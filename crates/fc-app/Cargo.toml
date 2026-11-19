@@ -12,6 +12,7 @@ fc-core.workspace = true
 fc-api.workspace = true
 fc-storage.workspace = true
 fc-providers.workspace = true
+fc-study = { path = "../fc-study" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

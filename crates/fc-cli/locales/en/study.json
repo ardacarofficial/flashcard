@@ -1,0 +1,10 @@
+{
+  "oplog.summary.study.start": "Started a study session",
+  "oplog.summary.study.answer": "Rated a card: {rating}",
+  "oplog.summary.study.hint": "Showed a hint",
+  "oplog.summary.study.end": "Ended a study session",
+  "oplog.summary.study.suspend": "Suspended/unsuspended {count} card(s)",
+  "oplog.summary.study.bury": "Buried/unburied {count} card(s)",
+  "oplog.summary.study.postpone": "Postponed {count} card(s)",
+  "oplog.summary.study.restore": "Restored the study state of {count} card(s)"
+}
