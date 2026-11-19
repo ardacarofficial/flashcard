@@ -142,6 +142,22 @@ Sonuç sadece doğru/yanlış değil, **derecelidir**: `doğru`, `neredeyse`, `y
 - Etiket yeniden adlandırma ve birleştirme (tüm notlarda).
 - Etiket rengi.
 
+### 8.1 🎚️ Sınıflandırmalar (seviye, sınav, ünite…)
+
+`[v0.1 veri modeli + not ekleme formu · v0.4 sorgu/filtre/toplu atama · v0.6 istatistik · v0.10 seviye ilerlemesi]` · 🧱 Veri modeli (`attribute_defs`/`attribute_values`), komutlar, sorgu dili, modül kaydı
+
+Etiketler serbesttir. Sınıflandırma ise **kullanıcının tanımladığı yapılı bir boyuttur**: adı, türü ve seçenekleri vardır, bir deste grubuna bağlanır ve alt destelere miras kalır.
+
+- **Örnekler:** `İngilizce` grubunda *Seviye* = A1 · A2 · B1 · B2 · C1 · C2. `YKS` grubunda *Sınav* = TYT · AYT · YDT, *Ders* = Matematik · Fizik…, *Konu* = serbest liste. `Japonca` grubunda *JLPT* = N5…N1.
+- **Türler:** sıralı seçim (seviye gibi, `>=` karşılaştırılabilir), sırasız seçim, çoklu seçim, sayı, metin, tarih, evet/hayır.
+- **Seçenekler tamamen özelleştirilebilir:** ekle, yeniden adlandır, sırala, renk ver, birleştir, sil (kullanan notlar başka seçeneğe taşınır). Ad değişse de kimlik değişmez.
+- **Kapsam ve miras:** Sınıflandırma koleksiyon geneline veya bir desteye tanımlanır. O destenin tüm alt destelerinde geçerlidir. Alt deste ek sınıflandırma ekleyebilir.
+- **Hazır şablonlar** (kopyalanıp değiştirilebilir): CEFR (A1–C2), YKS (TYT/AYT/YDT), LGS, KPSS, JLPT, HSK, okul sınıfı (1–12), zorluk (kolay/orta/zor). Şablon kopyalandıktan sonra tamamen kullanıcının olur.
+- **Not ekleme/düzenleme:** Destenin geçerli sınıflandırmaları formda alan olarak çıkar. Varsayılan değer verilebilir ve "son kullanılanı hatırla" seçilebilir. Zorunlu yapılabilir.
+- **Kullanıldığı yerler:** sorgu dili (`seviye:B1`, `seviye>=B1`, `sınav:TYT ders:fizik`) `[v0.4]`, özel çalışma oturumu ve filtreli deste `[v0.2/v0.4]`, toplu atama `[v0.4]`, istatistik kırılımı `[v0.6]`, içe aktarmada sütun eşleme `[v0.5]`, AI üretiminde seviyeye uygun içerik `[v0.8]`, seviye ilerlemesi (bir seviyenin %X'i olgunlaşınca sonrakini aç) `[v0.10]`, eklentiler için okuma/yazma API'si `[v0.7]`.
+- **Aynı yapı taşıyla gelen başka özelleştirmeler:** kaynak kitap/sayfa, ünite/hafta, öncelik, kelime türü (isim/fiil), okul/kurs dönemi… Kullanıcı ne isterse, kod değişikliği olmadan.
+- Not düzeyinde atanır. Kart düzeyi gerekirse (ör. yalnızca bir yön zor) kart düzeyinde de atanabilir.
+
 ## 9. 🔎 Arama ve sorgu dili
 
 `[v0.4]` · 🧱 Sorgu dili (DSL), SQLite FTS5

@@ -84,6 +84,8 @@ Tüm kimlikler **UUIDv7** (zamana göre sıralanabilir). Tüm tablolarda `create
 | `review_log` | id, card_id, session_id, rating, state_before, state_after, scheduled_days, elapsed_days, duration_ms, answer_duration_ms, hints_used, mode, created_at | **Değişmez.** İstatistik ve FSRS optimizasyonunun kaynağı |
 | `oplog` | id, command, payload, inverse, actor, batch_id, created_at | Geri al ve denetim izi (bkz. §5) |
 | `tags` | id, name (hiyerarşik), color | Notlarla çoka-çok: `note_tags` |
+| `attribute_defs` | id, scope_deck_id (NULL = koleksiyon), key, name, kind (ordered_enum/enum/multi_enum/number/text/date/bool), options (JSON: [{id, label, color, order}]), target (note/card), required, default_value, position, template_id | Kullanıcı tanımlı sınıflandırmalar (seviye, sınav…). Kapsam deste ağacında miras kalır. Bkz. [02 §8.1](02-ozellik-katalogu.md) |
+| `attribute_values` | attr_id, entity_kind (note/card), entity_id, value (seçenek id'si, sayı, metin…) | `(attr_id, entity_kind, entity_id)` birincil anahtar; çoklu seçimde birden çok satır. Sorgu dili buradan derlenir |
 | `media` | hash (sha256), mime, size, original_name, ref_count | Dosyalar `media/<ab>/<hash>` altında |
 | `links` | from_note, to_note, label | `[[bağlantı]]` ve geri bağlantılar |
 | `saved_queries` | id, name, query, icon, position | Kayıtlı filtreler |

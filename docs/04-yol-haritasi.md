@@ -45,6 +45,7 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - Tauri IPC köprüsü (tek genel `invoke(command, payload)` + olay akışı).
 - `fc-cli`: deste/not oluşturma ve listeleme (çekirdeğin Tauri'siz çalıştığının kanıtı).
 - i18n altyapısı (TR/EN anahtarları), tema token altyapısı.
+- Sınıflandırmalar ([02 §8.1](02-ozellik-katalogu.md)): `attribute_defs`/`attribute_values` şeması, tanımlama/düzenleme/seçenek komutları (geri alınabilir), deste ağacında miras çözümü, hazır şablonlar (CEFR, YKS…). Not ekleme formunda alan olarak görünür.
 - Minimal arayüz: deste ağacı, not ekleme (klasik), not listesi.
 - CI: fmt, clippy (`-D warnings`), testler, tip üretimi tutarlılık kontrolü, Windows derlemesi.
 
@@ -54,6 +55,7 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [ ] Rust'ta bir DTO alanı değişince frontend `pnpm check` kırılır.
 - [ ] Aynı işlemler CLI ile de yapılabilir.
 - [ ] Boş veritabanından migration testi geçer.
+- [ ] Bir desteye "Seviye" (A1–C2) sınıflandırması tanımlanır, alt destede not eklerken seçilebilir, seçenek yeniden adlandırma/sıralama geri alınabilir.
 - [ ] Windows'ta CI derlemesi başarılı.
 
 ## 📖 v0.2 · Çalışma çekirdeği
