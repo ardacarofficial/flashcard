@@ -58,6 +58,14 @@ pub enum StorageError {
     /// Contract exists but the implementation is pending.
     #[error("storage operation {0} not implemented")]
     NotImplemented(&'static str),
+    /// A media file could not be read or written (`fc-app` maps it to `IO_FILE`).
+    #[error("file {path}: {message}")]
+    File {
+        /// File path.
+        path: String,
+        /// OS error text.
+        message: String,
+    },
     /// Any other SQLite error.
     #[error("sqlite: {0}")]
     Sqlite(rusqlite::Error),

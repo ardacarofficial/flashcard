@@ -6,6 +6,7 @@
 
 mod attributes;
 mod cards;
+mod content;
 mod decks;
 mod jobs;
 mod notes;

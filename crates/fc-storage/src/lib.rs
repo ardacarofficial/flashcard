@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod media;
 pub mod migrate;
 pub mod repo;
 mod sqlite;
