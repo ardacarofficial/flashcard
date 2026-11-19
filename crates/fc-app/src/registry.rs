@@ -7,6 +7,7 @@ use crate::error::{AppError, AppResult};
 use crate::handler::{
     CommandCtx, CommandHandler, CommandOutcome, PendingOplogEntry, QueryCtx, QueryHandler,
 };
+use crate::jobs::JobHandler;
 use crate::module::ModuleDescriptor;
 use fc_api::method::parse_qualified_name;
 use fc_api::v1::oplog::Actor;
@@ -97,6 +98,7 @@ pub struct Registry {
     entries: BTreeMap<&'static str, Entry>,
     modules: Vec<ModuleDescriptor>,
     card_types: BTreeMap<String, Arc<dyn CardTypeEngine>>,
+    jobs: BTreeMap<&'static str, Arc<dyn JobHandler>>,
     errors: Vec<String>,
 }
 
@@ -172,6 +174,20 @@ impl Registry {
     pub fn query<M: ApiMethod>(&mut self, handler: impl QueryHandler<M>) {
         let erased = TypedQuery::<M, _>(handler, PhantomData);
         self.insert::<M>(MethodKind::Query, ErasedHandler::Query(Box::new(erased)));
+    }
+
+    /// Registers the handler of a background job kind (docs/03 §12).
+    pub fn job(&mut self, handler: Arc<dyn JobHandler>) {
+        let kind = handler.kind();
+        if self.jobs.insert(kind, handler).is_some() {
+            self.errors
+                .push(format!("job kind {kind} registered twice"));
+        }
+    }
+
+    /// Handler of job `kind`.
+    pub fn job_handler(&self, kind: &str) -> Option<&Arc<dyn JobHandler>> {
+        self.jobs.get(kind)
     }
 
     /// Registers a placeholder for `M` that fails with `INTERNAL_NOT_IMPLEMENTED`. Lets the

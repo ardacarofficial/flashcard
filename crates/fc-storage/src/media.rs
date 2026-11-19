@@ -1,8 +1,10 @@
 //! Media file locations (docs/03 §13): `media/<ab>/<sha256>` next to the collection file.
 //! Transports serve files from here (`fcmedia://` protocol) without going through the app.
 
+use crate::error::{StorageError, StorageResult};
 use fc_core::content::media::media_rel_path;
 use fc_core::content::refs::is_media_hash;
+use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
 /// Where the file of `hash` lives for the collection at `db_path` (`None` for anything that
@@ -13,6 +15,41 @@ pub fn media_file_path(db_path: &Path, hash: &str) -> Option<PathBuf> {
     }
     let dir = db_path.parent().unwrap_or_else(|| Path::new("."));
     Some(dir.join(media_rel_path(hash)))
+}
+
+/// Before migration 0402 drops it: copies every row of the pre-release `media_blobs` table
+/// (migration 0400, v0.5's temporary media adapter) to the file store of the collection at
+/// `db_path`. Idempotent (existing files are kept; content-addressed) and a no-op once the
+/// table is gone. Returns how many files were written.
+pub fn export_legacy_blobs(conn: &Connection, db_path: &Path) -> StorageResult<u64> {
+    if !crate::migrate::schema_object_exists(conn, "media_blobs")? {
+        return Ok(0);
+    }
+    let file_err = |p: &Path, e: std::io::Error| StorageError::File {
+        path: p.display().to_string(),
+        message: e.to_string(),
+    };
+    let mut st = conn.prepare("SELECT hash, data FROM media_blobs ORDER BY hash")?;
+    let mut rows = st.query([])?;
+    let mut written = 0;
+    while let Some(row) = rows.next()? {
+        let hash: String = row.get(0)?;
+        let Some(path) = media_file_path(db_path, &hash) else {
+            continue;
+        };
+        if path.exists() {
+            continue;
+        }
+        let data: Vec<u8> = row.get(1)?;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| file_err(dir, e))?;
+        }
+        let part = path.with_extension("part");
+        std::fs::write(&part, &data).map_err(|e| file_err(&part, e))?;
+        std::fs::rename(&part, &path).map_err(|e| file_err(&path, e))?;
+        written += 1;
+    }
+    Ok(written)
 }
 
 #[cfg(test)]

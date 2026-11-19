@@ -4,6 +4,16 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased]
 
+### Faz 2 entegrasyonu — tur 2 (+ v0.5, `feat/phase2-integration`)
+- **Medya tek depoda:** içe/dışa aktarma ve yedek v0.3'ün içerik adresli dosya deposunu kullanır (`io::media::FileMedia`); geçici `BlobMedia` ve `media_blobs` kalktı — `0402_drop_media_blobs`, açılışta kalan baytları önce dosyalara taşır. Aynı içerik diskte tek dosya. Yedekler medya dosyalarını içerir, geri yükleme onları yeniden yazar.
+- **Anki → v0.3:** Anki'nin hazır not türleri (Basic, ters, isteğe bağlı ters, yazarak, Cloze, Image Occlusion) yapılarından tanınıp yerleşik türlere eşlenir; Image Occlusion şekilleri v0.3 maskelerine çevrilir. `[sound:x]` ↔ `<audio src="media:…">`, resim/ses alanlarında çıplak `media:` başvurusu. İçe aktarılan kartlar kart türü motorlarıyla çizilir.
+- **Anki bayrakları** numara ↔ bit doğru çevrilir (7 = mor = `card_flag_defs` 7; önceden numara bit maskesi gibi yazılıyordu).
+- **İçe aktarılan geçmiş** `review_log.mode = "imported"`: kart geçmişinde görünür, günlük çalışma limitlerine sayılmaz.
+- **Satır içe aktarma** (metin/CSV/JSON) kartları v0.3 motorlarından üretir: boşluk doldurma türüne de satır aktarılır.
+- Yarıda atılan içe aktarma, eklediği ve kimsenin kullanmadığı medya satırlarını da siler (`ImportedIds.media`).
+- **Dokümantasyon:** v0.5 ayırıcı algılama kriteri **kısmen** karşılandı olarak işaretlendi (tutulmuş sette %92,9, 65/70); v1.0'a iyileştirme maddesi eklendi.
+- **Testler:** `phase2_io_tests.rs` uçtan uca (CSV → sınıflandırma, Anki cloze/resim/ses/geçmiş → diskte tekil medya → çizim → çalışma, limit → yedek → koleksiyon klasörünü sil → geri yükle → birebir); Anki yerleşik eşleme ve resim gizleme dönüşümü; 0402 taşıma migration testi.
+
 ### Faz 2 entegrasyonu — tur 1 (v0.2 + v0.3, `feat/phase2-integration`)
 - **Çalışma kartları kart türü motoruyla çizilir:** `StudyCardDto` artık `sides` (temizlenmiş HTML, CSS, etkileşim, TTS) ve `flags` taşır; düz metin `question/answer` ve `fc_study::render` kalktı (`fc_study::text::html_to_text` kaldı). Çalışma ekranı `CardView` ile medya, KaTeX, kod ve not türü CSS'ini gösterir.
 - **Boş kartlar** (silinen cloze/maske) kuyruğa girmez, oturumda atlanır, puanlanamaz.
@@ -53,6 +63,17 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 - `media.ref_count` okunurken sayılır (kalıcı silmede bayatlamaz); geri alınan `media.add`'in dosyası açılışta temizlenir.
 - Bayrak numaralaması Anki'ninki (1 kırmızı … 5 pembe, 7 mor), `card_flag_defs` tek kaynak.
 - Kullanılmayan `NoteAddForm` kaldırıldı.
+### Eklendi — v0.5 İçe / dışa aktarma (iz D)
+- **`fc-interop` crate'i** (saf, bayt girer bayt çıkar): esnek ayırıcılı metin/CSV/TSV (tırnak, özel ayırıcı, `max_fields`) + ayırıcı otomatik algılama; kendi JSON not biçimimiz; Quizlet metni; Anki `.apkg`/`.colpkg` okuma (eski `collection.anki2`/`.anki21` ve yeni zstd `collection.anki21b` + protobuf) ve yazma (şema 11) — cloze, medya, zamanlama ve tekrar geçmişi korunur; `.fcpack` deste paketi (sınıflandırma tanım/seçenek/değerleri kimlikleriyle); `.fcbackup` tam yedek; yazdırma HTML'i (çift taraflı baskı için aynalı arka yüzler).
+- **İş kuyruğu çalışanı:** `fc_app::jobs::spawn_worker`, `App::run_pending_jobs`, modül başına `Registry::job`; `jobs.cancel` işin iptal işaretini yazıcıyı beklemeden verir; işler yazmayı yalnızca komutlarla yapar.
+- **`io` modülü:** `io.import.preview/start`, `io.export.start`, `io.backup.create/inspect/restore`, `io.print.render`. İçe aktarma tek işlem + **tek geri al** adımıdır, yazarken iptal edilirse tamamen geri sarılır; tekrar edenler için atla/güncelle/yine de ekle; sütunlar alan/etiket/sınıflandırmaya eşlenir (istenirse eksik seçenekler oluşturulur). Geri yükleme önce mevcut durumun yedeğini alır.
+- **Depolama:** `0400_interop` (medya içeriği `media_blobs`), medya/tekrar kaydı/koleksiyon döküm-yükleme repo alanı.
+- **Masaüstü:** İçe/dışa aktar ekranı (önizleme, sütun eşleme, ilerleme + iptal, geri al), dışa aktarma, yedek/geri yükleme, yazdırma; Tauri dosya diyaloğu (yalnız aç/kaydet izni); TR/EN.
+- **CLI:** `fc call` kuyruğa aldığı işi hemen çalıştırıp bitmiş işi yazar.
+
+### Değişti
+- `JobDto.result` ve `imported` / `collection_replaced` olayları eklendi (eklemeli).
+- **v0.5 inceleme düzeltmeleri:** büyük içe aktarma ~500 satırlık parçalarla kendi işlemlerinde yazılır (çalışırken çalışma/düzenleme komutları zaman aşımına uğramaz), yine tek geri al adımıdır; iptal işlenmiş parçaları iz bırakmadan kaldırır (`io.import.discard`). Zip/zstd bombalarına toplam bütçe. Windows-1254 ve UTF-16 metin dosyaları. Eski şemalı yedek geri yüklenirken sonraki migration'lardan geçirilir; güvenlik yedeği uygulama veri klasörüne yazılır. İş sonu durumu yazımı yeniden denenir. Anki gömülü kartları korunur. Medya `MediaStore` trait'i arkasında (v0.3 deposuna bağlanmaya hazır), alan referansı `media:<sha256>`. Ayırıcı algılama için ayrı tutulmuş örnek seti (40/46). Ardından: algılama sayı/saat/URL parçalarını maskeler, gerekirse `max_fields` önerir, `::`/`–`/`—`/`→` adayları, Anki `#separator:` başlıkları (2. tutulmuş set: ilk ölçüm 63/70, şimdi 65/70). **Çökme güvenliği:** içe aktarma parçaları kalıcı bir işaretle (`0401_unfinished_batches`) izlenir; uygulama parçalar arasında kapanırsa açılışta işlenmiş parçalar geri sarılır.
 
 ## [0.1.0] — Yayımlanmadı (inceleme bekliyor)
 

@@ -101,10 +101,18 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** Esnek ayırıcılı metin/CSV içe aktarma (önizleme, otomatik algılama, alan eşleme, tırnak işleme); JSON; Quizlet metni; Anki .apkg/.colpkg içe ve dışa (eski ve yeni şema sürümleri, medya, geçmiş); deste paketi (`.fcpack`); tam yedek (`.fcbackup`) ve geri yükleme; yazdırma/PDF.
 
 **Kabul kriterleri**
-- [ ] `Arda, porsuk` ve `Arda: porsuk` ve özel ayırıcılı dosyalar doğru ayrışır; otomatik algılama test kümesinde ≥ %95 doğru.
-- [ ] Örnek Anki desteleri (cloze, resimli, sesli) kayıpsız içe aktarılır; dışa aktarılan .apkg Anki'de açılır.
-- [ ] Yedek → sil → geri yükle döngüsü veriyi birebir korur.
-- [ ] İçe aktarma iptal edilebilir ve tek geri al ile geri döner.
+- [ ] **Kısmen karşılandı** — `Arda, porsuk` ve `Arda: porsuk` ve özel ayırıcılı dosyalar doğru ayrışır ✅; otomatik algılama test kümesinde ≥ %95 doğru: **ayar setinde karşılandı, tutulmuş sette değil.** Ölçümler: ayar seti ≥ %95; ayardan sonra yazılan 2. tutulmuş sette ilk ölçüm %90,0 (63/70), Anki `#separator:` başlık desteğiyle **%92,9 (65/70)** (o iki örnek artık saf tutulmuş değil). Kalan kaçanlar: `~` ayırıcı, çift TAB / boşlukla hizalı sütunlar, her satırında virgül olan cümle listesi, tireli kelime listesi; önizleme her zaman elle düzeltmeye izin verir. **→ v1.0'da iyileştirilecek** (yeni bir tutulmuş setle yeniden ölçülerek). Ayrıntı docs/10 §14.
+- [x] Örnek Anki desteleri (cloze, resimli, sesli) kayıpsız içe aktarılır; dışa aktarılan .apkg Anki'de açılır. *(Anki'nin kendisiyle elle açma denemesi henüz yapılmadı; yapı testle doğrulanıyor, aşağıya bkz. Faz-2 tur 2'den beri Anki'nin hazır not türleri v0.3 yerleşiklerine eşlenir ve kartlar v0.3 motorlarıyla çizilir — docs/10 §15.)*
+- [x] Yedek → sil → geri yükle döngüsü veriyi birebir korur.
+- [x] İçe aktarma iptal edilebilir ve tek geri al ile geri döner.
+
+> **Doğrulama (`feat/v0.5-io`):**
+> - Ayrıştırma/algılama: `fc-interop/src/text/tests.rs` (`acceptance_examples_parse`, 70 örneklik etiketli kümede `detection_is_at_least_95_percent_accurate`); uçtan uca `fc-app/src/modules/io/tests.rs::text_import_parses_acceptance_examples_with_auto_detection`.
+> - Anki: fikstürler testte sentetik üretilir (`fc_interop::anki::fixtures`: cloze + resim + ses notu, tüm kart durumları, filtreli deste, geçmiş) ve üç paket düzeninde (eski `collection.anki2`, `collection.anki21`, yeni zstd/protobuf `collection.anki21b`) yazılır. `all_layouts_read_the_same_collection`, `converts_cloze_image_sound_scheduling_and_history`, `export_then_import_roundtrips`, `exported_package_is_a_valid_anki_collection` (şema 11 tablo/sütunları, `ver = 11`, model/deste/ayar JSON anahtarları, referans bütünlüğü, checksum, medya listesi); uygulama düzeyinde `anki_packages_import_losslessly_in_every_layout`, `exported_apkg_reimports_with_the_same_content`.
+> - Yedek: `backup_delete_restore_preserves_everything` (Anki içe aktarma + sınıflandırma + oplog içeren koleksiyon → `.fcbackup` → deste sil → geri yükle → `jobs` dışındaki **tüm tablolar** ve medya baytları birebir aynı; otomatik güvenlik yedeği silinmiş durumu geri getirir). Depolama düzeyinde `dump_then_load_is_bit_exact`.
+> - İptal + tek geri al: `cancelling_in_the_middle_of_writing_rolls_everything_back` (64 satır yazıldıktan sonra iptal → işlem geri sarılır, oplog değişmez), `jobs_cancel_stops_queued_and_running_imports`, `import_is_one_undo_step_and_redoable` (yeni desteler + not güncelleme + yeni sınıflandırma seçenekleri tek `oplog.undo` ile geri, `oplog.redo` ile aynen ileri).
+> - Sınıflandırmalar: `text_columns_map_to_classifications_and_create_missing_options`, `fcpack_preserves_classifications_exactly`.
+> - **Faz-2 tur 2 (v0.5 × v0.3 × v0.2), uçtan uca:** `fc-app/src/phase2_io_tests.rs::anki_import_study_backup_wipe_restore_is_identical` — CSV sütunu → Seviye (eksik seçenek oluşturulur) → cloze + resim + ses + mor bayrak + bugünden bir tekrar içeren `.apkg` → yerleşik not türleri, aynı resmi başka adla taşıyan ikinci paket yeni medya eklemez (diskte 2 dosya) → kartlar motorla çizilir (`media:` resim/ses, cloze) → içe aktarılan geçmiş `imported`, günlük tekrar limitini tüketmez → çalışma `normal` tekrar yazar → yedek → koleksiyon klasörü tamamen silinir → boş koleksiyona geri yükleme → `jobs` dışındaki tüm tablolar, medya dosyaları ve sınıflandırmalar birebir.
 
 ## 📊 v0.6 · İstatistik ve akıllı planlama
 
@@ -161,6 +169,7 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [ ] Performans hedefleri ([02 §34](02-ozellik-katalogu.md)) benchmark ile sağlanır.
 - [ ] Temiz bir Windows'ta kurulum → ilk açılış → çalışma → güncelleme akışı sorunsuz.
 - [ ] Tüm arayüz metinleri çeviri anahtarlarından gelir (sabit metin yok, lint ile).
+- [ ] İçe aktarmada ayırıcı otomatik algılama **yeni bir tutulmuş sette** ≥ %95 doğru (v0.5'ten devreden: şu an %92,9, 65/70; bkz. v0.5).
 
 ## 🔮 v1.0 sonrası
 

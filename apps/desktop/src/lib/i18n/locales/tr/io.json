@@ -1,0 +1,143 @@
+{
+  "nav": {
+    "io": "İçe / dışa aktar"
+  },
+  "modules": {
+    "io": {
+      "name": "İçe / dışa aktarma",
+      "description": "Metin, CSV, JSON, Quizlet ve Anki içe aktarma; dışa aktarma, deste paketi, yedek ve yazdırma."
+    }
+  },
+  "io": {
+    "tabs": {
+      "import": "İçe aktar",
+      "export": "Dışa aktar",
+      "backup": "Yedek",
+      "print": "Yazdır"
+    },
+    "pick_deck": "Önce soldan bir deste seç.",
+    "choose_file": "Dosya seç…",
+    "no_file": "Dosya seçilmedi",
+    "path_prompt": "Dosya yolu",
+    "import": {
+      "source": "Kaynak",
+      "source_file": "Dosya",
+      "source_text": "Metin yapıştır",
+      "paste_placeholder": "dog, köpek\ncat: kedi",
+      "format": "Biçim",
+      "format_auto": "Otomatik",
+      "field_separator": "Terim ile tanım arası",
+      "record_separator": "Kartlar arası",
+      "newline": "Yeni satır",
+      "blank_line": "Boş satır",
+      "detected": "Otomatik algılandı (%{confidence}). Yanlış görünüyorsa değiştir.",
+      "skip_first_row": "İlk satır başlık",
+      "preview": "Önizleme",
+      "rows": "{total} satırın {shown} tanesi",
+      "column": "{n}. sütun",
+      "ignore": "Aktarma",
+      "tags": "Etiketler",
+      "duplicates": "Not zaten varsa",
+      "create_missing_options": "Eksik sınıflandırma seçeneklerini oluştur",
+      "include_history": "Tekrar geçmişini ve zamanlamayı koru",
+      "package": "{notes} not, {cards} kart, {media} medya dosyası, {decks} deste",
+      "start": "{deck} destesine aktar",
+      "start_package": "İçe aktar",
+      "done": "{added} eklendi, {updated} güncellendi, {skipped} tekrar atlandı.",
+      "issues": "Aktarılamayan veya değişenler",
+      "row": "{row}. satır",
+      "undo": "İçe aktarmayı geri al"
+    },
+    "formats": {
+      "text": "Metin / CSV",
+      "quizlet": "Quizlet",
+      "json": "JSON",
+      "anki": "Anki (.apkg, .colpkg)",
+      "fcpack": "Deste paketi (.fcpack)"
+    },
+    "duplicate": {
+      "skip": "Atla",
+      "update": "Güncelle",
+      "add": "Yine de ekle"
+    },
+    "export": {
+      "format": "Biçim",
+      "scope": "{deck} alt desteleriyle birlikte dışa aktarılır.",
+      "scope_all": "Tüm koleksiyon dışa aktarılır.",
+      "include_history": "Tekrar geçmişi ve zamanlamayı ekle",
+      "start": "Dışa aktar…",
+      "done": "{notes} not ({media} medya dosyası) {path} dosyasına kaydedildi."
+    },
+    "export_formats": {
+      "fcpack": "Deste paketi (.fcpack)",
+      "apkg": "Anki destesi (.apkg)",
+      "colpkg": "Anki koleksiyonu (.colpkg)",
+      "text": "Metin (.txt)",
+      "json": "JSON (.json)"
+    },
+    "backup": {
+      "hint": "Yedek tüm koleksiyonu içerir: notlar, kartlar, geçmiş, sınıflandırmalar, ayarlar ve medya.",
+      "create": "Yedek al…",
+      "created": "Yedek {path} dosyasına kaydedildi.",
+      "restore": "Yedekten geri yükle…",
+      "confirm_title": "Bu yedek geri yüklensin mi?",
+      "confirm_body": "{date} tarihli, {notes} notluk yedek. Önce mevcut koleksiyonun yedeği alınır, sonra yerine bu yüklenir.",
+      "incompatible": "Bu yedek uygulamanın daha yeni bir sürümünden.",
+      "restored": "Geri yüklendi. Önceki durum {path} dosyasına kaydedildi."
+    },
+    "print": {
+      "layout": "Düzen",
+      "cards_2x4": "Kart, sayfada 2 × 4",
+      "cards_3x5": "Kart, sayfada 3 × 5",
+      "list": "Liste",
+      "render": "Hazırla",
+      "print": "Yazdır / PDF kaydet",
+      "count": "{count} kart",
+      "hint": "Ön ve arka yüzler sırayla ayrı sayfalarda; çift taraflı baskı için arka yüzler aynalanır."
+    },
+    "job": {
+      "cancel": "İptal",
+      "cancelled": "İptal edildi. Hiçbir şey değişmedi.",
+      "working": "Çalışıyor…"
+    },
+    "progress": {
+      "reading": "Dosya okunuyor…",
+      "parsing": "İçerik okunuyor…",
+      "converting": "Dönüştürülüyor…",
+      "writing": "Kaydediliyor…",
+      "collecting": "Toplanıyor…",
+      "writing_file": "Dosya yazılıyor…",
+      "safety_backup": "Mevcut koleksiyonun yedeği alınıyor…"
+    },
+    "issue": {
+      "anki_skipped_notes": "{count} not okunamadı.",
+      "anki_skipped_cards": "{count} kart okunamadı.",
+      "anki_skipped_reviews": "{count} tekrar kaydı atlandı (elle yeniden planlama).",
+      "anki_skipped_tags": "{count} geçersiz etiket atlandı.",
+      "anki_missing_media": "Pakette {count} medya dosyası eksik.",
+      "unknown_notetype": "Bilinmeyen not türü.",
+      "invalid_notetype": "Paketteki bir not türü geçersiz.",
+      "notetype_no_cards": "Bu satır bu not türüyle kart üretmiyor (örneğin boşluk içermeyen bir boşluk doldurma satırı).",
+      "bad_deck": "Geçersiz deste adı.",
+      "no_deck": "Deste belirtilmemiş.",
+      "unknown_field": "Bilinmeyen alan “{field}”.",
+      "invalid_fields": "Zorunlu bir alan boş.",
+      "bad_tag": "Geçersiz etiket “{tag}”.",
+      "attribute_required": "Zorunlu bir sınıflandırma eksik.",
+      "attribute_not_applicable": "Bu sınıflandırma bu destede geçerli değil.",
+      "attribute_invalid": "Geçersiz sınıflandırma değeri “{value}”.",
+      "attribute_unknown_option": "Bilinmeyen seçenek “{value}” (otomatik oluşturulabilir)."
+    }
+  },
+  "errors": {
+    "validation": {
+      "import_format": "Dosya beklenen biçimde değil ya da bozuk.",
+      "text_options": "Ayırıcılar boş ya da çakışıyor.",
+      "column_mapping": "Bir sütun eşlemesi geçersiz."
+    },
+    "conflict": {
+      "unsupported_version": "Bu dosya uygulamanın daha yeni bir sürümünden.",
+      "job_cancelled": "İş iptal edildi."
+    }
+  }
+}

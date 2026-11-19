@@ -477,6 +477,7 @@ fn job_dto(r: JobRecord) -> AppResult<JobDto> {
         progress: r.progress.map(|p| p as f32),
         message: None,
         error: r.error.as_ref().map(from_json).transpose()?,
+        result: r.result,
         created_at: r.created_at,
         updated_at: r.updated_at,
     })

@@ -78,4 +78,5 @@ domains! {
     attributes,
     study,
     cardtypes,
+    io,
 }

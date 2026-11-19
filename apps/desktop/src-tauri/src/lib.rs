@@ -19,6 +19,7 @@ pub const COLLECTION_FILE: &str = "collection.db";
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let result = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![ipc::invoke])
         .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
             let (status, mime, body) = match ctx.app_handle().path().app_data_dir() {
@@ -37,6 +38,14 @@ pub fn run() {
             match open_collection(app) {
                 Ok(collection) => {
                     ipc::forward_events(&collection, app.handle().clone());
+                    // Background jobs (imports, exports, backups) run on their own thread;
+                    // the worker lives as long as the app state.
+                    match fc_app::jobs::spawn_worker(collection.clone()) {
+                        Ok(worker) => {
+                            app.manage(worker);
+                        }
+                        Err(e) => fail(&e.to_string()),
+                    }
                     app.manage(collection);
                     Ok(())
                 }

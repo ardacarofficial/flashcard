@@ -41,6 +41,8 @@ mod acceptance;
 #[cfg(test)]
 mod cards_tests;
 #[cfg(test)]
+mod phase2_io_tests;
+#[cfg(test)]
 mod phase2_tests;
 #[cfg(test)]
 mod tests;

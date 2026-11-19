@@ -71,4 +71,5 @@ domains! {
     jobs: JobRead, JobWrite;
     study: StudyRead, StudyWrite;
     content: ContentRead, ContentWrite;
+    interop: InteropRead, InteropWrite;
 }

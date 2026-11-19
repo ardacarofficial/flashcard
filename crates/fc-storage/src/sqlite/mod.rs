@@ -8,6 +8,8 @@ mod attributes;
 mod cards;
 mod content;
 mod decks;
+mod interop;
+pub use interop::{upgrade_dump, upgrade_dump_with};
 mod jobs;
 mod notes;
 mod notetypes;

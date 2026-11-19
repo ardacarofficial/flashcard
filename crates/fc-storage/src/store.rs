@@ -85,6 +85,7 @@ impl SqliteStore {
         let mut conn = Connection::open(path)?;
         migrate::configure_connection(&conn)?;
         let backup = snapshot_before_migrating(&mut conn, path, migrations)?;
+        crate::media::export_legacy_blobs(&conn, path)?;
         migrate::migrate_with(&mut conn, migrations)?;
         let readers = (0..READ_POOL_SIZE)
             .map(|_| {

@@ -6,6 +6,7 @@ pub mod cardtypes;
 pub mod common;
 pub mod decks;
 pub mod events;
+pub mod io;
 pub mod jobs;
 pub mod methods;
 pub mod modules;

@@ -12,7 +12,7 @@ use rusqlite::{params, Row};
 const SESSIONS: &str = "sessions";
 const REVIEWS: &str = "review_log";
 const SESSION_COLS: &str = "id, kind, query, config, state, started_at, ended_at";
-const REVIEW_COLS: &str = "id, card_id, session_id, rating, state_before, state_after, \
+pub(super) const REVIEW_COLS: &str = "id, card_id, session_id, rating, state_before, state_after, \
                            scheduled_days, elapsed_days, duration_ms, answer_duration_ms, \
                            hints_used, mode, stability_after, difficulty_after, created_at";
 
@@ -28,7 +28,7 @@ fn session_row(r: &Row<'_>) -> rusqlite::Result<SessionRecord> {
     })
 }
 
-fn review_row(r: &Row<'_>) -> rusqlite::Result<ReviewLogRecord> {
+pub(super) fn review_row(r: &Row<'_>) -> rusqlite::Result<ReviewLogRecord> {
     Ok(ReviewLogRecord {
         id: id(r, 0)?,
         card_id: id(r, 1)?,

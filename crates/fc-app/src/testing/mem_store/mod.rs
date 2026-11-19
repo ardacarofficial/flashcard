@@ -46,6 +46,8 @@ pub struct MemState {
     settings: BTreeMap<(String, String), Value>,
     modules: BTreeMap<String, bool>,
     jobs: BTreeMap<JobId, JobRecord>,
+    unfinished_batches: BTreeMap<BatchId, UnfinishedBatchRecord>,
+    unfinished_batch_parts: BTreeMap<(BatchId, u32), Value>,
     /// State of domains that keep their own tables (see [`domains!`]).
     domains: DomainState,
 }
@@ -169,4 +171,5 @@ domains! {
     jobs,
     study => StudyState,
     content => ContentState,
+    interop,
 }

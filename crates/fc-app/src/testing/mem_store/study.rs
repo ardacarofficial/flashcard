@@ -7,7 +7,7 @@ use fc_core::{ReviewLogId, SessionId};
 #[derive(Debug, Clone, Default)]
 pub struct StudyState {
     sessions: BTreeMap<SessionId, SessionRecord>,
-    reviews: BTreeMap<ReviewLogId, ReviewLogRecord>,
+    pub(super) reviews: BTreeMap<ReviewLogId, ReviewLogRecord>,
 }
 
 impl MemTx<'_> {

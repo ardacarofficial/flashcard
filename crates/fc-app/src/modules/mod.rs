@@ -34,4 +34,5 @@ modules! {
     flags,
     card_notes,
     rich_content,
+    io,
 }

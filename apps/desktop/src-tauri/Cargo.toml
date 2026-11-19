@@ -24,6 +24,8 @@ fc-core.workspace = true
 fc-storage.workspace = true
 # Native error box for startup failures (release builds on Windows have no console).
 rfd = { version = "0.15", default-features = false, features = ["gtk3"] }
+# Open/save file dialogs for import, export and backups (the backend gets the chosen path).
+tauri-plugin-dialog = "2"
 
 [dev-dependencies]
 fc-app = { workspace = true, features = ["testing"] }

@@ -7,6 +7,7 @@
 mod attributes;
 mod content;
 mod decks;
+mod interop;
 mod migrations;
 mod misc;
 mod notes;

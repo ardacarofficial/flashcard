@@ -16,6 +16,7 @@ fc-api = { path = "crates/fc-api" }
 fc-storage = { path = "crates/fc-storage" }
 fc-providers = { path = "crates/fc-providers" }
 fc-app = { path = "crates/fc-app" }
+fc-interop = { path = "crates/fc-interop" }
 
 # external
 serde = { version = "1", features = ["derive"] }
@@ -32,6 +33,10 @@ ammonia = "4"
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 sha2 = "0.10"
 base64 = "0.22"
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zstd = { version = "0.14", default-features = false }
+sha1 = "0.10"
+encoding_rs = "0.8"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

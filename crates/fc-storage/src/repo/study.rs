@@ -23,6 +23,11 @@ pub struct SessionRecord {
     pub ended_at: Option<Timestamp>,
 }
 
+/// `review_log.mode` of history brought in by an import (Anki revlog, `.fcpack`): shown in
+/// card history and usable by the scheduler, but never counted against today's study limits
+/// (those count `normal` rows only).
+pub const REVIEW_MODE_IMPORTED: &str = "imported";
+
 /// A `review_log` row.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReviewLogRecord {
@@ -48,7 +53,7 @@ pub struct ReviewLogRecord {
     pub answer_duration_ms: Option<u32>,
     /// Hints used.
     pub hints_used: u32,
-    /// `normal` or `trial`.
+    /// `normal`, `trial` or [`REVIEW_MODE_IMPORTED`].
     pub mode: String,
     /// Stability after.
     pub stability_after: Option<f64>,

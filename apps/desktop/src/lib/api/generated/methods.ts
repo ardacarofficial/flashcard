@@ -11,6 +11,7 @@ import type { AttributeRef } from "./AttributeRef";
 import type { AttributeTemplateList } from "./AttributeTemplateList";
 import type { AttributeValues } from "./AttributeValues";
 import type { BacklinksOf } from "./BacklinksOf";
+import type { BackupInfo } from "./BackupInfo";
 import type { BatchResult } from "./BatchResult";
 import type { BuryCards } from "./BuryCards";
 import type { CardFlagsList } from "./CardFlagsList";
@@ -23,6 +24,7 @@ import type { CardRef } from "./CardRef";
 import type { CardTypeList } from "./CardTypeList";
 import type { CardsOfNote } from "./CardsOfNote";
 import type { CheckAnswer } from "./CheckAnswer";
+import type { CreateBackup } from "./CreateBackup";
 import type { CreateDeck } from "./CreateDeck";
 import type { CreateNote } from "./CreateNote";
 import type { CreateNoteType } from "./CreateNoteType";
@@ -43,6 +45,8 @@ import type { GetAttributeValues } from "./GetAttributeValues";
 import type { GetSettings } from "./GetSettings";
 import type { HintDto } from "./HintDto";
 import type { HintRequest } from "./HintRequest";
+import type { ImportPreview } from "./ImportPreview";
+import type { InspectBackup } from "./InspectBackup";
 import type { JobDto } from "./JobDto";
 import type { JobList } from "./JobList";
 import type { JobRef } from "./JobRef";
@@ -73,12 +77,16 @@ import type { OplogPage } from "./OplogPage";
 import type { OptionChangeResult } from "./OptionChangeResult";
 import type { PostponeCards } from "./PostponeCards";
 import type { PreviewCards } from "./PreviewCards";
+import type { PreviewImport } from "./PreviewImport";
+import type { PrintDocument } from "./PrintDocument";
 import type { RenameAttributeOption } from "./RenameAttributeOption";
 import type { RenameDeck } from "./RenameDeck";
 import type { RenameTag } from "./RenameTag";
+import type { RenderPrint } from "./RenderPrint";
 import type { RenderedCardDto } from "./RenderedCardDto";
 import type { ReorderAttributeOptions } from "./ReorderAttributeOptions";
 import type { ResetSetting } from "./ResetSetting";
+import type { RestoreBackup } from "./RestoreBackup";
 import type { SessionDto } from "./SessionDto";
 import type { SessionRef } from "./SessionRef";
 import type { SessionSummary } from "./SessionSummary";
@@ -93,6 +101,8 @@ import type { SetTagColor } from "./SetTagColor";
 import type { SettingValueDto } from "./SettingValueDto";
 import type { SettingValues } from "./SettingValues";
 import type { SettingsSchema } from "./SettingsSchema";
+import type { StartExport } from "./StartExport";
+import type { StartImport } from "./StartImport";
 import type { StartSession } from "./StartSession";
 import type { StudyCardsChanged } from "./StudyCardsChanged";
 import type { SuggestLinks } from "./SuggestLinks";
@@ -198,6 +208,13 @@ export interface Methods {
   "cards.set_flags": { kind: "command"; request: SetCardFlags; response: CardFlagsList };
   "cards.set_user_note": { kind: "command"; request: SetCardUserNote; response: CardMetaDto };
   "cards.meta": { kind: "query"; request: CardsOfNote; response: CardMetaList };
+  "io.import.preview": { kind: "query"; request: PreviewImport; response: ImportPreview };
+  "io.import.start": { kind: "command"; request: StartImport; response: JobDto };
+  "io.export.start": { kind: "command"; request: StartExport; response: JobDto };
+  "io.backup.create": { kind: "command"; request: CreateBackup; response: JobDto };
+  "io.backup.inspect": { kind: "query"; request: InspectBackup; response: BackupInfo };
+  "io.backup.restore": { kind: "command"; request: RestoreBackup; response: JobDto };
+  "io.print.render": { kind: "query"; request: RenderPrint; response: PrintDocument };
 }
 
 /** Unqualified method name. */
@@ -298,4 +315,11 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "cards.set_flags": "command",
   "cards.set_user_note": "command",
   "cards.meta": "query",
+  "io.import.preview": "query",
+  "io.import.start": "command",
+  "io.export.start": "command",
+  "io.backup.create": "command",
+  "io.backup.inspect": "query",
+  "io.backup.restore": "command",
+  "io.print.render": "query",
 };
