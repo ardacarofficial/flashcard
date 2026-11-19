@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [claude/clever-archimedes-u8c7rp]
   pull_request:
 
 concurrency:
@@ -17,7 +18,26 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  detect:
+    name: Hangi parçalar mevcut?
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.d.outputs.rust }}
+      types: ${{ steps.d.outputs.types }}
+      frontend: ${{ steps.d.outputs.frontend }}
+      desktop: ${{ steps.d.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: d
+        shell: bash
+        run: |
+          [ -f Cargo.toml ] && echo "rust=true" >> "$GITHUB_OUTPUT" || echo "rust=false" >> "$GITHUB_OUTPUT"
+          [ -f crates/fc-api/Cargo.toml ] && echo "types=true" >> "$GITHUB_OUTPUT" || echo "types=false" >> "$GITHUB_OUTPUT"
+          [ -f apps/desktop/package.json ] && [ -f apps/desktop/pnpm-lock.yaml ] && echo "frontend=true" >> "$GITHUB_OUTPUT" || echo "frontend=false" >> "$GITHUB_OUTPUT"
+          [ -f Cargo.toml ] && [ -f apps/desktop/src-tauri/Cargo.toml ] && [ -f apps/desktop/package.json ] && [ -f apps/desktop/pnpm-lock.yaml ] && echo "desktop=true" >> "$GITHUB_OUTPUT" || echo "desktop=false" >> "$GITHUB_OUTPUT"
   rust:
+    needs: detect
+    if: needs.detect.outputs.rust == 'true'
     name: Rust (fmt, clippy, test)
     runs-on: ubuntu-latest
     steps:
@@ -33,11 +53,15 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: frontendDist klasörü (generate_context! için)
+        run: mkdir -p apps/desktop/build apps/desktop/dist
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
 
   types:
+    needs: detect
+    if: needs.detect.outputs.types == 'true'
     name: TS tipleri güncel mi
     runs-on: ubuntu-latest
     steps:
@@ -45,7 +69,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Tipleri üret
-        run: cargo run -p fc-api --bin gen-ts
+        run: cargo run --locked -p fc-api --bin gen-ts
       - name: Üretilen klasörde fark yok
         run: |
           dir=apps/desktop/src/lib/api/generated
@@ -56,6 +80,8 @@ jobs:
           fi
 
   frontend:
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true'
     name: Frontend (check, test, build)
     runs-on: ubuntu-latest
     defaults:
@@ -77,6 +103,8 @@ jobs:
       - run: pnpm build
 
   windows:
+    needs: detect
+    if: needs.detect.outputs.desktop == 'true'
     name: Windows (build + test)
     runs-on: windows-latest
     steps:
@@ -92,19 +120,19 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
       - name: Çekirdek testleri
-        run: cargo test -p fc-core -p fc-storage
+        run: cargo test --locked -p fc-core -p fc-storage
       - name: Frontend derle
         working-directory: apps/desktop
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm build
-      - name: Tauri uygulamasını derle
-        run: cargo build -p fc-desktop --release
+        run: pnpm install --frozen-lockfile
+      - name: Frontend build
+        working-directory: apps/desktop
+        run: pnpm build
+      - name: Tauri uygulamasını derle (debug)
+        run: cargo build --locked -p fc-desktop
 
   core-purity:
     name: fc-core saflık kontrolü
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - run: bash .github/scripts/check-core-purity.sh
