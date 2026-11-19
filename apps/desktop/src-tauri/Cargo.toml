@@ -1,0 +1,33 @@
+[package]
+name = "fc-desktop"
+version = "0.1.0"
+description = "Flashcard desktop shell (Tauri 2): thin IPC bridge over fc-api"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+# TODO(integration): this crate builds standalone until the root workspace exists.
+# At integration: delete the `[workspace]` table below, add
+# "apps/desktop/src-tauri" to the root `[workspace] members`, and switch
+# shared deps to `workspace = true` where the root defines them.
+[workspace]
+
+[lib]
+name = "fc_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# TODO(integration): uncomment once crates/ lands; the IPC handler then
+# dispatches into fc-app and errors become fc_api::ApiError.
+# fc-app = { path = "../../../crates/fc-app" }
+# fc-api = { path = "../../../crates/fc-api" }
+
+[features]
+# Used by `tauri build` / production: serve the bundled frontend.
+custom-protocol = ["tauri/custom-protocol"]

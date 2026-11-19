@@ -1,0 +1,82 @@
+{
+  "app": {
+    "title": "Flashcard"
+  },
+  "menu": {
+    "decks": "Decks",
+    "add_note": "Add",
+    "notes": "Notes",
+    "settings": "Settings"
+  },
+  "modules": {
+    "decks": "Decks",
+    "notes": "Notes",
+    "settings": "Settings"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "rename": "Rename",
+    "loading": "Loading…",
+    "none": "—",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "deck": {
+    "heading": "Decks",
+    "new": "New deck",
+    "new_sub": "New subdeck",
+    "name": "Deck name",
+    "empty": "No decks yet.",
+    "confirm_delete": "Delete “{name}” and its subdecks?",
+    "select_prompt": "Select a deck first.",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "current": "Deck"
+  },
+  "note": {
+    "add_heading": "Add note",
+    "list_heading": "Notes",
+    "front": "Front",
+    "back": "Back",
+    "add": "Add",
+    "added": "Note added.",
+    "empty": "No notes in this deck.",
+    "classifications": "Classifications",
+    "confirm_delete": "Delete this note?",
+    "undo_hint": "You can undo this afterwards.",
+    "delete_aria": "Delete note “{name}”"
+  },
+  "attribute": {
+    "unset": "Not set",
+    "required": "Required"
+  },
+  "settings": {
+    "heading": "Settings",
+    "language": "Language",
+    "theme": "Theme",
+    "theme_system": "System",
+    "theme_light": "Light",
+    "theme_dark": "Dark"
+  },
+  "lang": {
+    "tr": "Türkçe",
+    "en": "English"
+  },
+  "errors": {
+    "internal": "Something went wrong.",
+    "not_implemented": "Not available yet.",
+    "deck": {
+      "not_found": "Deck not found."
+    },
+    "note": {
+      "not_found": "Note not found.",
+      "duplicate": "This note already exists."
+    },
+    "validation": {
+      "empty_name": "Name can't be empty.",
+      "empty_front": "Front can't be empty."
+    }
+  }
+}
