@@ -42,18 +42,11 @@ pub fn checksum(sql: &str) -> String {
 }
 
 /// All migrations, ascending by version.
-pub const MIGRATIONS: &[Migration] = &[
-    Migration {
-        version: 1,
-        name: "0001_init",
-        sql: include_str!("../migrations/0001_init.sql"),
-    },
-    Migration {
-        version: 2,
-        name: "0002_notes_fts_rowid",
-        sql: include_str!("../migrations/0002_notes_fts_rowid.sql"),
-    },
-];
+pub const MIGRATIONS: &[Migration] = &[Migration {
+    version: 1,
+    name: "0001_init",
+    sql: include_str!("../migrations/0001_init.sql"),
+}];
 
 /// Highest known schema version.
 pub fn latest_version() -> u32 {
@@ -104,7 +97,15 @@ pub fn migrate_with(conn: &mut Connection, migrations: &[Migration]) -> StorageR
 
 /// Versions of `MIGRATIONS` not yet applied to `conn` (after validating what is recorded).
 pub fn pending_versions(conn: &mut Connection) -> StorageResult<Vec<u32>> {
-    Ok(check(conn, MIGRATIONS)?
+    pending_versions_with(conn, MIGRATIONS)
+}
+
+/// [`pending_versions`] against an explicit migration list. For tests.
+pub fn pending_versions_with(
+    conn: &mut Connection,
+    migrations: &[Migration],
+) -> StorageResult<Vec<u32>> {
+    Ok(check(conn, migrations)?
         .into_iter()
         .map(|m| m.version)
         .collect())

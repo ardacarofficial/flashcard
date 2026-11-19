@@ -1,4 +1,6 @@
-use super::{add_note, card, cid, classic, deck, did, nid, note, search_text, tag, Fx};
+use super::{
+    add_note, card, cid, classic, deck, did, nid, note, put_note, put_update, search_text, tag, Fx,
+};
 use crate::error::StorageError;
 use crate::repo::*;
 use fc_core::card::CardState;
@@ -52,7 +54,7 @@ fn notetype_upsert_get_list() {
 fn note_roundtrip_with_tags_in_order() {
     let fx = Fx::seeded();
     let n = note(1, "<b>run</b>", "koşmak", &["verb", "Dil::Fiil", "a1"], 100);
-    fx.write(|tx| tx.insert_note(&n, &search_text(&n)).unwrap());
+    fx.write(|tx| put_note(tx, &n, &search_text(&n)).unwrap());
     fx.read(|r| {
         let got = r.get_note(nid(1)).unwrap().unwrap();
         assert_eq!(got, n);
@@ -67,12 +69,10 @@ fn note_roundtrip_with_tags_in_order() {
 fn case_duplicate_tags_are_stored_once_and_reuse_existing_rows() {
     let fx = Fx::seeded();
     fx.write(|tx| {
-        tx.insert_note(&note(1, "a", "", &["Verb"], 1), "a")
-            .unwrap();
-        tx.insert_note(&note(2, "b", "", &["VERB", "x", "verb"], 2), "b")
-            .unwrap();
-        tx.insert_note(&note(3, "c", "", &["Çay"], 3), "c").unwrap();
-        tx.insert_note(&note(4, "d", "", &["çay"], 4), "d").unwrap();
+        put_note(tx, &note(1, "a", "", &["Verb"], 1), "a").unwrap();
+        put_note(tx, &note(2, "b", "", &["VERB", "x", "verb"], 2), "b").unwrap();
+        put_note(tx, &note(3, "c", "", &["Çay"], 3), "c").unwrap();
+        put_note(tx, &note(4, "d", "", &["çay"], 4), "d").unwrap();
     });
     fx.read(|r| {
         let tags = r.list_tags().unwrap();
@@ -92,16 +92,16 @@ fn case_duplicate_tags_are_stored_once_and_reuse_existing_rows() {
 fn update_note_replaces_columns_tags_and_fts() {
     let fx = Fx::seeded();
     let n = note(1, "dog", "köpek", &["animal", "a1"], 10);
-    fx.write(|tx| tx.insert_note(&n, &search_text(&n)).unwrap());
+    fx.write(|tx| put_note(tx, &n, &search_text(&n)).unwrap());
     assert_eq!(fts(&fx, "dog"), [nid(1)]);
     assert_eq!(fts(&fx, "kopek"), [nid(1)], "diacritics folded");
 
     let mut m = note(1, "cat", "kedi", &["a2", "animal"], 10);
     m.updated_at = Timestamp(20);
     fx.write(|tx| {
-        tx.update_note(&m, &search_text(&m)).unwrap();
+        put_update(tx, &m, &search_text(&m)).unwrap();
         assert!(matches!(
-            tx.update_note(&note(9, "x", "", &[], 1), "x"),
+            put_update(tx, &note(9, "x", "", &[], 1), "x"),
             Err(StorageError::NotFound { entity: "note", .. })
         ));
     });
@@ -117,9 +117,9 @@ fn update_note_replaces_columns_tags_and_fts() {
 fn fts_row_is_recreated_if_missing() {
     let fx = Fx::seeded();
     let n = note(1, "dog", "", &[], 10);
-    fx.write(|tx| tx.insert_note(&n, "dog").unwrap());
+    fx.write(|tx| put_note(tx, &n, "dog").unwrap());
     fx.raw().execute("DELETE FROM notes_fts", []).unwrap();
-    fx.write(|tx| tx.update_note(&n, "dog").unwrap());
+    fx.write(|tx| put_update(tx, &n, "dog").unwrap());
     assert_eq!(fts(&fx, "dog"), [nid(1)]);
     assert_eq!(fts_rows(&fx), 1);
 }
@@ -166,8 +166,8 @@ fn checksum_lookup_skips_trash_and_other_types() {
     let a = note(1, "<i>Dog</i>", "x", &[], 1);
     let b = note(2, "dog ", "y", &[], 2);
     fx.write(|tx| {
-        tx.insert_note(&a, "").unwrap();
-        tx.insert_note(&b, "").unwrap();
+        put_note(tx, &a, "").unwrap();
+        put_note(tx, &b, "").unwrap();
     });
     assert_eq!(a.checksum, b.checksum);
     fx.read(|r| {
@@ -195,13 +195,10 @@ fn checksum_lookup_skips_trash_and_other_types() {
 fn note_ids_with_tag_includes_children() {
     let fx = Fx::seeded();
     fx.write(|tx| {
-        tx.insert_note(&note(1, "a", "", &["dil::fiil"], 1), "")
-            .unwrap();
-        tx.insert_note(&note(2, "b", "", &["Dil::Fiil::düzensiz"], 2), "")
-            .unwrap();
-        tx.insert_note(&note(3, "c", "", &["dil::fiiller"], 3), "")
-            .unwrap();
-        tx.insert_note(&note(4, "d", "", &["dil"], 4), "").unwrap();
+        put_note(tx, &note(1, "a", "", &["dil::fiil"], 1), "").unwrap();
+        put_note(tx, &note(2, "b", "", &["Dil::Fiil::düzensiz"], 2), "").unwrap();
+        put_note(tx, &note(3, "c", "", &["dil::fiiller"], 3), "").unwrap();
+        put_note(tx, &note(4, "d", "", &["dil"], 4), "").unwrap();
     });
     fx.read(|r| {
         assert_eq!(
@@ -223,8 +220,7 @@ fn list_notes_pages_newest_first_with_filters() {
         for (n, at, d) in [(1, 10, 1), (2, 20, 2), (3, 30, 1), (4, 30, 1), (5, 40, 2)] {
             add_note(tx, &note(n, &format!("w{n}"), "", &["t"], at), d);
         }
-        tx.insert_note(&note(6, "cardless", "", &[], 50), "")
-            .unwrap();
+        put_note(tx, &note(6, "cardless", "", &[], 50), "").unwrap();
     });
     let mut seen = Vec::new();
     let mut page = PageRequest {
@@ -303,8 +299,8 @@ fn cards_roundtrip_filter_and_soft_delete() {
     fx.write(|tx| {
         tx.insert_deck(&deck(1, None, "A")).unwrap();
         tx.insert_deck(&deck(2, None, "B")).unwrap();
-        tx.insert_note(&note(1, "a", "", &[], 1), "").unwrap();
-        tx.insert_note(&note(2, "b", "", &[], 2), "").unwrap();
+        put_note(tx, &note(1, "a", "", &[], 1), "").unwrap();
+        put_note(tx, &note(2, "b", "", &[], 2), "").unwrap();
     });
     let mut c1 = card(1, 1, 1);
     c1.scheduling.state = CardState::Review;
@@ -373,4 +369,41 @@ fn cards_roundtrip_filter_and_soft_delete() {
     });
     fx.write(|tx| assert_eq!(tx.set_cards_deleted(&[cid(1)], None).unwrap(), 1));
     fx.read(|r| assert_eq!(r.get_card(cid(1)).unwrap().unwrap().deleted_at, None));
+}
+
+#[test]
+fn home_deck_is_stored_listed_and_changeable() {
+    let fx = Fx::seeded();
+    fx.write(|tx| {
+        tx.insert_deck(&deck(1, None, "A")).unwrap();
+        tx.insert_deck(&deck(2, None, "B")).unwrap();
+        tx.insert_note(&note(1, "a", "", &[], 1), did(1), "a")
+            .unwrap();
+        // The FK is enforced.
+        assert!(matches!(
+            tx.insert_note(&note(2, "b", "", &[], 1), did(9), "b"),
+            Err(StorageError::Constraint { constraint }) if constraint == "foreign_key"
+        ));
+    });
+    fx.read(|r| {
+        assert_eq!(r.note_home_deck(nid(1)).unwrap(), Some(did(1)));
+        assert_eq!(r.note_home_deck(nid(2)).unwrap(), None);
+        let page = r
+            .list_notes(&NoteFilter::default(), &PageRequest::default())
+            .unwrap();
+        assert_eq!(page.items[0].home_deck_id, did(1));
+    });
+    fx.write(|tx| {
+        // update_note keeps the home deck.
+        let mut n = note(1, "a2", "", &[], 1);
+        n.updated_at = Timestamp(2);
+        tx.update_note(&n, "a2").unwrap();
+        assert_eq!(tx.note_home_deck(nid(1)).unwrap(), Some(did(1)));
+        tx.set_note_home_deck(nid(1), did(2)).unwrap();
+        assert!(matches!(
+            tx.set_note_home_deck(nid(9), did(2)),
+            Err(StorageError::NotFound { entity: "note", .. })
+        ));
+    });
+    fx.read(|r| assert_eq!(r.note_home_deck(nid(1)).unwrap(), Some(did(2))));
 }

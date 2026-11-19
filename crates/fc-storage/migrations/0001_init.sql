@@ -55,17 +55,25 @@ CREATE TABLE notetypes (
 CREATE UNIQUE INDEX notetypes_builtin ON notetypes(builtin) WHERE builtin IS NOT NULL;
 
 -- ---------------------------------------------------------------- notes
+-- home_deck_id: the deck whose classification definitions apply to the note (note-level
+-- attributes); card-level attributes resolve from each card's own deck.
+-- fts_rowid: rowid of the note's notes_fts row. notes_fts.note_id is UNINDEXED, so this link
+-- makes FTS updates O(log n). Stored explicitly (notes.rowid may be renumbered by VACUUM).
 CREATE TABLE notes (
     id           TEXT PRIMARY KEY NOT NULL,
     notetype_id  TEXT NOT NULL REFERENCES notetypes(id),
+    home_deck_id TEXT NOT NULL REFERENCES decks(id),
     fields       TEXT NOT NULL CHECK (json_valid(fields)),    -- {field_key: value}
     sort_field   TEXT NOT NULL DEFAULT '',
     checksum     TEXT NOT NULL,                               -- fc_core::note::note_checksum
     created_at   INTEGER NOT NULL,
     updated_at   INTEGER NOT NULL,
-    deleted_at   INTEGER
+    deleted_at   INTEGER,
+    fts_rowid    INTEGER
 ) STRICT;
 CREATE INDEX notes_notetype ON notes(notetype_id);
+CREATE INDEX notes_home_deck ON notes(home_deck_id);
+CREATE UNIQUE INDEX notes_fts_rowid ON notes(fts_rowid) WHERE fts_rowid IS NOT NULL;
 CREATE INDEX notes_checksum ON notes(notetype_id, checksum) WHERE deleted_at IS NULL;
 CREATE INDEX notes_updated ON notes(updated_at);
 
@@ -95,6 +103,10 @@ CREATE TABLE cards (
 CREATE INDEX cards_deck_due ON cards(deck_id, due);
 CREATE INDEX cards_note ON cards(note_id);
 CREATE UNIQUE INDEX cards_note_template ON cards(note_id, template_key);
+-- Study queue: scheduled cards that can come due.
+CREATE INDEX cards_due_active ON cards(due)
+    WHERE state IN ('learning', 'review', 'relearning') AND suspended = 0
+      AND deleted_at IS NULL;
 
 -- ---------------------------------------------------------------- review log (immutable)
 CREATE TABLE review_log (
@@ -186,6 +198,8 @@ CREATE TABLE attribute_values (
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX attribute_values_entity ON attribute_values(entity_kind, entity_id);
 CREATE INDEX attribute_values_value ON attribute_values(attr_id, value);
+-- Range queries on number/bool attributes (`difficulty>3`).
+CREATE INDEX attribute_values_num ON attribute_values(attr_id, value_num);
 
 -- ---------------------------------------------------------------- media
 CREATE TABLE media (

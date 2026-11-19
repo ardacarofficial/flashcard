@@ -9,7 +9,7 @@
 //!   deleted rows only when asked (`include_deleted`) or when fetching by id.
 
 use crate::error::StorageResult;
-use fc_core::attribute::{AttributeDef, AttributeValue, EntityRef};
+use fc_core::attribute::{AttributeDef, AttributeOption, AttributeValue, EntityRef};
 use fc_core::card::Card;
 use fc_core::deck::Deck;
 use fc_core::note::Note;
@@ -54,6 +54,8 @@ pub struct NoteFilter {
 pub struct NoteListRow {
     /// The note (with tags).
     pub note: Note,
+    /// `notes.home_deck_id` (not part of `fc_core::note::Note` in v0.1).
+    pub home_deck_id: DeckId,
     /// Number of live cards.
     pub card_count: u32,
 }
@@ -67,6 +69,52 @@ pub struct CardFilter {
     pub note_ids: Option<Vec<NoteId>>,
     /// Include trashed cards.
     pub include_deleted: bool,
+}
+
+/// Entities trashed (or restored) together by a deck delete/restore. Lists are sorted by id
+/// and contain only rows whose `deleted_at` actually changed, so the app can store them in
+/// the inverse and replay them exactly ([`DeckWrite::set_trash_set_deleted`]).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DeckTrashSet {
+    /// The deck and its sub-decks.
+    pub decks: Vec<DeckId>,
+    /// Cards in those decks.
+    pub cards: Vec<CardId>,
+    /// Notes left without a live card (or card-less notes homed in those decks).
+    pub notes: Vec<NoteId>,
+}
+
+impl DeckTrashSet {
+    /// Whether nothing changed.
+    pub fn is_empty(&self) -> bool {
+        self.decks.is_empty() && self.cards.is_empty() && self.notes.is_empty()
+    }
+}
+
+/// Result of [`TagWrite::ensure_tags`] for one requested name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnsuredTag {
+    /// Id of the tag now carrying the name (the existing one, or the caller's id).
+    pub id: TagId,
+    /// Whether the tag was inserted by this call (with the caller's id).
+    pub created: bool,
+}
+
+/// What [`AttributeWrite::remove_attribute_option`] changed: everything
+/// [`AttributeWrite::restore_attribute_option`] needs to undo it exactly.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OptionRemoval {
+    /// The removed option as it was (label, color, order before removal).
+    pub option: AttributeOption,
+    /// Its index in the definition's sorted option list before removal.
+    pub index: usize,
+    /// The option values were moved to (`None` = values were dropped).
+    pub replaced_with: Option<AttributeOptionId>,
+    /// Entities whose `option` row was rewritten to `replaced_with`.
+    pub moved: Vec<EntityRef>,
+    /// Entities whose `option` row was deleted (no replacement, or the entity already had
+    /// `replaced_with` — multi-select).
+    pub dropped: Vec<EntityRef>,
 }
 
 /// Oplog entry kind (`oplog.kind`).
@@ -170,10 +218,29 @@ pub trait DeckWrite: DeckRead {
     fn insert_deck(&mut self, deck: &Deck) -> StorageResult<()>;
     /// Replaces all columns of an existing deck (by id).
     fn update_deck(&mut self, deck: &Deck) -> StorageResult<()>;
-    /// Trash (`Some`) or restore (`None`). Returns rows changed.
+    /// Trash (`Some`) or restore (`None`) deck rows only (no cascade). Returns rows changed.
     fn set_decks_deleted(
         &mut self,
         ids: &[DeckId],
+        deleted_at: Option<Timestamp>,
+    ) -> StorageResult<u32>;
+    /// Deck delete rule: trashes `deck` and its live sub-decks (walking through live decks
+    /// only), every live card in them, and every live note that is left without a live card
+    /// (plus live card-less notes homed in those decks) — all with the same `deleted_at = at`.
+    /// Returns exactly what changed (empty if `deck` is already trashed). `NotFound` for an
+    /// unknown deck.
+    fn trash_deck_subtree(&mut self, deck: DeckId, at: Timestamp) -> StorageResult<DeckTrashSet>;
+    /// Trash restore of a deck: with `T = deck.deleted_at`, restores the deck, the sub-decks
+    /// reachable through decks trashed at `T`, their cards trashed at `T` and the notes trashed
+    /// at `T` that own one of those cards or are homed in those decks. Returns what changed
+    /// (empty if the deck is live). `NotFound` for an unknown deck; a sibling-name clash is
+    /// `Constraint { "decks_sibling_name" }`.
+    fn restore_deck_subtree(&mut self, deck: DeckId) -> StorageResult<DeckTrashSet>;
+    /// Applies `deleted_at` to exactly the listed decks, cards and notes (undo/redo of the two
+    /// methods above). Trash touches live rows, restore trashed rows. Returns rows changed.
+    fn set_trash_set_deleted(
+        &mut self,
+        set: &DeckTrashSet,
         deleted_at: Option<Timestamp>,
     ) -> StorageResult<u32>;
 }
@@ -226,15 +293,25 @@ pub trait NoteRead {
     ) -> StorageResult<Vec<NoteId>>;
     /// Live notes carrying `tag` or any tag below it.
     fn note_ids_with_tag(&self, tag: &TagName) -> StorageResult<Vec<NoteId>>;
+    /// `notes.home_deck_id` of a note (also if trashed); `None` for an unknown note.
+    fn note_home_deck(&self, id: NoteId) -> StorageResult<Option<DeckId>>;
 }
 
-/// Note writes.
+/// Note writes. Storage never creates tags here: every name in `note.tags` must already exist
+/// (see [`TagWrite::ensure_tags`]), else `NotFound { entity: "tag" }`.
 pub trait NoteWrite: NoteRead {
-    /// Inserts a note, its `note_tags` (creating missing tags with `note.created_at`) and its
+    /// Inserts a note homed in `home_deck`, its `note_tags` (in `note.tags` order) and its
     /// `notes_fts` row with `search_text`.
-    fn insert_note(&mut self, note: &Note, search_text: &str) -> StorageResult<()>;
-    /// Replaces a note's columns, tags and FTS row.
+    fn insert_note(
+        &mut self,
+        note: &Note,
+        home_deck: DeckId,
+        search_text: &str,
+    ) -> StorageResult<()>;
+    /// Replaces a note's columns, tags and FTS row. The home deck is kept.
     fn update_note(&mut self, note: &Note, search_text: &str) -> StorageResult<()>;
+    /// Sets `notes.home_deck_id`. `NotFound` for an unknown note.
+    fn set_note_home_deck(&mut self, id: NoteId, home_deck: DeckId) -> StorageResult<()>;
     /// Trash/restore. Returns rows changed.
     fn set_notes_deleted(
         &mut self,
@@ -279,13 +356,24 @@ pub trait TagRead {
 pub trait TagWrite: TagRead {
     /// Inserts or replaces a tag row.
     fn upsert_tag(&mut self, tag: &Tag) -> StorageResult<()>;
+    /// For each `(name, id)`: returns the existing tag with that name (Unicode
+    /// case-insensitive), or inserts `name` with the caller's `id` (created/updated at `now`).
+    /// Results are in input order; a name repeated in the input resolves to the same tag.
+    /// Storage never mints ids (all come from the app's `IdGen`).
+    fn ensure_tags(
+        &mut self,
+        tags: &[(TagName, TagId)],
+        now: Timestamp,
+    ) -> StorageResult<Vec<EnsuredTag>>;
     /// Removes tags no note references (also not trashed notes). Returns rows deleted.
     fn delete_unused_tags(&mut self) -> StorageResult<u32>;
     /// Moves every `note_tags` reference from tag `from` to tag `into` (a note carrying both
-    /// keeps `into` at its own position), then deletes `from`. Returns the number of notes
-    /// that carried `from`. Note rows (`updated_at`) are not touched. Hierarchical renames
-    /// are `upsert_tag` (same id, new name) per tag, or this when the new name exists.
-    fn merge_tag(&mut self, from: TagId, into: TagId) -> StorageResult<u32>;
+    /// keeps `into` at its own position), then deletes `from`. Sets `updated_at = now` on
+    /// every note that carried `from` and returns those notes (sorted by id; trashed notes
+    /// included). Hierarchical renames are `upsert_tag` (same id, new name) per tag, or this
+    /// when the new name exists.
+    fn merge_tag(&mut self, from: TagId, into: TagId, now: Timestamp)
+        -> StorageResult<Vec<NoteId>>;
 }
 
 // ------------------------------------------------------------------ attributes
@@ -315,6 +403,20 @@ pub trait AttributeRead {
         &self,
         deck: Option<DeckId>,
     ) -> StorageResult<Vec<(AttributeDef, usize)>>;
+    /// Note-level (`target = note`) definitions that apply to `note`: resolved like
+    /// [`AttributeRead::effective_attribute_defs_for_deck`] over the note's **home deck**,
+    /// then filtered by target (shadowing by `key` happens before filtering). `NotFound` for
+    /// an unknown note.
+    fn effective_attribute_defs_for_note(
+        &self,
+        note: NoteId,
+    ) -> StorageResult<Vec<(AttributeDef, usize)>>;
+    /// Card-level (`target = card`) definitions that apply to `card`, resolved over the
+    /// **card's deck**. `NotFound` for an unknown card.
+    fn effective_attribute_defs_for_card(
+        &self,
+        card: CardId,
+    ) -> StorageResult<Vec<(AttributeDef, usize)>>;
 }
 
 /// Attribute writes.
@@ -328,6 +430,38 @@ pub trait AttributeWrite: AttributeRead {
         &mut self,
         id: AttributeDefId,
         deleted_at: Option<Timestamp>,
+    ) -> StorageResult<()>;
+    /// Inserts `option` (caller's id) into `attr`'s option list at `index` of the sorted list
+    /// (clamped to the end); orders are renumbered `0..n` and `updated_at = now`. Fails with
+    /// `Constraint { "attribute_option_id" }` if the id is taken, `NotFound` for an unknown
+    /// definition.
+    fn insert_attribute_option(
+        &mut self,
+        attr: AttributeDefId,
+        option: &AttributeOption,
+        index: usize,
+        now: Timestamp,
+    ) -> StorageResult<()>;
+    /// Removes `option` from `attr` (orders renumbered, `updated_at = now`) and rewrites its
+    /// values: with `replace_with = Some(r)` each entity's `option` row becomes `r` (dropped
+    /// if the entity already has `r`); with `None` the rows are deleted. Merge = `Some(into)`.
+    /// Returns everything changed. `NotFound { entity: "attribute_option" }` for an unknown
+    /// option or replacement.
+    fn remove_attribute_option(
+        &mut self,
+        attr: AttributeDefId,
+        option: AttributeOptionId,
+        replace_with: Option<AttributeOptionId>,
+        now: Timestamp,
+    ) -> StorageResult<OptionRemoval>;
+    /// Exact inverse of [`AttributeWrite::remove_attribute_option`], atomically: re-inserts
+    /// `removal.option` at `removal.index`, rewrites `replaced_with` rows of `moved` back to
+    /// the option and re-adds the option row for `dropped`.
+    fn restore_attribute_option(
+        &mut self,
+        attr: AttributeDefId,
+        removal: &OptionRemoval,
+        now: Timestamp,
     ) -> StorageResult<()>;
     /// Sets values on one entity: `Some` replaces that attribute's rows, `None` removes them.
     /// Attributes not listed are untouched. Rows use `AttributeValue::to_stored()`.

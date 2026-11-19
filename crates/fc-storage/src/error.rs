@@ -34,7 +34,9 @@ pub enum StorageError {
         /// Details.
         message: String,
     },
-    /// A paging cursor was not produced by this listing (or is from another version).
+    /// A paging cursor was not produced by this listing (or is from another version). Caused
+    /// by client input, not by the database: `fc-app` maps it to
+    /// `VALIDATION_INVALID_PARAMS` (details `{"field": "cursor"}`), never to `IO_*`.
     #[error("invalid paging cursor: {0}")]
     InvalidCursor(String),
     /// Migration failed.

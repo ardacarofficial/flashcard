@@ -1,4 +1,4 @@
-use super::{cid, deck, did, nid, note, Fx};
+use super::{cid, deck, did, nid, note, put_note, Fx};
 use crate::error::StorageError;
 use crate::store::Store;
 use fc_core::attribute::{
@@ -61,8 +61,7 @@ fn classification_flow_seviye() {
     fx.write(|tx| {
         tx.insert_deck(&deck(1, None, "İngilizce")).unwrap();
         tx.insert_deck(&deck(2, Some(1), "Kelimeler")).unwrap();
-        tx.insert_note(&note(1, "run", "koşmak", &[], 5), "run")
-            .unwrap();
+        put_note(tx, &note(1, "run", "koşmak", &[], 5), "run").unwrap();
     });
     let cefr = find_template("cefr").unwrap();
     let mut seviye =
@@ -206,7 +205,7 @@ fn deepest_definition_wins_and_trash_is_ignored() {
 fn every_value_kind_roundtrips() {
     let fx = Fx::seeded();
     let mut ids = ids();
-    fx.write(|tx| tx.insert_note(&note(1, "a", "", &[], 1), "").unwrap());
+    fx.write(|tx| put_note(tx, &note(1, "a", "", &[], 1), "").unwrap());
     let multi = plain_def(
         &mut ids,
         None,
@@ -327,4 +326,288 @@ fn update_missing_definition_is_not_found() {
             ..
         })
     ));
+}
+
+/// Note-level definitions resolve from the note's home deck, card-level ones from the card's
+/// deck; shadowing by key happens before filtering by target.
+#[test]
+fn effective_defs_for_note_use_home_deck_and_for_card_use_card_deck() {
+    let fx = Fx::seeded();
+    let mut ids = ids();
+    let mut on_a = plain_def(&mut ids, Some(did(1)), "level", AttributeKind::Enum, &["x"]);
+    on_a.name = "A".into();
+    let mut card_b = plain_def(&mut ids, Some(did(2)), "seen", AttributeKind::Bool, &[]);
+    card_b.target = AttributeTarget::Card;
+    let note_b = plain_def(&mut ids, Some(did(2)), "topic", AttributeKind::Text, &[]);
+    let global = plain_def(&mut ids, None, "src", AttributeKind::Text, &[]);
+    fx.write(|tx| {
+        tx.insert_deck(&deck(1, None, "A")).unwrap();
+        tx.insert_deck(&deck(2, None, "B")).unwrap();
+        for d in [&on_a, &card_b, &note_b, &global] {
+            tx.insert_attribute_def(d).unwrap();
+        }
+        // Note homed in A, its card lives in B.
+        let n = note(1, "a", "", &[], 1);
+        tx.insert_note(&n, did(1), "a").unwrap();
+        tx.insert_card(&super::card(1, 1, 2)).unwrap();
+    });
+    let keys = |v: Vec<(AttributeDef, usize)>| -> Vec<String> {
+        let mut k: Vec<String> = v.into_iter().map(|(d, _)| d.key).collect();
+        k.sort();
+        k
+    };
+    fx.read(|r| {
+        assert_eq!(
+            keys(r.effective_attribute_defs_for_note(nid(1)).unwrap()),
+            ["level", "src"]
+        );
+        assert_eq!(
+            keys(r.effective_attribute_defs_for_card(cid(1)).unwrap()),
+            ["seen"]
+        );
+        assert!(matches!(
+            r.effective_attribute_defs_for_note(nid(9)),
+            Err(StorageError::NotFound { entity: "note", .. })
+        ));
+        assert!(matches!(
+            r.effective_attribute_defs_for_card(cid(9)),
+            Err(StorageError::NotFound { entity: "card", .. })
+        ));
+    });
+    // Re-homing the note switches its note-level definitions.
+    fx.write(|tx| tx.set_note_home_deck(nid(1), did(2)).unwrap());
+    fx.read(|r| {
+        assert_eq!(
+            keys(r.effective_attribute_defs_for_note(nid(1)).unwrap()),
+            ["src", "topic"]
+        );
+    });
+}
+
+fn opt(def: &AttributeDef, label: &str) -> AttributeOptionId {
+    def.option_by_label(label).unwrap().id
+}
+
+fn labels(fx: &Fx, attr: AttributeDefId) -> Vec<String> {
+    fx.read(|r| {
+        r.get_attribute_def(attr)
+            .unwrap()
+            .unwrap()
+            .sorted_options()
+            .iter()
+            .map(|o| format!("{}:{}", o.order, o.label))
+            .collect()
+    })
+}
+
+#[test]
+fn insert_option_with_caller_id_at_index() {
+    let fx = Fx::seeded();
+    let mut ids = ids();
+    let def = plain_def(
+        &mut ids,
+        None,
+        "lvl",
+        AttributeKind::OrderedEnum,
+        &["a", "c"],
+    );
+    fx.write(|tx| tx.insert_attribute_def(&def).unwrap());
+    let b = AttributeOption {
+        id: AttributeOptionId(super::u(0xb)),
+        label: "b".into(),
+        color: Some("#123456".into()),
+        order: 99,
+    };
+    fx.write(|tx| {
+        tx.insert_attribute_option(def.id, &b, 1, Timestamp(5))
+            .unwrap();
+        assert!(matches!(
+            tx.insert_attribute_option(def.id, &b, 0, Timestamp(5)),
+            Err(StorageError::Constraint { constraint }) if constraint == "attribute_option_id"
+        ));
+        let mut d = b.clone();
+        d.id = AttributeOptionId(super::u(0xd));
+        d.label = "d".into();
+        // Index past the end appends.
+        tx.insert_attribute_option(def.id, &d, 100, Timestamp(6))
+            .unwrap();
+        assert!(matches!(
+            tx.insert_attribute_option(AttributeDefId(super::u(0xdead)), &d, 0, Timestamp(6)),
+            Err(StorageError::NotFound { .. })
+        ));
+    });
+    assert_eq!(labels(&fx, def.id), ["0:a", "1:b", "2:c", "3:d"]);
+    fx.read(|r| {
+        let got = r.get_attribute_def(def.id).unwrap().unwrap();
+        assert_eq!(got.updated_at, Timestamp(6));
+        assert_eq!(got.option(b.id).unwrap().color.as_deref(), Some("#123456"));
+    });
+}
+
+/// Merge on a multi-select: entities with only `from` move, entities with both drop `from`;
+/// restore puts back the option at its index and every value exactly.
+#[test]
+fn merge_multi_select_and_restore_exactly() {
+    let fx = Fx::seeded();
+    let mut ids = ids();
+    let def = plain_def(
+        &mut ids,
+        None,
+        "topics",
+        AttributeKind::MultiEnum,
+        &["x", "y", "z"],
+    );
+    let (x, y, z) = (opt(&def, "x"), opt(&def, "y"), opt(&def, "z"));
+    let (n1, n2, n3) = (
+        EntityRef::Note(nid(1)),
+        EntityRef::Note(nid(2)),
+        EntityRef::Note(nid(3)),
+    );
+    let set = |e, v: Vec<AttributeOptionId>| (e, vec![(def.id, Some(AttributeValue::Choices(v)))]);
+    let initial = [
+        set(n1, vec![x, y]), // has both: y row dropped
+        set(n2, vec![y]),    // only y: moves to z
+        set(n3, vec![z]),    // untouched
+    ];
+    fx.write(|tx| {
+        tx.insert_attribute_def(&def).unwrap();
+        for n in 1..=3 {
+            put_note(tx, &note(n, &format!("w{n}"), "", &[], 1), "").unwrap();
+        }
+        for (e, v) in &initial {
+            tx.set_attribute_values(*e, v).unwrap();
+        }
+    });
+    let snapshot = |fx: &Fx| -> Vec<Vec<(AttributeDefId, AttributeValue)>> {
+        fx.read(|r| {
+            [n1, n2, n3]
+                .iter()
+                .map(|e| r.get_attribute_values(*e).unwrap())
+                .collect()
+        })
+    };
+    let before = snapshot(&fx);
+    let before_labels = labels(&fx, def.id);
+
+    // Merge y into x... from n1's perspective it already has x.
+    let removal = fx.write(|tx| {
+        tx.remove_attribute_option(def.id, y, Some(x), Timestamp(9))
+            .unwrap()
+    });
+    assert_eq!(removal.index, 1);
+    assert_eq!(removal.option.label, "y");
+    assert_eq!(removal.replaced_with, Some(x));
+    assert_eq!(removal.moved, [n2]);
+    assert_eq!(removal.dropped, [n1]);
+    assert_eq!(labels(&fx, def.id), ["0:x", "1:z"]);
+    assert_eq!(
+        snapshot(&fx),
+        [
+            vec![(def.id, AttributeValue::Choices(vec![x]))],
+            vec![(def.id, AttributeValue::Choices(vec![x]))],
+            vec![(def.id, AttributeValue::Choices(vec![z]))],
+        ]
+    );
+
+    fx.write(|tx| {
+        tx.restore_attribute_option(def.id, &removal, Timestamp(10))
+            .unwrap()
+    });
+    assert_eq!(labels(&fx, def.id), before_labels);
+    assert_eq!(snapshot(&fx), before);
+}
+
+#[test]
+fn delete_option_without_replacement_and_restore() {
+    let fx = Fx::seeded();
+    let mut ids = ids();
+    let def = plain_def(&mut ids, None, "lvl", AttributeKind::Enum, &["a", "b", "c"]);
+    let (a, b) = (opt(&def, "a"), opt(&def, "b"));
+    fx.write(|tx| {
+        tx.insert_attribute_def(&def).unwrap();
+        for n in 1..=2 {
+            put_note(tx, &note(n, &format!("w{n}"), "", &[], 1), "").unwrap();
+        }
+        tx.set_attribute_values(
+            EntityRef::Note(nid(1)),
+            &[(def.id, Some(AttributeValue::Choice(a)))],
+        )
+        .unwrap();
+        tx.set_attribute_values(
+            EntityRef::Note(nid(2)),
+            &[(def.id, Some(AttributeValue::Choice(b)))],
+        )
+        .unwrap();
+    });
+    let removal = fx.write(|tx| {
+        assert!(matches!(
+            tx.remove_attribute_option(
+                def.id,
+                AttributeOptionId(super::u(0x77)),
+                None,
+                Timestamp(2)
+            ),
+            Err(StorageError::NotFound {
+                entity: "attribute_option",
+                ..
+            })
+        ));
+        assert!(matches!(
+            tx.remove_attribute_option(def.id, a, Some(a), Timestamp(2)),
+            Err(StorageError::NotFound {
+                entity: "attribute_option",
+                ..
+            })
+        ));
+        tx.remove_attribute_option(def.id, a, None, Timestamp(2))
+            .unwrap()
+    });
+    assert_eq!(removal.index, 0);
+    assert!(removal.moved.is_empty());
+    assert_eq!(removal.dropped, [EntityRef::Note(nid(1))]);
+    fx.read(|r| {
+        assert!(r
+            .get_attribute_values(EntityRef::Note(nid(1)))
+            .unwrap()
+            .is_empty());
+        assert_eq!(r.entities_with_option(def.id, b).unwrap().len(), 1);
+    });
+    fx.write(|tx| {
+        tx.restore_attribute_option(def.id, &removal, Timestamp(3))
+            .unwrap()
+    });
+    assert_eq!(labels(&fx, def.id), ["0:a", "1:b", "2:c"]);
+    fx.read(|r| {
+        assert_eq!(
+            r.get_attribute_values(EntityRef::Note(nid(1))).unwrap(),
+            [(def.id, AttributeValue::Choice(a))]
+        );
+    });
+}
+
+/// Multi-select values come back in option order, also after a reorder.
+#[test]
+fn multi_select_values_follow_option_order() {
+    let fx = Fx::seeded();
+    let mut ids = ids();
+    let mut def = plain_def(
+        &mut ids,
+        None,
+        "m",
+        AttributeKind::MultiEnum,
+        &["p", "q", "r"],
+    );
+    let (p, q, r) = (opt(&def, "p"), opt(&def, "q"), opt(&def, "r"));
+    let e = EntityRef::Note(nid(1));
+    fx.write(|tx| {
+        tx.insert_attribute_def(&def).unwrap();
+        put_note(tx, &note(1, "w", "", &[], 1), "").unwrap();
+        tx.set_attribute_values(e, &[(def.id, Some(AttributeValue::Choices(vec![r, p, q])))])
+            .unwrap();
+    });
+    let get = |fx: &Fx| fx.read(|rd| rd.get_attribute_values(e).unwrap()[0].1.clone());
+    assert_eq!(get(&fx), AttributeValue::Choices(vec![p, q, r]));
+    def.reorder_options(&[q, r, p]).unwrap();
+    fx.write(|tx| tx.update_attribute_def(&def).unwrap());
+    assert_eq!(get(&fx), AttributeValue::Choices(vec![q, r, p]));
 }

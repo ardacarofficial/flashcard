@@ -1,13 +1,15 @@
 //! Decks and presets.
 
-use super::{all, count, exec, exec_one, id, json, one, opt_id, opt_ms, opt_ts, to_json, ts};
+use super::{
+    all, count, exec, exec_one, id, json, json_list, one, opt_id, opt_ms, opt_ts, to_json, ts,
+};
 use super::{Mode, SqliteTx, WriteMode};
 use crate::error::{StorageError, StorageResult};
-use crate::repo::{CardCounts, DeckRead, DeckWrite, PresetRead, PresetWrite};
+use crate::repo::{CardCounts, DeckRead, DeckTrashSet, DeckWrite, PresetRead, PresetWrite};
 use fc_core::deck::{name_eq, Deck};
 use fc_core::preset::Preset;
-use fc_core::{DeckId, PresetId, Timestamp};
-use rusqlite::{params, Row};
+use fc_core::{CardId, DeckId, NoteId, PresetId, Timestamp};
+use rusqlite::{params, Connection, Row};
 
 const T: &str = "decks";
 const COLS: &str = "id, parent_id, name, description, icon, color, preset_id, position, \
@@ -186,6 +188,146 @@ impl DeckWrite for SqliteTx<'_, WriteMode> {
     ) -> StorageResult<u32> {
         set_deleted(self.conn(), "decks", ids, deleted_at)
     }
+
+    fn trash_deck_subtree(&mut self, deck: DeckId, at: Timestamp) -> StorageResult<DeckTrashSet> {
+        let conn = self.conn();
+        if deck_deleted_at(conn, deck)?.is_some() {
+            return Ok(DeckTrashSet::default());
+        }
+        // Live sub-decks, walking through live decks only.
+        let decks: Vec<DeckId> = all(
+            conn,
+            T,
+            "WITH RECURSIVE sub(id, depth) AS (
+                 SELECT id, 0 FROM decks WHERE id = ?1
+                 UNION
+                 SELECT d.id, sub.depth + 1 FROM decks d JOIN sub ON d.parent_id = sub.id
+                 WHERE d.deleted_at IS NULL AND sub.depth < ?2
+             )
+             SELECT id FROM sub ORDER BY id",
+            params![deck.to_string(), MAX_DEPTH],
+            |r| id(r, 0),
+        )?;
+        let deck_list = json_list(&decks);
+        let cards: Vec<CardId> = all(
+            conn,
+            "cards",
+            "SELECT id FROM cards
+             WHERE deleted_at IS NULL AND deck_id IN (SELECT value FROM json_each(?1))
+             ORDER BY id",
+            [&deck_list],
+            |r| id(r, 0),
+        )?;
+        let card_list = json_list(&cards);
+        // Live notes that lose their last live card, plus live card-less notes homed here.
+        let notes: Vec<NoteId> = all(
+            conn,
+            "notes",
+            "SELECT n.id FROM notes n
+             WHERE n.deleted_at IS NULL
+               AND (n.id IN (SELECT c.note_id FROM cards c
+                             WHERE c.id IN (SELECT value FROM json_each(?2)))
+                    OR (n.home_deck_id IN (SELECT value FROM json_each(?1))
+                        AND NOT EXISTS (SELECT 1 FROM cards c WHERE c.note_id = n.id
+                                          AND c.deleted_at IS NULL)))
+               AND NOT EXISTS (SELECT 1 FROM cards c
+                               WHERE c.note_id = n.id AND c.deleted_at IS NULL
+                                 AND c.id NOT IN (SELECT value FROM json_each(?2)))
+             ORDER BY n.id",
+            params![deck_list, card_list],
+            |r| id(r, 0),
+        )?;
+        let set = DeckTrashSet {
+            decks,
+            cards,
+            notes,
+        };
+        apply_trash_set(conn, &set, Some(at))?;
+        Ok(set)
+    }
+
+    fn restore_deck_subtree(&mut self, deck: DeckId) -> StorageResult<DeckTrashSet> {
+        let conn = self.conn();
+        let Some(at) = deck_deleted_at(conn, deck)? else {
+            return Ok(DeckTrashSet::default());
+        };
+        // Sub-decks trashed together with `deck` (same deleted_at), walking through them only.
+        let decks: Vec<DeckId> = all(
+            conn,
+            T,
+            "WITH RECURSIVE sub(id, depth) AS (
+                 SELECT id, 0 FROM decks WHERE id = ?1
+                 UNION
+                 SELECT d.id, sub.depth + 1 FROM decks d JOIN sub ON d.parent_id = sub.id
+                 WHERE d.deleted_at = ?2 AND sub.depth < ?3
+             )
+             SELECT id FROM sub ORDER BY id",
+            params![deck.to_string(), at.0, MAX_DEPTH],
+            |r| id(r, 0),
+        )?;
+        let deck_list = json_list(&decks);
+        let cards: Vec<CardId> = all(
+            conn,
+            "cards",
+            "SELECT id FROM cards
+             WHERE deleted_at = ?2 AND deck_id IN (SELECT value FROM json_each(?1))
+             ORDER BY id",
+            params![deck_list, at.0],
+            |r| id(r, 0),
+        )?;
+        let notes: Vec<NoteId> = all(
+            conn,
+            "notes",
+            "SELECT n.id FROM notes n
+             WHERE n.deleted_at = ?3
+               AND (n.id IN (SELECT c.note_id FROM cards c
+                             WHERE c.id IN (SELECT value FROM json_each(?2)))
+                    OR n.home_deck_id IN (SELECT value FROM json_each(?1)))
+             ORDER BY n.id",
+            params![deck_list, json_list(&cards), at.0],
+            |r| id(r, 0),
+        )?;
+        let set = DeckTrashSet {
+            decks,
+            cards,
+            notes,
+        };
+        apply_trash_set(conn, &set, None)?;
+        Ok(set)
+    }
+
+    fn set_trash_set_deleted(
+        &mut self,
+        set: &DeckTrashSet,
+        deleted_at: Option<Timestamp>,
+    ) -> StorageResult<u32> {
+        apply_trash_set(self.conn(), set, deleted_at)
+    }
+}
+
+/// `deleted_at` of a deck; `NotFound` if the deck does not exist.
+fn deck_deleted_at(conn: &Connection, deck: DeckId) -> StorageResult<Option<Timestamp>> {
+    one(
+        conn,
+        T,
+        "SELECT deleted_at FROM decks WHERE id = ?1",
+        [deck.to_string()],
+        |r| opt_ts(r, 0),
+    )?
+    .ok_or_else(|| StorageError::NotFound {
+        entity: "deck",
+        id: deck.to_string(),
+    })
+}
+
+fn apply_trash_set(
+    conn: &Connection,
+    set: &DeckTrashSet,
+    deleted_at: Option<Timestamp>,
+) -> StorageResult<u32> {
+    Ok(set_deleted(conn, "decks", &set.decks, deleted_at)?
+        + set_deleted(conn, "cards", &set.cards, deleted_at)?
+        + set_deleted(conn, "notes", &set.notes, deleted_at)?)
 }
 
 /// Shared trash/restore: trash touches live rows only, restore trashed rows only.

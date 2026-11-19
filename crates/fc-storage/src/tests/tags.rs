@@ -1,4 +1,4 @@
-use super::{nid, note, tag, Fx};
+use super::{nid, note, put_note, put_update, tag, tid_of, Fx};
 use crate::error::StorageError;
 use crate::store::Store;
 use fc_core::tag::Tag;
@@ -29,10 +29,7 @@ fn note_tags(fx: &Fx, n: u128) -> Vec<String> {
 #[test]
 fn get_by_name_is_case_insensitive_including_unicode() {
     let fx = Fx::seeded();
-    fx.write(|tx| {
-        tx.insert_note(&note(1, "a", "", &["Grammar", "Öğrenci::Şube"], 1), "")
-            .unwrap()
-    });
+    fx.write(|tx| put_note(tx, &note(1, "a", "", &["Grammar", "Öğrenci::Şube"], 1), "").unwrap());
     fx.read(|r| {
         assert_eq!(
             r.get_tag_by_name(&tag("gRAMMAR"))
@@ -62,51 +59,57 @@ fn get_by_name_is_case_insensitive_including_unicode() {
 }
 
 #[test]
-fn created_tag_ids_are_deterministic_v7() {
-    let ids: Vec<TagId> = (0..2)
-        .map(|_| {
-            let fx = Fx::seeded();
-            fx.write(|tx| tx.insert_note(&note(1, "a", "", &["x"], 1234), "").unwrap());
-            fx.read(|r| r.get_tag_by_name(&tag("x")).unwrap().unwrap())
-        })
-        .map(|t| {
-            assert_eq!(t.created_at, Timestamp(1234));
-            assert_eq!(t.id.0.get_version_num(), 7);
-            t.id
-        })
-        .collect();
-    assert_eq!(ids[0], ids[1]);
+fn ensure_tags_uses_caller_ids_and_finds_existing() {
+    let fx = Fx::seeded();
+    let (a, b) = (TagId(super::u(0xa1)), TagId(super::u(0xb1)));
+    fx.write(|tx| {
+        let got = tx
+            .ensure_tags(
+                &[(tag("Çay"), a), (tag("çay"), b), (tag("x"), b)],
+                Timestamp(7),
+            )
+            .unwrap();
+        let ids: Vec<(TagId, bool)> = got.iter().map(|e| (e.id, e.created)).collect();
+        // "çay" is the tag just created as "Çay" (Unicode case-insensitive).
+        assert_eq!(ids, [(a, true), (a, true), (b, true)]);
+        let again = tx
+            .ensure_tags(&[(tag("X"), TagId(super::u(0xc1)))], Timestamp(8))
+            .unwrap();
+        assert_eq!(again[0].id, b);
+        assert!(!again[0].created, "existing tag found, caller id unused");
+    });
+    fx.read(|r| {
+        let t = r.get_tag_by_name(&tag("çay")).unwrap().unwrap();
+        assert_eq!((t.id, t.created_at), (a, Timestamp(7)));
+        assert_eq!(r.list_tags().unwrap().len(), 2);
+    });
 }
 
 #[test]
-fn derived_id_collision_is_salted() {
+fn note_with_unknown_tag_is_rejected_storage_never_mints_ids() {
     let fx = Fx::seeded();
-    fx.write(|tx| tx.insert_note(&note(1, "a", "", &["x"], 5), "").unwrap());
-    let x = fx.read(|r| r.get_tag_by_name(&tag("x")).unwrap().unwrap());
-    // Rename x → y (same id), then create a fresh "x" at the same instant.
     fx.write(|tx| {
-        tx.upsert_tag(&Tag {
-            name: tag("y"),
-            ..x.clone()
-        })
-        .unwrap();
-        tx.insert_note(&note(2, "b", "", &["x"], 5), "").unwrap();
+        super::ensure_home(tx);
+        let r = tx.insert_note(
+            &note(1, "a", "", &["missing"], 1),
+            super::did(super::HOME),
+            "",
+        );
+        assert!(matches!(
+            r,
+            Err(StorageError::NotFound { entity: "tag", .. })
+        ));
     });
-    let new_x = fx.read(|r| r.get_tag_by_name(&tag("x")).unwrap().unwrap());
-    assert_ne!(new_x.id, x.id);
-    assert_eq!(tag_names(&fx), [("x".to_owned(), 1), ("y".to_owned(), 1)]);
+    fx.read(|r| assert!(r.list_tags().unwrap().is_empty()));
 }
 
 #[test]
 fn hierarchical_rename_via_upsert() {
     let fx = Fx::seeded();
     fx.write(|tx| {
-        tx.insert_note(&note(1, "a", "", &["dil::fiil", "z"], 1), "")
-            .unwrap();
-        tx.insert_note(&note(2, "b", "", &["dil::fiil::düzensiz"], 2), "")
-            .unwrap();
-        tx.insert_note(&note(3, "c", "", &["dil::fiiller"], 3), "")
-            .unwrap();
+        put_note(tx, &note(1, "a", "", &["dil::fiil", "z"], 1), "").unwrap();
+        put_note(tx, &note(2, "b", "", &["dil::fiil::düzensiz"], 2), "").unwrap();
+        put_note(tx, &note(3, "c", "", &["dil::fiiller"], 3), "").unwrap();
     });
     // What the app does for tags.rename dil::fiil → lang::verb.
     let (from, to) = (tag("dil::fiil"), tag("lang::verb"));
@@ -141,21 +144,31 @@ fn hierarchical_rename_via_upsert() {
 fn merge_moves_references_and_deletes_source() {
     let fx = Fx::seeded();
     fx.write(|tx| {
-        tx.insert_note(&note(1, "a", "", &["old", "keep"], 1), "")
-            .unwrap();
-        tx.insert_note(&note(2, "b", "", &["new", "old"], 2), "")
-            .unwrap();
-        tx.insert_note(&note(3, "c", "", &["new"], 3), "").unwrap();
+        put_note(tx, &note(1, "a", "", &["old", "keep"], 1), "").unwrap();
+        put_note(tx, &note(2, "b", "", &["new", "old"], 2), "").unwrap();
+        put_note(tx, &note(3, "c", "", &["new"], 3), "").unwrap();
     });
     let get = |name: &str| fx.read(|r| r.get_tag_by_name(&tag(name)).unwrap().unwrap().id);
     let (old, new) = (get("old"), get("new"));
+    assert_eq!(old, tid_of(&tag("old")), "ids come from the caller");
     fx.write(|tx| {
-        assert_eq!(tx.merge_tag(old, new).unwrap(), 2);
+        assert_eq!(
+            tx.merge_tag(old, new, Timestamp(50)).unwrap(),
+            [nid(1), nid(2)]
+        );
         assert!(matches!(
-            tx.merge_tag(old, new),
+            tx.merge_tag(old, new, Timestamp(51)),
             Err(StorageError::NotFound { entity: "tag", .. })
         ));
-        assert_eq!(tx.merge_tag(new, new).unwrap(), 0);
+        assert!(tx.merge_tag(new, new, Timestamp(52)).unwrap().is_empty());
+    });
+    fx.read(|r| {
+        let at = |n| r.get_note(nid(n)).unwrap().unwrap().updated_at;
+        assert_eq!(
+            [at(1), at(2), at(3)],
+            [Timestamp(50), Timestamp(50), Timestamp(3)],
+            "affected notes bumped"
+        );
     });
     assert_eq!(note_tags(&fx, 1), ["new", "keep"], "position kept");
     assert_eq!(note_tags(&fx, 2), ["new"], "duplicate collapsed");
@@ -168,10 +181,7 @@ fn merge_moves_references_and_deletes_source() {
 #[test]
 fn set_color_and_cleanup() {
     let fx = Fx::seeded();
-    fx.write(|tx| {
-        tx.insert_note(&note(1, "a", "", &["a", "b"], 1), "")
-            .unwrap()
-    });
+    fx.write(|tx| put_note(tx, &note(1, "a", "", &["a", "b"], 1), "").unwrap());
     let a = fx.read(|r| r.get_tag_by_name(&tag("a")).unwrap().unwrap());
     fx.write(|tx| {
         tx.upsert_tag(&Tag {
@@ -199,7 +209,7 @@ fn set_color_and_cleanup() {
     let mut n = note(1, "a", "", &["a"], 1);
     n.updated_at = Timestamp(4);
     fx.write(|tx| {
-        tx.update_note(&n, "").unwrap();
+        put_update(tx, &n, "").unwrap();
         assert_eq!(tx.delete_unused_tags().unwrap(), 2, "b and lonely");
     });
     assert_eq!(tag_names(&fx), [("a".to_owned(), 1)]);

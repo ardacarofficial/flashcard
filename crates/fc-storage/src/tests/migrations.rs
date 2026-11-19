@@ -42,9 +42,11 @@ const INDICES: &[&str] = &[
     "notes_checksum",
     "notes_updated",
     "notes_fts_rowid",
+    "notes_home_deck",
     "cards_deck_due",
     "cards_note",
     "cards_note_template",
+    "cards_due_active",
     "review_log_card_time",
     "oplog_batch",
     "tags_name",
@@ -52,6 +54,7 @@ const INDICES: &[&str] = &[
     "attribute_defs_scope_key",
     "attribute_values_entity",
     "attribute_values_value",
+    "attribute_values_num",
     "jobs_status",
 ];
 
@@ -239,7 +242,7 @@ fn refuses_newer_schema() {
 }
 
 /// A database created before `schema_migrations` existed (only `0001_init`, tracked by
-/// `user_version`) is adopted, snapshotted and upgraded by `SqliteStore::open`.
+/// `user_version`) is adopted; with a newer migration pending it is snapshotted and upgraded.
 #[test]
 fn adopts_legacy_database_with_snapshot() {
     let dir = tempfile::tempdir().unwrap();
@@ -252,46 +255,108 @@ fn adopts_legacy_database_with_snapshot() {
         conn.execute_batch(
             "INSERT INTO notetypes (id, name, kind, fields, templates, sort_field, created_at, updated_at)
                VALUES ('nt', 'N', 'standard', '[]', '[]', 'front', 0, 0);
-             INSERT INTO notes (id, notetype_id, fields, checksum, created_at, updated_at)
-               VALUES ('n1', 'nt', '{}', 'x', 0, 0);
-             INSERT INTO notes_fts (note_id, sort_field, content) VALUES ('n1', 'dog', 'dog');",
+             INSERT INTO decks (id, name, created_at, updated_at) VALUES ('d', 'D', 0, 0);
+             INSERT INTO notes (id, notetype_id, home_deck_id, fields, checksum, created_at, updated_at)
+               VALUES ('n1', 'nt', 'd', '{}', 'x', 0, 0);",
         )
         .unwrap();
     }
+    // Same version set as the build: adopted (back-filled), nothing to migrate, no snapshot.
     let store = SqliteStore::open(&path).unwrap();
+    assert!(store.migration_backup().is_none());
     assert_eq!(store.schema_version().unwrap(), migrate::latest_version());
+    drop(store);
+
+    // A later lane migration arrives: snapshot first, then upgrade.
+    let next = [
+        MIGRATIONS[0],
+        Migration {
+            version: 2,
+            name: "0002_test",
+            sql: "ALTER TABLE notes ADD COLUMN extra TEXT; UPDATE notes SET extra = 'x';",
+        },
+    ];
+    let store = SqliteStore::open_with_migrations(&path, &next).unwrap();
+    assert_eq!(store.schema_version().unwrap(), 2);
     let backup = store.migration_backup().unwrap().to_owned();
     assert!(backup.exists(), "snapshot written before migrating");
     assert!(backup
         .file_name()
         .unwrap()
         .to_string_lossy()
-        .starts_with("collection.db.pre-v1-to-v"));
+        .starts_with("collection.db.pre-v1-to-v2"));
     drop(store);
 
     let conn = Connection::open(&path).unwrap();
-    let recorded: Vec<u32> = conn
-        .prepare("SELECT version FROM schema_migrations ORDER BY version")
+    let recorded: Vec<(u32, i64)> = conn
+        .prepare("SELECT version, applied_at FROM schema_migrations ORDER BY version")
         .unwrap()
-        .query_map([], |r| r.get(0))
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
         .unwrap()
         .collect::<Result<_, _>>()
         .unwrap();
-    assert_eq!(recorded, all_versions());
-    // 0002 back-filled the FTS link.
-    let linked: Option<i64> = conn
-        .query_row("SELECT fts_rowid FROM notes WHERE id = 'n1'", [], |r| {
-            r.get(0)
-        })
+    assert_eq!(recorded.len(), 2);
+    assert_eq!(recorded[0], (1, 0), "0001 back-filled");
+    let extra: String = conn
+        .query_row("SELECT extra FROM notes WHERE id = 'n1'", [], |r| r.get(0))
         .unwrap();
-    assert!(linked.is_some());
+    assert_eq!(extra, "x");
     // The snapshot is the old schema.
     let old = Connection::open(&backup).unwrap();
     assert_eq!(migrate::current_version(&old).unwrap(), 1);
 
     // Re-opening an up-to-date database takes no snapshot.
-    let again = SqliteStore::open(&path).unwrap();
+    let again = SqliteStore::open_with_migrations(&path, &next).unwrap();
     assert!(again.migration_backup().is_none());
+}
+
+/// v0.1 ships one clean init migration (the FTS link and home deck are folded in).
+#[test]
+fn single_init_migration_has_folded_columns() {
+    assert_eq!(all_versions(), [1]);
+    let conn = fresh();
+    let cols: Vec<(String, i64)> = conn
+        .prepare("SELECT name, \"notnull\" FROM pragma_table_info('notes')")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert!(cols.contains(&("home_deck_id".to_owned(), 1)));
+    assert!(cols.contains(&("fts_rowid".to_owned(), 0)));
+    let fk: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM pragma_foreign_key_list('notes')
+             WHERE \"from\" = 'home_deck_id' AND \"table\" = 'decks'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(fk, 1);
+}
+
+/// The planner uses the partial study-queue index and the numeric value index.
+#[test]
+fn query_plans_use_new_indices() {
+    let conn = fresh();
+    let plan = |sql: &str| -> String {
+        conn.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(3))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .join("\n")
+    };
+    let due = plan(
+        "SELECT id FROM cards WHERE due <= 5 AND state IN ('learning', 'review', 'relearning')
+           AND suspended = 0 AND deleted_at IS NULL",
+    );
+    assert!(due.contains("cards_due_active"), "{due}");
+    let num = plan("SELECT entity_id FROM attribute_values WHERE attr_id = 'a' AND value_num > 3");
+    assert!(num.contains("attribute_values_num"), "{num}");
+    let home = plan("SELECT id FROM notes WHERE home_deck_id = 'd'");
+    assert!(home.contains("notes_home_deck"), "{home}");
 }
 
 #[test]

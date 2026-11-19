@@ -1,4 +1,4 @@
-use super::{card, cid, deck, did, nid, note, Fx};
+use super::{card, cid, deck, did, nid, note, put_note, Fx};
 use crate::error::StorageError;
 use crate::repo::*;
 use crate::store::Store;
@@ -192,8 +192,7 @@ fn card_counts_per_deck() {
         tx.insert_deck(&deck(1, None, "A")).unwrap();
         tx.insert_deck(&deck(2, None, "B")).unwrap();
         for n in 1..=7 {
-            tx.insert_note(&note(n, &format!("w{n}"), "", &[], 10), "")
-                .unwrap();
+            put_note(tx, &note(n, &format!("w{n}"), "", &[], 10), "").unwrap();
         }
         // deck 1: new, new(suspended), learning due, review due, review not due, new(buried)
         let mut cards = vec![card(1, 1, 1), card(2, 2, 1), card(3, 3, 1), card(4, 4, 1)];
@@ -262,5 +261,131 @@ fn presets_upsert_get_list() {
         assert_eq!(r.list_presets().unwrap(), vec![p.clone()]);
         assert_eq!(r.get_deck(did(1)).unwrap().unwrap().preset_id, Some(p.id));
         assert!(r.get_preset(PresetId(super::u(2))).unwrap().is_none());
+    });
+}
+
+/// Snapshot of `deleted_at` for decks 1..=5, cards 1..=6, notes 1..=6.
+fn trash_state(fx: &Fx) -> Vec<Option<Timestamp>> {
+    fx.read(|r| {
+        let mut v = Vec::new();
+        for n in 1..=5 {
+            v.push(r.get_deck(did(n)).unwrap().unwrap().deleted_at);
+        }
+        for n in 1..=6 {
+            v.push(r.get_card(cid(n)).unwrap().unwrap().deleted_at);
+        }
+        for n in 1..=6 {
+            v.push(r.get_note(nid(n)).unwrap().unwrap().deleted_at);
+        }
+        v
+    })
+}
+
+/// Tree: 1 ─ 2 ─ 3, 1 ─ 4 (trashed earlier), 5 elsewhere.
+/// Notes (home → cards): n1 (1 → c1@1), n2 (1 → c2@2, c3@5: keeps a live card),
+/// n3 (5 → c4@3), n4 (4 → c5@4, trashed earlier with deck 4), n5 (2 → no cards),
+/// n6 (5 → c6@5).
+fn trash_fixture() -> Fx {
+    let fx = Fx::seeded();
+    fx.write(|tx| {
+        tx.insert_deck(&deck(1, None, "Root")).unwrap();
+        tx.insert_deck(&deck(2, Some(1), "Child")).unwrap();
+        tx.insert_deck(&deck(3, Some(2), "Grandchild")).unwrap();
+        tx.insert_deck(&deck(4, Some(1), "Old")).unwrap();
+        tx.insert_deck(&deck(5, None, "Other")).unwrap();
+        for (n, home) in [(1, 1), (2, 1), (3, 5), (4, 4), (5, 2), (6, 5)] {
+            tx.insert_note(&note(n, &format!("w{n}"), "", &[], 1), did(home), "")
+                .unwrap();
+        }
+        for (c, n, d) in [
+            (1, 1, 1),
+            (2, 2, 2),
+            (3, 2, 5),
+            (4, 3, 3),
+            (5, 4, 4),
+            (6, 6, 5),
+        ] {
+            let mut c = card(c, n, d);
+            c.template_key = format!("t{}", c.id);
+            tx.insert_card(&c).unwrap();
+        }
+        // Deck 4 was trashed earlier (with its card and note).
+        tx.set_decks_deleted(&[did(4)], Some(Timestamp(50)))
+            .unwrap();
+        tx.set_cards_deleted(&[cid(5)], Some(Timestamp(50)))
+            .unwrap();
+        tx.set_notes_deleted(&[nid(4)], Some(Timestamp(50)))
+            .unwrap();
+    });
+    fx
+}
+
+#[test]
+fn deck_delete_trashes_subtree_cards_and_orphaned_notes_with_one_timestamp() {
+    let fx = trash_fixture();
+    let before = trash_state(&fx);
+    let t = Timestamp(100);
+    let set = fx.write(|tx| tx.trash_deck_subtree(did(1), t).unwrap());
+    assert_eq!(
+        set,
+        DeckTrashSet {
+            decks: vec![did(1), did(2), did(3)],
+            cards: vec![cid(1), cid(2), cid(4)],
+            // n2 keeps c3 in deck 5; n3 is homed elsewhere but lost its only card; n5 is a
+            // card-less note homed in deck 2; n4 was already trashed.
+            notes: vec![nid(1), nid(3), nid(5)],
+        }
+    );
+    let s = Some(t);
+    let old = Some(Timestamp(50));
+    assert_eq!(
+        trash_state(&fx),
+        [
+            s, s, s, old, None, // decks
+            s, s, None, s, old, None, // cards
+            s, None, s, old, s, None, // notes
+        ]
+    );
+    // Trashing again is a no-op; unknown decks are NotFound.
+    fx.write(|tx| {
+        assert!(tx
+            .trash_deck_subtree(did(1), Timestamp(200))
+            .unwrap()
+            .is_empty());
+        assert!(matches!(
+            tx.trash_deck_subtree(did(99), t),
+            Err(StorageError::NotFound { entity: "deck", .. })
+        ));
+    });
+
+    // Undo: restore exactly the listed ids; redo: trash them again with the same time.
+    fx.write(|tx| assert_eq!(tx.set_trash_set_deleted(&set, None).unwrap(), 9));
+    assert_eq!(trash_state(&fx), before);
+    fx.write(|tx| assert_eq!(tx.set_trash_set_deleted(&set, Some(t)).unwrap(), 9));
+
+    // Trash restore of the deck brings back what went with it, not deck 4's older trash.
+    let restored = fx.write(|tx| tx.restore_deck_subtree(did(1)).unwrap());
+    assert_eq!(restored, set);
+    assert_eq!(trash_state(&fx), before);
+    fx.write(|tx| assert!(tx.restore_deck_subtree(did(1)).unwrap().is_empty()));
+}
+
+#[test]
+fn restoring_a_sub_deck_restores_only_its_part() {
+    let fx = trash_fixture();
+    let t = Timestamp(100);
+    fx.write(|tx| tx.trash_deck_subtree(did(1), t).unwrap());
+    let restored = fx.write(|tx| tx.restore_deck_subtree(did(2)).unwrap());
+    assert_eq!(
+        restored,
+        DeckTrashSet {
+            decks: vec![did(2), did(3)],
+            cards: vec![cid(2), cid(4)],
+            notes: vec![nid(3), nid(5)],
+        }
+    );
+    fx.read(|r| {
+        assert_eq!(r.get_deck(did(1)).unwrap().unwrap().deleted_at, Some(t));
+        assert_eq!(r.get_note(nid(1)).unwrap().unwrap().deleted_at, Some(t));
     });
 }

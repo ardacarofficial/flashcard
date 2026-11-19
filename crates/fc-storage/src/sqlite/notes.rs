@@ -1,11 +1,11 @@
 //! Notes, their tags (`note_tags`) and their full-text rows (`notes_fts`).
 //!
 //! FTS is maintained explicitly (no triggers): the app passes the searchable text, and
-//! `notes.fts_rowid` (migration 0002) points at the note's `notes_fts` row. Trashing a note
+//! `notes.fts_rowid` points at the note's `notes_fts` row. Trashing a note
 //! keeps its FTS row (searches join `notes` and filter `deleted_at`), so restore needs no text.
 
 use super::decks::set_deleted;
-use super::tags::{ensure_tag, TagCol};
+use super::tags::{find_tag, TagCol};
 use super::{all, exec, exec_one, id, json, json_list, one, opt_ms, opt_ts, to_json, ts};
 use super::{Mode, SqliteTx, WriteMode};
 use crate::error::{StorageError, StorageResult};
@@ -13,7 +13,7 @@ use crate::repo::{NoteFilter, NoteListRow, NoteRead, NoteWrite};
 use fc_core::note::Note;
 use fc_core::paging::{Page, PageRequest};
 use fc_core::tag::TagName;
-use fc_core::{NoteId, NoteTypeId, TagId, Timestamp};
+use fc_core::{DeckId, NoteId, NoteTypeId, TagId, Timestamp};
 use rusqlite::{params, Connection, Row};
 use std::collections::HashMap;
 
@@ -62,9 +62,10 @@ fn with_tags(conn: &Connection, mut notes: Vec<Note>) -> StorageResult<Vec<Note>
     Ok(notes)
 }
 
-/// Replaces a note's `note_tags` rows, creating missing tags at `at`. Case-insensitive
-/// duplicates in the list are stored once (first position wins).
-fn write_tags(conn: &Connection, note: &Note, at: Timestamp) -> StorageResult<()> {
+/// Replaces a note's `note_tags` rows. Every tag must exist (`NotFound` otherwise; storage
+/// never mints tag ids). Case-insensitive duplicates in the list are stored once (first
+/// position wins).
+fn write_tags(conn: &Connection, note: &Note) -> StorageResult<()> {
     let nid = note.id.to_string();
     exec(
         conn,
@@ -74,7 +75,12 @@ fn write_tags(conn: &Connection, note: &Note, at: Timestamp) -> StorageResult<()
     )?;
     let mut seen: Vec<TagId> = Vec::new();
     for tag in &note.tags {
-        let tid = ensure_tag(conn, tag, at)?;
+        let tid = find_tag(conn, tag)?
+            .ok_or_else(|| StorageError::NotFound {
+                entity: "tag",
+                id: tag.as_str().to_owned(),
+            })?
+            .id;
         if seen.contains(&tid) {
             continue;
         }
@@ -172,7 +178,8 @@ impl<M: Mode> NoteRead for SqliteTx<'_, M> {
             &format!(
                 "SELECT {COLS},
                      (SELECT count(*) FROM cards c WHERE c.note_id = notes.id
-                        AND c.deleted_at IS NULL)
+                        AND c.deleted_at IS NULL),
+                     home_deck_id
                  FROM notes
                  WHERE (?1 OR deleted_at IS NULL)
                    AND (?2 IS NULL OR EXISTS (
@@ -190,10 +197,11 @@ impl<M: Mode> NoteRead for SqliteTx<'_, M> {
                 c_id,
                 i64::from(limit) + 1,
             ],
-            |r| Ok((note_row(r)?, r.get::<_, u32>(8)?)),
+            |r| Ok((note_row(r)?, (r.get::<_, u32>(8)?, id::<DeckId>(r, 9)?))),
         )?;
         let has_more = rows.len() > limit as usize;
-        let (notes, counts): (Vec<Note>, Vec<u32>) = rows.into_iter().take(limit as usize).unzip();
+        let (notes, extra): (Vec<Note>, Vec<(u32, DeckId)>) =
+            rows.into_iter().take(limit as usize).unzip();
         let notes = with_tags(self.conn(), notes)?;
         let next_cursor = if has_more {
             notes.last().map(|n| format!("{}:{}", n.updated_at.0, n.id))
@@ -203,8 +211,12 @@ impl<M: Mode> NoteRead for SqliteTx<'_, M> {
         Ok(Page {
             items: notes
                 .into_iter()
-                .zip(counts)
-                .map(|(note, card_count)| NoteListRow { note, card_count })
+                .zip(extra)
+                .map(|(note, (card_count, home_deck_id))| NoteListRow {
+                    note,
+                    home_deck_id,
+                    card_count,
+                })
                 .collect(),
             next_cursor,
         })
@@ -247,15 +259,33 @@ impl<M: Mode> NoteRead for SqliteTx<'_, M> {
             |r| id(r, 0),
         )
     }
+
+    fn note_home_deck(&self, note: NoteId) -> StorageResult<Option<DeckId>> {
+        one(
+            self.conn(),
+            T,
+            "SELECT home_deck_id FROM notes WHERE id = ?1",
+            [note.to_string()],
+            |r| id(r, 0),
+        )
+    }
 }
 
 impl NoteWrite for SqliteTx<'_, WriteMode> {
-    fn insert_note(&mut self, note: &Note, search_text: &str) -> StorageResult<()> {
+    fn insert_note(
+        &mut self,
+        note: &Note,
+        home_deck: DeckId,
+        search_text: &str,
+    ) -> StorageResult<()> {
         let conn = self.conn();
         exec(
             conn,
             T,
-            &format!("INSERT INTO notes ({COLS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"),
+            &format!(
+                "INSERT INTO notes ({COLS}, home_deck_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
+            ),
             params![
                 note.id.to_string(),
                 note.notetype_id.to_string(),
@@ -265,9 +295,10 @@ impl NoteWrite for SqliteTx<'_, WriteMode> {
                 note.created_at.0,
                 note.updated_at.0,
                 opt_ms(note.deleted_at),
+                home_deck.to_string(),
             ],
         )?;
-        write_tags(conn, note, note.created_at)?;
+        write_tags(conn, note)?;
         write_fts(conn, note, search_text)
     }
 
@@ -292,7 +323,7 @@ impl NoteWrite for SqliteTx<'_, WriteMode> {
                 opt_ms(note.deleted_at),
             ],
         )?;
-        write_tags(conn, note, note.updated_at)?;
+        write_tags(conn, note)?;
         write_fts(conn, note, search_text)
     }
 
@@ -302,5 +333,16 @@ impl NoteWrite for SqliteTx<'_, WriteMode> {
         deleted_at: Option<Timestamp>,
     ) -> StorageResult<u32> {
         set_deleted(self.conn(), T, ids, deleted_at)
+    }
+
+    fn set_note_home_deck(&mut self, note: NoteId, home_deck: DeckId) -> StorageResult<()> {
+        exec_one(
+            self.conn(),
+            T,
+            "note",
+            &note,
+            "UPDATE notes SET home_deck_id = ?2 WHERE id = ?1",
+            params![note.to_string(), home_deck.to_string()],
+        )
     }
 }

@@ -5,11 +5,9 @@
 use super::{all, exec, exec_one, id, one, ts};
 use super::{Mode, SqliteTx, WriteMode};
 use crate::error::{StorageError, StorageResult};
-use crate::repo::{TagRead, TagWrite};
-use fc_core::id::uuid_v7_from_parts;
-use fc_core::note::fnv1a64;
+use crate::repo::{EnsuredTag, TagRead, TagWrite};
 use fc_core::tag::{Tag, TagName};
-use fc_core::{TagId, Timestamp};
+use fc_core::{NoteId, TagId, Timestamp};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
 use rusqlite::{params, Connection, Row};
 
@@ -66,47 +64,6 @@ pub(super) fn find_tag(conn: &Connection, name: &TagName) -> StorageResult<Optio
     Ok(candidates.into_iter().find(|t| t.name.key() == key))
 }
 
-/// Id of tag `name`, inserting the tag (created/updated at `at`) if missing.
-///
-/// Storage has no id generator, so new tag ids are derived: a UUIDv7 with timestamp `at` and
-/// random bits from the FNV-1a hash of the tag key (salted on the rare collision). This keeps
-/// writes deterministic for a given input.
-pub(super) fn ensure_tag(conn: &Connection, name: &TagName, at: Timestamp) -> StorageResult<TagId> {
-    if let Some(t) = find_tag(conn, name)? {
-        return Ok(t.id);
-    }
-    let key = name.key();
-    for salt in 0u32.. {
-        let a = fnv1a64(format!("{key}\u{1f}{salt}").as_bytes()).to_be_bytes();
-        let b = fnv1a64(format!("{salt}\u{1f}{key}").as_bytes()).to_be_bytes();
-        let mut random = [0u8; 10];
-        random[..8].copy_from_slice(&a);
-        random[8..].copy_from_slice(&b[..2]);
-        let candidate = TagId(uuid_v7_from_parts(at, &random));
-        let taken = one(
-            conn,
-            T,
-            "SELECT 1 FROM tags WHERE id = ?1",
-            [candidate.to_string()],
-            |r| r.get::<_, i64>(0),
-        )?
-        .is_some();
-        if !taken {
-            exec(
-                conn,
-                T,
-                &format!("INSERT INTO tags ({COLS}) VALUES (?1, ?2, NULL, ?3, ?3)"),
-                params![candidate.to_string(), name.as_str(), at.0],
-            )?;
-            return Ok(candidate);
-        }
-    }
-    Err(StorageError::Corrupt {
-        table: T,
-        message: "could not allocate a tag id".to_owned(),
-    })
-}
-
 impl<M: Mode> TagRead for SqliteTx<'_, M> {
     fn list_tags(&self) -> StorageResult<Vec<(Tag, u32)>> {
         all(
@@ -149,6 +106,34 @@ impl TagWrite for SqliteTx<'_, WriteMode> {
         Ok(())
     }
 
+    fn ensure_tags(
+        &mut self,
+        tags: &[(TagName, TagId)],
+        now: Timestamp,
+    ) -> StorageResult<Vec<EnsuredTag>> {
+        let conn = self.conn();
+        let mut out: Vec<EnsuredTag> = Vec::with_capacity(tags.len());
+        for (name, new_id) in tags {
+            if let Some(t) = find_tag(conn, name)? {
+                // A name repeated in the input finds the row inserted for its first occurrence.
+                let created = out.iter().any(|e| e.id == t.id && e.created);
+                out.push(EnsuredTag { id: t.id, created });
+                continue;
+            }
+            exec(
+                conn,
+                T,
+                &format!("INSERT INTO tags ({COLS}) VALUES (?1, ?2, NULL, ?3, ?3)"),
+                params![new_id.to_string(), name.as_str(), now.0],
+            )?;
+            out.push(EnsuredTag {
+                id: *new_id,
+                created: true,
+            });
+        }
+        Ok(out)
+    }
+
     fn delete_unused_tags(&mut self) -> StorageResult<u32> {
         let n = exec(
             self.conn(),
@@ -159,7 +144,12 @@ impl TagWrite for SqliteTx<'_, WriteMode> {
         Ok(super::count(n))
     }
 
-    fn merge_tag(&mut self, from: TagId, into: TagId) -> StorageResult<u32> {
+    fn merge_tag(
+        &mut self,
+        from: TagId,
+        into: TagId,
+        now: Timestamp,
+    ) -> StorageResult<Vec<NoteId>> {
         let conn = self.conn();
         for t in [from, into] {
             if one(
@@ -178,17 +168,23 @@ impl TagWrite for SqliteTx<'_, WriteMode> {
             }
         }
         if from == into {
-            return Ok(0);
+            return Ok(Vec::new());
         }
         let (f, i) = (from.to_string(), into.to_string());
-        let affected = one(
+        let affected: Vec<NoteId> = all(
             conn,
             "note_tags",
-            "SELECT count(*) FROM note_tags WHERE tag_id = ?1",
+            "SELECT note_id FROM note_tags WHERE tag_id = ?1 ORDER BY note_id",
             [&f],
-            |r| r.get::<_, u32>(0),
-        )?
-        .unwrap_or(0);
+            |r| id(r, 0),
+        )?;
+        exec(
+            conn,
+            "notes",
+            "UPDATE notes SET updated_at = ?2
+             WHERE id IN (SELECT note_id FROM note_tags WHERE tag_id = ?1)",
+            params![f, now.0],
+        )?;
         exec(
             conn,
             "note_tags",

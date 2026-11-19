@@ -12,14 +12,15 @@ mod notes;
 mod store;
 mod tags;
 
+use crate::error::StorageResult;
 use crate::repo::Writes;
 use crate::store::{SqliteStore, Store};
 use fc_core::card::{standard_card_specs, Card};
 use fc_core::deck::Deck;
-use fc_core::note::{note_checksum, searchable_text, sort_field_text, FieldValues, Note};
+use fc_core::note::{fnv1a64, note_checksum, searchable_text, sort_field_text, FieldValues, Note};
 use fc_core::notetype::{builtin, FieldKey, NoteType};
 use fc_core::tag::TagName;
-use fc_core::{CardId, DeckId, NoteId, Timestamp};
+use fc_core::{CardId, DeckId, NoteId, TagId, Timestamp};
 use rusqlite::Connection;
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -89,6 +90,42 @@ pub(crate) fn tag(s: &str) -> TagName {
     TagName::parse(s).unwrap()
 }
 
+/// Test id for a tag name (the app would take it from its `IdGen`).
+pub(crate) fn tid_of(name: &TagName) -> TagId {
+    TagId(u(
+        0x4_0000_0000 + u128::from(fnv1a64(name.key().as_bytes()) & 0xffff_ffff)
+    ))
+}
+
+/// Deck number of the default home deck used by [`put_note`].
+pub(crate) const HOME: u128 = 0xff;
+
+/// Inserts the default home deck if missing.
+pub(crate) fn ensure_home(tx: &mut dyn Writes) {
+    if tx.get_deck(did(HOME)).unwrap().is_none() {
+        tx.insert_deck(&deck(HOME, None, "Home")).unwrap();
+    }
+}
+
+/// What the app does before writing a note: resolve/create its tags with caller ids.
+pub(crate) fn ensure_note_tags(tx: &mut dyn Writes, n: &Note) {
+    let pairs: Vec<(TagName, TagId)> = n.tags.iter().map(|t| (t.clone(), tid_of(t))).collect();
+    tx.ensure_tags(&pairs, n.updated_at).unwrap();
+}
+
+/// Inserts `n` homed in the default home deck (created on demand), creating its tags first.
+pub(crate) fn put_note(tx: &mut dyn Writes, n: &Note, text: &str) -> StorageResult<()> {
+    ensure_home(tx);
+    ensure_note_tags(tx, n);
+    tx.insert_note(n, did(HOME), text)
+}
+
+/// Updates `n`, creating its tags first.
+pub(crate) fn put_update(tx: &mut dyn Writes, n: &Note, text: &str) -> StorageResult<()> {
+    ensure_note_tags(tx, n);
+    tx.update_note(n, text)
+}
+
 pub(crate) fn classic() -> NoteType {
     builtin::classic(Timestamp(1), "Classic", "Front", "Back")
 }
@@ -141,7 +178,7 @@ pub(crate) fn card(n: u128, note: u128, deck: u128) -> Card {
 
 /// Inserts a note with one card (card id = note uuid) in `deck`.
 pub(crate) fn add_note(tx: &mut dyn Writes, n: &Note, deck: u128) {
-    tx.insert_note(n, &search_text(n)).unwrap();
+    put_note(tx, n, &search_text(n)).unwrap();
     let spec = standard_card_specs(&classic()).remove(0);
     tx.insert_card(&Card::new(
         CardId(n.id.0),

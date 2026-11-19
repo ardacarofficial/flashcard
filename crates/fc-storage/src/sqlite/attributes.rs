@@ -4,13 +4,13 @@
 use super::{all, enum_col, enum_str, exec, exec_one, id, json, one, opt_ms, opt_ts, to_json, ts};
 use super::{Mode, SqliteTx, WriteMode};
 use crate::error::{StorageError, StorageResult};
-use crate::repo::{AttributeRead, AttributeWrite, DeckRead};
+use crate::repo::{AttributeRead, AttributeWrite, CardRead, DeckRead, NoteRead, OptionRemoval};
 use fc_core::attribute::{
-    effective_attribute_defs, AttributeDef, AttributeKind, AttributeTarget, AttributeValue,
-    EntityRef, StoredValue,
+    effective_attribute_defs, AttributeDef, AttributeKind, AttributeOption, AttributeTarget,
+    AttributeValue, EntityRef, StoredValue,
 };
 use fc_core::{AttributeDefId, AttributeOptionId, CardId, DeckId, NoteId, Timestamp};
-use rusqlite::{params, Row};
+use rusqlite::{params, Connection, Row};
 use std::collections::HashMap;
 
 const T: &str = "attribute_defs";
@@ -65,6 +65,79 @@ fn def_params(d: &AttributeDef) -> StorageResult<Vec<Box<dyn rusqlite::ToSql + '
 
 fn entity_parts(e: &EntityRef) -> (&'static str, String) {
     (e.target().as_str(), e.uuid().to_string())
+}
+
+fn entity_row(r: &Row<'_>) -> rusqlite::Result<EntityRef> {
+    let kind: AttributeTarget = enum_col(r, 0)?;
+    Ok(match kind {
+        AttributeTarget::Note => EntityRef::Note(id::<NoteId>(r, 1)?),
+        AttributeTarget::Card => EntityRef::Card(id::<CardId>(r, 1)?),
+    })
+}
+
+/// Resolves effective definitions over `deck`'s ancestry and keeps those for `target`.
+fn effective_for<M: Mode>(
+    tx: &SqliteTx<'_, M>,
+    deck: DeckId,
+    target: AttributeTarget,
+) -> StorageResult<Vec<(AttributeDef, usize)>> {
+    Ok(tx
+        .effective_attribute_defs_for_deck(Some(deck))?
+        .into_iter()
+        .filter(|(d, _)| d.target == target)
+        .collect())
+}
+
+/// Definition by id for an option edit; `NotFound` if missing.
+fn def_for_options(conn: &Connection, attr: AttributeDefId) -> StorageResult<AttributeDef> {
+    one(
+        conn,
+        T,
+        &format!("SELECT {COLS} FROM attribute_defs WHERE id = ?1"),
+        [attr.to_string()],
+        def_row,
+    )?
+    .ok_or_else(|| StorageError::NotFound {
+        entity: "attribute",
+        id: attr.to_string(),
+    })
+}
+
+/// The definition's options in sorted order (`AttributeDef::sorted_options`).
+fn sorted(def: &AttributeDef) -> Vec<AttributeOption> {
+    def.sorted_options().into_iter().cloned().collect()
+}
+
+/// Stores `options` (renumbered `0..n`) on `attr` with `updated_at = now`.
+fn write_options(
+    conn: &Connection,
+    attr: AttributeDefId,
+    options: Vec<AttributeOption>,
+    now: Timestamp,
+) -> StorageResult<()> {
+    let options: Vec<AttributeOption> = options
+        .into_iter()
+        .enumerate()
+        .map(|(i, o)| AttributeOption {
+            order: i32::try_from(i).unwrap_or(i32::MAX),
+            ..o
+        })
+        .collect();
+    exec_one(
+        conn,
+        T,
+        "attribute",
+        &attr,
+        "UPDATE attribute_defs SET options = ?2, updated_at = ?3 WHERE id = ?1",
+        params![attr.to_string(), to_json(T, &options)?, now.0],
+    )
+}
+
+fn unknown_option(o: AttributeOptionId) -> StorageError {
+    StorageError::NotFound {
+        entity: "attribute_option",
+        id: o.to_string(),
+    }
 }
 
 /// Decodes one attribute's rows. Multi-select options come back in the definition's option
@@ -162,13 +235,7 @@ impl<M: Mode> AttributeRead for SqliteTx<'_, M> {
             "SELECT entity_kind, entity_id FROM attribute_values
              WHERE attr_id = ?1 AND value = ?2 ORDER BY entity_kind, entity_id",
             params![attr.to_string(), option.to_string()],
-            |r| {
-                let kind: AttributeTarget = enum_col(r, 0)?;
-                Ok(match kind {
-                    AttributeTarget::Note => EntityRef::Note(id::<NoteId>(r, 1)?),
-                    AttributeTarget::Card => EntityRef::Card(id::<CardId>(r, 1)?),
-                })
-            },
+            entity_row,
         )
     }
 
@@ -185,6 +252,30 @@ impl<M: Mode> AttributeRead for SqliteTx<'_, M> {
             .into_iter()
             .map(|e| (e.def.clone(), e.depth))
             .collect())
+    }
+
+    fn effective_attribute_defs_for_note(
+        &self,
+        note: NoteId,
+    ) -> StorageResult<Vec<(AttributeDef, usize)>> {
+        let home = self
+            .note_home_deck(note)?
+            .ok_or_else(|| StorageError::NotFound {
+                entity: "note",
+                id: note.to_string(),
+            })?;
+        effective_for(self, home, AttributeTarget::Note)
+    }
+
+    fn effective_attribute_defs_for_card(
+        &self,
+        card: CardId,
+    ) -> StorageResult<Vec<(AttributeDef, usize)>> {
+        let c = self.get_card(card)?.ok_or_else(|| StorageError::NotFound {
+            entity: "card",
+            id: card.to_string(),
+        })?;
+        effective_for(self, c.deck_id, AttributeTarget::Card)
     }
 }
 
@@ -231,6 +322,149 @@ impl AttributeWrite for SqliteTx<'_, WriteMode> {
             "UPDATE attribute_defs SET deleted_at = ?2 WHERE id = ?1",
             params![def.to_string(), opt_ms(deleted_at)],
         )
+    }
+
+    fn insert_attribute_option(
+        &mut self,
+        attr: AttributeDefId,
+        option: &AttributeOption,
+        index: usize,
+        now: Timestamp,
+    ) -> StorageResult<()> {
+        let conn = self.conn();
+        let def = def_for_options(conn, attr)?;
+        if def.option(option.id).is_some() {
+            return Err(StorageError::Constraint {
+                constraint: "attribute_option_id".to_owned(),
+            });
+        }
+        let mut options = sorted(&def);
+        options.insert(index.min(options.len()), option.clone());
+        write_options(conn, attr, options, now)
+    }
+
+    fn remove_attribute_option(
+        &mut self,
+        attr: AttributeDefId,
+        option: AttributeOptionId,
+        replace_with: Option<AttributeOptionId>,
+        now: Timestamp,
+    ) -> StorageResult<OptionRemoval> {
+        let conn = self.conn();
+        let def = def_for_options(conn, attr)?;
+        let mut options = sorted(&def);
+        let index = options
+            .iter()
+            .position(|o| o.id == option)
+            .ok_or_else(|| unknown_option(option))?;
+        if let Some(r) = replace_with {
+            if r == option || def.option(r).is_none() {
+                return Err(unknown_option(r));
+            }
+        }
+        let removed = options.remove(index);
+        let (aid, oid) = (attr.to_string(), option.to_string());
+        let rid = replace_with.map(|r| r.to_string());
+        // Entities that already carry the replacement lose the row; the others move.
+        let (dropped, moved) = match &rid {
+            None => (
+                all(
+                    conn,
+                    V,
+                    "SELECT entity_kind, entity_id FROM attribute_values
+                     WHERE attr_id = ?1 AND value = ?2 ORDER BY entity_kind, entity_id",
+                    params![aid, oid],
+                    entity_row,
+                )?,
+                Vec::new(),
+            ),
+            Some(rid) => {
+                let sql = |has: bool| {
+                    format!(
+                        "SELECT entity_kind, entity_id FROM attribute_values v
+                         WHERE attr_id = ?1 AND value = ?2 AND {} EXISTS (
+                             SELECT 1 FROM attribute_values w WHERE w.attr_id = v.attr_id
+                               AND w.entity_kind = v.entity_kind
+                               AND w.entity_id = v.entity_id AND w.value = ?3)
+                         ORDER BY entity_kind, entity_id",
+                        if has { "" } else { "NOT" }
+                    )
+                };
+                (
+                    all(conn, V, &sql(true), params![aid, oid, rid], entity_row)?,
+                    all(conn, V, &sql(false), params![aid, oid, rid], entity_row)?,
+                )
+            }
+        };
+        if let Some(rid) = &rid {
+            exec(
+                conn,
+                V,
+                "UPDATE attribute_values SET value = ?3
+                 WHERE attr_id = ?1 AND value = ?2 AND NOT EXISTS (
+                     SELECT 1 FROM attribute_values w WHERE w.attr_id = attribute_values.attr_id
+                       AND w.entity_kind = attribute_values.entity_kind
+                       AND w.entity_id = attribute_values.entity_id AND w.value = ?3)",
+                params![aid, oid, rid],
+            )?;
+        }
+        exec(
+            conn,
+            V,
+            "DELETE FROM attribute_values WHERE attr_id = ?1 AND value = ?2",
+            params![aid, oid],
+        )?;
+        write_options(conn, attr, options, now)?;
+        Ok(OptionRemoval {
+            option: removed,
+            index,
+            replaced_with: replace_with,
+            moved,
+            dropped,
+        })
+    }
+
+    fn restore_attribute_option(
+        &mut self,
+        attr: AttributeDefId,
+        removal: &OptionRemoval,
+        now: Timestamp,
+    ) -> StorageResult<()> {
+        self.insert_attribute_option(attr, &removal.option, removal.index, now)?;
+        let conn = self.conn();
+        let (aid, oid) = (attr.to_string(), removal.option.id.to_string());
+        if !removal.moved.is_empty() {
+            let rid = removal
+                .replaced_with
+                .ok_or_else(|| StorageError::Corrupt {
+                    table: V,
+                    message: "option removal moved values without a replacement".to_owned(),
+                })?
+                .to_string();
+            for e in &removal.moved {
+                let (kind, eid) = entity_parts(e);
+                exec_one(
+                    conn,
+                    V,
+                    "attribute_value",
+                    &eid,
+                    "UPDATE attribute_values SET value = ?4
+                     WHERE attr_id = ?1 AND entity_kind = ?2 AND entity_id = ?3 AND value = ?5",
+                    params![aid, kind, eid, oid, rid],
+                )?;
+            }
+        }
+        for e in &removal.dropped {
+            let (kind, eid) = entity_parts(e);
+            exec(
+                conn,
+                V,
+                "INSERT INTO attribute_values (attr_id, entity_kind, entity_id, value, value_num)
+                 VALUES (?1, ?2, ?3, ?4, NULL)",
+                params![aid, kind, eid, oid],
+            )?;
+        }
+        Ok(())
     }
 
     fn set_attribute_values(

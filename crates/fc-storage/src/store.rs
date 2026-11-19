@@ -74,10 +74,18 @@ impl SqliteStore {
     /// (docs/03 §15; see [`SqliteStore::migration_backup`]), runs pending migrations and opens
     /// the reader pool.
     pub fn open(path: &Path) -> StorageResult<Self> {
+        Self::open_with_migrations(path, migrate::MIGRATIONS)
+    }
+
+    /// [`SqliteStore::open`] with an explicit migration list (tests of upgrade paths).
+    pub(crate) fn open_with_migrations(
+        path: &Path,
+        migrations: &[migrate::Migration],
+    ) -> StorageResult<Self> {
         let mut conn = Connection::open(path)?;
         migrate::configure_connection(&conn)?;
-        let backup = snapshot_before_migrating(&mut conn, path)?;
-        migrate::migrate(&mut conn)?;
+        let backup = snapshot_before_migrating(&mut conn, path, migrations)?;
+        migrate::migrate_with(&mut conn, migrations)?;
         let readers = (0..READ_POOL_SIZE)
             .map(|_| {
                 let r = Connection::open_with_flags(
@@ -197,12 +205,16 @@ fn lock_within(
 
 /// docs/03 §15: before migrating an existing database, copy it next to itself with
 /// `VACUUM INTO` (`<file>.pre-v<from>-to-v<to>[-n].bak`). Fresh databases are not copied.
-fn snapshot_before_migrating(conn: &mut Connection, path: &Path) -> StorageResult<Option<PathBuf>> {
+fn snapshot_before_migrating(
+    conn: &mut Connection,
+    path: &Path,
+    migrations: &[migrate::Migration],
+) -> StorageResult<Option<PathBuf>> {
     let from = migrate::current_version(conn)?;
     if from == 0 {
         return Ok(None);
     }
-    let pending = migrate::pending_versions(conn)?;
+    let pending = migrate::pending_versions_with(conn, migrations)?;
     let Some(to) = pending.last() else {
         return Ok(None);
     };
