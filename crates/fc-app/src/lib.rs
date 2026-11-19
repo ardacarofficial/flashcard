@@ -37,4 +37,6 @@ pub use registry::Registry;
 pub use fc_providers as providers;
 
 #[cfg(test)]
+mod acceptance;
+#[cfg(test)]
 mod tests;

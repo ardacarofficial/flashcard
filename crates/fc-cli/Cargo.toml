@@ -21,6 +21,7 @@ clap.workspace = true
 
 [dev-dependencies]
 fc-app = { path = "../fc-app", features = ["testing"] }
+tempfile.workspace = true
 
 [lints]
 workspace = true
