@@ -272,9 +272,25 @@ pub fn sanitize_html(input: &str) -> String {
 ///    closer is dropped and missing closers are appended ([`balance_css`]). A single `}` in a
 ///    note type's CSS therefore can never close the frontend's scope block.
 pub fn sanitize_css(css: &str) -> String {
-    balance_css(&filter_css(&normalize_css_escapes(css)))
+    let mut current = normalize_css_escapes(css);
+    // Removing a token (or dropping a stray closer in `balance_css`) can glue its neighbours
+    // into a new forbidden token (`ur)l(`), so repeat until nothing changes. Never-stable
+    // input (should be impossible) yields nothing rather than something unfiltered.
+    for _ in 0..MAX_CSS_PASSES {
+        let next = balance_css(&filter_css(&current));
+        if next == current {
+            return next;
+        }
+        current = next;
+    }
+    String::new()
 }
 
+const MAX_CSS_PASSES: usize = 16;
+
+/// One filtering pass. Removed tokens are replaced by a space so the text around them cannot
+/// fuse into a new forbidden token (`ur<l(` → `ur l(`); [`sanitize_css`] still iterates to a
+/// fixpoint as a second line of defence.
 fn filter_css(css: &str) -> String {
     let mut out = String::with_capacity(css.len());
     let lower = css.to_ascii_lowercase();
@@ -284,6 +300,7 @@ fn filter_css(css: &str) -> String {
         if rest.starts_with("@import") {
             // Drop up to and including the next ';' (or the rest).
             i += rest.find(';').map_or(rest.len(), |p| p + 1);
+            out.push(' ');
             continue;
         }
         if ["url(", "image(", "image-set(", "expression(", "src("]
@@ -291,19 +308,22 @@ fn filter_css(css: &str) -> String {
             .any(|f| rest.starts_with(f))
         {
             i += rest.find(')').map_or(rest.len(), |p| p + 1);
-            out.push_str("none");
+            out.push_str(" none ");
             continue;
         }
         if rest.starts_with("javascript:") {
             i += "javascript:".len();
+            out.push(' ');
             continue;
         }
         if rest.starts_with('<') {
             i += 1;
+            out.push(' ');
             continue;
         }
         if rest.starts_with("behavior") || rest.starts_with("-moz-binding") {
             i += rest.find(';').map_or(rest.len(), |p| p + 1);
+            out.push(' ');
             continue;
         }
         // Copy one UTF-8 character.
@@ -645,6 +665,91 @@ mod tests {
         );
         // `<` cannot be smuggled in as an escape.
         assert!(!sanitize_css("a { content: \"\\3c /style>\" }").contains('<'));
+    }
+
+    fn assert_css_clean(out: &str) {
+        let l = out.to_ascii_lowercase();
+        for bad in ["url(", "javascript:", "expression(", "@import", "image("] {
+            assert!(!l.contains(bad), "{bad} survived in {out:?}");
+        }
+    }
+
+    #[test]
+    fn css_removal_cannot_reassemble_tokens() {
+        for payload in [
+            "a{background:ur<l(https://e/x)}",
+            "a{background:u@import x;rl(https://e/x)}",
+            "a{x:javasjavascript:cript:alert(1)}",
+            "a{background:ur)l(https://e/x)}",
+            "a{background:ur}l(https://e/x)}",
+            "a{background:ur<<l(https://e/x)}",
+            "a{background:UR<L(https://e/x)}",
+        ] {
+            assert_css_clean(&sanitize_css(payload));
+        }
+    }
+
+    mod props {
+        use super::*;
+        use proptest::prelude::*;
+
+        fn fragment() -> impl Strategy<Value = String> {
+            prop_oneof![
+                prop::sample::select(vec![
+                    "url(",
+                    "ur",
+                    "l(",
+                    "u",
+                    "rl(",
+                    "<",
+                    "@import",
+                    "@import x;",
+                    ";",
+                    ")",
+                    "(",
+                    "}",
+                    "{",
+                    "]",
+                    "[",
+                    "javascript:",
+                    "javas",
+                    "cript:",
+                    "expression(",
+                    "expr",
+                    "ession(",
+                    "/*",
+                    "*/",
+                    "\\75 ",
+                    "\\6c ",
+                    "\\",
+                    "\"",
+                    "'",
+                    "image(",
+                    "src(",
+                    "behavior",
+                    "-moz-binding",
+                    "https://e/x",
+                    "fcmedia:abc",
+                    " ",
+                ])
+                .prop_map(String::from),
+                "[a-zA-Z(){}<;:@/*\\\\ ]{0,6}",
+            ]
+        }
+
+        proptest! {
+            #[test]
+            fn sanitized_css_never_has_forbidden_tokens(
+                parts in prop::collection::vec(fragment(), 0..24),
+                upper in any::<bool>(),
+            ) {
+                let mut input = parts.concat();
+                if upper {
+                    input = input.to_ascii_uppercase();
+                }
+                assert_css_clean(&sanitize_css(&input));
+            }
+        }
     }
 
     #[test]
