@@ -99,6 +99,9 @@ pub enum Pred {
         keys: Vec<String>,
         /// Glob source ([`super::text::Glob::source`]).
         glob: String,
+        /// Every field with one of these keys is full-text indexed, so backends may narrow
+        /// candidates with [`super::text::glob_index_tokens`] first.
+        indexed: bool,
     },
     /// Case-insensitive regex over the text of `keys` (all fields when `None`).
     Regex {

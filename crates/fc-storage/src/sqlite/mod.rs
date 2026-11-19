@@ -11,6 +11,7 @@ mod jobs;
 mod notes;
 mod notetypes;
 mod oplog;
+pub(crate) mod search;
 mod settings;
 mod tags;
 

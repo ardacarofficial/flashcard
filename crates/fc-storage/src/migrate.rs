@@ -231,6 +231,8 @@ pub fn configure_connection(conn: &Connection) -> StorageResult<()> {
     let _mode: String = conn.pragma_update_and_check(None, "journal_mode", "WAL", |r| r.get(0))?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.pragma_update(None, "temp_store", "MEMORY")?;
+    conn.pragma_update(None, "cache_size", CACHE_SIZE_KIB)?;
+    crate::sqlite::search::register_functions(conn)?;
     Ok(())
 }
 
@@ -241,8 +243,15 @@ pub fn configure_reader(conn: &Connection) -> StorageResult<()> {
     conn.pragma_update(None, "busy_timeout", BUSY_TIMEOUT_MS)?;
     conn.pragma_update(None, "temp_store", "MEMORY")?;
     conn.pragma_update(None, "query_only", "ON")?;
+    conn.pragma_update(None, "cache_size", CACHE_SIZE_KIB)?;
+    crate::sqlite::search::register_functions(conn)?;
     Ok(())
 }
+
+/// Page cache per connection, in KiB (negative = KiB for `PRAGMA cache_size`): 64 MiB keeps a
+/// 100k-note collection's hot pages in memory so a search does not go back to the OS cache
+/// (docs/04 v0.4 benchmark).
+pub const CACHE_SIZE_KIB: i64 = -65_536;
 
 /// SQLite busy timeout, also used for acquiring a pooled connection.
 pub const BUSY_TIMEOUT_MS: u32 = 5000;

@@ -10,11 +10,12 @@ use fc_core::{CardId, Timestamp};
 use rusqlite::{params, Row};
 
 const T: &str = "cards";
-const COLS: &str = "id, note_id, deck_id, template_key, card_type, state, due, stability, \
+pub(super) const COLS: &str =
+    "id, note_id, deck_id, template_key, card_type, state, due, stability, \
                     difficulty, reps, lapses, last_review, flags, suspended, buried_until, \
                     user_note, created_at, updated_at, deleted_at";
 
-fn card_row(r: &Row<'_>) -> rusqlite::Result<Card> {
+pub(super) fn card_row(r: &Row<'_>) -> rusqlite::Result<Card> {
     Ok(Card {
         id: id(r, 0)?,
         note_id: id(r, 1)?,

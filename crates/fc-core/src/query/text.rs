@@ -168,6 +168,35 @@ impl Glob {
     }
 }
 
+/// Index tokens every whole-field match of `glob` must contain, as `(folded token, prefix)`:
+/// tokens of the literal parts that start at a token boundary (a token right after a `*` may
+/// be the tail of a longer word and is skipped); the last token of a part followed by `*` is a
+/// prefix. Used to pre-filter field globs with the full-text index (necessary, not sufficient).
+pub fn glob_index_tokens(glob: &Glob) -> Vec<(String, bool)> {
+    let mut out = Vec::new();
+    let n = glob.parts.len();
+    for (pi, part) in glob.parts.iter().enumerate() {
+        let chars: Vec<char> = part.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            if !chars[i].is_alphanumeric() {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < chars.len() && chars[i].is_alphanumeric() {
+                i += 1;
+            }
+            let left_bounded = start > 0 || pi == 0;
+            let right_bounded = i < chars.len() || pi == n - 1;
+            if left_bounded {
+                out.push((chars[start..i].iter().collect(), !right_bounded));
+            }
+        }
+    }
+    out
+}
+
 /// Field values in `keys` (all fields when `None`), HTML stripped, newline-joined: the text a
 /// field glob or a regex is matched against.
 pub fn fields_text(fields: &BTreeMap<String, String>, keys: Option<&[String]>) -> String {
@@ -249,6 +278,19 @@ mod tests {
         assert!(!Glob::new("ab*ba").matches("aba"));
         let g = Glob::new("a\\*b*c");
         assert_eq!(Glob::new(&g.source()), g);
+    }
+
+    #[test]
+    fn index_tokens_of_globs() {
+        let t = |g: &str| glob_index_tokens(&Glob::new(g));
+        assert_eq!(t("kılıç*"), vec![("kilic".into(), true)]);
+        assert_eq!(
+            t("kılıç kalkan"),
+            vec![("kilic".into(), false), ("kalkan".into(), false)]
+        );
+        assert_eq!(t("*an"), vec![]);
+        assert_eq!(t("*a b*"), vec![("b".into(), true)]);
+        assert_eq!(t("x-y*z"), vec![("x".into(), false), ("y".into(), true)]);
     }
 
     #[test]

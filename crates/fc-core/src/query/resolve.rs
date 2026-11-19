@@ -415,9 +415,16 @@ impl<'a> Resolver<'a> {
         if let Some(pattern) = t.value.strip_prefix("re:") {
             return regex(t, pattern, Some(keys));
         }
+        // The full-text index may pre-filter only if every field with such a key is indexed.
+        let indexed = self.cat.notetypes.iter().all(|nt| {
+            nt.fields
+                .iter()
+                .all(|f| !keys.contains(&f.key.0) || f.searchable)
+        });
         Ok(Filter::Pred(Pred::Field {
             keys,
             glob: Glob::new(&t.value).source(),
+            indexed,
         }))
     }
 

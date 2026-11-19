@@ -87,7 +87,9 @@ fn pred(p: &Pred, f: &CardFacts<'_>, now: Timestamp) -> bool {
     match p {
         Pred::Text { tokens, prefix } => phrase_matches(f.search_text, tokens, *prefix),
         Pred::TextGlob(src) => Glob::new(src).matches(&fields_text(&fields(f.note), None)),
-        Pred::Field { keys, glob } => field_glob_matches(&fields(f.note), keys, &Glob::new(glob)),
+        Pred::Field { keys, glob, .. } => {
+            field_glob_matches(&fields(f.note), keys, &Glob::new(glob))
+        }
         Pred::Regex { keys, pattern } => compile_regex(pattern)
             .is_ok_and(|re| regex_matches(&fields(f.note), keys.as_deref(), &re)),
         Pred::Decks(ids) => ids.contains(&c.deck_id),

@@ -9,6 +9,7 @@ mod decks;
 mod migrations;
 mod misc;
 mod notes;
+mod search;
 mod store;
 mod tags;
 
