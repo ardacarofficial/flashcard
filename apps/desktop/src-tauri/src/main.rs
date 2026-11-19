@@ -1,0 +1,7 @@
+//! Desktop binary entry point.
+// Prevents an extra console window on Windows in release.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+fn main() {
+    fc_desktop_lib::run();
+}

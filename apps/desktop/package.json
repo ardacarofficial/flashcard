@@ -1,0 +1,33 @@
+{
+  "name": "fc-desktop-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@12.21.0",
+  "scripts": {
+    "i18n": "node scripts/merge-locales.mjs",
+    "dev": "node scripts/merge-locales.mjs && vite",
+    "dev:mock": "node scripts/merge-locales.mjs && vite --mode mock",
+    "build": "node scripts/merge-locales.mjs && vite build",
+    "preview": "vite preview",
+    "check": "node scripts/merge-locales.mjs && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tsconfig.node.json --noEmit",
+    "test": "node scripts/merge-locales.mjs && vitest run",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.5"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
+    "@tauri-apps/cli": "^2.12.6",
+    "@testing-library/svelte": "^5.4.2",
+    "@tsconfig/svelte": "^5.0.9",
+    "@types/node": "^22.20.5",
+    "jsdom": "^31.0.1",
+    "svelte": "^5.58.0",
+    "svelte-check": "^4.7.8",
+    "typescript": "~5.8.3",
+    "vite": "^6.4.6",
+    "vitest": "^3.2.7"
+  }
+}

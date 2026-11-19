@@ -1,0 +1,7 @@
+{
+  "oplog.summary.batch.execute": "{count} işlem",
+  "oplog.summary.modules.set_enabled": "{module} modülü açıldı/kapandı",
+  "oplog.summary.settings.set": "Ayar değişti: {key}",
+  "oplog.summary.settings.reset": "Ayar sıfırlandı: {key}",
+  "oplog.summary.jobs.cancel": "Bir iş iptal edildi"
+}

@@ -1,0 +1,35 @@
+{
+  "modules": {
+    "notes": {
+      "name": "Notlar",
+      "description": "Not ekleme ve göz atma."
+    }
+  },
+  "note": {
+    "add_heading": "Not ekle",
+    "list_heading": "Notlar",
+    "front": "Ön yüz",
+    "back": "Arka yüz",
+    "add": "Ekle",
+    "added": "Not eklendi.",
+    "empty": "Bu destede not yok.",
+    "classifications": "Sınıflandırmalar",
+    "confirm_delete": "Bu not silinsin mi?",
+    "undo_hint": "Sonradan geri alabilirsin.",
+    "delete_aria": "“{name}” notunu sil",
+    "tags": "Etiketler"
+  },
+  "errors": {
+    "validation": {
+      "field_required": "Zorunlu bir alan boş.",
+      "unknown_field": "Bilinmeyen alan."
+    },
+    "not_found": {
+      "note": "Not bulunamadı.",
+      "card": "Kart bulunamadı."
+    },
+    "conflict": {
+      "note_duplicate": "Bu not zaten var."
+    }
+  }
+}

@@ -1,0 +1,3 @@
+# Standalone pnpm project for the desktop frontend.
+allowBuilds:
+  esbuild: true

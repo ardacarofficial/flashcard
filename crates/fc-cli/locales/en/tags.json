@@ -1,0 +1,5 @@
+{
+  "oplog.summary.tags.rename": "Renamed tag {from} → {to}",
+  "oplog.summary.tags.merge": "Merged {count} tag(s) into {into}",
+  "oplog.summary.tags.set_color": "Changed the color of tag {name}"
+}

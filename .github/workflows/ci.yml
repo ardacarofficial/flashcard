@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [claude/clever-archimedes-u8c7rp]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: -D warnings
+
+jobs:
+  detect:
+    name: Hangi parçalar mevcut?
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.d.outputs.rust }}
+      types: ${{ steps.d.outputs.types }}
+      frontend: ${{ steps.d.outputs.frontend }}
+      desktop: ${{ steps.d.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: d
+        shell: bash
+        run: |
+          [ -f Cargo.toml ] && echo "rust=true" >> "$GITHUB_OUTPUT" || echo "rust=false" >> "$GITHUB_OUTPUT"
+          [ -f crates/fc-api/Cargo.toml ] && echo "types=true" >> "$GITHUB_OUTPUT" || echo "types=false" >> "$GITHUB_OUTPUT"
+          [ -f apps/desktop/package.json ] && [ -f apps/desktop/pnpm-lock.yaml ] && echo "frontend=true" >> "$GITHUB_OUTPUT" || echo "frontend=false" >> "$GITHUB_OUTPUT"
+          [ -f Cargo.toml ] && [ -f apps/desktop/src-tauri/Cargo.toml ] && [ -f apps/desktop/package.json ] && [ -f apps/desktop/pnpm-lock.yaml ] && echo "desktop=true" >> "$GITHUB_OUTPUT" || echo "desktop=false" >> "$GITHUB_OUTPUT"
+  rust:
+    needs: detect
+    if: needs.detect.outputs.rust == 'true'
+    name: Rust (fmt, clippy, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tauri Linux bağımlılıkları
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libssl-dev libxdo-dev patchelf build-essential pkg-config
+      - uses: dtolnay/rust-toolchain@1.100.0 # = rust-toolchain.toml
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: frontendDist klasörü (generate_context! için)
+        run: mkdir -p apps/desktop/dist
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+
+  types:
+    needs: detect
+    if: needs.detect.outputs.types == 'true'
+    name: TS tipleri güncel mi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.100.0 # = rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+      - name: gen-ts --check
+        run: cargo run --locked -p fc-api --bin gen-ts -- --check
+      - name: Tipleri üret
+        run: cargo run --locked -p fc-api --bin gen-ts
+      - name: Üretilen klasörde fark yok
+        run: |
+          dir=apps/desktop/src/lib/api/generated
+          git add -N "$dir"
+          if ! git diff --exit-code -- "$dir"; then
+            echo "::error::Rust DTO'ları değişti ama TS tipleri yeniden üretilmedi. 'cargo run -p fc-api --bin gen-ts' çalıştırıp commit'le."
+            exit 1
+          fi
+
+  frontend:
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true'
+    name: Frontend (check, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/desktop/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+
+  windows:
+    needs: detect
+    if: needs.detect.outputs.desktop == 'true'
+    name: Windows (build + test)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.100.0 # = rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/desktop/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+      - name: Backend testleri (core, storage, app, CLI e2e)
+        run: cargo test --locked -p fc-core -p fc-storage -p fc-app -p fc-cli
+      - name: Frontend derle
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+      - name: Frontend build
+        working-directory: apps/desktop
+        run: pnpm build
+      - name: Tauri uygulamasını derle (debug)
+        run: cargo build --locked -p fc-desktop
+
+  core-purity:
+    name: fc-core saflık kontrolü
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/check-core-purity.sh

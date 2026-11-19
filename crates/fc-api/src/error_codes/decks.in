@@ -1,0 +1,10 @@
+// Decks.
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// Deck name/path rejected (`details.reason`).
+ValidationDeckName => Validation, "errors.validation.deck_name";
+/// Deck not found (`details.id`).
+NotFoundDeck => NotFound, "errors.not_found.deck";
+/// A sibling deck already has this name (`details.existing_deck_id`).
+ConflictDeckExists => Conflict, "errors.conflict.deck_exists";
+/// Moving a deck under itself/its descendant.
+ConflictDeckCycle => Conflict, "errors.conflict.deck_cycle";

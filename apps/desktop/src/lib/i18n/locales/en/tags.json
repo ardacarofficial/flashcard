@@ -1,0 +1,16 @@
+{
+  "modules": {
+    "tags": {
+      "name": "Tags",
+      "description": "Hierarchical tags."
+    }
+  },
+  "errors": {
+    "validation": {
+      "tag_name": "Invalid tag name."
+    },
+    "not_found": {
+      "tag": "Tag not found."
+    }
+  }
+}

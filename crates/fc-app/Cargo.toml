@@ -1,0 +1,33 @@
+[package]
+name = "fc-app"
+description = "Service layer: command/query dispatch, registry, oplog/undo, events, jobs, modules, settings."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fc-core.workspace = true
+fc-api.workspace = true
+fc-storage.workspace = true
+fc-providers.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+getrandom.workspace = true
+uuid.workspace = true
+
+tempfile = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[features]
+## In-memory store, a temp-file SQLite store and the storage-agnostic service test suite
+## (`fc_app::testing`).
+testing = ["dep:tempfile"]
+
+[lints]
+workspace = true
+

@@ -50,13 +50,15 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - CI: fmt, clippy (`-D warnings`), testler, tip üretimi tutarlılık kontrolü, Windows derlemesi.
 
 **Kabul kriterleri**
-- [ ] `cargo test --workspace` geçer, `fc-core` I/O içermez (lint/inceleme ile doğrulanır).
-- [ ] Deste/not oluşturma, düzenleme, silme komutları çalışır ve **geri alınabilir.**
-- [ ] Rust'ta bir DTO alanı değişince frontend `pnpm check` kırılır.
-- [ ] Aynı işlemler CLI ile de yapılabilir.
-- [ ] Boş veritabanından migration testi geçer.
-- [ ] Bir desteye "Seviye" (A1–C2) sınıflandırması tanımlanır, alt destede not eklerken seçilebilir, seçenek yeniden adlandırma/sıralama geri alınabilir.
-- [ ] Windows'ta CI derlemesi başarılı.
+- [x] `cargo test --workspace` geçer, `fc-core` I/O içermez (lint/inceleme ile doğrulanır).
+- [x] Deste/not oluşturma, düzenleme, silme komutları çalışır ve **geri alınabilir.**
+- [x] Rust'ta bir DTO alanı değişince frontend `pnpm check` kırılır.
+- [x] Aynı işlemler CLI ile de yapılabilir.
+- [x] Boş veritabanından migration testi geçer.
+- [x] Bir desteye "Seviye" (A1–C2) sınıflandırması tanımlanır, alt destede not eklerken seçilebilir, seçenek yeniden adlandırma/sıralama geri alınabilir.
+- [ ] Windows'ta CI derlemesi başarılı. *(iş akışı hazır, henüz Windows'ta koşmadı)*
+
+> **Doğrulama (entegrasyon, `feat/v0.1-integration`):** `fc-app/src/acceptance.rs` (gerçek SQLite dosyası: boş veritabanından migration, deste/not oluştur-düzenle-sil + birebir geri al/yinele, üst destede "Seviye" A1–C2 → alt deste notunda seçim, seçenek yeniden adlandırma/sıralama geri alma, yeniden açınca durum ve geri al korunur); `store_suite!` MemStore + SQLite (bellek ve dosya) üzerinde; `fc-cli/tests/cli_e2e.rs` gerçek `fc` ikilisiyle; `check-core-purity.sh`; DTO alanı yeniden adlandırılıp `gen-ts` çalıştırılınca `pnpm check` 7 hata verdi (geri alındı).
 
 ## 📖 v0.2 · Çalışma çekirdeği
 

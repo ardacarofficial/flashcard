@@ -1,0 +1,9 @@
+{
+  "oplog.summary.decks.create": "Deste oluşturuldu: {path}",
+  "oplog.summary.decks.rename": "Deste yeniden adlandırıldı: {from} → {to}",
+  "oplog.summary.decks.move": "Deste taşındı: {path}",
+  "oplog.summary.decks.update": "Deste güncellendi: {path}",
+  "oplog.summary.decks.delete": "Deste silindi: {path}",
+  "oplog.summary.decks.restore": "Deste geri yüklendi: {path}",
+  "oplog.summary.decks.restore_affected": "Deste geri yüklendi: {path}"
+}

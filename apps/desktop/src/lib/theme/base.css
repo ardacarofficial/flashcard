@@ -1,0 +1,70 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--fc-bg);
+  color: var(--fc-text);
+  font-family: var(--fc-font);
+  font-size: var(--fc-font-size);
+}
+#app {
+  height: 100%;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  background: var(--fc-surface);
+  border: var(--fc-border-width) solid var(--fc-border);
+  border-radius: var(--fc-radius);
+  padding: var(--fc-space-1) var(--fc-space-3);
+  cursor: pointer;
+}
+button.primary {
+  background: var(--fc-accent);
+  border-color: var(--fc-accent);
+  color: var(--fc-accent-text);
+}
+button.danger {
+  color: var(--fc-danger);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+input,
+select,
+textarea {
+  background: var(--fc-surface);
+  border: var(--fc-border-width) solid var(--fc-border);
+  border-radius: var(--fc-radius);
+  padding: var(--fc-space-1) var(--fc-space-2);
+}
+:focus-visible {
+  outline: 2px solid var(--fc-focus);
+  outline-offset: 1px;
+}
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  margin: 0 0 var(--fc-space-3);
+}
+h2 {
+  font-size: 1.15rem;
+}
+.muted {
+  color: var(--fc-text-muted);
+}
+.error {
+  color: var(--fc-danger);
+}

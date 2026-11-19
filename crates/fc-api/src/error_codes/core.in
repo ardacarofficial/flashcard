@@ -1,0 +1,38 @@
+// Cross-cutting codes: params, methods, permissions, providers, I/O, internal, trash, undo, modules, settings, jobs.
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// Request params do not match the method's request type.
+ValidationInvalidParams => Validation, "errors.validation.invalid_params";
+/// Setting value rejected (`details.key`).
+ValidationSettingValue => Validation, "errors.validation.setting_value";
+/// Unknown method name.
+NotFoundMethod => NotFound, "errors.not_found.method";
+/// Module not found (`details.id`).
+NotFoundModule => NotFound, "errors.not_found.module";
+/// Setting key not in any schema (`details.key`).
+NotFoundSetting => NotFound, "errors.not_found.setting";
+/// Job not found (`details.id`).
+NotFoundJob => NotFound, "errors.not_found.job";
+/// Nothing to undo.
+ConflictNothingToUndo => Conflict, "errors.conflict.nothing_to_undo";
+/// Nothing to redo.
+ConflictNothingToRedo => Conflict, "errors.conflict.nothing_to_redo";
+/// The method's module is disabled (`details.module`).
+ConflictModuleDisabled => Conflict, "errors.conflict.module_disabled";
+/// The module cannot be disabled (`details.module`).
+ConflictModuleRequired => Conflict, "errors.conflict.module_required";
+/// Entity is in the trash; restore it first (`details.id`).
+ConflictDeleted => Conflict, "errors.conflict.deleted";
+/// Caller may not invoke this method (`details.permission`).
+PermissionDenied => Permission, "errors.permission.denied";
+/// Provider not configured/reachable (`details.provider`).
+ProviderUnavailable => Provider, "errors.provider.unavailable";
+/// Provider returned an error (`details.provider`).
+ProviderFailed => Provider, "errors.provider.failed";
+/// Database error.
+IoDatabase => Io, "errors.io.database";
+/// File system error.
+IoFile => Io, "errors.io.file";
+/// Unexpected internal error (a bug).
+Internal => Internal, "errors.internal.unexpected";
+/// The method exists in the contract but is not implemented yet.
+InternalNotImplemented => Internal, "errors.internal.not_implemented";

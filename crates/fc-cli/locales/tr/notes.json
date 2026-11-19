@@ -1,0 +1,6 @@
+{
+  "oplog.summary.notes.create": "Not eklendi: {text}",
+  "oplog.summary.notes.update": "Not düzenlendi: {text}",
+  "oplog.summary.notes.delete": "{count} not silindi",
+  "oplog.summary.notes.restore": "{count} not geri yüklendi"
+}

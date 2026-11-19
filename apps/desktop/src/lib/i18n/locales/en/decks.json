@@ -1,0 +1,32 @@
+{
+  "modules": {
+    "decks": {
+      "name": "Decks",
+      "description": "Deck tree."
+    }
+  },
+  "deck": {
+    "heading": "Decks",
+    "new": "New deck",
+    "new_sub": "New subdeck",
+    "name": "Deck name",
+    "empty": "No decks yet.",
+    "confirm_delete": "Delete “{name}” and its subdecks?",
+    "select_prompt": "Select a deck first.",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "current": "Deck"
+  },
+  "errors": {
+    "validation": {
+      "deck_name": "Invalid deck name."
+    },
+    "not_found": {
+      "deck": "Deck not found."
+    },
+    "conflict": {
+      "deck_exists": "A deck with this name already exists.",
+      "deck_cycle": "A deck can't be moved into itself."
+    }
+  }
+}

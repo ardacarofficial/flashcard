@@ -1,0 +1,6 @@
+// Tags.
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// Tag name rejected (`details.reason`).
+ValidationTagName => Validation, "errors.validation.tag_name";
+/// Tag not found (`details.name`).
+NotFoundTag => NotFound, "errors.not_found.tag";

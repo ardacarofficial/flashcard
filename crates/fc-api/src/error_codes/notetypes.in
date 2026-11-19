@@ -1,0 +1,6 @@
+// Note types.
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// Note type definition rejected.
+ValidationNoteType => Validation, "errors.validation.note_type";
+/// Note type not found (`details.id`).
+NotFoundNoteType => NotFound, "errors.not_found.note_type";

@@ -1,0 +1,22 @@
+{
+  "cli.undone": "Geri alındı: {summary}",
+  "cli.redone": "Yinelendi: {summary}",
+  "cli.deck.created": "Deste oluşturuldu: {path} ({id})",
+  "cli.deck.renamed": "Deste yeniden adlandırıldı: {path}",
+  "cli.deck.moved": "Deste taşındı: {path}",
+  "cli.deck.none": "Deste yok",
+  "cli.deck.counts": "[yeni {new} · öğrenme {learning} · vadesi gelen {due} · toplam {total}]",
+  "cli.deck.deleted": "{summary}; geri almak için `fc deck restore {id}`",
+  "cli.affected.deleted": "{what} silindi ({decks} deste, {notes} not, {cards} kart)",
+  "cli.affected.restored": "{what} geri yüklendi ({decks} deste, {notes} not, {cards} kart)",
+  "cli.note.added": "Not eklendi: {front} → {deck} ({id})",
+  "cli.note.none": "Not yok",
+  "cli.note.edited": "Not düzenlendi: {front} ({id})",
+  "cli.note.deleted": "{count} not silindi",
+  "cli.note.restored": "{count} not geri yüklendi",
+  "cli.attr.defined": "Tanımlandı: {name} ({key}) [{labels}]",
+  "cli.attr.set": "{key} = {value}",
+  "cli.attr.cleared": "{key} temizlendi",
+  "cli.attr.none": "Sınıflandırma yok",
+  "cli.attr.option_deleted": "{key} sınıflandırmasının {label} seçeneği silindi ({count} değer değişti)"
+}

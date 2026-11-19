@@ -1,0 +1,7 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+*.local
+# Merged i18n dictionaries (scripts/merge-locales.mjs)
+src/lib/i18n/generated/

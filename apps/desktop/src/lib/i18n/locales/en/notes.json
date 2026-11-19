@@ -1,0 +1,35 @@
+{
+  "modules": {
+    "notes": {
+      "name": "Notes",
+      "description": "Add and browse notes."
+    }
+  },
+  "note": {
+    "add_heading": "Add note",
+    "list_heading": "Notes",
+    "front": "Front",
+    "back": "Back",
+    "add": "Add",
+    "added": "Note added.",
+    "empty": "No notes in this deck.",
+    "classifications": "Classifications",
+    "confirm_delete": "Delete this note?",
+    "undo_hint": "You can undo this afterwards.",
+    "delete_aria": "Delete note “{name}”",
+    "tags": "Tags"
+  },
+  "errors": {
+    "validation": {
+      "field_required": "A required field is empty.",
+      "unknown_field": "Unknown field."
+    },
+    "not_found": {
+      "note": "Note not found.",
+      "card": "Card not found."
+    },
+    "conflict": {
+      "note_duplicate": "This note already exists."
+    }
+  }
+}

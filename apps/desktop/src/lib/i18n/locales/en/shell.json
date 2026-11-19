@@ -1,0 +1,77 @@
+{
+  "app": {
+    "title": "Flashcard"
+  },
+  "nav": {
+    "decks": "Decks",
+    "add_note": "Add",
+    "notes": "Notes",
+    "settings": "Settings"
+  },
+  "modules": {
+    "core": {
+      "name": "Core",
+      "description": "Undo, modules and app settings."
+    }
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "rename": "Rename",
+    "loading": "Loading…",
+    "none": "—",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "settings": {
+    "heading": "Settings",
+    "language": "Language",
+    "theme": "Theme",
+    "theme_system": "System",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
+    "pages": {
+      "general": "General",
+      "attributes": "Classifications"
+    }
+  },
+  "lang": {
+    "tr": "Türkçe",
+    "en": "English"
+  },
+  "errors": {
+    "validation": {
+      "invalid_params": "Invalid request.",
+      "setting_value": "Invalid setting value."
+    },
+    "not_found": {
+      "method": "Unknown command.",
+      "module": "Module not found.",
+      "setting": "Setting not found.",
+      "job": "Job not found."
+    },
+    "conflict": {
+      "nothing_to_undo": "Nothing to undo.",
+      "nothing_to_redo": "Nothing to redo.",
+      "module_disabled": "This module is turned off.",
+      "module_required": "This module can't be turned off.",
+      "deleted": "This item is in the trash."
+    },
+    "permission": {
+      "denied": "Not allowed."
+    },
+    "provider": {
+      "unavailable": "The service is not available.",
+      "failed": "The service failed."
+    },
+    "io": {
+      "database": "Database error.",
+      "file": "File error."
+    },
+    "internal": {
+      "unexpected": "Something went wrong.",
+      "not_implemented": "Not available yet."
+    }
+  }
+}
