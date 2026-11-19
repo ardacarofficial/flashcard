@@ -6,7 +6,7 @@ Bu dosya, bu repoda çalışan AI ajanları için başlangıç bağlamıdır.
 
 Rust + Tauri 2 ile masaüstü flash kart uygulaması. Tüm plan `docs/` klasöründedir. **Bir işe başlamadan önce `docs/README.md` ve ilgili dokümanları oku.**
 
-- Durum: Planlama bitti. Sıradaki iş **v0.1 (Temel)**: bkz. `docs/04-yol-haritasi.md`.
+- Durum: **v0.1 (Temel) tamamlandı, inceleme bekliyor** (`feat/v0.1-integration`; Windows CI henüz koşmadı). Sıradaki: v0.2–v0.5 paralel izler, bkz. `docs/04-yol-haritasi.md`.
 - Öncelikli platform: **Windows** (macOS/Linux sonra).
 
 ## İletişim
@@ -28,7 +28,7 @@ Rust + Tauri 2 ile masaüstü flash kart uygulaması. Tüm plan `docs/` klasör�
 9. AI slop yok: sade varsayılanlar, aşamalı gösterim, gereksiz süs yok.
 10. Telemetri yok. API anahtarları sadece işletim sistemi anahtar zincirinde.
 
-## Komutlar (v0.1 kurulduktan sonra geçerli olacak)
+## Komutlar
 
 ```bash
 cargo fmt --all
