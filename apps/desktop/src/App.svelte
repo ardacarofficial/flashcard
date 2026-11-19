@@ -3,51 +3,48 @@
   import { api, type ApiError } from '$lib/api';
   import type { DeckTreeNode, ModuleDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
-  import DeckTree from '$lib/components/DeckTree.svelte';
-  import NoteAddForm from '$lib/components/NoteAddForm.svelte';
-  import NoteList from '$lib/components/NoteList.svelte';
-  import SettingsScreen from '$lib/components/SettingsScreen.svelte';
+  import { SCREENS, type ScreenCtx, type ScreenDef } from '$lib/features';
   import { deckPaths } from '$lib/components/deck-paths';
 
-  /**
-   * Screens this frontend can draw, by the route a module's `main_menu` contribution points
-   * at. Menu items for other routes are ignored. Settings has no module menu entry: it is
-   * shown when any enabled module contributes a settings page.
-   */
-  const ROUTES = {
-    '/decks': 'decks',
-    '/notes/new': 'add_note',
-    '/notes': 'notes',
-  } as const;
-  type Screen = (typeof ROUTES)[keyof typeof ROUTES] | 'settings';
   interface MenuItem {
     id: string;
     label_key: string;
-    screen: Screen;
+    screen: ScreenDef;
     order: number;
   }
-  const screenOf = (route: string | null): Screen | null =>
-    route !== null && route in ROUTES ? ROUTES[route as keyof typeof ROUTES] : null;
+
+  /** Screen for a `main_menu` route, from the registered features. */
+  const screenOfRoute = (route: string | null): ScreenDef | null =>
+    SCREENS.find((s) => route !== null && s.routes?.includes(route)) ?? null;
 
   let modules = $state<ModuleDto[]>([]);
   let decks = $state<DeckTreeNode[]>([]);
-  let screen = $state<Screen | null>(null);
+  let screen = $state.raw<ScreenDef | null>(null);
   let selectedDeck = $state<string | null>(null);
   let error = $state<string | null>(null);
 
   const menu = $derived.by((): MenuItem[] => {
     const ui = modules.filter((m) => m.enabled).flatMap((m) => m.ui);
     const items = ui.flatMap((c): MenuItem[] => {
-      const s = c.slot === 'main_menu' ? screenOf(c.route) : null;
+      const s = c.slot === 'main_menu' ? screenOfRoute(c.route) : null;
       return s ? [{ id: c.id, label_key: c.label_key, screen: s, order: c.order }] : [];
     });
-    if (ui.some((c) => c.slot === 'settings_page')) {
-      items.push({ id: 'settings', label_key: 'nav.settings', screen: 'settings', order: Infinity });
+    for (const s of SCREENS) {
+      if (s.slot && ui.some((c) => c.slot === s.slot?.name)) {
+        items.push({ id: s.id, label_key: s.slot.label_key, screen: s, order: s.slot.order });
+      }
     }
     return items.sort((a, b) => a.order - b.order);
   });
   const paths = $derived(deckPaths(decks));
   const selectedPath = $derived(paths.find((p) => p.id === selectedDeck)?.path ?? null);
+  const ctx = $derived<ScreenCtx>({
+    decks,
+    selectedDeck,
+    selectedPath,
+    selectDeck: (id) => (selectedDeck = id),
+    guarded: (fn) => guarded(fn),
+  });
 
   function fail(e: unknown) {
     error = td((e as ApiError).messageKey);
@@ -91,7 +88,7 @@
     <ul>
       {#each menu as item (item.id)}
         <li>
-          <button class:active={screen === item.screen} aria-current={screen === item.screen ? 'page' : undefined} onclick={() => (screen = item.screen)}>
+          <button class:active={screen?.id === item.screen.id} aria-current={screen?.id === item.screen.id ? 'page' : undefined} onclick={() => (screen = item.screen)}>
             {td(item.label_key)}
           </button>
         </li>
@@ -102,37 +99,20 @@
   <main>
     {#if error}<p class="error" role="alert">{error}</p>{/if}
 
-    {#if screen === 'add_note' || screen === 'notes'}
-      <label class="deck-pick">
-        {t('deck.current')}
-        <select bind:value={selectedDeck}>
-          <option value={null}>{t('deck.select_prompt')}</option>
-          {#each paths as p (p.id)}
-            <option value={p.id}>{p.path}</option>
-          {/each}
-        </select>
-      </label>
-    {/if}
-
-    {#if screen === 'decks'}
-      <DeckTree
-        {decks}
-        selectedId={selectedDeck}
-        onselect={(id) => (selectedDeck = id)}
-        oncreate={(name, parentId) => guarded(() => api.deck.create(name, parentId))}
-        onrename={(id, name) => guarded(() => api.deck.rename(id, name))}
-        ondelete={(id) => guarded(() => api.deck.remove(id))}
-      />
-    {:else if screen === 'add_note'}
-      {#if selectedDeck && selectedPath}
-        <NoteAddForm deckId={selectedDeck} deckName={selectedPath} />
+    {#if screen}
+      {#if screen.deckPicker}
+        <label class="deck-pick">
+          {t('deck.current')}
+          <select bind:value={selectedDeck}>
+            <option value={null}>{t('deck.select_prompt')}</option>
+            {#each paths as p (p.id)}
+              <option value={p.id}>{p.path}</option>
+            {/each}
+          </select>
+        </label>
       {/if}
-    {:else if screen === 'notes'}
-      {#if selectedDeck}
-        <NoteList deckId={selectedDeck} />
-      {/if}
-    {:else if screen === 'settings'}
-      <SettingsScreen />
+      {@const Screen = screen.component}
+      <Screen {ctx} />
     {:else}
       <p class="muted">{t('common.loading')}</p>
     {/if}

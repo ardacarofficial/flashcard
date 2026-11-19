@@ -63,27 +63,39 @@ fn split_tags(raw: &str) -> Vec<String> {
         .collect()
 }
 
-fn affected(verb: &str, what: &str, a: &AffectedCount) -> String {
-    format!(
-        "{verb} {what} ({} decks, {} notes, {} cards)",
-        a.decks, a.notes, a.cards
+fn affected(text: &Catalog, key: &str, what: &str, a: &AffectedCount) -> String {
+    text.text(
+        key,
+        &params(&[
+            ("what", what.to_owned()),
+            ("decks", a.decks.to_string()),
+            ("notes", a.notes.to_string()),
+            ("cards", a.cards.to_string()),
+        ]),
     )
 }
 
-fn tree_lines(node: &DeckTreeNode, depth: usize, buf: &mut String) {
+fn params(pairs: &[(&str, String)]) -> BTreeMap<String, String> {
+    pairs
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), v.clone()))
+        .collect()
+}
+
+fn tree_lines(text: &Catalog, node: &DeckTreeNode, depth: usize, buf: &mut String) {
     let c = node.counts;
-    let _ = writeln!(
-        buf,
-        "{}{}  [new {} · learn {} · due {} · total {}]",
-        "  ".repeat(depth),
-        node.deck.name,
-        c.new,
-        c.learning,
-        c.due,
-        c.total
+    let counts = text.text(
+        "cli.deck.counts",
+        &params(&[
+            ("new", c.new.to_string()),
+            ("learning", c.learning.to_string()),
+            ("due", c.due.to_string()),
+            ("total", c.total.to_string()),
+        ]),
     );
+    let _ = writeln!(buf, "{}{}  {counts}", "  ".repeat(depth), node.deck.name);
     for child in &node.children {
-        tree_lines(child, depth + 1, buf);
+        tree_lines(text, child, depth + 1, buf);
     }
 }
 
@@ -192,17 +204,22 @@ fn deck(ctx: &Ctx<'_>, c: &DeckCommand) -> Result<String, ApiError> {
                     color: None,
                 },
             )?;
-            ctx.out(&d, |d| format!("created deck {} ({})", d.path, d.id))
+            ctx.out(&d, |d| {
+                ctx.text.text(
+                    "cli.deck.created",
+                    &params(&[("path", d.path.clone()), ("id", d.id.to_string())]),
+                )
+            })
         }
         DeckCommand::List => {
             let tree = call::<m::DecksTree>(app, &Empty {})?;
             ctx.out(&tree, |t| {
                 let mut buf = String::new();
                 for root in &t.roots {
-                    tree_lines(root, 0, &mut buf);
+                    tree_lines(&ctx.text, root, 0, &mut buf);
                 }
                 if buf.is_empty() {
-                    buf.push_str("no decks");
+                    buf.push_str(&ctx.text.text("cli.deck.none", &BTreeMap::new()));
                 }
                 buf.trim_end().to_owned()
             })
@@ -216,7 +233,9 @@ fn deck(ctx: &Ctx<'_>, c: &DeckCommand) -> Result<String, ApiError> {
                     name: name.clone(),
                 },
             )?;
-            ctx.out(&d, |d| format!("renamed deck to {}", d.path))
+            ctx.out(&d, |d| {
+                ctx.text.with("cli.deck.renamed", "path", d.path.clone())
+            })
         }
         DeckCommand::Move {
             deck,
@@ -238,23 +257,32 @@ fn deck(ctx: &Ctx<'_>, c: &DeckCommand) -> Result<String, ApiError> {
                     position: *position,
                 },
             )?;
-            ctx.out(&d, |d| format!("moved deck to {}", d.path))
+            ctx.out(&d, |d| {
+                ctx.text.with("cli.deck.moved", "path", d.path.clone())
+            })
         }
         DeckCommand::Delete { deck } => {
             let d = lookup::deck(app, deck)?;
             let a = call::<m::DecksDelete>(app, &DeckRef { id: d.id })?;
             ctx.out(&a, |a| {
-                format!(
-                    "{}; restore with `fc deck restore {}`",
-                    affected("deleted", &d.path, a),
-                    d.id
+                ctx.text.text(
+                    "cli.deck.deleted",
+                    &params(&[
+                        (
+                            "summary",
+                            affected(&ctx.text, "cli.affected.deleted", &d.path, a),
+                        ),
+                        ("id", d.id.to_string()),
+                    ]),
                 )
             })
         }
         DeckCommand::Restore { id } => {
             let a = call::<m::DecksRestore>(app, &DeckRef { id: *id })?;
             let path = call::<m::DecksGet>(app, &DeckRef { id: *id })?.path;
-            ctx.out(&a, |a| affected("restored", &path, a))
+            ctx.out(&a, |a| {
+                affected(&ctx.text, "cli.affected.restored", &path, a)
+            })
         }
     }
 }
@@ -279,7 +307,14 @@ fn note(ctx: &Ctx<'_>, c: &NoteCommand) -> Result<String, ApiError> {
                 },
             )?;
             ctx.out(&note, |n| {
-                format!("added note {} to {} ({})", n.sort_field, deck.path, n.id)
+                ctx.text.text(
+                    "cli.note.added",
+                    &params(&[
+                        ("front", n.sort_field.clone()),
+                        ("deck", deck.path.clone()),
+                        ("id", n.id.to_string()),
+                    ]),
+                )
             })
         }
         NoteCommand::List { deck, limit } => {
@@ -296,7 +331,7 @@ fn note(ctx: &Ctx<'_>, c: &NoteCommand) -> Result<String, ApiError> {
             )?;
             ctx.out(&page, |p| {
                 if p.items.is_empty() {
-                    return "no notes".into();
+                    return ctx.text.text("cli.note.none", &BTreeMap::new());
                 }
                 p.items
                     .iter()
@@ -335,16 +370,25 @@ fn note(ctx: &Ctx<'_>, c: &NoteCommand) -> Result<String, ApiError> {
                 },
             )?;
             ctx.out(&note, |n| {
-                format!("edited note {} ({})", n.sort_field, n.id)
+                ctx.text.text(
+                    "cli.note.edited",
+                    &params(&[("front", n.sort_field.clone()), ("id", n.id.to_string())]),
+                )
             })
         }
         NoteCommand::Delete { ids } => {
             let a = call::<m::NotesDelete>(app, &NoteIds { ids: ids.clone() })?;
-            ctx.out(&a, |a| format!("deleted {} note(s)", a.notes))
+            ctx.out(&a, |a| {
+                ctx.text
+                    .with("cli.note.deleted", "count", a.notes.to_string())
+            })
         }
         NoteCommand::Restore { ids } => {
             let a = call::<m::NotesRestore>(app, &NoteIds { ids: ids.clone() })?;
-            ctx.out(&a, |a| format!("restored {} note(s)", a.notes))
+            ctx.out(&a, |a| {
+                ctx.text
+                    .with("cli.note.restored", "count", a.notes.to_string())
+            })
         }
     }
 }
@@ -353,7 +397,14 @@ fn attribute(ctx: &Ctx<'_>, c: &AttributeCommand) -> Result<String, ApiError> {
     let app = ctx.app;
     let defined = |d: &AttributeDefDto| {
         let labels: Vec<&str> = d.options.iter().map(|o| o.label.as_str()).collect();
-        format!("defined {} ({}) [{}]", d.name, d.key, labels.join(", "))
+        ctx.text.text(
+            "cli.attr.defined",
+            &params(&[
+                ("name", d.name.clone()),
+                ("key", d.key.clone()),
+                ("labels", labels.join(", ")),
+            ]),
+        )
     };
     match c {
         AttributeCommand::Define(def) => {
@@ -429,8 +480,11 @@ fn attribute(ctx: &Ctx<'_>, c: &AttributeCommand) -> Result<String, ApiError> {
                     .find(|a| a.attr_id == def.id)
                     .and_then(|a| a.value.as_ref())
                 {
-                    Some(v) => format!("{} = {}", def.key, lookup::label(def, v)),
-                    None => format!("{} cleared", def.key),
+                    Some(v) => ctx.text.text(
+                        "cli.attr.set",
+                        &params(&[("key", def.key.clone()), ("value", lookup::label(def, v))]),
+                    ),
+                    None => ctx.text.with("cli.attr.cleared", "key", def.key.clone()),
                 }
             })
         }
@@ -453,7 +507,7 @@ fn attribute(ctx: &Ctx<'_>, c: &AttributeCommand) -> Result<String, ApiError> {
             };
             ctx.out(&defs, |defs| {
                 if defs.is_empty() {
-                    return "no classifications".into();
+                    return ctx.text.text("cli.attr.none", &BTreeMap::new());
                 }
                 defs.iter().map(def_line).collect::<Vec<_>>().join("\n")
             })
@@ -537,9 +591,13 @@ fn option(ctx: &Ctx<'_>, c: &OptionCommand) -> Result<String, ApiError> {
                 },
             )?;
             ctx.out(&r, |r| {
-                format!(
-                    "deleted option {label} of {} ({} values changed)",
-                    def.key, r.values_affected
+                ctx.text.text(
+                    "cli.attr.option_deleted",
+                    &params(&[
+                        ("label", label.clone()),
+                        ("key", def.key.clone()),
+                        ("count", r.values_affected.to_string()),
+                    ]),
                 )
             })
         }

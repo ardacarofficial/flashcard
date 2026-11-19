@@ -1,4 +1,22 @@
 {
   "cli.undone": "Undone: {summary}",
-  "cli.redone": "Redone: {summary}"
+  "cli.redone": "Redone: {summary}",
+  "cli.deck.created": "created deck {path} ({id})",
+  "cli.deck.renamed": "renamed deck to {path}",
+  "cli.deck.moved": "moved deck to {path}",
+  "cli.deck.none": "no decks",
+  "cli.deck.counts": "[new {new} · learn {learning} · due {due} · total {total}]",
+  "cli.deck.deleted": "{summary}; restore with `fc deck restore {id}`",
+  "cli.affected.deleted": "deleted {what} ({decks} decks, {notes} notes, {cards} cards)",
+  "cli.affected.restored": "restored {what} ({decks} decks, {notes} notes, {cards} cards)",
+  "cli.note.added": "added note {front} to {deck} ({id})",
+  "cli.note.none": "no notes",
+  "cli.note.edited": "edited note {front} ({id})",
+  "cli.note.deleted": "deleted {count} note(s)",
+  "cli.note.restored": "restored {count} note(s)",
+  "cli.attr.defined": "defined {name} ({key}) [{labels}]",
+  "cli.attr.set": "{key} = {value}",
+  "cli.attr.cleared": "{key} cleared",
+  "cli.attr.none": "no classifications",
+  "cli.attr.option_deleted": "deleted option {label} of {key} ({count} values changed)"
 }

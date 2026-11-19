@@ -217,6 +217,13 @@ fn end_to_end_against_the_app() {
         "Geri alındı: Not eklendi: run"
     );
     assert_eq!(exec(&t, &["note", "list"]).unwrap(), "no notes");
+    assert_eq!(
+        exec(&t, &["--lang", "tr", "note", "list"]).unwrap(),
+        "Not yok"
+    );
+    assert!(exec(&t, &["--lang", "tr", "deck", "list"])
+        .unwrap()
+        .contains("[yeni 0 · öğrenme 0"));
     let e = exec(&t, &["note", "add", "--deck", "Yok", "--front", "x"]).unwrap_err();
     assert_eq!(e.code, ErrorCode::NotFoundDeck);
     exec(
