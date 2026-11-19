@@ -10,6 +10,7 @@ use fc_api::{ApiError, ErrorCode};
 use fc_core::card::{Card, CardState, SchedulingState};
 use fc_core::preset::PresetConfig;
 use fc_core::settings::SettingScope;
+use fc_core::time::MILLIS_PER_DAY;
 use fc_core::{CardId, DeckId, SessionId, Timestamp};
 use fc_providers::strategy::{ReviewOutcome, Scheduler, SchedulerParams, StrategyError};
 use fc_storage::repo::SessionRecord;
@@ -128,9 +129,20 @@ pub(super) struct SessionConfig {
 }
 
 impl SessionConfig {
+    /// The session's study calendar.
+    pub fn study_day(&self) -> fc_study::day::StudyDay {
+        fc_study::day::StudyDay::new(self.tz_offset_mins, self.day_start_hour)
+    }
+
     /// End of the study day containing `now`.
     pub fn day_end(&self, now: Timestamp) -> Timestamp {
-        fc_study::day::day_end(now, self.tz_offset_mins, self.day_start_hour)
+        self.study_day().end(now)
+    }
+
+    /// Scheduler parameters of `deck` on this session's study calendar.
+    pub fn params(&self, reads: &dyn Reads, deck: DeckId) -> AppResult<SchedulerParams> {
+        let params = params_for_deck(reads, deck, &mut HashMap::new())?;
+        Ok(scheduler::with_study_day(params, self.study_day()))
     }
 }
 
@@ -170,7 +182,6 @@ impl Session {
         SessionStateSnapshot {
             id: self.record.id,
             state: self.record.state.clone(),
-            ended_at: self.record.ended_at,
         }
     }
 
@@ -343,10 +354,15 @@ pub(super) fn previews(
         .zip(outcomes.iter())
         .map(|(rating, o)| IntervalPreview {
             rating: *rating,
-            interval_ms: o
-                .state
-                .due
-                .map_or(0, |d| d.as_millis().saturating_sub(now.as_millis()).max(0)),
+            // Whole-day intervals are shown as days (the due time is the start of the due
+            // study day, so `due - now` would read "13 h" for "1 day").
+            interval_ms: if o.scheduled_days > 0 {
+                i64::from(o.scheduled_days).saturating_mul(MILLIS_PER_DAY)
+            } else {
+                o.state
+                    .due
+                    .map_or(0, |d| d.as_millis().saturating_sub(now.as_millis()).max(0))
+            },
             scheduled_days: o.scheduled_days,
         })
         .collect())
@@ -384,7 +400,7 @@ pub(super) fn session_dto(reads: &dyn Reads, s: &Session, now: Timestamp) -> App
     let current = match live {
         Some(card) => {
             let state = s.scheduling_of(&card);
-            let params = params_for_deck(reads, card.deck_id, &mut HashMap::new())?;
+            let params = s.config.params(reads, card.deck_id)?;
             let rendered = render_card(reads, &card)?;
             let type_setting = setting_bool(reads, &SettingScope::Deck(card.deck_id), TYPE_ANSWER)?;
             Some(StudyCardDto {

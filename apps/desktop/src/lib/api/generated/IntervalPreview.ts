@@ -11,6 +11,8 @@ export type IntervalPreview = {
 rating: Rating, 
 /**
  * Time until the card would be due again, ms (`10m`, `3d`… formatting is the UI's).
+ * Whole-day intervals are `scheduled_days` × 24 h (the card is due from the start of
+ * that study day).
  */
 interval_ms: number, 
 /**

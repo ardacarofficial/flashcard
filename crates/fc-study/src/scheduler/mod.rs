@@ -15,17 +15,21 @@
 //! Graduation and review intervals are whole days, capped by `maximum_interval_days`; review
 //! intervals keep `hard < good < easy` (as far as the cap allows). No fuzz: the result depends only on the inputs (load balancing comes
 //! with v0.6).
+//!
+//! **Days are study days** ([`StudyDay`]: local time zone + rollover hour), passed in
+//! `SchedulerParams.extra.day = {"tz_offset_mins": i32, "rollover_hour": u8}` (UTC/04:00 when
+//! absent; see [`with_study_day`]). `elapsed_days` counts calendar days between reviews, not
+//! 24-hour spans, and a review card is due at the **start** of its due day — so answering at
+//! 09:00 a card reviewed at 15:00 the day before is one elapsed day, as in Anki/FSRS.
 
 mod fsrs;
 mod sm2;
-#[cfg(test)]
-mod tests;
 
 pub use self::fsrs::{retrievability, FsrsScheduler, FSRS6_DEFAULT_WEIGHTS};
 pub use self::sm2::Sm2Scheduler;
 
+use crate::day::{StudyDay, MAX_TZ_OFFSET_MINS};
 use fc_core::card::{CardState, Rating, SchedulingState};
-use fc_core::time::MILLIS_PER_DAY;
 use fc_core::Timestamp;
 use fc_providers::strategy::{ReviewOutcome, Scheduler, SchedulerParams, StrategyError};
 use fc_providers::ProviderInfo;
@@ -84,20 +88,54 @@ pub(crate) const fn rating_index(rating: Rating) -> usize {
 /// The four ratings in button order.
 pub const RATINGS: [Rating; 4] = [Rating::Again, Rating::Hard, Rating::Good, Rating::Easy];
 
-/// Whole days between `last_review` and `now` (0 for a never-reviewed card).
-pub fn elapsed_days(state: &SchedulingState, now: Timestamp) -> u32 {
-    state.last_review.map_or(0, |last| {
-        let days = (now.as_millis() - last.as_millis()).max(0) / MILLIS_PER_DAY;
-        u32::try_from(days).unwrap_or(u32::MAX)
-    })
+/// Study days between `last_review` and `now` (0 for a never-reviewed card).
+pub fn elapsed_days(state: &SchedulingState, now: Timestamp, day: StudyDay) -> u32 {
+    state
+        .last_review
+        .map_or(0, |last| day.days_between(last, now))
+}
+
+/// `params` with the study calendar set (`extra.day`); other `extra` keys are kept.
+pub fn with_study_day(mut params: SchedulerParams, day: StudyDay) -> SchedulerParams {
+    let value = serde_json::json!({
+        "tz_offset_mins": day.tz_offset_mins,
+        "rollover_hour": day.rollover_hour,
+    });
+    match params.extra.as_object_mut() {
+        Some(map) => {
+            map.insert("day".to_owned(), value);
+        }
+        None => params.extra = serde_json::json!({ "day": value }),
+    }
+    params
+}
+
+/// The study calendar in `params` (`extra.day`; UTC/04:00 when absent).
+pub fn study_day(params: &SchedulerParams) -> Result<StudyDay, StrategyError> {
+    let Some(raw) = params.extra.get("day") else {
+        return Ok(StudyDay::default());
+    };
+    let tz = raw
+        .get("tz_offset_mins")
+        .and_then(serde_json::Value::as_i64)
+        .and_then(|n| i32::try_from(n).ok())
+        .filter(|n| n.abs() <= MAX_TZ_OFFSET_MINS)
+        .ok_or_else(|| invalid("day.tz_offset_mins must be within ±840"))?;
+    let hour = raw
+        .get("rollover_hour")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|n| u8::try_from(n).ok())
+        .filter(|n| *n < 24)
+        .ok_or_else(|| invalid("day.rollover_hour must be 0–23"))?;
+    Ok(StudyDay::new(tz, hour))
 }
 
 fn invalid(msg: impl Into<String>) -> StrategyError {
     StrategyError(msg.into())
 }
 
-/// Validates the generic parameters.
-pub(crate) fn check_params(params: &SchedulerParams) -> Result<(), StrategyError> {
+/// Validates the generic parameters; returns the study calendar.
+pub(crate) fn check_params(params: &SchedulerParams) -> Result<StudyDay, StrategyError> {
     let r = params.desired_retention;
     if !(r.is_finite() && r > 0.0 && r < 1.0) {
         return Err(invalid(format!(
@@ -107,7 +145,7 @@ pub(crate) fn check_params(params: &SchedulerParams) -> Result<(), StrategyError
     if params.learning_steps_mins.contains(&0) || params.relearning_steps_mins.contains(&0) {
         return Err(invalid("learning steps must be at least 1 minute"));
     }
-    Ok(())
+    study_day(params)
 }
 
 /// Rounds the four proposed intervals to whole days in `1..=max`; for review cards
@@ -167,6 +205,7 @@ pub(crate) fn apply(
     rating: Rating,
     now: Timestamp,
     params: &SchedulerParams,
+    day: StudyDay,
     candidates: &[Candidate; 4],
 ) -> ReviewOutcome {
     let days = day_intervals(
@@ -180,11 +219,7 @@ pub(crate) fn apply(
         stability: Some(chosen.stability),
         difficulty: Some(chosen.difficulty),
         last_review: Some(now),
-        reps: if rating == Rating::Again {
-            state.reps
-        } else {
-            state.reps.saturating_add(1)
-        },
+        reps: state.reps.saturating_add(1),
         ..state.clone()
     };
     // Intraday step: `minutes` from now, scheduled_days 0.
@@ -193,9 +228,10 @@ pub(crate) fn apply(
         next.due = Some(now.plus_millis(i64::from(minutes) * 60_000));
         0
     };
+    // Whole days: due at the start of the study day `d` days after today.
     let graduate = |next: &mut SchedulingState, d: u32| {
         next.state = CardState::Review;
-        next.due = Some(now.plus_days(i64::from(d)));
+        next.due = Some(day.start(day.index(now) + i64::from(d)));
         d
     };
     let learn = |next: &mut SchedulingState, steps: &[u32], learning: CardState, cur: usize| {
@@ -251,7 +287,7 @@ pub(crate) fn apply(
     ReviewOutcome {
         state: next,
         scheduled_days,
-        elapsed_days: elapsed_days(state, now),
+        elapsed_days: elapsed_days(state, now, day),
     }
 }
 
@@ -266,3 +302,6 @@ pub fn default_params() -> SchedulerParams {
         extra: serde_json::Value::Null,
     }
 }
+
+#[cfg(test)]
+mod tests;

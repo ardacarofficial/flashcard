@@ -18,7 +18,6 @@ use fc_study::answer::{check, CheckOptions, CheckerKind, Grade};
 use fc_study::day::MAX_TZ_OFFSET_MINS;
 use fc_study::hint::HintKind;
 use fc_study::session::{self as queue, BuildOptions, Order, SessionState};
-use std::collections::HashMap;
 
 /// Ends every open session at `now` (one session is open at a time).
 fn end_open_sessions(ctx: &mut CommandCtx<'_>) -> AppResult<()> {
@@ -217,7 +216,7 @@ pub(super) fn answer(req: AnswerCard, ctx: &mut CommandCtx<'_>) -> AppResult<Com
     let mut card = require_live_card(ctx.reads(), req.card_id)?;
     let card_before = snapshot(&card);
     let before = session.scheduling_of(&card);
-    let params = params_for_deck(ctx.reads(), card.deck_id, &mut HashMap::new())?;
+    let params = session.config.params(ctx.reads(), card.deck_id)?;
     let outcome = scheduler(ctx.reads())?
         .schedule(&before, req.rating, ctx.now, &params)
         .map_err(scheduler_error)?;

@@ -248,8 +248,9 @@ pub(super) fn restore(
     if let Some(snap) = &req.session {
         let mut s = Session::load(ctx.reads(), snap.id)?;
         inverse.session = Some(s.snapshot());
+        // Only the queue state: an ended session stays ended (start/end have no undo, so a
+        // session ended since the snapshot must not reopen next to the new one).
         s.record.state = snap.state.clone();
-        s.record.ended_at = snap.ended_at;
         ctx.tx.upsert_session(&s.record)?;
     }
     for id in &req.remove_reviews {
@@ -289,6 +290,7 @@ pub(super) fn history(req: CardHistoryRequest, ctx: &QueryCtx<'_>) -> AppResult<
         (_, Some(stability), Some(last)) => fc_study::scheduler::retrievability(
             stability,
             (ctx.now.as_millis() - last.as_millis()) as f64 / MILLIS_PER_DAY as f64,
+            &params_for_deck(ctx.tx, card.deck_id, &mut std::collections::HashMap::new())?,
         ),
         _ => None,
     };

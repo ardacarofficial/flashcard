@@ -8,6 +8,7 @@
 //! arrives with v0.6).
 
 use super::{apply, check_params, elapsed_days, info, Candidate, FSRS_ID, RATINGS};
+use crate::day::StudyDay;
 use fc_core::card::{CardState, Rating, SchedulingState};
 use fc_core::Timestamp;
 use fc_providers::strategy::{
@@ -23,12 +24,13 @@ pub const FSRS6_DEFAULT_WEIGHTS: [f32; 21] = [
 ];
 
 /// Probability of recall after `elapsed_days` for a memory of `stability` days (FSRS-6
-/// forgetting curve with the default decay). `None` for a non-positive/unknown stability.
-pub fn retrievability(stability: f64, elapsed_days: f64) -> Option<f64> {
+/// forgetting curve with the decay `w20` of `params`' weights — custom `extra.weights` or the
+/// defaults). `None` for a non-positive/unknown stability or invalid weights.
+pub fn retrievability(stability: f64, elapsed_days: f64, params: &SchedulerParams) -> Option<f64> {
     if !(stability.is_finite() && stability > 0.0) {
         return None;
     }
-    let decay = -f64::from(FSRS6_DEFAULT_WEIGHTS[20]);
+    let decay = -f64::from(*weights(params).ok()?.get(20)?);
     let factor = 0.9f64.powf(1.0 / decay) - 1.0;
     Some((1.0 + factor * elapsed_days.max(0.0) / stability).powf(decay))
 }
@@ -80,14 +82,14 @@ impl FsrsScheduler {
         state: &SchedulingState,
         now: Timestamp,
         params: &SchedulerParams,
-    ) -> StrategyResult<[Candidate; 4]> {
-        check_params(params)?;
+    ) -> StrategyResult<(StudyDay, [Candidate; 4])> {
+        let day = check_params(params)?;
         let model = FSRS::new(&weights(params)?).map_err(|e| StrategyError(e.to_string()))?;
         let next = model
             .next_states(
                 memory(state),
                 params.desired_retention as f32,
-                elapsed_days(state, now),
+                elapsed_days(state, now, day),
             )
             .map_err(|e| StrategyError(e.to_string()))?;
         let c = |s: &fsrs::ItemState| Candidate {
@@ -95,7 +97,10 @@ impl FsrsScheduler {
             difficulty: f64::from(s.memory.difficulty),
             interval_days: f64::from(s.interval),
         };
-        Ok([c(&next.again), c(&next.hard), c(&next.good), c(&next.easy)])
+        Ok((
+            day,
+            [c(&next.again), c(&next.hard), c(&next.good), c(&next.easy)],
+        ))
     }
 }
 
@@ -111,8 +116,8 @@ impl Scheduler for FsrsScheduler {
         now: Timestamp,
         params: &SchedulerParams,
     ) -> StrategyResult<ReviewOutcome> {
-        let candidates = self.candidates(state, now, params)?;
-        Ok(apply(state, rating, now, params, &candidates))
+        let (day, candidates) = self.candidates(state, now, params)?;
+        Ok(apply(state, rating, now, params, day, &candidates))
     }
 
     fn preview(
@@ -121,7 +126,7 @@ impl Scheduler for FsrsScheduler {
         now: Timestamp,
         params: &SchedulerParams,
     ) -> StrategyResult<[ReviewOutcome; 4]> {
-        let candidates = self.candidates(state, now, params)?;
-        Ok(RATINGS.map(|r| apply(state, r, now, params, &candidates)))
+        let (day, candidates) = self.candidates(state, now, params)?;
+        Ok(RATINGS.map(|r| apply(state, r, now, params, day, &candidates)))
     }
 }

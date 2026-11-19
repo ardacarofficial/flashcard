@@ -5,7 +5,7 @@
 //! * deterministic 365-day simulation, FSRS consistent → [`simulation_365_days`] (app level;
 //!   the reference-formula comparison is in `fc-study`'s scheduler tests);
 //! * rating → undo → card exactly as before → [`answer_undo_redo_is_exact`],
-//!   [`sibling_burying_is_undone_exactly`];
+//!   [`review_lapse_undo_is_exact`], [`sibling_burying_is_undone_exactly`];
 //! * trial mode never changes `cards` → [`trial_mode_never_changes_cards`].
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -257,6 +257,78 @@ pub fn answer_undo_redo_is_exact(f: &Factory) {
     assert_eq!(t.session(s.id).answered, 1);
     t.undo();
     assert_eq!(t.card(card), before);
+}
+
+/// A lapse on a review card (Again: lapses, stability, difficulty, reps, relearning step) is
+/// undone exactly. The card is answered early on its due day, less than `interval × 24 h`
+/// after the previous review: it is in the session and the elapsed days are calendar days.
+pub fn review_lapse_undo_is_exact(f: &Factory) {
+    let t = T::new(f(), 11);
+    let deck = t.deck("Dil");
+    let card = t.note(deck.id, "dog", "köpek");
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(deck.id));
+    t.answer(s.id, card, Rating::Easy); // 10:00Z → review
+    t.ok::<StudyEnd>(SessionRef { session_id: s.id });
+    let graduated = t.card(card);
+    assert_eq!(graduated.scheduling.state, CardState::Review);
+    let days = t.history(card).reviews[0].scheduled_days;
+    assert!(days >= 2);
+    // Due at the start (04:00Z) of the due study day.
+    let due = graduated.scheduling.due.unwrap();
+    assert_eq!(due, Timestamp(T0 - 6 * 3_600_000 + i64::from(days) * MILLIS_PER_DAY));
+
+    // 05:00Z on the due day: 19 h short of `days × 24 h`.
+    t.clock.set(due.plus_millis(3_600_000));
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(deck.id));
+    assert_eq!(s.counts.review, 1, "due today although not 24 h × interval later");
+    let before = t.card(card);
+    let after = t.answer(s.id, card, Rating::Again);
+    let lapsed = t.card(card);
+    assert_eq!(lapsed.scheduling.state, CardState::Relearning);
+    assert_eq!(lapsed.scheduling.lapses, before.scheduling.lapses + 1);
+    assert_eq!(lapsed.scheduling.reps, before.scheduling.reps + 1);
+    assert_ne!(lapsed.scheduling.stability, before.scheduling.stability);
+    assert_ne!(lapsed.scheduling.difficulty, before.scheduling.difficulty);
+    let h = t.history(card);
+    assert_eq!(h.reviews.len(), 2);
+    assert_eq!(h.reviews[1].elapsed_days, days, "calendar days, not 24-hour spans");
+    assert_eq!((h.reviews[1].state_before, h.reviews[1].state_after), (CardState::Review, CardState::Relearning));
+    assert_eq!(after.counts.learning, 1);
+
+    t.undo();
+    assert_eq!(t.card(card), before, "undo restores every column");
+    assert_eq!(t.history(card).reviews.len(), 1);
+    let back = t.session(s.id);
+    assert_eq!((back.answered, back.counts), (0, s.counts));
+    assert_eq!(back.current.unwrap().card_id, card);
+
+    t.redo();
+    assert_eq!(t.card(card), lapsed);
+    assert_eq!(t.history(card).reviews, h.reviews);
+    t.undo();
+    assert_eq!(t.card(card), before);
+}
+
+/// Undoing an answer of an earlier session restores that session's queue but does not reopen
+/// it: only the newer session stays open.
+pub fn undo_does_not_reopen_ended_session(f: &Factory) {
+    let t = T::new(f(), 12);
+    let deck = t.deck("D");
+    let card = t.note(deck.id, "q0", "a");
+    t.note(deck.id, "q1", "a");
+    let a = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(deck.id));
+    let before = t.card(card);
+    t.answer(a.id, card, Rating::Easy);
+    let b = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(deck.id));
+    assert!(t.ok::<StudySummary>(SessionRef { session_id: a.id }).ended_at.is_some());
+    t.undo();
+    assert_eq!(t.card(card), before);
+    assert!(
+        t.ok::<StudySummary>(SessionRef { session_id: a.id }).ended_at.is_some(),
+        "the ended session stays ended"
+    );
+    assert_eq!(t.ok::<StudyActive>(Empty {}).session.unwrap().id, b.id);
+    assert_eq!(t.session(a.id).answered, 0, "its queue state is restored");
 }
 
 /// Answering one card buries its siblings until the day ends; undo un-buries them exactly.
@@ -618,15 +690,21 @@ pub fn suspend_and_bury_in_session_with_undo(f: &Factory) {
     });
     assert_eq!(t.session(s.id).current.unwrap().card_id, c);
     assert!(t.card(b).buried_until.is_some());
-    // A new session skips both.
-    let other = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(deck.id));
-    assert_eq!(other.counts.new, 1);
     t.undo(); // bury
     assert!(t.card(b).buried_until.is_none());
     assert_eq!(t.session(s.id).current.unwrap().card_id, b);
+    t.redo();
+    // A new session skips both (and ends `s`).
+    let other = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(deck.id));
+    assert_eq!(other.counts.new, 1);
+    t.undo(); // bury: the queue of the ended session is restored, it stays ended
+    assert!(t.card(b).buried_until.is_none());
+    let back = t.session(s.id);
+    assert!(back.ended_at.is_some() && back.current.is_none());
+    assert_eq!(back.counts.new, 2);
     t.undo(); // suspend
     assert_eq!(t.card(a), a_before);
-    assert_eq!(t.session(s.id).current.unwrap().card_id, a);
+    assert_eq!(t.session(s.id).counts.new, 3);
     // Unchanged requests are no-ops (no undo step).
     let r = t.ok::<StudySuspend>(SuspendCards {
         card_ids: vec![a],
@@ -824,6 +902,8 @@ macro_rules! study_suite {
         study_suite!(@tests $factory;
             answer_undo_redo_is_exact,
             sibling_burying_is_undone_exactly,
+            review_lapse_undo_is_exact,
+            undo_does_not_reopen_ended_session,
             trial_mode_never_changes_cards,
             simulation_365_days,
             learning_cards_come_back_in_the_session,

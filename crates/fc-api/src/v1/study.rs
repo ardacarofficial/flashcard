@@ -139,6 +139,8 @@ pub struct IntervalPreview {
     /// Button.
     pub rating: Rating,
     /// Time until the card would be due again, ms (`10m`, `3d`… formatting is the UI's).
+    /// Whole-day intervals are `scheduled_days` × 24 h (the card is due from the start of
+    /// that study day).
     pub interval_ms: i64,
     /// Whole days (0 for intraday steps).
     pub scheduled_days: u32,
@@ -421,8 +423,6 @@ pub struct SessionStateSnapshot {
     /// Opaque engine state (`sessions.state`).
     #[ts(type = "unknown")]
     pub state: serde_json::Value,
-    /// End time.
-    pub ended_at: Option<Timestamp>,
 }
 
 /// One review (`review_log` row, immutable except for undo of the answer that wrote it).

@@ -189,11 +189,12 @@ fn single(expected: &str, given: &str, opts: &CheckOptions, mode: Mode) -> Check
     }
 }
 
-/// Case/accents folding of one character for comparisons.
+/// Case/accents folding of one character for comparisons. Case follows the Turkish rule
+/// (`I → ı`, `İ → i`); with `fold_turkish` `ı` and `i` are equal anyway.
 fn fold_char(c: char, opts: &CheckOptions) -> char {
     let lower = match c {
         'İ' => 'i',
-        'I' => 'i',
+        'I' => 'ı',
         _ => c.to_lowercase().next().unwrap_or(c),
     };
     if !opts.fold_turkish {
@@ -363,6 +364,12 @@ mod tests {
         };
         assert_eq!(check(n, "ışık", "isik", &strict).grade, Grade::Wrong);
         assert_eq!(check(n, "Şeker", "şeker", &strict).grade, Grade::Correct);
+        // Turkish case rule: I ↔ ı, İ ↔ i.
+        assert_eq!(check(n, "ILIK", "ılık", &strict).grade, Grade::Correct);
+        assert_eq!(check(n, "İLİK", "ilik", &strict).grade, Grade::Correct);
+        assert_eq!(check(n, "ILIK", "ilik", &strict).grade, Grade::Wrong);
+        // Folding keeps both equal.
+        assert_eq!(grade(n, "ILIK", "ilik"), Grade::Correct);
     }
 
     #[test]

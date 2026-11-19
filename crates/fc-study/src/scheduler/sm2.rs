@@ -81,8 +81,8 @@ impl Scheduler for Sm2Scheduler {
         now: Timestamp,
         params: &SchedulerParams,
     ) -> StrategyResult<ReviewOutcome> {
-        check_params(params)?;
-        Ok(apply(state, rating, now, params, &candidates(state)))
+        let day = check_params(params)?;
+        Ok(apply(state, rating, now, params, day, &candidates(state)))
     }
 
     fn preview(
@@ -91,8 +91,8 @@ impl Scheduler for Sm2Scheduler {
         now: Timestamp,
         params: &SchedulerParams,
     ) -> StrategyResult<[ReviewOutcome; 4]> {
-        check_params(params)?;
+        let day = check_params(params)?;
         let c = candidates(state);
-        Ok(RATINGS.map(|r| apply(state, r, now, params, &c)))
+        Ok(RATINGS.map(|r| apply(state, r, now, params, day, &c)))
     }
 }
