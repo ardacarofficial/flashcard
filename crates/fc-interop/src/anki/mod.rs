@@ -15,6 +15,8 @@
 //! [`Pack`](crate::pack::Pack).
 
 pub mod convert;
+#[cfg(any(test, feature = "fixtures"))]
+pub mod fixtures;
 mod proto;
 mod read;
 pub mod schema;

@@ -7,6 +7,10 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Synthetic Anki packages for other crates' tests (`fc_interop::anki::fixtures`).
+fixtures = []
+
 [dependencies]
 fc-core.workspace = true
 serde.workspace = true

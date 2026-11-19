@@ -105,11 +105,11 @@ pub(crate) fn repeated_bytes<'a>(fields: &[(u32, Value<'a>)], n: u32) -> Vec<&'a
 }
 
 /// Message encoder (test fixtures build the latest Anki format with it).
-#[cfg(test)]
+#[cfg(any(test, feature = "fixtures"))]
 #[derive(Default)]
 pub(crate) struct Enc(pub Vec<u8>);
 
-#[cfg(test)]
+#[cfg(any(test, feature = "fixtures"))]
 impl Enc {
     fn raw_varint(&mut self, mut v: u64) {
         loop {
