@@ -1,11 +1,18 @@
 <script lang="ts">
-  import type { AttributeDef, AttributeValue } from '$lib/api/types';
+  import type { AttributeDefDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
-  import { controlFor, displayOptions, fromInput } from './attribute-field';
+  import {
+    controlFor,
+    displayOptions,
+    fromInput,
+    selectedChoices,
+    toInput,
+    type FieldValue,
+  } from './attribute-field';
 
   interface Props {
-    def: AttributeDef;
-    value: AttributeValue;
+    def: AttributeDefDto;
+    value: FieldValue;
   }
   let { def, value = $bindable() }: Props = $props();
 
@@ -26,7 +33,8 @@
   function onText(e: Event) {
     value = fromInput(def.kind, (e.currentTarget as HTMLInputElement).value);
   }
-  const triValue = $derived(value === true ? 'true' : value === false ? 'false' : '');
+  const raw = $derived(toInput(value));
+  const chosen = $derived(selectedChoices(value));
 </script>
 
 <div class="field" data-kind={def.kind}>
@@ -36,7 +44,7 @@
   </label>
 
   {#if control === 'select'}
-    <select id={inputId} value={typeof value === 'string' ? value : ''} onchange={onSelect}>
+    <select id={inputId} value={raw} onchange={onSelect}>
       <option value="">{t('attribute.unset')}</option>
       {#each options as o (o.id)}
         <option value={o.id}>{o.label}</option>
@@ -45,21 +53,21 @@
   {:else if control === 'multiselect'}
     <select id={inputId} multiple onchange={onMulti}>
       {#each options as o (o.id)}
-        <option value={o.id} selected={Array.isArray(value) && value.includes(o.id)}>{o.label}</option>
+        <option value={o.id} selected={chosen.includes(o.id)}>{o.label}</option>
       {/each}
     </select>
   {:else if control === 'number'}
-    <input id={inputId} type="number" value={typeof value === 'number' ? value : ''} oninput={onText} />
+    <input id={inputId} type="number" value={raw} oninput={onText} />
   {:else if control === 'date'}
-    <input id={inputId} type="date" value={typeof value === 'string' ? value : ''} oninput={onText} />
+    <input id={inputId} type="date" value={raw} oninput={onText} />
   {:else if control === 'tristate'}
-    <select id={inputId} value={triValue} onchange={onSelect}>
+    <select id={inputId} value={raw} onchange={onSelect}>
       <option value="">{t('attribute.unset')}</option>
       <option value="true">{t('common.yes')}</option>
       <option value="false">{t('common.no')}</option>
     </select>
   {:else}
-    <input id={inputId} type="text" value={typeof value === 'string' ? value : ''} oninput={onText} />
+    <input id={inputId} type="text" value={raw} oninput={onText} />
   {/if}
 </div>
 

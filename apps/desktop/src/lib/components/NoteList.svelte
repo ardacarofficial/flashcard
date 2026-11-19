@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, type ApiError } from '$lib/api';
-  import type { NoteSummary } from '$lib/api/types';
+  import type { NoteListItem } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
 
@@ -9,12 +9,12 @@
   }
   let { deckId }: Props = $props();
 
-  let notes = $state<NoteSummary[] | null>(null);
+  let notes = $state<NoteListItem[] | null>(null);
   let error = $state<string | null>(null);
 
   async function load(id: string) {
     try {
-      notes = await api.note.list(id);
+      notes = (await api.note.list(id)).items;
       error = null;
     } catch (e) {
       error = td((e as ApiError).messageKey);
@@ -25,11 +25,11 @@
     const id = deckId;
     notes = null;
     void load(id);
-    const unsub = api.on('note.', () => void load(id));
+    const unsub = api.on(['note', 'deck_', 'undone', 'redone'], () => void load(id));
     return () => void unsub.then((u) => u());
   });
 
-  let pending = $state<NoteSummary | null>(null);
+  let pending = $state<NoteListItem | null>(null);
 
   async function remove(id: string) {
     pending = null;
@@ -53,15 +53,15 @@
       <thead>
         <tr>
           <th>{t('note.front')}</th>
-          <th>{t('note.back')}</th>
+          <th>{t('note.tags')}</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {#each notes as n (n.id)}
           <tr>
-            <td>{n.fields.front ?? n.sort_field}</td>
-            <td class="muted">{n.fields.back ?? t('common.none')}</td>
+            <td>{n.sort_field}</td>
+            <td class="muted">{n.tags.length > 0 ? n.tags.join(' ') : t('common.none')}</td>
             <td>
               <button
                 class="danger"

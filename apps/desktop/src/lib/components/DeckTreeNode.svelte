@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DeckNode } from '$lib/api/types';
+  import type { DeckTreeNode as DeckNode } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import DeckTreeNode from './DeckTreeNode.svelte';
 
@@ -21,23 +21,23 @@
 
   function start(m: Mode) {
     mode = m;
-    draft = m === 'rename' ? node.name : '';
+    draft = m === 'rename' ? node.deck.name : '';
   }
   async function submit(e: SubmitEvent) {
     e.preventDefault();
-    const ok = mode === 'rename' ? await onrename(node.id, draft) : await oncreate(draft, node.id);
+    const ok = mode === 'rename' ? await onrename(node.deck.id, draft) : await oncreate(draft, node.deck.id);
     if (ok) {
       mode = 'idle';
       expanded = true;
     }
   }
   async function confirmDelete() {
-    if (await ondelete(node.id)) mode = 'idle';
+    if (await ondelete(node.deck.id)) mode = 'idle';
   }
 </script>
 
 <li>
-  <div class="row" class:selected={selectedId === node.id} style:padding-left="calc({depth} * var(--fc-space-4))">
+  <div class="row" class:selected={selectedId === node.deck.id} style:padding-left="calc({depth} * var(--fc-space-4))">
     {#if node.children.length > 0}
       <button
         class="toggle"
@@ -57,7 +57,7 @@
         <button type="button" onclick={() => (mode = 'idle')}>{t('common.cancel')}</button>
       </form>
     {:else}
-      <button class="name" onclick={() => onselect(node.id)}>{node.name}</button>
+      <button class="name" onclick={() => onselect(node.deck.id)}>{node.deck.name}</button>
       <span class="actions">
         <button title={t('deck.new_sub')} aria-label={t('deck.new_sub')} onclick={() => start('add')}>+</button>
         <button onclick={() => start('rename')}>{t('common.rename')}</button>
@@ -68,7 +68,7 @@
 
   {#if mode === 'confirm'}
     <div class="inline confirm" style:padding-left="calc({depth + 1} * var(--fc-space-4))">
-      <span>{t('deck.confirm_delete', { name: node.name })}</span>
+      <span>{t('deck.confirm_delete', { name: node.deck.name })}</span>
       <button class="danger" onclick={confirmDelete}>{t('common.delete')}</button>
       <button onclick={() => (mode = 'idle')}>{t('common.cancel')}</button>
     </div>
@@ -83,7 +83,7 @@
 
   {#if expanded && node.children.length > 0}
     <ul>
-      {#each node.children as child (child.id)}
+      {#each node.children as child (child.deck.id)}
         <DeckTreeNode node={child} depth={depth + 1} {selectedId} {onselect} {oncreate} {onrename} {ondelete} />
       {/each}
     </ul>

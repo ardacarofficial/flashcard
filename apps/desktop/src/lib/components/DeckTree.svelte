@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DeckNode } from '$lib/api/types';
+  import type { DeckTreeNode as DeckNode } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import DeckTreeNode from './DeckTreeNode.svelte';
 
@@ -44,7 +44,7 @@
     <p class="muted">{t('deck.empty')}</p>
   {:else}
     <ul>
-      {#each decks as node (node.id)}
+      {#each decks as node (node.deck.id)}
         <DeckTreeNode {node} depth={0} {selectedId} {onselect} {oncreate} {onrename} {ondelete} />
       {/each}
     </ul>

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { api, type ApiError } from '$lib/api';
-  import type { AttributeDef, AttributeValue } from '$lib/api/types';
+  import type { AttributeDefDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import AttributeField from './AttributeField.svelte';
-  import { initialValue } from './attribute-field';
+  import { initialValue, toAssignments, type FieldValue } from './attribute-field';
 
   interface Props {
     deckId: string;
@@ -11,8 +11,8 @@
   }
   let { deckId, deckName }: Props = $props();
 
-  let defs = $state<AttributeDef[]>([]);
-  let values = $state<Record<string, AttributeValue>>({});
+  let defs = $state<AttributeDefDto[]>([]);
+  let values = $state<Record<string, FieldValue>>({});
   let front = $state('');
   let back = $state('');
   let busy = $state(false);
@@ -27,8 +27,9 @@
     defs = [];
     values = {};
     api.attribute.effective(id).then(
-      (d) => {
+      (list) => {
         if (cancelled) return;
+        const d = list.attributes.map((a) => a.def);
         defs = [...d].sort((a, b) => a.position - b.position);
         values = Object.fromEntries(d.map((def) => [def.id, initialValue(def)]));
       },
@@ -47,7 +48,7 @@
     error = null;
     status = null;
     try {
-      await api.note.createClassic(deckId, front, back, $state.snapshot(values));
+      await api.note.createClassic(deckId, front, back, toAssignments($state.snapshot(values)));
       front = '';
       back = '';
       status = t('note.added');

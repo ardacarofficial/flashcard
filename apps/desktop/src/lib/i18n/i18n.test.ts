@@ -22,7 +22,9 @@ describe('i18n', () => {
   });
 
   it('dynamic keys fall back to the key itself', () => {
-    expect(translateDynamic('tr', 'errors.validation.empty_name')).toBe('Ad boş olamaz.');
+    expect(translateDynamic('tr', 'errors.validation.deck_name')).toBe('Geçersiz deste adı.');
+    expect(translateDynamic('en', 'nav.add_note')).toBe('Add');
+    expect(translateDynamic('tr', 'modules.attributes.name')).toBe('Sınıflandırmalar');
     expect(translateDynamic('tr', 'plugin.unknown.key')).toBe('plugin.unknown.key');
   });
 

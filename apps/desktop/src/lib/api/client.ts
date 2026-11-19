@@ -1,15 +1,34 @@
-import type { ApiErrorDto, AttributeValue, CommandMap, FcEvent, Uuid } from './types';
+import {
+  API_VERSION,
+  type MethodName,
+  type RequestOf,
+  type ResponseOf,
+} from './generated/methods';
+import type {
+  ApiError as ApiErrorDto,
+  AttributeAssignment,
+  DeckId,
+  DomainEvent,
+  ErrorCode,
+  EventEnvelope,
+  NoteId,
+  NoteTypeId,
+} from './types';
 import type { Transport, Unsubscribe } from './transport';
 
-export type CommandName = keyof CommandMap;
-export type Input<K extends CommandName> = CommandMap[K]['input'];
-export type Output<K extends CommandName> = CommandMap[K]['output'];
+/** Built-in Classic note type (`fc_core::notetype::builtin::CLASSIC_ID`, seeded by the app). */
+export const CLASSIC_NOTETYPE_ID: NoteTypeId = '01900000-0000-7000-8000-000000000001';
+
+/** Qualified wire name of a method: `decks.create` → `v1.decks.create`. */
+export function wireName(method: MethodName): string {
+  return `${API_VERSION}.${method}`;
+}
 
 /** Error thrown by every api call. UI branches on `code`, displays `messageKey`. */
 export class ApiError extends Error {
-  readonly code: string;
+  readonly code: ErrorCode;
   readonly messageKey: string;
-  readonly details: Record<string, unknown> | null;
+  readonly details: Record<string, unknown>;
   readonly retryable: boolean;
 
   constructor(dto: ApiErrorDto) {
@@ -17,7 +36,7 @@ export class ApiError extends Error {
     this.name = 'ApiError';
     this.code = dto.code;
     this.messageKey = dto.message_key;
-    this.details = dto.details ?? null;
+    this.details = dto.details ?? {};
     this.retryable = dto.retryable;
   }
 }
@@ -45,67 +64,77 @@ export function toApiError(e: unknown): ApiError {
   }
   return new ApiError({
     code: 'INTERNAL',
-    message_key: 'errors.internal',
+    message_key: 'errors.internal.unexpected',
     message: e instanceof Error ? e.message : String(e),
-    details: null,
+    details: {},
     retryable: false,
   });
 }
 
-export type EventHandler = (event: FcEvent) => void;
+/** Discriminant of a domain event (`deck_created`, `notes_deleted`, …). */
+export type EventType = DomainEvent['type'];
+export type EventHandler = (event: EventEnvelope) => void;
 
 export function createApiClient(transport: Transport) {
-  async function call<K extends CommandName>(command: K, payload: Input<K>): Promise<Output<K>> {
+  /** Calls `method` with typed params; resolves to its typed response or throws ApiError. */
+  async function call<M extends MethodName>(method: M, params: RequestOf<M>): Promise<ResponseOf<M>> {
     try {
-      return (await transport.invoke(command, payload)) as Output<K>;
+      return (await transport.invoke(wireName(method), params)) as ResponseOf<M>;
     } catch (e) {
       throw toApiError(e);
     }
   }
 
   /**
-   * Subscribe to domain events. `prefix` filters by event type
-   * (e.g. "deck." matches "deck.created"). Returns an unsubscribe function.
+   * Subscribe to domain events whose type starts with one of `prefixes` (`''` = all; e.g.
+   * `'deck_'` matches `deck_created`, `'note'` matches `note_created` and `notes_deleted`).
+   * Returns an unsubscribe function.
    */
-  function on(prefix: string, handler: EventHandler): Promise<Unsubscribe> {
-    return transport.listen((ev) => {
-      if (prefix === '' || ev.type.startsWith(prefix)) handler(ev);
+  function on(prefixes: string | readonly string[], handler: EventHandler): Promise<Unsubscribe> {
+    const list = typeof prefixes === 'string' ? [prefixes] : prefixes;
+    return transport.listen((env) => {
+      if (list.some((p) => env.event.type.startsWith(p))) handler(env);
     });
   }
-
-  const none = {} as Record<string, never>;
 
   return {
     call,
     on,
     modules: {
-      list: () => call('v1.modules.list', none),
+      list: () => call('modules.list', {}),
     },
     deck: {
-      tree: () => call('v1.deck.tree', none),
-      create: (name: string, parentId: Uuid | null) =>
-        call('v1.deck.create', { name, parent_id: parentId }),
-      rename: (id: Uuid, name: string) => call('v1.deck.rename', { id, name }),
-      remove: (id: Uuid) => call('v1.deck.delete', { id }),
+      tree: () => call('decks.tree', {}),
+      /** Creates the deck at `path` (`Parent::Child`; missing parents are created). */
+      create: (path: string) => call('decks.create', { path }),
+      rename: (id: DeckId, name: string) => call('decks.rename', { id, name }),
+      remove: (id: DeckId) => call('decks.delete', { id }),
     },
     attribute: {
-      effective: (deckId: Uuid) => call('v1.attribute.effective', { deck_id: deckId }),
+      /** Note-level classifications that apply to a deck (inherited down the tree). */
+      effective: (deckId: DeckId) =>
+        call('attributes.effective', { deck_id: deckId, target: 'note' }),
     },
     note: {
-      createClassic: (
-        deckId: Uuid,
-        front: string,
-        back: string,
-        attributes: Record<Uuid, AttributeValue>,
-      ) =>
-        call('v1.note.create', {
+      createClassic: (deckId: DeckId, front: string, back: string, attributes: AttributeAssignment[]) =>
+        call('notes.create', {
+          notetype_id: CLASSIC_NOTETYPE_ID,
           deck_id: deckId,
-          notetype_id: 'classic',
           fields: { front, back },
+          tags: [],
           attributes,
         }),
-      list: (deckId: Uuid) => call('v1.note.list', { deck_id: deckId }),
-      remove: (id: Uuid) => call('v1.note.delete', { id }),
+      list: (deckId: DeckId) =>
+        call('notes.list', {
+          deck_id: deckId,
+          include_subdecks: false,
+          page: { cursor: null, limit: null },
+        }),
+      remove: (id: NoteId) => call('notes.delete', { ids: [id] }),
+    },
+    oplog: {
+      undo: () => call('oplog.undo', {}),
+      redo: () => call('oplog.redo', {}),
     },
   };
 }

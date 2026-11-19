@@ -2,16 +2,37 @@
   "app": {
     "title": "Flashcard"
   },
-  "menu": {
+  "nav": {
     "decks": "Desteler",
     "add_note": "Ekle",
     "notes": "Notlar",
     "settings": "Ayarlar"
   },
   "modules": {
-    "decks": "Desteler",
-    "notes": "Notlar",
-    "settings": "Ayarlar"
+    "core": {
+      "name": "Çekirdek",
+      "description": "Geri alma, modüller ve uygulama ayarları."
+    },
+    "decks": {
+      "name": "Desteler",
+      "description": "Deste ağacı."
+    },
+    "notes": {
+      "name": "Notlar",
+      "description": "Not ekleme ve göz atma."
+    },
+    "notetypes": {
+      "name": "Not türleri",
+      "description": "Not türleri ve kart şablonları."
+    },
+    "tags": {
+      "name": "Etiketler",
+      "description": "Hiyerarşik etiketler."
+    },
+    "attributes": {
+      "name": "Sınıflandırmalar",
+      "description": "Notlar için seviye, sınav ve benzeri etiketler."
+    }
   },
   "common": {
     "save": "Kaydet",
@@ -46,7 +67,8 @@
     "classifications": "Sınıflandırmalar",
     "confirm_delete": "Bu not silinsin mi?",
     "undo_hint": "Sonradan geri alabilirsin.",
-    "delete_aria": "“{name}” notunu sil"
+    "delete_aria": "“{name}” notunu sil",
+    "tags": "Etiketler"
   },
   "attribute": {
     "unset": "Seçilmedi",
@@ -58,25 +80,70 @@
     "theme": "Tema",
     "theme_system": "Sistem",
     "theme_light": "Açık",
-    "theme_dark": "Koyu"
+    "theme_dark": "Koyu",
+    "pages": {
+      "general": "Genel",
+      "attributes": "Sınıflandırmalar"
+    }
   },
   "lang": {
     "tr": "Türkçe",
     "en": "English"
   },
   "errors": {
-    "internal": "Bir şeyler ters gitti.",
-    "not_implemented": "Henüz kullanılamıyor.",
-    "deck": {
-      "not_found": "Deste bulunamadı."
-    },
-    "note": {
-      "not_found": "Not bulunamadı.",
-      "duplicate": "Bu not zaten var."
-    },
     "validation": {
-      "empty_name": "Ad boş olamaz.",
-      "empty_front": "Ön yüz boş olamaz."
+      "invalid_params": "Geçersiz istek.",
+      "deck_name": "Geçersiz deste adı.",
+      "tag_name": "Geçersiz etiket adı.",
+      "field_required": "Zorunlu bir alan boş.",
+      "unknown_field": "Bilinmeyen alan.",
+      "note_type": "Geçersiz not türü.",
+      "attribute_def": "Geçersiz sınıflandırma.",
+      "attribute_value": "Geçersiz sınıflandırma değeri.",
+      "attribute_required": "Bu sınıflandırma zorunlu.",
+      "attribute_not_applicable": "Bu sınıflandırma bu destede geçerli değil.",
+      "setting_value": "Geçersiz ayar değeri."
+    },
+    "not_found": {
+      "method": "Bilinmeyen komut.",
+      "deck": "Deste bulunamadı.",
+      "note": "Not bulunamadı.",
+      "card": "Kart bulunamadı.",
+      "note_type": "Not türü bulunamadı.",
+      "tag": "Etiket bulunamadı.",
+      "attribute": "Sınıflandırma bulunamadı.",
+      "attribute_option": "Seçenek bulunamadı.",
+      "attribute_template": "Şablon bulunamadı.",
+      "module": "Modül bulunamadı.",
+      "setting": "Ayar bulunamadı.",
+      "job": "İş bulunamadı."
+    },
+    "conflict": {
+      "deck_exists": "Bu adda bir deste zaten var.",
+      "deck_cycle": "Bir deste kendi içine taşınamaz.",
+      "note_duplicate": "Bu not zaten var.",
+      "attribute_key_exists": "Bu anahtarla bir sınıflandırma zaten var.",
+      "attribute_option_in_use": "Bu seçenek hâlâ kullanılıyor.",
+      "nothing_to_undo": "Geri alınacak bir şey yok.",
+      "nothing_to_redo": "Yinelenecek bir şey yok.",
+      "module_disabled": "Bu modül kapalı.",
+      "module_required": "Bu modül kapatılamaz.",
+      "deleted": "Bu öğe çöp kutusunda."
+    },
+    "permission": {
+      "denied": "İzin yok."
+    },
+    "provider": {
+      "unavailable": "Hizmet kullanılamıyor.",
+      "failed": "Hizmet başarısız oldu."
+    },
+    "io": {
+      "database": "Veritabanı hatası.",
+      "file": "Dosya hatası."
+    },
+    "internal": {
+      "unexpected": "Bir şeyler ters gitti.",
+      "not_implemented": "Henüz kullanılamıyor."
     }
   }
 }

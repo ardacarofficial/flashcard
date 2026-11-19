@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import type { AttributeDef, AttributeKind } from '$lib/api/types';
-import { controlFor, displayOptions, fromInput, initialValue } from './attribute-field';
+import type { AttributeDefDto, AttributeKind } from '$lib/api/types';
+import {
+  controlFor,
+  displayOptions,
+  fromInput,
+  initialValue,
+  toAssignments,
+  toInput,
+} from './attribute-field';
 import AttributeField from './AttributeField.svelte';
 import { i18n } from '$lib/i18n/index.svelte';
 
 i18n.locale = 'tr';
 
-function def(kind: AttributeKind, extra: Partial<AttributeDef> = {}): AttributeDef {
+function def(kind: AttributeKind, extra: Partial<AttributeDefDto> = {}): AttributeDefDto {
   return {
     id: `a-${kind}`,
     scope_deck_id: null,
@@ -22,6 +29,8 @@ function def(kind: AttributeKind, extra: Partial<AttributeDef> = {}): AttributeD
     required: false,
     default_value: null,
     position: 0,
+    template_id: null,
+    updated_at: 0,
     ...extra,
   };
 }
@@ -46,18 +55,37 @@ describe('attribute field logic', () => {
     expect(initialValue(def('multi_enum'))).toBeNull();
     expect(initialValue(def('bool'))).toBeNull();
     expect(initialValue(def('text'))).toBeNull();
-    expect(initialValue(def('enum', { default_value: 'o1' }))).toBe('o1');
+    expect(initialValue(def('enum', { default_value: { type: 'choice', value: 'o1' } }))).toEqual({
+      type: 'choice',
+      value: 'o1',
+    });
   });
 
   it('converts raw input', () => {
-    expect(fromInput('number', '12.5')).toBe(12.5);
+    expect(fromInput('number', '12.5')).toEqual({ type: 'number', value: 12.5 });
     expect(fromInput('number', '')).toBeNull();
     expect(fromInput('enum', '')).toBeNull();
-    expect(fromInput('multi_enum', ['o1'])).toEqual(['o1']);
+    expect(fromInput('ordered_enum', 'o1')).toEqual({ type: 'choice', value: 'o1' });
+    expect(fromInput('multi_enum', ['o1'])).toEqual({ type: 'choices', value: ['o1'] });
     expect(fromInput('multi_enum', [])).toBeNull();
-    expect(fromInput('bool', 'true')).toBe(true);
-    expect(fromInput('bool', 'false')).toBe(false);
+    expect(fromInput('bool', 'true')).toEqual({ type: 'bool', value: true });
+    expect(fromInput('bool', 'false')).toEqual({ type: 'bool', value: false });
     expect(fromInput('bool', '')).toBeNull();
+    expect(fromInput('date', '2026-01-02')).toEqual({ type: 'date', value: '2026-01-02' });
+    expect(fromInput('text', 'x')).toEqual({ type: 'text', value: 'x' });
+  });
+
+  it('round-trips single values to input state', () => {
+    expect(toInput(null)).toBe('');
+    expect(toInput({ type: 'bool', value: false })).toBe('false');
+    expect(toInput({ type: 'number', value: 7 })).toBe('7');
+    expect(toInput({ type: 'choice', value: 'o1' })).toBe('o1');
+  });
+
+  it('sends only touched fields as assignments', () => {
+    expect(
+      toAssignments({ a: null, b: { type: 'bool', value: false }, c: null }),
+    ).toEqual([{ attr_id: 'b', value: { type: 'bool', value: false } }]);
   });
 });
 
@@ -71,7 +99,7 @@ describe('<AttributeField>', () => {
   });
 
   it('renders multi_enum as a multi-select', () => {
-    render(AttributeField, { def: def('multi_enum'), value: ['o2'] });
+    render(AttributeField, { def: def('multi_enum'), value: { type: 'choices', value: ['o2'] } });
     const select = screen.getByLabelText('Attr multi_enum') as HTMLSelectElement;
     expect(select.multiple).toBe(true);
     expect(Array.from(select.selectedOptions).map((o) => o.value)).toEqual(['o2']);
@@ -113,6 +141,6 @@ describe('<AttributeField>', () => {
       },
     });
     await fireEvent.input(screen.getByLabelText('Attr number'), { target: { value: '7' } });
-    expect(value).toBe(7);
+    expect(value).toEqual({ type: 'number', value: 7 });
   });
 });

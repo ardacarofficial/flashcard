@@ -8,7 +8,12 @@ i18n.locale = 'en';
 describe('<App> on the dev mock transport', () => {
   it('draws the menu from modules.list and shows classification fields', async () => {
     render(App);
-    // Menu items come from the mock's modules.list.
+    // Menu items come from modules.list main_menu contributions (+ Settings for settings pages).
+    await screen.findByRole('button', { name: 'Settings' });
+    const nav = screen.getByRole('navigation');
+    expect(Array.from(nav.querySelectorAll('button'), (b) => b.textContent?.trim())).toEqual([
+      'Decks', 'Add', 'Notes', 'Settings',
+    ]);
     await fireEvent.click(await screen.findByRole('button', { name: 'Add' }));
     const deck = (await screen.findByLabelText('Deck')) as HTMLSelectElement;
     await screen.findByRole('option', { name: 'İngilizce::Fiiller' });

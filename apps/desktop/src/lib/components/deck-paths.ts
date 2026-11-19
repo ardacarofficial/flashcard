@@ -1,14 +1,11 @@
-import type { DeckNode } from '$lib/api/types';
+import type { DeckTreeNode } from '$lib/api/types';
 
 export interface DeckPath {
   id: string;
   path: string;
 }
 
-/** Flatten the tree into "Parent::Child" display paths, depth-first. */
-export function deckPaths(nodes: DeckNode[], prefix = ''): DeckPath[] {
-  return nodes.flatMap((n) => {
-    const path = prefix ? `${prefix}::${n.name}` : n.name;
-    return [{ id: n.id, path }, ...deckPaths(n.children, path)];
-  });
+/** Flatten the tree into "Parent::Child" display paths (the backend's `path`), depth-first. */
+export function deckPaths(nodes: DeckTreeNode[]): DeckPath[] {
+  return nodes.flatMap((n) => [{ id: n.deck.id, path: n.deck.path }, ...deckPaths(n.children)]);
 }

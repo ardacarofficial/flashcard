@@ -1,16 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import type { AttributeDef } from '$lib/api/types';
+import type { AttributeDefDto, EffectiveAttributeList } from '$lib/api/types';
 import { i18n } from '$lib/i18n/index.svelte';
 
 i18n.locale = 'en';
 
-const level: AttributeDef = {
+const level: AttributeDefDto = {
   id: 'lvl', scope_deck_id: null, key: 'lvl', name: 'Level', kind: 'enum',
   options: [{ id: 'a1', label: 'A1', color: null, order: 1 }],
   target: 'note', required: false, default_value: null, position: 0,
+  template_id: null, updated_at: 0,
 };
-const calls: Array<(d: AttributeDef[]) => void> = [];
+const calls: Array<(d: EffectiveAttributeList) => void> = [];
 const createClassic = vi.fn().mockResolvedValue({});
 
 vi.mock('$lib/api', () => ({
@@ -25,7 +26,7 @@ import NoteAddForm from './NoteAddForm.svelte';
 describe('<NoteAddForm>', () => {
   it('drops the previous deck\'s fields while the new deck loads', async () => {
     const { rerender } = render(NoteAddForm, { deckId: 'd1', deckName: 'D1' });
-    calls[0]!([level]);
+    calls[0]!({ attributes: [{ def: level, inherited: false, suggested_value: null }] });
     const select = (await screen.findByLabelText('Level')) as HTMLSelectElement;
     await fireEvent.change(select, { target: { value: 'a1' } });
 
@@ -33,6 +34,6 @@ describe('<NoteAddForm>', () => {
     await waitFor(() => expect(screen.queryByLabelText('Level')).toBeNull());
 
     await fireEvent.submit(screen.getByRole('button', { name: 'Add' }).closest('form')!);
-    expect(createClassic).toHaveBeenLastCalledWith('d2', '', '', {});
+    expect(createClassic).toHaveBeenLastCalledWith('d2', '', '', []);
   });
 });

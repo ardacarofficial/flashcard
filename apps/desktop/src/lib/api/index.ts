@@ -1,7 +1,15 @@
 import { createApiClient } from './client';
 import { createTauriTransport, isTauri, type Transport } from './transport';
 
-export { ApiError, createApiClient, toApiError, type ApiClient } from './client';
+export {
+  ApiError,
+  CLASSIC_NOTETYPE_ID,
+  createApiClient,
+  toApiError,
+  wireName,
+  type ApiClient,
+  type EventType,
+} from './client';
 export type * from './types';
 
 /**

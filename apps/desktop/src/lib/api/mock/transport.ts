@@ -1,38 +1,93 @@
 /**
- * DEV-ONLY in-memory backend so the UI is demoable before the Rust side is
- * wired. It is NOT a source of truth for behaviour: the real rules live in
- * fc-app. Loaded only when `import.meta.env.DEV` (see ../index.ts) and by tests.
+ * DEV-ONLY in-memory backend so the UI is demoable in a plain browser
+ * (`pnpm dev:mock`) and testable without Rust. It is NOT a source of truth for
+ * behaviour: the real rules live in fc-app. Loaded only when
+ * `import.meta.env.DEV` (see ../index.ts) and by tests. Speaks the real wire
+ * protocol: qualified `v1.*` names, generated request/response types, `ApiError`
+ * DTOs on failure and `EventEnvelope`s on the event stream.
  */
-import type { ApiErrorDto, AttributeDef, DeckNode, FcEvent, NoteSummary } from '../types';
+import { API_VERSION, type MethodName, type RequestOf, type ResponseOf } from '../generated/methods';
+import type {
+  ApiError,
+  AttributeDefDto,
+  DeckDto,
+  DeckTreeNode,
+  DomainEvent,
+  ErrorCode,
+  EventEnvelope,
+  ModuleDto,
+  NoteDto,
+  UiContribution,
+} from '../types';
 import type { Transport } from '../transport';
 
-interface FlatDeck {
-  id: string;
-  parent_id: string | null;
-  name: string;
-}
-
-function err(code: string, message_key: string, message: string): ApiErrorDto {
-  return { code, message_key, message, details: null, retryable: false };
+function err(code: ErrorCode, message_key: string, message: string): ApiError {
+  return { code, message_key, message, details: {}, retryable: false };
 }
 
 const CEFR = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
+function menu(id: string, label_key: string, route: string, order: number): UiContribution {
+  return { slot: 'main_menu', id, label_key, icon: null, route, method: null, order };
+}
+
+function settingsPage(id: string, label_key: string, route: string, order: number): UiContribution {
+  return { slot: 'settings_page', id, label_key, icon: null, route, method: null, order };
+}
+
+function module(id: string, ui: UiContribution[]): ModuleDto {
+  return {
+    id,
+    name_key: `modules.${id}.name`,
+    description_key: `modules.${id}.description`,
+    enabled: true,
+    can_disable: id !== 'core',
+    ui,
+    methods: [],
+  };
+}
+
+type Handlers = { [M in MethodName]?: (req: RequestOf<M>) => ResponseOf<M> };
+
 export function createMockTransport(): Transport {
   let seq = 0;
+  let eventSeq = 0;
+  const now = () => ++seq;
   const id = (p: string) => `${p}-${(++seq).toString().padStart(4, '0')}`;
-  const listeners = new Set<(e: FcEvent) => void>();
-  const emit = (type: string, payload: unknown) => {
-    for (const l of listeners) l({ type, payload });
+  const listeners = new Set<(e: EventEnvelope) => void>();
+  const emit = (event: DomainEvent) => {
+    const env: EventEnvelope = { seq: ++eventSeq, at: now(), batch_id: null, event };
+    for (const l of listeners) l(structuredClone(env));
   };
 
-  const english = { id: id('deck'), parent_id: null, name: 'İngilizce' };
-  const decks: FlatDeck[] = [
-    english,
-    { id: id('deck'), parent_id: english.id, name: 'Fiiller' },
-    { id: id('deck'), parent_id: null, name: 'YKS' },
-  ];
-  const attrs: AttributeDef[] = [
+  const decks: DeckDto[] = [];
+  const pathOf = (d: DeckDto): string => {
+    const parent = decks.find((p) => p.id === d.parent_id);
+    return parent ? `${pathOf(parent)}::${d.name}` : d.name;
+  };
+  const addDeck = (name: string, parent: DeckDto | null): DeckDto => {
+    const t = now();
+    const d: DeckDto = {
+      id: id('deck'),
+      parent_id: parent?.id ?? null,
+      name,
+      path: parent ? `${parent.path}::${name}` : name,
+      description: '',
+      icon: null,
+      color: null,
+      preset_id: null,
+      position: decks.filter((x) => x.parent_id === (parent?.id ?? null)).length,
+      created_at: t,
+      updated_at: t,
+    };
+    decks.push(d);
+    return d;
+  };
+  const english = addDeck('İngilizce', null);
+  addDeck('Fiiller', english);
+  addDeck('YKS', null);
+
+  const attrs: AttributeDefDto[] = [
     {
       id: id('attr'),
       scope_deck_id: english.id,
@@ -44,14 +99,21 @@ export function createMockTransport(): Transport {
       required: false,
       default_value: null,
       position: 0,
+      template_id: 'cefr',
+      updated_at: 0,
     },
   ];
-  const notes: NoteSummary[] = [];
+  const notes: NoteDto[] = [];
 
-  const tree = (parent: string | null): DeckNode[] =>
+  const tree = (parent: string | null): DeckTreeNode[] =>
     decks
       .filter((d) => d.parent_id === parent)
-      .map((d) => ({ ...d, children: tree(d.id) }));
+      .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
+      .map((deck) => ({
+        deck: { ...deck, path: pathOf(deck) },
+        counts: { new: 0, learning: 0, due: 0, total: 0 },
+        children: tree(deck.id),
+      }));
 
   const ancestors = (deckId: string): string[] => {
     const out: string[] = [];
@@ -65,108 +127,147 @@ export function createMockTransport(): Transport {
 
   const requireDeck = (deckId: string) => {
     const d = decks.find((x) => x.id === deckId);
-    if (!d) throw err('NOT_FOUND_DECK', 'errors.deck.not_found', deckId);
+    if (!d) throw err('NOT_FOUND_DECK', 'errors.not_found.deck', deckId);
     return d;
   };
   const requireName = (name: string) => {
-    if (name.trim() === '') throw err('VALIDATION_EMPTY_NAME', 'errors.validation.empty_name', '');
+    const n = name.trim();
+    if (n === '' || n.includes('::')) {
+      throw err('VALIDATION_DECK_NAME', 'errors.validation.deck_name', name);
+    }
+    return n;
   };
+  const sameName = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
 
-  type Handler = (p: Record<string, unknown>) => unknown;
-  const handlers: Record<string, Handler> = {
-    'v1.modules.list': () => [
-      {
-        id: 'decks',
-        name_key: 'modules.decks',
-        enabled: true,
-        ui_contributions: [
-          { kind: 'menu_item', id: 'decks', label_key: 'menu.decks', screen: 'decks', position: 0 },
-        ],
-      },
-      {
-        id: 'notes',
-        name_key: 'modules.notes',
-        enabled: true,
-        ui_contributions: [
-          { kind: 'menu_item', id: 'add', label_key: 'menu.add_note', screen: 'add_note', position: 1 },
-          { kind: 'menu_item', id: 'browse', label_key: 'menu.notes', screen: 'notes', position: 2 },
-        ],
-      },
-      {
-        id: 'settings',
-        name_key: 'modules.settings',
-        enabled: true,
-        ui_contributions: [
-          { kind: 'menu_item', id: 'settings', label_key: 'menu.settings', screen: 'settings', position: 9 },
-        ],
-      },
-    ],
-    'v1.deck.tree': () => tree(null),
-    'v1.deck.create': (p) => {
-      const name = String(p.name ?? '');
-      requireName(name);
-      const parent = (p.parent_id as string | null) ?? null;
-      if (parent) requireDeck(parent);
-      const d = { id: id('deck'), parent_id: parent, name: name.trim() };
-      decks.push(d);
-      emit('deck.created', { id: d.id });
-      return { id: d.id };
+  const handlers: Handlers = {
+    'modules.list': () => ({
+      modules: [
+        module('core', [settingsPage('core.general', 'settings.pages.general', '/settings/general', 0)]),
+        module('decks', [menu('decks.tree', 'nav.decks', '/decks', 10)]),
+        module('notes', [
+          menu('notes.add', 'nav.add_note', '/notes/new', 20),
+          menu('notes.list', 'nav.notes', '/notes', 30),
+        ]),
+      ],
+    }),
+    'decks.tree': () => ({ roots: tree(null) }),
+    'decks.create': ({ path }) => {
+      const parts = path.split('::').map(requireName);
+      let parent: DeckDto | null = null;
+      for (const [i, name] of parts.entries()) {
+        const existing: DeckDto | undefined = decks.find(
+          (d) => d.parent_id === (parent?.id ?? null) && sameName(d.name, name),
+        );
+        if (existing && i === parts.length - 1) {
+          throw err('CONFLICT_DECK_EXISTS', 'errors.conflict.deck_exists', path);
+        }
+        parent = existing ?? addDeck(name, parent);
+        if (!existing) emit({ type: 'deck_created', data: { deck: parent } });
+      }
+      return { ...parent!, path: pathOf(parent!) };
     },
-    'v1.deck.rename': (p) => {
-      const d = requireDeck(String(p.id));
-      const name = String(p.name ?? '');
-      requireName(name);
-      d.name = name.trim();
-      emit('deck.renamed', { id: d.id });
-      return null;
+    'decks.rename': ({ id: deckId, name }) => {
+      const d = requireDeck(deckId);
+      d.name = requireName(name);
+      d.updated_at = now();
+      const dto = { ...d, path: pathOf(d) };
+      emit({ type: 'deck_updated', data: { deck: dto } });
+      return dto;
     },
-    'v1.deck.delete': (p) => {
-      const target = String(p.id);
+    'decks.delete': ({ id: target }) => {
       requireDeck(target);
       const doomed = new Set(decks.filter((d) => ancestors(d.id).includes(target)).map((d) => d.id));
       for (let i = decks.length - 1; i >= 0; i--) if (doomed.has(decks[i]!.id)) decks.splice(i, 1);
-      emit('deck.deleted', { id: target });
-      return null;
+      let removed = 0;
+      for (let i = notes.length - 1; i >= 0; i--) {
+        if (doomed.has(notes[i]!.home_deck_id)) {
+          notes.splice(i, 1);
+          removed++;
+        }
+      }
+      const affected = { decks: doomed.size, notes: removed, cards: removed };
+      emit({ type: 'deck_deleted', data: { id: target, affected } });
+      return affected;
     },
-    'v1.attribute.effective': (p) => {
-      const chain = ancestors(String(p.deck_id));
-      return attrs.filter((a) => a.scope_deck_id === null || chain.includes(a.scope_deck_id));
+    'attributes.effective': ({ deck_id, target }) => {
+      const chain = ancestors(deck_id);
+      return {
+        attributes: attrs
+          .filter((a) => a.target === target)
+          .filter((a) => a.scope_deck_id === null || chain.includes(a.scope_deck_id))
+          .map((def) => ({
+            def,
+            inherited: def.scope_deck_id !== deck_id,
+            suggested_value: null,
+          })),
+      };
     },
-    'v1.note.create': (p) => {
-      const deckId = String(p.deck_id);
-      requireDeck(deckId);
-      const fields = (p.fields ?? {}) as Record<string, string>;
-      if (!fields.front?.trim()) throw err('VALIDATION_EMPTY_FIELD', 'errors.validation.empty_front', '');
-      const n: NoteSummary = {
+    'notes.create': (req) => {
+      requireDeck(req.deck_id);
+      if (!req.fields.front?.trim()) {
+        throw err('VALIDATION_FIELD_REQUIRED', 'errors.validation.field_required', 'front');
+      }
+      const t = now();
+      const n: NoteDto = {
         id: id('note'),
-        deck_id: deckId,
-        notetype_id: String(p.notetype_id ?? 'classic'),
-        sort_field: fields.front,
-        fields,
-        attributes: (p.attributes ?? {}) as NoteSummary['attributes'],
-        created_at: seq,
+        notetype_id: req.notetype_id,
+        home_deck_id: req.deck_id,
+        fields: req.fields,
+        tags: req.tags,
+        attributes: req.attributes,
+        cards: [
+          {
+            id: id('card'),
+            deck_id: req.deck_id,
+            template_key: 'forward',
+            state: 'new',
+            due: null,
+            suspended: false,
+          },
+        ],
+        sort_field: req.fields.front,
+        created_at: t,
+        updated_at: t,
       };
       notes.push(n);
-      emit('note.created', { id: n.id, deck_id: deckId });
-      return { id: n.id };
+      emit({ type: 'note_created', data: { note_id: n.id, deck_id: req.deck_id } });
+      return n;
     },
-    'v1.note.list': (p) => notes.filter((n) => n.deck_id === p.deck_id),
-    'v1.note.delete': (p) => {
-      const i = notes.findIndex((n) => n.id === p.id);
-      if (i < 0) throw err('NOT_FOUND_NOTE', 'errors.note.not_found', String(p.id));
-      notes.splice(i, 1);
-      emit('note.deleted', { id: p.id });
-      return null;
+    'notes.list': ({ deck_id }) => ({
+      items: notes
+        .filter((n) => !deck_id || n.home_deck_id === deck_id)
+        .map((n) => ({
+          id: n.id,
+          notetype_id: n.notetype_id,
+          sort_field: n.sort_field,
+          tags: n.tags,
+          card_count: n.cards.length,
+          updated_at: n.updated_at,
+        })),
+      next_cursor: null,
+    }),
+    'notes.delete': ({ ids }) => {
+      const gone = ids.filter((noteId) => {
+        const i = notes.findIndex((n) => n.id === noteId);
+        if (i >= 0) notes.splice(i, 1);
+        return i >= 0;
+      });
+      if (gone.length === 0) {
+        throw err('NOT_FOUND_NOTE', 'errors.not_found.note', ids.join(','));
+      }
+      emit({ type: 'notes_deleted', data: { ids: gone } });
+      return { decks: 0, notes: gone.length, cards: gone.length };
     },
   };
 
   return {
     async invoke(command, payload) {
-      const h = handlers[command];
-      if (!h) throw err('NOT_IMPLEMENTED', 'errors.not_implemented', command);
+      const prefix = `${API_VERSION}.`;
+      const method = (command.startsWith(prefix) ? command.slice(prefix.length) : '') as MethodName;
+      const h = handlers[method] as ((req: unknown) => unknown) | undefined;
+      if (!h) throw err('NOT_FOUND_METHOD', 'errors.not_found.method', command);
       // Deep-copy in and out so callers can't mutate mock state (mirrors IPC serialisation).
-      const input = structuredClone((payload ?? {}) as Record<string, unknown>);
-      return structuredClone(h(input));
+      return structuredClone(h(structuredClone(payload ?? {})));
     },
     async listen(handler) {
       listeners.add(handler);
