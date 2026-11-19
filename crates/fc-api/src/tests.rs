@@ -2,8 +2,6 @@ use crate::method::{parse_qualified_name, MethodKind};
 use crate::v1;
 use std::collections::HashSet;
 
-const MODULES: &[&str] = &["core", "decks", "notetypes", "notes", "tags", "attributes"];
-
 #[test]
 fn catalog_names_are_unique_and_well_formed() {
     let cat = v1::catalog();
@@ -23,9 +21,12 @@ fn catalog_names_are_unique_and_well_formed() {
                 m.name
             );
         }
+        // That the module exists is checked against the real registry in fc-app
+        // (`modules_are_consistent`), so tracks adding a module touch no
+        // list here.
         assert!(
-            MODULES.contains(&m.module),
-            "{}: unknown module {}",
+            !m.module.is_empty() && m.module.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+            "{}: module id must be snake_case, got {:?}",
             m.name,
             m.module
         );

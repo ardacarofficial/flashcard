@@ -1,0 +1,12 @@
+// Notes and cards.
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// A required note field is empty (`details.field`).
+ValidationFieldRequired => Validation, "errors.validation.field_required";
+/// Unknown note field (`details.field`).
+ValidationUnknownField => Validation, "errors.validation.unknown_field";
+/// Note not found (`details.id`).
+NotFoundNote => NotFound, "errors.not_found.note";
+/// Card not found (`details.id`).
+NotFoundCard => NotFound, "errors.not_found.card";
+/// Duplicate note (`details.existing_note_id`).
+ConflictNoteDuplicate => Conflict, "errors.conflict.note_duplicate";

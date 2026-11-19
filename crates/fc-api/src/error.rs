@@ -60,88 +60,9 @@ macro_rules! error_codes {
     };
 }
 
-error_codes! {
-    /// Request params do not match the method's request type.
-    ValidationInvalidParams => Validation, "errors.validation.invalid_params";
-    /// Deck name/path rejected (`details.reason`).
-    ValidationDeckName => Validation, "errors.validation.deck_name";
-    /// Tag name rejected (`details.reason`).
-    ValidationTagName => Validation, "errors.validation.tag_name";
-    /// A required note field is empty (`details.field`).
-    ValidationFieldRequired => Validation, "errors.validation.field_required";
-    /// Unknown note field (`details.field`).
-    ValidationUnknownField => Validation, "errors.validation.unknown_field";
-    /// Note type definition rejected.
-    ValidationNoteType => Validation, "errors.validation.note_type";
-    /// Attribute definition rejected (`details.reason`).
-    ValidationAttributeDef => Validation, "errors.validation.attribute_def";
-    /// Attribute value rejected (`details.key`, `details.reason`).
-    ValidationAttributeValue => Validation, "errors.validation.attribute_value";
-    /// Required attribute missing (`details.key`).
-    ValidationAttributeRequired => Validation, "errors.validation.attribute_required";
-    /// Attribute does not apply to this deck/target (`details.id`).
-    ValidationAttributeNotApplicable => Validation, "errors.validation.attribute_not_applicable";
-    /// Setting value rejected (`details.key`).
-    ValidationSettingValue => Validation, "errors.validation.setting_value";
-    /// Unknown method name.
-    NotFoundMethod => NotFound, "errors.not_found.method";
-    /// Deck not found (`details.id`).
-    NotFoundDeck => NotFound, "errors.not_found.deck";
-    /// Note not found (`details.id`).
-    NotFoundNote => NotFound, "errors.not_found.note";
-    /// Card not found (`details.id`).
-    NotFoundCard => NotFound, "errors.not_found.card";
-    /// Note type not found (`details.id`).
-    NotFoundNoteType => NotFound, "errors.not_found.note_type";
-    /// Tag not found (`details.name`).
-    NotFoundTag => NotFound, "errors.not_found.tag";
-    /// Attribute definition not found (`details.id`).
-    NotFoundAttribute => NotFound, "errors.not_found.attribute";
-    /// Attribute option not found (`details.id`).
-    NotFoundAttributeOption => NotFound, "errors.not_found.attribute_option";
-    /// Attribute template not found (`details.id`).
-    NotFoundAttributeTemplate => NotFound, "errors.not_found.attribute_template";
-    /// Module not found (`details.id`).
-    NotFoundModule => NotFound, "errors.not_found.module";
-    /// Setting key not in any schema (`details.key`).
-    NotFoundSetting => NotFound, "errors.not_found.setting";
-    /// Job not found (`details.id`).
-    NotFoundJob => NotFound, "errors.not_found.job";
-    /// A sibling deck already has this name (`details.existing_deck_id`).
-    ConflictDeckExists => Conflict, "errors.conflict.deck_exists";
-    /// Moving a deck under itself/its descendant.
-    ConflictDeckCycle => Conflict, "errors.conflict.deck_cycle";
-    /// Duplicate note (`details.existing_note_id`).
-    ConflictNoteDuplicate => Conflict, "errors.conflict.note_duplicate";
-    /// Attribute key already used in this scope chain (`details.existing_id`).
-    ConflictAttributeKeyExists => Conflict, "errors.conflict.attribute_key_exists";
-    /// Option still in use and no replacement given (`details.usage_count`).
-    ConflictAttributeOptionInUse => Conflict, "errors.conflict.attribute_option_in_use";
-    /// Nothing to undo.
-    ConflictNothingToUndo => Conflict, "errors.conflict.nothing_to_undo";
-    /// Nothing to redo.
-    ConflictNothingToRedo => Conflict, "errors.conflict.nothing_to_redo";
-    /// The method's module is disabled (`details.module`).
-    ConflictModuleDisabled => Conflict, "errors.conflict.module_disabled";
-    /// The module cannot be disabled (`details.module`).
-    ConflictModuleRequired => Conflict, "errors.conflict.module_required";
-    /// Entity is in the trash; restore it first (`details.id`).
-    ConflictDeleted => Conflict, "errors.conflict.deleted";
-    /// Caller may not invoke this method (`details.permission`).
-    PermissionDenied => Permission, "errors.permission.denied";
-    /// Provider not configured/reachable (`details.provider`).
-    ProviderUnavailable => Provider, "errors.provider.unavailable";
-    /// Provider returned an error (`details.provider`).
-    ProviderFailed => Provider, "errors.provider.failed";
-    /// Database error.
-    IoDatabase => Io, "errors.io.database";
-    /// File system error.
-    IoFile => Io, "errors.io.file";
-    /// Unexpected internal error (a bug).
-    Internal => Internal, "errors.internal.unexpected";
-    /// The method exists in the contract but is not implemented yet.
-    InternalNotImplemented => Internal, "errors.internal.not_implemented";
-}
+// The code list is assembled at build time from `src/error_codes/*.in` (one file per domain,
+// in file-name order; see `build.rs`), so a feature adds its codes in its own file.
+include!(concat!(env!("OUT_DIR"), "/error_codes.rs"));
 
 impl fmt::Display for ErrorCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -1,0 +1,20 @@
+// Attributes (classifications).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// Attribute definition rejected (`details.reason`).
+ValidationAttributeDef => Validation, "errors.validation.attribute_def";
+/// Attribute value rejected (`details.key`, `details.reason`).
+ValidationAttributeValue => Validation, "errors.validation.attribute_value";
+/// Required attribute missing (`details.key`).
+ValidationAttributeRequired => Validation, "errors.validation.attribute_required";
+/// Attribute does not apply to this deck/target (`details.id`).
+ValidationAttributeNotApplicable => Validation, "errors.validation.attribute_not_applicable";
+/// Attribute definition not found (`details.id`).
+NotFoundAttribute => NotFound, "errors.not_found.attribute";
+/// Attribute option not found (`details.id`).
+NotFoundAttributeOption => NotFound, "errors.not_found.attribute_option";
+/// Attribute template not found (`details.id`).
+NotFoundAttributeTemplate => NotFound, "errors.not_found.attribute_template";
+/// Attribute key already used in this scope chain (`details.existing_id`).
+ConflictAttributeKeyExists => Conflict, "errors.conflict.attribute_key_exists";
+/// Option still in use and no replacement given (`details.usage_count`).
+ConflictAttributeOptionInUse => Conflict, "errors.conflict.attribute_option_in_use";
