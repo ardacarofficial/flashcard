@@ -117,7 +117,7 @@ pub(crate) fn ensure_note_tags(tx: &mut dyn Writes, n: &Note) {
 pub(crate) fn put_note(tx: &mut dyn Writes, n: &Note, text: &str) -> StorageResult<()> {
     ensure_home(tx);
     ensure_note_tags(tx, n);
-    tx.insert_note(n, did(HOME), text)
+    tx.insert_note(&homed(n.clone(), did(HOME)), text)
 }
 
 /// Updates `n`, creating its tags first.
@@ -164,7 +164,14 @@ pub(crate) fn note(n: u128, front: &str, back: &str, tags: &[&str], at: i64) -> 
         created_at: Timestamp(at),
         updated_at: Timestamp(at),
         deleted_at: None,
+        home_deck_id: did(HOME),
     }
+}
+
+/// `n` re-homed in `deck`.
+pub(crate) fn homed(mut n: Note, deck: DeckId) -> Note {
+    n.home_deck_id = deck;
+    n
 }
 
 pub(crate) fn search_text(n: &Note) -> String {

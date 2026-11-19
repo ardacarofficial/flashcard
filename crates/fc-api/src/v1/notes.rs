@@ -33,6 +33,9 @@ pub struct NoteDto {
     pub id: NoteId,
     /// Note type.
     pub notetype_id: NoteTypeId,
+    /// Home deck: where note-level classifications are resolved from (card-level ones come
+    /// from each card's deck).
+    pub home_deck_id: DeckId,
     /// Field values keyed by field key.
     pub fields: BTreeMap<String, String>,
     /// Tags.
@@ -56,7 +59,7 @@ pub struct NoteDto {
 pub struct CreateNote {
     /// Note type.
     pub notetype_id: NoteTypeId,
-    /// Deck for the generated cards.
+    /// Home deck of the note and deck of the generated cards.
     pub deck_id: DeckId,
     /// Field values keyed by field key (missing = default/empty).
     pub fields: BTreeMap<String, String>,
@@ -70,12 +73,17 @@ pub struct CreateNote {
     pub allow_duplicate: Option<bool>,
 }
 
-/// `notes.update`: replaces fields, tags and attributes of a note (full replace).
+/// `notes.update`: replaces fields and tags, sets the listed attributes, and optionally
+/// changes the home deck (cards stay where they are).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
 pub struct UpdateNote {
     /// Note id.
     pub id: NoteId,
+    /// New home deck (`null` = unchanged).
+    #[serde(default)]
+    pub deck_id: Option<DeckId>,
     /// Field values.
     pub fields: BTreeMap<String, String>,
     /// Tags.

@@ -1,7 +1,7 @@
 //! Notes: the data a user enters. Cards are derived from notes via their note type.
 
 use crate::error::{CoreError, CoreResult};
-use crate::id::{NoteId, NoteTypeId};
+use crate::id::{DeckId, NoteId, NoteTypeId};
 use crate::notetype::{FieldKey, NoteType};
 use crate::tag::TagName;
 use crate::time::Timestamp;
@@ -18,6 +18,9 @@ pub struct Note {
     pub id: NoteId,
     /// Note type.
     pub notetype_id: NoteTypeId,
+    /// Home deck (`notes.home_deck_id`): note-level classifications resolve from here.
+    /// Set on create, changeable on update; cards keep their own `deck_id`.
+    pub home_deck_id: DeckId,
     /// Values for every field of the note type (missing keys are filled by
     /// [`normalize_note_fields`]).
     pub fields: FieldValues,

@@ -347,8 +347,8 @@ fn effective_defs_for_note_use_home_deck_and_for_card_use_card_deck() {
             tx.insert_attribute_def(d).unwrap();
         }
         // Note homed in A, its card lives in B.
-        let n = note(1, "a", "", &[], 1);
-        tx.insert_note(&n, did(1), "a").unwrap();
+        let n = super::homed(note(1, "a", "", &[], 1), did(1));
+        tx.insert_note(&n, "a").unwrap();
         tx.insert_card(&super::card(1, 1, 2)).unwrap();
     });
     let keys = |v: Vec<(AttributeDef, usize)>| -> Vec<String> {

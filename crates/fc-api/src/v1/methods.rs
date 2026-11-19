@@ -20,7 +20,8 @@ use crate::method::{ApiMethod, MethodDescriptor, MethodKind, Visibility};
 macro_rules! catalog {
     ($(
         $(#[$m:meta])*
-        $ty:ident = $name:literal, $kind:ident, $module:literal, $perm:literal, undo: $undo:literal,
+        $ty:ident = $name:literal, $kind:ident, $module:literal, $perm:literal, $vis:ident,
+            undo: $undo:literal,
             $req:ty => $res:ty;
     )*) => {
         $(
@@ -33,7 +34,7 @@ macro_rules! catalog {
                 const KIND: MethodKind = MethodKind::$kind;
                 const MODULE: &'static str = $module;
                 const PERMISSION: &'static str = $perm;
-                const VISIBILITY: Visibility = Visibility::Public;
+                const VISIBILITY: Visibility = Visibility::$vis;
                 const UNDOABLE: bool = $undo;
                 type Request = $req;
                 type Response = $res;
@@ -50,122 +51,126 @@ macro_rules! catalog {
 catalog! {
     // ---- core: undo/redo, batch ----
     /// Reverts the latest undoable batch.
-    OplogUndo = "oplog.undo", Command, "core", "oplog:write", undo: false, Empty => UndoResult;
+    OplogUndo = "oplog.undo", Command, "core", "oplog:write", Public, undo: false, Empty => UndoResult;
     /// Re-applies the latest undone batch.
-    OplogRedo = "oplog.redo", Command, "core", "oplog:write", undo: false, Empty => UndoResult;
+    OplogRedo = "oplog.redo", Command, "core", "oplog:write", Public, undo: false, Empty => UndoResult;
     /// What undo/redo would do now.
-    OplogStatus = "oplog.status", Query, "core", "oplog:read", undo: false, Empty => UndoStatus;
+    OplogStatus = "oplog.status", Query, "core", "oplog:read", Public, undo: false, Empty => UndoStatus;
     /// Operation history (newest first).
-    OplogList = "oplog.list", Query, "core", "oplog:read", undo: false, ListOplog => OplogPage;
+    OplogList = "oplog.list", Query, "core", "oplog:read", Public, undo: false, ListOplog => OplogPage;
     /// Runs several commands atomically as one undo step (its sub-calls are what the oplog
     /// records, so the batch itself is `undo: false`).
-    BatchExecute = "batch.execute", Command, "core", "batch:write", undo: false, ExecuteBatch => BatchResult;
+    BatchExecute = "batch.execute", Command, "core", "batch:write", Public, undo: false, ExecuteBatch => BatchResult;
 
     // ---- core: modules, method registry, settings, jobs ----
     /// Modules with their UI contributions (frontend menus are drawn from this).
-    ModulesList = "modules.list", Query, "core", "modules:read", undo: false, Empty => ModuleList;
+    ModulesList = "modules.list", Query, "core", "modules:read", Public, undo: false, Empty => ModuleList;
     /// Enables/disables a module.
-    ModulesSetEnabled = "modules.set_enabled", Command, "core", "modules:write", undo: true, SetModuleEnabled => ModuleDto;
+    ModulesSetEnabled = "modules.set_enabled", Command, "core", "modules:write", Public, undo: true, SetModuleEnabled => ModuleDto;
     /// All methods (command palette, MCP tool list, docs).
-    CommandsList = "commands.list", Query, "core", "modules:read", undo: false, Empty => MethodList;
+    CommandsList = "commands.list", Query, "core", "modules:read", Public, undo: false, Empty => MethodList;
     /// Setting schemas of enabled modules.
-    SettingsSchemaGet = "settings.schema", Query, "core", "settings:read", undo: false, Empty => SettingsSchema;
+    SettingsSchemaGet = "settings.schema", Query, "core", "settings:read", Public, undo: false, Empty => SettingsSchema;
     /// Resolved setting values.
-    SettingsGet = "settings.get", Query, "core", "settings:read", undo: false, GetSettings => SettingValues;
+    SettingsGet = "settings.get", Query, "core", "settings:read", Public, undo: false, GetSettings => SettingValues;
     /// Sets a setting at a scope.
-    SettingsSet = "settings.set", Command, "core", "settings:write", undo: true, SetSetting => SettingValueDto;
+    SettingsSet = "settings.set", Command, "core", "settings:write", Public, undo: true, SetSetting => SettingValueDto;
     /// Removes a setting override at a scope.
-    SettingsReset = "settings.reset", Command, "core", "settings:write", undo: true, ResetSetting => SettingValueDto;
+    SettingsReset = "settings.reset", Command, "core", "settings:write", Public, undo: true, ResetSetting => SettingValueDto;
     /// Background jobs.
-    JobsList = "jobs.list", Query, "core", "jobs:read", undo: false, Empty => JobList;
+    JobsList = "jobs.list", Query, "core", "jobs:read", Public, undo: false, Empty => JobList;
     /// One job.
-    JobsGet = "jobs.get", Query, "core", "jobs:read", undo: false, JobRef => JobDto;
+    JobsGet = "jobs.get", Query, "core", "jobs:read", Public, undo: false, JobRef => JobDto;
     /// Requests cooperative cancellation.
-    JobsCancel = "jobs.cancel", Command, "core", "jobs:write", undo: false, JobRef => JobDto;
+    JobsCancel = "jobs.cancel", Command, "core", "jobs:write", Public, undo: false, JobRef => JobDto;
 
     // ---- decks ----
     /// Deck tree with counts.
-    DecksTree = "decks.tree", Query, "decks", "decks:read", undo: false, Empty => DeckTree;
+    DecksTree = "decks.tree", Query, "decks", "decks:read", Public, undo: false, Empty => DeckTree;
     /// Flat deck list.
-    DecksList = "decks.list", Query, "decks", "decks:read", undo: false, Empty => DeckList;
+    DecksList = "decks.list", Query, "decks", "decks:read", Public, undo: false, Empty => DeckList;
     /// One deck.
-    DecksGet = "decks.get", Query, "decks", "decks:read", undo: false, DeckRef => DeckDto;
+    DecksGet = "decks.get", Query, "decks", "decks:read", Public, undo: false, DeckRef => DeckDto;
     /// Creates a deck (and missing parents) from a path.
-    DecksCreate = "decks.create", Command, "decks", "decks:write", undo: true, CreateDeck => DeckDto;
+    DecksCreate = "decks.create", Command, "decks", "decks:write", Public, undo: true, CreateDeck => DeckDto;
     /// Renames a deck (leaf name).
-    DecksRename = "decks.rename", Command, "decks", "decks:write", undo: true, RenameDeck => DeckDto;
+    DecksRename = "decks.rename", Command, "decks", "decks:write", Public, undo: true, RenameDeck => DeckDto;
     /// Re-parents/reorders a deck.
-    DecksMove = "decks.move", Command, "decks", "decks:write", undo: true, MoveDeck => DeckDto;
+    DecksMove = "decks.move", Command, "decks", "decks:write", Public, undo: true, MoveDeck => DeckDto;
     /// Updates description/icon/color.
-    DecksUpdate = "decks.update", Command, "decks", "decks:write", undo: true, UpdateDeck => DeckDto;
+    DecksUpdate = "decks.update", Command, "decks", "decks:write", Public, undo: true, UpdateDeck => DeckDto;
     /// Moves a deck, its sub-decks, notes and cards to the trash.
-    DecksDelete = "decks.delete", Command, "decks", "decks:write", undo: true, DeckRef => AffectedCount;
+    DecksDelete = "decks.delete", Command, "decks", "decks:write", Public, undo: true, DeckRef => AffectedCount;
     /// Restores a deck deleted by `decks.delete` (with what was deleted along with it).
-    DecksRestore = "decks.restore", Command, "decks", "decks:write", undo: true, DeckRef => AffectedCount;
+    DecksRestore = "decks.restore", Command, "decks", "decks:write", Public, undo: true, DeckRef => AffectedCount;
+    /// Internal inverse of `decks.delete`: restores exactly the listed decks/notes/cards.
+    DecksRestoreAffected = "decks.restore_affected", Command, "decks", "decks:write", Internal, undo: true, RestoreDeckAffected => AffectedCount;
 
     // ---- note types ----
     /// All note types.
-    NotetypesList = "notetypes.list", Query, "notetypes", "notetypes:read", undo: false, Empty => NoteTypeList;
+    NotetypesList = "notetypes.list", Query, "notetypes", "notetypes:read", Public, undo: false, Empty => NoteTypeList;
     /// One note type.
-    NotetypesGet = "notetypes.get", Query, "notetypes", "notetypes:read", undo: false, NoteTypeRef => NoteTypeDto;
+    NotetypesGet = "notetypes.get", Query, "notetypes", "notetypes:read", Public, undo: false, NoteTypeRef => NoteTypeDto;
 
     // ---- notes ----
     /// Creates a note and its cards.
-    NotesCreate = "notes.create", Command, "notes", "notes:write", undo: true, CreateNote => NoteDto;
+    NotesCreate = "notes.create", Command, "notes", "notes:write", Public, undo: true, CreateNote => NoteDto;
     /// Replaces fields/tags/attributes of a note.
-    NotesUpdate = "notes.update", Command, "notes", "notes:write", undo: true, UpdateNote => NoteDto;
+    NotesUpdate = "notes.update", Command, "notes", "notes:write", Public, undo: true, UpdateNote => NoteDto;
     /// Moves notes (and their cards) to the trash.
-    NotesDelete = "notes.delete", Command, "notes", "notes:write", undo: true, NoteIds => AffectedCount;
+    NotesDelete = "notes.delete", Command, "notes", "notes:write", Public, undo: true, NoteIds => AffectedCount;
     /// Restores notes from the trash.
-    NotesRestore = "notes.restore", Command, "notes", "notes:write", undo: true, NoteIds => AffectedCount;
+    NotesRestore = "notes.restore", Command, "notes", "notes:write", Public, undo: true, NoteIds => AffectedCount;
     /// One note.
-    NotesGet = "notes.get", Query, "notes", "notes:read", undo: false, NoteRef => NoteDto;
+    NotesGet = "notes.get", Query, "notes", "notes:read", Public, undo: false, NoteRef => NoteDto;
     /// Paged note list.
-    NotesList = "notes.list", Query, "notes", "notes:read", undo: false, ListNotes => NotePage;
+    NotesList = "notes.list", Query, "notes", "notes:read", Public, undo: false, ListNotes => NotePage;
 
     // ---- tags ----
     /// All tags.
-    TagsList = "tags.list", Query, "tags", "tags:read", undo: false, Empty => TagList;
+    TagsList = "tags.list", Query, "tags", "tags:read", Public, undo: false, Empty => TagList;
     /// Renames a tag subtree on all notes.
-    TagsRename = "tags.rename", Command, "tags", "tags:write", undo: true, RenameTag => TagChangeResult;
+    TagsRename = "tags.rename", Command, "tags", "tags:write", Public, undo: true, RenameTag => TagChangeResult;
     /// Merges tags.
-    TagsMerge = "tags.merge", Command, "tags", "tags:write", undo: true, MergeTags => TagChangeResult;
+    TagsMerge = "tags.merge", Command, "tags", "tags:write", Public, undo: true, MergeTags => TagChangeResult;
     /// Sets a tag color.
-    TagsSetColor = "tags.set_color", Command, "tags", "tags:write", undo: true, SetTagColor => TagDto;
+    TagsSetColor = "tags.set_color", Command, "tags", "tags:write", Public, undo: true, SetTagColor => TagDto;
 
     // ---- attributes (classifications) ----
     /// Attribute definitions.
-    AttributesList = "attributes.list", Query, "attributes", "attributes:read", undo: false, ListAttributes => AttributeDefList;
+    AttributesList = "attributes.list", Query, "attributes", "attributes:read", Public, undo: false, ListAttributes => AttributeDefList;
     /// Definitions applicable to a deck (inheritance resolved).
-    AttributesEffective = "attributes.effective", Query, "attributes", "attributes:read", undo: false, EffectiveAttributes => EffectiveAttributeList;
+    AttributesEffective = "attributes.effective", Query, "attributes", "attributes:read", Public, undo: false, EffectiveAttributes => EffectiveAttributeList;
     /// Built-in templates.
-    AttributesTemplates = "attributes.templates", Query, "attributes", "attributes:read", undo: false, ListAttributeTemplates => AttributeTemplateList;
+    AttributesTemplates = "attributes.templates", Query, "attributes", "attributes:read", Public, undo: false, ListAttributeTemplates => AttributeTemplateList;
     /// One definition.
-    AttributesGet = "attributes.get", Query, "attributes", "attributes:read", undo: false, AttributeRef => AttributeDefDto;
+    AttributesGet = "attributes.get", Query, "attributes", "attributes:read", Public, undo: false, AttributeRef => AttributeDefDto;
     /// Defines a classification.
-    AttributesDefine = "attributes.define", Command, "attributes", "attributes:write", undo: true, DefineAttribute => AttributeDefDto;
+    AttributesDefine = "attributes.define", Command, "attributes", "attributes:write", Public, undo: true, DefineAttribute => AttributeDefDto;
     /// Defines a classification from a built-in template.
-    AttributesDefineFromTemplate = "attributes.define_from_template", Command, "attributes", "attributes:write", undo: true, DefineAttributeFromTemplate => AttributeDefDto;
+    AttributesDefineFromTemplate = "attributes.define_from_template", Command, "attributes", "attributes:write", Public, undo: true, DefineAttributeFromTemplate => AttributeDefDto;
     /// Updates name/required/default/position.
-    AttributesUpdate = "attributes.update", Command, "attributes", "attributes:write", undo: true, UpdateAttribute => AttributeDefDto;
+    AttributesUpdate = "attributes.update", Command, "attributes", "attributes:write", Public, undo: true, UpdateAttribute => AttributeDefDto;
     /// Moves a definition (and hides its values) to the trash.
-    AttributesDelete = "attributes.delete", Command, "attributes", "attributes:write", undo: true, AttributeRef => AttributeDefDto;
+    AttributesDelete = "attributes.delete", Command, "attributes", "attributes:write", Public, undo: true, AttributeRef => AttributeDefDto;
     /// Restores a definition from the trash.
-    AttributesRestore = "attributes.restore", Command, "attributes", "attributes:write", undo: true, AttributeRef => AttributeDefDto;
+    AttributesRestore = "attributes.restore", Command, "attributes", "attributes:write", Public, undo: true, AttributeRef => AttributeDefDto;
     /// Adds an option.
-    AttributesOptionAdd = "attributes.option.add", Command, "attributes", "attributes:write", undo: true, AddAttributeOption => AttributeDefDto;
+    AttributesOptionAdd = "attributes.option.add", Command, "attributes", "attributes:write", Public, undo: true, AddAttributeOption => AttributeDefDto;
     /// Renames an option (id unchanged).
-    AttributesOptionRename = "attributes.option.rename", Command, "attributes", "attributes:write", undo: true, RenameAttributeOption => AttributeDefDto;
+    AttributesOptionRename = "attributes.option.rename", Command, "attributes", "attributes:write", Public, undo: true, RenameAttributeOption => AttributeDefDto;
     /// Sets an option color.
-    AttributesOptionSetColor = "attributes.option.set_color", Command, "attributes", "attributes:write", undo: true, SetAttributeOptionColor => AttributeDefDto;
+    AttributesOptionSetColor = "attributes.option.set_color", Command, "attributes", "attributes:write", Public, undo: true, SetAttributeOptionColor => AttributeDefDto;
     /// Reorders options.
-    AttributesOptionReorder = "attributes.option.reorder", Command, "attributes", "attributes:write", undo: true, ReorderAttributeOptions => AttributeDefDto;
+    AttributesOptionReorder = "attributes.option.reorder", Command, "attributes", "attributes:write", Public, undo: true, ReorderAttributeOptions => AttributeDefDto;
     /// Merges one option into another (values move).
-    AttributesOptionMerge = "attributes.option.merge", Command, "attributes", "attributes:write", undo: true, MergeAttributeOptions => OptionChangeResult;
+    AttributesOptionMerge = "attributes.option.merge", Command, "attributes", "attributes:write", Public, undo: true, MergeAttributeOptions => OptionChangeResult;
     /// Deletes an option (values move to a replacement or are removed).
-    AttributesOptionDelete = "attributes.option.delete", Command, "attributes", "attributes:write", undo: true, DeleteAttributeOption => OptionChangeResult;
+    AttributesOptionDelete = "attributes.option.delete", Command, "attributes", "attributes:write", Public, undo: true, DeleteAttributeOption => OptionChangeResult;
+    /// Internal inverse of option delete/merge: re-inserts the option (id, index) and values.
+    AttributesOptionRestore = "attributes.option.restore", Command, "attributes", "attributes:write", Internal, undo: true, RestoreAttributeOption => AttributeDefDto;
     /// Values on a note/card.
-    AttributesValuesGet = "attributes.values.get", Query, "attributes", "attributes:read", undo: false, GetAttributeValues => AttributeValues;
+    AttributesValuesGet = "attributes.values.get", Query, "attributes", "attributes:read", Public, undo: false, GetAttributeValues => AttributeValues;
     /// Sets/clears values on a note/card.
-    AttributesValuesSet = "attributes.values.set", Command, "attributes", "attributes:write", undo: true, SetAttributeValues => AttributeValues;
+    AttributesValuesSet = "attributes.values.set", Command, "attributes", "attributes:write", Public, undo: true, SetAttributeValues => AttributeValues;
 }

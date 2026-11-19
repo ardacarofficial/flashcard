@@ -1,6 +1,6 @@
 //! Deck DTOs.
 
-use fc_core::{DeckId, PresetId, Timestamp};
+use fc_core::{CardId, DeckId, NoteId, PresetId, Timestamp};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -91,6 +91,21 @@ pub struct CreateDeck {
 pub struct DeckRef {
     /// Deck id.
     pub id: DeckId,
+}
+
+/// Internal `decks.restore_affected` (the inverse of `decks.delete`): restores exactly the
+/// decks, notes and cards that delete trashed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RestoreDeckAffected {
+    /// The deck that was deleted (its parent must be live).
+    pub id: DeckId,
+    /// Trashed decks (`id` and its sub-decks).
+    pub decks: Vec<DeckId>,
+    /// Trashed notes.
+    pub notes: Vec<NoteId>,
+    /// Trashed cards.
+    pub cards: Vec<CardId>,
 }
 
 /// `decks.rename`: changes the leaf name only.

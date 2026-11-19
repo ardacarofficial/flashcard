@@ -377,11 +377,11 @@ fn home_deck_is_stored_listed_and_changeable() {
     fx.write(|tx| {
         tx.insert_deck(&deck(1, None, "A")).unwrap();
         tx.insert_deck(&deck(2, None, "B")).unwrap();
-        tx.insert_note(&note(1, "a", "", &[], 1), did(1), "a")
+        tx.insert_note(&super::homed(note(1, "a", "", &[], 1), did(1)), "a")
             .unwrap();
         // The FK is enforced.
         assert!(matches!(
-            tx.insert_note(&note(2, "b", "", &[], 1), did(9), "b"),
+            tx.insert_note(&super::homed(note(2, "b", "", &[], 1), did(9)), "b"),
             Err(StorageError::Constraint { constraint }) if constraint == "foreign_key"
         ));
     });
@@ -391,19 +391,23 @@ fn home_deck_is_stored_listed_and_changeable() {
         let page = r
             .list_notes(&NoteFilter::default(), &PageRequest::default())
             .unwrap();
-        assert_eq!(page.items[0].home_deck_id, did(1));
+        assert_eq!(page.items[0].note.home_deck_id, did(1));
+        assert_eq!(r.get_note(nid(1)).unwrap().unwrap().home_deck_id, did(1));
     });
     fx.write(|tx| {
-        // update_note keeps the home deck.
-        let mut n = note(1, "a2", "", &[], 1);
+        // update_note writes the note's home deck.
+        let mut n = super::homed(note(1, "a2", "", &[], 1), did(2));
         n.updated_at = Timestamp(2);
         tx.update_note(&n, "a2").unwrap();
-        assert_eq!(tx.note_home_deck(nid(1)).unwrap(), Some(did(1)));
-        tx.set_note_home_deck(nid(1), did(2)).unwrap();
+        assert_eq!(tx.note_home_deck(nid(1)).unwrap(), Some(did(2)));
+        tx.set_note_home_deck(nid(1), did(1)).unwrap();
         assert!(matches!(
             tx.set_note_home_deck(nid(9), did(2)),
             Err(StorageError::NotFound { entity: "note", .. })
         ));
     });
-    fx.read(|r| assert_eq!(r.note_home_deck(nid(1)).unwrap(), Some(did(2))));
+    fx.read(|r| {
+        assert_eq!(r.note_home_deck(nid(1)).unwrap(), Some(did(1)));
+        assert_eq!(r.get_note(nid(1)).unwrap().unwrap().home_deck_id, did(1));
+    });
 }

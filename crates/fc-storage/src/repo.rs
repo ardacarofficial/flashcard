@@ -54,8 +54,6 @@ pub struct NoteFilter {
 pub struct NoteListRow {
     /// The note (with tags).
     pub note: Note,
-    /// `notes.home_deck_id` (not part of `fc_core::note::Note` in v0.1).
-    pub home_deck_id: DeckId,
     /// Number of live cards.
     pub card_count: u32,
 }
@@ -300,15 +298,10 @@ pub trait NoteRead {
 /// Note writes. Storage never creates tags here: every name in `note.tags` must already exist
 /// (see [`TagWrite::ensure_tags`]), else `NotFound { entity: "tag" }`.
 pub trait NoteWrite: NoteRead {
-    /// Inserts a note homed in `home_deck`, its `note_tags` (in `note.tags` order) and its
-    /// `notes_fts` row with `search_text`.
-    fn insert_note(
-        &mut self,
-        note: &Note,
-        home_deck: DeckId,
-        search_text: &str,
-    ) -> StorageResult<()>;
-    /// Replaces a note's columns, tags and FTS row. The home deck is kept.
+    /// Inserts a note (homed in `note.home_deck_id`), its `note_tags` (in `note.tags` order)
+    /// and its `notes_fts` row with `search_text`.
+    fn insert_note(&mut self, note: &Note, search_text: &str) -> StorageResult<()>;
+    /// Replaces a note's columns (home deck included), tags and FTS row.
     fn update_note(&mut self, note: &Note, search_text: &str) -> StorageResult<()>;
     /// Sets `notes.home_deck_id`. `NotFound` for an unknown note.
     fn set_note_home_deck(&mut self, id: NoteId, home_deck: DeckId) -> StorageResult<()>;

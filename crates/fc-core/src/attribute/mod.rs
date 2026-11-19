@@ -260,6 +260,26 @@ impl AttributeDef {
         Ok(())
     }
 
+    /// Inserts `option` (keeping its id) at `index` of the sorted option list (clamped to the
+    /// end). Orders are renumbered `0..n`. Used to bring a removed option back exactly.
+    pub fn insert_option_at(&mut self, option: AttributeOption, index: usize) -> CoreResult<()> {
+        let ordered: Vec<AttributeOptionId> = self.sorted_options().iter().map(|o| o.id).collect();
+        let after = match index.min(ordered.len()) {
+            0 => None,
+            i => Some(ordered[i - 1]),
+        };
+        let first = ordered.first().copied();
+        let id = option.id;
+        self.add_option(option, after)?;
+        if after.is_none() && first.is_some() {
+            // `add_option(None)` appends; move it to the front.
+            let mut order: Vec<AttributeOptionId> = vec![id];
+            order.extend(ordered);
+            self.reorder_options(&order)?;
+        }
+        Ok(())
+    }
+
     /// Renames an option (id unchanged). Returns the previous label (for the inverse).
     pub fn rename_option(&mut self, id: AttributeOptionId, label: &str) -> CoreResult<String> {
         let label = validate::normalize_label(label)
@@ -389,18 +409,27 @@ impl AttributeValue {
         }
     }
 
-    /// Rebuilds a value from its storage rows. Returns `None` for no rows or malformed rows.
-    pub fn from_stored(kind: AttributeKind, rows: &[StoredValue]) -> Option<Self> {
+    /// Rebuilds a value of `def` from its storage rows. Returns `None` for no rows or malformed
+    /// rows. `multi_enum` choices come back in the definition's current option order (rows
+    /// carry no order of their own, and options may have been reordered since the write);
+    /// ids no longer among the options keep their row order, after the known ones.
+    pub fn from_stored(def: &AttributeDef, rows: &[StoredValue]) -> Option<Self> {
         let first = rows.first()?;
-        Some(match kind {
+        Some(match def.kind {
             AttributeKind::OrderedEnum | AttributeKind::Enum => {
                 Self::Choice(first.value.parse().ok()?)
             }
-            AttributeKind::MultiEnum => Self::Choices(
-                rows.iter()
+            AttributeKind::MultiEnum => {
+                let mut ids = rows
+                    .iter()
                     .map(|r| r.value.parse().ok())
-                    .collect::<Option<Vec<_>>>()?,
-            ),
+                    .collect::<Option<Vec<AttributeOptionId>>>()?;
+                let order: Vec<AttributeOptionId> =
+                    def.sorted_options().iter().map(|o| o.id).collect();
+                // Stable sort: unknown ids (usize::MAX) keep their relative order at the end.
+                ids.sort_by_key(|id| order.iter().position(|o| o == id).unwrap_or(usize::MAX));
+                Self::Choices(ids)
+            }
             AttributeKind::Number => Self::Number(first.value.parse().ok()?),
             AttributeKind::Text => Self::Text(first.value.clone()),
             AttributeKind::Date => Self::Date(first.value.clone()),

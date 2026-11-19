@@ -21,7 +21,10 @@ pub mod module;
 pub mod modules;
 pub mod registry;
 pub mod settings;
+pub(crate) mod support;
 pub mod system;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 
 pub use app::{App, AppDeps};
 pub use error::{AppError, AppResult};

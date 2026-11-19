@@ -90,11 +90,7 @@ fn note_with_unknown_tag_is_rejected_storage_never_mints_ids() {
     let fx = Fx::seeded();
     fx.write(|tx| {
         super::ensure_home(tx);
-        let r = tx.insert_note(
-            &note(1, "a", "", &["missing"], 1),
-            super::did(super::HOME),
-            "",
-        );
+        let r = tx.insert_note(&note(1, "a", "", &["missing"], 1), "");
         assert!(matches!(
             r,
             Err(StorageError::NotFound { entity: "tag", .. })

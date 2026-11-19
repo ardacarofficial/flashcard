@@ -16,9 +16,18 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 getrandom.workspace = true
+uuid.workspace = true
+
+tempfile = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[features]
+## In-memory store, a temp-file SQLite store and the storage-agnostic service test suite
+## (`fc_app::testing`).
+testing = ["dep:tempfile"]
 
 [lints]
 workspace = true
 
-[dev-dependencies]
-uuid.workspace = true

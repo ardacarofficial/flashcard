@@ -102,6 +102,14 @@ pub fn core_to_api(e: CoreError) -> ApiError {
     }
 }
 
+/// A paging cursor the store did not issue: `VALIDATION_INVALID_PARAMS` with
+/// `details.field = "cursor"`.
+fn invalid_cursor(msg: String) -> ApiError {
+    ApiError::new(ErrorCode::ValidationInvalidParams, msg.clone())
+        .with_detail("field", "cursor")
+        .with_detail("reason", msg)
+}
+
 /// Maps a storage error. Handlers should check existence/uniqueness themselves and return the
 /// specific `NOT_FOUND_*`/`CONFLICT_*` code; this is the fallback.
 pub fn storage_to_api(e: StorageError) -> ApiError {
@@ -115,11 +123,14 @@ pub fn storage_to_api(e: StorageError) -> ApiError {
                 "notetype" => ErrorCode::NotFoundNoteType,
                 "tag" => ErrorCode::NotFoundTag,
                 "attribute" => ErrorCode::NotFoundAttribute,
+                "attribute_option" => ErrorCode::NotFoundAttributeOption,
                 "job" => ErrorCode::NotFoundJob,
                 _ => ErrorCode::Internal,
             };
             ApiError::new(code, msg).with_detail("id", id)
         }
+        // Client input, not a database fault.
+        StorageError::InvalidCursor(_) => invalid_cursor(msg),
         StorageError::Busy => ApiError::new(ErrorCode::IoDatabase, msg).retryable(true),
         StorageError::NotImplemented(op) => {
             ApiError::new(ErrorCode::InternalNotImplemented, msg).with_detail("operation", op)

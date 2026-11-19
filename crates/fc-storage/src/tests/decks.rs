@@ -294,8 +294,11 @@ fn trash_fixture() -> Fx {
         tx.insert_deck(&deck(4, Some(1), "Old")).unwrap();
         tx.insert_deck(&deck(5, None, "Other")).unwrap();
         for (n, home) in [(1, 1), (2, 1), (3, 5), (4, 4), (5, 2), (6, 5)] {
-            tx.insert_note(&note(n, &format!("w{n}"), "", &[], 1), did(home), "")
-                .unwrap();
+            tx.insert_note(
+                &super::homed(note(n, &format!("w{n}"), "", &[], 1), did(home)),
+                "",
+            )
+            .unwrap();
         }
         for (c, n, d) in [
             (1, 1, 1),

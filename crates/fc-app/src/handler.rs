@@ -94,7 +94,9 @@ pub struct CommandCtx<'a> {
     /// For undo/redo: batch being reverted.
     pub reverts_batch_id: Option<BatchId>,
     pub(crate) registry: &'a Registry,
-    pub(crate) oplog: Vec<PendingOplogEntry>,
+    /// Oplog slots in **start order**: a command reserves its slot before it runs, so it comes
+    /// before the nested calls it makes; slots of commands that record nothing stay `None`.
+    pub(crate) oplog: Vec<Option<PendingOplogEntry>>,
     pub(crate) events: Vec<DomainEvent>,
 }
 
@@ -106,6 +108,11 @@ impl CommandCtx<'_> {
     pub fn call(&mut self, request: &InvokeRequest) -> AppResult<Value> {
         let registry = self.registry;
         registry.execute_nested(self, request)
+    }
+
+    /// Whether any oplog entry has been recorded in this dispatch so far.
+    pub(crate) fn has_oplog_entries(&self) -> bool {
+        self.oplog.iter().any(Option::is_some)
     }
 
     /// Read access through the write transaction.
@@ -122,6 +129,7 @@ pub struct QueryCtx<'a> {
     pub now: Timestamp,
     /// UI locale.
     pub locale: Locale,
+    pub(crate) registry: &'a Registry,
 }
 
 /// Handles command `M`.

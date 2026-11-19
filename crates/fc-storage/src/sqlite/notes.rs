@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 const T: &str = "notes";
 const COLS: &str = "id, notetype_id, fields, sort_field, checksum, created_at, updated_at, \
-                    deleted_at";
+                    deleted_at, home_deck_id";
 
 fn note_row(r: &Row<'_>) -> rusqlite::Result<Note> {
     Ok(Note {
@@ -32,6 +32,7 @@ fn note_row(r: &Row<'_>) -> rusqlite::Result<Note> {
         created_at: ts(r, 5)?,
         updated_at: ts(r, 6)?,
         deleted_at: opt_ts(r, 7)?,
+        home_deck_id: id(r, 8)?,
     })
 }
 
@@ -178,8 +179,7 @@ impl<M: Mode> NoteRead for SqliteTx<'_, M> {
             &format!(
                 "SELECT {COLS},
                      (SELECT count(*) FROM cards c WHERE c.note_id = notes.id
-                        AND c.deleted_at IS NULL),
-                     home_deck_id
+                        AND c.deleted_at IS NULL)
                  FROM notes
                  WHERE (?1 OR deleted_at IS NULL)
                    AND (?2 IS NULL OR EXISTS (
@@ -197,11 +197,10 @@ impl<M: Mode> NoteRead for SqliteTx<'_, M> {
                 c_id,
                 i64::from(limit) + 1,
             ],
-            |r| Ok((note_row(r)?, (r.get::<_, u32>(8)?, id::<DeckId>(r, 9)?))),
+            |r| Ok((note_row(r)?, r.get::<_, u32>(9)?)),
         )?;
         let has_more = rows.len() > limit as usize;
-        let (notes, extra): (Vec<Note>, Vec<(u32, DeckId)>) =
-            rows.into_iter().take(limit as usize).unzip();
+        let (notes, counts): (Vec<Note>, Vec<u32>) = rows.into_iter().take(limit as usize).unzip();
         let notes = with_tags(self.conn(), notes)?;
         let next_cursor = if has_more {
             notes.last().map(|n| format!("{}:{}", n.updated_at.0, n.id))
@@ -211,12 +210,8 @@ impl<M: Mode> NoteRead for SqliteTx<'_, M> {
         Ok(Page {
             items: notes
                 .into_iter()
-                .zip(extra)
-                .map(|(note, (card_count, home_deck_id))| NoteListRow {
-                    note,
-                    home_deck_id,
-                    card_count,
-                })
+                .zip(counts)
+                .map(|(note, card_count)| NoteListRow { note, card_count })
                 .collect(),
             next_cursor,
         })
@@ -272,18 +267,13 @@ impl<M: Mode> NoteRead for SqliteTx<'_, M> {
 }
 
 impl NoteWrite for SqliteTx<'_, WriteMode> {
-    fn insert_note(
-        &mut self,
-        note: &Note,
-        home_deck: DeckId,
-        search_text: &str,
-    ) -> StorageResult<()> {
+    fn insert_note(&mut self, note: &Note, search_text: &str) -> StorageResult<()> {
         let conn = self.conn();
         exec(
             conn,
             T,
             &format!(
-                "INSERT INTO notes ({COLS}, home_deck_id)
+                "INSERT INTO notes ({COLS})
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
             ),
             params![
@@ -295,7 +285,7 @@ impl NoteWrite for SqliteTx<'_, WriteMode> {
                 note.created_at.0,
                 note.updated_at.0,
                 opt_ms(note.deleted_at),
-                home_deck.to_string(),
+                note.home_deck_id.to_string(),
             ],
         )?;
         write_tags(conn, note)?;
@@ -310,7 +300,7 @@ impl NoteWrite for SqliteTx<'_, WriteMode> {
             "note",
             &note.id,
             "UPDATE notes SET notetype_id = ?2, fields = ?3, sort_field = ?4, checksum = ?5,
-                 created_at = ?6, updated_at = ?7, deleted_at = ?8
+                 created_at = ?6, updated_at = ?7, deleted_at = ?8, home_deck_id = ?9
              WHERE id = ?1",
             params![
                 note.id.to_string(),
@@ -321,6 +311,7 @@ impl NoteWrite for SqliteTx<'_, WriteMode> {
                 note.created_at.0,
                 note.updated_at.0,
                 opt_ms(note.deleted_at),
+                note.home_deck_id.to_string(),
             ],
         )?;
         write_tags(conn, note)?;

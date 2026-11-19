@@ -155,7 +155,7 @@ fn decode(def: &AttributeDef, mut rows: Vec<StoredValue>) -> StorageResult<Attri
             oa.cmp(&ob).then_with(|| a.value.cmp(&b.value))
         });
     }
-    AttributeValue::from_stored(def.kind, &rows).ok_or_else(|| StorageError::Corrupt {
+    AttributeValue::from_stored(def, &rows).ok_or_else(|| StorageError::Corrupt {
         table: V,
         message: format!("cannot decode value of attribute {} ({})", def.key, def.id),
     })

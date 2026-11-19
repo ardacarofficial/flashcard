@@ -12,7 +12,7 @@ export type CreateNote = {
  */
 notetype_id: NoteTypeId, 
 /**
- * Deck for the generated cards.
+ * Home deck of the note and deck of the generated cards.
  */
 deck_id: DeckId, 
 /**
