@@ -1,0 +1,19 @@
+[package]
+name = "fc-cli"
+description = "Command-line client for Flashcard; proves the core runs without Tauri."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "fc"
+path = "src/main.rs"
+
+[dependencies]
+fc-api.workspace = true
+clap.workspace = true
+
+[lints]
+workspace = true
