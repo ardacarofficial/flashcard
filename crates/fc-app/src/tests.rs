@@ -1,6 +1,7 @@
 use crate::error::{core_to_api, storage_to_api, AppError};
 use crate::events::{EventBus, InMemoryEventBus};
 use crate::settings::resolve_setting;
+use crate::testing::{MemStore, TestApp};
 use crate::{inverse_call, App, AppDeps};
 use fc_api::v1::events::{DomainEvent, EventEnvelope};
 use fc_api::v1::methods::DecksDelete;
@@ -9,15 +10,23 @@ use fc_api::{v1, ErrorCode, MethodKind};
 use fc_core::error::{CoreError, NameProblem};
 use fc_core::settings::{validate_setting_def, SettingScope};
 use fc_core::{DeckId, Timestamp};
-use fc_storage::{SqliteStore, StorageError};
+use fc_storage::{StorageError, Store};
 use serde_json::json;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 fn app() -> App {
-    let store = Arc::new(SqliteStore::open_in_memory().unwrap());
-    App::new(AppDeps::with_store(store)).unwrap()
+    let store = Arc::new(MemStore::new());
+    let app = App::new(AppDeps::with_store(store)).unwrap();
+    app.load_state().unwrap();
+    app
+}
+
+/// The storage-agnostic service suite against the in-memory store.
+mod mem_suite {
+    use super::*;
+    crate::store_suite!(|| -> Arc<dyn Store> { Arc::new(MemStore::new()) });
 }
 
 #[test]
@@ -102,13 +111,17 @@ fn invoke_validates_params_before_touching_storage() {
 }
 
 #[test]
-fn unimplemented_paths_report_not_implemented() {
-    let app = app();
-    let err = app
-        .invoke("v1.decks.tree", json!({}), &Actor::Cli)
-        .unwrap_err();
-    assert_eq!(err.code, ErrorCode::InternalNotImplemented);
-    assert!(app.load_state().is_err());
+fn no_handler_is_a_stub() {
+    let t = TestApp::mem();
+    for m in t.app.registry().methods() {
+        let err = t
+            .app
+            .invoke(&m.qualified_name(), json!({}), &Actor::User)
+            .err();
+        if let Some(e) = err {
+            assert_ne!(e.code, ErrorCode::InternalNotImplemented, "{}", m.name);
+        }
+    }
 }
 
 #[test]

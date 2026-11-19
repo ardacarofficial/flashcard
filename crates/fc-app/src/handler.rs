@@ -122,6 +122,7 @@ pub struct QueryCtx<'a> {
     pub now: Timestamp,
     /// UI locale.
     pub locale: Locale,
+    pub(crate) registry: &'a Registry,
 }
 
 /// Handles command `M`.

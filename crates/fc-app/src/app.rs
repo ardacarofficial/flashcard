@@ -8,13 +8,16 @@ use crate::registry::{unknown_method, ErasedHandler, Registry, RegistryError};
 use crate::settings::SettingsSchema;
 use crate::system::{OsRng, SystemClock};
 use fc_api::method::parse_qualified_name;
+use fc_api::v1::events::DomainEvent;
 use fc_api::v1::events::EventEnvelope;
 use fc_api::v1::oplog::{Actor, OplogKind};
 use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest, Visibility};
 use fc_core::i18n::Locale;
+use fc_core::notetype::builtin;
+use fc_core::settings::SettingScope;
 use fc_core::{BatchId, Clock, IdGen, OplogId, V7IdGen};
 use fc_storage::repo::{OplogRecord, OplogRecordKind};
-use fc_storage::Store;
+use fc_storage::{Reads, Store};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -84,10 +87,61 @@ impl App {
         })
     }
 
-    /// Loads persisted state (module switches, locale), seeds built-ins (Classic note type,
-    /// default preset) and marks unfinished jobs interrupted. **L3 implements.**
+    /// Startup work after the store is open (and migrated — `SqliteStore::open` migrates):
+    /// seeds built-ins (the Classic note type, localized by `app.locale`), marks jobs left
+    /// running/queued as interrupted, then loads module switches and the locale into memory.
+    /// Idempotent. Seeding is not an undoable command, so it writes no oplog entry.
     pub fn load_state(&self) -> AppResult<()> {
-        Err(ApiError::not_implemented("App::load_state").into())
+        let now = self.clock.now();
+        let mut tx = self.store.write()?;
+        let locale = read_locale(&*tx)?;
+        if tx.get_notetype(builtin::CLASSIC_ID)?.is_none() {
+            let (name, front, back) = match locale {
+                Locale::Tr => ("Klasik", "Ön", "Arka"),
+                Locale::En => ("Classic", "Front", "Back"),
+            };
+            tx.upsert_notetype(&builtin::classic(now, name, front, back))?;
+        }
+        tx.mark_unfinished_jobs_interrupted(now)?;
+        tx.commit()?;
+        self.reload_cached_state()
+    }
+
+    /// Opens (creating and migrating if needed) the SQLite collection at `path` and returns a
+    /// ready app: production deps, [`App::load_state`] done.
+    pub fn open_sqlite(path: &std::path::Path) -> AppResult<Self> {
+        let store = Arc::new(fc_storage::SqliteStore::open(path)?);
+        let app = Self::new(AppDeps::with_store(store))
+            .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+        app.load_state()?;
+        Ok(app)
+    }
+
+    /// Re-reads module switches and the locale from storage into the in-memory caches.
+    pub fn reload_cached_state(&self) -> AppResult<()> {
+        let tx = self.store.read()?;
+        let states = crate::support::module_states(&*tx, &self.registry)?;
+        if let Ok(mut m) = self.module_enabled.write() {
+            m.extend(states);
+        }
+        self.set_locale(read_locale(&*tx)?);
+        Ok(())
+    }
+
+    /// Keeps in-memory caches in step with committed changes (also when they come from
+    /// undo/redo, whose nested calls emit the same events).
+    fn apply_committed(&self, events: &[DomainEvent]) {
+        let relevant = events.iter().any(|e| match e {
+            DomainEvent::ModuleToggled { .. } => true,
+            DomainEvent::SettingChanged { scope, key } => {
+                *scope == SettingScope::App && key == crate::modules::core::LOCALE
+            }
+            _ => false,
+        });
+        if relevant {
+            // A failed reload keeps the previous cache; the next start reloads anyway.
+            let _ = self.reload_cached_state();
+        }
     }
 
     /// The registry (for `commands.list`, transports and tests).
@@ -189,6 +243,7 @@ impl App {
                     tx: &*tx,
                     now: self.clock.now(),
                     locale: self.locale(),
+                    registry: &self.registry,
                 };
                 h.run(params, &ctx)
             }
@@ -219,7 +274,7 @@ impl App {
                 let mut oplog = std::mem::take(&mut ctx.oplog);
                 let mut events = std::mem::take(&mut ctx.events);
                 let (kind, reverts) = (ctx.batch_kind, ctx.reverts_batch_id);
-                if d.undoable {
+                if d.undoable && !outcome.inverse.is_empty() {
                     oplog.insert(
                         0,
                         PendingOplogEntry {
@@ -257,6 +312,7 @@ impl App {
                 }
                 tx.commit()?;
                 drop(ids);
+                self.apply_committed(&events);
                 for event in events {
                     let envelope = EventEnvelope {
                         seq: self.event_seq.fetch_add(1, Ordering::SeqCst),
@@ -270,6 +326,15 @@ impl App {
             }
         }
     }
+}
+
+/// Locale from the `app.locale` setting (schema default `tr`).
+fn read_locale(reads: &dyn Reads) -> AppResult<Locale> {
+    let value = reads.get_setting(&SettingScope::App, crate::modules::core::LOCALE)?;
+    Ok(match value.as_ref().and_then(|v| v.as_str()) {
+        Some("en") => Locale::En,
+        _ => Locale::Tr,
+    })
 }
 
 impl Invoker for App {

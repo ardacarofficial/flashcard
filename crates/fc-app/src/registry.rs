@@ -212,7 +212,7 @@ impl Registry {
             ));
         };
         let outcome = handler.execute(request.params.clone(), ctx)?;
-        if entry.descriptor.undoable {
+        if entry.descriptor.undoable && !outcome.inverse.is_empty() {
             ctx.oplog.push(PendingOplogEntry {
                 command: request.method.clone(),
                 payload: request.params.clone(),

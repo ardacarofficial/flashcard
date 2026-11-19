@@ -16,9 +16,12 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 getrandom.workspace = true
+uuid.workspace = true
+
+[features]
+## In-memory store and the storage-agnostic service test suite (`fc_app::testing`).
+testing = []
 
 [lints]
 workspace = true
 
-[dev-dependencies]
-uuid.workspace = true
