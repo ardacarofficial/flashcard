@@ -1,0 +1,23 @@
+[package]
+name = "fc-study"
+description = "Pure study logic: FSRS/SM-2 schedulers, answer checkers, hint strategies, session queue. No I/O, no clocks, no OS randomness."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fc-core.workspace = true
+fc-providers.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# FSRS reference implementation (open-spaced-repetition/fsrs-rs). Only its pure inference
+# functions are used (no optimizer/simulator here).
+fsrs = "7.0.0"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+uuid.workspace = true
