@@ -1,0 +1,23 @@
+[package]
+name = "fc-core"
+description = "Pure domain core: models, ids, validation. No I/O, no clocks, no global state."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# Derive `ts_rs::TS` on value types so `fc-api` can expose them in generated TypeScript.
+ts = ["dep:ts-rs"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+[lints]
+workspace = true
