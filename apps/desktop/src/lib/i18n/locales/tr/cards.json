@@ -1,0 +1,168 @@
+{
+  "nav": {
+    "notetypes": "Not türleri"
+  },
+  "modules": {
+    "cardtypes": {
+      "name": "Kart türleri",
+      "description": "Not türü editörü, kart şablonları, kart gösterimi ve önizleme."
+    },
+    "media": {
+      "name": "Medya",
+      "description": "Kartlarda resim, ses ve video (her dosya bir kez saklanır)."
+    },
+    "links": {
+      "name": "Not bağlantıları",
+      "description": "Notlar arası [[bağlantılar]] ve geri bağlantılar."
+    },
+    "flags": {
+      "name": "Bayraklar",
+      "description": "Kendi adlarını verebileceğin yedi renkli kart bayrağı."
+    },
+    "card_notes": {
+      "name": "Kart notları",
+      "description": "Tek bir karta özel not."
+    },
+    "math": {
+      "name": "Matematik",
+      "description": "$…$ ve $$…$$ formüllerini dizer (KaTeX)."
+    },
+    "code_highlight": {
+      "name": "Kod renklendirme",
+      "description": "Kod bloklarında sözdizimi renkleri."
+    }
+  },
+  "cardtypes": {
+    "engine": {
+      "classic": "Kendin puanla",
+      "typing": "Yazarak cevapla",
+      "cloze": "Boşluk doldurma",
+      "multiple_choice": "Çoktan seçmeli",
+      "image_occlusion": "Resim üzerinde gizleme"
+    }
+  },
+  "cards": {
+    "preview": "Önizleme",
+    "show_answer": "Cevabı göster",
+    "show_question": "Soruyu göster",
+    "no_cards": "Bu not henüz kart üretmiyor.",
+    "hint": "İpucu",
+    "expected": "Cevap",
+    "type_placeholder": "Cevabını yaz",
+    "speak": "Sesli oku",
+    "heading": "Kartlar",
+    "user_note": "Kart notu",
+    "user_note_placeholder": "Yalnızca bu kart için…",
+    "backlinks": "Buraya bağlananlar",
+    "no_backlinks": "Bu nota bağlanan başka not yok."
+  },
+  "flags": {
+    "heading": "Bayraklar",
+    "rename": "Bayrak adları",
+    "default": {
+      "1": "Kırmızı",
+      "2": "Turuncu",
+      "3": "Yeşil",
+      "4": "Mavi",
+      "5": "Pembe",
+      "6": "Turkuaz",
+      "7": "Mor"
+    }
+  },
+  "editor": {
+    "toolbar": "Biçimlendirme",
+    "bold": "Kalın",
+    "italic": "İtalik",
+    "code": "Kod",
+    "math": "Formül",
+    "link": "Nota bağlantı",
+    "media": "Resim, ses veya video ekle",
+    "placeholder": "Markdown, $formül$, [[bağlantı]]; dosya yapıştır ya da sürükle",
+    "uploading": "Yükleniyor…",
+    "link_suggestions": "Notlar",
+    "remove_media": "Kaldır",
+    "drop_hint": "Dosyayı buraya sürükle ya da yapıştır.",
+    "bold_short": "K",
+    "italic_short": "İ",
+    "code_short": "</>"
+  },
+  "masks": {
+    "need_image": "Önce resmi ekle.",
+    "mode": "Soru biçimi",
+    "hide_all": "Hepsini gizle, birini sor",
+    "hide_one": "Birini gizle, diğerlerini göster",
+    "draw_hint": "Maske eklemek için resmin üzerinde sürükle; silmek için maskeye tıkla.",
+    "remove": "Maskeyi sil",
+    "remove_n": "{n}. maskeyi sil",
+    "count": "{n} maske = {n} kart"
+  },
+  "notetype": {
+    "heading": "Not türleri",
+    "type": "Not türü",
+    "name": "Ad",
+    "fields": "Alanlar",
+    "field_name": "Alan adı",
+    "field_kind": "Tür",
+    "required": "Zorunlu",
+    "unique": "Benzersiz",
+    "searchable": "Aranabilir",
+    "sort_field": "Listelerde görünen",
+    "add_field": "Alan ekle",
+    "new_field": "Yeni alan",
+    "templates": "Kart şablonları",
+    "template_name": "Şablon adı",
+    "card_type": "Kart türü",
+    "front": "Soru",
+    "back": "Cevap",
+    "add_template": "Şablon ekle",
+    "new_template": "Yeni kart",
+    "css": "Görünüm (CSS)",
+    "save": "Not türünü kaydet",
+    "saved": "Kaydedildi.",
+    "new": "Yeni not türü",
+    "copy": "Kopyala",
+    "delete": "Not türünü sil",
+    "confirm_delete": "“{name}” silinsin mi?",
+    "move_up": "Yukarı taşı",
+    "move_down": "Aşağı taşı",
+    "remove": "Kaldır",
+    "usage": "Bu türü {notes} not kullanıyor.",
+    "builtin": "Hazır",
+    "syntax": "{{alan}} · {{#alan}}…{{/alan}} · {{cloze:alan}} · {{type:alan}} · {{hint:alan}} · {{tts:en:alan}} · {{FrontSide}}",
+    "classifications": "Her notta sorulan sınıflandırmalar",
+    "classifications_hint": "Deste bazında Sınıflandırmalar'da tanımlanır; alanların yanında çıkar.",
+    "kind": {
+      "text": "Metin",
+      "rich_text": "Zengin metin",
+      "image": "Resim",
+      "audio": "Ses",
+      "video": "Video",
+      "number": "Sayı",
+      "tag_list": "Etiket listesi",
+      "link": "Not bağlantısı"
+    }
+  },
+  "note_editor": {
+    "save": "Kaydet",
+    "saved": "Kaydedildi.",
+    "edit_heading": "Notu düzenle",
+    "close": "Kapat",
+    "edit": "Düzenle"
+  },
+  "errors": {
+    "validation": {
+      "media_type": "Bu dosya türü desteklenmiyor.",
+      "media_too_large": "Dosya çok büyük.",
+      "flag": "Bilinmeyen bayrak."
+    },
+    "not_found": {
+      "media": "Medya dosyası bulunamadı.",
+      "card_type": "Bilinmeyen kart türü."
+    },
+    "conflict": {
+      "note_type_in_use": "Bu not türünü kullanan notlar var.",
+      "template_in_use": "Bu şablonun hâlâ kartları var.",
+      "note_type_required": "Bu not türü silinemez."
+    }
+  }
+}

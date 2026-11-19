@@ -2,6 +2,7 @@
 //! behind `fc-api` (docs/03 §1).
 
 pub mod ipc;
+pub mod media;
 
 use std::sync::Arc;
 use tauri::Manager;
@@ -19,6 +20,17 @@ pub const COLLECTION_FILE: &str = "collection.db";
 pub fn run() {
     let result = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![ipc::invoke])
+        .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
+            let (status, mime, body) = match ctx.app_handle().path().app_data_dir() {
+                Ok(dir) => media::respond(&dir.join(COLLECTION_FILE), request.uri().path()),
+                Err(_) => (500, "text/plain", Vec::new()),
+            };
+            tauri::http::Response::builder()
+                .status(status)
+                .header("Content-Type", mime)
+                .body(body)
+                .unwrap_or_default()
+        })
         .setup(|app| {
             // Handled here rather than returned: depending on the platform Tauri runs setup
             // inside the event loop and would panic on an error instead of returning it.
