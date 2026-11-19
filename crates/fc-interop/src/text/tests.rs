@@ -235,6 +235,22 @@ fn corpus() -> Vec<(String, &'static str, &'static str)> {
             ">>",
             NEWLINE,
         ),
+        // Anki 2.1.55+ plain-text exports declare their separator in a header.
+        (
+            "#separator:tab\n#html:true\nkedi\tcat\nköpek\tdog".into(),
+            "\t",
+            NEWLINE,
+        ),
+        (
+            "#separator:Semicolon\n#html:false\n#tags column:3\na;b, c;t1\nd;e;t2".into(),
+            ";",
+            NEWLINE,
+        ),
+        (
+            "#separator:Pipe\nkedi|cat, pisi\nköpek|dog".into(),
+            "|",
+            NEWLINE,
+        ),
     ];
     // Generated variants: a vocabulary list with each separator and a few lengths.
     let words = [
@@ -308,4 +324,40 @@ fn detection_reports_columns_and_confidence() {
     let none = detect("just one line of text");
     assert_eq!(none.confidence, 0.0);
     assert_eq!(none.columns, 1);
+}
+
+#[test]
+fn anki_header_lines_are_not_records() {
+    let text = "#separator:tab\n#html:true\n#tags column:3\nkedi\tcat\tanimals\n";
+    let d = detect(text);
+    assert_eq!(d.options.field_separator, "\t");
+    assert_eq!(d.confidence, 1.0);
+    assert_eq!(
+        parse_delimited(text, &d.options).unwrap(),
+        v(&[&["kedi", "cat", "animals"]])
+    );
+    // Only Anki's own keys form a header: a first record starting with `#` stays data.
+    assert_eq!(
+        rows("#etiket: değer\nkedi: cat", ":", NEWLINE),
+        v(&[&["#etiket", "değer"], &["kedi", "cat"]])
+    );
+}
+
+#[test]
+fn detection_masks_numbers_times_and_urls() {
+    // Decimal commas: `;` separates.
+    let d = detect("pi;3,14\ne;2,72\nphi;1,62");
+    assert_eq!(d.options.field_separator, ";");
+    // Times / URLs in the last column: `:` limited to two fields.
+    let d = detect("Toplantı: 10:30\nÇıkış: 17:45");
+    assert_eq!(d.options.field_separator, ":");
+    assert_eq!(d.options.max_fields, Some(2));
+    let d = detect("Google: https://google.com\nWiki: https://wikipedia.org");
+    assert_eq!(d.options.max_fields, Some(2));
+    // A plain numeric CSV is still a CSV.
+    let d = detect("1,5\n2,5\n3,5");
+    assert_eq!(d.options.field_separator, ",");
+    // A separator missing from many lines is not one.
+    let d = detect("Merhaba, nasılsın?\nİyiyim, teşekkürler.\nSen nasılsın?");
+    assert_eq!(d.columns, 1);
 }

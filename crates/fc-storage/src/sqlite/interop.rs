@@ -16,8 +16,15 @@ const MEDIA: &str = "media";
 const REVIEWS: &str = "review_log";
 const BACKUP: &str = "backup";
 
-/// Tables a dump never contains.
-const EXCLUDED: &[&str] = &["schema_migrations", "media_blobs"];
+/// Tables a dump never contains. `unfinished_batches(_parts)` are in-flight job state (an
+/// import's crash marker): jobs run one at a time and leftovers are rolled back at startup,
+/// so a backup never has rows there, and a restore must not touch a running group's marker.
+const EXCLUDED: &[&str] = &[
+    "schema_migrations",
+    "media_blobs",
+    "unfinished_batches",
+    "unfinished_batch_parts",
+];
 
 fn media_row(r: &Row<'_>) -> rusqlite::Result<MediaRecord> {
     Ok(MediaRecord {

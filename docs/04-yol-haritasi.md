@@ -97,7 +97,7 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** Esnek ayırıcılı metin/CSV içe aktarma (önizleme, otomatik algılama, alan eşleme, tırnak işleme); JSON; Quizlet metni; Anki .apkg/.colpkg içe ve dışa (eski ve yeni şema sürümleri, medya, geçmiş); deste paketi (`.fcpack`); tam yedek (`.fcbackup`) ve geri yükleme; yazdırma/PDF.
 
 **Kabul kriterleri**
-- [x] `Arda, porsuk` ve `Arda: porsuk` ve özel ayırıcılı dosyalar doğru ayrışır; otomatik algılama test kümesinde ≥ %95 doğru.
+- [x] `Arda, porsuk` ve `Arda: porsuk` ve özel ayırıcılı dosyalar doğru ayrışır; otomatik algılama test kümesinde ≥ %95 doğru. *(Ayar setinde ≥ %95. Ayardan sonra yazılan 2. tutulmuş sette ilk ölçüm **%90 (63/70)**, Anki başlık desteğiyle %92,9 (65/70) — tutulmuş sette hedefin altında; ayrıntı docs/10 §11.)*
 - [x] Örnek Anki desteleri (cloze, resimli, sesli) kayıpsız içe aktarılır; dışa aktarılan .apkg Anki'de açılır. *(Anki'nin kendisiyle elle açma denemesi henüz yapılmadı; yapı testle doğrulanıyor, aşağıya bkz.)*
 - [x] Yedek → sil → geri yükle döngüsü veriyi birebir korur.
 - [x] İçe aktarma iptal edilebilir ve tek geri al ile geri döner.

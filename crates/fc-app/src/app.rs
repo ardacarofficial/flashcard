@@ -22,8 +22,8 @@ use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest};
 use fc_core::i18n::Locale;
 use fc_core::notetype::builtin;
 use fc_core::settings::SettingScope;
-use fc_core::{BatchId, Clock, IdGen, OplogId, V7IdGen};
-use fc_storage::repo::{OplogRecord, OplogRecordKind};
+use fc_core::{BatchId, Clock, IdGen, JobId, OplogId, V7IdGen};
+use fc_storage::repo::{OplogRecord, OplogRecordKind, UnfinishedBatchRecord};
 use fc_storage::{Reads, Store};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -80,17 +80,30 @@ pub(crate) enum OplogMode<'g> {
     Write,
     /// Held back in an [`UndoGroup`] that a long job commits as one batch at its end.
     Defer(&'g mut UndoGroup),
-    /// Dropped: compensation that leaves no history (discarding an unfinished import).
-    Discard,
+    /// Dropped: compensation that leaves no history (discarding an unfinished import). With
+    /// a group's batch id, its durable marker is removed in the same transaction.
+    Discard(Option<BatchId>),
 }
 
 /// One undo step written across several transactions (a long import writes in chunks so
 /// other commands are never locked out for long). Its oplog entries are held here and written
 /// together by [`App::commit_group`] — the oplog requires a batch's entries to be contiguous,
 /// and an unfinished group must never be an undo target.
+///
+/// **Crash safety.** A group is durable: [`App::begin_group`] writes a marker row
+/// (`unfinished_batches`, state `started`) with the compensating `rollback` call before
+/// anything else, and every command run in the group appends its inverse calls to the marker
+/// **in its own transaction** (state `writing`). Committing or discarding the group removes
+/// the marker in that same transaction. So if the app stops in between, the marker describes
+/// exactly the committed parts, and [`App::load_state`] rolls them back — a change is never
+/// left without an undo step.
 pub(crate) struct UndoGroup {
     batch_id: BatchId,
     pending: Vec<PendingOplogEntry>,
+    /// Marker row of this group (see above).
+    marker: UnfinishedBatchRecord,
+    /// Parts appended to the marker so far.
+    parts: u32,
 }
 
 impl UndoGroup {
@@ -107,6 +120,38 @@ impl UndoGroup {
     pub(crate) fn is_empty(&self) -> bool {
         self.pending.is_empty()
     }
+
+    /// Batch id of the group (also its marker's key).
+    pub(crate) fn batch_id(&self) -> BatchId {
+        self.batch_id
+    }
+}
+
+/// Inverse calls of `entries` as stored in a marker part: one list per entry, in order.
+fn part_inverses(entries: &[PendingOplogEntry]) -> AppResult<Value> {
+    let lists: Vec<&Vec<InvokeRequest>> = entries.iter().map(|e| &e.inverse).collect();
+    serde_json::to_value(lists).map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))
+}
+
+/// The rollback call of a marker with its parts' inverses filled in (newest first) as
+/// `params.calls`.
+fn rollback_request(rollback: &Value, parts: &[Value]) -> AppResult<InvokeRequest> {
+    let internal = |e: serde_json::Error| AppError::api(ErrorCode::Internal, e.to_string());
+    let mut calls: Vec<InvokeRequest> = Vec::new();
+    for part in parts.iter().rev() {
+        let lists: Vec<Vec<InvokeRequest>> =
+            serde_json::from_value(part.clone()).map_err(internal)?;
+        calls.extend(lists.into_iter().rev().flatten());
+    }
+    let mut request: InvokeRequest = serde_json::from_value(rollback.clone()).map_err(internal)?;
+    let calls = serde_json::to_value(calls).map_err(internal)?;
+    match &mut request.params {
+        Value::Object(m) => {
+            m.insert("calls".into(), calls);
+        }
+        other => *other = serde_json::json!({ "calls": calls }),
+    }
+    Ok(request)
 }
 
 /// Decrements [`App::writers_waiting`] when dropped.
@@ -178,7 +223,43 @@ impl App {
         }
         tx.mark_unfinished_jobs_interrupted(now)?;
         tx.commit()?;
-        self.reload_cached_state()
+        self.reload_cached_state()?;
+        self.roll_back_unfinished_groups()
+    }
+
+    /// Startup: undoes what undo groups left unfinished by a crash wrote (see [`UndoGroup`]).
+    /// The rollback runs unlogged and removes the marker in its own transaction. A rollback
+    /// that fails keeps its marker (tried again at the next start) and does not stop the
+    /// app from opening.
+    fn roll_back_unfinished_groups(&self) -> AppResult<()> {
+        let markers = {
+            let tx = self.store.read()?;
+            let mut out = Vec::new();
+            for m in tx.list_unfinished_batches()? {
+                let parts = tx.unfinished_batch_parts(m.batch_id)?;
+                out.push((m, parts));
+            }
+            out
+        };
+        for (marker, parts) in markers {
+            if parts.is_empty() {
+                let mut tx = self.store.write()?;
+                tx.delete_unfinished_batch(marker.batch_id)?;
+                tx.commit()?;
+                continue;
+            }
+            let Ok(request) = rollback_request(&marker.rollback, &parts) else {
+                continue;
+            };
+            // Recovery must not depend on module switches: run the handler directly.
+            let _ = self.invoke_entry(
+                &request,
+                &Actor::System,
+                OplogMode::Discard(Some(marker.batch_id)),
+                false,
+            );
+        }
+        Ok(())
     }
 
     /// Opens (creating and migrating if needed) the SQLite collection at `path` and returns a
@@ -410,6 +491,17 @@ impl App {
         actor: &Actor,
         mode: OplogMode<'_>,
     ) -> AppResult<Value> {
+        self.invoke_entry(request, actor, mode, true)
+    }
+
+    /// [`App::invoke_with`]; `check_module = false` skips the module switch (crash recovery).
+    fn invoke_entry(
+        &self,
+        request: &InvokeRequest,
+        actor: &Actor,
+        mode: OplogMode<'_>,
+        check_module: bool,
+    ) -> AppResult<Value> {
         let method = request.method.as_str();
         let name = parse_qualified_name(method).ok_or_else(|| unknown_method(method))?;
         let entry = self
@@ -417,7 +509,7 @@ impl App {
             .entry(name)
             .ok_or_else(|| unknown_method(method))?;
         let d = &entry.descriptor;
-        if !self.is_module_enabled(d.module) {
+        if check_module && !self.is_module_enabled(d.module) {
             return Err(AppError::Api(
                 ApiError::new(
                     ErrorCode::ConflictModuleDisabled,
@@ -435,16 +527,49 @@ impl App {
         self.run_command(h.as_ref(), d, method, request.params.clone(), actor, mode)
     }
 
-    /// A new, empty [`UndoGroup`].
-    pub(crate) fn begin_group(&self) -> AppResult<UndoGroup> {
-        let mut ids = self
-            .ids
-            .lock()
-            .map_err(|_| AppError::api(ErrorCode::Internal, "id generator poisoned"))?;
+    /// A new, empty [`UndoGroup`] of `job`, with its durable marker written. `rollback` is
+    /// the internal command that removes what the group committed if the app stops before
+    /// the group ends; it receives the group's inverse calls (newest first) as
+    /// `params.calls`.
+    pub(crate) fn begin_group(
+        &self,
+        job: Option<JobId>,
+        rollback: &InvokeRequest,
+    ) -> AppResult<UndoGroup> {
+        let now = self.clock.now();
+        let batch_id = {
+            let mut ids = self
+                .ids
+                .lock()
+                .map_err(|_| AppError::api(ErrorCode::Internal, "id generator poisoned"))?;
+            BatchId::generate(&mut **ids)
+        };
+        let marker = UnfinishedBatchRecord {
+            batch_id,
+            job_id: job,
+            state: "started".into(),
+            rollback: serde_json::to_value(rollback)
+                .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?,
+            created_at: now,
+            updated_at: now,
+        };
+        let mut tx = self.store.write()?;
+        tx.upsert_unfinished_batch(&marker)?;
+        tx.commit()?;
         Ok(UndoGroup {
-            batch_id: BatchId::generate(&mut **ids),
+            batch_id,
             pending: Vec::new(),
+            marker,
+            parts: 0,
         })
+    }
+
+    /// Ends a group that recorded nothing: removes its marker.
+    pub(crate) fn close_empty_group(&self, group: &UndoGroup) -> AppResult<()> {
+        let mut tx = self.store.write()?;
+        tx.delete_unfinished_batch(group.batch_id)?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// Writes the oplog entries of `group` as one batch (one undo step). `summary` replaces
@@ -456,7 +581,7 @@ impl App {
         summary: Option<I18nMessage>,
     ) -> AppResult<()> {
         if group.pending.is_empty() {
-            return Ok(());
+            return self.close_empty_group(group);
         }
         let mut entries = group.pending.clone();
         if let (Some(first), Some(s)) = (entries.first_mut(), summary) {
@@ -476,6 +601,7 @@ impl App {
             actor,
             now,
         )?;
+        tx.delete_unfinished_batch(group.batch_id)?;
         tx.commit()?;
         Ok(())
     }
@@ -536,13 +662,33 @@ impl App {
                 now,
             )?,
             OplogMode::Defer(group) => {
+                // The marker learns this part in the part's own transaction.
+                if !oplog.is_empty() {
+                    tx.add_unfinished_batch_part(
+                        group.batch_id,
+                        group.parts,
+                        &part_inverses(&oplog)?,
+                    )?;
+                    if group.marker.state != "writing" {
+                        group.marker.state = "writing".into();
+                        group.marker.updated_at = now;
+                        tx.upsert_unfinished_batch(&group.marker)?;
+                    }
+                }
                 tx.commit()?;
+                if !oplog.is_empty() {
+                    group.parts += 1;
+                }
                 group.pending.extend(oplog);
                 drop(ids);
                 self.after_commit(events, now, batch_id);
                 return Ok(response);
             }
-            OplogMode::Discard => {}
+            OplogMode::Discard(group) => {
+                if let Some(batch) = group {
+                    tx.delete_unfinished_batch(batch)?;
+                }
+            }
         }
         tx.commit()?;
         drop(ids);

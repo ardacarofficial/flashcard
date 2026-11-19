@@ -14,12 +14,18 @@
 //! * `Toplantı: 10:30`, `Google: https://…` — need `max_fields: 2`; detection never limits
 //!   fields.
 //! * `Merhaba, nasılsın?` — a one-column list of sentences with commas reads as two columns.
+//!
+//! **Afterwards the detector was revised for exactly these failure classes** (protected-token
+//! masking for numbers/times/URLs with a suggested `max_fields`, `::` and dash/arrow
+//! candidates, "a separator missing from > 25% of the records is not one", record separators
+//! must separate something). It now gets **46/46**, but this set has become a tuning set: the
+//! untouched measurement is the second held-out set (`heldout2_tests.rs`).
 
 use super::*;
 
-/// Correct samples when the set was added (out of [`samples`]`().len()`). Raising it is fine;
-/// lowering it means detection got worse.
-const HELD_OUT_FLOOR: usize = 40;
+/// Correct samples now (40 when the set was added). Raising it is fine; lowering it means
+/// detection got worse.
+const HELD_OUT_FLOOR: usize = 46;
 
 fn r(rows: &[&[&str]]) -> Vec<Vec<String>> {
     rows.iter()

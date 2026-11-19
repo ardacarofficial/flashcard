@@ -186,7 +186,11 @@ impl JobHandler for ImportJob {
         let chunk = knobs.as_ref().map_or(CHUNK_ROWS, |k| k.chunk_rows);
         self.0
             .put_import(job, ApplyState::new(staged, chunk), ctx.cancel.clone());
-        let mut group = ctx.begin_group()?;
+        // Crash-safe: if the app stops between chunks, startup discards the committed ones.
+        let mut group = ctx.begin_group::<IoImportDiscard>(&DiscardImport {
+            calls: Vec::new(),
+            since,
+        })?;
         let mut chunks = 0usize;
         let outcome = loop {
             if let Err(e) = ctx.cancel.check() {
@@ -233,16 +237,15 @@ impl JobHandler for ImportJob {
     }
 }
 
-/// Reverts the committed chunks of an unfinished import (no undo step).
+/// Reverts the committed chunks of an unfinished import (no undo step) and ends the group.
 fn discard(ctx: &JobContext<'_>, group: &UndoGroup, since: Timestamp) -> AppResult<()> {
-    if group.is_empty() {
-        return Ok(());
-    }
-    ctx.invoke_unlogged::<IoImportDiscard>(&DiscardImport {
-        calls: group.inverses_rev(),
-        since,
-    })?;
-    Ok(())
+    ctx.discard_group::<IoImportDiscard>(
+        group,
+        &DiscardImport {
+            calls: group.inverses_rev(),
+            since,
+        },
+    )
 }
 
 /// Test hooks of the import job, keyed by job id (chunk size, a callback after each chunk).

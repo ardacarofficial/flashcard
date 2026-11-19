@@ -543,6 +543,95 @@ fn cancel_after_committed_chunks_leaves_no_trace() {
     }
 }
 
+/// The app stops (crash, power loss) between two committed chunks: the next start rolls the
+/// committed chunks back through the durable marker, so nothing is left without an undo step.
+#[test]
+fn crash_between_chunks_is_rolled_back_at_next_start() {
+    let db = Arc::new(TempSqlite::new());
+    let path = db.path();
+    let stores: [(Arc<dyn Store>, bool); 2] = [(db, true), (Arc::new(MemStore::new()), false)];
+    for (store, is_sqlite) in stores {
+        let t = TestApp::new(store.clone());
+        let d = deck(&t, "Base");
+        level_attribute(&t);
+        t.ok::<NotesCreate>(CreateNote {
+            notetype_id: CLASSIC_ID,
+            deck_id: d.id,
+            fields: [("front".into(), "keep".into()), ("back".into(), "me".into())].into(),
+            tags: vec!["t1".into()],
+            attributes: vec![],
+            allow_duplicate: None,
+        });
+        let before = is_sqlite.then(|| collection(&t));
+        let notes_before = live_notes(&t.store);
+        let undo_before = t.ok::<OplogStatus>(Empty {});
+        // 120 rows, 10 per chunk; the process "dies" after the 5th committed chunk: no
+        // cancel, no discard, no commit of the undo group runs.
+        let job = t.ok::<IoImportStart>(json_import(json_rows(120), d.id));
+        super::import::knobs::set(
+            job.id,
+            super::import::knobs::Knobs {
+                chunk_rows: 10,
+                after_chunk: Box::new(|n, _| {
+                    if n == 5 {
+                        panic!("simulated crash between chunks");
+                    }
+                }),
+            },
+        );
+        let crashed =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| t.app.run_pending_jobs()));
+        assert!(crashed.is_err());
+        // The crash left committed rows and a marker describing them.
+        assert!(live_notes(&store).len() > notes_before.len());
+        {
+            let tx = store.read().unwrap();
+            let markers = tx.list_unfinished_batches().unwrap();
+            assert_eq!(markers.len(), 1);
+            assert_eq!(markers[0].state, "writing");
+            assert_eq!(markers[0].job_id, Some(job.id));
+            assert!(!tx.unfinished_batch_parts(markers[0].batch_id).unwrap().is_empty());
+        }
+        drop(t);
+        // Next start (a fresh connection to the same file for SQLite).
+        let reopened: Arc<dyn Store> = if is_sqlite {
+            Arc::new(fc_storage::SqliteStore::open(&path).unwrap())
+        } else {
+            store.clone()
+        };
+        let t = TestApp::new(reopened);
+        assert!(t.store.read().unwrap().list_unfinished_batches().unwrap().is_empty());
+        if let Some(before) = before {
+            assert_eq!(without_updated_at(collection(&t)), without_updated_at(before));
+        }
+        let content = |notes: &[Note]| {
+            notes.iter().map(|n| (n.id, n.fields.clone(), n.tags.clone())).collect::<Vec<_>>()
+        };
+        assert_eq!(content(&live_notes(&t.store)), content(&notes_before));
+        let tx = t.store.read().unwrap();
+        assert_eq!(tx.list_decks(true).unwrap().len(), 1);
+        assert_eq!(tx.list_tags().unwrap().len(), 1);
+        drop(tx);
+        assert_eq!(t.ok::<OplogStatus>(Empty {}).undo_summary, undo_before.undo_summary);
+        let job = t.ok::<JobsGet>(JobRef { id: job.id });
+        assert_eq!(job.status, JobStatus::Interrupted);
+    }
+}
+
+#[test]
+fn finished_and_cancelled_imports_leave_no_marker() {
+    let t = sqlite();
+    let d = deck(&t, "Base");
+    import(&t, text_import("a, b\nc, d", d.id));
+    let job = import_chunked(&t, json_import(json_rows(30), d.id), 10, |n, cancel| {
+        if n == 2 {
+            cancel.cancel();
+        }
+    });
+    assert_eq!(job.status, JobStatus::Cancelled);
+    assert!(t.store.read().unwrap().list_unfinished_batches().unwrap().is_empty());
+}
+
 #[test]
 fn commands_run_while_a_large_import_writes_and_undo_is_still_exact() {
     let t = sqlite();

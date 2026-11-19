@@ -163,8 +163,13 @@ impl JobContext<'_> {
 
     /// Starts an undo step that spans several commands (each in its own transaction); see
     /// [`UndoGroup`]. Nothing reaches the oplog until [`JobContext::commit_group`].
-    pub(crate) fn begin_group(&self) -> AppResult<UndoGroup> {
-        self.app.begin_group()
+    ///
+    /// The group is crash-safe ([`UndoGroup`]): `rollback` (method `R`, an internal command
+    /// whose request has a `calls` list) removes what it committed if the app stops before
+    /// [`JobContext::commit_group`] / [`JobContext::discard_group`].
+    pub(crate) fn begin_group<R: ApiMethod>(&self, rollback: &R::Request) -> AppResult<UndoGroup> {
+        self.app
+            .begin_group(Some(self.job_id), &request_of::<R>(rollback)?)
     }
 
     /// Like [`JobContext::invoke`] for a command, but its oplog entries join `group` instead
@@ -182,17 +187,22 @@ impl JobContext<'_> {
         serde_json::from_value(value).map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))
     }
 
-    /// Runs a compensating command that records no undo step.
-    pub(crate) fn invoke_unlogged<M: ApiMethod>(
+    /// Reverts `group` with compensating command `M` (records no undo step) and ends the
+    /// group: its marker is removed in the same transaction. An empty group just ends.
+    pub(crate) fn discard_group<M: ApiMethod>(
         &self,
+        group: &UndoGroup,
         request: &M::Request,
-    ) -> AppResult<M::Response> {
-        let value = self.app.invoke_with(
+    ) -> AppResult<()> {
+        if group.is_empty() {
+            return self.app.close_empty_group(group);
+        }
+        self.app.invoke_with(
             &request_of::<M>(request)?,
             &Actor::System,
-            OplogMode::Discard,
+            OplogMode::Discard(Some(group.batch_id())),
         )?;
-        serde_json::from_value(value).map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))
+        Ok(())
     }
 
     /// Writes `group` as one undo step (retried briefly if the writer is busy).

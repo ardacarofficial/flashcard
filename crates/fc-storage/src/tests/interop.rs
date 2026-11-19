@@ -1,4 +1,5 @@
-//! Import/export storage: migration 0400, media bytes, review log rows, dump/load.
+//! Import/export storage: migrations 0400/0401, media bytes, review log rows, dump/load,
+//! unfinished undo groups (import crash markers).
 
 use super::*;
 use crate::migrate;
@@ -60,6 +61,68 @@ fn migration_0400_adds_media_blobs_with_cascade() {
         .query_row("SELECT count(*) FROM media_blobs", [], |r| r.get(0))
         .unwrap();
     assert_eq!(left, 0);
+}
+
+#[test]
+fn migration_0401_unfinished_batches_hold_parts_and_stay_out_of_dumps() {
+    use crate::repo::UnfinishedBatchRecord;
+    use fc_core::{BatchId, JobId};
+    let fx = Fx::new();
+    {
+        let conn = fx.raw();
+        assert!(migrate::current_version(&conn).unwrap() >= 401);
+        conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
+        // A part needs its marker; the state is constrained.
+        assert!(conn
+            .execute(
+                "INSERT INTO unfinished_batch_parts VALUES ('x', 0, '[]')",
+                []
+            )
+            .is_err());
+        assert!(conn
+            .execute(
+                "INSERT INTO unfinished_batches VALUES ('x', NULL, 'done', '{}', 0, 0)",
+                []
+            )
+            .is_err());
+    }
+    let batch = BatchId(u(0x77));
+    let mut marker = UnfinishedBatchRecord {
+        batch_id: batch,
+        job_id: Some(JobId(u(0x78))),
+        state: "started".into(),
+        rollback: serde_json::json!({"method": "v1.x", "params": {"since": 3}}),
+        created_at: Timestamp(1),
+        updated_at: Timestamp(1),
+    };
+    fx.write(|tx| tx.upsert_unfinished_batch(&marker).unwrap());
+    marker.state = "writing".into();
+    marker.updated_at = Timestamp(2);
+    fx.write(|tx| {
+        tx.upsert_unfinished_batch(&marker).unwrap();
+        tx.add_unfinished_batch_part(batch, 1, &serde_json::json!([["b"]]))
+            .unwrap();
+        tx.add_unfinished_batch_part(batch, 0, &serde_json::json!([["a"]]))
+            .unwrap();
+    });
+    fx.read(|r| {
+        assert_eq!(r.list_unfinished_batches().unwrap(), vec![marker.clone()]);
+        assert_eq!(
+            r.unfinished_batch_parts(batch).unwrap(),
+            vec![serde_json::json!([["a"]]), serde_json::json!([["b"]])]
+        );
+        let dump = r.dump_collection().unwrap();
+        assert!(!dump
+            .tables
+            .iter()
+            .any(|t| t.name.starts_with("unfinished_batch")));
+    });
+    assert!(fx.write(|tx| tx.delete_unfinished_batch(batch).unwrap()));
+    fx.read(|r| {
+        assert!(r.list_unfinished_batches().unwrap().is_empty());
+        assert!(r.unfinished_batch_parts(batch).unwrap().is_empty());
+    });
+    assert!(!fx.write(|tx| tx.delete_unfinished_batch(batch).unwrap()));
 }
 
 #[test]

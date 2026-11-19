@@ -168,7 +168,58 @@ pub fn normalize_newlines(text: &str) -> String {
 pub fn parse_delimited(text: &str, opts: &TextOptions) -> InteropResult<Vec<Vec<String>>> {
     opts.validate()?;
     let text = normalize_newlines(text);
-    Ok(Parser::new(&text, opts).run())
+    let (_, body) = split_anki_header(&text);
+    Ok(Parser::new(body, opts).run())
+}
+
+/// Header lines Anki (2.1.55+) writes at the top of a plain-text export (`#separator:tab`,
+/// `#html:true`, `#tags column:3` …). Only these known keys count, so a first record that
+/// happens to start with `#` stays data.
+const ANKI_HEADER_KEYS: &[&str] = &[
+    "separator",
+    "html",
+    "tags",
+    "tags column",
+    "deck",
+    "deck column",
+    "notetype",
+    "notetype column",
+    "guid column",
+    "columns",
+    "if matches",
+];
+
+/// Splits Anki's `#key:value` header lines off the top of `text`: `(header, rest)`.
+fn split_anki_header(text: &str) -> (Vec<(&str, &str)>, &str) {
+    let mut header = Vec::new();
+    let mut rest = text;
+    while let Some(line) = rest.strip_prefix('#') {
+        let end = line.find('\n').unwrap_or(line.len());
+        let Some((key, value)) = line[..end].split_once(':') else {
+            break;
+        };
+        if !ANKI_HEADER_KEYS.contains(&key.trim()) {
+            break;
+        }
+        header.push((key.trim(), value.trim()));
+        rest = line.get(end + 1..).unwrap_or("");
+    }
+    (header, rest)
+}
+
+/// The field separator an Anki header declares (`#separator:Tab` …).
+fn anki_separator(header: &[(&str, &str)]) -> Option<String> {
+    let (_, v) = header.iter().find(|(k, _)| *k == "separator")?;
+    let sep = match v.to_ascii_lowercase().as_str() {
+        "tab" => "\t",
+        "comma" => ",",
+        "semicolon" => ";",
+        "space" => " ",
+        "pipe" => "|",
+        "colon" => ":",
+        _ => v,
+    };
+    (!sep.is_empty()).then(|| sep.to_owned())
 }
 
 struct Parser<'a> {
@@ -355,12 +406,17 @@ pub struct Detection {
     pub confidence: f32,
 }
 
-/// Field separator candidates and their prior weights (more specific first).
+/// Field separator candidates and their prior weights (more specific first). Separators are
+/// trimmed around values, so ` → ` is covered by `→`.
 const FIELD_CANDIDATES: &[(&str, f64)] = &[
     ("\t", 1.0),
+    ("::", 0.97),
     (" - ", 0.97),
+    (" – ", 0.97),
+    (" — ", 0.96),
     (" = ", 0.96),
     (" => ", 0.96),
+    ("→", 0.96),
     ("=>", 0.95),
     ("->", 0.95),
     (">>", 0.95),
@@ -373,19 +429,51 @@ const FIELD_CANDIDATES: &[(&str, f64)] = &[
 ];
 
 /// Two-column separators: a record with more fields is unlikely to be meant this way.
-const PAIR_SEPARATORS: &[&str] = &[" - ", " = ", " => ", "=>", "->", ">>", ":", "=", "-"];
+const PAIR_SEPARATORS: &[&str] = &[
+    "::", " - ", " – ", " — ", " = ", " => ", "→", "=>", "->", ">>", ":", "=", "-",
+];
 
 const RECORD_CANDIDATES: &[(&str, f64)] = &[(NEWLINE, 1.0), (BLANK_LINE, 0.97), (";", 0.9)];
 
 /// How much text detection looks at.
 const SAMPLE_BYTES: usize = 64 * 1024;
 
-/// Suggests separators for `text` (docs/02 §15.1 "otomatik algılama"): every candidate pair is
-/// parsed and scored by how consistently it yields ≥ 2 fields per record, weighted by how
-/// specific the separator is and how many records it produces.
+/// A candidate whose splits cut through protected tokens (`3,14`, `10:30`, `https://…`) is
+/// worth this much of its consistency score.
+const SPLITS_TOKENS: f64 = 0.5;
+
+/// A separator missing from more than this share of the records is not the separator (a list
+/// of sentences, some with a comma, is one column).
+const MAX_RECORDS_WITHOUT_SEPARATOR: f64 = 0.25;
+
+/// Suggests separators for `text` (docs/02 §15.1 "otomatik algılama").
+///
+/// Every (record, field) separator pair is parsed and scored by how consistently it yields
+/// the same number (≥ 2) of fields per record, weighted by how specific the separator is.
+/// Values that merely *contain* separator characters are recognised first: decimal numbers
+/// (`3,14`), times (`10:30`), number ranges (`1919-1922`) and URLs are masked, so a candidate
+/// is judged by the columns it gives outside those tokens. A candidate that would cut through
+/// them scores half; when the clean split is reachable by limiting the field count
+/// (`Toplantı: 10:30` → `max_fields: 2`), that limit is suggested.
 pub fn detect(text: &str) -> Detection {
     let text = normalize_newlines(text);
-    let sample = sample(&text);
+    let (header, body) = split_anki_header(&text);
+    let sample = sample(body);
+    if let Some(fs) = anki_separator(&header) {
+        // Anki said which separator it used (fields with newlines are quoted).
+        let options = TextOptions::new(&fs, NEWLINE);
+        if options.validate().is_ok() {
+            let records = Parser::new(sample, &options).run();
+            let columns = score(&records, &fs).map_or(1, |(_, c)| c);
+            return Detection {
+                options,
+                columns,
+                records: records.len(),
+                confidence: 1.0,
+            };
+        }
+    }
+    let masked = mask_tokens(sample);
     let mut best: Option<(f64, TextOptions, usize, usize)> = None;
     for (rs, rw) in RECORD_CANDIDATES {
         for (fs, fw) in FIELD_CANDIDATES {
@@ -393,17 +481,12 @@ pub fn detect(text: &str) -> Detection {
             if opts.validate().is_err() {
                 continue;
             }
-            let records = Parser::new(sample, &opts).run();
-            let Some((mut score, columns)) = score(&records, fs) else {
+            let Some((score, opts, columns, records)) = candidate(sample, &masked, opts) else {
                 continue;
             };
-            if *rs == NEWLINE && trailing_custom_separator(&records) {
-                // `a,b;` lines: the `;` is a record separator followed by a line break.
-                score *= 0.5;
-            }
             let score = score * fw * rw;
             if best.as_ref().is_none_or(|b| score > b.0) {
-                best = Some((score, opts, columns, records.len()));
+                best = Some((score, opts, columns, records));
             }
         }
     }
@@ -427,6 +510,48 @@ pub fn detect(text: &str) -> Detection {
     }
 }
 
+/// Scores one separator pair: `(score, options, columns, records)`.
+fn candidate(
+    sample: &str,
+    masked: &str,
+    opts: TextOptions,
+) -> Option<(f64, TextOptions, usize, usize)> {
+    let fs = opts.field_separator.clone();
+    let rs = opts.record_separator.clone();
+    let real = Parser::new(sample, &opts).run();
+    if rs != NEWLINE && real.len() < 2 {
+        // A record separator that does not separate anything (no blank line, no `;`).
+        return None;
+    }
+    let clean = unmask_records(Parser::new(masked, &opts).run());
+    let adjust = |records: &[Vec<String>], s: f64| {
+        if rs == NEWLINE && trailing_custom_separator(records) {
+            // `a,b;` lines: the `;` is a record separator followed by a line break.
+            s * 0.5
+        } else {
+            s
+        }
+    };
+    if real == clean {
+        let (s, columns) = score(&real, &fs)?;
+        return Some((adjust(&real, s), opts, columns, real.len()));
+    }
+    // The candidate cuts through protected tokens. Best: the clean split, if limiting the
+    // field count reproduces it (protected tokens only in the last column).
+    if let Some((s, columns)) = score(&clean, &fs) {
+        let limited = TextOptions {
+            max_fields: Some(columns),
+            ..opts.clone()
+        };
+        if Parser::new(sample, &limited).run() == clean {
+            return Some((adjust(&clean, s), limited, columns, clean.len()));
+        }
+    }
+    // Otherwise the plain split, for want of anything better ("1,5\n2,5" is still a CSV).
+    let (s, columns) = score(&real, &fs)?;
+    Some((adjust(&real, s) * SPLITS_TOKENS, opts, columns, real.len()))
+}
+
 fn sample(text: &str) -> &str {
     if text.len() <= SAMPLE_BYTES {
         return text;
@@ -440,6 +565,81 @@ fn sample(text: &str) -> &str {
         Some(n) if n > 0 => &cut[..n],
         _ => cut,
     }
+}
+
+/// Stand-ins for separator characters inside protected tokens (control characters never
+/// found in text; one byte each, so offsets do not move).
+const MASKS: &[(char, char)] = &[
+    (',', '\u{1}'),
+    (':', '\u{2}'),
+    ('-', '\u{3}'),
+    ('=', '\u{4}'),
+    (';', '\u{5}'),
+];
+
+fn mask_char(c: char) -> char {
+    MASKS.iter().find(|(a, _)| *a == c).map_or(c, |(_, m)| *m)
+}
+
+fn unmask_char(c: char) -> char {
+    MASKS.iter().find(|(_, m)| *m == c).map_or(c, |(a, _)| *a)
+}
+
+fn unmask_records(records: Vec<Vec<String>>) -> Vec<Vec<String>> {
+    records
+        .into_iter()
+        .map(|r| {
+            r.into_iter()
+                .map(|f| {
+                    if f.contains(|c| MASKS.iter().any(|(_, m)| *m == c)) {
+                        f.chars().map(unmask_char).collect()
+                    } else {
+                        f
+                    }
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// `text` with the separator characters inside protected tokens replaced by [`MASKS`]:
+///
+/// * numbers: `,` `:` `-` between digits (`3,14`, `1.000,50`, `10:30`, `1919-1922`) — not
+///   when the `,` is followed by a space (`1, 2` lists separate);
+/// * URLs: `scheme://…` up to whitespace, a quote or a `,` `;` `|` `\t` boundary (their `:`,
+///   `-`, `=` stay inside).
+fn mask_tokens(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = chars.clone();
+    let digit = |i: usize| chars.get(i).is_some_and(|c| c.is_ascii_digit());
+    for i in 1..chars.len() {
+        if matches!(chars[i], ',' | ':' | '-') && digit(i - 1) && digit(i + 1) {
+            out[i] = mask_char(chars[i]);
+        }
+    }
+    let mut i = 0;
+    while i + 3 <= chars.len() {
+        if chars[i] == ':' && chars.get(i + 1) == Some(&'/') && chars.get(i + 2) == Some(&'/') {
+            let mut start = i;
+            while start > 0 && chars[start - 1].is_ascii_alphanumeric() {
+                start -= 1;
+            }
+            if start < i && chars[start].is_ascii_alphabetic() {
+                let mut end = i;
+                while end < chars.len()
+                    && !chars[end].is_whitespace()
+                    && !matches!(chars[end], '"' | ',' | ';' | '|')
+                {
+                    out[end] = mask_char(chars[end]);
+                    end += 1;
+                }
+                i = end;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    out.into_iter().collect()
 }
 
 /// `(score, columns)` of one candidate, `None` if it does not split records at all.
@@ -462,6 +662,10 @@ fn score(records: &[Vec<String>], fs: &str) -> Option<(f64, usize)> {
     if mode < 2 {
         return None;
     }
+    let without = records.iter().filter(|r| r.len() == 1).count();
+    if without as f64 > MAX_RECORDS_WITHOUT_SEPARATOR * n as f64 {
+        return None;
+    }
     let share = hits as f64 / n as f64;
     let consistent: Vec<&Vec<String>> = records.iter().filter(|r| r.len() == mode).collect();
     let fields = (consistent.len() * mode).max(1);
@@ -474,22 +678,6 @@ fn score(records: &[Vec<String>], fs: &str) -> Option<(f64, usize)> {
     let mut s = share * (n as f64 / (n as f64 + 1.0)) * (1.0 - 0.5 * empty);
     if PAIR_SEPARATORS.contains(&fs) && mode > 2 {
         s *= 0.6;
-    }
-    if fs == ":" {
-        // `10:30` style values (digits on both sides) and URLs (`http://`).
-        let timeish = consistent
-            .iter()
-            .filter(|r| {
-                r.windows(2).any(|w| {
-                    (w[0].chars().last().is_some_and(|c| c.is_ascii_digit())
-                        && w[1].chars().next().is_some_and(|c| c.is_ascii_digit()))
-                        || w[1].starts_with("//")
-                })
-            })
-            .count();
-        if timeish * 2 > consistent.len() {
-            s *= 0.5;
-        }
     }
     Some((s, mode))
 }
@@ -509,6 +697,8 @@ fn trailing_custom_separator(records: &[Vec<String>]) -> bool {
 
 #[cfg(test)]
 mod encoding_tests;
+#[cfg(test)]
+mod heldout2_tests;
 #[cfg(test)]
 mod heldout_tests;
 #[cfg(test)]
