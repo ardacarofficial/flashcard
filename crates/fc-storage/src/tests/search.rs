@@ -236,6 +236,7 @@ impl World {
             tags: &self.tags,
             notetypes: &self.notetypes,
             attributes: &self.attrs,
+            flag_names: &[],
             now: NOW,
         };
         compile_query(q, &cat).unwrap_or_else(|e| panic!("{q}: {e}"))
@@ -579,37 +580,35 @@ fn migration_0300_folds_existing_index_rows() {
     assert!(crate::migrate::schema_object_exists(&conn, "cards_created").unwrap());
 }
 
-/// docs/04 v0.4: "100k notta arama < 100 ms". Run with
-/// `cargo test -p fc-storage --release -- --ignored --nocapture bench_search_100k`.
-/// Measures a full browser request (count + first page of 50 + row data) per query.
-#[test]
-#[ignore = "benchmark: builds a 100k-note database"]
-fn bench_search_100k() {
-    let w = world(100_000, 42);
-    let queries = [
-        "",
-        "kilic",
-        "\"kılıç kalkan\"",
-        "deck:İngilizce is:due",
-        "tag:fiil -is:suspended",
-        "seviye>=B1 sınav:TYT",
-        "stability>20 lapses>=2",
-        "retrievability<0.8",
-        "front:kılıç*",
-        "(seviye:B1 OR seviye:B2) app",
-    ];
+/// Browser-like queries of the benchmarks (see docs/04 v0.4).
+const BENCH_QUERIES: &[&str] = &[
+    "",
+    "kilic",
+    "\"kılıç kalkan\"",
+    "deck:İngilizce is:due",
+    "tag:fiil -is:suspended",
+    "seviye>=B1 sınav:TYT",
+    "stability>20 lapses>=2",
+    "retrievability<0.8",
+    "front:kılıç*",
+    "(seviye:B1 OR seviye:B2) app",
+];
+
+/// Times a full browser request (count + first page of 50 + row data) per query, best of
+/// `runs`; prints and returns the slowest query's time in µs.
+fn bench(w: &World, runs: usize) -> u128 {
     let mut worst = 0u128;
-    for (sort, q) in queries.iter().map(|q| (CardSort::SortField, *q)) {
+    for q in BENCH_QUERIES {
         let f = w.filter(q);
         let mut best = u128::MAX;
         let mut total = 0;
-        for _ in 0..5 {
+        for _ in 0..runs {
             let t = Instant::now();
             let p = w.fx.read(|r| {
                 r.search_cards(&CardSearch {
                     filter: f.clone(),
                     now: NOW,
-                    sort,
+                    sort: CardSort::SortField,
                     descending: true,
                     notes_only: false,
                     offset: 0,
@@ -621,10 +620,124 @@ fn bench_search_100k() {
             total = p.total;
         }
         worst = worst.max(best);
-        println!(
-            "{:>8.2} ms  {total:>6} hits  {sort:?}  {q}",
-            best as f64 / 1000.0
+        println!("{:>8.2} ms  {total:>6} hits  {q}", best as f64 / 1000.0);
+    }
+    worst
+}
+
+/// docs/04 v0.4: "100k notta arama < 100 ms". Run with
+/// `cargo test -p fc-storage --release -- --ignored --nocapture bench_search_100k`.
+#[test]
+#[ignore = "benchmark: builds a 100k-note database"]
+fn bench_search_100k() {
+    let w = world(100_000, 42);
+    let worst = bench(&w, 5);
+    assert!(worst < 100_000, "slowest query took {worst} µs");
+}
+
+/// The CI-sized benchmark (runs with every `cargo test`, not ignored): 20k notes, same
+/// queries. The docs/04 budget (100 ms for 100k notes) scales linearly to 20 ms; CI runners
+/// are shared and noisy, so the assertion allows 3× that. (Debug builds measure about the
+/// same as release here: the time is spent in SQLite, built with `opt-level = 1`.)
+#[test]
+fn bench_search_20k_scaled() {
+    let w = world(20_000, 42);
+    let budget_us: u128 = 60_000;
+    let worst = bench(&w, 3);
+    assert!(
+        worst < budget_us,
+        "slowest query took {worst} µs (budget {budget_us} µs)"
+    );
+}
+
+/// Pages read by walking a sort index (large result sets) equal sorting every match.
+#[test]
+fn ordered_scan_pages_match_a_full_sort() {
+    let w = world(20_400, 5);
+    let queries = [
+        "",
+        "tag:fiil -is:suspended",
+        "seviye>=B1",
+        "-zor:yes app",
+        "kilic",
+    ];
+    let sorts = [
+        (CardSort::SortField, "n.sort_field COLLATE NOCASE"),
+        (CardSort::Created, "c.created_at"),
+        (CardSort::Modified, "n.updated_at"),
+        (CardSort::Lapses, "c.lapses"),
+    ];
+    for q in queries {
+        let f = w.filter(q);
+        let ids = w.actual(&f);
+        for (sort, col) in sorts {
+            for descending in [false, true] {
+                let dir = if descending { "DESC" } else { "ASC" };
+                let expected: Vec<CardId> =
+                    w.fx.raw()
+                        .prepare(&format!(
+                            "SELECT c.id FROM cards c JOIN notes n ON n.id = c.note_id
+                     WHERE c.id IN (SELECT value FROM json_each(?1))
+                     ORDER BY {col} {dir}, c.id {dir}"
+                        ))
+                        .unwrap()
+                        .query_map([crate::sqlite::json_list(&ids)], |r| {
+                            Ok(r.get::<_, String>(0)?.parse::<CardId>().unwrap())
+                        })
+                        .unwrap()
+                        .map(Result::unwrap)
+                        .collect();
+                for (offset, limit) in [(0u32, 50u32), (1_000, 30), (20_390, 50)] {
+                    let page = w.fx.read(|r| {
+                        r.search_cards(&CardSearch {
+                            filter: f.clone(),
+                            now: NOW,
+                            sort,
+                            descending,
+                            notes_only: false,
+                            offset,
+                            limit,
+                        })
+                        .unwrap()
+                    });
+                    assert_eq!(page.total as usize, ids.len(), "{q}");
+                    let got: Vec<CardId> = page.hits.iter().map(|h| h.card.id).collect();
+                    let want: Vec<CardId> = expected
+                        .iter()
+                        .skip(offset as usize)
+                        .take(limit as usize)
+                        .copied()
+                        .collect();
+                    assert_eq!(got, want, "{q} {sort:?} desc={descending} offset={offset}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn migration_0301_adds_covering_indexes() {
+    let fx = Fx::new();
+    let conn = fx.raw();
+    for ix in ["notes_id_live", "cards_note_live", "notes_trashed"] {
+        assert!(
+            crate::migrate::schema_object_exists(&conn, ix).unwrap(),
+            "{ix}"
         );
     }
-    assert!(worst < 100_000, "slowest query took {worst} µs");
+    // The search join is answered from them.
+    let plan: Vec<String> = conn
+        .prepare(
+            "EXPLAIN QUERY PLAN SELECT count(*) FROM cards c JOIN notes n ON n.id = c.note_id
+             WHERE c.deleted_at IS NULL AND n.deleted_at IS NULL AND c.suspended = 0",
+        )
+        .unwrap()
+        .query_map([], |r| r.get::<_, String>(3))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert!(
+        plan.iter().all(|p| p.contains("COVERING INDEX")),
+        "{plan:?}"
+    );
 }

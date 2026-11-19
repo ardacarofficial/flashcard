@@ -106,7 +106,8 @@
       "duplicates": "Tekrarları bul",
       "trash": "Çöp kutusu",
       "check_database": "Veritabanını denetle",
-      "repair_database": "Veritabanını onar"
+      "repair_database": "Veritabanını onar",
+      "purge_trash": "Süresi dolan çöpü boşalt"
     },
     "palette": {
       "list": "Komut paleti girdileri"
@@ -115,6 +116,16 @@
       "list": "Klavye kısayolları",
       "set": "Kısayol değiştir",
       "reset": "Kısayolları sıfırla"
+    },
+    "presets": {
+      "list": "Deste ayar şablonları",
+      "get": "Şablon ayrıntısı",
+      "for_deck": "Destenin ayarları",
+      "create": "Yeni şablon",
+      "update": "Şablonu düzenle",
+      "clone": "Şablonu kopyala",
+      "delete": "Şablonu sil",
+      "assign": "Desteye şablon ata"
     }
   }
 }

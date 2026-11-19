@@ -1,0 +1,66 @@
+{
+  "nav": {
+    "presets": "Deste ayarları"
+  },
+  "modules": {
+    "presets": {
+      "name": "Deste ayarları",
+      "description": "Destelerin paylaştığı çalışma ayarı şablonları (günlük sınırlar, adımlar, hedef hatırlama)."
+    }
+  },
+  "presets": {
+    "heading": "Deste ayarları",
+    "intro": "Deste kendi şablonunu, yoksa üst destesininkini, o da yoksa varsayılanları kullanır.",
+    "list": "Şablonlar",
+    "none": "Henüz şablon yok: tüm desteler varsayılanları kullanıyor.",
+    "new": "Yeni şablon",
+    "new_name": "Ad",
+    "defaults_name": "Varsayılanlar",
+    "clone": "Kopyala",
+    "clone_suffix": "{name} (kopya)",
+    "delete": "Sil",
+    "save": "Kaydet",
+    "saved": "Kaydedildi.",
+    "decks": "Desteler",
+    "decks_none": "Hiçbir desteye atanmadı.",
+    "assign": "Destede kullan",
+    "assign_pick": "Deste seç",
+    "unassign": "“{path}” destesinden kaldır",
+    "advanced": "Gelişmiş",
+    "field": {
+      "name": "Ad",
+      "new_per_day": "Günlük yeni kart",
+      "reviews_per_day": "Günlük en çok tekrar",
+      "learning_steps_mins": "Öğrenme adımları (dakika)",
+      "relearning_steps_mins": "Yeniden öğrenme adımları (dakika)",
+      "steps_hint": "Boşlukla ayır, ör. 1 10",
+      "desired_retention": "Hedef hatırlama oranı",
+      "fsrs_weights": "FSRS parametreleri",
+      "fsrs_hint": "Boş = varsayılanlar. Optimizasyon doldurur.",
+      "bury_siblings": "İlişkili kartları yarına göm",
+      "new_order": "Yeni kart sırası",
+      "review_order": "Tekrar sırası"
+    },
+    "new_order": {
+      "added": "Eklenme sırası",
+      "random": "Rastgele"
+    },
+    "review_order": {
+      "due": "Vade tarihi",
+      "random": "Rastgele",
+      "retrievability": "En zayıf hatıra önce"
+    }
+  },
+  "errors": {
+    "validation": {
+      "preset_name": "Şablona bir ad ver (en çok 100 karakter).",
+      "preset_config": "Bir ayar izin verilen aralığın dışında."
+    },
+    "not_found": {
+      "preset": "Şablon bulunamadı."
+    },
+    "conflict": {
+      "preset_name": "Bu adda bir şablon zaten var."
+    }
+  }
+}

@@ -7,6 +7,7 @@
 //! [`resolve`] module docs.
 
 pub mod ast;
+pub mod canonical;
 pub mod error;
 pub mod eval;
 pub mod filter;

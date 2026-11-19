@@ -27,9 +27,14 @@ missing_search_index: Array<NoteId>,
  */
 cardless_notes: Array<NoteId>, 
 /**
- * Classification values of deleted entities (report only).
+ * Classification values of deleted entities (repair: remove them; they are invisible, so
+ * there is nothing observable to undo).
  */
 dangling_values: number, 
+/**
+ * Notes lacking a field their note type defines (repair: add it empty).
+ */
+broken_fields: Array<NoteId>, 
 /**
  * Nothing to repair.
  */

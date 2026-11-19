@@ -125,6 +125,8 @@ pub enum DomainEvent {
     },
     /// Saved queries changed (refetch `saved_queries.list`).
     SavedQueriesChanged,
+    /// Presets or deck preset assignments changed (refetch `presets.list`).
+    PresetsChanged,
     /// A batch was undone.
     Undone {
         /// Batch reverted.

@@ -409,4 +409,14 @@ impl PresetWrite for SqliteTx<'_, WriteMode> {
         )?;
         Ok(())
     }
+
+    fn delete_preset(&mut self, id: PresetId) -> StorageResult<bool> {
+        let n = exec(
+            self.conn(),
+            "presets",
+            "DELETE FROM presets WHERE id = ?1",
+            [id.to_string()],
+        )?;
+        Ok(n > 0)
+    }
 }

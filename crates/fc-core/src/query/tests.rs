@@ -212,6 +212,7 @@ impl World {
             tags: &self.tags,
             notetypes: &self.notetypes,
             attributes: &self.attrs,
+            flag_names: &[],
             now: NOW,
         }
     }
@@ -333,6 +334,65 @@ fn classifications_by_key_or_name_with_order_comparison() {
             "{query}: {f:?}"
         );
     }
+}
+
+#[test]
+fn stored_queries_follow_option_renames_and_reorders() {
+    use super::canonical::{attr_key, canonicalize, render};
+    let mut w = world();
+    let mut b1 = sample(1, 2, "apple");
+    b1.values = vec![(AttributeDefId(u(LEVEL)), choice(602))];
+    let mut c1 = sample(2, 2, "pear");
+    c1.values = vec![(AttributeDefId(u(LEVEL)), choice(604))];
+    let mut a2 = sample(3, 2, "fig");
+    a2.values = vec![(AttributeDefId(u(LEVEL)), choice(601))];
+    let hits = |w: &World, q: &str| {
+        let f = w.compile(q).unwrap_or_else(|e| panic!("{q}: {e}"));
+        [b1.hits(&f), c1.hits(&f), a2.hits(&f)]
+    };
+
+    let typed = "seviye>=B1  -sınav:\"TYT\" deck:Dil";
+    let stored = canonicalize(typed, &w.cat());
+    let level_key = attr_key(AttributeDefId(u(LEVEL)));
+    let b1_id = AttributeOptionId(u(602)).to_string();
+    assert_eq!(
+        stored,
+        format!(
+            "{level_key}>={b1_id}  -{}:{} deck:Dil",
+            attr_key(AttributeDefId(u(EXAM))),
+            AttributeOptionId(u(700))
+        )
+    );
+    // Idempotent, executable as is, and rendered back to what was typed (modulo key spelling).
+    assert_eq!(canonicalize(&stored, &w.cat()), stored);
+    assert_eq!(hits(&w, &stored), hits(&w, typed));
+    assert_eq!(hits(&w, &stored), [true, true, false]);
+    assert_eq!(render(&stored, &w.cat()), "level>=B1  -sinav:TYT deck:Dil");
+
+    // Rename B1 → "Orta seviye" and the classification key: the stored query still works and
+    // renders with the new names (quoted where needed); the old text no longer resolves.
+    let level = &mut w.attrs[0];
+    level.key = "cefr".into();
+    level.options[2].label = "Orta seviye".into();
+    assert_eq!(hits(&w, &stored), [true, true, false]);
+    assert_eq!(
+        render(&stored, &w.cat()),
+        "cefr>=\"Orta seviye\"  -sinav:TYT deck:Dil"
+    );
+    assert!(w.compile("level>=B1").is_err());
+
+    // Reorder: B1 moves below A2 → `>= B1` now also takes A2 (follows the current order).
+    let level = &mut w.attrs[0];
+    level.options[2].order = 0;
+    level.options[0].order = 2;
+    level.options[1].order = 1;
+    assert_eq!(hits(&w, &stored), [true, true, true]);
+    let shown = render(&stored, &w.cat());
+    assert_eq!(hits(&w, &shown), hits(&w, &stored));
+
+    // Unparsable text and non-classification terms are untouched.
+    assert_eq!(render("seviye:(", &w.cat()), "seviye:(");
+    assert_eq!(canonicalize("tag:fiil kilic", &w.cat()), "tag:fiil kilic");
 }
 
 #[test]

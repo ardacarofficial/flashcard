@@ -11,13 +11,13 @@
 //! | `notetype:` `note:` | note type name (glob) |
 //! | `type:` `card:` | card type engine id / template key |
 //! | `is:` | `new learn review relearn due suspended buried flagged` |
-//! | `flag:` | `0`/`none`, `1`–`7`, `red orange green blue purple` (TR names too), `*` |
+//! | `flag:` | `0`/`none`, `1`–`7`, `red orange green blue pink turquoise purple` (TR names too, plus [`Catalog::flag_names`]), `*` |
 //! | `stability` `difficulty` `lapses` `reps` | number with `= != < <= > >=` |
 //! | `retrievability` | FSRS recall probability now, `0..1` |
 //! | `added:N` `edited:N` `reviewed:N` | within the last N days; `due:N` = due within N days |
 //! | `re:` | regex over all fields; `<field>:re:<regex>` for one field |
 //! | `nid:` `cid:` | comma-separated ids |
-//! | classification key or name | `seviye:B1`, `seviye>=B1` (ordered lists), `sınav:TYT`, `puan>3`, `tarih<2025-01-01`, `x:*` = has a value |
+//! | classification key or name | `seviye:B1`, `seviye>=B1` (ordered lists), `sınav:TYT`, `puan>3`, `tarih<2025-01-01`, `x:*` = has a value; canonical `attr_<id>` keys and option ids too ([`super::canonical`]) |
 //! | field key or name | whole-field glob: `kelime:app*` |
 //!
 //! `k!=v` is `-k:v` (also true when there is no value).
@@ -46,11 +46,15 @@ pub struct Catalog<'a> {
     pub notetypes: &'a [NoteType],
     /// Classification definitions (trashed ones are ignored).
     pub attributes: &'a [AttributeDef],
+    /// User-defined flag names (`name`, flag number 1–7), matched folded in addition to
+    /// [`FLAG_NAMES`]. Empty until custom flag names exist (v0.3 `card_flag_defs`).
+    pub flag_names: &'a [(String, u32)],
     /// "Now" for relative times (`added:7`, `is:due`, retrievability).
     pub now: Timestamp,
 }
 
-/// Flag colors (1-based flag number = bit + 1), English and Turkish names.
+/// Built-in flag colors (1-based flag number = bit + 1, Anki's numbering), English and Turkish
+/// names (folded).
 pub const FLAG_NAMES: &[(&str, u32)] = &[
     ("red", 1),
     ("kirmizi", 1),
@@ -60,8 +64,12 @@ pub const FLAG_NAMES: &[(&str, u32)] = &[
     ("yesil", 3),
     ("blue", 4),
     ("mavi", 4),
-    ("purple", 5),
-    ("mor", 5),
+    ("pink", 5),
+    ("pembe", 5),
+    ("turquoise", 6),
+    ("turkuaz", 6),
+    ("purple", 7),
+    ("mor", 7),
 ];
 
 /// Highest flag number.
@@ -320,6 +328,15 @@ impl<'a> Resolver<'a> {
                                 .iter()
                                 .find(|(name, _)| *name == other)
                                 .map(|(_, n)| *n)
+                        })
+                        .or_else(|| {
+                            self.cat
+                                .flag_names
+                                .iter()
+                                .find(|(name, n)| {
+                                    fold(name.trim()) == other && (1..=MAX_FLAG).contains(n)
+                                })
+                                .map(|(_, n)| *n)
                         }),
                 };
                 match n {
@@ -385,12 +402,7 @@ impl<'a> Resolver<'a> {
     }
 
     fn attribute_or_field(&self, t: &Term, k: &str) -> Result<Filter, QueryError> {
-        let defs: Vec<&AttributeDef> = self
-            .cat
-            .attributes
-            .iter()
-            .filter(|d| d.deleted_at.is_none() && (fold(&d.key) == k || name_key(&d.name) == k))
-            .collect();
+        let defs: Vec<&AttributeDef> = super::canonical::defs_named(self.cat.attributes, k);
         if !defs.is_empty() {
             return attribute(t, &defs);
         }
@@ -574,7 +586,11 @@ fn attr_test(def: &AttributeDef, t: &Term) -> Result<Option<AttrTest>, QueryErro
                 return Err(unsupported(t));
             }
             let wanted = fold(value);
-            let Some(pivot) = def.options.iter().find(|o| fold(&o.label) == wanted) else {
+            let Some(pivot) = def
+                .options
+                .iter()
+                .find(|o| fold(&o.label) == wanted || o.id.to_string() == value)
+            else {
                 return Ok(None);
             };
             let ids: Vec<_> = def

@@ -46,6 +46,10 @@
 
   // Bulk inputs.
   let moveTo = $state<string>('');
+  // Anki's numbering: 1 red, 2 orange, 3 green, 4 blue, 5 pink, 6 turquoise, 7 purple. Labels
+  // come from `browse.flags.<n>` until v0.3's custom flag names (`card_flag_defs`) are merged;
+  // the backend binding point is `fc-app modules/browse::flag_names`.
+  const FLAGS = [1, 2, 3, 4, 5, 6, 7] as const;
   let flag = $state(1);
   let tag = $state('');
   let find = $state('');
@@ -282,7 +286,7 @@
         </div>
         <div class="row">
           <select bind:value={flag} aria-label={t('browse.bulk.flag')}>
-            {#each [1, 2, 3, 4, 5] as f (f)}<option value={f}>{td(`browse.flags.${f}`)}</option>{/each}
+            {#each FLAGS as f (f)}<option value={f}>{td(`browse.flags.${f}`)}</option>{/each}
           </select>
           <button onclick={() => bulk(() => api.call('bulk.set_flag', { card_ids: cards, flag, on: true }))}>{t('browse.bulk.flag')}</button>
           <button onclick={() => bulk(() => api.call('bulk.set_flag', { card_ids: cards, flag: 0, on: false }))}>{t('browse.bulk.flag_clear')}</button>

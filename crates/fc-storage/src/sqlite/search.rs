@@ -8,8 +8,8 @@
 use super::{all, exec, id, json_list, one, ts, Mode, SqliteTx, WriteMode};
 use crate::error::StorageResult;
 use crate::repo::{
-    CardHit, CardSearch, CardSort, IntegrityReport, ReviewEntry, SearchPage, SearchRead,
-    SearchWrite,
+    CardHit, CardSearch, CardSort, IntegrityReport, PurgeCounts, ReviewEntry, SearchPage,
+    SearchRead, SearchWrite,
 };
 use fc_core::attribute::AttributeTarget;
 use fc_core::card::Card;
@@ -104,6 +104,16 @@ pub(crate) fn fts_text(text: &str) -> String {
 struct Sql {
     text: String,
     params: Vec<SqlValue>,
+    /// Compile set membership (tags, classifications) as correlated `EXISTS` index probes
+    /// instead of `IN (subquery)`. `IN` materializes the whole set once (best when every row
+    /// is visited anyway: counts, full sorts); `EXISTS` costs one probe per visited row (best
+    /// for an ordered scan that stops after one page).
+    correlated: bool,
+    /// Expression for the card's note id: `c.note_id` until a predicate needs a note column
+    /// (then the query joins `notes n` and uses `n.id`).
+    note: &'static str,
+    /// Some predicate read a `notes` column (`n.…`).
+    needs_note: bool,
 }
 
 impl Sql {
@@ -138,7 +148,7 @@ fn fts_phrase(tokens: &[String], prefix: bool) -> String {
 
 /// `negated`: whether `f` sits under a `NOT`. Only there must a predicate be made non-`NULL`
 /// (`coalesce`); in positive position `NULL` already rejects the row, and leaving the bare
-/// predicate lets the planner drive the query from an index (`n.id IN (…)`).
+/// predicate lets the planner drive the query from an index (`c.note_id IN (…)`).
 fn compile(f: &Filter, now: Timestamp, negated: bool, out: &mut Sql) -> String {
     match f {
         Filter::All => "1".into(),
@@ -167,17 +177,23 @@ fn compile(f: &Filter, now: Timestamp, negated: bool, out: &mut Sql) -> String {
 }
 
 fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
+    let note: &'static str = out.note;
     match p {
         Pred::Text { tokens, prefix } => {
             let q = out.param(fts_phrase(tokens, *prefix));
+            out.needs_note = true;
             format!("n.fts_rowid IN (SELECT rowid FROM notes_fts WHERE notes_fts MATCH {q})")
         }
-        Pred::TextGlob(g) => format!("fc_text_glob(n.fields, {})", out.param(g.clone())),
+        Pred::TextGlob(g) => {
+            out.needs_note = true;
+            format!("fc_text_glob(n.fields, {})", out.param(g.clone()))
+        }
         Pred::Field {
             keys,
             glob,
             indexed,
         } => {
+            out.needs_note = true;
             // Narrow by the full-text index when possible, then check the field exactly.
             // SQLite's JSON extraction is much cheaper than decoding every note in Rust.
             let toks = if *indexed {
@@ -213,6 +229,7 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
             }
         }
         Pred::Regex { keys, pattern } => {
+            out.needs_note = true;
             let k = match keys {
                 Some(keys) => out.param(json(keys)),
                 None => "NULL".into(),
@@ -221,12 +238,24 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
             format!("fc_regex(n.fields, {k}, {r})")
         }
         Pred::Decks(ids) => format!("c.deck_id IN {}", out.list(ids)),
-        Pred::Tags(ids) => format!(
-            "n.id IN (SELECT note_id FROM note_tags WHERE tag_id IN {})",
+        Pred::Tags(ids) if out.correlated => format!(
+            "EXISTS (SELECT 1 FROM note_tags WHERE note_id = {} AND tag_id IN {})",
+            note,
             out.list(ids)
         ),
-        Pred::Untagged => "NOT EXISTS (SELECT 1 FROM note_tags WHERE note_id = n.id)".into(),
-        Pred::NoteTypes(ids) => format!("n.notetype_id IN {}", out.list(ids)),
+        Pred::Tags(ids) => format!(
+            "{} IN (SELECT note_id FROM note_tags WHERE tag_id IN {})",
+            note,
+            out.list(ids)
+        ),
+        Pred::Untagged => format!(
+            "NOT EXISTS (SELECT 1 FROM note_tags WHERE note_id = {})",
+            out.note
+        ),
+        Pred::NoteTypes(ids) => {
+            out.needs_note = true;
+            format!("n.notetype_id IN {}", out.list(ids))
+        }
         Pred::CardType(t) => format!("fc_fold(c.card_type) = {}", out.param(t.clone())),
         Pred::Template(t) => format!("fc_fold(c.template_key) = {}", out.param(t.clone())),
         Pred::State(s) => format!("c.state = {}", out.param(s.as_str().to_owned())),
@@ -265,7 +294,10 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
         Pred::Time(col, op, at) => {
             let col = match col {
                 TimeCol::CardCreated => "c.created_at",
-                TimeCol::NoteEdited => "n.updated_at",
+                TimeCol::NoteEdited => {
+                    out.needs_note = true;
+                    "n.updated_at"
+                }
                 TimeCol::LastReview => "c.last_review",
                 TimeCol::Due => "(CASE WHEN c.state <> 'new' THEN c.due END)",
             };
@@ -276,7 +308,7 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
                 .iter()
                 .map(|alt| {
                     let (entity, kind) = match alt.target {
-                        AttributeTarget::Note => ("n.id", "note"),
+                        AttributeTarget::Note => (note, "note"),
                         AttributeTarget::Card => ("c.id", "card"),
                     };
                     let a = out.param(alt.attr_id.to_string());
@@ -297,10 +329,17 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
                             out.param(if *b { "true" } else { "false" }.to_owned())
                         ),
                     };
-                    format!(
-                        "{entity} IN (SELECT entity_id FROM attribute_values \
-                         WHERE attr_id = {a} AND entity_kind = '{kind}'{test})"
-                    )
+                    if out.correlated {
+                        format!(
+                            "EXISTS (SELECT 1 FROM attribute_values WHERE attr_id = {a} \
+                             AND entity_kind = '{kind}' AND entity_id = {entity}{test})"
+                        )
+                    } else {
+                        format!(
+                            "{entity} IN (SELECT entity_id FROM attribute_values \
+                             WHERE attr_id = {a} AND entity_kind = '{kind}'{test})"
+                        )
+                    }
                 })
                 .collect();
             if parts.is_empty() {
@@ -310,7 +349,8 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
             }
         }
         Pred::NoteIds(ids) => format!(
-            "n.id IN (SELECT value FROM json_each({}))",
+            "{} IN (SELECT value FROM json_each({}))",
+            note,
             out.param(json(ids))
         ),
         Pred::CardIds(ids) => format!(
@@ -321,17 +361,72 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
 }
 
 /// `FROM … WHERE …` selecting live cards of live notes matching `filter` (aliases `c`, `n`).
+/// `from` is the join (see [`ordered_from`]); `correlated` as in [`Sql::correlated`].
+fn matching_from(filter: &Filter, now: Timestamp, from: &str, correlated: bool) -> Sql {
+    let mut sql = Sql {
+        text: String::new(),
+        params: Vec::new(),
+        correlated,
+        note: "n.id",
+        needs_note: true,
+    };
+    let cond = compile(filter, now, false, &mut sql);
+    sql.text =
+        format!("FROM {from} WHERE c.deleted_at IS NULL AND n.deleted_at IS NULL AND {cond}");
+    sql
+}
+
+/// [`matching_from`] with the planner's choice of join and materialized sets. When no
+/// predicate reads a note column the `notes` join is left out: the note's liveness is then a
+/// probe into the (small) set of trashed notes, and the whole match is answered from card
+/// indexes. (A card whose note row is missing altogether would match; foreign keys prevent
+/// that and the database check reports it.)
 fn matching(filter: &Filter, now: Timestamp) -> Sql {
     let mut sql = Sql {
         text: String::new(),
         params: Vec::new(),
+        correlated: false,
+        note: "c.note_id",
+        needs_note: false,
     };
     let cond = compile(filter, now, false, &mut sql);
+    if sql.needs_note {
+        return matching_from(
+            filter,
+            now,
+            "cards c JOIN notes n ON n.id = c.note_id",
+            false,
+        );
+    }
     sql.text = format!(
-        "FROM cards c JOIN notes n ON n.id = c.note_id \
-         WHERE c.deleted_at IS NULL AND n.deleted_at IS NULL AND {cond}"
+        "FROM cards c WHERE c.deleted_at IS NULL AND c.note_id NOT IN \
+         (SELECT id FROM notes INDEXED BY notes_trashed WHERE deleted_at IS NOT NULL) AND {cond}"
     );
     sql
+}
+
+/// Matches from which a page is read by walking the sort column's index (stopping after
+/// `offset + limit` hits) instead of sorting every match. Below it, sorting the matched ids
+/// is cheap; above it, matches are dense enough that the walk finds a page quickly even when
+/// they cluster at the far end of the sort order (every visited row costs a few index probes).
+const ORDERED_SCAN_MIN: usize = 20_000;
+
+/// Join that walks the index of `sort` in order (`CROSS JOIN` pins the outer table), for the
+/// sort columns that have one. The inner table is pinned to its id index too: a filter
+/// column index (`cards_deck_due` for `deck:`) would turn every probe into a range scan.
+fn ordered_from(sort: CardSort) -> Option<&'static str> {
+    match sort {
+        CardSort::SortField => {
+            Some("notes n INDEXED BY notes_sort_field CROSS JOIN cards c INDEXED BY cards_note_live ON c.note_id = n.id")
+        }
+        CardSort::Created => {
+            Some("cards c INDEXED BY cards_created CROSS JOIN notes n INDEXED BY notes_id_live ON n.id = c.note_id")
+        }
+        CardSort::Modified => {
+            Some("notes n INDEXED BY notes_updated CROSS JOIN cards c INDEXED BY cards_note_live ON c.note_id = n.id")
+        }
+        _ => None,
+    }
 }
 
 fn order_by(sort: CardSort, desc: bool) -> String {
@@ -353,6 +448,29 @@ fn card_ids(conn: &Connection, sql: &str, params: &[SqlValue]) -> StorageResult<
     all(conn, "cards", sql, params_from_iter(params.iter()), |r| {
         id(r, 0)
     })
+}
+
+/// Runs a query whose first column is a card rowid; returns the row count and the rowids as
+/// a JSON array (tens of thousands of matches are counted and handed back to SQLite without
+/// materializing ids in Rust).
+fn rowid_list(conn: &Connection, sql: &str, params: &[SqlValue]) -> StorageResult<(usize, String)> {
+    let run = || -> rusqlite::Result<(usize, String)> {
+        let mut stmt = conn.prepare_cached(sql)?;
+        let mut rows = stmt.query(params_from_iter(params.iter()))?;
+        let mut n = 0usize;
+        let mut out = String::from("[");
+        while let Some(r) = rows.next()? {
+            let rowid: i64 = r.get(0)?;
+            if n > 0 {
+                out.push(',');
+            }
+            out.push_str(&rowid.to_string());
+            n += 1;
+        }
+        out.push(']');
+        Ok((n, out))
+    };
+    run().map_err(|e| crate::error::in_table(e, "cards"))
 }
 
 impl<M: Mode> SqliteTx<'_, M> {
@@ -417,50 +535,59 @@ impl<M: Mode> SqliteTx<'_, M> {
 
 impl<M: Mode> SearchRead for SqliteTx<'_, M> {
     fn search_cards(&self, s: &CardSearch) -> StorageResult<SearchPage> {
+        // 1. One pass over the filter collects every match, unsorted: the total, and the
+        //    rowids to sort for small sets. (A window count would force every match to be
+        //    sorted, even when the page can be read off an index.)
         let m = matching(&s.filter, s.now);
-        let from = if s.notes_only {
-            format!(
-                "FROM cards c JOIN notes n ON n.id = c.note_id WHERE c.id IN \
-                 (SELECT min(c.id) {} GROUP BY c.note_id)",
-                m.text
-            )
+        let ids_sql = if s.notes_only {
+            // The first matching card of each note represents it (`c.rowid` is a bare
+            // column: SQLite takes it from the row holding `min(c.id)`).
+            format!("SELECT c.rowid, min(c.id) {} GROUP BY c.note_id", m.text)
         } else {
-            m.text.clone()
+            format!("SELECT c.rowid {}", m.text)
         };
-        // One pass: the window count is computed over every match before LIMIT applies.
-        let mut params = m.params.clone();
+        let (matched, matched_json) = rowid_list(self.conn(), &ids_sql, &m.params)?;
+        let total = u32::try_from(matched).unwrap_or(u32::MAX);
+        if s.offset >= total {
+            return Ok(SearchPage {
+                hits: Vec::new(),
+                total,
+            });
+        }
+        // 2. The page: walk the sort index for big sets, otherwise sort the matches.
+        let ordered = (!s.notes_only && matched >= ORDERED_SCAN_MIN)
+            .then(|| ordered_from(s.sort))
+            .flatten();
+        let (from, mut params) = match ordered {
+            Some(join) => {
+                let page = matching_from(&s.filter, s.now, join, true);
+                (page.text, page.params)
+            }
+            None => {
+                // Pinned join from the rowid list; notes only when sorting by a note column.
+                let notes = if matches!(s.sort, CardSort::SortField | CardSort::Modified) {
+                    " CROSS JOIN notes n ON n.id = c.note_id"
+                } else {
+                    ""
+                };
+                (
+                    format!("FROM json_each(?1) j CROSS JOIN cards c ON c.rowid = j.value{notes}"),
+                    vec![SqlValue::Text(matched_json)],
+                )
+            }
+        };
         params.push(SqlValue::Integer(i64::from(s.limit)));
         params.push(SqlValue::Integer(i64::from(s.offset)));
         let n = params.len();
         let sql = format!(
-            "SELECT c.id, count(*) OVER () {from} {} LIMIT ?{} OFFSET ?{n}",
+            "SELECT c.id {from} {} LIMIT ?{} OFFSET ?{n}",
             order_by(s.sort, s.descending),
             n - 1
         );
-        let rows: Vec<(CardId, i64)> = all(
-            self.conn(),
-            "cards",
-            &sql,
-            params_from_iter(params.iter()),
-            |r| Ok((id(r, 0)?, r.get(1)?)),
-        )?;
-        let total = match rows.first() {
-            Some((_, t)) => *t,
-            // Past the end: count separately.
-            None if s.offset > 0 => one(
-                self.conn(),
-                "cards",
-                &format!("SELECT count(*) {from}"),
-                params_from_iter(m.params.iter()),
-                |r| r.get(0),
-            )?
-            .unwrap_or(0),
-            None => 0,
-        };
-        let ids: Vec<CardId> = rows.into_iter().map(|(c, _)| c).collect();
+        let ids = card_ids(self.conn(), &sql, &params)?;
         Ok(SearchPage {
             hits: self.hits(&ids)?,
-            total: u32::try_from(total).unwrap_or(u32::MAX),
+            total,
         })
     }
 
@@ -598,15 +725,19 @@ impl<M: Mode> SearchRead for SqliteTx<'_, M> {
             dangling_values: one(
                 conn,
                 "attribute_values",
-                "SELECT count(*) FROM attribute_values v
-                 WHERE (v.entity_kind = 'note' AND NOT EXISTS
-                          (SELECT 1 FROM notes WHERE id = v.entity_id))
-                    OR (v.entity_kind = 'card' AND NOT EXISTS
-                          (SELECT 1 FROM cards WHERE id = v.entity_id))",
+                &format!("SELECT count(*) FROM attribute_values v WHERE {DANGLING_VALUES}"),
                 [],
                 |r| r.get::<_, u32>(0),
             )?
             .unwrap_or(0),
+            broken_fields: notes(
+                "SELECT n.id FROM notes n JOIN notetypes t ON t.id = n.notetype_id
+                 WHERE n.deleted_at IS NULL AND EXISTS (
+                   SELECT 1 FROM json_each(t.fields) f
+                   WHERE json_type(n.fields) IS NOT 'object' OR NOT EXISTS
+                     (SELECT 1 FROM json_each(n.fields) nf WHERE nf.key = f.value ->> '$.key'))
+                 ORDER BY n.id",
+            )?,
         })
     }
 }
@@ -623,7 +754,72 @@ fn saved_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<SavedQuery> {
     })
 }
 
+/// Values whose entity row is gone (shared by the report and the cleanup).
+const DANGLING_VALUES: &str = "(v.entity_kind = 'note' AND NOT EXISTS
+      (SELECT 1 FROM notes WHERE id = v.entity_id))
+   OR (v.entity_kind = 'card' AND NOT EXISTS
+      (SELECT 1 FROM cards WHERE id = v.entity_id))";
+
 impl SearchWrite for SqliteTx<'_, WriteMode> {
+    fn purge_trash(&mut self, before: Timestamp) -> StorageResult<PurgeCounts> {
+        let conn = self.conn();
+        let t = before.0;
+        exec(
+            conn,
+            "notes_fts",
+            "DELETE FROM notes_fts WHERE rowid IN (SELECT fts_rowid FROM notes
+               WHERE deleted_at IS NOT NULL AND deleted_at < ?1 AND fts_rowid IS NOT NULL)",
+            [t],
+        )?;
+        // Cards, review history, tag links and note links cascade.
+        let notes = exec(
+            conn,
+            "notes",
+            "DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?1",
+            [t],
+        )?;
+        let cards = exec(
+            conn,
+            "cards",
+            "DELETE FROM cards WHERE deleted_at IS NOT NULL AND deleted_at < ?1",
+            [t],
+        )?;
+        // Leaves first: repeat until no trashed deck is free of references.
+        let mut decks = 0;
+        loop {
+            let n = exec(
+                conn,
+                "decks",
+                "DELETE FROM decks AS d WHERE d.deleted_at IS NOT NULL AND d.deleted_at < ?1
+                   AND NOT EXISTS (SELECT 1 FROM decks c WHERE c.parent_id = d.id)
+                   AND NOT EXISTS (SELECT 1 FROM cards WHERE deck_id = d.id)
+                   AND NOT EXISTS (SELECT 1 FROM notes WHERE home_deck_id = d.id)
+                   AND NOT EXISTS (SELECT 1 FROM attribute_defs WHERE scope_deck_id = d.id)",
+                [t],
+            )?;
+            if n == 0 {
+                break;
+            }
+            decks += n;
+        }
+        self.delete_dangling_values()?;
+        Ok(PurgeCounts {
+            notes: super::count(notes),
+            cards: super::count(cards),
+            decks: super::count(decks),
+        })
+    }
+
+    fn delete_dangling_values(&mut self) -> StorageResult<u32> {
+        let n = exec(
+            self.conn(),
+            "attribute_values",
+            &format!("DELETE FROM attribute_values AS v WHERE {DANGLING_VALUES}"),
+            [],
+        )?;
+        Ok(super::count(n))
+    }
+
     fn upsert_saved_query(&mut self, q: &SavedQuery) -> StorageResult<()> {
         exec(
             self.conn(),

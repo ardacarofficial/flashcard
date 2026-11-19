@@ -128,8 +128,11 @@ pub struct DatabaseReport {
     pub missing_search_index: Vec<NoteId>,
     /// Notes without any card (report only).
     pub cardless_notes: Vec<NoteId>,
-    /// Classification values of deleted entities (report only).
+    /// Classification values of deleted entities (repair: remove them; they are invisible, so
+    /// there is nothing observable to undo).
     pub dangling_values: u32,
+    /// Notes lacking a field their note type defines (repair: add it empty).
+    pub broken_fields: Vec<NoteId>,
     /// Nothing to repair.
     pub healthy: bool,
 }
@@ -143,6 +146,32 @@ pub struct RepairResult {
     pub rescheduled_cards: u32,
     /// Notes re-indexed.
     pub reindexed_notes: u32,
+    /// Notes given their missing fields.
+    pub fixed_notes: u32,
+    /// Dangling classification values removed.
+    pub removed_values: u32,
+}
+
+/// `browse.purge_trash`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PurgeTrash {
+    /// Purge what was trashed more than this many days ago (`null` = the
+    /// `browse.trash_retention_days` setting; `0` = everything, "empty the trash").
+    pub older_than_days: Option<u32>,
+}
+
+/// Response of `browse.purge_trash`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct PurgeResult {
+    /// Notes deleted for good (with their cards).
+    pub notes: u32,
+    /// Cards trashed on their own, deleted for good.
+    pub cards: u32,
+    /// Decks deleted for good.
+    pub decks: u32,
+    /// Everything trashed before this moment was eligible.
+    pub before: Timestamp,
 }
 
 /// Where a shortcut is active.

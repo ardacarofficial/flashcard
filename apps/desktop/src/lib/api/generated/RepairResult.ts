@@ -15,4 +15,12 @@ rescheduled_cards: number,
 /**
  * Notes re-indexed.
  */
-reindexed_notes: number, };
+reindexed_notes: number, 
+/**
+ * Notes given their missing fields.
+ */
+fixed_notes: number, 
+/**
+ * Dangling classification values removed.
+ */
+removed_values: number, };

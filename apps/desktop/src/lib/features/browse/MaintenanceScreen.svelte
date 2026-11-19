@@ -11,6 +11,8 @@
   let dups = $state<DuplicateGroup[] | null>(null);
   let report = $state<DatabaseReport | null>(null);
   let repaired = $state<string | null>(null);
+  let purged = $state<string | null>(null);
+  let retention = $state<number | null>(null);
 
   const PROBLEMS = [
     'orphan_cards',
@@ -18,6 +20,7 @@
     'unscheduled_cards',
     'missing_search_index',
     'cardless_notes',
+    'broken_fields',
   ] as const;
 
   const fmt = (ms: number) => new Date(ms).toLocaleString(i18n.locale);
@@ -42,13 +45,35 @@
         trashed: r.trashed_cards,
         rescheduled: r.rescheduled_cards,
         reindexed: r.reindexed_notes,
+        fixed: r.fixed_notes,
+        removed: r.removed_values,
       });
     });
     if (ok) report = await api.call('browse.check_database', {});
   }
 
+  async function emptyTrash() {
+    await ctx.guarded(async () => {
+      const r = await api.call('browse.purge_trash', { older_than_days: 0 });
+      purged = t('maintenance.purged', { count: r.notes + r.cards + r.decks });
+    });
+    await loadTrash();
+  }
+
+  // Only a hint: without the setting (e.g. the dev mock) the line is simply not shown.
+  async function loadRetention() {
+    try {
+      const s = await api.call('settings.get', { scope: { kind: 'app' }, keys: ['browse.trash_retention_days'] });
+      const v = s.values[0]?.value;
+      retention = typeof v === 'number' ? v : null;
+    } catch {
+      retention = null;
+    }
+  }
+
   onMount(() => {
     void loadTrash();
+    void loadRetention();
     const unsub = api.on(['notes_', 'deck_', 'undone', 'redone'], () => void loadTrash());
     return () => void unsub.then((u) => u());
   });
@@ -58,6 +83,8 @@
 
 <section>
   <h3>{t('maintenance.trash')}</h3>
+  {#if retention !== null}<p class="muted">{t('maintenance.purge_hint', { days: retention })}</p>{/if}
+  {#if purged}<p role="status">{purged}</p>{/if}
   {#if trash && trash.decks.length === 0 && trash.notes.length === 0}
     <p class="muted">{t('maintenance.trash_empty')}</p>
   {:else if trash}
@@ -79,6 +106,7 @@
         {/each}
       </ul>
     {/if}
+    <button onclick={() => void emptyTrash()}>{t('maintenance.purge')}</button>
   {/if}
 </section>
 
@@ -101,7 +129,7 @@
   <button onclick={() => void check()}>{t('maintenance.run_check')}</button>
   {#if repaired}<p role="status">{repaired}</p>{/if}
   {#if report}
-    {#if report.healthy && report.cardless_notes.length === 0 && report.dangling_values === 0}
+    {#if report.healthy && report.cardless_notes.length === 0}
       <p class="muted">{t('maintenance.healthy')}</p>
     {:else}
       <ul>

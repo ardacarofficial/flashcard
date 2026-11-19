@@ -82,7 +82,9 @@
       "2": "Orange",
       "3": "Green",
       "4": "Blue",
-      "5": "Purple"
+      "5": "Pink",
+      "6": "Turquoise",
+      "7": "Purple"
     },
     "info": {
       "heading": "Card info",
@@ -111,15 +113,19 @@
     "run_check": "Check",
     "healthy": "No problems found.",
     "repair": "Repair",
-    "repaired": "Repaired: {trashed} card(s) to trash, {rescheduled} rescheduled, {reindexed} note(s) re-indexed.",
+    "repaired": "Repaired: {trashed} card(s) to trash, {rescheduled} rescheduled, {reindexed} note(s) re-indexed, {fixed} note(s) given missing fields, {removed} stray value(s) removed.",
     "problem": {
       "orphan_cards": "Cards of deleted notes: {count}",
       "cards_in_trashed_decks": "Cards in deleted decks: {count}",
       "unscheduled_cards": "Scheduled cards without a due date: {count}",
       "missing_search_index": "Notes missing from search: {count}",
       "cardless_notes": "Notes without cards: {count}",
-      "dangling_values": "Classification values of deleted items: {count}"
-    }
+      "dangling_values": "Classification values of deleted items: {count}",
+      "broken_fields": "Notes missing fields: {count}"
+    },
+    "purge": "Empty trash",
+    "purge_hint": "Items are deleted for good after {days} days in the trash (Settings).",
+    "purged": "{count} item(s) deleted for good."
   },
   "palette": {
     "title": "Command palette",
@@ -192,6 +198,14 @@
       "invalid_flag": "Unknown flag “{value}”.",
       "invalid_id": "“{value}” is not an id.",
       "invalid_regex": "Invalid regular expression: {message}"
+    }
+  },
+  "settings": {
+    "browse": {
+      "trash_retention_days": {
+        "label": "Keep trash for (days)",
+        "description": "Deleted decks and notes can be restored for this many days, then they are deleted for good."
+      }
     }
   }
 }

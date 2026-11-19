@@ -9,6 +9,9 @@ mod maintenance;
 mod search;
 #[cfg(test)]
 mod tests;
+mod trash;
+
+pub use trash::{purge_on_startup, PurgeTrashJob, DEFAULT_RETENTION_DAYS, RETENTION_KEY};
 
 use crate::error::{AppError, AppResult};
 use crate::module::{main_menu, ModuleDescriptor};
@@ -34,7 +37,7 @@ pub fn descriptor() -> ModuleDescriptor {
         description_key: "modules.browse.description",
         enabled_by_default: true,
         can_disable: true,
-        settings: vec![],
+        settings: vec![trash::retention_setting()],
         ui: vec![
             main_menu("browse.cards", "nav.browse", "search", "/browse", 35),
             main_menu("browse.maintenance", "nav.maintenance", "wrench", "/maintenance", 90),
@@ -70,6 +73,7 @@ pub fn register(reg: &mut Registry) {
     reg.query::<BrowseTrash>(maintenance::trash);
     reg.query::<BrowseCheckDatabase>(maintenance::check_database);
     reg.command::<BrowseRepairDatabase>(maintenance::repair_database);
+    reg.command::<BrowsePurgeTrash>(trash::purge);
 }
 
 /// The wire form of a query error.
@@ -98,20 +102,57 @@ pub(crate) fn query_error(e: &QueryError) -> AppError {
     AppError::Api(api)
 }
 
+/// Owned snapshot of everything query names resolve against.
+pub(crate) struct CatalogData {
+    decks: Vec<fc_core::deck::Deck>,
+    tags: Vec<Tag>,
+    notetypes: Vec<fc_core::notetype::NoteType>,
+    attributes: Vec<fc_core::attribute::AttributeDef>,
+    flag_names: Vec<(String, u32)>,
+    now: Timestamp,
+}
+
+impl CatalogData {
+    /// Loads the current catalog.
+    pub(crate) fn load(reads: &dyn Reads, now: Timestamp) -> AppResult<Self> {
+        Ok(Self {
+            decks: reads.list_decks(true)?,
+            tags: reads.list_tags()?.into_iter().map(|(t, _)| t).collect(),
+            notetypes: reads.list_notetypes(true)?,
+            attributes: reads.list_attribute_defs(false)?,
+            flag_names: flag_names(reads)?,
+            now,
+        })
+    }
+
+    /// The borrowed view the resolver takes.
+    pub(crate) fn catalog(&self) -> Catalog<'_> {
+        Catalog {
+            decks: &self.decks,
+            tags: &self.tags,
+            notetypes: &self.notetypes,
+            attributes: &self.attributes,
+            flag_names: &self.flag_names,
+            now: self.now,
+        }
+    }
+}
+
+/// User-defined flag names for `flag:<name>` (in addition to the built-in color names,
+/// `fc_core::query::resolve::FLAG_NAMES`, numbered like Anki: 1 red … 7 purple).
+///
+/// **Phase-2 binding point (v0.3 `card_flag_defs`):** after the merge, return
+/// `(name, flag number)` rows from v0.3's flag definitions here. This is the only place the
+/// backend needs it; the browser UI labels flags from the same source (`browse.flags.<n>`
+/// i18n keys until then).
+fn flag_names(_reads: &dyn Reads) -> AppResult<Vec<(String, u32)>> {
+    Ok(Vec::new())
+}
+
 /// Parses and resolves `text` against the current catalog.
 pub(crate) fn compile(reads: &dyn Reads, text: &str, now: Timestamp) -> AppResult<Filter> {
-    let decks = reads.list_decks(true)?;
-    let tags: Vec<Tag> = reads.list_tags()?.into_iter().map(|(t, _)| t).collect();
-    let notetypes = reads.list_notetypes(true)?;
-    let attributes = reads.list_attribute_defs(false)?;
-    let cat = Catalog {
-        decks: &decks,
-        tags: &tags,
-        notetypes: &notetypes,
-        attributes: &attributes,
-        now,
-    };
-    compile_query(text, &cat).map_err(|e| query_error(&e))
+    let data = CatalogData::load(reads, now)?;
+    compile_query(text, &data.catalog()).map_err(|e| query_error(&e))
 }
 
 /// Browser row of a hit.

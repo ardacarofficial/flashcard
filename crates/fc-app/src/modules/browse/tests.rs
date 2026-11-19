@@ -18,6 +18,7 @@ use fc_api::v1::modules::SetModuleEnabled;
 use fc_api::v1::notes::*;
 use fc_api::v1::oplog::ListOplog;
 use fc_api::v1::search::*;
+use fc_api::v1::settings::SetSetting;
 use fc_api::{ErrorCode, Visibility};
 use fc_core::attribute::{AttributeKind, AttributeValue};
 use fc_core::card::{CardState, SchedulingState};
@@ -52,11 +53,14 @@ suite!(
     search_with_classifications_and_paging,
     search_errors_are_positioned,
     saved_queries_crud_undo,
+    saved_queries_follow_option_renames_and_reorders,
     bulk_attribute_skips_inapplicable_and_restores,
     find_replace_and_tags,
+    undo_restores_modification_times,
     palette_lists_every_registry_command,
     shortcuts_set_conflict_reset_undo,
     card_info_duplicates_trash,
+    trash_is_purged_after_retention,
     database_check_and_repair_undo,
     module_can_be_disabled,
 );
@@ -436,6 +440,102 @@ pub(super) fn saved_queries_crud_undo(f: Factory) {
     assert_eq!(e.code, ErrorCode::PermissionDenied);
 }
 
+/// Saved queries store classification/option ids (docs/10 §11): renaming or reordering
+/// options keeps them working, and they are shown with the current names.
+pub(super) fn saved_queries_follow_option_renames_and_reorders(f: Factory) {
+    let t = TestApp::new(f());
+    let en = deck(&t, "İngilizce");
+    let lvl = level(&t, None);
+    let mk = |front: &str, label: &str| {
+        let n = note(&t, en, front, &[]);
+        t.ok::<AttributesValuesSet>(SetAttributeValues {
+            entity: EntityRef::Note(n.id),
+            values: vec![AttributeAssignment {
+                attr_id: lvl.id,
+                value: Some(AttributeValue::Choice(option(&lvl, label))),
+            }],
+        });
+        n.id
+    };
+    let (a2, b1, c1) = (mk("a2", "A2"), mk("b1", "B1"), mk("c1", "C1"));
+    let saved = t.ok::<SavedQueriesCreate>(CreateSavedQuery {
+        name: "Orta ve üstü".into(),
+        query: "seviye>=B1".into(),
+        icon: None,
+        position: None,
+    });
+    assert_eq!(saved.query, "level>=B1");
+    let run = |t: &TestApp| {
+        let q = t.ok::<SavedQueriesList>(Empty {}).items[0].query.clone();
+        let mut n = ids(t, &q).note_ids;
+        n.sort();
+        (q, n)
+    };
+    let sorted = |mut v: Vec<NoteId>| {
+        v.sort();
+        v
+    };
+    assert_eq!(run(&t).1, sorted(vec![b1, c1]));
+
+    t.ok::<AttributesOptionRename>(RenameAttributeOption {
+        attr_id: lvl.id,
+        option_id: option(&lvl, "B1"),
+        label: "Orta seviye".into(),
+    });
+    let (q, hits) = run(&t);
+    assert_eq!(q, "level>=\"Orta seviye\"");
+    assert_eq!(hits, sorted(vec![b1, c1]));
+
+    // Move B1 first: `>= B1` now covers everything at or after it in the new order.
+    let mut order: Vec<AttributeOptionId> = lvl.options.iter().map(|o| o.id).collect();
+    order.retain(|o| *o != option(&lvl, "B1"));
+    order.insert(0, option(&lvl, "B1"));
+    t.ok::<AttributesOptionReorder>(ReorderAttributeOptions {
+        attr_id: lvl.id,
+        order,
+    });
+    assert_eq!(run(&t).1, sorted(vec![a2, b1, c1]));
+
+    // Undoing the reorder and rename brings the original behaviour and text back.
+    undo(&t);
+    undo(&t);
+    assert_eq!(run(&t), ("level>=B1".to_owned(), sorted(vec![b1, c1])));
+}
+
+/// Undoing a bulk change puts `updated_at` back, so `edited:N` does not pick up notes whose
+/// change was undone.
+pub(super) fn undo_restores_modification_times(f: Factory) {
+    let t = TestApp::new(f());
+    let d = deck(&t, "Dil");
+    let n = note(&t, d, "elma", &[]);
+    let card = n.cards[0].id;
+    let times = |t: &TestApp| {
+        let tx = t.store.read().unwrap();
+        (
+            tx.get_note(n.id).unwrap().unwrap().updated_at,
+            tx.get_card(card).unwrap().unwrap().updated_at,
+        )
+    };
+    let before = times(&t);
+    t.ok::<BulkAddTags>(NoteTags {
+        note_ids: vec![n.id],
+        tags: vec!["yeni".into()],
+    });
+    t.ok::<BulkSetSuspended>(SetSuspended {
+        card_ids: vec![card],
+        suspended: true,
+    });
+    let changed = times(&t);
+    assert!(changed.0 > before.0 && changed.1 > before.1);
+    undo(&t);
+    undo(&t);
+    assert_eq!(times(&t), before);
+    // Redo brings the change's own times back.
+    redo(&t);
+    redo(&t);
+    assert_eq!(times(&t), changed);
+}
+
 pub(super) fn bulk_attribute_skips_inapplicable_and_restores(f: Factory) {
     let t = TestApp::new(f());
     let en = deck(&t, "İngilizce");
@@ -617,27 +717,101 @@ pub(super) fn database_check_and_repair_undo(f: Factory) {
     let d = deck(&t, "D");
     let n = note(&t, d, "x", &[]);
     let m = note(&t, d, "y", &[]);
+    let k = note(&t, d, "z", &[]);
+    let lvl = level(&t, None);
     let r = t.ok::<BrowseCheckDatabase>(Empty {});
     assert!(r.healthy, "{r:?}");
-    // Corrupt: a live card of a trashed note, a review card without due.
+    // Corrupt: a live card of a trashed note, a review card without due, a note missing a
+    // field of its note type, a classification value of a note that does not exist.
     {
         let mut tx = t.store.write().unwrap();
         tx.set_notes_deleted(&[n.id], Some(Timestamp(5))).unwrap();
         let mut c = tx.get_card(m.cards[0].id).unwrap().unwrap();
         c.scheduling.state = CardState::Review;
         tx.update_card(&c).unwrap();
+        let mut broken = tx.get_note(k.id).unwrap().unwrap();
+        // Drop `back` (not the sort field, so the derived columns stay as they were).
+        let back = broken.fields.keys().find(|k| k.0 == "back").unwrap().clone();
+        broken.fields.remove(&back);
+        tx.update_note(&broken, "z").unwrap();
+        let ghost = EntityRef::Note(NoteId(uuid::Uuid::from_u128(0xdead)));
+        tx.set_attribute_values(
+            ghost,
+            &[(lvl.id, Some(AttributeValue::Choice(option(&lvl, "A1"))))],
+        )
+        .unwrap();
         tx.commit().unwrap();
     }
     let r = t.ok::<BrowseCheckDatabase>(Empty {});
     assert!(!r.healthy);
     assert_eq!(r.orphan_cards, vec![n.cards[0].id]);
     assert_eq!(r.unscheduled_cards, vec![m.cards[0].id]);
+    assert_eq!(r.broken_fields, vec![k.id]);
+    assert_eq!(r.dangling_values, 1);
     let before = state(&t);
     let fixed = t.ok::<BrowseRepairDatabase>(Empty {});
-    assert_eq!((fixed.trashed_cards, fixed.rescheduled_cards), (1, 1));
-    assert!(t.ok::<BrowseCheckDatabase>(Empty {}).healthy);
+    assert_eq!(
+        (
+            fixed.trashed_cards,
+            fixed.rescheduled_cards,
+            fixed.fixed_notes,
+            fixed.removed_values
+        ),
+        (1, 1, 1, 1)
+    );
+    let after = t.ok::<BrowseCheckDatabase>(Empty {});
+    assert!(after.healthy, "{after:?}");
     undo(&t);
+    // Everything observable is back (the dangling row belonged to nothing).
     assert_eq!(state(&t), before);
+    assert_eq!(t.ok::<BrowseCheckDatabase>(Empty {}).broken_fields, vec![k.id]);
+}
+
+/// docs/02 §10: trash is kept `browse.trash_retention_days` (default 30) days, then purged
+/// for good (at startup, by the job, or on demand; `0` days empties the trash).
+pub(super) fn trash_is_purged_after_retention(f: Factory) {
+    let t = TestApp::new(f());
+    let d = deck(&t, "Dil");
+    let old = note(&t, d, "eski", &[]);
+    let recent = note(&t, d, "yeni", &[]);
+    let kept = note(&t, d, "canlı", &[]);
+    t.ok::<NotesDelete>(NoteIds { ids: vec![old.id, recent.id] });
+    let gone_deck = deck(&t, "Boş");
+    t.ok::<DecksDelete>(DeckRef { id: gone_deck });
+    {
+        // Trashed 40 days before "now".
+        let at = Some(Timestamp(1_767_225_600_000 - 40 * 86_400_000));
+        let mut tx = t.store.write().unwrap();
+        tx.set_notes_deleted(&[old.id], None).unwrap();
+        tx.set_notes_deleted(&[old.id], at).unwrap();
+        tx.set_cards_deleted(&[old.cards[0].id], None).unwrap();
+        tx.set_cards_deleted(&[old.cards[0].id], at).unwrap();
+        tx.commit().unwrap();
+    }
+    let r = t.ok::<BrowsePurgeTrash>(PurgeTrash { older_than_days: None });
+    assert_eq!((r.notes, r.cards, r.decks), (1, 0, 0));
+    let e = t.err::<BrowseCardInfo>(CardInfoRef { card_id: old.cards[0].id });
+    assert_eq!(e.code, ErrorCode::NotFoundCard);
+    let trash = t.ok::<BrowseTrash>(ListTrash { limit: None });
+    assert_eq!(trash.notes.iter().map(|n| n.id).collect::<Vec<_>>(), vec![recent.id]);
+    assert_eq!(trash.decks.len(), 1);
+
+    // The retention is a validated setting.
+    let e = t.err::<SettingsSet>(SetSetting {
+        scope: fc_core::settings::SettingScope::App,
+        key: super::RETENTION_KEY.into(),
+        value: serde_json::json!(0),
+    });
+    assert_eq!(e.code, ErrorCode::ValidationSettingValue);
+
+    // Emptying the trash: everything trashed goes, live data stays.
+    let r = t.ok::<BrowsePurgeTrash>(PurgeTrash { older_than_days: Some(0) });
+    assert_eq!((r.notes, r.decks), (1, 1));
+    let trash = t.ok::<BrowseTrash>(ListTrash { limit: None });
+    assert!(trash.notes.is_empty() && trash.decks.is_empty());
+    assert_eq!(search(&t, "").total, 1);
+    assert_eq!(search(&t, "").items[0].note_id, kept.id);
+    assert!(t.ok::<BrowseCheckDatabase>(Empty {}).healthy);
 }
 
 pub(super) fn module_can_be_disabled(f: Factory) {

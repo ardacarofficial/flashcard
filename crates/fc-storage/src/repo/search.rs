@@ -115,6 +115,20 @@ pub struct IntegrityReport {
     pub cardless_notes: Vec<NoteId>,
     /// Classification values whose note/card no longer exists.
     pub dangling_values: u32,
+    /// Live notes lacking a field their note type defines (extra keys are not reported: a
+    /// note type change may keep the data of removed fields).
+    pub broken_fields: Vec<NoteId>,
+}
+
+/// What [`SearchWrite::purge_trash`] removed for good.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PurgeCounts {
+    /// Notes (with all their cards).
+    pub notes: u32,
+    /// Cards trashed on their own (their note stays).
+    pub cards: u32,
+    /// Decks.
+    pub decks: u32,
 }
 
 /// Search reads.
@@ -143,4 +157,12 @@ pub trait SearchWrite: SearchRead {
     fn upsert_saved_query(&mut self, query: &SavedQuery) -> StorageResult<()>;
     /// Deletes a saved query. Returns whether it existed.
     fn delete_saved_query(&mut self, id: SavedQueryId) -> StorageResult<bool>;
+    /// Deletes classification values whose note/card no longer exists (see
+    /// [`IntegrityReport::dangling_values`]). Returns the number of rows removed.
+    fn delete_dangling_values(&mut self) -> StorageResult<u32>;
+    /// Permanently deletes what was trashed before `before`: notes (their cards, links,
+    /// tags, search rows and review history go with them), cards trashed on their own, then
+    /// decks nothing refers to any more (no notes, cards, child decks or classification
+    /// scopes), and the classification values left without an entity.
+    fn purge_trash(&mut self, before: Timestamp) -> StorageResult<PurgeCounts>;
 }

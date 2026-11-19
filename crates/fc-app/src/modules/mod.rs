@@ -29,4 +29,5 @@ modules! {
     attributes,
     browse,
     palette,
+    presets,
 }

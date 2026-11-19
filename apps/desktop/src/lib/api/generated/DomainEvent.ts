@@ -103,7 +103,7 @@ job: JobDto, } } | { "type": "cards_changed", "data": {
 /**
  * Cards.
  */
-ids: Array<CardId>, } } | { "type": "saved_queries_changed" } | { "type": "undone", "data": { 
+ids: Array<CardId>, } } | { "type": "saved_queries_changed" } | { "type": "presets_changed" } | { "type": "undone", "data": { 
 /**
  * Batch reverted.
  */

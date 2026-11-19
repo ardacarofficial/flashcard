@@ -106,7 +106,8 @@
       "duplicates": "Find duplicates",
       "trash": "Trash",
       "check_database": "Check database",
-      "repair_database": "Repair database"
+      "repair_database": "Repair database",
+      "purge_trash": "Empty expired trash"
     },
     "palette": {
       "list": "Command palette entries"
@@ -115,6 +116,16 @@
       "list": "Keyboard shortcuts",
       "set": "Change a shortcut",
       "reset": "Reset shortcuts"
+    },
+    "presets": {
+      "list": "Deck presets",
+      "get": "Preset details",
+      "for_deck": "Options of a deck",
+      "create": "New preset",
+      "update": "Edit preset",
+      "clone": "Copy preset",
+      "delete": "Delete preset",
+      "assign": "Assign preset to decks"
     }
   }
 }

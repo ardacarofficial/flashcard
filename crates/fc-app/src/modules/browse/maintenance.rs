@@ -7,7 +7,7 @@ use crate::support::decks::DeckIndex;
 use crate::support::notes::{require_note, require_notetype, write_note};
 use crate::support::{dto, err_id, summary};
 use fc_api::v1::browse::*;
-use fc_api::v1::bulk::{CardSnapshot, RestoreCards};
+use fc_api::v1::bulk::{CardSnapshot, NoteSnapshot, RestoreCards, RestoreNotes};
 use fc_api::v1::common::Empty;
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::methods::*;
@@ -119,7 +119,9 @@ fn report(ctx_reads: &dyn fc_storage::Reads) -> AppResult<DatabaseReport> {
     let healthy = r.orphan_cards.is_empty()
         && r.cards_in_trashed_decks.is_empty()
         && r.unscheduled_cards.is_empty()
-        && r.missing_search_index.is_empty();
+        && r.missing_search_index.is_empty()
+        && r.broken_fields.is_empty()
+        && r.dangling_values == 0;
     Ok(DatabaseReport {
         orphan_cards: r.orphan_cards,
         cards_in_trashed_decks: r.cards_in_trashed_decks,
@@ -127,6 +129,7 @@ fn report(ctx_reads: &dyn fc_storage::Reads) -> AppResult<DatabaseReport> {
         missing_search_index: r.missing_search_index,
         cardless_notes: r.cardless_notes,
         dangling_values: r.dangling_values,
+        broken_fields: r.broken_fields,
         healthy,
     })
 }
@@ -137,7 +140,10 @@ pub(super) fn check_database(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<Database
 
 /// Repairs what [`check_database`] reports: orphan cards and cards in trashed decks go to the
 /// trash, scheduled cards without a due time become due now (both undone exactly by one
-/// `bulk.restore_cards`), and missing search rows are rebuilt (derived data, nothing to undo).
+/// `bulk.restore_cards`), notes get their missing fields (empty; undone by
+/// `bulk.restore_notes`), missing search rows are rebuilt (derived data) and dangling
+/// classification values are removed (rows of entities that no longer exist: invisible, so
+/// nothing observable to undo).
 pub(super) fn repair_database(
     _: Empty,
     ctx: &mut CommandCtx<'_>,
@@ -172,25 +178,58 @@ pub(super) fn repair_database(
     for id in &r.unscheduled_cards {
         fix(ctx, *id, false)?;
     }
+    let mut notes_before: Vec<NoteSnapshot> = Vec::new();
+    for id in &r.broken_fields {
+        let mut note = require_note(ctx.reads(), *id)?;
+        let nt = require_notetype(ctx.reads(), note.notetype_id)?;
+        notes_before.push(super::bulk::note_snapshot(&note));
+        for f in &nt.fields {
+            note.fields.entry(f.key.clone()).or_default();
+        }
+        note.updated_at = ctx.now;
+        write_note(ctx, &nt, &mut note)?;
+        result.fixed_notes += 1;
+    }
     for id in &r.missing_search_index {
+        if r.broken_fields.contains(id) {
+            continue; // written (and so indexed) above
+        }
         let mut note = require_note(ctx.reads(), *id)?;
         let nt = require_notetype(ctx.reads(), note.notetype_id)?;
         write_note(ctx, &nt, &mut note)?;
         result.reindexed_notes += 1;
     }
-    let total = result.trashed_cards + result.rescheduled_cards + result.reindexed_notes;
+    if r.dangling_values > 0 {
+        result.removed_values = ctx.tx.delete_dangling_values()?;
+    }
+    let total = result.trashed_cards
+        + result.rescheduled_cards
+        + result.reindexed_notes
+        + result.fixed_notes
+        + result.removed_values;
+    let mut inverse = Vec::new();
+    if !before.is_empty() {
+        inverse.push(inverse_call::<BulkRestoreCards>(&RestoreCards { cards: before })?);
+    }
+    if !notes_before.is_empty() {
+        inverse.push(inverse_call::<BulkRestoreNotes>(&RestoreNotes {
+            notes: notes_before,
+        })?);
+    }
     Ok(CommandOutcome {
         response: result,
-        inverse: if before.is_empty() {
-            Vec::new()
-        } else {
-            vec![inverse_call::<BulkRestoreCards>(&RestoreCards { cards: before })?]
-        },
+        inverse,
         summary: summary::<BrowseRepairDatabase>().param("count", total),
-        events: if changed.is_empty() {
-            Vec::new()
-        } else {
-            vec![DomainEvent::CardsChanged { ids: changed }]
+        events: {
+            let mut ev: Vec<DomainEvent> = r
+                .broken_fields
+                .iter()
+                .map(|&note_id| DomainEvent::NoteUpdated { note_id })
+                .collect();
+            if !changed.is_empty() {
+                ev.push(DomainEvent::CardsChanged { ids: changed });
+            }
+            ev
         },
     })
 }

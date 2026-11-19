@@ -213,6 +213,14 @@ impl SearchRead for MemTx<'_> {
                     .sum::<usize>(),
             )
             .unwrap_or(u32::MAX),
+            broken_fields: live_notes()
+                .filter(|n| {
+                    s.notetypes.get(&n.notetype_id).is_some_and(|nt| {
+                        nt.fields.iter().any(|f| !n.fields.contains_key(&f.key))
+                    })
+                })
+                .map(|n| n.id)
+                .collect(),
         })
     }
 }
@@ -225,5 +233,70 @@ impl SearchWrite for MemTx<'_> {
 
     fn delete_saved_query(&mut self, id: SavedQueryId) -> StorageResult<bool> {
         Ok(self.m().domains.search.saved.remove(&id).is_some())
+    }
+
+    fn purge_trash(&mut self, before: Timestamp) -> StorageResult<PurgeCounts> {
+        let old = |d: Option<Timestamp>| d.is_some_and(|d| d < before);
+        let s = self.m();
+        let gone: Vec<NoteId> = s
+            .notes
+            .values()
+            .filter(|n| old(n.deleted_at))
+            .map(|n| n.id)
+            .collect();
+        for id in &gone {
+            s.notes.remove(id);
+            s.search_text.remove(id);
+        }
+        // Cards of purged notes cascade (not counted), then cards trashed on their own.
+        s.cards.retain(|_, c| !gone.contains(&c.note_id));
+        let before_cards = s.cards.len();
+        s.cards.retain(|_, c| !old(c.deleted_at));
+        let card_count = before_cards - s.cards.len();
+        let mut decks = 0u32;
+        loop {
+            let free: Vec<DeckId> = s
+                .decks
+                .values()
+                .filter(|d| {
+                    old(d.deleted_at)
+                        && !s.decks.values().any(|c| c.parent_id == Some(d.id))
+                        && !s.cards.values().any(|c| c.deck_id == d.id)
+                        && !s.notes.values().any(|n| n.home_deck_id == d.id)
+                        && !s.attr_defs.values().any(|a| a.scope_deck_id == Some(d.id))
+                })
+                .map(|d| d.id)
+                .collect();
+            if free.is_empty() {
+                break;
+            }
+            for id in &free {
+                s.decks.remove(id);
+            }
+            decks += u32::try_from(free.len()).unwrap_or(u32::MAX);
+        }
+        self.delete_dangling_values()?;
+        Ok(PurgeCounts {
+            notes: u32::try_from(gone.len()).unwrap_or(u32::MAX),
+            cards: u32::try_from(card_count).unwrap_or(u32::MAX),
+            decks,
+        })
+    }
+
+    fn delete_dangling_values(&mut self) -> StorageResult<u32> {
+        let s = self.m();
+        let (notes, cards) = (&s.notes, &s.cards);
+        let mut removed = 0usize;
+        s.attr_values.retain(|(_, e, rows)| {
+            let live = match e {
+                EntityRef::Note(n) => notes.contains_key(n),
+                EntityRef::Card(c) => cards.contains_key(c),
+            };
+            if !live {
+                removed += rows.len();
+            }
+            live
+        });
+        Ok(u32::try_from(removed).unwrap_or(u32::MAX))
     }
 }

@@ -18,5 +18,6 @@
   "oplog.summary.browse.repair_database": "{count} sorun onarıldı",
   "oplog.summary.shortcuts.set": "Kısayol değişti: {action}",
   "oplog.summary.shortcuts.reset": "Kısayol(lar) sıfırlandı: {action}",
-  "oplog.summary.shortcuts.restore": "Kısayollar geri getirildi"
+  "oplog.summary.shortcuts.restore": "Kısayollar geri getirildi",
+  "oplog.summary.browse.purge_trash": "Çöpten {count} öğe kalıcı olarak silindi"
 }

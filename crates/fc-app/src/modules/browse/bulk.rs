@@ -51,6 +51,7 @@ pub(super) fn snapshot(c: &Card) -> CardSnapshot {
         suspended: c.suspended,
         buried_until: c.buried_until,
         deleted_at: c.deleted_at,
+        updated_at: Some(c.updated_at),
     }
 }
 
@@ -205,7 +206,7 @@ pub(super) fn restore_cards(
         let mut card = require_card(ctx, s.id)?;
         before.push(snapshot(&card));
         apply_snapshot(&mut card, s);
-        card.updated_at = ctx.now;
+        card.updated_at = s.updated_at.unwrap_or(ctx.now);
         ctx.tx.update_card(&card)?;
         changed.push(s.id);
     }
@@ -214,11 +215,12 @@ pub(super) fn restore_cards(
 
 // ------------------------------------------------------------------ notes
 
-fn note_snapshot(n: &Note) -> NoteSnapshot {
+pub(super) fn note_snapshot(n: &Note) -> NoteSnapshot {
     NoteSnapshot {
         id: n.id,
         fields: n.fields.iter().map(|(k, v)| (k.0.clone(), v.clone())).collect(),
         tags: n.tags.iter().map(|t| t.as_str().to_owned()).collect(),
+        updated_at: Some(n.updated_at),
     }
 }
 
@@ -336,7 +338,7 @@ pub(super) fn restore_notes(
             .map(|(k, v)| (FieldKey::new(k.clone()), v.clone()))
             .collect();
         note.tags = parse_tags(&s.tags)?;
-        note.updated_at = ctx.now;
+        note.updated_at = s.updated_at.unwrap_or(ctx.now);
         write_note(ctx, &nt, &mut note)?;
         changed.push(s.id);
     }

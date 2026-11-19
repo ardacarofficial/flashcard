@@ -78,5 +78,6 @@ domains! {
     attributes,
     search,
     bulk,
+    presets,
     browse,
 }

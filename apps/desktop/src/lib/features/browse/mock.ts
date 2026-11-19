@@ -130,8 +130,10 @@ export default {
         missing_search_index: [],
         cardless_notes: [],
         dangling_values: 0,
+        broken_fields: [],
         healthy: true,
       }),
+      'browse.purge_trash': () => ({ notes: 0, cards: 0, decks: 0, before: now() }),
       'palette.list': () => ({
         entries: (Object.keys(METHODS) as MethodName[]).sort().map((m) => ({
           method: `v1.${m}`,

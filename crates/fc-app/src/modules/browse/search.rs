@@ -1,6 +1,6 @@
 //! `search.*` and `saved_queries.*`.
 
-use super::{compile, query_error_dto, row};
+use super::{compile, query_error_dto, row, CatalogData};
 use crate::error::AppResult;
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
 use crate::support::decks::DeckIndex;
@@ -10,6 +10,7 @@ use fc_api::v1::events::DomainEvent;
 use fc_api::v1::methods::*;
 use fc_api::v1::search::*;
 use fc_api::{ApiError, ErrorCode};
+use fc_core::query::canonical::{canonicalize, render};
 use fc_core::query::{normalize_saved_query_name, parse_query, SavedQuery};
 use fc_core::{NoteId, SavedQueryId};
 use fc_storage::repo::{CardSearch, CardSort};
@@ -81,18 +82,8 @@ pub(super) fn check(req: QueryText, ctx: &QueryCtx<'_>) -> AppResult<QueryCheck>
             })
         }
     };
-    let decks = ctx.tx.list_decks(true)?;
-    let tags: Vec<_> = ctx.tx.list_tags()?.into_iter().map(|(t, _)| t).collect();
-    let notetypes = ctx.tx.list_notetypes(true)?;
-    let attributes = ctx.tx.list_attribute_defs(false)?;
-    let cat = fc_core::query::Catalog {
-        decks: &decks,
-        tags: &tags,
-        notetypes: &notetypes,
-        attributes: &attributes,
-        now: ctx.now,
-    };
-    Ok(match fc_core::query::compile_query(&req.query, &cat) {
+    let data = CatalogData::load(ctx.tx, ctx.now)?;
+    Ok(match fc_core::query::compile_query(&req.query, &data.catalog()) {
         Ok(_) => QueryCheck {
             error: None,
             normalized: Some(normalized),
@@ -106,7 +97,17 @@ pub(super) fn check(req: QueryText, ctx: &QueryCtx<'_>) -> AppResult<QueryCheck>
 
 // ------------------------------------------------------------------ saved queries
 
-fn dto(q: &SavedQuery) -> SavedQueryDto {
+/// Saved queries are stored canonical (classification and option ids, see
+/// `fc_core::query::canonical`) and shown with the current names.
+fn dto(q: &SavedQuery, cat: &CatalogData) -> SavedQueryDto {
+    SavedQueryDto {
+        query: render(&q.query, &cat.catalog()),
+        ..stored(q)
+    }
+}
+
+/// The stored (canonical) form, for inverses.
+fn stored(q: &SavedQuery) -> SavedQueryDto {
     SavedQueryDto {
         id: q.id,
         name: q.name.clone(),
@@ -151,8 +152,14 @@ fn require(reads: &dyn Reads, id: SavedQueryId) -> AppResult<SavedQuery> {
 }
 
 pub(super) fn saved_list(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<SavedQueryList> {
+    let cat = CatalogData::load(ctx.tx, ctx.now)?;
     Ok(SavedQueryList {
-        items: ctx.tx.list_saved_queries()?.iter().map(dto).collect(),
+        items: ctx
+            .tx
+            .list_saved_queries()?
+            .iter()
+            .map(|q| dto(q, &cat))
+            .collect(),
     })
 }
 
@@ -161,7 +168,8 @@ pub(super) fn saved_create(
     ctx: &mut CommandCtx<'_>,
 ) -> AppResult<CommandOutcome<SavedQueryDto>> {
     let name = name(&req.name)?;
-    let query = req.query.trim().to_owned();
+    let cat = CatalogData::load(ctx.reads(), ctx.now)?;
+    let query = canonicalize(req.query.trim(), &cat.catalog());
     compile(ctx.reads(), &query, ctx.now)?;
     let position = match req.position {
         Some(p) => p,
@@ -184,7 +192,7 @@ pub(super) fn saved_create(
     };
     ctx.tx.upsert_saved_query(&q)?;
     Ok(CommandOutcome {
-        response: dto(&q),
+        response: dto(&q, &cat),
         inverse: vec![inverse_call::<SavedQueriesDelete>(&SavedQueryRef { id: q.id })?],
         summary: summary::<SavedQueriesCreate>().param("name", &q.name),
         events: vec![DomainEvent::SavedQueriesChanged],
@@ -196,7 +204,8 @@ pub(super) fn saved_update(
     ctx: &mut CommandCtx<'_>,
 ) -> AppResult<CommandOutcome<SavedQueryDto>> {
     let old = require(ctx.reads(), req.id)?;
-    let query = req.query.trim().to_owned();
+    let cat = CatalogData::load(ctx.reads(), ctx.now)?;
+    let query = canonicalize(req.query.trim(), &cat.catalog());
     if ctx.batch_kind == fc_api::v1::oplog::OplogKind::Do {
         compile(ctx.reads(), &query, ctx.now)?;
     }
@@ -217,7 +226,7 @@ pub(super) fn saved_update(
         position: Some(old.position),
     };
     Ok(CommandOutcome {
-        response: dto(&q),
+        response: dto(&q, &cat),
         inverse: vec![inverse_call::<SavedQueriesUpdate>(&inverse)?],
         summary: summary::<SavedQueriesUpdate>().param("name", &q.name),
         events: vec![DomainEvent::SavedQueriesChanged],
@@ -229,15 +238,15 @@ pub(super) fn saved_delete(
     ctx: &mut CommandCtx<'_>,
 ) -> AppResult<CommandOutcome<SavedQueryDto>> {
     let old = require(ctx.reads(), req.id)?;
+    let cat = CatalogData::load(ctx.reads(), ctx.now)?;
     ctx.tx.delete_saved_query(old.id)?;
-    let d = dto(&old);
     Ok(CommandOutcome {
         inverse: vec![inverse_call::<SavedQueriesRestore>(&RestoreSavedQuery {
-            query: d.clone(),
+            query: stored(&old),
         })?],
         summary: summary::<SavedQueriesDelete>().param("name", &old.name),
         events: vec![DomainEvent::SavedQueriesChanged],
-        response: d,
+        response: dto(&old, &cat),
     })
 }
 
@@ -245,10 +254,12 @@ pub(super) fn saved_restore(
     req: RestoreSavedQuery,
     ctx: &mut CommandCtx<'_>,
 ) -> AppResult<CommandOutcome<SavedQueryDto>> {
-    let q = model(&req.query);
+    let cat = CatalogData::load(ctx.reads(), ctx.now)?;
+    let mut q = model(&req.query);
+    q.query = canonicalize(&q.query, &cat.catalog());
     ctx.tx.upsert_saved_query(&q)?;
     Ok(CommandOutcome {
-        response: dto(&q),
+        response: dto(&q, &cat),
         inverse: vec![inverse_call::<SavedQueriesDelete>(&SavedQueryRef { id: q.id })?],
         summary: summary::<SavedQueriesRestore>().param("name", &q.name),
         events: vec![DomainEvent::SavedQueriesChanged],

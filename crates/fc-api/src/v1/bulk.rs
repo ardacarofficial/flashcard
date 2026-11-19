@@ -139,6 +139,9 @@ pub struct CardSnapshot {
     pub buried_until: Option<Timestamp>,
     /// Trashed at.
     pub deleted_at: Option<Timestamp>,
+    /// Modification time to put back (`null`/absent = now). Undo restores it, so undone
+    /// changes do not look like edits (`edited:N`).
+    pub updated_at: Option<Timestamp>,
 }
 
 /// `bulk.restore_cards` (internal).
@@ -158,6 +161,8 @@ pub struct NoteSnapshot {
     pub fields: BTreeMap<String, String>,
     /// Tags.
     pub tags: Vec<String>,
+    /// Modification time to put back (`null`/absent = now), see [`CardSnapshot::updated_at`].
+    pub updated_at: Option<Timestamp>,
 }
 
 /// `bulk.restore_notes` (internal).

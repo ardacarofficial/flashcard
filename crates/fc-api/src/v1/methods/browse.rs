@@ -15,6 +15,9 @@ methods! {
     BrowseCheckDatabase = "browse.check_database", Query, "browse", "notes:read", Public, undo: false, Empty => DatabaseReport;
     /// Repairs what the check found (undoable; re-indexing needs no undo).
     BrowseRepairDatabase = "browse.repair_database", Command, "browse", "notes:write", Public, undo: true, Empty => RepairResult;
+    /// Deletes for good what has been in the trash longer than the retention period (not
+    /// undoable: that is what the retention period is for). Also run at startup.
+    BrowsePurgeTrash = "browse.purge_trash", Command, "browse", "notes:write", Public, undo: false, PurgeTrash => PurgeResult;
 
     // ---- palette & shortcuts ----
     /// Every public method for the command palette.

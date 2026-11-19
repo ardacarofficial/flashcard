@@ -13,6 +13,7 @@ pub mod modules;
 pub mod notes;
 pub mod notetypes;
 pub mod oplog;
+pub mod presets;
 pub mod search;
 pub mod settings;
 pub mod tags;

@@ -96,8 +96,9 @@ impl App {
 
     /// Startup work after the store is open (and migrated — `SqliteStore::open` migrates):
     /// seeds built-ins (the Classic note type, localized by `app.locale`), marks jobs left
-    /// running/queued as interrupted, then loads module switches and the locale into memory.
-    /// Idempotent. Seeding is not an undoable command, so it writes no oplog entry.
+    /// running/queued as interrupted, then loads module switches and the locale into memory,
+    /// and purges the expired trash (`browse.purge_trash`, v0.4). Idempotent. Seeding is not
+    /// an undoable command, so it writes no oplog entry.
     pub fn load_state(&self) -> AppResult<()> {
         let now = self.clock.now();
         let mut tx = self.store.write()?;
@@ -111,7 +112,11 @@ impl App {
         }
         tx.mark_unfinished_jobs_interrupted(now)?;
         tx.commit()?;
-        self.reload_cached_state()
+        self.reload_cached_state()?;
+        // Best effort: an expired-trash purge that fails must not keep the collection closed
+        // (it runs again next start, and the user can run `browse.purge_trash`).
+        let _ = crate::modules::browse::purge_on_startup(self);
+        Ok(())
     }
 
     /// Opens (creating and migrating if needed) the SQLite collection at `path` and returns a

@@ -82,7 +82,9 @@
       "2": "Turuncu",
       "3": "Yeşil",
       "4": "Mavi",
-      "5": "Mor"
+      "5": "Pembe",
+      "6": "Turkuaz",
+      "7": "Mor"
     },
     "info": {
       "heading": "Kart bilgisi",
@@ -111,15 +113,19 @@
     "run_check": "Denetle",
     "healthy": "Sorun bulunmadı.",
     "repair": "Onar",
-    "repaired": "Onarıldı: {trashed} kart çöpe, {rescheduled} kart yeniden planlandı, {reindexed} not yeniden dizinlendi.",
+    "repaired": "Onarıldı: {trashed} kart çöpe, {rescheduled} kart yeniden planlandı, {reindexed} not yeniden dizinlendi, {fixed} notun eksik alanı eklendi, {removed} sahipsiz değer silindi.",
     "problem": {
       "orphan_cards": "Silinmiş notların kartları: {count}",
       "cards_in_trashed_decks": "Silinmiş destelerdeki kartlar: {count}",
       "unscheduled_cards": "Vadesi olmayan planlı kartlar: {count}",
       "missing_search_index": "Aramada eksik notlar: {count}",
       "cardless_notes": "Kartı olmayan notlar: {count}",
-      "dangling_values": "Silinmiş öğelerin sınıflandırma değerleri: {count}"
-    }
+      "dangling_values": "Silinmiş öğelerin sınıflandırma değerleri: {count}",
+      "broken_fields": "Alanı eksik notlar: {count}"
+    },
+    "purge": "Çöpü boşalt",
+    "purge_hint": "Çöpteki öğeler {days} gün sonra kalıcı olarak silinir (Ayarlar).",
+    "purged": "{count} öğe kalıcı olarak silindi."
   },
   "palette": {
     "title": "Komut paleti",
@@ -192,6 +198,14 @@
       "invalid_flag": "Bilinmeyen bayrak: “{value}”.",
       "invalid_id": "“{value}” bir kimlik değil.",
       "invalid_regex": "Geçersiz düzenli ifade: {message}"
+    }
+  },
+  "settings": {
+    "browse": {
+      "trash_retention_days": {
+        "label": "Çöpte tutma süresi (gün)",
+        "description": "Silinen desteler ve notlar bu kadar gün geri getirilebilir, sonra kalıcı olarak silinir."
+      }
     }
   }
 }

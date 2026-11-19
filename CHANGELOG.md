@@ -13,11 +13,20 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 - **fc-app modülleri `browse` ve `palette`** (ayrı ayrı kapatılabilir). Her toplu işlem tek komut = tek geri al (birebir anlık görüntü tersi).
 - **Masaüstü:** kart tarayıcısı (canlı konumlu sorgu hatası, kayıtlı sorgular, sıralanabilir tablo, not modu, "eşleşenlerin hepsini seç", toplu işlem çubuğu, kart bilgisi), bakım ekranı (çöp kutusu, tekrarlar, veritabanı denetimi + onarım), kısayol düzenleyici (kaydet/kaldır/varsayılan, çakışmalar), Ctrl+K komut paleti (tüm public metotlar + ekranlar).
 
+- **Deste ayar şablonları (`presets` modülü):** `presets.list/get/for_deck/create/update/clone/delete/assign` (+ iç `presets.restore`), Rust'ta doğrulanan şemalı ayar (`PresetConfig`: yeni/gün, tekrar/gün, (yeniden) öğrenme adımları, hedef hatırlama, FSRS parametreleri, kardeş gömme, yeni/tekrar sırası; şema docs/10 §11), destede yoksa en yakın üst destenin şablonu, o da yoksa varsayılanlar (`modules::presets::effective`, v0.2'nin okuyacağı tek yer). Hepsi geri alınabilir. Hata kodları `VALIDATION_PRESET_NAME`, `VALIDATION_PRESET_CONFIG` (`field`), `NOT_FOUND_PRESET`, `CONFLICT_PRESET_NAME`; olay `presets_changed`. Masaüstü: "Deste ayarları" düzenleyicisi.
+- **Çöp saklama süresi:** ayar `browse.trash_retention_days` (varsayılan 30, 1–3650), `browse.purge_trash` (kalıcı silme; `older_than_days: 0` = çöpü boşalt), açılışta otomatik temizlik ve v0.5 işçi havuzu için `PurgeTrashJob`. Bakım ekranında "Çöpü boşalt".
+- **Veritabanı denetimi:** alanı eksik notlar (`broken_fields`, onarım: boş alan eklenir, geri alınabilir) ve sahipsiz sınıflandırma değerlerinin silinmesi.
+- Migration `0301_search_covering` (arama birleşimi için kapsayan indeksler + çöpteki notların kısmi indeksi).
+
 #### Değişti
 - SQLite bağlantı başına sayfa önbelleği 64 MiB (`CACHE_SIZE_KIB`); FTS metni katlanmış yazılır.
+- **Bayrak numaraları Anki'ninki:** 1 kırmızı, 2 turuncu, 3 yeşil, 4 mavi, 5 pembe, 6 turkuaz, 7 mor (önceden 5 = mor); arayüz 7 bayrağın hepsini sunar. Özel bayrak adları (v0.3 `card_flag_defs`) için tek bağlama noktası `browse::flag_names`.
+- **Kayıtlı sorgular kanonik saklanır:** sınıflandırma anahtarları `attr_<id>`, seçenek etiketleri seçenek kimliği olarak; gösterilirken güncel adlarla yazılır. Seçenek/anahtar yeniden adlandırılınca sorgu bozulmaz, `seviye>=B1` güncel sıralamayı izler.
+- **Arama hızı:** sayım ile sayfa ayrıldı (pencere sayımı her eşleşmeyi sıralatıyordu); not sütunu gerekmeyen sorgular `notes` birleşimi olmadan, büyük sonuçlarda sayfa sıralama indeksinden okunur. Yaygın etiket sorgusu ~90 → ~50 ms (100k).
+- Geri al, toplu işlemlerde `updated_at`'i eski haline getirir (geri alınan değişiklik `edited:N`'de görünmez).
 
 #### Testler
-- Proptest: yazdır→ayrıştır gidiş-dönüş, ayrıştırıcı toplamlığı + sınır içi hata konumları, olumsuzlama tümleyeni; SQL ↔ referans değerlendirici (her atom + 300 rastgele bileşik sorgu); 1000 kartlık toplu işlemlerin tek geri alla birebir dönüşü; palet tamlığı; 100k not benchmark'ı (`#[ignore]`, docs/04).
+- Proptest: yazdır→ayrıştır gidiş-dönüş, ayrıştırıcı toplamlığı + sınır içi hata konumları, olumsuzlama tümleyeni; SQL ↔ referans değerlendirici (her atom + 300 rastgele bileşik sorgu); 1000 kartlık toplu işlemlerin tek geri alla birebir dönüşü; palet tamlığı; 100k not benchmark'ı (`#[ignore]`, docs/04) ve CI'da koşan 20k benchmark'ı (`bench_search_20k_scaled`, bütçe 60 ms); sıralı tarama = tam sıralama testi; kayıtlı sorgunun yeniden adlandırma/sıralama sonrası çalışması; şablon CRUD/miras/geri al; çöp temizliği; denetimde eksik alan ve sahipsiz değer onarımı.
 
 ## [0.1.0] — Yayımlanmadı (inceleme bekliyor)
 
