@@ -87,10 +87,17 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** Sorgu dili (ayrıştırıcı + SQL derleyici + FTS5); arama; kayıtlı filtreler; özel çalışma oturumları; kart tarayıcısı; toplu işlemler; bul-değiştir; çöp kutusu; tekrar tespiti; kart bilgi ekranı; veritabanı kontrolü; deste ayar şablonları; komut paleti; kısayol düzenleyici.
 
 **Kabul kriterleri**
-- [ ] Sorgu dili için ayrıştırıcı özellik tabanlı testleri; hatalı sorguda konumlu hata.
-- [ ] 100k notta arama < 100 ms (benchmark).
-- [ ] 1000 kartlık toplu işlem tek geri al ile tamamen geri döner.
-- [ ] Komut paleti kayıt defterindeki tüm komutları listeler.
+- [x] Sorgu dili için ayrıştırıcı özellik tabanlı testleri; hatalı sorguda konumlu hata.
+- [x] 100k notta arama < 100 ms (benchmark).
+- [x] 1000 kartlık toplu işlem tek geri al ile tamamen geri döner.
+- [x] Komut paleti kayıt defterindeki tüm komutları listeler.
+
+> **Doğrulama (`feat/v0.4-manage`):**
+> - *Özellik tabanlı testler + konumlu hata:* `fc-core/src/query/tests.rs` (proptest: `print_parse_roundtrip`, `parser_is_total_and_positions_are_in_bounds`, `query_alphabet_fuzz`, `term_spans_slice_the_source`, `negation_is_complement`; `errors_are_positioned_in_characters`, `classification_errors_are_positioned`). Uçtan uca: `fc-app/src/modules/browse/tests.rs::search_errors_are_positioned` (`VALIDATION_QUERY`, `details.start/end` karakter cinsinden). SQL derleyicisi referans değerlendiriciyle karşılaştırılır: `fc-storage/src/tests/search.rs` (`every_atom_agrees_…`, `random_queries_agree_…`: 300 rastgele bileşik sorgu).
+> - *Benchmark:* `cargo test -p fc-storage --release -- --ignored --nocapture bench_search_100k` — 100k not / 100k kart, tam tarayıcı isteği (toplam sayı + ilk 50 satır + satır verisi), 5 denemenin en iyisi; test her sorgu < 100 ms'yi doğrular. 8 çekirdekli, 4 başka iz derlerken ölçülen: boş sorgu ~72 ms, `kilic` ~42, `"kılıç kalkan"` ~4, `deck:İngilizce is:due` ~32, `tag:fiil -is:suspended` (koleksiyonun ~%48'i) ~88–95, `seviye>=B1 sınav:TYT` ~65–72, `stability>20 lapses>=2` ~38, `retrievability<0.8` ~28, `front:kılıç*` ~51, `(seviye:B1 OR seviye:B2) app` ~39. En pahalısı koleksiyonun yarısını eşleyen yaygın etiket (metin anahtarlı geçici küme); sınırın yakınında, yükte oynayabilir.
+> - *1000 kart tek geri al:* `fc-app/src/modules/browse/tests.rs::bulk_ops_on_1000_cards_undo_in_one_step` (taşı, askı, göm, bayrak, sıfırla, etiket ekle/çıkar, bul-değiştir, sınıflandırma ata; her biri tek oplog girdisi, geri al → durum birebir, yinele → birebir) — MemStore, SQLite bellek ve SQLite dosya.
+> - *Komut paleti:* `…/browse/tests.rs::palette_lists_every_registry_command` (`palette.list` = registry'deki tüm public metotlar) + `apps/desktop/src/lib/features/browse/palette.test.ts` (arayüz her metodu listeler, her metodun TR/EN etiketi var).
+> - **Kapsamdan kalanlar:** deste ayar şablonları (preset) komutları, toplu "not türünü değiştir" (alan eşleme; v0.3'ün not türü editörüne bağlı), çöpün süre dolunca kalıcı silinmesi, özel çalışma oturumunun kendisi (v0.2 oturum motoru `search.ids`/`Filter` ile bağlanacak).
 
 ## 📥 v0.5 · İçe / dışa aktarma
 
