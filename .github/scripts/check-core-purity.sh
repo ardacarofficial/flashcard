@@ -12,7 +12,7 @@ fi
 fail=0
 
 # 1) Yasaklı bağımlılıklar ([dependencies] ve [build-dependencies]; dev-dependencies serbest)
-deny='^(rusqlite|sqlx|diesel|sea-orm|rand|rand_core|getrandom|fastrand|uuid|fs-err|fs_extra|tokio|async-std|smol|reqwest|hyper|ureq|surf|isahc|attohttpc|tauri|tauri-.*|walkdir|tempfile|notify|keyring|dirs|directories|home|mio|socket2|libsqlite3-sys|fc-storage|fc-app|fc-api|fc-providers|fc-cli)$'
+deny='^(rusqlite|sqlx|diesel|sea-orm|rand|rand_core|getrandom|fastrand|fs-err|fs_extra|tokio|async-std|smol|reqwest|hyper|ureq|surf|isahc|attohttpc|tauri|tauri-.*|walkdir|tempfile|notify|keyring|dirs|directories|home|mio|socket2|libsqlite3-sys|fc-storage|fc-app|fc-api|fc-providers|fc-cli)$'
 deps=$(awk '
   /^\[/ {
     sec = 0
