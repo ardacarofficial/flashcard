@@ -1,0 +1,16 @@
+{
+  "oplog.summary.notetypes.create": "Created note type {name}",
+  "oplog.summary.notetypes.update": "Changed note type {name}",
+  "oplog.summary.notetypes.delete": "Deleted note type {name}",
+  "oplog.summary.notetypes.restore": "Restored note type {name}",
+  "oplog.summary.notetypes.restore_version": "Restored note type {name}",
+  "oplog.summary.cards.trash_generated": "Removed {count} generated card(s)",
+  "oplog.summary.cards.restore_generated": "Brought back {count} generated card(s)",
+  "oplog.summary.media.add": "Added media {name}",
+  "oplog.summary.media.forget": "Removed media {name}",
+  "oplog.summary.media.reinstate": "Added media {name}",
+  "oplog.summary.flags.update": "Changed flag {flag}",
+  "oplog.summary.cards.set_flag": "Flagged {count} card(s)",
+  "oplog.summary.cards.set_flags": "Changed flags of {count} card(s)",
+  "oplog.summary.cards.set_user_note": "Edited card note: {text}"
+}

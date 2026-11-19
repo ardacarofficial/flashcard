@@ -1,0 +1,168 @@
+{
+  "nav": {
+    "notetypes": "Note types"
+  },
+  "modules": {
+    "cardtypes": {
+      "name": "Card types",
+      "description": "Note type editor, card templates, card rendering and preview."
+    },
+    "media": {
+      "name": "Media",
+      "description": "Images, audio and video in cards (each file stored once)."
+    },
+    "links": {
+      "name": "Note links",
+      "description": "[[Links]] between notes and backlinks."
+    },
+    "flags": {
+      "name": "Flags",
+      "description": "Seven colored card flags with your own names."
+    },
+    "card_notes": {
+      "name": "Card notes",
+      "description": "A private note on a single card."
+    },
+    "math": {
+      "name": "Math",
+      "description": "Typeset $…$ and $$…$$ formulas (KaTeX)."
+    },
+    "code_highlight": {
+      "name": "Code highlighting",
+      "description": "Syntax colors in code blocks."
+    }
+  },
+  "cardtypes": {
+    "engine": {
+      "classic": "Self-graded",
+      "typing": "Type the answer",
+      "cloze": "Cloze",
+      "multiple_choice": "Multiple choice",
+      "image_occlusion": "Image occlusion"
+    }
+  },
+  "cards": {
+    "preview": "Preview",
+    "show_answer": "Show answer",
+    "show_question": "Show question",
+    "no_cards": "This note would make no cards yet.",
+    "hint": "Hint",
+    "expected": "Answer",
+    "type_placeholder": "Type your answer",
+    "speak": "Read aloud",
+    "heading": "Cards",
+    "user_note": "Card note",
+    "user_note_placeholder": "Only for this card…",
+    "backlinks": "Linked from",
+    "no_backlinks": "No other note links here."
+  },
+  "flags": {
+    "heading": "Flags",
+    "rename": "Flag names",
+    "default": {
+      "1": "Red",
+      "2": "Orange",
+      "3": "Green",
+      "4": "Blue",
+      "5": "Pink",
+      "6": "Turquoise",
+      "7": "Purple"
+    }
+  },
+  "editor": {
+    "toolbar": "Formatting",
+    "bold": "Bold",
+    "italic": "Italic",
+    "code": "Code",
+    "math": "Formula",
+    "link": "Link to a note",
+    "media": "Add image, audio or video",
+    "placeholder": "Markdown, $math$, [[links]]; paste or drop files",
+    "uploading": "Uploading…",
+    "link_suggestions": "Notes",
+    "remove_media": "Remove",
+    "drop_hint": "Drop or paste a file here.",
+    "bold_short": "B",
+    "italic_short": "I",
+    "code_short": "</>"
+  },
+  "masks": {
+    "need_image": "Add the image first.",
+    "mode": "Ask",
+    "hide_all": "Hide all, ask one",
+    "hide_one": "Hide one, show others",
+    "draw_hint": "Drag on the image to add a mask; click a mask to remove it.",
+    "remove": "Remove mask",
+    "remove_n": "Remove mask {n}",
+    "count": "{n} mask(s) = {n} card(s)"
+  },
+  "notetype": {
+    "heading": "Note types",
+    "type": "Note type",
+    "name": "Name",
+    "fields": "Fields",
+    "field_name": "Field name",
+    "field_kind": "Kind",
+    "required": "Required",
+    "unique": "Unique",
+    "searchable": "Searchable",
+    "sort_field": "Shown in lists",
+    "add_field": "Add field",
+    "new_field": "New field",
+    "templates": "Card templates",
+    "template_name": "Template name",
+    "card_type": "Card type",
+    "front": "Question",
+    "back": "Answer",
+    "add_template": "Add template",
+    "new_template": "New card",
+    "css": "Styling (CSS)",
+    "save": "Save note type",
+    "saved": "Saved.",
+    "new": "New note type",
+    "copy": "Copy",
+    "delete": "Delete note type",
+    "confirm_delete": "Delete “{name}”?",
+    "move_up": "Move up",
+    "move_down": "Move down",
+    "remove": "Remove",
+    "usage": "{notes} note(s) use this type.",
+    "builtin": "Built-in",
+    "syntax": "{{field}} · {{#field}}…{{/field}} · {{cloze:field}} · {{type:field}} · {{hint:field}} · {{tts:en:field}} · {{FrontSide}}",
+    "classifications": "Classifications asked in every note",
+    "classifications_hint": "Defined per deck under Classifications; they appear next to the fields.",
+    "kind": {
+      "text": "Text",
+      "rich_text": "Rich text",
+      "image": "Image",
+      "audio": "Audio",
+      "video": "Video",
+      "number": "Number",
+      "tag_list": "Tag list",
+      "link": "Note link"
+    }
+  },
+  "note_editor": {
+    "save": "Save",
+    "saved": "Saved.",
+    "edit_heading": "Edit note",
+    "close": "Close",
+    "edit": "Edit"
+  },
+  "errors": {
+    "validation": {
+      "media_type": "This file type is not supported.",
+      "media_too_large": "The file is too large.",
+      "flag": "Unknown flag."
+    },
+    "not_found": {
+      "media": "Media file not found.",
+      "card_type": "Unknown card type."
+    },
+    "conflict": {
+      "note_type_in_use": "Notes still use this note type.",
+      "template_in_use": "This template still has cards.",
+      "note_type_required": "This note type can't be deleted."
+    }
+  }
+}

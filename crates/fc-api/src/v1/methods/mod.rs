@@ -77,4 +77,5 @@ domains! {
     tags,
     attributes,
     study,
+    cardtypes,
 }

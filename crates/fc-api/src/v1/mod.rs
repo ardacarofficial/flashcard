@@ -2,6 +2,7 @@
 //! are qualified (`v1.decks.create`).
 
 pub mod attributes;
+pub mod cardtypes;
 pub mod common;
 pub mod decks;
 pub mod events;

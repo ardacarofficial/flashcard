@@ -168,4 +168,5 @@ domains! {
     settings,
     jobs,
     study => StudyState,
+    content => ContentState,
 }

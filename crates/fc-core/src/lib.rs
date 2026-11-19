@@ -11,6 +11,7 @@
 
 pub mod attribute;
 pub mod card;
+pub mod content;
 pub mod deck;
 pub mod error;
 pub mod i18n;

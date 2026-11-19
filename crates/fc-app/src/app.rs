@@ -96,8 +96,9 @@ impl App {
 
     /// Startup work after the store is open (and migrated — `SqliteStore::open` migrates):
     /// seeds built-ins (the Classic note type, localized by `app.locale`), marks jobs left
-    /// running/queued as interrupted, then loads module switches and the locale into memory.
-    /// Idempotent. Seeding is not an undoable command, so it writes no oplog entry.
+    /// running/queued as interrupted, removes media files without a media entry (left by an
+    /// undone `media.add`; redo works until the next start), then loads module switches and
+    /// the locale into memory. Idempotent. Seeding is not an undoable command, so it writes no oplog entry.
     pub fn load_state(&self) -> AppResult<()> {
         let now = self.clock.now();
         let mut tx = self.store.write()?;
@@ -109,7 +110,9 @@ impl App {
             };
             tx.upsert_notetype(&builtin::classic(now, name, front, back))?;
         }
+        crate::support::content::seed_builtin_notetypes(&mut *tx, locale, now)?;
         tx.mark_unfinished_jobs_interrupted(now)?;
+        tx.delete_orphan_media_files()?;
         tx.commit()?;
         self.reload_cached_state()
     }

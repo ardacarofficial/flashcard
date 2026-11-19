@@ -13,10 +13,12 @@ use fc_api::v1::oplog::Actor;
 use fc_api::{
     ApiError, ApiMethod, ErrorCode, InvokeRequest, MethodDescriptor, MethodKind, Visibility,
 };
+use fc_providers::strategy::CardTypeEngine;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 /// Type-erased command handler.
 pub(crate) trait ErasedCommand: Send + Sync {
@@ -89,11 +91,12 @@ pub(crate) struct Entry {
 #[error("invalid registry: {0:?}")]
 pub struct RegistryError(pub Vec<String>);
 
-/// Methods and modules known to the app.
+/// Methods, modules and card type engines known to the app.
 #[derive(Default)]
 pub struct Registry {
     entries: BTreeMap<&'static str, Entry>,
     modules: Vec<ModuleDescriptor>,
+    card_types: BTreeMap<String, Arc<dyn CardTypeEngine>>,
     errors: Vec<String>,
 }
 
@@ -110,6 +113,25 @@ impl Registry {
                 .push(format!("module {} registered twice", descriptor.id));
         }
         self.modules.push(descriptor);
+    }
+
+    /// Registers a card type engine under `engine.info().id` (docs/02 §4: a new card type is
+    /// an engine registered here; templates refer to it by id).
+    pub fn card_type(&mut self, engine: Arc<dyn CardTypeEngine>) {
+        let id = engine.info().id;
+        if self.card_types.insert(id.clone(), engine).is_some() {
+            self.errors.push(format!("card type {id} registered twice"));
+        }
+    }
+
+    /// Card type engine by id.
+    pub fn card_type_engine(&self, id: &str) -> Option<&Arc<dyn CardTypeEngine>> {
+        self.card_types.get(id)
+    }
+
+    /// Registered card type engines, by id.
+    pub fn card_types(&self) -> impl Iterator<Item = &Arc<dyn CardTypeEngine>> {
+        self.card_types.values()
     }
 
     fn insert<M: ApiMethod>(&mut self, expected: MethodKind, handler: ErasedHandler) {

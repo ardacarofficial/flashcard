@@ -5,6 +5,7 @@
 //! inspect the schema and the FTS index.
 
 mod attributes;
+mod content;
 mod decks;
 mod migrations;
 mod misc;

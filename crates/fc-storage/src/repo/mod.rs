@@ -70,4 +70,5 @@ domains! {
     modules: ModuleStateRead, ModuleStateWrite;
     jobs: JobRead, JobWrite;
     study: StudyRead, StudyWrite;
+    content: ContentRead, ContentWrite;
 }

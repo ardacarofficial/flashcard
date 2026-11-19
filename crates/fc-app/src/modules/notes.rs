@@ -6,12 +6,14 @@ use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::registry::Registry;
 use crate::support::attrs::apply_assignments;
+use crate::support::content::{add_missing_cards, card_specs, deck_for_new_cards};
 use crate::support::decks::DeckIndex;
 use crate::support::notes::{
     derive, field_values, insert_note, parse_tags, require_live_note, require_note,
     require_notetype, write_note,
 };
 use crate::support::{deleted, dto, err_id, summary};
+use fc_api::v1::cardtypes::CardIdList;
 use fc_api::v1::common::AffectedCount;
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::methods::*;
@@ -21,7 +23,7 @@ use fc_api::{ApiError, ErrorCode};
 use fc_core::attribute::{
     effective_attribute_defs, prepare_attribute_values, AttributeTarget, EntityRef,
 };
-use fc_core::card::{standard_card_specs, Card};
+use fc_core::card::Card;
 use fc_core::error::CoreError;
 use fc_core::note::{normalize_note_fields, Note};
 use fc_core::{CardId, NoteId};
@@ -74,13 +76,6 @@ fn create(req: CreateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
     }
     let index = DeckIndex::load(ctx.reads())?;
     index.require_live(req.deck_id)?;
-    let specs = standard_card_specs(&nt);
-    if specs.is_empty() {
-        return Err(CoreError::InvalidNoteType {
-            reason: "note type generates no cards".into(),
-        }
-        .into());
-    }
     let mut note = Note {
         id: NoteId::generate(ctx.ids),
         notetype_id: nt.id,
@@ -94,6 +89,14 @@ fn create(req: CreateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
         deleted_at: None,
     };
     derive(&nt, &mut note);
+    // Cards come from the card type engines of the note type's templates (v0.3).
+    let specs = card_specs(ctx.registry, &nt, &note)?;
+    if specs.is_empty() {
+        return Err(CoreError::InvalidNoteType {
+            reason: "note generates no cards".into(),
+        }
+        .into());
+    }
     if !req.allow_duplicate.unwrap_or(false) {
         if let Some(existing) = ctx
             .reads()
@@ -167,6 +170,10 @@ fn update(req: UpdateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
     note.tags = parse_tags(&req.tags)?;
     note.updated_at = ctx.now;
     write_note(ctx, &nt, &mut note)?;
+    // New content may call for new cards (a new cloze number, a filled optional reverse);
+    // existing cards are never removed (v0.3).
+    let deck = deck_for_new_cards(ctx.reads(), &note)?;
+    let new_cards = add_missing_cards(ctx, &nt, &note, deck)?;
     let previous = apply_assignments(ctx.tx, strict, EntityRef::Note(note.id), &req.attributes)?;
     let inverse = UpdateNote {
         id: note.id,
@@ -180,8 +187,12 @@ fn update(req: UpdateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
         deck_id: (old.home_deck_id != note.home_deck_id).then_some(old.home_deck_id),
     };
     let response = dto::note(ctx.reads(), &note)?;
+    let mut inverse = vec![inverse_call::<NotesUpdate>(&inverse)?];
+    if !new_cards.is_empty() {
+        inverse.push(inverse_call::<CardsTrashGenerated>(&CardIdList { ids: new_cards })?);
+    }
     Ok(CommandOutcome {
-        inverse: vec![inverse_call::<NotesUpdate>(&inverse)?],
+        inverse,
         summary: summary::<NotesUpdate>().param("text", &note.sort_field),
         events: vec![DomainEvent::NoteUpdated { note_id: note.id }],
         response,

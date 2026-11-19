@@ -949,3 +949,11 @@ mod sqlite_file {
     use std::sync::Arc;
     study_suite!(|| -> Arc<dyn Store> { Arc::new(TempSqlite::new()) });
 }
+
+#[test]
+fn v02_internal_methods() {
+    assert_eq!(
+        crate::tests::internal_methods_of(&crate::testing::TestApp::mem(), &["study"]),
+        ["study.restore"]
+    );
+}

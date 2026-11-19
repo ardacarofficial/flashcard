@@ -3,6 +3,7 @@
 //! history walk. Handlers compose these; none of them writes on its own.
 
 pub(crate) mod attrs;
+pub(crate) mod content;
 pub(crate) mod decks;
 pub(crate) mod dto;
 pub(crate) mod history;

@@ -10,6 +10,7 @@ import type { EntityRef } from "./EntityRef";
 import type { I18nMessage } from "./I18nMessage";
 import type { JobDto } from "./JobDto";
 import type { NoteId } from "./NoteId";
+import type { NoteTypeId } from "./NoteTypeId";
 import type { SettingScope } from "./SettingScope";
 
 /**
@@ -63,7 +64,15 @@ ids: Array<NoteId>, } } | { "type": "notes_restored", "data": {
 /**
  * Note ids.
  */
-ids: Array<NoteId>, } } | { "type": "tags_changed" } | { "type": "attribute_defined", "data": { 
+ids: Array<NoteId>, } } | { "type": "tags_changed" } | { "type": "note_type_changed", "data": { 
+/**
+ * Note type id.
+ */
+notetype_id: NoteTypeId, } } | { "type": "cards_updated", "data": { 
+/**
+ * Card ids.
+ */
+ids: Array<CardId>, } } | { "type": "flags_changed" } | { "type": "attribute_defined", "data": { 
 /**
  * Definition.
  */
