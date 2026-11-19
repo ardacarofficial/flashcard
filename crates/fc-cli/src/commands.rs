@@ -7,6 +7,7 @@ use crate::{AttrRef, AttributeCommand, Command, DeckCommand, NoteCommand, Option
 use fc_api::v1::attributes::*;
 use fc_api::v1::common::{AffectedCount, Empty, EntityRef};
 use fc_api::v1::decks::{CreateDeck, DeckRef, DeckTreeNode, MoveDeck, RenameDeck};
+use fc_api::v1::jobs::{JobDto, JobRef, JobStatus};
 use fc_api::v1::methods as m;
 use fc_api::v1::notes::{CreateNote, ListNotes, NoteIds, NoteRef, UpdateNote};
 use fc_api::v1::oplog::{Actor, UndoResult};
@@ -177,7 +178,20 @@ pub fn run(ctx: &Ctx<'_>, command: &Command, stdin: &mut dyn Read) -> Result<Str
             } else {
                 format!("{prefix}{method}")
             };
-            pretty(&ctx.app.invoke(&qualified, params, &Actor::Cli)?)
+            let response = ctx.app.invoke(&qualified, params, &Actor::Cli)?;
+            // No background worker here: a job the call queued runs now, and the finished
+            // job (with its result) is printed instead of the queued one.
+            if let Ok(job) = serde_json::from_value::<JobDto>(response.clone()) {
+                if job.status == JobStatus::Queued {
+                    ctx.app.run_pending_jobs().map_err(ApiError::from)?;
+                    let done = call::<m::JobsGet>(ctx.app, &JobRef { id: job.id })?;
+                    return pretty(
+                        &serde_json::to_value(done)
+                            .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?,
+                    );
+                }
+            }
+            pretty(&response)
         }
     }
 }

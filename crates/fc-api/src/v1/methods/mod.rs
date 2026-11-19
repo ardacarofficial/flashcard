@@ -76,4 +76,5 @@ domains! {
     notes,
     tags,
     attributes,
+    io,
 }

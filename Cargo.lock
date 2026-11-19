@@ -953,6 +953,7 @@ version = "0.1.0"
 dependencies = [
  "fc-api",
  "fc-core",
+ "fc-interop",
  "fc-providers",
  "fc-storage",
  "getrandom 0.3.4",

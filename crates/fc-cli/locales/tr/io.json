@@ -1,0 +1,10 @@
+{
+  "oplog.summary.io.import.start": "İçe aktarma başlatıldı",
+  "oplog.summary.io.import.apply": "{count} not içe aktarıldı",
+  "oplog.summary.io.import.trash": "İçe aktarılan {count} not kaldırıldı",
+  "oplog.summary.io.import.untrash": "İçe aktarılan {count} not geri getirildi",
+  "oplog.summary.io.export.start": "Dışa aktarma başlatıldı",
+  "oplog.summary.io.backup.create": "Yedekleme başlatıldı",
+  "oplog.summary.io.backup.restore": "Geri yükleme başlatıldı",
+  "oplog.summary.io.backup.load": "Yedek geri yüklendi"
+}

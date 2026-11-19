@@ -5,7 +5,7 @@ use super::common::{AffectedCount, EntityRef, I18nMessage};
 use super::decks::DeckDto;
 use super::jobs::JobDto;
 use fc_core::settings::SettingScope;
-use fc_core::{AttributeDefId, BatchId, DeckId, NoteId, Timestamp};
+use fc_core::{AttributeDefId, BatchId, DeckId, JobId, NoteId, Timestamp};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -118,6 +118,15 @@ pub enum DomainEvent {
         /// Job snapshot.
         job: JobDto,
     },
+    /// An import job committed (refetch decks/notes).
+    Imported {
+        /// Job.
+        job_id: JobId,
+        /// Notes added or updated.
+        notes: u32,
+    },
+    /// The whole collection was replaced (backup restored): refetch everything.
+    CollectionReplaced,
     /// A batch was undone.
     Undone {
         /// Batch reverted.

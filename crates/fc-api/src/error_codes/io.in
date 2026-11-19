@@ -1,0 +1,12 @@
+// Import / export (v0.5).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// The file is not in the expected format or is damaged (`details.format`, `details.reason`).
+ValidationImportFormat => Validation, "errors.validation.import_format";
+/// Separators are empty or overlap (`details.reason`).
+ValidationTextOptions => Validation, "errors.validation.text_options";
+/// A column mapping is invalid (`details.column`, `details.reason`).
+ValidationColumnMapping => Validation, "errors.validation.column_mapping";
+/// The file comes from a newer version of the app (`details.format`, `details.version`).
+ConflictUnsupportedVersion => Conflict, "errors.conflict.unsupported_version";
+/// The job was cancelled.
+ConflictJobCancelled => Conflict, "errors.conflict.job_cancelled";

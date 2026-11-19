@@ -8,6 +8,7 @@ import type { DeckId } from "./DeckId";
 import type { EntityRef } from "./EntityRef";
 import type { I18nMessage } from "./I18nMessage";
 import type { JobDto } from "./JobDto";
+import type { JobId } from "./JobId";
 import type { NoteId } from "./NoteId";
 import type { SettingScope } from "./SettingScope";
 
@@ -98,7 +99,15 @@ enabled: boolean, } } | { "type": "job_progress", "data": {
 /**
  * Job snapshot.
  */
-job: JobDto, } } | { "type": "undone", "data": { 
+job: JobDto, } } | { "type": "imported", "data": { 
+/**
+ * Job.
+ */
+job_id: JobId, 
+/**
+ * Notes added or updated.
+ */
+notes: number, } } | { "type": "collection_replaced" } | { "type": "undone", "data": { 
 /**
  * Batch reverted.
  */

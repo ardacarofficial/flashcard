@@ -39,6 +39,8 @@ pub struct JobDto {
     pub message: Option<I18nMessage>,
     /// Error if failed.
     pub error: Option<ApiError>,
+    /// Result when succeeded (shape depends on `kind`, e.g. `ImportReport`).
+    pub result: Option<serde_json::Value>,
     /// Created.
     pub created_at: Timestamp,
     /// Last update.

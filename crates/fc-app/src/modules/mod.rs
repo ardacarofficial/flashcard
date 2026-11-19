@@ -27,4 +27,5 @@ modules! {
     notes,
     tags,
     attributes,
+    io,
 }

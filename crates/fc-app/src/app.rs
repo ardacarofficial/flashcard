@@ -12,6 +12,8 @@ use crate::system::{OsRng, SystemClock};
 use fc_api::method::parse_qualified_name;
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::events::EventEnvelope;
+use fc_api::v1::jobs::{JobRef, JobStatus};
+use fc_api::v1::methods::JobsCancel;
 use fc_api::v1::oplog::{Actor, OplogKind};
 use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest};
 use fc_core::i18n::Locale;
@@ -61,6 +63,7 @@ pub struct App {
     module_enabled: RwLock<HashMap<&'static str, bool>>,
     locale: RwLock<Locale>,
     event_seq: AtomicU64,
+    jobs: crate::jobs::JobRuntime,
 }
 
 impl App {
@@ -91,6 +94,7 @@ impl App {
             module_enabled: RwLock::new(module_enabled),
             locale: RwLock::new(Locale::default()),
             event_seq: AtomicU64::new(0),
+            jobs: crate::jobs::JobRuntime::default(),
         })
     }
 
@@ -138,8 +142,13 @@ impl App {
     /// Keeps in-memory caches in step with committed changes (also when they come from
     /// undo/redo, whose nested calls emit the same events).
     fn apply_committed(&self, events: &[DomainEvent]) {
+        if events.iter().any(
+            |e| matches!(e, DomainEvent::JobProgress { job } if job.status == JobStatus::Queued),
+        ) {
+            self.jobs.notify();
+        }
         let relevant = events.iter().any(|e| match e {
-            DomainEvent::ModuleToggled { .. } => true,
+            DomainEvent::ModuleToggled { .. } | DomainEvent::CollectionReplaced => true,
             DomainEvent::SettingChanged { scope, key } => {
                 *scope == SettingScope::App && key == crate::modules::core::LOCALE
             }
@@ -148,6 +157,35 @@ impl App {
         if relevant {
             // A failed reload keeps the previous cache; the next start reloads anyway.
             let _ = self.reload_cached_state();
+        }
+    }
+
+    /// Current time from the injected clock.
+    pub(crate) fn now(&self) -> fc_core::Timestamp {
+        self.clock.now()
+    }
+
+    /// The store.
+    pub(crate) fn store(&self) -> &Arc<dyn Store> {
+        &self.store
+    }
+
+    /// In-memory job state (cancel tokens, worker wake-up).
+    pub(crate) fn job_runtime(&self) -> &crate::jobs::JobRuntime {
+        &self.jobs
+    }
+
+    /// Publishes events outside a command (job progress).
+    pub(crate) fn publish(&self, events: Vec<DomainEvent>, batch_id: Option<BatchId>) {
+        let at = self.clock.now();
+        for event in events {
+            let envelope = EventEnvelope {
+                seq: self.event_seq.fetch_add(1, Ordering::SeqCst),
+                at,
+                batch_id,
+                event,
+            };
+            self.events.publish(&envelope);
         }
     }
 
@@ -216,18 +254,53 @@ impl App {
     /// Commands: parse + validate → write tx → handler (nested calls share tx and batch) →
     /// oplog entries → commit → publish events.
     pub fn invoke(&self, method: &str, params: Value, actor: &Actor) -> Result<Value, ApiError> {
-        self.invoke_inner(method, params, actor)
+        self.invoke_inner(method, params, actor, false)
             .map_err(AppError::into_api)
     }
 
-    fn invoke_inner(&self, method: &str, params: Value, actor: &Actor) -> AppResult<Value> {
+    /// [`App::invoke`] for trusted in-process callers (background jobs): internal methods are
+    /// allowed; the module switch still applies.
+    pub(crate) fn invoke_trusted(
+        &self,
+        request: &InvokeRequest,
+        actor: &Actor,
+    ) -> Result<Value, ApiError> {
+        self.invoke_inner(&request.method, request.params.clone(), actor, true)
+            .map_err(AppError::into_api)
+    }
+
+    fn invoke_inner(
+        &self,
+        method: &str,
+        params: Value,
+        actor: &Actor,
+        trusted: bool,
+    ) -> AppResult<Value> {
         let name = parse_qualified_name(method).ok_or_else(|| unknown_method(method))?;
         let entry = self
             .registry
             .entry(name)
             .ok_or_else(|| unknown_method(method))?;
         let d = &entry.descriptor;
-        ensure_invocable(d, actor, self.is_module_enabled(d.module))?;
+        if trusted {
+            if !self.is_module_enabled(d.module) {
+                return Err(AppError::Api(
+                    ApiError::new(
+                        ErrorCode::ConflictModuleDisabled,
+                        format!("module {} is disabled", d.module),
+                    )
+                    .with_detail("module", d.module),
+                ));
+            }
+        } else {
+            ensure_invocable(d, actor, self.is_module_enabled(d.module))?;
+        }
+        if name == JobsCancel::NAME {
+            // Signal a running job before waiting for the writer it may be holding.
+            if let Ok(r) = serde_json::from_value::<JobRef>(params.clone()) {
+                self.jobs.request_cancel(r.id);
+            }
+        }
         match &entry.handler {
             ErasedHandler::Query(h) => {
                 h.validate(&params)?;

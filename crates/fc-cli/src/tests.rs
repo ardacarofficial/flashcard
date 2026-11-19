@@ -427,3 +427,23 @@ fn ambiguous_attribute_names_ask_for_a_deck() {
     )
     .unwrap();
 }
+
+#[test]
+fn call_runs_the_jobs_it_queues() {
+    let t = TestApp::mem();
+    let created: serde_json::Value = serde_json::from_str(
+        &exec(&t, &["call", "decks.create", r#"{"path": "Kelimeler"}"#]).unwrap(),
+    )
+    .unwrap();
+    let params = serde_json::json!({
+        "source": {"kind": "text", "text": "Arda, porsuk\nAli, kedi"},
+        "deck_id": created["id"],
+    });
+    let job: serde_json::Value =
+        serde_json::from_str(&exec(&t, &["call", "io.import.start", &params.to_string()]).unwrap())
+            .unwrap();
+    assert_eq!(job["status"], "succeeded");
+    assert_eq!(job["result"]["added_notes"], 2);
+    let listed = exec(&t, &["note", "list", "--deck", "Kelimeler"]).unwrap();
+    assert!(listed.contains("Arda"), "{listed}");
+}
