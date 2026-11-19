@@ -77,10 +77,10 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** Not türü şeması ve editörü; şablon dili; kart türü motoru; klasik, ters, isteğe bağlı ters, cloze, çoktan seçmeli, yazarak, resim üzerinde gizleme, resimli quiz, sesli kart; hazır not türleri (kelime kartı dahil); Markdown editör, KaTeX, kod blokları; medya deposu, sürükle-bırak, Ctrl+V; kart önizleme; `[[bağlantılar]]` ve geri bağlantılar; kart notu; bayraklar (özel adlarıyla).
 
 **Kabul kriterleri**
-- [ ] Yeni bir kart türü sadece `CardTypeEngine` uygulanarak eklenebilir (testte örnek tür ile kanıt).
-- [ ] Not türüne alan eklemek/çıkarmak mevcut kartları ve geçmişi bozmaz.
-- [ ] Aynı medya iki kez eklenince tek dosya tutulur.
-- [ ] HTML temizleme testleri (XSS vektörleri) geçer.
+- [x] Yeni bir kart türü sadece `CardTypeEngine` uygulanarak eklenebilir (testte örnek tür ile kanıt). → `fc-app/src/cards_tests.rs::a_new_card_type_is_just_an_engine` (test içi `ReverseWords` motoru, 3 depoda)
+- [x] Not türüne alan eklemek/çıkarmak mevcut kartları ve geçmişi bozmaz. → `notetype_field_add_remove_keeps_cards_and_history` (kart kimlikleri/zamanlama aynı, geri al değerleri birebir getirir, eski not düzenlemesi hâlâ geri alınır)
+- [x] Aynı medya iki kez eklenince tek dosya tutulur. → `same_media_twice_is_one_file_on_disk`, `same_media_twice_is_one_entry`, `fc-storage` `same_media_twice_is_one_file_and_one_row`
+- [x] HTML temizleme testleri (XSS vektörleri) geçer. → `fc-core` `content::html::tests::xss_vectors_are_neutralized` (36 vektör) + uçtan uca `rendering_is_sanitized` (alan, kullanıcı şablonu, seçenek, CSS)
 
 ## 🛠️ v0.4 · Kart yönetimi
 
