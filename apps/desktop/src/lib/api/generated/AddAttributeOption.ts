@@ -21,4 +21,9 @@ color?: string | null,
 /**
  * Insert after this option (`null` = last).
  */
-after?: AttributeOptionId | null, };
+after?: AttributeOptionId | null, 
+/**
+ * Id for the new option (`null` = generated). Lets the inverse of `option.delete` /
+ * `option.merge` bring an option back under its old id, so stored values match again.
+ */
+id?: AttributeOptionId | null, };

@@ -176,6 +176,10 @@ pub struct AddAttributeOption {
     pub color: Option<String>,
     /// Insert after this option (`null` = last).
     pub after: Option<AttributeOptionId>,
+    /// Id for the new option (`null` = generated). Lets the inverse of `option.delete` /
+    /// `option.merge` bring an option back under its old id, so stored values match again.
+    #[serde(default)]
+    pub id: Option<AttributeOptionId>,
 }
 
 /// `attributes.option.rename`.
