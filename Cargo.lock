@@ -181,6 +181,10 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "fc-api",
+ "fc-app",
+ "fc-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
