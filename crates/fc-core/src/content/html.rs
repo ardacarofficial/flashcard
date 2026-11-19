@@ -11,7 +11,8 @@
 //!   of layout/typography properties, and every event handler, script, frame, form and
 //!   `style`/`link` element is dropped.
 //! * [`sanitize_css`]: note type CSS minus anything that loads or executes (`@import`,
-//!   `url(…)`, `expression(…)`, `javascript:`, `</style`).
+//!   `url(…)`, `expression(…)`, `javascript:`, `</style`), with escapes normalised and
+//!   brackets balanced so it cannot break out of the frontend's scope block.
 
 use pulldown_cmark::{html, Options, Parser};
 use std::borrow::Cow;
@@ -260,13 +261,24 @@ pub fn sanitize_html(input: &str) -> String {
     builder.clean(input).to_string()
 }
 
-/// Removes everything from note type CSS that could load resources or run code. The result is
-/// meant to be scoped to the card container by the frontend.
+/// Removes everything from note type CSS that could load resources or run code, and repairs its
+/// structure so it can be wrapped in a scope block without escaping it.
+///
+/// 1. Escapes are normalised first ([`normalize_css_escapes`]), so `\\75rl(` cannot slip past
+///    the filter as `url(`.
+/// 2. `@import`, `url(…)`, `image(…)`, `image-set(…)`, `expression(…)`, `javascript:`,
+///    `behavior`/`-moz-binding` and every `<` are removed.
+/// 3. Comments are dropped, unterminated strings closed, and `{}`/`()`/`[]` balanced: a stray
+///    closer is dropped and missing closers are appended ([`balance_css`]). A single `}` in a
+///    note type's CSS therefore can never close the frontend's scope block.
 pub fn sanitize_css(css: &str) -> String {
+    balance_css(&filter_css(&normalize_css_escapes(css)))
+}
+
+fn filter_css(css: &str) -> String {
     let mut out = String::with_capacity(css.len());
     let lower = css.to_ascii_lowercase();
     let mut i = 0;
-    let bytes = css.as_bytes();
     while i < css.len() {
         let rest = &lower[i..];
         if rest.starts_with("@import") {
@@ -274,9 +286,9 @@ pub fn sanitize_css(css: &str) -> String {
             i += rest.find(';').map_or(rest.len(), |p| p + 1);
             continue;
         }
-        if rest.starts_with("url(")
-            || rest.starts_with("expression(")
-            || rest.starts_with("image-set(")
+        if ["url(", "image(", "image-set(", "expression(", "src("]
+            .iter()
+            .any(|f| rest.starts_with(f))
         {
             i += rest.find(')').map_or(rest.len(), |p| p + 1);
             out.push_str("none");
@@ -286,7 +298,7 @@ pub fn sanitize_css(css: &str) -> String {
             i += "javascript:".len();
             continue;
         }
-        if rest.starts_with("</") || bytes[i] == b'<' {
+        if rest.starts_with('<') {
             i += 1;
             continue;
         }
@@ -298,6 +310,134 @@ pub fn sanitize_css(css: &str) -> String {
         let ch_len = css[i..].chars().next().map_or(1, char::len_utf8);
         out.push_str(&css[i..i + ch_len]);
         i += ch_len;
+    }
+    out
+}
+
+/// Rewrites every CSS escape into a canonical form: escaped letters and non-ASCII characters
+/// become the literal character (so keyword filters see them), everything else becomes
+/// `\\<hex> ` (an escaped `}` or `(` stays an identifier character and can never act as
+/// syntax). A backslash before a newline (string continuation) or at the end is removed.
+fn normalize_css_escapes(css: &str) -> String {
+    let mut out = String::with_capacity(css.len());
+    let mut chars = css.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        let decoded = match chars.peek().copied() {
+            None | Some('\n' | '\r' | '\u{c}') => {
+                if chars.next() == Some('\r') && chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                continue;
+            }
+            Some(h) if h.is_ascii_hexdigit() => {
+                let mut v: u32 = 0;
+                for _ in 0..6 {
+                    match chars.peek().and_then(|d| d.to_digit(16)) {
+                        Some(d) => {
+                            v = v * 16 + d;
+                            chars.next();
+                        }
+                        None => break,
+                    }
+                }
+                match chars.peek().copied() {
+                    Some('\r') => {
+                        chars.next();
+                        if chars.peek() == Some(&'\n') {
+                            chars.next();
+                        }
+                    }
+                    Some(' ' | '\t' | '\n' | '\u{c}') => {
+                        chars.next();
+                    }
+                    _ => {}
+                }
+                match char::from_u32(v) {
+                    Some(ch) if v != 0 => ch,
+                    _ => char::REPLACEMENT_CHARACTER,
+                }
+            }
+            Some(other) => {
+                chars.next();
+                other
+            }
+        };
+        if decoded.is_ascii_alphabetic() || !decoded.is_ascii() {
+            out.push(decoded);
+        } else {
+            out.push_str(&format!("\\{:x} ", u32::from(decoded)));
+        }
+    }
+    out
+}
+
+/// Drops comments, closes unterminated strings and balances brackets (see [`sanitize_css`]).
+/// Expects normalised escapes: a backslash is always followed by hex digits and a space.
+fn balance_css(css: &str) -> String {
+    let mut out = String::with_capacity(css.len() + 8);
+    let mut stack: Vec<char> = Vec::new();
+    let mut chars = css.chars().peekable();
+    let mut quote: Option<char> = None;
+    while let Some(c) = chars.next() {
+        if let Some(q) = quote {
+            match c {
+                '\n' | '\r' | '\u{c}' => {
+                    // A newline ends a CSS string (as a "bad string"); close it properly.
+                    out.push(q);
+                    out.push(c);
+                    quote = None;
+                }
+                _ => {
+                    out.push(c);
+                    if c == q {
+                        quote = None;
+                    }
+                }
+            }
+            continue;
+        }
+        match c {
+            '"' | '\'' => {
+                quote = Some(c);
+                out.push(c);
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                chars.next();
+                let mut prev = ' ';
+                for d in chars.by_ref() {
+                    if prev == '*' && d == '/' {
+                        break;
+                    }
+                    prev = d;
+                }
+                out.push(' ');
+            }
+            '{' | '(' | '[' => {
+                stack.push(match c {
+                    '{' => '}',
+                    '(' => ')',
+                    _ => ']',
+                });
+                out.push(c);
+            }
+            '}' | ')' | ']' => {
+                if stack.last() == Some(&c) {
+                    stack.pop();
+                    out.push(c);
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    if let Some(q) = quote {
+        out.push(q);
+    }
+    while let Some(close) = stack.pop() {
+        out.push(close);
     }
     out
 }
@@ -443,6 +583,68 @@ mod tests {
         }
         assert!(out.contains("color: red"));
         assert_eq!(sanitize_css(".ç { color: blue }"), ".ç { color: blue }");
+    }
+
+    #[test]
+    fn css_braces_cannot_escape_scope() {
+        // A stray closer is dropped; an unclosed block is closed.
+        assert_eq!(
+            sanitize_css("} body { color: red }"),
+            " body { color: red }"
+        );
+        assert_eq!(sanitize_css(".a { color: red"), ".a { color: red}");
+        assert_eq!(
+            sanitize_css(".a { b: rgb( } .c {}"),
+            ".a { b: rgb(  .c {})}"
+        );
+        // Braces in strings and comments do not count; unterminated strings are closed.
+        assert_eq!(
+            sanitize_css(".a::after { content: \"}\" } /* } */"),
+            ".a::after { content: \"}\" }  "
+        );
+        assert_eq!(
+            sanitize_css(".a { content: \"x\n}"),
+            ".a { content: \"x\"\n}"
+        );
+        assert_eq!(sanitize_css(".a { content: \"x"), ".a { content: \"x\"}");
+        // Escaped braces stay escaped identifier characters.
+        assert_eq!(sanitize_css(".a\\7d { }"), ".a\\7d { }");
+        // Whatever goes in, wrapping the result keeps every rule inside the scope.
+        for evil in ["}}}} * { x: y }", "{{{", "]) } :root { }", "\"}\n}", "/* }"] {
+            let out = sanitize_css(evil);
+            let wrapped = format!(".s {{{out}}}");
+            assert_eq!(balance_css(&wrapped), wrapped, "{evil:?} -> {out:?}");
+        }
+    }
+
+    #[test]
+    fn css_escapes_are_normalised_before_filtering() {
+        for evil in [
+            ".a { background: \\75rl(https://evil/x.png) }",
+            ".a { background: \\75 rl(https://evil/x.png) }",
+            ".a { background: u\\rl(https://evil/x.png) }",
+            ".a { background: \\000055RL(https://evil/x.png) }",
+            "@\\69mport 'https://evil/x.css';",
+            ".a { width: expr\\65ssion(alert(1)) }",
+        ] {
+            let out = sanitize_css(evil).to_ascii_lowercase();
+            assert!(
+                !out.contains("evil") && !out.contains("alert"),
+                "{evil:?} -> {out:?}"
+            );
+        }
+        // Harmless escapes survive in an equivalent form.
+        assert_eq!(
+            sanitize_css("q::before { content: \"\\201C\" }"),
+            "q::before { content: \"“\" }"
+        );
+        assert_eq!(sanitize_css(".\\31 0 { }"), ".\\31 0 { }");
+        assert_eq!(
+            sanitize_css("a { content: \"\\\"\" }"),
+            "a { content: \"\\22 \" }"
+        );
+        // `<` cannot be smuggled in as an escape.
+        assert!(!sanitize_css("a { content: \"\\3c /style>\" }").contains('<'));
     }
 
     #[test]

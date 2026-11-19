@@ -1,6 +1,8 @@
 //! [`MemTx`] repository traits: card content (media, note references, flags).
 
 use super::*;
+use fc_core::note::fnv1a64;
+use fc_core::notetype::FieldKey;
 
 /// Content tables.
 #[derive(Debug, Clone)]
@@ -36,6 +38,20 @@ impl MemTx<'_> {
         &self.s().domains.content
     }
 
+    /// `m` with `ref_count` counted from the references of existing notes.
+    fn counted(&self, m: &MediaRecord) -> MediaRecord {
+        let n = self
+            .c()
+            .refs
+            .iter()
+            .filter(|(id, r)| self.s().notes.contains_key(id) && r.media.contains(&m.hash))
+            .count();
+        MediaRecord {
+            ref_count: u32::try_from(n).unwrap_or(u32::MAX),
+            ..m.clone()
+        }
+    }
+
     fn live_note(&self, id: NoteId) -> bool {
         self.s()
             .notes
@@ -46,11 +62,11 @@ impl MemTx<'_> {
 
 impl ContentRead for MemTx<'_> {
     fn get_media(&self, hash: &str) -> StorageResult<Option<MediaRecord>> {
-        Ok(self.c().media.get(hash).cloned())
+        Ok(self.c().media.get(hash).map(|m| self.counted(m)))
     }
 
     fn list_media(&self) -> StorageResult<Vec<MediaRecord>> {
-        let mut v: Vec<MediaRecord> = self.c().media.values().cloned().collect();
+        let mut v: Vec<MediaRecord> = self.c().media.values().map(|m| self.counted(m)).collect();
         v.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(a.hash.cmp(&b.hash)));
         Ok(v)
     }
@@ -131,6 +147,30 @@ impl ContentRead for MemTx<'_> {
     fn list_flag_defs(&self) -> StorageResult<Vec<FlagDef>> {
         Ok(self.c().flags.clone())
     }
+
+    fn sample_field_values(&self, q: &FieldSample<'_>) -> StorageResult<Vec<String>> {
+        let s = self.s();
+        let mut v: Vec<(u64, NoteId, String)> = s
+            .notes
+            .values()
+            .filter(|n| n.id != q.exclude && n.notetype_id == q.notetype && n.deleted_at.is_none())
+            .filter(|n| {
+                s.cards.values().any(|c| {
+                    c.note_id == n.id && c.deck_id == q.deck && c.deleted_at.is_none()
+                })
+            })
+            .filter_map(|n| {
+                let value = n.fields.get(&FieldKey::new(q.field))?;
+                let order = fnv1a64(format!("{}{}", q.seed, n.id).as_bytes());
+                (!value.is_empty()).then(|| (order, n.id, value.clone()))
+            })
+            .collect();
+        v.sort();
+        Ok(v.into_iter()
+            .take(q.limit as usize)
+            .map(|(_, _, value)| value)
+            .collect())
+    }
 }
 
 impl ContentWrite for MemTx<'_> {
@@ -161,6 +201,14 @@ impl ContentWrite for MemTx<'_> {
         Ok(!used && self.m().domains.content.media.remove(hash).is_some())
     }
 
+    fn delete_orphan_media_files(&mut self) -> StorageResult<u64> {
+        let content = &mut self.m().domains.content;
+        let before = content.files.len();
+        let media = &content.media;
+        content.files.retain(|h, _| media.contains_key(h));
+        Ok((before - content.files.len()) as u64)
+    }
+
     fn set_note_refs(&mut self, note: NoteId, refs: &NoteRefs) -> StorageResult<()> {
         if !self.s().notes.contains_key(&note) {
             return Err(not_found("note", note));
@@ -170,20 +218,7 @@ impl ContentWrite for MemTx<'_> {
                 constraint: format!("foreign_key: media {missing}"),
             });
         }
-        let content = &mut self.m().domains.content;
-        content.refs.insert(note, refs.clone());
-        let counts: BTreeMap<String, u32> =
-            content
-                .refs
-                .values()
-                .flat_map(|r| r.media.iter())
-                .fold(BTreeMap::new(), |mut acc, h| {
-                    *acc.entry(h.clone()).or_insert(0) += 1;
-                    acc
-                });
-        for (h, m) in &mut content.media {
-            m.ref_count = counts.get(h).copied().unwrap_or(0);
-        }
+        self.m().domains.content.refs.insert(note, refs.clone());
         Ok(())
     }
 

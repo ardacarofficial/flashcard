@@ -215,6 +215,10 @@ pub struct RenderedCardDto {
     pub flags: u32,
     /// Card note.
     pub user_note: Option<String>,
+    /// The note no longer yields this card (its cloze number, mask or optional reverse was
+    /// removed). The card and its history are kept, but its sides may give the answer away:
+    /// study must skip it.
+    pub empty: bool,
 }
 
 /// `cards.preview`: renders the cards a note **would** have, without saving. Either an
@@ -461,6 +465,8 @@ pub struct CardMetaDto {
     pub flags: u32,
     /// Card note.
     pub user_note: Option<String>,
+    /// The note no longer yields this card (see [`RenderedCardDto::empty`]).
+    pub empty: bool,
 }
 
 /// Response of `cards.meta`.

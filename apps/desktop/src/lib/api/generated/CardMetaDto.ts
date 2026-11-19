@@ -33,4 +33,8 @@ flags: number,
 /**
  * Card note.
  */
-user_note: string | null, };
+user_note: string | null, 
+/**
+ * The note no longer yields this card (see [`RenderedCardDto::empty`]).
+ */
+empty: boolean, };

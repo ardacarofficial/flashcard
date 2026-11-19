@@ -6,6 +6,7 @@ use crate::handler::{inverse_call, CommandCtx, CommandOutcome};
 use crate::module::ModuleDescriptor;
 use crate::modules::cardtypes::card_meta;
 use crate::registry::Registry;
+use crate::support::content::is_empty_card;
 use crate::support::notes::{require_note, require_notetype};
 use crate::support::{err_id, summary};
 use fc_api::v1::cardtypes::{CardMetaDto, SetCardUserNote};
@@ -72,6 +73,9 @@ fn set_user_note(
         },
         inverse,
         summary: summary::<CardsSetUserNote>().param("text", &note.sort_field),
-        response: card_meta(&nt, card),
+        response: {
+            let empty = is_empty_card(ctx.registry, &nt, &note, &card.template_key)?;
+            card_meta(&nt, card, empty)
+        },
     })
 }

@@ -24,6 +24,14 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 - `notes.create` kartları not türü şablonlarının motorlarından üretir (`standard_card_specs` yerine); `notes.update` eksik kartları ekler (tersi `cards.trash_generated`).
 - CSP: `style-src 'unsafe-inline'` (kart CSS'i, KaTeX), `media-src fcmedia:`, `font-src data:`.
 
+#### Düzeltildi (inceleme)
+- Not türü CSS'i kapsamdan kaçamaz: `sanitize_css` kaçışları normalleştirir, parantezleri dengeler; frontend dengesiz CSS'i basmaz.
+- Silinen cloze numarasının kartı `empty: true` (`cards.render`, `cards.meta`); çalışma atlar.
+- Çeldirici havuzu tek sınırlı, tohumlu sorgu (deste boyunca not okuma yok).
+- `media.ref_count` okunurken sayılır (kalıcı silmede bayatlamaz); geri alınan `media.add`'in dosyası açılışta temizlenir.
+- Bayrak numaralaması Anki'ninki (1 kırmızı … 5 pembe, 7 mor), `card_flag_defs` tek kaynak.
+- Kullanılmayan `NoteAddForm` kaldırıldı.
+
 ## [0.1.0] — Yayımlanmadı (inceleme bekliyor)
 
 v0.1 · Temel: her şeyin üstüne kurulacağı iskelet ve API sözleşmesinin ilk hali (docs/04, docs/10).

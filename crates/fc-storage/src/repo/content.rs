@@ -14,7 +14,8 @@ pub struct MediaRecord {
     pub size: u64,
     /// File name it was first added with.
     pub original_name: Option<String>,
-    /// Number of notes referencing it (live or trashed).
+    /// Number of notes referencing it (live or trashed). Computed on read, so it stays right
+    /// when notes are purged (cascade); ignored on insert.
     pub ref_count: u32,
     /// First added.
     pub created_at: Timestamp,
@@ -73,6 +74,30 @@ pub trait ContentRead {
     ) -> StorageResult<Vec<NoteId>>;
     /// The seven flags, by number.
     fn list_flag_defs(&self) -> StorageResult<Vec<FlagDef>>;
+    /// Values of `field` of at most `limit` live notes of `notetype` with a live card in
+    /// `deck`, excluding `exclude`. Notes are picked in a pseudo-random order fixed by `seed`
+    /// (same seed + same data = same result); empty and missing values are skipped.
+    fn sample_field_values(
+        &self,
+        sample: &FieldSample<'_>,
+    ) -> StorageResult<Vec<String>>;
+}
+
+/// Parameters of [`ContentRead::sample_field_values`].
+#[derive(Debug, Clone, Copy)]
+pub struct FieldSample<'a> {
+    /// Deck whose cards' notes are sampled.
+    pub deck: DeckId,
+    /// Note type of the sampled notes.
+    pub notetype: NoteTypeId,
+    /// Note left out (the one being rendered).
+    pub exclude: NoteId,
+    /// Field key.
+    pub field: &'a str,
+    /// Order seed.
+    pub seed: u64,
+    /// Maximum number of values.
+    pub limit: u32,
 }
 
 /// Content writes.
@@ -81,10 +106,14 @@ pub trait ContentWrite: ContentRead {
     fn insert_media(&mut self, media: &MediaRecord) -> StorageResult<()>;
     /// Stores the file of `hash` (content-addressed: an existing file is left as is).
     fn write_media_file(&mut self, hash: &str, bytes: &[u8]) -> StorageResult<()>;
-    /// Deletes a media row that no note references (the file stays until a database check
-    /// removes orphans). Returns whether a row was deleted.
+    /// Deletes a media row that no note references (the file stays, so redoing an undone
+    /// `media.add` still works, until [`ContentWrite::delete_orphan_media_files`] runs).
+    /// Returns whether a row was deleted.
     fn delete_unreferenced_media(&mut self, hash: &str) -> StorageResult<bool>;
-    /// Replaces a note's references and refreshes `media.ref_count` of every affected hash.
+    /// Removes stored files that have no `media` row (and interrupted partial writes).
+    /// Returns how many files were removed.
+    fn delete_orphan_media_files(&mut self) -> StorageResult<u64>;
+    /// Replaces a note's references.
     fn set_note_refs(&mut self, note: NoteId, refs: &NoteRefs) -> StorageResult<()>;
     /// Replaces one flag definition.
     fn set_flag_def(&mut self, def: &FlagDef) -> StorageResult<()>;

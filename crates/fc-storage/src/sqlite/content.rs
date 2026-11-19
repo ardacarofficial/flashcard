@@ -8,14 +8,21 @@ use super::{all, exec, id, json_list, one, ts};
 use super::{Mode, SqliteTx, WriteMode};
 use crate::error::{StorageError, StorageResult};
 use crate::media::media_file_path;
-use crate::repo::{ContentRead, ContentWrite, FlagDef, MediaRecord, NoteRefs};
+use crate::repo::{ContentRead, ContentWrite, FieldSample, FlagDef, MediaRecord, NoteRefs};
 use fc_core::content::refs::is_media_hash;
+use fc_core::rng::{Rng, SplitMix64};
 use fc_core::{NoteId, NoteTypeId};
 use rusqlite::{params, Connection, Row};
 use std::path::{Path, PathBuf};
 
 const M: &str = "media";
-const MCOLS: &str = "hash, mime, size, original_name, ref_count, created_at";
+/// `ref_count` is counted on read (the stored column is no longer maintained): purging a note
+/// cascades its `note_media` rows away without going through the app.
+const MCOLS: &str = "hash, mime, size, original_name, \
+    (SELECT count(*) FROM note_media nm WHERE nm.hash = media.hash), created_at";
+
+/// Modulus of the seeded order in [`ContentRead::sample_field_values`] (prime 2^31 − 1).
+const SAMPLE_P: u64 = 2_147_483_647;
 
 fn db_file(conn: &Connection) -> Option<PathBuf> {
     conn.path().filter(|p| !p.is_empty()).map(PathBuf::from)
@@ -196,6 +203,39 @@ impl<M: Mode> ContentRead for SqliteTx<'_, M> {
             },
         )
     }
+
+    fn sample_field_values(&self, q: &FieldSample<'_>) -> StorageResult<Vec<String>> {
+        // A seeded affine permutation of rowids (mod a prime): cheap, deterministic, no full
+        // fetch. The seed is mixed first so neighbouring seeds give unrelated orders.
+        let mut rng = SplitMix64::new(q.seed);
+        let a = 1 + rng.next_u64() % (SAMPLE_P - 1);
+        let b = rng.next_u64() % SAMPLE_P;
+        all(
+            self.conn(),
+            "notes",
+            "SELECT v FROM (
+                 SELECT n.rowid AS rid, n.id AS nid,
+                        (SELECT f.value FROM json_each(n.fields) f WHERE f.key = ?4) AS v
+                 FROM notes n
+                 WHERE n.notetype_id = ?2 AND n.id <> ?3 AND n.deleted_at IS NULL
+                   AND EXISTS (SELECT 1 FROM cards c WHERE c.note_id = n.id
+                                 AND c.deck_id = ?1 AND c.deleted_at IS NULL))
+             WHERE typeof(v) = 'text' AND v <> ''
+             ORDER BY (rid % ?7 * ?5 + ?6) % ?7, nid
+             LIMIT ?8",
+            params![
+                q.deck.to_string(),
+                q.notetype.to_string(),
+                q.exclude.to_string(),
+                q.field,
+                i64::try_from(a).unwrap_or(1),
+                i64::try_from(b).unwrap_or(0),
+                i64::try_from(SAMPLE_P).unwrap_or(i64::MAX),
+                q.limit
+            ],
+            |r| r.get(0),
+        )
+    }
 }
 
 impl ContentWrite for SqliteTx<'_, WriteMode> {
@@ -261,16 +301,71 @@ impl ContentWrite for SqliteTx<'_, WriteMode> {
         Ok(n > 0)
     }
 
+    fn delete_orphan_media_files(&mut self) -> StorageResult<u64> {
+        let Some(db) = db_file(self.conn()) else {
+            ensure_blob_table(self.conn())?;
+            let n = exec(
+                self.conn(),
+                M,
+                "DELETE FROM temp.media_blob WHERE hash NOT IN (SELECT hash FROM media)",
+                [],
+            )?;
+            return Ok(n as u64);
+        };
+        let root = db.parent().unwrap_or_else(|| Path::new(".")).join("media");
+        // (path, hash) of every file shaped like ours: `media/<ab>/<hash>[.part]`.
+        let mut found: Vec<(PathBuf, String)> = Vec::new();
+        let Ok(shards) = std::fs::read_dir(&root) else {
+            return Ok(0);
+        };
+        for shard in shards.flatten() {
+            let shard_name = shard.file_name().to_string_lossy().into_owned();
+            if shard_name.len() != 2 || !shard.path().is_dir() {
+                continue;
+            }
+            let Ok(files) = std::fs::read_dir(shard.path()) else {
+                continue;
+            };
+            for f in files.flatten() {
+                let name = f.file_name().to_string_lossy().into_owned();
+                let (hash, partial) = match name.strip_suffix(".part") {
+                    Some(h) => (h.to_owned(), true),
+                    None => (name.clone(), false),
+                };
+                if is_media_hash(&hash) && hash.starts_with(&shard_name) {
+                    // A partial write is always garbage (complete files are renamed into place).
+                    let key = if partial { String::new() } else { hash };
+                    found.push((f.path(), key));
+                }
+            }
+        }
+        let hashes: Vec<String> = found
+            .iter()
+            .map(|(_, h)| h.clone())
+            .filter(|h| !h.is_empty())
+            .collect();
+        let known: std::collections::HashSet<String> = all(
+            self.conn(),
+            M,
+            "SELECT hash FROM media WHERE hash IN (SELECT value FROM json_each(?1))",
+            [json_list(&hashes)],
+            |r| r.get(0),
+        )?
+        .into_iter()
+        .collect();
+        let mut removed = 0;
+        for (path, hash) in found {
+            if hash.is_empty() || !known.contains(&hash) {
+                std::fs::remove_file(&path).map_err(|e| file_err(&path, &e))?;
+                removed += 1;
+            }
+        }
+        Ok(removed)
+    }
+
     fn set_note_refs(&mut self, note: NoteId, refs: &NoteRefs) -> StorageResult<()> {
         let conn = self.conn();
         let nid = note.to_string();
-        let mut affected = all(
-            conn,
-            "note_media",
-            "SELECT hash FROM note_media WHERE note_id = ?1",
-            [&nid],
-            |r| r.get::<_, String>(0),
-        )?;
         exec(
             conn,
             "note_media",
@@ -284,17 +379,7 @@ impl ContentWrite for SqliteTx<'_, WriteMode> {
                 "INSERT INTO note_media (note_id, hash) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
                 params![nid, h],
             )?;
-            affected.push(h.clone());
         }
-        affected.sort();
-        affected.dedup();
-        exec(
-            conn,
-            M,
-            "UPDATE media SET ref_count = (SELECT count(*) FROM note_media WHERE hash = media.hash)
-             WHERE hash IN (SELECT value FROM json_each(?1))",
-            [json_list(&affected)],
-        )?;
         exec(
             conn,
             "note_link_refs",

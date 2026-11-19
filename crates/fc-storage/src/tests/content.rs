@@ -1,7 +1,7 @@
 //! v0.3 content storage: media rows/files (dedup), note references, flags, migration 0200.
 
 use super::*;
-use crate::repo::{FlagDef, MediaRecord, NoteRefs};
+use crate::repo::{FieldSample, FlagDef, MediaRecord, NoteRefs};
 use fc_core::content::media::media_hash;
 
 fn media(bytes: &[u8], name: &str) -> MediaRecord {
@@ -241,4 +241,113 @@ fn flag_names_are_updatable() {
     let flags = fx.read(|r| r.list_flag_defs().unwrap());
     assert_eq!(flags[1].name.as_deref(), Some("Zor"));
     assert_eq!(flags[1].updated_at, Timestamp(9));
+}
+
+/// Purging a note cascades its `note_media` rows away behind the app's back; the count is
+/// computed on read, so it never goes stale.
+#[test]
+fn ref_count_follows_purged_notes() {
+    let fx = Fx::seeded();
+    let m = media(b"pic", "p");
+    fx.write(|tx| {
+        tx.insert_media(&m).unwrap();
+        add_note(tx, &note(1, "a", "b", &[], 10), HOME);
+        tx.set_note_refs(
+            nid(1),
+            &NoteRefs {
+                key: "a".into(),
+                links: vec![],
+                media: vec![m.hash.clone()],
+            },
+        )
+        .unwrap();
+    });
+    let rc = || fx.read(|r| r.get_media(&m.hash).unwrap().unwrap().ref_count);
+    assert_eq!(rc(), 1);
+    let conn = fx.raw();
+    conn.execute("PRAGMA foreign_keys = ON", []).unwrap();
+    conn.execute("DELETE FROM cards", []).unwrap();
+    conn.execute("DELETE FROM notes", []).unwrap();
+    assert_eq!(rc(), 0);
+    assert_eq!(fx.read(|r| r.list_media().unwrap())[0].ref_count, 0);
+}
+
+#[test]
+fn orphan_media_files_are_removed() {
+    let fx = Fx::new();
+    let (kept, orphan) = (b"kept".as_slice(), b"orphan".as_slice());
+    let mk = media(kept, "k");
+    let ho = media_hash(orphan);
+    fx.write(|tx| {
+        tx.write_media_file(&mk.hash, kept).unwrap();
+        tx.insert_media(&mk).unwrap();
+        tx.write_media_file(&ho, orphan).unwrap();
+    });
+    let dir = fx.dir.path().join("media");
+    let part = crate::media::media_file_path(&fx.db_path(), &mk.hash)
+        .unwrap()
+        .with_extension("part");
+    std::fs::write(&part, b"half").unwrap();
+    let stranger = dir.join("notes.txt");
+    std::fs::write(&stranger, b"not ours").unwrap();
+    assert_eq!(files_under(&dir).len(), 4);
+    assert_eq!(fx.write(|tx| tx.delete_orphan_media_files().unwrap()), 2);
+    let mut left = files_under(&dir);
+    left.sort();
+    let mut want = vec![
+        crate::media::media_file_path(&fx.db_path(), &mk.hash).unwrap(),
+        stranger,
+    ];
+    want.sort();
+    assert_eq!(left, want);
+    assert_eq!(fx.write(|tx| tx.delete_orphan_media_files().unwrap()), 0);
+
+    // In-memory store: blobs without a row go too.
+    let store = SqliteStore::open_in_memory().unwrap();
+    let mut tx = store.write().unwrap();
+    tx.write_media_file(&ho, orphan).unwrap();
+    assert_eq!(tx.delete_orphan_media_files().unwrap(), 1);
+    assert!(tx.read_media_file(&ho).unwrap().is_none());
+}
+
+#[test]
+fn field_samples_are_seeded_bounded_and_filtered() {
+    let fx = Fx::seeded();
+    fx.write(|tx| {
+        tx.insert_deck(&deck(2, None, "Other")).unwrap();
+        for i in 1..=30u128 {
+            let back = if i == 7 {
+                String::new()
+            } else {
+                format!("b{i}")
+            };
+            add_note(tx, &note(i, &format!("f{i}"), &back, &[], 10), HOME);
+        }
+        add_note(tx, &note(40, "elsewhere", "x", &[], 10), 2);
+        add_note(tx, &note(41, "trashed", "y", &[], 10), HOME);
+        tx.set_notes_deleted(&[nid(41)], Some(Timestamp(20)))
+            .unwrap();
+    });
+    let q = |seed: u64, limit: u32| {
+        fx.read(|r| {
+            r.sample_field_values(&FieldSample {
+                deck: did(HOME),
+                notetype: classic().id,
+                exclude: nid(1),
+                field: builtin::BACK,
+                seed,
+                limit,
+            })
+            .unwrap()
+        })
+    };
+    let all = q(1, 100);
+    // 30 notes − excluded − empty one; other deck and trash left out.
+    assert_eq!(all.len(), 28, "{all:?}");
+    assert!(!all
+        .iter()
+        .any(|v| v == "b1" || v.is_empty() || v == "x" || v == "y"));
+    assert_eq!(q(1, 5), q(1, 5));
+    assert_eq!(q(1, 5).len(), 5);
+    assert_ne!(q(1, 5), q(2, 5), "different seeds pick different notes");
 }

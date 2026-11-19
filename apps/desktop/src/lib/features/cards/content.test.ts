@@ -12,6 +12,7 @@ import {
   parseMasks,
   sampleFields,
   scopeCss,
+  cssIsContained,
   serializeMasks,
   wrapSelection,
 } from './content';
@@ -49,8 +50,13 @@ describe('card content helpers', () => {
   });
 
   it('scopes CSS and moves items', () => {
-    expect(scopeCss('.x { color: red }', 'fc-card-1')).toBe('.fc-card-1 {\n.x { color: red }\n}');
+    expect(scopeCss('.x { color: red }', 'fc-card-1')).toBe('.card.fc-card-1 {\n.x { color: red }\n}');
     expect(scopeCss('  ', 'fc-card-1')).toBe('');
+    expect(scopeCss('.x::after { content: "}" } /* } */', 's')).toContain('content: "}"');
+    expect(scopeCss('.x { content: "\\"}" }', 's')).not.toBe('');
+    for (const evil of ['} body { color: red }', '.a {', '.a { b: rgb( }', '</style><b>', '.a { content: "x }', '/* }']) {
+      expect(scopeCss(evil, 's')).toBe('');
+    }
     expect(move([1, 2, 3], 0, 1)).toEqual([2, 1, 3]);
     expect(move([1, 2, 3], 0, -1)).toEqual([1, 2, 3]);
   });

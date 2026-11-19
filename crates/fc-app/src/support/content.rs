@@ -16,13 +16,13 @@ use fc_core::content::refs::{extract_links, extract_media, link_key};
 use fc_core::content::{sanitize_css, sanitize_html, validate_templates};
 use fc_core::i18n::Locale;
 use fc_core::note::{fnv1a64, strip_html, Note};
-use fc_core::notetype::{validate_notetype, CardTemplate, FieldKey, NoteType};
-use fc_core::{CardId, DeckId, NoteId, Timestamp};
+use fc_core::notetype::{validate_notetype, CardTemplate, NoteType};
+use fc_core::{CardId, DeckId, Timestamp};
 use fc_providers::strategy::{
     CardInput, CardTypeEngine, Interaction, RenderContext, RenderedCard, StrategyError,
 };
 use fc_providers::Capability;
-use fc_storage::repo::{CardFilter, NoteRefs};
+use fc_storage::repo::{CardFilter, FieldSample, NoteRefs};
 use fc_storage::{Reads, WriteTx};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -30,7 +30,7 @@ use std::sync::Arc;
 use fc_providers::card_types::DISTRACTOR_POOL_CAPABILITY as DISTRACTOR_POOL;
 
 /// Most notes sampled for automatic distractors.
-const POOL_LIMIT: usize = 50;
+const POOL_LIMIT: u32 = 50;
 
 /// `NOT_FOUND_CARD_TYPE`.
 pub(crate) fn unknown_card_type(id: &str) -> AppError {
@@ -90,6 +90,21 @@ pub(crate) fn card_specs(
         }
     }
     Ok(out)
+}
+
+/// Whether the card keyed `template_key` is **empty**: `note` no longer yields it (a removed
+/// cloze number or mask, an optional reverse switched off). Such cards are kept with their
+/// history but must not be studied (v0.2 study skips them; `cards.render` / `cards.meta`
+/// report it as `empty`).
+pub(crate) fn is_empty_card(
+    registry: &Registry,
+    nt: &NoteType,
+    note: &Note,
+    template_key: &str,
+) -> AppResult<bool> {
+    Ok(!card_specs(registry, nt, note)?
+        .iter()
+        .any(|s| s.template_key == template_key))
 }
 
 /// The template that produced a card: by key, else the note type's only template (cloze and
@@ -320,7 +335,7 @@ pub(crate) fn render(
         .capabilities
         .contains(&Capability::Other(DISTRACTOR_POOL.to_owned()))
     {
-        distractor_pool(reads, nt, note, setup.deck)?
+        distractor_pool(reads, nt, note, setup.deck, setup.seed)?
     } else {
         Vec::new()
     };
@@ -373,44 +388,29 @@ fn sides(template_key: &str, template: &CardTemplate, r: RenderedCard) -> Render
     }
 }
 
-/// Plain-text `answer` values of other live notes of the same type in `deck`.
+/// Plain-text `answer` values of other live notes of the same type in `deck`: a seeded sample
+/// of at most [`POOL_LIMIT`], fetched with one bounded query.
 fn distractor_pool(
     reads: &dyn Reads,
     nt: &NoteType,
     note: &Note,
     deck: Option<DeckId>,
+    seed: u64,
 ) -> AppResult<Vec<String>> {
     let Some(deck) = deck else {
         return Ok(Vec::new());
     };
-    let answer = FieldKey::new("answer");
-    let mut note_ids: Vec<NoteId> = reads
-        .list_cards(&CardFilter {
-            deck_ids: Some(vec![deck]),
-            note_ids: None,
-            include_deleted: false,
+    Ok(reads
+        .sample_field_values(&FieldSample {
+            deck,
+            notetype: nt.id,
+            exclude: note.id,
+            field: "answer",
+            seed,
+            limit: POOL_LIMIT,
         })?
-        .into_iter()
-        .map(|c| c.note_id)
-        .filter(|id| *id != note.id)
-        .collect();
-    note_ids.sort();
-    note_ids.dedup();
-    let mut out = Vec::new();
-    for id in note_ids {
-        if out.len() == POOL_LIMIT {
-            break;
-        }
-        if let Some(n) = reads.get_note(id)? {
-            if n.notetype_id == nt.id && n.deleted_at.is_none() {
-                if let Some(v) = n.fields.get(&answer) {
-                    let text = strip_html(v);
-                    if !text.is_empty() {
-                        out.push(text);
-                    }
-                }
-            }
-        }
-    }
-    Ok(out)
+        .iter()
+        .map(|v| strip_html(v))
+        .filter(|t| !t.is_empty())
+        .collect())
 }

@@ -11,7 +11,8 @@ use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::registry::Registry;
 use crate::support::content::{
-    add_missing_cards, card_seed, deck_for_new_cards, fields_snapshot, from_snapshot, render,
+    add_missing_cards, card_seed, card_specs, deck_for_new_cards, fields_snapshot, from_snapshot,
+    is_empty_card, render,
     snapshot, sync_card_types, template_for, validate_full, RenderSetup,
 };
 use crate::support::decks::DeckIndex;
@@ -33,7 +34,7 @@ use fc_core::notetype::{builtin as classic_builtin, FieldKey, NoteType, NoteType
 use fc_core::{CardId, NoteId, NoteTypeId};
 use fc_providers::card_types::builtin_engines;
 use fc_storage::repo::CardFilter;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Module id.
 pub const ID: &str = "cardtypes";
@@ -475,6 +476,7 @@ fn render_card(req: CardRef, ctx: &QueryCtx<'_>) -> AppResult<RenderedCardDto> {
     Ok(RenderedCardDto {
         card_id: card.id,
         note_id: note.id,
+        empty: is_empty_card(ctx.registry, &nt, &note, &card.template_key)?,
         sides,
         flags: card.flags,
         user_note: card.user_note,
@@ -535,7 +537,7 @@ fn preview(req: PreviewCards, ctx: &QueryCtx<'_>) -> AppResult<CardPreviewList> 
     crate::support::notes::derive(&nt, &mut note);
     let seed = fnv1a64(note.checksum.as_bytes());
     let mut cards = Vec::new();
-    for spec in crate::support::content::card_specs(ctx.registry, &nt, &note)? {
+    for spec in card_specs(ctx.registry, &nt, &note)? {
         cards.push(render(
             ctx.registry,
             ctx.tx,
@@ -555,15 +557,22 @@ fn preview(req: PreviewCards, ctx: &QueryCtx<'_>) -> AppResult<CardPreviewList> 
 fn cards_meta(req: CardsOfNote, ctx: &QueryCtx<'_>) -> AppResult<CardMetaList> {
     let note = require_note(ctx.tx, req.note_id)?;
     let nt = require_notetype(ctx.tx, note.notetype_id)?;
+    let keys: BTreeSet<String> = card_specs(ctx.registry, &nt, &note)?
+        .into_iter()
+        .map(|s| s.template_key)
+        .collect();
     let items = dto::note_cards(ctx.tx, &note)?
         .into_iter()
-        .map(|c| card_meta(&nt, c))
+        .map(|c| {
+            let empty = !keys.contains(&c.template_key);
+            card_meta(&nt, c, empty)
+        })
         .collect();
     Ok(CardMetaList { items })
 }
 
 /// Card → meta DTO (template name resolved through the note type).
-pub(crate) fn card_meta(nt: &NoteType, c: Card) -> CardMetaDto {
+pub(crate) fn card_meta(nt: &NoteType, c: Card, empty: bool) -> CardMetaDto {
     let template_name = match template_for(nt, &c.template_key) {
         Some(t) if t.key == c.template_key => t.name.clone(),
         _ => c.template_key.clone(),
@@ -576,5 +585,6 @@ pub(crate) fn card_meta(nt: &NoteType, c: Card) -> CardMetaDto {
         deck_id: c.deck_id,
         flags: c.flags,
         user_note: c.user_note,
+        empty,
     }
 }

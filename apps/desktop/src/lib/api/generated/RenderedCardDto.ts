@@ -26,4 +26,10 @@ flags: number,
 /**
  * Card note.
  */
-user_note: string | null, };
+user_note: string | null, 
+/**
+ * The note no longer yields this card (its cloze number, mask or optional reverse was
+ * removed). The card and its history are kept, but its sides may give the answer away:
+ * study must skip it.
+ */
+empty: boolean, };

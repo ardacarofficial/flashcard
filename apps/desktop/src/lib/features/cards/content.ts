@@ -77,9 +77,54 @@ export function mediaSnippet(m: Pick<MediaDto, 'kind' | 'reference' | 'original_
   }
 }
 
-/** Note type CSS scoped to the card container (CSS nesting). */
+/**
+ * Whether `css` has balanced `{}`/`()`/`[]` outside strings and comments and no `<`, i.e.
+ * cannot close a block it did not open or end the `<style>` element.
+ */
+export function cssIsContained(css: string): boolean {
+  const stack: string[] = [];
+  const close: Partial<Record<string, string>> = { '{': '}', '(': ')', '[': ']' };
+  for (let i = 0; i < css.length; i++) {
+    const c = css.charAt(i);
+    if (c === '<') return false;
+    if (c === '\\') {
+      i++;
+      continue;
+    }
+    if (c === '/' && css[i + 1] === '*') {
+      const end = css.indexOf('*/', i + 2);
+      if (end < 0) return false;
+      i = end + 1;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < css.length && css[j] !== c) {
+        if (css[j] === '\n' || css[j] === '\r' || css[j] === '\f') return false;
+        if (css[j] === '\\') j++;
+        j++;
+      }
+      if (j >= css.length) return false;
+      i = j;
+      continue;
+    }
+    const want = close[c];
+    if (want) stack.push(want);
+    else if (c === '}' || c === ')' || c === ']') {
+      if (stack.pop() !== c) return false;
+    }
+  }
+  return stack.length === 0;
+}
+
+/**
+ * Note type CSS scoped to the card container (CSS nesting). The backend already sanitizes and
+ * balances it (`fc_core::content::sanitize_css`); anything that could still leave the scope
+ * is dropped as a second line of defence.
+ */
 export function scopeCss(css: string, scope: string): string {
-  return css.trim() ? `.${scope} {\n${css}\n}` : '';
+  if (!css.trim() || !cssIsContained(css)) return '';
+  return `.card.${scope} {\n${css}\n}`;
 }
 
 /** Editable copy of a note type. */

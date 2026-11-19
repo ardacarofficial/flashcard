@@ -64,6 +64,7 @@ export default {
         deck_id: c.deck_id,
         flags: 0,
         user_note: null,
+        empty: false,
       };
     const side = (fields: Record<string, string>): RenderedSides => {
       const vals = Object.values(fields).filter((v) => v.trim());

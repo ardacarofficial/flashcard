@@ -491,9 +491,22 @@ pub fn cloze_cards_follow_the_text(f: &Factory) {
         );
         assert_eq!(card_keys(t, &n), ["c1", "c2", "c3"]);
     });
-    // Removing a number keeps its card (history is never dropped silently).
+    // Removing a number keeps its card (history is never dropped silently), marked empty so
+    // study skips it (its sides would show the answer).
+    assert!(!render(&t, c2).empty);
     update_fields(&t, &n, &[("text", "{{c1::Ankara}}")]);
     assert_eq!(card_keys(&t, &n), ["c1", "c2", "c3"]);
+    assert!(render(&t, c2).empty);
+    let meta = t.ok::<CardsMeta>(CardsOfNote { note_id: n.id }).items;
+    let empty: Vec<_> = meta
+        .iter()
+        .filter(|m| m.empty)
+        .map(|m| m.template_key.as_str())
+        .collect();
+    assert_eq!(empty, ["c2", "c3"]);
+    // Bringing the number back revives the same card.
+    update_fields(&t, &n, &[("text", "{{c1::Ankara}} {{c2::Türkiye}}")]);
+    assert!(!render(&t, c2).empty);
     // A cloze note without deletions generates nothing.
     let e = t.err::<NotesCreate>(CreateNote {
         notetype_id: cloze,
@@ -702,6 +715,15 @@ pub fn same_media_twice_is_one_entry(f: &Factory) {
         });
         assert!(m.created);
     });
+    // Undone again, its file is an orphan: kept for redo during the session, removed on the
+    // next start; files still in use stay.
+    undo(&t);
+    let gif = fc_core::content::media::media_hash(b"GIF89a-other");
+    let file = |h: &str| t.store.read().unwrap().read_media_file(h).unwrap();
+    assert!(file(&gif).is_some());
+    t.app.load_state().unwrap();
+    assert!(file(&gif).is_none());
+    assert!(file(&first.hash).is_some());
 }
 
 /// ACCEPTANCE (with `fc_core::content::html` tests): sanitizing applies to everything that
@@ -846,6 +868,26 @@ pub fn links_and_backlinks(f: &Factory) {
         .items;
     assert_eq!(s.len(), 1);
     assert_eq!(s[0].id, badger.id);
+    // Links are by title (wiki style, docs/10): renaming the target leaves the link pointing
+    // at the old title, shown as missing (never silently to another note); renaming it back
+    // or creating a note with that title resolves it again.
+    update_fields(&t, &badger, &[("front", "Porsuk (hayvan)")]);
+    let r = render(&t, cat.cards[0].id);
+    assert!(
+        r.sides.answer.contains("fc-link-missing"),
+        "{}",
+        r.sides.answer
+    );
+    assert!(t
+        .ok::<LinksBacklinks>(BacklinksOf { note_id: badger.id })
+        .items
+        .is_empty());
+    update_fields(&t, &badger, &[("front", "Porsuk")]);
+    let r = render(&t, cat.cards[0].id);
+    assert!(r
+        .sides
+        .answer
+        .contains(&format!("href=\"note:{}\"", badger.id)));
     // Removing the link removes the backlink; undo restores it.
     assert_undo_redo(&t, |t| {
         update_fields(t, &cat, &[("back", "cat")]);
@@ -1106,6 +1148,22 @@ pub fn a_new_card_type_is_just_an_engine(f: &Factory) {
     });
     let qs: Vec<_> = p.cards.iter().map(|c| c.question.as_str()).collect();
     assert_eq!(qs, ["cba", "yx"]);
+}
+
+/// v0.3's internal methods (undo inverses); the shared test in `tests.rs` checks that every
+/// internal method is undoable and unreachable from transports.
+#[test]
+fn v03_internal_methods() {
+    assert_eq!(
+        crate::tests::internal_methods_of(&TestApp::mem(), &["cardtypes", "media"]),
+        [
+            "cards.restore_generated",
+            "cards.trash_generated",
+            "media.forget",
+            "media.reinstate",
+            "notetypes.restore_version",
+        ]
+    );
 }
 
 fn base64_encode(bytes: &[u8]) -> String {
