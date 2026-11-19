@@ -1,0 +1,120 @@
+{
+  "commands": {
+    "oplog": {
+      "undo": "Geri al",
+      "redo": "Yinele",
+      "status": "Geri alma durumu",
+      "list": "İşlem geçmişi"
+    },
+    "batch": {
+      "execute": "Komut grubu çalıştır"
+    },
+    "modules": {
+      "list": "Modülleri listele",
+      "set_enabled": "Modülü aç/kapat"
+    },
+    "commands": {
+      "list": "Komutları listele"
+    },
+    "settings": {
+      "schema": "Ayar şeması",
+      "get": "Ayarları oku",
+      "set": "Ayar değiştir",
+      "reset": "Ayarı sıfırla"
+    },
+    "jobs": {
+      "list": "Arka plan işleri",
+      "get": "İş ayrıntısı",
+      "cancel": "İşi iptal et"
+    },
+    "decks": {
+      "tree": "Deste ağacı",
+      "list": "Desteleri listele",
+      "get": "Deste ayrıntısı",
+      "create": "Yeni deste",
+      "rename": "Desteyi yeniden adlandır",
+      "move": "Desteyi taşı",
+      "update": "Desteyi düzenle",
+      "delete": "Desteyi sil",
+      "restore": "Desteyi geri getir"
+    },
+    "notetypes": {
+      "list": "Not türlerini listele",
+      "get": "Not türü ayrıntısı"
+    },
+    "notes": {
+      "create": "Yeni not",
+      "update": "Notu düzenle",
+      "delete": "Notları sil",
+      "restore": "Notları geri getir",
+      "get": "Not ayrıntısı",
+      "list": "Notları listele"
+    },
+    "tags": {
+      "list": "Etiketleri listele",
+      "rename": "Etiketi yeniden adlandır",
+      "merge": "Etiketleri birleştir",
+      "set_color": "Etiket rengi"
+    },
+    "attributes": {
+      "list": "Sınıflandırmaları listele",
+      "effective": "Destenin sınıflandırmaları",
+      "templates": "Sınıflandırma şablonları",
+      "get": "Sınıflandırma ayrıntısı",
+      "define": "Yeni sınıflandırma",
+      "define_from_template": "Şablondan sınıflandırma",
+      "update": "Sınıflandırmayı düzenle",
+      "delete": "Sınıflandırmayı sil",
+      "restore": "Sınıflandırmayı geri getir",
+      "option": {
+        "add": "Seçenek ekle",
+        "rename": "Seçeneği yeniden adlandır",
+        "set_color": "Seçenek rengi",
+        "reorder": "Seçenekleri sırala",
+        "merge": "Seçenekleri birleştir",
+        "delete": "Seçeneği sil"
+      },
+      "values": {
+        "get": "Sınıflandırma değerlerini oku",
+        "set": "Sınıflandırma değerlerini ayarla"
+      }
+    },
+    "search": {
+      "cards": "Kart ara",
+      "ids": "Eşleşen tüm kartlar",
+      "check": "Sorguyu denetle"
+    },
+    "saved_queries": {
+      "list": "Kayıtlı sorgular",
+      "create": "Sorguyu kaydet",
+      "update": "Kayıtlı sorguyu düzenle",
+      "delete": "Kayıtlı sorguyu sil"
+    },
+    "bulk": {
+      "move_cards": "Kartları taşı",
+      "set_suspended": "Kartları askıya al / aç",
+      "set_buried": "Kartları göm / çıkar",
+      "set_flag": "Kartları bayrakla",
+      "reset_progress": "Kartları sıfırla",
+      "add_tags": "Etiket ekle",
+      "remove_tags": "Etiket çıkar",
+      "find_replace": "Bul ve değiştir",
+      "set_attribute": "Sınıflandırma ata"
+    },
+    "browse": {
+      "card_info": "Kart bilgisi",
+      "duplicates": "Tekrarları bul",
+      "trash": "Çöp kutusu",
+      "check_database": "Veritabanını denetle",
+      "repair_database": "Veritabanını onar"
+    },
+    "palette": {
+      "list": "Komut paleti girdileri"
+    },
+    "shortcuts": {
+      "list": "Klavye kısayolları",
+      "set": "Kısayol değiştir",
+      "reset": "Kısayolları sıfırla"
+    }
+  }
+}

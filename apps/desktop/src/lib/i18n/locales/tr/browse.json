@@ -1,0 +1,197 @@
+{
+  "nav": {
+    "browse": "Göz at",
+    "maintenance": "Bakım",
+    "shortcuts": "Kısayollar"
+  },
+  "modules": {
+    "browse": {
+      "name": "Kart tarayıcısı",
+      "description": "Sorgu diliyle arama, kayıtlı sorgular, toplu değişiklik, çöp kutusu ve veritabanı denetimi."
+    },
+    "palette": {
+      "name": "Komut paleti",
+      "description": "Her komutu klavyeden çalıştır (Ctrl+K) ve kısayolları düzenle."
+    }
+  },
+  "browse": {
+    "query_label": "Ara",
+    "query_placeholder": "ör. deck:İngilizce tag:fiil seviye>=B1",
+    "help": "Kelimeler metinde arar; anahtar:değer süzer. -x değil, OR veya, tırnak gruplar.",
+    "results": "{count} kart",
+    "results_notes": "{count} not",
+    "notes_only": "Not başına bir satır",
+    "load_more": "Daha fazla",
+    "empty": "Eşleşen kart yok.",
+    "selected": "{count} seçili",
+    "select_all": "{count} kartın hepsini seç",
+    "select_row": "“{name}” seç",
+    "clear_selection": "Seçimi temizle",
+    "saved": "Kayıtlı sorgular",
+    "save": "Sorguyu kaydet",
+    "save_name": "Ad",
+    "no_saved": "Henüz kayıtlı sorgu yok.",
+    "delete_saved": "“{name}” kayıtlı sorgusunu sil",
+    "col": {
+      "sort_field": "Sıralama alanı",
+      "deck": "Deste",
+      "state": "Durum",
+      "due": "Vade",
+      "lapses": "Unutma",
+      "reps": "Tekrar",
+      "tags": "Etiketler",
+      "created": "Eklenme"
+    },
+    "state": {
+      "new": "Yeni",
+      "learning": "Öğreniliyor",
+      "review": "Tekrar",
+      "relearning": "Yeniden öğreniliyor",
+      "suspended": "Askıda",
+      "buried": "Gömülü"
+    },
+    "bulk": {
+      "heading": "Seçimi değiştir",
+      "move": "Desteye taşı",
+      "suspend": "Askıya al",
+      "unsuspend": "Askıdan çıkar",
+      "bury": "Göm",
+      "unbury": "Gömmeyi kaldır",
+      "flag": "Bayrak",
+      "flag_clear": "Bayrakları kaldır",
+      "reset": "Sıfırla",
+      "add_tag": "Etiket ekle",
+      "remove_tag": "Etiket çıkar",
+      "tag": "Etiket",
+      "find": "Bul",
+      "replace": "Şununla değiştir",
+      "field": "Alan",
+      "all_fields": "Tüm alanlar",
+      "regex": "Düzenli ifade",
+      "match_case": "Büyük/küçük harf duyarlı",
+      "find_replace": "Bul ve değiştir",
+      "classification": "Sınıflandırma",
+      "value": "Değer",
+      "clear_value": "Temizle",
+      "apply": "Uygula",
+      "delete": "Notları sil",
+      "done": "{changed} değişti, {skipped} aynı kaldı."
+    },
+    "flags": {
+      "1": "Kırmızı",
+      "2": "Turuncu",
+      "3": "Yeşil",
+      "4": "Mavi",
+      "5": "Mor"
+    },
+    "info": {
+      "heading": "Kart bilgisi",
+      "added": "Eklenme",
+      "due": "Vade",
+      "stability": "Stabilite",
+      "difficulty": "Zorluk",
+      "retrievability": "Şu an hatırlama",
+      "reviews": "Tekrarlar",
+      "no_reviews": "Henüz tekrar edilmedi.",
+      "close": "Kapat"
+    },
+    "error_at": "{start}–{end} arası"
+  },
+  "maintenance": {
+    "heading": "Bakım",
+    "duplicates": "Tekrarlar",
+    "find_duplicates": "Tekrarları bul",
+    "no_duplicates": "Tekrar eden not yok.",
+    "trash": "Çöp kutusu",
+    "trash_empty": "Çöp kutusu boş.",
+    "restore": "Geri getir",
+    "trashed_decks": "Desteler",
+    "trashed_notes": "Notlar",
+    "check": "Veritabanı denetimi",
+    "run_check": "Denetle",
+    "healthy": "Sorun bulunmadı.",
+    "repair": "Onar",
+    "repaired": "Onarıldı: {trashed} kart çöpe, {rescheduled} kart yeniden planlandı, {reindexed} not yeniden dizinlendi.",
+    "problem": {
+      "orphan_cards": "Silinmiş notların kartları: {count}",
+      "cards_in_trashed_decks": "Silinmiş destelerdeki kartlar: {count}",
+      "unscheduled_cards": "Vadesi olmayan planlı kartlar: {count}",
+      "missing_search_index": "Aramada eksik notlar: {count}",
+      "cardless_notes": "Kartı olmayan notlar: {count}",
+      "dangling_values": "Silinmiş öğelerin sınıflandırma değerleri: {count}"
+    }
+  },
+  "palette": {
+    "title": "Komut paleti",
+    "placeholder": "Komut ya da ekran yaz…",
+    "no_match": "Eşleşen komut yok.",
+    "params": "Parametreler (JSON)",
+    "run": "Çalıştır",
+    "invalid_json": "Parametreler bir JSON nesnesi olmalı.",
+    "screen": "Ekran",
+    "done": "Tamam."
+  },
+  "shortcuts": {
+    "heading": "Klavye kısayolları",
+    "filter": "Süz",
+    "action": "Eylem",
+    "combo": "Kısayol",
+    "record": "Tuşlara bas…",
+    "change": "Değiştir",
+    "unbind": "Kaldır",
+    "reset": "Varsayılan",
+    "reset_all": "Hepsini sıfırla",
+    "unbound": "—",
+    "conflicts": "Çakışmalar",
+    "context": {
+      "global": "Her yerde",
+      "browse": "Kart tarayıcısı",
+      "study": "Çalışma"
+    },
+    "ui": {
+      "palette": "Komut paletini aç",
+      "search": "Kart ara",
+      "new_note": "Yeni not",
+      "undo": "Geri al",
+      "redo": "Yinele"
+    },
+    "browse": {
+      "select_all": "Hepsini seç",
+      "suspend": "Seçimi askıya al",
+      "info": "Kart bilgisi",
+      "delete": "Seçimi sil"
+    }
+  },
+  "errors": {
+    "validation": {
+      "query": "Sorgu geçerli değil.",
+      "saved_query_name": "Sorguya bir ad ver (en fazla 100 karakter).",
+      "shortcut": "Geçerli bir tuş birleşimi değil.",
+      "find_replace": "Arama deseni geçerli değil."
+    },
+    "not_found": {
+      "saved_query": "Kayıtlı sorgu bulunamadı.",
+      "shortcut_action": "Bilinmeyen eylem."
+    },
+    "conflict": {
+      "shortcut": "Bu kısayol zaten kullanılıyor."
+    },
+    "query": {
+      "unclosed_quote": "Bir tırnak kapanmamış.",
+      "unclosed_paren": "Bir parantez kapanmamış.",
+      "unmatched_paren": "Açılmamış parantez kapatılmış.",
+      "expected_term": "Burada bir arama terimi eksik.",
+      "empty_value": "“{key}:” bir değer bekliyor.",
+      "unknown_key": "Bilinmeyen süzgeç: “{key}”.",
+      "unsupported_operator": "“{key}” {op} ile karşılaştırılamaz.",
+      "invalid_number": "“{value}” bir sayı değil.",
+      "invalid_date": "“{value}” bir tarih değil (YYYY-AA-GG).",
+      "invalid_bool": "“{value}” evet/hayır değil.",
+      "unknown_option": "“{key}” için “{value}” diye bir seçenek yok.",
+      "unknown_state": "Bilinmeyen durum: “{value}”.",
+      "invalid_flag": "Bilinmeyen bayrak: “{value}”.",
+      "invalid_id": "“{value}” bir kimlik değil.",
+      "invalid_regex": "Geçersiz düzenli ifade: {message}"
+    }
+  }
+}
