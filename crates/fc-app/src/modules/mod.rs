@@ -1,24 +1,30 @@
 //! Feature modules. **One file per module**, each exposing `descriptor()` and `register()`.
-//! A lane adding a module adds its file and one line to [`register_all`].
+//! A track adding a module adds its file and one name to the `modules!` list.
 //!
-//! v0.1 registers every catalog method; handlers not implemented yet are `Registry::stub`s
-//! (fail with `INTERNAL_NOT_IMPLEMENTED`). L3 replaces stubs with real handlers.
-
-pub mod attributes;
-pub mod core;
-pub mod decks;
-pub mod notes;
-pub mod notetypes;
-pub mod tags;
+//! Every catalog method must be registered (`registry_covers_the_catalog_exactly`); a method
+//! declared ahead of its handler can use `Registry::stub` (`INTERNAL_NOT_IMPLEMENTED`).
 
 use crate::registry::Registry;
 
-/// Registers every module, in menu order.
-pub fn register_all(reg: &mut Registry) {
-    core::register(reg);
-    decks::register(reg);
-    notetypes::register(reg);
-    notes::register(reg);
-    tags::register(reg);
-    attributes::register(reg);
+/// Declares the module files and [`register_all`], which registers them in list order
+/// (= menu order).
+macro_rules! modules {
+    ($($module:ident),* $(,)?) => {
+        $( pub mod $module; )*
+
+        /// Registers every module, in menu order.
+        pub fn register_all(reg: &mut Registry) {
+            $( $module::register(reg); )*
+        }
+    };
+}
+
+// One name per module file, in menu order. Phase-2 tracks append theirs here.
+modules! {
+    core,
+    decks,
+    notetypes,
+    notes,
+    tags,
+    attributes,
 }
