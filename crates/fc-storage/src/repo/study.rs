@@ -1,0 +1,99 @@
+//! Study (v0.2): sessions, the review log and study-queue candidates.
+
+use super::*;
+use fc_core::card::{CardState, Rating};
+use fc_core::{ReviewLogId, SessionId};
+
+/// A `sessions` row. `config`/`state` are owned by the app's session engine.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionRecord {
+    /// Id.
+    pub id: SessionId,
+    /// Kind (`normal`, `custom`, `mistakes`).
+    pub kind: String,
+    /// Query/filter text, if any (v0.4 query language).
+    pub query: Option<String>,
+    /// Start options.
+    pub config: Value,
+    /// Engine state.
+    pub state: Value,
+    /// Start.
+    pub started_at: Timestamp,
+    /// End (`None` = open).
+    pub ended_at: Option<Timestamp>,
+}
+
+/// A `review_log` row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReviewLogRecord {
+    /// Id.
+    pub id: ReviewLogId,
+    /// Card.
+    pub card_id: CardId,
+    /// Session.
+    pub session_id: Option<SessionId>,
+    /// Rating.
+    pub rating: Rating,
+    /// State before.
+    pub state_before: CardState,
+    /// State after.
+    pub state_after: CardState,
+    /// Interval given, days.
+    pub scheduled_days: u32,
+    /// Days since the previous review.
+    pub elapsed_days: u32,
+    /// Show → rate, ms.
+    pub duration_ms: u32,
+    /// Show → reveal, ms.
+    pub answer_duration_ms: Option<u32>,
+    /// Hints used.
+    pub hints_used: u32,
+    /// `normal` or `trial`.
+    pub mode: String,
+    /// Stability after.
+    pub stability_after: Option<f64>,
+    /// Difficulty after.
+    pub difficulty_after: Option<f64>,
+    /// Time.
+    pub created_at: Timestamp,
+}
+
+/// Which cards a study queue may contain. Always: live cards of live notes. All set
+/// conditions must hold.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct StudyCardFilter {
+    /// Cards in these decks.
+    pub deck_ids: Option<Vec<DeckId>>,
+    /// Exactly these cards.
+    pub card_ids: Option<Vec<CardId>>,
+    /// Learning states.
+    pub states: Option<Vec<CardState>>,
+    /// Classification conditions: the card or its note has one of the stored values.
+    pub attributes: Vec<(AttributeDefId, Vec<String>)>,
+    /// Also suspended cards.
+    pub include_suspended: bool,
+}
+
+/// Study reads.
+pub trait StudyRead {
+    /// Session by id.
+    fn get_session(&self, id: SessionId) -> StorageResult<Option<SessionRecord>>;
+    /// Most recently started open session.
+    fn latest_open_session(&self) -> StorageResult<Option<SessionRecord>>;
+    /// Candidate cards (ordered by creation time, id).
+    fn study_cards(&self, filter: &StudyCardFilter) -> StorageResult<Vec<Card>>;
+    /// Review log entry by id.
+    fn get_review_log(&self, id: ReviewLogId) -> StorageResult<Option<ReviewLogRecord>>;
+    /// Reviews of a card, oldest first.
+    fn review_logs_for_card(&self, card: CardId) -> StorageResult<Vec<ReviewLogRecord>>;
+}
+
+/// Study writes.
+pub trait StudyWrite: StudyRead {
+    /// Inserts or replaces a session.
+    fn upsert_session(&mut self, session: &SessionRecord) -> StorageResult<()>;
+    /// Appends a review (id clash → `Constraint`).
+    fn insert_review_log(&mut self, review: &ReviewLogRecord) -> StorageResult<()>;
+    /// Deletes a review (undo of the answer that wrote it). Returns whether it existed.
+    fn delete_review_log(&mut self, id: ReviewLogId) -> StorageResult<bool>;
+}

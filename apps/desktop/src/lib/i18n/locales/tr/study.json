@@ -1,0 +1,118 @@
+{
+  "modules": {
+    "study": {
+      "name": "Çalışma",
+      "description": "Çalışma oturumları, aralıklı tekrar (FSRS), ipuçları ve yazarak cevaplama."
+    }
+  },
+  "nav": {
+    "study": "Çalış"
+  },
+  "study": {
+    "heading": "Çalış",
+    "whole_collection": "Tüm desteler",
+    "start": "Çalışmaya başla",
+    "start_hint": "Enter",
+    "resume": "Oturuma devam et",
+    "practice": "Deneme modu (takvimi değiştirmez)",
+    "filter_label": "Yalnızca şu kartlar",
+    "filter_any": "Hepsi",
+    "custom_start": "Özel oturum",
+    "postpone_label": "Bugünün kartlarını ertele",
+    "postpone_days": "Gün",
+    "postpone": "Ertele",
+    "postponed": "{count} kart ertelendi.",
+    "nothing": "Şu an çalışılacak kart yok.",
+    "remaining": "Yeni {new} · Öğreniliyor {learning} · Tekrar {review}",
+    "practice_badge": "Deneme",
+    "show_answer": "Cevabı göster",
+    "type_placeholder": "Cevabı yaz",
+    "check": "Kontrol et",
+    "hint": "İpucu",
+    "suspend": "Askıya al",
+    "bury": "Göm",
+    "undo": "Geri al",
+    "end": "Bitir",
+    "rating": {
+      "again": "Tekrar",
+      "hard": "Zor",
+      "good": "İyi",
+      "easy": "Kolay"
+    },
+    "grade": {
+      "correct": "Doğru",
+      "almost": "Neredeyse",
+      "wrong": "Yanlış"
+    },
+    "expected": "Beklenen: {text}",
+    "interval": {
+      "now": "<1dk",
+      "minutes": "{n}dk",
+      "hours": "{n}sa",
+      "days": "{n}g",
+      "months": "{n}ay",
+      "years": "{n}y"
+    },
+    "summary": {
+      "heading": "Oturum bitti",
+      "answered": "Çalışılan kart: {n}",
+      "accuracy": "Doğruluk: %{n}",
+      "time": "Süre: {min} dk {sec} sn",
+      "mistakes": "Yanlışlar: {n}",
+      "repeat": "Yanlışları tekrar çalış",
+      "back": "Tamam"
+    },
+    "keys": "Boşluk: göster · 1–4: puanla · H: ipucu · S: askıya al · B: göm · Z: geri al · Esc: bitir"
+  },
+  "settings": {
+    "study": {
+      "new_per_session": { "label": "Oturum başına yeni kart", "description": "Normal oturumun tanıttığı yeni kart sayısı (0 = hiç)." },
+      "order": {
+        "label": "Kart sırası",
+        "description": "Tekrarların ve yeni kartların sırası.",
+        "due": "Vadeye göre",
+        "random": "Rastgele",
+        "hardest_first": "Önce en zorlar",
+        "newest_first": "Önce en yeniler"
+      },
+      "bury_siblings": { "label": "Kardeşleri göm", "description": "Aynı notun diğer kartları yarına kalır." },
+      "type_answer": { "label": "Cevabı yazarak ver", "description": "Bir giriş kutusu gösterir ve yazılanı kontrol eder." },
+      "hint_strategy": {
+        "label": "İpucu türü",
+        "description": "İpuçlarının cevabı nasıl açtığı.",
+        "first_letters": "İlk harfler",
+        "word_starts": "Her kelimenin başı",
+        "partial": "Harflerin bir kısmı"
+      },
+      "scheduler": {
+        "label": "Zamanlayıcı",
+        "description": "Aralıklı tekrar algoritması.",
+        "fsrs": "FSRS",
+        "sm2": "SM-2"
+      },
+      "answer_checker": {
+        "label": "Cevap kontrolü",
+        "description": "Yazılan cevapların nasıl karşılaştırılacağı.",
+        "exact": "Birebir",
+        "normalized": "Büyük/küçük harf ve noktalama yok sayılsın",
+        "tolerant": "Yazım hatalarına izin ver",
+        "multi": "Birden çok cevap, yazım hatasına izin ver"
+      },
+      "fold_turkish": { "label": "ı/i, ş/s… eşit sayılsın", "description": "Yazılan cevaplar kontrol edilirken." },
+      "auto_grade": { "label": "Otomatik puanla", "description": "Kontrolcünün önerisi puan olarak kullanılsın." },
+      "day_start_hour": { "label": "Yeni gün şu saatte başlar", "description": "Yeni çalışma gününün başladığı yerel saat." }
+    }
+  },
+  "errors": {
+    "not_found": {
+      "session": "Çalışma oturumu bulunamadı."
+    },
+    "conflict": {
+      "session_ended": "Bu çalışma oturumu bitti.",
+      "not_current_card": "Bu kart artık oturumda değil."
+    },
+    "validation": {
+      "scheduler_params": "Geçersiz zamanlayıcı ayarları."
+    }
+  }
+}

@@ -46,8 +46,7 @@ pub struct MemState {
     settings: BTreeMap<(String, String), Value>,
     modules: BTreeMap<String, bool>,
     jobs: BTreeMap<JobId, JobRecord>,
-    /// State of domains that keep their own tables (see [`domains!`]; empty in v0.1).
-    #[allow(dead_code)]
+    /// State of domains that keep their own tables (see [`domains!`]).
     domains: DomainState,
 }
 
@@ -168,4 +167,5 @@ domains! {
     oplog,
     settings,
     jobs,
+    study => StudyState,
 }

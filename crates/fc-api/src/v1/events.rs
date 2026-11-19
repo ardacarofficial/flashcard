@@ -5,7 +5,7 @@ use super::common::{AffectedCount, EntityRef, I18nMessage};
 use super::decks::DeckDto;
 use super::jobs::JobDto;
 use fc_core::settings::SettingScope;
-use fc_core::{AttributeDefId, BatchId, DeckId, NoteId, Timestamp};
+use fc_core::{AttributeDefId, BatchId, CardId, DeckId, NoteId, Timestamp};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -131,5 +131,11 @@ pub enum DomainEvent {
         reverted_batch_id: BatchId,
         /// Summary.
         summary: I18nMessage,
+    },
+    /// Study changed cards' scheduling or visibility (answer, suspend, bury, postpone and
+    /// their undo): deck counts are stale.
+    StudyCardsChanged {
+        /// Cards.
+        card_ids: Vec<CardId>,
     },
 }
