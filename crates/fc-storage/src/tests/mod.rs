@@ -10,6 +10,7 @@ mod migrations;
 mod misc;
 mod notes;
 mod store;
+mod study;
 mod tags;
 
 use crate::error::StorageResult;

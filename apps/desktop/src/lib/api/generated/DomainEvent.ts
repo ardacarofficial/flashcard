@@ -3,6 +3,7 @@ import type { AffectedCount } from "./AffectedCount";
 import type { AttributeDefDto } from "./AttributeDefDto";
 import type { AttributeDefId } from "./AttributeDefId";
 import type { BatchId } from "./BatchId";
+import type { CardId } from "./CardId";
 import type { DeckDto } from "./DeckDto";
 import type { DeckId } from "./DeckId";
 import type { EntityRef } from "./EntityRef";
@@ -114,4 +115,8 @@ reverted_batch_id: BatchId,
 /**
  * Summary.
  */
-summary: I18nMessage, } };
+summary: I18nMessage, } } | { "type": "study_cards_changed", "data": { 
+/**
+ * Cards.
+ */
+card_ids: Array<CardId>, } };

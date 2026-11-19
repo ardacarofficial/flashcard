@@ -1,0 +1,10 @@
+// Study (v0.2).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// Study session not found (`details.id`).
+NotFoundSession => NotFound, "errors.not_found.session";
+/// The session has ended (`details.id`).
+ConflictSessionEnded => Conflict, "errors.conflict.session_ended";
+/// The card is not available in the session now (`details.card_id`; refetch `study.session`).
+ConflictNotCurrentCard => Conflict, "errors.conflict.not_current_card";
+/// Scheduler parameters rejected (`details.reason`).
+ValidationSchedulerParams => Validation, "errors.validation.scheduler_params";

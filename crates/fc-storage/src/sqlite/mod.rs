@@ -12,6 +12,7 @@ mod notes;
 mod notetypes;
 mod oplog;
 mod settings;
+mod study;
 mod tags;
 
 use crate::error::{in_table, StorageError, StorageResult};

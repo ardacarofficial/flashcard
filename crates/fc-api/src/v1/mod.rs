@@ -12,6 +12,7 @@ pub mod notes;
 pub mod notetypes;
 pub mod oplog;
 pub mod settings;
+pub mod study;
 pub mod tags;
 
 pub use methods::catalog;
