@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*", "apps/desktop/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
@@ -15,6 +15,7 @@ fc-core = { path = "crates/fc-core" }
 fc-api = { path = "crates/fc-api" }
 fc-storage = { path = "crates/fc-storage" }
 fc-providers = { path = "crates/fc-providers" }
+fc-app = { path = "crates/fc-app" }
 
 # external
 serde = { version = "1", features = ["derive"] }

@@ -1,3 +1,6 @@
+//! Tauri build script: generates the context and the `invoke` permission.
+#![allow(clippy::expect_used)]
+
 fn main() {
     // `generate_context!` requires `frontendDist` to exist at compile time.
     // Create an empty placeholder so `cargo check` works before `pnpm build`.
