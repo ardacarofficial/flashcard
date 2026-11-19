@@ -17,6 +17,7 @@
 #![forbid(unsafe_code)]
 
 pub mod ai;
+pub mod card_types;
 pub mod language;
 pub mod provider;
 pub mod speech;
