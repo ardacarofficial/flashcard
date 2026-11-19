@@ -1,0 +1,4 @@
+{
+  "cli.undone": "Undone: {summary}",
+  "cli.redone": "Redone: {summary}"
+}

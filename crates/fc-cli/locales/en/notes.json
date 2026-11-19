@@ -1,0 +1,6 @@
+{
+  "oplog.summary.notes.create": "Added note {text}",
+  "oplog.summary.notes.update": "Edited note {text}",
+  "oplog.summary.notes.delete": "Deleted {count} note(s)",
+  "oplog.summary.notes.restore": "Restored {count} note(s)"
+}

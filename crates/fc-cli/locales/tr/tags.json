@@ -1,0 +1,5 @@
+{
+  "oplog.summary.tags.rename": "Etiket yeniden adlandırıldı: {from} → {to}",
+  "oplog.summary.tags.merge": "{count} etiket {into} içine birleştirildi",
+  "oplog.summary.tags.set_color": "Etiket rengi değişti: {name}"
+}

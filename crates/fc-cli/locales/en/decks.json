@@ -1,0 +1,9 @@
+{
+  "oplog.summary.decks.create": "Created deck {path}",
+  "oplog.summary.decks.rename": "Renamed deck {from} → {to}",
+  "oplog.summary.decks.move": "Moved deck {path}",
+  "oplog.summary.decks.update": "Updated deck {path}",
+  "oplog.summary.decks.delete": "Deleted deck {path}",
+  "oplog.summary.decks.restore": "Restored deck {path}",
+  "oplog.summary.decks.restore_affected": "Restored deck {path}"
+}

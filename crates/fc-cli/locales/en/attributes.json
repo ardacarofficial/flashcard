@@ -1,0 +1,15 @@
+{
+  "oplog.summary.attributes.define": "Defined classification {name}",
+  "oplog.summary.attributes.define_from_template": "Added classification {name} from a template",
+  "oplog.summary.attributes.update": "Updated classification {name}",
+  "oplog.summary.attributes.delete": "Deleted classification {name}",
+  "oplog.summary.attributes.restore": "Restored classification {name}",
+  "oplog.summary.attributes.option.add": "{name}: added an option",
+  "oplog.summary.attributes.option.rename": "{name}: renamed an option",
+  "oplog.summary.attributes.option.set_color": "{name}: changed an option color",
+  "oplog.summary.attributes.option.reorder": "{name}: reordered options",
+  "oplog.summary.attributes.option.merge": "{name}: merged options ({count} values)",
+  "oplog.summary.attributes.option.delete": "{name}: deleted an option ({count} values)",
+  "oplog.summary.attributes.option.restore": "{name}: restored an option",
+  "oplog.summary.attributes.values.set": "Set {count} classification value(s)"
+}

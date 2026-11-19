@@ -1,0 +1,547 @@
+//! Execution of parsed subcommands. Every write goes through a public API method; nothing
+//! here touches storage or business rules.
+
+use crate::i18n::Catalog;
+use crate::lookup::{self, call};
+use crate::{AttrRef, AttributeCommand, Command, DeckCommand, NoteCommand, OptionCommand};
+use fc_api::v1::attributes::*;
+use fc_api::v1::common::{AffectedCount, Empty, EntityRef};
+use fc_api::v1::decks::{CreateDeck, DeckRef, DeckTreeNode, MoveDeck, RenameDeck};
+use fc_api::v1::methods as m;
+use fc_api::v1::notes::{CreateNote, ListNotes, NoteIds, NoteRef, UpdateNote};
+use fc_api::v1::oplog::{Actor, UndoResult};
+use fc_api::{ApiError, ErrorCode, API_VERSION};
+use fc_app::App;
+use fc_core::attribute::AttributeKind;
+use fc_core::notetype::builtin;
+use fc_core::paging::PageRequest;
+use fc_core::DeckId;
+use serde::Serialize;
+use serde_json::Value;
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
+use std::io::Read;
+
+/// What a command runs against.
+pub struct Ctx<'a> {
+    /// The opened collection.
+    pub app: &'a App,
+    /// Print raw JSON instead of a human summary.
+    pub json: bool,
+    /// Message catalog for human output.
+    pub text: Catalog,
+}
+
+impl Ctx<'_> {
+    /// The JSON response, or a human summary.
+    fn out<T: Serialize>(
+        &self,
+        value: &T,
+        human: impl FnOnce(&T) -> String,
+    ) -> Result<String, ApiError> {
+        if self.json {
+            pretty(value)
+        } else {
+            Ok(human(value))
+        }
+    }
+}
+
+fn pretty<T: Serialize>(value: &T) -> Result<String, ApiError> {
+    serde_json::to_string_pretty(value)
+        .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))
+}
+
+fn invalid(message: impl Into<String>) -> ApiError {
+    ApiError::new(ErrorCode::ValidationInvalidParams, message)
+}
+
+fn split_tags(raw: &str) -> Vec<String> {
+    raw.split(|c: char| c.is_whitespace() || c == ',')
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+fn affected(verb: &str, what: &str, a: &AffectedCount) -> String {
+    format!(
+        "{verb} {what} ({} decks, {} notes, {} cards)",
+        a.decks, a.notes, a.cards
+    )
+}
+
+fn tree_lines(node: &DeckTreeNode, depth: usize, buf: &mut String) {
+    let c = node.counts;
+    let _ = writeln!(
+        buf,
+        "{}{}  [new {} · learn {} · due {} · total {}]",
+        "  ".repeat(depth),
+        node.deck.name,
+        c.new,
+        c.learning,
+        c.due,
+        c.total
+    );
+    for child in &node.children {
+        tree_lines(child, depth + 1, buf);
+    }
+}
+
+fn def_line(d: &AttributeDefDto) -> String {
+    let labels: Vec<&str> = d.options.iter().map(|o| o.label.as_str()).collect();
+    format!(
+        "{}  {} ({})  [{}]",
+        d.key,
+        d.name,
+        d.kind.as_str(),
+        labels.join(", ")
+    )
+}
+
+/// `--attr KEY=VALUE` pairs → assignments, resolved against the definitions applying to
+/// `deck`. An empty VALUE clears (when `allow_clear`).
+fn assignments(
+    app: &App,
+    deck: DeckId,
+    pairs: &[String],
+    allow_clear: bool,
+) -> Result<Vec<AttributeAssignment>, ApiError> {
+    if pairs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let defs = lookup::effective(app, deck)?;
+    pairs
+        .iter()
+        .map(|p| {
+            let (key, raw) = lookup::pair(p)?;
+            let def = lookup::match_attr(defs.iter().map(|e| &e.def), key)?;
+            let value = if allow_clear && raw.trim().is_empty() {
+                None
+            } else {
+                Some(lookup::value(def, raw)?)
+            };
+            Ok(AttributeAssignment {
+                attr_id: def.id,
+                value,
+            })
+        })
+        .collect()
+}
+
+/// Runs one parsed command. `stdin` feeds `fc call <method> -`.
+pub fn run(ctx: &Ctx<'_>, command: &Command, stdin: &mut dyn Read) -> Result<String, ApiError> {
+    match command {
+        Command::Deck(c) => deck(ctx, c),
+        Command::Note(c) => note(ctx, c),
+        Command::Attribute(c) => attribute(ctx, c),
+        Command::Undo => {
+            let r = call::<m::OplogUndo>(ctx.app, &Empty {})?;
+            ctx.out(&r, |r| undo_line(&ctx.text, "cli.undone", r))
+        }
+        Command::Redo => {
+            let r = call::<m::OplogRedo>(ctx.app, &Empty {})?;
+            ctx.out(&r, |r| undo_line(&ctx.text, "cli.redone", r))
+        }
+        Command::Call { method, params } => {
+            let raw = match params.as_deref() {
+                Some("-") => {
+                    let mut s = String::new();
+                    stdin
+                        .read_to_string(&mut s)
+                        .map_err(|e| ApiError::new(ErrorCode::IoFile, e.to_string()))?;
+                    s
+                }
+                Some(s) => s.to_owned(),
+                None => String::new(),
+            };
+            let params: Value = if raw.trim().is_empty() {
+                Value::Object(serde_json::Map::new())
+            } else {
+                serde_json::from_str(&raw).map_err(|e| invalid(format!("params: {e}")))?
+            };
+            let prefix = format!("{API_VERSION}.");
+            let qualified = if method.starts_with(&prefix) {
+                method.clone()
+            } else {
+                format!("{prefix}{method}")
+            };
+            pretty(&ctx.app.invoke(&qualified, params, &Actor::Cli)?)
+        }
+    }
+}
+
+fn undo_line(text: &Catalog, key: &str, r: &UndoResult) -> String {
+    text.with(key, "summary", text.message(&r.summary))
+}
+
+fn deck(ctx: &Ctx<'_>, c: &DeckCommand) -> Result<String, ApiError> {
+    let app = ctx.app;
+    match c {
+        DeckCommand::Create {
+            path,
+            parent,
+            description,
+        } => {
+            let d = call::<m::DecksCreate>(
+                app,
+                &CreateDeck {
+                    path: path.clone(),
+                    parent_id: lookup::deck_id(app, parent.as_deref())?,
+                    description: description.clone(),
+                    icon: None,
+                    color: None,
+                },
+            )?;
+            ctx.out(&d, |d| format!("created deck {} ({})", d.path, d.id))
+        }
+        DeckCommand::List => {
+            let tree = call::<m::DecksTree>(app, &Empty {})?;
+            ctx.out(&tree, |t| {
+                let mut buf = String::new();
+                for root in &t.roots {
+                    tree_lines(root, 0, &mut buf);
+                }
+                if buf.is_empty() {
+                    buf.push_str("no decks");
+                }
+                buf.trim_end().to_owned()
+            })
+        }
+        DeckCommand::Rename { deck, name } => {
+            let id = lookup::deck(app, deck)?.id;
+            let d = call::<m::DecksRename>(
+                app,
+                &RenameDeck {
+                    id,
+                    name: name.clone(),
+                },
+            )?;
+            ctx.out(&d, |d| format!("renamed deck to {}", d.path))
+        }
+        DeckCommand::Move {
+            deck,
+            parent,
+            top,
+            position,
+        } => {
+            let current = lookup::deck(app, deck)?;
+            let parent_id = match (parent, top) {
+                (Some(p), _) => Some(lookup::deck(app, p)?.id),
+                (None, true) => None,
+                (None, false) => current.parent_id,
+            };
+            let d = call::<m::DecksMove>(
+                app,
+                &MoveDeck {
+                    id: current.id,
+                    parent_id,
+                    position: *position,
+                },
+            )?;
+            ctx.out(&d, |d| format!("moved deck to {}", d.path))
+        }
+        DeckCommand::Delete { deck } => {
+            let d = lookup::deck(app, deck)?;
+            let a = call::<m::DecksDelete>(app, &DeckRef { id: d.id })?;
+            ctx.out(&a, |a| {
+                format!(
+                    "{}; restore with `fc deck restore {}`",
+                    affected("deleted", &d.path, a),
+                    d.id
+                )
+            })
+        }
+        DeckCommand::Restore { id } => {
+            let a = call::<m::DecksRestore>(app, &DeckRef { id: *id })?;
+            let path = call::<m::DecksGet>(app, &DeckRef { id: *id })?.path;
+            ctx.out(&a, |a| affected("restored", &path, a))
+        }
+    }
+}
+
+fn note(ctx: &Ctx<'_>, c: &NoteCommand) -> Result<String, ApiError> {
+    let app = ctx.app;
+    match c {
+        NoteCommand::Add(add) => {
+            let deck = lookup::deck(app, &add.deck)?;
+            let note = call::<m::NotesCreate>(
+                app,
+                &CreateNote {
+                    notetype_id: builtin::CLASSIC_ID,
+                    deck_id: deck.id,
+                    fields: BTreeMap::from([
+                        (builtin::FRONT.to_owned(), add.front.clone()),
+                        (builtin::BACK.to_owned(), add.back.clone()),
+                    ]),
+                    tags: split_tags(&add.tags),
+                    attributes: assignments(app, deck.id, &add.attrs, false)?,
+                    allow_duplicate: None,
+                },
+            )?;
+            ctx.out(&note, |n| {
+                format!("added note {} to {} ({})", n.sort_field, deck.path, n.id)
+            })
+        }
+        NoteCommand::List { deck, limit } => {
+            let page = call::<m::NotesList>(
+                app,
+                &ListNotes {
+                    deck_id: lookup::deck_id(app, deck.as_deref())?,
+                    include_subdecks: None,
+                    page: PageRequest {
+                        cursor: None,
+                        limit: Some(*limit),
+                    },
+                },
+            )?;
+            ctx.out(&page, |p| {
+                if p.items.is_empty() {
+                    return "no notes".into();
+                }
+                p.items
+                    .iter()
+                    .map(|n| {
+                        let tags: Vec<&str> = n.tags.iter().map(|t| t.as_str()).collect();
+                        format!("{}  {}  [{}]", n.id, n.sort_field, tags.join(" "))
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+        }
+        NoteCommand::Edit(e) => {
+            let current = call::<m::NotesGet>(app, &NoteRef { id: e.id })?;
+            let deck_id = lookup::deck_id(app, e.deck.as_deref())?;
+            let mut fields = current.fields.clone();
+            if let Some(front) = &e.front {
+                fields.insert(builtin::FRONT.to_owned(), front.clone());
+            }
+            if let Some(back) = &e.back {
+                fields.insert(builtin::BACK.to_owned(), back.clone());
+            }
+            let tags = match &e.tags {
+                Some(raw) => split_tags(raw),
+                None => current.tags.iter().map(|t| t.as_str().to_owned()).collect(),
+            };
+            let attributes =
+                assignments(app, deck_id.unwrap_or(current.home_deck_id), &e.attrs, true)?;
+            let note = call::<m::NotesUpdate>(
+                app,
+                &UpdateNote {
+                    id: e.id,
+                    deck_id,
+                    fields,
+                    tags,
+                    attributes,
+                },
+            )?;
+            ctx.out(&note, |n| {
+                format!("edited note {} ({})", n.sort_field, n.id)
+            })
+        }
+        NoteCommand::Delete { ids } => {
+            let a = call::<m::NotesDelete>(app, &NoteIds { ids: ids.clone() })?;
+            ctx.out(&a, |a| format!("deleted {} note(s)", a.notes))
+        }
+        NoteCommand::Restore { ids } => {
+            let a = call::<m::NotesRestore>(app, &NoteIds { ids: ids.clone() })?;
+            ctx.out(&a, |a| format!("restored {} note(s)", a.notes))
+        }
+    }
+}
+
+fn attribute(ctx: &Ctx<'_>, c: &AttributeCommand) -> Result<String, ApiError> {
+    let app = ctx.app;
+    let defined = |d: &AttributeDefDto| {
+        let labels: Vec<&str> = d.options.iter().map(|o| o.label.as_str()).collect();
+        format!("defined {} ({}) [{}]", d.name, d.key, labels.join(", "))
+    };
+    match c {
+        AttributeCommand::Define(def) => {
+            let scope_deck_id = lookup::deck_id(app, def.deck.as_deref())?;
+            let dto = match &def.template {
+                Some(template_id) => call::<m::AttributesDefineFromTemplate>(
+                    app,
+                    &DefineAttributeFromTemplate {
+                        template_id: template_id.clone(),
+                        scope_deck_id,
+                        locale: def.locale,
+                    },
+                )?,
+                None => call::<m::AttributesDefine>(
+                    app,
+                    &DefineAttribute {
+                        scope_deck_id,
+                        key: def.key.clone(),
+                        name: def.name.clone().unwrap_or_default(),
+                        kind: def.kind.map_or(AttributeKind::Text, Into::into),
+                        target: None,
+                        required: Some(def.required),
+                        options: def
+                            .options
+                            .iter()
+                            .map(|label| NewAttributeOption {
+                                label: label.clone(),
+                                color: None,
+                            })
+                            .collect(),
+                    },
+                )?,
+            };
+            ctx.out(&dto, defined)
+        }
+        AttributeCommand::ApplyTemplate {
+            template,
+            deck,
+            locale,
+        } => {
+            let dto = call::<m::AttributesDefineFromTemplate>(
+                app,
+                &DefineAttributeFromTemplate {
+                    template_id: template.clone(),
+                    scope_deck_id: lookup::deck_id(app, deck.as_deref())?,
+                    locale: *locale,
+                },
+            )?;
+            ctx.out(&dto, defined)
+        }
+        AttributeCommand::Set { note, key, value } => {
+            let n = call::<m::NotesGet>(app, &NoteRef { id: *note })?;
+            let defs = lookup::effective(app, n.home_deck_id)?;
+            let def = lookup::match_attr(defs.iter().map(|e| &e.def), key)?;
+            let value = value
+                .as_deref()
+                .map(|v| lookup::value(def, v))
+                .transpose()?;
+            let res = call::<m::AttributesValuesSet>(
+                app,
+                &SetAttributeValues {
+                    entity: EntityRef::Note(*note),
+                    values: vec![AttributeAssignment {
+                        attr_id: def.id,
+                        value,
+                    }],
+                },
+            )?;
+            ctx.out(&res, |r| {
+                match r
+                    .values
+                    .iter()
+                    .find(|a| a.attr_id == def.id)
+                    .and_then(|a| a.value.as_ref())
+                {
+                    Some(v) => format!("{} = {}", def.key, lookup::label(def, v)),
+                    None => format!("{} cleared", def.key),
+                }
+            })
+        }
+        AttributeCommand::List { deck } => {
+            let defs: Vec<AttributeDefDto> = match deck {
+                Some(p) => lookup::effective(app, lookup::deck(app, p)?.id)?
+                    .into_iter()
+                    .map(|e| e.def)
+                    .collect(),
+                None => {
+                    call::<m::AttributesList>(
+                        app,
+                        &ListAttributes {
+                            scope_deck_id: None,
+                            include_deleted: None,
+                        },
+                    )?
+                    .defs
+                }
+            };
+            ctx.out(&defs, |defs| {
+                if defs.is_empty() {
+                    return "no classifications".into();
+                }
+                defs.iter().map(def_line).collect::<Vec<_>>().join("\n")
+            })
+        }
+        AttributeCommand::Option(o) => option(ctx, o),
+    }
+}
+
+fn resolve(app: &App, r: &AttrRef) -> Result<AttributeDefDto, ApiError> {
+    lookup::attr(app, &r.attr, r.deck.as_deref())
+}
+
+fn option(ctx: &Ctx<'_>, c: &OptionCommand) -> Result<String, ApiError> {
+    let app = ctx.app;
+    match c {
+        OptionCommand::Add { attr, label, after } => {
+            let def = resolve(app, attr)?;
+            let after = after
+                .as_deref()
+                .map(|l| lookup::option_id(&def, l))
+                .transpose()?;
+            let d = call::<m::AttributesOptionAdd>(
+                app,
+                &AddAttributeOption {
+                    attr_id: def.id,
+                    label: label.clone(),
+                    color: None,
+                    after,
+                    id: None,
+                },
+            )?;
+            ctx.out(&d, def_line)
+        }
+        OptionCommand::Rename {
+            attr,
+            label,
+            new_label,
+        } => {
+            let def = resolve(app, attr)?;
+            let d = call::<m::AttributesOptionRename>(
+                app,
+                &RenameAttributeOption {
+                    attr_id: def.id,
+                    option_id: lookup::option_id(&def, label)?,
+                    label: new_label.clone(),
+                },
+            )?;
+            ctx.out(&d, def_line)
+        }
+        OptionCommand::Reorder { attr, labels } => {
+            let def = resolve(app, attr)?;
+            let order = labels
+                .iter()
+                .map(|l| lookup::option_id(&def, l))
+                .collect::<Result<Vec<_>, _>>()?;
+            let d = call::<m::AttributesOptionReorder>(
+                app,
+                &ReorderAttributeOptions {
+                    attr_id: def.id,
+                    order,
+                },
+            )?;
+            ctx.out(&d, def_line)
+        }
+        OptionCommand::Delete {
+            attr,
+            label,
+            replace_with,
+        } => {
+            let def = resolve(app, attr)?;
+            let replace_with = replace_with
+                .as_deref()
+                .map(|l| lookup::option_id(&def, l))
+                .transpose()?;
+            let r = call::<m::AttributesOptionDelete>(
+                app,
+                &DeleteAttributeOption {
+                    attr_id: def.id,
+                    option_id: lookup::option_id(&def, label)?,
+                    replace_with,
+                },
+            )?;
+            ctx.out(&r, |r| {
+                format!(
+                    "deleted option {label} of {} ({} values changed)",
+                    def.key, r.values_affected
+                )
+            })
+        }
+    }
+}

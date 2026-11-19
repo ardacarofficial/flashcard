@@ -1,0 +1,4 @@
+{
+  "cli.undone": "Geri alındı: {summary}",
+  "cli.redone": "Yinelendi: {summary}"
+}

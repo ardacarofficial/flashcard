@@ -1,0 +1,7 @@
+{
+  "oplog.summary.batch.execute": "{count} operations",
+  "oplog.summary.modules.set_enabled": "Module {module} switched",
+  "oplog.summary.settings.set": "Changed setting {key}",
+  "oplog.summary.settings.reset": "Reset setting {key}",
+  "oplog.summary.jobs.cancel": "Cancelled a job"
+}

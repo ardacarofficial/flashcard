@@ -141,3 +141,122 @@ fn deck_note_attr_undo_roundtrip_on_a_temp_db() {
     // Decks are still there.
     assert!(ok(&db, &["deck", "list"]).contains("İngilizce"));
 }
+
+/// Reviewer scenario: nested decks, CEFR on the parent, a note in the child classified by key
+/// *and* by localised name, option rename, undo ×2, redo — every step a separate process.
+#[test]
+fn cefr_on_parent_option_rename_undo_redo() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("collection.db");
+
+    ok(&db, &["deck", "create", "Dil"]);
+    ok(&db, &["deck", "create", "İngilizce", "--parent", "Dil"]);
+    ok(
+        &db,
+        &["deck", "create", "Fiiller", "--parent", "Dil::İngilizce"],
+    );
+    assert!(ok(&db, &["deck", "list"]).contains("    Fiiller"));
+
+    let cefr = json(
+        &db,
+        &[
+            "attribute",
+            "apply-template",
+            "cefr",
+            "--deck",
+            "Dil",
+            "--locale",
+            "tr",
+        ],
+    );
+    assert_eq!(cefr["key"], "level");
+    assert_eq!(cefr["name"], "Seviye");
+
+    // `--attr` takes the key or the localised name, case-insensitively.
+    let by_name = json(
+        &db,
+        &[
+            "note",
+            "add",
+            "--deck",
+            "Dil::İngilizce::Fiiller",
+            "--front",
+            "run",
+            "--attr",
+            "seviye=B1",
+        ],
+    );
+    let by_key = json(
+        &db,
+        &[
+            "note",
+            "add",
+            "--deck",
+            "Dil::İngilizce::Fiiller",
+            "--front",
+            "go",
+            "--attr",
+            "LEVEL=a2",
+        ],
+    );
+    assert_eq!(by_name["attributes"][0]["attr_id"], cefr["id"]);
+    assert_eq!(by_key["attributes"][0]["attr_id"], cefr["id"]);
+    let b1 = by_name["attributes"][0]["value"]["value"].clone();
+
+    // Rename B1 → B1+ (id unchanged, the note still points at it).
+    let renamed = ok(
+        &db,
+        &["attribute", "option", "rename", "level", "B1", "B1+"],
+    );
+    assert!(renamed.contains("B1+"), "{renamed}");
+    let level = json(
+        &db,
+        &["attribute", "list", "--deck", "Dil::İngilizce::Fiiller"],
+    );
+    let label_of_b1 = level[0]["options"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["id"] == b1)
+        .unwrap()["label"]
+        .clone();
+    assert_eq!(label_of_b1, "B1+");
+
+    // Undo ×2 (rename, then the second note), translated output; redo brings the note back.
+    assert_eq!(
+        ok(&db, &["--lang", "en", "undo"]).trim(),
+        "Undone: Seviye: renamed an option"
+    );
+    assert_eq!(
+        ok(&db, &["--lang", "tr", "undo"]).trim(),
+        "Geri alındı: Not eklendi: go"
+    );
+    assert_eq!(note_fronts(&db).len(), 1);
+    let level = json(&db, &["attribute", "list", "--deck", "Dil"]);
+    assert!(level[0]["options"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|o| o["label"] == "B1"));
+    assert_eq!(
+        ok(&db, &["--lang", "tr", "redo"]).trim(),
+        "Yinelendi: Not eklendi: go"
+    );
+    let mut fronts = note_fronts(&db);
+    fronts.sort();
+    assert_eq!(fronts, ["go", "run"]);
+
+    // The generic escape hatch: any public method, internal ones refused like over IPC.
+    let tags = json(&db, &["call", "tags.list"]);
+    assert!(tags["tags"].is_array());
+    let denied = fc(
+        &db,
+        &[
+            "call",
+            "decks.restore_affected",
+            r#"{"decks":[],"notes":[],"cards":[]}"#,
+        ],
+    );
+    assert!(!denied.status.success());
+    assert!(String::from_utf8_lossy(&denied.stderr).contains("PERMISSION_DENIED"));
+}

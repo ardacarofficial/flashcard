@@ -1,0 +1,15 @@
+{
+  "oplog.summary.attributes.define": "Sınıflandırma tanımlandı: {name}",
+  "oplog.summary.attributes.define_from_template": "Şablondan sınıflandırma eklendi: {name}",
+  "oplog.summary.attributes.update": "Sınıflandırma güncellendi: {name}",
+  "oplog.summary.attributes.delete": "Sınıflandırma silindi: {name}",
+  "oplog.summary.attributes.restore": "Sınıflandırma geri yüklendi: {name}",
+  "oplog.summary.attributes.option.add": "{name}: seçenek eklendi",
+  "oplog.summary.attributes.option.rename": "{name}: seçenek yeniden adlandırıldı",
+  "oplog.summary.attributes.option.set_color": "{name}: seçenek rengi değişti",
+  "oplog.summary.attributes.option.reorder": "{name}: seçenekler yeniden sıralandı",
+  "oplog.summary.attributes.option.merge": "{name}: seçenekler birleştirildi ({count} değer)",
+  "oplog.summary.attributes.option.delete": "{name}: seçenek silindi ({count} değer)",
+  "oplog.summary.attributes.option.restore": "{name}: seçenek geri yüklendi",
+  "oplog.summary.attributes.values.set": "{count} sınıflandırma değeri ayarlandı"
+}
