@@ -20,6 +20,8 @@ serde.workspace = true
 serde_json.workspace = true
 fc-app.workspace = true
 fc-api.workspace = true
+# Native error box for startup failures (release builds on Windows have no console).
+rfd = { version = "0.15", default-features = false, features = ["gtk3"] }
 
 [dev-dependencies]
 fc-app = { workspace = true, features = ["testing"] }
