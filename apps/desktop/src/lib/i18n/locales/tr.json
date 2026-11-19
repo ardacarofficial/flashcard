@@ -1,0 +1,69 @@
+{
+  "app": { "title": "Flashcard" },
+  "menu": {
+    "decks": "Desteler",
+    "add_note": "Ekle",
+    "notes": "Notlar",
+    "settings": "Ayarlar"
+  },
+  "modules": {
+    "decks": "Desteler",
+    "notes": "Notlar",
+    "settings": "Ayarlar"
+  },
+  "common": {
+    "save": "Kaydet",
+    "cancel": "Vazgeç",
+    "delete": "Sil",
+    "rename": "Yeniden adlandır",
+    "loading": "Yükleniyor…",
+    "none": "—",
+    "yes": "Evet",
+    "no": "Hayır"
+  },
+  "deck": {
+    "heading": "Desteler",
+    "new": "Yeni deste",
+    "new_sub": "Yeni alt deste",
+    "name": "Deste adı",
+    "empty": "Henüz deste yok.",
+    "confirm_delete": "“{name}” ve alt desteleri silinsin mi?",
+    "select_prompt": "Önce bir deste seç.",
+    "expand": "Aç",
+    "collapse": "Kapat",
+    "current": "Deste"
+  },
+  "note": {
+    "add_heading": "Not ekle",
+    "list_heading": "Notlar",
+    "front": "Ön yüz",
+    "back": "Arka yüz",
+    "add": "Ekle",
+    "added": "Not eklendi.",
+    "empty": "Bu destede not yok.",
+    "classifications": "Sınıflandırmalar"
+  },
+  "attribute": {
+    "unset": "Seçilmedi",
+    "required": "Zorunlu"
+  },
+  "settings": {
+    "heading": "Ayarlar",
+    "language": "Dil",
+    "theme": "Tema",
+    "theme_system": "Sistem",
+    "theme_light": "Açık",
+    "theme_dark": "Koyu"
+  },
+  "lang": { "tr": "Türkçe", "en": "English" },
+  "errors": {
+    "internal": "Bir şeyler ters gitti.",
+    "not_implemented": "Henüz kullanılamıyor.",
+    "deck": { "not_found": "Deste bulunamadı." },
+    "note": { "not_found": "Not bulunamadı.", "duplicate": "Bu not zaten var." },
+    "validation": {
+      "empty_name": "Ad boş olamaz.",
+      "empty_front": "Ön yüz boş olamaz."
+    }
+  }
+}
