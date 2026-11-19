@@ -2,6 +2,19 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## [Unreleased]
+
+### Eklendi — v0.5 İçe / dışa aktarma (iz D)
+- **`fc-interop` crate'i** (saf, bayt girer bayt çıkar): esnek ayırıcılı metin/CSV/TSV (tırnak, özel ayırıcı, `max_fields`) + ayırıcı otomatik algılama; kendi JSON not biçimimiz; Quizlet metni; Anki `.apkg`/`.colpkg` okuma (eski `collection.anki2`/`.anki21` ve yeni zstd `collection.anki21b` + protobuf) ve yazma (şema 11) — cloze, medya, zamanlama ve tekrar geçmişi korunur; `.fcpack` deste paketi (sınıflandırma tanım/seçenek/değerleri kimlikleriyle); `.fcbackup` tam yedek; yazdırma HTML'i (çift taraflı baskı için aynalı arka yüzler).
+- **İş kuyruğu çalışanı:** `fc_app::jobs::spawn_worker`, `App::run_pending_jobs`, modül başına `Registry::job`; `jobs.cancel` işin iptal işaretini yazıcıyı beklemeden verir; işler yazmayı yalnızca komutlarla yapar.
+- **`io` modülü:** `io.import.preview/start`, `io.export.start`, `io.backup.create/inspect/restore`, `io.print.render`. İçe aktarma tek işlem + **tek geri al** adımıdır, yazarken iptal edilirse tamamen geri sarılır; tekrar edenler için atla/güncelle/yine de ekle; sütunlar alan/etiket/sınıflandırmaya eşlenir (istenirse eksik seçenekler oluşturulur). Geri yükleme önce mevcut durumun yedeğini alır.
+- **Depolama:** `0400_interop` (medya içeriği `media_blobs`), medya/tekrar kaydı/koleksiyon döküm-yükleme repo alanı.
+- **Masaüstü:** İçe/dışa aktar ekranı (önizleme, sütun eşleme, ilerleme + iptal, geri al), dışa aktarma, yedek/geri yükleme, yazdırma; Tauri dosya diyaloğu (yalnız aç/kaydet izni); TR/EN.
+- **CLI:** `fc call` kuyruğa aldığı işi hemen çalıştırıp bitmiş işi yazar.
+
+### Değişti
+- `JobDto.result` ve `imported` / `collection_replaced` olayları eklendi (eklemeli).
+
 ## [0.1.0] — Yayımlanmadı (inceleme bekliyor)
 
 v0.1 · Temel: her şeyin üstüne kurulacağı iskelet ve API sözleşmesinin ilk hali (docs/04, docs/10).

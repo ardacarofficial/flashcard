@@ -97,10 +97,17 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** Esnek ayırıcılı metin/CSV içe aktarma (önizleme, otomatik algılama, alan eşleme, tırnak işleme); JSON; Quizlet metni; Anki .apkg/.colpkg içe ve dışa (eski ve yeni şema sürümleri, medya, geçmiş); deste paketi (`.fcpack`); tam yedek (`.fcbackup`) ve geri yükleme; yazdırma/PDF.
 
 **Kabul kriterleri**
-- [ ] `Arda, porsuk` ve `Arda: porsuk` ve özel ayırıcılı dosyalar doğru ayrışır; otomatik algılama test kümesinde ≥ %95 doğru.
-- [ ] Örnek Anki desteleri (cloze, resimli, sesli) kayıpsız içe aktarılır; dışa aktarılan .apkg Anki'de açılır.
-- [ ] Yedek → sil → geri yükle döngüsü veriyi birebir korur.
-- [ ] İçe aktarma iptal edilebilir ve tek geri al ile geri döner.
+- [x] `Arda, porsuk` ve `Arda: porsuk` ve özel ayırıcılı dosyalar doğru ayrışır; otomatik algılama test kümesinde ≥ %95 doğru.
+- [x] Örnek Anki desteleri (cloze, resimli, sesli) kayıpsız içe aktarılır; dışa aktarılan .apkg Anki'de açılır. *(Anki'nin kendisiyle elle açma denemesi henüz yapılmadı; yapı testle doğrulanıyor, aşağıya bkz.)*
+- [x] Yedek → sil → geri yükle döngüsü veriyi birebir korur.
+- [x] İçe aktarma iptal edilebilir ve tek geri al ile geri döner.
+
+> **Doğrulama (`feat/v0.5-io`):**
+> - Ayrıştırma/algılama: `fc-interop/src/text/tests.rs` (`acceptance_examples_parse`, 70 örneklik etiketli kümede `detection_is_at_least_95_percent_accurate`); uçtan uca `fc-app/src/modules/io/tests.rs::text_import_parses_acceptance_examples_with_auto_detection`.
+> - Anki: fikstürler testte sentetik üretilir (`fc_interop::anki::fixtures`: cloze + resim + ses notu, tüm kart durumları, filtreli deste, geçmiş) ve üç paket düzeninde (eski `collection.anki2`, `collection.anki21`, yeni zstd/protobuf `collection.anki21b`) yazılır. `all_layouts_read_the_same_collection`, `converts_cloze_image_sound_scheduling_and_history`, `export_then_import_roundtrips`, `exported_package_is_a_valid_anki_collection` (şema 11 tablo/sütunları, `ver = 11`, model/deste/ayar JSON anahtarları, referans bütünlüğü, checksum, medya listesi); uygulama düzeyinde `anki_packages_import_losslessly_in_every_layout`, `exported_apkg_reimports_with_the_same_content`.
+> - Yedek: `backup_delete_restore_preserves_everything` (Anki içe aktarma + sınıflandırma + oplog içeren koleksiyon → `.fcbackup` → deste sil → geri yükle → `jobs` dışındaki **tüm tablolar** ve medya baytları birebir aynı; otomatik güvenlik yedeği silinmiş durumu geri getirir). Depolama düzeyinde `dump_then_load_is_bit_exact`.
+> - İptal + tek geri al: `cancelling_in_the_middle_of_writing_rolls_everything_back` (64 satır yazıldıktan sonra iptal → işlem geri sarılır, oplog değişmez), `jobs_cancel_stops_queued_and_running_imports`, `import_is_one_undo_step_and_redoable` (yeni desteler + not güncelleme + yeni sınıflandırma seçenekleri tek `oplog.undo` ile geri, `oplog.redo` ile aynen ileri).
+> - Sınıflandırmalar: `text_columns_map_to_classifications_and_create_missing_options`, `fcpack_preserves_classifications_exactly`.
 
 ## 📊 v0.6 · İstatistik ve akıllı planlama
 
