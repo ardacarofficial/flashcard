@@ -76,8 +76,8 @@
       screen ??= menu[0]?.screen ?? null;
     }, fail);
     void loadDecks();
-    // Live updates: any deck event (or undo/redo) re-reads the tree from the backend.
-    const unsub = api.on(['deck_', 'undone', 'redone'], () => void loadDecks());
+    // Live updates: any deck/study event (or undo/redo) re-reads the tree from the backend.
+    const unsub = api.on(['deck_', 'study_', 'undone', 'redone'], () => void loadDecks());
     return () => void unsub.then((u) => u());
   });
 </script>

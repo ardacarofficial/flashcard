@@ -1,0 +1,118 @@
+{
+  "modules": {
+    "study": {
+      "name": "Study",
+      "description": "Study sessions, spaced repetition (FSRS), hints and typed answers."
+    }
+  },
+  "nav": {
+    "study": "Study"
+  },
+  "study": {
+    "heading": "Study",
+    "whole_collection": "All decks",
+    "start": "Study now",
+    "start_hint": "Enter",
+    "resume": "Continue session",
+    "practice": "Practice mode (does not change the schedule)",
+    "filter_label": "Only cards with",
+    "filter_any": "Any",
+    "custom_start": "Custom session",
+    "postpone_label": "Postpone today's cards",
+    "postpone_days": "Days",
+    "postpone": "Postpone",
+    "postponed": "{count} card(s) postponed.",
+    "nothing": "Nothing to study right now.",
+    "remaining": "New {new} · Learning {learning} · Review {review}",
+    "practice_badge": "Practice",
+    "show_answer": "Show answer",
+    "type_placeholder": "Type the answer",
+    "check": "Check",
+    "hint": "Hint",
+    "suspend": "Suspend",
+    "bury": "Bury",
+    "undo": "Undo",
+    "end": "End",
+    "rating": {
+      "again": "Again",
+      "hard": "Hard",
+      "good": "Good",
+      "easy": "Easy"
+    },
+    "grade": {
+      "correct": "Correct",
+      "almost": "Almost",
+      "wrong": "Wrong"
+    },
+    "expected": "Expected: {text}",
+    "interval": {
+      "now": "<1m",
+      "minutes": "{n}m",
+      "hours": "{n}h",
+      "days": "{n}d",
+      "months": "{n}mo",
+      "years": "{n}y"
+    },
+    "summary": {
+      "heading": "Session complete",
+      "answered": "Cards studied: {n}",
+      "accuracy": "Accuracy: {n}%",
+      "time": "Time: {min} min {sec} s",
+      "mistakes": "Mistakes: {n}",
+      "repeat": "Repeat mistakes",
+      "back": "Done"
+    },
+    "keys": "Space: show · 1–4: rate · H: hint · S: suspend · B: bury · Z: undo · Esc: end"
+  },
+  "settings": {
+    "study": {
+      "new_per_session": { "label": "New cards per session", "description": "How many new cards a normal session introduces (0 = none)." },
+      "order": {
+        "label": "Card order",
+        "description": "Order of reviews and new cards.",
+        "due": "By due date",
+        "random": "Random",
+        "hardest_first": "Hardest first",
+        "newest_first": "Newest first"
+      },
+      "bury_siblings": { "label": "Bury siblings", "description": "Other cards of the same note wait until tomorrow." },
+      "type_answer": { "label": "Type the answer", "description": "Show an input and check what you type." },
+      "hint_strategy": {
+        "label": "Hint style",
+        "description": "How hints reveal the answer.",
+        "first_letters": "First letters",
+        "word_starts": "Start of every word",
+        "partial": "Some letters"
+      },
+      "scheduler": {
+        "label": "Scheduler",
+        "description": "Spaced-repetition algorithm.",
+        "fsrs": "FSRS",
+        "sm2": "SM-2"
+      },
+      "answer_checker": {
+        "label": "Answer checking",
+        "description": "How typed answers are compared.",
+        "exact": "Exact",
+        "normalized": "Ignore case and punctuation",
+        "tolerant": "Allow typos",
+        "multi": "Several answers, allow typos"
+      },
+      "fold_turkish": { "label": "Treat ı/i, ş/s… as equal", "description": "When checking typed answers." },
+      "auto_grade": { "label": "Rate automatically", "description": "Use the checker's suggestion as the rating." },
+      "day_start_hour": { "label": "Next day starts at", "description": "Local hour when a new study day begins." }
+    }
+  },
+  "errors": {
+    "not_found": {
+      "session": "Study session not found."
+    },
+    "conflict": {
+      "session_ended": "This study session has ended.",
+      "not_current_card": "This card is no longer in the session."
+    },
+    "validation": {
+      "scheduler_params": "Invalid scheduler settings."
+    }
+  }
+}
