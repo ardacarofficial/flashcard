@@ -169,6 +169,10 @@ define_id!(
     /// Study session id.
     SessionId
 );
+define_id!(
+    /// Saved query (named filter) id.
+    SavedQueryId
+);
 
 #[cfg(test)]
 mod tests {

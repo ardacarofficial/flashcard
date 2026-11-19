@@ -18,6 +18,10 @@ serde_json.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 ts-rs = { workspace = true, optional = true }
+regex = { version = "1", default-features = false, features = ["std", "unicode"] }
+
+[dev-dependencies]
+proptest = { version = "1", default-features = false, features = ["std"] }
 
 [lints]
 workspace = true
