@@ -1,5 +1,7 @@
-import en from './locales/en.json';
-import tr from './locales/tr.json';
+// Merged at build time from `locales/<lang>/<feature>.json` by `scripts/merge-locales.mjs`
+// (run by `pnpm check|test|build|dev`). Edit the feature files, never these.
+import en from './generated/en.json';
+import tr from './generated/tr.json';
 
 /** EN is the reference dictionary; every other locale must have the same shape. */
 export type Dictionary = typeof en;

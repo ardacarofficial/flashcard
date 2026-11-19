@@ -1,0 +1,29 @@
+{
+  "modules": {
+    "attributes": {
+      "name": "Sınıflandırmalar",
+      "description": "Notlar için seviye, sınav ve benzeri etiketler."
+    }
+  },
+  "attribute": {
+    "unset": "Seçilmedi",
+    "required": "Zorunlu"
+  },
+  "errors": {
+    "validation": {
+      "attribute_def": "Geçersiz sınıflandırma.",
+      "attribute_value": "Geçersiz sınıflandırma değeri.",
+      "attribute_required": "Bu sınıflandırma zorunlu.",
+      "attribute_not_applicable": "Bu sınıflandırma bu destede geçerli değil."
+    },
+    "not_found": {
+      "attribute": "Sınıflandırma bulunamadı.",
+      "attribute_option": "Seçenek bulunamadı.",
+      "attribute_template": "Şablon bulunamadı."
+    },
+    "conflict": {
+      "attribute_key_exists": "Bu anahtarla bir sınıflandırma zaten var.",
+      "attribute_option_in_use": "Bu seçenek hâlâ kullanılıyor."
+    }
+  }
+}

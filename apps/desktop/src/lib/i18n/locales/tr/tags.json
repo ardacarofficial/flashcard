@@ -1,0 +1,16 @@
+{
+  "modules": {
+    "tags": {
+      "name": "Etiketler",
+      "description": "Hiyerarşik etiketler."
+    }
+  },
+  "errors": {
+    "validation": {
+      "tag_name": "Geçersiz etiket adı."
+    },
+    "not_found": {
+      "tag": "Etiket bulunamadı."
+    }
+  }
+}

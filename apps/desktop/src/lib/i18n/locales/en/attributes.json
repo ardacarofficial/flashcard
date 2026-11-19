@@ -1,0 +1,29 @@
+{
+  "modules": {
+    "attributes": {
+      "name": "Classifications",
+      "description": "Levels, exams and other labels for notes."
+    }
+  },
+  "attribute": {
+    "unset": "Not set",
+    "required": "Required"
+  },
+  "errors": {
+    "validation": {
+      "attribute_def": "Invalid classification.",
+      "attribute_value": "Invalid classification value.",
+      "attribute_required": "This classification is required.",
+      "attribute_not_applicable": "This classification doesn't apply to this deck."
+    },
+    "not_found": {
+      "attribute": "Classification not found.",
+      "attribute_option": "Option not found.",
+      "attribute_template": "Template not found."
+    },
+    "conflict": {
+      "attribute_key_exists": "A classification with this key already exists.",
+      "attribute_option_in_use": "This option is still in use."
+    }
+  }
+}

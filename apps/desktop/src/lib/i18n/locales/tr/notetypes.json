@@ -1,0 +1,16 @@
+{
+  "modules": {
+    "notetypes": {
+      "name": "Not türleri",
+      "description": "Not türleri ve kart şablonları."
+    }
+  },
+  "errors": {
+    "validation": {
+      "note_type": "Geçersiz not türü."
+    },
+    "not_found": {
+      "note_type": "Not türü bulunamadı."
+    }
+  }
+}

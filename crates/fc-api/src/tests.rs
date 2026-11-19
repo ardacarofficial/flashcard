@@ -102,3 +102,42 @@ fn generated_typescript_is_up_to_date() {
         panic!("{e}");
     }
 }
+
+/// Every error code has a user-facing message in the desktop dictionaries (TR and EN), so a
+/// track adding codes is reminded to add its `errors.*` texts to its locale files.
+#[test]
+fn every_error_code_has_a_desktop_message() {
+    use std::collections::BTreeSet;
+    fn leaves(v: &serde_json::Value, prefix: &str, out: &mut BTreeSet<String>) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, v) in m {
+                    let p = if prefix.is_empty() {
+                        k.clone()
+                    } else {
+                        format!("{prefix}.{k}")
+                    };
+                    leaves(v, &p, out);
+                }
+            }
+            _ => {
+                out.insert(prefix.to_owned());
+            }
+        }
+    }
+    let locales = crate::tsgen::workspace_root().join("apps/desktop/src/lib/i18n/locales");
+    for lang in ["en", "tr"] {
+        let mut keys = BTreeSet::new();
+        for entry in std::fs::read_dir(locales.join(lang)).unwrap() {
+            let text = std::fs::read_to_string(entry.unwrap().path()).unwrap();
+            leaves(&serde_json::from_str(&text).unwrap(), "", &mut keys);
+        }
+        for code in crate::ErrorCode::ALL {
+            assert!(
+                keys.contains(code.message_key()),
+                "locales/{lang}: no text for {} ({code})",
+                code.message_key()
+            );
+        }
+    }
+}

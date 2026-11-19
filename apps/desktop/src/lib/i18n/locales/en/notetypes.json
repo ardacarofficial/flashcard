@@ -1,0 +1,16 @@
+{
+  "modules": {
+    "notetypes": {
+      "name": "Note types",
+      "description": "Note types and card templates."
+    }
+  },
+  "errors": {
+    "validation": {
+      "note_type": "Invalid note type."
+    },
+    "not_found": {
+      "note_type": "Note type not found."
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "app": {
+    "title": "Flashcard"
+  },
+  "nav": {
+    "decks": "Desteler",
+    "add_note": "Ekle",
+    "notes": "Notlar",
+    "settings": "Ayarlar"
+  },
+  "modules": {
+    "core": {
+      "name": "Çekirdek",
+      "description": "Geri alma, modüller ve uygulama ayarları."
+    }
+  },
+  "common": {
+    "save": "Kaydet",
+    "cancel": "Vazgeç",
+    "delete": "Sil",
+    "rename": "Yeniden adlandır",
+    "loading": "Yükleniyor…",
+    "none": "—",
+    "yes": "Evet",
+    "no": "Hayır"
+  },
+  "settings": {
+    "heading": "Ayarlar",
+    "language": "Dil",
+    "theme": "Tema",
+    "theme_system": "Sistem",
+    "theme_light": "Açık",
+    "theme_dark": "Koyu",
+    "pages": {
+      "general": "Genel",
+      "attributes": "Sınıflandırmalar"
+    }
+  },
+  "lang": {
+    "tr": "Türkçe",
+    "en": "English"
+  },
+  "errors": {
+    "validation": {
+      "invalid_params": "Geçersiz istek.",
+      "setting_value": "Geçersiz ayar değeri."
+    },
+    "not_found": {
+      "method": "Bilinmeyen komut.",
+      "module": "Modül bulunamadı.",
+      "setting": "Ayar bulunamadı.",
+      "job": "İş bulunamadı."
+    },
+    "conflict": {
+      "nothing_to_undo": "Geri alınacak bir şey yok.",
+      "nothing_to_redo": "Yinelenecek bir şey yok.",
+      "module_disabled": "Bu modül kapalı.",
+      "module_required": "Bu modül kapatılamaz.",
+      "deleted": "Bu öğe çöp kutusunda."
+    },
+    "permission": {
+      "denied": "İzin yok."
+    },
+    "provider": {
+      "unavailable": "Hizmet kullanılamıyor.",
+      "failed": "Hizmet başarısız oldu."
+    },
+    "io": {
+      "database": "Veritabanı hatası.",
+      "file": "Dosya hatası."
+    },
+    "internal": {
+      "unexpected": "Bir şeyler ters gitti.",
+      "not_implemented": "Henüz kullanılamıyor."
+    }
+  }
+}

@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { DICTIONARIES, detectLocale, flatKeys, translate, translateDynamic } from './core';
+import { mergeLocales } from '../../../scripts/merge-locales.mjs';
 
 describe('i18n', () => {
+  it('per-feature files merge without conflicts into the generated dictionaries', () => {
+    expect(mergeLocales()).toEqual({ en: DICTIONARIES.en, tr: DICTIONARIES.tr });
+  });
+
   it('TR and EN have exactly the same keys', () => {
     expect(flatKeys(DICTIONARIES.tr).sort()).toEqual(flatKeys(DICTIONARIES.en).sort());
   });

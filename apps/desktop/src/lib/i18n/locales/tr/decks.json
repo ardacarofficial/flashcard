@@ -1,0 +1,32 @@
+{
+  "modules": {
+    "decks": {
+      "name": "Desteler",
+      "description": "Deste ağacı."
+    }
+  },
+  "deck": {
+    "heading": "Desteler",
+    "new": "Yeni deste",
+    "new_sub": "Yeni alt deste",
+    "name": "Deste adı",
+    "empty": "Henüz deste yok.",
+    "confirm_delete": "“{name}” ve alt desteleri silinsin mi?",
+    "select_prompt": "Önce bir deste seç.",
+    "expand": "Aç",
+    "collapse": "Kapat",
+    "current": "Deste"
+  },
+  "errors": {
+    "validation": {
+      "deck_name": "Geçersiz deste adı."
+    },
+    "not_found": {
+      "deck": "Deste bulunamadı."
+    },
+    "conflict": {
+      "deck_exists": "Bu adda bir deste zaten var.",
+      "deck_cycle": "Bir deste kendi içine taşınamaz."
+    }
+  }
+}
