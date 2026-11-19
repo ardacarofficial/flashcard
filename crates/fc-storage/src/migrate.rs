@@ -1,11 +1,21 @@
-//! Schema migrations. Versions are tracked with `PRAGMA user_version`.
+//! Schema migrations.
 //!
-//! Numbering is reserved per release lane so parallel branches never collide (docs/07 §5):
-//! v0.1 = 1–99, v0.2 = 100–199, v0.3 = 200–299, v0.4 = 300–399, v0.5 = 400–499, …
-//! Gaps are fine; order is by number. A migration is never edited after merge.
+//! * Numbering is reserved per release lane so parallel branches never collide (docs/07 §5):
+//!   v0.1 = 1–99, v0.2 = 100–199, v0.3 = 200–299, v0.4 = 300–399, v0.5 = 400–499, …
+//!   Gaps are fine; order is by number. A migration is **never edited after merge**.
+//! * Applied migrations are recorded in `schema_migrations (version, name, checksum,
+//!   applied_at)`. The checksum (FNV-1a 64 of the SQL with `\r` removed, so CRLF checkouts
+//!   agree) guards against an edited migration: a mismatch refuses to open the database.
+//! * `PRAGMA user_version` mirrors the highest applied version (cheap check, and lets
+//!   databases created before `schema_migrations` existed be adopted: their rows are
+//!   back-filled).
+//! * Each migration runs in its own `BEGIN IMMEDIATE` transaction. Missing migrations are
+//!   applied in ascending order, even if a higher one is already applied (lane merges).
 
-use crate::error::{StorageError, StorageResult};
-use rusqlite::Connection;
+use crate::error::{in_table, StorageError, StorageResult};
+use fc_core::note::fnv1a64;
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use std::collections::BTreeMap;
 
 /// One migration.
 #[derive(Debug, Clone, Copy)]
@@ -18,59 +28,196 @@ pub struct Migration {
     pub sql: &'static str,
 }
 
+impl Migration {
+    /// Checksum recorded in `schema_migrations` (16 hex chars).
+    pub fn checksum(&self) -> String {
+        checksum(self.sql)
+    }
+}
+
+/// Checksum of a migration's SQL: FNV-1a 64 over the text without `\r`.
+pub fn checksum(sql: &str) -> String {
+    let normalized: String = sql.chars().filter(|c| *c != '\r').collect();
+    format!("{:016x}", fnv1a64(normalized.as_bytes()))
+}
+
 /// All migrations, ascending by version.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "0001_init",
-    sql: include_str!("../migrations/0001_init.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "0001_init",
+        sql: include_str!("../migrations/0001_init.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "0002_notes_fts_rowid",
+        sql: include_str!("../migrations/0002_notes_fts_rowid.sql"),
+    },
+];
 
 /// Highest known schema version.
 pub fn latest_version() -> u32 {
     MIGRATIONS.last().map_or(0, |m| m.version)
 }
 
-/// Current schema version of `conn`.
+/// Current schema version of `conn` (`PRAGMA user_version`).
 pub fn current_version(conn: &Connection) -> StorageResult<u32> {
     let v: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
     Ok(u32::try_from(v).unwrap_or(0))
 }
 
-/// Applies pending migrations, each in its own transaction. Returns the versions applied.
-/// Fails with [`StorageError::TooNew`] if the database is ahead of this build.
+/// Applies pending [`MIGRATIONS`]. Returns the versions applied (empty = up to date).
+/// Fails with [`StorageError::TooNew`] if the database is ahead of this build, and with
+/// [`StorageError::Migration`] on a checksum mismatch or an unknown recorded migration.
 ///
-/// (Taking a file snapshot before migrating — docs/03 §15 — is the caller's job, because it
-/// needs the file path.)
+/// (Taking a file snapshot before migrating — docs/03 §15 — is done by
+/// [`crate::SqliteStore::open`], which knows the path.)
 pub fn migrate(conn: &mut Connection) -> StorageResult<Vec<u32>> {
-    let current = current_version(conn)?;
-    let latest = latest_version();
-    if current > latest {
-        return Err(StorageError::TooNew {
-            found: current,
-            supported: latest,
-        });
-    }
+    migrate_with(conn, MIGRATIONS)
+}
+
+/// [`migrate`] against an explicit migration list (ascending by version). For tests.
+pub fn migrate_with(conn: &mut Connection, migrations: &[Migration]) -> StorageResult<Vec<u32>> {
+    let pending = check(conn, migrations)?;
     let mut applied = Vec::new();
-    for m in MIGRATIONS.iter().filter(|m| m.version > current) {
-        let tx = conn.transaction()?;
+    for m in pending {
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         tx.execute_batch(m.sql)
             .map_err(|e| StorageError::Migration {
                 version: m.version,
                 message: e.to_string(),
             })?;
-        tx.pragma_update(None, "user_version", m.version)?;
+        tx.execute(
+            "INSERT INTO schema_migrations (version, name, checksum, applied_at) \
+             VALUES (?1, ?2, ?3, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))",
+            params![m.version, m.name, m.checksum()],
+        )?;
+        let top: u32 = tx.query_row("SELECT max(version) FROM schema_migrations", [], |r| {
+            r.get(0)
+        })?;
+        tx.pragma_update(None, "user_version", top)?;
         tx.commit()?;
         applied.push(m.version);
     }
     Ok(applied)
 }
 
-/// Connection settings every connection must use (WAL, foreign keys, busy timeout).
+/// Versions of `MIGRATIONS` not yet applied to `conn` (after validating what is recorded).
+pub fn pending_versions(conn: &mut Connection) -> StorageResult<Vec<u32>> {
+    Ok(check(conn, MIGRATIONS)?
+        .into_iter()
+        .map(|m| m.version)
+        .collect())
+}
+
+/// Ensures `schema_migrations` exists (back-filling it for legacy databases), validates the
+/// recorded rows against `migrations` and returns the pending ones in order.
+fn check<'m>(
+    conn: &mut Connection,
+    migrations: &'m [Migration],
+) -> StorageResult<Vec<&'m Migration>> {
+    let latest = migrations.last().map_or(0, |m| m.version);
+    let current = current_version(conn)?;
+    if current > latest {
+        return Err(StorageError::TooNew {
+            found: current,
+            supported: latest,
+        });
+    }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS schema_migrations (
+            version     INTEGER PRIMARY KEY NOT NULL,
+            name        TEXT NOT NULL,
+            checksum    TEXT NOT NULL,
+            applied_at  INTEGER NOT NULL
+        ) STRICT;",
+    )?;
+    let mut recorded = load_recorded(&tx)?;
+    if recorded.is_empty() && current > 0 {
+        // Database created before `schema_migrations` existed: adopt what user_version says.
+        for m in migrations.iter().filter(|m| m.version <= current) {
+            tx.execute(
+                "INSERT INTO schema_migrations (version, name, checksum, applied_at) \
+                 VALUES (?1, ?2, ?3, 0)",
+                params![m.version, m.name, m.checksum()],
+            )?;
+        }
+        recorded = load_recorded(&tx)?;
+    }
+    for (version, sum) in &recorded {
+        let Some(m) = migrations.iter().find(|m| m.version == *version) else {
+            if *version > latest {
+                return Err(StorageError::TooNew {
+                    found: *version,
+                    supported: latest,
+                });
+            }
+            return Err(StorageError::Migration {
+                version: *version,
+                message: "recorded migration is unknown to this build".to_owned(),
+            });
+        };
+        if m.checksum() != *sum {
+            return Err(StorageError::Migration {
+                version: *version,
+                message: format!(
+                    "checksum mismatch for {}: database has {sum}, build has {} \
+                     (migrations must never be edited after merge)",
+                    m.name,
+                    m.checksum()
+                ),
+            });
+        }
+    }
+    tx.commit()?;
+    Ok(migrations
+        .iter()
+        .filter(|m| !recorded.contains_key(&m.version))
+        .collect())
+}
+
+fn load_recorded(conn: &Connection) -> StorageResult<BTreeMap<u32, String>> {
+    let mut stmt = conn.prepare("SELECT version, checksum FROM schema_migrations")?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, u32>(0)?, r.get::<_, String>(1)?)))?
+        .collect::<Result<BTreeMap<_, _>, _>>()
+        .map_err(|e| in_table(e, "schema_migrations"))?;
+    Ok(rows)
+}
+
+/// Whether `table` (or index/virtual table) exists in the schema.
+pub fn schema_object_exists(conn: &Connection, name: &str) -> StorageResult<bool> {
+    Ok(conn
+        .query_row("SELECT 1 FROM sqlite_master WHERE name = ?1", [name], |r| {
+            r.get::<_, i64>(0)
+        })
+        .optional()?
+        .is_some())
+}
+
+/// Settings every writer connection uses: WAL, foreign keys, busy timeout, `synchronous =
+/// NORMAL` (safe with WAL; a power cut may lose the last commits but never corrupts),
+/// in-memory temp storage.
 pub fn configure_connection(conn: &Connection) -> StorageResult<()> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
-    conn.pragma_update(None, "busy_timeout", 5000)?;
+    conn.pragma_update(None, "busy_timeout", BUSY_TIMEOUT_MS)?;
     // In-memory databases report "memory"; ignore the returned mode.
     let _mode: String = conn.pragma_update_and_check(None, "journal_mode", "WAL", |r| r.get(0))?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
+    conn.pragma_update(None, "temp_store", "MEMORY")?;
     Ok(())
 }
+
+/// Settings of read-pool connections: like [`configure_connection`] but `query_only` (a read
+/// transaction can never write, even by mistake) and no journal-mode change.
+pub fn configure_reader(conn: &Connection) -> StorageResult<()> {
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.pragma_update(None, "busy_timeout", BUSY_TIMEOUT_MS)?;
+    conn.pragma_update(None, "temp_store", "MEMORY")?;
+    conn.pragma_update(None, "query_only", "ON")?;
+    Ok(())
+}
+
+/// SQLite busy timeout, also used for acquiring a pooled connection.
+pub const BUSY_TIMEOUT_MS: u32 = 5000;
