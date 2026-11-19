@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: -D warnings
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tauri Linux bağımlılıkları
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libssl-dev libxdo-dev patchelf build-essential pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  types:
+    name: TS tipleri güncel mi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Tipleri üret
+        run: cargo run -p fc-api --bin gen-ts
+      - name: Üretilen klasörde fark yok
+        run: |
+          dir=apps/desktop/src/lib/api/generated
+          git add -N "$dir"
+          if ! git diff --exit-code -- "$dir"; then
+            echo "::error::Rust DTO'ları değişti ama TS tipleri yeniden üretilmedi. 'cargo run -p fc-api --bin gen-ts' çalıştırıp commit'le."
+            exit 1
+          fi
+
+  frontend:
+    name: Frontend (check, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/desktop/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+
+  windows:
+    name: Windows (build + test)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/desktop/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+      - name: Çekirdek testleri
+        run: cargo test -p fc-core -p fc-storage
+      - name: Frontend derle
+        working-directory: apps/desktop
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Tauri uygulamasını derle
+        run: cargo build -p fc-desktop --release
+
+  core-purity:
+    name: fc-core saflık kontrolü
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: bash .github/scripts/check-core-purity.sh
