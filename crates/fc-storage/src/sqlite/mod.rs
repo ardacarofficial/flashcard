@@ -7,6 +7,7 @@
 mod attributes;
 mod cards;
 mod decks;
+mod interop;
 mod jobs;
 mod notes;
 mod notetypes;

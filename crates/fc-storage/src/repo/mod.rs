@@ -69,4 +69,5 @@ domains! {
     settings: SettingsRead, SettingsWrite;
     modules: ModuleStateRead, ModuleStateWrite;
     jobs: JobRead, JobWrite;
+    interop: InteropRead, InteropWrite;
 }

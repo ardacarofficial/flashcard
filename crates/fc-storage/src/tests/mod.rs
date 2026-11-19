@@ -6,6 +6,7 @@
 
 mod attributes;
 mod decks;
+mod interop;
 mod migrations;
 mod misc;
 mod notes;
