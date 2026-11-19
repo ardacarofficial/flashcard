@@ -49,12 +49,6 @@
   const paths = $derived(deckPaths(decks));
   const selectedPath = $derived(paths.find((p) => p.id === selectedDeck)?.path ?? null);
 
-  /** Path of a new deck named `name` under `parentId` (`null` = top level). */
-  function childPath(name: string, parentId: string | null): string {
-    const parent = paths.find((p) => p.id === parentId)?.path;
-    return parent ? `${parent}::${name.trim()}` : name.trim();
-  }
-
   function fail(e: unknown) {
     error = td((e as ApiError).messageKey);
   }
@@ -125,7 +119,7 @@
         {decks}
         selectedId={selectedDeck}
         onselect={(id) => (selectedDeck = id)}
-        oncreate={(name, parentId) => guarded(() => api.deck.create(childPath(name, parentId)))}
+        oncreate={(name, parentId) => guarded(() => api.deck.create(name, parentId))}
         onrename={(id, name) => guarded(() => api.deck.rename(id, name))}
         ondelete={(id) => guarded(() => api.deck.remove(id))}
       />

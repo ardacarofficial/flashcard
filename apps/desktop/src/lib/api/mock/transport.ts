@@ -151,9 +151,9 @@ export function createMockTransport(): Transport {
       ],
     }),
     'decks.tree': () => ({ roots: tree(null) }),
-    'decks.create': ({ path }) => {
+    'decks.create': ({ path, parent_id }) => {
       const parts = path.split('::').map(requireName);
-      let parent: DeckDto | null = null;
+      let parent: DeckDto | null = parent_id ? requireDeck(parent_id) : null;
       for (const [i, name] of parts.entries()) {
         const existing: DeckDto | undefined = decks.find(
           (d) => d.parent_id === (parent?.id ?? null) && sameName(d.name, name),

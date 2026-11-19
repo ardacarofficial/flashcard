@@ -33,6 +33,7 @@ fn open(path: &Path) -> TestApp {
 fn deck(t: &TestApp, path: &str) -> DeckDto {
     t.ok::<DecksCreate>(CreateDeck {
         path: path.into(),
+        parent_id: None,
         description: None,
         icon: None,
         color: None,

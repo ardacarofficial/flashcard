@@ -44,6 +44,7 @@ macro_rules! store_suite {
             bootstrap_seeds_classic_once,
             deck_create_builds_missing_parents,
             deck_create_undo_redo_roundtrip,
+            deck_create_under_parent_id,
             deck_rename_move_update_undo,
             deck_delete_cascades_and_undo_restores,
             note_create_generates_classic_card,
@@ -91,6 +92,7 @@ fn app(f: &StoreFactory) -> TestApp {
 fn deck(t: &TestApp, path: &str) -> DeckDto {
     t.ok::<DecksCreate>(CreateDeck {
         path: path.into(),
+        parent_id: None,
         description: None,
         icon: None,
         color: None,
@@ -287,6 +289,7 @@ pub fn deck_create_builds_missing_parents(f: &StoreFactory) {
     );
     let e = t.err::<DecksCreate>(CreateDeck {
         path: "DIL::İngilizce::FIILLER".into(),
+        parent_id: None,
         description: None,
         icon: None,
         color: None,
@@ -294,6 +297,7 @@ pub fn deck_create_builds_missing_parents(f: &StoreFactory) {
     assert_eq!(e.code, ErrorCode::ConflictDeckExists);
     let e = t.err::<DecksCreate>(CreateDeck {
         path: "A::::B".into(),
+        parent_id: None,
         description: None,
         icon: None,
         color: None,
@@ -327,12 +331,40 @@ pub fn deck_create_builds_missing_parents(f: &StoreFactory) {
     assert_eq!(got, leaf);
 }
 
+/// `decks.create` with `parent_id`: the path is relative to the parent and Rust builds the
+/// full path (clients never join paths).
+pub fn deck_create_under_parent_id(f: &StoreFactory) {
+    let t = app(f);
+    let dil = deck(&t, "Dil");
+    let req = |path: &str, parent_id| CreateDeck {
+        path: path.into(),
+        parent_id,
+        description: None,
+        icon: None,
+        color: None,
+    };
+    let child = t.ok::<DecksCreate>(req("İngilizce", Some(dil.id)));
+    assert_eq!(child.path, "Dil::İngilizce");
+    assert_eq!(child.parent_id, Some(dil.id));
+    let deep = t.ok::<DecksCreate>(req("Fiiller::Düzensiz", Some(child.id)));
+    assert_eq!(deep.path, "Dil::İngilizce::Fiiller::Düzensiz");
+    let e = t.err::<DecksCreate>(req("fiiller", Some(child.id)));
+    assert_eq!(e.code, ErrorCode::ConflictDeckExists);
+    assert_eq!(e.details["path"], "Dil::İngilizce::fiiller");
+    let e = t.err::<DecksCreate>(req("X", Some(DeckId(uuid::Uuid::from_u128(1)))));
+    assert_eq!(e.code, ErrorCode::NotFoundDeck);
+    t.ok::<DecksDelete>(DeckRef { id: child.id });
+    let e = t.err::<DecksCreate>(req("X", Some(child.id)));
+    assert_eq!(e.code, ErrorCode::ConflictDeleted);
+}
+
 pub fn deck_create_undo_redo_roundtrip(f: &StoreFactory) {
     let t = app(f);
     deck(&t, "Dil");
     assert_undo_redo(&t, |t| {
         let d = t.ok::<DecksCreate>(CreateDeck {
             path: "Dil::İngilizce::Fiiller".into(),
+            parent_id: None,
             description: Some("açıklama".into()),
             icon: Some("📘".into()),
             color: Some("#ff0000".into()),
@@ -1528,6 +1560,7 @@ pub fn events_follow_commits(f: &StoreFactory) {
     assert_eq!(ev[0].event, DomainEvent::DeckCreated { deck: d.clone() });
     t.err::<DecksCreate>(CreateDeck {
         path: "A".into(),
+        parent_id: None,
         description: None,
         icon: None,
         color: None,

@@ -71,12 +71,18 @@ pub struct DeckList {
 
 /// `decks.create`: creates the deck at `path`, creating missing parents. Fails with
 /// `CONFLICT_DECK_EXISTS` if the full path already exists.
+///
+/// With `parent_id`, `path` is relative to that (live) deck: `{parent_id, path: "Verbs"}`
+/// creates a child named `Verbs`. Clients never join paths themselves.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 #[ts(optional_fields = nullable)]
 pub struct CreateDeck {
-    /// `A::B::C`.
+    /// `A::B::C` (relative to `parent_id` when given; a plain name for one child).
     pub path: String,
+    /// Parent deck the path is relative to (`null` = top level).
+    #[serde(default)]
+    pub parent_id: Option<DeckId>,
     /// Description.
     pub description: Option<String>,
     /// Icon.

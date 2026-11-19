@@ -154,10 +154,19 @@ fn get(req: DeckRef, ctx: &QueryCtx<'_>) -> AppResult<DeckDto> {
 // ------------------------------------------------------------------ commands
 
 fn create(req: CreateDeck, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<DeckDto>> {
-    let path = DeckPath::parse(&req.path)?;
+    let relative = DeckPath::parse(&req.path)?;
     let mut index = DeckIndex::load(ctx.reads())?;
-    let segments = path.segments();
-    let mut parent: Option<DeckId> = None;
+    // The full path (for messages): the parent's path joined with the relative one, built
+    // here so clients never join paths themselves.
+    let path = match req.parent_id {
+        Some(p) => {
+            index.require_live(p)?;
+            DeckPath::parse(&format!("{}::{relative}", index.path(p)))?
+        }
+        None => relative.clone(),
+    };
+    let segments = relative.segments();
+    let mut parent: Option<DeckId> = req.parent_id;
     let mut created: Vec<Deck> = Vec::new();
     for (i, segment) in segments.iter().enumerate() {
         let leaf = i + 1 == segments.len();

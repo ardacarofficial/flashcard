@@ -23,8 +23,8 @@ describe('api client', () => {
   it('sends the qualified method name and typed params through the single invoke', async () => {
     const { t } = fakeTransport(async () => ({ id: 'd1' }));
     const api = createApiClient(t);
-    await expect(api.deck.create('Dil::Fiiller')).resolves.toEqual({ id: 'd1' });
-    expect(t.invoke).toHaveBeenCalledWith('v1.decks.create', { path: 'Dil::Fiiller' });
+    await expect(api.deck.create('Fiiller', 'p1')).resolves.toEqual({ id: 'd1' });
+    expect(t.invoke).toHaveBeenCalledWith('v1.decks.create', { path: 'Fiiller', parent_id: 'p1' });
     await api.deck.remove('d1');
     expect(t.invoke).toHaveBeenLastCalledWith('v1.decks.delete', { id: 'd1' });
     await api.attribute.effective('d1');
@@ -107,8 +107,9 @@ describe('mock transport (dev only)', () => {
     ]);
     expect(note.home_deck_id).toBe(sub.deck.id);
     expect((await api.note.list(sub.deck.id)).items).toHaveLength(1);
-    const child = await api.deck.create(`${sub.deck.path}::Düzensiz`);
+    const child = await api.deck.create('Düzensiz', sub.deck.id);
     expect(child.parent_id).toBe(sub.deck.id);
+    expect(child.path).toBe('İngilizce::Fiiller::Düzensiz');
     expect(events).toEqual(['note_created', 'deck_created']);
   });
 

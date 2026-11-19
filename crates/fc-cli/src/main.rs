@@ -342,6 +342,7 @@ fn run(app: &App, command: &Command, json: bool) -> Result<String, ApiError> {
                 app,
                 &CreateDeck {
                     path: path.clone(),
+                    parent_id: None,
                     description: description.clone(),
                     icon: None,
                     color: None,

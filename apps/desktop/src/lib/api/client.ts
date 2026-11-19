@@ -105,8 +105,12 @@ export function createApiClient(transport: Transport) {
     },
     deck: {
       tree: () => call('decks.tree', {}),
-      /** Creates the deck at `path` (`Parent::Child`; missing parents are created). */
-      create: (path: string) => call('decks.create', { path }),
+      /**
+       * Creates the deck `name` under `parentId` (`null` = top level). The backend builds the
+       * full path; a name containing `::` creates the missing levels.
+       */
+      create: (name: string, parentId: DeckId | null = null) =>
+        call('decks.create', { path: name, parent_id: parentId }),
       rename: (id: DeckId, name: string) => call('decks.rename', { id, name }),
       remove: (id: DeckId) => call('decks.delete', { id }),
     },
