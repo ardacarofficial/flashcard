@@ -13,51 +13,25 @@
   --fc-radius: 6px;
   --fc-border-width: 1px;
 
-  --fc-bg: #ffffff;
-  --fc-bg-subtle: #f5f5f4;
-  --fc-surface: #ffffff;
-  --fc-text: #1c1917;
-  --fc-text-muted: #6b6560;
-  --fc-border: #e2e0dd;
-  --fc-accent: #2f6fdb;
-  --fc-accent-text: #ffffff;
-  --fc-danger: #c0392b;
-  --fc-success: #2e7d4f;
-  --fc-focus: #2f6fdb;
-  --fc-selected: #e8eefb;
+  --fc-bg: light-dark(#ffffff, #161514);
+  --fc-bg-subtle: light-dark(#f5f5f4, #1f1e1c);
+  --fc-surface: light-dark(#ffffff, #1f1e1c);
+  --fc-text: light-dark(#1c1917, #ecebe9);
+  --fc-text-muted: light-dark(#6b6560, #a19d98);
+  --fc-border: light-dark(#e2e0dd, #34322f);
+  --fc-accent: light-dark(#2f6fdb, #6b9bf0);
+  --fc-accent-text: light-dark(#ffffff, #0c0c0c);
+  --fc-danger: light-dark(#c0392b, #ef6f62);
+  --fc-success: light-dark(#2e7d4f, #6cc28d);
+  --fc-focus: light-dark(#2f6fdb, #6b9bf0);
+  --fc-selected: light-dark(#e8eefb, #23324d);
+  color-scheme: light dark; /* follow the OS */
+}
+
+/* Forced themes. Each token is declared once, above, via light-dark(). */
+:root[data-theme='light'] {
   color-scheme: light;
 }
-
 :root[data-theme='dark'] {
-  --fc-bg: #161514;
-  --fc-bg-subtle: #1f1e1c;
-  --fc-surface: #1f1e1c;
-  --fc-text: #ecebe9;
-  --fc-text-muted: #a19d98;
-  --fc-border: #34322f;
-  --fc-accent: #6b9bf0;
-  --fc-accent-text: #0c0c0c;
-  --fc-danger: #ef6f62;
-  --fc-success: #6cc28d;
-  --fc-focus: #6b9bf0;
-  --fc-selected: #23324d;
   color-scheme: dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --fc-bg: #161514;
-    --fc-bg-subtle: #1f1e1c;
-    --fc-surface: #1f1e1c;
-    --fc-text: #ecebe9;
-    --fc-text-muted: #a19d98;
-    --fc-border: #34322f;
-    --fc-accent: #6b9bf0;
-    --fc-accent-text: #0c0c0c;
-    --fc-danger: #ef6f62;
-    --fc-success: #6cc28d;
-    --fc-focus: #6b9bf0;
-    --fc-selected: #23324d;
-    color-scheme: dark;
-  }
 }

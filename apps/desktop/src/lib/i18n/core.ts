@@ -50,10 +50,6 @@ export function translateDynamic(locale: Locale, key: string, params?: Params): 
   return interpolate(s, params);
 }
 
-export function hasKey(locale: Locale, key: string): boolean {
-  return lookup(DICTIONARIES[locale], key) !== undefined;
-}
-
 /** All leaf keys of a dictionary (used by tests to compare locales). */
 export function flatKeys(dict: unknown, prefix = ''): string[] {
   if (typeof dict !== 'object' || dict === null) return [prefix];

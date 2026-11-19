@@ -24,6 +24,8 @@
     const id = deckId;
     let cancelled = false;
     error = null;
+    defs = [];
+    values = {};
     api.attribute.effective(id).then(
       (d) => {
         if (cancelled) return;
@@ -61,7 +63,7 @@
   <h2>{t('note.add_heading')}</h2>
   <p class="muted">{t('deck.current')}: {deckName}</p>
 
-  <form onsubmit={submit}>
+  <form onsubmit={submit} novalidate>
     <label>
       {t('note.front')}
       <textarea bind:value={front} rows="3"></textarea>

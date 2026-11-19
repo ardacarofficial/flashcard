@@ -72,7 +72,7 @@
     <ul>
       {#each menu as item (item.id)}
         <li>
-          <button class:active={screen === item.screen} onclick={() => (screen = item.screen)}>
+          <button class:active={screen === item.screen} aria-current={screen === item.screen ? 'page' : undefined} onclick={() => (screen = item.screen)}>
             {td(item.label_key)}
           </button>
         </li>

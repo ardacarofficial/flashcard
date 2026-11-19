@@ -1,5 +1,7 @@
 {
-  "app": { "title": "Flashcard" },
+  "app": {
+    "title": "Flashcard"
+  },
   "menu": {
     "decks": "Decks",
     "add_note": "Add",
@@ -41,7 +43,10 @@
     "add": "Add",
     "added": "Note added.",
     "empty": "No notes in this deck.",
-    "classifications": "Classifications"
+    "classifications": "Classifications",
+    "confirm_delete": "Delete this note?",
+    "undo_hint": "You can undo this afterwards.",
+    "delete_aria": "Delete note “{name}”"
   },
   "attribute": {
     "unset": "Not set",
@@ -55,12 +60,20 @@
     "theme_light": "Light",
     "theme_dark": "Dark"
   },
-  "lang": { "tr": "Türkçe", "en": "English" },
+  "lang": {
+    "tr": "Türkçe",
+    "en": "English"
+  },
   "errors": {
     "internal": "Something went wrong.",
     "not_implemented": "Not available yet.",
-    "deck": { "not_found": "Deck not found." },
-    "note": { "not_found": "Note not found.", "duplicate": "This note already exists." },
+    "deck": {
+      "not_found": "Deck not found."
+    },
+    "note": {
+      "not_found": "Note not found.",
+      "duplicate": "This note already exists."
+    },
     "validation": {
       "empty_name": "Name can't be empty.",
       "empty_front": "Front can't be empty."

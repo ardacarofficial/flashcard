@@ -34,7 +34,7 @@ describe('attribute field logic', () => {
     expect(controlFor('number')).toBe('number');
     expect(controlFor('text')).toBe('text');
     expect(controlFor('date')).toBe('date');
-    expect(controlFor('bool')).toBe('checkbox');
+    expect(controlFor('bool')).toBe('tristate');
   });
 
   it('orders options by backend order', () => {
@@ -42,8 +42,9 @@ describe('attribute field logic', () => {
   });
 
   it('initial values honour defaults and kind', () => {
-    expect(initialValue(def('multi_enum'))).toEqual([]);
-    expect(initialValue(def('bool'))).toBe(false);
+    // Untouched fields stay null: Rust applies defaults, not the frontend.
+    expect(initialValue(def('multi_enum'))).toBeNull();
+    expect(initialValue(def('bool'))).toBeNull();
     expect(initialValue(def('text'))).toBeNull();
     expect(initialValue(def('enum', { default_value: 'o1' }))).toBe('o1');
   });
@@ -53,7 +54,10 @@ describe('attribute field logic', () => {
     expect(fromInput('number', '')).toBeNull();
     expect(fromInput('enum', '')).toBeNull();
     expect(fromInput('multi_enum', ['o1'])).toEqual(['o1']);
-    expect(fromInput('bool', true)).toBe(true);
+    expect(fromInput('multi_enum', [])).toBeNull();
+    expect(fromInput('bool', 'true')).toBe(true);
+    expect(fromInput('bool', 'false')).toBe(false);
+    expect(fromInput('bool', '')).toBeNull();
   });
 });
 
@@ -77,15 +81,22 @@ describe('<AttributeField>', () => {
     ['number', 'number'],
     ['text', 'text'],
     ['date', 'date'],
-    ['bool', 'checkbox'],
   ] as const)('renders %s as input[type=%s]', (kind, type) => {
     render(AttributeField, { def: def(kind), value: initialValue(def(kind)) });
     expect((screen.getByLabelText(`Attr ${kind}`) as HTMLInputElement).type).toBe(type);
   });
 
-  it('marks required fields', () => {
+  it('renders bool as a three-state select', () => {
+    render(AttributeField, { def: def('bool'), value: null });
+    const select = screen.getByLabelText('Attr bool') as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(['', 'true', 'false']);
+    expect(select.value).toBe('');
+  });
+
+  it('marks required fields without native validation', () => {
     render(AttributeField, { def: def('text', { required: true }), value: null });
-    expect((screen.getByLabelText(/Attr text/) as HTMLInputElement).required).toBe(true);
+    expect((screen.getByLabelText(/Attr text/) as HTMLInputElement).required).toBe(false);
+    expect(screen.getByTitle('Zorunlu')).toBeTruthy();
   });
 
   it('reports changes back as typed values', async () => {

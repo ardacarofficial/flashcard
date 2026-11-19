@@ -2,6 +2,7 @@
   import { api, type ApiError } from '$lib/api';
   import type { NoteSummary } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
+  import ConfirmDialog from './ConfirmDialog.svelte';
 
   interface Props {
     deckId: string;
@@ -28,7 +29,10 @@
     return () => void unsub.then((u) => u());
   });
 
+  let pending = $state<NoteSummary | null>(null);
+
   async function remove(id: string) {
+    pending = null;
     try {
       await api.note.remove(id);
     } catch (e) {
@@ -58,11 +62,27 @@
           <tr>
             <td>{n.fields.front ?? n.sort_field}</td>
             <td class="muted">{n.fields.back ?? t('common.none')}</td>
-            <td><button class="danger" onclick={() => remove(n.id)}>{t('common.delete')}</button></td>
+            <td>
+              <button
+                class="danger"
+                aria-label={t('note.delete_aria', { name: n.sort_field })}
+                onclick={() => (pending = n)}>{t('common.delete')}</button
+              >
+            </td>
           </tr>
         {/each}
       </tbody>
     </table>
+  {/if}
+
+  {#if pending}
+    <ConfirmDialog
+      message={t('note.confirm_delete')}
+      hint={t('note.undo_hint')}
+      confirmLabel={t('common.delete')}
+      onconfirm={() => remove(pending!.id)}
+      oncancel={() => (pending = null)}
+    />
   {/if}
 </section>
 

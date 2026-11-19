@@ -1,5 +1,7 @@
 {
-  "app": { "title": "Flashcard" },
+  "app": {
+    "title": "Flashcard"
+  },
   "menu": {
     "decks": "Desteler",
     "add_note": "Ekle",
@@ -41,7 +43,10 @@
     "add": "Ekle",
     "added": "Not eklendi.",
     "empty": "Bu destede not yok.",
-    "classifications": "Sınıflandırmalar"
+    "classifications": "Sınıflandırmalar",
+    "confirm_delete": "Bu not silinsin mi?",
+    "undo_hint": "Sonradan geri alabilirsin.",
+    "delete_aria": "“{name}” notunu sil"
   },
   "attribute": {
     "unset": "Seçilmedi",
@@ -55,12 +60,20 @@
     "theme_light": "Açık",
     "theme_dark": "Koyu"
   },
-  "lang": { "tr": "Türkçe", "en": "English" },
+  "lang": {
+    "tr": "Türkçe",
+    "en": "English"
+  },
   "errors": {
     "internal": "Bir şeyler ters gitti.",
     "not_implemented": "Henüz kullanılamıyor.",
-    "deck": { "not_found": "Deste bulunamadı." },
-    "note": { "not_found": "Not bulunamadı.", "duplicate": "Bu not zaten var." },
+    "deck": {
+      "not_found": "Deste bulunamadı."
+    },
+    "note": {
+      "not_found": "Not bulunamadı.",
+      "duplicate": "Bu not zaten var."
+    },
     "validation": {
       "empty_name": "Ad boş olamaz.",
       "empty_front": "Ön yüz boş olamaz."
