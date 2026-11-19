@@ -5,7 +5,7 @@ use super::common::{AffectedCount, EntityRef, I18nMessage};
 use super::decks::DeckDto;
 use super::jobs::JobDto;
 use fc_core::settings::SettingScope;
-use fc_core::{AttributeDefId, BatchId, DeckId, NoteId, Timestamp};
+use fc_core::{AttributeDefId, BatchId, CardId, DeckId, NoteId, NoteTypeId, Timestamp};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -79,6 +79,18 @@ pub enum DomainEvent {
     },
     /// Tags were renamed/merged/recolored (refetch `tags.list`).
     TagsChanged,
+    /// A note type was created, changed, trashed or restored (v0.3).
+    NoteTypeChanged {
+        /// Note type id.
+        notetype_id: NoteTypeId,
+    },
+    /// Card metadata (flags, card note) or generated cards changed (v0.3).
+    CardsUpdated {
+        /// Card ids.
+        ids: Vec<CardId>,
+    },
+    /// Flag names/colors changed (refetch `flags.list`, v0.3).
+    FlagsChanged,
     /// An attribute definition was created or restored.
     AttributeDefined {
         /// Definition.
