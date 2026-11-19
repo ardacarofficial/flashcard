@@ -7,8 +7,15 @@ import type { AttributeRef } from "./AttributeRef";
 import type { AttributeTemplateList } from "./AttributeTemplateList";
 import type { AttributeValues } from "./AttributeValues";
 import type { BatchResult } from "./BatchResult";
+import type { BulkResult } from "./BulkResult";
+import type { CardInfo } from "./CardInfo";
+import type { CardInfoRef } from "./CardInfoRef";
+import type { CardSearchPage } from "./CardSearchPage";
+import type { CardSelection } from "./CardSelection";
 import type { CreateDeck } from "./CreateDeck";
 import type { CreateNote } from "./CreateNote";
+import type { CreateSavedQuery } from "./CreateSavedQuery";
+import type { DatabaseReport } from "./DatabaseReport";
 import type { DeckDto } from "./DeckDto";
 import type { DeckList } from "./DeckList";
 import type { DeckRef } from "./DeckRef";
@@ -16,10 +23,12 @@ import type { DeckTree } from "./DeckTree";
 import type { DefineAttribute } from "./DefineAttribute";
 import type { DefineAttributeFromTemplate } from "./DefineAttributeFromTemplate";
 import type { DeleteAttributeOption } from "./DeleteAttributeOption";
+import type { DuplicateList } from "./DuplicateList";
 import type { EffectiveAttributeList } from "./EffectiveAttributeList";
 import type { EffectiveAttributes } from "./EffectiveAttributes";
 import type { Empty } from "./Empty";
 import type { ExecuteBatch } from "./ExecuteBatch";
+import type { FindReplace } from "./FindReplace";
 import type { GetAttributeValues } from "./GetAttributeValues";
 import type { GetSettings } from "./GetSettings";
 import type { JobDto } from "./JobDto";
@@ -29,42 +38,63 @@ import type { ListAttributeTemplates } from "./ListAttributeTemplates";
 import type { ListAttributes } from "./ListAttributes";
 import type { ListNotes } from "./ListNotes";
 import type { ListOplog } from "./ListOplog";
+import type { ListTrash } from "./ListTrash";
 import type { MergeAttributeOptions } from "./MergeAttributeOptions";
 import type { MergeTags } from "./MergeTags";
 import type { MethodList } from "./MethodList";
 import type { ModuleDto } from "./ModuleDto";
 import type { ModuleList } from "./ModuleList";
+import type { MoveCards } from "./MoveCards";
 import type { MoveDeck } from "./MoveDeck";
 import type { NoteDto } from "./NoteDto";
 import type { NoteIds } from "./NoteIds";
 import type { NotePage } from "./NotePage";
 import type { NoteRef } from "./NoteRef";
+import type { NoteTags } from "./NoteTags";
 import type { NoteTypeDto } from "./NoteTypeDto";
 import type { NoteTypeList } from "./NoteTypeList";
 import type { NoteTypeRef } from "./NoteTypeRef";
 import type { OplogPage } from "./OplogPage";
 import type { OptionChangeResult } from "./OptionChangeResult";
+import type { PaletteList } from "./PaletteList";
+import type { QueryCheck } from "./QueryCheck";
+import type { QueryText } from "./QueryText";
 import type { RenameAttributeOption } from "./RenameAttributeOption";
 import type { RenameDeck } from "./RenameDeck";
 import type { RenameTag } from "./RenameTag";
 import type { ReorderAttributeOptions } from "./ReorderAttributeOptions";
+import type { RepairResult } from "./RepairResult";
 import type { ResetSetting } from "./ResetSetting";
+import type { ResetShortcut } from "./ResetShortcut";
+import type { SavedQueryDto } from "./SavedQueryDto";
+import type { SavedQueryList } from "./SavedQueryList";
+import type { SavedQueryRef } from "./SavedQueryRef";
+import type { SearchCards } from "./SearchCards";
+import type { SearchIds } from "./SearchIds";
+import type { SetAttributeBulk } from "./SetAttributeBulk";
 import type { SetAttributeOptionColor } from "./SetAttributeOptionColor";
 import type { SetAttributeValues } from "./SetAttributeValues";
+import type { SetBuried } from "./SetBuried";
+import type { SetFlag } from "./SetFlag";
 import type { SetModuleEnabled } from "./SetModuleEnabled";
 import type { SetSetting } from "./SetSetting";
+import type { SetShortcut } from "./SetShortcut";
+import type { SetSuspended } from "./SetSuspended";
 import type { SetTagColor } from "./SetTagColor";
 import type { SettingValueDto } from "./SettingValueDto";
 import type { SettingValues } from "./SettingValues";
 import type { SettingsSchema } from "./SettingsSchema";
+import type { ShortcutList } from "./ShortcutList";
 import type { TagChangeResult } from "./TagChangeResult";
 import type { TagDto } from "./TagDto";
 import type { TagList } from "./TagList";
+import type { TrashList } from "./TrashList";
 import type { UndoResult } from "./UndoResult";
 import type { UndoStatus } from "./UndoStatus";
 import type { UpdateAttribute } from "./UpdateAttribute";
 import type { UpdateDeck } from "./UpdateDeck";
 import type { UpdateNote } from "./UpdateNote";
+import type { UpdateSavedQuery } from "./UpdateSavedQuery";
 
 /** API version prefix of qualified method names (`v1.decks.create`). */
 export const API_VERSION = "v1" as const;
@@ -124,6 +154,31 @@ export interface Methods {
   "attributes.option.delete": { kind: "command"; request: DeleteAttributeOption; response: OptionChangeResult };
   "attributes.values.get": { kind: "query"; request: GetAttributeValues; response: AttributeValues };
   "attributes.values.set": { kind: "command"; request: SetAttributeValues; response: AttributeValues };
+  "search.cards": { kind: "query"; request: SearchCards; response: CardSearchPage };
+  "search.ids": { kind: "query"; request: QueryText; response: SearchIds };
+  "search.check": { kind: "query"; request: QueryText; response: QueryCheck };
+  "saved_queries.list": { kind: "query"; request: Empty; response: SavedQueryList };
+  "saved_queries.create": { kind: "command"; request: CreateSavedQuery; response: SavedQueryDto };
+  "saved_queries.update": { kind: "command"; request: UpdateSavedQuery; response: SavedQueryDto };
+  "saved_queries.delete": { kind: "command"; request: SavedQueryRef; response: SavedQueryDto };
+  "bulk.move_cards": { kind: "command"; request: MoveCards; response: BulkResult };
+  "bulk.set_suspended": { kind: "command"; request: SetSuspended; response: BulkResult };
+  "bulk.set_buried": { kind: "command"; request: SetBuried; response: BulkResult };
+  "bulk.set_flag": { kind: "command"; request: SetFlag; response: BulkResult };
+  "bulk.reset_progress": { kind: "command"; request: CardSelection; response: BulkResult };
+  "bulk.add_tags": { kind: "command"; request: NoteTags; response: BulkResult };
+  "bulk.remove_tags": { kind: "command"; request: NoteTags; response: BulkResult };
+  "bulk.find_replace": { kind: "command"; request: FindReplace; response: BulkResult };
+  "bulk.set_attribute": { kind: "command"; request: SetAttributeBulk; response: BulkResult };
+  "browse.card_info": { kind: "query"; request: CardInfoRef; response: CardInfo };
+  "browse.duplicates": { kind: "query"; request: Empty; response: DuplicateList };
+  "browse.trash": { kind: "query"; request: ListTrash; response: TrashList };
+  "browse.check_database": { kind: "query"; request: Empty; response: DatabaseReport };
+  "browse.repair_database": { kind: "command"; request: Empty; response: RepairResult };
+  "palette.list": { kind: "query"; request: Empty; response: PaletteList };
+  "shortcuts.list": { kind: "query"; request: Empty; response: ShortcutList };
+  "shortcuts.set": { kind: "command"; request: SetShortcut; response: ShortcutList };
+  "shortcuts.reset": { kind: "command"; request: ResetShortcut; response: ShortcutList };
 }
 
 /** Unqualified method name. */
@@ -192,4 +247,29 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "attributes.option.delete": "command",
   "attributes.values.get": "query",
   "attributes.values.set": "command",
+  "search.cards": "query",
+  "search.ids": "query",
+  "search.check": "query",
+  "saved_queries.list": "query",
+  "saved_queries.create": "command",
+  "saved_queries.update": "command",
+  "saved_queries.delete": "command",
+  "bulk.move_cards": "command",
+  "bulk.set_suspended": "command",
+  "bulk.set_buried": "command",
+  "bulk.set_flag": "command",
+  "bulk.reset_progress": "command",
+  "bulk.add_tags": "command",
+  "bulk.remove_tags": "command",
+  "bulk.find_replace": "command",
+  "bulk.set_attribute": "command",
+  "browse.card_info": "query",
+  "browse.duplicates": "query",
+  "browse.trash": "query",
+  "browse.check_database": "query",
+  "browse.repair_database": "command",
+  "palette.list": "query",
+  "shortcuts.list": "query",
+  "shortcuts.set": "command",
+  "shortcuts.reset": "command",
 };

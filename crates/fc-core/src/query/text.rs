@@ -235,6 +235,36 @@ pub fn regex_matches(
     re.is_match(&fields_text(fields, keys))
 }
 
+/// Find/replace in one field value (raw text, HTML included). `regex`: `find` is a regex and
+/// `replace` may use `$1`/`${name}`; otherwise both are literal. Case-insensitive unless
+/// `match_case`. Errors with a reason for an empty or invalid pattern.
+pub fn replace_text(
+    text: &str,
+    find: &str,
+    replace: &str,
+    regex: bool,
+    match_case: bool,
+) -> Result<String, String> {
+    if find.is_empty() {
+        return Err("empty pattern".to_owned());
+    }
+    let pattern = if regex {
+        find.to_owned()
+    } else {
+        regex::escape(find)
+    };
+    let re = regex::RegexBuilder::new(&pattern)
+        .case_insensitive(!match_case)
+        .size_limit(1 << 20)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(if regex {
+        re.replace_all(text, replace).into_owned()
+    } else {
+        re.replace_all(text, regex::NoExpand(replace)).into_owned()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,6 +308,25 @@ mod tests {
         assert!(!Glob::new("ab*ba").matches("aba"));
         let g = Glob::new("a\\*b*c");
         assert_eq!(Glob::new(&g.source()), g);
+    }
+
+    #[test]
+    fn find_and_replace() {
+        assert_eq!(
+            replace_text("Elma elma", "elma", "armut", false, false).unwrap(),
+            "armut armut"
+        );
+        assert_eq!(
+            replace_text("Elma elma", "elma", "armut", false, true).unwrap(),
+            "Elma armut"
+        );
+        assert_eq!(replace_text("a.b", ".", "$1", false, true).unwrap(), "a$1b");
+        assert_eq!(
+            replace_text("run ran", r"r(u|a)n", "w${1}n", true, true).unwrap(),
+            "wun wan"
+        );
+        assert!(replace_text("x", "", "y", false, false).is_err());
+        assert!(replace_text("x", "(", "y", true, false).is_err());
     }
 
     #[test]

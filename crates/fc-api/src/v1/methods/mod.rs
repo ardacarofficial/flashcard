@@ -76,4 +76,7 @@ domains! {
     notes,
     tags,
     attributes,
+    search,
+    bulk,
+    browse,
 }

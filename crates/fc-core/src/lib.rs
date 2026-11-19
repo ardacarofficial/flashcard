@@ -22,6 +22,7 @@ pub mod preset;
 pub mod query;
 pub mod rng;
 pub mod settings;
+pub mod shortcut;
 pub mod tag;
 pub mod time;
 

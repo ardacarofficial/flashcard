@@ -391,10 +391,10 @@ fn internal_methods_are_rejected_from_every_transport_path() {
         .copied()
         .collect();
     let names: Vec<_> = internal.iter().map(|d| d.name).collect();
-    assert_eq!(
-        names,
-        ["attributes.option.restore", "decks.restore_affected"]
-    );
+    // Phase-2 tracks add their own internal inverses; the v0.1 ones must stay internal.
+    for name in ["attributes.option.restore", "decks.restore_affected"] {
+        assert!(names.contains(&name), "{name} must be internal: {names:?}");
+    }
     for d in &internal {
         assert!(
             d.undoable,

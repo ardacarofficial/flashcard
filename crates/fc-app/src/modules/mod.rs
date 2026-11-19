@@ -27,4 +27,6 @@ modules! {
     notes,
     tags,
     attributes,
+    browse,
+    palette,
 }

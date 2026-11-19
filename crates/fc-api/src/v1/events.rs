@@ -5,7 +5,7 @@ use super::common::{AffectedCount, EntityRef, I18nMessage};
 use super::decks::DeckDto;
 use super::jobs::JobDto;
 use fc_core::settings::SettingScope;
-use fc_core::{AttributeDefId, BatchId, DeckId, NoteId, Timestamp};
+use fc_core::{AttributeDefId, BatchId, CardId, DeckId, NoteId, Timestamp};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -118,6 +118,13 @@ pub enum DomainEvent {
         /// Job snapshot.
         job: JobDto,
     },
+    /// Scheduling/deck/flag/suspension columns of these cards changed (bulk operations).
+    CardsChanged {
+        /// Cards.
+        ids: Vec<CardId>,
+    },
+    /// Saved queries changed (refetch `saved_queries.list`).
+    SavedQueriesChanged,
     /// A batch was undone.
     Undone {
         /// Batch reverted.

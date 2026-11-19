@@ -3,6 +3,7 @@ import type { AffectedCount } from "./AffectedCount";
 import type { AttributeDefDto } from "./AttributeDefDto";
 import type { AttributeDefId } from "./AttributeDefId";
 import type { BatchId } from "./BatchId";
+import type { CardId } from "./CardId";
 import type { DeckDto } from "./DeckDto";
 import type { DeckId } from "./DeckId";
 import type { EntityRef } from "./EntityRef";
@@ -98,7 +99,11 @@ enabled: boolean, } } | { "type": "job_progress", "data": {
 /**
  * Job snapshot.
  */
-job: JobDto, } } | { "type": "undone", "data": { 
+job: JobDto, } } | { "type": "cards_changed", "data": { 
+/**
+ * Cards.
+ */
+ids: Array<CardId>, } } | { "type": "saved_queries_changed" } | { "type": "undone", "data": { 
 /**
  * Batch reverted.
  */
