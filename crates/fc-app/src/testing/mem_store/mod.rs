@@ -168,4 +168,5 @@ domains! {
     oplog,
     settings,
     jobs,
+    content => ContentState,
 }

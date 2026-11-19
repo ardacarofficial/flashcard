@@ -1,0 +1,16 @@
+{
+  "oplog.summary.notetypes.create": "Not türü oluşturuldu: {name}",
+  "oplog.summary.notetypes.update": "Not türü değiştirildi: {name}",
+  "oplog.summary.notetypes.delete": "Not türü silindi: {name}",
+  "oplog.summary.notetypes.restore": "Not türü geri yüklendi: {name}",
+  "oplog.summary.notetypes.restore_version": "Not türü geri yüklendi: {name}",
+  "oplog.summary.cards.trash_generated": "{count} üretilmiş kart kaldırıldı",
+  "oplog.summary.cards.restore_generated": "{count} üretilmiş kart geri getirildi",
+  "oplog.summary.media.add": "Medya eklendi: {name}",
+  "oplog.summary.media.forget": "Medya kaldırıldı: {name}",
+  "oplog.summary.media.reinstate": "Medya eklendi: {name}",
+  "oplog.summary.flags.update": "Bayrak değiştirildi: {flag}",
+  "oplog.summary.cards.set_flag": "{count} kart bayraklandı",
+  "oplog.summary.cards.set_flags": "{count} kartın bayrakları değişti",
+  "oplog.summary.cards.set_user_note": "Kart notu düzenlendi: {text}"
+}

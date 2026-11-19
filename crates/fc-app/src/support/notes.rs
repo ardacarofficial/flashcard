@@ -83,6 +83,7 @@ pub(crate) fn insert_note(ctx: &mut CommandCtx<'_>, nt: &NoteType, note: &Note) 
     ensure_tag_rows(ctx, &note.tags)?;
     ctx.tx
         .insert_note(note, &searchable_text(nt, &note.fields))?;
+    super::content::sync_note_refs(ctx.tx, note)?;
     Ok(())
 }
 
@@ -96,6 +97,7 @@ pub(crate) fn write_note(
     ensure_tag_rows(ctx, &note.tags)?;
     ctx.tx
         .update_note(note, &searchable_text(nt, &note.fields))?;
+    super::content::sync_note_refs(ctx.tx, note)?;
     Ok(())
 }
 

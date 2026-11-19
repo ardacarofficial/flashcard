@@ -393,7 +393,15 @@ fn internal_methods_are_rejected_from_every_transport_path() {
     let names: Vec<_> = internal.iter().map(|d| d.name).collect();
     assert_eq!(
         names,
-        ["attributes.option.restore", "decks.restore_affected"]
+        [
+            "attributes.option.restore",
+            "cards.restore_generated",
+            "cards.trash_generated",
+            "decks.restore_affected",
+            "media.forget",
+            "media.reinstate",
+            "notetypes.restore_version",
+        ]
     );
     for d in &internal {
         assert!(

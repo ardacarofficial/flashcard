@@ -254,8 +254,13 @@ pub fn bootstrap_seeds_classic_once(f: &StoreFactory) {
     let store = f();
     let t = TestApp::new(store.clone());
     let list = t.ok::<NotetypesList>(Empty {});
-    assert_eq!(list.notetypes.len(), 1);
-    let classic = &list.notetypes[0];
+    // Classic plus the v0.3 built-ins, each seeded once.
+    assert_eq!(list.notetypes.len(), fc_core::content::builtin::ALL.len());
+    let classic = list
+        .notetypes
+        .iter()
+        .find(|n| n.id == builtin::CLASSIC_ID)
+        .unwrap();
     assert_eq!(classic.id, builtin::CLASSIC_ID);
     assert_eq!(classic.name, "Klasik");
     assert_eq!(classic.fields[0].name, "Ön");
@@ -263,7 +268,10 @@ pub fn bootstrap_seeds_classic_once(f: &StoreFactory) {
     deck(&t, "A");
     let t2 = TestApp::new(store);
     t2.app.load_state().unwrap();
-    assert_eq!(t2.ok::<NotetypesList>(Empty {}).notetypes.len(), 1);
+    assert_eq!(
+        t2.ok::<NotetypesList>(Empty {}).notetypes.len(),
+        fc_core::content::builtin::ALL.len()
+    );
     assert_eq!(t2.ok::<DecksList>(Empty {}).decks.len(), 1);
     assert_eq!(t2.app.locale(), Locale::Tr);
     assert!(t2.ok::<OplogList>(ListOplog::default()).items.len() == 1);

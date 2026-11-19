@@ -27,4 +27,10 @@ modules! {
     notes,
     tags,
     attributes,
+    cardtypes,
+    media,
+    links,
+    flags,
+    card_notes,
+    rich_content,
 }

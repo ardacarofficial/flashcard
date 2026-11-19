@@ -109,6 +109,7 @@ impl App {
             };
             tx.upsert_notetype(&builtin::classic(now, name, front, back))?;
         }
+        crate::support::content::seed_builtin_notetypes(&mut *tx, locale, now)?;
         tx.mark_unfinished_jobs_interrupted(now)?;
         tx.commit()?;
         self.reload_cached_state()

@@ -39,4 +39,6 @@ pub use fc_providers as providers;
 #[cfg(test)]
 mod acceptance;
 #[cfg(test)]
+mod cards_tests;
+#[cfg(test)]
 mod tests;
