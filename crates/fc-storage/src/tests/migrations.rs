@@ -81,8 +81,49 @@ fn migrations_are_ordered_and_named() {
         );
         prev = m.version;
     }
-    // v0.1 owns 1..=99.
-    assert!(MIGRATIONS.iter().all(|m| (1..=99).contains(&m.version)));
+}
+
+#[test]
+fn migrations_stay_in_their_release_range() {
+    for m in MIGRATIONS {
+        assert!(
+            migrate::release_of(m.version).is_some(),
+            "{}: number outside every release range {:?}",
+            m.name,
+            migrate::RELEASE_RANGES
+        );
+    }
+    // The ranges are contiguous, ordered and 100 wide (v0.1 starts at 1).
+    let ranges = migrate::RELEASE_RANGES;
+    assert_eq!(*ranges[0].1.start(), 1);
+    for pair in ranges.windows(2) {
+        assert_eq!(*pair[0].1.end() + 1, *pair[1].1.start(), "{pair:?}");
+        assert_eq!(*pair[1].1.start() % 100, 0);
+        assert_eq!(pair[1].1.end() - pair[1].1.start(), 99);
+    }
+    assert_eq!(migrate::release_of(1), Some("v0.1"));
+    assert_eq!(migrate::release_of(99), Some("v0.1"));
+    assert_eq!(migrate::release_of(100), Some("v0.2"));
+    assert_eq!(migrate::release_of(299), Some("v0.3"));
+    assert_eq!(migrate::release_of(350), Some("v0.4"));
+    assert_eq!(migrate::release_of(400), Some("v0.5"));
+    assert_eq!(migrate::release_of(0), None);
+}
+
+/// Every `.sql` file in `migrations/` is in the list (the build script collects them all).
+#[test]
+fn every_migration_file_is_collected() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let mut files: Vec<String> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    files.sort();
+    let listed: Vec<String> = MIGRATIONS
+        .iter()
+        .map(|m| format!("{}.sql", m.name))
+        .collect();
+    assert_eq!(files, listed);
 }
 
 #[test]
@@ -261,10 +302,11 @@ fn adopts_legacy_database_with_snapshot() {
         )
         .unwrap();
     }
-    // Same version set as the build: adopted (back-filled), nothing to migrate, no snapshot.
-    let store = SqliteStore::open(&path).unwrap();
+    // Same version set as the database: adopted (back-filled), nothing to migrate, no
+    // snapshot. (Only 0001, so later tracks' migrations don't change what this tests.)
+    let store = SqliteStore::open_with_migrations(&path, &MIGRATIONS[..1]).unwrap();
     assert!(store.migration_backup().is_none());
-    assert_eq!(store.schema_version().unwrap(), migrate::latest_version());
+    assert_eq!(store.schema_version().unwrap(), 1);
     drop(store);
 
     // A later lane migration arrives: snapshot first, then upgrade.
@@ -313,7 +355,11 @@ fn adopts_legacy_database_with_snapshot() {
 /// v0.1 ships one clean init migration (the FTS link and home deck are folded in).
 #[test]
 fn single_init_migration_has_folded_columns() {
-    assert_eq!(all_versions(), [1]);
+    let v01: Vec<u32> = all_versions()
+        .into_iter()
+        .filter(|v| migrate::release_of(*v) == Some("v0.1"))
+        .collect();
+    assert_eq!(v01, [1]);
     let conn = fresh();
     let cols: Vec<(String, i64)> = conn
         .prepare("SELECT name, \"notnull\" FROM pragma_table_info('notes')")

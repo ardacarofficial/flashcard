@@ -1,8 +1,11 @@
 //! Schema migrations.
 //!
-//! * Numbering is reserved per release lane so parallel branches never collide (docs/07 §5):
-//!   v0.1 = 1–99, v0.2 = 100–199, v0.3 = 200–299, v0.4 = 300–399, v0.5 = 400–499, …
-//!   Gaps are fine; order is by number. A migration is **never edited after merge**.
+//! * Files `migrations/NNNN_name.sql` are collected automatically (`build.rs`); adding a
+//!   migration = adding its file.
+//! * Numbering is reserved per release track so parallel branches never collide (docs/07 §5,
+//!   [`RELEASE_RANGES`]): v0.1 = 1–99, v0.2 = 100–199, v0.3 = 200–299, v0.4 = 300–399,
+//!   v0.5 = 400–499, … Gaps are fine; order is by number. A migration is **never edited after
+//!   merge**.
 //! * Applied migrations are recorded in `schema_migrations (version, name, checksum,
 //!   applied_at)`. The checksum (FNV-1a 64 of the SQL with `\r` removed, so CRLF checkouts
 //!   agree) guards against an edited migration: a mismatch refuses to open the database.
@@ -41,12 +44,33 @@ pub fn checksum(sql: &str) -> String {
     format!("{:016x}", fnv1a64(normalized.as_bytes()))
 }
 
-/// All migrations, ascending by version.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "0001_init",
-    sql: include_str!("../migrations/0001_init.sql"),
-}];
+// `MIGRATIONS`: every `migrations/NNNN_name.sql`, ascending, collected by `build.rs` (a track
+// adds a migration by adding its file).
+include!(concat!(env!("OUT_DIR"), "/migrations.rs"));
+
+/// Migration number range reserved for each release track (docs/07 §5), so parallel branches
+/// never collide. A migration outside every range fails the tests.
+pub const RELEASE_RANGES: &[(&str, std::ops::RangeInclusive<u32>)] = &[
+    ("v0.1", 1..=99),
+    ("v0.2", 100..=199),
+    ("v0.3", 200..=299),
+    ("v0.4", 300..=399),
+    ("v0.5", 400..=499),
+    ("v0.6", 500..=599),
+    ("v0.7", 600..=699),
+    ("v0.8", 700..=799),
+    ("v0.9", 800..=899),
+    ("v0.10", 900..=999),
+    ("v1.0", 1000..=1099),
+];
+
+/// Release track that owns migration number `version` (`None` = outside every range).
+pub fn release_of(version: u32) -> Option<&'static str> {
+    RELEASE_RANGES
+        .iter()
+        .find(|(_, r)| r.contains(&version))
+        .map(|(name, _)| *name)
+}
 
 /// Highest known schema version.
 pub fn latest_version() -> u32 {
