@@ -448,3 +448,31 @@ fn rejects_non_packages() {
     zip.add("readme.txt", b"x", true).unwrap();
     assert!(read_package(&zip.finish().unwrap()).is_err());
 }
+
+#[test]
+fn buried_cards_keep_their_state_both_ways() {
+    let mut col = sample();
+    // Card 1 buried by sibling, card 2 by hand.
+    col.cards[0].queue = -2;
+    col.cards[1].queue = -3;
+    let (pack, _) = to_pack(&col, NOW);
+    let buried: Vec<_> = pack
+        .cards
+        .iter()
+        .filter(|c| c.buried_until.is_some())
+        .collect();
+    assert_eq!(buried.len(), 2);
+    assert!(buried
+        .iter()
+        .all(|c| c.buried_until == Some(Timestamp(NOW.0 + 86_400_000)) && !c.suspended));
+    // Back out: buried cards are manually buried (−3) while the bury lasts.
+    let out = from_pack(&pack, true, NOW);
+    assert_eq!(out.cards.iter().filter(|c| c.queue == -3).count(), 2);
+    let later = from_pack(&pack, true, Timestamp(NOW.0 + 2 * 86_400_000));
+    assert_eq!(later.cards.iter().filter(|c| c.queue == -3).count(), 0);
+    // Without scheduling nothing is buried.
+    assert!(from_pack(&pack, false, NOW)
+        .cards
+        .iter()
+        .all(|c| c.queue >= -1));
+}

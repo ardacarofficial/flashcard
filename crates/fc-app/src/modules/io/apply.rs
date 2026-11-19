@@ -1,13 +1,22 @@
-//! `io.import.apply`: writes a staged import in the caller's transaction (one undo batch), and
-//! its inverse pair `io.import.trash` / `io.import.untrash`.
+//! `io.import.apply`: writes the next chunk of a staged import, and the inverse/compensation
+//! commands `io.import.trash` / `io.import.untrash` / `io.import.discard`.
 //!
-//! Rows the import creates are tracked in [`ImportedIds`]; the apply's inverse trashes exactly
-//! those. Updates of existing notes (`duplicates: update`) and classification options created
-//! for unknown labels go through nested `notes.update` / `attributes.option.add` calls, which
-//! record their own inverses in the same batch. The cancel token is checked as rows are
-//! written; a cancelled apply fails and its transaction rolls back.
+//! **Chunks.** A large import must not hold the single writer for seconds (study and editing
+//! would time out), so the `io.import` job calls `io.import.apply` repeatedly: each call
+//! writes at most [`CHUNK_ROWS`] units (rows, notes, cards, values, review rows; media also
+//! by bytes) in its own transaction, keeps its progress in [`ApplyState`] and returns. The
+//! job records all chunks as **one undo step** ([`crate::app::UndoGroup`]): each chunk's
+//! inverse trashes exactly what that chunk created ([`ImportedIds`]); updates of existing
+//! notes (`duplicates: update`) and options created for unknown labels go through nested
+//! `notes.update` / `attributes.option.add` calls with their own inverses.
+//!
+//! **Cancel / failure.** The cancel token is checked as rows are written; a cancelled chunk
+//! rolls back, and the job then runs `io.import.discard` with the inverses of the chunks
+//! already committed: it hard-deletes what they created (nothing lands in the trash) and
+//! reverts their nested calls, without recording an undo step.
 
 use super::import::{PackImport, Staged};
+use super::media::media_store;
 use super::rows::{parse_value, AttrRef, ParsedValue, RowSpec, RowsImport};
 use super::Staging;
 use crate::error::AppResult;
@@ -17,11 +26,15 @@ use crate::support::decks::DeckIndex;
 use crate::support::notes::{derive, insert_note, require_notetype};
 use crate::support::summary;
 use fc_api::v1::attributes::{AddAttributeOption, AttributeAssignment};
-use fc_api::v1::common::{AffectedCount, I18nMessage};
+use fc_api::v1::common::{AffectedCount, Empty, I18nMessage};
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::io::*;
-use fc_api::v1::methods::{AttributesOptionAdd, IoImportApply, IoImportTrash, IoImportUntrash, NotesUpdate};
+use fc_api::v1::methods::{
+    AttributesOptionAdd, IoImportApply, IoImportDiscard, IoImportTrash, IoImportUntrash,
+    NotesUpdate,
+};
 use fc_api::v1::notes::UpdateNote;
+use fc_api::ApiMethod;
 use fc_core::attribute::{
     effective_attribute_defs, prepare_attribute_values, validate_attribute_value, AttributeDef,
     AttributeTarget, AttributeValue, EntityRef,
@@ -31,16 +44,113 @@ use fc_core::deck::{normalize_deck_segment, Deck, DeckPath};
 use fc_core::note::{normalize_note_fields, FieldValues, Note};
 use fc_core::notetype::{validate_notetype, FieldKey, NoteType};
 use fc_core::tag::{dedup_tags, TagName};
-use fc_core::{
-    AttributeDefId, AttributeOptionId, CardId, DeckId, NoteId, NoteTypeId, Timestamp,
-};
+use fc_core::{AttributeDefId, AttributeOptionId, CardId, DeckId, NoteId, NoteTypeId, Timestamp};
 use fc_interop::media::guess_mime;
-use fc_storage::repo::{MediaRecord, ReviewLogRecord};
-use std::collections::HashMap;
+use fc_storage::repo::{MediaRecord, PurgeRows, ReviewLogRecord};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-/// How often (rows) the cancel token is checked.
+/// Units (rows, notes, cards, values, review rows, media files) written per chunk.
+pub(crate) const CHUNK_ROWS: usize = 500;
+/// Media bytes written per chunk (a chunk ends after the file that crosses it).
+const CHUNK_MEDIA_BYTES: usize = 32 * 1024 * 1024;
+/// How often (units) the cancel token is checked.
 const CHECK_EVERY: usize = 32;
+
+/// Where an import is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Step {
+    /// Rows import: next row.
+    Rows(usize),
+    /// Package: next media file.
+    Media(usize),
+    /// Package: decks, note types, classification definitions (one chunk).
+    Structure,
+    /// Package: next note.
+    Notes(usize),
+    /// Package: next card.
+    Cards(usize),
+    /// Package: next classification value.
+    Values(usize),
+    /// Package: next review row.
+    Reviews(usize),
+    /// Finished.
+    Done,
+}
+
+/// A staged import and its progress between chunks (kept in [`Staging`], in memory).
+pub(crate) struct ApplyState {
+    staged: Staged,
+    step: Step,
+    /// Units per chunk.
+    chunk: usize,
+    /// Totals so far.
+    report: ImportReport,
+    /// Rows: note types resolved by reference.
+    notetype_refs: HashMap<String, Option<NoteType>>,
+    /// Package: id maps from the package to the collection.
+    deck_map: HashMap<DeckId, DeckId>,
+    notetypes: HashMap<NoteTypeId, NoteType>,
+    def_map: HashMap<AttributeDefId, AttributeDefId>,
+    option_map: HashMap<AttributeOptionId, AttributeOptionId>,
+    note_map: HashMap<NoteId, NoteId>,
+    card_map: HashMap<CardId, CardId>,
+    used_card_ids: HashSet<CardId>,
+    /// Package: deck of each note's first card (home deck fallback).
+    first_card_deck: HashMap<NoteId, DeckId>,
+}
+
+impl ApplyState {
+    /// Fresh state for `staged`, writing `chunk` units per call.
+    pub(crate) fn new(staged: Staged, chunk: usize) -> Self {
+        let step = match &staged {
+            Staged::Rows(_) => Step::Rows(0),
+            Staged::Pack(_) => Step::Media(0),
+        };
+        Self {
+            staged,
+            step,
+            chunk: chunk.max(1),
+            report: ImportReport::default(),
+            notetype_refs: HashMap::new(),
+            deck_map: HashMap::new(),
+            notetypes: HashMap::new(),
+            def_map: HashMap::new(),
+            option_map: HashMap::new(),
+            note_map: HashMap::new(),
+            card_map: HashMap::new(),
+            used_card_ids: HashSet::new(),
+            first_card_deck: HashMap::new(),
+        }
+    }
+
+    /// Whether everything is written.
+    pub(crate) fn is_done(&self) -> bool {
+        self.step == Step::Done
+    }
+
+    /// Rough fraction written (for progress events).
+    pub(crate) fn progress(&self) -> f32 {
+        let frac = |i: usize, n: usize| if n == 0 { 1.0 } else { i as f32 / n as f32 };
+        match (&self.staged, self.step) {
+            (_, Step::Done) => 1.0,
+            (Staged::Rows(r), Step::Rows(i)) => frac(i, r.rows.len()),
+            (Staged::Pack(p), step) => {
+                let p = &p.pack;
+                let total = (p.media.len() + p.notes.len() + p.cards.len()).max(1) as f32;
+                let done = match step {
+                    Step::Media(i) => i,
+                    Step::Structure => p.media.len(),
+                    Step::Notes(i) => p.media.len() + i,
+                    Step::Cards(i) => p.media.len() + p.notes.len() + i,
+                    _ => p.media.len() + p.notes.len() + p.cards.len(),
+                };
+                done as f32 / total
+            }
+            _ => 0.0,
+        }
+    }
+}
 
 /// Handler of `io.import.apply`.
 pub(crate) struct ApplyHandler(pub Arc<Staging>);
@@ -51,16 +161,17 @@ impl CommandHandler<IoImportApply> for ApplyHandler {
         req: StagedJob,
         ctx: &mut CommandCtx<'_>,
     ) -> AppResult<CommandOutcome<ImportReport>> {
-        let (staged, cancel) = self.0.take_import(req.job_id)?;
+        // Taken out for the chunk; put back only if the chunk commits work and more is left
+        // (a failed chunk rolls back and its half-advanced state is dropped).
+        let (mut state, cancel) = self.0.take_import(req.job_id)?;
         let mut w = Writer {
             created: ImportedIds::default(),
-            report: ImportReport::default(),
-            cancel,
+            cancel: cancel.clone(),
+            spent: 0,
+            media_bytes: 0,
+            budget: state.chunk,
         };
-        match staged {
-            Staged::Rows(r) => w.rows(ctx, r)?,
-            Staged::Pack(p) => w.pack(ctx, *p)?,
-        }
+        w.run(ctx, &mut state)?;
         w.cancel.check()?;
         let index = DeckIndex::load(ctx.reads())?;
         let mut events: Vec<DomainEvent> = w
@@ -70,18 +181,25 @@ impl CommandHandler<IoImportApply> for ApplyHandler {
             .filter_map(|d| index.get(*d))
             .map(|d| DomainEvent::DeckCreated { deck: index.dto(d) })
             .collect();
-        events.push(DomainEvent::Imported {
-            job_id: req.job_id,
-            notes: w.report.added_notes + w.report.updated_notes,
-        });
+        if state.is_done() {
+            events.push(DomainEvent::Imported {
+                job_id: req.job_id,
+                notes: state.report.added_notes + state.report.updated_notes,
+            });
+        }
         let inverse = if w.created.is_empty() {
             Vec::new()
         } else {
             vec![inverse_call::<IoImportTrash>(&w.created)?]
         };
+        let response = state.report.clone();
+        let added = w.created.notes.len();
+        if !state.is_done() {
+            self.0.put_import(req.job_id, state, cancel);
+        }
         Ok(CommandOutcome {
-            summary: summary::<IoImportApply>().param("count", w.report.added_notes),
-            response: w.report,
+            summary: summary::<IoImportApply>().param("count", added),
+            response,
             inverse,
             events,
         })
@@ -95,18 +213,48 @@ fn issue(row: u32, key: &str) -> ImportIssue {
     }
 }
 
+/// Writes one chunk.
 struct Writer {
+    /// Created by this chunk (its inverse).
     created: ImportedIds,
-    report: ImportReport,
     cancel: CancelToken,
+    /// Units written in this chunk.
+    spent: usize,
+    media_bytes: usize,
+    budget: usize,
 }
 
 impl Writer {
-    fn tick(&self, i: usize) -> AppResult<()> {
-        if i % CHECK_EVERY == 0 {
+    /// Counts one unit; checks the cancel token every [`CHECK_EVERY`] units.
+    fn tick(&mut self) -> AppResult<()> {
+        if self.spent % CHECK_EVERY == 0 {
             self.cancel.check()?;
         }
+        self.spent += 1;
         Ok(())
+    }
+
+    fn full(&self) -> bool {
+        self.spent >= self.budget || self.media_bytes >= CHUNK_MEDIA_BYTES
+    }
+
+    fn run(&mut self, ctx: &mut CommandCtx<'_>, st: &mut ApplyState) -> AppResult<()> {
+        let staged = std::mem::replace(
+            &mut st.staged,
+            Staged::Rows(RowsImport {
+                rows: Vec::new(),
+                deck_id: None,
+                notetype_id: fc_core::notetype::builtin::CLASSIC_ID,
+                duplicates: DuplicatePolicy::Skip,
+                create_missing_options: false,
+            }),
+        );
+        let result = match &staged {
+            Staged::Rows(r) => self.rows(ctx, st, r),
+            Staged::Pack(p) => self.pack(ctx, st, p),
+        };
+        st.staged = staged;
+        result
     }
 
     /// Finds or creates the deck path `segments` under `parent`; a created leaf takes
@@ -114,6 +262,7 @@ impl Writer {
     fn ensure_deck(
         &mut self,
         ctx: &mut CommandCtx<'_>,
+        report: &mut ImportReport,
         parent: Option<DeckId>,
         segments: &[String],
         leaf: Option<&Deck>,
@@ -147,26 +296,17 @@ impl Writer {
             };
             ctx.tx.insert_deck(&deck)?;
             self.created.decks.push(id);
-            self.report.added_decks += 1;
+            report.added_decks += 1;
             parent = Some(id);
         }
         parent.ok_or_else(|| crate::support::invalid("empty deck path"))
-    }
-
-    /// Inserts cards for a new note.
-    fn insert_cards(&mut self, ctx: &mut CommandCtx<'_>, cards: &[Card]) -> AppResult<()> {
-        for c in cards {
-            ctx.tx.insert_card(c)?;
-            self.created.cards.push(c.id);
-            self.report.added_cards += 1;
-        }
-        Ok(())
     }
 
     /// Adds `label` to `def` (nested `attributes.option.add`, its own undo entry).
     fn add_option(
         &mut self,
         ctx: &mut CommandCtx<'_>,
+        report: &mut ImportReport,
         def: AttributeDefId,
         label: &str,
         color: Option<String>,
@@ -180,231 +320,15 @@ impl Writer {
             id,
         })?;
         ctx.call(&call)?;
-        self.report.added_options += 1;
+        report.added_options += 1;
         Ok(())
-    }
-
-    // ------------------------------------------------------------------ rows
-
-    fn rows(&mut self, ctx: &mut CommandCtx<'_>, imp: RowsImport) -> AppResult<()> {
-        let default_nt = require_notetype(ctx.reads(), imp.notetype_id)?;
-        if let Some(d) = imp.deck_id {
-            DeckIndex::load(ctx.reads())?.require_live(d)?;
-        }
-        let mut notetypes: HashMap<String, Option<NoteType>> = HashMap::new();
-        for (i, row) in imp.rows.iter().enumerate() {
-            self.tick(i)?;
-            let nt = match &row.notetype {
-                None => default_nt.clone(),
-                Some(r) => {
-                    if !notetypes.contains_key(r) {
-                        let found = find_notetype(ctx, r)?;
-                        notetypes.insert(r.clone(), found);
-                    }
-                    match notetypes.get(r).cloned().flatten() {
-                        Some(nt) => nt,
-                        None => {
-                            self.report.issues.push(issue(row.row, "io.issue.unknown_notetype"));
-                            continue;
-                        }
-                    }
-                }
-            };
-            self.row(ctx, &imp, &nt, row)?;
-        }
-        Ok(())
-    }
-
-    fn row(
-        &mut self,
-        ctx: &mut CommandCtx<'_>,
-        imp: &RowsImport,
-        nt: &NoteType,
-        row: &RowSpec,
-    ) -> AppResult<()> {
-        let specs = standard_card_specs(nt);
-        if nt.deleted_at.is_some() || specs.is_empty() {
-            self.report.issues.push(issue(row.row, "io.issue.notetype_no_cards"));
-            return Ok(());
-        }
-        let deck = match (&row.deck, imp.deck_id) {
-            (Some(path), _) => match DeckPath::parse(path) {
-                Ok(p) => self.ensure_deck(ctx, None, p.segments(), None)?,
-                Err(_) => {
-                    self.report.issues.push(issue(row.row, "io.issue.bad_deck"));
-                    return Ok(());
-                }
-            },
-            (None, Some(d)) => d,
-            (None, None) => {
-                self.report.issues.push(issue(row.row, "io.issue.no_deck"));
-                return Ok(());
-            }
-        };
-        // Fields by key or (case-insensitive) name.
-        let mut values = FieldValues::new();
-        for (k, v) in &row.fields {
-            let wanted = k.to_lowercase();
-            let resolved = nt
-                .field(&FieldKey::new(k.clone()))
-                .or_else(|| {
-                    nt.fields.iter().find(|f| {
-                        f.key.0.to_lowercase() == wanted || f.name.to_lowercase() == wanted
-                    })
-                })
-                .map(|f| f.key.clone());
-            match resolved {
-                Some(key) => {
-                    values.insert(key, v.clone());
-                }
-                None => self.report.issues.push(
-                    issue(row.row, "io.issue.unknown_field").tap_param("field", k),
-                ),
-            }
-        }
-        let fields = match normalize_note_fields(nt, &values) {
-            Ok(f) => f,
-            Err(_) => {
-                self.report.issues.push(issue(row.row, "io.issue.invalid_fields"));
-                return Ok(());
-            }
-        };
-        let mut tags = Vec::new();
-        for t in &row.tags {
-            match TagName::parse(t) {
-                Ok(t) => tags.push(t),
-                Err(_) => self
-                    .report
-                    .issues
-                    .push(issue(row.row, "io.issue.bad_tag").tap_param("tag", t)),
-            }
-        }
-        let tags = dedup_tags(tags);
-
-        // Classifications applicable to the deck (note level).
-        let provided = self.row_attributes(ctx, imp, deck, row)?;
-
-        let mut note = Note {
-            id: NoteId::generate(ctx.ids),
-            notetype_id: nt.id,
-            home_deck_id: deck,
-            fields,
-            sort_field: String::new(),
-            checksum: String::new(),
-            tags,
-            created_at: ctx.now,
-            updated_at: ctx.now,
-            deleted_at: None,
-        };
-        derive(nt, &mut note);
-        if let Some(existing) = ctx
-            .reads()
-            .find_notes_by_checksum(nt.id, &note.checksum)?
-            .first()
-            .copied()
-        {
-            match imp.duplicates {
-                DuplicatePolicy::Skip => {
-                    self.report.skipped_duplicates += 1;
-                    return Ok(());
-                }
-                DuplicatePolicy::Update => {
-                    self.update_note(ctx, existing, &note, &provided)?;
-                    return Ok(());
-                }
-                DuplicatePolicy::Add => {}
-            }
-        }
-        let index = DeckIndex::load(ctx.reads())?;
-        let ancestry = index.ancestry(deck)?;
-        let defs = ctx.reads().list_attribute_defs(false)?;
-        let effective = effective_attribute_defs(&ancestry, &defs);
-        let values = match prepare_attribute_values(&effective, AttributeTarget::Note, &provided)
-        {
-            Ok(v) => v,
-            Err(_) => {
-                self.report.issues.push(issue(row.row, "io.issue.attribute_required"));
-                return Ok(());
-            }
-        };
-        insert_note(ctx, nt, &note)?;
-        self.created.notes.push(note.id);
-        self.report.added_notes += 1;
-        let cards: Vec<Card> = specs
-            .into_iter()
-            .map(|spec| Card::new(CardId::generate(ctx.ids), note.id, deck, spec, ctx.now))
-            .collect();
-        self.insert_cards(ctx, &cards)?;
-        let values: Vec<_> = values.into_iter().map(|(id, v)| (id, Some(v))).collect();
-        ctx.tx
-            .set_attribute_values(EntityRef::Note(note.id), &values)?;
-        Ok(())
-    }
-
-    /// Resolves a row's classification values against the deck's note-level definitions,
-    /// creating missing options when allowed. Unusable values become issues.
-    fn row_attributes(
-        &mut self,
-        ctx: &mut CommandCtx<'_>,
-        imp: &RowsImport,
-        deck: DeckId,
-        row: &RowSpec,
-    ) -> AppResult<Vec<(AttributeDefId, Option<AttributeValue>)>> {
-        let mut out = Vec::new();
-        for (aref, text) in &row.attrs {
-            let index = DeckIndex::load(ctx.reads())?;
-            let ancestry = index.ancestry(deck)?;
-            let defs = ctx.reads().list_attribute_defs(false)?;
-            let effective: Vec<AttributeDef> = effective_attribute_defs(&ancestry, &defs)
-                .into_iter()
-                .map(|e| e.def.clone())
-                .filter(|d| d.target == AttributeTarget::Note)
-                .collect();
-            let def = effective.into_iter().find(|d| match aref {
-                AttrRef::Id(id) => d.id == *id,
-                AttrRef::Name(n) => d.key == *n || d.name.to_lowercase() == n.to_lowercase(),
-            });
-            let Some(mut def) = def else {
-                self.report
-                    .issues
-                    .push(issue(row.row, "io.issue.attribute_not_applicable"));
-                continue;
-            };
-            let mut parsed = parse_value(&def, text);
-            if let ParsedValue::MissingLabels(labels) = &parsed {
-                if imp.create_missing_options {
-                    for l in labels.clone() {
-                        self.add_option(ctx, def.id, &l, None, None)?;
-                    }
-                    if let Some(fresh) = ctx.reads().get_attribute_def(def.id)? {
-                        def = fresh;
-                    }
-                    parsed = parse_value(&def, text);
-                }
-            }
-            match parsed {
-                ParsedValue::Empty => {}
-                ParsedValue::Value(v) => match validate_attribute_value(&def, &v) {
-                    Ok(v) => out.push((def.id, Some(v))),
-                    Err(_) => self.report.issues.push(
-                        issue(row.row, "io.issue.attribute_invalid").tap_param("value", text),
-                    ),
-                },
-                ParsedValue::MissingLabels(_) => self.report.issues.push(
-                    issue(row.row, "io.issue.attribute_unknown_option").tap_param("value", text),
-                ),
-                ParsedValue::Invalid => self.report.issues.push(
-                    issue(row.row, "io.issue.attribute_invalid").tap_param("value", text),
-                ),
-            }
-        }
-        Ok(out)
     }
 
     /// `duplicates: update`: nested `notes.update` (its own undo entry).
     fn update_note(
         &mut self,
         ctx: &mut CommandCtx<'_>,
+        report: &mut ImportReport,
         existing: NoteId,
         incoming: &Note,
         attributes: &[(AttributeDefId, Option<AttributeValue>)],
@@ -427,27 +351,288 @@ impl Writer {
                 .collect(),
         })?;
         ctx.call(&call)?;
-        self.report.updated_notes += 1;
+        report.updated_notes += 1;
         Ok(())
+    }
+
+    // ------------------------------------------------------------------ rows
+
+    fn rows(
+        &mut self,
+        ctx: &mut CommandCtx<'_>,
+        st: &mut ApplyState,
+        imp: &RowsImport,
+    ) -> AppResult<()> {
+        let default_nt = require_notetype(ctx.reads(), imp.notetype_id)?;
+        if let Some(d) = imp.deck_id {
+            DeckIndex::load(ctx.reads())?.require_live(d)?;
+        }
+        let Step::Rows(mut i) = st.step else {
+            return Ok(());
+        };
+        while i < imp.rows.len() && !self.full() {
+            self.tick()?;
+            let row = &imp.rows[i];
+            i += 1;
+            let nt = match &row.notetype {
+                None => default_nt.clone(),
+                Some(r) => {
+                    if !st.notetype_refs.contains_key(r) {
+                        let found = find_notetype(ctx, r)?;
+                        st.notetype_refs.insert(r.clone(), found);
+                    }
+                    match st.notetype_refs.get(r).cloned().flatten() {
+                        Some(nt) => nt,
+                        None => {
+                            st.report
+                                .issues
+                                .push(issue(row.row, "io.issue.unknown_notetype"));
+                            continue;
+                        }
+                    }
+                }
+            };
+            self.row(ctx, &mut st.report, imp, &nt, row)?;
+        }
+        st.step = if i >= imp.rows.len() {
+            Step::Done
+        } else {
+            Step::Rows(i)
+        };
+        Ok(())
+    }
+
+    fn row(
+        &mut self,
+        ctx: &mut CommandCtx<'_>,
+        report: &mut ImportReport,
+        imp: &RowsImport,
+        nt: &NoteType,
+        row: &RowSpec,
+    ) -> AppResult<()> {
+        let specs = standard_card_specs(nt);
+        if nt.deleted_at.is_some() || specs.is_empty() {
+            report.issues.push(issue(row.row, "io.issue.notetype_no_cards"));
+            return Ok(());
+        }
+        let deck = match (&row.deck, imp.deck_id) {
+            (Some(path), _) => match DeckPath::parse(path) {
+                Ok(p) => self.ensure_deck(ctx, report, None, p.segments(), None)?,
+                Err(_) => {
+                    report.issues.push(issue(row.row, "io.issue.bad_deck"));
+                    return Ok(());
+                }
+            },
+            (None, Some(d)) => d,
+            (None, None) => {
+                report.issues.push(issue(row.row, "io.issue.no_deck"));
+                return Ok(());
+            }
+        };
+        // Fields by key or (case-insensitive) name.
+        let mut values = FieldValues::new();
+        for (k, v) in &row.fields {
+            let wanted = k.to_lowercase();
+            let resolved = nt
+                .field(&FieldKey::new(k.clone()))
+                .or_else(|| {
+                    nt.fields.iter().find(|f| {
+                        f.key.0.to_lowercase() == wanted || f.name.to_lowercase() == wanted
+                    })
+                })
+                .map(|f| f.key.clone());
+            match resolved {
+                Some(key) => {
+                    values.insert(key, v.clone());
+                }
+                None => report
+                    .issues
+                    .push(issue(row.row, "io.issue.unknown_field").tap_param("field", k)),
+            }
+        }
+        let fields = match normalize_note_fields(nt, &values) {
+            Ok(f) => f,
+            Err(_) => {
+                report.issues.push(issue(row.row, "io.issue.invalid_fields"));
+                return Ok(());
+            }
+        };
+        let mut tags = Vec::new();
+        for t in &row.tags {
+            match TagName::parse(t) {
+                Ok(t) => tags.push(t),
+                Err(_) => report
+                    .issues
+                    .push(issue(row.row, "io.issue.bad_tag").tap_param("tag", t)),
+            }
+        }
+        let tags = dedup_tags(tags);
+
+        // Classifications applicable to the deck (note level).
+        let provided = self.row_attributes(ctx, report, imp, deck, row)?;
+
+        let mut note = Note {
+            id: NoteId::generate(ctx.ids),
+            notetype_id: nt.id,
+            home_deck_id: deck,
+            fields,
+            sort_field: String::new(),
+            checksum: String::new(),
+            tags,
+            created_at: ctx.now,
+            updated_at: ctx.now,
+            deleted_at: None,
+        };
+        derive(nt, &mut note);
+        if let Some(existing) = ctx
+            .reads()
+            .find_notes_by_checksum(nt.id, &note.checksum)?
+            .first()
+            .copied()
+        {
+            match imp.duplicates {
+                DuplicatePolicy::Skip => {
+                    report.skipped_duplicates += 1;
+                    return Ok(());
+                }
+                DuplicatePolicy::Update => {
+                    self.update_note(ctx, report, existing, &note, &provided)?;
+                    return Ok(());
+                }
+                DuplicatePolicy::Add => {}
+            }
+        }
+        let index = DeckIndex::load(ctx.reads())?;
+        let ancestry = index.ancestry(deck)?;
+        let defs = ctx.reads().list_attribute_defs(false)?;
+        let effective = effective_attribute_defs(&ancestry, &defs);
+        let values = match prepare_attribute_values(&effective, AttributeTarget::Note, &provided)
+        {
+            Ok(v) => v,
+            Err(_) => {
+                report
+                    .issues
+                    .push(issue(row.row, "io.issue.attribute_required"));
+                return Ok(());
+            }
+        };
+        insert_note(ctx, nt, &note)?;
+        self.created.notes.push(note.id);
+        report.added_notes += 1;
+        for spec in specs {
+            let card = Card::new(CardId::generate(ctx.ids), note.id, deck, spec, ctx.now);
+            ctx.tx.insert_card(&card)?;
+            self.created.cards.push(card.id);
+            report.added_cards += 1;
+        }
+        let values: Vec<_> = values.into_iter().map(|(id, v)| (id, Some(v))).collect();
+        ctx.tx
+            .set_attribute_values(EntityRef::Note(note.id), &values)?;
+        Ok(())
+    }
+
+    /// Resolves a row's classification values against the deck's note-level definitions,
+    /// creating missing options when allowed. Unusable values become issues.
+    fn row_attributes(
+        &mut self,
+        ctx: &mut CommandCtx<'_>,
+        report: &mut ImportReport,
+        imp: &RowsImport,
+        deck: DeckId,
+        row: &RowSpec,
+    ) -> AppResult<Vec<(AttributeDefId, Option<AttributeValue>)>> {
+        let mut out = Vec::new();
+        for (aref, text) in &row.attrs {
+            let index = DeckIndex::load(ctx.reads())?;
+            let ancestry = index.ancestry(deck)?;
+            let defs = ctx.reads().list_attribute_defs(false)?;
+            let effective: Vec<AttributeDef> = effective_attribute_defs(&ancestry, &defs)
+                .into_iter()
+                .map(|e| e.def.clone())
+                .filter(|d| d.target == AttributeTarget::Note)
+                .collect();
+            let def = effective.into_iter().find(|d| match aref {
+                AttrRef::Id(id) => d.id == *id,
+                AttrRef::Name(n) => d.key == *n || d.name.to_lowercase() == n.to_lowercase(),
+            });
+            let Some(mut def) = def else {
+                report
+                    .issues
+                    .push(issue(row.row, "io.issue.attribute_not_applicable"));
+                continue;
+            };
+            let mut parsed = parse_value(&def, text);
+            if let ParsedValue::MissingLabels(labels) = &parsed {
+                if imp.create_missing_options {
+                    for l in labels.clone() {
+                        self.add_option(ctx, report, def.id, &l, None, None)?;
+                    }
+                    if let Some(fresh) = ctx.reads().get_attribute_def(def.id)? {
+                        def = fresh;
+                    }
+                    parsed = parse_value(&def, text);
+                }
+            }
+            match parsed {
+                ParsedValue::Empty => {}
+                ParsedValue::Value(v) => match validate_attribute_value(&def, &v) {
+                    Ok(v) => out.push((def.id, Some(v))),
+                    Err(_) => report.issues.push(
+                        issue(row.row, "io.issue.attribute_invalid").tap_param("value", text),
+                    ),
+                },
+                ParsedValue::MissingLabels(_) => report.issues.push(
+                    issue(row.row, "io.issue.attribute_unknown_option").tap_param("value", text),
+                ),
+                ParsedValue::Invalid => report.issues.push(
+                    issue(row.row, "io.issue.attribute_invalid").tap_param("value", text),
+                ),
+            }
+        }
+        Ok(out)
     }
 
     // ------------------------------------------------------------------ packages
 
-    fn pack(&mut self, ctx: &mut CommandCtx<'_>, p: PackImport) -> AppResult<()> {
-        let PackImport {
-            pack,
-            parent,
-            duplicates,
-            include_history,
-            issues,
-        } = p;
-        self.report.issues.extend(issues);
-        if let Some(d) = parent {
+    fn pack(
+        &mut self,
+        ctx: &mut CommandCtx<'_>,
+        st: &mut ApplyState,
+        p: &PackImport,
+    ) -> AppResult<()> {
+        if let Some(d) = p.parent {
             DeckIndex::load(ctx.reads())?.require_live(d)?;
         }
+        while !self.full() {
+            st.step = match st.step {
+                Step::Media(i) => self.pack_media(ctx, st, p, i)?,
+                Step::Structure => self.pack_structure(ctx, st, p)?,
+                Step::Notes(i) => self.pack_notes(ctx, st, p, i)?,
+                Step::Cards(i) => self.pack_cards(ctx, st, p, i)?,
+                Step::Values(i) => self.pack_values(ctx, st, p, i)?,
+                Step::Reviews(i) => self.pack_reviews(ctx, st, p, i)?,
+                Step::Rows(_) | Step::Done => Step::Done,
+            };
+            if st.step == Step::Done {
+                break;
+            }
+        }
+        Ok(())
+    }
 
-        // Media (content-addressed; not undone, unreferenced media is cleaned up later).
-        for m in &pack.media {
+    /// Media (content-addressed; not undone: unreferenced media is cleaned up later).
+    fn pack_media(
+        &mut self,
+        ctx: &mut CommandCtx<'_>,
+        st: &mut ApplyState,
+        p: &PackImport,
+        mut i: usize,
+    ) -> AppResult<Step> {
+        let media = &p.pack.media;
+        while i < media.len() && !self.full() {
+            self.tick()?;
+            let m = &media[i];
+            i += 1;
             let record = MediaRecord {
                 hash: m.hash.clone(),
                 mime: if m.mime.is_empty() {
@@ -459,38 +644,51 @@ impl Writer {
                 original_name: m.name.clone(),
                 created_at: ctx.now,
             };
-            if ctx.tx.put_media(&record, &m.bytes)? {
-                self.report.added_media += 1;
+            if media_store().put(&mut *ctx.tx, &record, &m.bytes)? {
+                st.report.added_media += 1;
             }
+            self.media_bytes += m.bytes.len();
         }
-        self.cancel.check()?;
+        Ok(if i >= media.len() {
+            Step::Structure
+        } else {
+            Step::Media(i)
+        })
+    }
 
+    /// Decks, note types and classification definitions, in one chunk.
+    fn pack_structure(
+        &mut self,
+        ctx: &mut CommandCtx<'_>,
+        st: &mut ApplyState,
+        p: &PackImport,
+    ) -> AppResult<Step> {
+        let pack = &p.pack;
+        st.report.issues.extend(p.issues.iter().cloned());
         // Decks, parents first, matched by path under `parent`.
         let mut decks = pack.decks.clone();
         decks.sort_by_key(|d| pack.deck_path(d.id).len());
-        let mut deck_map: HashMap<DeckId, DeckId> = HashMap::new();
         for d in &decks {
+            self.tick()?;
             let path = pack.deck_path(d.id);
-            let id = self.ensure_deck(ctx, parent, &path, Some(d))?;
-            deck_map.insert(d.id, id);
+            let id = self.ensure_deck(ctx, &mut st.report, p.parent, &path, Some(d))?;
+            st.deck_map.insert(d.id, id);
         }
-
         // Note types: reuse by id, else insert.
-        let mut notetypes: HashMap<NoteTypeId, NoteType> = HashMap::new();
         for nt in &pack.notetypes {
             match ctx.reads().get_notetype(nt.id)? {
                 Some(existing) if existing.deleted_at.is_none() => {
-                    notetypes.insert(nt.id, existing);
+                    st.notetypes.insert(nt.id, existing);
                 }
                 Some(mut trashed) => {
                     trashed.deleted_at = None;
                     ctx.tx.upsert_notetype(&trashed)?;
-                    self.created.notetypes.push(trashed.id);
-                    notetypes.insert(nt.id, trashed);
+                    self.created.revived_notetypes.push(trashed.id);
+                    st.notetypes.insert(nt.id, trashed);
                 }
                 None => {
                     if validate_notetype(nt).is_err() {
-                        self.report.issues.push(issue(0, "io.issue.invalid_notetype"));
+                        st.report.issues.push(issue(0, "io.issue.invalid_notetype"));
                         continue;
                     }
                     let mut nt = nt.clone();
@@ -498,43 +696,52 @@ impl Writer {
                     nt.deleted_at = None;
                     ctx.tx.upsert_notetype(&nt)?;
                     self.created.notetypes.push(nt.id);
-                    self.report.added_notetypes += 1;
-                    notetypes.insert(nt.id, nt);
+                    st.report.added_notetypes += 1;
+                    st.notetypes.insert(nt.id, nt);
                 }
             }
         }
+        self.pack_attributes(ctx, st, p)?;
+        for c in &pack.cards {
+            if let Some(d) = st.deck_map.get(&c.deck_id) {
+                st.first_card_deck.entry(c.note_id).or_insert(*d);
+            }
+        }
+        Ok(Step::Notes(0))
+    }
 
-        // Classification definitions and options.
-        let (def_map, option_map) = self.pack_attributes(ctx, &pack, parent, &deck_map)?;
-
-        // Notes.
-        let mut note_map: HashMap<NoteId, NoteId> = HashMap::new();
-        for (i, n) in pack.notes.iter().enumerate() {
-            self.tick(i)?;
-            let row = u32::try_from(i + 1).unwrap_or(u32::MAX);
-            let Some(nt) = notetypes.get(&n.notetype_id) else {
-                self.report.issues.push(issue(row, "io.issue.unknown_notetype"));
+    fn pack_notes(
+        &mut self,
+        ctx: &mut CommandCtx<'_>,
+        st: &mut ApplyState,
+        p: &PackImport,
+        mut i: usize,
+    ) -> AppResult<Step> {
+        let notes = &p.pack.notes;
+        while i < notes.len() && !self.full() {
+            self.tick()?;
+            let n = &notes[i];
+            i += 1;
+            let row = u32::try_from(i).unwrap_or(u32::MAX);
+            let Some(nt) = st.notetypes.get(&n.notetype_id).cloned() else {
+                st.report.issues.push(issue(row, "io.issue.unknown_notetype"));
                 continue;
             };
-            let home = deck_map
+            let home = st
+                .deck_map
                 .get(&n.home_deck_id)
                 .copied()
-                .or_else(|| {
-                    pack.cards
-                        .iter()
-                        .find(|c| c.note_id == n.id)
-                        .and_then(|c| deck_map.get(&c.deck_id).copied())
-                })
-                .or(parent);
+                .or_else(|| st.first_card_deck.get(&n.id).copied())
+                .or(p.parent);
             let Some(home) = home else {
-                self.report.issues.push(issue(row, "io.issue.no_deck"));
+                st.report.issues.push(issue(row, "io.issue.no_deck"));
                 continue;
             };
             let mut note = n.clone();
             note.notetype_id = nt.id;
             note.home_deck_id = home;
             note.deleted_at = None;
-            derive(nt, &mut note);
+            derive(&nt, &mut note);
             let by_id = ctx
                 .reads()
                 .get_note(n.id)?
@@ -549,13 +756,13 @@ impl Writer {
                     .copied(),
             };
             if let Some(existing) = duplicate {
-                match duplicates {
+                match p.duplicates {
                     DuplicatePolicy::Skip => {
-                        self.report.skipped_duplicates += 1;
+                        st.report.skipped_duplicates += 1;
                         continue;
                     }
                     DuplicatePolicy::Update => {
-                        self.update_note(ctx, existing, &note, &[])?;
+                        self.update_note(ctx, &mut st.report, existing, &note, &[])?;
                         continue;
                     }
                     DuplicatePolicy::Add => {}
@@ -564,23 +771,37 @@ impl Writer {
             if ctx.reads().get_note(note.id)?.is_some() {
                 note.id = NoteId::generate(ctx.ids);
             }
-            insert_note(ctx, nt, &note)?;
+            insert_note(ctx, &nt, &note)?;
             self.created.notes.push(note.id);
-            self.report.added_notes += 1;
-            note_map.insert(n.id, note.id);
+            st.report.added_notes += 1;
+            st.note_map.insert(n.id, note.id);
         }
+        Ok(if i >= notes.len() {
+            Step::Cards(0)
+        } else {
+            Step::Notes(i)
+        })
+    }
 
-        // Cards of the inserted notes.
-        let mut card_map: HashMap<CardId, CardId> = HashMap::new();
-        let mut new_cards = Vec::new();
-        for (i, c) in pack.cards.iter().enumerate() {
-            self.tick(i)?;
-            let Some(note_id) = note_map.get(&c.note_id).copied() else {
+    /// Cards of the inserted notes.
+    fn pack_cards(
+        &mut self,
+        ctx: &mut CommandCtx<'_>,
+        st: &mut ApplyState,
+        p: &PackImport,
+        mut i: usize,
+    ) -> AppResult<Step> {
+        let cards = &p.pack.cards;
+        while i < cards.len() && !self.full() {
+            self.tick()?;
+            let c = &cards[i];
+            i += 1;
+            let Some(note_id) = st.note_map.get(&c.note_id).copied() else {
                 continue;
             };
             let mut card = c.clone();
             card.note_id = note_id;
-            card.deck_id = match deck_map.get(&c.deck_id) {
+            card.deck_id = match st.deck_map.get(&c.deck_id) {
                 Some(d) => *d,
                 None => match ctx.reads().get_note(note_id)? {
                     Some(n) => n.home_deck_id,
@@ -588,33 +809,51 @@ impl Writer {
                 },
             };
             card.deleted_at = None;
-            if !include_history {
+            if !p.include_history {
                 card.scheduling = SchedulingState::NEW;
                 card.suspended = false;
                 card.buried_until = None;
             }
-            if ctx.reads().get_card(card.id)?.is_some() || card_map.values().any(|v| *v == card.id)
-            {
+            if st.used_card_ids.contains(&card.id) || ctx.reads().get_card(card.id)?.is_some() {
                 card.id = CardId::generate(ctx.ids);
             }
-            card_map.insert(c.id, card.id);
-            new_cards.push(card);
+            st.used_card_ids.insert(card.id);
+            st.card_map.insert(c.id, card.id);
+            ctx.tx.insert_card(&card)?;
+            self.created.cards.push(card.id);
+            st.report.added_cards += 1;
         }
-        self.insert_cards(ctx, &new_cards)?;
+        Ok(if i >= cards.len() {
+            Step::Values(0)
+        } else {
+            Step::Cards(i)
+        })
+    }
 
-        // Classification values of the inserted notes/cards.
-        for v in &pack.attribute_values {
+    /// Classification values of the inserted notes/cards.
+    fn pack_values(
+        &mut self,
+        ctx: &mut CommandCtx<'_>,
+        st: &mut ApplyState,
+        p: &PackImport,
+        mut i: usize,
+    ) -> AppResult<Step> {
+        let values = &p.pack.attribute_values;
+        while i < values.len() && !self.full() {
+            self.tick()?;
+            let v = &values[i];
+            i += 1;
             let entity = match v.entity {
-                EntityRef::Note(n) => note_map.get(&n).map(|n| EntityRef::Note(*n)),
-                EntityRef::Card(c) => card_map.get(&c).map(|c| EntityRef::Card(*c)),
+                EntityRef::Note(n) => st.note_map.get(&n).map(|n| EntityRef::Note(*n)),
+                EntityRef::Card(c) => st.card_map.get(&c).map(|c| EntityRef::Card(*c)),
             };
-            let (Some(entity), Some(attr)) = (entity, def_map.get(&v.attr_id).copied()) else {
+            let (Some(entity), Some(attr)) = (entity, st.def_map.get(&v.attr_id).copied()) else {
                 continue;
             };
             let Some(def) = ctx.reads().get_attribute_def(attr)? else {
                 continue;
             };
-            let remap = |o: &AttributeOptionId| option_map.get(o).copied().unwrap_or(*o);
+            let remap = |o: &AttributeOptionId| st.option_map.get(o).copied().unwrap_or(*o);
             let value = match &v.value {
                 AttributeValue::Choice(o) => AttributeValue::Choice(remap(o)),
                 AttributeValue::Choices(list) => {
@@ -626,38 +865,59 @@ impl Writer {
                 Ok(value) => ctx
                     .tx
                     .set_attribute_values(entity, &[(attr, Some(value))])?,
-                Err(_) => self.report.issues.push(issue(0, "io.issue.attribute_invalid")),
+                Err(_) => st.report.issues.push(issue(0, "io.issue.attribute_invalid")),
             }
         }
+        Ok(if i >= values.len() {
+            Step::Reviews(0)
+        } else {
+            Step::Values(i)
+        })
+    }
 
-        // Review history.
-        if include_history {
-            let rows: Vec<ReviewLogRecord> = pack
-                .review_logs
-                .iter()
-                .filter_map(|r| {
-                    card_map.get(&r.card_id).map(|card| ReviewLogRecord {
-                        id: r.id,
-                        card_id: *card,
-                        session_id: r.session_id,
-                        rating: r.rating,
-                        state_before: r.state_before,
-                        state_after: r.state_after,
-                        scheduled_days: r.scheduled_days,
-                        elapsed_days: r.elapsed_days,
-                        duration_ms: r.duration_ms,
-                        answer_duration_ms: r.answer_duration_ms,
-                        hints_used: r.hints_used,
-                        mode: r.mode.clone(),
-                        stability_after: r.stability_after,
-                        difficulty_after: r.difficulty_after,
-                        created_at: r.created_at,
-                    })
-                })
-                .collect();
-            self.report.added_reviews = ctx.tx.insert_review_logs(&rows)?;
+    /// Review history (when kept).
+    fn pack_reviews(
+        &mut self,
+        ctx: &mut CommandCtx<'_>,
+        st: &mut ApplyState,
+        p: &PackImport,
+        i: usize,
+    ) -> AppResult<Step> {
+        let logs = &p.pack.review_logs;
+        if !p.include_history || i >= logs.len() {
+            return Ok(Step::Done);
         }
-        Ok(())
+        let end = (i + self.budget.saturating_sub(self.spent).max(1)).min(logs.len());
+        self.cancel.check()?;
+        self.spent += end - i;
+        let rows: Vec<ReviewLogRecord> = logs[i..end]
+            .iter()
+            .filter_map(|r| {
+                st.card_map.get(&r.card_id).map(|card| ReviewLogRecord {
+                    id: r.id,
+                    card_id: *card,
+                    session_id: r.session_id,
+                    rating: r.rating,
+                    state_before: r.state_before,
+                    state_after: r.state_after,
+                    scheduled_days: r.scheduled_days,
+                    elapsed_days: r.elapsed_days,
+                    duration_ms: r.duration_ms,
+                    answer_duration_ms: r.answer_duration_ms,
+                    hints_used: r.hints_used,
+                    mode: r.mode.clone(),
+                    stability_after: r.stability_after,
+                    difficulty_after: r.difficulty_after,
+                    created_at: r.created_at,
+                })
+            })
+            .collect();
+        st.report.added_reviews += ctx.tx.insert_review_logs(&rows)?;
+        Ok(if end >= logs.len() {
+            Step::Done
+        } else {
+            Step::Reviews(end)
+        })
     }
 
     /// Definitions keep their ids (exact round trip of `.fcpack`): an existing definition is
@@ -665,22 +925,15 @@ impl Writer {
     /// is inserted with its options, scoped to the mapped deck (or the import's parent deck
     /// if its scope is outside the package). A definition whose key is taken at that scope
     /// maps onto the existing one by label.
-    #[allow(clippy::type_complexity)]
     fn pack_attributes(
         &mut self,
         ctx: &mut CommandCtx<'_>,
-        pack: &fc_interop::pack::Pack,
-        parent: Option<DeckId>,
-        deck_map: &HashMap<DeckId, DeckId>,
-    ) -> AppResult<(
-        HashMap<AttributeDefId, AttributeDefId>,
-        HashMap<AttributeOptionId, AttributeOptionId>,
-    )> {
-        let mut def_map = HashMap::new();
-        let mut option_map = HashMap::new();
-        for def in &pack.attribute_defs {
+        st: &mut ApplyState,
+        p: &PackImport,
+    ) -> AppResult<()> {
+        for def in &p.pack.attribute_defs {
             let scope = match def.scope_deck_id {
-                Some(s) => deck_map.get(&s).copied().or(parent),
+                Some(s) => st.deck_map.get(&s).copied().or(p.parent),
                 None => None,
             };
             let existing = match ctx.reads().get_attribute_def(def.id)? {
@@ -695,18 +948,18 @@ impl Writer {
                 Some(e) => {
                     for o in def.sorted_options() {
                         if let Some(same) = e.option(o.id).or_else(|| e.option_by_label(&o.label)) {
-                            option_map.insert(o.id, same.id);
+                            st.option_map.insert(o.id, same.id);
                             continue;
                         }
                         let id = (!option_used(ctx, o.id)?).then_some(o.id);
-                        self.add_option(ctx, e.id, &o.label, o.color.clone(), id)?;
+                        self.add_option(ctx, &mut st.report, e.id, &o.label, o.color.clone(), id)?;
                         if let Some(fresh) = ctx.reads().get_attribute_def(e.id)? {
                             if let Some(added) = fresh.option_by_label(&o.label) {
-                                option_map.insert(o.id, added.id);
+                                st.option_map.insert(o.id, added.id);
                             }
                         }
                     }
-                    def_map.insert(def.id, e.id);
+                    st.def_map.insert(def.id, e.id);
                 }
                 None => {
                     let mut new = def.clone();
@@ -718,15 +971,15 @@ impl Writer {
                     new.template_id = def.template_id.clone();
                     ctx.tx.insert_attribute_def(&new)?;
                     self.created.attribute_defs.push(new.id);
-                    self.report.added_attributes += 1;
-                    def_map.insert(def.id, new.id);
+                    st.report.added_attributes += 1;
+                    st.def_map.insert(def.id, new.id);
                     for o in &new.options {
-                        option_map.insert(o.id, o.id);
+                        st.option_map.insert(o.id, o.id);
                     }
                 }
             }
         }
-        Ok((def_map, option_map))
+        Ok(())
     }
 }
 
@@ -775,7 +1028,7 @@ fn set_deleted(
     for d in &ids.attribute_defs {
         ctx.tx.set_attribute_def_deleted(*d, at)?;
     }
-    for id in &ids.notetypes {
+    for id in ids.notetypes.iter().chain(&ids.revived_notetypes) {
         if let Some(mut nt) = ctx.reads().get_notetype(*id)? {
             nt.deleted_at = at;
             ctx.tx.upsert_notetype(&nt)?;
@@ -834,6 +1087,67 @@ pub(super) fn untrash(
         response: affected,
         inverse: vec![inverse_call::<IoImportTrash>(&req)?],
         summary: summary::<IoImportUntrash>().param("count", req.notes.len()),
+        events,
+    })
+}
+
+/// `io.import.discard`: reverts the committed chunks of an unfinished import (the job's
+/// [`crate::app::UndoGroup`] inverses, newest first). Rows the chunks created are
+/// hard-deleted — with their cards, review rows, values, search rows and the tags only they
+/// introduced — instead of trashed; trashed note types they revived are trashed again; the
+/// other inverses (notes updated, options added) run as recorded. Records no undo step.
+pub(super) fn discard(
+    req: DiscardImport,
+    ctx: &mut CommandCtx<'_>,
+) -> AppResult<CommandOutcome<Empty>> {
+    let trash_method = format!("{}.{}", fc_api::API_VERSION, IoImportTrash::NAME);
+    let mut purge = PurgeRows {
+        tags_created_since: Some(req.since),
+        ..PurgeRows::default()
+    };
+    let mut revived = Vec::new();
+    let mut others = Vec::new();
+    for call in &req.calls {
+        if call.method == trash_method {
+            let ids: ImportedIds = serde_json::from_value(call.params.clone()).map_err(|e| {
+                crate::error::AppError::api(fc_api::ErrorCode::Internal, e.to_string())
+            })?;
+            purge.decks.extend(ids.decks);
+            purge.notetypes.extend(ids.notetypes);
+            purge.notes.extend(ids.notes);
+            purge.cards.extend(ids.cards);
+            purge.attribute_defs.extend(ids.attribute_defs);
+            revived.extend(ids.revived_notetypes);
+        } else {
+            others.push(call);
+        }
+    }
+    ctx.tx.purge_rows(&purge)?;
+    let now = ctx.now;
+    for id in &revived {
+        if let Some(mut nt) = ctx.reads().get_notetype(*id)? {
+            nt.deleted_at = Some(now);
+            ctx.tx.upsert_notetype(&nt)?;
+        }
+    }
+    for call in others {
+        ctx.call(call)?;
+    }
+    let mut events: Vec<DomainEvent> = purge
+        .decks
+        .iter()
+        .map(|d| DomainEvent::DeckDeleted {
+            id: *d,
+            affected: AffectedCount::default(),
+        })
+        .collect();
+    if !purge.notes.is_empty() {
+        events.push(DomainEvent::NotesDeleted { ids: purge.notes });
+    }
+    Ok(CommandOutcome {
+        response: Empty {},
+        inverse: Vec::new(),
+        summary: summary::<IoImportDiscard>(),
         events,
     })
 }

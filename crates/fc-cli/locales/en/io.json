@@ -3,6 +3,7 @@
   "oplog.summary.io.import.apply": "Imported {count} notes",
   "oplog.summary.io.import.trash": "Removed {count} imported notes",
   "oplog.summary.io.import.untrash": "Brought back {count} imported notes",
+  "oplog.summary.io.import.discard": "Discarded an unfinished import",
   "oplog.summary.io.export.start": "Started an export",
   "oplog.summary.io.backup.create": "Started a backup",
   "oplog.summary.io.backup.restore": "Started a restore",

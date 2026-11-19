@@ -362,6 +362,17 @@ pub struct StagedJob {
     pub job_id: JobId,
 }
 
+/// Internal `io.import.discard`: reverts the chunks an unfinished import already committed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DiscardImport {
+    /// Inverses of the committed chunks, newest first (`io.import.trash` calls are purged
+    /// instead of trashed).
+    pub calls: Vec<crate::InvokeRequest>,
+    /// When the import started (tags it created are removed too).
+    pub since: Timestamp,
+}
+
 /// Internal `io.import.trash` / `io.import.untrash`: rows an import created.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
@@ -376,6 +387,9 @@ pub struct ImportedIds {
     pub cards: Vec<CardId>,
     /// Classification definitions.
     pub attribute_defs: Vec<AttributeDefId>,
+    /// Trashed note types the import brought back (trashed again, never purged).
+    #[serde(default)]
+    pub revived_notetypes: Vec<NoteTypeId>,
 }
 
 impl ImportedIds {
@@ -386,5 +400,6 @@ impl ImportedIds {
             && self.notes.is_empty()
             && self.cards.is_empty()
             && self.attribute_defs.is_empty()
+            && self.revived_notetypes.is_empty()
     }
 }

@@ -15,10 +15,6 @@ fn sql(e: rusqlite::Error) -> InteropError {
     InteropError::invalid(FORMAT, format!("collection: {e}"))
 }
 
-pub(super) fn zstd_decode(bytes: &[u8]) -> InteropResult<Vec<u8>> {
-    zstd::stream::decode_all(bytes).map_err(|e| InteropError::invalid(FORMAT, format!("zstd: {e}")))
-}
-
 /// Opens an in-memory copy of a collection database.
 pub(super) fn open_db(bytes: &[u8]) -> InteropResult<Connection> {
     let mut conn = Connection::open_in_memory().map_err(sql)?;
@@ -31,7 +27,7 @@ pub(super) fn open_db(bytes: &[u8]) -> InteropResult<Connection> {
 pub fn read_package(bytes: &[u8]) -> InteropResult<AnkiCollection> {
     let mut zip = ZipIn::open(bytes, FORMAT)?;
     let (layout, db) = if let Some(b) = zip.read("collection.anki21b")? {
-        (AnkiLayout::Latest, zstd_decode(&b)?)
+        (AnkiLayout::Latest, zip.zstd(&b)?)
     } else if let Some(b) = zip.read("collection.anki21")? {
         (AnkiLayout::Legacy2, b)
     } else if let Some(b) = zip.read("collection.anki2")? {
@@ -304,11 +300,7 @@ fn media(zip: &mut ZipIn<'_>, layout: AnkiLayout) -> InteropResult<Vec<(String, 
     };
     let compressed = list.starts_with(&ZSTD_MAGIC);
     let entries: Vec<(String, String)> = if compressed || layout == AnkiLayout::Latest {
-        let raw = if compressed {
-            zstd_decode(&list)?
-        } else {
-            list
-        };
+        let raw = if compressed { zip.zstd(&list)? } else { list };
         let msg = proto::decode(&raw)?;
         let mut out = Vec::new();
         for (i, entry) in proto::repeated_bytes(&msg, 1).into_iter().enumerate() {
@@ -333,7 +325,7 @@ fn media(zip: &mut ZipIn<'_>, layout: AnkiLayout) -> InteropResult<Vec<(String, 
             continue;
         };
         if layout == AnkiLayout::Latest && bytes.starts_with(&ZSTD_MAGIC) {
-            bytes = zstd_decode(&bytes)?;
+            bytes = zip.zstd(&bytes)?;
         }
         files.push((name, bytes));
     }

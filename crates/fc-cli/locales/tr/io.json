@@ -3,6 +3,7 @@
   "oplog.summary.io.import.apply": "{count} not içe aktarıldı",
   "oplog.summary.io.import.trash": "İçe aktarılan {count} not kaldırıldı",
   "oplog.summary.io.import.untrash": "İçe aktarılan {count} not geri getirildi",
+  "oplog.summary.io.import.discard": "Yarım kalan içe aktarma geri alındı",
   "oplog.summary.io.export.start": "Dışa aktarma başlatıldı",
   "oplog.summary.io.backup.create": "Yedekleme başlatıldı",
   "oplog.summary.io.backup.restore": "Geri yükleme başlatıldı",

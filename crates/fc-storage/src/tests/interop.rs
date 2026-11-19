@@ -166,3 +166,81 @@ fn load_rejects_unknown_tables_and_columns_without_touching_data() {
     drop(tx);
     assert_eq!(fx.read(|r| r.dump_collection().unwrap()), good);
 }
+
+#[test]
+fn purge_rows_removes_an_import_without_a_trace() {
+    let fx = Fx::seeded();
+    fx.write(|tx| {
+        ensure_home(tx);
+        tx.insert_deck(&deck(1, None, "Keep")).unwrap();
+        add_note(tx, &note(1, "keep", "me", &["old"], 1), 1);
+    });
+    let before = fx.read(|r| r.dump_collection().unwrap());
+    // An "import": a deck, two notes (one reusing tag `old`, one with a new tag), review
+    // history, a classification with a value.
+    fx.write(|tx| {
+        tx.insert_deck(&deck(2, None, "Imported")).unwrap();
+        add_note(tx, &note(2, "new one", "x", &["old", "fresh"], 50), 2);
+        add_note(tx, &note(3, "new two", "y", &[], 50), 2);
+        tx.insert_review_logs(&[review(1, CardId(nid(2).0), 60)])
+            .unwrap();
+    });
+    let after_import = fx.read(|r| r.dump_collection().unwrap());
+    assert_ne!(after_import, before);
+    fx.write(|tx| {
+        tx.purge_rows(&crate::repo::PurgeRows {
+            decks: vec![did(2)],
+            notetypes: vec![],
+            notes: vec![nid(2), nid(3)],
+            cards: vec![CardId(nid(2).0), CardId(nid(3).0)],
+            attribute_defs: vec![],
+            tags_created_since: Some(Timestamp(50)),
+        })
+        .unwrap()
+    });
+    let after = fx.read(|r| r.dump_collection().unwrap());
+    assert_eq!(after, before);
+    let hits: i64 = fx
+        .raw()
+        .query_row(
+            "SELECT count(*) FROM notes_fts WHERE notes_fts MATCH 'new'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(hits, 0);
+}
+
+#[test]
+fn upgrade_dump_runs_later_data_migrations_on_restored_rows() {
+    let fx = Fx::seeded();
+    fx.write(|tx| {
+        ensure_home(tx);
+        tx.insert_deck(&deck(1, None, "Deck")).unwrap();
+        add_note(tx, &note(1, "Işık", "back", &[], 1), 1);
+    });
+    let old = fx.read(|r| r.dump_collection().unwrap());
+    // Same schema: unchanged.
+    assert_eq!(crate::upgrade_dump(old.clone()).unwrap(), old);
+
+    // A later build with a data migration (like v0.4's 0300 re-folding search text).
+    let mut newer: Vec<migrate::Migration> = migrate::MIGRATIONS.to_vec();
+    newer.push(migrate::Migration {
+        version: 499,
+        name: "0499_test_fold",
+        sql: "UPDATE notes_fts SET sort_field = replace(sort_field, 'I', 'i');
+              CREATE TABLE fold_marker (n INTEGER NOT NULL);
+              INSERT INTO fold_marker SELECT count(*) FROM notes;",
+    });
+    let up = crate::upgrade_dump_with(old.clone(), &newer).unwrap();
+    assert_eq!(*up.schema_versions.last().unwrap(), 499);
+    let fts = up.tables.iter().find(|t| t.name == "notes_fts").unwrap();
+    let col = fts.columns.iter().position(|c| c == "sort_field").unwrap();
+    assert_eq!(fts.rows[0][col], SqlValue::Text("işık".into()));
+    let marker = up.tables.iter().find(|t| t.name == "fold_marker").unwrap();
+    assert_eq!(marker.rows[0].last(), Some(&SqlValue::Integer(1)));
+    // Unknown versions are refused.
+    let mut alien = old;
+    alien.schema_versions.push(9999);
+    assert!(crate::upgrade_dump(alien).is_err());
+}

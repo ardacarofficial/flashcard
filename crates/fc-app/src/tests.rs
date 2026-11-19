@@ -398,6 +398,7 @@ fn internal_methods_are_rejected_from_every_transport_path() {
             "decks.restore_affected",
             "io.backup.load",
             "io.import.apply",
+            "io.import.discard",
             "io.import.trash",
             "io.import.untrash",
         ]

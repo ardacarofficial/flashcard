@@ -1,8 +1,18 @@
 //! Full backup (`.fcbackup`) and restore.
 //!
-//! A backup is the storage's table dump plus every media file. A restore first writes a
-//! backup of the current state (docs/02 §16), then replaces every table in one transaction
-//! (`io.backup.load`). It is not an undo step — the safety backup is the way back.
+//! A backup is the storage's table dump plus every media file (read through
+//! [`super::media::MediaStore`]). A restore
+//!
+//! 1. reads and checks the backup and brings its dump to this build's schema in a private
+//!    database ([`fc_storage::upgrade_dump`]: later data migrations run on the restored rows),
+//!    all without holding the writer;
+//! 2. writes a backup of the current state (docs/02 §16) into the app data folder
+//!    (`<collection folder>/backups/`; the backup's own folder may be read-only);
+//! 3. swaps every table and the media in one transaction (`io.backup.load`) — deliberately
+//!    atomic: a half-restored collection must never be visible to other commands. Only
+//!    prepared bulk inserts run inside it.
+//!
+//! It is not an undo step — the safety backup is the way back.
 
 use super::{file_err, interop_err, read_file, write_file, Staging, JOB_BACKUP, JOB_RESTORE};
 use crate::error::{AppError, AppResult};
@@ -15,12 +25,19 @@ use fc_api::v1::io::*;
 use fc_api::v1::jobs::JobDto;
 use fc_api::v1::methods::{IoBackupCreate, IoBackupLoad, IoBackupRestore};
 use fc_api::{ApiError, ErrorCode};
-use fc_interop::fcbackup::{self, Backup, BackupWriter, Manifest};
+use super::media::media_store;
+use fc_interop::fcbackup::{self, BackupWriter, Manifest};
 use fc_storage::repo::{CollectionDump, MediaRecord};
 use fc_storage::Reads;
 use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
+
+/// A restore ready to swap in: the dump at this build's schema and the media files.
+pub(crate) struct Restore {
+    pub dump: CollectionDump,
+    pub media: Vec<(String, Vec<u8>)>,
+}
 
 fn internal(e: impl ToString) -> AppError {
     AppError::api(ErrorCode::Internal, e.to_string())
@@ -77,7 +94,8 @@ fn compatible(versions: &[u32]) -> bool {
 /// A complete backup of what `reads` sees.
 fn backup_bytes(reads: &dyn Reads, now: fc_core::Timestamp) -> AppResult<(Vec<u8>, Manifest)> {
     let dump = reads.dump_collection()?;
-    let media = reads.list_media()?;
+    let store = media_store();
+    let media = store.list(reads)?;
     let manifest = Manifest {
         format: fcbackup::FORMAT.into(),
         version: fcbackup::VERSION,
@@ -89,7 +107,7 @@ fn backup_bytes(reads: &dyn Reads, now: fc_core::Timestamp) -> AppResult<(Vec<u8
     let json = serde_json::to_vec(&dump).map_err(internal)?;
     let mut w = BackupWriter::new(&manifest, &json).map_err(interop_err)?;
     for m in &media {
-        if let Some(bytes) = reads.media_bytes(&m.hash)? {
+        if let Some(bytes) = store.bytes(reads, &m.hash)? {
             w.add_media(&m.hash, &bytes).map_err(interop_err)?;
         }
     }
@@ -162,18 +180,26 @@ impl JobHandler for RestoreJob {
         let dump: CollectionDump = serde_json::from_slice(&backup.collection)
             .map_err(|e| interop_err(fc_interop::InteropError::invalid("fcbackup", e)))?;
         ctx.cancel.check()?;
+        // Older schema: migrate the restored rows forward (outside the writer).
+        let dump = fc_storage::upgrade_dump(dump)?;
+        ctx.cancel.check()?;
 
-        // Safety backup of the current state first.
+        // Safety backup of the current state first, into the app data folder.
         ctx.report(Some(0.3), "io.progress.safety_backup");
-        let safety = req.safety_backup_path.clone().unwrap_or_else(|| {
-            let dir = Path::new(&req.path)
-                .parent()
-                .map(Path::to_path_buf)
-                .unwrap_or_default();
-            dir.join(format!("pre-restore-{}.fcbackup", ctx.now().0))
-                .to_string_lossy()
-                .into_owned()
-        });
+        let safety = match req.safety_backup_path.clone() {
+            Some(p) => p,
+            None => {
+                let dir = ctx
+                    .data_dir()
+                    .map(|d| d.join("backups"))
+                    .unwrap_or_else(std::env::temp_dir);
+                std::fs::create_dir_all(&dir)
+                    .map_err(|e| file_err(&dir.to_string_lossy(), e))?;
+                dir.join(format!("pre-restore-{}.fcbackup", ctx.now().0))
+                    .to_string_lossy()
+                    .into_owned()
+            }
+        };
         {
             let tx = ctx.read()?;
             let (bytes, _) = backup_bytes(&*tx, ctx.now())?;
@@ -190,7 +216,13 @@ impl JobHandler for RestoreJob {
         ctx.report(None, "io.progress.writing");
         let counts = row_counts(&dump);
         let media = u32::try_from(backup.media.len()).unwrap_or(u32::MAX);
-        self.0.put_restore(ctx.job_id, backup);
+        self.0.put_restore(
+            ctx.job_id,
+            Restore {
+                dump,
+                media: backup.media,
+            },
+        );
         let result = ctx.invoke::<IoBackupLoad>(&StagedJob { job_id: ctx.job_id });
         let _ = self.0.take_restore(ctx.job_id);
         result?;
@@ -208,21 +240,18 @@ pub(crate) struct LoadHandler(pub Arc<Staging>);
 
 impl CommandHandler<IoBackupLoad> for LoadHandler {
     fn execute(&self, req: StagedJob, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Empty>> {
-        let Backup {
-            collection, media, ..
-        } = self.0.take_restore(req.job_id)?;
-        let dump: CollectionDump = serde_json::from_slice(&collection)
-            .map_err(|e| interop_err(fc_interop::InteropError::invalid("fcbackup", e)))?;
+        let Restore { dump, media } = self.0.take_restore(req.job_id)?;
         ctx.tx.load_collection(&dump)?;
+        let store = media_store();
         for (hash, bytes) in &media {
-            let record = ctx.reads().get_media(hash)?.unwrap_or(MediaRecord {
+            let record = store.record(ctx.reads(), hash)?.unwrap_or(MediaRecord {
                 hash: hash.clone(),
                 mime: "application/octet-stream".into(),
                 size: bytes.len() as u64,
                 original_name: None,
                 created_at: ctx.now,
             });
-            ctx.tx.put_media(&record, bytes)?;
+            store.put(&mut *ctx.tx, &record, bytes)?;
         }
         // Jobs that were running when the backup was taken have no worker now.
         ctx.tx.mark_unfinished_jobs_interrupted(ctx.now)?;

@@ -10,8 +10,12 @@ methods! {
     IoImportPreview = "io.import.preview", Query, "io", "io:read", Public, undo: false, PreviewImport => ImportPreview;
     /// Starts an import job (one undo step, cancellable until it commits).
     IoImportStart = "io.import.start", Command, "io", "io:write", Public, undo: false, StartImport => JobDto;
-    /// Internal: writes what an import job staged (the job's single undo step).
+    /// Internal: writes the next chunk of what an import job staged. The job runs it once per
+    /// chunk (own transaction each) and records all chunks as one undo step.
     IoImportApply = "io.import.apply", Command, "io", "io:write", Internal, undo: true, StagedJob => ImportReport;
+    /// Internal: removes what the committed chunks of a cancelled/failed import wrote. Run
+    /// without history (the import never became an undo step); it has no inverse.
+    IoImportDiscard = "io.import.discard", Command, "io", "io:write", Internal, undo: true, DiscardImport => Empty;
     /// Internal: inverse of `io.import.apply` — trashes what the import created.
     IoImportTrash = "io.import.trash", Command, "io", "io:write", Internal, undo: true, ImportedIds => AffectedCount;
     /// Internal: inverse of `io.import.trash`.

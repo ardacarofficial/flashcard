@@ -5,11 +5,14 @@ use crate::events::{EventBus, InMemoryEventBus};
 use crate::handler::{CommandCtx, PendingOplogEntry, QueryCtx};
 use crate::jobs::Invoker;
 use crate::registry::{
-    ensure_invocable, run_recorded, unknown_method, ErasedHandler, Registry, RegistryError,
+    ensure_invocable, run_recorded, unknown_method, ErasedCommand, ErasedHandler, Registry,
+    RegistryError,
 };
 use crate::settings::SettingsSchema;
 use crate::system::{OsRng, SystemClock};
 use fc_api::method::parse_qualified_name;
+use fc_api::method::MethodDescriptor;
+use fc_api::v1::common::I18nMessage;
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::events::EventEnvelope;
 use fc_api::v1::jobs::{JobRef, JobStatus};
@@ -24,8 +27,9 @@ use fc_storage::repo::{OplogRecord, OplogRecordKind};
 use fc_storage::{Reads, Store};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 /// External dependencies of the app (injected so tests use a fixed clock / seeded ids).
 pub struct AppDeps {
@@ -64,6 +68,63 @@ pub struct App {
     locale: RwLock<Locale>,
     event_seq: AtomicU64,
     jobs: crate::jobs::JobRuntime,
+    /// Commands waiting for the writer (long jobs yield to them between chunks).
+    writers_waiting: AtomicUsize,
+    /// Folder of the collection file (`None` until known; see [`App::data_dir`]).
+    data_dir: OnceLock<PathBuf>,
+}
+
+/// Where a command's oplog entries go.
+pub(crate) enum OplogMode<'g> {
+    /// Written with the command, as one batch (every normal call).
+    Write,
+    /// Held back in an [`UndoGroup`] that a long job commits as one batch at its end.
+    Defer(&'g mut UndoGroup),
+    /// Dropped: compensation that leaves no history (discarding an unfinished import).
+    Discard,
+}
+
+/// One undo step written across several transactions (a long import writes in chunks so
+/// other commands are never locked out for long). Its oplog entries are held here and written
+/// together by [`App::commit_group`] — the oplog requires a batch's entries to be contiguous,
+/// and an unfinished group must never be an undo target.
+pub(crate) struct UndoGroup {
+    batch_id: BatchId,
+    pending: Vec<PendingOplogEntry>,
+}
+
+impl UndoGroup {
+    /// Inverse calls of everything run so far, newest first (to revert the group).
+    pub(crate) fn inverses_rev(&self) -> Vec<InvokeRequest> {
+        self.pending
+            .iter()
+            .rev()
+            .flat_map(|e| e.inverse.iter().cloned())
+            .collect()
+    }
+
+    /// Whether nothing has been recorded.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.pending.is_empty()
+    }
+}
+
+/// Decrements [`App::writers_waiting`] when dropped.
+struct WaitingWriter<'a>(&'a AtomicUsize, bool);
+
+impl WaitingWriter<'_> {
+    fn acquired(&mut self) {
+        if self.1 {
+            self.0.fetch_sub(1, Ordering::SeqCst);
+            self.1 = false;
+        }
+    }
+}
+
+impl Drop for WaitingWriter<'_> {
+    fn drop(&mut self) {
+        self.acquired();
+    }
 }
 
 impl App {
@@ -95,6 +156,8 @@ impl App {
             locale: RwLock::new(Locale::default()),
             event_seq: AtomicU64::new(0),
             jobs: crate::jobs::JobRuntime::default(),
+            writers_waiting: AtomicUsize::new(0),
+            data_dir: OnceLock::new(),
         })
     }
 
@@ -124,6 +187,9 @@ impl App {
         let store = Arc::new(fc_storage::SqliteStore::open(path)?);
         let app = Self::new(AppDeps::with_store(store))
             .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+        if let Some(dir) = path.parent() {
+            app.set_data_dir(dir.to_path_buf());
+        }
         app.load_state()?;
         Ok(app)
     }
@@ -168,6 +234,23 @@ impl App {
     /// The store.
     pub(crate) fn store(&self) -> &Arc<dyn Store> {
         &self.store
+    }
+
+    /// Folder of the collection (app data: automatic backups go under it). Set by
+    /// [`App::open_sqlite`]; transports opening the store themselves call
+    /// [`App::set_data_dir`].
+    pub fn data_dir(&self) -> Option<&std::path::Path> {
+        self.data_dir.get().map(PathBuf::as_path)
+    }
+
+    /// Sets [`App::data_dir`] (first call wins).
+    pub fn set_data_dir(&self, dir: PathBuf) {
+        let _ = self.data_dir.set(dir);
+    }
+
+    /// Whether a command is waiting for the writer.
+    pub(crate) fn writers_waiting(&self) -> bool {
+        self.writers_waiting.load(Ordering::SeqCst) > 0
     }
 
     /// In-memory job state (cancel tokens, worker wake-up).
@@ -314,75 +397,208 @@ impl App {
                 h.run(params, &ctx)
             }
             ErasedHandler::Command(h) => {
-                h.validate(&params)?;
-                let now = self.clock.now();
-                let locale = self.locale();
-                let mut ids = self
-                    .ids
-                    .lock()
-                    .map_err(|_| AppError::api(ErrorCode::Internal, "id generator poisoned"))?;
-                let mut tx = self.store.write()?;
-                let batch_id = BatchId::generate(&mut **ids);
-                let mut ctx = CommandCtx {
-                    tx: &mut *tx,
-                    now,
-                    ids: &mut **ids,
-                    actor,
-                    locale,
-                    batch_id,
-                    batch_kind: OplogKind::Do,
-                    reverts_batch_id: None,
-                    registry: &self.registry,
-                    oplog: Vec::new(),
-                    events: Vec::new(),
-                };
-                let response = run_recorded(&mut ctx, d, h.as_ref(), method, params)?;
-                let oplog: Vec<PendingOplogEntry> = std::mem::take(&mut ctx.oplog)
-                    .into_iter()
-                    .flatten()
-                    .collect();
-                let events = std::mem::take(&mut ctx.events);
-                let (kind, reverts) = (ctx.batch_kind, ctx.reverts_batch_id);
-                let actor_json = serde_json::to_value(actor)
-                    .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
-                for (seq, entry) in oplog.into_iter().enumerate() {
-                    let record = OplogRecord {
-                        id: OplogId::generate(&mut **ids),
-                        batch_id,
-                        seq: u32::try_from(seq).unwrap_or(u32::MAX),
-                        command: entry.command,
-                        payload: entry.payload,
-                        inverse: serde_json::to_value(&entry.inverse)
-                            .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?,
-                        actor: actor_json.clone(),
-                        kind: match kind {
-                            OplogKind::Do => OplogRecordKind::Do,
-                            OplogKind::Undo => OplogRecordKind::Undo,
-                            OplogKind::Redo => OplogRecordKind::Redo,
-                        },
-                        reverts_batch_id: reverts,
-                        summary: serde_json::to_value(&entry.summary)
-                            .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?,
-                        created_at: now,
-                    };
-                    tx.append_oplog(&record)?;
-                }
-                tx.commit()?;
-                drop(ids);
-                self.apply_committed(&events);
-                for event in events {
-                    let envelope = EventEnvelope {
-                        seq: self.event_seq.fetch_add(1, Ordering::SeqCst),
-                        at: now,
-                        batch_id: Some(batch_id),
-                        event,
-                    };
-                    self.events.publish(&envelope);
-                }
-                Ok(response)
+                self.run_command(h.as_ref(), d, method, params, actor, OplogMode::Write)
             }
         }
     }
+
+    /// Runs a trusted command (see [`App::invoke_trusted`]) with its oplog entries going to
+    /// `mode` instead of being written as their own batch.
+    pub(crate) fn invoke_with(
+        &self,
+        request: &InvokeRequest,
+        actor: &Actor,
+        mode: OplogMode<'_>,
+    ) -> AppResult<Value> {
+        let method = request.method.as_str();
+        let name = parse_qualified_name(method).ok_or_else(|| unknown_method(method))?;
+        let entry = self
+            .registry
+            .entry(name)
+            .ok_or_else(|| unknown_method(method))?;
+        let d = &entry.descriptor;
+        if !self.is_module_enabled(d.module) {
+            return Err(AppError::Api(
+                ApiError::new(
+                    ErrorCode::ConflictModuleDisabled,
+                    format!("module {} is disabled", d.module),
+                )
+                .with_detail("module", d.module),
+            ));
+        }
+        let ErasedHandler::Command(h) = &entry.handler else {
+            return Err(AppError::api(
+                ErrorCode::ValidationInvalidParams,
+                format!("{method} is a query"),
+            ));
+        };
+        self.run_command(h.as_ref(), d, method, request.params.clone(), actor, mode)
+    }
+
+    /// A new, empty [`UndoGroup`].
+    pub(crate) fn begin_group(&self) -> AppResult<UndoGroup> {
+        let mut ids = self
+            .ids
+            .lock()
+            .map_err(|_| AppError::api(ErrorCode::Internal, "id generator poisoned"))?;
+        Ok(UndoGroup {
+            batch_id: BatchId::generate(&mut **ids),
+            pending: Vec::new(),
+        })
+    }
+
+    /// Writes the oplog entries of `group` as one batch (one undo step). `summary` replaces
+    /// the first entry's summary (what the undo UI shows for the whole group).
+    pub(crate) fn commit_group(
+        &self,
+        group: &UndoGroup,
+        actor: &Actor,
+        summary: Option<I18nMessage>,
+    ) -> AppResult<()> {
+        if group.pending.is_empty() {
+            return Ok(());
+        }
+        let mut entries = group.pending.clone();
+        if let (Some(first), Some(s)) = (entries.first_mut(), summary) {
+            first.summary = s;
+        }
+        let now = self.clock.now();
+        let mut ids = self
+            .ids
+            .lock()
+            .map_err(|_| AppError::api(ErrorCode::Internal, "id generator poisoned"))?;
+        let mut tx = self.store.write()?;
+        write_oplog(
+            &mut *tx,
+            &mut **ids,
+            entries,
+            (group.batch_id, OplogKind::Do, None),
+            actor,
+            now,
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Commands: write tx → handler (nested calls share tx and batch) → oplog entries (per
+    /// `mode`) → commit → publish events.
+    fn run_command(
+        &self,
+        h: &dyn ErasedCommand,
+        d: &MethodDescriptor,
+        method: &str,
+        params: Value,
+        actor: &Actor,
+        mode: OplogMode<'_>,
+    ) -> AppResult<Value> {
+        h.validate(&params)?;
+        let now = self.clock.now();
+        let locale = self.locale();
+        self.writers_waiting.fetch_add(1, Ordering::SeqCst);
+        let mut waiting = WaitingWriter(&self.writers_waiting, true);
+        let mut ids = self
+            .ids
+            .lock()
+            .map_err(|_| AppError::api(ErrorCode::Internal, "id generator poisoned"))?;
+        let mut tx = self.store.write()?;
+        waiting.acquired();
+        let batch_id = match &mode {
+            OplogMode::Defer(g) => g.batch_id,
+            _ => BatchId::generate(&mut **ids),
+        };
+        let mut ctx = CommandCtx {
+            tx: &mut *tx,
+            now,
+            ids: &mut **ids,
+            actor,
+            locale,
+            batch_id,
+            batch_kind: OplogKind::Do,
+            reverts_batch_id: None,
+            registry: &self.registry,
+            oplog: Vec::new(),
+            events: Vec::new(),
+        };
+        let response = run_recorded(&mut ctx, d, h, method, params)?;
+        let oplog: Vec<PendingOplogEntry> = std::mem::take(&mut ctx.oplog)
+            .into_iter()
+            .flatten()
+            .collect();
+        let events = std::mem::take(&mut ctx.events);
+        let (kind, reverts) = (ctx.batch_kind, ctx.reverts_batch_id);
+        match mode {
+            OplogMode::Write => write_oplog(
+                &mut *tx,
+                &mut **ids,
+                oplog,
+                (batch_id, kind, reverts),
+                actor,
+                now,
+            )?,
+            OplogMode::Defer(group) => {
+                tx.commit()?;
+                group.pending.extend(oplog);
+                drop(ids);
+                self.after_commit(events, now, batch_id);
+                return Ok(response);
+            }
+            OplogMode::Discard => {}
+        }
+        tx.commit()?;
+        drop(ids);
+        self.after_commit(events, now, batch_id);
+        Ok(response)
+    }
+
+    fn after_commit(&self, events: Vec<DomainEvent>, now: fc_core::Timestamp, batch_id: BatchId) {
+        self.apply_committed(&events);
+        for event in events {
+            let envelope = EventEnvelope {
+                seq: self.event_seq.fetch_add(1, Ordering::SeqCst),
+                at: now,
+                batch_id: Some(batch_id),
+                event,
+            };
+            self.events.publish(&envelope);
+        }
+    }
+}
+
+/// Appends `entries` as batch `batch` (`(id, kind, reverts)`), `seq` from 0.
+fn write_oplog(
+    tx: &mut dyn fc_storage::WriteTx,
+    ids: &mut dyn IdGen,
+    entries: Vec<PendingOplogEntry>,
+    batch: (BatchId, OplogKind, Option<BatchId>),
+    actor: &Actor,
+    now: fc_core::Timestamp,
+) -> AppResult<()> {
+    let (batch_id, kind, reverts) = batch;
+    let actor_json = serde_json::to_value(actor)
+        .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+    for (seq, entry) in entries.into_iter().enumerate() {
+        let record = OplogRecord {
+            id: OplogId::generate(ids),
+            batch_id,
+            seq: u32::try_from(seq).unwrap_or(u32::MAX),
+            command: entry.command,
+            payload: entry.payload,
+            inverse: serde_json::to_value(&entry.inverse)
+                .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?,
+            actor: actor_json.clone(),
+            kind: match kind {
+                OplogKind::Do => OplogRecordKind::Do,
+                OplogKind::Undo => OplogRecordKind::Undo,
+                OplogKind::Redo => OplogRecordKind::Redo,
+            },
+            reverts_batch_id: reverts,
+            summary: serde_json::to_value(&entry.summary)
+                .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?,
+            created_at: now,
+        };
+        tx.append_oplog(&record)?;
+    }
+    Ok(())
 }
 
 /// Locale from the `app.locale` setting (schema default `tr`).

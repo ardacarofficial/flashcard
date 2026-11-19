@@ -84,6 +84,79 @@ impl TextOptions {
     }
 }
 
+/// Text decoded from a file's bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Decoded {
+    /// The text (no BOM).
+    pub text: String,
+    /// Encoding used: `UTF-8`, `UTF-16LE`, `UTF-16BE` or `windows-1254`.
+    pub encoding: &'static str,
+}
+
+/// Decodes an import file whatever Windows wrote it as (Turkish Excel saves CSV as
+/// Windows-1254, "Unicode text" as UTF-16):
+///
+/// 1. a byte-order mark wins (UTF-8, UTF-16 LE/BE; the mark is removed);
+/// 2. BOM-less UTF-16 is recognised by its zero bytes (mostly at odd positions = LE, even =
+///    BE — true for Latin-script text);
+/// 3. valid UTF-8 is UTF-8;
+/// 4. anything else is Windows-1254 (a superset of Latin-1 for the printable range, so
+///    Western European files decode too, except the six Turkish-specific code points).
+///
+/// Never fails: malformed sequences become U+FFFD.
+pub fn decode(bytes: &[u8]) -> Decoded {
+    use encoding_rs::{Encoding, UTF_8, WINDOWS_1254};
+    if let Some((enc, bom)) = Encoding::for_bom(bytes) {
+        let (text, _) = enc.decode_without_bom_handling(&bytes[bom..]);
+        return Decoded {
+            text: text.into_owned(),
+            encoding: enc.name(),
+        };
+    }
+    // Before the UTF-8 check: ASCII-only UTF-16 is also valid UTF-8 (full of NULs).
+    let enc = match utf16_without_bom(bytes) {
+        Some(e) => e,
+        None => match std::str::from_utf8(bytes) {
+            Ok(s) => {
+                return Decoded {
+                    text: s.to_owned(),
+                    encoding: UTF_8.name(),
+                }
+            }
+            Err(_) => WINDOWS_1254,
+        },
+    };
+    let (text, _) = enc.decode_without_bom_handling(bytes);
+    Decoded {
+        text: text.into_owned(),
+        encoding: enc.name(),
+    }
+}
+
+/// UTF-16 without a BOM: an even length and at least 40% of the code units having a zero
+/// high byte at the same side, with almost none on the other.
+fn utf16_without_bom(bytes: &[u8]) -> Option<&'static encoding_rs::Encoding> {
+    if bytes.len() < 4 || bytes.len() % 2 != 0 {
+        return None;
+    }
+    let sample = &bytes[..bytes.len().min(64 * 1024)];
+    let units = sample.len() / 2;
+    let (mut even, mut odd) = (0usize, 0usize);
+    for pair in sample.chunks_exact(2) {
+        even += usize::from(pair[0] == 0);
+        odd += usize::from(pair[1] == 0);
+    }
+    let many = |n: usize| n * 10 >= units * 4;
+    let few = |n: usize| n * 20 <= units;
+    if many(odd) && few(even) {
+        Some(encoding_rs::UTF_16LE)
+    } else if many(even) && few(odd) {
+        Some(encoding_rs::UTF_16BE)
+    } else {
+        None
+    }
+}
+
 /// Strips a UTF-8 BOM and turns `\r\n` / `\r` into `\n`.
 pub fn normalize_newlines(text: &str) -> String {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
@@ -434,5 +507,9 @@ fn trailing_custom_separator(records: &[Vec<String>]) -> bool {
     hits * 2 > head.len()
 }
 
+#[cfg(test)]
+mod encoding_tests;
+#[cfg(test)]
+mod heldout_tests;
 #[cfg(test)]
 mod tests;

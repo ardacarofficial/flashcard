@@ -5,20 +5,25 @@
 //! ([`crate::jobs`]) read files and report progress, and one internal command per job writes
 //! the result:
 //!
-//! * **Import** = job `io.import` parses the source into a staged [`Staged`] value, then
-//!   invokes `io.import.apply` (internal), which writes everything in **one transaction and
-//!   one undo batch**. Its inverse is `io.import.trash` (soft-deletes what it created); updated
+//! * **Import** = job `io.import` parses the source into a staged [`import::Staged`] value,
+//!   then invokes `io.import.apply` (internal) once per chunk of ~500 rows, each in its own
+//!   short transaction (other commands get the writer in between), all recorded as **one undo
+//!   step**. A chunk's inverse is `io.import.trash` (soft-deletes what it created); updated
 //!   notes and created classification options go through nested `notes.update` /
-//!   `attributes.option.add` calls, which record their own inverses in the same batch. The
-//!   apply checks the job's cancel token as it goes: cancelling rolls the whole import back.
+//!   `attributes.option.add` calls with their own inverses. Cancelling (or a failure) rolls
+//!   the current chunk back and removes the committed ones (`io.import.discard`).
 //! * **Export / backup** = jobs reading one snapshot and writing a file.
-//! * **Restore** = job `io.backup.restore` writes a safety backup of the current state, then
-//!   invokes `io.backup.load` (internal), which replaces every table in one transaction.
+//! * **Restore** = job `io.backup.restore` brings the backup to the current schema in a
+//!   private database (later data migrations included), writes a safety backup of the current
+//!   state under the app data folder, then invokes `io.backup.load` (internal), which swaps
+//!   every table in one transaction (atomic on purpose: a half-restored collection must never
+//!   be visible). Media go through [`media::MediaStore`].
 
 mod apply;
 mod backup;
 mod export;
 mod import;
+mod media;
 mod preview;
 mod print;
 mod rows;
@@ -71,6 +76,7 @@ pub fn register(reg: &mut Registry) {
     reg.command::<IoImportApply>(apply::ApplyHandler(staging.clone()));
     reg.command::<IoImportTrash>(apply::trash);
     reg.command::<IoImportUntrash>(apply::untrash);
+    reg.command::<IoImportDiscard>(apply::discard);
     reg.command::<IoExportStart>(export::start);
     reg.command::<IoBackupCreate>(backup::create);
     reg.query::<IoBackupInspect>(backup::inspect);
@@ -86,18 +92,18 @@ pub fn register(reg: &mut Registry) {
 /// Data a job hands to its internal command (kept in memory, not in the oplog).
 #[derive(Default)]
 pub(crate) struct Staging {
-    imports: Mutex<HashMap<JobId, (import::Staged, CancelToken)>>,
-    restores: Mutex<HashMap<JobId, fc_interop::fcbackup::Backup>>,
+    imports: Mutex<HashMap<JobId, (apply::ApplyState, CancelToken)>>,
+    restores: Mutex<HashMap<JobId, backup::Restore>>,
 }
 
 impl Staging {
-    fn put_import(&self, job: JobId, staged: import::Staged, cancel: CancelToken) {
+    fn put_import(&self, job: JobId, staged: apply::ApplyState, cancel: CancelToken) {
         if let Ok(mut m) = self.imports.lock() {
             m.insert(job, (staged, cancel));
         }
     }
 
-    fn take_import(&self, job: JobId) -> AppResult<(import::Staged, CancelToken)> {
+    fn take_import(&self, job: JobId) -> AppResult<(apply::ApplyState, CancelToken)> {
         self.imports
             .lock()
             .ok()
@@ -105,13 +111,21 @@ impl Staging {
             .ok_or_else(|| AppError::api(ErrorCode::Internal, format!("nothing staged for {job}")))
     }
 
-    fn put_restore(&self, job: JobId, backup: fc_interop::fcbackup::Backup) {
+    /// Progress of a staged import between chunks (`None` = finished or unknown).
+    fn import_progress(&self, job: JobId) -> Option<f32> {
+        self.imports
+            .lock()
+            .ok()
+            .and_then(|m| m.get(&job).map(|(s, _)| s.progress()))
+    }
+
+    fn put_restore(&self, job: JobId, backup: backup::Restore) {
         if let Ok(mut m) = self.restores.lock() {
             m.insert(job, backup);
         }
     }
 
-    fn take_restore(&self, job: JobId) -> AppResult<fc_interop::fcbackup::Backup> {
+    fn take_restore(&self, job: JobId) -> AppResult<backup::Restore> {
         self.restores
             .lock()
             .ok()
@@ -207,11 +221,10 @@ pub(crate) fn text_options_dto(o: &TextOptions) -> TextOptionsDto {
     }
 }
 
-/// UTF-8 text of an import source (BOM tolerated; invalid UTF-8 is a format error).
-pub(crate) fn utf8(bytes: Vec<u8>) -> AppResult<String> {
-    String::from_utf8(bytes).map_err(|_| {
-        interop_err(InteropError::invalid("text", "the file is not UTF-8 text"))
-    })
+/// Text of an import source: UTF-8 (BOM stripped), UTF-16 LE/BE (BOM or detected), else
+/// Windows-1254 (Turkish Excel/Notepad on Windows); see [`fc_interop::text::decode`].
+pub(crate) fn decode_text(bytes: &[u8]) -> String {
+    fc_interop::text::decode(bytes).text
 }
 
 #[cfg(test)]

@@ -15,7 +15,7 @@
 //!
 //! Jobs left `queued`/`running` when the app closed are marked `interrupted` at startup.
 
-use crate::app::App;
+use crate::app::{App, OplogMode, UndoGroup};
 use crate::error::{AppError, AppResult};
 use fc_api::v1::common::I18nMessage;
 use fc_api::v1::events::DomainEvent;
@@ -129,6 +129,11 @@ impl JobContext<'_> {
         self.app.now()
     }
 
+    /// Folder of the collection (see [`App::data_dir`]).
+    pub fn data_dir(&self) -> Option<&std::path::Path> {
+        self.app.data_dir()
+    }
+
     /// UI locale.
     pub fn locale(&self) -> Locale {
         self.app.locale()
@@ -155,7 +160,92 @@ impl JobContext<'_> {
             .map_err(AppError::Api)?;
         serde_json::from_value(value).map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))
     }
+
+    /// Starts an undo step that spans several commands (each in its own transaction); see
+    /// [`UndoGroup`]. Nothing reaches the oplog until [`JobContext::commit_group`].
+    pub(crate) fn begin_group(&self) -> AppResult<UndoGroup> {
+        self.app.begin_group()
+    }
+
+    /// Like [`JobContext::invoke`] for a command, but its oplog entries join `group` instead
+    /// of becoming their own undo step.
+    pub(crate) fn invoke_in_group<M: ApiMethod>(
+        &self,
+        group: &mut UndoGroup,
+        request: &M::Request,
+    ) -> AppResult<M::Response> {
+        let value = self.app.invoke_with(
+            &request_of::<M>(request)?,
+            &Actor::System,
+            OplogMode::Defer(group),
+        )?;
+        serde_json::from_value(value).map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))
+    }
+
+    /// Runs a compensating command that records no undo step.
+    pub(crate) fn invoke_unlogged<M: ApiMethod>(
+        &self,
+        request: &M::Request,
+    ) -> AppResult<M::Response> {
+        let value = self.app.invoke_with(
+            &request_of::<M>(request)?,
+            &Actor::System,
+            OplogMode::Discard,
+        )?;
+        serde_json::from_value(value).map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))
+    }
+
+    /// Writes `group` as one undo step (retried briefly if the writer is busy).
+    pub(crate) fn commit_group(
+        &self,
+        group: &UndoGroup,
+        summary: Option<I18nMessage>,
+    ) -> AppResult<()> {
+        retry(|| {
+            self.app
+                .commit_group(group, &Actor::System, summary.clone())
+        })
+    }
+
+    /// Between chunks of a long job: lets commands waiting for the writer go first (up to
+    /// ~2 s), so a long import never makes study or editing time out.
+    pub(crate) fn yield_writer(&self) {
+        for _ in 0..2000 {
+            if !self.app.writers_waiting() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
 }
+
+fn request_of<M: ApiMethod>(request: &M::Request) -> AppResult<InvokeRequest> {
+    let params = serde_json::to_value(request)
+        .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+    Ok(InvokeRequest {
+        method: format!("{}.{}", fc_api::API_VERSION, M::NAME),
+        params,
+    })
+}
+
+/// Runs `f` up to [`RETRIES`] times while it fails (e.g. the writer stays busy past its
+/// timeout), pausing longer each time (~1.5 s in all).
+pub(crate) fn retry<T>(mut f: impl FnMut() -> AppResult<T>) -> AppResult<T> {
+    let mut last = None;
+    for attempt in 0..RETRIES {
+        match f() {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                last = Some(e);
+                std::thread::sleep(Duration::from_millis(50 << attempt.min(4)));
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| AppError::api(ErrorCode::Internal, "retry")))
+}
+
+/// Attempts of [`retry`].
+const RETRIES: u32 = 6;
 
 /// Implements one job kind. Registered by its module ([`crate::Registry::job`]).
 pub trait JobHandler: Send + Sync {
@@ -342,34 +432,37 @@ impl App {
             )),
         };
         self.job_runtime().finish(record.id);
-
-        let mut tx = self.store().write()?;
-        let mut done = tx.get_job(record.id)?.unwrap_or(record);
-        done.updated_at = self.now();
-        match outcome {
-            Ok(result) => {
-                done.status = "succeeded".into();
-                done.progress = Some(1.0);
-                done.result = Some(result);
-                done.error = None;
-            }
+        let (status, result, error) = match outcome {
+            Ok(result) => ("succeeded", Some(result), None),
             Err(e) => {
                 let api = e.into_api();
-                done.status =
-                    if token.is_cancelled() || api.code == ErrorCode::ConflictJobCancelled {
-                        "cancelled"
-                    } else {
-                        "failed"
-                    }
-                    .into();
-                done.error = Some(
-                    serde_json::to_value(&api)
-                        .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?,
-                );
+                let status = if token.is_cancelled() || api.code == ErrorCode::ConflictJobCancelled
+                {
+                    "cancelled"
+                } else {
+                    "failed"
+                };
+                let error = serde_json::to_value(&api)
+                    .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+                (status, None, Some(error))
             }
-        }
-        tx.upsert_job(&done)?;
-        tx.commit()?;
+        };
+        // The final status must land, or the job would show as running forever: retried while
+        // the writer is busy; failing that, the next start marks it interrupted.
+        let done = retry(|| {
+            let mut tx = self.store().write()?;
+            let mut done = tx.get_job(record.id)?.unwrap_or_else(|| record.clone());
+            done.updated_at = self.now();
+            done.status = status.into();
+            if status == "succeeded" {
+                done.progress = Some(1.0);
+            }
+            done.result = result.clone();
+            done.error = error.clone();
+            tx.upsert_job(&done)?;
+            tx.commit()?;
+            Ok(done)
+        })?;
         let dto = job_dto(&done)?;
         self.publish(vec![DomainEvent::JobProgress { job: dto.clone() }], None);
         Ok(Some(dto))

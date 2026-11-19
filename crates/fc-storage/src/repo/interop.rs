@@ -98,6 +98,25 @@ pub struct CollectionDump {
     pub tables: Vec<TableDump>,
 }
 
+/// Rows an unfinished import wrote, hard-deleted when it is discarded (cancel/failure between
+/// its chunks; see `io.import.discard`). Unlike trashing, nothing is left behind.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PurgeRows {
+    /// Decks.
+    pub decks: Vec<DeckId>,
+    /// Note types.
+    pub notetypes: Vec<NoteTypeId>,
+    /// Notes (with their cards, tags links, search rows and classification values).
+    pub notes: Vec<NoteId>,
+    /// Cards (with their review history and classification values).
+    pub cards: Vec<CardId>,
+    /// Classification definitions (with their values).
+    pub attribute_defs: Vec<AttributeDefId>,
+    /// Tags carried by the purged notes that were created at or after this time are deleted
+    /// too once no note references them (`None` = keep tags).
+    pub tags_created_since: Option<Timestamp>,
+}
+
 /// Import/export reads.
 pub trait InteropRead {
     /// Media metadata.
@@ -123,4 +142,6 @@ pub trait InteropWrite: InteropRead {
     /// columns missing from it take their defaults; media bytes are removed and re-added by
     /// the caller). Foreign keys are checked at commit. SQLite only.
     fn load_collection(&mut self, dump: &CollectionDump) -> StorageResult<()>;
+    /// Hard-deletes the rows of a discarded import (see [`PurgeRows`]).
+    fn purge_rows(&mut self, rows: &PurgeRows) -> StorageResult<()>;
 }

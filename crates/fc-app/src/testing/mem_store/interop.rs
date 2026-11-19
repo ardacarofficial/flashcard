@@ -69,4 +69,54 @@ impl InteropWrite for MemTx<'_> {
     fn load_collection(&mut self, _dump: &CollectionDump) -> StorageResult<()> {
         Err(StorageError::NotImplemented("MemStore::load_collection"))
     }
+
+    fn purge_rows(&mut self, rows: &PurgeRows) -> StorageResult<()> {
+        let s = self.m();
+        let mut cards: Vec<CardId> = rows.cards.clone();
+        cards.extend(
+            s.cards
+                .values()
+                .filter(|c| rows.notes.contains(&c.note_id))
+                .map(|c| c.id),
+        );
+        let mut tag_names: Vec<String> = Vec::new();
+        for id in &rows.notes {
+            if let Some(n) = s.notes.remove(id) {
+                tag_names.extend(n.tags.iter().map(|t| t.as_str().to_lowercase()));
+            }
+            s.search_text.remove(id);
+        }
+        for id in &cards {
+            s.cards.remove(id);
+        }
+        s.domains.interop.reviews.retain(|_, r| !cards.contains(&r.card_id));
+        s.attr_values.retain(|(attr, e, _)| {
+            !rows.attribute_defs.contains(attr)
+                && match e {
+                    EntityRef::Note(n) => !rows.notes.contains(n),
+                    EntityRef::Card(c) => !cards.contains(c),
+                }
+        });
+        for id in &rows.attribute_defs {
+            s.attr_defs.remove(id);
+        }
+        for id in &rows.decks {
+            s.decks.remove(id);
+        }
+        for id in &rows.notetypes {
+            s.notetypes.remove(id);
+        }
+        if let Some(since) = rows.tags_created_since {
+            let used: std::collections::HashSet<String> = s
+                .notes
+                .values()
+                .flat_map(|n| n.tags.iter().map(|t| t.as_str().to_lowercase()))
+                .collect();
+            s.tags.retain(|_, t| {
+                let name = t.name.as_str().to_lowercase();
+                !(tag_names.contains(&name) && t.created_at >= since && !used.contains(&name))
+            });
+        }
+        Ok(())
+    }
 }

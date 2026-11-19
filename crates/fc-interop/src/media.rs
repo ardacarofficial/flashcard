@@ -1,14 +1,18 @@
 //! Media references inside field HTML.
 //!
-//! Inside the collection a field refers to media by content hash: `<img src="fcmedia://<sha256>">`
-//! and `[sound:fcmedia://<sha256>]` (docs/03 §13: the frontend resolves `fcmedia://`, it never
-//! sees file paths). Foreign formats use file names (`<img src="cat.jpg">`, `[sound:a.mp3]`);
-//! importers and exporters translate with [`rewrite`].
+//! Inside the collection a field refers to media by content hash, `media:<sha256>` — the
+//! reference form of the collection's media store (docs/03 §13; v0.3): `<img src="media:<h>">`
+//! and `[sound:media:<h>]`. The UI serves the bytes through the `fcmedia://` protocol and
+//! never sees file paths. Foreign formats use file names (`<img src="cat.jpg">`,
+//! `[sound:a.mp3]`); importers and exporters translate with [`rewrite`]. References written
+//! by earlier builds (`fcmedia://<h>`) are still understood ([`hash_of`]).
 
 use sha2::{Digest, Sha256};
 
-/// URL scheme of collection media.
-pub const SCHEME: &str = "fcmedia://";
+/// Prefix of a collection media reference in field content.
+pub const SCHEME: &str = "media:";
+/// Older reference prefix (still read).
+const LEGACY_SCHEME: &str = "fcmedia://";
 
 /// Lowercase hex SHA-256 of `bytes` (the media id).
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -25,14 +29,17 @@ pub(crate) fn hex(bytes: &[u8]) -> String {
     s
 }
 
-/// `fcmedia://<hash>`.
+/// `media:<hash>`.
 pub fn media_url(hash: &str) -> String {
     format!("{SCHEME}{hash}")
 }
 
-/// The hash of an `fcmedia://` reference.
+/// The hash of a `media:<hash>` (or legacy `fcmedia://<hash>`) reference.
 pub fn hash_of(reference: &str) -> Option<&str> {
-    reference.strip_prefix(SCHEME)
+    reference
+        .strip_prefix(SCHEME)
+        .or_else(|| reference.strip_prefix(LEGACY_SCHEME))
+        .filter(|h| !h.is_empty())
 }
 
 /// Best-effort MIME type from a file name's extension.

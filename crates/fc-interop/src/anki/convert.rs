@@ -9,7 +9,7 @@
 //!   if present, else the interval), difficulty (FSRS `d`), suspension; cards in filtered
 //!   decks go back to their original deck;
 //! * review log entries with a rating become `review_log` rows (manual reschedules skipped);
-//! * media references are rewritten to `fcmedia://<sha256>`.
+//! * media references are rewritten to `media:<sha256>` ([`crate::media`]).
 //!
 //! Export ([`from_pack`]) is the reverse; Anki ids are allocated from creation times.
 
@@ -422,7 +422,8 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
                 },
                 flags: u32::try_from(ac.flags & 7).unwrap_or(0),
                 suspended: ac.queue == -1,
-                buried_until: None,
+                // Anki buries (−2 by sibling, −3 by hand) until the next day.
+                buried_until: matches!(ac.queue, -2 | -3).then_some(Timestamp(now.0 + DAY_MS)),
                 user_note: None,
                 created_at: created,
                 updated_at: ms(ac.modified.saturating_mul(1000), created),
@@ -692,7 +693,13 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
             ord,
             modified: c.updated_at.0.div_euclid(1000),
             ctype,
-            queue: if c.suspended { -1 } else { queue },
+            queue: if c.suspended {
+                -1
+            } else if include_scheduling && c.buried_until.is_some_and(|b| b > now) {
+                -3
+            } else {
+                queue
+            },
             due,
             ivl,
             factor,

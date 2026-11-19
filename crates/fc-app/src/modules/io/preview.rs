@@ -2,7 +2,7 @@
 //! package contents.
 
 use super::rows::{default_columns, effective_options};
-use super::{format_of, interop_err, read_file, text_options, text_options_dto, utf8};
+use super::{format_of, interop_err, read_file, text_options, text_options_dto, decode_text};
 use crate::error::AppResult;
 use crate::handler::QueryCtx;
 use crate::support::attrs::effective_for_deck;
@@ -108,7 +108,7 @@ pub(super) fn preview(req: PreviewImport, ctx: &QueryCtx<'_>) -> AppResult<Impor
     };
     Ok(match format {
         ImportFormat::Text | ImportFormat::Quizlet => {
-            let text = utf8(bytes)?;
+            let text = decode_text(&bytes);
             let given = req.text_options.as_ref().map(text_options);
             let (opts, confidence) = effective_options(given, &text, format);
             let records = parse_delimited(&text, &opts).map_err(interop_err)?;
@@ -124,7 +124,7 @@ pub(super) fn preview(req: PreviewImport, ctx: &QueryCtx<'_>) -> AppResult<Impor
             }
         }
         ImportFormat::Json => {
-            let doc = json::parse(&utf8(bytes)?).map_err(interop_err)?;
+            let doc = json::parse(&decode_text(&bytes)).map_err(interop_err)?;
             let rows: Vec<Vec<String>> = doc
                 .notes
                 .iter()

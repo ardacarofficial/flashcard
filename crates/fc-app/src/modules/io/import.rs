@@ -1,20 +1,23 @@
 //! `io.import.start` and the `io.import` job: read the source, parse it into a [`Staged`]
-//! value (cancellable between steps), then hand it to `io.import.apply`.
+//! value (cancellable between steps), then write it chunk by chunk through `io.import.apply`
+//! (see [`super::apply`]): one transaction per chunk, one undo step for the whole import.
 
 use super::rows::{self, RowsImport};
-use super::{format_of, interop_err, read_file, utf8, Staging, JOB_IMPORT};
+use super::{format_of, interop_err, read_file, decode_text, Staging, JOB_IMPORT};
 use crate::error::{AppError, AppResult};
 use crate::handler::{CommandCtx, CommandOutcome};
+use super::apply::{ApplyState, CHUNK_ROWS};
+use crate::app::UndoGroup;
 use crate::jobs::{enqueue, JobContext, JobHandler};
 use crate::support::decks::DeckIndex;
 use crate::support::notes::require_notetype;
 use crate::support::{deleted, invalid, summary};
 use fc_api::v1::io::*;
 use fc_api::v1::jobs::JobDto;
-use fc_api::v1::methods::{IoImportApply, IoImportStart};
+use fc_api::v1::methods::{IoImportApply, IoImportDiscard, IoImportStart};
 use fc_api::ErrorCode;
 use fc_core::notetype::builtin::CLASSIC_ID;
-use fc_core::DeckId;
+use fc_core::{DeckId, Timestamp};
 use fc_interop::pack::Pack;
 use fc_interop::{anki, fcpack};
 use serde_json::Value;
@@ -117,11 +120,11 @@ impl ImportJob {
                         .map(|f| f.key.0.clone())
                         .collect()
                 };
-                let text = utf8(bytes)?;
+                let text = decode_text(&bytes);
                 Staged::Rows(rows::from_text(req, &text, format, notetype_id, &keys)?)
             }
             ImportFormat::Json => {
-                Staged::Rows(rows::from_json(req, &utf8(bytes)?, notetype_id)?)
+                Staged::Rows(rows::from_json(req, &decode_text(&bytes), notetype_id)?)
             }
             ImportFormat::Anki => {
                 let col = anki::read_package(&bytes).map_err(interop_err)?;
@@ -176,12 +179,104 @@ impl JobHandler for ImportJob {
         ctx.report(Some(0.0), "io.progress.reading");
         let staged = self.stage(&req, ctx)?;
         ctx.cancel.check()?;
-        ctx.report(None, "io.progress.writing");
-        self.0.put_import(ctx.job_id, staged, ctx.cancel.clone());
-        let result = ctx.invoke::<IoImportApply>(&StagedJob { job_id: ctx.job_id });
-        // The apply takes the staged data; drop it if the call failed before that.
-        let _ = self.0.take_import(ctx.job_id);
-        let report = result?;
-        serde_json::to_value(report).map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))
+        ctx.report(Some(0.0), "io.progress.writing");
+        let job = ctx.job_id;
+        let since = ctx.now();
+        let knobs = knobs::get(job);
+        let chunk = knobs.as_ref().map_or(CHUNK_ROWS, |k| k.chunk_rows);
+        self.0
+            .put_import(job, ApplyState::new(staged, chunk), ctx.cancel.clone());
+        let mut group = ctx.begin_group()?;
+        let mut chunks = 0usize;
+        let outcome = loop {
+            if let Err(e) = ctx.cancel.check() {
+                break Err(e);
+            }
+            match ctx.invoke_in_group::<IoImportApply>(&mut group, &StagedJob { job_id: job }) {
+                Err(e) => break Err(e),
+                Ok(report) => {
+                    chunks += 1;
+                    if let Some(k) = &knobs {
+                        (k.after_chunk)(chunks, &ctx.cancel);
+                    }
+                    match self.0.import_progress(job) {
+                        None => break Ok(report),
+                        Some(p) => ctx.report(Some(p), "io.progress.writing"),
+                    }
+                    ctx.yield_writer();
+                }
+            }
+        };
+        // The apply takes the staged data; drop what is left after a failure or cancel.
+        let _ = self.0.take_import(job);
+        match outcome {
+            Ok(report) => {
+                let summary = summary::<IoImportApply>().param("count", report.added_notes);
+                if let Err(e) = ctx.commit_group(&group, Some(summary)) {
+                    // Undo history could not be written: remove the import rather than leave
+                    // rows nothing can undo.
+                    let _ = discard(ctx, &group, since);
+                    return Err(e);
+                }
+                serde_json::to_value(report)
+                    .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))
+            }
+            Err(e) => {
+                if let Err(d) = discard(ctx, &group, since) {
+                    // Could not remove the committed chunks: keep them undoable instead.
+                    let _ = ctx.commit_group(&group, None);
+                    return Err(d);
+                }
+                Err(e)
+            }
+        }
+    }
+}
+
+/// Reverts the committed chunks of an unfinished import (no undo step).
+fn discard(ctx: &JobContext<'_>, group: &UndoGroup, since: Timestamp) -> AppResult<()> {
+    if group.is_empty() {
+        return Ok(());
+    }
+    ctx.invoke_unlogged::<IoImportDiscard>(&DiscardImport {
+        calls: group.inverses_rev(),
+        since,
+    })?;
+    Ok(())
+}
+
+/// Test hooks of the import job, keyed by job id (chunk size, a callback after each chunk).
+pub(crate) mod knobs {
+    use crate::jobs::CancelToken;
+    use fc_core::JobId;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    /// Callback after each committed chunk.
+    pub(crate) type AfterChunk = Box<dyn Fn(usize, &CancelToken) + Send + Sync>;
+
+    /// Overrides for one job.
+    pub(crate) struct Knobs {
+        /// Units per chunk.
+        pub chunk_rows: usize,
+        /// Called after each committed chunk (1-based count) outside any transaction.
+        pub after_chunk: AfterChunk,
+    }
+
+    static KNOBS: Mutex<Option<HashMap<JobId, Arc<Knobs>>>> = Mutex::new(None);
+
+    /// Sets the knobs of `job` (tests).
+    #[cfg(test)]
+    pub(crate) fn set(job: JobId, knobs: Knobs) {
+        if let Ok(mut m) = KNOBS.lock() {
+            m.get_or_insert_with(HashMap::new).insert(job, Arc::new(knobs));
+        }
+    }
+
+    pub(super) fn get(job: JobId) -> Option<Arc<Knobs>> {
+        KNOBS
+            .lock()
+            .ok()
+            .and_then(|m| m.as_ref().and_then(|m| m.get(&job).cloned()))
     }
 }

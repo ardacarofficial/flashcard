@@ -162,7 +162,8 @@ pub(crate) fn collect_pack(
     }
     pack.cards = cards;
     for hash in media {
-        let (Some(record), Some(bytes)) = (reads.get_media(&hash)?, reads.media_bytes(&hash)?)
+        let store = super::media::media_store();
+        let (Some(record), Some(bytes)) = (store.record(reads, &hash)?, store.bytes(reads, &hash)?)
         else {
             continue;
         };

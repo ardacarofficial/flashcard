@@ -14,6 +14,7 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ### Değişti
 - `JobDto.result` ve `imported` / `collection_replaced` olayları eklendi (eklemeli).
+- **v0.5 inceleme düzeltmeleri:** büyük içe aktarma ~500 satırlık parçalarla kendi işlemlerinde yazılır (çalışırken çalışma/düzenleme komutları zaman aşımına uğramaz), yine tek geri al adımıdır; iptal işlenmiş parçaları iz bırakmadan kaldırır (`io.import.discard`). Zip/zstd bombalarına toplam bütçe. Windows-1254 ve UTF-16 metin dosyaları. Eski şemalı yedek geri yüklenirken sonraki migration'lardan geçirilir; güvenlik yedeği uygulama veri klasörüne yazılır. İş sonu durumu yazımı yeniden denenir. Anki gömülü kartları korunur. Medya `MediaStore` trait'i arkasında (v0.3 deposuna bağlanmaya hazır), alan referansı `media:<sha256>`. Ayırıcı algılama için ayrı tutulmuş örnek seti (40/46).
 
 ## [0.1.0] — Yayımlanmadı (inceleme bekliyor)
 

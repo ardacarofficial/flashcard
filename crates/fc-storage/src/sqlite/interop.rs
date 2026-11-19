@@ -4,7 +4,8 @@ use super::{all, count, enum_col, enum_str, exec, id, json_list, one, opt_id, ts
 use super::{Mode, SqliteTx, WriteMode};
 use crate::error::{StorageError, StorageResult};
 use crate::repo::{
-    CollectionDump, InteropRead, InteropWrite, MediaRecord, ReviewLogRecord, SqlValue, TableDump,
+    CollectionDump, InteropRead, InteropWrite, MediaRecord, PurgeRows, ReviewLogRecord, SqlValue,
+    TableDump,
 };
 use fc_core::CardId;
 use rusqlite::types::{Value, ValueRef};
@@ -332,7 +333,9 @@ impl InteropWrite for SqliteTx<'_, WriteMode> {
                 return Err(corrupt(format!("ragged rows in {}", t.name)));
             }
         }
-        conn.execute_batch("DELETE FROM media_blobs")?;
+        if crate::migrate::schema_object_exists(conn, "media_blobs")? {
+            conn.execute_batch("DELETE FROM media_blobs")?;
+        }
         for t in &current {
             conn.execute_batch(&format!("DELETE FROM {}", quote(&t.name)))?;
         }
@@ -358,4 +361,122 @@ impl InteropWrite for SqliteTx<'_, WriteMode> {
         }
         Ok(())
     }
+
+    fn purge_rows(&mut self, rows: &PurgeRows) -> StorageResult<()> {
+        let conn = self.conn();
+        conn.execute_batch("PRAGMA defer_foreign_keys = ON")?;
+        let notes = json_list(&rows.notes);
+        let cards = json_list(&rows.cards);
+        const NOTES: &str = "SELECT value FROM json_each(?1)";
+        let tags: Vec<String> = if rows.tags_created_since.is_some() {
+            let mut st = conn.prepare(&format!(
+                "SELECT DISTINCT tag_id FROM note_tags WHERE note_id IN ({NOTES})"
+            ))?;
+            let out = st
+                .query_map([&notes], |r| r.get(0))?
+                .collect::<Result<_, _>>()?;
+            out
+        } else {
+            Vec::new()
+        };
+        conn.execute(
+            &format!(
+                "DELETE FROM attribute_values
+                 WHERE (entity_kind = 'note' AND entity_id IN ({NOTES}))
+                    OR (entity_kind = 'card' AND (entity_id IN (SELECT value FROM json_each(?2))
+                        OR entity_id IN (SELECT id FROM cards WHERE note_id IN ({NOTES}))))"
+            ),
+            params![notes, cards],
+        )?;
+        conn.execute(
+            &format!(
+                "DELETE FROM notes_fts WHERE rowid IN
+                 (SELECT fts_rowid FROM notes WHERE id IN ({NOTES}) AND fts_rowid IS NOT NULL)"
+            ),
+            [&notes],
+        )?;
+        conn.execute(
+            &format!(
+                "DELETE FROM cards WHERE id IN (SELECT value FROM json_each(?2))
+                 OR note_id IN ({NOTES})"
+            ),
+            params![notes, cards],
+        )?;
+        conn.execute(
+            &format!("DELETE FROM notes WHERE id IN ({NOTES})"),
+            [&notes],
+        )?;
+        conn.execute(
+            &format!("DELETE FROM attribute_defs WHERE id IN ({NOTES})"),
+            [json_list(&rows.attribute_defs)],
+        )?;
+        conn.execute(
+            &format!("DELETE FROM decks WHERE id IN ({NOTES})"),
+            [json_list(&rows.decks)],
+        )?;
+        conn.execute(
+            &format!("DELETE FROM notetypes WHERE id IN ({NOTES})"),
+            [json_list(&rows.notetypes)],
+        )?;
+        if let Some(since) = rows.tags_created_since {
+            conn.execute(
+                &format!(
+                    "DELETE FROM tags WHERE id IN ({NOTES}) AND created_at >= ?2
+                     AND NOT EXISTS (SELECT 1 FROM note_tags WHERE tag_id = tags.id)"
+                ),
+                params![json_list(&tags), since.0],
+            )?;
+        }
+        Ok(())
+    }
+}
+
+/// Brings a dump taken at an older schema up to this build's schema (`.fcbackup` restore,
+/// docs/03 §15): loads it into a private in-memory database migrated only as far as the
+/// dump's own versions, runs the remaining migrations there (so data migrations such as
+/// re-folding search text apply to the restored rows), and dumps the result. A dump already
+/// at the current schema is returned as is. Fails if the dump has a migration this build
+/// does not know.
+pub fn upgrade_dump(dump: CollectionDump) -> StorageResult<CollectionDump> {
+    upgrade_dump_with(dump, crate::migrate::MIGRATIONS)
+}
+
+/// [`upgrade_dump`] against an explicit migration list (tests).
+pub fn upgrade_dump_with(
+    dump: CollectionDump,
+    migrations: &[crate::migrate::Migration],
+) -> StorageResult<CollectionDump> {
+    let all: Vec<u32> = migrations.iter().map(|m| m.version).collect();
+    if dump.schema_versions == all {
+        return Ok(dump);
+    }
+    let at: Vec<crate::migrate::Migration> = migrations
+        .iter()
+        .filter(|m| dump.schema_versions.contains(&m.version))
+        .copied()
+        .collect();
+    if at.len() != dump.schema_versions.len() {
+        return Err(corrupt(format!(
+            "unknown schema versions {:?}",
+            dump.schema_versions
+        )));
+    }
+    let mut conn = Connection::open_in_memory()?;
+    crate::migrate::configure_connection(&conn)?;
+    crate::migrate::migrate_with(&mut conn, &at)?;
+    {
+        let guard = std::sync::Mutex::new(conn);
+        {
+            let lock = guard.lock().map_err(|_| corrupt("poisoned"))?;
+            let mut tx = SqliteTx::<WriteMode>::begin(lock)?;
+            tx.load_collection(&dump)?;
+            crate::WriteTx::commit(Box::new(tx))?;
+        }
+        conn = guard.into_inner().map_err(|_| corrupt("poisoned"))?;
+    }
+    crate::migrate::migrate_with(&mut conn, migrations)?;
+    let guard = std::sync::Mutex::new(conn);
+    let lock = guard.lock().map_err(|_| corrupt("poisoned"))?;
+    let tx = SqliteTx::<WriteMode>::begin(lock)?;
+    tx.dump_collection()
 }

@@ -260,7 +260,33 @@ fn json_import_creates_decks_and_resolves_names() {
 
 #[test]
 fn import_is_one_undo_step_and_redoable() {
-    let t = TestApp::mem();
+    // One chunk, and one transaction per row: the undo step is the same.
+    for chunk in [super::apply::CHUNK_ROWS, 1] {
+        import_is_one_undo_step_and_redoable_with(TestApp::mem(), chunk);
+        import_is_one_undo_step_and_redoable_with(sqlite(), chunk);
+    }
+}
+
+/// Runs an import job with `chunk` units per transaction and an optional hook after each
+/// committed chunk.
+fn import_chunked(
+    t: &TestApp,
+    req: StartImport,
+    chunk: usize,
+    after_chunk: impl Fn(usize, &CancelToken) + Send + Sync + 'static,
+) -> JobDto {
+    let job = t.ok::<IoImportStart>(req);
+    super::import::knobs::set(
+        job.id,
+        super::import::knobs::Knobs {
+            chunk_rows: chunk,
+            after_chunk: Box::new(after_chunk),
+        },
+    );
+    finish(t, &job)
+}
+
+fn import_is_one_undo_step_and_redoable_with(t: TestApp, chunk: usize) {
     let d = deck(&t, "Base");
     t.ok::<NotesCreate>(CreateNote {
         notetype_id: CLASSIC_ID,
@@ -292,8 +318,27 @@ fn import_is_one_undo_step_and_redoable() {
     req.format = Some(ImportFormat::Json);
     req.create_missing_options = Some(true);
     req.duplicates = Some(DuplicatePolicy::Update);
-    let r = import(&t, req);
+    let batches = |t: &TestApp| -> std::collections::HashSet<_> {
+        t.ok::<OplogList>(Default::default())
+            .items
+            .iter()
+            .map(|e| e.batch_id)
+            .collect()
+    };
+    let batches_before = batches(&t);
+    let r: ImportReport = result(&import_chunked(&t, req, chunk, |_, _| {}));
     assert_eq!((r.added_notes, r.updated_notes, r.added_options, r.added_decks), (2, 1, 2, 2));
+    assert_eq!(
+        batches(&t).difference(&batches_before).count(),
+        1,
+        "one undo step whatever the chunking"
+    );
+    let status = t.ok::<OplogStatus>(Empty {});
+    assert_eq!(
+        status.undo_summary.unwrap().params.get("count"),
+        Some(&"2".to_string()),
+        "the step is summarized with the import's total"
+    );
     let after = live_notes(&t.store);
     assert_eq!(after.len(), 3);
 
@@ -345,7 +390,7 @@ fn staged_rows(deck: DeckId, n: usize) -> Staged {
 }
 
 #[test]
-fn cancelling_in_the_middle_of_writing_rolls_everything_back() {
+fn cancelling_in_the_middle_of_a_chunk_rolls_the_chunk_back() {
     let t = TestApp::mem();
     let d = deck(&t, "Base");
     t.ok::<AttributesDefine>(DefineAttribute {
@@ -363,7 +408,11 @@ fn cancelling_in_the_middle_of_writing_rolls_everything_back() {
     let staging = super::Staging::default();
     let job = JobId::from_uuid(fc_core::id::uuid_v7_from_parts(fc_core::Timestamp(1), &[7; 10]));
     // The third cancel check happens after 64 rows (decks, notes, options) were written.
-    staging.put_import(job, staged_rows(d.id, 200), CancelToken::cancelling_at_check(3));
+    staging.put_import(
+        job,
+        super::apply::ApplyState::new(staged_rows(d.id, 200), super::apply::CHUNK_ROWS),
+        CancelToken::cancelling_at_check(3),
+    );
     let staging = Arc::new(staging);
     let mut reg = crate::Registry::new();
     crate::modules::register_all(&mut reg);
@@ -400,6 +449,225 @@ fn cancelling_in_the_middle_of_writing_rolls_everything_back() {
     assert_eq!(live_notes(&t.store).len(), 0);
     assert_eq!(t.ok::<DecksList>(Empty {}).decks.len(), 1);
     assert_eq!(t.ok::<OplogList>(Default::default()).items.len(), oplog_before);
+}
+
+
+/// Everything but the `jobs` table (whose row records the job itself).
+fn collection(t: &TestApp) -> fc_storage::repo::CollectionDump {
+    let mut d = t.store.read().unwrap().dump_collection().unwrap();
+    d.tables.retain(|t| t.name != "jobs");
+    d
+}
+
+fn level_attribute(t: &TestApp) {
+    t.ok::<AttributesDefine>(DefineAttribute {
+        scope_deck_id: None,
+        key: Some("level".into()),
+        name: "Level".into(),
+        kind: AttributeKind::Enum,
+        target: None,
+        required: None,
+        options: vec![NewAttributeOption {
+            label: "Z".into(),
+            color: None,
+        }],
+    });
+}
+
+/// JSON rows: decks, new tags, unknown classification labels, one update of `keep`.
+fn json_rows(n: usize) -> String {
+    let mut rows: Vec<String> = (0..n)
+        .map(|i| {
+            format!(
+                r#"{{"deck":"Big::D{}","fields":{{"front":"q{i}","back":"a"}},"tags":["t{}"],"attributes":{{"level":"L{}"}}}}"#,
+                i % 4,
+                i % 5,
+                i % 7
+            )
+        })
+        .collect();
+    rows.insert(n / 2, r#"{"deck":"Base","fields":{"front":"keep","back":"changed"}}"#.into());
+    format!("[{}]", rows.join(","))
+}
+
+fn json_import(text: String, d: DeckId) -> StartImport {
+    let mut req = text_import(&text, d);
+    req.format = Some(ImportFormat::Json);
+    req.create_missing_options = Some(true);
+    req.duplicates = Some(DuplicatePolicy::Update);
+    req
+}
+
+#[test]
+fn cancel_after_committed_chunks_leaves_no_trace() {
+    for t in [sqlite(), TestApp::mem()] {
+        let d = deck(&t, "Base");
+        level_attribute(&t);
+        t.ok::<NotesCreate>(CreateNote {
+            notetype_id: CLASSIC_ID,
+            deck_id: d.id,
+            fields: [("front".into(), "keep".into()), ("back".into(), "me".into())].into(),
+            tags: vec!["t1".into()],
+            attributes: vec![],
+            allow_duplicate: None,
+        });
+        let sql = t.store.read().unwrap().dump_collection().is_ok();
+        let before = sql.then(|| collection(&t));
+        let notes_before = live_notes(&t.store);
+        let undo_before = t.ok::<OplogStatus>(Empty {});
+        // 120 rows, 10 per chunk; cancelled once 4 chunks (with the update of `keep`, new
+        // decks, tags and options) are committed.
+        let job = import_chunked(&t, json_import(json_rows(120), d.id), 10, |n, cancel| {
+            if n == 7 {
+                cancel.cancel();
+            }
+        });
+        assert_eq!(job.status, JobStatus::Cancelled);
+        assert_eq!(job.error.unwrap().code, ErrorCode::ConflictJobCancelled);
+        // Exactly as before: no notes, decks, tags or options left, nothing in the trash, no
+        // undo step. (Rows the import had touched — `keep`, the classification it added
+        // options to — carry a later `updated_at`, as after an undo; their content is equal.)
+        if let Some(before) = before {
+            assert_eq!(without_updated_at(collection(&t)), without_updated_at(before));
+        }
+        let content = |notes: &[Note]| {
+            notes.iter().map(|n| (n.id, n.fields.clone(), n.tags.clone())).collect::<Vec<_>>()
+        };
+        assert_eq!(content(&live_notes(&t.store)), content(&notes_before));
+        let tx = t.store.read().unwrap();
+        assert_eq!(tx.list_decks(true).unwrap().len(), 1);
+        assert_eq!(tx.list_tags().unwrap().len(), 1);
+        drop(tx);
+        let after = t.ok::<OplogStatus>(Empty {});
+        assert_eq!(after.undo_summary, undo_before.undo_summary);
+    }
+}
+
+#[test]
+fn commands_run_while_a_large_import_writes_and_undo_is_still_exact() {
+    let t = sqlite();
+    let d = deck(&t, "Base");
+    level_attribute(&t);
+    let before = collection(&t);
+    let job = t.ok::<IoImportStart>(json_import(json_rows(600), d.id));
+    let chunks = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let (tx, rx) = std::sync::mpsc::channel::<usize>();
+    let tx = std::sync::Mutex::new(tx);
+    let counter = chunks.clone();
+    super::import::knobs::set(
+        job.id,
+        super::import::knobs::Knobs {
+            chunk_rows: 20,
+            after_chunk: Box::new(move |n, _| {
+                counter.store(n, std::sync::atomic::Ordering::SeqCst);
+                if let Ok(tx) = tx.lock() {
+                    let _ = tx.send(n);
+                }
+            }),
+        },
+    );
+    let app = Arc::new(t.app);
+    let worker = {
+        let app = app.clone();
+        std::thread::spawn(move || app.run_pending_jobs().unwrap())
+    };
+    // Once the import is under way, ordinary commands go through between its chunks.
+    rx.recv().unwrap();
+    let user = fc_api::v1::oplog::Actor::User;
+    let mut seen = Vec::new();
+    for i in 0..3 {
+        let started = std::time::Instant::now();
+        app.call::<NotesCreate>(
+            &CreateNote {
+                notetype_id: CLASSIC_ID,
+                deck_id: d.id,
+                fields: [("front".into(), format!("mine{i}")), ("back".into(), "x".into())]
+                    .into(),
+                tags: vec![],
+                attributes: vec![],
+                allow_duplicate: None,
+            },
+            &user,
+        )
+        .unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_secs(4));
+        seen.push(chunks.load(std::sync::atomic::Ordering::SeqCst));
+    }
+    assert!(
+        *seen.last().unwrap() < 30,
+        "the commands ran while the import was still writing (chunks seen: {seen:?})"
+    );
+    assert_eq!(worker.join().unwrap(), 1);
+    let done = app
+        .call::<JobsGet>(&JobRef { id: job.id }, &user)
+        .unwrap();
+    let r: ImportReport = result(&done);
+    assert_eq!(r.added_notes, 601);
+    assert!(chunks.load(std::sync::atomic::Ordering::SeqCst) >= 30);
+    assert_eq!(count_live(&t.store), 601 + 3);
+
+    // One undo removes the import — and only the import: the three notes made meanwhile
+    // stay.
+    app.call::<OplogUndo>(&Empty {}, &user).unwrap();
+    let mine: Vec<_> = live_notes(&t.store)
+        .into_iter()
+        .map(|n| fields(&n).0)
+        .collect();
+    assert_eq!(mine, vec!["mine0", "mine1", "mine2"]);
+    // Undoing the three notes too gives back the collection as it was, apart from rows the
+    // import's undo trashes (soft delete) — compare the live view.
+    for _ in 0..3 {
+        app.call::<OplogUndo>(&Empty {}, &user).unwrap();
+    }
+    let live = |d: &fc_storage::repo::CollectionDump| {
+        d.tables
+            .iter()
+            .filter(|t| t.name == "attribute_defs")
+            .map(|t| t.rows.len())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(live(&collection_of(&t.store)), live(&before));
+    assert!(live_notes(&t.store).is_empty());
+    let decks = app.call::<DecksList>(&Empty {}, &user).unwrap().decks;
+    assert_eq!(decks.into_iter().map(|d| d.path).collect::<Vec<_>>(), vec!["Base"]);
+}
+
+fn count_live(store: &Arc<dyn Store>) -> usize {
+    let tx = store.read().unwrap();
+    let mut n = 0;
+    let mut cursor = None;
+    loop {
+        let page = tx
+            .list_notes(
+                &NoteFilter::default(),
+                &fc_core::paging::PageRequest {
+                    cursor,
+                    limit: Some(1000),
+                },
+            )
+            .unwrap();
+        n += page.items.len();
+        match page.next_cursor {
+            Some(c) => cursor = Some(c),
+            None => return n,
+        }
+    }
+}
+
+/// A dump with every `updated_at` column blanked.
+fn without_updated_at(mut d: fc_storage::repo::CollectionDump) -> fc_storage::repo::CollectionDump {
+    for t in &mut d.tables {
+        if let Some(i) = t.columns.iter().position(|c| c == "updated_at") {
+            for r in &mut t.rows {
+                r[i] = fc_storage::repo::SqlValue::Null;
+            }
+        }
+    }
+    d
+}
+
+fn collection_of(store: &Arc<dyn Store>) -> fc_storage::repo::CollectionDump {
+    store.read().unwrap().dump_collection().unwrap()
 }
 
 #[test]
@@ -644,6 +912,8 @@ fn fcpack_preserves_classifications_exactly() {
 fn backup_delete_restore_preserves_everything() {
     let dir = tempfile::tempdir().unwrap();
     let t = sqlite();
+    let app_data = dir.path().join("app-data");
+    t.app.set_data_dir(app_data.clone());
     // Rich state: Anki import (media, history, cloze), classifications, settings, oplog.
     let src = write_tmp(
         &dir,
@@ -702,8 +972,10 @@ fn backup_delete_restore_preserves_everything() {
         .iter()
         .any(|e| matches!(e.event, fc_api::v1::events::DomainEvent::CollectionReplaced)));
 
-    // The automatic safety backup holds the deleted state.
+    // The automatic safety backup holds the deleted state; it goes to the app data folder
+    // (the backup's own folder may be read-only).
     assert!(std::path::Path::new(&rr.safety_backup_path).exists());
+    assert!(std::path::Path::new(&rr.safety_backup_path).starts_with(app_data.join("backups")));
     let job = t.ok::<IoBackupRestore>(RestoreBackup {
         path: rr.safety_backup_path.clone(),
         safety_backup_path: Some(dir.path().join("s2.fcbackup").to_string_lossy().into_owned()),
@@ -804,4 +1076,50 @@ fn start_validates_requests() {
         t.err::<IoImportStart>(text_import("a,b", d.id)).code,
         ErrorCode::ConflictModuleDisabled
     );
+}
+
+#[test]
+fn restoring_an_older_schema_backup_migrates_it_forward() {
+    let dir = tempfile::tempdir().unwrap();
+    let t = sqlite();
+    let d = deck(&t, "Old");
+    import(&t, text_import("bir\tone\niki\ttwo", d.id));
+    let before = collection(&t);
+    let path = dir.path().join("b.fcbackup");
+    let job = t.ok::<IoBackupCreate>(CreateBackup {
+        path: path.to_string_lossy().into_owned(),
+    });
+    result::<ExportReport>(&finish(&t, &job));
+    // Rewrite it as a backup from a build that only had migration 0001.
+    let b = fc_interop::fcbackup::read(&std::fs::read(&path).unwrap()).unwrap();
+    let mut dump: fc_storage::repo::CollectionDump = serde_json::from_slice(&b.collection).unwrap();
+    dump.schema_versions = vec![1];
+    let mut manifest = b.manifest.clone();
+    manifest.schema_versions = vec![1];
+    let w = fc_interop::fcbackup::BackupWriter::new(&manifest, &serde_json::to_vec(&dump).unwrap())
+        .unwrap();
+    let old = write_tmp(&dir, "old.fcbackup", &w.finish().unwrap());
+    t.ok::<DecksDelete>(DeckRef { id: d.id });
+    let job = t.ok::<IoBackupRestore>(RestoreBackup {
+        path: old.to_string_lossy().into_owned(),
+        safety_backup_path: Some(dir.path().join("s.fcbackup").to_string_lossy().into_owned()),
+    });
+    result::<RestoreReport>(&finish(&t, &job));
+    let after = collection(&t);
+    assert_eq!(after.schema_versions, before.schema_versions);
+    assert_eq!(after, before);
+}
+
+#[test]
+fn final_job_status_is_retried() {
+    let calls = std::sync::atomic::AtomicU32::new(0);
+    let r = crate::jobs::retry(|| {
+        if calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 2 {
+            Err(crate::error::AppError::api(ErrorCode::Internal, "busy"))
+        } else {
+            Ok(7)
+        }
+    });
+    assert_eq!(r.unwrap(), 7);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 3);
 }
