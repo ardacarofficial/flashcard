@@ -62,7 +62,8 @@
       "repeat": "Yanlışları tekrar çalış",
       "back": "Tamam"
     },
-    "keys": "Boşluk: göster · 1–4: puanla · H: ipucu · S: askıya al · B: göm · Z: geri al · Esc: bitir"
+    "keys": "Boşluk: göster · 1–4: puanla · 1–9: seçenek seç · H: ipucu · S: askıya al · B: göm · Ctrl+1–7: bayrak · Z: geri al · Esc: bitir",
+    "choices": "Seçenekler"
   },
   "settings": {
     "study": {

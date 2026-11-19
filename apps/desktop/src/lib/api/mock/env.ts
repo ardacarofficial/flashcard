@@ -107,6 +107,8 @@ const attrs: AttributeDefDto[] = [
   },
 ];
 const notes: NoteDto[] = [];
+/** Flag bits per card id (`cards.set_flag` writes, card views read). */
+const cardFlags = new Map<string, number>();
 
 const tree = (parent: string | null): DeckTreeNode[] =>
   decks
@@ -149,6 +151,7 @@ const sameName = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleL
     decks,
     attrs,
     notes,
+    cardFlags,
     pathOf,
     addDeck,
     tree,

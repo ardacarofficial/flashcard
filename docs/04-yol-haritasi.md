@@ -73,6 +73,8 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [x] Bir oturum tamamen klavyeyle yürütülebilir.
 
 > **Doğrulama (`feat/v0.2-study`):** (1) `fc-study/src/scheduler/tests.rs`: FSRS-6 formüllerinin spesifikasyondan yazılmış bağımsız f64 uygulamasıyla 365 günlük simülasyonlar (adımlı/adımsız, 4 tohum) her geçişte kararlılık/zorluk/aralık uyumu + ilk tekrar referans değerleri; `fc-app/src/modules/study/tests.rs::simulation_365_days` uygulama düzeyinde sabit saatle bir yıl, kart durumu `review_log`'dan birebir yeniden hesaplanır, iki koşu aynı. (2) `answer_undo_redo_is_exact`, `sibling_burying_is_undone_exactly`: geri alınca kartın **tüm** sütunları (gömülen kardeş dahil) eşit, `review_log` satırı silinir, oturum kartı yeniden gösterir; yinele birebir. (3) `trial_mode_never_changes_cards`: deneme oturumu (ipucu, kontrol, adımlar, geri al dahil) sonrası `cards` tablosunun tamamı aynı, `review_log` `mode = "trial"`. Hepsi MemStore + SQLite bellek + SQLite dosyada. (4) `apps/desktop/src/lib/features/study/StudyScreen.test.ts`: başlat → ipucu → göster → puanla → geri al → … → özet → yanlışları tekrar → geri dön, yalnızca tuş basışlarıyla. **Not:** FSRS-7 yerine FSRS-6 (bkz. 08 K10).
+>
+> **Faz 2 entegrasyonu (v0.2 × v0.3):** çalışma kartları v0.3 kart türü motoruyla çizilir (temizlenmiş HTML), boş kartlar atlanır, yazarak türler v0.2 kontrolcüleriyle, seçmeli kartlar motorla değerlendirilir, preset günlük limitleri uygulanır, bayraklar Anki numaralamasıyla gösterilir; uçtan uca `fc-app/src/phase2_tests.rs` (bkz. 10 §13).
 
 ## 🧩 v0.3 · Kart türleri ve içerik
 

@@ -33,6 +33,17 @@ describe('study keymap', () => {
     expect(keyAction('answer', { key: '3', altKey: true })).toBeNull();
     expect(keyAction('question', { key: '3' })).toBeNull();
   });
+
+  it('picks choice options and toggles flags', () => {
+    expect(keyAction('question', { key: '2' }, false, { choices: 3 })).toEqual({ kind: 'choose', index: 1 });
+    expect(keyAction('question', { key: '4' }, false, { choices: 3 })).toBeNull();
+    expect(keyAction('answer', { key: '2' }, false, { choices: 3 })).toEqual({ kind: 'rate', rating: 'hard' });
+    expect(keyAction('answer', { key: '7', ctrlKey: true }, false, { flags: true })).toEqual({ kind: 'flag', flag: 7 });
+    expect(keyAction('question', { key: '5', metaKey: true }, false, { flags: true })).toEqual({ kind: 'flag', flag: 5 });
+    expect(keyAction('question', { key: '8', ctrlKey: true }, false, { flags: true })).toBeNull();
+    expect(keyAction('idle', { key: '1', ctrlKey: true }, false, { flags: true })).toBeNull();
+    expect(keyAction('answer', { key: '3', ctrlKey: true }, false, { flags: false })).toBeNull();
+  });
 });
 
 describe('interval labels', () => {

@@ -72,6 +72,24 @@ impl StudyRead for MemTx<'_> {
         out.sort_by_key(|r| (r.created_at, r.id));
         Ok(out)
     }
+
+    fn review_logs_since(
+        &self,
+        since: Timestamp,
+        mode: &str,
+    ) -> StorageResult<Vec<ReviewLogRecord>> {
+        let mut out: Vec<ReviewLogRecord> = self
+            .s()
+            .domains
+            .study
+            .reviews
+            .values()
+            .filter(|r| r.created_at >= since && r.mode == mode)
+            .cloned()
+            .collect();
+        out.sort_by_key(|r| (r.created_at, r.id));
+        Ok(out)
+    }
 }
 
 impl StudyWrite for MemTx<'_> {

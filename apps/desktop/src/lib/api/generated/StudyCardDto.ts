@@ -4,6 +4,7 @@ import type { CardState } from "./CardState";
 import type { DeckId } from "./DeckId";
 import type { IntervalPreview } from "./IntervalPreview";
 import type { NoteId } from "./NoteId";
+import type { RenderedSides } from "./RenderedSides";
 
 /**
  * The card on screen. Sides are **plain text** (display as text, never as HTML).
@@ -26,15 +27,17 @@ deck_id: DeckId,
  */
 state: CardState, 
 /**
- * Question side.
+ * The card rendered by its card type engine (`cards.render`): sanitized question and
+ * answer HTML, scoped CSS, interaction (self-grade / type / choice), TTS.
  */
-question: string, 
+sides: RenderedSides, 
 /**
- * Answer side (without the repeated question).
+ * Flag bits (`cards.flags`; flag `n` = bit `n - 1`, Anki numbering, names and colors
+ * from `flags.list`).
  */
-answer: string, 
+flags: number, 
 /**
- * Show an input for typing the answer (template `{{type:…}}` or `study.type_answer`).
+ * Show an input for typing the answer (a typing card type, or `study.type_answer`).
  */
 type_answer: boolean, 
 /**

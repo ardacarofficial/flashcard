@@ -6,7 +6,7 @@
 //! more (AI meaning check — v0.8). The checker only **suggests** a rating
 //! ([`Grade::suggested_rating`]); the user decides unless auto-grading is on.
 
-use crate::render::html_to_text;
+use crate::text::html_to_text;
 use fc_core::card::Rating;
 use fc_providers::strategy::{
     AnswerChecker, AnswerVerdict, DiffSpan, DiffSpanKind, StrategyResult,

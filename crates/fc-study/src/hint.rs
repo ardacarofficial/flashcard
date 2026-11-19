@@ -3,7 +3,7 @@
 //! `None` once the next level would give the whole answer away. Field hints (show another
 //! field) are resolved by the app; AI hints come with v0.8.
 
-use crate::render::html_to_text;
+use crate::text::html_to_text;
 use fc_providers::strategy::{HintStrategy, StrategyResult};
 use fc_providers::ProviderInfo;
 use serde::{Deserialize, Serialize};

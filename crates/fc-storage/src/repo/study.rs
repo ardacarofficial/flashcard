@@ -86,6 +86,9 @@ pub trait StudyRead {
     fn get_review_log(&self, id: ReviewLogId) -> StorageResult<Option<ReviewLogRecord>>;
     /// Reviews of a card, oldest first.
     fn review_logs_for_card(&self, card: CardId) -> StorageResult<Vec<ReviewLogRecord>>;
+    /// Reviews written at or after `since` with `mode`, oldest first (daily limits).
+    fn review_logs_since(&self, since: Timestamp, mode: &str)
+        -> StorageResult<Vec<ReviewLogRecord>>;
 }
 
 /// Study writes.

@@ -4,12 +4,16 @@
   import type {
     AnswerCheckDto,
     AttributeDefDto,
+    FlagDto,
     Rating,
     SessionDto,
     SessionSummary,
     StartSession,
   } from '$lib/api/types';
-  import { t } from '$lib/i18n/index.svelte';
+  import { t, td } from '$lib/i18n/index.svelte';
+  import CardView from '../cards/CardView.svelte';
+  import { defaultFlagKey, flagColor, hasFlag } from '../cards/flags';
+  import { moduleOn, trackModules } from '../cards/modules.svelte';
   import type { ScreenCtx } from '../types';
   import { intervalLabel, tzOffsetMins } from './format';
   import { keyAction, RATINGS, type StudyAction, type StudyPhase } from './keys';
@@ -33,15 +37,38 @@
   let shownAt = 0;
   let revealedAt: number | null = null;
   let input = $state<HTMLInputElement | null>(null);
+  /** Flag names/colors (`flags.list`, Anki numbering from `card_flag_defs`). */
+  let flagDefs = $state<FlagDto[]>([]);
+  /** Picked option of a choice card. */
+  let picked = $state<number | null>(null);
 
   const card = $derived(session?.current ?? null);
+  const choice = $derived(card?.sides.interaction.kind === 'choice' ? card.sides.interaction : null);
+  const cardFlags = $derived(
+    card && moduleOn('flags') ? flagDefs.filter((f) => hasFlag(card.flags, f.flag)) : [],
+  );
   const phase = $derived<StudyPhase>(summary ? 'done' : card ? (revealed ? 'answer' : 'question') : 'idle');
   const filterDef = $derived(attrs.find((a) => a.id === filterAttr) ?? null);
 
   onMount(() => {
+    trackModules();
     void ctx.guarded(async () => {
       resumable = (await api.call('study.active', {})).session;
     });
+  });
+
+  async function loadFlags() {
+    try {
+      flagDefs = moduleOn('flags') ? (await api.call('flags.list', {})).flags : [];
+    } catch {
+      flagDefs = [];
+    }
+  }
+
+  $effect(() => {
+    void loadFlags();
+    const unsub = api.on(['flags_changed', 'module_toggled', 'undone', 'redone'], () => void loadFlags());
+    return () => void unsub.then((u) => u());
   });
 
   // Classifications of the selected deck feed the custom-session filter.
@@ -70,6 +97,7 @@
     hint = null;
     typed = '';
     check = null;
+    picked = null;
     shownAt = Date.now();
     revealedAt = null;
   }
@@ -115,13 +143,35 @@
     await settle(await api.call('study.session', { session_id: id }));
   }
 
+  /** Refreshes the shown card's data (flags) without leaving the answer side. */
+  async function refresh() {
+    if (!session) return;
+    const s = await api.call('study.session', { session_id: session.id });
+    if (s.current && s.current.card_id === card?.card_id) session = s;
+    else await settle(s);
+  }
+
   async function checkTyped() {
     if (!session || !card || typed.trim() === '') return;
     check = await api.call('study.check_answer', {
       session_id: session.id,
       card_id: card.card_id,
       given: typed,
+      choice: null,
     });
+  }
+
+  /** Picks an option of a choice card: the card type engine judges it, then the answer shows. */
+  async function choose(index: number) {
+    if (!session || !card || !choice || revealed) return;
+    picked = index;
+    check = await api.call('study.check_answer', {
+      session_id: session.id,
+      card_id: card.card_id,
+      given: '',
+      choice: index,
+    });
+    await reveal();
   }
 
   async function reveal() {
@@ -158,6 +208,14 @@
             return reveal();
           case 'rate':
             return rate(a.rating);
+          case 'choose':
+            return choose(a.index);
+          case 'flag':
+            if (c) {
+              await api.call('cards.set_flag', { ids: [c.card_id], flag: a.flag, on: !hasFlag(c.flags, a.flag) });
+              await refresh();
+            }
+            return;
           case 'hint':
             if (s && c) {
               const h = await api.call('study.hint', { session_id: s.id, card_id: c.card_id });
@@ -215,7 +273,10 @@
     const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
     // Buttons handle their own Enter/Space; keep shortcuts working everywhere else.
     if (tag === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
-    const action = keyAction(phase, e, typing);
+    const action = keyAction(phase, e, typing, {
+      choices: choice?.options.length ?? 0,
+      flags: moduleOn('flags'),
+    });
     if (!action) return;
     e.preventDefault();
     if (typing) el?.blur();
@@ -321,10 +382,28 @@
     <div class="meta muted">
       <span>{t('study.remaining', session.counts)}</span>
       {#if session.mode === 'trial'}<span class="badge">{t('study.practice_badge')}</span>{/if}
+      {#each cardFlags as f (f.flag)}
+        <span class="flag" style:--flag={flagColor(f)} data-testid="flag">{f.name ?? td(defaultFlagKey(f.flag))}</span>
+      {/each}
     </div>
-    <div class="card">
-      <p class="side" data-testid="question">{card.question}</p>
+    <div class="stage">
+      <CardView sides={card.sides} showAnswer={revealed} interactive={false} testid={revealed ? 'answer' : 'question'} />
       {#if hint && !revealed}<p class="hint muted" data-testid="hint">{hint}</p>{/if}
+      {#if choice}
+        <div class="choices" role="group" aria-label={t('study.choices')}>
+          {#each choice.options as option, i (i)}
+            <button
+              class:right={revealed && i === choice.correct}
+              class:wrong={revealed && picked === i && i !== choice.correct}
+              disabled={revealed}
+              onclick={() => void run({ kind: 'choose', index: i })}
+            >
+              <span>{@html option}</span>
+              <kbd>{i + 1}</kbd>
+            </button>
+          {/each}
+        </div>
+      {/if}
       {#if card.type_answer}
         <input
           bind:this={input}
@@ -336,7 +415,6 @@
         />
       {/if}
       {#if revealed}
-        <hr />
         {#if check}
           <p class="check {check.grade}" role="status">
             {t(`study.grade.${check.grade}`)}:
@@ -344,7 +422,6 @@
           </p>
           {#if check.grade !== 'correct'}<p class="muted">{t('study.expected', { text: check.expected })}</p>{/if}
         {/if}
-        <p class="side" data-testid="answer">{card.answer}</p>
       {/if}
     </div>
 
@@ -382,22 +459,37 @@
     max-width: 720px;
   }
   .panel,
-  .card {
+  .stage {
     display: flex;
     flex-direction: column;
     gap: var(--fc-space-3);
   }
-  .card {
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    padding: var(--fc-space-6);
-    background: var(--fc-surface);
+  .stage {
     margin: var(--fc-space-3) 0;
   }
-  .side {
-    white-space: pre-wrap;
+  .stage :global(.card) {
     font-size: 1.4em;
-    margin: 0;
+    padding: var(--fc-space-6);
+  }
+  .choices {
+    display: flex;
+    flex-direction: column;
+    gap: var(--fc-space-2);
+  }
+  .choices button {
+    display: flex;
+    justify-content: space-between;
+    text-align: left;
+  }
+  .choices .right {
+    border-color: var(--fc-success);
+  }
+  .choices .wrong {
+    border-color: var(--fc-danger);
+  }
+  .flag {
+    border-left: 0.6em solid var(--flag);
+    padding-left: var(--fc-space-1);
   }
   .row {
     display: flex;

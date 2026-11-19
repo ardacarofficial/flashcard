@@ -12,8 +12,13 @@
     showAnswer?: boolean;
     /** Called when a `[[link]]` to another note is clicked. */
     onopennote?: (id: string) => void;
+    /** Draw the card's own answer controls (choices, typing box). Off when the host (the
+     * study screen) owns answering. */
+    interactive?: boolean;
+    /** `data-testid` of the card body. */
+    testid?: string;
   }
-  let { sides, showAnswer = false, onopennote }: Props = $props();
+  let { sides, showAnswer = false, onopennote, interactive = true, testid }: Props = $props();
 
   const scope = `fc-card-${Math.random().toString(36).slice(2, 10)}`;
   let el = $state<HTMLElement | null>(null);
@@ -63,11 +68,13 @@
 {@html `<style>${scopeCss(sides.css, scope)}</style>`}
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="card {scope}" bind:this={el} {onclick}>
+<div class="card {scope}" bind:this={el} {onclick} data-testid={testid}>
   {@html html}
 </div>
 
-{#if sides.interaction.kind === 'choice' && !showAnswer}
+{#if !interactive}
+  <!-- answering is the host's -->
+{:else if sides.interaction.kind === 'choice' && !showAnswer}
   <div class="choices">
     {#each sides.interaction.options as option, i (i)}
       <button

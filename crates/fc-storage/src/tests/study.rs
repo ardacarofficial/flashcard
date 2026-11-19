@@ -151,6 +151,24 @@ fn review_log_roundtrip_order_and_delete() {
         fx.read(|r| r.review_logs_for_card(card_id).unwrap()),
         vec![r2.clone(), r1.clone()]
     );
+    // Daily-limit read: since a time, one mode, oldest first.
+    let mut r3 = review(3, 300);
+    r3.card_id = card_id;
+    r3.mode = "trial".into();
+    fx.write(|tx| tx.insert_review_log(&r3).unwrap());
+    assert_eq!(
+        fx.read(|r| r.review_logs_since(Timestamp(100), "normal").unwrap()),
+        vec![r2.clone(), r1.clone()]
+    );
+    assert_eq!(
+        fx.read(|r| r.review_logs_since(Timestamp(101), "normal").unwrap()),
+        vec![r1.clone()]
+    );
+    assert_eq!(
+        fx.read(|r| r.review_logs_since(Timestamp(0), "trial").unwrap()),
+        vec![r3.clone()]
+    );
+    fx.write(|tx| assert!(tx.delete_review_log(rid(3)).unwrap()));
     assert_eq!(
         fx.read(|r| r.get_review_log(rid(1)).unwrap()),
         Some(r1.clone())

@@ -4,6 +4,14 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased]
 
+### Faz 2 entegrasyonu — tur 1 (v0.2 + v0.3, `feat/phase2-integration`)
+- **Çalışma kartları kart türü motoruyla çizilir:** `StudyCardDto` artık `sides` (temizlenmiş HTML, CSS, etkileşim, TTS) ve `flags` taşır; düz metin `question/answer` ve `fc_study::render` kalktı (`fc_study::text::html_to_text` kaldı). Çalışma ekranı `CardView` ile medya, KaTeX, kod ve not türü CSS'ini gösterir.
+- **Boş kartlar** (silinen cloze/maske) kuyruğa girmez, oturumda atlanır, puanlanamaz.
+- **Cevap kontrolü motor üzerinden:** yazarak türler v0.2 kontrolcüleriyle, çoktan seçmeli motorla (`CheckAnswer.choice`); soruda 1–9 seçenek seçer.
+- **Preset günlük limitleri:** normal oturum `new_per_day`/`reviews_per_day`'den bugün çalışılanı düşer (`StudyRead::review_logs_since`, `BuildOptions.review_limit`).
+- **Bayraklar çalışmada:** Anki numaralı adlar/renkler (`flags.list`), Ctrl/⌘+1–7 aç/kapa.
+- **Testler:** `phase2_tests.rs` uçtan uca (cloze + klasik + Seviye → çalış → puanla → geri al birebir; deneme modu `cards`'ı değiştirmez; günlük limitler) × 3 depo; `review_logs_since` depolama testi; `review_limit` kuyruk testi; tuş haritası ve bayrak bileşen testi.
+
 ### Eklendi — v0.2 Çalışma çekirdeği (İz A, `feat/v0.2-study`)
 - **`fc-study` (yeni saf crate):** FSRS zamanlayıcı (`fsrs-rs` 7, **FSRS-6** modeli, varsayılan ağırlıklar; ağırlıklar preset'ten değiştirilebilir) ve SM-2 yedeği aynı `Scheduler` arayüzünün arkasında; Anki uyumlu öğrenme/yeniden öğrenme adımları (adım `due - last_review`'dan çıkarılır, şema değişmez); cevap kontrolcüleri (birebir, normalize — Türkçe harf eşdeğerliği ayarlı —, yazım toleranslı, çoklu cevap; `doğru/neredeyse/yanlış` + fark); ipucu stratejileri (ilk harfler, kelime başları, kısmi); çalışma kuyruğu (öğrenme → vadesi gelen → yeni, kardeş gömme, sıralama, tohumlu karıştırma); çalışma günü sınırı (yerel saat + devir saati; FSRS'in `elapsed_days`'i takvim günüdür, vade gün başına hizalanır). G/Ç yok; saflık betiği artık bu crate'i de denetler.
 - **`study` modülü (fc-app):** kalıcı oturum motoru (`sessions`, çökme kurtarma: `study.active`), `study.start/session/answer/hint/check_answer/end/summary`, `study.suspend/bury/postpone`, `study.card_history` (geçmiş + hatırlama olasılığı), iç ters metot `study.restore`. Puanlama tek adımda geri alınır: kart sütunları, gömülen kardeşler, oturum durumu ve `review_log` satırı birebir döner. Deneme modu `review_log`'a `mode = "trial"` yazar, `cards`'a hiç dokunmaz. Yanlışları tekrar (mistakes) oturumu, sınıflandırmaya göre özel oturum (yapılı filtre; v0.4 sorgu dili gelince bağlanacak), cevap süresi (istemci bildirir, arka uç kendi saatiyle sınırlar). Ayarlar: zamanlayıcı, oturum başına yeni kart, sıra, kardeş gömme, yazarak cevap, cevap kontrolcüsü, Türkçe eşdeğerlik, otomatik puanlama, ipucu türü, gün başlangıç saati.

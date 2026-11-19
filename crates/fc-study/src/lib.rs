@@ -14,13 +14,13 @@
 //! * [`session`]: the study queue — building it from candidate cards, picking the next card,
 //!   re-queueing intraday learning cards.
 //! * [`day`]: the study-day boundary (local rollover hour).
-//! * [`render`]: a minimal, HTML-escaping `{{field}}` renderer used until the card type
-//!   engines of v0.3 take over.
+//! * [`text`]: plain text of (sanitized) card HTML for checkers and hints; rendering is
+//!   v0.3's card type engines.
 #![forbid(unsafe_code)]
 
 pub mod answer;
 pub mod day;
 pub mod hint;
-pub mod render;
 pub mod scheduler;
 pub mod session;
+pub mod text;

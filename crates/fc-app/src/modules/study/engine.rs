@@ -1,9 +1,14 @@
 //! Shared machinery of the study handlers: settings, scheduler parameters, session
-//! persistence, card rendering, snapshots and the session DTO.
+//! persistence, card rendering (through v0.3's card type engines), snapshots and the
+//! session DTO.
 
 use super::*;
 use crate::error::{AppError, AppResult};
 use crate::settings::resolve_stored;
+use crate::handler::{CommandCtx, QueryCtx};
+use crate::registry::Registry;
+use crate::support::content::{self, card_seed, CardRender, RenderSetup};
+use crate::support::notes::{require_note, require_notetype};
 use crate::support::{deleted, err_id, from_json};
 use fc_api::v1::study::*;
 use fc_api::{ApiError, ErrorCode};
@@ -11,16 +16,20 @@ use fc_core::card::{Card, CardState, SchedulingState};
 use fc_core::preset::PresetConfig;
 use fc_core::settings::SettingScope;
 use fc_core::time::MILLIS_PER_DAY;
-use fc_core::{CardId, DeckId, SessionId, Timestamp};
-use fc_providers::strategy::{ReviewOutcome, Scheduler, SchedulerParams, StrategyError};
+use fc_core::i18n::Locale;
+use fc_core::notetype::NoteType;
+use fc_core::{CardId, DeckId, NoteId, NoteTypeId, SessionId, Timestamp};
+use fc_providers::strategy::{
+    Interaction, ReviewOutcome, Scheduler, SchedulerParams, StrategyError,
+};
 use fc_storage::repo::SessionRecord;
 use fc_storage::Reads;
-use fc_study::render::{answer_part, render};
+use fc_study::text::html_to_text;
 use fc_study::scheduler::{self, DEFAULT_MAXIMUM_INTERVAL_DAYS, RATINGS};
 use fc_study::session::{self as queue, SessionState, LEARN_AHEAD_MS};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 // ------------------------------------------------------------------ settings
 
@@ -85,14 +94,23 @@ pub(super) fn params_for_deck(
     if let Some(p) = cache.get(&deck) {
         return Ok(p.clone());
     }
-    let preset = match reads.get_deck(deck)?.and_then(|d| d.preset_id) {
+    let p = params_from_preset(&preset_of(reads, Some(deck))?);
+    cache.insert(deck, p.clone());
+    Ok(p)
+}
+
+/// Preset options of `deck` (its own preset; the defaults when it has none or for the whole
+/// collection). v0.4 owns the `presets.*` commands; study only reads.
+pub(super) fn preset_of(reads: &dyn Reads, deck: Option<DeckId>) -> AppResult<PresetConfig> {
+    let id = match deck {
+        Some(d) => reads.get_deck(d)?.and_then(|d| d.preset_id),
+        None => None,
+    };
+    Ok(match id {
         Some(id) => reads.get_preset(id)?.map(|p| p.config),
         None => None,
     }
-    .unwrap_or_default();
-    let p = params_from_preset(&preset);
-    cache.insert(deck, p.clone());
-    Ok(p)
+    .unwrap_or_default())
 }
 
 fn params_from_preset(preset: &PresetConfig) -> SchedulerParams {
@@ -218,13 +236,7 @@ impl Session {
                         .is_none_or(|d| d <= now.plus_millis(LEARN_AHEAD_MS))
             });
         if !available {
-            return Err(AppError::Api(
-                ApiError::new(
-                    ErrorCode::ConflictNotCurrentCard,
-                    format!("card {card} is not available in this session"),
-                )
-                .with_detail("card_id", card.to_string()),
-            ));
+            return Err(not_available(card));
         }
         Ok(())
     }
@@ -238,6 +250,17 @@ impl Session {
             StudyMode::Scheduled => card.scheduling.clone(),
         }
     }
+}
+
+/// `CONFLICT_NOT_CURRENT_CARD` for `card`.
+pub(super) fn not_available(card: CardId) -> AppError {
+    AppError::Api(
+        ApiError::new(
+            ErrorCode::ConflictNotCurrentCard,
+            format!("card {card} is not available in this session"),
+        )
+        .with_detail("card_id", card.to_string()),
+    )
 }
 
 /// Database form of a study kind.
@@ -304,40 +327,118 @@ pub(super) fn apply_snapshot(card: &mut Card, snap: &CardStudySnapshot) {
     card.updated_at = snap.updated_at;
 }
 
-/// Rendered sides of a card: `(question, answer, expected typed answer, template asks for
-/// typing)`.
-pub(super) struct Rendered {
-    pub question: String,
-    pub answer: String,
-    pub expected: String,
-    pub template_types: bool,
+/// What rendering needs: reads plus the card type engines and the UI locale.
+#[derive(Clone, Copy)]
+pub(super) struct View<'a> {
+    pub reads: &'a dyn Reads,
+    pub registry: &'a Registry,
+    pub locale: Locale,
 }
 
-pub(super) fn render_card(reads: &dyn Reads, card: &Card) -> AppResult<Rendered> {
-    let note = crate::support::notes::require_note(reads, card.note_id)?;
-    let nt = crate::support::notes::require_notetype(reads, note.notetype_id)?;
-    let fields: std::collections::BTreeMap<String, String> = note
-        .fields
-        .iter()
-        .map(|(k, v)| (k.as_str().to_owned(), v.clone()))
-        .collect();
-    let Some(template) = nt.templates.iter().find(|t| t.key == card.template_key) else {
-        // Unknown template (v0.3 card types): show the sort field rather than nothing.
-        return Ok(Rendered {
-            question: note.sort_field.clone(),
-            answer: String::new(),
-            expected: String::new(),
-            template_types: false,
-        });
+impl<'a> View<'a> {
+    pub fn cmd(ctx: &'a CommandCtx<'_>) -> Self {
+        Self {
+            reads: ctx.reads(),
+            registry: ctx.registry,
+            locale: ctx.locale,
+        }
+    }
+
+    pub fn query(ctx: &'a QueryCtx<'_>) -> Self {
+        Self {
+            reads: ctx.tx,
+            registry: ctx.registry,
+            locale: ctx.locale,
+        }
+    }
+}
+
+/// A card rendered by its card type engine (v0.3), plus what study derives from it.
+pub(super) struct StudyRender {
+    pub card: CardRender,
+    /// Text hints and typed-answer checks compare with: the engine's expected answer for
+    /// typing card types, else the text of the answer part.
+    pub expected: String,
+    /// The card type asks for typing.
+    pub types: bool,
+}
+
+pub(super) fn render_for_study(v: View<'_>, card: &Card) -> AppResult<StudyRender> {
+    let note = require_note(v.reads, card.note_id)?;
+    let nt = require_notetype(v.reads, note.notetype_id)?;
+    let r = content::render_card(
+        v.registry,
+        v.reads,
+        &nt,
+        &note,
+        &card.template_key,
+        &RenderSetup {
+            deck: Some(card.deck_id),
+            seed: card_seed(card.id),
+            locale: v.locale,
+        },
+    )?;
+    let (expected, types) = match &r.raw.interaction {
+        Interaction::Type { expected } => (expected.clone(), true),
+        Interaction::SelfGrade | Interaction::Choice { .. } => (answer_text(&r.sides.answer), false),
     };
-    let q = render(&template.front, &fields, None);
-    let a = render(answer_part(&template.back), &fields, Some(&q.text));
-    Ok(Rendered {
-        expected: q.type_answer.clone().unwrap_or_else(|| a.text.clone()),
-        template_types: q.type_answer.is_some(),
-        question: q.text,
-        answer: a.text,
+    Ok(StudyRender {
+        card: r,
+        expected,
+        types,
     })
+}
+
+/// Text of the answer part of (sanitized) answer HTML: what follows the rule that separates
+/// the repeated question (`<hr class="fc-answer">`, else the first `<hr>` — the v0.1 / Anki
+/// `<hr id="answer">` loses its id in sanitizing); the whole side when there is none.
+pub(super) fn answer_text(html: &str) -> String {
+    let after_tag = |i: usize| html[i..].find('>').map(|j| &html[i + j + 1..]);
+    let rest = html
+        .find("fc-answer")
+        .and_then(after_tag)
+        .or_else(|| html.find("<hr").and_then(after_tag))
+        .unwrap_or(html);
+    html_to_text(rest)
+}
+
+/// Whether cards are **empty** (v0.3: the note no longer yields them — a removed cloze
+/// number or mask, an optional reverse switched off). Study never shows them. Caches the
+/// card keys per note.
+pub(super) struct EmptyCards<'a> {
+    view: View<'a>,
+    keys: HashMap<NoteId, BTreeSet<String>>,
+    notetypes: HashMap<NoteTypeId, NoteType>,
+}
+
+impl<'a> EmptyCards<'a> {
+    pub fn new(view: View<'a>) -> Self {
+        Self {
+            view,
+            keys: HashMap::new(),
+            notetypes: HashMap::new(),
+        }
+    }
+
+    pub fn is_empty(&mut self, card: &Card) -> AppResult<bool> {
+        if let Some(keys) = self.keys.get(&card.note_id) {
+            return Ok(!keys.contains(&card.template_key));
+        }
+        let note = require_note(self.view.reads, card.note_id)?;
+        let nt = match self.notetypes.entry(note.notetype_id) {
+            std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(require_notetype(self.view.reads, note.notetype_id)?)
+            }
+        };
+        let keys: BTreeSet<String> = content::card_specs(self.view.registry, nt, &note)?
+            .into_iter()
+            .map(|s| s.template_key)
+            .collect();
+        let empty = !keys.contains(&card.template_key);
+        self.keys.insert(card.note_id, keys);
+        Ok(empty)
+    }
 }
 
 /// Interval previews of the four buttons.
@@ -378,19 +479,21 @@ pub(super) fn requeue_at(state: &SchedulingState, day_end: Timestamp) -> Option<
 }
 
 /// The session as the study screen sees it at `now`.
-pub(super) fn session_dto(reads: &dyn Reads, s: &Session, now: Timestamp) -> AppResult<SessionDto> {
-    // Cards deleted since the queue was built are skipped (a query cannot rewrite the
-    // session; the next answer persists the queue without them).
+pub(super) fn session_dto(v: View<'_>, s: &Session, now: Timestamp) -> AppResult<SessionDto> {
+    let reads = v.reads;
+    // Cards deleted or emptied (v0.3) since the queue was built are skipped (a query cannot
+    // rewrite the session; the next answer persists the queue without them).
     let mut view = s.clone();
     let mut live = None;
+    let mut empty = EmptyCards::new(v);
     while let Some(entry) = view.current(now) {
         let id = entry.card_id;
         match require_live_card(reads, id) {
-            Ok(card) => {
+            Ok(card) if !empty.is_empty(&card)? => {
                 live = Some(card);
                 break;
             }
-            Err(_) => {
+            _ => {
                 queue::remove_cards(&mut view.state, &[id]);
             }
         }
@@ -401,17 +504,20 @@ pub(super) fn session_dto(reads: &dyn Reads, s: &Session, now: Timestamp) -> App
         Some(card) => {
             let state = s.scheduling_of(&card);
             let params = s.config.params(reads, card.deck_id)?;
-            let rendered = render_card(reads, &card)?;
-            let type_setting = setting_bool(reads, &SettingScope::Deck(card.deck_id), TYPE_ANSWER)?;
+            let rendered = render_for_study(v, &card)?;
+            // Choice cards are answered by picking, never by typing.
+            let choice = matches!(rendered.card.raw.interaction, Interaction::Choice { .. });
+            let type_setting = !choice
+                && setting_bool(reads, &SettingScope::Deck(card.deck_id), TYPE_ANSWER)?;
             Some(StudyCardDto {
                 card_id: card.id,
                 note_id: card.note_id,
                 deck_id: card.deck_id,
                 state: state.state,
                 intervals: previews(scheduler(reads)?, &state, now, &params)?,
-                type_answer: rendered.template_types || type_setting,
-                question: rendered.question,
-                answer: rendered.answer,
+                type_answer: rendered.types || type_setting,
+                flags: card.flags,
+                sides: rendered.card.sides,
                 hints_used: if s.state.hint_card == Some(card.id) {
                     s.state.hints
                 } else {

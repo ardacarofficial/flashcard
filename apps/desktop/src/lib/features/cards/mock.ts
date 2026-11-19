@@ -36,7 +36,7 @@ export default {
     module('math', []),
     module('code_highlight', []),
   ],
-  handlers: ({ notes, emit }: MockEnv) => {
+  handlers: ({ notes, emit, cardFlags }: MockEnv) => {
     const types: NoteTypeDto[] = [classic()];
     const media = new Map<string, { dto: MediaDto; data: string }>();
     const flags: FlagDto[] = ['red', 'orange', 'green', 'blue', 'pink', 'turquoise', 'purple'].map((color, i) => ({
@@ -62,7 +62,7 @@ export default {
         template_name: c.template_key,
         card_type: 'classic',
         deck_id: c.deck_id,
-        flags: 0,
+        flags: cardFlags.get(c.id) ?? 0,
         user_note: null,
         empty: false,
       };
@@ -121,6 +121,7 @@ export default {
           const m = metaOf(card);
           m.flags = on ? m.flags | (1 << (flag - 1)) : m.flags & ~(1 << (flag - 1));
           meta.set(id, m);
+          cardFlags.set(id, m.flags);
           return { id, flags: m.flags };
         });
         emit({ type: 'cards_updated', data: { ids } });

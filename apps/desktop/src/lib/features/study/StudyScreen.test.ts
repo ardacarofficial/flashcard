@@ -4,7 +4,7 @@
  * end-of-session summary, repeat mistakes, back.
  */
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { api, CLASSIC_NOTETYPE_ID } from '$lib/api';
 import { i18n } from '$lib/i18n/index.svelte';
 import type { ScreenCtx } from '../types';
@@ -27,9 +27,14 @@ function ctx(deck: string | null): ScreenCtx {
 
 /** Presses a key once the previous action has fully settled (the screen ignores keys while
  * a call is in flight, so a double press never rates twice). */
-async function key(k: string) {
+async function key(k: string, mods: { ctrlKey?: boolean } = {}) {
   await new Promise((r) => setTimeout(r, 0));
-  await fireEvent.keyDown(window, { key: k });
+  await fireEvent.keyDown(window, { key: k, ...mods });
+}
+
+/** Waits until the card side `id` (`question` / `answer`, rendered HTML) reads `text`. */
+async function side(id: 'question' | 'answer', text: string) {
+  await waitFor(() => expect(screen.getByTestId(id).textContent?.trim()).toBe(text));
 }
 
 describe('study screen', () => {
@@ -48,22 +53,21 @@ describe('study screen', () => {
     await screen.findByRole('button', { name: /Study now/ });
 
     await key('Enter'); // start
-    expect((await screen.findByTestId('question')).textContent).toBe('dog');
+    await side('question', 'dog');
     expect(screen.queryByTestId('answer')).toBeNull();
 
     await key('h'); // hint
     expect((await screen.findByTestId('hint')).textContent).toBe('k____');
 
     await key(' '); // reveal
-    expect((await screen.findByTestId('answer')).textContent).toBe('köpek');
+    await side('answer', 'köpek');
     await screen.findByText('10m'); // interval shown above "Good"
 
     await key('1'); // again → dog goes to the back
-    expect((await screen.findByTestId('question')).textContent).toBe('cat');
+    await side('question', 'cat');
 
     await key('z'); // undo → dog again
-    await screen.findByText('dog');
-    expect(screen.getByTestId('question').textContent).toBe('dog');
+    await side('question', 'dog');
 
     await key(' ');
     await screen.findByTestId('answer');
@@ -84,7 +88,7 @@ describe('study screen', () => {
     expect(screen.getByText('Accuracy: 67%')).toBeTruthy();
 
     await key('r'); // repeat mistakes: only "dog"
-    expect((await screen.findByTestId('question')).textContent).toBe('dog');
+    await side('question', 'dog');
     await key(' ');
     await screen.findByTestId('answer');
     await key('4');
@@ -92,6 +96,29 @@ describe('study screen', () => {
 
     await key('Enter'); // back to the start panel
     await screen.findByRole('button', { name: /Study now/ });
+  });
+
+  it('shows and toggles flags with Ctrl+1–7 (Anki numbering)', async () => {
+    const deck = await api.call('decks.create', { path: 'Bayrak', parent_id: null });
+    await api.call('notes.create', {
+      notetype_id: CLASSIC_NOTETYPE_ID,
+      deck_id: deck.id,
+      fields: { front: 'flag me', back: 'bayrak' },
+      tags: [],
+      attributes: [],
+    });
+    render(StudyScreen, { ctx: ctx(deck.id) });
+    await screen.findByRole('button', { name: /Study now/ });
+    await key('Enter');
+    await side('question', 'flag me');
+    expect(screen.queryByTestId('flag')).toBeNull();
+    await key('7', { ctrlKey: true }); // flag 7 = purple
+    expect((await screen.findByTestId('flag')).textContent).toBe('Purple');
+    await key(' '); // the answer side keeps the flag
+    await side('answer', 'bayrak');
+    await key('7', { ctrlKey: true }); // off again, still on the answer
+    await waitFor(() => expect(screen.queryByTestId('flag')).toBeNull());
+    expect(screen.getByTestId('answer')).toBeTruthy();
   });
 
   it('Escape ends a session early', async () => {

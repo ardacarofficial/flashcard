@@ -14,7 +14,10 @@ use fc_core::rng::SplitMix64;
 use fc_core::settings::SettingScope;
 use fc_core::{CardId, ReviewLogId, SessionId, Timestamp};
 use fc_storage::repo::{CardFilter, ReviewLogRecord, SessionRecord, StudyCardFilter};
+use fc_api::v1::cardtypes::CardInteraction;
+use fc_providers::strategy::{CardResponse, Evaluation};
 use fc_study::answer::{check, CheckOptions, CheckerKind, Grade};
+use fc_study::text::html_to_text;
 use fc_study::day::MAX_TZ_OFFSET_MINS;
 use fc_study::hint::HintKind;
 use fc_study::session::{self as queue, BuildOptions, Order, SessionState};
@@ -80,7 +83,8 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         }
         StudyKind::Normal | StudyKind::Custom => None,
     };
-    let candidates = ctx.reads().study_cards(&StudyCardFilter {
+    let scope_decks = deck_ids.clone();
+    let mut candidates = ctx.reads().study_cards(&StudyCardFilter {
         deck_ids,
         card_ids,
         states: filter.states.clone(),
@@ -91,6 +95,15 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
             .collect(),
         include_suspended: false,
     })?;
+    // Empty cards (v0.3: the note no longer yields them) are never studied.
+    let mut empty = EmptyCards::new(View::cmd(ctx));
+    let mut keep = Vec::with_capacity(candidates.len());
+    for c in candidates {
+        if !empty.is_empty(&c)? {
+            keep.push(c);
+        }
+    }
+    candidates = keep;
     let scope = deck_scope(req.deck_id);
     let config = SessionConfig {
         kind: req.kind,
@@ -104,11 +117,19 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         Some(o) => o,
         None => parse_order(&setting_str(ctx.reads(), &SettingScope::App, ORDER)?),
     };
-    let new_limit = match (req.new_limit, req.kind) {
-        (Some(n), _) => Some(n),
-        (None, StudyKind::Normal) => Some(setting_u32(ctx.reads(), &scope, NEW_PER_SESSION)?),
-        (None, StudyKind::Custom | StudyKind::Mistakes) => None,
+    // Normal sessions respect the deck preset's daily limits (minus what was studied today).
+    let daily = match req.kind {
+        StudyKind::Normal => Some(daily_left(ctx, req.deck_id, scope_decks.as_deref(), &config)?),
+        StudyKind::Custom | StudyKind::Mistakes => None,
     };
+    let new_limit = match (req.new_limit, daily) {
+        (Some(n), _) => Some(n),
+        (None, Some((new_left, _))) => {
+            Some(setting_u32(ctx.reads(), &scope, NEW_PER_SESSION)?.min(new_left))
+        }
+        (None, None) => None,
+    };
+    let review_limit = daily.map(|(_, reviews_left)| reviews_left);
     let bury_siblings = req.kind != StudyKind::Mistakes && setting_bool(ctx.reads(), &scope, BURY_SIBLINGS)?;
     let due_only = match req.kind {
         StudyKind::Normal => filter.due_only.unwrap_or(true),
@@ -125,6 +146,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
             day_end: config.day_end(ctx.now),
             due_only,
             new_limit,
+            review_limit,
             order: order_of(order),
             bury_siblings,
             rng: &mut rng,
@@ -154,11 +176,52 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
     };
     session.save(ctx.tx)?;
     Ok(CommandOutcome {
-        response: session_dto(ctx.reads(), &session, ctx.now)?,
+        response: session_dto(View::cmd(ctx), &session, ctx.now)?,
         inverse: Vec::new(),
         summary: summary::<StudyStart>(),
         events: Vec::new(),
     })
+}
+
+/// New and review cards still allowed today by the preset of `deck`: its `new_per_day` /
+/// `reviews_per_day` minus the distinct cards first studied / reviewed (scheduled mode) since
+/// the study day began, counted over `decks` (all decks when `None`).
+fn daily_left(
+    ctx: &CommandCtx<'_>,
+    deck: Option<fc_core::DeckId>,
+    decks: Option<&[fc_core::DeckId]>,
+    config: &SessionConfig,
+) -> AppResult<(u32, u32)> {
+    let preset = preset_of(ctx.reads(), deck)?;
+    let day = config.study_day();
+    let since = day.start(day.index(ctx.now));
+    let mut new = std::collections::HashSet::new();
+    let mut reviewed = std::collections::HashSet::new();
+    for r in ctx.reads().review_logs_since(since, review_mode(StudyMode::Scheduled))? {
+        let set = match r.state_before {
+            CardState::New => &mut new,
+            CardState::Review => &mut reviewed,
+            CardState::Learning | CardState::Relearning => continue,
+        };
+        if set.contains(&r.card_id) {
+            continue;
+        }
+        let in_scope = match decks {
+            None => true,
+            Some(decks) => ctx
+                .reads()
+                .get_card(r.card_id)?
+                .is_some_and(|c| decks.contains(&c.deck_id)),
+        };
+        if in_scope {
+            set.insert(r.card_id);
+        }
+    }
+    let count = |s: &std::collections::HashSet<CardId>| u32::try_from(s.len()).unwrap_or(u32::MAX);
+    Ok((
+        preset.new_per_day.saturating_sub(count(&new)),
+        preset.reviews_per_day.saturating_sub(count(&reviewed)),
+    ))
 }
 
 /// `decks.include_subdecks` at the deck (the decks module owns the setting).
@@ -172,12 +235,16 @@ fn setting_bool_any(ctx: &CommandCtx<'_>, deck: fc_core::DeckId) -> AppResult<bo
 
 pub(super) fn get(req: SessionRef, ctx: &QueryCtx<'_>) -> AppResult<SessionDto> {
     let s = Session::load(ctx.tx, req.session_id)?;
-    session_dto(ctx.tx, &s, ctx.now)
+    session_dto(View::query(ctx), &s, ctx.now)
 }
 
 pub(super) fn active(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<ActiveSession> {
     let session = match ctx.tx.latest_open_session()? {
-        Some(r) => Some(session_dto(ctx.tx, &Session::load(ctx.tx, r.id)?, ctx.now)?),
+        Some(r) => Some(session_dto(
+            View::query(ctx),
+            &Session::load(ctx.tx, r.id)?,
+            ctx.now,
+        )?),
         None => None,
     };
     Ok(ActiveSession { session })
@@ -214,6 +281,9 @@ pub(super) fn answer(req: AnswerCard, ctx: &mut CommandCtx<'_>) -> AppResult<Com
     let session_before = session.snapshot();
     drop_dead_cards(ctx, &mut session)?;
     let mut card = require_live_card(ctx.reads(), req.card_id)?;
+    if EmptyCards::new(View::cmd(ctx)).is_empty(&card)? {
+        return Err(not_available(card.id));
+    }
     let card_before = snapshot(&card);
     let before = session.scheduling_of(&card);
     let params = session.config.params(ctx.reads(), card.deck_id)?;
@@ -286,7 +356,7 @@ pub(super) fn answer(req: AnswerCard, ctx: &mut CommandCtx<'_>) -> AppResult<Com
         .and_then(|v| v.as_str().map(str::to_owned))
         .unwrap_or_default();
     Ok(CommandOutcome {
-        response: session_dto(ctx.reads(), &session, ctx.now)?,
+        response: session_dto(View::cmd(ctx), &session, ctx.now)?,
         inverse: vec![inverse_call::<StudyRestore>(&RestoreStudy {
             cards: restore_cards,
             session: Some(session_before),
@@ -318,10 +388,11 @@ fn drop_dead_cards(ctx: &CommandCtx<'_>, session: &mut Session) -> AppResult<()>
     Ok(())
 }
 
-/// Text a hint/check is computed from: the typed-answer field, else the answer side.
-fn expected_answer(ctx_reads: &dyn fc_storage::Reads, card: CardId) -> AppResult<String> {
-    let card = require_live_card(ctx_reads, card)?;
-    Ok(render_card(ctx_reads, &card)?.expected)
+/// Text a hint is computed from: the card type's expected typed answer, else the text of
+/// the answer part.
+fn expected_answer(v: View<'_>, card: CardId) -> AppResult<String> {
+    let card = require_live_card(v.reads, card)?;
+    Ok(render_for_study(v, &card)?.expected)
 }
 
 pub(super) fn hint(req: HintRequest, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<HintDto>> {
@@ -335,7 +406,7 @@ pub(super) fn hint(req: HintRequest, ctx: &mut CommandCtx<'_>) -> AppResult<Comm
     };
     let kind = HintKind::parse(&setting_str(ctx.reads(), &SettingScope::App, HINT_STRATEGY)?)
         .unwrap_or(HintKind::FirstLetters);
-    let text = fc_study::hint::hint(kind, &expected_answer(ctx.reads(), req.card_id)?, used + 1);
+    let text = fc_study::hint::hint(kind, &expected_answer(View::cmd(ctx), req.card_id)?, used + 1);
     let level = if text.is_some() {
         session.state.hint_card = Some(req.card_id);
         session.state.hints = used + 1;
@@ -352,22 +423,51 @@ pub(super) fn hint(req: HintRequest, ctx: &mut CommandCtx<'_>) -> AppResult<Comm
     })
 }
 
+/// Judges an answer the way the card type engine says (v0.3 `CardTypeEngine::evaluate`):
+/// choice cards are decided by the engine; typed answers go to the configured v0.2 answer
+/// checker (`CheckText`; also for self-graded cards when `study.type_answer` is on).
 pub(super) fn check_answer(req: CheckAnswer, ctx: &QueryCtx<'_>) -> AppResult<AnswerCheckDto> {
     let session = Session::load(ctx.tx, req.session_id)?;
     session.require_available(req.card_id, ctx.now)?;
+    let card = require_live_card(ctx.tx, req.card_id)?;
+    let r = render_for_study(View::query(ctx), &card)?;
+    let response = match req.choice {
+        Some(i) => CardResponse::Choice(i as usize),
+        None => CardResponse::Text(req.given.clone()),
+    };
+    let auto_grade = setting_bool(ctx.tx, &SettingScope::App, AUTO_GRADE)?;
+    let (expected, given) = match r.card.engine.evaluate(&r.card.raw, &response) {
+        Evaluation::Decided { correct } => {
+            let expected = match &r.card.sides.interaction {
+                CardInteraction::Choice { options, correct } => options
+                    .get(*correct as usize)
+                    .map(|o| html_to_text(o))
+                    .unwrap_or_default(),
+                _ => r.expected.clone(),
+            };
+            let grade = if correct { Grade::Correct } else { Grade::Wrong };
+            return Ok(AnswerCheckDto {
+                grade: grade_dto(grade),
+                score: if correct { 1.0 } else { 0.0 },
+                diff: Vec::new(),
+                expected,
+                suggested_rating: grade.suggested_rating(),
+                auto_grade,
+            });
+        }
+        Evaluation::CheckText { expected, given } => (expected, given),
+        Evaluation::SelfGraded if req.choice.is_none() => (r.expected.clone(), req.given),
+        Evaluation::SelfGraded => return Err(invalid("this card is not a choice card")),
+    };
     let kind = CheckerKind::parse(&setting_str(ctx.tx, &SettingScope::App, ANSWER_CHECKER)?)
         .unwrap_or(CheckerKind::Multi);
     let opts = CheckOptions {
         fold_turkish: setting_bool(ctx.tx, &SettingScope::App, FOLD_TURKISH)?,
         ..CheckOptions::default()
     };
-    let c = check(kind, &expected_answer(ctx.tx, req.card_id)?, &req.given, &opts);
+    let c = check(kind, &expected, &given, &opts);
     Ok(AnswerCheckDto {
-        grade: match c.grade {
-            Grade::Correct => AnswerGrade::Correct,
-            Grade::Almost => AnswerGrade::Almost,
-            Grade::Wrong => AnswerGrade::Wrong,
-        },
+        grade: grade_dto(c.grade),
         score: c.score,
         diff: c
             .diff
@@ -383,8 +483,16 @@ pub(super) fn check_answer(req: CheckAnswer, ctx: &QueryCtx<'_>) -> AppResult<An
             .collect(),
         expected: c.matched,
         suggested_rating: c.grade.suggested_rating(),
-        auto_grade: setting_bool(ctx.tx, &SettingScope::App, AUTO_GRADE)?,
+        auto_grade,
     })
+}
+
+fn grade_dto(g: Grade) -> AnswerGrade {
+    match g {
+        Grade::Correct => AnswerGrade::Correct,
+        Grade::Almost => AnswerGrade::Almost,
+        Grade::Wrong => AnswerGrade::Wrong,
+    }
 }
 
 pub(super) fn end(req: SessionRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<SessionSummary>> {

@@ -302,6 +302,29 @@ pub(crate) fn render(
     template_key: &str,
     setup: &RenderSetup,
 ) -> AppResult<RenderedSides> {
+    Ok(render_card(registry, reads, nt, note, template_key, setup)?.sides)
+}
+
+/// A rendered card: the sanitized sides that leave the backend, plus the raw engine output
+/// and the engine itself (study judges answers with [`CardTypeEngine::evaluate`]).
+pub(crate) struct CardRender {
+    /// Engine that rendered the card.
+    pub engine: Arc<dyn CardTypeEngine>,
+    /// Unsanitized engine output (never sent out).
+    pub raw: RenderedCard,
+    /// Sanitized sides.
+    pub sides: RenderedSides,
+}
+
+/// [`render`] keeping the engine and its raw output.
+pub(crate) fn render_card(
+    registry: &Registry,
+    reads: &dyn Reads,
+    nt: &NoteType,
+    note: &Note,
+    template_key: &str,
+    setup: &RenderSetup,
+) -> AppResult<CardRender> {
     let template = template_for(nt, template_key).ok_or_else(|| {
         AppError::Api(
             ApiError::new(
@@ -311,7 +334,7 @@ pub(crate) fn render(
             .with_detail("template", template_key),
         )
     })?;
-    let eng = engine(registry, &template.card_type)?;
+    let eng = Arc::clone(engine(registry, &template.card_type)?);
     let info = eng.info();
 
     // [[links]] that resolve to live notes.
@@ -352,11 +375,15 @@ pub(crate) fn render(
         template,
         template_key,
     };
-    let rendered = eng.render(&input, &ctx).map_err(strategy_error)?;
-    Ok(sides(template_key, template, rendered))
+    let raw = eng.render(&input, &ctx).map_err(strategy_error)?;
+    Ok(CardRender {
+        sides: sides(template_key, template, &raw),
+        raw,
+        engine: eng,
+    })
 }
 
-fn sides(template_key: &str, template: &CardTemplate, r: RenderedCard) -> RenderedSides {
+fn sides(template_key: &str, template: &CardTemplate, r: &RenderedCard) -> RenderedSides {
     let template_name = if template.key == template_key {
         template.name.clone()
     } else {
@@ -369,20 +396,22 @@ fn sides(template_key: &str, template: &CardTemplate, r: RenderedCard) -> Render
         question: sanitize_html(&r.question),
         answer: sanitize_html(&r.answer),
         css: sanitize_css(&r.css),
-        interaction: match r.interaction {
+        interaction: match &r.interaction {
             Interaction::SelfGrade => CardInteraction::SelfGrade,
-            Interaction::Type { expected } => CardInteraction::Type { expected },
+            Interaction::Type { expected } => CardInteraction::Type {
+                expected: expected.clone(),
+            },
             Interaction::Choice { options, correct } => CardInteraction::Choice {
                 options: options.iter().map(|o| sanitize_html(o)).collect(),
-                correct: u32::try_from(correct).unwrap_or(0),
+                correct: u32::try_from(*correct).unwrap_or(0),
             },
         },
         tts: r
             .tts
-            .into_iter()
+            .iter()
             .map(|t| TtsItem {
-                lang: t.lang,
-                text: t.text,
+                lang: t.lang.clone(),
+                text: t.text.clone(),
             })
             .collect(),
     }

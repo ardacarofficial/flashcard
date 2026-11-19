@@ -6,7 +6,7 @@ use super::{Mode, SqliteTx, WriteMode};
 use crate::error::StorageResult;
 use crate::repo::{ReviewLogRecord, SessionRecord, StudyCardFilter, StudyRead, StudyWrite};
 use fc_core::card::Card;
-use fc_core::{CardId, ReviewLogId, SessionId};
+use fc_core::{CardId, ReviewLogId, SessionId, Timestamp};
 use rusqlite::{params, Row};
 
 const SESSIONS: &str = "sessions";
@@ -144,6 +144,23 @@ impl<M: Mode> StudyRead for SqliteTx<'_, M> {
                  ORDER BY created_at, id"
             ),
             [card.to_string()],
+            review_row,
+        )
+    }
+
+    fn review_logs_since(
+        &self,
+        since: Timestamp,
+        mode: &str,
+    ) -> StorageResult<Vec<ReviewLogRecord>> {
+        all(
+            self.conn(),
+            REVIEWS,
+            &format!(
+                "SELECT {REVIEW_COLS} FROM review_log WHERE created_at >= ?1 AND mode = ?2
+                 ORDER BY created_at, id"
+            ),
+            params![since.0, mode],
             review_row,
         )
     }

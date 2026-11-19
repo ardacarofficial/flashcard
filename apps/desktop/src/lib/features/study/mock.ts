@@ -7,6 +7,7 @@ import { err, menu, module, type MockEnv, type MockFeature } from '$lib/api/mock
 import type { NoteDto, SessionDto, SessionSummary, StudyCardDto } from '$lib/api/types';
 
 const DAY = 86_400_000;
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 const INTERVALS = [60_000, 6 * 60_000, 10 * 60_000, 4 * DAY];
 
 interface MockCard {
@@ -24,7 +25,7 @@ interface MockSession {
 
 export default {
   modules: [module('study', [menu('study.session', 'nav.study', '/study', 5)])],
-  handlers: ({ id, now, notes, ancestors }: MockEnv) => {
+  handlers: ({ id, now, notes, ancestors, cardFlags }: MockEnv) => {
     const sessions = new Map<string, MockSession>();
     const undo: Array<{ id: string; snapshot: string }> = [];
 
@@ -41,8 +42,17 @@ export default {
         note_id: c.note.id,
         deck_id: c.note.home_deck_id,
         state: 'new',
-        question: c.note.fields.front ?? '',
-        answer: c.note.fields.back ?? '',
+        sides: {
+          template_key: 'forward',
+          template_name: '1',
+          card_type: 'classic',
+          question: esc(c.note.fields.front ?? ''),
+          answer: esc(c.note.fields.back ?? ''),
+          css: '',
+          interaction: { kind: 'self_grade' },
+          tts: [],
+        },
+        flags: cardFlags.get(c.card_id) ?? 0,
         type_answer: false,
         intervals: INTERVALS.map((ms, i) => ({
           rating: (['again', 'hard', 'good', 'easy'] as const)[i]!,

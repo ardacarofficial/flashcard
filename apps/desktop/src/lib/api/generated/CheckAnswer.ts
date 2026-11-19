@@ -15,6 +15,11 @@ session_id: SessionId,
  */
 card_id: CardId, 
 /**
- * Typed answer.
+ * Typed answer (judged by the configured answer checker).
  */
-given: string, };
+given: string, 
+/**
+ * Picked option of a choice card (index into `sides.interaction.options`); the card
+ * type engine decides. Wins over `given`.
+ */
+choice?: number | null, };

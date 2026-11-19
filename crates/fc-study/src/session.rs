@@ -115,6 +115,8 @@ pub struct BuildOptions<'a> {
     pub due_only: bool,
     /// At most this many new cards (`None` = no limit).
     pub new_limit: Option<u32>,
+    /// At most this many review cards (`None` = no limit). Learning cards are never limited.
+    pub review_limit: Option<u32>,
     /// Order.
     pub order: Order,
     /// One review/new card per note.
@@ -211,8 +213,14 @@ pub fn build_queue(
         });
         true
     };
+    let mut reviews_taken = 0u32;
     for (c, _) in reviews {
-        take(c, QueueKind::Review, &mut queue);
+        if opts.review_limit.is_some_and(|l| reviews_taken >= l) {
+            break;
+        }
+        if take(c, QueueKind::Review, &mut queue) {
+            reviews_taken += 1;
+        }
     }
     let mut new_taken = 0u32;
     for (c, _) in new {
@@ -371,10 +379,34 @@ mod tests {
             day_end: END,
             due_only: true,
             new_limit: None,
+            review_limit: None,
             order: Order::Due,
             bury_siblings: true,
             rng,
         }
+    }
+
+    #[test]
+    fn review_limit_caps_reviews_but_never_learning_cards() {
+        let cards = vec![
+            card(1, 1, CardState::Review, Some(NOW.0 - 3)),
+            card(2, 2, CardState::Review, Some(NOW.0 - 2)),
+            card(3, 3, CardState::Review, Some(NOW.0 - 1)),
+            card(4, 4, CardState::Learning, Some(NOW.0 - 1)),
+            card(5, 5, CardState::Relearning, Some(NOW.0)),
+            card(6, 6, CardState::New, None),
+        ];
+        let mut rng = SplitMix64::new(1);
+        let q = build_queue(
+            &cards,
+            |c| c.scheduling.clone(),
+            BuildOptions {
+                review_limit: Some(1),
+                new_limit: Some(0),
+                ..opts(&mut rng)
+            },
+        );
+        assert_eq!(ids(&q), vec![4, 5, 1]);
     }
 
     #[test]

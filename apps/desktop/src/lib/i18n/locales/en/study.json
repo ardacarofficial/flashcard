@@ -62,7 +62,8 @@
       "repeat": "Repeat mistakes",
       "back": "Done"
     },
-    "keys": "Space: show · 1–4: rate · H: hint · S: suspend · B: bury · Z: undo · Esc: end"
+    "keys": "Space: show · 1–4: rate · 1–9: pick an option · H: hint · S: suspend · B: bury · Ctrl+1–7: flag · Z: undo · Esc: end",
+    "choices": "Options"
   },
   "settings": {
     "study": {

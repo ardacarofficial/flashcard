@@ -8,6 +8,7 @@
 //! crash). Trial sessions (`mode: trial`) write `review_log` with `mode = "trial"` but never
 //! touch `cards`.
 
+use super::cardtypes::RenderedSides;
 use fc_core::card::{CardState, Rating};
 use fc_core::{AttributeDefId, CardId, DeckId, NoteId, ReviewLogId, SessionId, Timestamp};
 use serde::{Deserialize, Serialize};
@@ -147,7 +148,7 @@ pub struct IntervalPreview {
 }
 
 /// The card on screen. Sides are **plain text** (display as text, never as HTML).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct StudyCardDto {
     /// Card.
     pub card_id: CardId,
@@ -157,11 +158,13 @@ pub struct StudyCardDto {
     pub deck_id: DeckId,
     /// Learning state (simulated state in trial sessions).
     pub state: CardState,
-    /// Question side.
-    pub question: String,
-    /// Answer side (without the repeated question).
-    pub answer: String,
-    /// Show an input for typing the answer (template `{{type:…}}` or `study.type_answer`).
+    /// The card rendered by its card type engine (`cards.render`): sanitized question and
+    /// answer HTML, scoped CSS, interaction (self-grade / type / choice), TTS.
+    pub sides: RenderedSides,
+    /// Flag bits (`cards.flags`; flag `n` = bit `n - 1`, Anki numbering, names and colors
+    /// from `flags.list`).
+    pub flags: u32,
+    /// Show an input for typing the answer (a typing card type, or `study.type_answer`).
     pub type_answer: bool,
     /// Buttons, in order again/hard/good/easy.
     pub intervals: Vec<IntervalPreview>,
@@ -170,7 +173,7 @@ pub struct StudyCardDto {
 }
 
 /// A session as the study screen sees it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct SessionDto {
     /// Id.
     pub id: SessionId,
@@ -199,7 +202,7 @@ pub struct SessionDto {
 }
 
 /// Response of `study.active`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct ActiveSession {
     /// The most recent open session, if any (resume after a crash/restart).
     pub session: Option<SessionDto>,
@@ -246,13 +249,19 @@ pub struct HintDto {
 /// `study.check_answer`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
 pub struct CheckAnswer {
     /// Session.
     pub session_id: SessionId,
     /// Current card.
     pub card_id: CardId,
-    /// Typed answer.
+    /// Typed answer (judged by the configured answer checker).
+    #[serde(default)]
     pub given: String,
+    /// Picked option of a choice card (index into `sides.interaction.options`); the card
+    /// type engine decides. Wins over `given`.
+    #[serde(default)]
+    pub choice: Option<u32>,
 }
 
 /// Grade of a typed answer.

@@ -190,7 +190,7 @@ fn two_way(t: &T) -> NoteTypeId {
         key: "reverse".into(),
         name: "2".into(),
         front: "{{back}}".into(),
-        back: "{{back}}\n<hr id=\"answer\">\n{{front}}".into(),
+        back: "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{front}}".into(),
         card_type: "classic".into(),
     });
     let mut tx = t.store.write().unwrap();
@@ -213,8 +213,10 @@ pub fn answer_undo_redo_is_exact(f: &Factory) {
     assert_eq!(s.counts.new, 2);
     let shown = s.current.clone().unwrap();
     assert_eq!(shown.card_id, card);
-    assert_eq!(shown.question, "dog");
-    assert_eq!(shown.answer, "köpek");
+    // Rendered by the classic card type engine (sanitized HTML).
+    assert_eq!(shown.sides.card_type, "classic");
+    assert_eq!(fc_study::text::html_to_text(&shown.sides.question), "dog");
+    assert_eq!(super::engine::answer_text(&shown.sides.answer), "köpek");
     assert_eq!(shown.intervals.len(), 4);
     assert_eq!(shown.intervals[0].interval_ms, 60_000, "again = first learning step");
 
@@ -391,6 +393,7 @@ pub fn trial_mode_never_changes_cards(f: &Factory) {
             session_id: cur.id,
             card_id: c.card_id,
             given: "a".into(),
+            choice: None,
         });
         t.advance(15 * 60_000);
         cur = t.answer(cur.id, c.card_id, ratings[i % ratings.len()]);
@@ -790,6 +793,7 @@ pub fn hints_and_answer_checking(f: &Factory) {
             session_id: s.id,
             card_id: card,
             given: given.into(),
+            choice: None,
         })
     };
     let ok = check("Kopek");
@@ -956,4 +960,12 @@ fn v02_internal_methods() {
         crate::tests::internal_methods_of(&crate::testing::TestApp::mem(), &["study"]),
         ["study.restore"]
     );
+}
+
+#[test]
+fn answer_text_takes_the_part_after_the_rule() {
+    use super::engine::answer_text;
+    assert_eq!(answer_text("q\n<hr class=\"fc-answer\">\n<b>a</b>"), "a");
+    assert_eq!(answer_text("q<hr>a"), "a");
+    assert_eq!(answer_text("<p>only</p>"), "only");
 }
