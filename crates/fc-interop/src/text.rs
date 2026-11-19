@@ -1,0 +1,438 @@
+//! Flexible delimited text (docs/02 §15.1): `term, definition`, `term: definition`, CSV, TSV,
+//! Quizlet exports, custom separators (`>>`, ` - `), quoted values (`"Arda, Ali": porsuk`),
+//! and separator auto-detection.
+//!
+//! Separators are plain strings. Two record separators are special: [`NEWLINE`] (one record
+//! per line, empty lines skipped) and [`BLANK_LINE`] (records separated by one or more blank
+//! lines; single newlines stay inside the value, so definitions can span lines).
+
+use crate::error::{InteropError, InteropResult};
+use serde::{Deserialize, Serialize};
+
+/// One record per line.
+pub const NEWLINE: &str = "\n";
+/// Records separated by blank lines.
+pub const BLANK_LINE: &str = "\n\n";
+
+/// How to split text into records and fields.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextOptions {
+    /// Between fields (`,`, `:`, `\t`, ` - `, `>>` …). Never contains a newline.
+    pub field_separator: String,
+    /// Between records: [`NEWLINE`], [`BLANK_LINE`] or a custom string (`;`).
+    pub record_separator: String,
+    /// Honour `"…"` quoting (`""` inside a quoted value is a literal quote).
+    pub quotes: bool,
+    /// Split at most into this many fields; the rest of the record stays in the last field
+    /// (Quizlet: 2, so definitions may contain the separator). `None` = unlimited.
+    pub max_fields: Option<usize>,
+}
+
+impl TextOptions {
+    /// Options with quoting on and no field limit.
+    pub fn new(field_separator: &str, record_separator: &str) -> Self {
+        Self {
+            field_separator: field_separator.to_owned(),
+            record_separator: record_separator.to_owned(),
+            quotes: true,
+            max_fields: None,
+        }
+    }
+
+    /// Quizlet's default export: `term<TAB>definition`, one card per line, two columns.
+    pub fn quizlet() -> Self {
+        Self {
+            field_separator: "\t".into(),
+            record_separator: NEWLINE.into(),
+            quotes: false,
+            max_fields: Some(2),
+        }
+    }
+
+    /// Checks the separators make sense together.
+    pub fn validate(&self) -> InteropResult<()> {
+        let f = &self.field_separator;
+        let r = &self.record_separator;
+        if f.is_empty() || r.is_empty() {
+            return Err(InteropError::Options("separators must not be empty".into()));
+        }
+        if f.contains('\n') {
+            return Err(InteropError::Options(
+                "field separator cannot contain a newline".into(),
+            ));
+        }
+        if f == r
+            || (r != NEWLINE
+                && r != BLANK_LINE
+                && (f.contains(r.as_str()) || r.contains(f.as_str())))
+        {
+            return Err(InteropError::Options(
+                "field and record separators overlap".into(),
+            ));
+        }
+        if self.quotes && (f.contains('"') || r.contains('"')) {
+            return Err(InteropError::Options(
+                "separators cannot contain a quote while quoting is on".into(),
+            ));
+        }
+        if self.max_fields == Some(0) {
+            return Err(InteropError::Options(
+                "max_fields must be at least 1".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Strips a UTF-8 BOM and turns `\r\n` / `\r` into `\n`.
+pub fn normalize_newlines(text: &str) -> String {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    text.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+/// Splits `text` into records of fields. Unquoted values are trimmed; quoted values are kept
+/// verbatim. Records whose fields are all empty are dropped.
+pub fn parse_delimited(text: &str, opts: &TextOptions) -> InteropResult<Vec<Vec<String>>> {
+    opts.validate()?;
+    let text = normalize_newlines(text);
+    Ok(Parser::new(&text, opts).run())
+}
+
+struct Parser<'a> {
+    s: &'a str,
+    i: usize,
+    opts: &'a TextOptions,
+}
+
+impl<'a> Parser<'a> {
+    fn new(s: &'a str, opts: &'a TextOptions) -> Self {
+        Self { s, i: 0, opts }
+    }
+
+    fn rest(&self) -> &'a str {
+        &self.s[self.i..]
+    }
+
+    /// Length of the record separator at the cursor, if any.
+    fn record_sep_len(&self) -> Option<usize> {
+        let rest = self.rest();
+        let sep = self.opts.record_separator.as_str();
+        if sep == BLANK_LINE {
+            if !rest.starts_with('\n') {
+                return None;
+            }
+            let after = rest[1..].trim_start_matches([' ', '\t']);
+            if !after.starts_with('\n') {
+                return None;
+            }
+            let tail = rest.trim_start_matches([' ', '\t', '\n']);
+            return Some(rest.len() - tail.len());
+        }
+        rest.starts_with(sep).then_some(sep.len())
+    }
+
+    fn field_sep_len(&self, fields_so_far: usize) -> Option<usize> {
+        if let Some(max) = self.opts.max_fields {
+            if fields_so_far + 1 >= max {
+                return None;
+            }
+        }
+        let sep = self.opts.field_separator.as_str();
+        self.rest().starts_with(sep).then_some(sep.len())
+    }
+
+    fn is_blank(&self, c: char) -> bool {
+        c == ' ' || (c == '\t' && self.opts.field_separator != "\t")
+    }
+
+    /// Tries to read a quoted value at the cursor (after leading blanks). Returns it and moves
+    /// past the closing quote; `None` (cursor unchanged) if there is no well-formed quote.
+    fn quoted(&mut self) -> Option<String> {
+        let start = self.i;
+        let lead = self.rest().len() - self.rest().trim_start_matches(|c| self.is_blank(c)).len();
+        let body = &self.s[start + lead..];
+        let inner = body.strip_prefix('"')?;
+        let mut out = String::new();
+        let mut chars = inner.char_indices().peekable();
+        while let Some((idx, c)) = chars.next() {
+            if c == '"' {
+                if matches!(chars.peek(), Some((_, '"'))) {
+                    out.push('"');
+                    chars.next();
+                    continue;
+                }
+                self.i = start + lead + 1 + idx + 1;
+                return Some(out);
+            }
+            out.push(c);
+        }
+        None
+    }
+
+    fn run(mut self) -> Vec<Vec<String>> {
+        let mut records = Vec::new();
+        let mut fields: Vec<String> = Vec::new();
+        loop {
+            // One field.
+            let quoted = if self.opts.quotes {
+                self.quoted()
+            } else {
+                None
+            };
+            let mut raw = String::new();
+            let mut ended_record = false;
+            let mut ended_text = false;
+            loop {
+                if self.i >= self.s.len() {
+                    ended_text = true;
+                    break;
+                }
+                if let Some(n) = self.record_sep_len() {
+                    self.i += n;
+                    ended_record = true;
+                    break;
+                }
+                if let Some(n) = self.field_sep_len(fields.len()) {
+                    self.i += n;
+                    break;
+                }
+                let c = self.rest().chars().next().unwrap_or_default();
+                raw.push(c);
+                self.i += c.len_utf8().max(1);
+            }
+            let value = match quoted {
+                Some(q) => {
+                    let tail = raw.trim();
+                    if tail.is_empty() {
+                        q
+                    } else {
+                        format!("{q}{tail}")
+                    }
+                }
+                None => raw.trim().to_owned(),
+            };
+            fields.push(value);
+            if ended_record || ended_text {
+                if fields.iter().any(|f| !f.is_empty()) {
+                    records.push(std::mem::take(&mut fields));
+                } else {
+                    fields.clear();
+                }
+            }
+            if ended_text {
+                break;
+            }
+        }
+        records
+    }
+}
+
+/// Writes records with `opts` separators, quoting values that would not read back verbatim.
+/// Ends with a newline.
+pub fn write_delimited(rows: &[Vec<String>], opts: &TextOptions) -> String {
+    let mut out = String::new();
+    for (i, row) in rows.iter().enumerate() {
+        if i > 0 {
+            out.push_str(&opts.record_separator);
+            if opts.record_separator != NEWLINE && opts.record_separator != BLANK_LINE {
+                out.push('\n');
+            }
+        }
+        for (j, value) in row.iter().enumerate() {
+            if j > 0 {
+                out.push_str(&opts.field_separator);
+            }
+            out.push_str(&quote_if_needed(value, opts));
+        }
+    }
+    out.push('\n');
+    out
+}
+
+fn quote_if_needed(value: &str, opts: &TextOptions) -> String {
+    let record_hit = if opts.record_separator == BLANK_LINE {
+        value.contains("\n\n")
+    } else {
+        value.contains(opts.record_separator.as_str())
+    };
+    let needs = value.contains(opts.field_separator.as_str())
+        || record_hit
+        || value.starts_with('"')
+        || value.contains('\n') && opts.record_separator == NEWLINE
+        || value.trim() != value;
+    if needs {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_owned()
+    }
+}
+
+// ------------------------------------------------------------------ detection
+
+/// Result of [`detect`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Detection {
+    /// Suggested options.
+    pub options: TextOptions,
+    /// Most common number of fields per record.
+    pub columns: usize,
+    /// Records found with the suggestion.
+    pub records: usize,
+    /// 0.0–1.0; low values mean "please check the separators".
+    pub confidence: f32,
+}
+
+/// Field separator candidates and their prior weights (more specific first).
+const FIELD_CANDIDATES: &[(&str, f64)] = &[
+    ("\t", 1.0),
+    (" - ", 0.97),
+    (" = ", 0.96),
+    (" => ", 0.96),
+    ("=>", 0.95),
+    ("->", 0.95),
+    (">>", 0.95),
+    (":", 0.93),
+    ("=", 0.92),
+    ("|", 0.91),
+    (",", 0.9),
+    (";", 0.88),
+    ("-", 0.75),
+];
+
+/// Two-column separators: a record with more fields is unlikely to be meant this way.
+const PAIR_SEPARATORS: &[&str] = &[" - ", " = ", " => ", "=>", "->", ">>", ":", "=", "-"];
+
+const RECORD_CANDIDATES: &[(&str, f64)] = &[(NEWLINE, 1.0), (BLANK_LINE, 0.97), (";", 0.9)];
+
+/// How much text detection looks at.
+const SAMPLE_BYTES: usize = 64 * 1024;
+
+/// Suggests separators for `text` (docs/02 §15.1 "otomatik algılama"): every candidate pair is
+/// parsed and scored by how consistently it yields ≥ 2 fields per record, weighted by how
+/// specific the separator is and how many records it produces.
+pub fn detect(text: &str) -> Detection {
+    let text = normalize_newlines(text);
+    let sample = sample(&text);
+    let mut best: Option<(f64, TextOptions, usize, usize)> = None;
+    for (rs, rw) in RECORD_CANDIDATES {
+        for (fs, fw) in FIELD_CANDIDATES {
+            let opts = TextOptions::new(fs, rs);
+            if opts.validate().is_err() {
+                continue;
+            }
+            let records = Parser::new(sample, &opts).run();
+            let Some((mut score, columns)) = score(&records, fs) else {
+                continue;
+            };
+            if *rs == NEWLINE && trailing_custom_separator(&records) {
+                // `a,b;` lines: the `;` is a record separator followed by a line break.
+                score *= 0.5;
+            }
+            let score = score * fw * rw;
+            if best.as_ref().is_none_or(|b| score > b.0) {
+                best = Some((score, opts, columns, records.len()));
+            }
+        }
+    }
+    match best {
+        Some((score, options, columns, records)) => Detection {
+            options,
+            columns,
+            records,
+            confidence: score.clamp(0.0, 1.0) as f32,
+        },
+        None => {
+            let options = TextOptions::new("\t", NEWLINE);
+            let records = Parser::new(sample, &options).run().len();
+            Detection {
+                options,
+                columns: 1,
+                records,
+                confidence: 0.0,
+            }
+        }
+    }
+}
+
+fn sample(text: &str) -> &str {
+    if text.len() <= SAMPLE_BYTES {
+        return text;
+    }
+    let mut end = SAMPLE_BYTES;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    let cut = &text[..end];
+    match cut.rfind('\n') {
+        Some(n) if n > 0 => &cut[..n],
+        _ => cut,
+    }
+}
+
+/// `(score, columns)` of one candidate, `None` if it does not split records at all.
+fn score(records: &[Vec<String>], fs: &str) -> Option<(f64, usize)> {
+    let n = records.len();
+    if n == 0 {
+        return None;
+    }
+    let mut counts: Vec<(usize, usize)> = Vec::new();
+    for r in records {
+        match counts.iter_mut().find(|(c, _)| *c == r.len()) {
+            Some((_, k)) => *k += 1,
+            None => counts.push((r.len(), 1)),
+        }
+    }
+    let (mode, hits) = counts
+        .iter()
+        .copied()
+        .max_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)))?;
+    if mode < 2 {
+        return None;
+    }
+    let share = hits as f64 / n as f64;
+    let consistent: Vec<&Vec<String>> = records.iter().filter(|r| r.len() == mode).collect();
+    let fields = (consistent.len() * mode).max(1);
+    let empty = consistent
+        .iter()
+        .flat_map(|r| r.iter())
+        .filter(|f| f.is_empty())
+        .count() as f64
+        / fields as f64;
+    let mut s = share * (n as f64 / (n as f64 + 1.0)) * (1.0 - 0.5 * empty);
+    if PAIR_SEPARATORS.contains(&fs) && mode > 2 {
+        s *= 0.6;
+    }
+    if fs == ":" {
+        // `10:30` style values (digits on both sides) and URLs (`http://`).
+        let timeish = consistent
+            .iter()
+            .filter(|r| {
+                r.windows(2).any(|w| {
+                    (w[0].chars().last().is_some_and(|c| c.is_ascii_digit())
+                        && w[1].chars().next().is_some_and(|c| c.is_ascii_digit()))
+                        || w[1].starts_with("//")
+                })
+            })
+            .count();
+        if timeish * 2 > consistent.len() {
+            s *= 0.5;
+        }
+    }
+    Some((s, mode))
+}
+
+/// Whether most records (all but the last) end with `;`, i.e. `;` separates records.
+fn trailing_custom_separator(records: &[Vec<String>]) -> bool {
+    if records.len() < 2 {
+        return false;
+    }
+    let head = &records[..records.len() - 1];
+    let hits = head
+        .iter()
+        .filter(|r| r.last().is_some_and(|f| f.ends_with(';')))
+        .count();
+    hits * 2 > head.len()
+}
+
+#[cfg(test)]
+mod tests;

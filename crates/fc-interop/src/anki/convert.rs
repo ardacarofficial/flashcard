@@ -1,0 +1,757 @@
+//! Anki ⇄ [`Pack`] mapping.
+//!
+//! Import ([`to_pack`]):
+//! * ids are derived from Anki ids ([`derived_id`]); a note whose guid is one of our UUIDv7
+//!   note ids (a package we exported) gets that id back;
+//! * field names become keys (`Front` → `front`), templates are rewritten to keys;
+//! * cloze cards get template key `c<n>`;
+//! * scheduling: type/queue/due/ivl/reps/lapses/flags → state, due time, stability (FSRS `s`
+//!   if present, else the interval), difficulty (FSRS `d`), suspension; cards in filtered
+//!   decks go back to their original deck;
+//! * review log entries with a rating become `review_log` rows (manual reschedules skipped);
+//! * media references are rewritten to `fcmedia://<sha256>`.
+//!
+//! Export ([`from_pack`]) is the reverse; Anki ids are allocated from creation times.
+
+use super::template::map_field_refs;
+use super::*;
+use crate::media::{extension_for, guess_mime, hash_of, media_url, rewrite, sha256_hex};
+use crate::pack::{derived_id, MediaFile, Pack, ReviewEntry};
+use fc_core::card::{Card, CardState, Rating, SchedulingState};
+use fc_core::deck::{normalize_deck_segment, Deck};
+use fc_core::note::{note_checksum, sort_field_text, Note};
+use fc_core::notetype::{CardTemplate, FieldDef, FieldKey, FieldKind, NoteType, NoteTypeKind};
+use fc_core::tag::{dedup_tags, TagName};
+use fc_core::{CardId, DeckId, NoteId, NoteTypeId, ReviewLogId, Timestamp};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use uuid::Uuid;
+
+const DAY_MS: i64 = 86_400_000;
+
+/// What could not be imported as-is.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AnkiImportReport {
+    /// Notes skipped (unknown note type, no cards).
+    pub skipped_notes: usize,
+    /// Cards skipped (unknown note or template).
+    pub skipped_cards: usize,
+    /// Review log rows skipped (manual reschedules, unknown cards).
+    pub skipped_reviews: usize,
+    /// Tags that are not valid tag names.
+    pub skipped_tags: usize,
+    /// Media referenced by notes but missing from the package.
+    pub missing_media: Vec<String>,
+}
+
+fn slug(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.trim().to_lowercase().chars() {
+        if c.is_alphanumeric() {
+            out.push(c);
+        } else if !out.ends_with('_') {
+            out.push('_');
+        }
+    }
+    out.trim_matches('_').to_owned()
+}
+
+fn unique(base: String, fallback: &str, used: &mut HashSet<String>) -> String {
+    let base = if base.is_empty() {
+        fallback.to_owned()
+    } else {
+        base
+    };
+    let mut candidate = base.clone();
+    let mut n = 2;
+    while !used.insert(candidate.clone()) {
+        candidate = format!("{base}_{n}");
+        n += 1;
+    }
+    candidate
+}
+
+fn ms(t: i64, fallback: Timestamp) -> Timestamp {
+    if t > 0 {
+        Timestamp(t)
+    } else {
+        fallback
+    }
+}
+
+fn day_to_ms(crt: i64, day: i64) -> i64 {
+    (crt + day * 86_400) * 1000
+}
+
+struct ImportedNotetype {
+    nt: NoteType,
+    keys: Vec<FieldKey>,
+    cloze: bool,
+}
+
+fn import_notetype(a: &AnkiNotetype, now: Timestamp) -> ImportedNotetype {
+    let mut used = HashSet::new();
+    let mut fields = Vec::new();
+    let mut keys = Vec::new();
+    let mut names: HashMap<String, String> = HashMap::new();
+    let field_names: Vec<String> = if a.fields.is_empty() {
+        vec!["Text".to_owned()]
+    } else {
+        a.fields.clone()
+    };
+    for (i, name) in field_names.iter().enumerate() {
+        let key = unique(slug(name), &format!("field_{}", i + 1), &mut used);
+        names.insert(name.clone(), key.clone());
+        keys.push(FieldKey::new(key.clone()));
+        fields.push(FieldDef {
+            key: FieldKey::new(key),
+            name: if name.trim().is_empty() {
+                format!("Field {}", i + 1)
+            } else {
+                name.clone()
+            },
+            kind: FieldKind::RichText,
+            required: false,
+            unique: i == 0,
+            searchable: true,
+            default_value: None,
+        });
+    }
+    let to_keys = |t: &str| map_field_refs(t, |n| names.get(n).cloned());
+    let cloze = a.kind == 1;
+    let mut tused = HashSet::new();
+    let templates = a
+        .templates
+        .iter()
+        .enumerate()
+        .map(|(i, t)| CardTemplate {
+            key: if cloze {
+                unique("cloze".into(), "cloze", &mut tused)
+            } else {
+                unique(slug(&t.name), &format!("card_{}", i + 1), &mut tused)
+            },
+            name: t.name.clone(),
+            front: to_keys(&t.qfmt),
+            back: to_keys(&t.afmt),
+            card_type: if cloze { "cloze" } else { "classic" }.into(),
+        })
+        .collect();
+    let created = ms(a.id, now);
+    ImportedNotetype {
+        nt: NoteType {
+            id: NoteTypeId::from_uuid(derived_id(a.id, &format!("notetype:{}:{}", a.id, a.name))),
+            name: if a.name.trim().is_empty() {
+                "Anki".into()
+            } else {
+                a.name.clone()
+            },
+            kind: if cloze {
+                NoteTypeKind::Cloze
+            } else {
+                NoteTypeKind::Standard
+            },
+            sort_field: keys
+                .get(a.sort_field)
+                .or_else(|| keys.first())
+                .cloned()
+                .unwrap_or_else(|| FieldKey::new("text")),
+            fields,
+            templates,
+            css: a.css.clone(),
+            version: 1,
+            builtin: None,
+            created_at: created,
+            updated_at: created,
+            deleted_at: None,
+        },
+        keys,
+        cloze,
+    }
+}
+
+fn deck_segments(name: &str) -> Vec<String> {
+    let segs: Vec<String> = name
+        .split("::")
+        .map(|s| normalize_deck_segment(s).unwrap_or_else(|_| "Anki".to_owned()))
+        .collect();
+    if segs.is_empty() {
+        vec!["Default".into()]
+    } else {
+        segs
+    }
+}
+
+#[derive(Default, Deserialize)]
+struct FsrsData {
+    s: Option<f64>,
+    d: Option<f64>,
+}
+
+fn rating(ease: i64) -> Option<Rating> {
+    match ease {
+        1 => Some(Rating::Again),
+        2 => Some(Rating::Hard),
+        3 => Some(Rating::Good),
+        4 => Some(Rating::Easy),
+        _ => None,
+    }
+}
+
+/// Converts a read package into a [`Pack`] (see the module docs).
+pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport) {
+    let mut report = AnkiImportReport::default();
+    let mut pack = Pack::default();
+
+    // Media.
+    let mut name_to_hash: HashMap<String, String> = HashMap::new();
+    for (name, bytes) in &col.media {
+        let hash = sha256_hex(bytes);
+        name_to_hash.insert(name.clone(), hash.clone());
+        if !pack.media.iter().any(|m| m.hash == hash) {
+            pack.media.push(MediaFile {
+                hash,
+                mime: guess_mime(name).into(),
+                name: Some(name.clone()),
+                bytes: bytes.clone(),
+            });
+        }
+    }
+
+    // Note types.
+    let notetypes: HashMap<i64, ImportedNotetype> = col
+        .notetypes
+        .iter()
+        .map(|a| (a.id, import_notetype(a, now)))
+        .collect();
+
+    // Decks actually used by cards (filtered decks resolve to the original deck).
+    let anki_decks: HashMap<i64, &AnkiDeck> = col.decks.iter().map(|d| (d.id, d)).collect();
+    let home_did = |c: &AnkiCard| if c.odid != 0 { c.odid } else { c.did };
+    let did_path = |did: i64| -> Vec<String> {
+        anki_decks
+            .get(&did)
+            .map_or_else(|| vec!["Default".to_owned()], |d| deck_segments(&d.name))
+    };
+    let mut paths: BTreeSet<Vec<String>> = BTreeSet::new();
+    for c in &col.cards {
+        let p = did_path(home_did(c));
+        for n in 1..=p.len() {
+            paths.insert(p[..n].to_vec());
+        }
+    }
+    let by_path: HashMap<String, &AnkiDeck> = col
+        .decks
+        .iter()
+        .map(|d| (deck_segments(&d.name).join("::"), d))
+        .collect();
+    let mut deck_ids: HashMap<Vec<String>, DeckId> = HashMap::new();
+    let mut ordered: Vec<Vec<String>> = paths.into_iter().collect();
+    ordered.sort_by(|a, b| a.len().cmp(&b.len()).then(a.cmp(b)));
+    for (i, path) in ordered.iter().enumerate() {
+        let full = path.join("::");
+        let source = by_path.get(&full);
+        let id = DeckId::from_uuid(derived_id(
+            source.map_or(0, |d| d.id),
+            &format!("deck:{full}"),
+        ));
+        deck_ids.insert(path.clone(), id);
+        let parent_id = (path.len() > 1)
+            .then(|| deck_ids.get(&path[..path.len() - 1]).copied())
+            .flatten();
+        pack.decks.push(Deck {
+            id,
+            parent_id,
+            name: path.last().cloned().unwrap_or_default(),
+            description: source.map(|d| d.description.clone()).unwrap_or_default(),
+            icon: None,
+            color: None,
+            preset_id: None,
+            position: i64::try_from(i).unwrap_or(0),
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
+        });
+    }
+    let deck_of = |did: i64| deck_ids.get(&did_path(did)).copied();
+
+    // Last review per card.
+    let mut last_review: HashMap<i64, i64> = HashMap::new();
+    for r in &col.revlog {
+        let e = last_review.entry(r.cid).or_insert(r.id);
+        *e = (*e).max(r.id);
+    }
+
+    let mut cards_by_note: HashMap<i64, Vec<&AnkiCard>> = HashMap::new();
+    for c in &col.cards {
+        cards_by_note.entry(c.nid).or_default().push(c);
+    }
+    let mut used_nts: BTreeSet<i64> = BTreeSet::new();
+    let mut card_ids: HashMap<i64, (CardId, CardState)> = HashMap::new();
+    let mut missing: BTreeSet<String> = BTreeSet::new();
+
+    for an in &col.notes {
+        let Some(imp) = notetypes.get(&an.mid) else {
+            report.skipped_notes += 1;
+            continue;
+        };
+        let mut acards: Vec<&AnkiCard> = cards_by_note.get(&an.id).cloned().unwrap_or_default();
+        acards.sort_by_key(|c| (c.ord, c.id));
+        let Some(home) = acards.first().and_then(|c| deck_of(home_did(c))) else {
+            report.skipped_notes += 1;
+            continue;
+        };
+        let note_id = Uuid::parse_str(&an.guid)
+            .ok()
+            .filter(|u| u.get_version_num() == 7)
+            .map(NoteId::from_uuid)
+            .unwrap_or_else(|| {
+                NoteId::from_uuid(derived_id(an.id, &format!("note:{}:{}", an.id, an.guid)))
+            });
+        let mut fields = fc_core::note::FieldValues::new();
+        for (i, key) in imp.keys.iter().enumerate() {
+            let raw = an.fields.get(i).cloned().unwrap_or_default();
+            let value = rewrite(&raw, |r| {
+                if hash_of(r).is_some() {
+                    return None;
+                }
+                let found = name_to_hash
+                    .get(r)
+                    .or_else(|| name_to_hash.get(&r.replace("&amp;", "&")));
+                match found {
+                    Some(h) => Some(media_url(h)),
+                    None => {
+                        if !r.contains("://") && !r.starts_with("data:") {
+                            missing.insert(r.to_owned());
+                        }
+                        None
+                    }
+                }
+            });
+            fields.insert(key.clone(), value);
+        }
+        let mut tags = Vec::new();
+        for t in &an.tags {
+            match TagName::parse(t) {
+                Ok(t) => tags.push(t),
+                Err(_) => report.skipped_tags += 1,
+            }
+        }
+        let created = ms(an.id, now);
+        let note = Note {
+            id: note_id,
+            notetype_id: imp.nt.id,
+            home_deck_id: home,
+            sort_field: sort_field_text(&imp.nt, &fields),
+            checksum: note_checksum(&imp.nt, &fields),
+            fields,
+            tags: dedup_tags(tags),
+            created_at: created,
+            updated_at: ms(an.modified.saturating_mul(1000), created),
+            deleted_at: None,
+        };
+        used_nts.insert(an.mid);
+
+        for ac in acards {
+            let template_key = if imp.cloze {
+                format!("c{}", ac.ord + 1)
+            } else {
+                match usize::try_from(ac.ord)
+                    .ok()
+                    .and_then(|o| imp.nt.templates.get(o))
+                {
+                    Some(t) => t.key.clone(),
+                    None => continue,
+                }
+            };
+            let Some(deck) = deck_of(home_did(ac)) else {
+                continue;
+            };
+            let due_raw = if ac.odid != 0 && ac.odue != 0 {
+                ac.odue
+            } else {
+                ac.due
+            };
+            let state = match ac.ctype {
+                1 => CardState::Learning,
+                2 => CardState::Review,
+                3 => CardState::Relearning,
+                _ => CardState::New,
+            };
+            let due = match state {
+                CardState::New => None,
+                CardState::Review => Some(Timestamp(day_to_ms(col.crt, due_raw))),
+                CardState::Learning | CardState::Relearning => {
+                    Some(Timestamp(if due_raw > 1_000_000_000 {
+                        due_raw * 1000
+                    } else {
+                        day_to_ms(col.crt, due_raw)
+                    }))
+                }
+            };
+            let fsrs: FsrsData = serde_json::from_str(&ac.data).unwrap_or_default();
+            let stability = fsrs.s.or((ac.ivl > 0).then_some(ac.ivl as f64));
+            let last = last_review.get(&ac.id).map(|t| Timestamp(*t)).or_else(|| {
+                (state == CardState::Review && ac.ivl > 0)
+                    .then(|| due.map(|d| Timestamp(d.0 - ac.ivl * DAY_MS)))
+                    .flatten()
+            });
+            let id = CardId::from_uuid(derived_id(
+                ac.id,
+                &format!("card:{}:{}:{}", an.guid, ac.ord, ac.id),
+            ));
+            card_ids.insert(ac.id, (id, state));
+            let created = ms(ac.id, now);
+            pack.cards.push(Card {
+                id,
+                note_id,
+                deck_id: deck,
+                template_key,
+                card_type: if imp.cloze { "cloze" } else { "classic" }.into(),
+                scheduling: SchedulingState {
+                    state,
+                    due,
+                    stability: if state == CardState::New {
+                        None
+                    } else {
+                        stability
+                    },
+                    difficulty: fsrs.d,
+                    reps: u32::try_from(ac.reps).unwrap_or(0),
+                    lapses: u32::try_from(ac.lapses).unwrap_or(0),
+                    last_review: last,
+                },
+                flags: u32::try_from(ac.flags & 7).unwrap_or(0),
+                suspended: ac.queue == -1,
+                buried_until: None,
+                user_note: None,
+                created_at: created,
+                updated_at: ms(ac.modified.saturating_mul(1000), created),
+                deleted_at: None,
+            });
+        }
+        pack.notes.push(note);
+    }
+    report.skipped_cards = col.cards.len().saturating_sub(card_ids.len());
+
+    for r in &col.revlog {
+        let (Some((card, _)), Some(rating), true) =
+            (card_ids.get(&r.cid), rating(r.ease), r.rtype != 4)
+        else {
+            report.skipped_reviews += 1;
+            continue;
+        };
+        let state_before = match r.rtype {
+            0 => CardState::Learning,
+            2 => CardState::Relearning,
+            _ => CardState::Review,
+        };
+        let state_after = match (rating, state_before) {
+            (Rating::Again, CardState::Review | CardState::Relearning) => CardState::Relearning,
+            (Rating::Again, _) => CardState::Learning,
+            _ if r.ivl > 0 => CardState::Review,
+            _ => state_before,
+        };
+        pack.review_logs.push(ReviewEntry {
+            id: ReviewLogId::from_uuid(derived_id(r.id, &format!("rev:{card}:{}", r.id))),
+            card_id: *card,
+            session_id: None,
+            rating,
+            state_before,
+            state_after,
+            scheduled_days: r.ivl.max(0),
+            elapsed_days: r.last_ivl.max(0),
+            duration_ms: r.time.max(0),
+            answer_duration_ms: None,
+            hints_used: 0,
+            mode: "normal".into(),
+            stability_after: None,
+            difficulty_after: None,
+            created_at: Timestamp(r.id),
+        });
+    }
+
+    pack.notetypes = used_nts
+        .iter()
+        .filter_map(|mid| notetypes.get(mid).map(|i| i.nt.clone()))
+        .collect();
+    report.missing_media = missing.into_iter().collect();
+    (pack, report)
+}
+
+// ------------------------------------------------------------------ export
+
+/// Allocates unique Anki ids near the wanted (creation-time) value.
+#[derive(Default)]
+struct IdAlloc(HashSet<i64>);
+
+impl IdAlloc {
+    fn take(&mut self, want: i64) -> i64 {
+        let mut v = want.max(1);
+        while !self.0.insert(v) {
+            v += 1;
+        }
+        v
+    }
+}
+
+/// Builds an Anki collection from `pack` (decks by path, note types with templates rewritten
+/// to field names, cards with scheduling when `include_scheduling`, media by file name).
+pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiCollection {
+    let now_s = now.0.div_euclid(1000);
+    let earliest_due = pack
+        .cards
+        .iter()
+        .filter(|c| include_scheduling && c.scheduling.state != CardState::New)
+        .filter_map(|c| c.scheduling.due.map(|d| d.0.div_euclid(1000)))
+        .min()
+        .unwrap_or(now_s);
+    let crt = now_s.min(earliest_due).div_euclid(86_400) * 86_400;
+
+    // Media names.
+    let mut used_names: HashSet<String> = HashSet::new();
+    let mut hash_to_name: HashMap<String, String> = HashMap::new();
+    let mut media = Vec::new();
+    for m in &pack.media {
+        let base = m
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("{}.{}", m.hash, extension_for(&m.mime)))
+            .replace(['/', '\\'], "_");
+        let name = if used_names.insert(base.clone()) {
+            base
+        } else {
+            let alt = format!("{}_{}", &m.hash[..8.min(m.hash.len())], base);
+            used_names.insert(alt.clone());
+            alt
+        };
+        hash_to_name.insert(m.hash.clone(), name.clone());
+        media.push((name, m.bytes.clone()));
+    }
+    let to_names = |html: &str| {
+        rewrite(html, |r| {
+            hash_of(r).and_then(|h| hash_to_name.get(h).cloned())
+        })
+    };
+
+    // Note types.
+    let mut nt_ids = IdAlloc::default();
+    let mut notetypes = Vec::new();
+    let mut mids: HashMap<NoteTypeId, (i64, &NoteType)> = HashMap::new();
+    for nt in &pack.notetypes {
+        let mid = nt_ids.take(nt.created_at.0);
+        let names: HashMap<String, String> = nt
+            .fields
+            .iter()
+            .map(|f| (f.key.0.clone(), f.name.clone()))
+            .collect();
+        let to_field_names = |t: &str| map_field_refs(t, |k| names.get(k).cloned());
+        let cloze = nt.kind == NoteTypeKind::Cloze;
+        let mut templates: Vec<AnkiTemplate> = nt
+            .templates
+            .iter()
+            .map(|t| AnkiTemplate {
+                name: t.name.clone(),
+                qfmt: to_field_names(&t.front),
+                afmt: to_field_names(&t.back),
+            })
+            .collect();
+        if templates.is_empty() {
+            let first = nt.fields.first().map_or("Text", |f| f.name.as_str());
+            templates.push(AnkiTemplate {
+                name: "Cloze".into(),
+                qfmt: format!("{{{{cloze:{first}}}}}"),
+                afmt: format!("{{{{cloze:{first}}}}}"),
+            });
+        }
+        if cloze {
+            templates.truncate(1);
+        }
+        notetypes.push(AnkiNotetype {
+            id: mid,
+            name: nt.name.clone(),
+            kind: i64::from(cloze),
+            sort_field: nt
+                .fields
+                .iter()
+                .position(|f| f.key == nt.sort_field)
+                .unwrap_or(0),
+            css: nt.css.clone(),
+            fields: nt.fields.iter().map(|f| f.name.clone()).collect(),
+            templates,
+        });
+        mids.insert(nt.id, (mid, nt));
+    }
+
+    // Decks.
+    let mut deck_alloc = IdAlloc::default();
+    deck_alloc.take(1);
+    let mut decks = vec![AnkiDeck {
+        id: 1,
+        name: "Default".into(),
+        description: String::new(),
+        filtered: false,
+    }];
+    let mut dids: HashMap<DeckId, i64> = HashMap::new();
+    for d in &pack.decks {
+        let did = deck_alloc.take(d.created_at.0);
+        dids.insert(d.id, did);
+        decks.push(AnkiDeck {
+            id: did,
+            name: pack.deck_path(d.id).join("::"),
+            description: d.description.clone(),
+            filtered: false,
+        });
+    }
+
+    // Notes.
+    let mut note_alloc = IdAlloc::default();
+    let mut nids: HashMap<NoteId, i64> = HashMap::new();
+    let mut notes = Vec::new();
+    for n in &pack.notes {
+        let Some((mid, nt)) = mids.get(&n.notetype_id) else {
+            continue;
+        };
+        let nid = note_alloc.take(n.created_at.0);
+        nids.insert(n.id, nid);
+        notes.push(AnkiNote {
+            id: nid,
+            guid: n.id.to_string(),
+            mid: *mid,
+            modified: n.updated_at.0.div_euclid(1000),
+            tags: n
+                .tags
+                .iter()
+                .map(|t| t.as_str().split_whitespace().collect::<Vec<_>>().join("_"))
+                .collect(),
+            fields: nt
+                .fields
+                .iter()
+                .map(|f| to_names(n.fields.get(&f.key).map_or("", String::as_str)))
+                .collect(),
+        });
+    }
+    let note_nt: HashMap<NoteId, &NoteType> = pack
+        .notes
+        .iter()
+        .filter_map(|n| mids.get(&n.notetype_id).map(|(_, nt)| (n.id, *nt)))
+        .collect();
+
+    // Cards.
+    let mut card_alloc = IdAlloc::default();
+    let mut cids: HashMap<CardId, i64> = HashMap::new();
+    let mut cards = Vec::new();
+    for (pos, c) in pack.cards.iter().enumerate() {
+        let (Some(nid), Some(nt)) = (nids.get(&c.note_id), note_nt.get(&c.note_id)) else {
+            continue;
+        };
+        let ord = if nt.kind == NoteTypeKind::Cloze {
+            c.template_key
+                .strip_prefix('c')
+                .and_then(|n| n.parse::<i64>().ok())
+                .map_or(0, |n| (n - 1).max(0))
+        } else {
+            nt.templates
+                .iter()
+                .position(|t| t.key == c.template_key)
+                .map_or(0, |p| i64::try_from(p).unwrap_or(0))
+        };
+        let cid = card_alloc.take(c.created_at.0);
+        cids.insert(c.id, cid);
+        let s = &c.scheduling;
+        let position = i64::try_from(pos).unwrap_or(0) + 1;
+        let sched = include_scheduling && s.state != CardState::New;
+        let interval = || {
+            s.stability
+                .map(|x| x.round() as i64)
+                .or_else(|| match (s.due, s.last_review) {
+                    (Some(d), Some(l)) => Some((d.0 - l.0).div_euclid(DAY_MS)),
+                    _ => None,
+                })
+                .unwrap_or(1)
+                .max(1)
+        };
+        let due_day = |t: Timestamp| (t.0.div_euclid(1000) - crt).div_euclid(86_400);
+        let (ctype, queue, due, ivl, factor) = if !sched {
+            (0, 0, position, 0, 0)
+        } else {
+            let due_ts = s.due.unwrap_or(now);
+            match s.state {
+                CardState::Review => (2, 2, due_day(due_ts), interval(), 2500),
+                CardState::Relearning => (3, 1, due_ts.0.div_euclid(1000), interval(), 2500),
+                _ => (1, 1, due_ts.0.div_euclid(1000), 0, 2500),
+            }
+        };
+        let data = match (sched, s.stability, s.difficulty) {
+            (true, Some(st), Some(d)) => serde_json::json!({ "s": st, "d": d }).to_string(),
+            _ => String::new(),
+        };
+        cards.push(AnkiCard {
+            id: cid,
+            nid: *nid,
+            did: dids.get(&c.deck_id).copied().unwrap_or(1),
+            ord,
+            modified: c.updated_at.0.div_euclid(1000),
+            ctype,
+            queue: if c.suspended { -1 } else { queue },
+            due,
+            ivl,
+            factor,
+            reps: if include_scheduling {
+                i64::from(s.reps)
+            } else {
+                0
+            },
+            lapses: if include_scheduling {
+                i64::from(s.lapses)
+            } else {
+                0
+            },
+            left: 0,
+            odue: 0,
+            odid: 0,
+            flags: i64::from(c.flags & 7),
+            data,
+        });
+    }
+
+    // Review log.
+    let mut rev_alloc = IdAlloc::default();
+    let mut revlog = Vec::new();
+    if include_scheduling {
+        for r in &pack.review_logs {
+            let Some(cid) = cids.get(&r.card_id) else {
+                continue;
+            };
+            revlog.push(AnkiRevlog {
+                id: rev_alloc.take(r.created_at.0),
+                cid: *cid,
+                ease: match r.rating {
+                    Rating::Again => 1,
+                    Rating::Hard => 2,
+                    Rating::Good => 3,
+                    Rating::Easy => 4,
+                },
+                ivl: r.scheduled_days,
+                last_ivl: r.elapsed_days,
+                factor: 2500,
+                time: r.duration_ms.clamp(0, i64::from(i32::MAX)),
+                rtype: match r.state_before {
+                    CardState::New | CardState::Learning => 0,
+                    CardState::Review => 1,
+                    CardState::Relearning => 2,
+                },
+            });
+        }
+    }
+
+    AnkiCollection {
+        layout: AnkiLayout::Legacy1,
+        crt,
+        notetypes,
+        decks,
+        notes,
+        cards,
+        revlog,
+        media,
+    }
+}
