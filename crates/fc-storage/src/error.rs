@@ -20,7 +20,7 @@ pub enum StorageError {
     /// A uniqueness/foreign-key constraint failed (`constraint` = index or rule name).
     #[error("constraint violated: {constraint}")]
     Constraint {
-        /// Constraint/index name, e.g. `decks_sibling_name`.
+        /// Constraint/index name, e.g. `decks_sibling_name`, `tags.name`, `foreign_key`.
         constraint: String,
     },
     /// Database is locked/busy; retryable.
@@ -34,6 +34,9 @@ pub enum StorageError {
         /// Details.
         message: String,
     },
+    /// A paging cursor was not produced by this listing (or is from another version).
+    #[error("invalid paging cursor: {0}")]
+    InvalidCursor(String),
     /// Migration failed.
     #[error("migration {version} failed: {message}")]
     Migration {
@@ -50,10 +53,63 @@ pub enum StorageError {
         /// Highest version this build knows.
         supported: u32,
     },
-    /// Contract exists but the implementation is pending (L2 fills these in).
+    /// Contract exists but the implementation is pending.
     #[error("storage operation {0} not implemented")]
     NotImplemented(&'static str),
     /// Any other SQLite error.
     #[error("sqlite: {0}")]
-    Sqlite(#[from] rusqlite::Error),
+    Sqlite(rusqlite::Error),
+}
+
+impl From<rusqlite::Error> for StorageError {
+    /// Classifies SQLite errors: busy/locked → [`StorageError::Busy`], constraint violations →
+    /// [`StorageError::Constraint`], decode failures → [`StorageError::Corrupt`].
+    fn from(e: rusqlite::Error) -> Self {
+        in_table(e, "unknown")
+    }
+}
+
+/// Like `From<rusqlite::Error>` but names the table for decode failures.
+pub(crate) fn in_table(e: rusqlite::Error, table: &'static str) -> StorageError {
+    use rusqlite::ErrorCode as C;
+    match &e {
+        rusqlite::Error::SqliteFailure(f, msg) => match f.code {
+            C::DatabaseBusy | C::DatabaseLocked => StorageError::Busy,
+            C::ConstraintViolation => StorageError::Constraint {
+                constraint: constraint_name(msg.as_deref().unwrap_or_default()),
+            },
+            _ => StorageError::Sqlite(e),
+        },
+        rusqlite::Error::FromSqlConversionFailure(..)
+        | rusqlite::Error::InvalidColumnType(..)
+        | rusqlite::Error::IntegralValueOutOfRange(..) => StorageError::Corrupt {
+            table,
+            message: e.to_string(),
+        },
+        _ => StorageError::Sqlite(e),
+    }
+}
+
+/// Extracts a stable constraint name from an SQLite message:
+/// `UNIQUE constraint failed: index 'decks_sibling_name'` → `decks_sibling_name`,
+/// `UNIQUE constraint failed: tags.name` → `tags.name`, `FOREIGN KEY constraint failed` →
+/// `foreign_key`, `CHECK constraint failed: <expr>` → `check: <expr>`.
+pub(crate) fn constraint_name(msg: &str) -> String {
+    if msg.starts_with("FOREIGN KEY") {
+        return "foreign_key".to_owned();
+    }
+    let Some((head, tail)) = msg.split_once(": ") else {
+        return msg.to_owned();
+    };
+    let tail = tail.trim();
+    if let Some(name) = tail
+        .strip_prefix("index '")
+        .and_then(|s| s.strip_suffix('\''))
+    {
+        return name.to_owned();
+    }
+    if head.starts_with("CHECK") {
+        return format!("check: {tail}");
+    }
+    tail.to_owned()
 }

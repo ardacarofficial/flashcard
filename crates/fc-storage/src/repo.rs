@@ -20,7 +20,7 @@ use fc_core::settings::SettingScope;
 use fc_core::tag::{Tag, TagName};
 use fc_core::{
     AttributeDefId, AttributeOptionId, BatchId, CardId, DeckId, JobId, NoteId, NoteTypeId, OplogId,
-    PresetId, Timestamp,
+    PresetId, TagId, Timestamp,
 };
 use serde_json::Value;
 
@@ -156,8 +156,12 @@ pub trait DeckRead {
     fn list_decks(&self, include_deleted: bool) -> StorageResult<Vec<Deck>>;
     /// Live child of `parent` named `name` (Unicode case-insensitive).
     fn find_child_deck(&self, parent: Option<DeckId>, name: &str) -> StorageResult<Option<Deck>>;
-    /// Own card counts per deck at `now` (decks without cards may be omitted).
+    /// Own card counts per deck at `now` (decks without cards may be omitted). Cards of
+    /// trashed notes are not counted.
     fn card_counts_by_deck(&self, now: Timestamp) -> StorageResult<Vec<(DeckId, CardCounts)>>;
+    /// Ancestry of `id`: root first, `id` itself last (trashed decks included). Fails with
+    /// `NotFound` for an unknown deck and `Corrupt` on a parent cycle.
+    fn deck_ancestry(&self, id: DeckId) -> StorageResult<Vec<DeckId>>;
 }
 
 /// Deck writes.
@@ -275,8 +279,13 @@ pub trait TagRead {
 pub trait TagWrite: TagRead {
     /// Inserts or replaces a tag row.
     fn upsert_tag(&mut self, tag: &Tag) -> StorageResult<()>;
-    /// Removes tags no note references. Returns rows deleted.
+    /// Removes tags no note references (also not trashed notes). Returns rows deleted.
     fn delete_unused_tags(&mut self) -> StorageResult<u32>;
+    /// Moves every `note_tags` reference from tag `from` to tag `into` (a note carrying both
+    /// keeps `into` at its own position), then deletes `from`. Returns the number of notes
+    /// that carried `from`. Note rows (`updated_at`) are not touched. Hierarchical renames
+    /// are `upsert_tag` (same id, new name) per tag, or this when the new name exists.
+    fn merge_tag(&mut self, from: TagId, into: TagId) -> StorageResult<u32>;
 }
 
 // ------------------------------------------------------------------ attributes
@@ -298,6 +307,14 @@ pub trait AttributeRead {
         attr: AttributeDefId,
         option: AttributeOptionId,
     ) -> StorageResult<Vec<EntityRef>>;
+    /// Definitions that apply to `deck` (`None` = collection only), resolved with
+    /// `fc_core::attribute::effective_attribute_defs` over the deck's ancestry: live
+    /// definitions only, deepest `key` wins. Each comes with its depth (`0` = collection,
+    /// `ancestry.len()` = defined on `deck` itself), in the resolver's order.
+    fn effective_attribute_defs_for_deck(
+        &self,
+        deck: Option<DeckId>,
+    ) -> StorageResult<Vec<(AttributeDef, usize)>>;
 }
 
 /// Attribute writes.
@@ -395,6 +412,9 @@ pub trait JobWrite: JobRead {
     fn upsert_job(&mut self, job: &JobRecord) -> StorageResult<()>;
     /// At startup: `running`/`queued` → `interrupted`. Returns rows changed.
     fn mark_unfinished_jobs_interrupted(&mut self, now: Timestamp) -> StorageResult<u32>;
+    /// Claims the oldest `queued` job: sets it `running` with `updated_at = now` and returns
+    /// it (`None` if the queue is empty).
+    fn claim_next_job(&mut self, now: Timestamp) -> StorageResult<Option<JobRecord>>;
 }
 
 // ------------------------------------------------------------------ bundles
