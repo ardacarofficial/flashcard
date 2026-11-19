@@ -4,14 +4,16 @@ use crate::error::{AppError, AppResult};
 use crate::events::{EventBus, InMemoryEventBus};
 use crate::handler::{CommandCtx, PendingOplogEntry, QueryCtx};
 use crate::jobs::Invoker;
-use crate::registry::{unknown_method, ErasedHandler, Registry, RegistryError};
+use crate::registry::{
+    ensure_invocable, run_recorded, unknown_method, ErasedHandler, Registry, RegistryError,
+};
 use crate::settings::SettingsSchema;
 use crate::system::{OsRng, SystemClock};
 use fc_api::method::parse_qualified_name;
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::events::EventEnvelope;
 use fc_api::v1::oplog::{Actor, OplogKind};
-use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest, Visibility};
+use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest};
 use fc_core::i18n::Locale;
 use fc_core::notetype::builtin;
 use fc_core::settings::SettingScope;
@@ -67,6 +69,11 @@ impl App {
     pub fn new(deps: AppDeps) -> Result<Self, RegistryError> {
         let mut registry = Registry::new();
         crate::modules::register_all(&mut registry);
+        Self::with_registry(deps, registry)
+    }
+
+    /// Builds the app over a custom registry (tests wire in probe handlers this way).
+    pub(crate) fn with_registry(deps: AppDeps, registry: Registry) -> Result<Self, RegistryError> {
         let registry = registry.finish()?;
         let module_enabled = registry
             .modules()
@@ -220,21 +227,7 @@ impl App {
             .entry(name)
             .ok_or_else(|| unknown_method(method))?;
         let d = &entry.descriptor;
-        if d.visibility == Visibility::Internal {
-            return Err(AppError::Api(
-                ApiError::new(ErrorCode::PermissionDenied, format!("{method} is internal"))
-                    .with_detail("permission", d.permission),
-            ));
-        }
-        if !self.is_module_enabled(d.module) {
-            return Err(AppError::Api(
-                ApiError::new(
-                    ErrorCode::ConflictModuleDisabled,
-                    format!("module {} is disabled", d.module),
-                )
-                .with_detail("module", d.module),
-            ));
-        }
+        ensure_invocable(d, actor, self.is_module_enabled(d.module))?;
         match &entry.handler {
             ErasedHandler::Query(h) => {
                 h.validate(&params)?;
@@ -270,22 +263,13 @@ impl App {
                     oplog: Vec::new(),
                     events: Vec::new(),
                 };
-                let outcome = h.execute(params.clone(), &mut ctx)?;
-                let mut oplog = std::mem::take(&mut ctx.oplog);
-                let mut events = std::mem::take(&mut ctx.events);
+                let response = run_recorded(&mut ctx, d, h.as_ref(), method, params)?;
+                let oplog: Vec<PendingOplogEntry> = std::mem::take(&mut ctx.oplog)
+                    .into_iter()
+                    .flatten()
+                    .collect();
+                let events = std::mem::take(&mut ctx.events);
                 let (kind, reverts) = (ctx.batch_kind, ctx.reverts_batch_id);
-                if d.undoable && !outcome.inverse.is_empty() {
-                    oplog.insert(
-                        0,
-                        PendingOplogEntry {
-                            command: method.to_owned(),
-                            payload: params,
-                            inverse: outcome.inverse,
-                            summary: outcome.summary,
-                        },
-                    );
-                }
-                events.extend(outcome.events);
                 let actor_json = serde_json::to_value(actor)
                     .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
                 for (seq, entry) in oplog.into_iter().enumerate() {
@@ -322,7 +306,7 @@ impl App {
                     };
                     self.events.publish(&envelope);
                 }
-                Ok(outcome.response)
+                Ok(response)
             }
         }
     }

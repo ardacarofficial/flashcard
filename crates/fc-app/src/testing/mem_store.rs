@@ -5,7 +5,7 @@
 use fc_core::attribute::{AttributeDef, AttributeValue, EntityRef, StoredValue};
 use fc_core::card::{Card, CardState};
 use fc_core::deck::{name_eq, Deck};
-use fc_core::note::{fnv1a64, Note};
+use fc_core::note::Note;
 use fc_core::notetype::NoteType;
 use fc_core::paging::{Page, PageRequest};
 use fc_core::preset::Preset;
@@ -13,7 +13,7 @@ use fc_core::settings::SettingScope;
 use fc_core::tag::{Tag, TagName};
 use fc_core::{
     AttributeDefId, AttributeOptionId, BatchId, CardId, DeckId, JobId, NoteId, NoteTypeId,
-    PresetId, TagId, Timestamp,
+    PresetId, Timestamp,
 };
 use fc_storage::repo::*;
 use fc_storage::{ReadTx, StorageError, StorageResult, Store, WriteTx};
@@ -120,6 +120,8 @@ fn not_found(entity: &'static str, id: impl ToString) -> StorageError {
 fn offset_page<T>(items: Vec<T>, page: &PageRequest) -> StorageResult<Page<T>> {
     let start: usize = match &page.cursor {
         None => 0,
+        // The real store's `StorageError::InvalidCursor` (storage lane); `Corrupt { table:
+        // "cursor" }` is its stand-in until the lanes merge — both map to the same API error.
         Some(c) => c.parse().map_err(|_| StorageError::Corrupt {
             table: "cursor",
             message: format!("bad cursor {c:?}"),
@@ -133,11 +135,6 @@ fn offset_page<T>(items: Vec<T>, page: &PageRequest) -> StorageResult<Page<T>> {
         items,
         next_cursor: (end < total).then(|| end.to_string()),
     })
-}
-
-fn tag_id(name: &TagName) -> TagId {
-    let h = u128::from(fnv1a64(name.key().as_bytes()));
-    TagId(uuid::Uuid::from_u128((h << 64) | h))
 }
 
 // ------------------------------------------------------------------ decks & presets
@@ -333,15 +330,14 @@ impl NoteRead for MemTx<'_> {
     }
 }
 
-fn ensure_tags(s: &mut MemState, note: &Note) {
-    for t in &note.tags {
-        s.tags.entry(t.key()).or_insert_with(|| Tag {
-            id: tag_id(t),
-            name: t.clone(),
-            color: None,
-            created_at: note.created_at,
-            updated_at: note.created_at,
-        });
+/// Tag rows are the app's job (it mints `TagId`s); like the real store's foreign key, a
+/// note may only reference existing tags.
+fn check_tags(s: &MemState, note: &Note) -> StorageResult<()> {
+    match note.tags.iter().find(|t| !s.tags.contains_key(&t.key())) {
+        Some(_) => Err(StorageError::Constraint {
+            constraint: "note_tags_tag_id_fkey".into(),
+        }),
+        None => Ok(()),
     }
 }
 
@@ -352,8 +348,8 @@ impl NoteWrite for MemTx<'_> {
                 constraint: "notes_pk".into(),
             });
         }
+        check_tags(self.s(), note)?;
         let s = self.m();
-        ensure_tags(s, note);
         s.notes.insert(note.id, note.clone());
         s.search_text.insert(note.id, search_text.to_owned());
         Ok(())
@@ -363,8 +359,8 @@ impl NoteWrite for MemTx<'_> {
         if !self.s().notes.contains_key(&note.id) {
             return Err(not_found("note", note.id));
         }
+        check_tags(self.s(), note)?;
         let s = self.m();
-        ensure_tags(s, note);
         s.notes.insert(note.id, note.clone());
         s.search_text.insert(note.id, search_text.to_owned());
         Ok(())
@@ -527,11 +523,10 @@ impl AttributeRead for MemTx<'_> {
             let Some(def) = s.attr_defs.get(attr).filter(|d| d.deleted_at.is_none()) else {
                 continue;
             };
-            let value =
-                AttributeValue::from_stored(def.kind, rows).ok_or(StorageError::Corrupt {
-                    table: "attribute_values",
-                    message: format!("cannot decode value of {attr}"),
-                })?;
+            let value = AttributeValue::from_stored(def, rows).ok_or(StorageError::Corrupt {
+                table: "attribute_values",
+                message: format!("cannot decode value of {attr}"),
+            })?;
             out.push((*attr, value));
         }
         out.sort_by_key(|(id, _)| *id);

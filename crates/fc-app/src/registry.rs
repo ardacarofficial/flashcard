@@ -9,7 +9,10 @@ use crate::handler::{
 };
 use crate::module::ModuleDescriptor;
 use fc_api::method::parse_qualified_name;
-use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest, MethodDescriptor, MethodKind};
+use fc_api::v1::oplog::Actor;
+use fc_api::{
+    ApiError, ApiMethod, ErrorCode, InvokeRequest, MethodDescriptor, MethodKind, Visibility,
+};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -196,7 +199,8 @@ impl Registry {
         self.entries.get(name)
     }
 
-    /// See [`CommandCtx::call`].
+    /// See [`CommandCtx::call`]. Internal methods are allowed here (inverses, undo/redo);
+    /// callers that forward client calls (`batch.execute`) check [`ensure_invocable`] first.
     pub(crate) fn execute_nested(
         &self,
         ctx: &mut CommandCtx<'_>,
@@ -211,17 +215,79 @@ impl Registry {
                 format!("{} is a query; only commands can be nested", request.method),
             ));
         };
-        let outcome = handler.execute(request.params.clone(), ctx)?;
-        if entry.descriptor.undoable && !outcome.inverse.is_empty() {
-            ctx.oplog.push(PendingOplogEntry {
-                command: request.method.clone(),
-                payload: request.params.clone(),
-                inverse: outcome.inverse,
-                summary: outcome.summary,
-            });
-        }
-        ctx.events.extend(outcome.events);
-        Ok(outcome.response)
+        run_recorded(
+            ctx,
+            &entry.descriptor,
+            handler.as_ref(),
+            &request.method,
+            request.params.clone(),
+        )
+    }
+}
+
+/// Runs a command handler and records its oplog entry (if undoable and not a no-op) in a slot
+/// reserved **before** the handler runs: a command's `seq` precedes those of its nested calls,
+/// whatever depth they run at. Collects its events; returns the serialized response.
+pub(crate) fn run_recorded(
+    ctx: &mut CommandCtx<'_>,
+    descriptor: &MethodDescriptor,
+    handler: &dyn ErasedCommand,
+    method: &str,
+    params: Value,
+) -> AppResult<Value> {
+    let slot = ctx.oplog.len();
+    ctx.oplog.push(None);
+    let outcome = handler.execute(params.clone(), ctx)?;
+    if descriptor.undoable && !outcome.inverse.is_empty() {
+        ctx.oplog[slot] = Some(PendingOplogEntry {
+            command: method.to_owned(),
+            payload: params,
+            inverse: outcome.inverse,
+            summary: outcome.summary,
+        });
+    }
+    ctx.events.extend(outcome.events);
+    Ok(outcome.response)
+}
+
+/// The access check every client-originated call goes through — top-level
+/// [`App::invoke`](crate::App::invoke) and each call inside `batch.execute` alike:
+/// internal methods are rejected (`PERMISSION_DENIED`), then the actor's permission, then the
+/// owning module's switch (`CONFLICT_MODULE_DISABLED`).
+pub(crate) fn ensure_invocable(
+    d: &MethodDescriptor,
+    actor: &Actor,
+    module_enabled: bool,
+) -> AppResult<()> {
+    if d.visibility == Visibility::Internal || !permits(actor, d.permission) {
+        return Err(AppError::Api(
+            ApiError::new(
+                ErrorCode::PermissionDenied,
+                format!("{} may not be called here", d.qualified_name()),
+            )
+            .with_detail("method", d.qualified_name())
+            .with_detail("permission", d.permission),
+        ));
+    }
+    if !module_enabled {
+        return Err(AppError::Api(
+            ApiError::new(
+                ErrorCode::ConflictModuleDisabled,
+                format!("module {} is disabled", d.module),
+            )
+            .with_detail("module", d.module),
+        ));
+    }
+    Ok(())
+}
+
+/// Whether `actor` holds `permission`. v0.1 has no grant store: the user, the CLI and the app
+/// itself hold every permission, and so do the other actors until plugin/local-API grants land
+/// (v0.7) — at which point this is the single place that enforces them.
+fn permits(actor: &Actor, _permission: &str) -> bool {
+    match actor {
+        Actor::User | Actor::Cli | Actor::System => true,
+        Actor::Plugin(_) | Actor::Automation(_) | Actor::LocalApi(_) => true,
     }
 }
 

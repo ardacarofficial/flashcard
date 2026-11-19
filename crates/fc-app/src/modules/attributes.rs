@@ -3,8 +3,9 @@
 //! `support::attrs` (applicability, validated writes, option replacement).
 //!
 //! Option ids are stable: rename/recolor/reorder never touch values. Removing an option
-//! (`option.delete` / `option.merge`) rewrites the values that used it; the inverse re-adds the
-//! option under its old id, restores the order and default, then restores each value.
+//! (`option.delete` / `option.merge`) rewrites the values that used it; the inverse is the
+//! internal `attributes.option.restore` (old id, old index, every changed value verbatim) plus
+//! an `attributes.update` when the default changed.
 
 use crate::error::AppResult;
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
@@ -12,11 +13,11 @@ use crate::module::{bool_setting, settings_page, ModuleDescriptor};
 use crate::registry::Registry;
 use crate::settings::resolve_stored;
 use crate::support::attrs::{
-    apply_assignments, effective_for_deck, entity_decks, replace_option, require_def,
+    apply_assignments, effective_for_deck, entity_deck, replace_option, require_def,
     require_live_def, uses_option,
 };
 use crate::support::decks::DeckIndex;
-use crate::support::{dto, invalid, summary};
+use crate::support::{dto, invalid, store_ops, summary};
 use fc_api::v1::attributes::*;
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::methods::*;
@@ -80,6 +81,7 @@ pub fn register(reg: &mut Registry) {
     reg.command::<AttributesOptionReorder>(option_reorder);
     reg.command::<AttributesOptionMerge>(option_merge);
     reg.command::<AttributesOptionDelete>(option_delete);
+    reg.command::<AttributesOptionRestore>(option_restore);
     reg.query::<AttributesValuesGet>(values_get);
     reg.command::<AttributesValuesSet>(values_set);
 }
@@ -265,7 +267,7 @@ fn get(req: AttributeRef, ctx: &QueryCtx<'_>) -> AppResult<AttributeDefDto> {
 }
 
 fn values_get(req: GetAttributeValues, ctx: &QueryCtx<'_>) -> AppResult<AttributeValues> {
-    entity_decks(ctx.tx, req.entity)?;
+    entity_deck(ctx.tx, req.entity)?;
     Ok(AttributeValues {
         entity: req.entity,
         values: dto::assignments(ctx.tx.get_attribute_values(req.entity)?),
@@ -488,13 +490,17 @@ fn option_reorder(
 
 /// Removes `option`, rewriting values (and the default) that use it to `replacement` (or
 /// dropping it). Returns the number of values changed, the inverse calls and the new def.
+///
+/// The inverse is the internal `attributes.option.restore` (option back under its id at its
+/// index, every changed value back verbatim), then — if the default changed — an
+/// `attributes.update` restoring it.
 fn remove_option(
     ctx: &mut CommandCtx<'_>,
     attr_id: AttributeDefId,
     option: AttributeOptionId,
     replacement: Option<AttributeOptionId>,
 ) -> AppResult<(u32, Vec<InvokeRequest>, AttributeDef)> {
-    let mut def = require_live_def(ctx.reads(), attr_id)?;
+    let def = require_live_def(ctx.reads(), attr_id)?;
     let removed = def
         .option(option)
         .cloned()
@@ -505,69 +511,55 @@ fn remove_option(
         }
         def.option(r).ok_or_else(|| unknown_option(&def, r))?;
     }
-    let old = def.clone();
-    let old_order: Vec<AttributeOptionId> = def.sorted_options().iter().map(|o| o.id).collect();
-    let entities = ctx.reads().entities_with_option(def.id, option)?;
+    let index = def
+        .sorted_options()
+        .iter()
+        .position(|o| o.id == option)
+        .unwrap_or_default();
     let strict = ctx.batch_kind == OplogKind::Do;
-    if strict && def.required && replacement.is_none() && !entities.is_empty() {
-        return Err(ApiError::new(
-            ErrorCode::ConflictAttributeOptionInUse,
-            format!(
-                "option {:?} of required {:?} is in use",
-                removed.label, def.key
-            ),
-        )
-        .with_detail("id", option.to_string())
-        .with_detail("count", entities.len())
-        .into());
+    if strict && def.required && replacement.is_none() {
+        let in_use = ctx.reads().entities_with_option(def.id, option)?.len();
+        if in_use > 0 {
+            return Err(ApiError::new(
+                ErrorCode::ConflictAttributeOptionInUse,
+                format!(
+                    "option {:?} of required {:?} is in use",
+                    removed.label, def.key
+                ),
+            )
+            .with_detail("id", option.to_string())
+            .with_detail("count", in_use)
+            .into());
+        }
     }
-    let mut restores = Vec::new();
-    for entity in entities {
-        let current = ctx
-            .reads()
-            .get_attribute_values(entity)?
-            .into_iter()
-            .find(|(id, _)| *id == def.id)
-            .map(|(_, v)| v);
-        let Some(current) = current else {
-            continue;
-        };
-        let new = replace_option(&current, option, replacement);
-        ctx.tx.set_attribute_values(entity, &[(def.id, new)])?;
-        restores.push(SetAttributeValues {
-            entity,
-            values: vec![AttributeAssignment {
-                attr_id: def.id,
-                value: Some(current),
-            }],
-        });
-    }
-    let default_changed = def
+    let changed = store_ops::remove_option(ctx.tx, def.id, option, replacement)?;
+    let old = def.clone();
+    let mut def = require_def(ctx.reads(), def.id)?;
+    let default_changed = old
         .default_value
         .as_ref()
         .is_some_and(|d| uses_option(d, option));
     if default_changed {
-        def.default_value = def
+        def.default_value = old
             .default_value
             .as_ref()
             .and_then(|d| replace_option(d, option, replacement));
     }
-    def.remove_option(option)?;
     save(ctx, &mut def)?;
 
-    let mut inverse = vec![
-        inverse_call::<AttributesOptionAdd>(&AddAttributeOption {
+    let affected = u32::try_from(changed.len()).unwrap_or(u32::MAX);
+    let mut inverse = vec![inverse_call::<AttributesOptionRestore>(
+        &RestoreAttributeOption {
             attr_id: def.id,
-            label: removed.label,
-            color: removed.color,
-            after: None,
-            id: Some(option),
-        })?,
-        inverse_call::<AttributesOptionReorder>(&ReorderAttributeOptions {
-            attr_id: def.id,
-            order: old_order,
-        })?,
-    ];
+            option: removed,
+            index: u32::try_from(index).unwrap_or(u32::MAX),
+            replaced_by: replacement,
+            values: changed
+                .into_iter()
+                .map(|(entity, value)| EntityAttributeValue { entity, value })
+                .collect(),
+        },
+    )?];
     if default_changed {
         inverse.push(inverse_call::<AttributesUpdate>(&UpdateAttribute {
             id: old.id,
@@ -577,11 +569,40 @@ fn remove_option(
             position: old.position,
         })?);
     }
-    let affected = u32::try_from(restores.len()).unwrap_or(u32::MAX);
-    for r in &restores {
-        inverse.push(inverse_call::<AttributesValuesSet>(r)?);
-    }
     Ok((affected, inverse, def))
+}
+
+/// Internal: re-inserts a removed option at its index and writes the listed values back
+/// verbatim (still validated against the definition). The inverse removes it again with the
+/// original replacement, which recomputes the same values from this state.
+fn option_restore(
+    req: RestoreAttributeOption,
+    ctx: &mut CommandCtx<'_>,
+) -> AppResult<CommandOutcome<AttributeDefDto>> {
+    let def = require_live_def(ctx.reads(), req.attr_id)?;
+    if let Some(r) = req.replaced_by {
+        def.option(r).ok_or_else(|| unknown_option(&def, r))?;
+    }
+    let index = usize::try_from(req.index).unwrap_or(usize::MAX);
+    store_ops::insert_option(ctx.tx, def.id, &req.option, index)?;
+    let mut def = require_def(ctx.reads(), def.id)?;
+    let mut writes = Vec::with_capacity(req.values.len());
+    for v in &req.values {
+        entity_deck(ctx.reads(), v.entity)?;
+        let value = validate_attribute_value(&def, &v.value)?;
+        writes.push((v.entity, value));
+    }
+    for (entity, value) in writes {
+        ctx.tx
+            .set_attribute_values(entity, &[(def.id, Some(value))])?;
+    }
+    let dto = save(ctx, &mut def)?;
+    let inverse = inverse_call::<AttributesOptionDelete>(&DeleteAttributeOption {
+        attr_id: def.id,
+        option_id: req.option.id,
+        replace_with: req.replaced_by,
+    })?;
+    Ok(updated::<AttributesOptionRestore>(dto, vec![inverse]))
 }
 
 fn option_outcome<M: fc_api::ApiMethod>(

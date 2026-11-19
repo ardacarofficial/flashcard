@@ -242,6 +242,36 @@ pub struct DeleteAttributeOption {
     pub replace_with: Option<AttributeOptionId>,
 }
 
+/// Internal `attributes.option.restore` (the inverse of `option.delete` / `option.merge`):
+/// re-inserts `option` under its old id at `index` of the sorted option list, then puts each
+/// entity's value back exactly as it was. Its own inverse removes the option again, moving
+/// values to `replaced_by` (what the original delete/merge did).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct RestoreAttributeOption {
+    /// Definition.
+    pub attr_id: AttributeDefId,
+    /// The option as it was (id, label, color; `order` is ignored).
+    pub option: AttributeOption,
+    /// Index in the sorted option list (clamped to the end).
+    pub index: u32,
+    /// Option the values had been moved to (`null` = they had been removed).
+    pub replaced_by: Option<AttributeOptionId>,
+    /// Entity values before the delete/merge (full values, written verbatim).
+    pub values: Vec<EntityAttributeValue>,
+}
+
+/// One entity's value of one attribute.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EntityAttributeValue {
+    /// Note or card.
+    pub entity: EntityRef,
+    /// Value.
+    pub value: AttributeValue,
+}
+
 /// `attributes.values.get`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]

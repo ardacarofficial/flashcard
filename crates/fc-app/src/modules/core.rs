@@ -3,7 +3,7 @@
 use crate::error::{AppError, AppResult};
 use crate::handler::{CommandCtx, CommandOutcome, PendingOplogEntry, QueryCtx};
 use crate::module::{choice_setting, settings_page, ModuleDescriptor};
-use crate::registry::{unknown_method, Registry};
+use crate::registry::{ensure_invocable, unknown_method, Registry};
 use crate::settings::{chain_for, resolve_setting, stored_chain, SettingsSchema as Schema};
 use crate::support::history::{display_summary, scan};
 use crate::support::{err_id, from_json, invalid, module_states, summary};
@@ -87,14 +87,14 @@ fn revert<M: ApiMethod>(
             ctx.call(call)?;
         }
     }
-    if ctx.oplog.is_empty() {
+    if !ctx.has_oplog_entries() {
         // Nothing to re-execute (a no-op batch): still record the step so history advances.
-        ctx.oplog.push(PendingOplogEntry {
+        ctx.oplog.push(Some(PendingOplogEntry {
             command: format!("{}.{}", fc_api::API_VERSION, M::NAME),
             payload: Value::Object(Default::default()),
             inverse: Vec::new(),
             summary: shown.clone(),
-        });
+        }));
     }
     let event = match kind {
         OplogKind::Redo => DomainEvent::Redone {
@@ -180,9 +180,11 @@ fn oplog_list(req: ListOplog, ctx: &QueryCtx<'_>) -> AppResult<OplogPage> {
     })
 }
 
-/// Runs the calls in this transaction and batch; their oplog entries form one undo step.
+/// Runs the calls in this transaction and batch; their oplog entries form one undo step. Each
+/// call passes the same access check as a top-level invoke ([`ensure_invocable`]), against the
+/// module switches as they stand inside this transaction (an earlier call may have changed
+/// them).
 fn batch(req: ExecuteBatch, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<BatchResult>> {
-    let states = module_states(ctx.reads(), ctx.registry)?;
     let mut results = Vec::with_capacity(req.calls.len());
     for call in &req.calls {
         let name =
@@ -190,25 +192,15 @@ fn batch(req: ExecuteBatch, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
         if [OplogUndo::NAME, OplogRedo::NAME, BatchExecute::NAME].contains(&name) {
             return Err(invalid(format!("{name} cannot run inside batch.execute")));
         }
-        let d = ctx
+        let d = *ctx
             .registry
             .descriptor(name)
             .ok_or_else(|| unknown_method(&call.method))?;
-        if d.visibility == Visibility::Internal {
-            return Err(ApiError::new(
-                ErrorCode::PermissionDenied,
-                format!("{} is internal", call.method),
-            )
-            .into());
-        }
-        if !states.get(d.module).copied().unwrap_or(false) {
-            return Err(ApiError::new(
-                ErrorCode::ConflictModuleDisabled,
-                format!("module {} is disabled", d.module),
-            )
-            .with_detail("module", d.module)
-            .into());
-        }
+        let enabled = module_states(ctx.reads(), ctx.registry)?
+            .get(d.module)
+            .copied()
+            .unwrap_or(false);
+        ensure_invocable(&d, ctx.actor, enabled)?;
         results.push(ctx.call(call)?);
     }
     Ok(CommandOutcome {
@@ -236,7 +228,7 @@ fn module_dto(registry: &Registry, m: &ModuleDescriptor, enabled: bool) -> Modul
         ui,
         methods: registry
             .methods()
-            .filter(|d| d.module == m.id)
+            .filter(|d| d.module == m.id && d.visibility == Visibility::Public)
             .map(|d| d.qualified_name())
             .collect(),
     }

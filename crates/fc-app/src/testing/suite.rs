@@ -64,6 +64,11 @@ macro_rules! store_suite {
             events_follow_commits,
             jobs_interrupted_and_cancel,
             noop_commands_are_not_undo_steps,
+            option_restore_is_exact,
+            deck_delete_inverse_carries_ids,
+            note_home_deck_drives_note_attributes,
+            tag_ids_are_minted_by_the_app,
+            undo_redo_chains,
         );
     };
     (@tests $factory:expr; $($name:ident),* $(,)?) => {
@@ -534,6 +539,7 @@ pub fn note_update_delete_restore_undo(f: &StoreFactory) {
             fields: fields("ran", "koştu"),
             tags: vec!["yeni".into()],
             attributes: vec![],
+            deck_id: None,
         });
         assert_eq!(u.sort_field, "ran");
         assert_eq!(u.tags[0].as_str(), "yeni");
@@ -550,6 +556,7 @@ pub fn note_update_delete_restore_undo(f: &StoreFactory) {
         fields: fields("x", ""),
         tags: vec![],
         attributes: vec![],
+        deck_id: None,
     });
     assert_eq!(e.code, ErrorCode::ConflictDeleted);
     assert_undo_redo(&t, |t| {
@@ -1189,6 +1196,7 @@ pub fn attribute_values_required_and_applicability(f: &StoreFactory) {
                 attr_id: page.id,
                 value: Some(AttributeValue::Number(99.0)),
             }],
+            deck_id: None,
         });
         assert_eq!(u.attributes[0].value, Some(AttributeValue::Number(99.0)));
     });
@@ -1585,4 +1593,371 @@ pub fn noop_commands_are_not_undo_steps(f: &StoreFactory) {
         ErrorCode::ConflictNothingToUndo
     );
     assert!(t.ok::<OplogList>(ListOplog::default()).items.is_empty());
+}
+
+// ------------------------------------------------------------------ contract review (L3b)
+
+/// After `action`: undo → redo → undo → redo, checking the exact snapshots each time (redo
+/// batches are themselves undoable). Leaves the action applied.
+fn assert_undo_chain(t: &TestApp, action: impl FnOnce(&TestApp)) {
+    let before = snapshot(t);
+    action(t);
+    let after = snapshot(t);
+    for round in 0..2 {
+        undo(t);
+        assert_same(&snapshot(t), &before, &format!("undo #{round}"));
+        redo(t);
+        assert_same(&snapshot(t), &after, &format!("redo #{round}"));
+    }
+}
+
+/// Commands of the newest oplog batch, in `seq` order, with their inverse method names.
+fn last_batch(t: &TestApp) -> Vec<(String, Vec<InvokeRequest>)> {
+    let tx = t.store.read().unwrap();
+    let batch = tx.list_oplog_batches(None, 1).unwrap()[0].batch_id;
+    tx.oplog_batch_entries(batch)
+        .unwrap()
+        .into_iter()
+        .map(|r| (r.command, serde_json::from_value(r.inverse).unwrap()))
+        .collect()
+}
+
+pub fn option_restore_is_exact(f: &StoreFactory) {
+    let t = app(f);
+    let d = deck(&t, "D");
+    let topics = define(
+        &t,
+        Some(d.id),
+        "Konu",
+        AttributeKind::MultiEnum,
+        &["x", "y", "z", "w"],
+    );
+    let [x, y, z, w] = ["x", "y", "z", "w"].map(|l| option_id(&topics, l));
+    t.ok::<AttributesUpdate>(UpdateAttribute {
+        id: topics.id,
+        name: "Konu".into(),
+        required: false,
+        default_value: Some(AttributeValue::Choices(vec![y, z])),
+        position: 0,
+    });
+    let mk = |front: &str, ts: Vec<AttributeOptionId>| {
+        t.ok::<NotesCreate>(CreateNote {
+            attributes: vec![AttributeAssignment {
+                attr_id: topics.id,
+                value: Some(AttributeValue::Choices(ts)),
+            }],
+            ..new_note(d.id, front)
+        })
+    };
+    let n1 = mk("one", vec![w, z, x]);
+    let n2 = mk("two", vec![z]);
+    let n3 = mk("three", vec![y]);
+    let topics_of = |t: &TestApp, n: &NoteDto| {
+        values(t, EntityRef::Note(n.id))
+            .into_iter()
+            .find(|a| a.attr_id == topics.id)
+            .and_then(|a| a.value)
+    };
+    assert_eq!(
+        topics_of(&t, &n1),
+        Some(AttributeValue::Choices(vec![x, z, w])),
+        "multi values come back in option order"
+    );
+
+    // Delete a middle option: the inverse is the internal restore (+ default update), and
+    // undo puts the option back at index 2 under its id with every value verbatim.
+    assert_undo_chain(&t, |t| {
+        let r = t.ok::<AttributesOptionDelete>(DeleteAttributeOption {
+            attr_id: topics.id,
+            option_id: z,
+            replace_with: None,
+        });
+        assert_eq!(r.values_affected, 2);
+        let entries = last_batch(t);
+        assert_eq!(entries.len(), 1);
+        let inverse: Vec<&str> = entries[0].1.iter().map(|c| c.method.as_str()).collect();
+        assert_eq!(
+            inverse,
+            ["v1.attributes.option.restore", "v1.attributes.update"]
+        );
+        assert_eq!(entries[0].1[0].params["index"], 2);
+        assert_eq!(topics_of(t, &n2), None, "emptied value removed");
+    });
+    undo(&t);
+    assert_eq!(last_batch(&t)[0].0, "v1.attributes.option.restore");
+    let order: Vec<AttributeOptionId> = t
+        .ok::<AttributesGet>(AttributeRef { id: topics.id })
+        .options
+        .iter()
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(order, [x, y, z, w]);
+
+    // Merge the first option into the last after a reorder; undo/redo/undo is exact.
+    t.ok::<AttributesOptionReorder>(ReorderAttributeOptions {
+        attr_id: topics.id,
+        order: vec![w, x, y, z],
+    });
+    assert_eq!(
+        topics_of(&t, &n1),
+        Some(AttributeValue::Choices(vec![w, x, z])),
+        "reorder changes the read order of stored values"
+    );
+    assert_undo_chain(&t, |t| {
+        let r = t.ok::<AttributesOptionMerge>(MergeAttributeOptions {
+            attr_id: topics.id,
+            from: y,
+            into: w,
+        });
+        assert_eq!(r.values_affected, 1);
+        assert_eq!(topics_of(t, &n3), Some(AttributeValue::Choices(vec![w])));
+        let def = t.ok::<AttributesGet>(AttributeRef { id: topics.id });
+        assert_eq!(def.default_value, Some(AttributeValue::Choices(vec![w, z])));
+    });
+    // The restore itself is internal: unreachable from a transport.
+    let e = t
+        .app
+        .invoke("v1.attributes.option.restore", json!({}), &Actor::User)
+        .unwrap_err();
+    assert_eq!(e.code, ErrorCode::PermissionDenied);
+}
+
+pub fn deck_delete_inverse_carries_ids(f: &StoreFactory) {
+    let t = app(f);
+    let root = deck(&t, "Dil");
+    let sub = deck(&t, "Dil::Fiiller");
+    deck(&t, "Matematik");
+    let a = note(&t, root.id, "a");
+    let b = note(&t, sub.id, "b");
+    assert_undo_chain(&t, |t| {
+        t.ok::<DecksDelete>(DeckRef { id: root.id });
+        let entries = last_batch(t);
+        assert_eq!(entries[0].0, "v1.decks.delete");
+        let inv = &entries[0].1[0];
+        assert_eq!(inv.method, "v1.decks.restore_affected");
+        let p: RestoreDeckAffected = serde_json::from_value(inv.params.clone()).unwrap();
+        assert_eq!(p.id, root.id);
+        let mut decks = p.decks.clone();
+        decks.sort();
+        let mut want = vec![root.id, sub.id];
+        want.sort();
+        assert_eq!(decks, want);
+        let mut notes = p.notes.clone();
+        notes.sort();
+        let mut want = vec![a.id, b.id];
+        want.sort();
+        assert_eq!(notes, want);
+        assert_eq!(p.cards.len(), 2);
+    });
+    // Undo then a new delete: the trash flow restores by `deleted_at` and is undoable too.
+    undo(&t);
+    let before = snapshot(&t);
+    t.ok::<DecksDelete>(DeckRef { id: root.id });
+    let trashed = snapshot(&t);
+    let r = t.ok::<DecksRestore>(DeckRef { id: root.id });
+    assert_eq!(
+        r,
+        AffectedCount {
+            decks: 2,
+            notes: 2,
+            cards: 2
+        }
+    );
+    assert_same(&snapshot(&t), &before, "restore from trash");
+    undo(&t);
+    assert_same(&snapshot(&t), &trashed, "undo of restore re-trashes");
+    // The internal restore validates its input.
+    let e = t
+        .app
+        .invoke(
+            "v1.decks.restore_affected",
+            json!({"id": root.id, "decks": [], "notes": [], "cards": []}),
+            &Actor::User,
+        )
+        .unwrap_err();
+    assert_eq!(e.code, ErrorCode::PermissionDenied);
+}
+
+pub fn note_home_deck_drives_note_attributes(f: &StoreFactory) {
+    let t = app(f);
+    let d = deck(&t, "D");
+    let o = deck(&t, "O");
+    let lvl = define(&t, Some(d.id), "Seviye", AttributeKind::Enum, &["a", "b"]);
+    let side = t.ok::<AttributesDefine>(DefineAttribute {
+        scope_deck_id: Some(d.id),
+        key: None,
+        name: "Yön".into(),
+        kind: AttributeKind::Text,
+        target: Some(AttributeTarget::Card),
+        required: None,
+        options: vec![],
+    });
+    let a = option_id(&lvl, "a");
+    let n = t.ok::<NotesCreate>(CreateNote {
+        attributes: vec![AttributeAssignment {
+            attr_id: lvl.id,
+            value: Some(AttributeValue::Choice(a)),
+        }],
+        ..new_note(d.id, "x")
+    });
+    assert_eq!(n.home_deck_id, d.id);
+    let card = EntityRef::Card(n.cards[0].id);
+    let update = |deck_id: Option<DeckId>, attrs: Vec<AttributeAssignment>| UpdateNote {
+        id: n.id,
+        fields: fields("x", "arka"),
+        tags: vec![],
+        attributes: attrs,
+        deck_id,
+    };
+    // Moving the home deck is undoable; the card stays in its deck.
+    assert_undo_chain(&t, |t| {
+        let u = t.ok::<NotesUpdate>(update(Some(o.id), vec![]));
+        assert_eq!(u.home_deck_id, o.id);
+        assert_eq!(u.cards[0].deck_id, d.id);
+    });
+    // Note-level definitions now resolve from O (none there)…
+    let e = t.err::<NotesUpdate>(update(
+        None,
+        vec![AttributeAssignment {
+            attr_id: lvl.id,
+            value: Some(AttributeValue::Choice(a)),
+        }],
+    ));
+    assert_eq!(e.code, ErrorCode::ValidationAttributeNotApplicable);
+    // …card-level ones still from the card's deck D.
+    t.ok::<AttributesValuesSet>(SetAttributeValues {
+        entity: card,
+        values: vec![AttributeAssignment {
+            attr_id: side.id,
+            value: Some(AttributeValue::Text("ileri".into())),
+        }],
+    });
+    // Moving back with a value in the same call resolves against the new home deck.
+    let u = t.ok::<NotesUpdate>(update(
+        Some(d.id),
+        vec![AttributeAssignment {
+            attr_id: lvl.id,
+            value: None,
+        }],
+    ));
+    assert_eq!(u.home_deck_id, d.id);
+    assert!(u.attributes.is_empty());
+    // Unknown / trashed decks are rejected.
+    let ghost = DeckId(uuid::Uuid::from_u128(5));
+    assert_eq!(
+        t.err::<NotesUpdate>(update(Some(ghost), vec![])).code,
+        ErrorCode::NotFoundDeck
+    );
+    t.ok::<DecksDelete>(DeckRef { id: o.id });
+    assert_eq!(
+        t.err::<NotesUpdate>(update(Some(o.id), vec![])).code,
+        ErrorCode::ConflictDeleted
+    );
+}
+
+pub fn tag_ids_are_minted_by_the_app(f: &StoreFactory) {
+    let t = app(f);
+    let d = deck(&t, "D");
+    let n = t.ok::<NotesCreate>(CreateNote {
+        tags: vec!["dil::fiil".into(), "Kolay".into()],
+        ..new_note(d.id, "x")
+    });
+    let tags = t.ok::<TagsList>(Empty {}).tags;
+    assert_eq!(tags.len(), 2);
+    for tag in &tags {
+        assert_eq!(tag.id.0.get_version_num(), 7, "UUIDv7 from the app's IdGen");
+    }
+    assert_ne!(tags[0].id, tags[1].id);
+    // Renaming to a brand-new tag creates its row through the app as well.
+    t.ok::<TagsRename>(RenameTag {
+        from: "kolay".into(),
+        to: "zor".into(),
+    });
+    let tags = t.ok::<TagsList>(Empty {}).tags;
+    let zor = tags.iter().find(|t| t.name.as_str() == "zor").unwrap();
+    assert_eq!(zor.id.0.get_version_num(), 7);
+    assert_eq!(zor.note_count, 1);
+    // Updating keeps existing tag ids.
+    let before = tags
+        .iter()
+        .find(|t| t.name.as_str() == "dil::fiil")
+        .unwrap()
+        .id;
+    t.ok::<NotesUpdate>(UpdateNote {
+        id: n.id,
+        fields: fields("x", "y"),
+        tags: vec!["dil::fiil".into()],
+        attributes: vec![],
+        deck_id: None,
+    });
+    let after = t.ok::<TagsList>(Empty {}).tags;
+    assert_eq!(
+        after
+            .iter()
+            .find(|t| t.name.as_str() == "dil::fiil")
+            .unwrap()
+            .id,
+        before
+    );
+}
+
+pub fn undo_redo_chains(f: &StoreFactory) {
+    let t = app(f);
+    let s0 = snapshot(&t);
+    deck(&t, "A");
+    let s1 = snapshot(&t);
+    deck(&t, "B");
+    let s2 = snapshot(&t);
+    let status = |t: &TestApp| {
+        let s = t.ok::<OplogStatus>(Empty {});
+        (s.can_undo, s.can_redo)
+    };
+    // undo B → redo B → undo (the redo) → undo A → redo A → redo B.
+    undo(&t);
+    assert_eq!(snapshot(&t), s1);
+    redo(&t);
+    assert_eq!(snapshot(&t), s2);
+    assert_eq!(status(&t), (true, false));
+    undo(&t);
+    assert_eq!(snapshot(&t), s1, "a redo batch is itself undoable");
+    undo(&t);
+    assert_eq!(snapshot(&t), s0);
+    assert_eq!(status(&t), (false, true));
+    redo(&t);
+    assert_eq!(snapshot(&t), s1);
+    redo(&t);
+    assert_eq!(snapshot(&t), s2);
+    assert_eq!(status(&t), (true, false));
+    // Undo twice, redo once, then a new action: the remaining redo is gone.
+    undo(&t);
+    undo(&t);
+    redo(&t);
+    assert_eq!(snapshot(&t), s1);
+    assert_eq!(status(&t), (true, true));
+    deck(&t, "C");
+    assert_eq!(status(&t), (true, false));
+    assert_eq!(
+        code(t.err::<OplogRedo>(Empty {})),
+        ErrorCode::ConflictNothingToRedo
+    );
+    undo(&t);
+    assert_eq!(snapshot(&t), s1);
+    assert_eq!(status(&t), (true, true));
+    undo(&t);
+    assert_eq!(snapshot(&t), s0);
+    assert_eq!(
+        code(t.err::<OplogUndo>(Empty {})),
+        ErrorCode::ConflictNothingToUndo
+    );
+    // Redo walks forward again: A, then C (B was dropped by the new action).
+    redo(&t);
+    assert_eq!(snapshot(&t), s1);
+    redo(&t);
+    let names: Vec<String> = t
+        .ok::<DecksList>(Empty {})
+        .decks
+        .into_iter()
+        .map(|d| d.name)
+        .collect();
+    assert_eq!(names, ["A", "C"]);
 }

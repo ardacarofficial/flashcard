@@ -2,15 +2,15 @@
 
 use super::{deleted, err_id};
 use crate::error::AppResult;
-use crate::handler::inverse_call;
+use crate::handler::{inverse_call, CommandCtx};
 use fc_api::v1::methods::NotesUpdate;
 use fc_api::v1::notes::UpdateNote;
 use fc_api::{ErrorCode, InvokeRequest};
 use fc_core::note::{note_checksum, searchable_text, sort_field_text, FieldValues, Note};
 use fc_core::notetype::{FieldKey, NoteType};
-use fc_core::tag::{dedup_tags, TagName};
-use fc_core::{NoteId, NoteTypeId};
-use fc_storage::{Reads, WriteTx};
+use fc_core::tag::{dedup_tags, Tag, TagName};
+use fc_core::{NoteId, NoteTypeId, TagId};
+use fc_storage::Reads;
 use std::collections::BTreeMap;
 
 /// Note by id (trash included) or `NOT_FOUND_NOTE`.
@@ -63,14 +63,46 @@ pub(crate) fn derive(nt: &NoteType, note: &mut Note) {
     note.checksum = note_checksum(nt, &note.fields);
 }
 
-/// Writes an existing note (derived columns and search text recomputed).
-pub(crate) fn write_note(tx: &mut dyn WriteTx, nt: &NoteType, note: &mut Note) -> AppResult<()> {
-    derive(nt, note);
-    tx.update_note(note, &searchable_text(nt, &note.fields))?;
+/// Makes sure every tag of `tags` has a `tags` row, creating missing ones with an id from the
+/// app's [`IdGen`](fc_core::IdGen) (storage never mints ids). Call before writing a note.
+pub(crate) fn ensure_tag_rows(ctx: &mut CommandCtx<'_>, tags: &[TagName]) -> AppResult<()> {
+    for name in tags {
+        if ctx.reads().get_tag_by_name(name)?.is_none() {
+            ctx.tx.upsert_tag(&Tag {
+                id: TagId::generate(ctx.ids),
+                name: name.clone(),
+                color: None,
+                created_at: ctx.now,
+                updated_at: ctx.now,
+            })?;
+        }
+    }
     Ok(())
 }
 
-/// A `notes.update` call restoring the fields and tags of `note` (attributes untouched).
+/// Inserts a new note (tag rows resolved first, search text computed).
+pub(crate) fn insert_note(ctx: &mut CommandCtx<'_>, nt: &NoteType, note: &Note) -> AppResult<()> {
+    ensure_tag_rows(ctx, &note.tags)?;
+    ctx.tx
+        .insert_note(note, &searchable_text(nt, &note.fields))?;
+    Ok(())
+}
+
+/// Writes an existing note (derived columns and search text recomputed, tag rows resolved).
+pub(crate) fn write_note(
+    ctx: &mut CommandCtx<'_>,
+    nt: &NoteType,
+    note: &mut Note,
+) -> AppResult<()> {
+    derive(nt, note);
+    ensure_tag_rows(ctx, &note.tags)?;
+    ctx.tx
+        .update_note(note, &searchable_text(nt, &note.fields))?;
+    Ok(())
+}
+
+/// A `notes.update` call restoring the fields and tags of `note` (attributes and home deck
+/// untouched).
 pub(crate) fn restore_content_call(note: &Note) -> AppResult<InvokeRequest> {
     inverse_call::<NotesUpdate>(&UpdateNote {
         id: note.id,
@@ -81,5 +113,6 @@ pub(crate) fn restore_content_call(note: &Note) -> AppResult<InvokeRequest> {
             .collect(),
         tags: note.tags.iter().map(|t| t.as_str().to_owned()).collect(),
         attributes: Vec::new(),
+        deck_id: None,
     })
 }

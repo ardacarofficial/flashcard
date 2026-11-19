@@ -7,6 +7,7 @@ pub(crate) mod decks;
 pub(crate) mod dto;
 pub(crate) mod history;
 pub(crate) mod notes;
+pub(crate) mod store_ops;
 
 use crate::error::{AppError, AppResult};
 use crate::registry::Registry;

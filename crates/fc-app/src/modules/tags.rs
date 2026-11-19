@@ -92,7 +92,7 @@ fn retag(
         }
         let nt = require_notetype(ctx.reads(), note.notetype_id)?;
         note.updated_at = ctx.now;
-        write_note(ctx.tx, &nt, &mut note)?;
+        write_note(ctx, &nt, &mut note)?;
         inverse.push(restore_content_call(&old)?);
     }
     Ok(inverse)

@@ -95,6 +95,7 @@ pub(crate) fn note(reads: &dyn Reads, note: &Note) -> AppResult<NoteDto> {
     Ok(NoteDto {
         id: note.id,
         notetype_id: note.notetype_id,
+        home_deck_id: note.home_deck_id,
         fields: note
             .fields
             .iter()

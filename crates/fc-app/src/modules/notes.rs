@@ -8,7 +8,8 @@ use crate::registry::Registry;
 use crate::support::attrs::apply_assignments;
 use crate::support::decks::DeckIndex;
 use crate::support::notes::{
-    derive, field_values, parse_tags, require_live_note, require_note, require_notetype, write_note,
+    derive, field_values, insert_note, parse_tags, require_live_note, require_note,
+    require_notetype, write_note,
 };
 use crate::support::{deleted, dto, err_id, summary};
 use fc_api::v1::common::AffectedCount;
@@ -22,7 +23,7 @@ use fc_core::attribute::{
 };
 use fc_core::card::{standard_card_specs, Card};
 use fc_core::error::CoreError;
-use fc_core::note::{normalize_note_fields, searchable_text, Note};
+use fc_core::note::{normalize_note_fields, Note};
 use fc_core::{CardId, NoteId};
 use fc_storage::repo::{CardFilter, NoteFilter};
 
@@ -83,6 +84,7 @@ fn create(req: CreateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
     let mut note = Note {
         id: NoteId::generate(ctx.ids),
         notetype_id: nt.id,
+        home_deck_id: req.deck_id,
         fields: normalize_note_fields(&nt, &field_values(&req.fields))?,
         sort_field: String::new(),
         checksum: String::new(),
@@ -116,8 +118,7 @@ fn create(req: CreateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
         .collect();
     let values = prepare_attribute_values(&effective, AttributeTarget::Note, &provided)?;
 
-    ctx.tx
-        .insert_note(&note, &searchable_text(&nt, &note.fields))?;
+    insert_note(ctx, &nt, &note)?;
     for spec in specs {
         let card = Card::new(
             CardId::generate(ctx.ids),
@@ -145,16 +146,27 @@ fn create(req: CreateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
     })
 }
 
-/// Replaces fields and tags; sets/clears the listed attributes (others are untouched).
+/// Replaces fields and tags; optionally moves the home deck (cards stay put); then sets/clears
+/// the listed attributes (others are untouched), resolved against the new home deck.
 fn update(req: UpdateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<NoteDto>> {
     let mut note = require_live_note(ctx.reads(), req.id)?;
     let nt = require_notetype(ctx.reads(), note.notetype_id)?;
     let old = note.clone();
+    let strict = ctx.batch_kind == OplogKind::Do;
+    if let Some(d) = req.deck_id {
+        let index = DeckIndex::load(ctx.reads())?;
+        if strict {
+            index.require_live(d)?;
+        } else {
+            // Undo/redo may move a note back to a deck that has since been trashed.
+            index.require(d)?;
+        }
+        note.home_deck_id = d;
+    }
     note.fields = normalize_note_fields(&nt, &field_values(&req.fields))?;
     note.tags = parse_tags(&req.tags)?;
     note.updated_at = ctx.now;
-    write_note(ctx.tx, &nt, &mut note)?;
-    let strict = ctx.batch_kind == OplogKind::Do;
+    write_note(ctx, &nt, &mut note)?;
     let previous = apply_assignments(ctx.tx, strict, EntityRef::Note(note.id), &req.attributes)?;
     let inverse = UpdateNote {
         id: note.id,
@@ -165,6 +177,7 @@ fn update(req: UpdateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
             .collect(),
         tags: old.tags.iter().map(|t| t.as_str().to_owned()).collect(),
         attributes: previous,
+        deck_id: (old.home_deck_id != note.home_deck_id).then_some(old.home_deck_id),
     };
     let response = dto::note(ctx.reads(), &note)?;
     Ok(CommandOutcome {

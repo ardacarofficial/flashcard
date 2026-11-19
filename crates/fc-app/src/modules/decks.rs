@@ -8,7 +8,8 @@ use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
 use crate::module::{bool_setting, main_menu, ModuleDescriptor};
 use crate::registry::Registry;
 use crate::support::decks::DeckIndex;
-use crate::support::{deleted, err_id, summary};
+use crate::support::store_ops::{self, Trashed};
+use crate::support::{deleted, invalid, summary};
 use fc_api::v1::common::{AffectedCount, Empty};
 use fc_api::v1::decks::*;
 use fc_api::v1::events::DomainEvent;
@@ -16,9 +17,8 @@ use fc_api::v1::methods::*;
 use fc_api::{ApiError, ErrorCode};
 use fc_core::deck::{check_move, normalize_deck_segment, Deck, DeckPath};
 use fc_core::settings::SettingScopeKind;
-use fc_core::{CardId, DeckId, NoteId};
-use fc_storage::repo::CardFilter;
-use std::collections::{BTreeSet, HashMap};
+use fc_core::DeckId;
+use std::collections::HashMap;
 
 /// Module id.
 pub const ID: &str = "decks";
@@ -56,6 +56,7 @@ pub fn register(reg: &mut Registry) {
     reg.command::<DecksUpdate>(update);
     reg.command::<DecksDelete>(delete);
     reg.command::<DecksRestore>(restore);
+    reg.command::<DecksRestoreAffected>(restore_affected);
 }
 
 fn exists(path: String) -> ApiError {
@@ -282,39 +283,24 @@ fn update(req: UpdateDeck, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
 }
 
 /// Trashes the deck, its live sub-decks, their live cards and the notes left without live
-/// cards — all with the same `deleted_at`, which is how `decks.restore` finds them again.
+/// cards — all with the same `deleted_at`. The inverse (internal `decks.restore_affected`)
+/// carries exactly the trashed ids.
 fn delete(req: DeckRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<AffectedCount>> {
     let index = DeckIndex::load(ctx.reads())?;
     let deck = index.require_live(req.id)?;
     let path = index.path(deck.id);
-    let decks = index.live_subtree(deck.id);
-    let cards = ctx.reads().list_cards(&CardFilter {
-        deck_ids: Some(decks.clone()),
-        note_ids: None,
-        include_deleted: false,
-    })?;
-    let card_ids: Vec<CardId> = cards.iter().map(|c| c.id).collect();
-    let touched: BTreeSet<NoteId> = cards.iter().map(|c| c.note_id).collect();
-    let mut notes: Vec<NoteId> = Vec::new();
-    for n in touched {
-        let live = ctx.reads().list_cards(&CardFilter {
-            deck_ids: None,
-            note_ids: Some(vec![n]),
-            include_deleted: false,
-        })?;
-        if live.iter().all(|c| card_ids.contains(&c.id)) {
-            notes.push(n);
-        }
-    }
-    let now = Some(ctx.now);
-    let affected = AffectedCount {
-        decks: ctx.tx.set_decks_deleted(&decks, now)?,
-        notes: ctx.tx.set_notes_deleted(&notes, now)?,
-        cards: ctx.tx.set_cards_deleted(&card_ids, now)?,
-    };
+    let trashed = store_ops::trash_deck_subtree(ctx.tx, deck.id, ctx.now)?;
+    let affected = count(&trashed);
     Ok(CommandOutcome {
         response: affected,
-        inverse: vec![inverse_call::<DecksRestore>(&req)?],
+        inverse: vec![inverse_call::<DecksRestoreAffected>(
+            &RestoreDeckAffected {
+                id: req.id,
+                decks: trashed.decks,
+                notes: trashed.notes,
+                cards: trashed.cards,
+            },
+        )?],
         summary: summary::<DecksDelete>().param("path", path),
         events: vec![DomainEvent::DeckDeleted {
             id: req.id,
@@ -323,66 +309,73 @@ fn delete(req: DeckRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Af
     })
 }
 
-/// Restores a trashed deck with everything trashed together with it. A live deck is a no-op.
-fn restore(req: DeckRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<AffectedCount>> {
+fn count(t: &Trashed) -> AffectedCount {
+    let n = |len: usize| u32::try_from(len).unwrap_or(u32::MAX);
+    AffectedCount {
+        decks: n(t.decks.len()),
+        notes: n(t.notes.len()),
+        cards: n(t.cards.len()),
+    }
+}
+
+/// Restores `items` (trashed together with deck `id`). The parent must be live and the name
+/// free. Inverse: `decks.delete`, which re-trashes the same set from this state.
+fn restore_items<M: fc_api::ApiMethod>(
+    ctx: &mut CommandCtx<'_>,
+    id: DeckId,
+    items: &Trashed,
+) -> AppResult<CommandOutcome<AffectedCount>> {
     let index = DeckIndex::load(ctx.reads())?;
-    let deck = index.require(req.id)?.clone();
-    let Some(at) = deck.deleted_at else {
+    let deck = index.require(id)?.clone();
+    if !deck.is_deleted() {
         return Ok(CommandOutcome {
             response: AffectedCount::default(),
             inverse: Vec::new(),
-            summary: summary::<DecksRestore>().param("path", index.path(deck.id)),
+            summary: summary::<M>().param("path", index.path(deck.id)),
             events: Vec::new(),
         });
-    };
+    }
     if let Some(p) = deck.parent_id {
         if index.require(p)?.is_deleted() {
             return Err(deleted("deck", p));
         }
     }
     ensure_name_free(&index, deck.parent_id, &deck.name, deck.id)?;
-    let mut decks = vec![deck.id];
-    decks.extend(
-        index
-            .descendants(deck.id)
-            .into_iter()
-            .filter(|d| index.get(*d).is_some_and(|d| d.deleted_at == Some(at))),
-    );
-    let cards: Vec<_> = ctx
-        .reads()
-        .list_cards(&CardFilter {
-            deck_ids: Some(decks.clone()),
-            note_ids: None,
-            include_deleted: true,
-        })?
-        .into_iter()
-        .filter(|c| c.deleted_at == Some(at))
-        .collect();
-    let mut notes: Vec<NoteId> = Vec::new();
-    for c in &cards {
-        if notes.contains(&c.note_id) {
-            continue;
-        }
-        let note = ctx
-            .reads()
-            .get_note(c.note_id)?
-            .ok_or_else(|| err_id(ErrorCode::NotFoundNote, "card without note", c.note_id))?;
-        if note.deleted_at == Some(at) {
-            notes.push(note.id);
-        }
-    }
-    let card_ids: Vec<CardId> = cards.iter().map(|c| c.id).collect();
-    let affected = AffectedCount {
-        decks: ctx.tx.set_decks_deleted(&decks, None)?,
-        notes: ctx.tx.set_notes_deleted(&notes, None)?,
-        cards: ctx.tx.set_cards_deleted(&card_ids, None)?,
-    };
+    let (decks, notes, cards) = store_ops::restore_trashed(ctx.tx, items)?;
     let restored = DeckIndex::load(ctx.reads())?;
     let dto = restored.dto(restored.require(deck.id)?);
     Ok(CommandOutcome {
-        response: affected,
-        inverse: vec![inverse_call::<DecksDelete>(&req)?],
-        summary: summary::<DecksRestore>().param("path", &dto.path),
+        response: AffectedCount {
+            decks,
+            notes,
+            cards,
+        },
+        inverse: vec![inverse_call::<DecksDelete>(&DeckRef { id })?],
+        summary: summary::<M>().param("path", &dto.path),
         events: vec![DomainEvent::DeckRestored { deck: dto }],
     })
+}
+
+/// Restores a trashed deck (from the trash UI) with everything whose `deleted_at` equals the
+/// deck's. A live deck is a no-op.
+fn restore(req: DeckRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<AffectedCount>> {
+    let deck = DeckIndex::load(ctx.reads())?.require(req.id)?.clone();
+    let items = store_ops::trashed_with_deck(ctx.reads(), &deck)?;
+    restore_items::<DecksRestore>(ctx, req.id, &items)
+}
+
+/// Internal inverse of `decks.delete`: restores exactly the listed entities.
+fn restore_affected(
+    req: RestoreDeckAffected,
+    ctx: &mut CommandCtx<'_>,
+) -> AppResult<CommandOutcome<AffectedCount>> {
+    if !req.decks.contains(&req.id) {
+        return Err(invalid("the deleted deck must be among the restored decks"));
+    }
+    let items = Trashed {
+        decks: req.decks,
+        notes: req.notes,
+        cards: req.cards,
+    };
+    restore_items::<DecksRestoreAffected>(ctx, req.id, &items)
 }

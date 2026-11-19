@@ -404,8 +404,12 @@ fn storage_representation_roundtrips() {
     ];
     for (kind, v) in cases {
         let rows = v.to_stored();
+        let def = AttributeDef {
+            kind,
+            ..level.clone()
+        };
         assert_eq!(
-            AttributeValue::from_stored(kind, &rows),
+            AttributeValue::from_stored(&def, &rows),
             Some(v.clone()),
             "{kind:?}"
         );
@@ -416,12 +420,60 @@ fn storage_representation_roundtrips() {
         AttributeValue::Number(3.0).to_stored()[0].value_num,
         Some(3.0)
     );
-    assert_eq!(
-        AttributeValue::from_stored(AttributeKind::Number, &[]),
-        None
-    );
+    assert_eq!(AttributeValue::from_stored(&level, &[]), None);
     assert_eq!(
         serde_json::to_value(AttributeValue::Choice(a1)).unwrap(),
         serde_json::json!({"type": "choice", "value": a1.to_string()})
     );
+}
+
+#[test]
+fn multi_enum_from_stored_follows_option_order() {
+    let mut g = ids();
+    let mut level = cefr(None, &mut g);
+    level.kind = AttributeKind::MultiEnum;
+    let order: Vec<_> = level.sorted_options().iter().map(|o| o.id).collect();
+    let (a1, a2, b1) = (order[0], order[1], order[2]);
+    // Rows written in an arbitrary order come back in option order.
+    let rows = AttributeValue::Choices(vec![b1, a1, a2]).to_stored();
+    assert_eq!(
+        AttributeValue::from_stored(&level, &rows),
+        Some(AttributeValue::Choices(vec![a1, a2, b1]))
+    );
+    // After a reorder, the same rows follow the new order.
+    let mut reordered = order.clone();
+    reordered.swap(0, 2);
+    level.reorder_options(&reordered).unwrap();
+    assert_eq!(
+        AttributeValue::from_stored(&level, &rows),
+        Some(AttributeValue::Choices(vec![b1, a2, a1]))
+    );
+    // Unknown ids go last, keeping their row order.
+    let ghost = AttributeOptionId::generate(&mut g);
+    let rows = AttributeValue::Choices(vec![ghost, a2]).to_stored();
+    assert_eq!(
+        AttributeValue::from_stored(&level, &rows),
+        Some(AttributeValue::Choices(vec![a2, ghost]))
+    );
+}
+
+#[test]
+fn insert_option_at_restores_position() {
+    let mut g = ids();
+    let base = cefr(None, &mut g);
+    let order: Vec<_> = base.sorted_options().iter().map(|o| o.id).collect();
+    for index in [0usize, 1, order.len() - 1, 99] {
+        let mut def = base.clone();
+        let (removed, idx) = def
+            .remove_option(order[index.min(order.len() - 1)])
+            .unwrap();
+        def.insert_option_at(removed, idx).unwrap();
+        let got: Vec<_> = def.sorted_options().iter().map(|o| o.id).collect();
+        assert_eq!(got, order, "index {index}");
+    }
+    let mut def = base.clone();
+    let (removed, _) = def.remove_option(order[1]).unwrap();
+    def.insert_option_at(removed.clone(), 0).unwrap();
+    assert_eq!(def.sorted_options()[0].id, removed.id);
+    assert!(def.insert_option_at(removed, 0).is_err(), "duplicate id");
 }

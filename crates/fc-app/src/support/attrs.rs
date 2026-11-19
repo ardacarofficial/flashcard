@@ -11,7 +11,6 @@ use fc_core::attribute::{
 };
 use fc_core::error::CoreError;
 use fc_core::{AttributeDefId, AttributeOptionId, DeckId};
-use fc_storage::repo::CardFilter;
 use fc_storage::{Reads, WriteTx};
 use std::collections::HashMap;
 
@@ -53,61 +52,31 @@ pub(crate) fn effective_for_deck(
         .collect())
 }
 
-/// Decks an entity lives in: a card's deck, or the decks of a note's cards (trashed cards
-/// included, so values of trashed notes stay addressable). Empty if the entity has no cards.
-pub(crate) fn entity_decks(reads: &dyn Reads, entity: EntityRef) -> AppResult<Vec<DeckId>> {
+/// The deck an entity's definitions resolve from: a card's own deck, a note's home deck
+/// (`notes.home_deck_id`). Fails with `NOT_FOUND_*` for an unknown entity.
+pub(crate) fn entity_deck(reads: &dyn Reads, entity: EntityRef) -> AppResult<DeckId> {
     match entity {
-        EntityRef::Card(id) => {
-            let card = reads.get_card(id)?.ok_or_else(|| {
-                err_id(ErrorCode::NotFoundCard, format!("card {id} not found"), id)
-            })?;
-            Ok(vec![card.deck_id])
-        }
-        EntityRef::Note(id) => {
-            if reads.get_note(id)?.is_none() {
-                return Err(err_id(
-                    ErrorCode::NotFoundNote,
-                    format!("note {id} not found"),
-                    id,
-                ));
-            }
-            let mut cards = reads.list_cards(&CardFilter {
-                deck_ids: None,
-                note_ids: Some(vec![id]),
-                include_deleted: true,
-            })?;
-            // Live cards first so their decks win the "first deck" (suggestions etc.).
-            cards.sort_by_key(|c| (c.deleted_at.is_some(), c.created_at, c.id));
-            let mut decks = Vec::new();
-            for c in cards {
-                if !decks.contains(&c.deck_id) {
-                    decks.push(c.deck_id);
-                }
-            }
-            Ok(decks)
-        }
+        EntityRef::Card(id) => Ok(reads
+            .get_card(id)?
+            .ok_or_else(|| err_id(ErrorCode::NotFoundCard, format!("card {id} not found"), id))?
+            .deck_id),
+        EntityRef::Note(id) => Ok(reads
+            .get_note(id)?
+            .ok_or_else(|| err_id(ErrorCode::NotFoundNote, format!("note {id} not found"), id))?
+            .home_deck_id),
     }
 }
 
-/// Live definitions applicable to `entity` (union over its decks; collection scope if it has
-/// none), filtered to the entity's target.
+/// Live definitions applicable to `entity` (resolved from [`entity_deck`]), filtered to the
+/// entity's target.
 pub(crate) fn applicable(reads: &dyn Reads, entity: EntityRef) -> AppResult<Vec<AttributeDef>> {
     let index = DeckIndex::load(reads)?;
-    let decks = entity_decks(reads, entity)?;
-    let scopes: Vec<Option<DeckId>> = if decks.is_empty() {
-        vec![None]
-    } else {
-        decks.into_iter().map(Some).collect()
-    };
-    let mut out: Vec<AttributeDef> = Vec::new();
-    for scope in scopes {
-        for (def, _) in effective_for_deck(reads, &index, scope)? {
-            if def.target == entity.target() && !out.iter().any(|d| d.id == def.id) {
-                out.push(def);
-            }
-        }
-    }
-    Ok(out)
+    let deck = entity_deck(reads, entity)?;
+    Ok(effective_for_deck(reads, &index, Some(deck))?
+        .into_iter()
+        .map(|(def, _)| def)
+        .filter(|def| def.target == entity.target())
+        .collect())
 }
 
 /// Validates and writes `assignments` on `entity`; returns the previous values of the touched
