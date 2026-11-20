@@ -61,6 +61,8 @@ suite!(
     host_call_loops_in_hooks_do_not_freeze_actions,
     ui_notify_needs_permission_and_is_rate_limited,
     hook_budget_is_charged_to_the_initiator,
+    bulk_edit_cannot_switch_one_plugin_off_for_another,
+    looping_hooks_are_still_switched_off,
     faults_in_another_plugins_chain_are_not_counted,
     oplog_cannot_be_read_by_plugins,
     results_are_filtered_by_read_permissions,
@@ -1206,8 +1208,9 @@ fn failed_hook_rollback_does_not_cascade(f: Factory) {
     assert_eq!(plugin(&t, ID).status, PluginStatus::Active);
 }
 
-/// Hook budget: one user action runs at most `plugins.max_hooks_per_action` hooks; past it
-/// the rest are dropped and the plugin is switched off with an i18n notice.
+/// Hook budget: one user action runs at most `plugins.max_hooks_per_action` hooks of a
+/// plugin; past it that plugin's remaining hooks are skipped and the user gets one i18n
+/// notice. The plugin stays on, and its budget is fresh in the next action.
 fn hook_budget_per_action(f: Factory) {
     const ID: &str = "com.test.fail";
     let t = TestApp::new(f());
@@ -1219,23 +1222,32 @@ fn hook_budget_per_action(f: Factory) {
     deck(&t, "One");
     assert_eq!(log_lines(&t, ID, "boom"), 1);
     t.take_events();
-    // One action, four deck_created events: two hooks run, then the budget trips.
+    // One action, four deck_created events: two hooks run, the other two are skipped.
     let start = std::time::Instant::now();
     deck(&t, "A::B::C::D");
     assert!(start.elapsed() < std::time::Duration::from_secs(10));
     assert_eq!(log_lines(&t, ID, "boom"), 3);
     assert_eq!(log_lines(&t, ID, "HOOK_BUDGET"), 1);
-    let p = plugin(&t, ID);
-    assert_eq!(p.status, PluginStatus::AutoDisabled);
-    assert!(p.last_error.unwrap_or_default().contains("HOOK_BUDGET"));
-    assert!(t.take_events().iter().any(|e| matches!(
-        &e.event,
-        DomainEvent::PluginsChanged { plugin_id, auto_disabled: true, reason: Some(r) }
-            if plugin_id == ID && r.key == "plugins.notice.hook_budget"
-    )));
-    // Off now: the next action runs no hook.
+    assert_eq!(plugin(&t, ID).status, PluginStatus::Active);
+    assert_eq!(skipped_notices(&t), vec![vec![ID.to_owned()]]);
+    // Still on, with a fresh budget: the next action runs its hook.
     deck(&t, "Two");
-    assert_eq!(log_lines(&t, ID, "boom"), 3);
+    assert_eq!(log_lines(&t, ID, "boom"), 4);
+    assert!(skipped_notices(&t).is_empty());
+}
+
+/// The `plugin_hooks_skipped` notices published since the last look (their plugin ids).
+fn skipped_notices(t: &TestApp) -> Vec<Vec<String>> {
+    t.take_events()
+        .into_iter()
+        .filter_map(|e| match e.event {
+            DomainEvent::PluginHooksSkipped { plugin_ids, notice } => {
+                assert_eq!(notice.key, "plugins.notice.hooks_skipped");
+                Some(plugin_ids)
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// Re-entrancy guard: a hook never starts inside another one, and nothing that happens
@@ -1244,7 +1256,7 @@ fn hook_budget_per_action(f: Factory) {
 fn hooks_do_not_nest_and_their_effects_do_not_queue() {
     let t = TestApp::new(Arc::new(MemStore::new()));
     let host = t.app.plugins();
-    let _action = host.begin_action();
+    let _action = host.begin_action(&t.app);
     let host::Admission::Run(outer) = host.enter_hook(&t.app, "com.test.a", "event:x") else {
         panic!("first hook runs");
     };
@@ -1259,28 +1271,33 @@ fn hooks_do_not_nest_and_their_effects_do_not_queue() {
         matches!(host.enter_hook(&t.app, "com.test.a", "event:x"), host::Admission::Stop),
         "action tripped"
     );
-    assert_eq!(host.pending_disables(), vec!["com.test.b".to_owned()]);
+    assert!(host.pending_disables().is_empty(), "nobody is switched off for it");
 }
 
-/// Hook time budget: once the hooks of one action have taken `plugins.hook_ms_per_action`
-/// together, no more run and the plugin that would have run next is switched off.
+/// Hook time budget: once a plugin's hooks have taken `plugins.hook_ms_per_action` together
+/// in one action, its remaining hooks are skipped; other plugins' hooks run on, nobody is
+/// switched off.
 #[test]
 fn hook_time_per_action_is_bounded() {
     let t = TestApp::new(Arc::new(MemStore::new()));
     set_app_setting(&t, SETTING_HOOK_TIME, json!(100));
     t.app.plugins().reload(&t.app);
     let host = t.app.plugins();
-    let _action = host.begin_action();
+    let _action = host.begin_action(&t.app);
     let host::Admission::Run(first) = host.enter_hook(&t.app, "com.test.a", "event:x") else {
         panic!("first hook runs");
     };
     std::thread::sleep(std::time::Duration::from_millis(150));
     drop(first);
     assert!(matches!(
-        host.enter_hook(&t.app, "com.test.b", "event:x"),
-        host::Admission::Stop
+        host.enter_hook(&t.app, "com.test.a", "event:x"),
+        host::Admission::Spent
     ));
-    assert_eq!(host.pending_disables(), vec!["com.test.b".to_owned()]);
+    assert!(
+        matches!(host.enter_hook(&t.app, "com.test.b", "event:x"), host::Admission::Run(_)),
+        "b's budget is its own"
+    );
+    assert!(host.pending_disables().is_empty());
 }
 
 /// Finding 3: `kv.set` needs `storage:kv`, and a plugin's storage is capped (entries and
@@ -1450,8 +1467,9 @@ fn go_text(t: &TestApp, id: &str) -> String {
 }
 
 /// Finding 1, the exact repro: B hooks `before:decks.create`; A (only `decks:write` +
-/// `ui:command`) calls `decks.create` in a loop. The hook budget is A's: A is switched off,
-/// its call past the budget is refused (it never goes on without B's hook), B stays on.
+/// `ui:command`) calls `decks.create` in a loop. The hook budget is A's: its call past the
+/// budget is refused (it never goes on without B's hook), B is untouched. Spending a budget
+/// switches nobody off.
 fn hook_budget_is_charged_to_the_initiator(f: Factory) {
     let t = TestApp::new(f());
     let dir = tempfile::tempdir().unwrap();
@@ -1466,13 +1484,112 @@ fn hook_budget_is_charged_to_the_initiator(f: Factory) {
     let victim = plugin(&t, VICTIM);
     assert_eq!(victim.status, PluginStatus::Active);
     assert_eq!(victim.failures, 0);
-    let attacker = plugin(&t, ATTACKER);
-    assert_eq!(attacker.status, PluginStatus::AutoDisabled);
-    assert!(attacker.last_error.unwrap_or_default().contains("HOOK_BUDGET"));
+    assert_eq!(log_lines(&t, ATTACKER, "HOOK_BUDGET"), 1);
+    assert_eq!(log_lines(&t, VICTIM, "HOOK_BUDGET"), 0);
+    assert_eq!(skipped_notices(&t), vec![vec![ATTACKER.to_owned()]]);
     assert_eq!(t.ok::<DecksList>(Empty {}).decks.len(), decks, "the failed call rolled back");
     // The user's own actions keep the victim's hook, and its budget is fresh.
     deck(&t, "Mine");
     assert_eq!(plugin(&t, VICTIM).status, PluginStatus::Active);
+}
+
+/// `count` classic notes in deck `name`.
+fn notes(t: &TestApp, name: &str, count: usize) -> Vec<fc_core::NoteId> {
+    let d = deck(t, name);
+    (0..count).map(|i| classic(t, &d, &format!("q{i}"), "a").id).collect()
+}
+
+fn tag_all(t: &TestApp, note_ids: &[fc_core::NoteId], tag: &str) {
+    t.ok::<fc_api::v1::methods::BulkAddTags>(fc_api::v1::bulk::NoteTags {
+        note_ids: note_ids.to_vec(),
+        tags: vec![tag.to_owned()],
+    });
+}
+
+/// An `event:<event>` hook that logs `ran` once per run and returns.
+fn install_counter(t: &TestApp, dir: &tempfile::TempDir, id: &str, event: &str) {
+    let request = json!({ "fn": "log", "args": { "level": "info", "message": "ran" } }).to_string();
+    let wat = fc_plugins::testing::host_loop_wat(&request, 1);
+    let perms = [format!("hooks:event:{event}")];
+    let perms: Vec<&str> = perms.iter().map(String::as_str).collect();
+    install_wat(t, dir, id, &wat, &perms, &[], &perms);
+}
+
+/// Fifth review, the exact repro: `com.aaa.victim` and `com.zzz.attacker` both hook
+/// `event:note_updated`; the user tags 150 notes (150 events). Before: the victim was switched
+/// off (the shared budget ran out on its hook). Now each plugin has its own budget per
+/// action: both stay on, the victim's hooks all ran. One plugin alone on 1000 notes: its
+/// hooks stop at its budget, the user is told once, it stays on.
+fn bulk_edit_cannot_switch_one_plugin_off_for_another(f: Factory) {
+    const AAA: &str = "com.aaa.victim";
+    const ZZZ: &str = "com.zzz.attacker";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let ids = notes(&t, "Bulk", 150);
+    install_counter(&t, &dir, AAA, "note_updated");
+    let perms = ["hooks:event:note_updated"];
+    install_wat(&t, &dir, ZZZ, include_str!("fixtures/hook_continue.wat"), &perms, &[], &perms);
+    t.take_events();
+    tag_all(&t, &ids, "x");
+    for id in [AAA, ZZZ] {
+        let p = plugin(&t, id);
+        assert_eq!((p.status, p.failures), (PluginStatus::Active, 0), "{id}");
+    }
+    assert_eq!(log_lines(&t, AAA, "ran"), 150, "every hook of the victim ran");
+    assert!(skipped_notices(&t).is_empty(), "150 is within each plugin's budget");
+    // Alone with the default budget (200) on a 1000-note edit.
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let ids = notes(&t, "Big", 1000);
+    install_counter(&t, &dir, AAA, "note_updated");
+    t.take_events();
+    tag_all(&t, &ids, "y");
+    let p = plugin(&t, AAA);
+    assert_eq!((p.status, p.failures), (PluginStatus::Active, 0));
+    assert_eq!(log_lines(&t, AAA, "HOOK_BUDGET"), 1);
+    // The log keeps its last 200 lines: 199 runs + the budget line.
+    assert_eq!(log_lines(&t, AAA, "ran"), 199);
+    assert_eq!(skipped_notices(&t), vec![vec![AAA.to_owned()]], "one notice for the action");
+    tag_all(&t, &ids[..10], "z");
+    assert_eq!(plugin(&t, AAA).status, PluginStatus::Active);
+    assert!(skipped_notices(&t).is_empty());
+}
+
+/// A plugin whose own hook code loops is still switched off (its own fault, each action's
+/// deadline counted, `plugins.max_failures` in a row); the plugin next to it is not.
+fn looping_hooks_are_still_switched_off(f: Factory) {
+    const SPIN: &str = "com.test.spin";
+    const CALM: &str = "com.test.calm";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    set_app_setting(&t, SETTING_TIMEOUT, json!(200));
+    let ids = notes(&t, "Spin", 20);
+    let spin = r#"(module
+  (memory (export "memory") 1)
+  (global $heap (mut i32) (i32.const 1024))
+  (func (export "fc_abi_version") (result i32) (i32.const 1))
+  (func (export "fc_alloc") (param $len i32) (result i32)
+    (local $p i32)
+    (local.set $p (global.get $heap))
+    (global.set $heap (i32.add (global.get $heap) (local.get $len)))
+    (local.get $p))
+  (func (export "fc_handle") (param $ptr i32) (param $len i32) (result i64)
+    (loop $l (br $l))
+    unreachable)
+)"#;
+    let perms = ["hooks:event:note_updated"];
+    install_wat(&t, &dir, SPIN, spin, &perms, &[], &perms);
+    install_counter(&t, &dir, CALM, "note_updated");
+    for round in 1..=3u32 {
+        let start = std::time::Instant::now();
+        tag_all(&t, &ids, &format!("r{round}"));
+        assert!(start.elapsed() < std::time::Duration::from_secs(10), "round {round}");
+        assert_eq!(plugin(&t, SPIN).failures, round, "one fault per action, then skipped");
+        assert_eq!(log_lines(&t, CALM, "ran"), 20 * round as usize);
+    }
+    assert_eq!(plugin(&t, SPIN).status, PluginStatus::AutoDisabled);
+    let calm = plugin(&t, CALM);
+    assert_eq!((calm.status, calm.failures), (PluginStatus::Active, 0));
 }
 
 /// Sibling of finding 1: A cannot switch B off by feeding B's hook input it faults on. B's

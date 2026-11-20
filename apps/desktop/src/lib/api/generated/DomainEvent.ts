@@ -148,10 +148,18 @@ plugin_id: string,
  */
 auto_disabled: boolean, 
 /**
- * With `auto_disabled`: why, when it was not repeated failures (e.g.
- * `plugins.notice.hook_budget`).
+ * With `auto_disabled`: why, when it was not repeated failures (an i18n key;
+ * none = repeated failures).
  */
-reason: I18nMessage | null, } } | { "type": "plugin_notice", "data": { 
+reason: I18nMessage | null, } } | { "type": "plugin_hooks_skipped", "data": { 
+/**
+ * Plugins whose hooks were cut short.
+ */
+plugin_ids: Array<string>, 
+/**
+ * What to tell the user (`plugins.notice.hooks_skipped`; params `max`, `ms`).
+ */
+notice: I18nMessage, } } | { "type": "plugin_notice", "data": { 
 /**
  * The notice.
  */

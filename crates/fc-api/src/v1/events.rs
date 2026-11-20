@@ -169,10 +169,18 @@ pub enum DomainEvent {
         plugin_id: String,
         /// Disabled by the app after repeated failures (notify the user).
         auto_disabled: bool,
-        /// With `auto_disabled`: why, when it was not repeated failures (e.g.
-        /// `plugins.notice.hook_budget`).
+        /// With `auto_disabled`: why, when it was not repeated failures (an i18n key;
+        /// none = repeated failures).
         #[serde(default)]
         reason: Option<I18nMessage>,
+    },
+    /// Some plugins' hook budgets for one action ran out: their remaining hooks in that action
+    /// were skipped (nobody is switched off; one event per action, v0.7).
+    PluginHooksSkipped {
+        /// Plugins whose hooks were cut short.
+        plugin_ids: Vec<String>,
+        /// What to tell the user (`plugins.notice.hooks_skipped`; params `max`, `ms`).
+        notice: I18nMessage,
     },
     /// A plugin asked to show a notice (`host.ui.notify`, v0.7).
     PluginNotice {

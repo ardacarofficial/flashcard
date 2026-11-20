@@ -290,7 +290,9 @@ pub(crate) fn event_domains(event: &DomainEvent) -> &'static [Domain] {
         E::SavedQueriesChanged => SEARCH,
         // Undo summaries carry the undone step's data (names, texts) of any domain.
         E::Undone { .. } | E::Redone { .. } => &["oplog"],
-        E::PluginsChanged { .. } | E::PluginNotice { .. } => PLUGINS,
+        E::PluginsChanged { .. } | E::PluginNotice { .. } | E::PluginHooksSkipped { .. } => {
+            PLUGINS
+        }
         E::StudyCardsChanged { .. } => STUDY,
     }
 }

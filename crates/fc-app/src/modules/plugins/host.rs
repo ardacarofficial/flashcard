@@ -24,20 +24,24 @@
 //! Changes made by plugins never trigger `after:`/`event:` hooks (no cascades): plugin
 //! writes, and the rollback of a failed plugin call, run as the plugin's actor; and nothing
 //! that happens *while* a hook runs (whatever the actor) is queued for `event:` hooks.
-//! **Hook budget:** one user action may run at most `plugins.max_hooks_per_action` hooks, for
-//! at most `plugins.hook_ms_per_action` together, and no hook may start inside another
-//! ([`Config::max_hook_depth`]). Past any of these, the action's remaining hooks are dropped,
-//! the plugin that *initiated* the work is switched off — the plugin whose operation made the
-//! calls ([`initiator`]), or, on a user's action, the plugin whose hook would have run — and
-//! the user is told (`plugins_changed` with `reason = plugins.notice.hook_budget`); a plugin's
-//! call past the budget is refused rather than run without the hooks. A plugin whose hook
-//! *faulted* runs no more hooks in that action. So a user action never waits on plugins
-//! longer than the hook time budget plus one call's deadline.
+//! **Hook budget, per plugin:** in one user action *each* plugin may run at most
+//! `plugins.max_hooks_per_action` hooks, for at most `plugins.hook_ms_per_action` together
+//! (its own budget; no plugin can spend another's). A plugin past its budget runs no more
+//! hooks in that action — the others run on — and the user gets one notice for the action
+//! listing every plugin whose hooks were cut short (`plugin_hooks_skipped`). Exhausting a
+//! budget never switches a plugin off: on a user's action the volume is the user's (a bulk
+//! edit of 1000 notes is fine); only a plugin's own faults (trap, timeout, fuel, memory, ABI,
+//! `plugins.max_failures` in a row) do. Inside a plugin's operation every hook is charged to
+//! that plugin ([`initiator`]), and its call past its budget is refused rather than run
+//! without the other plugins' `before:` hooks. No hook may start inside another
+//! ([`Config::max_hook_depth`]): that ends the action's hooks. A plugin whose hook *faulted*
+//! runs no more hooks in that action. So a user action waits on each plugin at most its hook
+//! time budget plus one call's deadline.
 //!
 //! **Initiator:** every budget is charged to the plugin that started the chain, never to one
-//! it ran into: the action's hook budget, the per-minute host call windows of hooks run inside
-//! its calls, and faults of other plugins' hooks and engines inside its calls (logged, not
-//! counted against them).
+//! it ran into: the hook budget of its operation, the per-minute host call windows of hooks
+//! run inside its calls, and faults of other plugins' hooks and engines inside its calls
+//! (logged, not counted against them).
 //!
 //! **What plugins see:** every value handed to a plugin (results, errors, hook payloads,
 //! events, jobs) is filtered by its read permissions in [`super::redact`].
@@ -124,7 +128,7 @@ thread_local! {
 }
 
 /// The plugin that started the work running on this thread (`None` = the user or the
-/// app). Every budget is charged to it: the hook budget of the action, per-minute host call
+/// app). Every budget is charged to it: the hook budget of its operation, per-minute host call
 /// windows, and faults of other plugins' hooks and engines its calls ran into.
 pub(crate) fn initiator() -> Option<String> {
     CHAIN.with(|c| c.borrow().first().cloned())
@@ -159,12 +163,12 @@ impl Drop for ChainGuard {
     }
 }
 
-/// The refusal of a plugin's call once its action's hook budget is spent.
+/// The refusal of a plugin's call once its hook budget for the action is spent.
 fn hook_budget_refused(method: &str) -> AppError {
     AppError::Api(
         ApiError::new(
             ErrorCode::ValidationPluginHostLimit,
-            format!("{method}: the hook budget of this action is spent"),
+            format!("{method}: this plugin's hook budget for the action is spent"),
         )
         .with_detail("function", host_fns::INVOKE)
         .with_detail("limit", "hook_budget")
@@ -190,12 +194,12 @@ pub(crate) struct Config {
     pub limits: Limits,
     pub max_failures: u32,
     pub reject_on_hook_failure: bool,
-    /// Hooks one user action may run, all plugins together.
+    /// Hooks one user action may run, per plugin.
     pub max_hooks_per_action: u32,
     /// Hooks that may be running at once on one thread (1 = a hook never starts inside
     /// another; nothing legitimate nests them).
     pub max_hook_depth: u32,
-    /// Wall-clock time all hooks of one user action may take together.
+    /// Wall-clock time the hooks of one plugin may take together in one user action.
     pub hook_time_per_action: Duration,
     /// Private storage per plugin: entries.
     pub kv_max_keys: u64,
@@ -218,42 +222,82 @@ impl Default for Config {
     }
 }
 
+/// What one payer's hooks used in an action.
+#[derive(Debug, Default, Clone, Copy)]
+struct Spent {
+    hooks: u32,
+    time: Duration,
+}
+
 /// Hook accounting of the user action running on one thread (host calls are serviced on
 /// the thread that started the action, so nested work lands here too).
 #[derive(Debug, Default)]
 struct ActionState {
     /// Open [`ActionScope`]s (nested dispatches).
     scopes: u32,
-    /// Hooks running now.
-    depth: u32,
-    /// Hooks run so far in this action.
-    invocations: u32,
-    /// Time spent in hooks so far in this action.
-    hook_time: Duration,
+    /// Payers of the hooks running now, outermost first.
+    running: Vec<String>,
+    /// Budget used so far in this action, per payer ([`payer`]: the hook's own plugin on a
+    /// user's action, the initiator inside a plugin's operation).
+    spent: HashMap<String, Spent>,
     /// Plugins whose hook faulted in this action (they run no more hooks in it).
     faulted: BTreeSet<String>,
-    /// The budget was exceeded: no more hooks in this action.
+    /// Payers whose budget is spent: their remaining hooks in this action are skipped, and
+    /// the user is told once at the end of the action.
+    exhausted: BTreeSet<String>,
+    /// A hook started inside another: no more hooks in this action.
     tripped: bool,
 }
 
-/// One dispatch of [`App::invoke_hooked`]; the outermost one is the user action.
-pub(crate) struct ActionScope<'a>(&'a PluginHost);
+/// One dispatch of [`App::invoke_hooked`]; the outermost one is the user action. When it
+/// ends, the user is told which plugins' hooks were cut short (one notice per action).
+pub(crate) struct ActionScope<'a>(&'a App);
 
 impl Drop for ActionScope<'_> {
     fn drop(&mut self) {
-        self.0.with_action(|a| a.scopes = a.scopes.saturating_sub(1));
+        let skipped = self
+            .0
+            .plugins()
+            .with_action(|a| {
+                a.scopes = a.scopes.saturating_sub(1);
+                if a.scopes == 0 {
+                    std::mem::take(&mut a.exhausted)
+                } else {
+                    BTreeSet::new()
+                }
+            })
+            .unwrap_or_default();
+        if skipped.is_empty() {
+            return;
+        }
+        let config = self.0.plugins().core.config();
+        self.0.publish(
+            vec![DomainEvent::PluginHooksSkipped {
+                plugin_ids: skipped.into_iter().collect(),
+                notice: I18nMessage::key("plugins.notice.hooks_skipped")
+                    .param("max", config.max_hooks_per_action.to_string())
+                    .param("ms", config.hook_time_per_action.as_millis().to_string()),
+            }],
+            None,
+        );
     }
 }
 
-/// A running hook (see [`PluginHost::enter_hook`]); its time counts against the action.
-pub(crate) struct HookGuard<'a>(&'a PluginHost, Instant);
+/// A running hook (see [`PluginHost::enter_hook`]); its time counts against its payer's
+/// budget.
+pub(crate) struct HookGuard<'a> {
+    host: &'a PluginHost,
+    started: Instant,
+    payer: String,
+}
 
 impl Drop for HookGuard<'_> {
     fn drop(&mut self) {
-        let spent = self.1.elapsed();
-        self.0.with_action(|a| {
-            a.depth = a.depth.saturating_sub(1);
-            a.hook_time = a.hook_time.saturating_add(spent);
+        let took = self.started.elapsed();
+        self.host.with_action(|a| {
+            a.running.pop();
+            let spent = a.spent.entry(std::mem::take(&mut self.payer)).or_default();
+            spent.time = spent.time.saturating_add(took);
         });
     }
 }
@@ -264,7 +308,10 @@ pub(crate) enum Admission<'a> {
     Run(HookGuard<'a>),
     /// Not this plugin (its hook faulted earlier in this action); others may run.
     Skip,
-    /// No more hooks in this action.
+    /// Its payer's hook budget for this action is spent: skip it (others may run); a
+    /// plugin's own call is refused instead.
+    Spent,
+    /// No more hooks in this action (a hook inside a hook).
     Stop,
 }
 
@@ -404,26 +451,6 @@ impl Core {
         }
     }
 
-    /// Switches `plugin` off at the end of the action, telling the user why.
-    fn disable(&self, plugin: &str, error: String, reason: I18nMessage) {
-        let failures = self
-            .counts
-            .lock()
-            .map(|mut c| {
-                let n = c.entry(plugin.to_owned()).or_insert(0);
-                *n += 1;
-                *n
-            })
-            .unwrap_or(1);
-        self.push_pending(RecordPluginFailure {
-            id: plugin.to_owned(),
-            failures,
-            error: Some(error),
-            disable: true,
-            reason: Some(reason),
-        });
-    }
-
     /// Runs `op` with no host access (engines).
     pub fn call_pure(
         &self,
@@ -474,6 +501,20 @@ struct Loaded {
     events: HashMap<String, Vec<String>>,
 }
 
+/// Committed events waiting for `event:` hooks, with how many each subscribed plugin has.
+#[derive(Default)]
+struct EventQueue {
+    events: Vec<DomainEvent>,
+    per_plugin: HashMap<String, usize>,
+}
+
+impl EventQueue {
+    fn clear(&mut self) {
+        self.events.clear();
+        self.per_plugin.clear();
+    }
+}
+
 /// A declarative UI session.
 pub(crate) struct Session {
     pub plugin_id: String,
@@ -488,7 +529,7 @@ pub struct PluginHost {
     loaded: RwLock<Loaded>,
     pub(crate) sessions: Mutex<HashMap<String, Session>>,
     next_session: AtomicU64,
-    events: Mutex<Vec<DomainEvent>>,
+    events: Mutex<EventQueue>,
     picker: RwLock<Option<Arc<dyn FilePicker>>>,
 }
 
@@ -593,22 +634,22 @@ impl PluginHost {
         let id = std::thread::current().id();
         let state = actions.entry(id).or_default();
         let out = f(state);
-        if state.scopes == 0 && state.depth == 0 {
+        if state.scopes == 0 && state.running.is_empty() {
             actions.remove(&id);
         }
         Some(out)
     }
 
-    /// Opens a dispatch; the outermost one on a thread starts a fresh hook budget.
-    pub(crate) fn begin_action(&self) -> ActionScope<'_> {
+    /// Opens a dispatch; the outermost one on a thread starts fresh hook budgets.
+    pub(crate) fn begin_action<'a>(&self, app: &'a App) -> ActionScope<'a> {
         self.with_action(|a| a.scopes += 1);
-        ActionScope(self)
+        ActionScope(app)
     }
 
     /// Events waiting for `event:` hooks.
     #[cfg(test)]
     pub(crate) fn queued_events(&self) -> usize {
-        self.events.lock().map(|q| q.len()).unwrap_or(0)
+        self.events.lock().map(|q| q.events.len()).unwrap_or(0)
     }
 
     /// Plugins waiting to be switched off at the end of the action.
@@ -626,63 +667,86 @@ impl PluginHost {
         self.core
             .actions
             .lock()
-            .is_ok_and(|a| a.get(&std::thread::current().id()).is_some_and(|s| s.depth > 0))
+            .is_ok_and(|a| {
+                a.get(&std::thread::current().id())
+                    .is_some_and(|s| !s.running.is_empty())
+            })
     }
 
-    /// Admits one hook run of `plugin` against the action's budget. Past the budget (too
-    /// many hooks or too much hook time in this action, or a hook inside a hook) the action
-    /// runs no more hooks, queued events are dropped and `plugin` is switched off with a
-    /// notice. A plugin whose hook faulted earlier in the action is skipped.
+    /// Admits one hook run of `plugin` against its payer's budget for this action ([`payer`]:
+    /// `plugin` itself on a user's action, the initiator inside a plugin's operation). Past
+    /// that budget (too many hooks or too much hook time) the payer's remaining hooks in this
+    /// action are skipped and the user is told when the action ends; nobody is switched off
+    /// and other plugins' hooks run on. A hook inside a hook ends the action's hooks. A
+    /// plugin whose hook faulted earlier in the action is skipped.
     pub(crate) fn enter_hook(&self, app: &App, plugin: &str, hook: &str) -> Admission<'_> {
+        enum Verdict {
+            Run,
+            Skip,
+            Spent,
+            Stop,
+            Exhausted(&'static str),
+            Nested(Option<String>),
+        }
         let config = self.core.config();
+        let payer = payer(plugin);
         let verdict = self.with_action(|a| {
             if a.tripped {
-                return Err(None);
+                return Verdict::Stop;
             }
             if a.faulted.contains(plugin) {
-                return Ok(false);
+                return Verdict::Skip;
             }
-            if a.depth >= config.max_hook_depth.max(1) {
+            if a.exhausted.contains(&payer) {
+                return Verdict::Spent;
+            }
+            if a.running.len() >= config.max_hook_depth.max(1) as usize {
                 a.tripped = true;
-                return Err(Some("depth"));
+                return Verdict::Nested(a.running.last().cloned());
             }
-            if a.invocations >= config.max_hooks_per_action.max(1) {
-                a.tripped = true;
-                return Err(Some("count"));
+            let spent = a.spent.entry(payer.clone()).or_default();
+            let limit = if spent.hooks >= config.max_hooks_per_action.max(1) {
+                Some("count")
+            } else if spent.time >= config.hook_time_per_action {
+                Some("time")
+            } else {
+                None
+            };
+            if let Some(limit) = limit {
+                a.exhausted.insert(payer.clone());
+                return Verdict::Exhausted(limit);
             }
-            if a.hook_time >= config.hook_time_per_action {
-                a.tripped = true;
-                return Err(Some("time"));
-            }
-            a.depth += 1;
-            a.invocations += 1;
-            Ok(true)
+            spent.hooks += 1;
+            a.running.push(payer.clone());
+            Verdict::Run
         });
         match verdict {
-            None | Some(Err(None)) => Admission::Stop,
-            Some(Ok(false)) => Admission::Skip,
-            Some(Ok(true)) => Admission::Run(HookGuard(self, Instant::now())),
-            Some(Err(Some(limit))) => {
+            None | Some(Verdict::Stop) => Admission::Stop,
+            Some(Verdict::Skip) => Admission::Skip,
+            Some(Verdict::Spent) => Admission::Spent,
+            Some(Verdict::Run) => Admission::Run(HookGuard {
+                host: self,
+                started: Instant::now(),
+                payer,
+            }),
+            Some(Verdict::Exhausted(limit)) => {
+                let message = format!(
+                    "HOOK_BUDGET: {hook} skipped: this plugin's hook budget for the action is spent ({limit}: at most {} hooks, {} ms per plugin); its remaining hooks in this action are skipped",
+                    config.max_hooks_per_action,
+                    config.hook_time_per_action.as_millis(),
+                );
+                self.core.log(&payer, LogLevel::Warn, message, app.now());
+                Admission::Spent
+            }
+            Some(Verdict::Nested(outer)) => {
                 if let Ok(mut q) = self.events.lock() {
                     q.clear();
                 }
-                // The plugin whose calls made the hooks run pays, not the hook it ran into.
-                let culprit = payer(plugin);
-                let plugin = culprit.as_str();
                 let message = format!(
-                    "HOOK_BUDGET: {hook} exceeded the hook budget of one action ({limit}: at most {} hooks, {} ms together, {} at a time)",
-                    config.max_hooks_per_action,
-                    config.hook_time_per_action.as_millis(),
-                    config.max_hook_depth
+                    "HOOK_DEPTH: {hook} would have started inside another hook; no more hooks run in this action"
                 );
-                self.core.log(plugin, LogLevel::Error, &message, app.now());
-                self.core.disable(
-                    plugin,
-                    message,
-                    I18nMessage::key("plugins.notice.hook_budget")
-                        .param("hook", hook)
-                        .param("max", config.max_hooks_per_action.to_string()),
-                );
+                self.core
+                    .log(outer.as_deref().unwrap_or(&payer), LogLevel::Error, message, app.now());
                 Admission::Stop
             }
         }
@@ -952,9 +1016,12 @@ impl PluginHost {
             let _running = match self.enter_hook(app, &id, &hook) {
                 Admission::Run(guard) => guard,
                 Admission::Skip => continue,
-                // A plugin's call past the budget is refused: it must not go on without the
+                // A plugin's call past its budget is refused: it must not go on without the
                 // hooks the user installed to check it.
-                Admission::Stop if skip.is_some() => return Err(hook_budget_refused(method)),
+                Admission::Spent | Admission::Stop if skip.is_some() => {
+                    return Err(hook_budget_refused(method))
+                }
+                Admission::Spent => continue,
                 Admission::Stop => break,
             };
             let domains = redact::exposure(method).domains();
@@ -1022,7 +1089,7 @@ impl PluginHost {
                 let hook = format!("after:{method}");
                 let _running = match self.enter_hook(app, &id, &hook) {
                     Admission::Run(guard) => guard,
-                    Admission::Skip => continue,
+                    Admission::Skip | Admission::Spent => continue,
                     Admission::Stop => return,
                 };
                 let domains = redact::exposure(method).domains();
@@ -1055,20 +1122,30 @@ impl PluginHost {
             .filter(|e| event_type(e).is_some_and(|t| l.events.contains_key(&t)))
             .cloned()
             .collect();
-        drop(l);
-        // Each queued event runs at least one hook, so more than the action's hook budget
-        // can never all run (one more trips the budget, as before): the queue stays bounded
-        // whatever the action produced.
+        // Each queued event runs one hook of each plugin subscribed to it, so a plugin can
+        // never run more than its hook budget of them (one more marks its budget spent): an
+        // event is kept while one of its subscribers has room, and the queue stays bounded
+        // (budget × plugins) whatever the action produced.
         let cap = self.core.config().max_hooks_per_action.max(1) as usize + 1;
         if let Ok(mut q) = self.events.lock() {
-            let room = cap.saturating_sub(q.len());
-            q.extend(wanted.into_iter().take(room));
+            for event in wanted {
+                let Some(subscribers) = event_type(&event).and_then(|t| l.events.get(&t)) else {
+                    continue;
+                };
+                if subscribers.iter().all(|id| q.per_plugin.get(id).is_some_and(|n| *n >= cap)) {
+                    continue;
+                }
+                for id in subscribers {
+                    *q.per_plugin.entry(id.clone()).or_default() += 1;
+                }
+                q.events.push(event);
+            }
         }
     }
 
     fn dispatch_events(&self, app: &App) {
         let queued = match self.events.lock() {
-            Ok(mut q) if !q.is_empty() => std::mem::take(&mut *q),
+            Ok(mut q) if !q.events.is_empty() => std::mem::take(&mut *q).events,
             _ => return,
         };
         for event in queued {
@@ -1086,7 +1163,7 @@ impl PluginHost {
                     let hook = format!("event:{kind}");
                     let _running = match self.enter_hook(app, &id, &hook) {
                         Admission::Run(guard) => guard,
-                        Admission::Skip => continue,
+                        Admission::Skip | Admission::Spent => continue,
                         Admission::Stop => return,
                     };
                     // Filtered by this plugin's read permissions for the event's domain.

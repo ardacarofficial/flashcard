@@ -30,8 +30,14 @@
   let active = $state<string | null>(null);
   let selectedDeck = $state<string | null>(null);
   let error = $state<string | null>(null);
-  /** A plugin the app switched off (repeated failures, hook budget), with the reason. */
+  /** A plugin the app switched off (repeated failures), or plugins whose hooks were skipped. */
   let pluginNotice = $state<string | null>(null);
+
+  /** A plugin's display name (its locale's `name`), else its id. */
+  function pluginName(id: string): string {
+    const label = td(`plugin.${id}.name`);
+    return label === `plugin.${id}.name` ? id : label;
+  }
 
   const menu = $derived.by((): MenuItem[] => {
     const ui = modules.filter((m) => m.enabled).flatMap((m) => m.ui);
@@ -104,10 +110,16 @@
     const unsubNotice = api.on('plugins_changed', (env) => {
       if (env.event.type !== 'plugins_changed' || !env.event.data.auto_disabled) return;
       const { plugin_id, reason } = env.event.data;
-      const label = td(`plugin.${plugin_id}.name`);
-      const name = label === `plugin.${plugin_id}.name` ? plugin_id : label;
       const why = reason ? td(reason.key, reason.params) : '';
-      pluginNotice = [t('plugins.notice.auto_disabled', { name }), why].filter(Boolean).join(' ');
+      pluginNotice = [t('plugins.notice.auto_disabled', { name: pluginName(plugin_id) }), why]
+        .filter(Boolean)
+        .join(' ');
+    });
+    // One notice per action whose plugins' hook budgets ran out (nobody is switched off).
+    const unsubSkipped = api.on('plugin_hooks_skipped', (env) => {
+      if (env.event.type !== 'plugin_hooks_skipped') return;
+      const { plugin_ids, notice } = env.event.data;
+      pluginNotice = td(notice.key, { ...notice.params, names: plugin_ids.map(pluginName).join(', ') });
     });
     // Live updates: any deck/study event (or undo/redo, import, restore) re-reads the tree.
     const unsub = api.on(
@@ -118,6 +130,7 @@
       void unsub.then((u) => u());
       void unsubModules.then((u) => u());
       void unsubNotice.then((u) => u());
+      void unsubSkipped.then((u) => u());
     };
   });
 </script>

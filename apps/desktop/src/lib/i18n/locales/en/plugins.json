@@ -43,7 +43,7 @@
       },
       "max_hooks_per_action": {
         "label": "Plugin reactions per action",
-        "description": "Most plugin hooks one action of yours may set off. A plugin going past it is switched off."
+        "description": "Most hooks each plugin may run in one action of yours. Past it, that plugin's remaining reactions in the action are skipped."
       },
       "kv_max_keys": {
         "label": "Storage entries per plugin",
@@ -63,7 +63,7 @@
       },
       "hook_ms_per_action": {
         "label": "Plugin reaction time per action (ms)",
-        "description": "Most time all plugin hooks of one action of yours may take together. A plugin going past it is switched off."
+        "description": "Most time each plugin's hooks may take together in one action of yours. Past it, that plugin's remaining reactions in the action are skipped."
       }
     },
     "tts": {
@@ -137,7 +137,7 @@
     "file_filter": "Flashcard plugin",
     "notice": {
       "auto_disabled": "“{name}” was switched off.",
-      "hook_budget": "It set off too many reactions in one action ({hook}; at most {max}).",
+      "hooks_skipped": "Some plugins reacted too often in one action, so their remaining reactions were skipped ({names}; at most {max} reactions or {ms} ms per plugin). Nothing was switched off.",
       "dismiss": "Dismiss"
     }
   },

@@ -43,7 +43,7 @@
       },
       "max_hooks_per_action": {
         "label": "İşlem başına eklenti tepkisi",
-        "description": "Yaptığın tek bir işlemin tetikleyebileceği en fazla eklenti kancası. Bunu aşan eklenti kapatılır."
+        "description": "Yaptığın tek bir işlemde her eklentinin çalıştırabileceği en fazla kanca. Aşınca o eklentinin işlemdeki kalan tepkileri atlanır."
       },
       "kv_max_keys": {
         "label": "Eklenti başına depo kaydı",
@@ -63,7 +63,7 @@
       },
       "hook_ms_per_action": {
         "label": "İşlem başına eklenti tepki süresi (ms)",
-        "description": "Bir işleminde tüm eklenti kancalarının toplam en fazla süresi. Aşan eklenti kapatılır."
+        "description": "Bir işleminde her eklentinin kancalarının toplam en fazla süresi. Aşınca o eklentinin işlemdeki kalan tepkileri atlanır."
       }
     },
     "tts": {
@@ -137,7 +137,7 @@
     "file_filter": "Flashcard eklentisi",
     "notice": {
       "auto_disabled": "“{name}” kapatıldı.",
-      "hook_budget": "Tek bir işlemde çok fazla tepki tetikledi ({hook}; en çok {max}).",
+      "hooks_skipped": "Bazı eklentiler tek bir işlemde çok fazla tepki verdi, kalan tepkileri atlandı ({names}; eklenti başına en çok {max} tepki ya da {ms} ms). Hiçbiri kapatılmadı.",
       "dismiss": "Kapat"
     }
   },
