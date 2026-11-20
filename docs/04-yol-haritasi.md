@@ -143,10 +143,16 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** [05-eklenti-sistemi.md](05-eklenti-sistemi.md) tamamı: WASM çalışma zamanı, manifest, izinler, host API, kancalar, sağlayıcı kayıtları, arayüz katkı noktaları, eklenti ayarları, eklenti KV deposu, model indirme yöneticisi, mağaza kaynağı arayüzü, eklenti SDK'sı ve örnek eklentiler.
 
 **Kabul kriterleri**
-- [ ] Örnek eklentiler çalışır: yeni kart türü, yeni çalışma modu, TTS sağlayıcı, kanca ile alan doldurma.
-- [ ] İzni olmayan host fonksiyonu çağrısı reddedilir (test).
-- [ ] Sonsuz döngüye giren / panik yapan eklenti uygulamayı çökertmez (yakıt/zaman sınırı testi).
-- [ ] Eklenti API'si sürümlüdür; v1 eklentisi sonraki çekirdek sürümünde çalışmaya devam eder (sözleşme testi).
+- [x] Örnek eklentiler çalışır: yeni kart türü, yeni çalışma modu, TTS sağlayıcı, kanca ile alan doldurma.
+- [x] İzni olmayan host fonksiyonu çağrısı reddedilir (test).
+- [x] Sonsuz döngüye giren / panik yapan eklenti uygulamayı çökertmez (yakıt/zaman sınırı testi).
+- [x] Eklenti API'si sürümlüdür; v1 eklentisi sonraki çekirdek sürümünde çalışmaya devam eder (sözleşme testi).
+
+> **Doğrulama (`feat/v0.7-plugins`):** örnek eklentiler `plugins-sdk/examples` altında Rust ile yazılır, testte `wasm32-unknown-unknown`'a derlenip `.fcplugin` olarak paketlenir ve public API ile kurulur (`fc_plugins::testing`); hepsi MemStore + SQLite bellek + SQLite dosyada (`fc-app/src/modules/plugins/tests.rs`).
+> - *Örnekler:* `example_card_type_plugin` (`scramble-card`: not türü şablonu `plugin.com.example.scramble.scramble`, kart üretimi/çizimi/yazarak cevap motordan, HTML temizlenir, izin geri alınınca tür kaybolur), `example_study_mode_plugin` (`reverse-drill`: menüden açılan bildirimsel arayüz, cevap `study.answer` ile kaydedilir, adım tek geri al), `example_tts_provider_plugin` (`tone-tts`: `tts.providers/voices/synthesize` geçerli WAV döner), `example_hook_fills_a_field` (`autofill`: `before:notes.create` boş alanı doldurur, ayarlarla yönlendirilir, izin geri alınınca durur, eklenti komutu çalışma zamanında kayıtlı metot olarak palette).
+> - *İzinsiz çağrı:* `host_calls_without_permission_are_refused` (verilmemiş `decks:write` ile `decks.create` → `PERMISSION_DENIED`, hiçbir şey yazılmaz; aynı kontrol `Actor::Plugin` ile doğrudan çağrıda; verilmemiş kanca çalışmaz; istenmemiş izin verilemez). Çalışma zamanı düzeyinde `fc-plugins` `abi_v1_contract`.
+> - *Çökmezlik:* `misbehaving_plugins_cannot_crash_the_app` (sonsuz döngü → `TIMEOUT`, yakıt az → `OUT_OF_FUEL`, panik → `TRAP`, bellek → `MEMORY_LIMIT`; çekirdek işlem kanca hatasında sürer; 3. ardışık hatada otomatik kapanır ve bildirilir; yeniden açılır), `failed_operations_roll_back` (yazdıktan sonra panikleyen eklentinin yazdığı geri sarılır, geri al adımı kalmaz); `fc-plugins` `runtime::tests` (WAT ile döngü: yakıt ve son tarih, tuzak, bellek, ABI ihlali, host çağrısında geçen süre sayılmaz).
+> - *Sürümlü API:* `plugin_api_v1_contract` (dondurulmuş, elle yazılmış ABI v1 modülü `abi_v1.wat` paketlenip kurulur ve izinler üzerinden çalışır; `api_version = "2"` → `VALIDATION_PLUGIN_API_VERSION`; eklentilere açık v1 metotlarının ad/tür/izin anlık görüntüsü `api_v1.json` yalnız büyüyebilir). Ayrıntı docs/05 §12, docs/10 §18.
 
 ## 🤖 v0.8 · Yapay zeka
 

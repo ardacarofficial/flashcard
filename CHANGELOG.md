@@ -2,6 +2,23 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## [Unreleased] — v0.7 eklenti altyapısı (iz F, `feat/v0.7-plugins`)
+
+### Eklendi
+- **`fc-plugins` crate'i:** WASM çalışma zamanı (wasmtime 50): çağrı başına **yakıt**, eklentinin içinde geçen süreye **son tarih** (epoch; host çağrısında geçen süre sayılmaz), örnek başına **bellek sınırı**; her çağrı taze örnek; tuzak/panik/sonsuz döngü hata olur, uygulama çökmez. Host çağrıları çağıran iş parçacığında servis edilir (kapsamlı işçi iş parçacığı + kanallar), böylece host tarafı yazma işlemi dahil her şeyi ödünç alabilir. **ABI v1** (`fc_plugins::abi`: `fc_abi_version`/`fc_alloc`/`fc_handle` + `fc.host_call`/`fc.host_reply`, JSON zarflar) ve dondurulmuş elle yazılmış v1 fikstürü (`tests/fixtures/abi_v1.wat`). `plugin.toml` manifesti (izinler, katkılar, `api_version`, `min_app_version`), izin sözlüğü (API izinleri, `hooks:before|after:<metot>`, `hooks:event:<olay>`, `network:<host>`, `ui:*`, sağlayıcı izinleri; hassas izinler işaretli), `.fcplugin` paketi (boyut sınırlı okuma), `PluginRegistrySource` + `FileSource` (yalnız dosyadan kurulum, 08 K3), model indirme yöneticisi (`file://` getirici, devam ettirilebilir, SHA-256 doğrulamalı, disk kullanımı, silme).
+- **`plugins` modülü:** `plugins.list/inspect/install/uninstall/set_enabled/set_permissions/settings.get/settings.set/locales/logs/run/ui.open/ui.act/ui.close/models.*` (+ iç `plugins.restore/kv.set/record_failure/rollback`). Kurma, güncelleme, kaldırma (isteğe bağlı veri silme), aç/kapa, izinler, ayarlar **geri alınabilir**. Eklenti API'si = public API'nin izinlerle süzülmüş hali (`ensure_invocable`, eklenti aktörü için izin kaydı `Registry::permits`). Kancalar: `before:` (parametreyi değiştir/reddet; hata = eklentisiz devam, ayarla `reject`), `after:`, `event:`; eklentinin yaptığı değişiklikler kanca tetiklemez. Eklenti işlemi (komut, görünüm, çalışma modu adımı) **tek geri al adımı**; eklenti hata verirse yazdıkları geri sarılır. Art arda `plugins.max_failures` hata → otomatik kapatma + `plugins_changed{auto_disabled}`.
+- **Katkılar:** kart türü (`CardTypeEngine`), TTS sağlayıcı (`TtsProvider`), komutlar (çalışma zamanında kayıtlı `v1.plugin.<id>.<komut>`; palette ve `commands.list`'te), bildirimsel arayüzlü görünümler ve çalışma modları, ana menü / kenar paneli / kart altı düğme katkıları (`modules.list`'te eklenti modülleri), şemalı eklenti ayarları, eklentiye özel KV, eklentinin kendi çevirileri.
+- **`tts` modülü:** `tts.providers/voices/synthesize` (yerleşik ya da eklenti sağlayıcıları; ayar `tts.provider`).
+- **Kayıt defteri çalışma zamanı kaydı:** `Registry::register_dynamic` (`Arc<str>` anahtarlı metotlar), `register_card_type`/`register_tts` (`&self`), eklenti izinleri; statik katalog aynen. Yeni işleyici türü `Registry::action` (işlem dışı çalışan metotlar).
+- **SDK:** `plugins-sdk/rust` (`fc-plugin-sdk`: `Plugin` trait'i, `export_plugin!`, tipli `host::call::<M>()` (tipler fc-api'den), `kv`, `settings`, `log`, `notify`, arayüz kurucuları, yerel testler için sahte host) ve örnek eklentiler: `autofill` (kanca ile alan doldurma), `scramble-card` (kart türü), `tone-tts` (TTS), `reverse-drill` (çalışma modu), `misbehave` (test: döngü/panik/bellek/izinsiz çağrı).
+- **Masaüstü:** Eklentiler ekranı (dosyadan kur + izin onayı, aç/kapa, izinler, ayarlar, günlük, kaldır, indirmeler), bildirimsel arayüz çizicisi, `/plugins/view/<id>/<görünüm>` rotası, kenar paneli ve kart altı düğmeleri; eklenti metinleri `plugins.locales`'tan.
+- Migration **`0600_plugins`** (`plugins` satırına çalışma durumu sütunları, `plugin_packages`).
+
+### Değişti
+- `ensure_invocable` artık kayıt defterini alır; eklenti aktörleri yalnızca verilen izinlerle çağırabilir (önceden her şey serbestti). `Registry::card_type_engine`/`card_types` artık `Arc` döndürür.
+- İki yedek testi (`upgrade_dump_runs_later_data_migrations_on_restored_rows`, `restoring_an_older_schema_backup_migrates_it_forward`) sonraki sürümlerin migration'larına dayanıklı hale getirildi.
+- `rust-toolchain.toml` ve CI `wasm32-unknown-unknown` hedefini kurar (örnek eklentiler testlerde derlenir).
+
 ## [Unreleased] — Faz 2 entegrasyonu (v0.2–v0.5 birleşik, son inceleme bekliyor)
 
 ### Faz 2 entegrasyonu — tur 3 (+ v0.4, `feat/phase2-integration`)
