@@ -92,4 +92,6 @@ domains! {
     stats,
     planning,
     ai,
+    plugins,
+    tts,
 }

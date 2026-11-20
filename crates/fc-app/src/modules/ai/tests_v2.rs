@@ -95,6 +95,63 @@ fn changing_the_address_removes_the_key_unless_confirmed() {
     assert!(a.requests().is_empty() && b.requests().is_empty() && c.requests().is_empty());
 }
 
+/// Deferred from phase-3 round 3 (docs/10 §23, §25): with real grants (v0.7), keeping a key
+/// across an address change needs `ai_keys:write` — not just the right to edit providers.
+///
+/// * A plugin can never edit providers: `ai:write` is not grantable to plugins (v0.7), so
+///   even a smuggled `ai:write` grant (no `ai_keys:write`) is refused — address and key stay.
+/// * A caller that does reach `ai.providers.update` without `ai_keys:write` (here a plugin
+///   actor on the trusted in-process path, which skips the method's own permission check
+///   the way a future v0.9 grant of `ai:write` alone would) moves the provider but **not**
+///   the key, even with `keep_key: true`; the same request from the user keeps it.
+#[test]
+fn keep_key_needs_ai_keys_write() {
+    const PLUGIN: &str = "com.test.ai";
+    let a = MockServer::start(|_| claude_text("A"));
+    let b = MockServer::start(|_| claude_text("B"));
+    let c = MockServer::start(|_| claude_text("C"));
+    let t = app();
+    let p = claude(&t, &a, Some(KEY));
+    let stored = |t: &TestApp| {
+        t.app.ai_services().unwrap().secrets().get(&key_account(p.id)).unwrap().is_some()
+    };
+    let plugin = Actor::Plugin(PLUGIN.into());
+    let request = |base_url: &str| fc_api::InvokeRequest {
+        method: format!("{}.{}", fc_api::API_VERSION, <AiProvidersUpdate as fc_api::ApiMethod>::NAME),
+        params: serde_json::to_value(update(&p, base_url, Some(true))).unwrap(),
+    };
+    // A smuggled `ai:write` grant does not make ai:write callable by a plugin.
+    let g = ["ai:read", "ai:write"].iter().map(|s| (*s).to_owned()).collect();
+    t.app.registry().set_plugin_grants(PLUGIN, Some(g));
+    assert!(!t.app.registry().permits(&plugin, "ai:write"));
+    assert!(!t.app.registry().permits(&plugin, "ai_keys:write"));
+    let r = request(&b.url());
+    let e = t.app.invoke(&r.method, r.params.clone(), &plugin).unwrap_err();
+    assert_eq!(e.code, ErrorCode::PermissionDenied, "{e:?}");
+    let now = &t.ok::<AiProvidersList>(Empty {}).providers[0];
+    assert_eq!(now.base_url, a.url());
+    assert!(now.has_key && stored(&t));
+
+    // Reaching the command without `ai_keys:write`: moved, key dropped despite `keep_key`.
+    let moved: AiProviderDto =
+        serde_json::from_value(t.app.invoke_trusted(&r, &plugin).unwrap()).unwrap();
+    assert_eq!(moved.base_url, b.url());
+    assert!(!moved.has_key && !has_key(&t), "keep_key without ai_keys:write");
+    assert!(!stored(&t), "nothing left in the keychain");
+
+    // The user (who holds `ai_keys:write`) keeps it with the same request.
+    t.ok::<AiProvidersSetKey>(SetAiProviderKey {
+        provider_id: p.id,
+        key: Some(KEY.into()),
+    });
+    let kept: AiProviderDto =
+        serde_json::from_value(t.app.invoke_trusted(&request(&c.url()), &Actor::User).unwrap())
+            .unwrap();
+    assert_eq!(kept.base_url, c.url());
+    assert!(kept.has_key && stored(&t));
+    assert!(a.requests().is_empty() && b.requests().is_empty() && c.requests().is_empty());
+}
+
 #[test]
 fn the_preview_hash_covers_address_kind_and_model() {
     let a = MockServer::start(|_| claude_text("A"));

@@ -1,0 +1,1 @@
+{"name": "Reverse drill", "study_modes.reverse": "Reverse drill", "menu.drill": "Reverse drill", "title": "Reverse drill", "prompt": "What is the question for this answer?", "answer": "Your answer", "check": "Check", "right": "Right!", "wrong": "Wrong — it is: {expected}", "finished": "Done: {correct} right, {wrong} wrong", "close": "Close", "empty": "No cards to study"}

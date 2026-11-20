@@ -7,12 +7,14 @@
 //! * [`repo`]: repository traits — the **only** interface `fc-app` uses.
 //! * [`store`]: [`Store`] / [`ReadTx`] / [`WriteTx`] handles and the [`SqliteStore`]
 //!   implementation (connection model documented there).
+//! * [`interrupt`]: stopping long statements at a caller's deadline (plugin host calls).
 //! * `sqlite` (private): the SQL behind every repository trait.
 //!
 //! Storage holds no business rules: it persists and loads `fc-core` models faithfully.
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod interrupt;
 pub mod media;
 pub mod migrate;
 pub mod repo;

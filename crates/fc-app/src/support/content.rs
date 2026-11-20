@@ -44,10 +44,7 @@ pub(crate) fn unknown_card_type(id: &str) -> AppError {
 }
 
 /// Engine by id.
-pub(crate) fn engine<'r>(
-    registry: &'r Registry,
-    id: &str,
-) -> AppResult<&'r Arc<dyn CardTypeEngine>> {
+pub(crate) fn engine(registry: &Registry, id: &str) -> AppResult<Arc<dyn CardTypeEngine>> {
     registry
         .card_type_engine(id)
         .ok_or_else(|| unknown_card_type(id))
@@ -334,7 +331,7 @@ pub(crate) fn render_card(
             .with_detail("template", template_key),
         )
     })?;
-    let eng = Arc::clone(engine(registry, &template.card_type)?);
+    let eng = engine(registry, &template.card_type)?;
     let info = eng.info();
 
     // [[links]] that resolve to live notes.

@@ -357,7 +357,7 @@ fn apply_to_leeches(
             .get(d.module)
             .copied()
             .unwrap_or(false);
-        crate::registry::ensure_invocable(&d, ctx.actor, enabled)?;
+        crate::registry::ensure_invocable(ctx.registry, &d, ctx.actor, enabled)?;
         let r: fc_api::v1::bulk::BulkResult = serde_json::from_value(ctx.call(&call)?)
             .map_err(|e| AppError::api(ErrorCode::Internal, format!("bulk result: {e}")))?;
         response.changed = r.changed;

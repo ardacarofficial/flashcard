@@ -624,10 +624,19 @@ pub(super) fn only_user_and_cli_may_register_servers(f: Factory) {
         a["name"] = json!(format!("{actor:?}"));
         t.app.invoke("v1.mcp.servers.add", a, &actor).unwrap();
     }
-    // Reading stays open to plugins.
-    t.app
-        .invoke("v1.mcp.servers.list", json!({}), &Actor::Plugin("p".into()))
-        .unwrap();
+    // Reading is closed too since real grants (v0.7, phase-3 round 4): `mcp` is an area no
+    // plugin may hold — not even with a (tampered) grant — and local API clients and
+    // automations hold nothing until v0.9.
+    let g = ["mcp:read", "mcp:write"].iter().map(|s| (*s).to_owned()).collect();
+    t.app.registry().set_plugin_grants("p", Some(g));
+    for actor in [
+        Actor::Plugin("p".into()),
+        Actor::LocalApi("l".into()),
+        Actor::Automation("a".into()),
+    ] {
+        let e = t.app.invoke("v1.mcp.servers.list", json!({}), &actor).unwrap_err();
+        assert_eq!(e.code, ErrorCode::PermissionDenied, "{actor:?}");
+    }
 }
 
 /// A registration counts as approved only while it still is exactly what the user saved.

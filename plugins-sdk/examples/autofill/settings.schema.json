@@ -1,0 +1,4 @@
+[
+  {"key": "source_field", "kind": {"type": "text", "max_len": 64}, "default": "front", "label_key": "settings.source_field", "description_key": null, "advanced": false, "scopes": ["plugin"]},
+  {"key": "target_field", "kind": {"type": "text", "max_len": 64}, "default": "back", "label_key": "settings.target_field", "description_key": null, "advanced": false, "scopes": ["plugin"]}
+]

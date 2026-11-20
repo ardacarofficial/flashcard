@@ -1,0 +1,12 @@
+id = "com.example.scramble"
+name = "Scrambled word"
+version = "1.0.0"
+api_version = "1"
+authors = ["Flashcard"]
+description = "A card type: the word's letters are shuffled, type the word."
+min_app_version = "0.7.0"
+permissions = ["card_types:provide"]
+
+[contributes]
+card_types = ["scramble"]
+locales = "locales"

@@ -132,6 +132,10 @@ pub fn storage_to_api(e: StorageError) -> ApiError {
         // Client input, not a database fault.
         StorageError::InvalidCursor(_) => invalid_cursor(msg),
         StorageError::Busy => ApiError::new(ErrorCode::IoDatabase, msg).retryable(true),
+        // A plugin host call ran past the plugin's deadline (`fc_storage::interrupt`).
+        StorageError::Interrupted => {
+            ApiError::new(ErrorCode::IoDatabase, msg).with_detail("interrupted", true)
+        }
         StorageError::File { path, .. } => {
             ApiError::new(ErrorCode::IoFile, msg).with_detail("path", path)
         }

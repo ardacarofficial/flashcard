@@ -18,5 +18,15 @@
   "cli.attr.set": "{key} = {value}",
   "cli.attr.cleared": "{key} temizlendi",
   "cli.attr.none": "Sınıflandırma yok",
-  "cli.attr.option_deleted": "{key} sınıflandırmasının {label} seçeneği silindi ({count} değer değişti)"
+  "cli.attr.option_deleted": "{key} sınıflandırmasının {label} seçeneği silindi ({count} değer değişti)",
+  "cli.plugin.line": "{name} {version} ({id}) — {status}",
+  "cli.plugin.none": "kurulu eklenti yok",
+  "cli.plugin.package": "{name} {version} ({id}) şu izinleri istiyor:",
+  "cli.plugin.installed": "{name} {version} kuruldu",
+  "cli.plugin.uninstalled": "{name} kaldırıldı; `fc undo` geri getirir",
+  "cli.plugin.perm_granted": "[x] {permission}",
+  "cli.plugin.perm_off": "[ ] {permission}",
+  "cli.plugin.perm_sensitive": "[ ] {permission} (hassas)",
+  "cli.plugin.no_logs": "günlük satırı yok",
+  "cli.plugin.packed": "{id} {version} paketlendi → {path}"
 }

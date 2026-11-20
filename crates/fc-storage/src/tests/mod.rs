@@ -13,6 +13,7 @@ mod mcp;
 mod migrations;
 mod misc;
 mod notes;
+mod plugins;
 mod search;
 mod stats;
 mod store;

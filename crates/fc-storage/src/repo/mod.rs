@@ -76,4 +76,5 @@ domains! {
     mcp: McpRead, McpWrite;
     stats: StatsRead, StatsWrite;
     ai: AiRead, AiWrite;
+    plugins: PluginRead, PluginWrite;
 }

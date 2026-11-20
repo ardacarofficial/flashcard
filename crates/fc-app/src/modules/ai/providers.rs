@@ -7,7 +7,7 @@ use super::context::{require_live_provider, require_provider};
 use super::{key_account, AiServices, MODELS_JOB};
 use crate::error::{AppError, AppResult};
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
-use crate::registry::{permits, Registry};
+use crate::registry::Registry;
 use crate::support::summary;
 use fc_ai::secrets::{Secret, SecretError};
 use fc_ai::ProviderKind;
@@ -315,7 +315,7 @@ fn update(
     p.updated_at = ctx.now;
     // A key was entered for one host: it never follows the provider to another one unless
     // the user confirms and may manage keys anyway.
-    let keep_key = req.keep_key == Some(true) && permits(ctx.actor, KEYS_PERMISSION);
+    let keep_key = req.keep_key == Some(true) && ctx.registry.permits(ctx.actor, KEYS_PERMISSION);
     let drop_key = endpoint_changed(&old, &p) && !keep_key;
     let unchanged = AiProviderRecord {
         updated_at: p.updated_at,

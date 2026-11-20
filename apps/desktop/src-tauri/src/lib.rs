@@ -55,6 +55,7 @@ pub fn run() {
                 Ok(collection) => {
                     ipc::forward_events(&collection, app.handle().clone());
                     ipc::watch_external_changes(collection.clone());
+                    collection.set_file_picker(Arc::new(NativePicker));
                     // Background jobs (imports, exports, backups) run on their own thread;
                     // the worker lives as long as the app state.
                     match fc_app::jobs::spawn_worker(collection.clone()) {
@@ -72,6 +73,33 @@ pub fn run() {
         .run(tauri::generate_context!());
     if let Err(e) = result {
         fail(&e.to_string());
+    }
+}
+
+/// Native dialogs behind plugins' `fs:pick`: the user chooses, the backend reads or writes
+/// the file, the plugin only ever sees a file name and bytes.
+struct NativePicker;
+
+impl NativePicker {
+    fn dialog(extensions: &[String]) -> rfd::FileDialog {
+        let dialog = rfd::FileDialog::new();
+        if extensions.is_empty() {
+            dialog
+        } else {
+            dialog.add_filter(extensions.join(", "), extensions)
+        }
+    }
+}
+
+impl fc_app::FilePicker for NativePicker {
+    fn pick_open(&self, extensions: &[String]) -> Option<std::path::PathBuf> {
+        Self::dialog(extensions).pick_file()
+    }
+
+    fn pick_save(&self, suggested_name: &str, extensions: &[String]) -> Option<std::path::PathBuf> {
+        Self::dialog(extensions)
+            .set_file_name(suggested_name)
+            .save_file()
     }
 }
 

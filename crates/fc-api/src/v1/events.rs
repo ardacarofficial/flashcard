@@ -180,6 +180,31 @@ pub enum DomainEvent {
         /// Summary.
         summary: I18nMessage,
     },
+    /// Plugins were installed, updated, removed, switched or re-granted, or one was disabled
+    /// automatically (refetch `plugins.list`, `modules.list`, `plugins.locales`; v0.7).
+    PluginsChanged {
+        /// Plugin id.
+        plugin_id: String,
+        /// Disabled by the app after repeated failures (notify the user).
+        auto_disabled: bool,
+        /// With `auto_disabled`: why, when it was not repeated failures (an i18n key;
+        /// none = repeated failures).
+        #[serde(default)]
+        reason: Option<I18nMessage>,
+    },
+    /// Some plugins' hook budgets for one action ran out: their remaining hooks in that action
+    /// were skipped (nobody is switched off; one event per action, v0.7).
+    PluginHooksSkipped {
+        /// Plugins whose hooks were cut short.
+        plugin_ids: Vec<String>,
+        /// What to tell the user (`plugins.notice.hooks_skipped`; params `max`, `ms`).
+        notice: I18nMessage,
+    },
+    /// A plugin asked to show a notice (`host.ui.notify`, v0.7).
+    PluginNotice {
+        /// The notice.
+        notice: super::plugins::PluginNotice,
+    },
     /// Study changed cards' scheduling or visibility (answer, suspend, bury, postpone and
     /// their undo): deck counts are stale.
     StudyCardsChanged {

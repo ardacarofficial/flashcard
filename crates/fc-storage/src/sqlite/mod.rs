@@ -16,6 +16,7 @@ mod mcp;
 mod notes;
 mod notetypes;
 mod oplog;
+mod plugins;
 pub(crate) mod search;
 mod settings;
 mod stats;

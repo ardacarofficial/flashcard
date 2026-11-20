@@ -1,0 +1,203 @@
+{
+  "nav": {
+    "plugins": "Plugins"
+  },
+  "modules": {
+    "plugins": {
+      "name": "Plugins",
+      "description": "Install sandboxed plugins: card types, study modes, voices, hooks and more."
+    },
+    "tts": {
+      "name": "Text to speech",
+      "description": "Reads cards aloud through the installed voice providers."
+    }
+  },
+  "settings": {
+    "pages": {
+      "plugins": "Plugins"
+    },
+    "plugins": {
+      "timeout_ms": {
+        "label": "Time limit per call (ms)",
+        "description": "A plugin call running longer than this is stopped (the work it asks the app to do counts too)."
+      },
+      "fuel_millions": {
+        "label": "Work limit per call (millions of steps)",
+        "description": "Stops a plugin stuck in a loop even if the clock is slow."
+      },
+      "memory_mb": {
+        "label": "Memory limit (MB)",
+        "description": "Most memory one plugin call may use."
+      },
+      "max_failures": {
+        "label": "Failures before switching off",
+        "description": "A plugin that fails this many times in a row is switched off; you are told."
+      },
+      "before_hook_failure": {
+        "label": "When a plugin check fails",
+        "description": "Continue without the plugin, or cancel the action.",
+        "options": {
+          "continue": "Continue without it",
+          "reject": "Cancel the action"
+        }
+      },
+      "max_hooks_per_action": {
+        "label": "Plugin reactions per action",
+        "description": "Most hooks each plugin may run in one action of yours. Past it, that plugin's remaining reactions in the action are skipped."
+      },
+      "kv_max_keys": {
+        "label": "Storage entries per plugin",
+        "description": "Most entries one plugin may keep in its own storage."
+      },
+      "kv_max_mb": {
+        "label": "Storage size per plugin (MB)",
+        "description": "Most space one plugin's own storage may take."
+      },
+      "max_host_calls": {
+        "label": "Requests per plugin call",
+        "description": "Most requests one plugin call may make to the app. A plugin going past it is stopped."
+      },
+      "host_mb_per_call": {
+        "label": "Data per plugin call (MB)",
+        "description": "Most data one plugin call may send to and get from the app."
+      },
+      "hook_ms_per_action": {
+        "label": "Plugin reaction time per action (ms)",
+        "description": "Most time each plugin's hooks may take together in one action of yours. Past it, that plugin's remaining reactions in the action are skipped."
+      }
+    },
+    "tts": {
+      "provider": {
+        "label": "Voice provider",
+        "description": "Empty = the first available one."
+      }
+    }
+  },
+  "plugins": {
+    "heading": "Plugins",
+    "intro": "Plugins run in a sandbox and can only do what you allow.",
+    "install": "Install from file…",
+    "pick_prompt": "Path of the .fcplugin file",
+    "none": "No plugins installed.",
+    "version": "Version {version}",
+    "by": "by {authors}",
+    "status": {
+      "active": "On",
+      "disabled": "Off",
+      "auto_disabled": "Switched off after errors",
+      "broken": "Cannot run"
+    },
+    "enable": "Turn on",
+    "disable": "Turn off",
+    "uninstall": "Uninstall",
+    "delete_data": "Also delete its saved data",
+    "confirm_uninstall": "Uninstall “{name}”? Notes it created stay.",
+    "permissions": "Permissions",
+    "sensitive": "asks separately",
+    "save_permissions": "Save permissions",
+    "settings": "Settings",
+    "logs": "Log",
+    "logs_empty": "Nothing logged.",
+    "last_error": "Last error: {error}",
+    "failures": "{count} failure(s) in a row",
+    "install_heading": "Install “{name}” {version}?",
+    "installed_version": "Installed now: {version}",
+    "install_confirm": "Install",
+    "update_confirm": "Update",
+    "cancel": "Cancel",
+    "grant_hint": "Untick what you do not want to allow. You can change it later.",
+    "contributes": "Adds",
+    "contrib": {
+      "commands": "Commands",
+      "study_modes": "Study modes",
+      "views": "Views",
+      "card_types": "Card types",
+      "tts": "Voices",
+      "hooks": "Hooks"
+    },
+    "run": "Run",
+    "view": {
+      "close": "Close",
+      "done": "Finished.",
+      "recorder_unavailable": "Recording is not available yet."
+    },
+    "models": {
+      "heading": "Downloads",
+      "download": "Download",
+      "delete": "Delete",
+      "size": "{size} MB",
+      "state": {
+        "missing": "Not downloaded",
+        "partial": "Partly downloaded",
+        "ready": "Ready"
+      },
+      "usage": "Disk use: {size} MB"
+    },
+    "saved": "Saved.",
+    "file_filter": "Flashcard plugin",
+    "notice": {
+      "auto_disabled": "“{name}” was switched off.",
+      "hooks_skipped": "Some plugins reacted too often in one action, so their remaining reactions were skipped ({names}; at most {max} reactions or {ms} ms per plugin). Nothing was switched off.",
+      "dismiss": "Dismiss"
+    }
+  },
+  "jobs": {
+    "plugins": {
+      "model_download": "Downloading a model"
+    }
+  },
+  "commands": {
+    "plugins": {
+      "list": "List plugins",
+      "inspect": "Inspect a plugin file",
+      "install": "Install a plugin",
+      "uninstall": "Uninstall a plugin",
+      "set_enabled": "Turn a plugin on/off",
+      "set_permissions": "Change plugin permissions",
+      "settings": {
+        "get": "Plugin settings",
+        "set": "Change a plugin setting"
+      },
+      "locales": "Plugin translations",
+      "logs": "Plugin log",
+      "run": "Run a plugin command",
+      "ui": {
+        "open": "Open a plugin view",
+        "act": "Act in a plugin view",
+        "close": "Close a plugin view"
+      },
+      "models": {
+        "list": "Plugin downloads",
+        "download": "Download a model",
+        "delete": "Delete a model"
+      }
+    },
+    "tts": {
+      "providers": "Voice providers",
+      "voices": "Voices",
+      "synthesize": "Read text aloud"
+    }
+  },
+  "errors": {
+    "validation": {
+      "plugin_package": "This is not a valid plugin file.",
+      "plugin_manifest": "The plugin's description is invalid ({field}).",
+      "plugin_api_version": "This plugin was made for a different app version (plugin API {api_version}).",
+      "plugin_app_version": "This plugin needs app version {required} or newer.",
+      "plugin_permission": "The plugin did not ask for this permission.",
+      "plugin_host_limit": "A plugin asked too much of the app at once ({function}: {limit}, at most {max})."
+    },
+    "not_found": {
+      "plugin": "Plugin not installed.",
+      "plugin_contribution": "The plugin has no such item.",
+      "plugin_session": "This plugin view is closed."
+    },
+    "conflict": {
+      "plugin_inactive": "The plugin is off, broken or not allowed to do this.",
+      "plugin_rejected": "A plugin stopped this: {message}"
+    },
+    "provider": {
+      "plugin_failed": "A plugin failed ({kind})."
+    }
+  }
+}

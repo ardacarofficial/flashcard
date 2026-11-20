@@ -225,7 +225,7 @@ fn batch(req: ExecuteBatch, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
             .get(d.module)
             .copied()
             .unwrap_or(false);
-        ensure_invocable(&d, ctx.actor, enabled)?;
+        ensure_invocable(ctx.registry, &d, ctx.actor, enabled)?;
         results.push(ctx.call(call)?);
     }
     Ok(CommandOutcome {
@@ -261,14 +261,17 @@ fn module_dto(registry: &Registry, m: &ModuleDescriptor, enabled: bool) -> Modul
 
 fn modules_list(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<ModuleList> {
     let states = module_states(ctx.tx, ctx.registry)?;
-    Ok(ModuleList {
-        modules: ctx
-            .registry
-            .modules()
-            .iter()
-            .map(|m| module_dto(ctx.registry, m, states.get(m.id).copied().unwrap_or(false)))
-            .collect(),
-    })
+    let mut modules: Vec<ModuleDto> = ctx
+        .registry
+        .modules()
+        .iter()
+        .map(|m| module_dto(ctx.registry, m, states.get(m.id).copied().unwrap_or(false)))
+        .collect();
+    // Plugins register as modules too (v0.7); their menus come with them.
+    if states.get(crate::modules::plugins::ID).copied().unwrap_or(false) {
+        modules.extend(crate::modules::plugins::plugin_modules(ctx.tx)?);
+    }
+    Ok(ModuleList { modules })
 }
 
 fn set_enabled(
@@ -342,6 +345,15 @@ fn commands_list(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<MethodList> {
                 undoable: d.undoable,
                 enabled: states.get(d.module).copied().unwrap_or(false),
             })
+            .chain(ctx.registry.dynamic_methods().into_iter().map(|m| MethodInfo {
+                name: m.qualified_name(),
+                kind: fc_api::MethodKind::Command,
+                module: m.module.to_string(),
+                permission: m.permission.to_string(),
+                visibility: Visibility::Public,
+                undoable: false,
+                enabled: states.get(&*m.module).copied().unwrap_or(false),
+            }))
             .collect(),
     })
 }

@@ -44,4 +44,6 @@ modules! {
     goals,
     optimizer,
     ai,
+    plugins,
+    tts,
 }

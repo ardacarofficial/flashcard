@@ -2,8 +2,8 @@
 //! `fc_app::App` exactly like the desktop app (actor = `Cli`), so internal methods are refused
 //! here too. Output is a short human summary, or the raw JSON response with `--json`.
 //!
-//! * Ergonomic subcommands (`deck`, `note`, `attribute`, `undo`, `redo`) resolve paths, keys,
-//!   names and labels to ids for you.
+//! * Ergonomic subcommands (`deck`, `note`, `attribute`, `plugin`, `undo`, `redo`) resolve
+//!   paths, keys, names and labels to ids for you.
 //! * `fc call <method> [<json>|-]` invokes **any** public method with raw JSON params (`-` =
 //!   read them from stdin), so everything the app can do is reachable from the shell.
 #![allow(clippy::print_stdout)]
@@ -51,6 +51,9 @@ enum Command {
     /// Classification (attribute) operations.
     #[command(subcommand)]
     Attribute(AttributeCommand),
+    /// Plugins: install, permissions, on/off, run, pack (docs/05).
+    #[command(subcommand)]
+    Plugin(PluginCommand),
     /// Undo the last operation (`oplog.undo`).
     Undo,
     /// Redo the last undone operation (`oplog.redo`).
@@ -114,6 +117,81 @@ enum DeckCommand {
     Restore {
         /// Deck id.
         id: fc_core::DeckId,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum PluginCommand {
+    /// List installed plugins (`plugins.list`).
+    List,
+    /// Show what a package is and asks for, without installing (`plugins.inspect`).
+    Inspect {
+        /// `.fcplugin` file.
+        path: PathBuf,
+    },
+    /// Install or update from a package file (`plugins.install`). Nothing is granted unless
+    /// asked: `--grant` per permission, or `--grant-all`.
+    Install {
+        /// `.fcplugin` file.
+        path: PathBuf,
+        /// Permission to grant (repeatable).
+        #[arg(long = "grant", conflicts_with = "grant_all")]
+        grant: Vec<String>,
+        /// Grant everything the plugin asks for (sensitive ones included).
+        #[arg(long)]
+        grant_all: bool,
+    },
+    /// Uninstall (`plugins.uninstall`; undoable).
+    Uninstall {
+        /// Plugin id.
+        id: String,
+        /// Also delete its storage and settings.
+        #[arg(long)]
+        delete_data: bool,
+    },
+    /// Turn a plugin on (`plugins.set_enabled`).
+    Enable {
+        /// Plugin id.
+        id: String,
+    },
+    /// Turn a plugin off (`plugins.set_enabled`).
+    Disable {
+        /// Plugin id.
+        id: String,
+    },
+    /// Set exactly which requested permissions are granted (`plugins.set_permissions`); none
+    /// listed = revoke all.
+    Grant {
+        /// Plugin id.
+        id: String,
+        /// Permissions to grant.
+        permissions: Vec<String>,
+    },
+    /// Recent log lines of a plugin (`plugins.logs`).
+    Logs {
+        /// Plugin id.
+        id: String,
+    },
+    /// Run a contributed command (`plugins.run`); prints its JSON result.
+    Run {
+        /// Plugin id.
+        id: String,
+        /// Command id.
+        command: String,
+        /// JSON params (default `null`).
+        params: Option<String>,
+    },
+    /// Pack a plugin folder (`plugin.toml`, its WASM entry, settings, locales) into a
+    /// `.fcplugin` file. Local only; checks the manifest like an install would.
+    Pack {
+        /// Plugin folder.
+        dir: PathBuf,
+        /// WASM file to use instead of the manifest's `entry`.
+        #[arg(long)]
+        wasm: Option<PathBuf>,
+        /// Output file (default `<dir>/<id>-<version>.fcplugin`).
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
 }
 
@@ -370,6 +448,19 @@ impl Command {
                     OptionCommand::Reorder { .. } => m::AttributesOptionReorder::NAME,
                     OptionCommand::Delete { .. } => m::AttributesOptionDelete::NAME,
                 },
+            },
+            Command::Plugin(c) => match c {
+                PluginCommand::List => m::PluginsList::NAME,
+                PluginCommand::Inspect { .. } => m::PluginsInspect::NAME,
+                PluginCommand::Install { .. } => m::PluginsInstall::NAME,
+                PluginCommand::Uninstall { .. } => m::PluginsUninstall::NAME,
+                PluginCommand::Enable { .. } | PluginCommand::Disable { .. } => {
+                    m::PluginsSetEnabled::NAME
+                }
+                PluginCommand::Grant { .. } => m::PluginsSetPermissions::NAME,
+                PluginCommand::Logs { .. } => m::PluginsLogs::NAME,
+                PluginCommand::Run { .. } => m::PluginsRun::NAME,
+                PluginCommand::Pack { .. } => "plugin.pack",
             },
             Command::Undo => m::OplogUndo::NAME,
             Command::Redo => m::OplogRedo::NAME,

@@ -1,0 +1,16 @@
+[package]
+name = "fc-plugin-sdk"
+description = "Rust SDK for Flashcard plugins: ABI glue, typed host calls, declarative UI helpers, a fake host for native tests."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Contract types come from the app's own crates: a DTO change breaks plugins at compile time.
+fc-api = { path = "../../crates/fc-api" }
+fc-core = { path = "../../crates/fc-core" }
+fc-providers = { path = "../../crates/fc-providers" }
+serde.workspace = true
+serde_json.workspace = true
+base64 = "0.22"

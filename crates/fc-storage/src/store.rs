@@ -84,16 +84,18 @@ impl SqliteStore {
     ) -> StorageResult<Self> {
         let mut conn = Connection::open(path)?;
         migrate::configure_connection(&conn)?;
+        crate::interrupt::install(&mut conn)?;
         let backup = snapshot_before_migrating(&mut conn, path, migrations)?;
         crate::media::export_legacy_blobs(&conn, path)?;
         migrate::migrate_with(&mut conn, migrations)?;
         let readers = (0..READ_POOL_SIZE)
             .map(|_| {
-                let r = Connection::open_with_flags(
+                let mut r = Connection::open_with_flags(
                     path,
                     OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
                 )?;
                 migrate::configure_reader(&r)?;
+                crate::interrupt::install(&mut r)?;
                 Ok(Mutex::new(r))
             })
             .collect::<StorageResult<Vec<_>>>()?;
@@ -152,6 +154,7 @@ impl SqliteStore {
     pub fn open_in_memory() -> StorageResult<Self> {
         let mut conn = Connection::open_in_memory()?;
         migrate::configure_connection(&conn)?;
+        crate::interrupt::install(&mut conn)?;
         migrate::migrate(&mut conn)?;
         Ok(Self {
             writer: Mutex::new(conn),

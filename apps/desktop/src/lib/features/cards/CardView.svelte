@@ -6,6 +6,7 @@
   import { resolveMedia } from './media';
   import { moduleOn } from './modules.svelte';
   import { enhance } from './rich';
+  import { speak } from './speech';
 
   interface Props {
     sides: RenderedSides;
@@ -57,12 +58,6 @@
     if (href.startsWith('note:')) onopennote?.(href.slice(5));
   }
 
-  function speak(text: string, lang: string) {
-    if (typeof speechSynthesis === 'undefined') return;
-    const u = new SpeechSynthesisUtterance(text);
-    if (lang) u.lang = lang;
-    speechSynthesis.speak(u);
-  }
 </script>
 
 {@html `<style>${scopeCss(sides.css, scope)}</style>`}
@@ -97,7 +92,7 @@
 {#if sides.tts.length > 0}
   <div class="tts">
     {#each sides.tts as item, i (i)}
-      <button class="small" onclick={() => speak(item.text, item.lang)} aria-label={t('cards.speak')}>🔊 {item.text}</button>
+      <button class="small" onclick={() => void speak(item.text, item.lang)} aria-label={t('cards.speak')}>🔊 {item.text}</button>
     {/each}
   </div>
 {/if}
