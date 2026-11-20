@@ -1,20 +1,28 @@
+<!--
+  Appearance settings (docs/02 §31): scheme, preset, accent — rows of a Settings section.
+  Every change is `themes.set` (the backend owns the theme).
+-->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { ThemePresetDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import { theme, THEME_MODES, type ThemeMode } from '$lib/theme/theme.svelte';
+  import { Button, Check, Icon, Input, Monitor, Moon, RotateCcw, SegmentedControl, Skeleton, Sun } from '$lib/ui';
+  import FormRow from '../core/kit/FormRow.svelte';
 
-  /** Appearance settings (docs/02 §31): scheme, preset, accent. Every change is `themes.set`. */
   const MODE_LABEL = {
     system: 'settings.theme_system',
     light: 'settings.theme_light',
     dark: 'settings.theme_dark',
   } as const satisfies Record<ThemeMode, string>;
+  const MODE_ICON = { system: Monitor, light: Sun, dark: Moon } as const;
 
-  let presets = $state<ThemePresetDto[]>([]);
+  let presets = $state<ThemePresetDto[] | null>(null);
   let error = $state<string | null>(null);
   const current = $derived(theme.current);
+  const modes = $derived(THEME_MODES.map((m) => ({ value: m, label: t(MODE_LABEL[m]), icon: MODE_ICON[m] })));
+  let radios = $state<HTMLButtonElement[]>([]);
 
   onMount(() => {
     theme.start();
@@ -32,119 +40,156 @@
       error = td((e as { messageKey?: string }).messageKey ?? 'errors.internal.unexpected');
     }
   }
+
+  /** Arrow keys move through the preset swatches (one tab stop, like a radio group). */
+  function onkey(e: KeyboardEvent, i: number) {
+    const list = presets ?? [];
+    const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (!dir || list.length === 0) return;
+    e.preventDefault();
+    const next = (i + dir + list.length) % list.length;
+    radios[next]?.focus();
+    void change({ preset: list[next]!.id });
+  }
 </script>
 
-<div class="appearance">
-  <label>
-    {t('themes.mode_label')}
-    <select value={theme.mode} onchange={(e) => void change({ mode: e.currentTarget.value as ThemeMode })}>
-      {#each THEME_MODES as m (m)}
-        <option value={m}>{t(MODE_LABEL[m])}</option>
+<FormRow label={t('themes.mode_label')} description={t('settings.app.theme.description')}>
+  <SegmentedControl label={t('themes.mode_label')} options={modes} value={theme.mode} onchange={(m) => void change({ mode: m })} />
+</FormRow>
+
+<FormRow label={t('themes.preset_label')} description={t('settings.themes.preset.description')} stack>
+  {#if presets === null}
+    <Skeleton shape="control" width="100%" />
+  {:else if current && presets.length > 0}
+    <div class="presets" role="radiogroup" aria-label={t('themes.preset_label')}>
+      {#each presets as p, i (p.id)}
+        {@const chosen = p.id === current.preset}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={chosen}
+          tabindex={chosen || (!presets.some((x) => x.id === current.preset) && i === 0) ? 0 : -1}
+          class="preset"
+          class:chosen
+          bind:this={radios[i]}
+          onclick={() => void change({ preset: p.id })}
+          onkeydown={(e) => onkey(e, i)}
+        >
+          <span class="swatch" aria-hidden="true">
+            <span class="half" style:background={p.light['bg']}><span class="dot" style:background={p.light['accent']}></span></span>
+            <span class="half" style:background={p.dark['bg']}><span class="dot" style:background={p.dark['accent']}></span></span>
+          </span>
+          <span class="name">{td(p.name_key)}</span>
+          {#if chosen}<span class="tick" aria-hidden="true"><Icon icon={Check} size={16} /></span>{/if}
+        </button>
       {/each}
-    </select>
-  </label>
-
-  {#if current && presets.length > 0}
-    <fieldset>
-      <legend>{t('themes.preset_label')}</legend>
-      <div class="presets">
-        {#each presets as p (p.id)}
-          <label class="preset" class:chosen={p.id === current.preset}>
-            <input
-              type="radio"
-              name="theme-preset"
-              value={p.id}
-              checked={p.id === current.preset}
-              onchange={() => void change({ preset: p.id })}
-            />
-            <span class="swatch" aria-hidden="true">
-              <span style:background={p.light['bg']} style:color={p.light['accent']}>●</span>
-              <span style:background={p.dark['bg']} style:color={p.dark['accent']}>●</span>
-            </span>
-            {td(p.name_key)}
-          </label>
-        {/each}
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>{t('themes.accent_label')}</legend>
-      <div class="accent">
-        <input
-          type="color"
-          aria-label={t('themes.accent_custom')}
-          value={current.accent ?? current.light['accent']}
-          onchange={(e) => void change({ accent: e.currentTarget.value })}
-        />
-        {#if current.accent}
-          <button type="button" onclick={() => void change({ accent: '' })}>{t('themes.accent_reset')}</button>
-        {/if}
-      </div>
-    </fieldset>
-
-    <div class="preview">
-      <p>{t('themes.preview_text')}</p>
-      <button type="button" class="primary" tabindex="-1">{t('themes.preview_button')}</button>
     </div>
   {/if}
+</FormRow>
 
-  {#if error}<p class="error" role="alert">{error}</p>{/if}
-</div>
+{#if current}
+  <FormRow label={t('themes.accent_label')} description={t('themes.preview_text')} labelFor="fc-accent-picker">
+    <div class="accent">
+      <Input
+        id="fc-accent-picker"
+        type="color"
+        hideLabel
+        label={t('themes.accent_custom')}
+        value={current.accent ?? current.light['accent']}
+        onchange={(e: Event) => void change({ accent: (e.currentTarget as HTMLInputElement).value })}
+      />
+      {#if current.accent}
+        <Button variant="ghost" size="sm" icon={RotateCcw} onclick={() => void change({ accent: '' })}>{t('themes.accent_reset')}</Button>
+      {/if}
+    </div>
+  </FormRow>
+{/if}
+
+{#if error}<p class="error" role="alert">{error}</p>{/if}
 
 <style>
-  .appearance {
-    display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-3);
-  }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-1);
-  }
-  fieldset {
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    padding: var(--fc-space-2) var(--fc-space-3);
-  }
   .presets {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--fc-space-2);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+    gap: var(--space-3);
+    width: 100%;
   }
   .preset {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--fc-space-2);
-    padding: var(--fc-space-1) var(--fc-space-2);
-    border-radius: var(--fc-radius);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-sm);
+    text-align: start;
+    cursor: pointer;
+    transition: border-color var(--motion-fast) var(--ease);
+  }
+  .preset:hover {
+    border-color: var(--border-strong);
   }
   .preset.chosen {
-    background: var(--fc-selected);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .preset:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
   }
   .swatch {
-    display: inline-flex;
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: 44px;
+    border-radius: var(--radius-control);
     overflow: hidden;
+    border: 1px solid var(--border);
   }
-  .swatch span {
-    padding: 0 var(--fc-space-1);
+  .half {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .dot {
+    width: 16px;
+    height: 16px;
+    border-radius: var(--radius-pill);
+  }
+  .name {
+    padding: 0 var(--space-1);
+    font-weight: var(--weight-medium);
+  }
+  .tick {
+    position: absolute;
+    right: var(--space-2);
+    bottom: var(--space-2);
+    display: inline-flex;
+    width: 20px;
+    height: 20px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--accent-fg);
   }
   .accent {
     display: flex;
     align-items: center;
-    gap: var(--fc-space-2);
+    gap: var(--space-2);
   }
-  .preview {
-    background: var(--fc-surface);
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    padding: var(--fc-space-3);
+  .accent :global(.fc-field) {
+    min-width: 0;
+    width: 64px;
   }
-  .primary {
-    background: var(--fc-accent);
-    color: var(--fc-accent-text);
-    border: none;
+  .error {
+    margin: 0;
+    padding: 0 var(--space-6) var(--space-4);
+    color: var(--danger);
+    font-size: var(--text-sm);
   }
 </style>

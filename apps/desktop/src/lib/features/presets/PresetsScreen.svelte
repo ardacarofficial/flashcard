@@ -1,17 +1,43 @@
+<!--
+  Settings → Study → Deck options: preset list on the left, the chosen preset's options on
+  the right (limits, memory, advanced, decks). The backend validates and stores everything.
+-->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { DeckTreeNode, PresetConfig, PresetDto, PresetList } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
+  import {
+    Badge,
+    Button,
+    Card,
+    ChevronDown,
+    ChevronUp,
+    Copy,
+    EmptyState,
+    IconButton,
+    Input,
+    Layers,
+    Plus,
+    Save,
+    Select,
+    Switch,
+    Textarea,
+    Trash2,
+    X,
+  } from '$lib/ui';
+  import { FormRow, LoadState, SettingsPage, SettingsSection } from '../core/kit';
   import type { ScreenCtx } from '../types';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
   let list = $state<PresetList | null>(null);
+  let failed = $state(false);
   let selected = $state<string | null>(null);
   let newName = $state('');
   let saved = $state(false);
-  let deckToAssign = $state('');
+  let deckToAssign = $state<string | null>(null);
+  let advanced = $state(false);
 
   // Edit form (strings for list inputs; parsed on save, validated by the backend).
   let name = $state('');
@@ -26,6 +52,14 @@
     nodes.flatMap((n) => [{ id: n.deck.id, path: n.deck.path }, ...flatten(n.children)]);
   const decks = $derived(flatten(ctx.decks));
   const pathOf = (id: string) => decks.find((d) => d.id === id)?.path ?? id;
+  const assignable = $derived(
+    current ? decks.filter((d) => !current.deck_ids.includes(d.id)).map((d) => ({ value: d.id, label: d.path })) : [],
+  );
+
+  const NEW_ORDER = ['added', 'random'] as const;
+  const REVIEW_ORDER = ['due', 'random', 'retrievability'] as const;
+  const newOrders = $derived(NEW_ORDER.map((v) => ({ value: v, label: t(`presets.new_order.${v}`) })));
+  const reviewOrders = $derived(REVIEW_ORDER.map((v) => ({ value: v, label: t(`presets.review_order.${v}`) })));
 
   const nums = (s: string) =>
     s
@@ -33,7 +67,9 @@
       .filter(Boolean)
       .map(Number);
 
-  function edit(p: PresetDto | null) {
+  /** Opens `p` in the form (`force`: also when it is already open, e.g. after saving). */
+  function edit(p: PresetDto | null, force = false) {
+    if (!force && p && p.id === selected && cfg) return;
     selected = p?.id ?? null;
     saved = false;
     if (!p) {
@@ -48,11 +84,12 @@
   }
 
   async function load() {
-    await ctx.guarded(async () => {
+    const ok = await ctx.guarded(async () => {
       list = await api.call('presets.list', {});
       const p = list.items.find((x) => x.id === selected) ?? null;
-      if (!p) edit(null);
+      if (!p) edit(list.items[0] ?? null);
     });
+    failed = !ok && !list;
   }
 
   async function create() {
@@ -75,7 +112,7 @@
     saved = await ctx.guarded(async () => {
       const p = await api.call('presets.update', { id: current.id, name, config });
       await load();
-      edit(list?.items.find((x) => x.id === p.id) ?? null);
+      edit(list?.items.find((x) => x.id === p.id) ?? null, true);
     });
   }
 
@@ -96,7 +133,7 @@
 
   async function assign(deckIds: string[], presetId: string | null) {
     await ctx.guarded(() => api.call('presets.assign', { deck_ids: deckIds, preset_id: presetId }));
-    deckToAssign = '';
+    deckToAssign = null;
     await load();
   }
 
@@ -107,116 +144,281 @@
   });
 </script>
 
-<h2>{t('presets.heading')}</h2>
-<p class="muted">{t('presets.intro')}</p>
+{#snippet newForm()}
+  <form class="new" onsubmit={(e) => { e.preventDefault(); void create(); }}>
+    <Input bind:value={newName} label={t('presets.new_name')} hideLabel placeholder={t('presets.new_placeholder')} />
+    <Button type="submit" icon={Plus} disabled={!newName.trim()}>{t('presets.new')}</Button>
+  </form>
+{/snippet}
 
-<div class="layout">
-  <aside>
-    <h3>{t('presets.list')}</h3>
-    {#if list && list.items.length === 0}<p class="muted">{t('presets.none')}</p>{/if}
-    <ul>
-      {#each list?.items ?? [] as p (p.id)}
-        <li>
-          <button class:active={p.id === selected} aria-pressed={p.id === selected} onclick={() => edit(p)}>{p.name}</button>
-          <span class="muted">{p.deck_ids.length}</span>
-        </li>
-      {/each}
-    </ul>
-    <form onsubmit={(e) => { e.preventDefault(); void create(); }}>
-      <input bind:value={newName} placeholder={t('presets.new_name')} aria-label={t('presets.new_name')} />
-      <button type="submit" disabled={!newName.trim()}>{t('presets.new')}</button>
-    </form>
-  </aside>
+<SettingsPage title={t('presets.heading')} subtitle={t('presets.intro')} width="wide">
+  {#if !list}
+    <SettingsSection>
+      <LoadState state={failed ? 'error' : 'loading'} retry={() => void load()} lines={5} />
+    </SettingsSection>
+  {:else if list.items.length === 0}
+    <SettingsSection>
+      <EmptyState icon={Layers} title={t('presets.none')} description={t('presets.none_hint')}>
+        <div class="new-empty">{@render newForm()}</div>
+      </EmptyState>
+    </SettingsSection>
+  {:else}
+  <div class="layout">
+    <aside aria-label={t('presets.list')}>
+      <Card padding="none">
+        <h2 class="side-title">{t('presets.list')}</h2>
+          <ul class="presets">
+            {#each list.items as p (p.id)}
+              <li>
+                <button type="button" class="preset" class:active={p.id === selected} aria-pressed={p.id === selected} onclick={() => edit(p)}>
+                  <span class="pname">{p.name}</span>
+                  <Badge count={p.deck_ids.length} label={t('presets.deck_count', { n: p.deck_ids.length })} />
+                </button>
+              </li>
+            {/each}
+          </ul>
+        <div class="new-side">{@render newForm()}</div>
+      </Card>
+    </aside>
 
-  {#if current && cfg}
-    <section aria-label={current.name}>
-      <form onsubmit={(e) => { e.preventDefault(); void save(); }}>
-        <label>{t('presets.field.name')} <input bind:value={name} /></label>
-        <label>{t('presets.field.new_per_day')} <input type="number" min="0" bind:value={cfg.new_per_day} /></label>
-        <label>{t('presets.field.reviews_per_day')} <input type="number" min="0" bind:value={cfg.reviews_per_day} /></label>
-        <label>{t('presets.field.desired_retention')}
-          <input type="number" min="0.7" max="0.99" step="0.01" bind:value={cfg.desired_retention} /></label>
-        <label>{t('presets.field.learning_steps_mins')}
-          <input bind:value={learning} placeholder={t('presets.field.steps_hint')} /></label>
-        <label>{t('presets.field.relearning_steps_mins')}
-          <input bind:value={relearning} placeholder={t('presets.field.steps_hint')} /></label>
-        <details>
-          <summary>{t('presets.advanced')}</summary>
-          <label class="check"><input type="checkbox" bind:checked={cfg.bury_siblings} /> {t('presets.field.bury_siblings')}</label>
-          <label>{t('presets.field.maximum_interval_days')}
-            <input type="number" min="1" max="36500" bind:value={cfg.maximum_interval_days} /></label>
-          <label>{t('presets.field.new_order')}
-            <select bind:value={cfg.new_order}>
-              <option value="added">{t('presets.new_order.added')}</option>
-              <option value="random">{t('presets.new_order.random')}</option>
-            </select></label>
-          <label>{t('presets.field.review_order')}
-            <select bind:value={cfg.review_order}>
-              <option value="due">{t('presets.review_order.due')}</option>
-              <option value="random">{t('presets.review_order.random')}</option>
-              <option value="retrievability">{t('presets.review_order.retrievability')}</option>
-            </select></label>
-          <label>{t('presets.field.fsrs_weights')}
-            <textarea rows="2" bind:value={weights} placeholder={t('presets.field.fsrs_hint')}></textarea></label>
-        </details>
-        <div class="row">
-          <button type="submit">{t('presets.save')}</button>
-          <button type="button" onclick={() => void copy()}>{t('presets.clone')}</button>
-          <button type="button" class="danger" onclick={() => void remove()}>{t('presets.delete')}</button>
-          {#if saved}<span role="status" class="muted">{t('presets.saved')}</span>{/if}
-        </div>
-      </form>
+    <div class="editor">
+      {#if current && cfg}
+        <form class="stack" aria-label={current.name} onsubmit={(e) => { e.preventDefault(); void save(); }}>
+          <SettingsSection title={current.name} body="rows">
+            {#snippet actions()}
+              <Button variant="ghost" size="sm" icon={Copy} onclick={() => void copy()}>{t('presets.clone')}</Button>
+              <Button variant="ghost" size="sm" icon={Trash2} onclick={() => void remove()}>{t('presets.delete')}</Button>
+            {/snippet}
+            <FormRow label={t('presets.field.name')}>
+              <Input class="txt" bind:value={name} label={t('presets.field.name')} hideLabel />
+            </FormRow>
+            <FormRow label={t('presets.field.new_per_day')} description={t('presets.desc.new_per_day')}>
+              <Input class="num" type="number" min="0" bind:value={cfg.new_per_day} label={t('presets.field.new_per_day')} hideLabel />
+            </FormRow>
+            <FormRow label={t('presets.field.reviews_per_day')} description={t('presets.desc.reviews_per_day')}>
+              <Input class="num" type="number" min="0" bind:value={cfg.reviews_per_day} label={t('presets.field.reviews_per_day')} hideLabel />
+            </FormRow>
+            <FormRow label={t('presets.field.desired_retention')} description={t('presets.desc.desired_retention')}>
+              <Input class="num" type="number" min="0.7" max="0.99" step="0.01" bind:value={cfg.desired_retention} label={t('presets.field.desired_retention')} hideLabel />
+            </FormRow>
+            <FormRow label={t('presets.field.learning_steps_mins')} description={t('presets.field.steps_hint')}>
+              <Input class="txt" bind:value={learning} label={t('presets.field.learning_steps_mins')} hideLabel placeholder="1 10" />
+            </FormRow>
+            <FormRow label={t('presets.field.relearning_steps_mins')} description={t('presets.field.steps_hint')}>
+              <Input class="txt" bind:value={relearning} label={t('presets.field.relearning_steps_mins')} hideLabel placeholder="10" />
+            </FormRow>
+            <div class="adv-toggle">
+              <Button variant="ghost" size="sm" iconEnd={advanced ? ChevronUp : ChevronDown} aria-expanded={advanced} aria-controls="fc-preset-advanced" onclick={() => (advanced = !advanced)}>
+                {t('presets.advanced')}
+              </Button>
+            </div>
+            {#if advanced}
+              <div id="fc-preset-advanced">
+                <FormRow label={t('presets.field.bury_siblings')}>
+                  <Switch bind:checked={cfg.bury_siblings} ariaLabel={t('presets.field.bury_siblings')} />
+                </FormRow>
+                <FormRow label={t('presets.field.maximum_interval_days')}>
+                  <Input class="num" type="number" min="1" max="36500" bind:value={cfg.maximum_interval_days} label={t('presets.field.maximum_interval_days')} hideLabel />
+                </FormRow>
+                <FormRow label={t('presets.field.new_order')}>
+                  <Select options={newOrders} bind:value={cfg.new_order} label={t('presets.field.new_order')} hideLabel />
+                </FormRow>
+                <FormRow label={t('presets.field.review_order')}>
+                  <Select options={reviewOrders} bind:value={cfg.review_order} label={t('presets.field.review_order')} hideLabel />
+                </FormRow>
+                <FormRow label={t('presets.field.fsrs_weights')} description={t('presets.field.fsrs_hint')} stack>
+                  <Textarea rows={2} bind:value={weights} label={t('presets.field.fsrs_weights')} hideLabel />
+                </FormRow>
+              </div>
+            {/if}
+            <div class="save">
+              {#if saved}<span role="status" class="saved">{t('presets.saved')}</span>{/if}
+              <Button type="submit" variant="primary" icon={Save}>{t('presets.save')}</Button>
+            </div>
+          </SettingsSection>
+        </form>
 
-      <h3>{t('presets.decks')}</h3>
-      {#if current.deck_ids.length === 0}<p class="muted">{t('presets.decks_none')}</p>{/if}
-      <ul>
-        {#each current.deck_ids as d (d)}
-          <li>{pathOf(d)}
-            <button aria-label={t('presets.unassign', { path: pathOf(d) })} onclick={() => void assign([d], null)}>×</button></li>
-        {/each}
-      </ul>
-      <div class="row">
-        <select bind:value={deckToAssign} aria-label={t('presets.assign_pick')}>
-          <option value="">{t('presets.assign_pick')}</option>
-          {#each decks.filter((d) => !current.deck_ids.includes(d.id)) as d (d.id)}<option value={d.id}>{d.path}</option>{/each}
-        </select>
-        <button disabled={!deckToAssign} onclick={() => void assign([deckToAssign], current.id)}>{t('presets.assign')}</button>
-      </div>
-    </section>
+        <SettingsSection title={t('presets.decks')} description={t('presets.decks_intro')}>
+          {#if current.deck_ids.length === 0}
+            <p class="muted">{t('presets.decks_none')}</p>
+          {:else}
+            <ul class="decks">
+              {#each current.deck_ids as d (d)}
+                <li>
+                  <span>{pathOf(d)}</span>
+                  <IconButton size="sm" icon={X} label={t('presets.unassign', { path: pathOf(d) })} onclick={() => void assign([d], null)} />
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          <div class="assign">
+            <Select options={assignable} bind:value={deckToAssign} label={t('presets.assign_pick')} hideLabel placeholder={t('presets.assign_pick')} disabled={assignable.length === 0} />
+            <Button icon={Plus} disabled={!deckToAssign} onclick={() => deckToAssign && void assign([deckToAssign], current.id)}>{t('presets.assign')}</Button>
+          </div>
+        </SettingsSection>
+      {:else}
+        <SettingsSection>
+          <EmptyState size="sm" icon={Layers} title={t('presets.pick')} />
+        </SettingsSection>
+      {/if}
+    </div>
+  </div>
   {/if}
-</div>
+</SettingsPage>
 
 <style>
   .layout {
     display: grid;
-    grid-template-columns: minmax(12rem, 16rem) 1fr;
-    gap: var(--fc-space-6);
+    grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
+    gap: var(--space-6);
+    align-items: start;
   }
-  ul {
+  .side-title {
+    margin: 0;
+    padding: var(--space-4) var(--space-4) var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .presets {
     list-style: none;
-    padding: 0;
-  }
-  li {
-    margin: var(--fc-space-1) 0;
-  }
-  .active {
-    font-weight: 600;
-  }
-  label {
-    display: block;
-    margin: var(--fc-space-2) 0;
-  }
-  label input:not([type='checkbox']),
-  label select,
-  label textarea {
-    display: block;
-    width: 100%;
-    max-width: 24rem;
-  }
-  .row {
+    margin: 0;
+    padding: 0 var(--space-2);
     display: flex;
-    gap: var(--fc-space-2);
+    flex-direction: column;
+    gap: 1px;
+  }
+  .preset {
+    display: flex;
     align-items: center;
-    margin-top: var(--fc-space-2);
+    justify-content: space-between;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: none;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-sm);
+    text-align: start;
+    cursor: pointer;
+  }
+  .preset:hover {
+    background: var(--surface-2);
+  }
+  .preset.active {
+    background: var(--accent-soft);
+    font-weight: var(--weight-semibold);
+  }
+  .preset:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
+  }
+  .pname {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .new {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .new :global(.fc-field) {
+    flex: 1 1 10rem;
+    min-width: 0;
+  }
+  .new-side {
+    padding: var(--space-3) var(--space-3) var(--space-3);
+    margin-top: var(--space-2);
+    border-top: 1px solid var(--border);
+  }
+  .new-side .new {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .new-side .new :global(.fc-field) {
+    flex: none;
+  }
+  .new-empty {
+    width: min(100%, 26rem);
+    margin-top: var(--space-2);
+  }
+  .editor,
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    min-width: 0;
+  }
+  .editor :global(.num) {
+    min-width: 0;
+    width: 8rem;
+  }
+  .editor :global(.txt) {
+    min-width: 0;
+    width: 12rem;
+  }
+  .adv-toggle {
+    padding: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+  #fc-preset-advanced {
+    border-top: 1px solid var(--border);
+  }
+  .save {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-6);
+    border-top: 1px solid var(--border);
+  }
+  .saved {
+    color: var(--success);
+    font-size: var(--text-sm);
+  }
+  .muted {
+    margin: 0 0 var(--space-3);
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .decks {
+    list-style: none;
+    margin: 0 0 var(--space-3);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .decks li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+    font-size: var(--text-sm);
+  }
+  .assign {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .assign :global(.fc-field) {
+    flex: 1 1 14rem;
+  }
+  @media (max-width: 1023.98px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .save {
+      padding-inline: var(--space-4);
+    }
   }
 </style>

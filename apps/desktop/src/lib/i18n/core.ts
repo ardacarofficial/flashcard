@@ -1,7 +1,11 @@
 // Merged at build time from `locales/<lang>/<feature>.json` by `scripts/merge-locales.mjs`
 // (run by `pnpm check|test|build|dev`). Edit the feature files, never these.
-import en from './generated/en.json';
-import tr from './generated/tr.json';
+//
+// Only the *types* are imported statically: each language is its own lazily loaded chunk
+// (`loadLocale`), so the initial bundle carries no dictionary at all and the app loads just
+// the active language before mounting (switching language loads the other one).
+import type en from './generated/en.json';
+import type tr from './generated/tr.json';
 
 /** EN is the reference dictionary; every other locale must have the same shape. */
 export type Dictionary = typeof en;
@@ -19,8 +23,27 @@ export type MessageKey = Paths<Dictionary>;
 export type Params = Record<string, string | number>;
 
 // Compile-time guarantee that TR is not missing any key EN has.
-const trChecked: Dictionary = tr;
-export const DICTIONARIES: Record<Locale, Dictionary> = { en, tr: trChecked };
+type TrComplete = typeof tr extends Dictionary ? true : never;
+export const TR_COMPLETE: TrComplete = true;
+
+const LOADERS: Record<Locale, () => Promise<{ default: Dictionary }>> = {
+  en: () => import('./generated/en.json'),
+  tr: () => import('./generated/tr.json'),
+};
+
+/** The dictionaries loaded so far (filled by `loadLocale`). */
+export const DICTIONARIES: Partial<Record<Locale, Dictionary>> = {};
+
+const pending: Partial<Record<Locale, Promise<Dictionary>>> = {};
+
+/** Loads `locale`'s dictionary once (a separate chunk); resolves when lookups can use it. */
+export function loadLocale(locale: Locale): Promise<Dictionary> {
+  const have = DICTIONARIES[locale];
+  if (have) return Promise.resolve(have);
+  return (pending[locale] ??= LOADERS[locale]().then((m) => (DICTIONARIES[locale] = m.default)));
+}
+
+export const isLocaleLoaded = (locale: Locale): boolean => DICTIONARIES[locale] !== undefined;
 
 function lookup(dict: unknown, key: string): string | undefined {
   let cur: unknown = dict;
@@ -38,7 +61,7 @@ export function interpolate(s: string, params?: Params): string {
   );
 }
 
-/** Typed lookup. Falls back to EN, then to the key itself. */
+/** Typed lookup. Falls back to EN (if loaded), then to the key itself. */
 export function translate(locale: Locale, key: MessageKey, params?: Params): string {
   return translateDynamic(locale, key, params);
 }

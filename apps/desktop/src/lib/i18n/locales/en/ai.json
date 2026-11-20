@@ -90,7 +90,10 @@
       "session_keychain": "Keys are kept only for this session on this system (they may disappear after you log out). You may need to enter them again.",
       "move_key": "New address: {url}. An API key is stored for the old one. Send it to the new address too?",
       "move_remove_key": "Change and remove the key",
-      "move_keep_key": "Change and keep the key"
+      "move_keep_key": "Change and keep the key",
+      "intro": "Every request is shown to you before it is sent. Keys stay in the system keychain.",
+      "more": "More actions for {name}",
+      "load_failed": "Could not load the providers."
     },
     "routes": {
       "heading": "Model per feature",
@@ -107,7 +110,8 @@
       "input": "Input",
       "output": "Output",
       "delete": "Remove",
-      "save": "Save"
+      "save": "Save",
+      "actions": "Actions"
     },
     "usage": {
       "month": "This month",
@@ -116,7 +120,10 @@
       "by_feature": "By feature (this month)",
       "by_model": "By model (this month)",
       "empty": "No AI requests yet.",
-      "estimate_note": "Costs are estimates from the price table."
+      "estimate_note": "Costs are estimates from the price table.",
+      "budget": "Monthly budget",
+      "requests": "{n} request(s)",
+      "tokens": "{input} in / {output} out tokens"
     },
     "job": {
       "connecting": "Connecting…",
@@ -151,7 +158,8 @@
         "almost": "Almost",
         "wrong": "Not quite"
       }
-    }
+    },
+    "subtitle": "Make cards from text, and choose the providers and models the app may use."
   },
   "errors": {
     "validation": {

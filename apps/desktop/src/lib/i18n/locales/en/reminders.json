@@ -1,5 +1,7 @@
 {
-  "nav": { "reminders": "Reminders" },
+  "nav": {
+    "reminders": "Reminders"
+  },
   "modules": {
     "reminders": {
       "name": "Reminders and tray",
@@ -8,10 +10,22 @@
   },
   "settings": {
     "reminders": {
-      "enabled": { "label": "Daily reminder", "description": "Show a notification when cards are waiting today." },
-      "minute_of_day": { "label": "Reminder time", "description": "Local time, minutes after midnight." },
-      "weekdays": { "label": "Reminder days", "description": "Days of the week the reminder may come." },
-      "keep_in_tray": { "label": "Keep running in the tray", "description": "Closing the window hides it; the app stays in the system tray so reminders keep coming." }
+      "enabled": {
+        "label": "Daily reminder",
+        "description": "Show a notification when cards are waiting today."
+      },
+      "minute_of_day": {
+        "label": "Reminder time",
+        "description": "Local time, minutes after midnight."
+      },
+      "weekdays": {
+        "label": "Reminder days",
+        "description": "Days of the week the reminder may come."
+      },
+      "keep_in_tray": {
+        "label": "Keep running in the tray",
+        "description": "Closing the window hides it; the app stays in the system tray so reminders keep coming."
+      }
     }
   },
   "reminders": {
@@ -36,7 +50,12 @@
     "none": "No reminder planned.",
     "test": "Send a test notification",
     "sent": "Test reminder sent.",
-    "notification": "{total} cards are waiting for you today ({due} due, {new} new)."
+    "notification": "{total} cards are waiting for you today ({due} due, {new} new).",
+    "daily": "Daily reminder",
+    "time_hint": "Local time of the notification.",
+    "test_hint": "Check that notifications reach you.",
+    "tray": "Tray",
+    "test_row": "Test notification"
   },
   "commands": {
     "reminders": {

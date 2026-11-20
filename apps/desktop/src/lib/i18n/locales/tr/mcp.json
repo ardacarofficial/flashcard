@@ -45,7 +45,10 @@
       "tools": "Araçlar",
       "read": "okur",
       "write": "yazar",
-      "changes_content": "içeriği değiştirir"
+      "changes_content": "içeriği değiştirir",
+      "setup_hint": "Claude Code ya da Claude Desktop’a yapıştırılacak ayar.",
+      "show_setup": "Kurulumu göster",
+      "hide_setup": "Kurulumu gizle"
     },
     "tools": {
       "list_decks": "Desteleri listele",
@@ -77,8 +80,12 @@
       "confirm_add": "Yapay zeka özellikleri bu sunucuyu kullandığında uygulama şu programı başlatacak: {command}. Yalnızca güveniyorsan devam et.",
       "confirm_approve": "Bu sunucu dışarıdan geldi (örneğin geri yüklenen bir yedekten) ve hiç onaylanmadı. Onaylarsan uygulama şunu başlatabilir: {command}. Yalnızca güveniyorsan devam et.",
       "trust_add": "Ekle ve güven",
-      "trust_approve": "Onayla"
-    }
+      "trust_approve": "Onayla",
+      "add_heading": "Sunucu ekle",
+      "add_title": "Bu programa güveniyor musun?",
+      "approve_title": "Bu sunucu onaylansın mı?"
+    },
+    "subtitle": "Yapay zeka asistanlarını koleksiyonuna, uygulamayı da dış araç sunucularına bağla."
   },
   "errors": {
     "validation": {

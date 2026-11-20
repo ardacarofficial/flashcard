@@ -1,5 +1,7 @@
 import {
   LOCALES,
+  isLocaleLoaded,
+  loadLocale,
   detectLocale,
   systemLanguages,
   interpolate,
@@ -40,20 +42,36 @@ export function initialLocale(): Locale {
 // TODO(v0.1 integration): persist via `settings.set` (app scope) once the backend exposes it.
 const state = $state<{ locale: Locale }>({ locale: initialLocale() });
 
+function apply(l: Locale): void {
+  state.locale = l;
+  try {
+    localStorage.setItem(STORAGE_KEY, l);
+  } catch {
+    /* ignore */
+  }
+  if (typeof document !== 'undefined') document.documentElement.lang = l;
+}
+
 export const i18n = {
   get locale(): Locale {
     return state.locale;
   },
+  /** Switches language: at once if its dictionary is loaded, else once its chunk has (`setLocale`). */
   set locale(l: Locale) {
-    state.locale = l;
-    try {
-      localStorage.setItem(STORAGE_KEY, l);
-    } catch {
-      /* ignore */
-    }
-    if (typeof document !== 'undefined') document.documentElement.lang = l;
+    if (isLocaleLoaded(l)) apply(l);
+    else void setLocale(l);
+  },
+  /** Loads the starting language's dictionary; `main.ts` awaits it before mounting. */
+  ready(): Promise<unknown> {
+    return loadLocale(state.locale);
   },
 };
+
+/** Loads `l`'s dictionary (lazy chunk), then switches the UI to it. */
+export async function setLocale(l: Locale): Promise<void> {
+  await loadLocale(l);
+  apply(l);
+}
 
 /** Reactive typed translation: re-renders when the locale changes. */
 export function t(key: MessageKey, params?: Params): string {

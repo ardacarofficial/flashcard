@@ -1,8 +1,32 @@
+<!--
+  Settings → Study → Note types: list on the left; the chosen type's fields, card templates,
+  styling and a live preview on the right. The backend validates, renders and stores.
+-->
 <script lang="ts">
   import { api, type ApiError } from '$lib/api';
   import type { AttributeDefDto, CardTypeDto, FieldKind, NoteTypeDto, NoteTypeInput, RenderedSides } from '$lib/api/types';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import { t, td } from '$lib/i18n/index.svelte';
+  import {
+    Button,
+    Card,
+    Checkbox,
+    ChevronDown,
+    ChevronUp,
+    Chip,
+    Copy,
+    EmptyState,
+    FileText,
+    IconButton,
+    Input,
+    Plus,
+    Save,
+    Select,
+    Textarea,
+    Trash2,
+    X,
+  } from '$lib/ui';
+  import { FormRow, LoadState, SettingsPage, SettingsSection } from '../core/kit';
   import type { ScreenCtx } from '../types';
   import CardPreview from './CardPreview.svelte';
   import { move, newField, sampleFields, toInput } from './content';
@@ -12,7 +36,8 @@
 
   const KINDS: FieldKind[] = ['rich_text', 'text', 'image', 'audio', 'video', 'number', 'tag_list', 'link'];
 
-  let list = $state<NoteTypeDto[]>([]);
+  let list = $state<NoteTypeDto[] | null>(null);
+  let loadFailed = $state(false);
   let engines = $state<CardTypeDto[]>([]);
   let classifications = $state<AttributeDefDto[]>([]);
   let selected = $state<string | null>(null);
@@ -24,7 +49,10 @@
   let status = $state<string | null>(null);
   let confirming = $state(false);
 
-  const current = $derived(list.find((n) => n.id === selected) ?? null);
+  const current = $derived(list?.find((n) => n.id === selected) ?? null);
+  const kindOptions = $derived(KINDS.map((k) => ({ value: k, label: t(`notetype.kind.${k}`) })));
+  const engineOptions = $derived(engines.map((e) => ({ value: e.id, label: td(e.name_key) })));
+  const sortOptions = $derived((draft?.fields ?? []).filter((f) => f.key).map((f) => ({ value: f.key, label: f.name })));
 
   function fail(e: unknown) {
     error = td((e as ApiError).messageKey);
@@ -32,9 +60,12 @@
 
   async function load() {
     try {
-      list = (await api.call('notetypes.list', {})).notetypes;
-      if (!list.some((n) => n.id === selected)) selected = list[0]?.id ?? null;
+      const items = (await api.call('notetypes.list', {})).notetypes;
+      list = items;
+      loadFailed = false;
+      if (!items.some((n) => n.id === selected)) selected = items[0]?.id ?? null;
     } catch (e) {
+      if (!list) loadFailed = true;
       fail(e);
     }
   }
@@ -127,146 +158,140 @@
   }
 </script>
 
-<section class="layout">
-  <aside>
-    <h2>{t('notetype.heading')}</h2>
-    <ul>
-      {#each list as n (n.id)}
-        <li>
-          <button class:active={n.id === selected} onclick={() => (selected = n.id)}>
-            {n.name}
-            {#if n.builtin}<span class="muted small-text">· {t('notetype.builtin')}</span>{/if}
-          </button>
-        </li>
-      {/each}
-    </ul>
-    <div class="row">
-      <button onclick={() => void create(null)}>{t('notetype.new')}</button>
-      {#if current}<button onclick={() => void create(current.id)}>{t('notetype.copy')}</button>{/if}
-    </div>
-  </aside>
+<SettingsPage title={t('notetype.heading')} subtitle={t('notetype.intro')} width="wide">
+  {#snippet actions()}
+    {#if current}<Button icon={Copy} onclick={() => void create(current.id)}>{t('notetype.copy')}</Button>{/if}
+    <Button variant="primary" icon={Plus} onclick={() => void create(null)}>{t('notetype.new')}</Button>
+  {/snippet}
 
-  {#if draft && current}
-    <div class="edit">
-      {#if error}<p class="error" role="alert">{error}</p>{/if}
-      <label>
-        {t('notetype.name')}
-        <input bind:value={draft.name} />
-      </label>
-      <p class="muted">{t('notetype.usage', { notes: usage })}</p>
+  {#if error}<p class="banner" role="alert">{error}</p>{/if}
 
-      <h3>{t('notetype.fields')}</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>{t('notetype.field_name')}</th>
-            <th>{t('notetype.field_kind')}</th>
-            <th>{t('notetype.required')}</th>
-            <th>{t('notetype.unique')}</th>
-            <th>{t('notetype.searchable')}</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each draft.fields as f, i (i)}
-            <tr>
-              <td><input bind:value={f.name} aria-label={t('notetype.field_name')} /></td>
-              <td>
-                <select bind:value={f.kind} aria-label={t('notetype.field_kind')}>
-                  {#each KINDS as k (k)}<option value={k}>{t(`notetype.kind.${k}`)}</option>{/each}
-                </select>
-              </td>
-              <td><input type="checkbox" bind:checked={f.required} aria-label={t('notetype.required')} /></td>
-              <td><input type="checkbox" bind:checked={f.unique} aria-label={t('notetype.unique')} /></td>
-              <td><input type="checkbox" bind:checked={f.searchable} aria-label={t('notetype.searchable')} /></td>
-              <td class="row">
-                <button class="small" aria-label={t('notetype.move_up')} onclick={() => draft && (draft.fields = move(draft.fields, i, -1))}>↑</button>
-                <button class="small" aria-label={t('notetype.move_down')} onclick={() => draft && (draft.fields = move(draft.fields, i, 1))}>↓</button>
-                <button class="small" aria-label={t('notetype.remove')} onclick={() => draft && (draft.fields = draft.fields.filter((_, j) => j !== i))}>✕</button>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-      <div class="row">
-        <button onclick={() => draft && (draft.fields = [...draft.fields, newField(t('notetype.new_field'))])}>{t('notetype.add_field')}</button>
-        <label class="inline">
-          {t('notetype.sort_field')}
-          <select bind:value={draft.sort_field}>
-            {#each draft.fields.filter((f) => f.key) as f (f.key)}<option value={f.key}>{f.name}</option>{/each}
-          </select>
-        </label>
-      </div>
+  {#if list === null}
+    <SettingsSection>
+      <LoadState state={loadFailed ? 'error' : 'loading'} retry={() => void load()} lines={5} />
+    </SettingsSection>
+  {:else if list.length === 0}
+    <SettingsSection>
+      <EmptyState icon={FileText} title={t('notetype.empty')} action={{ label: t('notetype.new'), icon: Plus, onclick: () => void create(null) }} />
+    </SettingsSection>
+  {:else}
+    <div class="layout">
+      <nav aria-label={t('notetype.list')}>
+        <Card padding="none">
+          <h2 class="side-title">{t('notetype.list')}</h2>
+          <ul class="types">
+            {#each list as n (n.id)}
+              <li>
+                <button type="button" class="type" class:active={n.id === selected} aria-current={n.id === selected ? 'true' : undefined} onclick={() => (selected = n.id)}>
+                  <span class="tname">{n.name}</span>
+                  {#if n.builtin}<Chip size="sm" label={t('notetype.builtin')} />{/if}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </Card>
+      </nav>
 
-      {#if classifications.length > 0}
-        <div class="classes">
-          <strong>{t('notetype.classifications')}</strong>
-          <span>{classifications.map((c) => c.name).join(' · ')}</span>
-          <span class="muted">{t('notetype.classifications_hint')}</span>
+      {#if draft && current}
+        <div class="editor">
+          <SettingsSection title={current.name} description={t('notetype.usage', { notes: usage })} body="rows">
+            {#snippet actions()}
+              <Button variant="ghost" size="sm" icon={Trash2} onclick={() => (confirming = true)}>{t('notetype.delete')}</Button>
+            {/snippet}
+            <FormRow label={t('notetype.name')}>
+              <Input bind:value={draft.name} label={t('notetype.name')} hideLabel />
+            </FormRow>
+            <FormRow label={t('notetype.sort_field')} description={t('notetype.sort_field_hint')}>
+              <Select options={sortOptions} bind:value={draft.sort_field} label={t('notetype.sort_field')} hideLabel />
+            </FormRow>
+          </SettingsSection>
+
+          <SettingsSection title={t('notetype.fields')}>
+            {#snippet actions()}
+              <Button size="sm" icon={Plus} onclick={() => draft && (draft.fields = [...draft.fields, newField(t('notetype.new_field'))])}>{t('notetype.add_field')}</Button>
+            {/snippet}
+            <ol class="fields" aria-label={t('notetype.fields')}>
+              {#each draft.fields as f, i (i)}
+                <li class="fitem">
+                  <div class="fline">
+                    <Input size="sm" bind:value={f.name} label={t('notetype.field_name')} hideLabel />
+                    <Select size="sm" options={kindOptions} bind:value={f.kind} label={t('notetype.field_kind')} hideLabel />
+                    <span class="acts">
+                      <IconButton size="sm" icon={ChevronUp} label={t('notetype.move_up')} disabled={i === 0} onclick={() => draft && (draft.fields = move(draft.fields, i, -1))} />
+                      <IconButton size="sm" icon={ChevronDown} label={t('notetype.move_down')} disabled={i === draft.fields.length - 1} onclick={() => draft && (draft.fields = move(draft.fields, i, 1))} />
+                      <IconButton size="sm" icon={X} label={t('notetype.remove')} onclick={() => draft && (draft.fields = draft.fields.filter((_, j) => j !== i))} />
+                    </span>
+                  </div>
+                  <div class="flags">
+                    <Checkbox bind:checked={f.required} label={t('notetype.required')} />
+                    <Checkbox bind:checked={f.unique} label={t('notetype.unique')} />
+                    <Checkbox bind:checked={f.searchable} label={t('notetype.searchable')} />
+                  </div>
+                </li>
+              {/each}
+            </ol>
+            {#if classifications.length > 0}
+              <div class="classes">
+                <strong>{t('notetype.classifications')}</strong>
+                <div class="chips">{#each classifications as c (c.id)}<Chip size="sm" label={c.name} />{/each}</div>
+                <span class="muted">{t('notetype.classifications_hint')}</span>
+              </div>
+            {/if}
+          </SettingsSection>
+
+          <SettingsSection title={t('notetype.templates')} description={t('notetype.syntax_intro')}>
+            {#snippet actions()}
+              {#if draft?.kind === 'standard'}
+                <Button
+                  size="sm"
+                  icon={Plus}
+                  onclick={() =>
+                    draft &&
+                    (draft.templates = [
+                      ...draft.templates,
+                      { key: '', name: t('notetype.new_template'), front: '', back: '{{FrontSide}}\n<hr>\n', card_type: 'classic' },
+                    ])}>{t('notetype.add_template')}</Button
+                >
+              {/if}
+            {/snippet}
+            <p class="syntax"><code>{t('notetype.syntax')}</code></p>
+            <div class="templates">
+              {#each draft.templates as tpl, i (i)}
+                <div class="tpl">
+                  <div class="tpl-head">
+                    <Input size="sm" bind:value={tpl.name} label={t('notetype.template_name')} />
+                    <Select size="sm" options={engineOptions} bind:value={tpl.card_type} label={t('notetype.card_type')} />
+                    {#if draft.templates.length > 1}
+                      <IconButton size="sm" icon={Trash2} label={t('notetype.remove_template', { name: tpl.name })} onclick={() => draft && (draft.templates = draft.templates.filter((_, j) => j !== i))} />
+                    {/if}
+                  </div>
+                  <div class="sides">
+                    <Textarea class="code" rows={4} bind:value={tpl.front} spellcheck="false" label={t('notetype.front')} />
+                    <Textarea class="code" rows={4} bind:value={tpl.back} spellcheck="false" label={t('notetype.back')} />
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </SettingsSection>
+
+          <SettingsSection title={t('notetype.preview_heading')}>
+            {#if previewError}<p class="banner" role="alert">{previewError}</p>{/if}
+            <CardPreview cards={preview} />
+          </SettingsSection>
+
+          <SettingsSection title={t('notetype.css')}>
+            <Textarea class="code" rows={5} bind:value={draft.css} spellcheck="false" label={t('notetype.css')} hideLabel />
+          </SettingsSection>
+
+          <div class="savebar">
+            {#if status}<span class="ok" role="status">{status}</span>{/if}
+            <Button variant="primary" icon={Save} onclick={() => void save()}>{t('notetype.save')}</Button>
+          </div>
         </div>
       {/if}
-
-      <h3>{t('notetype.templates')}</h3>
-      <p class="muted syntax">{t('notetype.syntax')}</p>
-      {#each draft.templates as tpl, i (i)}
-        <fieldset>
-          <div class="row">
-            <label class="inline">
-              {t('notetype.template_name')}
-              <input bind:value={tpl.name} />
-            </label>
-            <label class="inline">
-              {t('notetype.card_type')}
-              <select bind:value={tpl.card_type}>
-                {#each engines as e (e.id)}<option value={e.id}>{td(e.name_key)}</option>{/each}
-              </select>
-            </label>
-            {#if draft.templates.length > 1}
-              <button class="small" onclick={() => draft && (draft.templates = draft.templates.filter((_, j) => j !== i))}>{t('notetype.remove')}</button>
-            {/if}
-          </div>
-          <label>
-            {t('notetype.front')}
-            <textarea rows="3" bind:value={tpl.front} spellcheck="false"></textarea>
-          </label>
-          <label>
-            {t('notetype.back')}
-            <textarea rows="3" bind:value={tpl.back} spellcheck="false"></textarea>
-          </label>
-        </fieldset>
-      {/each}
-      {#if draft.kind === 'standard'}
-        <button
-          onclick={() =>
-            draft &&
-            (draft.templates = [
-              ...draft.templates,
-              { key: '', name: t('notetype.new_template'), front: '', back: '{{FrontSide}}\n<hr>\n', card_type: 'classic' },
-            ])}
-        >
-          {t('notetype.add_template')}
-        </button>
-      {/if}
-
-      <label>
-        {t('notetype.css')}
-        <textarea rows="4" bind:value={draft.css} spellcheck="false"></textarea>
-      </label>
-
-      <div class="row">
-        <button class="primary" onclick={() => void save()}>{t('notetype.save')}</button>
-        {#if status}<span class="ok" role="status">{status}</span>{/if}
-        <span class="spacer"></span>
-        <button class="danger" onclick={() => (confirming = true)}>{t('notetype.delete')}</button>
-      </div>
-    </div>
-
-    <div class="preview">
-      {#if previewError}<p class="error">{previewError}</p>{/if}
-      <CardPreview cards={preview} />
     </div>
   {/if}
-</section>
+</SettingsPage>
 
 {#if confirming && current}
   <ConfirmDialog
@@ -281,88 +306,194 @@
 <style>
   .layout {
     display: grid;
-    grid-template-columns: 200px minmax(360px, 1.4fr) minmax(240px, 1fr);
-    gap: var(--fc-space-6);
+    grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+    gap: var(--space-6);
     align-items: start;
   }
-  aside ul {
+  nav {
+    position: sticky;
+    top: 0;
+  }
+  .side-title {
+    margin: 0;
+    padding: var(--space-4) var(--space-4) var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .types {
     list-style: none;
-    margin: 0 0 var(--fc-space-3);
+    margin: 0;
+    padding: 0 var(--space-2) var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .type {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: none;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-sm);
+    text-align: start;
+    cursor: pointer;
+  }
+  .type:hover {
+    background: var(--surface-2);
+  }
+  .type.active {
+    background: var(--accent-soft);
+    font-weight: var(--weight-semibold);
+  }
+  .type:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
+  }
+  .tname {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    min-width: 0;
+  }
+  .fields {
+    list-style: none;
+    margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-1);
+    gap: var(--space-2);
   }
-  aside button {
-    width: 100%;
-    text-align: left;
-  }
-  aside button.active {
-    background: var(--fc-selected);
-  }
-  .edit {
+  .fitem {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-3);
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
   }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-1);
-  }
-  label.inline {
-    flex-direction: row;
+  .fline {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+    gap: var(--space-2);
     align-items: center;
-    gap: var(--fc-space-2);
   }
-  .row {
+  .fline :global(.fc-field) {
+    min-width: 0;
+  }
+  .flags {
     display: flex;
-    gap: var(--fc-space-2);
-    align-items: center;
     flex-wrap: wrap;
+    gap: var(--space-2) var(--space-6);
+    font-size: var(--text-sm);
   }
-  .spacer {
-    flex: 1;
-  }
-  table {
-    border-collapse: collapse;
-  }
-  td,
-  th {
-    padding: 2px var(--fc-space-1);
-    text-align: left;
-  }
-  fieldset {
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
+  .acts {
     display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-2);
-    padding: var(--fc-space-3);
-  }
-  textarea {
-    font-family: ui-monospace, monospace;
-  }
-  .syntax {
-    font-family: ui-monospace, monospace;
-    font-size: 0.85em;
+    gap: 2px;
+    justify-content: flex-end;
   }
   .classes {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-1);
-    padding: var(--fc-space-2);
-    background: var(--fc-bg-subtle);
-    border-radius: var(--fc-radius);
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-2);
+    border-radius: var(--radius-control);
+    font-size: var(--text-sm);
   }
-  .small-text {
-    font-size: 0.85em;
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+  .muted {
+    color: var(--text-2);
+  }
+  .syntax {
+    margin: 0 0 var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: var(--text-xs);
+    overflow-wrap: anywhere;
+  }
+  .syntax code {
+    font-family: var(--font-mono);
+  }
+  .templates {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .tpl {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+  }
+  .tpl-head {
+    display: flex;
+    gap: var(--space-3);
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .tpl-head :global(.fc-field) {
+    flex: 1 1 12rem;
+  }
+  .sides {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: var(--space-3);
+  }
+  .editor :global(.code textarea),
+  .editor :global(textarea.code) {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+  .savebar {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    background: var(--surface-0);
   }
   .ok {
-    color: var(--fc-success);
+    color: var(--success);
+    font-size: var(--text-sm);
   }
-  .preview {
-    position: sticky;
-    top: 0;
+  .banner {
+    margin: 0 0 var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-control);
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-size: var(--text-sm);
+  }
+  @media (max-width: 1023.98px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    nav {
+      position: static;
+    }
   }
 </style>

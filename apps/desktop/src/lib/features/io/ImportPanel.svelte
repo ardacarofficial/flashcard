@@ -19,6 +19,24 @@
   import { followJob, resultOf } from './job';
   import { decodeColumn, encodeColumn, escapeSeparator, unescapeSeparator } from './mapping';
   import JobProgress from './JobProgress.svelte';
+  import {
+    Button,
+    Checkbox,
+    CircleAlert,
+    CircleCheck,
+    ClipboardCheck,
+    Eye,
+    FileText,
+    FolderOpen,
+    Icon,
+    Input,
+    RotateCcw,
+    SegmentedControl,
+    Select,
+    Textarea,
+    Upload,
+  } from '$lib/ui';
+  import { FormRow, SettingsSection } from '../core/kit';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -46,6 +64,27 @@
   let report = $state<ImportReport | null>(null);
   let notice = $state<string | null>(null);
   let error = $state<string | null>(null);
+
+  const sourceKinds = $derived([
+    { value: 'text' as const, label: t('io.import.source_text'), icon: ClipboardCheck },
+    { value: 'file' as const, label: t('io.import.source_file'), icon: FileText },
+  ]);
+  const formatOptions = $derived([
+    { value: 'auto' as ImportFormat | 'auto', label: t('io.import.format_auto') },
+    ...FORMATS.map((f) => ({ value: f as ImportFormat | 'auto', label: t(`io.formats.${f}`) })),
+  ]);
+  const recordOptions = $derived([
+    { value: '\n', label: t('io.import.newline') },
+    { value: '\n\n', label: t('io.import.blank_line') },
+    { value: ';', label: ';' },
+  ]);
+  const duplicateOptions = $derived(DUPLICATES.map((d) => ({ value: d, label: t(`io.duplicate.${d}`) })));
+  const columnOptions = $derived([
+    { value: 'ignore', label: t('io.import.ignore') },
+    ...fields.map((f) => ({ value: `field:${f.key}`, label: f.name })),
+    { value: 'tags', label: t('io.import.tags') },
+    ...attributes.map((a) => ({ value: `attr:${a.def.id}`, label: a.def.name })),
+  ]);
 
   const isPackage = $derived(preview?.package != null);
   const source = $derived<ImportSource | null>(
@@ -162,93 +201,89 @@
   }
 </script>
 
-<div class="panel">
-  <fieldset>
-    <legend>{t('io.import.source')}</legend>
-    <label><input type="radio" bind:group={sourceKind} value="text" /> {t('io.import.source_text')}</label>
-    <label><input type="radio" bind:group={sourceKind} value="file" /> {t('io.import.source_file')}</label>
+<SettingsSection title={t('io.import.source')} description={t('io.import.source_hint')} icon={Upload} body="rows">
+  {#snippet actions()}
+    <SegmentedControl label={t('io.import.source_kind')} options={sourceKinds} bind:value={sourceKind} />
+  {/snippet}
+  <div class="source">
     {#if sourceKind === 'text'}
-      <textarea
-        rows="6"
-        aria-label={t('io.import.source_text')}
+      <Textarea
+        label={t('io.import.source_text')}
+        hideLabel
+        rows={6}
+        autoGrow
         placeholder={t('io.import.paste_placeholder')}
         bind:value={text}
-      ></textarea>
+      />
     {:else}
-      <div class="row">
-        <button onclick={chooseFile}>{t('io.choose_file')}</button>
-        <span class="muted">{path ?? t('io.no_file')}</span>
+      <div class="file">
+        <Button icon={FolderOpen} onclick={chooseFile}>{t('io.choose_file')}</Button>
+        <span class="path" class:empty={!path}>{path ?? t('io.no_file')}</span>
       </div>
     {/if}
-    <label>
-      {t('io.import.format')}
-      <select bind:value={format} onchange={() => void runPreview(false)}>
-        <option value="auto">{t('io.import.format_auto')}</option>
-        {#each FORMATS as f (f)}<option value={f}>{t(`io.formats.${f}`)}</option>{/each}
-      </select>
-    </label>
-    <button onclick={() => void runPreview(false)} disabled={!source}>{t('io.import.preview')}</button>
-  </fieldset>
+  </div>
+  <FormRow label={t('io.import.format')} labelFor="fc-import-format">
+    <Select id="fc-import-format" hideLabel label={t('io.import.format')} options={formatOptions} bind:value={format} onchange={() => void runPreview(false)} />
+  </FormRow>
+  <div class="foot">
+    <Button variant={preview ? 'secondary' : 'primary'} icon={Eye} onclick={() => void runPreview(false)} disabled={!source}>{t('io.import.preview')}</Button>
+  </div>
+</SettingsSection>
 
-  {#if error}<p class="error" role="alert">{error}</p>{/if}
-  {#if notice}<p class="muted" role="status">{notice}</p>{/if}
+{#if error}<p class="note bad" role="alert"><Icon icon={CircleAlert} size={16} /><span>{error}</span></p>{/if}
+{#if notice}<p class="note" role="status">{notice}</p>{/if}
 
-  {#if preview && !report}
+{#if preview && !report}
+  <SettingsSection title={t('io.import.preview_heading')} description={t('io.import.rows', { shown: preview.rows.length, total: preview.total_rows })} icon={Eye} body="rows">
     {#if preview.package}
-      <p>
-        {t('io.import.package', {
-          notes: preview.package.notes,
-          cards: preview.package.cards,
-          media: preview.package.media,
-          decks: preview.package.decks.length,
-        })}
-      </p>
-      <label><input type="checkbox" bind:checked={includeHistory} /> {t('io.import.include_history')}</label>
+      <FormRow label={t('io.import.package_label')} description={t('io.import.package', {
+        notes: preview.package.notes,
+        cards: preview.package.cards,
+        media: preview.package.media,
+        decks: preview.package.decks.length,
+      })} />
+      <FormRow label={t('io.import.include_history')}>
+        <Checkbox ariaLabel={t('io.import.include_history')} bind:checked={includeHistory} />
+      </FormRow>
     {:else}
       {#if options}
-        <div class="row">
-          <label>
-            {t('io.import.field_separator')}
-            <input
-              size="4"
+        <FormRow
+          stack
+          label={t('io.import.separators')}
+          description={preview.confidence !== null ? t('io.import.detected', { confidence: Math.round(preview.confidence * 100) }) : undefined}
+        >
+          <div class="seps">
+            <Input
+              label={t('io.import.field_separator')}
+              size="sm"
               value={escapeSeparator(options.field_separator)}
-              onchange={(e) => setSeparator('field_separator', e.currentTarget.value)}
+              onchange={(e: Event) => setSeparator('field_separator', (e.currentTarget as HTMLInputElement).value)}
             />
-          </label>
-          <label>
-            {t('io.import.record_separator')}
-            <select
+            <Select
+              label={t('io.import.record_separator')}
+              size="sm"
+              options={recordOptions}
               value={options.record_separator}
-              onchange={(e) => setSeparator('record_separator', e.currentTarget.value)}
-            >
-              <option value={'\n'}>{t('io.import.newline')}</option>
-              <option value={'\n\n'}>{t('io.import.blank_line')}</option>
-              <option value=";">;</option>
-            </select>
-          </label>
-        </div>
-        {#if preview.confidence !== null}
-          <p class="muted">{t('io.import.detected', { confidence: Math.round(preview.confidence * 100) })}</p>
-        {/if}
+              onchange={(v) => setSeparator('record_separator', v)}
+            />
+          </div>
+        </FormRow>
       {/if}
-      <p class="muted">{t('io.import.rows', { shown: preview.rows.length, total: preview.total_rows })}</p>
-      <div class="scroll">
+      <div class="table-wrap">
         <table>
           {#if preview.format !== 'json'}
             <thead>
               <tr>
                 {#each columns as column, i (i)}
-                  <th>
-                    <select
-                      aria-label={t('io.import.column', { n: i + 1 })}
+                  <th scope="col">
+                    <Select
+                      size="sm"
+                      hideLabel
+                      label={t('io.import.column', { n: i + 1 })}
+                      options={columnOptions}
                       value={encodeColumn(column)}
-                      onchange={(e) => (columns[i] = decodeColumn(e.currentTarget.value))}
-                    >
-                      <option value="ignore">{t('io.import.ignore')}</option>
-                      {#each fields as f (f.key)}<option value={`field:${f.key}`}>{f.name}</option>{/each}
-                      <option value="tags">{t('io.import.tags')}</option>
-                      {#each attributes as a (a.def.id)}<option value={`attr:${a.def.id}`}>{a.def.name}</option>{/each}
-                    </select>
+                      onchange={(v) => (columns[i] = decodeColumn(v))}
+                    />
                   </th>
                 {/each}
               </tr>
@@ -264,85 +299,192 @@
         </table>
       </div>
       {#if preview.format !== 'json'}
-        <label><input type="checkbox" bind:checked={skipFirst} /> {t('io.import.skip_first_row')}</label>
+        <FormRow label={t('io.import.skip_first_row')}>
+          <Checkbox ariaLabel={t('io.import.skip_first_row')} bind:checked={skipFirst} />
+        </FormRow>
       {/if}
       {#if attributesOn && (hasAttributeColumn || preview.format === 'json')}
-        <label><input type="checkbox" bind:checked={createMissing} /> {t('io.import.create_missing_options')}</label>
+        <FormRow label={t('io.import.create_missing_options')}>
+          <Checkbox ariaLabel={t('io.import.create_missing_options')} bind:checked={createMissing} />
+        </FormRow>
       {/if}
     {/if}
-    <label>
-      {t('io.import.duplicates')}
-      <select bind:value={duplicates}>
-        {#each DUPLICATES as d (d)}<option value={d}>{t(`io.duplicate.${d}`)}</option>{/each}
-      </select>
-    </label>
-    {#if needsDeck && !ctx.selectedDeck}
-      <p class="muted">{t('io.pick_deck')}</p>
-    {/if}
-    {#if job}
-      <JobProgress {job} />
-    {:else}
-      <button class="primary" disabled={!canStart} onclick={start}>
-        {isPackage || !needsDeck
-          ? t('io.import.start_package')
-          : t('io.import.start', { deck: ctx.selectedPath ?? '' })}
-      </button>
-    {/if}
-  {/if}
+    <FormRow label={t('io.import.duplicates')} labelFor="fc-import-dupes">
+      <Select id="fc-import-dupes" hideLabel label={t('io.import.duplicates')} options={duplicateOptions} bind:value={duplicates} />
+    </FormRow>
+    <div class="foot">
+      {#if job}
+        <JobProgress {job} />
+      {:else}
+        <Button variant="primary" icon={Upload} disabled={!canStart} onclick={start}>
+          {isPackage || !needsDeck
+            ? t('io.import.start_package')
+            : t('io.import.start', { deck: ctx.selectedPath ?? '' })}
+        </Button>
+        {#if needsDeck && !ctx.selectedDeck}<span class="hint">{t('io.pick_deck')}</span>{/if}
+      {/if}
+    </div>
+  </SettingsSection>
+{/if}
 
-  {#if report}
-    <p role="status">
-      {t('io.import.done', {
-        added: report.added_notes,
-        updated: report.updated_notes,
-        skipped: report.skipped_duplicates,
-      })}
-    </p>
-    {#if report.issues.length > 0}
-      <details>
-        <summary>{t('io.import.issues')} ({report.issues.length})</summary>
-        <ul>
-          {#each report.issues as issue, i (i)}
-            <li>{issueText(issue)}</li>
-          {/each}
-        </ul>
-      </details>
-    {/if}
-    <button onclick={undo}>{t('io.import.undo')}</button>
-  {/if}
-</div>
+{#if report}
+  <SettingsSection title={t('io.import.done_heading')} icon={CircleCheck}>
+    <div class="report">
+      <p class="note ok" role="status">
+        <Icon icon={CircleCheck} size={16} />
+        <span>
+          {t('io.import.done', {
+            added: report.added_notes,
+            updated: report.updated_notes,
+            skipped: report.skipped_duplicates,
+          })}
+        </span>
+      </p>
+      {#if report.issues.length > 0}
+        <details>
+          <summary>{t('io.import.issues')} ({report.issues.length})</summary>
+          <ul>
+            {#each report.issues as issue, i (i)}
+              <li>{issueText(issue)}</li>
+            {/each}
+          </ul>
+        </details>
+      {/if}
+      <div><Button icon={RotateCcw} onclick={undo}>{t('io.import.undo')}</Button></div>
+    </div>
+  </SettingsSection>
+{/if}
 
 <style>
-  .panel,
-  fieldset {
+  .source {
+    padding: var(--space-2) var(--space-6) var(--space-4);
+    border-bottom: 1px solid var(--border);
+  }
+  .file {
     display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-2);
-    align-items: flex-start;
-  }
-  fieldset {
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    width: 100%;
-  }
-  textarea {
-    width: 100%;
-  }
-  .row {
-    display: flex;
-    gap: var(--fc-space-3);
     align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    min-width: 0;
   }
-  .scroll {
-    max-width: 100%;
+  .path {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-1);
+    overflow-wrap: anywhere;
+  }
+  .path.empty {
+    font-family: inherit;
+    color: var(--text-2);
+  }
+  .seps {
+    flex: 1 1 100%;
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  :global(.fc-form-row) .seps :global(.fc-field) {
+    flex: 0 1 14rem;
+    min-width: 9rem;
+  }
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    padding: var(--space-4) var(--space-6);
+    border-top: 1px solid var(--border);
+  }
+  .hint {
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .table-wrap {
+    margin: var(--space-2) var(--space-6) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
     overflow: auto;
+    max-height: 420px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+  }
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: var(--space-2);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    text-align: start;
+    font-weight: var(--weight-medium);
+    min-width: 10rem;
+  }
+  th :global(.fc-field) {
+    min-width: 0;
   }
   td {
-    padding: var(--fc-space-1) var(--fc-space-2);
-    border-bottom: var(--fc-border-width) solid var(--fc-border);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 1px solid var(--border);
     white-space: pre-wrap;
+    color: var(--text-1);
+    vertical-align: top;
+  }
+  tbody tr:last-child td {
+    border-bottom: none;
   }
   tr.header td {
-    opacity: 0.6;
+    color: var(--text-2);
+    font-style: italic;
+  }
+  .note {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-start;
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-2);
+    overflow-wrap: anywhere;
+  }
+  .note :global(svg) {
+    flex: none;
+    margin-top: 2px;
+  }
+  .ok {
+    color: var(--success);
+  }
+  .bad {
+    color: var(--danger);
+  }
+  .report {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  details {
+    font-size: var(--text-sm);
+    color: var(--text-1);
+  }
+  summary {
+    cursor: pointer;
+    color: var(--text-2);
+  }
+  details ul {
+    margin: var(--space-2) 0 0;
+    padding-inline-start: var(--space-6);
+  }
+  @media (max-width: 1023.98px) {
+    .foot {
+      padding-inline: var(--space-4);
+    }
+    .table-wrap {
+      margin-inline: var(--space-4);
+    }
+    .source {
+      padding-inline: var(--space-4);
+    }
   }
 </style>

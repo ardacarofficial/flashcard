@@ -2,6 +2,7 @@
   import type { UiNode } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import { uiText } from './texts.svelte';
+  import { Button, CircleAlert, CircleCheck, Icon, Input, ProgressBar, RadioGroup, Textarea } from '$lib/ui';
   import PluginNode from './PluginNode.svelte';
 
   /** Draws one node of a plugin's declarative UI with the app's own components. */
@@ -33,71 +34,78 @@
   <!-- Sanitized by the backend (fc_core::content::sanitize_html). -->
   <div class="html">{@html node.html}</div>
 {:else if node.kind === 'input'}
-  <label>
-    {text(node.label)}
-    {#if node.multiline}
-      <textarea value={String(values[node.id] ?? node.value ?? '')} oninput={(e) => (values[node.id] = e.currentTarget.value)}></textarea>
-    {:else}
-      <input
-        value={String(values[node.id] ?? node.value ?? '')}
-        oninput={(e) => (values[node.id] = e.currentTarget.value)}
-        onkeydown={(e) => {
-          if (e.key === 'Enter') onaction('submit');
-        }}
-      />
-    {/if}
-  </label>
+  {#if node.multiline}
+    <Textarea label={text(node.label)} autoGrow value={String(values[node.id] ?? node.value ?? '')}
+      oninput={(e: Event) => (values[node.id] = (e.currentTarget as HTMLTextAreaElement).value)} />
+  {:else}
+    <Input
+      label={text(node.label)}
+      value={String(values[node.id] ?? node.value ?? '')}
+      oninput={(e: Event) => (values[node.id] = (e.currentTarget as HTMLInputElement).value)}
+      onkeydown={(e: KeyboardEvent) => {
+        if (e.key === 'Enter') onaction('submit');
+      }}
+    />
+  {/if}
 {:else if node.kind === 'choice'}
-  <fieldset>
-    {#if node.label}<legend>{text(node.label)}</legend>{/if}
-    {#each node.options as o (o.value)}
-      <label class="option">
-        <input type="radio" name={node.id} value={o.value} checked={values[node.id] === o.value} onchange={() => (values[node.id] = o.value)} />
-        {text(o.label)}
-      </label>
-    {/each}
-  </fieldset>
+  <RadioGroup
+    label={node.label ? text(node.label) : t('plugins.view.choice')}
+    hideLabel={!node.label}
+    name={node.id}
+    options={node.options.map((o) => ({ value: o.value, label: text(o.label) }))}
+    value={values[node.id] as string | undefined}
+    onchange={(v: string) => (values[node.id] = v)}
+  />
 {:else if node.kind === 'audio_recorder'}
   <p class="muted">{t('plugins.view.recorder_unavailable')}</p>
 {:else if node.kind === 'audio'}
   <audio controls src={node.src.replace(/^media:/, 'fcmedia://')}></audio>
 {:else if node.kind === 'button'}
-  <button class:primary={node.primary} disabled={busy} onclick={() => onaction(node.action)}>{text(node.label)}</button>
+  <div><Button variant={node.primary ? 'primary' : 'secondary'} disabled={busy} onclick={() => onaction(node.action)}>{text(node.label)}</Button></div>
 {:else if node.kind === 'feedback'}
-  <p class="feedback" class:correct={node.correct} class:wrong={!node.correct} role="status">{text(node.text)}</p>
+  <p class="feedback" class:correct={node.correct} class:wrong={!node.correct} role="status"><Icon icon={node.correct ? CircleCheck : CircleAlert} size={20} /><span>{text(node.text)}</span></p>
 {:else if node.kind === 'progress'}
-  <progress value={node.value} max={Math.max(node.max, 1)}></progress>
+  <ProgressBar label={t('plugins.view.progress')} value={node.value} max={Math.max(node.max, 1)} />
 {/if}
 
 <style>
   .column {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-2);
+    gap: var(--space-3);
   }
   .row {
     display: flex;
-    gap: var(--fc-space-2);
+    gap: var(--space-2);
     align-items: center;
+    flex-wrap: wrap;
   }
-  label {
-    display: block;
+  h3 {
+    margin: 0;
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
   }
-  label input:not([type='radio']),
-  label textarea {
-    display: block;
-    width: 100%;
-    max-width: 28rem;
+  p {
+    margin: 0;
   }
-  .option {
+  .muted {
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .feedback {
     display: flex;
-    gap: var(--fc-space-1);
     align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
+    font-weight: var(--weight-medium);
   }
   .feedback.correct {
-    color: var(--fc-success, green);
+    background: var(--success-soft);
+    color: var(--success);
   }
   .feedback.wrong {
-    color: var(--fc-danger, firebrick);
+    background: var(--danger-soft);
+    color: var(--danger);
   }
 </style>

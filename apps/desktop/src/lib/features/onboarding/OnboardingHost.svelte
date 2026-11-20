@@ -9,6 +9,7 @@
   import { api } from '$lib/api';
   import type { OnboardingChoices, OnboardingSubjectDto, StudyGoal } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
+  import { Button, Checkbox, CircleCheck, Dialog, Icon, Input } from '$lib/ui';
 
   interface Props {
     /** Called after setup or skip (the shell re-reads decks). */
@@ -77,109 +78,220 @@
     ondone?.();
   }
 
+  const stepNo = $derived(step === 'subject' ? 1 : 2);
+  let radios = $state<HTMLButtonElement[]>([]);
+  const all = $derived(choices ? GOALS.flatMap((g) => choices!.subjects.filter((s) => s.goal === g)) : []);
+
+  /** Arrow keys move the choice through every subject (one radio group, one tab stop). */
+  function onkey(e: KeyboardEvent, i: number) {
+    const dir = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
+    if (!dir || all.length === 0) return;
+    e.preventDefault();
+    const n = (i + dir + all.length) % all.length;
+    subject = all[n]!;
+    radios[n]?.focus();
+  }
+
   onMount(() => void load());
 </script>
 
-{#if open && choices}
-  <div class="backdrop" role="presentation">
-    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
-      <h1 id="onboarding-title">{t('onboarding.title')}</h1>
-      {#if step === 'subject'}
-        <p>{t('onboarding.intro')}</p>
+{#if choices}
+  <Dialog
+    bind:open
+    size="lg"
+    dismissible={false}
+    title={t('onboarding.title')}
+    description={step === 'subject' ? t('onboarding.intro') : step === 'details' ? t('onboarding.details_intro') : undefined}
+  >
+    {#if step !== 'done'}
+      <div class="steps" aria-label={t('onboarding.step', { n: stepNo, total: 2 })} role="img">
+        <span class="bar" class:on={stepNo >= 1}></span>
+        <span class="bar" class:on={stepNo >= 2}></span>
+        <span class="step-text" aria-hidden="true">{t('onboarding.step', { n: stepNo, total: 2 })}</span>
+      </div>
+    {/if}
+    {#if step === 'subject'}
+      <div class="goals" role="radiogroup" aria-label={t('onboarding.title')}>
         {#each GOALS as goal (goal)}
-          <fieldset>
-            <legend>{td(`onboarding.goal.${goal}`)}</legend>
-            {#each choices.subjects.filter((s) => s.goal === goal) as s (s.subject)}
-              <label class="choice">
-                <input type="radio" name="subject" checked={subject?.subject === s.subject} onchange={() => (subject = s)} />
-                <span>{td(`onboarding.subject.${s.subject}`)}</span>
-                <span class="muted">
-                  {s.template_id
-                    ? t('onboarding.template', { name: td(`onboarding.templates.${s.template_id}`) })
-                    : t('onboarding.template_none')}
-                </span>
-              </label>
-            {/each}
-          </fieldset>
+          {@const list = choices.subjects.filter((s) => s.goal === goal)}
+          {#if list.length > 0}
+            <div class="goal">
+              <h3>{td(`onboarding.goal.${goal}`)}</h3>
+              <div class="grid">
+                {#each list as s (s.subject)}
+                  {@const i = all.indexOf(s)}
+                  {@const chosen = subject?.subject === s.subject}
+                  <button
+                    type="button"
+                    role="radio"
+                    class="choice"
+                    class:chosen
+                    aria-checked={chosen}
+                    aria-labelledby="ob-{s.subject}"
+                    aria-describedby="ob-{s.subject}-d"
+                    tabindex={chosen || (!subject && i === 0) ? 0 : -1}
+                    bind:this={radios[i]}
+                    onclick={() => (subject = s)}
+                    onkeydown={(e) => onkey(e, i)}
+                  >
+                    <span class="choice-title" id="ob-{s.subject}">{td(`onboarding.subject.${s.subject}`)}</span>
+                    <span class="choice-desc" id="ob-{s.subject}-d">
+                      {s.template_id
+                        ? t('onboarding.template', { name: td(`onboarding.templates.${s.template_id}`) })
+                        : t('onboarding.template_none')}
+                    </span>
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
         {/each}
-        <div class="actions">
-          <button onclick={() => void skip()}>{t('onboarding.skip')}</button>
-          <button class="primary" disabled={!subject} onclick={next}>{t('onboarding.next')}</button>
+      </div>
+    {:else if step === 'details'}
+      <div class="details">
+        <Input label={t('onboarding.deck_name')} bind:value={deckName} />
+        <div class="starters">
+          <h3>{t('onboarding.starters')}</h3>
+          {#if offered.length === 0}
+            <p class="muted">{t('onboarding.starters_none')}</p>
+          {/if}
+          {#each offered as s (s.id)}
+            <Checkbox label={s.name} description={t('onboarding.notes', { count: s.note_count })} bind:checked={picked[s.id]} />
+          {/each}
         </div>
-      {:else if step === 'details'}
-        <label class="field">
-          {t('onboarding.deck_name')}
-          <input bind:value={deckName} />
-        </label>
-        <h2>{t('onboarding.starters')}</h2>
-        {#if offered.length === 0}
-          <p class="muted">{t('onboarding.starters_none')}</p>
-        {/if}
-        {#each offered as s (s.id)}
-          <label class="choice">
-            <input type="checkbox" bind:checked={picked[s.id]} />
-            <span>{s.name}</span>
-            <span class="muted">{t('onboarding.notes', { count: s.note_count })}</span>
-          </label>
-        {/each}
         {#if error}<p class="error" role="alert">{error}</p>{/if}
-        <div class="actions">
-          <button onclick={() => (step = 'subject')}>{t('onboarding.back')}</button>
-          <button onclick={() => void skip()}>{t('onboarding.skip')}</button>
-          <button class="primary" onclick={() => void apply()}>{t('onboarding.apply')}</button>
-        </div>
-      {:else}
+      </div>
+    {:else}
+      <div class="done">
+        <span class="done-icon" aria-hidden="true"><Icon icon={CircleCheck} size={24} /></span>
         <p role="status">{t('onboarding.done', { count: created })}</p>
-        <div class="actions">
-          <button class="primary" onclick={() => (open = false)}>{t('onboarding.close')}</button>
-        </div>
+      </div>
+    {/if}
+    {#snippet footer()}
+      {#if step === 'subject'}
+        <Button variant="ghost" onclick={() => void skip()}>{t('onboarding.skip')}</Button>
+        <span class="spacer"></span>
+        <Button variant="primary" disabled={!subject} onclick={next}>{t('onboarding.next')}</Button>
+      {:else if step === 'details'}
+        <Button variant="ghost" onclick={() => void skip()}>{t('onboarding.skip')}</Button>
+        <span class="spacer"></span>
+        <Button onclick={() => (step = 'subject')}>{t('onboarding.back')}</Button>
+        <Button variant="primary" onclick={() => void apply()}>{t('onboarding.apply')}</Button>
+      {:else}
+        <Button variant="primary" onclick={() => (open = false)}>{t('onboarding.close')}</Button>
       {/if}
-    </div>
-  </div>
+    {/snippet}
+  </Dialog>
 {/if}
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
+  .steps {
     display: grid;
-    place-items: center;
-    background: color-mix(in srgb, var(--fc-text) 40%, transparent);
-    z-index: 20;
+    grid-template-columns: 1fr 1fr auto;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-6);
   }
-  .dialog {
-    background: var(--fc-bg);
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    padding: var(--fc-space-6);
-    width: min(560px, 90vw);
-    max-height: 90vh;
-    overflow: auto;
+  .bar {
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-2);
   }
-  fieldset {
-    border: none;
-    padding: 0;
-    margin: 0 0 var(--fc-space-4);
+  .bar.on {
+    background: var(--accent);
   }
-  legend {
-    font-weight: 600;
-    margin-bottom: var(--fc-space-1);
+  .step-text {
+    margin-inline-start: var(--space-2);
+    color: var(--text-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+  }
+  .goals {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  h3 {
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: var(--space-2);
   }
   .choice {
     display: flex;
-    gap: var(--fc-space-2);
-    align-items: baseline;
-    padding: var(--fc-space-1) 0;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    color: var(--text-1);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+    transition: border-color var(--motion-fast) var(--ease);
   }
-  .field {
+  .choice:hover {
+    border-color: var(--border-strong);
+  }
+  .choice.chosen {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+    background: var(--accent-soft);
+  }
+  .choice:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .choice-title {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+  }
+  .choice-desc {
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .details {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-1);
+    gap: var(--space-6);
   }
-  .actions {
+  .starters {
     display: flex;
-    justify-content: flex-end;
-    gap: var(--fc-space-2);
-    margin-top: var(--fc-space-4);
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .muted {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .error {
+    margin: 0;
+    color: var(--danger);
+    font-size: var(--text-sm);
+  }
+  .done {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+  }
+  .done p {
+    margin: 0;
+  }
+  .done-icon {
+    display: inline-flex;
+    color: var(--success);
+  }
+  .spacer {
+    flex: 1;
   }
 </style>

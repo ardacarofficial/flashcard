@@ -8,9 +8,7 @@
   import ShortcutHost from '$lib/features/browse/ShortcutHost.svelte';
   import PluginPanels from '$lib/features/plugins/PluginPanels.svelte';
   import OutsideHost from '$lib/features/inbox/OutsideHost.svelte';
-  import RecoveryHost from '$lib/features/maintenance/RecoveryHost.svelte';
   import LockHost from '$lib/features/profiles/LockHost.svelte';
-  import OnboardingHost from '$lib/features/onboarding/OnboardingHost.svelte';
   import { buildNavigation, samePlace, type NavEntry, type SectionId } from '$lib/shell/navigation';
   import AppSidebar from '$lib/shell/AppSidebar.svelte';
   import DeckPicker from '$lib/shell/DeckPicker.svelte';
@@ -245,7 +243,10 @@
 <ToastHost />
 
 <!-- First-run guide on a new, empty collection (v1.0). -->
-<OnboardingHost ondone={() => void loadDecks()} />
+<!-- Loaded lazily (v1.1 bundle budget): they only matter once their check says so. -->
+{#await import('$lib/features/onboarding/OnboardingHost.svelte') then { default: OnboardingHost }}
+  <OnboardingHost ondone={() => void loadDecks()} />
+{/await}
 
 <!-- App lock screen (v1.0); drawn above everything while locked. -->
 <LockHost
@@ -262,7 +263,9 @@
 <OutsideHost open={openRoute} selectDeck={(id) => (selectedDeck = id)} />
 
 <!-- Recovery after a crash, update notice (v1.0). -->
-<RecoveryHost open={openRoute} />
+{#await import('$lib/features/maintenance/RecoveryHost.svelte') then { default: RecoveryHost }}
+  <RecoveryHost open={openRoute} />
+{/await}
 
 <!-- Keyboard shortcuts + command palette (v0.4); inert when the palette module is off. -->
 <ShortcutHost

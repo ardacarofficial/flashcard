@@ -13,5 +13,8 @@ document.documentElement.lang = i18n.locale;
 const target = document.getElementById('app');
 if (!target) throw new Error('#app missing');
 
+// Only the active language's dictionary loads before the first screen (a lazy chunk).
+await i18n.ready();
+
 // The quick-add window (global shortcut, v0.9) loads the same page with `#quick-add`.
 export default location.hash === '#quick-add' ? mount(QuickAdd, { target }) : mount(App, { target });

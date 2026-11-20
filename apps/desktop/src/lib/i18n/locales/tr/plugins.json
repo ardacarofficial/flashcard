@@ -119,7 +119,9 @@
     "view": {
       "close": "Kapat",
       "done": "Bitti.",
-      "recorder_unavailable": "Ses kaydı henüz kullanılamıyor."
+      "recorder_unavailable": "Ses kaydı henüz kullanılamıyor.",
+      "choice": "Birini seç",
+      "progress": "İlerleme"
     },
     "models": {
       "heading": "İndirmeler",
@@ -139,7 +141,11 @@
       "auto_disabled": "“{name}” kapatıldı.",
       "hooks_skipped": "Bazı eklentiler tek bir işlemde çok fazla tepki verdi, kalan tepkileri atlandı ({names}; eklenti başına en çok {max} tepki ya da {ms} ms). Hiçbiri kapatılmadı.",
       "dismiss": "Kapat"
-    }
+    },
+    "empty_hint": "Eklentiler kart türleri, çalışma modları ve sesler ekler. Korumalı alanda çalışırlar.",
+    "installed": "Kurulu eklentiler",
+    "no_permissions": "Bu eklentinin izne ihtiyacı yok.",
+    "show_logs": "Günlüğü göster"
   },
   "jobs": {
     "plugins": {

@@ -95,14 +95,16 @@
       "files": "{count} dosya, {size}",
       "export": "Günlükleri dışa aktar…",
       "exported": "{files} dosya {path} konumuna kaydedildi. {redactions} gizli bilgi çıkarıldı.",
-      "save_prompt": "Günlük paketi nereye kaydedilsin?"
+      "save_prompt": "Günlük paketi nereye kaydedilsin?",
+      "bundle": "Hata bildirimi için günlük paketi"
     },
     "integrity": {
       "heading": "Veritabanı",
       "check": "Veritabanını denetle",
       "ok": "Sorun bulunmadı ({ms} ms).",
       "problems": "{count} sorun bulundu. İçe ve dışa aktar bölümünden bir yedeği geri yükle.",
-      "never": "Bu çalıştırmada denetlenmedi."
+      "never": "Bu çalıştırmada denetlenmedi.",
+      "status": "Bütünlük denetimi"
     },
     "crashes": {
       "heading": "Çökme raporları",
@@ -139,11 +141,22 @@
       "ready": "İndirildi ve doğrulandı. Uygulama kapanacak, kurulacak ve yeniden açılacak.",
       "apply": "Kur ve yeniden başlat",
       "banner": "{version} sürümü çıktı.",
-      "open": "Güncellemeye bak"
+      "open": "Güncellemeye bak",
+      "notes": "Yenilikler",
+      "later": "Sonra"
     },
     "size": {
       "kb": "{n} KB",
       "mb": "{n} MB"
     }
+  },
+  "maintenance": {
+    "subtitle": "Çöp kutusu, tekrarlar ve koleksiyonunun sağlık kontrolü.",
+    "trash_desc": "Silinen desteler ve notlar, geri yükleyene ya da çöpü boşaltana kadar burada bekler.",
+    "duplicates_desc": "İlk alanı aynı olan notlar",
+    "check_desc": "Kartlar, notlar ve desteler arasındaki bozuk bağları arar; istersen onarır.",
+    "results": "Sonuçlar",
+    "duplicates_intro": "İki kez eklediğin notları bul, Ara ekranında düzenle.",
+    "check_row": "Kartları, notları ve desteleri denetle"
   }
 }

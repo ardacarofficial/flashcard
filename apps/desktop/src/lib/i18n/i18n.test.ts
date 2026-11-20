@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DICTIONARIES, detectLocale, flatKeys, translate, translateDynamic } from './core';
+import { DICTIONARIES, detectLocale, flatKeys, isLocaleLoaded, loadLocale, translate, translateDynamic } from './core';
 import { mergeLocales } from '../../../scripts/merge-locales.mjs';
-import { initialLocale } from './index.svelte';
+import { i18n, initialLocale, setLocale } from './index.svelte';
 
 describe('i18n', () => {
   it('per-feature files merge without conflicts into the generated dictionaries', () => {
@@ -16,6 +16,22 @@ describe('i18n', () => {
     for (const dict of Object.values(DICTIONARIES)) {
       for (const k of flatKeys(dict)) expect(translateDynamic('en', k).length).toBeGreaterThan(0);
     }
+  });
+
+  it('dictionaries are lazy chunks: loadLocale loads once and lookups use it', async () => {
+    expect(isLocaleLoaded('en')).toBe(true); // tests/setup-i18n.ts
+    const a = await loadLocale('tr');
+    expect(await loadLocale('tr')).toBe(a);
+    expect(DICTIONARIES.tr).toBe(a);
+  });
+
+  it('setLocale switches language after its dictionary loaded', async () => {
+    const before = i18n.locale;
+    await setLocale('en');
+    expect(i18n.locale).toBe('en');
+    expect(document.documentElement.lang).toBe('en');
+    await setLocale(before);
+    localStorage.removeItem('fc.locale');
   });
 
   it('looks up typed keys per locale', () => {

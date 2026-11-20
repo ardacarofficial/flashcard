@@ -96,8 +96,11 @@ describe('attributes module off', () => {
     render(ImportPanel, { ctx });
     await fireEvent.input(screen.getByRole('textbox', { name: 'Paste text' }), { target: { value: 'a: b' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-    const column = (await screen.findByLabelText('Column 1')) as HTMLSelectElement;
-    expect(Array.from(column.options, (o) => o.textContent)).not.toContain('Seviye');
+    const column = await screen.findByRole('combobox', { name: 'Column 1' });
+    await fireEvent.click(column);
+    const options = screen.getAllByRole('option').map((o) => o.textContent?.trim());
+    expect(options).toContain("Don't import");
+    expect(options).not.toContain('Seviye');
     expect(screen.queryByRole('alert')).toBeNull();
     expect(attributeCalls()).toEqual([]);
   });

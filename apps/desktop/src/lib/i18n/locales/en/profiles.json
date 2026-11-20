@@ -1,5 +1,7 @@
 {
-  "nav": { "profiles": "Profiles & lock" },
+  "nav": {
+    "profiles": "Profiles & lock"
+  },
   "modules": {
     "profiles": {
       "name": "Profiles and app lock",
@@ -22,7 +24,8 @@
     "switching": "Opening the profile — the app restarts…",
     "delete": "Delete",
     "confirm_delete": "Delete profile “{name}” and all its cards? This cannot be undone.",
-    "delete_secret": "PIN/password of that profile"
+    "delete_secret": "PIN/password of that profile",
+    "delete_title": "Delete profile?"
   },
   "lock": {
     "heading": "App lock",
@@ -59,7 +62,11 @@
     "recover": "Remove the lock",
     "held_title": "Links waiting for unlock",
     "held_body": "These flashcard:// links arrived while the app was locked. They run after you unlock, unless you drop them.",
-    "held_discard": "Don't open them"
+    "held_discard": "Don't open them",
+    "idle_hint": "Locks the window when you have not used the app for this long.",
+    "current_hint": "Needed to change or remove the lock.",
+    "kind_label": "Lock type",
+    "kind_hint": "A PIN is 4–12 digits; a password 6–128 characters."
   },
   "commands": {
     "profiles": {
@@ -86,7 +93,9 @@
       "lock_secret": "A PIN needs 4–12 digits; a password 6–128 characters.",
       "lock_idle": "Choose one of the offered times."
     },
-    "not_found": { "profile": "Profile not found." },
+    "not_found": {
+      "profile": "Profile not found."
+    },
     "conflict": {
       "profile_name": "A profile with this name exists.",
       "profile_active": "The profile in use (and the main profile) cannot be deleted.",
@@ -95,11 +104,15 @@
       "lock_retry": "Too many wrong attempts. Wait a moment.",
       "lock_state": "The app lock is not set up for this."
     },
-    "io": { "profile": "The profile list or folder could not be read or written." },
+    "io": {
+      "profile": "The profile list or folder could not be read or written."
+    },
     "permission": {
       "app_locked": "The app is locked.",
       "lock_secret": "Wrong PIN or password."
     },
-    "provider": { "lock_storage": "The system keychain holding the lock failed." }
+    "provider": {
+      "lock_storage": "The system keychain holding the lock failed."
+    }
   }
 }

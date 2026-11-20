@@ -15,7 +15,7 @@
       "backup": "Yedek",
       "print": "Yazdır"
     },
-    "pick_deck": "Önce soldan bir deste seç.",
+    "pick_deck": "Önce yukarıdan bir deste seç.",
     "choose_file": "Dosya seç…",
     "no_file": "Dosya seçilmedi",
     "path_prompt": "Dosya yolu",
@@ -46,7 +46,13 @@
       "done": "{added} eklendi, {updated} güncellendi, {skipped} tekrar atlandı.",
       "issues": "Aktarılamayan veya değişenler",
       "row": "{row}. satır",
-      "undo": "İçe aktarmayı geri al"
+      "undo": "İçe aktarmayı geri al",
+      "source_hint": "Metin satırları yapıştır ya da dosya seç; içe aktarmadan önce önizlemeye bak.",
+      "source_kind": "Nereden",
+      "preview_heading": "Önizleme",
+      "package_label": "Paket içeriği",
+      "separators": "Ayırıcılar",
+      "done_heading": "İçe aktarma bitti"
     },
     "formats": {
       "text": "Metin / CSV",
@@ -66,7 +72,9 @@
       "scope_all": "Tüm koleksiyon dışa aktarılır.",
       "include_history": "Tekrar geçmişi ve zamanlamayı ekle",
       "start": "Dışa aktar…",
-      "done": "{notes} not ({media} medya dosyası) {path} dosyasına kaydedildi."
+      "done": "{notes} not ({media} medya dosyası) {path} dosyasına kaydedildi.",
+      "format_hint": "Deste paketleri her şeyi saklar; metin ve JSON yalnızca notları.",
+      "include_history_hint": "Başka bir cihaz tam kaldığın yerden devam eder."
     },
     "export_formats": {
       "fcpack": "Deste paketi (.fcpack)",
@@ -83,7 +91,11 @@
       "confirm_title": "Bu yedek geri yüklensin mi?",
       "confirm_body": "{date} tarihli, {notes} notluk yedek. Önce mevcut koleksiyonun yedeği alınır, sonra yerine bu yüklenir.",
       "incompatible": "Bu yedek uygulamanın daha yeni bir sürümünden.",
-      "restored": "Geri yüklendi. Önceki durum {path} dosyasına kaydedildi."
+      "restored": "Geri yüklendi. Önceki durum {path} dosyasına kaydedildi.",
+      "create_title": "Şimdi yedekle",
+      "create_hint": "İstediğin yerde saklayabileceğin tek bir .fcbackup dosyası kaydeder.",
+      "restore_title": "Yedekten geri yükle",
+      "restore_hint": "Mevcut koleksiyonun yerini alır; önce o yedeklenir."
     },
     "print": {
       "layout": "Düzen",
@@ -128,7 +140,8 @@
       "attribute_not_applicable": "Bu sınıflandırma bu destede geçerli değil.",
       "attribute_invalid": "Geçersiz sınıflandırma değeri “{value}”.",
       "attribute_unknown_option": "Bilinmeyen seçenek “{value}” (otomatik oluşturulabilir)."
-    }
+    },
+    "intro": "Kart al, dışa aktar, tüm koleksiyonu yedekle ya da bir desteyi yazdır."
   },
   "errors": {
     "validation": {

@@ -40,3 +40,22 @@ export interface Bar {
   /** Tooltip / accessible text. */
   title: string;
 }
+
+/** `2025-11-04` → `4 Nov` / `4 Kas` (display only; the date comes from the backend). */
+export function shortDate(date: string, locale: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return date;
+  return d.toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+/** Weekday of a `YYYY-MM-DD` date, Monday = 0 (heatmap rows). */
+export function weekdayMon0(date: string): number {
+  const d = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return (d + 6) % 7;
+}
+
+/** Intensity level 0–4 of `value` relative to the busiest day (colour steps of the heatmap). */
+export function level(value: number, max: number): 0 | 1 | 2 | 3 | 4 {
+  if (value <= 0 || max <= 0) return 0;
+  return Math.min(4, Math.max(1, Math.ceil((value / max) * 4))) as 1 | 2 | 3 | 4;
+}
