@@ -934,8 +934,8 @@ impl Writer {
                     answer_duration_ms: r.answer_duration_ms.map(clamp_u32),
                     hints_used: r.hints_used,
                     // Brought-in history never counts against today's study limits; trial
-                    // answers stay trial.
-                    mode: if r.mode == "trial" {
+                    // answers (any practice mode, v0.10) stay as they were.
+                    mode: if fc_storage::repo::is_practice_mode(&r.mode) {
                         r.mode.clone()
                     } else {
                         REVIEW_MODE_IMPORTED.to_owned()

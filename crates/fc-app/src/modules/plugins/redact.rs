@@ -150,6 +150,15 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "ai.preview" => Reads(AI_NOTES),
         // AI drafts are applied by the user (a plugin writes notes with `notes.*` directly).
         "ai.notes.add" | "ai.notes.update" => Refused(AI_WRITES),
+        // Phase 4, v0.10 study modes: results are study sessions and cards (like `study.*`).
+        "modes.confidence.answer" | "modes.timed.start" | "modes.timed.expire"
+        | "modes.test.paper" => Reads(STUDY_CARDS),
+        // The backend judges a learn answer and grades a test against the card's answer: the
+        // verdict says what the card holds, so they need the read permissions to run at all.
+        "modes.learn.answer" | "modes.test.submit" => Oracle(STUDY_CARDS),
+        "modes.inline.preview" => Reads(NOTES),
+        // The duplicate count says which notes exist already.
+        "modes.inline.create" => Oracle(NOTES),
         _ => Refused("not available to plugins"),
     }
 }
@@ -698,6 +707,26 @@ mod tests {
         assert!(GATED_EVENT_DOMAINS.contains(&"mcp"));
         // Another process's write (an MCP client) carries no payload: delivered to anyone.
         assert!(event_delivered(&grants(&[]), &DomainEvent::DataChanged));
+    }
+
+    #[test]
+    fn domain_modes() {
+        // Learn/confidence/timed/test results are sessions with card content.
+        for m in ["modes.confidence.answer", "modes.timed.start", "modes.timed.expire", "modes.test.paper"] {
+            assert_eq!(exposure(m), Exposure::Reads(STUDY_CARDS), "{m}");
+        }
+        let d = exposure("modes.test.paper").domains();
+        domain_case("notes", d, json!({ "questions": [{ "card_id": 1, "prompt": "SECRET" }] }), "SECRET");
+        domain_case("study", d, json!({ "session_id": 1, "key": [{ "card_id": 1, "answer": "SECRET" }] }), "SECRET");
+        // Judging an answer or grading a test is an oracle on the card's answer.
+        for m in ["modes.learn.answer", "modes.test.submit"] {
+            assert_eq!(exposure(m), Exposure::Oracle(STUDY_CARDS), "{m}");
+            assert!(refuse_upfront(MethodKind::Command, exposure(m)), "{m}");
+        }
+        // Inline cards: notes; the duplicate count is an oracle on existing notes.
+        assert_eq!(exposure("modes.inline.preview"), Exposure::Reads(NOTES));
+        assert_eq!(exposure("modes.inline.create"), Exposure::Oracle(NOTES));
+        domain_case("notes", NOTES, json!({ "cards": [{ "front": "SECRET" }] }), "SECRET");
     }
 
     #[test]

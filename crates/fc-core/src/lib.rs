@@ -17,6 +17,7 @@ pub mod error;
 pub mod goal;
 pub mod i18n;
 pub mod id;
+pub mod inline_cards;
 pub mod note;
 pub mod notetype;
 pub mod paging;

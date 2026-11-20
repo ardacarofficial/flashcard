@@ -1,0 +1,250 @@
+{
+  "modules": {
+    "learn": {
+      "name": "Learn mode",
+      "description": "Each card as multiple choice, then written, until you know it at every step."
+    },
+    "practice_test": {
+      "name": "Practice tests",
+      "description": "Printable tests with mixed question types and a score."
+    },
+    "confidence": {
+      "name": "Confidence rating",
+      "description": "Rate how sure you were (1–5) instead of the four buttons."
+    },
+    "timed": {
+      "name": "Timed mode",
+      "description": "A time limit for every card."
+    },
+    "focus": {
+      "name": "Focus mode",
+      "description": "Full screen study with distractions hidden."
+    },
+    "inline_cards": {
+      "name": "Inline cards",
+      "description": "Write “question :: answer” lines to make cards on the spot."
+    }
+  },
+  "nav": {
+    "learn": "Learn",
+    "test": "Test"
+  },
+  "settings": {
+    "learn": {
+      "max_cards": {
+        "label": "Cards per learn session",
+        "description": "How many cards a learn session takes at most."
+      }
+    },
+    "practice_test": {
+      "questions": {
+        "label": "Questions per test",
+        "description": "Default length of a practice test."
+      }
+    },
+    "confidence": {
+      "rating_scale": {
+        "label": "Rating scale",
+        "description": "Rate with four buttons or with confidence (1–5).",
+        "buttons": "Four buttons",
+        "confidence": "Confidence 1–5"
+      },
+      "map": {
+        "1": {
+          "label": "Confidence 1 counts as",
+          "description": "Rating the scheduler gets for this level.",
+          "again": "Again",
+          "hard": "Hard",
+          "good": "Good",
+          "easy": "Easy"
+        },
+        "2": {
+          "label": "Confidence 2 counts as",
+          "description": "Rating the scheduler gets for this level.",
+          "again": "Again",
+          "hard": "Hard",
+          "good": "Good",
+          "easy": "Easy"
+        },
+        "3": {
+          "label": "Confidence 3 counts as",
+          "description": "Rating the scheduler gets for this level.",
+          "again": "Again",
+          "hard": "Hard",
+          "good": "Good",
+          "easy": "Easy"
+        },
+        "4": {
+          "label": "Confidence 4 counts as",
+          "description": "Rating the scheduler gets for this level.",
+          "again": "Again",
+          "hard": "Hard",
+          "good": "Good",
+          "easy": "Easy"
+        },
+        "5": {
+          "label": "Confidence 5 counts as",
+          "description": "Rating the scheduler gets for this level.",
+          "again": "Again",
+          "hard": "Hard",
+          "good": "Good",
+          "easy": "Easy"
+        }
+      }
+    },
+    "timed": {
+      "seconds": {
+        "label": "Seconds per card",
+        "description": "Default time limit in timed mode."
+      },
+      "on_timeout": {
+        "label": "When time runs out",
+        "description": "What happens to the card.",
+        "again": "Count as Again",
+        "skip": "Skip the card"
+      }
+    },
+    "focus": {
+      "fullscreen": {
+        "label": "Full screen",
+        "description": "Focus mode also fills the whole screen."
+      },
+      "hide_counts": {
+        "label": "Hide counters",
+        "description": "Hide remaining-card counts in focus mode."
+      },
+      "auto": {
+        "label": "Always start in focus mode",
+        "description": "Every study session opens in focus mode."
+      }
+    }
+  },
+  "errors": {
+    "validation": {
+      "session_mode": "This does not work in this kind of session.",
+      "inline_cards": "No “question :: answer” line found."
+    },
+    "conflict": {
+      "time_up": "Time is up for this card.",
+      "timer_running": "The card still has time left.",
+      "test_submitted": "This test was already submitted."
+    }
+  },
+  "commands": {
+    "modes": {
+      "learn": {
+        "answer": "Answer in learn mode"
+      },
+      "confidence": {
+        "answer": "Rate with confidence"
+      },
+      "timed": {
+        "expire": "Time up for the card",
+        "start": "Start the card timer"
+      },
+      "test": {
+        "paper": "Test paper",
+        "submit": "Submit the test"
+      },
+      "inline": {
+        "preview": "Preview cards from text",
+        "create": "Create cards from text"
+      }
+    }
+  },
+  "modes": {
+    "learn": {
+      "heading": "Learn",
+      "intro": "Every card is asked as multiple choice, then written. A card is learned once you get it right at both steps.",
+      "start": "Start learning",
+      "nothing": "No cards to learn here.",
+      "progress": "Learned {learned} of {total}",
+      "stage_choice": "Pick the answer",
+      "stage_written": "Type the answer",
+      "type_placeholder": "Your answer",
+      "check": "Check",
+      "continue": "Continue",
+      "correct": "Correct!",
+      "almost": "Almost — check the spelling.",
+      "wrong": "Not quite.",
+      "expected": "Answer: {text}",
+      "learned_card": "Learned!",
+      "done": "You learned all {total} cards.",
+      "again": "Learn again",
+      "back": "Back",
+      "keys": "1–4 pick · Enter check/continue · Z undo · Esc end"
+    },
+    "test": {
+      "heading": "Practice test",
+      "intro": "A test from the chosen cards with mixed questions. It does not change your schedule.",
+      "questions": "Questions",
+      "kinds": "Question types",
+      "kind": {
+        "multiple_choice": "Multiple choice",
+        "written": "Written",
+        "true_false": "True or false"
+      },
+      "start": "Create test",
+      "nothing": "No cards for a test here.",
+      "statement": "Answer: {text}",
+      "true": "True",
+      "false": "False",
+      "your_answer": "Your answer",
+      "print": "Print",
+      "print_key": "Print answer key",
+      "submit": "Submit",
+      "score": "Score: {percent}%",
+      "breakdown": "{correct} right · {almost} almost · {wrong} wrong · {blank} blank",
+      "verdict": {
+        "correct": "Right",
+        "almost": "Almost",
+        "wrong": "Wrong",
+        "blank": "Blank"
+      },
+      "key": "Answer: {text}",
+      "new": "New test",
+      "number": "{n}."
+    },
+    "options": {
+      "timed": "Time limit",
+      "seconds": "Seconds",
+      "on_timeout": "When time runs out",
+      "again": "Count as Again",
+      "skip": "Skip",
+      "scale": "Rating",
+      "scale_default": "Default",
+      "scale_buttons": "Four buttons",
+      "scale_confidence": "Confidence 1–5"
+    },
+    "timer": {
+      "left": "{s} s left",
+      "label": "Time left"
+    },
+    "confidence": {
+      "question": "How sure were you?",
+      "level": {
+        "1": "Not at all",
+        "2": "Barely",
+        "3": "Somewhat",
+        "4": "Mostly",
+        "5": "Perfectly"
+      }
+    },
+    "focus": {
+      "enter": "Focus",
+      "exit": "Exit focus"
+    },
+    "inline": {
+      "open": "New cards",
+      "heading": "New cards from text",
+      "hint": "One card per line: question :: answer",
+      "placeholder": "porsuk :: badger",
+      "create": "Create {count} card(s)",
+      "created": "{count} card(s) created.",
+      "duplicate": "exists",
+      "close": "Close",
+      "line": "Line {n}",
+      "truncated": "Only the first 500 lines are used."
+    }
+  }
+}

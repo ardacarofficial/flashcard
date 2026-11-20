@@ -18,6 +18,19 @@ mod session;
 #[cfg(test)]
 mod tests;
 
+/// Extension points of the session engine for the v0.10 study modes (`modules::modes`):
+/// sessions, rendering, the shared answer path and its hooks. Modes add session kinds and
+/// options through these instead of forking the engine (docs/10 §24).
+pub(crate) mod ext {
+    pub(crate) use super::engine::{
+        not_available, render_for_study, require_live_card, scheduler,
+        scheduler_error, session_dto, setting_bool, setting_str, Session,
+        SessionConfig, View,
+    };
+    pub(crate) use super::session::{answer_core, AnswerHooks};
+    pub(crate) use super::{ANSWER_CHECKER, FOLD_TURKISH};
+}
+
 use crate::module::{bool_setting, choice_setting, main_menu, ModuleDescriptor};
 use crate::registry::Registry;
 use fc_api::v1::methods::*;

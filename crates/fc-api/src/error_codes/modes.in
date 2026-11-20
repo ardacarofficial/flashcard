@@ -1,0 +1,14 @@
+// v0.10 study modes (learn, test, confidence, timed, inline cards).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// The method does not fit this session's kind or options (`details.reason`: `not_learn`,
+/// `not_test`, `not_timed`, `kind`, `stage`, `answer`, `timer_not_started`).
+ValidationSessionMode => Validation, "errors.validation.session_mode";
+/// The shown card's time ran out in a timed session; answer with `modes.timed.expire`
+/// (`details.card_id`). Also `modes.timed.start` on a card whose time ran out.
+ConflictTimeUp => Conflict, "errors.conflict.time_up";
+/// `modes.timed.expire` before the card's time ran out (`details.remaining_ms`).
+ConflictTimerRunning => Conflict, "errors.conflict.timer_running";
+/// The test was submitted already (`details.id`).
+ConflictTestSubmitted => Conflict, "errors.conflict.test_submitted";
+/// The text has no `question :: answer` line (`details.reason`: `no_cards`, `fields`).
+ValidationInlineCards => Validation, "errors.validation.inline_cards";

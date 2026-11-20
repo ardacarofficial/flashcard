@@ -72,8 +72,9 @@ pub struct GoalRecord {
 
 /// Statistics & planning reads.
 pub trait StatsRead {
-    /// Review rows other than `mode = trial` with sequence > `after_seq` (of `cards` only,
-    /// when given), in sequence order, with their sequence numbers.
+    /// Review rows other than practice ones (`trial`, `trial_<mode>`, `test`:
+    /// [`super::is_practice_mode`]) with sequence > `after_seq` (of `cards` only, when given),
+    /// in sequence order, with their sequence numbers.
     fn stats_reviews(
         &self,
         after_seq: i64,

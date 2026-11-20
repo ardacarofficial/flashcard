@@ -107,6 +107,7 @@ impl Plugin for Reverse {
             new_limit: None,
             order: None,
             tz_offset_mins: None,
+            modes: None,
         })?;
         let total = session.counts.new + session.counts.learning + session.counts.review;
         if session.current.is_none() {

@@ -1,0 +1,250 @@
+{
+  "modules": {
+    "learn": {
+      "name": "Öğren modu",
+      "description": "Her kart önce çoktan seçmeli, sonra yazarak; her adımda bilinene kadar."
+    },
+    "practice_test": {
+      "name": "Deneme testleri",
+      "description": "Karışık soru tipli, yazdırılabilir ve puanlı testler."
+    },
+    "confidence": {
+      "name": "Güven bazlı puanlama",
+      "description": "Dört düğme yerine ne kadar emin olduğunu (1–5) seç."
+    },
+    "timed": {
+      "name": "Zamanlı mod",
+      "description": "Her karta süre sınırı."
+    },
+    "focus": {
+      "name": "Odak modu",
+      "description": "Tam ekran, dikkat dağıtıcılar gizli çalışma."
+    },
+    "inline_cards": {
+      "name": "Satır içi kartlar",
+      "description": "“soru :: cevap” satırları yazarak anında kart yap."
+    }
+  },
+  "nav": {
+    "learn": "Öğren",
+    "test": "Test"
+  },
+  "settings": {
+    "learn": {
+      "max_cards": {
+        "label": "Öğren oturumundaki kart",
+        "description": "Bir öğren oturumunun en çok kaç kart alacağı."
+      }
+    },
+    "practice_test": {
+      "questions": {
+        "label": "Testteki soru",
+        "description": "Deneme testinin varsayılan uzunluğu."
+      }
+    },
+    "confidence": {
+      "rating_scale": {
+        "label": "Puanlama",
+        "description": "Dört düğmeyle ya da güvenle (1–5) puanla.",
+        "buttons": "Dört düğme",
+        "confidence": "Güven 1–5"
+      },
+      "map": {
+        "1": {
+          "label": "Güven 1 şuna eşittir",
+          "description": "Bu seviyede zamanlayıcıya giden puan.",
+          "again": "Tekrar",
+          "hard": "Zor",
+          "good": "İyi",
+          "easy": "Kolay"
+        },
+        "2": {
+          "label": "Güven 2 şuna eşittir",
+          "description": "Bu seviyede zamanlayıcıya giden puan.",
+          "again": "Tekrar",
+          "hard": "Zor",
+          "good": "İyi",
+          "easy": "Kolay"
+        },
+        "3": {
+          "label": "Güven 3 şuna eşittir",
+          "description": "Bu seviyede zamanlayıcıya giden puan.",
+          "again": "Tekrar",
+          "hard": "Zor",
+          "good": "İyi",
+          "easy": "Kolay"
+        },
+        "4": {
+          "label": "Güven 4 şuna eşittir",
+          "description": "Bu seviyede zamanlayıcıya giden puan.",
+          "again": "Tekrar",
+          "hard": "Zor",
+          "good": "İyi",
+          "easy": "Kolay"
+        },
+        "5": {
+          "label": "Güven 5 şuna eşittir",
+          "description": "Bu seviyede zamanlayıcıya giden puan.",
+          "again": "Tekrar",
+          "hard": "Zor",
+          "good": "İyi",
+          "easy": "Kolay"
+        }
+      }
+    },
+    "timed": {
+      "seconds": {
+        "label": "Kart başına saniye",
+        "description": "Zamanlı modda varsayılan süre."
+      },
+      "on_timeout": {
+        "label": "Süre dolunca",
+        "description": "Karta ne olacağı.",
+        "again": "Tekrar say",
+        "skip": "Kartı geç"
+      }
+    },
+    "focus": {
+      "fullscreen": {
+        "label": "Tam ekran",
+        "description": "Odak modu tüm ekranı da kaplar."
+      },
+      "hide_counts": {
+        "label": "Sayaçları gizle",
+        "description": "Odak modunda kalan kart sayılarını gizle."
+      },
+      "auto": {
+        "label": "Hep odak modunda başla",
+        "description": "Her çalışma oturumu odak modunda açılır."
+      }
+    }
+  },
+  "errors": {
+    "validation": {
+      "session_mode": "Bu, bu tür oturumda çalışmaz.",
+      "inline_cards": "“soru :: cevap” satırı bulunamadı."
+    },
+    "conflict": {
+      "time_up": "Bu kartın süresi doldu.",
+      "timer_running": "Kartın daha süresi var.",
+      "test_submitted": "Bu test zaten teslim edildi."
+    }
+  },
+  "commands": {
+    "modes": {
+      "learn": {
+        "answer": "Öğren modunda cevapla"
+      },
+      "confidence": {
+        "answer": "Güvenle puanla"
+      },
+      "timed": {
+        "expire": "Kartın süresi doldu",
+        "start": "Kart sayacını başlat"
+      },
+      "test": {
+        "paper": "Test kâğıdı",
+        "submit": "Testi teslim et"
+      },
+      "inline": {
+        "preview": "Metinden kartları önizle",
+        "create": "Metinden kart oluştur"
+      }
+    }
+  },
+  "modes": {
+    "learn": {
+      "heading": "Öğren",
+      "intro": "Her kart önce çoktan seçmeli, sonra yazarak sorulur. İki adımda da doğru bilince kart öğrenilmiş olur.",
+      "start": "Öğrenmeye başla",
+      "nothing": "Burada öğrenilecek kart yok.",
+      "progress": "{total} karttan {learned} öğrenildi",
+      "stage_choice": "Cevabı seç",
+      "stage_written": "Cevabı yaz",
+      "type_placeholder": "Cevabın",
+      "check": "Kontrol et",
+      "continue": "Devam",
+      "correct": "Doğru!",
+      "almost": "Az kaldı, yazımı kontrol et.",
+      "wrong": "Olmadı.",
+      "expected": "Cevap: {text}",
+      "learned_card": "Öğrenildi!",
+      "done": "{total} kartın hepsini öğrendin.",
+      "again": "Yeniden öğren",
+      "back": "Geri",
+      "keys": "1–4 seç · Enter kontrol/devam · Z geri al · Esc bitir"
+    },
+    "test": {
+      "heading": "Deneme testi",
+      "intro": "Seçilen kartlardan karışık sorulu bir test. Takvimini değiştirmez.",
+      "questions": "Soru sayısı",
+      "kinds": "Soru tipleri",
+      "kind": {
+        "multiple_choice": "Çoktan seçmeli",
+        "written": "Yazılı",
+        "true_false": "Doğru / yanlış"
+      },
+      "start": "Test oluştur",
+      "nothing": "Burada test yapılacak kart yok.",
+      "statement": "Cevap: {text}",
+      "true": "Doğru",
+      "false": "Yanlış",
+      "your_answer": "Cevabın",
+      "print": "Yazdır",
+      "print_key": "Cevap anahtarını yazdır",
+      "submit": "Teslim et",
+      "score": "Puan: %{percent}",
+      "breakdown": "{correct} doğru · {almost} az kaldı · {wrong} yanlış · {blank} boş",
+      "verdict": {
+        "correct": "Doğru",
+        "almost": "Az kaldı",
+        "wrong": "Yanlış",
+        "blank": "Boş"
+      },
+      "key": "Cevap: {text}",
+      "new": "Yeni test",
+      "number": "{n}."
+    },
+    "options": {
+      "timed": "Süre sınırı",
+      "seconds": "Saniye",
+      "on_timeout": "Süre dolunca",
+      "again": "Tekrar say",
+      "skip": "Geç",
+      "scale": "Puanlama",
+      "scale_default": "Varsayılan",
+      "scale_buttons": "Dört düğme",
+      "scale_confidence": "Güven 1–5"
+    },
+    "timer": {
+      "left": "{s} sn kaldı",
+      "label": "Kalan süre"
+    },
+    "confidence": {
+      "question": "Ne kadar emindin?",
+      "level": {
+        "1": "Hiç",
+        "2": "Pek değil",
+        "3": "Biraz",
+        "4": "Çoğunlukla",
+        "5": "Tamamen"
+      }
+    },
+    "focus": {
+      "enter": "Odak",
+      "exit": "Odaktan çık"
+    },
+    "inline": {
+      "open": "Yeni kartlar",
+      "heading": "Metinden yeni kartlar",
+      "hint": "Satır başına bir kart: soru :: cevap",
+      "placeholder": "porsuk :: badger",
+      "create": "{count} kart oluştur",
+      "created": "{count} kart oluşturuldu.",
+      "duplicate": "zaten var",
+      "close": "Kapat",
+      "line": "Satır {n}",
+      "truncated": "Yalnız ilk 500 satır kullanılır."
+    }
+  }
+}

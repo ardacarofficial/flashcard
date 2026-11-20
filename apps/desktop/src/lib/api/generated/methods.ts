@@ -51,11 +51,13 @@ import type { ChangeNoteTypeResult } from "./ChangeNoteTypeResult";
 import type { CheckAnswer } from "./CheckAnswer";
 import type { ClonePreset } from "./ClonePreset";
 import type { ClosePluginUi } from "./ClosePluginUi";
+import type { ConfidenceAnswer } from "./ConfidenceAnswer";
 import type { CreateAiProvider } from "./CreateAiProvider";
 import type { CreateBackup } from "./CreateBackup";
 import type { CreateDeck } from "./CreateDeck";
 import type { CreateExam } from "./CreateExam";
 import type { CreateGoal } from "./CreateGoal";
+import type { CreateInlineCards } from "./CreateInlineCards";
 import type { CreateNote } from "./CreateNote";
 import type { CreateNoteType } from "./CreateNoteType";
 import type { CreatePreset } from "./CreatePreset";
@@ -79,6 +81,7 @@ import type { ExamDto } from "./ExamDto";
 import type { ExamList } from "./ExamList";
 import type { ExamRef } from "./ExamRef";
 import type { ExecuteBatch } from "./ExecuteBatch";
+import type { ExpireCard } from "./ExpireCard";
 import type { ExtractAiSource } from "./ExtractAiSource";
 import type { FindReplace } from "./FindReplace";
 import type { FlagDto } from "./FlagDto";
@@ -92,12 +95,17 @@ import type { GoalRef } from "./GoalRef";
 import type { HintDto } from "./HintDto";
 import type { HintRequest } from "./HintRequest";
 import type { ImportPreview } from "./ImportPreview";
+import type { InlineCardsCreated } from "./InlineCardsCreated";
+import type { InlinePreview } from "./InlinePreview";
+import type { InlinePreviewRequest } from "./InlinePreviewRequest";
 import type { InspectBackup } from "./InspectBackup";
 import type { InspectPackage } from "./InspectPackage";
 import type { InstallPlugin } from "./InstallPlugin";
 import type { JobDto } from "./JobDto";
 import type { JobList } from "./JobList";
 import type { JobRef } from "./JobRef";
+import type { LearnAnswer } from "./LearnAnswer";
+import type { LearnAnswerResult } from "./LearnAnswerResult";
 import type { LeechActionResult } from "./LeechActionResult";
 import type { LeechList } from "./LeechList";
 import type { LeechRequest } from "./LeechRequest";
@@ -210,18 +218,22 @@ import type { ShortcutList } from "./ShortcutList";
 import type { StartExport } from "./StartExport";
 import type { StartImport } from "./StartImport";
 import type { StartSession } from "./StartSession";
+import type { StartTimer } from "./StartTimer";
 import type { StatsBreakdown } from "./StatsBreakdown";
 import type { StatsBreakdownRequest } from "./StatsBreakdownRequest";
 import type { StatsCacheInfo } from "./StatsCacheInfo";
 import type { StatsOverview } from "./StatsOverview";
 import type { StatsRequest } from "./StatsRequest";
 import type { StudyCardsChanged } from "./StudyCardsChanged";
+import type { SubmitTest } from "./SubmitTest";
 import type { SuggestLinks } from "./SuggestLinks";
 import type { SuspendCards } from "./SuspendCards";
 import type { Synthesize } from "./Synthesize";
 import type { TagChangeResult } from "./TagChangeResult";
 import type { TagDto } from "./TagDto";
 import type { TagList } from "./TagList";
+import type { TestPaperDto } from "./TestPaperDto";
+import type { TestPaperRequest } from "./TestPaperRequest";
 import type { TrashList } from "./TrashList";
 import type { TtsProviderList } from "./TtsProviderList";
 import type { UiSession } from "./UiSession";
@@ -434,6 +446,14 @@ export interface Methods {
   "tts.providers": { kind: "query"; request: Empty; response: TtsProviderList };
   "tts.voices": { kind: "query"; request: ListVoices; response: VoiceList };
   "tts.synthesize": { kind: "query"; request: Synthesize; response: AudioDto };
+  "modes.learn.answer": { kind: "command"; request: LearnAnswer; response: LearnAnswerResult };
+  "modes.confidence.answer": { kind: "command"; request: ConfidenceAnswer; response: SessionDto };
+  "modes.timed.expire": { kind: "command"; request: ExpireCard; response: SessionDto };
+  "modes.timed.start": { kind: "command"; request: StartTimer; response: SessionDto };
+  "modes.test.paper": { kind: "query"; request: TestPaperRequest; response: TestPaperDto };
+  "modes.test.submit": { kind: "command"; request: SubmitTest; response: TestPaperDto };
+  "modes.inline.preview": { kind: "query"; request: InlinePreviewRequest; response: InlinePreview };
+  "modes.inline.create": { kind: "command"; request: CreateInlineCards; response: InlineCardsCreated };
 }
 
 /** Unqualified method name. */
@@ -634,4 +654,12 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "tts.providers": "query",
   "tts.voices": "query",
   "tts.synthesize": "query",
+  "modes.learn.answer": "command",
+  "modes.confidence.answer": "command",
+  "modes.timed.expire": "command",
+  "modes.timed.start": "command",
+  "modes.test.paper": "query",
+  "modes.test.submit": "command",
+  "modes.inline.preview": "query",
+  "modes.inline.create": "command",
 };

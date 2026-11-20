@@ -128,6 +128,7 @@ fn start(
         new_limit: None,
         order: None,
         tz_offset_mins: Some(0),
+        modes: None,
     })
 }
 
@@ -495,6 +496,7 @@ pub fn custom_sessions_from_queries(f: &Factory) {
         new_limit: None,
         order: None,
         tz_offset_mins: None,
+        modes: None,
     });
     assert_eq!(e.code, ErrorCode::ValidationQuery);
     assert!(e.details["start"].is_number());
@@ -512,6 +514,7 @@ pub fn custom_sessions_from_queries(f: &Factory) {
         new_limit: None,
         order: None,
         tz_offset_mins: None,
+        modes: None,
     });
     assert_eq!(e.code, ErrorCode::ValidationInvalidParams);
 }

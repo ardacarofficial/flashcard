@@ -9,8 +9,10 @@
     SavedQueryDto,
     SessionDto,
     SessionSummary,
+    StartModes,
     StartSession,
   } from '$lib/api/types';
+  import { ApiError } from '$lib/api';
   import { t, td } from '$lib/i18n/index.svelte';
   import StudyAi from '../ai/StudyAi.svelte';
   import CardView from '../cards/CardView.svelte';
@@ -19,6 +21,13 @@
   import { moduleKnownOn, moduleOn, trackModules } from '../cards/modules.svelte';
   import type { ScreenCtx } from '../types';
   import { intervalLabel, tzOffsetMins } from './format';
+  // v0.10 study modes: start options, timer, confidence scale, focus, inline cards.
+  import ConfidenceButtons from '../modes/ConfidenceButtons.svelte';
+  import FocusToggle from '../modes/FocusToggle.svelte';
+  import InlineComposer from '../modes/InlineComposer.svelte';
+  import StudyModeOptions from '../modes/StudyModeOptions.svelte';
+  import TimerBar from '../modes/TimerBar.svelte';
+  import { plainKey } from '../modes/modes';
   import { keyAction, RATINGS, studyBindings, type StudyAction, type StudyPhase } from './keys';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -39,6 +48,8 @@
   let savedQueries = $state<SavedQueryDto[]>([]);
   let savedId = $state('');
   let postponeDays = $state(1);
+  let modeOptions = $state<StartModes | null>(null);
+  let composing = $state(false);
   let notice = $state<string | null>(null);
   let busy = false;
   let shownAt = 0;
@@ -88,7 +99,9 @@
   onMount(() => {
     trackModules();
     void ctx.guarded(async () => {
-      resumable = (await api.call('study.active', {})).session;
+      const open = (await api.call('study.active', {})).session;
+      // Learn and test sessions resume on their own screens.
+      resumable = open && open.kind !== 'learn' && open.kind !== 'test' ? open : null;
     });
     void loadSaved();
     const unsub = api.on(['saved_queries', 'module_toggled'], () => void loadSaved());
@@ -148,8 +161,18 @@
     revealedAt = null;
   }
 
+  /**
+   * Timed mode (v0.10): the countdown of a card starts when the screen puts it up — the
+   * backend refuses to restart one, so a resumed or undone card keeps what it has.
+   */
+  async function startTimer(s: SessionDto): Promise<SessionDto> {
+    const timer = s.modes?.timer;
+    if (!timer || !s.current || timer.deadline !== null || s.ended_at !== null) return s;
+    return api.call('modes.timed.start', { session_id: s.id, card_id: s.current.card_id });
+  }
+
   async function settle(s: SessionDto) {
-    if (s.current) show(s);
+    if (s.current) show(await startTimer(s));
     else await finish(s);
   }
 
@@ -180,6 +203,7 @@
           }
         : null,
       tz_offset_mins: tzOffsetMins(),
+      modes: modeOptions,
     };
   }
 
@@ -191,7 +215,7 @@
       notice = t('study.nothing');
       return;
     }
-    show(s);
+    show(await startTimer(s));
   }
 
   async function reload() {
@@ -204,7 +228,7 @@
   async function refresh() {
     if (!session) return;
     const s = await api.call('study.session', { session_id: session.id });
-    if (s.current && s.current.card_id === card?.card_id) session = s;
+    if (s.current && s.current.card_id === card?.card_id) session = await startTimer(s);
     else await settle(s);
   }
 
@@ -241,14 +265,51 @@
   async function rate(rating: Rating) {
     if (!session || !card) return;
     const now = Date.now();
-    const next = await api.call('study.answer', {
-      session_id: session.id,
-      card_id: card.card_id,
-      rating,
-      duration_ms: Math.max(0, now - shownAt),
-      reveal_ms: revealedAt === null ? null : Math.max(0, revealedAt - shownAt),
-    });
-    await settle(next);
+    try {
+      const next = await api.call('study.answer', {
+        session_id: session.id,
+        card_id: card.card_id,
+        rating,
+        duration_ms: Math.max(0, now - shownAt),
+        reveal_ms: revealedAt === null ? null : Math.max(0, revealedAt - shownAt),
+      });
+      await settle(next);
+    } catch (e) {
+      // Timed mode: the backend clock says the time ran out.
+      if (e instanceof ApiError && e.code === 'CONFLICT_TIME_UP') await expire();
+      else throw e;
+    }
+  }
+
+  /** Confidence scale (v0.10): level 1–5, mapped onto a rating by the backend. */
+  async function rateConfidence(level: number) {
+    if (!session || !card) return;
+    const now = Date.now();
+    try {
+      const next = await api.call('modes.confidence.answer', {
+        session_id: session.id,
+        card_id: card.card_id,
+        level,
+        duration_ms: Math.max(0, now - shownAt),
+        reveal_ms: revealedAt === null ? null : Math.max(0, revealedAt - shownAt),
+      });
+      await settle(next);
+    } catch (e) {
+      // Timed mode: the backend clock says the time ran out (as in `rate`).
+      if (e instanceof ApiError && e.code === 'CONFLICT_TIME_UP') await expire();
+      else throw e;
+    }
+  }
+
+  /** Timed mode (v0.10): the card's time ran out. */
+  async function expire() {
+    if (!session || !card) return;
+    await settle(await api.call('modes.timed.expire', { session_id: session.id, card_id: card.card_id }));
+  }
+
+  async function resume(s: SessionDto) {
+    // Timed: a card whose countdown never started gets it now (`settle`).
+    await settle(s);
   }
 
   async function run(a: StudyAction) {
@@ -309,6 +370,7 @@
                 mode: practice ? 'trial' : 'scheduled',
                 from_session: summary.session_id,
                 tz_offset_mins: tzOffsetMins(),
+                modes: modeOptions,
               });
               await settle(r);
             }
@@ -330,6 +392,20 @@
     const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
     // Buttons handle their own Enter/Space; keep shortcuts working everywhere else.
     if (tag === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
+    // v0.10: inline cards (N), confidence levels (1–5) on the answer side.
+    if (card && plainKey(e) && e.key.toLowerCase() === 'n' && moduleOn('inline_cards')) {
+      e.preventDefault();
+      composing = true;
+      return;
+    }
+    if (phase === 'answer' && confidence && plainKey(e) && /^[1-5]$/.test(e.key)) {
+      e.preventDefault();
+      if (!busy) {
+        busy = true;
+        void ctx.guarded(() => rateConfidence(Number(e.key))).finally(() => (busy = false));
+      }
+      return;
+    }
     const action = keyAction(phase, e, typing, {
       choices: choice?.options.length ?? 0,
       flags: moduleOn('flags'),
@@ -365,6 +441,8 @@
     return t(l.key, { n: l.n });
   }
 
+  const confidence = $derived(session?.modes?.rating_scale === 'confidence' && (session.modes?.confidence.length ?? 0) > 0);
+
   const accuracy = $derived(summary && summary.answered > 0 ? Math.round((summary.correct * 100) / summary.answered) : 0);
 </script>
 
@@ -377,12 +455,13 @@
     <div class="panel">
       <p class="muted">{ctx.selectedPath ?? t('study.whole_collection')}</p>
       {#if resumable}
-        <button onclick={() => resumable && void ctx.guarded(() => settle(resumable!))}>{t('study.resume')}</button>
+        <button onclick={() => resumable && void ctx.guarded(() => resume(resumable!))}>{t('study.resume')}</button>
       {/if}
       <label class="row">
         <input type="checkbox" bind:checked={practice} />
         {t('study.practice')}
       </label>
+      <StudyModeOptions bind:value={modeOptions} />
       {#if attrs.length > 0}
         <div class="row">
           <label>
@@ -462,12 +541,15 @@
     </div>
   {:else if session && card}
     <div class="meta muted">
-      <span>{t('study.remaining', session.counts)}</span>
+      <span data-focus-hide>{t('study.remaining', session.counts)}</span>
       {#if session.mode === 'trial'}<span class="badge">{t('study.practice_badge')}</span>{/if}
       {#each cardFlags as f (f.flag)}
         <span class="flag" style:--flag={flagColor(f)} data-testid="flag">{f.name ?? td(defaultFlagKey(f.flag))}</span>
       {/each}
     </div>
+    {#if session.modes?.timer}
+      <TimerBar timer={session.modes.timer} onexpire={() => void ctx.guarded(expire)} />
+    {/if}
     <div class="stage">
       <CardView sides={card.sides} showAnswer={revealed} interactive={false} testid={revealed ? 'answer' : 'question'} />
       <PluginToolbar cardId={card.card_id} />
@@ -510,7 +592,9 @@
 
     <StudyAi cardId={card.card_id} {revealed} typed={card.type_answer ? typed : null} />
 
-    {#if revealed}
+    {#if revealed && confidence && session.modes}
+      <ConfidenceButtons levels={session.modes.confidence} onrate={(l) => void ctx.guarded(() => rateConfidence(l))} />
+    {:else if revealed}
       <div class="ratings">
         {#each RATINGS as r, i (r)}
           <button
@@ -534,7 +618,14 @@
       <button onclick={() => void run({ kind: 'suspend' })}>{t('study.suspend')} <kbd>{'S'}</kbd></button>
       <button onclick={() => void run({ kind: 'bury' })}>{t('study.bury')} <kbd>{'B'}</kbd></button>
       <button onclick={() => void run({ kind: 'end' })}>{t('study.end')} <kbd>{'Esc'}</kbd></button>
+      <FocusToggle />
+      {#if moduleOn('inline_cards')}
+        <button onclick={() => (composing = true)}>{t('modes.inline.open')} <kbd>{'N'}</kbd></button>
+      {/if}
     </div>
+    {#if composing}
+      <InlineComposer deckId={card.deck_id} guarded={ctx.guarded} onclose={() => (composing = false)} />
+    {/if}
     <p class="muted keys">{t('study.keys')}</p>
   {/if}
 </section>

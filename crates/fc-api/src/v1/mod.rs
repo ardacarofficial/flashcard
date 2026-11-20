@@ -13,6 +13,7 @@ pub mod io;
 pub mod jobs;
 pub mod mcp;
 pub mod methods;
+pub mod modes;
 pub mod modules;
 pub mod notes;
 pub mod notetypes;
