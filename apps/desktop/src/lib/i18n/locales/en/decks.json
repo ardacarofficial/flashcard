@@ -28,5 +28,13 @@
       "deck_exists": "A deck with this name already exists.",
       "deck_cycle": "A deck can't be moved into itself."
     }
+  },
+  "settings": {
+    "decks": {
+      "include_subdecks": {
+        "label": "Include subdecks",
+        "description": "Studying a deck also studies its subdecks."
+      }
+    }
   }
 }

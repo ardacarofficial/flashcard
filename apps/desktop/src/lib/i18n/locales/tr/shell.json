@@ -20,6 +20,7 @@
     "delete": "Sil",
     "rename": "Yeniden adlandır",
     "loading": "Yükleniyor…",
+    "load_failed": "Bu ekran yüklenemedi. Bir daha dener misin?",
     "none": "—",
     "yes": "Evet",
     "no": "Hayır"
@@ -34,6 +35,16 @@
     "pages": {
       "general": "Genel",
       "attributes": "Sınıflandırmalar"
+    },
+    "app": {
+      "locale": {
+        "label": "Dil",
+        "description": "Menülerin, mesajların ve hazır not türlerinin dili."
+      },
+      "theme": {
+        "label": "Tema",
+        "description": "Açık, koyu ya da sistem ayarına uy."
+      }
     }
   },
   "lang": {

@@ -25,5 +25,13 @@
       "attribute_key_exists": "A classification with this key already exists.",
       "attribute_option_in_use": "This option is still in use."
     }
+  },
+  "settings": {
+    "attributes": {
+      "remember_last": {
+        "label": "Remember last classification values",
+        "description": "When adding notes, start from the values you chose last time."
+      }
+    }
   }
 }

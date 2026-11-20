@@ -25,5 +25,13 @@
       "attribute_key_exists": "Bu anahtarla bir sınıflandırma zaten var.",
       "attribute_option_in_use": "Bu seçenek hâlâ kullanılıyor."
     }
+  },
+  "settings": {
+    "attributes": {
+      "remember_last": {
+        "label": "Son sınıflandırma değerlerini hatırla",
+        "description": "Not eklerken en son seçtiğin değerlerle başla."
+      }
+    }
   }
 }
