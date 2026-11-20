@@ -25,12 +25,13 @@ describe('<App> on the dev mock transport', () => {
     expect(Array.from(tabs.querySelectorAll('[role=tab]'), (t) => t.textContent?.trim())).toEqual(['Add', 'AI', 'Import / export', 'Starter decks']);
     expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Create');
 
-    // The shell's deck picker is the design-system Select.
+    // v1.1 Create: a new deck or an existing one (design-system Select); classifications
+    // follow the target deck — "Seviye" (A1–C2) is inherited from the parent deck.
+    await fireEvent.click(await screen.findByRole('radio', { name: 'Existing deck' }));
     await fireEvent.click(await screen.findByRole('combobox', { name: 'Deck' }));
     await fireEvent.click(await screen.findByRole('option', { name: 'İngilizce::Fiiller' }));
-    // Inherited "Seviye" (A1–C2) from the parent deck.
-    const level = (await screen.findByLabelText('Seviye')) as HTMLSelectElement;
-    expect(Array.from(level.options).map((o) => o.textContent)).toEqual([
+    await fireEvent.click(await screen.findByRole('combobox', { name: 'Seviye' }));
+    expect(screen.getAllByRole('option').map((o) => o.textContent?.trim())).toEqual([
       'Not set', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2',
     ]);
   });

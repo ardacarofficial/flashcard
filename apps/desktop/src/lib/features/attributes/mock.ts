@@ -4,7 +4,7 @@ export default {
   modules: [module('attributes', [settingsPage('attributes.manage', 'settings.pages.attributes', '/settings/attributes', 20)])],
   handlers: ({ attrs, ancestors }: MockEnv) => ({
   'attributes.effective': ({ deck_id, target }) => {
-    const chain = ancestors(deck_id);
+    const chain = deck_id ? ancestors(deck_id) : [];
     return {
       attributes: attrs
         .filter((a) => a.target === target)
