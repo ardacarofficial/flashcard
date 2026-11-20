@@ -128,7 +128,7 @@ fn open(req: OpenDeepLink, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
             })?;
             Ok(CommandOutcome {
                 response: DeepLinkOutcome::Inbox {
-                    item: from_json(&created)?,
+                    item: Box::new(from_json(&created)?),
                 },
                 inverse: vec![],
                 summary: summary::<DeepLinksOpen>(),

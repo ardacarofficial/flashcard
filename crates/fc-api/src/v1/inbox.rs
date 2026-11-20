@@ -290,7 +290,7 @@ pub enum DeepLinkOutcome {
     /// A writing link (`add`) became an inbox item for the user to review.
     Inbox {
         /// The new item.
-        item: InboxItemDto,
+        item: Box<InboxItemDto>,
     },
 }
 

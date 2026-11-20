@@ -160,16 +160,13 @@ pub fn prefill_text(app: &App, clipboard: Option<String>) -> Option<String> {
 pub async fn quick_add_prefill<R: Runtime>(
     handle: AppHandle<R>,
     state: tauri::State<'_, SharedApp>,
-) -> Result<Option<String>, ()> {
+) -> Result<Option<String>, fc_api::ApiError> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
     let app = state.inner().clone();
     let text = handle.clipboard().read_text().ok();
-    Ok(
-        tauri::async_runtime::spawn_blocking(move || prefill_text(&app, text))
-            .await
-            .ok()
-            .flatten(),
-    )
+    tauri::async_runtime::spawn_blocking(move || prefill_text(&app, text))
+        .await
+        .map_err(|e| fc_api::ApiError::new(fc_api::ErrorCode::Internal, e.to_string()))
 }
 
 fn show_quick_add<R: Runtime>(handle: &AppHandle<R>) {
