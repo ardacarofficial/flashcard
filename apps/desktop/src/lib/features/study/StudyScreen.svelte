@@ -13,6 +13,7 @@
   } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import CardView from '../cards/CardView.svelte';
+  import PluginToolbar from '../plugins/PluginToolbar.svelte';
   import { defaultFlagKey, flagColor, hasFlag } from '../cards/flags';
   import { moduleOn, trackModules } from '../cards/modules.svelte';
   import type { ScreenCtx } from '../types';
@@ -464,6 +465,7 @@
     </div>
     <div class="stage">
       <CardView sides={card.sides} showAnswer={revealed} interactive={false} testid={revealed ? 'answer' : 'question'} />
+      <PluginToolbar cardId={card.card_id} />
       {#if hint && !revealed}<p class="hint muted" data-testid="hint">{hint}</p>{/if}
       {#if choice}
         <div class="choices" role="group" aria-label={t('study.choices')}>

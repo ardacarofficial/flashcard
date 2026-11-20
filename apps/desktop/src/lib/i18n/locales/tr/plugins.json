@@ -1,0 +1,173 @@
+{
+  "nav": {
+    "plugins": "Eklentiler"
+  },
+  "modules": {
+    "plugins": {
+      "name": "Eklentiler",
+      "description": "Korumalı alanda çalışan eklentiler: kart türleri, çalışma modları, sesler, kancalar ve daha fazlası."
+    },
+    "tts": {
+      "name": "Seslendirme",
+      "description": "Kartları kurulu ses sağlayıcılarıyla okur."
+    }
+  },
+  "settings": {
+    "pages": {
+      "plugins": "Eklentiler"
+    },
+    "plugins": {
+      "timeout_ms": {
+        "label": "Çağrı başına süre sınırı (ms)",
+        "description": "Bundan uzun çalışan eklenti durdurulur."
+      },
+      "fuel_millions": {
+        "label": "Çağrı başına iş sınırı (milyon adım)",
+        "description": "Saat yavaş olsa bile döngüye giren eklentiyi durdurur."
+      },
+      "memory_mb": {
+        "label": "Bellek sınırı (MB)",
+        "description": "Bir eklenti çağrısının kullanabileceği en çok bellek."
+      },
+      "max_failures": {
+        "label": "Kapatmadan önceki hata sayısı",
+        "description": "Art arda bu kadar hata veren eklenti kapatılır, sana haber verilir."
+      },
+      "before_hook_failure": {
+        "label": "Eklenti kontrolü hata verirse",
+        "description": "Eklentisiz devam et ya da işlemi iptal et.",
+        "options": {
+          "continue": "Eklentisiz devam et",
+          "reject": "İşlemi iptal et"
+        }
+      }
+    },
+    "tts": {
+      "provider": {
+        "label": "Ses sağlayıcısı",
+        "description": "Boş = kullanılabilen ilk sağlayıcı."
+      }
+    }
+  },
+  "plugins": {
+    "heading": "Eklentiler",
+    "intro": "Eklentiler korumalı alanda çalışır ve yalnızca izin verdiklerini yapabilir.",
+    "install": "Dosyadan kur…",
+    "pick_prompt": ".fcplugin dosyasının yolu",
+    "none": "Kurulu eklenti yok.",
+    "version": "Sürüm {version}",
+    "by": "{authors} tarafından",
+    "status": {
+      "active": "Açık",
+      "disabled": "Kapalı",
+      "auto_disabled": "Hatalar yüzünden kapatıldı",
+      "broken": "Çalışamıyor"
+    },
+    "enable": "Aç",
+    "disable": "Kapat",
+    "uninstall": "Kaldır",
+    "delete_data": "Kaydettiği verileri de sil",
+    "confirm_uninstall": "“{name}” kaldırılsın mı? Oluşturduğu notlar kalır.",
+    "permissions": "İzinler",
+    "sensitive": "ayrıca sorulur",
+    "save_permissions": "İzinleri kaydet",
+    "settings": "Ayarlar",
+    "logs": "Günlük",
+    "logs_empty": "Kayıt yok.",
+    "last_error": "Son hata: {error}",
+    "failures": "Art arda {count} hata",
+    "install_heading": "“{name}” {version} kurulsun mu?",
+    "installed_version": "Şu an kurulu: {version}",
+    "install_confirm": "Kur",
+    "update_confirm": "Güncelle",
+    "cancel": "Vazgeç",
+    "grant_hint": "İzin vermek istemediklerinin işaretini kaldır. Sonra değiştirebilirsin.",
+    "contributes": "Ekledikleri",
+    "contrib": {
+      "commands": "Komutlar",
+      "study_modes": "Çalışma modları",
+      "views": "Görünümler",
+      "card_types": "Kart türleri",
+      "tts": "Sesler",
+      "hooks": "Kancalar"
+    },
+    "run": "Çalıştır",
+    "view": {
+      "close": "Kapat",
+      "done": "Bitti.",
+      "recorder_unavailable": "Ses kaydı henüz kullanılamıyor."
+    },
+    "models": {
+      "heading": "İndirmeler",
+      "download": "İndir",
+      "delete": "Sil",
+      "size": "{size} MB",
+      "state": {
+        "missing": "İndirilmedi",
+        "partial": "Yarım indirildi",
+        "ready": "Hazır"
+      },
+      "usage": "Disk kullanımı: {size} MB"
+    },
+    "saved": "Kaydedildi.",
+    "file_filter": "Flashcard eklentisi"
+  },
+  "jobs": {
+    "plugins": {
+      "model_download": "Model indiriliyor"
+    }
+  },
+  "commands": {
+    "plugins": {
+      "list": "Eklentileri listele",
+      "inspect": "Eklenti dosyasını incele",
+      "install": "Eklenti kur",
+      "uninstall": "Eklentiyi kaldır",
+      "set_enabled": "Eklentiyi aç/kapat",
+      "set_permissions": "Eklenti izinlerini değiştir",
+      "settings": {
+        "get": "Eklenti ayarları",
+        "set": "Eklenti ayarını değiştir"
+      },
+      "locales": "Eklenti çevirileri",
+      "logs": "Eklenti günlüğü",
+      "run": "Eklenti komutunu çalıştır",
+      "ui": {
+        "open": "Eklenti görünümünü aç",
+        "act": "Eklenti görünümünde işlem yap",
+        "close": "Eklenti görünümünü kapat"
+      },
+      "models": {
+        "list": "Eklenti indirmeleri",
+        "download": "Model indir",
+        "delete": "Modeli sil"
+      }
+    },
+    "tts": {
+      "providers": "Ses sağlayıcıları",
+      "voices": "Sesler",
+      "synthesize": "Metni seslendir"
+    }
+  },
+  "errors": {
+    "validation": {
+      "plugin_package": "Bu geçerli bir eklenti dosyası değil.",
+      "plugin_manifest": "Eklentinin tanımı geçersiz ({field}).",
+      "plugin_api_version": "Bu eklenti başka bir uygulama sürümü için yapılmış (eklenti API {api_version}).",
+      "plugin_app_version": "Bu eklenti {required} veya daha yeni bir uygulama sürümü istiyor.",
+      "plugin_permission": "Eklenti bu izni istemedi."
+    },
+    "not_found": {
+      "plugin": "Eklenti kurulu değil.",
+      "plugin_contribution": "Eklentide böyle bir öğe yok.",
+      "plugin_session": "Bu eklenti görünümü kapandı."
+    },
+    "conflict": {
+      "plugin_inactive": "Eklenti kapalı, bozuk ya da buna izni yok.",
+      "plugin_rejected": "Bir eklenti bunu durdurdu: {message}"
+    },
+    "provider": {
+      "plugin_failed": "Bir eklenti hata verdi ({kind})."
+    }
+  }
+}

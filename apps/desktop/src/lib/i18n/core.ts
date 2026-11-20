@@ -31,7 +31,7 @@ function lookup(dict: unknown, key: string): string | undefined {
   return typeof cur === 'string' ? cur : undefined;
 }
 
-function interpolate(s: string, params?: Params): string {
+export function interpolate(s: string, params?: Params): string {
   if (!params) return s;
   return s.replace(/\{(\w+)\}/g, (m, name: string) =>
     name in params ? String(params[name]) : m,

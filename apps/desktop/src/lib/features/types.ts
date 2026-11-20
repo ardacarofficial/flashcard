@@ -10,6 +10,8 @@ export interface ScreenCtx {
   selectDeck: (id: string | null) => void;
   /** Runs an API call, shows its error in the shell, resolves to whether it succeeded. */
   guarded: (fn: () => Promise<unknown>) => Promise<boolean>;
+  /** Route of the menu entry that opened the screen (plugin views read their target here). */
+  route?: string | null;
 }
 
 /**
@@ -20,7 +22,7 @@ export interface ScreenCtx {
 export interface ScreenDef {
   id: string;
   component: Component<{ ctx: ScreenCtx }>;
-  /** `main_menu` routes that open this screen. */
+  /** `main_menu` routes that open this screen; a trailing `/*` matches a whole prefix. */
   routes?: string[];
   /** Slot whose mere presence adds one menu entry for this screen (e.g. `settings_page`). */
   slot?: { name: string; label_key: string; order: number };
