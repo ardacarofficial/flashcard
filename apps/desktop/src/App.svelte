@@ -8,6 +8,7 @@
   import ShortcutHost from '$lib/features/browse/ShortcutHost.svelte';
   import PluginPanels from '$lib/features/plugins/PluginPanels.svelte';
   import OutsideHost from '$lib/features/inbox/OutsideHost.svelte';
+  import RecoveryHost from '$lib/features/maintenance/RecoveryHost.svelte';
 
   interface MenuItem {
     id: string;
@@ -188,6 +189,9 @@
 
 <!-- Pairing requests, clipboard suggestions, flashcard:// links (v0.9). -->
 <OutsideHost open={openRoute} selectDeck={(id) => (selectedDeck = id)} />
+
+<!-- Recovery after a crash, update notice (v1.0). -->
+<RecoveryHost open={openRoute} />
 
 <!-- Keyboard shortcuts + command palette (v0.4); inert when the palette module is off. -->
 <ShortcutHost

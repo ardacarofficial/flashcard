@@ -1,0 +1,149 @@
+{
+  "nav": {
+    "app_maintenance": "Günlükler ve güncellemeler"
+  },
+  "modules": {
+    "maintenance": {
+      "name": "Bakım",
+      "description": "Çökme kurtarma, veritabanı denetimi, yerel günlükler ve dışa aktarılması. Hiçbir şey bir yere gönderilmez."
+    },
+    "updates": {
+      "name": "Güncellemeler",
+      "description": "Sen istediğinde (ya da açarsan açılışta) imzalı yeni sürümü denetler, yalnız onayınla kurar."
+    }
+  },
+  "settings": {
+    "maintenance": {
+      "log_level": {
+        "label": "Günlük ayrıntısı",
+        "description": "Uygulamanın yerel günlük dosyasına ne kadar yazacağı."
+      },
+      "log_max_kb": {
+        "label": "Günlük dosyası boyutu (KiB)",
+        "description": "Günlük bu boyutta yeni bir dosyaya geçer."
+      },
+      "log_files": {
+        "label": "Saklanan eski günlük dosyası",
+        "description": "En eskisi silinmeden önce kaç eski günlük dosyası tutulacağı."
+      },
+      "check_after_crash": {
+        "label": "Çökmeden sonra veritabanını denetle",
+        "description": "Uygulama düzgün kapanmadıysa bir sonraki açılışta koleksiyonu hasara karşı denetler."
+      }
+    },
+    "updates": {
+      "check_on_start": {
+        "label": "Açılışta güncelleme denetle",
+        "description": "Varsayılan olarak kapalı: uygulama güncelleme sunucusuna yalnız sen istediğinde bağlanır."
+      }
+    }
+  },
+  "commands": {
+    "maintenance": {
+      "status": "Bakım durumu",
+      "recovery": {
+        "dismiss": "Kurtarma önerisini kapat",
+        "get": "Çökme sonrası kurtarma"
+      },
+      "integrity": {
+        "check": "Veritabanını denetle"
+      },
+      "logs": {
+        "export": "Hata raporu için günlükleri dışa aktar"
+      },
+      "crash_reports": {
+        "clear": "Çökme raporlarını sil"
+      },
+      "drafts": {
+        "save": "Form taslağını kaydet",
+        "get": "Form taslağı",
+        "list": "Form taslakları",
+        "discard": "Form taslağını at"
+      }
+    },
+    "updates": {
+      "status": "Güncelleme durumu",
+      "check": "Güncellemeleri denetle",
+      "install": "Güncellemeyi indir",
+      "apply": "Güncellemeyi kur ve yeniden başlat"
+    }
+  },
+  "errors": {
+    "validation": {
+      "draft_key": "Bu taslak adı geçerli değil.",
+      "draft_too_large": "Bu taslak saklanamayacak kadar büyük."
+    },
+    "conflict": {
+      "update_not_available": "Kurulacak güncelleme yok. Önce güncellemeleri denetle.",
+      "update_not_ready": "Güncelleme henüz indirilmedi."
+    },
+    "provider": {
+      "update_unsupported": "Bu derleme kendini güncelleyemez.",
+      "update_network": "Güncelleme sunucusuna ulaşılamadı. Daha sonra yeniden dene.",
+      "update_signature": "İndirilen güncelleme bu uygulamanın anahtarıyla imzalı değil, bu yüzden reddedildi."
+    }
+  },
+  "app_maintenance": {
+    "heading": "Günlükler ve güncellemeler",
+    "version": "Sürüm {version}",
+    "data_dir": "Veri klasörü",
+    "log_dir": "Günlük klasörü",
+    "no_log": "Bu derlemede dosyaya günlük yazma kapalı.",
+    "logs": {
+      "heading": "Günlükler",
+      "intro": "Uygulama yerel bir günlük tutar. Hata raporuna eklemek için dışa aktar: anahtarlar, belirteçler ve parolalar önce çıkarılır. Hiçbir şey kendiliğinden gönderilmez.",
+      "files": "{count} dosya, {size}",
+      "export": "Günlükleri dışa aktar…",
+      "exported": "{files} dosya {path} konumuna kaydedildi. {redactions} gizli bilgi çıkarıldı.",
+      "save_prompt": "Günlük paketi nereye kaydedilsin?"
+    },
+    "integrity": {
+      "heading": "Veritabanı",
+      "check": "Veritabanını denetle",
+      "ok": "Sorun bulunmadı ({ms} ms).",
+      "problems": "{count} sorun bulundu. İçe ve dışa aktar bölümünden bir yedeği geri yükle.",
+      "never": "Bu çalıştırmada denetlenmedi."
+    },
+    "crashes": {
+      "heading": "Çökme raporları",
+      "none": "Çökme raporu yok.",
+      "clear": "Çökme raporlarını sil",
+      "cleared": "{count} rapor silindi."
+    },
+    "previous_run": {
+      "clean": "Son çalıştırma düzgün kapandı.",
+      "unclean": "Son çalıştırma düzgün kapanmadı."
+    },
+    "recovery": {
+      "title_crash": "Flashcard beklenmedik şekilde kapandı",
+      "title_unclean": "Flashcard düzgün kapanmadı",
+      "intro": "Koleksiyonun her değişiklikten sonra kaydedilir. Kaldığın yerden devam edebileceklerin:",
+      "integrity_ok": "Veritabanı denetlendi: sorun yok.",
+      "integrity_bad": "Veritabanı denetimi sorun buldu. Ayrıntılar için Bakım'ı aç.",
+      "session": "Bitmemiş bir çalışma oturumu",
+      "resume": "Çalışmaya devam et",
+      "drafts": "Kaydedilmemiş {count} form; yeniden açtığında geri gelir",
+      "crash": "Çökme raporu: {message}",
+      "details": "Bakım'ı aç",
+      "dismiss": "Devam et"
+    },
+    "updates": {
+      "heading": "Güncellemeler",
+      "current": "Sürümün {version}.",
+      "unsupported": "Bu derleme kendini güncelleyemez (geliştirme derlemesi).",
+      "check": "Güncellemeleri denetle",
+      "up_to_date": "Güncelsin.",
+      "available": "{version} sürümü çıktı.",
+      "install": "İndir",
+      "downloading": "İndiriliyor ve doğrulanıyor…",
+      "ready": "İndirildi ve doğrulandı. Uygulama kapanacak, kurulacak ve yeniden açılacak.",
+      "apply": "Kur ve yeniden başlat",
+      "banner": "{version} sürümü çıktı.",
+      "open": "Güncellemeye bak"
+    },
+    "size": {
+      "kb": "{n} KB",
+      "mb": "{n} MB"
+    }
+  }
+}
