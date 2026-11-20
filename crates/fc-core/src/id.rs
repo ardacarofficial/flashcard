@@ -173,6 +173,14 @@ define_id!(
     /// Saved query (named filter) id.
     SavedQueryId
 );
+define_id!(
+    /// Exam date id (v0.6 exam-date mode).
+    ExamId
+);
+define_id!(
+    /// Goal id (v0.6).
+    GoalId
+);
 
 #[cfg(test)]
 mod tests {
