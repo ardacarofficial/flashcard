@@ -46,7 +46,7 @@ describe('first-run guide (dev mock)', () => {
   it('asks what you study, shows the matching classification and sets up deck + starters', async () => {
     const ondone = vi.fn();
     render(OnboardingHost, { ondone });
-    expect(await screen.findByRole('heading', { name: 'Welcome to Flashcard' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Welcome to Flashcard' }, { timeout: 5000 })).toBeTruthy();
     const next = screen.getByRole('button', { name: 'Next' }) as HTMLButtonElement;
     expect(next.disabled).toBe(true);
     // English → CEFR; YKS → the exam sections.

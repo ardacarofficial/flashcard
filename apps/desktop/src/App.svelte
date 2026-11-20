@@ -194,6 +194,8 @@
 <!-- App lock screen (v1.0); drawn above everything while locked. -->
 <LockHost
   onunlock={() => {
+    // Calls made while locked failed with "the app is locked": start over.
+    error = null;
     void loadModules();
     void loadDecks();
   }}

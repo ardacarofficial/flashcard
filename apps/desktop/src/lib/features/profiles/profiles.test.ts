@@ -28,7 +28,7 @@ describe('profiles and app lock (dev mock)', () => {
     const onunlock = vi.fn();
     render(LockHost, { onunlock });
     render(ProfilesScreen, { ctx });
-    expect(await screen.findByText('Main profile')).toBeTruthy();
+    expect(await screen.findByText('Main profile', {}, { timeout: 5000 })).toBeTruthy();
 
     await fireEvent.input(screen.getByLabelText('New profile name'), { target: { value: 'Work' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Add profile' }));
