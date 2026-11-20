@@ -288,6 +288,7 @@ import type { SetSetting } from "./SetSetting";
 import type { SetShortcut } from "./SetShortcut";
 import type { SetSuspended } from "./SetSuspended";
 import type { SetTagColor } from "./SetTagColor";
+import type { SetTheme } from "./SetTheme";
 import type { SettingValueDto } from "./SettingValueDto";
 import type { SettingValues } from "./SettingValues";
 import type { SettingsSchema } from "./SettingsSchema";
@@ -315,6 +316,8 @@ import type { TagList } from "./TagList";
 import type { TestPaperDto } from "./TestPaperDto";
 import type { TestPaperRequest } from "./TestPaperRequest";
 import type { TextAnalysis } from "./TextAnalysis";
+import type { ThemeDto } from "./ThemeDto";
+import type { ThemePresetList } from "./ThemePresetList";
 import type { TrashList } from "./TrashList";
 import type { TtsProviderList } from "./TtsProviderList";
 import type { UiSession } from "./UiSession";
@@ -615,6 +618,9 @@ export interface Methods {
   "lock.activity": { kind: "command"; request: Empty; response: Empty };
   "reminders.status": { kind: "query"; request: ReminderStatusRequest; response: ReminderStatus };
   "reminders.test": { kind: "command"; request: Empty; response: ReminderCounts };
+  "themes.current": { kind: "query"; request: Empty; response: ThemeDto };
+  "themes.presets": { kind: "query"; request: Empty; response: ThemePresetList };
+  "themes.set": { kind: "command"; request: SetTheme; response: ThemeDto };
 }
 
 /** Unqualified method name. */
@@ -897,4 +903,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "lock.activity": "command",
   "reminders.status": "query",
   "reminders.test": "command",
+  "themes.current": "query",
+  "themes.presets": "query",
+  "themes.set": "command",
 };

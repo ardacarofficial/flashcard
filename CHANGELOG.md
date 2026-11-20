@@ -4,6 +4,17 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased]
 
+## [1.0.0] — v1.0 Cila ve Windows sürümü (`feat/v1.0-integration`)
+
+Workspace sürümü `1.0.0`. Elle yapılacak son adım: temiz bir Windows'ta kurulum → ilk açılış → çalışma → güncelleme betiği (docs/07 §8), henüz gerçek bir Windows'ta koşulmadı.
+
+### v1.0 entegrasyonu — tur 2 (+ iz P performans/i18n/temalar)
+- **Profiller:** oturum kuyruğu (`session_queue`), istatistik önbellekleri ve tema ayarları profilin kendi koleksiyonunda; profil geçişi bellekteki çalışma kuyruğu önbelleğini boşaltır.
+- **Kilit:** kilit ekranı ve ilk açılış profilin temasıyla çizilir (`themes.current` kilitliyken okunabilen tek ayar: renkler, şema, hazır tema kimliği); kilitliyken önbellekteki tema silinmez, açılınca yeniden okunur. Kilitliyken kabuk hiçbir ekranı (tembel parçalar dahil) bağlamaz.
+- **Çökme kurtarma × artımlı kuyruk:** gerçek bir süreç oturum ortasında öldürülür (`abort`), sonraki açılış çalıştırma işaretinden kirli kapanışı görür, oturumu sunar ve öldürülen sürecin son kaydettiği kuyrukla birebir devam eder (`maintenance::kill_tests`).
+- Tur 1 ekranları (Profiller, Başlangıç desteleri, Hatırlatıcılar, Günlükler ve güncellemeler) tembel yüklenir; i18n lint tur 1'in tüm ekranlarında (ilk açılış, profiller, kilit, hatırlatıcılar, günlükler, kurtarma penceresi) geçer.
+- Eklentiler: `themes.current`/`themes.presets` = ayar okuması, `themes.set` açıkça reddedilir (`domain_themes`); eklentilerin tema katkı noktası yok. Migration `1070`–`1072` iz P'nin `1070`–`1089` aralığında (`V1_LANE_RANGES`). docs/10 §37.
+
 ### v1.0 entegrasyonu — tur 1 (iz Q + iz O + iz N)
 - Üç v1.0 izi birleşti. **Loglar, çökme raporları ve çalıştırma işareti profil başına** (etkin profilin klasöründe); profil geçişi eski çalıştırmayı temiz kapatır.
 - **Profil silme anahtar zincirini temizler:** profilin AI anahtarları ve kilit özeti silinir. `fc --db <profil>/collection.db` o profilin AI anahtarlarını kullanır.
@@ -32,6 +43,14 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 - **Kilit güvenlik incelemesi:** kilitliyken `flashcard://` bağlantıları kuyrukta bekler (sınırlı, tekil) ve kilit açılınca işlenir, `take_deep_links`/medya protokolü/hızlı ekleme ön doldurması kapalı; yanlış deneme sayacı `profiles.json`'da (yeniden başlatma sıfırlamaz), kontrol + kayıt tek kilitte; özeti kayıp kilit kapalı kalır, yeni `lock.recover` + `LockState.recovery_required` ile açık kurtarma; AI anahtarları profil başına anahtar zinciri hesaplarında (varsayılan profil eski adları korur). Tehdit modeli docs/02 §29.
 - **Hatırlatıcılar ve tepsi:** seçilen saat/günlerde günlük OS bildirimi (o gün çalışıldıysa yok), sistem tepsisi menüsü, "pencere kapanınca tepside kal". `reminders.status/test`, `reminder_due`.
 - Migration `1000_ux_state` (+ migration testi). Paylaşılan değişiklikler: `fc-http` kilit kontrolü, `outside.rs` sunucu/pano kilidi, `App::invoke` arka plan aktörü kontrolü, otomasyon `run_due`.
+
+### v1.0 iz P — performans, i18n tamlığı + lint, temalar (`feat/v1.0-perf`)
+- **Performans takımı** (`fc-app/src/perf_tests.rs`): 100k not / 200k kart / 2M tekrar kaydı (sınıflandırmalar, etiketler, her kart durumu) SQLite dosyasında kurulur, ayrı bir süreç masaüstü gibi açıp ölçer. docs/02 §34 hedefleri release'te karşılandı (8 çekirdek, %10 öğrenme kartı — kuyrukta ~19 300 kart): açılış 626 ms (< 2 sn), sıradaki kart p95 7,2 ms (< 20 ms; medyan 4,1 ms), oturum başlatma 156 ms (< 500 ms), 100k'da en yavaş arama 70 ms (< 100 ms), tarayıcıda herhangi bir sayfa 81 ms, 10 bin satır içe aktarma 1,2 sn, 2M tekrarda önbellekli özet 643 ms / sınıflandırma kırılımı 1,06 sn (< 1,5 sn) / deste kapsamı 2,6 sn, tepe bellek 301 MB; okuma modunda 10 bin kelime renklendirme 16,6 ms (< 50 ms). 1/10 ölçekli eşi her `cargo test`'te koşar. Sayılar ve ölçüm koşulları docs/10 §36.
+- **Düzeltilen darboğazlar:** kardeş gömme ve çalışma adayı okumaları dizini kullanmıyordu (`?n IS NULL OR …` → yalnız verilen koşullar); yük dengeleyici her cevapta binlerce vade zamanını okuyordu (gün başına sayım SQL'de, kapsayan dizin); kuyruktaki her kart için ayrı okuma (tek sorgu); her aramada tüm etiketlerin kullanım sayımı (sayımsız liste); sınıflandırma kırılımı ve deste kapsamlı istatistik 2M satırı belleğe alıyordu (akış halinde, yalın satır); enum sütunları satır başına JSON değeri üretiyordu. Tarayıcı: vade sıralaması dizinli, orta noktadan sonraki sayfalar dizini tersten yürür, sıralama yürüyüşü not satırlarını okumaz (migration **1070**).
+- **Kuyruktan bağımsız cevap** (migration **1071**): oturum kuyruğu `session_queue` satırları; cevap yalnız değişen satırları ve oturum kaydını bir kez yazar, son kuyruk bellekte (revizyonla doğrulanır), geri alma anlık görüntüsü tam kuyruk yerine fark (geri al yine birebir); ölü/boş kartlar yalnız sıradaki adaylarda denetlenir. `study.start` vade dizini ve `cards_new_order` ile yalnız kuyruğun alabileceğini okur (2,1 sn → 156 ms). **Sınıflandırma kırılımı önbelleği** (migration **1072**): değer başına gün sayımları, kart kümelerinin parmak iziyle doğrulanır (2,97 → 1,06 sn). i18n lint artık yalnız `#[cfg(test)]` öğesini atlar (sonrasını tarar); `abort_flag_interrupts_training` deterministik.
+- **i18n lint:** masaüstünde Svelte AST taraması (işaretleme, görünen öznitelik/prop, betik cümleleri; her anahtar TR+EN), tarayıcı eklentisinde sayfa/manifest/betik taraması, backend'de modüllerin ilan ettiği ve kodun gönderdiği her `*_key`'in TR+EN metni. CLI hataları `message_key` çevirisiyle yazar. Bulunan eksik ayar etiketleri eklendi.
+- **Temalar** (docs/02 §31): açık/koyu/sistem, sakin hazır temalar (varsayılan, kâğıt, adaçayı, arduvaz, yüksek karşıtlık) ve özel vurgu rengi; renkler `fc_core::theme`'de hesaplanır (WCAG karşıtlığı korunur), `themes` modülü kapatılabilir, ayar tek geri al adımı.
+- **Ön yüz:** çalışma ekranı dışındaki her özellik ekranı ilk açılışta yüklenir (ayrı parça); `pnpm bundle:check` ilk yük bütçesini CI'da denetler.
 
 ## [0.10.0] — Faz 4 (v0.9 + v0.10 birleşik, `feat/phase4-integration`)
 

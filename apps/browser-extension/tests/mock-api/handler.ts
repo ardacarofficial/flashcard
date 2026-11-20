@@ -57,7 +57,7 @@ export class MockApi {
     } catch {
       return this.err(400, 'VALIDATION_INVALID_PARAMS');
     }
-    if (req.method === 'GET' && path === '/v1/ping') return { status: 200, headers: {}, body: { app: 'flashcard', api_version: 'v1', version: '0.10.0' } };
+    if (req.method === 'GET' && path === '/v1/ping') return { status: 200, headers: {}, body: { app: 'flashcard', api_version: 'v1', version: '1.0.0' } };
     const clientHeader = (h['x-flashcard-client'] ?? '').trim();
     if (clientHeader.length === 0 || clientHeader.length > 100) return this.err(400, 'VALIDATION_INVALID_PARAMS', { reason: 'client_header' });
     if (req.method === 'POST' && (h['content-type'] ?? '').split(';')[0]?.trim().toLowerCase() !== 'application/json')

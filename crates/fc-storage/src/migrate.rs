@@ -65,10 +65,11 @@ pub const RELEASE_RANGES: &[(&str, std::ops::RangeInclusive<u32>)] = &[
 ];
 
 /// Lanes inside the v1.0 range (docs/07 §5, docs/10 §35): the v1.0 tracks ran in parallel, so
-/// each owns a slice. `1070`–`1089` stay free for the second v1.0 round.
+/// each owns a slice; the second v1.0 round (perf/i18n/themes) owns `1070`–`1089`.
 pub const V1_LANE_RANGES: &[(&str, std::ops::RangeInclusive<u32>)] = &[
     ("v1.0 ux", 1000..=1049),
     ("v1.0 release", 1050..=1069),
+    ("v1.0 perf", 1070..=1089),
     ("v1.0 quality", 1090..=1099),
 ];
 

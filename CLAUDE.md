@@ -6,7 +6,7 @@ Bu dosya, bu repoda çalışan AI ajanları için başlangıç bağlamıdır.
 
 Rust + Tauri 2 ile masaüstü flash kart uygulaması. Tüm plan `docs/` klasöründedir. **Bir işe başlamadan önce `docs/README.md` ve ilgili dokümanları oku.**
 
-- Durum: **v0.1 (Temel) tamamlandı** (`v0.1.0`). **Faz 2 (v0.2–v0.5) `main`'de** (`v0.5.0`). **Faz 3 (v0.6 istatistik, v0.7 eklentiler, v0.8 AI + MCP) `main`'de** (workspace `0.8.0`). **Faz 4 (v0.9–v0.10) `main`'de** (`v0.10.0`). **v1.0 tur 1 (iz Q kalite, iz O Windows sürümü, iz N UX) `feat/v1.0-integration`'da birleşti**; tur 2 (performans/i18n/temalar) sürüyor — bkz. `docs/04-yol-haritasi.md` ve `docs/10-v0.1-sozlesme.md` §19–§35.
+- Durum: **v0.1 (Temel) tamamlandı** (`v0.1.0`). **Faz 2 (v0.2–v0.5) `main`'de** (`v0.5.0`). **Faz 3 (v0.6 istatistik, v0.7 eklentiler, v0.8 AI + MCP) `main`'de** (workspace `0.8.0`). **Faz 4 (v0.9–v0.10) `main`'de** (`v0.10.0`). **v1.0 entegre edildi** (`feat/v1.0-integration`, workspace `1.0.0`: iz Q kalite, iz O Windows sürümü, iz N UX, iz P performans/i18n/temalar); **son inceleme ve elle Windows koşusu bekliyor** (v1.0 integrated, pending final review and a manual Windows run) — bkz. `docs/04-yol-haritasi.md` ve `docs/10-v0.1-sozlesme.md` §19–§37.
 - Öncelikli platform: **Windows** (macOS/Linux sonra).
 
 ## İletişim

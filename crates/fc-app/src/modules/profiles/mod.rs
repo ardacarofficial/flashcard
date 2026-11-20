@@ -41,6 +41,9 @@ pub const ALLOWED_WHILE_LOCKED: &[&str] = &[
     "lock.recover",
     "profiles.list",
     "profiles.switch",
+    // v1.0 round 2: the lock screen and onboarding draw in the profile's theme. Only
+    // colours, the scheme and the preset id (a display setting, no collection data).
+    "themes.current",
 ];
 
 /// How often [`spawn_idle_watch`] looks at the idle timer.
@@ -237,6 +240,9 @@ fn delete(req: DeleteProfile, app: &App, actor: &Actor) -> AppResult<Empty> {
 fn switch(req: SwitchProfile, app: &App, actor: &Actor) -> AppResult<ProfileSwitched> {
     ensure_user(actor)?;
     let (profile, restart_required) = session_of(app)?.switch(&req.id)?;
+    // Session queue, stats caches and theme live in each profile's own collection; the
+    // only in-memory one (the study queue cache) is dropped here.
+    crate::modules::study::invalidate_queue_cache(app.registry());
     if restart_required {
         // The shell restarts on the new profile; until then nothing in the background may
         // touch this collection (`background_blocked`).

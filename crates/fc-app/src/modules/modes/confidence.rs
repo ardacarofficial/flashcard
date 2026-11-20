@@ -118,7 +118,7 @@ pub(super) fn levels(
 }
 
 fn answer(req: ConfidenceAnswer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<SessionDto>> {
-    let session = Session::load(ctx.reads(), req.session_id)?;
+    let session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
     if !session.config.modes.as_ref().is_some_and(|m| m.confidence) {
         return Err(session_mode(
             "scale",

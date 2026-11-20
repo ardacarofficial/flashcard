@@ -192,6 +192,71 @@ fn switching_retires_the_session_and_the_next_start_opens_the_new_profile() {
     assert!(!fx.t.app.background_blocked());
 }
 
+/// v1.0 round 2: switching profiles drops the in-memory study queue cache (the session
+/// queue, stats caches and theme are stored in each profile's own collection).
+#[test]
+fn switching_profiles_drops_the_in_memory_queue_cache() {
+    use fc_api::v1::decks::CreateDeck;
+    use fc_api::v1::notes::CreateNote;
+    use fc_api::v1::study::{AnswerCard, StartSession, StudyKind};
+    use fc_core::card::Rating;
+    use std::collections::BTreeMap;
+
+    let fx = Fx::new();
+    let deck = fx.t.ok::<DecksCreate>(CreateDeck {
+        path: "Deste".into(),
+        parent_id: None,
+        description: None,
+        icon: None,
+        color: None,
+    });
+    for (front, back) in [("a", "1"), ("b", "2"), ("c", "3")] {
+        fx.t.ok::<NotesCreate>(CreateNote {
+            notetype_id: fc_core::notetype::builtin::CLASSIC_ID,
+            deck_id: deck.id,
+            fields: BTreeMap::from([
+                ("front".to_owned(), front.to_owned()),
+                ("back".to_owned(), back.to_owned()),
+            ]),
+            tags: vec![],
+            attributes: vec![],
+            allow_duplicate: None,
+        });
+    }
+    let s = fx.t.ok::<StudyStart>(StartSession {
+        kind: StudyKind::Normal,
+        mode: None,
+        deck_id: Some(deck.id),
+        include_subdecks: None,
+        filter: None,
+        from_session: None,
+        new_limit: None,
+        order: None,
+        tz_offset_mins: Some(0),
+        modes: None,
+    });
+    let card = s.current.as_ref().expect("a card to study").card_id;
+    fx.t.ok::<StudyAnswer>(AnswerCard {
+        session_id: s.id,
+        card_id: card,
+        rating: Rating::Good,
+        duration_ms: 1_000,
+        reveal_ms: None,
+    });
+    assert!(
+        !crate::modules::study::queue_cache_is_empty(fx.t.app.registry()),
+        "answering caches the saved queue"
+    );
+    let work = fx.t.ok::<ProfilesCreate>(CreateProfile { name: "İş".into() });
+    fx.t.ok::<ProfilesSwitch>(SwitchProfile { id: work.id });
+    assert!(crate::modules::study::queue_cache_is_empty(
+        fx.t.app.registry()
+    ));
+    // The session itself is still stored in this collection: going back resumes it.
+    let again = fx.t.ok::<StudySession>(fc_api::v1::study::SessionRef { session_id: s.id });
+    assert_eq!(again.id, s.id);
+}
+
 /// A hand-edited registry can never point a profile outside the profiles folder.
 #[test]
 fn registry_ids_cannot_escape_and_unknown_active_falls_back() {
@@ -324,6 +389,16 @@ fn locked_app_lets_only_the_lock_screen_through_and_backs_off() {
     assert_eq!(e.code, ErrorCode::PermissionAppLocked);
     for allowed in ALLOWED_WHILE_LOCKED {
         assert!(gate(&fx.t.app, &format!("v1.{allowed}")).is_ok(), "{allowed}");
+    }
+    // The lock screen draws in the profile's theme (read only); changing it or reading
+    // other settings stays behind the lock.
+    assert!(gate(&fx.t.app, "v1.themes.current").is_ok());
+    for refused in ["v1.themes.set", "v1.themes.presets", "v1.settings.get"] {
+        assert_eq!(
+            gate(&fx.t.app, refused).unwrap_err().code,
+            ErrorCode::PermissionAppLocked,
+            "{refused}"
+        );
     }
 
     // Wrong PINs: free attempts, then a growing wait.

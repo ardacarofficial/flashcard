@@ -1,10 +1,8 @@
-import BrowseScreen from './BrowseScreen.svelte';
-import MaintenanceScreen from './MaintenanceScreen.svelte';
-import ShortcutsScreen from './ShortcutsScreen.svelte';
+// Screens load on first open (v1.0 code splitting): each is its own chunk.
 import type { ScreenModule } from '../types';
 
 export default [
-  { id: 'browse', component: BrowseScreen, routes: ['/browse'] },
-  { id: 'maintenance', component: MaintenanceScreen, routes: ['/maintenance'] },
-  { id: 'shortcuts', component: ShortcutsScreen, routes: ['/shortcuts'] },
+  { id: 'browse', load: () => import('./BrowseScreen.svelte'), routes: ['/browse'] },
+  { id: 'maintenance', load: () => import('./MaintenanceScreen.svelte'), routes: ['/maintenance'] },
+  { id: 'shortcuts', load: () => import('./ShortcutsScreen.svelte'), routes: ['/shortcuts'] },
 ] satisfies ScreenModule;

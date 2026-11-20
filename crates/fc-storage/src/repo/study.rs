@@ -94,6 +94,38 @@ pub struct StudyCardFilter {
     pub attributes: Vec<(AttributeDefId, Vec<String>)>,
     /// Also suspended cards.
     pub include_suspended: bool,
+    /// Cards that are not new only when due before this time (or without a due time):
+    /// today's queue of a due-only session (v1.0: read through the due indexes instead of
+    /// every card of the collection).
+    pub due_before: Option<Timestamp>,
+    /// New cards: only the first `n` in creation order (`newest`: the last `n`), ties by id.
+    /// `None` = every new card.
+    pub new_first: Option<NewCardsFirst>,
+}
+
+/// [`StudyCardFilter::new_first`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NewCardsFirst {
+    /// How many.
+    pub n: u32,
+    /// Newest first instead of oldest first.
+    pub newest: bool,
+}
+
+/// One entry of a session's queue (`session_queue`, v1.0): the queue is stored as rows so an
+/// answer writes the entries it changed, not the whole queue. `seq` orders the entries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionQueueRow {
+    /// Position key (ascending = queue order).
+    pub seq: i64,
+    /// Card.
+    pub card_id: CardId,
+    /// Its note.
+    pub note_id: NoteId,
+    /// Queue category (`learning`, `review`, `new`).
+    pub kind: String,
+    /// Not before (intraday learning).
+    pub due: Option<Timestamp>,
 }
 
 /// Study reads.
@@ -111,6 +143,8 @@ pub trait StudyRead {
     /// Reviews written at or after `since` with `mode`, oldest first (daily limits).
     fn review_logs_since(&self, since: Timestamp, mode: &str)
         -> StorageResult<Vec<ReviewLogRecord>>;
+    /// The queue rows of a session, in `seq` order.
+    fn session_queue(&self, session: SessionId) -> StorageResult<Vec<SessionQueueRow>>;
 }
 
 /// Study writes.
@@ -121,4 +155,13 @@ pub trait StudyWrite: StudyRead {
     fn insert_review_log(&mut self, review: &ReviewLogRecord) -> StorageResult<()>;
     /// Deletes a review (undo of the answer that wrote it). Returns whether it existed.
     fn delete_review_log(&mut self, id: ReviewLogId) -> StorageResult<bool>;
+    /// Changes a session's queue rows: deletes the rows at `remove` (seqs), then inserts
+    /// `add` (`clear`: deletes every row of the session first).
+    fn edit_session_queue(
+        &mut self,
+        session: SessionId,
+        clear: bool,
+        remove: &[i64],
+        add: &[SessionQueueRow],
+    ) -> StorageResult<()>;
 }

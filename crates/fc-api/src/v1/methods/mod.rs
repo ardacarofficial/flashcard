@@ -103,4 +103,5 @@ domains! {
     onboarding,
     session,
     reminders,
+    themes,
 }

@@ -59,4 +59,5 @@ modules! {
     onboarding,
     reminders,
     profiles,
+    themes,
 }

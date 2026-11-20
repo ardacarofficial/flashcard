@@ -33,6 +33,8 @@ pub mod smoke;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod kill_tests;
 
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::registry::Registry;

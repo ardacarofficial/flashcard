@@ -7,7 +7,8 @@ use super::{Mode, SqliteTx, WriteMode};
 use crate::error::StorageResult;
 use crate::repo::PRACTICE_MODE_SQL;
 use crate::repo::{
-    ExamRecord, GoalRecord, ReviewLogMark, ReviewLogRecord, StatsCacheRecord, StatsRead, StatsWrite,
+    ExamRecord, GoalRecord, ReviewLogMark, ReviewLogRecord, StatsCacheRecord, StatsRead,
+    StatsReviewRow, StatsWrite,
 };
 use fc_core::{CardId, ExamId, GoalId, Timestamp};
 use rusqlite::{params, Row};
@@ -64,6 +65,62 @@ impl<M: Mode> StatsRead for SqliteTx<'_, M> {
         )
     }
 
+    fn for_each_stats_review(
+        &self,
+        after_seq: i64,
+        cards: Option<&[CardId]>,
+        f: &mut dyn FnMut(i64, &ReviewLogRecord),
+    ) -> StorageResult<()> {
+        let sql = format!(
+            "SELECT {REVIEW_COLS}, rowid FROM review_log
+             WHERE rowid > ?1 AND NOT {PRACTICE_MODE_SQL}
+               AND (?2 IS NULL OR card_id IN (SELECT value FROM json_each(?2)))
+             ORDER BY rowid"
+        );
+        let mut run = || -> rusqlite::Result<()> {
+            let mut stmt = self.conn().prepare_cached(&sql)?;
+            let mut rows = stmt.query(params![after_seq, cards.map(super::json_list)])?;
+            while let Some(r) = rows.next()? {
+                f(r.get::<_, i64>(15)?, &review_row(r)?);
+            }
+            Ok(())
+        };
+        run().map_err(|e| crate::error::in_table(e, REVIEWS))
+    }
+
+    fn for_each_stats_review_row(
+        &self,
+        after_seq: i64,
+        cards: Option<&[CardId]>,
+        f: &mut dyn FnMut(i64, &StatsReviewRow),
+    ) -> StorageResult<()> {
+        let sql = format!(
+            "SELECT card_id, rating, state_before, elapsed_days, duration_ms,
+                    mode = 'imported', created_at, rowid FROM review_log
+             WHERE rowid > ?1 AND NOT {PRACTICE_MODE_SQL}
+               AND (?2 IS NULL OR card_id IN (SELECT value FROM json_each(?2)))
+             ORDER BY rowid"
+        );
+        let mut run = || -> rusqlite::Result<()> {
+            let mut stmt = self.conn().prepare_cached(&sql)?;
+            let mut rows = stmt.query(params![after_seq, cards.map(super::json_list)])?;
+            while let Some(r) = rows.next()? {
+                let row = StatsReviewRow {
+                    card_id: id(r, 0)?,
+                    rating: super::enum_col(r, 1)?,
+                    state_before: super::enum_col(r, 2)?,
+                    elapsed_days: r.get(3)?,
+                    duration_ms: r.get(4)?,
+                    imported: r.get(5)?,
+                    created_at: ts(r, 6)?,
+                };
+                f(r.get::<_, i64>(7)?, &row);
+            }
+            Ok(())
+        };
+        run().map_err(|e| crate::error::in_table(e, REVIEWS))
+    }
+
     fn review_log_mark(&self) -> StorageResult<ReviewLogMark> {
         let max_seq = one(
             self.conn(),
@@ -99,13 +156,13 @@ impl<M: Mode> StatsRead for SqliteTx<'_, M> {
     }
 
     fn stats_cache(&self, calendar: &str) -> StorageResult<Option<StatsCacheRecord>> {
-        let Some((upto_seq, row_count, generation, updated_at)) = one(
+        let Some((upto_seq, row_count, generation, updated_at, fingerprint)) = one(
             self.conn(),
             META,
-            "SELECT upto_seq, row_count, generation, updated_at FROM stats_cache_meta
-             WHERE calendar = ?1",
+            "SELECT upto_seq, row_count, generation, updated_at, fingerprint
+             FROM stats_cache_meta WHERE calendar = ?1",
             [calendar],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, ts(r, 3)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, ts(r, 3)?, r.get(4)?)),
         )?
         else {
             return Ok(None);
@@ -124,6 +181,7 @@ impl<M: Mode> StatsRead for SqliteTx<'_, M> {
             generation,
             days,
             updated_at,
+            fingerprint,
         }))
     }
 
@@ -139,6 +197,31 @@ impl<M: Mode> StatsRead for SqliteTx<'_, M> {
              ORDER BY c.due",
             params![from.0, to.0],
             |r| ts(r, 0),
+        )
+    }
+
+    fn due_counts_by_day(
+        &self,
+        from: Timestamp,
+        to: Timestamp,
+        shift_ms: i64,
+    ) -> StorageResult<Vec<(i64, u32)>> {
+        // Floor division (`div_euclid`) in SQL: SQLite's `/` truncates toward zero.
+        all(
+            self.conn(),
+            "cards",
+            "SELECT d, count(*) FROM (
+                 SELECT ((c.due + ?3) - (((c.due + ?3) % 86400000) + 86400000) % 86400000)
+                        / 86400000 AS d
+                 FROM cards c INDEXED BY cards_due_load
+                 WHERE c.due >= ?1 AND c.due < ?2
+                   AND c.state IN ('learning', 'review', 'relearning')
+                   AND c.suspended = 0 AND c.deleted_at IS NULL
+                   AND c.note_id NOT IN
+                       (SELECT id FROM notes INDEXED BY notes_trashed WHERE deleted_at IS NOT NULL)
+             ) GROUP BY d ORDER BY d",
+            params![from.0, to.0, shift_ms],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, u32>(1)?)),
         )
     }
 
@@ -202,17 +285,19 @@ impl StatsWrite for SqliteTx<'_, WriteMode> {
         exec(
             self.conn(),
             META,
-            "INSERT INTO stats_cache_meta (calendar, upto_seq, row_count, generation, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO stats_cache_meta
+                 (calendar, upto_seq, row_count, generation, updated_at, fingerprint)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(calendar) DO UPDATE SET upto_seq = excluded.upto_seq,
                  row_count = excluded.row_count, generation = excluded.generation,
-                 updated_at = excluded.updated_at",
+                 updated_at = excluded.updated_at, fingerprint = excluded.fingerprint",
             params![
                 rec.calendar,
                 rec.upto_seq,
                 rec.row_count,
                 rec.generation,
-                rec.updated_at.0
+                rec.updated_at.0,
+                rec.fingerprint
             ],
         )?;
         Ok(())

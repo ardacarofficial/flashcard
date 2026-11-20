@@ -120,6 +120,10 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         | "browse.purge_trash" => Refused(UNBOUNDED),
         "palette.list" | "modules.list" | "commands.list" => Reads(MODULES),
         "shortcuts.list" | "settings.schema" | "settings.get" => Reads(SETTINGS),
+        // v1.0: the app's colour scheme, preset and accent (app settings, nothing else).
+        "themes.current" | "themes.presets" => Reads(SETTINGS),
+        // Changing the look is the user's (plugins have no theme contribution point either).
+        "themes.set" => Refused("the app's look is the user's"),
         "bulk.move_cards" | "bulk.set_suspended" | "bulk.set_buried" | "bulk.set_flag"
         | "bulk.reset_progress" | "flags.list" | "flags.update" | "cards.set_flag"
         | "cards.set_flags" | "cards.set_user_note" | "cards.meta" => Reads(CARDS),
@@ -980,6 +984,18 @@ mod tests {
         for m in ["onboarding.apply", "onboarding.skip", "starter.install"] {
             assert!(matches!(exposure(m), Exposure::Refused(_)), "{m}");
         }
+    }
+
+    #[test]
+    fn domain_themes() {
+        // v1.0 round 2 (themes): reading the scheme/preset/accent is a settings read; setting
+        // it is refused and unhookable. No new events (changes arrive as `setting_changed`).
+        for m in ["themes.current", "themes.presets"] {
+            assert_eq!(exposure(m), Exposure::Reads(SETTINGS), "{m}");
+        }
+        assert!(matches!(exposure("themes.set"), Exposure::Refused(_)));
+        let d = exposure("themes.current").domains();
+        domain_case("settings", d, json!({ "preset": "SECRET", "light": {}, "dark": {} }), "SECRET");
     }
 
     #[test]

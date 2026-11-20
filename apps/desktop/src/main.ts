@@ -7,6 +7,7 @@ import { theme } from './lib/theme/theme.svelte';
 import { i18n } from './lib/i18n/index.svelte';
 
 theme.init();
+theme.start();
 document.documentElement.lang = i18n.locale;
 
 const target = document.getElementById('app');

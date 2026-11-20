@@ -188,7 +188,7 @@ pub(crate) fn init_state(
 /// `study.answer` hook: learn cards are judged, not rated (`modes.learn.answer`); a timed
 /// card past its time is answered by `modes.timed.expire` (`CONFLICT_TIME_UP`).
 pub(crate) fn check_button_answer(ctx: &CommandCtx<'_>, req: &AnswerCard) -> AppResult<()> {
-    let session = Session::load(ctx.reads(), req.session_id)?;
+    let session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
     if session.config.kind == StudyKind::Learn {
         return Err(session_mode(
             "kind",

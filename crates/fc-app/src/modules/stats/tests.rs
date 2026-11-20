@@ -469,6 +469,120 @@ pub fn breakdown_by_classification(f: &Factory) {
     assert_eq!(e.code, ErrorCode::ValidationBreakdownAttribute);
 }
 
+/// The cached and the recomputed breakdown agree (all time and the last 7 days); returns
+/// whether the cache was used.
+fn breakdown_agrees(t: &T, req: &StatsBreakdownRequest) -> bool {
+    let tx = t.store.read().unwrap();
+    let ctx = crate::handler::QueryCtx {
+        tx: &*tx,
+        now: fc_core::time::Clock::now(&*t.clock),
+        locale: fc_core::i18n::Locale::default(),
+        registry: t.app.registry(),
+    };
+    for days in [None, Some(7)] {
+        let req = StatsBreakdownRequest { days, ..req.clone() };
+        let cached = super::breakdown::breakdown_with(&req, &ctx, true).unwrap();
+        let fresh = super::breakdown::breakdown_with(&req, &ctx, false).unwrap();
+        assert_eq!(cached, fresh, "cache + tail must equal a recomputation");
+    }
+    super::breakdown::uses_cache(req, &ctx).unwrap()
+}
+
+/// v1.0: the breakdown's day counts are cached per classification and equal a
+/// recomputation; classification edits, trashed cards, removed reviews and other scopes
+/// never use a stale cache.
+pub fn breakdown_cache_equals_recomputation(f: &Factory) {
+    use fc_api::v1::attributes::SetAttributeValues;
+    use fc_core::attribute::EntityRef;
+    let t = T::new(f);
+    let d = t.deck("Kelimeler");
+    let def = t.ok::<AttributesDefine>(DefineAttribute {
+        scope_deck_id: None,
+        key: None,
+        name: "Konu".into(),
+        kind: AttributeKind::Enum,
+        target: None,
+        required: None,
+        options: ["isim", "fiil"]
+            .iter()
+            .map(|l| NewAttributeOption {
+                label: (*l).into(),
+                color: None,
+            })
+            .collect(),
+    });
+    let (noun, verb) = (def.options[0].id, def.options[1].id);
+    let cards: Vec<CardId> = (0..6)
+        .map(|i| t.note(d.id, &format!("w{i}"), (i < 4).then_some((def.id, if i % 2 == 0 { noun } else { verb }))))
+        .collect();
+    let req = StatsBreakdownRequest {
+        scope: StatsScope::default(),
+        attr_id: def.id,
+        tz_offset_mins: Some(0),
+        days: None,
+    };
+    t.study(StudyMode::Scheduled, None, 3);
+    assert!(!breakdown_agrees(&t, &req), "nothing cached yet");
+    t.refresh(0);
+    assert!(breakdown_agrees(&t, &req), "valid cache is used");
+    // Appended reviews are folded on top of the cache (SQLite).
+    for day in 1..4 {
+        t.day(day);
+        t.study(StudyMode::Scheduled, None, 2);
+        assert_eq!(breakdown_agrees(&t, &req), t.incremental, "day {day}");
+    }
+    // A classification edit (a card changes value) changes the card sets.
+    t.refresh(0);
+    assert!(breakdown_agrees(&t, &req));
+    t.ok::<AttributesValuesSet>(SetAttributeValues {
+        entity: EntityRef::Note(t.card(cards[0]).note_id),
+        values: vec![AttributeAssignment {
+            attr_id: def.id,
+            value: Some(AttributeValue::Choice(verb)),
+        }],
+    });
+    assert!(!breakdown_agrees(&t, &req), "edited values: not cached");
+    t.refresh(0);
+    assert!(breakdown_agrees(&t, &req));
+    // A trashed note leaves the breakdown.
+    t.ok::<NotesDelete>(NoteIds {
+        ids: vec![t.card(cards[1]).note_id],
+    });
+    assert!(!breakdown_agrees(&t, &req), "trashed card: not cached");
+    t.refresh(0);
+    assert!(breakdown_agrees(&t, &req));
+    // A removed review (undo of an answer) invalidates the cache.
+    t.day(9);
+    let s = t.start(StudyMode::Scheduled, None);
+    let c = s.current.clone().expect("cards due by day 9");
+    t.ok::<StudyAnswer>(AnswerCard {
+        session_id: s.id,
+        card_id: c.card_id,
+        rating: Rating::Good,
+        duration_ms: 3_000,
+        reveal_ms: None,
+    });
+    t.refresh(0);
+    t.undo();
+    assert!(!breakdown_agrees(&t, &req), "a removed row invalidates the cache");
+    // Another scope or calendar is recomputed.
+    t.refresh(0);
+    assert!(breakdown_agrees(&t, &req));
+    let scoped = StatsBreakdownRequest {
+        scope: StatsScope {
+            query: Some("w2".into()),
+            ..StatsScope::default()
+        },
+        ..req.clone()
+    };
+    assert!(!breakdown_agrees(&t, &scoped));
+    let other = StatsBreakdownRequest {
+        tz_offset_mins: Some(180),
+        ..req.clone()
+    };
+    assert!(!breakdown_agrees(&t, &other));
+}
+
 /// Leeches and deck report cards.
 pub fn leeches_and_report_cards(f: &Factory) {
     let t = T::new(f);
@@ -1091,6 +1205,7 @@ macro_rules! v06_suite {
         v06_suite!(@tests $factory;
             cache_equals_recomputation,
             breakdown_by_classification,
+            breakdown_cache_equals_recomputation,
             leeches_and_report_cards,
             target_retention_follows_presets,
             apply_to_leeches_covers_every_leech,

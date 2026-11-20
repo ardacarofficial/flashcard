@@ -34,6 +34,7 @@ pub mod settings;
 pub mod stats;
 pub mod study;
 pub mod tags;
+pub mod themes;
 pub mod tts;
 
 pub use methods::catalog;

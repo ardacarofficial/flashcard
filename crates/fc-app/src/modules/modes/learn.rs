@@ -198,7 +198,7 @@ fn grade_dto(g: Grade) -> AnswerGrade {
 }
 
 fn answer(req: LearnAnswer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<LearnAnswerResult>> {
-    let session = Session::load(ctx.reads(), req.session_id)?;
+    let session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
     let learn = learn_state(&session)?.clone();
     session.require_open()?;
     session.require_available(req.card_id, ctx.now)?;

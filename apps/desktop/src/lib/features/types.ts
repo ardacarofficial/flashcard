@@ -14,14 +14,16 @@ export interface ScreenCtx {
   route?: string | null;
 }
 
+/** A screen component (every screen takes the shell's context). */
+export type ScreenComponent = Component<{ ctx: ScreenCtx }>;
+
 /**
- * One screen a feature contributes. It becomes reachable when an enabled module's `ui`
+ * Base fields of a screen. It becomes reachable when an enabled module's `ui`
  * contribution points at it: a `main_menu` item whose `route` is in `routes`, or (for
  * `slot`) any contribution of that slot, which yields a single menu entry (`label_key`).
  */
-export interface ScreenDef {
+interface ScreenBase {
   id: string;
-  component: Component<{ ctx: ScreenCtx }>;
   /** `main_menu` routes that open this screen; a trailing `/*` matches a whole prefix. */
   routes?: string[];
   /** Slot whose mere presence adds one menu entry for this screen (e.g. `settings_page`). */
@@ -29,6 +31,17 @@ export interface ScreenDef {
   /** Shell draws the deck picker above the screen. */
   deckPicker?: boolean;
 }
+
+/**
+ * One screen a feature contributes, either bundled with the shell (`component`) or loaded
+ * on first open (`load`, its own chunk — v1.0 code splitting). Only the first screen the
+ * shell shows should be eager; everything else uses `load: () => import('./X.svelte')`.
+ */
+export type ScreenDef = ScreenBase &
+  (
+    | { component: ScreenComponent; load?: never }
+    | { load: () => Promise<{ default: ScreenComponent }>; component?: never }
+  );
 
 /** A feature's frontend registration: `features/<feature>/screen.ts` default-exports one. */
 export type ScreenModule = ScreenDef[];

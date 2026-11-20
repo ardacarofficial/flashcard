@@ -28,5 +28,13 @@
       "deck_exists": "Bu adda bir deste zaten var.",
       "deck_cycle": "Bir deste kendi içine taşınamaz."
     }
+  },
+  "settings": {
+    "decks": {
+      "include_subdecks": {
+        "label": "Alt desteleri dahil et",
+        "description": "Bir desteyi çalışırken alt destelerini de çalış."
+      }
+    }
   }
 }

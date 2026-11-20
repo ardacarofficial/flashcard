@@ -24,8 +24,10 @@
     onunlock?: () => void;
     /** Desktop shell (held links); tests pass a fake. */
     shell?: Shell;
+    /** Told whenever the lock state changes: the shell mounts no screen (lazy or bundled) while locked. */
+    onlockchange?: (locked: boolean) => void;
   }
-  let { onunlock, shell = defaultShell() }: Props = $props();
+  let { onunlock, shell = defaultShell(), onlockchange }: Props = $props();
 
   const ACTIVITY_EVERY_MS = 30_000;
 
@@ -39,6 +41,7 @@
   let lastActivity = 0;
 
   const locked = $derived(lock?.available === true && lock.locked);
+  $effect(() => onlockchange?.(locked));
 
   async function refresh() {
     try {

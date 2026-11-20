@@ -1,8 +1,7 @@
-import InboxScreen from './InboxScreen.svelte';
-import LocalApiScreen from './LocalApiScreen.svelte';
+// Screens load on first open (v1.0 code splitting): each is its own chunk.
 import type { ScreenModule } from '../types';
 
 export default [
-  { id: 'inbox', component: InboxScreen, routes: ['/inbox'] },
-  { id: 'local_api', component: LocalApiScreen, routes: ['/local-api'] },
+  { id: 'inbox', load: () => import('./InboxScreen.svelte'), routes: ['/inbox'] },
+  { id: 'local_api', load: () => import('./LocalApiScreen.svelte'), routes: ['/local-api'] },
 ] satisfies ScreenModule;
