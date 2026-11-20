@@ -4,6 +4,16 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased] — Faz 2 entegrasyonu (v0.2–v0.5 birleşik, son inceleme bekliyor) + Faz 3 izleri
 
+### v0.10 Okuma modu, altyazı ve artımlı okuma — okuma izi (`feat/v0.10-reading`)
+- **Okuma modu (docs/02 §24):** metin yapıştır, dosya (`.txt`/`.html`/`.pdf`, her kodlama) ya da web sayfası aç; kelimeler LingQ tarzı renklenir — **yeni** (mavi), **öğreniliyor** (sarı), **biliniyor**, **yok sayıldı** (gri). Durum destedeki kartların FSRS verisinden gelir: olgun kart (aralık ≥ 21 gün, istatistikle aynı tanım) = biliniyor; kartı olmayan kelimede "Biliyorum" / "Yok say" işaretleri (geri alınabilir, toplu "tüm yeni kelimeleri bildim"). "Bu metnin %87'sini biliyorsun".
+- **Lemmatizasyon:** `run/running/ran` ve `ev/evlerimizden` aynı kelime; yerleşik İngilizce ve Türkçe kural tabanlı lemmatizer'lar, diğer diller küçük harf (takılabilir `Lemmatizer` arayüzü). Kartın kelimesi `word` alanından (yoksa sıralama alanından) okunur; sayılan kartlar ayarla daraltılabilir.
+- **Kart yap:** tıklanan kelimeden **Kelime kartı** (cümle örnek olarak, kelime kalın) ya da yeni yerleşik **Cümle kartı** (cümle + çeviri + hedef kelime + kaynak/zaman damgası).
+- **Altyazıdan kart ve cümle madenciliği (§25):** `.srt`/`.vtt` yüklenir (etiketler, BOM, Windows-1254, VTT başlık/NOTE/STYLE), satırlar zamanlarıyla listelenir ve aynı motorla renklenir; video verilirse **ffmpeg** ile satırın ses kesiti (mp3) ve ekran görüntüsü (jpeg) karta eklenir (iptal edilebilir iş, ayarlanabilir ffmpeg yolu).
+- **Artımlı okuma (§26):** okuma kuyruğu (öncelikli, aralıklı: "bugünlük bu kadar" → 1, 2, 4… gün), erteleme, seçili parçadan **özüt** (kuyruğa yüksek öncelikle girer) ve özütten **cloze** kartı.
+- **Şema:** migration `0900_reading` (`reading_items`, `word_marks`); çöp temizliği okuma öğelerini de siler. API `reading.*` (UTF-16 ofsetler), olaylar `reading_items_changed`, `word_marks_changed`; hata kodları `error_codes/reading.in`. docs/10 §24.
+- **Masaüstü:** "Okuma" ekranı (kitaplık, okuma kuyruğu, okuyucu, kelime paneli), TR/EN.
+- **Testler:** `fc-core::reading` (durum kuralı, özet, cümleler, aralıklar, cloze), `fc-providers::lemma`, `fc-interop::subtitle`, depolama `0900` migration + gidiş-dönüş, `fc-app` `modules/reading/tests.rs` (bellek + SQLite: FSRS tutarlılığı, Türkçe + işaret geri al, öğe/kuyruk/özüt/cloze, kartlar, `.srt` dosyasından cümle kartı, sahte ffmpeg ile kesit + hata yolları, modül anahtarı), `reading.test.ts`.
+
 ### Faz 3 entegrasyonu — tur 3 (+ v0.8 AI, `feat/phase3-integration`)
 - v0.8 AI, MCP, istatistik ve Faz 2 geçmiş kurallarıyla birleşti: AI'nin eklediği/düzenlediği notlar replay listesindeki sıradan geri al adımlarıdır (`ai.usage.record` defter satırı, replay edilemez); AI iş şeridi içe/dışa aktarma ve optimizer işleriyle yan yana çalışır, iptal edilebilir; MCP hiçbir `ai.*` metoduna (okumalar ve `batch.execute` içi dahil) erişemez, anahtar görmez; seviyeye duyarlı üretimin sınıflandırmaları istatistik kırılımlarında görünür, AI kullanımı yalnız AI ekranında. Menüde AI, Hedefler'den sonra. Testler `modules/ai/tests_phase3.rs`. docs/10 §22–§23.
 
