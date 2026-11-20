@@ -54,6 +54,10 @@ suite!(
     set_classification_previews_until_confirmed,
     writes_switch_read_only_flag_and_module_switch,
     mcp_actor_holds_only_curated_permissions,
+    only_user_and_cli_may_register_servers,
+    registrations_are_approved_by_the_user,
+    set_classification_refuses_selections_over_the_limit,
+    foreign_commits_are_noticed_and_announced,
 );
 
 // ------------------------------------------------------------------ helpers
@@ -421,12 +425,42 @@ pub(super) fn set_classification_previews_until_confirmed(f: Factory) {
     assert_eq!(preview["matched_notes"], 3);
     assert_eq!(total(&t, "seviye:C1"), 0, "a preview changes nothing");
 
+    let token = preview["confirm_token"].as_str().unwrap().to_owned();
+
+    // `confirm: true` straight away (no preview) or with a made-up token changes nothing.
+    let mut blind = args.clone();
+    blind["confirm"] = json!(true);
+    assert_eq!(tool_err(&t, "set_classification", blind.clone()).code, ErrorCode::ValidationInvalidParams);
+    blind["confirm_token"] = json!("0".repeat(32));
+    assert_eq!(tool_err(&t, "set_classification", blind).code, ErrorCode::ValidationInvalidParams);
+    assert_eq!(total(&t, "seviye:C1"), 0);
+
+    // The token is for this exact selection and value…
+    let mut other = args.clone();
+    other["value"] = json!("B2");
+    other["confirm"] = json!(true);
+    other["confirm_token"] = json!(token);
+    assert_eq!(tool_err(&t, "set_classification", other).code, ErrorCode::ValidationInvalidParams);
+
+    // …and breaks when the matches change between preview and apply.
+    tool(&t, "add_notes", json!({ "deck": "İngilizce", "notes": [
+        { "fields": { "front": "late", "back": "x" }, "tags": ["t"] } ] }));
+    let mut stale = args.clone();
+    stale["confirm"] = json!(true);
+    stale["confirm_token"] = json!(token);
+    assert_eq!(tool_err(&t, "set_classification", stale).code, ErrorCode::ValidationInvalidParams);
+    assert_eq!(total(&t, "seviye:C1"), 0);
+    let preview = tool(&t, "set_classification", args.clone());
+    assert_eq!(preview["matched_notes"], 4);
+    let token = preview["confirm_token"].as_str().unwrap().to_owned();
+
     let mut confirmed = args.clone();
     confirmed["confirm"] = json!(true);
+    confirmed["confirm_token"] = json!(token);
     let done = tool(&t, "set_classification", confirmed);
     assert_eq!(done["applied"], true);
-    assert_eq!(done["changed"], 3);
-    assert_eq!(total(&t, "seviye:C1"), 3);
+    assert_eq!(done["changed"], 4);
+    assert_eq!(total(&t, "seviye:C1"), 4);
     let top = newest(&t, 1);
     assert_eq!(top[0].command, "v1.bulk.set_attribute");
     assert_eq!(top[0].actor, Actor::Mcp(CLIENT.into()));
@@ -530,6 +564,12 @@ pub(super) fn mcp_actor_holds_only_curated_permissions(f: Factory) {
         (OplogUndo::NAME, json!({})),
         (McpServersAdd::NAME, json!({ "name": "evil", "transport": "stdio", "command": "sh" })),
         (DecksRestoreAffected::NAME, json!({})),
+        // Held via `notes:write`/`decks:write`, but no tool calls them: deleting is out.
+        (NotesDelete::NAME, json!({ "ids": [] })),
+        (DecksDelete::NAME, json!({ "id": "00000000-0000-0000-0000-000000000000" })),
+        (BrowsePurgeTrash::NAME, json!({})),
+        (PresetsDelete::NAME, json!({})),
+        (AttributesDelete::NAME, json!({})),
     ];
     for (method, params) in denied {
         let e = t
@@ -550,4 +590,170 @@ pub(super) fn mcp_actor_holds_only_curated_permissions(f: Factory) {
         .unwrap_err();
     assert_eq!(e.code, ErrorCode::PermissionDenied);
     assert!(t.app.is_module_enabled(super::ID));
+
+    // Defence in depth: whatever permission a method needs, none of the catalog's methods
+    // deletes anything.
+    for spec in catalog() {
+        for name in spec.methods {
+            assert!(
+                !name.contains("delete") && !name.contains("purge"),
+                "{}: {name}",
+                spec.name
+            );
+        }
+    }
+}
+
+/// `mcp:write` (registering programs the app will launch) is for the user and the CLI only.
+pub(super) fn only_user_and_cli_may_register_servers(f: Factory) {
+    let t = TestApp::new(f());
+    let add = json!({ "name": "evil", "transport": "stdio", "command": "sh", "args": ["-c", "x"] });
+    for actor in [
+        Actor::Plugin("p".into()),
+        Actor::LocalApi("l".into()),
+        Actor::Automation("a".into()),
+        Actor::Mcp("m".into()),
+    ] {
+        let e = t.app.invoke("v1.mcp.servers.add", add.clone(), &actor).unwrap_err();
+        assert_eq!(e.code, ErrorCode::PermissionDenied, "{actor:?}");
+    }
+    assert!(t.ok::<McpServersList>(Empty {}).servers.is_empty());
+    for actor in [Actor::User, Actor::Cli] {
+        let mut a = add.clone();
+        a["name"] = json!(format!("{actor:?}"));
+        t.app.invoke("v1.mcp.servers.add", a, &actor).unwrap();
+    }
+    // Reading stays open to plugins.
+    t.app
+        .invoke("v1.mcp.servers.list", json!({}), &Actor::Plugin("p".into()))
+        .unwrap();
+}
+
+/// A registration counts as approved only while it still is exactly what the user saved.
+pub(super) fn registrations_are_approved_by_the_user(f: Factory) {
+    let t = TestApp::new(f());
+    let files = t.ok::<McpServersAdd>(AddMcpServer {
+        name: "Files".into(),
+        transport: McpTransport::Stdio,
+        command: Some("npx".into()),
+        args: vec!["-y".into(), "pkg".into()],
+        url: None,
+        enabled: None,
+    });
+    assert!(files.approved, "registering is the user's approval");
+    let get = || t.ok::<McpServersList>(Empty {}).servers.remove(0);
+
+    // A row written behind the commands' back (a restored backup, a hand edit of the
+    // database): stale approval, or none at all, is not approval.
+    let mut rec = t.store.read().unwrap().get_mcp_server(files.id).unwrap().unwrap();
+    rec.command = "sh".into();
+    let mut tx = t.store.write().unwrap();
+    tx.upsert_mcp_server(&rec).unwrap();
+    tx.commit().unwrap();
+    assert!(!get().approved, "the command changed after the approval");
+    rec.approved = None;
+    let mut tx = t.store.write().unwrap();
+    tx.upsert_mcp_server(&rec).unwrap();
+    tx.commit().unwrap();
+    assert!(!get().approved);
+
+    // Saving it again in the app is the new approval; undo puts the exact old state back.
+    let saved = t.ok::<McpServersUpdate>(UpdateMcpServer {
+        id: files.id,
+        name: "Files".into(),
+        transport: McpTransport::Stdio,
+        command: "sh".into(),
+        args: vec![],
+        url: None,
+        enabled: true,
+    });
+    assert!(saved.approved && get().approved);
+    undo(&t);
+    assert!(!get().approved, "undo does not approve what was never approved");
+    redo(&t);
+    assert!(get().approved);
+}
+
+pub(super) fn set_classification_refuses_selections_over_the_limit(f: Factory) {
+    let t = TestApp::new(f());
+    english(&t);
+    let limit = super::tools::MAX_BULK_CARDS;
+    let per = super::tools::MAX_NOTES_PER_CALL;
+    for chunk in 0..=(limit / per) {
+        let notes: Vec<Value> = (0..per)
+            .map(|i| json!({ "fields": { "front": format!("w{chunk}-{i}"), "back": "x" }, "tags": ["big"] }))
+            .collect();
+        tool(&t, "add_notes", json!({ "deck": "İngilizce", "notes": notes }));
+    }
+    let args = json!({ "query": "tag:big", "classification": "seviye", "value": "A2" });
+    let preview = tool(&t, "set_classification", args.clone());
+    assert!(preview["matched_cards"].as_u64().unwrap() > limit as u64);
+    assert_eq!(preview["applied"], false);
+    assert_eq!(preview["limit"], limit);
+    assert!(preview.get("confirm_token").is_none(), "nothing to confirm");
+    let mut confirmed = args;
+    confirmed["confirm"] = json!(true);
+    confirmed["confirm_token"] = json!("x");
+    assert_eq!(
+        tool_err(&t, "set_classification", confirmed).code,
+        ErrorCode::ValidationInvalidParams
+    );
+    assert_eq!(total(&t, "seviye:A2"), 0);
+}
+
+/// The desktop's screens go stale when another process (here: an MCP client) commits; the
+/// oplog position tells, and `data_changed` makes screens refetch. Own commits stay quiet.
+pub(super) fn foreign_commits_are_noticed_and_announced(f: Factory) {
+    use fc_api::v1::events::DomainEvent;
+    let t = TestApp::new(f());
+    let changed = |t: &TestApp| {
+        t.take_events()
+            .iter()
+            .filter(|e| matches!(e.event, DomainEvent::DataChanged))
+            .count()
+    };
+    assert!(!t.app.poll_external_changes().unwrap());
+    t.take_events();
+
+    // The app's own commands (actor user) are not news, nor is an idle poll.
+    deck(&t, "Mine");
+    assert!(!t.app.poll_external_changes().unwrap());
+    assert!(!t.app.poll_external_changes().unwrap());
+    assert_eq!(changed(&t), 0);
+
+    // An MCP client writes (as another process would): one announcement, then quiet again.
+    tool(&t, "create_deck", json!({ "path": "Claude" }));
+    assert!(t.app.poll_external_changes().unwrap());
+    assert_eq!(changed(&t), 1);
+    assert!(!t.app.poll_external_changes().unwrap());
+    assert_eq!(changed(&t), 0);
+
+    // Mixed: own and foreign commits since the last poll still announce once.
+    deck(&t, "Mine 2");
+    tool(&t, "create_deck", json!({ "path": "Claude 2" }));
+    deck(&t, "Mine 3");
+    assert!(t.app.poll_external_changes().unwrap());
+    assert_eq!(changed(&t), 1);
+}
+
+#[test]
+fn a_second_process_on_the_same_file_is_noticed() {
+    use fc_api::v1::events::DomainEvent;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("collection.db");
+    let desktop = TestApp::new(Arc::new(SqliteStore::open(&path).unwrap()));
+    assert!(!desktop.app.poll_external_changes().unwrap());
+    desktop.take_events();
+
+    // `fc mcp serve` is its own process with its own connection to the same file.
+    let server = TestApp::new(Arc::new(SqliteStore::open_current(&path).unwrap()));
+    tool(&server, "create_deck", json!({ "path": "From Claude" }));
+
+    assert!(desktop.app.poll_external_changes().unwrap());
+    assert!(desktop
+        .take_events()
+        .iter()
+        .any(|e| matches!(e.event, DomainEvent::DataChanged)));
+    let decks = desktop.ok::<DecksList>(Empty {}).decks;
+    assert!(decks.iter().any(|d| d.path == "From Claude"));
 }

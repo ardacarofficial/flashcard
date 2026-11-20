@@ -157,7 +157,7 @@
 
   onMount(() => {
     void load();
-    const unsub = api.on(['setting_changed', 'module_toggled', 'undone', 'redone'], () => void load());
+    const unsub = api.on(['setting_changed', 'module_toggled', 'undone', 'redone', 'data_changed'], () => void load());
     return () => void unsub.then((u) => u());
   });
 </script>

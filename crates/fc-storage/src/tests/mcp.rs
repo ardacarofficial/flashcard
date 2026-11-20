@@ -18,6 +18,7 @@ fn record(n: u128, name: &str) -> McpServerRecord {
         ],
         url: None,
         enabled: true,
+        approved: Some("[\"stdio\"]".into()),
         created_at: Timestamp(1),
         updated_at: Timestamp(2),
     }
@@ -91,4 +92,70 @@ fn mcp_servers_round_trip_and_names_are_unique() {
     assert!(fx.write(|tx| tx.delete_mcp_server(a.id).unwrap()));
     assert!(!fx.write(|tx| tx.delete_mcp_server(a.id).unwrap()));
     assert_eq!(fx.read(|r| r.list_mcp_servers().unwrap()), vec![b]);
+}
+
+#[test]
+fn migration_0751_adds_approval_and_leaves_old_rows_unapproved() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("collection.db");
+    let before: Vec<_> = MIGRATIONS
+        .iter()
+        .filter(|m| m.version < 751)
+        .copied()
+        .collect();
+    drop(SqliteStore::open_with_migrations(&path, &before).unwrap());
+    // A registration made before approvals existed.
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .execute(
+            "INSERT INTO mcp_servers (id, name, transport, command, args, enabled, created_at, updated_at)
+             VALUES (?1, 'Old', 'stdio', 'npx', '[]', 1, 1, 2)",
+            [McpServerId(u(7)).to_string()],
+        )
+        .unwrap();
+
+    let store = SqliteStore::open(&path).unwrap();
+    let rows = store.read().unwrap().list_mcp_servers().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].approved, None,
+        "nothing was ever approved: the user re-saves it"
+    );
+}
+
+#[test]
+fn open_current_never_migrates_or_creates() {
+    use crate::migrate::pending_versions;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("collection.db");
+    // Missing file: not created.
+    assert!(SqliteStore::open_current(&path).is_err());
+    assert!(!path.exists());
+
+    // Older schema: refused, and left exactly as it was.
+    let before: Vec<_> = MIGRATIONS
+        .iter()
+        .filter(|m| m.version < 750)
+        .copied()
+        .collect();
+    drop(SqliteStore::open_with_migrations(&path, &before).unwrap());
+    let err = SqliteStore::open_current(&path).err().unwrap();
+    assert!(
+        matches!(err, crate::StorageError::NeedsMigration { .. }),
+        "{err:?}"
+    );
+    let mut conn = rusqlite::Connection::open(&path).unwrap();
+    assert!(!pending_versions(&mut conn).unwrap().is_empty());
+    drop(conn);
+    assert_eq!(
+        std::fs::read_dir(dir.path()).unwrap().count(),
+        1,
+        "no snapshot either"
+    );
+
+    // Current schema: opens and works.
+    drop(SqliteStore::open(&path).unwrap());
+    let store = SqliteStore::open_current(&path).unwrap();
+    assert!(store.read().unwrap().list_mcp_servers().unwrap().is_empty());
+    assert!(store.migration_backup().is_none());
 }

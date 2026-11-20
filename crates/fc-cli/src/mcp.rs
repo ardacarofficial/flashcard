@@ -46,7 +46,9 @@ fn runtime() -> Result<tokio::runtime::Runtime, ApiError> {
 }
 
 /// Opens the collection and serves it until the client disconnects. Nothing is printed to
-/// stdout besides the protocol.
+/// stdout besides the protocol. The collection is never migrated here: an older schema is
+/// refused (open the app once to upgrade it), so a stray MCP launch cannot rewrite a database
+/// the app owns.
 pub fn serve(db: &Path, read_only: bool) -> Result<(), ApiError> {
     if !db.is_file() {
         return Err(ApiError::new(
@@ -57,7 +59,7 @@ pub fn serve(db: &Path, read_only: bool) -> Result<(), ApiError> {
             ),
         ));
     }
-    let app = Arc::new(App::open_sqlite(db).map_err(fc_app::AppError::into_api)?);
+    let app = Arc::new(App::open_sqlite_current(db).map_err(fc_app::AppError::into_api)?);
     runtime()?
         .block_on(fc_mcp::serve_stdio(app, read_only))
         .map_err(io)

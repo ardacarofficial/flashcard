@@ -55,6 +55,17 @@ pub enum StorageError {
         /// Highest version this build knows.
         supported: u32,
     },
+    /// The database is older than this build and opening it was asked not to migrate (see
+    /// `SqliteStore::open_current`): open it with the app first.
+    #[error(
+        "database schema {found} is older than {latest} and must be migrated by the app first"
+    )]
+    NeedsMigration {
+        /// Version in the file.
+        found: u32,
+        /// Version of this build.
+        latest: u32,
+    },
     /// Contract exists but the implementation is pending.
     #[error("storage operation {0} not implemented")]
     NotImplemented(&'static str),

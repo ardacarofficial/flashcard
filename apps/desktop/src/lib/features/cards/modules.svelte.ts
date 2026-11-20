@@ -19,7 +19,7 @@ export function trackModules(): void {
   if (started) return;
   started = true;
   void load();
-  void api.on(['module_toggled', 'undone', 'redone'], () => void load());
+  void api.on(['module_toggled', 'undone', 'redone', 'data_changed'], () => void load());
 }
 
 /** Whether module `id` is enabled (unknown modules count as on until loaded). */

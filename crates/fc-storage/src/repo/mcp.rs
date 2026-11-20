@@ -20,6 +20,8 @@ pub struct McpServerRecord {
     pub url: Option<String>,
     /// Enabled.
     pub enabled: bool,
+    /// Launch summary the user approved (`None` = never approved; see migration 0751).
+    pub approved: Option<String>,
     /// Creation time.
     pub created_at: Timestamp,
     /// Last modification time.

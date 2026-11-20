@@ -49,6 +49,7 @@ export default {
           args: transport === 'stdio' ? (args ?? []) : [],
           url: transport === 'http' ? (url ?? null) : null,
           enabled: enabled ?? true,
+          approved: true,
           created_at: t,
           updated_at: t,
         };
@@ -57,7 +58,7 @@ export default {
       },
       'mcp.servers.update': (req) => {
         const s = find(req.id);
-        Object.assign(s, { ...req, updated_at: now() });
+        Object.assign(s, { ...req, approved: true, updated_at: now() });
         return s;
       },
       'mcp.servers.remove': ({ id: sid }) => {

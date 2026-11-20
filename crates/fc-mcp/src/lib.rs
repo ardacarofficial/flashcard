@@ -35,4 +35,7 @@ pub enum McpError {
     /// The external server is not usable over the requested transport.
     #[error("unsupported MCP transport: {0}")]
     Unsupported(String),
+    /// The registration may not be launched (disabled, or the user never approved it).
+    #[error("MCP server not allowed to run: {0}")]
+    NotAllowed(String),
 }

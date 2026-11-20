@@ -65,7 +65,7 @@
 
   // The shell's global undo (Ctrl+Z, palette) or another screen may undo an answer: refresh.
   $effect(() => {
-    const unsub = api.on(['undone', 'redone'], () => {
+    const unsub = api.on(['undone', 'redone', 'data_changed'], () => {
       if (session && !busy) void ctx.guarded(reload);
     });
     return () => void unsub.then((u) => u());
@@ -107,7 +107,7 @@
 
   $effect(() => {
     void loadFlags();
-    const unsub = api.on(['flags_changed', 'module_toggled', 'undone', 'redone'], () => void loadFlags());
+    const unsub = api.on(['flags_changed', 'module_toggled', 'undone', 'redone', 'data_changed'], () => void loadFlags());
     return () => void unsub.then((u) => u());
   });
 

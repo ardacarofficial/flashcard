@@ -80,8 +80,20 @@ impl McpClient {
         Self::connect(transport).await
     }
 
-    /// Connects to a registered server (stdio only for now).
+    /// Connects to a registered server (stdio only for now). Refuses a disabled registration
+    /// and one the user never approved (`McpServerDto::approved`: a row that did not come
+    /// from `mcp.servers.add`/`update` — e.g. from a restored backup — must not launch
+    /// programs).
     pub async fn connect_registered(server: &McpServerDto) -> Result<Self, McpError> {
+        if !server.enabled {
+            return Err(McpError::NotAllowed(format!("{} is disabled", server.name)));
+        }
+        if !server.approved {
+            return Err(McpError::NotAllowed(format!(
+                "{} was not approved by the user (re-add or save it in the MCP screen)",
+                server.name
+            )));
+        }
         match server.transport {
             McpTransport::Stdio => Self::connect_stdio(&server.command, &server.args).await,
             McpTransport::Http => Err(McpError::Unsupported(format!(

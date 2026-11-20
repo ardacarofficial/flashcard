@@ -267,3 +267,35 @@ async fn client_skeleton_talks_to_our_server() {
     assert!(r.text.contains("VALIDATION_INVALID_PARAMS"), "{}", r.text);
     client.close().await.unwrap();
 }
+
+/// A registration that is disabled, or that the user never approved, is never launched —
+/// checked before anything is spawned (the command here would fail loudly if it were).
+#[tokio::test]
+async fn registered_servers_must_be_enabled_and_approved() {
+    use fc_api::v1::mcp::{McpServerDto, McpTransport};
+    use fc_core::McpServerId;
+    let server = |enabled: bool, approved: bool| McpServerDto {
+        id: McpServerId(uuid::Uuid::nil()),
+        name: "x".into(),
+        transport: McpTransport::Stdio,
+        command: "/nonexistent/never-launched".into(),
+        args: vec![],
+        url: None,
+        enabled,
+        approved,
+        created_at: fc_core::Timestamp(0),
+        updated_at: fc_core::Timestamp(0),
+    };
+    for (enabled, approved, word) in [(false, true, "disabled"), (true, false, "approved")] {
+        let e = McpClient::connect_registered(&server(enabled, approved))
+            .await
+            .unwrap_err();
+        assert!(matches!(e, fc_mcp::McpError::NotAllowed(_)), "{e:?}");
+        assert!(e.to_string().contains(word), "{e}");
+    }
+    // Enabled and approved: it gets as far as launching (and fails there, not in the policy).
+    let e = McpClient::connect_registered(&server(true, true))
+        .await
+        .unwrap_err();
+    assert!(!matches!(e, fc_mcp::McpError::NotAllowed(_)), "{e:?}");
+}

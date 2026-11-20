@@ -246,7 +246,7 @@
     void loadFlags();
     void loadNoteTypes();
     void ctx.guarded(async () => (attrs = (await api.call('attributes.list', {})).defs));
-    const unsub = api.on(['saved_queries', 'flags_changed', 'undone', 'redone'], () => {
+    const unsub = api.on(['saved_queries', 'flags_changed', 'undone', 'redone', 'data_changed'], () => {
       void loadSaved();
       void loadFlags();
       void refresh();

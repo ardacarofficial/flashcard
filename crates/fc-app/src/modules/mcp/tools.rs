@@ -35,7 +35,7 @@ use fc_core::deck::DeckPath;
 use fc_core::notetype::builtin::CLASSIC_ID;
 use fc_core::query::text::fold;
 use fc_core::settings::SettingScope;
-use fc_core::{DeckId, NoteId};
+use fc_core::{CardId, DeckId, NoteId};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -220,7 +220,10 @@ name." },
                        "items": { "type": "string" },
                        "description": "Option label / value; null clears." },
             "confirm": { "type": "boolean", "description": "false/omitted = preview only \
-(how many notes would change). Call again with true to apply." }
+(how many notes would change, plus a confirm_token). To apply, call again with the same \
+arguments, confirm: true and that confirm_token." },
+            "confirm_token": { "type": "string", "description": "From the preview of these \
+exact arguments; refused when the matching cards changed since." }
         },
         "required": ["query", "classification", "value"],
         "additionalProperties": false
@@ -341,7 +344,8 @@ one note; everything not given stays. Undoable in the app.",
             name: "set_classification",
             title: "Set classification",
             description: "Sets (or clears) one classification on every note/card matching \
-a query. Without confirm: true it only reports how many would change.",
+a query. Without confirm: true it only previews (how many would change, plus a \
+confirm_token); to apply, repeat the call with confirm: true and that token.",
             access: Write,
             destructive: true,
             idempotent: true,
@@ -354,6 +358,13 @@ a query. Without confirm: true it only reports how many would change.",
         },
     ];
     CATALOG
+}
+
+/// Whether an MCP client may call public method `name` at all: only those some tool of the
+/// [`catalog`] calls (the registry applies this to every call of the `mcp` actor, including
+/// each inside `batch.execute`).
+pub fn method_reachable(name: &str) -> bool {
+    catalog().iter().any(|t| t.methods.contains(&name))
 }
 
 /// Whether MCP write tools may run: module setting [`ALLOW_WRITES`] and not `read_only`.
@@ -538,6 +549,31 @@ struct SetClassificationArgs {
     classification: String,
     value: Value,
     confirm: Option<bool>,
+    confirm_token: Option<String>,
+}
+
+/// Most cards one confirmed `set_classification` may change; bigger selections are narrowed
+/// by the model (or done in the app).
+pub const MAX_BULK_CARDS: usize = 2000;
+
+/// Binds a confirmation to what the preview showed: the classification, the value and the
+/// exact set of matched cards (FNV-1a, two seeds). Not a secret — it proves the apply call
+/// saw a preview of this very selection, and breaks when the matches change in between.
+fn confirm_token(def: &AttributeDefDto, value: &Option<AttributeValue>, cards: &[CardId]) -> String {
+    let mut ids: Vec<String> = cards.iter().map(ToString::to_string).collect();
+    ids.sort_unstable();
+    let canonical = format!(
+        "{}|{}|{}",
+        def.id,
+        serde_json::to_string(value).unwrap_or_default(),
+        ids.join(",")
+    );
+    let fnv = |seed: u64| {
+        canonical.bytes().fold(seed, |h, b| {
+            (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
+        })
+    };
+    format!("{:016x}{:016x}", fnv(0xcbf2_9ce4_8422_2325), fnv(0x8422_2325_cbf2_9ce4))
 }
 
 // ------------------------------------------------------------------ execution
@@ -1021,15 +1057,37 @@ impl Cx<'_> {
             "matched_cards": ids.card_ids.len(),
             "matched_notes": ids.note_ids.len(),
         });
+        let token = confirm_token(def, &value, &ids.card_ids);
+        let too_many = ids.card_ids.len() > MAX_BULK_CARDS;
         if a.confirm != Some(true) || ids.card_ids.is_empty() {
             let mut p = preview;
             p["applied"] = Value::Bool(false);
-            if !ids.card_ids.is_empty() {
+            if too_many {
+                p["limit"] = json!(MAX_BULK_CARDS);
+                p["next"] = Value::String(format!(
+                    "Too many cards for one step (limit {MAX_BULK_CARDS}): narrow the query."
+                ));
+            } else if !ids.card_ids.is_empty() {
+                p["confirm_token"] = Value::String(token);
                 p["next"] = Value::String(
-                    "Nothing changed yet. Call again with confirm: true to apply.".into(),
+                    "Nothing changed yet. Call again with the same arguments, confirm: true \
+and this confirm_token to apply."
+                        .into(),
                 );
             }
             return Ok(p);
+        }
+        if too_many {
+            return Err(invalid(format!(
+                "{} cards match; at most {MAX_BULK_CARDS} may change in one step: narrow the query",
+                ids.card_ids.len()
+            )));
+        }
+        if a.confirm_token.as_deref() != Some(token.as_str()) {
+            return Err(invalid(
+                "confirm needs the confirm_token of a preview of these exact arguments \
+(missing, or the matching cards changed since the preview): preview again",
+            ));
         }
         let r = self.call::<m::BulkSetAttribute>(&SetAttributeBulk {
             card_ids: ids.card_ids,

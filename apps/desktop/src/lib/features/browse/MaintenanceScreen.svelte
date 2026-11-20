@@ -74,7 +74,7 @@
   onMount(() => {
     void loadTrash();
     void loadRetention();
-    const unsub = api.on(['notes_', 'deck_', 'undone', 'redone'], () => void loadTrash());
+    const unsub = api.on(['notes_', 'deck_', 'undone', 'redone', 'data_changed'], () => void loadTrash());
     return () => void unsub.then((u) => u());
   });
 </script>

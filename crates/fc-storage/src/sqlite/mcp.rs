@@ -6,7 +6,8 @@ use crate::repo::{McpRead, McpServerRecord, McpWrite};
 use fc_core::McpServerId;
 use rusqlite::params;
 
-const COLS: &str = "id, name, transport, command, args, url, enabled, created_at, updated_at";
+const COLS: &str =
+    "id, name, transport, command, args, url, enabled, created_at, updated_at, approved";
 
 fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<McpServerRecord> {
     let args: String = r.get(4)?;
@@ -22,6 +23,7 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<McpServerRecord> {
         enabled: r.get::<_, i64>(6)? != 0,
         created_at: ts(r, 7)?,
         updated_at: ts(r, 8)?,
+        approved: r.get(9)?,
     })
 }
 
@@ -54,10 +56,11 @@ impl McpWrite for SqliteTx<'_, WriteMode> {
             self.conn(),
             "mcp_servers",
             "INSERT INTO mcp_servers (id, name, transport, command, args, url, enabled,
-                 created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 created_at, updated_at, approved)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT(id) DO UPDATE SET name = ?2, transport = ?3, command = ?4, args = ?5,
-                 url = ?6, enabled = ?7, created_at = ?8, updated_at = ?9",
+                 url = ?6, enabled = ?7, created_at = ?8, updated_at = ?9,
+                 approved = ?10",
             params![
                 s.id.to_string(),
                 s.name,
@@ -67,7 +70,8 @@ impl McpWrite for SqliteTx<'_, WriteMode> {
                 s.url,
                 i64::from(s.enabled),
                 s.created_at.0,
-                s.updated_at.0
+                s.updated_at.0,
+                s.approved
             ],
         )?;
         Ok(())

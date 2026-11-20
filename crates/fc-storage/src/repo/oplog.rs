@@ -68,6 +68,11 @@ pub trait OplogRead {
     ) -> StorageResult<Vec<OplogBatch>>;
     /// Entries of a batch in `seq` order.
     fn oplog_batch_entries(&self, batch: BatchId) -> StorageResult<Vec<OplogRecord>>;
+    /// Position of the newest entry (`0` = empty): grows with every appended entry. Cheap, so
+    /// a process can poll it to notice commits other processes made.
+    fn oplog_watermark(&self) -> StorageResult<i64>;
+    /// Actors (JSON, distinct) of the entries appended after position `after`.
+    fn oplog_actors_after(&self, after: i64) -> StorageResult<Vec<Value>>;
 }
 
 /// Oplog writes (append-only).

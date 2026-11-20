@@ -20,7 +20,9 @@
   },
   "commands": {
     "mcp": {
-      "tools": { "list": "MCP server tools" },
+      "tools": {
+        "list": "MCP server tools"
+      },
       "servers": {
         "list": "External MCP servers",
         "add": "Add an MCP server",
@@ -69,7 +71,13 @@
       "url": "URL",
       "enabled": "Enabled",
       "add": "Add server",
-      "remove": "Remove"
+      "remove": "Remove",
+      "not_approved": "Not approved",
+      "approve": "Approve",
+      "confirm_add": "This app will start the following program whenever its AI features use this server: {command}. Only continue if you trust it.",
+      "confirm_approve": "This server came from outside (a restored backup, for example) and has never been approved. Approving lets the app start: {command}. Only continue if you trust it.",
+      "trust_add": "Add and trust",
+      "trust_approve": "Approve"
     }
   },
   "errors": {

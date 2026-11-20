@@ -79,7 +79,7 @@
     void loadDecks();
     // Live updates: any deck/study event (or undo/redo, import, restore) re-reads the tree.
     const unsub = api.on(
-      ['deck_', 'study_', 'undone', 'redone', 'imported', 'collection_'],
+      ['deck_', 'study_', 'undone', 'redone', 'data_changed', 'imported', 'collection_'],
       () => void loadDecks(),
     );
     return () => void unsub.then((u) => u());

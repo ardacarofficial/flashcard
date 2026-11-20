@@ -52,6 +52,19 @@ pub fn forward_events<R: Runtime>(app: &App, handle: AppHandle<R>) {
     }));
 }
 
+/// How often the app looks for commits other processes made to the collection.
+pub const EXTERNAL_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(2000);
+
+/// Background watcher: every [`EXTERNAL_POLL_INTERVAL`] asks the app whether another process
+/// (CLI, `fc mcp serve`) committed something; if so the app publishes `data_changed` and the
+/// forwarded event makes open screens refetch. One cheap query per tick.
+pub fn watch_external_changes(app: SharedApp) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(EXTERNAL_POLL_INTERVAL);
+        let _ = app.poll_external_changes();
+    });
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]

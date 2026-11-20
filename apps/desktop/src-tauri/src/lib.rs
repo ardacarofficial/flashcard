@@ -32,12 +32,25 @@ pub fn run() {
                 .body(body)
                 .unwrap_or_default()
         })
+        .on_window_event(|window, event| {
+            // Coming back to the window: pick up what other processes (the CLI, an MCP
+            // client such as Claude) changed meanwhile, right away instead of at the next tick.
+            if matches!(event, tauri::WindowEvent::Focused(true)) {
+                if let Some(state) = window.try_state::<ipc::SharedApp>() {
+                    let app = state.inner().clone();
+                    std::thread::spawn(move || {
+                        let _ = app.poll_external_changes();
+                    });
+                }
+            }
+        })
         .setup(|app| {
             // Handled here rather than returned: depending on the platform Tauri runs setup
             // inside the event loop and would panic on an error instead of returning it.
             match open_collection(app) {
                 Ok(collection) => {
                     ipc::forward_events(&collection, app.handle().clone());
+                    ipc::watch_external_changes(collection.clone());
                     // Background jobs (imports, exports, backups) run on their own thread;
                     // the worker lives as long as the app state.
                     match fc_app::jobs::spawn_worker(collection.clone()) {

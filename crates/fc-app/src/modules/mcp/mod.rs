@@ -7,7 +7,9 @@
 //!
 //! * internal methods are unreachable (the registry refuses them for every actor),
 //! * the MCP actor holds only [`MCP_PERMISSIONS`] (no settings/modules/undo/plugin/`mcp:write`
-//!   changes: an MCP client cannot make the app launch new external servers),
+//!   changes: an MCP client cannot make the app launch new external servers) **and** reaches
+//!   only the methods some tool calls ([`tools::method_reachable`]): `notes:write` would also
+//!   cover `notes.delete`, but no tool deletes, so the registry refuses it,
 //! * every write is an ordinary undoable command, recorded in the oplog with actor `mcp`.
 
 pub mod servers;

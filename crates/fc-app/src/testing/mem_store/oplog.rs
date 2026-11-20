@@ -40,6 +40,21 @@ impl OplogRead for MemTx<'_> {
             .collect())
     }
 
+    fn oplog_watermark(&self) -> StorageResult<i64> {
+        Ok(i64::try_from(self.s().oplog.len()).unwrap_or(i64::MAX))
+    }
+
+    fn oplog_actors_after(&self, after: i64) -> StorageResult<Vec<serde_json::Value>> {
+        let skip = usize::try_from(after).unwrap_or(0);
+        let mut out: Vec<serde_json::Value> = Vec::new();
+        for r in self.s().oplog.iter().skip(skip) {
+            if !out.contains(&r.actor) {
+                out.push(r.actor.clone());
+            }
+        }
+        Ok(out)
+    }
+
     fn oplog_batch_entries(&self, batch: BatchId) -> StorageResult<Vec<OplogRecord>> {
         let mut v: Vec<OplogRecord> = self
             .s()

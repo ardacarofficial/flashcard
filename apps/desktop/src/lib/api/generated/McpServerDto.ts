@@ -36,6 +36,12 @@ url: string | null,
  */
 enabled: boolean, 
 /**
+ * The user approved exactly this launch command (set by `mcp.servers.add`/`update`;
+ * `false` for a row that came from anywhere else, e.g. a backup). Unapproved servers are
+ * never launched.
+ */
+approved: boolean, 
+/**
  * Creation time.
  */
 created_at: Timestamp, 

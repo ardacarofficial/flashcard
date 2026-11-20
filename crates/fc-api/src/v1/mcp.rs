@@ -71,6 +71,10 @@ pub struct McpServerDto {
     pub url: Option<String>,
     /// Whether AI features may use it.
     pub enabled: bool,
+    /// The user approved exactly this launch command (set by `mcp.servers.add`/`update`;
+    /// `false` for a row that came from anywhere else, e.g. a backup). Unapproved servers are
+    /// never launched.
+    pub approved: bool,
     /// Creation time.
     pub created_at: Timestamp,
     /// Last modification time.

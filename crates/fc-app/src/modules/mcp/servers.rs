@@ -29,19 +29,43 @@ fn transport_str(t: McpTransport) -> &'static str {
     }
 }
 
+/// What the user approves when they register a server: the launch command (stdio) or the
+/// endpoint (http), as one canonical string. Stored with the row; the row only counts as
+/// approved while its current summary still equals it.
+pub fn approval_summary(
+    transport: McpTransport,
+    command: &str,
+    args: &[String],
+    url: Option<&str>,
+) -> String {
+    let mut parts = vec![transport_str(transport).to_owned()];
+    match transport {
+        McpTransport::Stdio => {
+            parts.push(command.to_owned());
+            parts.extend(args.iter().cloned());
+        }
+        McpTransport::Http => parts.push(url.unwrap_or_default().to_owned()),
+    }
+    serde_json::Value::from(parts).to_string()
+}
+
 fn dto(r: McpServerRecord) -> McpServerDto {
+    let transport = if r.transport == "http" {
+        McpTransport::Http
+    } else {
+        McpTransport::Stdio
+    };
+    let approved = r.approved.as_deref()
+        == Some(approval_summary(transport, &r.command, &r.args, r.url.as_deref()).as_str());
     McpServerDto {
         id: r.id,
         name: r.name,
-        transport: if r.transport == "http" {
-            McpTransport::Http
-        } else {
-            McpTransport::Stdio
-        },
+        transport,
         command: r.command,
         args: r.args,
         url: r.url,
         enabled: r.enabled,
+        approved,
         created_at: r.created_at,
         updated_at: r.updated_at,
     }
@@ -56,6 +80,9 @@ fn record(d: &McpServerDto) -> McpServerRecord {
         args: d.args.clone(),
         url: d.url.clone(),
         enabled: d.enabled,
+        approved: d.approved.then(|| {
+            approval_summary(d.transport, &d.command, &d.args, d.url.as_deref())
+        }),
         created_at: d.created_at,
         updated_at: d.updated_at,
     }
@@ -162,6 +189,8 @@ pub(super) fn add(
         args: f.args,
         url: f.url,
         enabled: req.enabled.unwrap_or(true),
+        // Only the user (and the CLI) hold `mcp:write`: registering is the approval.
+        approved: true,
         created_at: ctx.now,
         updated_at: ctx.now,
     };
@@ -195,19 +224,15 @@ pub(super) fn update(
         args: f.args,
         url: f.url,
         enabled: req.enabled,
+        approved: true,
         updated_at: ctx.now,
         ..old.clone()
     };
     ctx.tx.upsert_mcp_server(&record(&server))?;
     Ok(CommandOutcome {
-        inverse: vec![inverse_call::<McpServersUpdate>(&UpdateMcpServer {
-            id: old.id,
-            name: old.name.clone(),
-            transport: old.transport,
-            command: old.command.clone(),
-            args: old.args.clone(),
-            url: old.url.clone(),
-            enabled: old.enabled,
+        // The exact previous row (approval included) goes back, not a fresh approval.
+        inverse: vec![inverse_call::<McpServersRestore>(&RestoreMcpServer {
+            server: old,
         })?],
         summary: summary::<McpServersUpdate>().param("name", &server.name),
         events: Vec::new(),
@@ -231,14 +256,20 @@ pub(super) fn remove(
     })
 }
 
+/// Puts `server` back exactly (an upsert): the inverse of `remove` and of `update`.
 pub(super) fn restore(
     req: RestoreMcpServer,
     ctx: &mut CommandCtx<'_>,
 ) -> AppResult<CommandOutcome<McpServerDto>> {
     let server = req.server;
+    let previous = ctx.reads().get_mcp_server(server.id)?.map(dto);
     ctx.tx.upsert_mcp_server(&record(&server))?;
+    let inverse = match previous {
+        Some(old) => inverse_call::<McpServersRestore>(&RestoreMcpServer { server: old })?,
+        None => inverse_call::<McpServersRemove>(&McpServerRef { id: server.id })?,
+    };
     Ok(CommandOutcome {
-        inverse: vec![inverse_call::<McpServersRemove>(&McpServerRef { id: server.id })?],
+        inverse: vec![inverse],
         summary: summary::<McpServersRestore>().param("name", &server.name),
         events: Vec::new(),
         response: server,

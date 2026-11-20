@@ -24,6 +24,7 @@ rmcp = { version = "3.11", default-features = false, features = [
 fc-app = { path = "../fc-app", features = ["testing"] }
 fc-core.workspace = true
 tempfile.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true

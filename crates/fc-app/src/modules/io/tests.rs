@@ -1252,3 +1252,33 @@ fn final_job_status_is_retried() {
     assert_eq!(r.unwrap(), 7);
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 3);
 }
+
+#[test]
+fn restoring_a_backup_forgets_mcp_server_approvals() {
+    use fc_api::v1::mcp::{AddMcpServer, McpTransport};
+    let dir = tempfile::tempdir().unwrap();
+    let t = sqlite();
+    t.app.set_data_dir(dir.path().join("app-data"));
+    let s = t.ok::<fc_api::v1::methods::McpServersAdd>(AddMcpServer {
+        name: "Files".into(),
+        transport: McpTransport::Stdio,
+        command: Some("npx".into()),
+        args: vec![],
+        url: None,
+        enabled: None,
+    });
+    assert!(s.approved);
+    let backup = dir.path().join("b.fcbackup");
+    let job = t.ok::<IoBackupCreate>(CreateBackup {
+        path: backup.to_string_lossy().into_owned(),
+    });
+    result::<ExportReport>(&finish(&t, &job));
+    let job = t.ok::<IoBackupRestore>(RestoreBackup {
+        path: backup.to_string_lossy().into_owned(),
+        safety_backup_path: None,
+    });
+    result::<RestoreReport>(&finish(&t, &job));
+    let servers = t.ok::<fc_api::v1::methods::McpServersList>(Empty {}).servers;
+    assert_eq!(servers.len(), 1, "the registration itself comes back");
+    assert!(!servers[0].approved, "…but must be approved again before it can launch");
+}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { McpServerDto, McpToolList, McpTransport } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import type { ScreenCtx } from '../types';
@@ -17,6 +18,12 @@
   let command = $state('');
   let args = $state('');
   let url = $state('');
+
+  /** What the user is asked to approve before the app may launch a program. */
+  let pending = $state<{ server: McpServerDto | null } | null>(null);
+
+  const launches = (s: { transport: McpTransport; command: string; args: string[]; url: string | null }) =>
+    s.transport === 'stdio' ? [s.command, ...s.args].join(' ') : (s.url ?? '');
 
   const lines = (s: string) =>
     s
@@ -39,6 +46,7 @@
   }
 
   async function add() {
+    pending = null;
     const ok = await ctx.guarded(() =>
       api.call('mcp.servers.add', {
         name,
@@ -53,6 +61,23 @@
       name = command = args = url = '';
       await load();
     }
+  }
+
+  /** Saving a row again is the user's approval of exactly what it now says. */
+  async function approve(s: McpServerDto) {
+    pending = null;
+    await ctx.guarded(() =>
+      api.call('mcp.servers.update', {
+        id: s.id,
+        name: s.name,
+        transport: s.transport,
+        command: s.command,
+        args: s.args,
+        url: s.url,
+        enabled: s.enabled,
+      }),
+    );
+    await load();
   }
 
   async function toggle(s: McpServerDto) {
@@ -77,6 +102,9 @@
 
   onMount(() => {
     void load();
+    // Claude (or the CLI) may have changed things from outside; undo/redo changes the list too.
+    const unsub = api.on(['data_changed', 'undone', 'redone'], () => void load());
+    return () => void unsub.then((u) => u());
   });
 </script>
 
@@ -130,10 +158,19 @@
       {#each servers as s (s.id)}
         <li>
           <label class="check">
-            <input type="checkbox" checked={s.enabled} onchange={() => void toggle(s)} />
+            <input
+              type="checkbox"
+              checked={s.enabled}
+              disabled={!s.approved}
+              onchange={() => void toggle(s)}
+            />
             <strong>{s.name}</strong>
           </label>
-          <code>{s.transport === 'stdio' ? [s.command, ...s.args].join(' ') : s.url}</code>
+          <code>{launches(s)}</code>
+          {#if !s.approved}
+            <span class="warn" role="status">{t('mcp.client.not_approved')}</span>
+            <button type="button" onclick={() => (pending = { server: s })}>{t('mcp.client.approve')}</button>
+          {/if}
           <button type="button" class="danger" onclick={() => void remove(s)}>{t('mcp.client.remove')}</button>
         </li>
       {/each}
@@ -143,7 +180,7 @@
   <form
     onsubmit={(e) => {
       e.preventDefault();
-      void add();
+      pending = { server: null };
     }}
   >
     <label>{t('mcp.client.name')} <input bind:value={name} /></label>
@@ -164,7 +201,22 @@
   </form>
 </section>
 
+{#if pending}
+  {@const target = pending.server}
+  <ConfirmDialog
+    message={t(target ? 'mcp.client.confirm_approve' : 'mcp.client.confirm_add', {
+      command: target ? launches(target) : launches({ transport, command, args: lines(args), url }),
+    })}
+    confirmLabel={t(target ? 'mcp.client.trust_approve' : 'mcp.client.trust_add')}
+    onconfirm={() => void (target ? approve(target) : add())}
+    oncancel={() => (pending = null)}
+  />
+{/if}
+
 <style>
+  .warn {
+    color: var(--fc-danger, inherit);
+  }
   section {
     margin-bottom: var(--fc-space-6);
   }

@@ -20,7 +20,9 @@
   },
   "commands": {
     "mcp": {
-      "tools": { "list": "MCP sunucusu araçları" },
+      "tools": {
+        "list": "MCP sunucusu araçları"
+      },
       "servers": {
         "list": "Dış MCP sunucuları",
         "add": "MCP sunucusu ekle",
@@ -69,7 +71,13 @@
       "url": "URL",
       "enabled": "Açık",
       "add": "Sunucu ekle",
-      "remove": "Kaldır"
+      "remove": "Kaldır",
+      "not_approved": "Onaylanmadı",
+      "approve": "Onayla",
+      "confirm_add": "Yapay zeka özellikleri bu sunucuyu kullandığında uygulama şu programı başlatacak: {command}. Yalnızca güveniyorsan devam et.",
+      "confirm_approve": "Bu sunucu dışarıdan geldi (örneğin geri yüklenen bir yedekten) ve hiç onaylanmadı. Onaylarsan uygulama şunu başlatabilir: {command}. Yalnızca güveniyorsan devam et.",
+      "trust_add": "Ekle ve güven",
+      "trust_approve": "Onayla"
     }
   },
   "errors": {
