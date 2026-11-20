@@ -1651,7 +1651,7 @@ checksum = "caf1079563223d5d59d83c85886a56e586cfd5c1a26292e971a0fa266531ac5a"
 
 [[package]]
 name = "fc-ai"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1666,7 +1666,7 @@ dependencies = [
 
 [[package]]
 name = "fc-api"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "fc-core",
  "serde",
@@ -1677,7 +1677,7 @@ dependencies = [
 
 [[package]]
 name = "fc-app"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "argon2",
  "async-trait",
@@ -1704,7 +1704,7 @@ dependencies = [
 
 [[package]]
 name = "fc-cli"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "clap",
  "fc-ai",
@@ -1723,7 +1723,7 @@ dependencies = [
 
 [[package]]
 name = "fc-core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "ammonia",
  "proptest",
@@ -1739,7 +1739,7 @@ dependencies = [
 
 [[package]]
 name = "fc-desktop"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "clipboard-win",
@@ -1767,7 +1767,7 @@ dependencies = [
 
 [[package]]
 name = "fc-http"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1785,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "fc-interop"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "encoding_rs",
  "fc-core",
@@ -1802,7 +1802,7 @@ dependencies = [
 
 [[package]]
 name = "fc-mcp"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "fc-api",
  "fc-app",
@@ -1817,7 +1817,7 @@ dependencies = [
 
 [[package]]
 name = "fc-plugins"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "fc-core",
  "serde",
@@ -1833,7 +1833,7 @@ dependencies = [
 
 [[package]]
 name = "fc-providers"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "async-trait",
  "fc-core",
@@ -1845,7 +1845,7 @@ dependencies = [
 
 [[package]]
 name = "fc-storage"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "fc-core",
  "proptest",
@@ -1860,7 +1860,7 @@ dependencies = [
 
 [[package]]
 name = "fc-study"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "fc-core",
  "fc-providers",

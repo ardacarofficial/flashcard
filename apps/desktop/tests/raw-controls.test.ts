@@ -4,16 +4,12 @@
  * `<input type="radio">`; use `Select`, `Checkbox`/`Switch`, `RadioGroup`/`SegmentedControl`
  * from `$lib/ui`.
  *
- * v1.0 screens still have some: they are listed, with their count, in
- * `tests/raw-controls.allow.json`. The list only shrinks — a screen lane that restyles a
- * screen removes its entry (the test fails while an entry is larger than needed, so a fixed
- * file cannot keep its allowance). New files are never added to it.
+ * v1.1: no exceptions — the v1.0 allow-list is gone, every screen is on the design system.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { parse } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
-import allowList from './raw-controls.allow.json';
 
 const APP = join(__dirname, '..');
 const SRC = join(APP, 'src');
@@ -70,18 +66,11 @@ describe('no raw form controls outside $lib/ui', () => {
     ).toEqual(['select', 'input[type=checkbox]', 'input[type=radio]']);
   });
 
-  const found = new Map(svelteFiles(SRC).map((f) => [rel(f), rawControls(readFileSync(f, 'utf8')).length]));
-  const allowed = allowList as Record<string, number>;
-
-  it('only allow-listed v1.0 screens still have them (and no more than listed)', () => {
-    const over = [...found].filter(([f, n]) => n > (allowed[f] ?? 0)).map(([f, n]) => `${f}: ${n} raw control(s), allowed ${allowed[f] ?? 0}`);
-    expect(over, 'use Select / Checkbox / Switch / RadioGroup / SegmentedControl from $lib/ui').toEqual([]);
-  });
-
-  it('the allow-list only shrinks: entries match what is left', () => {
-    const stale = Object.entries(allowed)
-      .filter(([f, n]) => (found.get(f) ?? 0) !== n)
-      .map(([f, n]) => `${f}: listed ${n}, found ${found.get(f) ?? 0} — lower or remove the entry in tests/raw-controls.allow.json`);
-    expect(stale).toEqual([]);
+  it('no component outside $lib/ui has one (no allow-list)', () => {
+    const found = svelteFiles(SRC)
+      .map((f) => [rel(f), rawControls(readFileSync(f, 'utf8'))] as const)
+      .filter(([, raw]) => raw.length > 0)
+      .map(([f, raw]) => `${f}: ${raw.join(', ')}`);
+    expect(found, 'use Select / Checkbox / Switch / RadioGroup / SegmentedControl from $lib/ui').toEqual([]);
   });
 });

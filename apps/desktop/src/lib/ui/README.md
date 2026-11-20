@@ -13,8 +13,7 @@ pull every component any lazy screen uses (and its CSS) into the initial bundle.
 Rules for screen lanes:
 
 - **No raw controls**: no `<select>`, `<input type="checkbox|radio">` outside this folder
-  (lint: `tests/raw-controls.test.ts`). When you restyle a screen, remove its entry from
-  `tests/raw-controls.allow.json` (the test fails until you do; the list only shrinks).
+  (lint: `tests/raw-controls.test.ts`, no allow-list — zero exceptions since v1.1).
 - **No raw colours / sizes**: use tokens (`--surface-0/1/2`, `--text-1/2/3`, `--accent`,
   `--accent-fg`, `--accent-soft`, `--success|warning|danger` (+ `-solid`, `-solid-fg`, `-soft`),
   `--border`, `--border-strong`, `--space-1…16`, `--radius-control|card|lg|pill`,
@@ -95,5 +94,8 @@ All wrap **Field** (label, hint, error with `aria-describedby`/`aria-invalid`). 
 - `navigation.ts` — the only place mapping module routes to the 5 sections, the Inbox or a
   Settings group (`PLACEMENTS`). A new module screen: add its route there. Order within a
   section/group = order in that list.
-- Sections with more than one page show them as tabs above the screen; Settings shows a grouped
-  sub-navigation. The Home page (`HomeScreen.svelte`) is a placeholder for the Home lane.
+- Sections with more than one tab page show them as tabs above the screen (`tab: false` in
+  `PLACEMENTS` keeps a page out of the tabs — the study modes, opened from the deck page tiles
+  and Home); Settings shows a grouped sub-navigation. Home is `features/home/HomeScreen.svelte`.
+- A study screen calls `ctx.setFocus(true)` while a session runs: the shell hides the deck
+  picker and the tabs and centres the column (focus layout); it resets on every page change.

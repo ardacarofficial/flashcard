@@ -355,7 +355,7 @@
     height: 22px;
     border-radius: 50%;
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--text-1);
     font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
   }
@@ -424,7 +424,7 @@
   }
   .again {
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .prompt {
     min-height: 140px;
@@ -553,7 +553,7 @@
     gap: var(--space-4);
     margin: 0;
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .keys span {
     display: inline-flex;

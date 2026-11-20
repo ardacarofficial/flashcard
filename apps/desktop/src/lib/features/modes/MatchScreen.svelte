@@ -452,7 +452,7 @@
     margin: 0;
     text-align: center;
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   /* Result. */
   .done {

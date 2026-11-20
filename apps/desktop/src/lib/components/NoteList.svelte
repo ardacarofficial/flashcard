@@ -2,6 +2,7 @@
   import { api, type ApiError } from '$lib/api';
   import type { NoteListItem } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
+  import { Card, Chip, EmptyState, FileText, IconButton, Pencil, Skeleton, Trash2 } from '$lib/ui';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import NoteEditDialog from '$lib/features/cards/NoteEditDialog.svelte';
 
@@ -43,39 +44,29 @@
   }
 </script>
 
-<section>
-  <h2>{t('note.list_heading')}</h2>
+<section class="note-list" aria-label={t('note.list_heading')}>
   {#if error}<p class="error" role="alert">{error}</p>{/if}
   {#if notes === null}
-    <p class="muted">{t('common.loading')}</p>
+    <Skeleton lines={4} />
   {:else if notes.length === 0}
-    <p class="muted">{t('note.empty')}</p>
+    <EmptyState icon={FileText} title={t('note.empty')} />
   {:else}
-    <table>
-      <thead>
-        <tr>
-          <th>{t('note.front')}</th>
-          <th>{t('note.tags')}</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
+    <Card padding="none">
+      <ul>
         {#each notes as n (n.id)}
-          <tr>
-            <td>{n.sort_field}</td>
-            <td class="muted">{n.tags.length > 0 ? n.tags.join(' ') : t('common.none')}</td>
-            <td>
-              <button onclick={() => (editing = n.id)}>{t('note_editor.edit')}</button>
-              <button
-                class="danger"
-                aria-label={t('note.delete_aria', { name: n.sort_field })}
-                onclick={() => (pending = n)}>{t('common.delete')}</button
-              >
-            </td>
-          </tr>
+          <li>
+            <span class="front">{n.sort_field}</span>
+            <span class="tags">
+              {#each n.tags as tag (tag)}<Chip size="sm" label={tag} />{/each}
+            </span>
+            <span class="actions">
+              <IconButton icon={Pencil} label={t('note_editor.edit')} onclick={() => (editing = n.id)} />
+              <IconButton icon={Trash2} variant="danger" label={t('note.delete_aria', { name: n.sort_field })} onclick={() => (pending = n)} />
+            </span>
+          </li>
         {/each}
-      </tbody>
-    </table>
+      </ul>
+    </Card>
   {/if}
 
   {#if editing}
@@ -94,21 +85,45 @@
 </section>
 
 <style>
-  table {
-    width: 100%;
-    border-collapse: collapse;
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
-  th,
-  td {
-    text-align: left;
-    padding: var(--fc-space-2);
-    border-bottom: var(--fc-border-width) solid var(--fc-border);
+  li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 52px;
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
   }
-  th {
-    color: var(--fc-text-muted);
-    font-weight: 500;
+  li + li {
+    border-top: 1px solid var(--border);
   }
-  td:last-child {
-    text-align: right;
+  .front {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-1);
+  }
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    justify-content: flex-end;
+  }
+  .actions {
+    display: flex;
+    gap: var(--space-1);
+  }
+  .error {
+    margin: 0 0 var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-control);
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-size: var(--text-sm);
   }
 </style>

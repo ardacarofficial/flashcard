@@ -13,6 +13,7 @@
   import AttributeField from '$lib/components/AttributeField.svelte';
   import { initialValue, toAssignments, type FieldValue } from '$lib/components/attribute-field';
   import { t, td } from '$lib/i18n/index.svelte';
+  import { Button, Card, Checkbox, EmptyState, FileText, Input, Library, SegmentedControl, Select, Sparkles, Textarea } from '$lib/ui';
   import type { ScreenCtx } from '../types';
   import JobProgress from '../io/JobProgress.svelte';
   import { pickFile } from '../io/files';
@@ -49,6 +50,14 @@
   const notetype = $derived(notetypes.find((n) => n.id === notetypeId) ?? null);
   const fieldName = (key: string) => notetype?.fields.find((f) => f.key === key)?.name ?? key;
   const kept = $derived(drafts.filter((d) => d.keep).length);
+  const notetypeOptions = $derived(notetypes.map((n) => ({ value: n.id, label: n.name })));
+  const sourceOptions = $derived([
+    { value: 'text' as const, label: t('ai.source.text') },
+    { value: 'pdf' as const, label: t('ai.source.pdf') },
+    { value: 'url' as const, label: t('ai.source.url') },
+  ]);
+  /** Number inputs bind strings through lib/ui Input: keep the numbers. */
+  const num = (v: string, fallback: number) => (Number.isFinite(Number(v)) && v.trim() !== '' ? Number(v) : fallback);
 
   function fail(e: unknown) {
     error = td((e as ApiError).messageKey ?? 'errors.internal.unexpected');
@@ -177,82 +186,90 @@
   }
 </script>
 
-<section>
+<section class="generate">
   {#if !ctx.selectedDeck}
-    <p>{t('ai.generate.pick_deck')}</p>
+    <EmptyState icon={Library} title={t('ai.generate.pick_deck')} />
   {:else}
-    <div class="form">
-      <label>
-        {t('ai.generate.notetype')}
-        <select bind:value={notetypeId}>
-          {#each notetypes as nt (nt.id)}
-            <option value={nt.id}>{nt.name}</option>
+    <Card padding="lg">
+      <div class="form">
+        <div class="grid">
+          <Select label={t('ai.generate.notetype')} options={notetypeOptions} bind:value={notetypeId} />
+          {#each defs as a (a.def.id)}
+            <AttributeField def={a.def} bind:value={attrs[a.def.id]!} />
           {/each}
-        </select>
-      </label>
-      {#each defs as a (a.def.id)}
-        <AttributeField def={a.def} bind:value={attrs[a.def.id]!} />
-      {/each}
-      <div class="from" role="group" aria-label={t('ai.source.from')}>
-        <span>{t('ai.source.from')}</span>
-        <label><input type="radio" bind:group={from} value="text" /> {t('ai.source.text')}</label>
-        <label><input type="radio" bind:group={from} value="pdf" /> {t('ai.source.pdf')}</label>
-        <label><input type="radio" bind:group={from} value="url" /> {t('ai.source.url')}</label>
-      </div>
-      {#if from === 'pdf'}
-        <div class="row">
-          <button disabled={busy} onclick={() => void choosePdf()}>{t('ai.source.choose_pdf')}</button>
-          {#if pageCount !== null}
-            <label class="inline">
-              {t('ai.source.from_page')}
-              <input type="number" min="1" max={pageCount} bind:value={fromPage} />
-            </label>
-            <label class="inline">
-              {t('ai.source.to_page')}
-              <input type="number" min="1" max={pageCount} bind:value={toPage} />
-            </label>
-            <button disabled={busy || fromPage < 1 || toPage < fromPage} onclick={() => void readPages()}>
-              {t('ai.source.read_pages')}
-            </button>
-          {/if}
         </div>
-      {:else if from === 'url'}
-        <div class="row">
-          <input
-            type="url"
-            bind:value={url}
-            placeholder={t('ai.source.url_placeholder')}
-            aria-label={t('ai.source.url_label')}
-            onkeydown={(e) => e.key === 'Enter' && void readUrl()}
+        <SegmentedControl label={t('ai.source.from')} options={sourceOptions} bind:value={from} size="sm" />
+        {#if from === 'pdf'}
+          <div class="row">
+            <Button icon={FileText} disabled={busy} onclick={() => void choosePdf()}>{t('ai.source.choose_pdf')}</Button>
+            {#if pageCount !== null}
+              <Input
+                class="page-no"
+                size="sm"
+                type="number"
+                min="1"
+                max={pageCount}
+                label={t('ai.source.from_page')}
+                value={String(fromPage)}
+                oninput={(e) => (fromPage = num(e.currentTarget.value, fromPage))}
+              />
+              <Input
+                class="page-no"
+                size="sm"
+                type="number"
+                min="1"
+                max={pageCount}
+                label={t('ai.source.to_page')}
+                value={String(toPage)}
+                oninput={(e) => (toPage = num(e.currentTarget.value, toPage))}
+              />
+              <Button disabled={busy || fromPage < 1 || toPage < fromPage} onclick={() => void readPages()}>
+                {t('ai.source.read_pages')}
+              </Button>
+            {/if}
+          </div>
+        {:else if from === 'url'}
+          <div class="row">
+            <Input
+              class="grow"
+              type="url"
+              bind:value={url}
+              label={t('ai.source.url_label')}
+              hideLabel
+              placeholder={t('ai.source.url_placeholder')}
+              hint={t('ai.source.url_note')}
+              onkeydown={(e) => e.key === 'Enter' && void readUrl()}
+            />
+            <Button disabled={busy || !url.trim()} onclick={() => void readUrl()}>{t('ai.source.fetch')}</Button>
+          </div>
+        {/if}
+        {#if sourceInfo}<p class="muted" role="status">{sourceInfo}</p>{/if}
+        <Textarea label={t('ai.generate.source')} rows={8} bind:value={source} placeholder={t('ai.generate.source_hint')} />
+        <div class="grid">
+          <Input
+            type="number"
+            min="1"
+            max="50"
+            label={t('ai.generate.count')}
+            value={String(count)}
+            oninput={(e) => (count = num(e.currentTarget.value, count))}
           />
-          <button disabled={busy || !url.trim()} onclick={() => void readUrl()}>{t('ai.source.fetch')}</button>
+          <Input label={t('ai.generate.instructions')} bind:value={instructions} placeholder={t('ai.generate.instructions_hint')} />
         </div>
-        <p class="muted">{t('ai.source.url_note')}</p>
-      {/if}
-      {#if sourceInfo}<p class="muted" role="status">{sourceInfo}</p>{/if}
-      <label>
-        {t('ai.generate.source')}
-        <textarea rows="8" bind:value={source} placeholder={t('ai.generate.source_hint')}></textarea>
-      </label>
-      <label>
-        {t('ai.generate.count')}
-        <input type="number" min="1" max="50" bind:value={count} />
-      </label>
-      <label>
-        {t('ai.generate.instructions')}
-        <input type="text" bind:value={instructions} placeholder={t('ai.generate.instructions_hint')} />
-      </label>
-      <button disabled={busy || !source.trim()} onclick={() => void runPreview()}>
-        {t('ai.generate.preview')}
-      </button>
-    </div>
+        <div class="actions">
+          <Button variant="primary" icon={Sparkles} disabled={busy || !source.trim()} onclick={() => void runPreview()}>
+            {t('ai.generate.preview')}
+          </Button>
+        </div>
+      </div>
+    </Card>
   {/if}
 
   {#if error}
-    <p class="error" role="alert">{error}</p>
+    <p class="banner error" role="alert">{error}</p>
   {/if}
   {#if notice}
-    <p role="status">{notice}</p>
+    <p class="banner" role="status">{notice}</p>
   {/if}
 
   {#if preview}
@@ -263,74 +280,104 @@
   {/if}
 
   {#if drafts.length > 0}
-    <h3>{t('ai.generate.drafts', { count: drafts.length })}</h3>
-    {#if spent}
-      <p class="muted">{t('ai.generate.spent', { cost: spent })}</p>
-    {/if}
+    <div class="drafts-head">
+      <h3>{t('ai.generate.drafts', { count: drafts.length })}</h3>
+      {#if spent}<span class="muted">{t('ai.generate.spent', { cost: spent })}</span>{/if}
+    </div>
     <ol class="drafts">
       {#each drafts as d, i (i)}
         <li>
-          <label class="keep">
-            <input type="checkbox" bind:checked={d.keep} />
-            {t('ai.generate.keep')}
-          </label>
-          {#each Object.keys(d.draft.fields) as key (key)}
-            <label>
-              {fieldName(key)}
-              <textarea rows="2" bind:value={d.draft.fields[key]}></textarea>
-            </label>
-          {/each}
+          <Card padding="md">
+            <div class="draft">
+              <Checkbox label={t('ai.generate.keep')} bind:checked={d.keep} />
+              <div class="grid">
+                {#each Object.keys(d.draft.fields) as key (key)}
+                  <Textarea label={fieldName(key)} rows={2} autoGrow bind:value={d.draft.fields[key]!} />
+                {/each}
+              </div>
+            </div>
+          </Card>
         </li>
       {/each}
     </ol>
-    <button class="primary" disabled={kept === 0} onclick={() => void add()}>
-      {t('ai.generate.add', { count: kept })}
-    </button>
+    <div class="actions">
+      <Button variant="primary" disabled={kept === 0} onclick={() => void add()}>
+        {t('ai.generate.add', { count: kept })}
+      </Button>
+    </div>
   {/if}
 </section>
 
 <style>
+  .generate {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-width: 880px;
+  }
   .form,
-  .drafts li {
-    display: grid;
-    gap: var(--fc-space-2);
-    max-width: 48rem;
+  .draft {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
   }
-  label {
+  .grid {
     display: grid;
-    gap: var(--fc-space-1);
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--space-4);
+    align-items: start;
   }
-  .from,
   .row {
     display: flex;
-    gap: var(--fc-space-2);
-    align-items: center;
+    gap: var(--space-3);
+    align-items: flex-end;
     flex-wrap: wrap;
   }
-  .from label,
-  .row label.inline {
-    display: flex;
-    align-items: center;
-    gap: var(--fc-space-1);
-  }
-  .row input[type='number'] {
-    width: 5em;
-  }
-  .row input[type='url'] {
+  .row :global(.grow) {
     flex: 1;
+    min-width: 240px;
   }
-  .keep {
+  .row :global(.page-no) {
+    width: 120px;
+  }
+  .actions {
     display: flex;
-    align-items: center;
-  }
-  .drafts li {
-    border-bottom: var(--fc-border-width) solid var(--fc-border);
-    padding: var(--fc-space-2) 0;
-  }
-  .error {
-    color: var(--fc-danger);
+    justify-content: flex-end;
+    gap: var(--space-2);
   }
   .muted {
-    color: var(--fc-text-muted);
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .banner {
+    margin: 0;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+    color: var(--text-1);
+    font-size: var(--text-sm);
+  }
+  .banner.error {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+  .drafts-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+  }
+  .drafts-head h3 {
+    margin: 0;
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
+  }
+  .drafts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 </style>

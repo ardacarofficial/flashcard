@@ -69,7 +69,7 @@
     align-items: center;
     gap: var(--space-2);
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
     font-weight: var(--weight-regular);
   }
 </style>

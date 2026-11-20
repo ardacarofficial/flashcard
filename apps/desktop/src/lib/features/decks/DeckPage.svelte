@@ -317,7 +317,7 @@
   .hint {
     margin: 0;
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   :global(.preview-empty.fc-card) {
     display: flex;

@@ -249,8 +249,8 @@ describe('<QuickAdd>', () => {
     const { shell } = fakeShell([], 'porsuk');
     render(QuickAdd, { shell });
     expect(await screen.findByDisplayValue('porsuk')).toBeTruthy();
-    const deck = screen.getByLabelText('Deck') as HTMLSelectElement;
-    await fireEvent.change(deck, { target: { value: node.deck.id } });
+    await fireEvent.click(screen.getByRole('combobox', { name: 'Deck' }));
+    await fireEvent.click(await screen.findByRole('option', { name: node.deck.name }));
     await fireEvent.input(screen.getByLabelText('Back'), { target: { value: 'badger' } });
     const spy = vi.spyOn(api.note, 'createClassic');
     await fireEvent.click(screen.getByRole('button', { name: 'Add' }));

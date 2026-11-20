@@ -84,7 +84,9 @@
    * is readable as text (AA 4.5:1 on every surface); `-solid` fills carry `-solid-fg`;
    * `-soft` is a tinted background for chips and banners (text on it uses the plain token).
    */
-  --success: var(--fc-success);
+  /* Darkened (light) / lightened (dark) towards the text colour so success text also reads on
+     --success-soft (chips, badges): 5.3:1 light, 6.3:1 dark (plain #157a53 was 4.38:1). */
+  --success: color-mix(in srgb, var(--fc-success) 85%, var(--fc-text));
   --success-solid: light-dark(#157a53, #3ec28f);
   --success-solid-fg: light-dark(#ffffff, #000000);
   --success-soft: color-mix(in srgb, var(--fc-success) 14%, var(--fc-surface));

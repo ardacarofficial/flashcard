@@ -87,14 +87,14 @@ describe('AI screen: sources and providers', () => {
   it('fills the source from a web page or PDF pages', async () => {
     const deck = (await api.deck.tree()).roots[0]!.deck.id;
     render(AiScreen, { ctx: ctx(deck) });
-    await fireEvent.click(await screen.findByLabelText('Web page'));
+    await fireEvent.click(await screen.findByRole('radio', { name: 'Web page' }));
     await fireEvent.input(screen.getByLabelText('Web page address'), { target: { value: 'https://example.org/a' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Get text' }));
     const source = (await screen.findByLabelText('Source')) as HTMLTextAreaElement;
     await vi.waitFor(() => expect(source.value).toBe('Readable text of https://example.org/a.'));
 
     const prompt = vi.spyOn(window, 'prompt').mockReturnValue('/tmp/bio.pdf');
-    await fireEvent.click(screen.getByLabelText('PDF'));
+    await fireEvent.click(screen.getByRole('radio', { name: 'PDF' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Choose PDF…' }));
     expect(await screen.findByText('Pages 1–3 of 3. Edit the text below as you like.')).toBeTruthy();
     await fireEvent.input(screen.getByLabelText('From page'), { target: { value: '2' } });

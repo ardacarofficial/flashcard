@@ -952,7 +952,7 @@
   .remaining {
     margin: calc(-1 * var(--space-2)) 0 0;
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .stage {
     display: flex;
@@ -1134,7 +1134,7 @@
     gap: var(--space-2);
     font-size: var(--text-xs);
     font-weight: var(--weight-regular);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .tools {
     display: flex;
@@ -1150,7 +1150,7 @@
     gap: var(--space-4);
     margin: 0;
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .keys span {
     display: inline-flex;

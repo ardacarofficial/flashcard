@@ -35,7 +35,6 @@ const ALIAS: Record<string, string> = {
   'accent-fg': 'fc-accent-text',
   'accent-soft': 'fc-selected',
   'focus-ring': 'fc-focus',
-  success: 'fc-success',
   danger: 'fc-danger',
 };
 
@@ -48,7 +47,27 @@ export function contrast(a: string, b: string): number {
   return (x! + 0.05) / (y! + 0.05);
 }
 
-const all = tokens();
+/** Hex of an sRGB `color-mix(in srgb, a p%, b)`. */
+function mix(a: string, b: string, p: number): string {
+  const ch = (h: string, i: number) => parseInt(h.slice(i, i + 2), 16);
+  return '#' + [1, 3, 5].map((i) => Math.round(ch(a, i) * p + ch(b, i) * (1 - p)).toString(16).padStart(2, '0')).join('');
+}
+
+/** `--name: color-mix(in srgb, var(--a) N%, var(--b) | #hex)` tokens, resolved per scheme. */
+function mixes(base: Record<Scheme, Record<string, string>>): Record<Scheme, Record<string, string>> {
+  const root = css.slice(css.indexOf(':root {'), css.indexOf("\n}\n", css.indexOf(':root {')));
+  const out: Record<Scheme, Record<string, string>> = { light: { ...base.light }, dark: { ...base.dark } };
+  const ref = (s: Scheme, r: string) => (r.startsWith('#') ? r.toLowerCase() : out[s][r.replace(/^var\(--|\)$/g, '')]);
+  for (const m of root.matchAll(/--([\w-]+):\s*color-mix\(in srgb, (var\(--[\w-]+\)|#[0-9a-f]{6}) (\d+)%, (var\(--[\w-]+\)|#[0-9a-f]{6})\);/gi)) {
+    for (const s of ['light', 'dark'] as const) {
+      const [a, b] = [ref(s, m[2]!), ref(s, m[4]!)];
+      if (a && b) out[s][m[1]!] = mix(a, b, Number(m[3]) / 100);
+    }
+  }
+  return out;
+}
+
+const all = mixes(tokens());
 const get = (s: Scheme, name: string): string => {
   const v = all[s][ALIAS[name] ?? name];
   if (!v) throw new Error(`no token --${name}`);
@@ -67,6 +86,10 @@ const PAIRS: [string, string[], number][] = [
   ['success', SURFACES, 4.5],
   ['warning', SURFACES, 4.5],
   ['danger', SURFACES, 4.5],
+  // Status text on its own soft tint (chips, badges, notices).
+  ['success', ['success-soft'], 4.5],
+  ['warning', ['warning-soft'], 4.5],
+  ['danger', ['danger-soft'], 4.5],
   ['success-solid-fg', ['success-solid'], 4.5],
   ['warning-solid-fg', ['warning-solid'], 4.5],
   ['danger-solid-fg', ['danger-solid'], 4.5],

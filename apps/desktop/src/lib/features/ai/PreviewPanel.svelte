@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { AiPreview } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
+  import { Button, Card } from '$lib/ui';
   import { usd } from './ai';
 
   interface Props {
@@ -15,7 +16,7 @@
   const limit = $derived(usd(preview.budget.limit_usd) ?? '');
 </script>
 
-<section class="preview" aria-label={t('ai.preview.heading')}>
+<Card padding="lg" as="section" label={t('ai.preview.heading')} class="ai-preview">
   <h3>{t('ai.preview.heading')}</h3>
   <p>
     {t('ai.preview.summary', {
@@ -52,38 +53,53 @@
     {/each}
   </details>
   <div class="actions">
-    <button class="primary" disabled={busy || preview.missing_key} onclick={onsend}>
+    <Button variant="ghost" disabled={busy} onclick={oncancel}>{t('ai.preview.cancel')}</Button>
+    <Button variant="primary" loading={busy} disabled={busy || preview.missing_key} onclick={onsend}>
       {t('ai.preview.send')}
-    </button>
-    <button disabled={busy} onclick={oncancel}>{t('ai.preview.cancel')}</button>
+    </Button>
   </div>
-</section>
+</Card>
 
 <style>
-  .preview {
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    padding: var(--fc-space-3);
-    margin: var(--fc-space-3) 0;
-  }
   h3 {
-    margin-top: 0;
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
+  }
+  h4 {
+    margin: var(--space-3) 0 var(--space-1);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+  }
+  p {
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-sm);
+  }
+  summary {
+    cursor: pointer;
+    font-size: var(--text-sm);
+    color: var(--accent);
   }
   pre {
     white-space: pre-wrap;
     max-height: 20rem;
     overflow: auto;
-    background: var(--fc-bg-subtle);
-    padding: var(--fc-space-2);
+    margin: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+    font-size: var(--text-xs);
   }
   .muted {
-    color: var(--fc-text-muted);
+    color: var(--text-2);
   }
   .warn {
-    color: var(--fc-danger);
+    color: var(--danger);
   }
   .actions {
     display: flex;
-    gap: var(--fc-space-2);
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
   }
 </style>

@@ -341,7 +341,7 @@
   .hint {
     margin: 0;
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .notice {
     margin: var(--space-4) 0 0;
@@ -409,7 +409,7 @@
     color: var(--warning);
   }
   .miss.neutral > :global(svg) {
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .miss-body {
     flex: 1;
@@ -431,7 +431,7 @@
   }
   .k {
     min-width: 9ch;
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .paper {
     list-style: none;

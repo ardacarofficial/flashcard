@@ -9,6 +9,10 @@
   import type { DeckId, DeckTreeNode } from '$lib/api/types';
   import { deckPaths } from '$lib/components/deck-paths';
   import { t, td } from '$lib/i18n/index.svelte';
+  // Eager (main.ts mounts it): lib/ui file by file, never the barrel.
+  import Button from '$lib/ui/Button.svelte';
+  import Select from '$lib/ui/Select.svelte';
+  import Textarea from '$lib/ui/Textarea.svelte';
   import { QUICK_ADD_EVENT, defaultShell, type Shell } from './shell';
 
   let { shell = defaultShell() }: { shell?: Shell } = $props();
@@ -20,6 +24,7 @@
   let status = $state<string | null>(null);
 
   const paths = $derived(deckPaths(decks));
+  const deckOptions = $derived(paths.map((p) => ({ value: p.id as DeckId | null, label: p.path })));
 
   async function refresh() {
     try {
@@ -65,42 +70,42 @@
   {#if paths.length === 0}
     <p class="muted">{t('quick_add.no_deck')}</p>
   {:else}
-    <label>
-      {t('inbox.deck')}
-      <select bind:value={deck}>
-        {#each paths as p (p.id)}<option value={p.id}>{p.path}</option>{/each}
-      </select>
-    </label>
+    <Select label={t('inbox.deck')} options={deckOptions} bind:value={deck} />
   {/if}
   <!-- svelte-ignore a11y_autofocus -->
-  <label>{t('inbox.front')} <textarea bind:value={front} rows="2" autofocus></textarea></label>
-  <label>{t('inbox.back')} <textarea bind:value={back} rows="2"></textarea></label>
+  <Textarea label={t('inbox.front')} bind:value={front} rows={2} autoGrow autofocus />
+  <Textarea label={t('inbox.back')} bind:value={back} rows={2} autoGrow />
   <div class="actions">
-    <button type="button" onclick={() => void shell.hide()}>{t('quick_add.close')}</button>
-    <button type="submit" disabled={!deck || !front.trim()}>{t('quick_add.add')}</button>
+    <Button variant="ghost" onclick={() => void shell.hide()}>{t('quick_add.close')}</Button>
+    <Button variant="primary" type="submit" disabled={!deck || !front.trim()}>{t('quick_add.add')}</Button>
   </div>
-  {#if status}<p role="status">{status}</p>{/if}
+  {#if status}<p class="status" role="status">{status}</p>{/if}
 </form>
 
 <style>
   .quick-add {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-2);
-    padding: var(--fc-space-4);
+    gap: var(--space-4);
+    min-height: 100vh;
+    padding: var(--space-6);
+    background: var(--surface-1);
+    color: var(--text-1);
   }
-  .quick-add label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-1);
+  h1 {
+    margin: 0;
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
   }
   .actions {
     display: flex;
-    gap: var(--fc-space-2);
+    gap: var(--space-2);
     justify-content: flex-end;
   }
-  h1 {
-    font-size: 1.1rem;
+  .muted,
+  .status {
     margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
   }
 </style>
