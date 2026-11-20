@@ -121,7 +121,7 @@ impl CatalogData {
     pub(crate) fn load(reads: &dyn Reads, now: Timestamp) -> AppResult<Self> {
         Ok(Self {
             decks: reads.list_decks(true)?,
-            tags: reads.list_tags()?.into_iter().map(|(t, _)| t).collect(),
+            tags: reads.list_tags_uncounted()?,
             notetypes: reads.list_notetypes(true)?,
             attributes: reads.list_attribute_defs(false)?,
             flag_names: flag_names(reads)?,

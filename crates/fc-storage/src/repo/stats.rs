@@ -70,6 +70,41 @@ pub struct GoalRecord {
     pub updated_at: Timestamp,
 }
 
+/// The columns of a review row that statistics read (v1.0: a lean row for streaming the
+/// whole history; see [`StatsRead::for_each_stats_review_row`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StatsReviewRow {
+    /// Card.
+    pub card_id: CardId,
+    /// Button pressed.
+    pub rating: fc_core::card::Rating,
+    /// State before the answer.
+    pub state_before: fc_core::card::CardState,
+    /// Days since the previous review.
+    pub elapsed_days: u32,
+    /// Show → rate, ms.
+    pub duration_ms: u32,
+    /// `mode = imported`.
+    pub imported: bool,
+    /// When.
+    pub created_at: Timestamp,
+}
+
+impl StatsReviewRow {
+    /// The lean row of a full one.
+    pub fn of(r: &ReviewLogRecord) -> Self {
+        Self {
+            card_id: r.card_id,
+            rating: r.rating,
+            state_before: r.state_before,
+            elapsed_days: r.elapsed_days,
+            duration_ms: r.duration_ms,
+            imported: r.mode == super::REVIEW_MODE_IMPORTED,
+            created_at: r.created_at,
+        }
+    }
+}
+
 /// Statistics & planning reads.
 pub trait StatsRead {
     /// Review rows other than practice ones (`trial`, `trial_<mode>`, `test`:
@@ -80,6 +115,31 @@ pub trait StatsRead {
         after_seq: i64,
         cards: Option<&[CardId]>,
     ) -> StorageResult<Vec<(i64, ReviewLogRecord)>>;
+    /// [`StatsRead::stats_reviews`] one row at a time, without collecting them (v1.0: the
+    /// two million rows of a long-used collection need not sit in memory together).
+    fn for_each_stats_review(
+        &self,
+        after_seq: i64,
+        cards: Option<&[CardId]>,
+        f: &mut dyn FnMut(i64, &ReviewLogRecord),
+    ) -> StorageResult<()> {
+        for (seq, r) in self.stats_reviews(after_seq, cards)? {
+            f(seq, &r);
+        }
+        Ok(())
+    }
+    /// [`StatsRead::for_each_stats_review`] with only the [`StatsReviewRow`] columns (no ids
+    /// or texts decoded that statistics never look at).
+    fn for_each_stats_review_row(
+        &self,
+        after_seq: i64,
+        cards: Option<&[CardId]>,
+        f: &mut dyn FnMut(i64, &StatsReviewRow),
+    ) -> StorageResult<()> {
+        self.for_each_stats_review(after_seq, cards, &mut |seq, r| {
+            f(seq, &StatsReviewRow::of(r));
+        })
+    }
     /// Current [`ReviewLogMark`].
     fn review_log_mark(&self) -> StorageResult<ReviewLogMark>;
     /// Review rows (any mode) with sequence ≤ `seq`.
@@ -88,6 +148,26 @@ pub trait StatsRead {
     fn stats_cache(&self, calendar: &str) -> StorageResult<Option<StatsCacheRecord>>;
     /// Due times in `[from, to)` of live, unsuspended, scheduled (non-new) cards of live notes.
     fn due_times(&self, from: Timestamp, to: Timestamp) -> StorageResult<Vec<Timestamp>>;
+    /// [`StatsRead::due_times`] counted per day, sorted by day: `(day, cards)` where `day` is
+    /// `(due + shift_ms).div_euclid(MILLIS_PER_DAY)` (a study calendar's day index). v1.0: the
+    /// load balancer asks this on every answer, so the count stays in SQL.
+    fn due_counts_by_day(
+        &self,
+        from: Timestamp,
+        to: Timestamp,
+        shift_ms: i64,
+    ) -> StorageResult<Vec<(i64, u32)>> {
+        let mut out: Vec<(i64, u32)> = Vec::new();
+        for t in self.due_times(from, to)? {
+            let day = t.0.saturating_add(shift_ms).div_euclid(fc_core::time::MILLIS_PER_DAY);
+            match out.iter_mut().find(|(d, _)| *d == day) {
+                Some((_, n)) => *n += 1,
+                None => out.push((day, 1)),
+            }
+        }
+        out.sort_unstable();
+        Ok(out)
+    }
     /// Exams by date.
     fn list_exams(&self) -> StorageResult<Vec<ExamRecord>>;
     /// Exam by id.

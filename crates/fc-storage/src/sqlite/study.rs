@@ -90,37 +90,55 @@ impl<M: Mode> StudyRead for SqliteTx<'_, M> {
             .iter()
             .map(|(attr, values)| serde_json::json!({ "a": attr.to_string(), "v": values }))
             .collect();
-        let conditions = to_json("cards", &conditions)?;
+        // Only the conditions that are set (v1.0): `?n IS NULL OR …` keeps SQLite off the
+        // indexes, and an empty classification list still ran `json_each` for every card.
+        let mut conds = vec![
+            "c.deleted_at IS NULL".to_owned(),
+            "EXISTS (SELECT 1 FROM notes n WHERE n.id = c.note_id AND n.deleted_at IS NULL)"
+                .to_owned(),
+        ];
+        let mut args: Vec<String> = Vec::new();
+        let arg = |v: String, args: &mut Vec<String>| {
+            args.push(v);
+            args.len()
+        };
+        if let Some(decks) = filter.deck_ids.as_deref() {
+            let n = arg(super::json_list(decks), &mut args);
+            conds.push(format!("c.deck_id IN (SELECT value FROM json_each(?{n}))"));
+        }
+        if let Some(cards) = filter.card_ids.as_deref() {
+            let n = arg(super::json_list(cards), &mut args);
+            conds.push(format!("c.id IN (SELECT value FROM json_each(?{n}))"));
+        }
+        if let Some(states) = states {
+            let n = arg(states, &mut args);
+            conds.push(format!("c.state IN (SELECT value FROM json_each(?{n}))"));
+        }
+        if !filter.include_suspended {
+            conds.push("c.suspended = 0".to_owned());
+        }
+        if !conditions.is_empty() {
+            let n = arg(to_json("cards", &conditions)?, &mut args);
+            conds.push(format!(
+                "NOT EXISTS (
+                     SELECT 1 FROM json_each(?{n}) cond
+                     WHERE NOT EXISTS (
+                         SELECT 1 FROM attribute_values v
+                         WHERE v.attr_id = json_extract(cond.value, '$.a')
+                           AND v.value IN (SELECT value FROM json_each(
+                                               json_extract(cond.value, '$.v')))
+                           AND ((v.entity_kind = 'card' AND v.entity_id = c.id)
+                                OR (v.entity_kind = 'note' AND v.entity_id = c.note_id))))"
+            ));
+        }
         all(
             self.conn(),
             "cards",
             &format!(
-                "SELECT {CARD_COLS} FROM cards c
-                 WHERE c.deleted_at IS NULL
-                   AND EXISTS (SELECT 1 FROM notes n WHERE n.id = c.note_id
-                               AND n.deleted_at IS NULL)
-                   AND (?1 IS NULL OR c.deck_id IN (SELECT value FROM json_each(?1)))
-                   AND (?2 IS NULL OR c.id IN (SELECT value FROM json_each(?2)))
-                   AND (?3 IS NULL OR c.state IN (SELECT value FROM json_each(?3)))
-                   AND (?4 OR c.suspended = 0)
-                   AND NOT EXISTS (
-                       SELECT 1 FROM json_each(?5) cond
-                       WHERE NOT EXISTS (
-                           SELECT 1 FROM attribute_values v
-                           WHERE v.attr_id = json_extract(cond.value, '$.a')
-                             AND v.value IN (SELECT value FROM json_each(
-                                                 json_extract(cond.value, '$.v')))
-                             AND ((v.entity_kind = 'card' AND v.entity_id = c.id)
-                                  OR (v.entity_kind = 'note' AND v.entity_id = c.note_id))))
-                 ORDER BY c.created_at, c.id"
+                "SELECT {CARD_COLS} FROM cards c WHERE {} ORDER BY c.created_at, c.id",
+                conds.join(" AND ")
             ),
-            params![
-                filter.deck_ids.as_deref().map(super::json_list),
-                filter.card_ids.as_deref().map(super::json_list),
-                states,
-                filter.include_suspended,
-                conditions,
-            ],
+            rusqlite::params_from_iter(args.iter()),
             card_row,
         )
     }

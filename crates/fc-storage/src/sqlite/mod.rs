@@ -227,9 +227,13 @@ pub(crate) struct EnumStr<T>(pub T);
 
 impl<T: DeserializeOwned> FromSql for EnumStr<T> {
     fn column_result(v: ValueRef<'_>) -> FromSqlResult<Self> {
-        serde_json::from_value(serde_json::Value::String(v.as_str()?.to_owned()))
-            .map(EnumStr)
-            .map_err(conversion)
+        // Straight from the borrowed text (v1.0: no `String` + JSON value per column; review
+        // and card rows carry several of these, millions of times in statistics).
+        T::deserialize(
+            serde::de::value::BorrowedStrDeserializer::<serde_json::Error>::new(v.as_str()?),
+        )
+        .map(EnumStr)
+        .map_err(conversion)
     }
 }
 

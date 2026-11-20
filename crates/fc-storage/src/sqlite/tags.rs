@@ -80,6 +80,16 @@ impl<M: Mode> TagRead for SqliteTx<'_, M> {
         )
     }
 
+    fn list_tags_uncounted(&self) -> StorageResult<Vec<Tag>> {
+        all(
+            self.conn(),
+            T,
+            &format!("SELECT {COLS} FROM tags ORDER BY name COLLATE NOCASE, name, id"),
+            [],
+            tag_row,
+        )
+    }
+
     fn get_tag_by_name(&self, name: &TagName) -> StorageResult<Option<Tag>> {
         find_tag(self.conn(), name)
     }

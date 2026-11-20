@@ -134,6 +134,20 @@ pub(crate) fn review_fact(r: &ReviewLogRecord, cal: StudyDay) -> ReviewFact {
     }
 }
 
+/// [`review_fact`] of a lean statistics row (v1.0 streaming reads).
+pub(crate) fn review_fact_of_row(r: &fc_storage::repo::StatsReviewRow, cal: StudyDay) -> ReviewFact {
+    ReviewFact {
+        card_id: r.card_id,
+        rating: r.rating,
+        state_before: r.state_before,
+        elapsed_days: r.elapsed_days,
+        duration_ms: r.duration_ms,
+        day: cal.index(r.created_at),
+        hour: local_hour(cal, r.created_at),
+        imported: r.imported,
+    }
+}
+
 /// Facts of review rows.
 pub(crate) fn review_facts(rows: &[(i64, ReviewLogRecord)], cal: StudyDay) -> Vec<ReviewFact> {
     rows.iter().map(|(_, r)| review_fact(r, cal)).collect()
@@ -263,9 +277,17 @@ pub(crate) fn fresh_days(
     cal: StudyDay,
     cards: Option<&[CardId]>,
 ) -> AppResult<(Vec<DayAggregate>, u32)> {
-    let rows = reads.stats_reviews(0, cards)?;
-    let n = u32::try_from(rows.len()).unwrap_or(u32::MAX);
-    Ok((aggregate_days(&review_facts(&rows, cal)), n))
+    // Folded while streaming (v1.0: the history is never collected in memory).
+    let mut days: std::collections::BTreeMap<i64, DayAggregate> = std::collections::BTreeMap::new();
+    let mut n = 0u32;
+    reads.for_each_stats_review_row(0, cards, &mut |_, r| {
+        let f = review_fact_of_row(r, cal);
+        days.entry(f.day)
+            .or_insert_with(|| DayAggregate::empty(f.day))
+            .add(&f);
+        n = n.saturating_add(1);
+    })?;
+    Ok((days.into_values().collect(), n))
 }
 
 fn decode_days(rec: &StatsCacheRecord) -> AppResult<Vec<DayAggregate>> {

@@ -182,10 +182,12 @@ pub(crate) fn plan_outcome(
         fc_study::planning::candidate_range(today, outcome.scheduled_days, max_interval, exam);
     let from = cal.start(today + i64::from(lo));
     let to = cal.start(today + i64::from(hi) + 1);
-    let mut load: HashMap<i64, u32> = HashMap::new();
-    for t in reads.due_times(from, to)? {
-        *load.entry(cal.index(t)).or_insert(0) += 1;
-    }
+    // `cal.index(t) = (t + shift).div_euclid(day)` and `cal.start(0) = -shift`.
+    let shift_ms = -cal.start(0).as_millis();
+    let load: HashMap<i64, u32> = reads
+        .due_counts_by_day(from, to, shift_ms)?
+        .into_iter()
+        .collect();
     let ivl = plan_interval(
         today,
         outcome.scheduled_days,

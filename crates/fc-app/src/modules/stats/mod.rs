@@ -33,7 +33,7 @@ use fc_core::attribute::AttributeKind;
 use fc_core::query::{AttrAlt, AttrTest, CardNum, CmpOp, Filter, Pred};
 use fc_core::settings::{SettingDef, SettingKind, SettingScope, SettingScopeKind};
 use fc_core::stats::{
-    aggregate_days, card_stats, iso_date, report_card, review_stats, state_counts, CardFact,
+    card_stats, iso_date, report_card, review_stats, state_counts, CardFact,
 };
 use fc_core::{CardId, DeckId};
 use fc_storage::repo::{CardSearch, CardSort};
@@ -193,13 +193,6 @@ fn breakdown(req: StatsBreakdownRequest, ctx: &QueryCtx<'_>) -> AppResult<StatsB
         .into_iter()
         .map(|f| (f.card_id, f))
         .collect();
-    let mut reviews: HashMap<CardId, Vec<fc_core::stats::ReviewFact>> = HashMap::new();
-    for (_, r) in reads.stats_reviews(0, ids.as_deref())? {
-        reviews
-            .entry(r.card_id)
-            .or_default()
-            .push(review_fact(&r, cal));
-    }
     let alt = |test: AttrTest| {
         Filter::Pred(Pred::Attr(vec![AttrAlt {
             attr_id: def.id,
@@ -221,18 +214,35 @@ fn breakdown(req: StatsBreakdownRequest, ctx: &QueryCtx<'_>) -> AppResult<StatsB
         ctx.now,
     )?;
     groups.push((None, without));
+    // Reviews are folded into per-group day aggregates as they stream by (v1.0: two million
+    // rows are never held in memory; a card of a multi-choice value is in several groups).
+    let mut member: HashMap<CardId, Vec<usize>> = HashMap::new();
+    for (g, (_, ids)) in groups.iter().enumerate() {
+        for i in ids.iter().filter(|i| facts.contains_key(i)) {
+            member.entry(*i).or_default().push(g);
+        }
+    }
+    let mut days: Vec<std::collections::BTreeMap<i64, fc_core::stats::DayAggregate>> =
+        vec![std::collections::BTreeMap::new(); groups.len()];
+    reads.for_each_stats_review_row(0, ids.as_deref(), &mut |_, r| {
+        let Some(gs) = member.get(&r.card_id) else {
+            return;
+        };
+        let f = review_fact_of_row(r, cal);
+        for g in gs {
+            days[*g]
+                .entry(f.day)
+                .or_insert_with(|| fc_core::stats::DayAggregate::empty(f.day))
+                .add(&f);
+        }
+    })?;
     let rows = groups
         .into_iter()
-        .map(|(option, ids)| {
-            let ids: Vec<CardId> = ids.into_iter().filter(|i| facts.contains_key(i)).collect();
+        .zip(days)
+        .map(|((option, ids), days)| {
             let group_facts: Vec<CardFact> = ids.iter().filter_map(|i| facts.get(i).cloned()).collect();
-            let group_reviews: Vec<fc_core::stats::ReviewFact> = ids
-                .iter()
-                .filter_map(|i| reviews.get(i))
-                .flatten()
-                .cloned()
-                .collect();
-            let stats = review_stats(&aggregate_days(&group_reviews), today, from_day);
+            let days: Vec<fc_core::stats::DayAggregate> = days.into_values().collect();
+            let stats = review_stats(&days, today, from_day);
             let forecast = card_stats(&group_facts, today, 7);
             BreakdownRow {
                 option_id: option.map(|o| o.id),

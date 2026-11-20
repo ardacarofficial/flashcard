@@ -479,16 +479,14 @@ pub(crate) fn answer_core(
 
 /// Removes queued cards that were deleted since the queue was built.
 fn drop_dead_cards(ctx: &CommandCtx<'_>, session: &mut Session) -> AppResult<()> {
-    let mut dead = Vec::new();
-    for e in &session.state.queue {
-        let live = ctx
-            .reads()
-            .get_card(e.card_id)?
-            .is_some_and(|c| c.deleted_at.is_none());
-        if !live {
-            dead.push(e.card_id);
-        }
-    }
+    // One query for the whole queue (v1.0: was a card read per queued card on every answer).
+    let queued: Vec<CardId> = session.state.queue.iter().map(|e| e.card_id).collect();
+    let live: std::collections::HashSet<CardId> = ctx
+        .reads()
+        .search_card_ids_among(&fc_core::query::Filter::All, ctx.now, &queued)?
+        .into_iter()
+        .collect();
+    let dead: Vec<CardId> = queued.into_iter().filter(|id| !live.contains(id)).collect();
     queue::remove_cards(&mut session.state, &dead);
     Ok(())
 }

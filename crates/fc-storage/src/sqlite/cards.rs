@@ -7,7 +7,7 @@ use crate::error::StorageResult;
 use crate::repo::{CardFilter, CardRead, CardWrite};
 use fc_core::card::{Card, SchedulingState};
 use fc_core::{CardId, Timestamp};
-use rusqlite::{params, Row};
+use rusqlite::Row;
 
 const T: &str = "cards";
 pub(super) const COLS: &str =
@@ -53,21 +53,38 @@ impl<M: Mode> CardRead for SqliteTx<'_, M> {
     }
 
     fn list_cards(&self, filter: &CardFilter) -> StorageResult<Vec<Card>> {
+        // Only the conditions that are set: an `?n IS NULL OR …` form would keep SQLite off
+        // the `deck_id` / `note_id` indexes and scan every card (v1.0 performance: sibling
+        // lookups on every answer).
+        let mut conds = Vec::new();
+        let mut args = Vec::new();
+        if let Some(decks) = filter.deck_ids.as_deref() {
+            args.push(json_list(decks));
+            conds.push(format!(
+                "deck_id IN (SELECT value FROM json_each(?{}))",
+                args.len()
+            ));
+        }
+        if let Some(notes) = filter.note_ids.as_deref() {
+            args.push(json_list(notes));
+            conds.push(format!(
+                "note_id IN (SELECT value FROM json_each(?{}))",
+                args.len()
+            ));
+        }
+        if !filter.include_deleted {
+            conds.push("deleted_at IS NULL".to_owned());
+        }
+        let cond = if conds.is_empty() {
+            "1".to_owned()
+        } else {
+            conds.join(" AND ")
+        };
         all(
             self.conn(),
             T,
-            &format!(
-                "SELECT {COLS} FROM cards
-                 WHERE (?1 IS NULL OR deck_id IN (SELECT value FROM json_each(?1)))
-                   AND (?2 IS NULL OR note_id IN (SELECT value FROM json_each(?2)))
-                   AND (?3 OR deleted_at IS NULL)
-                 ORDER BY created_at, id"
-            ),
-            params![
-                filter.deck_ids.as_deref().map(json_list),
-                filter.note_ids.as_deref().map(json_list),
-                filter.include_deleted,
-            ],
+            &format!("SELECT {COLS} FROM cards WHERE {cond} ORDER BY created_at, id"),
+            rusqlite::params_from_iter(args.iter()),
             card_row,
         )
     }
