@@ -9,7 +9,7 @@
 use crate::error::AppResult;
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
 use crate::module::ModuleDescriptor;
-use crate::registry::{ErasedHandler, Registry};
+use crate::registry::Registry;
 use crate::support::{module_states, summary};
 use fc_api::v1::browse::*;
 use fc_api::v1::common::Empty;
@@ -283,11 +283,7 @@ fn palette_list(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<PaletteList> {
             let direct = ctx
                 .registry
                 .entry(d.name)
-                .is_some_and(|e| match &e.handler {
-                    ErasedHandler::Command(h) => h.validate(&empty).is_ok(),
-                    ErasedHandler::Query(h) => h.validate(&empty).is_ok(),
-                    ErasedHandler::Action(h) => h.validate(&empty).is_ok(),
-                });
+                .is_some_and(|e| e.handler.validate(&empty).is_ok());
             PaletteEntry {
                 kind: d.kind,
                 module: d.module.to_owned(),

@@ -211,34 +211,6 @@
     "command",
     "cards:write"
   ],
-  "v1.io.backup.create": [
-    "command",
-    "io:write"
-  ],
-  "v1.io.backup.inspect": [
-    "query",
-    "io:read"
-  ],
-  "v1.io.backup.restore": [
-    "command",
-    "io:write"
-  ],
-  "v1.io.export.start": [
-    "command",
-    "io:write"
-  ],
-  "v1.io.import.preview": [
-    "query",
-    "io:read"
-  ],
-  "v1.io.import.start": [
-    "command",
-    "io:write"
-  ],
-  "v1.io.print.render": [
-    "query",
-    "io:read"
-  ],
   "v1.jobs.cancel": [
     "command",
     "jobs:write"
@@ -278,10 +250,6 @@
   "v1.modules.list": [
     "query",
     "modules:read"
-  ],
-  "v1.modules.set_enabled": [
-    "command",
-    "modules:write"
   ],
   "v1.notes.create": [
     "command",
@@ -339,17 +307,9 @@
     "query",
     "oplog:read"
   ],
-  "v1.oplog.redo": [
-    "command",
-    "oplog:write"
-  ],
   "v1.oplog.status": [
     "query",
     "oplog:read"
-  ],
-  "v1.oplog.undo": [
-    "command",
-    "oplog:write"
   ],
   "v1.palette.list": [
     "query",
@@ -419,29 +379,13 @@
     "query",
     "settings:read"
   ],
-  "v1.settings.reset": [
-    "command",
-    "settings:write"
-  ],
   "v1.settings.schema": [
     "query",
     "settings:read"
   ],
-  "v1.settings.set": [
-    "command",
-    "settings:write"
-  ],
   "v1.shortcuts.list": [
     "query",
     "settings:read"
-  ],
-  "v1.shortcuts.reset": [
-    "command",
-    "settings:write"
-  ],
-  "v1.shortcuts.set": [
-    "command",
-    "settings:write"
   ],
   "v1.study.active": [
     "query",

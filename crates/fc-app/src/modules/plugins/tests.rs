@@ -50,6 +50,9 @@ suite!(
     plugin_api_v1_contract,
     install_update_uninstall_are_undoable,
     model_download_manager,
+    hooks_cannot_reach_management_io_or_settings,
+    plugins_get_no_free_paths_or_app_settings,
+    plugin_storage_rolls_back_with_the_call,
 );
 
 const AUTOFILL: &str = "com.example.autofill";
@@ -57,6 +60,7 @@ const SCRAMBLE: &str = "com.example.scramble";
 const TONE: &str = "com.example.tone";
 const REVERSE: &str = "com.example.reverse";
 const MISBEHAVE: &str = "com.example.misbehave";
+const ESCAPE: &str = "com.example.escape";
 
 /// Writes example `name` as a `.fcplugin` file; returns its path (the dir lives with `t`).
 fn package_file(dir: &tempfile::TempDir, name: &str) -> String {
@@ -367,7 +371,7 @@ fn example_hook_fills_a_field(f: Factory) {
         &t,
         &dir,
         "autofill",
-        &["hooks:before:notes.create", "notetypes:read", "ui:command"],
+        &["hooks:before:notes.create", "notes:write", "notetypes:read", "ui:command"],
     );
     let filled = classic(&t, &d, "sword", "");
     assert_eq!(filled.fields["back"], "kılıç");
@@ -414,10 +418,17 @@ fn example_hook_fills_a_field(f: Factory) {
     undo(&t); // the note
     undo(&t); // the setting
     assert_eq!(classic(&t, &d, "shield", "").fields["back"], "kalkan");
-    // Revoking the hook permission switches the hook off.
+    // Revoking the hook's target permission switches the hook off (a hook never gives more
+    // than calling the method would)…
     t.ok::<PluginsSetPermissions>(SetPluginPermissions {
         id: AUTOFILL.into(),
-        granted: vec!["notetypes:read".into()],
+        granted: vec!["hooks:before:notes.create".into(), "notetypes:read".into()],
+    });
+    assert_eq!(classic(&t, &d, "sword", "").fields["back"], "");
+    // …and so does revoking the hook permission.
+    t.ok::<PluginsSetPermissions>(SetPluginPermissions {
+        id: AUTOFILL.into(),
+        granted: vec!["notes:write".into(), "notetypes:read".into()],
     });
     assert_eq!(classic(&t, &d, "sword", "").fields["back"], "");
 }
@@ -463,7 +474,7 @@ fn host_calls_without_permission_are_refused(f: Factory) {
     deck(&t, "blocked");
     t.ok::<PluginsSetPermissions>(SetPluginPermissions {
         id: MISBEHAVE.into(),
-        granted: vec!["hooks:before:decks.create".into()],
+        granted: vec!["hooks:before:decks.create".into(), "decks:write".into()],
     });
     let e = t.err::<DecksCreate>(CreateDeck {
         path: "blocked".into(),
@@ -512,7 +523,13 @@ fn misbehaving_plugins_cannot_crash_the_app(f: Factory) {
         &t,
         &dir,
         "misbehave",
-        &["ui:command", "hooks:before:decks.create", "hooks:event:note_created", "decks:read"],
+        &[
+            "ui:command",
+            "hooks:before:decks.create",
+            "hooks:event:note_created",
+            "decks:read",
+            "decks:write",
+        ],
     );
     let started = std::time::Instant::now();
     assert_eq!(fault_kind(run(&t, MISBEHAVE, "loop")), "TIMEOUT");
@@ -598,7 +615,10 @@ fn plugin_api_v1_contract(f: Factory) {
         .app
         .registry()
         .methods()
-        .filter(|d| d.visibility == Visibility::Public && !d.permission.starts_with("plugins:"))
+        .filter(|d| {
+            d.visibility == Visibility::Public
+                && fc_plugins::permission::api_grantable(d.permission)
+        })
         .map(|d| {
             (
                 d.qualified_name(),
@@ -794,4 +814,287 @@ fn every_plugin_method_is_registered_with_its_kind() {
         }
     }
     assert_eq!(PluginsRun::NAME, "plugins.run");
+}
+
+// ------------------------------------------------------------------ sandbox escapes
+//
+// `plugins-sdk/examples/escape` is hostile: every command or hook is a way out of the sandbox
+// that must be refused. Variants of its manifest ask for what no plugin may hold.
+
+/// The escape plugin packed with `permissions` instead of its own list, without any check
+/// on the packing side (as a hostile author would ship it).
+fn escape_variant(dir: &tempfile::TempDir, name: &str, permissions: &[&str]) -> String {
+    let src = fc_plugins::testing::example_dir("escape");
+    let read = |f: &str| std::fs::read(src.join(f)).unwrap();
+    let list = permissions.iter().map(|p| format!("\"{p}\"")).collect::<Vec<_>>().join(", ");
+    let toml: String = String::from_utf8(read("plugin.toml"))
+        .unwrap()
+        .lines()
+        .map(|l| {
+            if l.starts_with("permissions = ") {
+                format!("permissions = [{list}]")
+            } else {
+                l.to_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let wasm = fc_plugins::testing::example_wasm("escape").unwrap();
+    let (settings, en, tr) = (
+        read("settings.schema.json"),
+        read("locales/en.json"),
+        read("locales/tr.json"),
+    );
+    let bytes = fc_plugins::testing::pack_unchecked(&[
+        ("plugin.toml", toml.as_bytes()),
+        ("plugin.wasm", &wasm),
+        ("settings.schema.json", &settings),
+        ("locales/en.json", &en),
+        ("locales/tr.json", &tr),
+    ])
+    .unwrap();
+    let path = dir.path().join(format!("{name}.fcplugin"));
+    std::fs::write(&path, bytes).unwrap();
+    path.display().to_string()
+}
+
+fn install_refused(t: &TestApp, path: String, grant: &[&str]) -> ApiError {
+    t.err::<PluginsInstall>(InstallPlugin {
+        path,
+        grant: grant.iter().map(|g| (*g).to_owned()).collect(),
+    })
+}
+
+fn wire(code: ErrorCode) -> Value {
+    serde_json::to_value(code).unwrap()
+}
+
+/// The plugin's call failed on a refused host call with `code`.
+fn refused(r: Result<PluginCommandResult, ApiError>, code: ErrorCode) {
+    let e = r.unwrap_err();
+    assert_eq!(e.code, ErrorCode::ProviderPluginFailed, "{e:?}");
+    assert_eq!(e.details["code"], wire(code), "{e:?}");
+}
+
+fn grants(t: &TestApp, id: &str) -> Vec<String> {
+    plugin(t, id)
+        .permissions
+        .into_iter()
+        .filter(|p| p.granted)
+        .map(|p| p.permission)
+        .collect()
+}
+
+fn kv(t: &TestApp, key: &str) -> Option<Value> {
+    t.app.store().read().unwrap().get_plugin_kv(ESCAPE, key).unwrap()
+}
+
+/// Review finding 1: a `before:` hook rewrites the *user's* call, so hooks on plugin
+/// management, export/restore, settings, modules, undo or batches would act with the user's
+/// authority. They are refused at install and never indexed; any other hook needs the hooked
+/// method's own permission.
+fn hooks_cannot_reach_management_io_or_settings(f: Factory) {
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    for (i, hook) in [
+        "hooks:before:plugins.set_permissions",
+        "hooks:before:plugins.install",
+        "hooks:after:plugins.set_enabled",
+        "hooks:before:io.export.start",
+        "hooks:before:io.backup.restore",
+        "hooks:before:io.backup.create",
+        "hooks:before:settings.set",
+        "hooks:before:shortcuts.set",
+        "hooks:before:modules.set_enabled",
+        "hooks:before:oplog.undo",
+        "hooks:before:batch.execute",
+        "hooks:before:jobs.cancel",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let e = install_refused(&t, escape_variant(&dir, &format!("h{i}"), &["ui:command", hook]), &[hook]);
+        assert_eq!(e.code, ErrorCode::ValidationPluginManifest, "{hook}: {e:?}");
+        assert_eq!(e.details["permission"], json!(hook));
+    }
+    // A hook without the hooked method's permission in the manifest is refused too.
+    let e = install_refused(
+        &t,
+        escape_variant(&dir, "nowrite", &["hooks:before:notes.create"]),
+        &["hooks:before:notes.create"],
+    );
+    assert_eq!(e.code, ErrorCode::ValidationPluginManifest);
+    assert!(t.ok::<PluginsList>(Empty {}).plugins.is_empty(), "nothing got installed");
+
+    // Installed, the hook runs only while the method's own permission is granted as well.
+    let d = deck(&t, "Hooked");
+    install(&t, &dir, "escape", &["hooks:before:notes.create"]);
+    assert_eq!(classic(&t, &d, "plain", "x").fields["front"], "plain");
+    t.ok::<PluginsSetPermissions>(SetPluginPermissions {
+        id: ESCAPE.into(),
+        granted: vec!["hooks:before:notes.create".into(), "notes:write".into()],
+    });
+    assert_eq!(classic(&t, &d, "plain", "x").fields["front"], "hooked");
+
+    // Defense in depth: a stored row that holds a forbidden hook anyway (an old or edited
+    // collection) loads, but the hook is never indexed, so the user's revoke stands.
+    {
+        let mut tx = t.app.store().write().unwrap();
+        let mut row = tx.get_plugin(ESCAPE).unwrap().unwrap();
+        let tampered = "hooks:before:plugins.set_permissions";
+        row.manifest["permissions"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!(tampered));
+        row.granted.push(tampered.into());
+        tx.upsert_plugin(&row).unwrap();
+        tx.commit().unwrap();
+    }
+    t.app.plugins().reload(&t.app);
+    t.ok::<PluginsSetPermissions>(SetPluginPermissions {
+        id: ESCAPE.into(),
+        granted: vec![],
+    });
+    assert!(grants(&t, ESCAPE).is_empty(), "the hook did not rewrite the revoke");
+}
+
+struct TestPicker {
+    open: Option<std::path::PathBuf>,
+    save: Option<std::path::PathBuf>,
+    suggested: std::sync::Mutex<Vec<String>>,
+}
+
+impl FilePicker for TestPicker {
+    fn pick_open(&self, _extensions: &[String]) -> Option<std::path::PathBuf> {
+        self.open.clone()
+    }
+
+    fn pick_save(&self, suggested_name: &str, _extensions: &[String]) -> Option<std::path::PathBuf> {
+        self.suggested.lock().unwrap().push(suggested_name.to_owned());
+        self.save.clone()
+    }
+}
+
+/// Review findings 2 and 3: `io:*` (free file paths), `settings:*`, `modules:*`, `plugins:*`,
+/// `oplog:*` are never grantable; files come only through `fs:pick` (a name and bytes); a
+/// plugin's settings are its own schema, so it cannot loosen its own limits.
+fn plugins_get_no_free_paths_or_app_settings(f: Factory) {
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    for (i, p) in [
+        "io:read",
+        "io:write",
+        "settings:write",
+        "modules:write",
+        "plugins:write",
+        "oplog:write",
+        "mcp:write",
+        "ai_keys:write",
+        "ai:write",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let e = install_refused(&t, escape_variant(&dir, &format!("p{i}"), &["ui:command", p]), &[p]);
+        assert_eq!(e.code, ErrorCode::ValidationPluginManifest, "{p}: {e:?}");
+    }
+
+    let all = ["ui:command", "fs:pick", "decks:write", "hooks:before:notes.create", "notes:write"];
+    install(&t, &dir, "escape", &all);
+    for command in ["self-grant", "export", "restore", "raise-limits", "module-off", "undo"] {
+        refused(run(&t, ESCAPE, command), ErrorCode::PermissionDenied);
+    }
+    assert_eq!(grants(&t, ESCAPE).len(), all.len(), "grants unchanged");
+    assert!(t.app.is_module_enabled(ID));
+    // Even a grant that slipped into the registry does not open a forbidden area.
+    let actor = Actor::Plugin(ESCAPE.into());
+    let mut tampered: BTreeSet<String> = all.iter().map(|p| (*p).to_owned()).collect();
+    tampered.extend(["io:write".to_owned(), "settings:write".to_owned()]);
+    t.app.registry().set_plugin_grants(ESCAPE, Some(tampered));
+    for (method, params) in [
+        ("v1.io.export.start", json!({ "path": "/tmp/x" })),
+        ("v1.settings.set", json!({ "scope": { "kind": "app" }, "key": SETTING_FUEL, "value": 1 })),
+    ] {
+        let e = t.app.invoke(method, params, &actor).unwrap_err();
+        assert_eq!(e.code, ErrorCode::PermissionDenied, "{method}");
+    }
+    t.app.plugins().reload(&t.app);
+
+    // Its own settings: yes. An app key through the same door: no such setting.
+    let r = run(&t, ESCAPE, "own-setting").unwrap().result;
+    assert_eq!(r["level"], json!(5));
+    let s = t.ok::<PluginsSettingsGet>(PluginRef { id: ESCAPE.into() });
+    assert_eq!(s.values["level"], json!(5));
+    refused(run(&t, ESCAPE, "app-setting-as-own"), ErrorCode::NotFoundSetting);
+    let stored = t
+        .app
+        .store()
+        .read()
+        .unwrap()
+        .get_setting(&SettingScope::App, SETTING_FUEL)
+        .unwrap();
+    assert_eq!(stored, None, "the sandbox limit was not touched");
+
+    // Files: only through the user's dialog.
+    refused(run(&t, ESCAPE, "open"), ErrorCode::ProviderUnavailable);
+    let files = tempfile::tempdir().unwrap();
+    let secret = files.path().join("notes.txt");
+    std::fs::write(&secret, "hello").unwrap();
+    let picker = Arc::new(TestPicker {
+        open: Some(secret.clone()),
+        save: Some(files.path().join("chosen.txt")),
+        suggested: std::sync::Mutex::new(vec![]),
+    });
+    t.app.set_file_picker(picker.clone());
+    let opened = run(&t, ESCAPE, "open").unwrap().result;
+    assert_eq!(opened["name"], json!("notes.txt"));
+    assert_eq!(opened["data_b64"], json!("aGVsbG8="));
+    let folder = files.path().display().to_string();
+    assert!(!opened.to_string().contains(&folder), "no path reaches the plugin: {opened}");
+    let saved = run(&t, ESCAPE, "save").unwrap().result;
+    assert_eq!(saved, json!("chosen.txt"));
+    assert_eq!(std::fs::read_to_string(files.path().join("chosen.txt")).unwrap(), "hi");
+    assert_eq!(
+        *picker.suggested.lock().unwrap(),
+        vec!["escaped.txt".to_owned()],
+        "a suggested name cannot steer the dialog to another folder"
+    );
+    assert!(!dir.path().join("escaped.txt").exists());
+    // Without fs:pick, no dialog.
+    t.ok::<PluginsSetPermissions>(SetPluginPermissions {
+        id: ESCAPE.into(),
+        granted: vec!["ui:command".into()],
+    });
+    refused(run(&t, ESCAPE, "open"), ErrorCode::PermissionDenied);
+}
+
+/// Review finding 4: plugin storage and settings written during a call are part of its undo
+/// group: rolled back when the plugin fails, undone with the user data it changed, and no
+/// undo step of their own.
+fn plugin_storage_rolls_back_with_the_call(f: Factory) {
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    install(&t, &dir, "escape", &["ui:command", "decks:write"]);
+    let status = t.ok::<OplogStatus>(Empty {});
+    assert_eq!(fault_kind(run(&t, ESCAPE, "kv-then-panic")), "TRAP");
+    assert_eq!(kv(&t, "secret"), None, "storage written before the crash is gone");
+    let s = t.ok::<PluginsSettingsGet>(PluginRef { id: ESCAPE.into() });
+    assert_eq!(s.values["level"], json!(1), "so is the setting");
+    assert_eq!(t.ok::<OplogStatus>(Empty {}), status, "and no undo step");
+
+    // Storage only: kept, no undo step.
+    assert_eq!(run(&t, ESCAPE, "kv-only").unwrap().result, json!(1));
+    assert_eq!(run(&t, ESCAPE, "kv-only").unwrap().result, json!(2));
+    assert_eq!(t.ok::<OplogStatus>(Empty {}), status);
+
+    // User data + storage: one undo step takes back both.
+    let before = t.ok::<DecksList>(Empty {});
+    assert_eq!(run(&t, ESCAPE, "write-and-kv").unwrap().result, json!(true));
+    assert_eq!(kv(&t, "deck"), Some(json!(true)));
+    undo(&t);
+    assert_eq!(t.ok::<DecksList>(Empty {}), before);
+    assert_eq!(kv(&t, "deck"), None);
+    redo(&t);
+    assert_eq!(kv(&t, "deck"), Some(json!(true)));
+    assert_eq!(kv(&t, "n"), Some(json!(2)));
 }

@@ -15,12 +15,14 @@ path = "src/main.rs"
 fc-api.workspace = true
 fc-core.workspace = true
 fc-app = { path = "../fc-app" }
+fc-plugins.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 clap.workspace = true
 
 [dev-dependencies]
 fc-app = { path = "../fc-app", features = ["testing"] }
+fc-plugins = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
 
 [lints]

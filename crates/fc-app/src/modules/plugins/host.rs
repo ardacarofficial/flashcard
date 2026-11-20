@@ -10,6 +10,17 @@
 //! | operation (`plugins.run`, plugin commands, `plugins.ui.*`) | everything granted | one undo step for the whole operation; rolled back if the plugin fails; other plugins' `before:` hooks apply |
 //! | card type / TTS engine | log only ([`PureHost`]) | none |
 //!
+//! Plugin storage (`kv.*`) and the plugin's own settings (`settings.set`) are written into the
+//! same undo group: a failing call rolls them back with everything else. A call that only
+//! touched its own storage/settings leaves no undo step (plugin bookkeeping is not the user's
+//! history); one that also changed user data undoes both together.
+//!
+//! **What plugins never reach**, whatever they were granted: plugin management, app
+//! settings and module switches (so never their own sandbox limits), undo/redo, free file
+//! paths (`io.*`; files come through `fs:pick`), MCP servers, AI keys — see
+//! `fc_plugins::permission::FORBIDDEN_API_AREAS` — and hooks on those methods
+//! (`FORBIDDEN_HOOK_PREFIXES`). A hook also needs the hooked method's own permission.
+//!
 //! Changes made by plugins never trigger `after:`/`event:` hooks (no cascades). A failing
 //! plugin never stops the core operation (a failing `before:` hook = continue without it,
 //! unless `plugins.before_hook_failure = reject`); faults (trap, fuel, deadline, memory, ABI)
@@ -18,17 +29,19 @@
 use super::{model_store, settings_values};
 use crate::app::{OplogMode, UndoGroup};
 use crate::error::{AppError, AppResult};
-use crate::registry::{ensure_invocable, ErasedHandler};
+use crate::registry::{ensure_invocable, ErasedHandler, Registry};
 use crate::App;
 use fc_api::method::parse_qualified_name;
 use fc_api::v1::common::I18nMessage;
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::methods::{
     OplogRedo, OplogUndo, PluginsKvSet, PluginsRecordFailure, PluginsRollback,
+    PluginsSettingsSet,
 };
 use fc_api::v1::oplog::Actor;
 use fc_api::v1::plugins::{
-    LogLevel, PluginLogEntry, PluginNotice, RecordPluginFailure, SetPluginKv, UiText,
+    LogLevel, PluginLogEntry, PluginNotice, RecordPluginFailure, SetPluginKv, SetPluginSetting,
+    UiText,
 };
 use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest};
 use fc_core::settings::SettingDef;
@@ -41,7 +54,35 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::path::PathBuf;
 use std::time::Duration;
+
+/// The native file dialog behind `fs:pick` (set by the desktop shell with
+/// [`App::set_file_picker`]). It returns the path the user chose; the host reads or writes
+/// the file itself and hands the plugin only the file name and bytes.
+pub trait FilePicker: Send + Sync {
+    /// An existing file to open (`None` = cancelled). `extensions` filter the dialog
+    /// (`["csv"]`; empty = any).
+    fn pick_open(&self, extensions: &[String]) -> Option<PathBuf>;
+    /// Where to save a new file named like `suggested_name` (`None` = cancelled).
+    fn pick_save(&self, suggested_name: &str, extensions: &[String]) -> Option<PathBuf>;
+}
+
+/// Largest file a plugin may open or save through `fs:pick` (base64 must fit one ABI
+/// message).
+pub const MAX_PICKED_FILE_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Whether `plugin` may hook command `method` now: a public command, not one of the methods
+/// no plugin may hook, and the plugin holds the method's own permission (a hook never gives
+/// more than calling the method would).
+pub(crate) fn hook_allowed(registry: &Registry, plugin: &LoadedPlugin, method: &str) -> bool {
+    registry.descriptor(method).is_some_and(|d| {
+        d.visibility == fc_api::Visibility::Public
+            && d.kind == fc_api::MethodKind::Command
+            && fc_plugins::permission::hook_target_allowed(method, d.permission).is_ok()
+            && plugin.has(d.permission)
+    })
+}
 
 /// Hook policy of one dispatch.
 #[derive(Debug, Clone, Copy)]
@@ -220,6 +261,7 @@ pub struct PluginHost {
     pub(crate) sessions: Mutex<HashMap<String, Session>>,
     next_session: AtomicU64,
     events: Mutex<Vec<DomainEvent>>,
+    picker: RwLock<Option<Arc<dyn FilePicker>>>,
 }
 
 /// Plain-text form of a wire error code.
@@ -282,6 +324,17 @@ fn read_settings_config(reads: &dyn fc_storage::Reads) -> Config {
 }
 
 impl PluginHost {
+    /// See [`App::set_file_picker`].
+    pub(crate) fn set_file_picker(&self, picker: Arc<dyn FilePicker>) {
+        if let Ok(mut p) = self.picker.write() {
+            *p = Some(picker);
+        }
+    }
+
+    fn picker(&self) -> Option<Arc<dyn FilePicker>> {
+        self.picker.read().ok().and_then(|p| p.clone())
+    }
+
     /// Active plugin by id.
     pub(crate) fn get(&self, id: &str) -> Option<Arc<LoadedPlugin>> {
         self.loaded
@@ -352,8 +405,13 @@ impl PluginHost {
                     continue;
                 };
                 match perm.hook() {
-                    Some(HookPoint::Before(m)) => next.before.entry(m).or_default().push(id.clone()),
-                    Some(HookPoint::After(m)) => next.after.entry(m).or_default().push(id.clone()),
+                    Some(HookPoint::Before(m)) if hook_allowed(registry, p, &m) => {
+                        next.before.entry(m).or_default().push(id.clone());
+                    }
+                    Some(HookPoint::After(m)) if hook_allowed(registry, p, &m) => {
+                        next.after.entry(m).or_default().push(id.clone());
+                    }
+                    Some(HookPoint::Before(_) | HookPoint::After(_)) => {}
                     Some(HookPoint::Event(e)) => next.events.entry(e).or_default().push(id.clone()),
                     None => {}
                 }
@@ -486,6 +544,7 @@ impl PluginHost {
             plugin,
             mode,
             group: None,
+            history: false,
             notices: Vec::new(),
         };
         let r = rt.call(&compiled, op, input, &limits, &mut host);
@@ -524,7 +583,9 @@ impl PluginHost {
             if skip == Some(id.as_str()) {
                 continue;
             }
-            let Some(plugin) = self.get(&id) else {
+            // Checked again at call time (grants may have changed since the index was built).
+            let Some(plugin) = self.get(&id).filter(|p| hook_allowed(app.registry(), p, method))
+            else {
                 continue;
             };
             let input = json!({ "hook": hook, "method": method, "params": params.clone() });
@@ -583,7 +644,7 @@ impl PluginHost {
             .and_then(|l| l.after.get(method).cloned())
             .unwrap_or_default();
         for id in ids {
-            if let Some(plugin) = self.get(&id) {
+            if let Some(plugin) = self.get(&id).filter(|p| hook_allowed(app.registry(), p, method)) {
                 let input = json!({
                     "hook": format!("after:{method}"),
                     "method": method,
@@ -673,6 +734,13 @@ impl PluginHost {
     }
 }
 
+/// Last component of `path` (what a plugin may learn about a picked file).
+fn file_name(path: &std::path::Path) -> String {
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
 /// Wire name of a domain event (`note_created`).
 pub(crate) fn event_type(e: &DomainEvent) -> Option<String> {
     serde_json::to_value(e)
@@ -699,6 +767,8 @@ pub(crate) struct OpHost<'a> {
     plugin: &'a Arc<LoadedPlugin>,
     mode: Mode,
     group: Option<UndoGroup>,
+    /// The group holds changes to user data (not only the plugin's own storage/settings).
+    history: bool,
     notices: Vec<PluginNotice>,
 }
 
@@ -747,11 +817,15 @@ impl OpHost<'_> {
             .ok_or_else(|| AppError::api(ErrorCode::Internal, "undo group missing"))
     }
 
-    /// Commits the operation's undo step, or rolls its writes back if the plugin failed.
+    /// Commits the operation's undo step, or rolls its writes back if the plugin failed
+    /// (plugin storage and settings included). Only storage/settings changes: kept, no undo
+    /// step.
     fn finish(&mut self, ok: bool) -> Vec<PluginNotice> {
         if let Some(group) = self.group.take() {
             let actor = self.plugin.actor();
-            if ok || group.is_empty() {
+            if ok && !self.history {
+                let _ = self.app.close_empty_group(&group);
+            } else if ok || group.is_empty() {
                 let summary = I18nMessage::key("oplog.summary.plugins.run")
                     .param("plugin", &self.plugin.manifest.name);
                 let _ = self.app.commit_group(&group, &actor, Some(summary));
@@ -808,24 +882,106 @@ impl OpHost<'_> {
                     params,
                 };
                 let group = self.group()?;
-                app.invoke_with(&request, &actor, OplogMode::Defer(group))
+                let r = app.invoke_with(&request, &actor, OplogMode::Defer(group));
+                if r.is_ok() {
+                    self.history = true;
+                }
+                r
             }
         }
     }
 
-    fn kv_write(&self, key: String, value: Option<Value>) -> AppResult<Value> {
+    /// Runs one of the plugin's own bookkeeping commands (storage, settings) inside the
+    /// operation's undo group.
+    fn own_write<M: ApiMethod>(&mut self, request: &M::Request) -> AppResult<Value> {
         let request = InvokeRequest {
-            method: format!("{}.{}", fc_api::API_VERSION, PluginsKvSet::NAME),
-            params: serde_json::to_value(SetPluginKv {
-                plugin_id: self.plugin.id().to_owned(),
-                key,
-                value,
-            })
-            .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?,
+            method: format!("{}.{}", fc_api::API_VERSION, M::NAME),
+            params: serde_json::to_value(request)
+                .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?,
         };
-        self.app
-            .invoke_trusted(&request, &self.plugin.actor())
-            .map_err(AppError::Api)
+        let actor = self.plugin.actor();
+        let app = self.app;
+        let group = self.group()?;
+        app.invoke_with(&request, &actor, OplogMode::Defer(group))
+    }
+
+    fn kv_write(&mut self, key: String, value: Option<Value>) -> AppResult<Value> {
+        self.own_write::<PluginsKvSet>(&SetPluginKv {
+            plugin_id: self.plugin.id().to_owned(),
+            key,
+            value,
+        })
+        .map(|_| Value::Null)
+    }
+
+    /// `fs:pick` checks: granted, user-started operation, a dialog available.
+    fn picker(&self, func: &str) -> AppResult<Arc<dyn FilePicker>> {
+        self.require(func, "fs:pick")?;
+        if self.mode != Mode::Operation {
+            return Err(denied(
+                func,
+                "fs:pick",
+                "file dialogs open only during an operation the user started",
+            ));
+        }
+        self.app.plugins().picker().ok_or_else(|| {
+            AppError::Api(
+                ApiError::new(ErrorCode::ProviderUnavailable, "no file dialog in this app")
+                    .with_detail("provider", "fs"),
+            )
+        })
+    }
+
+    fn fs_open(&self, func: &str, args: Value) -> AppResult<Value> {
+        #[derive(serde::Deserialize)]
+        struct Open {
+            #[serde(default)]
+            extensions: Vec<String>,
+        }
+        let a: Open = Self::args(func, args)?;
+        let picker = self.picker(func)?;
+        let Some(path) = picker.pick_open(&a.extensions) else {
+            return Ok(Value::Null);
+        };
+        let io = |e: std::io::Error| AppError::api(ErrorCode::IoFile, e.to_string());
+        let size = std::fs::metadata(&path).map_err(io)?.len();
+        if size > MAX_PICKED_FILE_BYTES {
+            return Err(AppError::Api(
+                ApiError::new(ErrorCode::ValidationInvalidParams, "file too large for a plugin")
+                    .with_detail("function", func)
+                    .with_detail("max_bytes", MAX_PICKED_FILE_BYTES),
+            ));
+        }
+        let data = std::fs::read(&path).map_err(io)?;
+        Ok(json!({
+            "name": file_name(&path),
+            "size": data.len(),
+            "data_b64": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data),
+        }))
+    }
+
+    fn fs_save(&self, func: &str, args: Value) -> AppResult<Value> {
+        #[derive(serde::Deserialize)]
+        struct Save {
+            suggested_name: String,
+            data_b64: String,
+            #[serde(default)]
+            extensions: Vec<String>,
+        }
+        let a: Save = Self::args(func, args)?;
+        let picker = self.picker(func)?;
+        let data = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &a.data_b64)
+            .map_err(|e| crate::support::invalid(format!("{func}: data_b64: {e}")))?;
+        if data.len() as u64 > MAX_PICKED_FILE_BYTES {
+            return Err(crate::support::invalid(format!("{func}: file too large")));
+        }
+        // Only a bare name is suggested: a plugin cannot steer the dialog to a folder.
+        let suggested = file_name(std::path::Path::new(&a.suggested_name));
+        let Some(path) = picker.pick_save(&suggested, &a.extensions) else {
+            return Ok(Value::Null);
+        };
+        std::fs::write(&path, data).map_err(|e| AppError::api(ErrorCode::IoFile, e.to_string()))?;
+        Ok(json!({ "name": file_name(&path) }))
     }
 
     fn dispatch(&mut self, func: &str, args: Value) -> AppResult<Value> {
@@ -862,6 +1018,19 @@ impl OpHost<'_> {
                 let tx = self.app.store().read()?;
                 Ok(json!(settings_values(&*tx, &id, &self.plugin.settings)?))
             }
+            host_fns::SETTINGS_SET => {
+                // Its own namespace only: the id is the caller's, the key must be in its
+                // schema (checked by `plugins.settings.set`).
+                let a: KeyArgs = Self::args(func, args)?;
+                let r = self.own_write::<PluginsSettingsSet>(&SetPluginSetting {
+                    id: id.clone(),
+                    key: a.key,
+                    value: a.value.filter(|v| !v.is_null()),
+                })?;
+                Ok(r.get("values").cloned().unwrap_or(Value::Null))
+            }
+            host_fns::FS_OPEN => self.fs_open(func, args),
+            host_fns::FS_SAVE => self.fs_save(func, args),
             host_fns::LOG => {
                 #[derive(serde::Deserialize)]
                 struct Log {

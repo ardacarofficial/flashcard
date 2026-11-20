@@ -382,6 +382,12 @@ impl App {
         &self.plugins
     }
 
+    /// Installs the native file dialog that serves plugins' `fs:pick` (the desktop shell
+    /// sets one; without it `fs.open`/`fs.save` report `PROVIDER_UNAVAILABLE`).
+    pub fn set_file_picker(&self, picker: Arc<dyn crate::modules::plugins::FilePicker>) {
+        self.plugins.set_file_picker(picker);
+    }
+
     /// The registry (for `commands.list`, transports and tests).
     pub fn registry(&self) -> &Registry {
         &self.registry

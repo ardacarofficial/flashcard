@@ -29,9 +29,65 @@ pub const UI_POINTS: &[&str] = &[
     "settings",
 ];
 
-/// API areas a plugin may never be granted (plugin management: a plugin cannot install
-/// plugins or change grants).
-pub const FORBIDDEN_API_AREAS: &[&str] = &["plugins"];
+/// API areas a plugin may never be granted, in either access:
+///
+/// * `plugins`: plugin management (install, grants, limits).
+/// * `io`: import/export/backup methods take free file paths (reads included: preview and
+///   inspect open any file); plugins get files only through `fs:pick` (the user chooses, the
+///   plugin sees bytes and a file name, never a path).
+/// * `mcp`, `ai_keys`, `ai_requests`: external tool servers, API keys, paid AI calls (plugins
+///   use the `ai:invoke` host permission).
+pub const FORBIDDEN_API_AREAS: &[&str] = &["plugins", "io", "mcp", "ai_keys", "ai_requests"];
+
+/// Single API permissions a plugin may never be granted (reading these areas is fine):
+///
+/// * `settings:write`, `modules:write`: app-wide switches, including the sandbox limits
+///   (`plugins.fuel_millions`…). A plugin's own settings go through the `settings.set` host
+///   function (its namespace and schema only).
+/// * `oplog:write`: undo/redo belong to the user.
+/// * `ai:write`: AI providers and routes (could redirect requests and keys).
+pub const FORBIDDEN_API_PERMISSIONS: &[&str] =
+    &["settings:write", "modules:write", "oplog:write", "ai:write"];
+
+/// Methods no plugin may hook, whatever it was granted: a `before:` hook rewrites the
+/// *user's* call, so a hook here would act with the user's authority (approve its own
+/// permissions, redirect an export or restore, change settings, run a rewritten batch).
+pub const FORBIDDEN_HOOK_PREFIXES: &[&str] = &[
+    "plugins.",
+    "oplog.",
+    "modules.",
+    "settings.",
+    "shortcuts.",
+    "io.",
+    "batch.",
+    "jobs.",
+    "mcp.",
+    "ai.providers.",
+    "ai.prices.",
+    "ai.routes.",
+];
+
+/// Whether permission `p` (`<area>:<access>`) may be granted to a plugin at all.
+pub fn api_grantable(p: &str) -> bool {
+    let area = p.split_once(':').map_or(p, |(a, _)| a);
+    !FORBIDDEN_API_AREAS.contains(&area) && !FORBIDDEN_API_PERMISSIONS.contains(&p)
+}
+
+/// Whether a plugin may hook `method`, whose own permission is `method_permission`. The
+/// method's permission must be grantable to plugins too, and the plugin must hold it (checked
+/// by the host): a hook never gives more than calling the method directly would.
+pub fn hook_target_allowed(method: &str, method_permission: &str) -> Result<(), &'static str> {
+    if FORBIDDEN_HOOK_PREFIXES
+        .iter()
+        .any(|p| method.starts_with(p))
+    {
+        return Err("this method cannot be hooked by plugins");
+    }
+    if !api_grantable(method_permission) {
+        return Err("the hooked method needs a permission plugins cannot get");
+    }
+    Ok(())
+}
 
 /// A hook a plugin subscribes to (`hooks:<point>`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -163,7 +219,7 @@ impl Permission {
                     Err(fail("unknown UI contribution point"))
                 }
             }
-            _ if FORBIDDEN_API_AREAS.contains(&area) => Err(fail("not grantable to plugins")),
+            _ if !api_grantable(&self.0) => Err(fail("not grantable to plugins")),
             _ if ident(area) && (rest == "read" || rest == "write") => Ok(PermissionKind::Api {
                 area: area.to_owned(),
                 access: rest.to_owned(),
@@ -250,6 +306,16 @@ mod tests {
         );
         for bad in [
             "plugins:write",
+            "plugins:read",
+            "io:read",
+            "io:write",
+            "settings:write",
+            "modules:write",
+            "oplog:write",
+            "mcp:write",
+            "ai_keys:write",
+            "ai_requests:write",
+            "ai:write",
             "notes",
             "notes:delete",
             "hooks:during:x",
@@ -259,6 +325,33 @@ mod tests {
             "NOTES:read",
         ] {
             assert!(Permission::parse(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn hook_targets() {
+        assert_eq!(hook_target_allowed("notes.create", "notes:write"), Ok(()));
+        for ok in ["ai:read", "settings:read", "modules:read", "oplog:read"] {
+            assert!(Permission::parse(ok).is_ok(), "{ok}");
+        }
+        for (method, perm) in [
+            ("plugins.set_permissions", "plugins:write"),
+            ("plugins.install", "plugins:write"),
+            ("io.export.start", "io:write"),
+            ("io.backup.restore", "io:write"),
+            ("settings.set", "settings:write"),
+            ("shortcuts.set", "settings:write"),
+            ("modules.set_enabled", "modules:write"),
+            ("oplog.undo", "oplog:write"),
+            ("batch.execute", "batch:write"),
+            ("mcp.servers.add", "mcp:write"),
+            ("ai.providers.set_key", "ai_keys:write"),
+            ("ai.routes.set", "ai:write"),
+            ("ai.run", "ai_requests:write"),
+            // A future method in a forbidden area, whatever its name.
+            ("x.y", "io:write"),
+        ] {
+            assert!(hook_target_allowed(method, perm).is_err(), "{method}");
         }
     }
 

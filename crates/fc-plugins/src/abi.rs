@@ -78,6 +78,18 @@ pub mod host_fns {
     pub const KV_LIST: &str = "kv.list";
     /// `{}` → `{key: value}` of the plugin's own settings (defaults applied).
     pub const SETTINGS_GET: &str = "settings.get";
+    /// `{key, value}` (`value` `null` = back to the default) → `{key: value}`. Only the
+    /// plugin's own settings, validated against its schema; no permission. App settings are
+    /// out of reach (`settings:*` is never granted to plugins).
+    pub const SETTINGS_SET: &str = "settings.set";
+    /// `{extensions?: ["csv"]}` → `{name, size, data_b64}` or `null` (cancelled). Needs
+    /// `fs:pick`; only during a user-started operation. The host shows a native open dialog;
+    /// the plugin gets the chosen file's name and bytes, never its path.
+    pub const FS_OPEN: &str = "fs.open";
+    /// `{suggested_name, data_b64, extensions?}` → `{name}` or `null` (cancelled). Needs
+    /// `fs:pick`; only during a user-started operation. The host shows a native save dialog
+    /// and writes the bytes where the user chose.
+    pub const FS_SAVE: &str = "fs.save";
     /// `{level, message}` → `null`. The plugin's own log channel.
     pub const LOG: &str = "log";
     /// `{message, level}` → `null`. A notice shown to the user.
@@ -101,6 +113,9 @@ pub mod host_fns {
         KV_DELETE,
         KV_LIST,
         SETTINGS_GET,
+        SETTINGS_SET,
+        FS_OPEN,
+        FS_SAVE,
         LOG,
         UI_NOTIFY,
         TTS_SYNTHESIZE,

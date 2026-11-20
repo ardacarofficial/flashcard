@@ -146,10 +146,25 @@ impl<M: ApiMethod, H: QueryHandler<M>> ErasedQuery for TypedQuery<M, H> {
     }
 }
 
+/// A registered handler. v0.7 added [`ErasedHandler::Action`]: code that only needs to
+/// validate params should use [`ErasedHandler::validate`] instead of an exhaustive `match`,
+/// and other matches should end in a `_` arm where they can, so a further kind does not
+/// break them.
 pub(crate) enum ErasedHandler {
     Command(Box<dyn ErasedCommand>),
     Query(Box<dyn ErasedQuery>),
     Action(Box<dyn ErasedAction>),
+}
+
+impl ErasedHandler {
+    /// Parses `params` as the method's request (any handler kind).
+    pub(crate) fn validate(&self, params: &Value) -> AppResult<()> {
+        match self {
+            Self::Command(h) => h.validate(params),
+            Self::Query(h) => h.validate(params),
+            Self::Action(h) => h.validate(params),
+        }
+    }
 }
 
 pub(crate) struct Entry {
@@ -324,9 +339,14 @@ impl Registry {
     pub fn permits(&self, actor: &Actor, permission: &str) -> bool {
         match actor {
             Actor::User | Actor::Cli | Actor::System => true,
-            Actor::Plugin(id) => read(&self.grants)
-                .get(id)
-                .is_some_and(|g| g.contains(permission)),
+            // Areas no plugin may ever hold (`io`, `settings`, `plugins`…) are refused even
+            // if a grant says otherwise (an old or tampered row).
+            Actor::Plugin(id) => {
+                fc_plugins::permission::api_grantable(permission)
+                    && read(&self.grants)
+                        .get(id)
+                        .is_some_and(|g| g.contains(permission))
+            }
             Actor::Automation(_) | Actor::LocalApi(_) => true,
         }
     }

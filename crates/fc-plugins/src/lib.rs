@@ -36,7 +36,7 @@ pub use runtime::{
     CompiledPlugin, HostCalls, HostError, Limits, PluginError, PluginErrorKind, Runtime,
 };
 
-/// The app version plugins are checked against (`min_app_version`). It tracks the feature
-/// level of this build (the roadmap milestone), which the workspace package version does not
-/// follow yet.
-pub const APP_VERSION: &str = "0.7.0";
+/// The app version plugins are checked against (`min_app_version`): the workspace package
+/// version (`[workspace.package] version` in the root `Cargo.toml`), which follows the
+/// roadmap milestone.
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");

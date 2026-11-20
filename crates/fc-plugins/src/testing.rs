@@ -74,3 +74,20 @@ pub fn wat2wasm(wat: &[u8]) -> Result<Vec<u8>, String> {
         .map(|b| b.into_owned())
         .map_err(|e| e.to_string())
 }
+
+/// A `.fcplugin` written without any validation (what a hostile packer produces): `files`
+/// go into the zip as given. Tests use it to check that the host, not the packer, refuses
+/// a bad manifest.
+pub fn pack_unchecked(files: &[(&str, &[u8])]) -> Result<Vec<u8>, String> {
+    use std::io::Write as _;
+    use zip::write::SimpleFileOptions;
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for (name, bytes) in files {
+        zip.start_file(*name, SimpleFileOptions::default())
+            .map_err(|e| e.to_string())?;
+        zip.write_all(bytes).map_err(|e| e.to_string())?;
+    }
+    zip.finish()
+        .map(std::io::Cursor::into_inner)
+        .map_err(|e| e.to_string())
+}

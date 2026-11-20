@@ -14,7 +14,7 @@ mod ui;
 #[cfg(test)]
 mod tests;
 
-pub use host::PluginHost;
+pub use host::{FilePicker, PluginHost};
 pub(crate) use host::Hooks;
 
 use crate::error::{AppError, AppResult};
@@ -224,7 +224,9 @@ fn changed(id: &str) -> DomainEvent {
 }
 
 /// Every API permission and hook target must exist in this app (a typo is an error at
-/// install, not a silent no-op).
+/// install, not a silent no-op). A `before:`/`after:` hook may target only a public command
+/// plugins may hook (`fc_plugins::permission::hook_target_allowed`), and the manifest must
+/// also request that command's own permission (a hook runs only while both are granted).
 fn check_against_registry(registry: &Registry, m: &Manifest) -> AppResult<()> {
     let bad = |p: &Permission, reason: &str| {
         AppError::Api(
@@ -242,11 +244,15 @@ fn check_against_registry(registry: &Registry, m: &Manifest) -> AppResult<()> {
                 }
             }
             PermissionKind::Hook(HookPoint::Before(method) | HookPoint::After(method)) => {
-                let ok = registry.descriptor(&method).is_some_and(|d| {
+                let Some(d) = registry.descriptor(&method).filter(|d| {
                     d.visibility == Visibility::Public && d.kind == fc_api::MethodKind::Command
-                });
-                if !ok {
+                }) else {
                     return Err(bad(p, "hooks attach to public commands"));
+                };
+                fc_plugins::permission::hook_target_allowed(&method, d.permission)
+                    .map_err(|reason| bad(p, reason))?;
+                if !m.requests(d.permission) {
+                    return Err(bad(p, "a hook needs the hooked method's own permission too"));
                 }
             }
             _ => {}
@@ -768,11 +774,22 @@ fn kv_set(req: SetPluginKv, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
     if req.value.as_ref().is_some_and(|v| v.to_string().len() > 1024 * 1024) {
         return Err(crate::support::invalid("kv value larger than 1 MiB"));
     }
+    let old = ctx.reads().get_plugin_kv(&req.plugin_id, &req.key)?;
     ctx.tx
         .set_plugin_kv(&req.plugin_id, &req.key, req.value.as_ref(), ctx.now)?;
+    // The way back, so a failed plugin call rolls its storage back with everything else.
+    let inverse = if old == req.value {
+        vec![]
+    } else {
+        vec![inverse_call::<PluginsKvSet>(&SetPluginKv {
+            plugin_id: req.plugin_id.clone(),
+            key: req.key.clone(),
+            value: old,
+        })?]
+    };
     Ok(CommandOutcome {
         response: Empty {},
-        inverse: vec![],
+        inverse,
         summary: summary::<PluginsKvSet>(),
         events: vec![],
     })

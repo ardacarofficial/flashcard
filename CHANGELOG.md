@@ -10,11 +10,21 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 - **Katkılar:** kart türü (`CardTypeEngine`), TTS sağlayıcı (`TtsProvider`), komutlar (çalışma zamanında kayıtlı `v1.plugin.<id>.<komut>`; palette ve `commands.list`'te), bildirimsel arayüzlü görünümler ve çalışma modları, ana menü / kenar paneli / kart altı düğme katkıları (`modules.list`'te eklenti modülleri), şemalı eklenti ayarları, eklentiye özel KV, eklentinin kendi çevirileri.
 - **`tts` modülü:** `tts.providers/voices/synthesize` (yerleşik ya da eklenti sağlayıcıları; ayar `tts.provider`).
 - **Kayıt defteri çalışma zamanı kaydı:** `Registry::register_dynamic` (`Arc<str>` anahtarlı metotlar), `register_card_type`/`register_tts` (`&self`), eklenti izinleri; statik katalog aynen. Yeni işleyici türü `Registry::action` (işlem dışı çalışan metotlar).
-- **SDK:** `plugins-sdk/rust` (`fc-plugin-sdk`: `Plugin` trait'i, `export_plugin!`, tipli `host::call::<M>()` (tipler fc-api'den), `kv`, `settings`, `log`, `notify`, arayüz kurucuları, yerel testler için sahte host) ve örnek eklentiler: `autofill` (kanca ile alan doldurma), `scramble-card` (kart türü), `tone-tts` (TTS), `reverse-drill` (çalışma modu), `misbehave` (test: döngü/panik/bellek/izinsiz çağrı).
+- **SDK:** `plugins-sdk/rust` (`fc-plugin-sdk`: `Plugin` trait'i, `export_plugin!`, tipli `host::call::<M>()` (tipler fc-api'den), `kv`, `settings`, `log`, `notify`, arayüz kurucuları, yerel testler için sahte host) ve örnek eklentiler: `autofill` (kanca ile alan doldurma), `scramble-card` (kart türü), `tone-tts` (TTS), `reverse-drill` (çalışma modu), `misbehave` (test: döngü/panik/bellek/izinsiz çağrı), `escape` (test: sanal alandan kaçış denemeleri).
 - **Masaüstü:** Eklentiler ekranı (dosyadan kur + izin onayı, aç/kapa, izinler, ayarlar, günlük, kaldır, indirmeler), bildirimsel arayüz çizicisi, `/plugins/view/<id>/<görünüm>` rotası, kenar paneli ve kart altı düğmeleri; eklenti metinleri `plugins.locales`'tan.
 - Migration **`0600_plugins`** (`plugins` satırına çalışma durumu sütunları, `plugin_packages`).
 
+- **`fc plugin` CLI:** `list`, `inspect`, `install [--grant …|--grant-all]`, `uninstall [--delete-data]`, `enable`, `disable`, `grant`, `logs`, `run`, `pack`.
+- **`fs:pick`:** host fonksiyonları `fs.open`/`fs.save`; yerel dosya penceresini host gösterir (`fc_app::FilePicker`, masaüstünde `rfd`), eklenti yalnız dosya adı + bayt alır. Eklentinin kendi ayarı için `settings.set` host fonksiyonu. SDK: `host::fs`, `host::set_setting`.
+- Saldırgan test eklentisi `plugins-sdk/examples/escape` ve kaçış testleri (kanca, serbest yol, ayar, depo geri sarma).
+
+### Güvenlik (bağımsız inceleme bulguları)
+- `before:`/`after:` kancaları artık `plugins.*`, `oplog.*`, `modules.*`, `settings.*`, `shortcuts.*`, `io.*`, `batch.*`, `jobs.*`, `mcp.*` ve AI sağlayıcı/anahtar metotlarına takılamaz; her kanca hedef metodun kendi iznini de ister (önceden bir eklenti kullanıcının izin değişikliğini ya da dışa aktarma yolunu yeniden yazabiliyordu).
+- `io:*` (serbest dosya yolu), `settings:write`, `modules:write`, `oplog:write`, `mcp:*`, `ai_keys:*`, `ai_requests:*`, `ai:write` eklentilere verilemez; `Registry::permits` eklenti için bunları kayıtlı izin olsa bile reddeder (eklenti kendi yakıt/bellek sınırını yükseltemez).
+- Eklenti deposu ve ayar yazımları işlemin geri al grubuna girer: eklenti hata verirse geri sarılır.
+
 ### Değişti
+- Workspace sürümü `0.7.0`; `fc_plugins::APP_VERSION` artık `CARGO_PKG_VERSION`. Eklentilere açık v1 metot anlık görüntüsünden (`api_v1.json`) eklentiye verilemeyen metotlar çıktı. `ErasedHandler::validate` (kapsamlı `match` yerine).
 - `ensure_invocable` artık kayıt defterini alır; eklenti aktörleri yalnızca verilen izinlerle çağırabilir (önceden her şey serbestti). `Registry::card_type_engine`/`card_types` artık `Arc` döndürür.
 - İki yedek testi (`upgrade_dump_runs_later_data_migrations_on_restored_rows`, `restoring_an_older_schema_backup_migrates_it_forward`) sonraki sürümlerin migration'larına dayanıklı hale getirildi.
 - `rust-toolchain.toml` ve CI `wasm32-unknown-unknown` hedefini kurar (örnek eklentiler testlerde derlenir).

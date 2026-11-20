@@ -435,6 +435,52 @@ pub mod host {
         serde_json::from_value(call_raw("settings.get", json!({}))?).map_err(Error::json)
     }
 
+    /// Changes one of the plugin's own settings (`None` = back to the default); returns all of
+    /// them. Only keys of the plugin's settings schema; app settings are out of reach.
+    pub fn set_setting(key: &str, value: Option<Value>) -> Result<BTreeMap<String, Value>> {
+        let v = call_raw("settings.set", json!({ "key": key, "value": value }))?;
+        serde_json::from_value(v).map_err(Error::json)
+    }
+
+    /// Files the user picks (`fs:pick`, only during a user-started operation). The plugin
+    /// gets names and bytes, never paths.
+    pub mod fs {
+        use super::*;
+
+        /// A file the user chose to open.
+        #[derive(Debug, Clone, Deserialize)]
+        pub struct PickedFile {
+            /// File name (no folder).
+            pub name: String,
+            /// Size in bytes.
+            pub size: u64,
+            /// Content, standard base64.
+            pub data_b64: String,
+        }
+
+        /// Shows an open dialog (`extensions` filter it, e.g. `["csv"]`). `None` = cancelled.
+        pub fn open(extensions: &[&str]) -> Result<Option<PickedFile>> {
+            match call_raw("fs.open", json!({ "extensions": extensions }))? {
+                Value::Null => Ok(None),
+                v => serde_json::from_value(v).map(Some).map_err(Error::json),
+            }
+        }
+
+        /// Shows a save dialog and writes `data_b64` where the user chose. Returns the chosen
+        /// file name, `None` = cancelled.
+        pub fn save(
+            suggested_name: &str,
+            data_b64: &str,
+            extensions: &[&str],
+        ) -> Result<Option<String>> {
+            let v = call_raw(
+                "fs.save",
+                json!({ "suggested_name": suggested_name, "data_b64": data_b64, "extensions": extensions }),
+            )?;
+            Ok(v.get("name").and_then(Value::as_str).map(str::to_owned))
+        }
+    }
+
     /// Writes to the plugin's log channel (`debug`, `info`, `warn`, `error`).
     pub fn log(level: &str, message: &str) {
         let _ = call_raw("log", json!({ "level": level, "message": message }));

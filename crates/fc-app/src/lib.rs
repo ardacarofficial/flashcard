@@ -31,6 +31,7 @@ pub use error::{AppError, AppResult};
 pub use handler::{
     inverse_call, CommandCtx, CommandHandler, CommandOutcome, QueryCtx, QueryHandler,
 };
+pub use modules::plugins::FilePicker;
 pub use registry::Registry;
 
 /// Provider/strategy interfaces, re-exported for transports and modules.

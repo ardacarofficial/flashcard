@@ -3,7 +3,9 @@
 
 use crate::i18n::Catalog;
 use crate::lookup::{self, call};
-use crate::{AttrRef, AttributeCommand, Command, DeckCommand, NoteCommand, OptionCommand};
+use crate::{
+    AttrRef, AttributeCommand, Command, DeckCommand, NoteCommand, OptionCommand, PluginCommand,
+};
 use fc_api::v1::attributes::*;
 use fc_api::v1::common::{AffectedCount, Empty, EntityRef};
 use fc_api::v1::decks::{CreateDeck, DeckRef, DeckTreeNode, MoveDeck, RenameDeck};
@@ -11,6 +13,10 @@ use fc_api::v1::jobs::{JobDto, JobRef, JobStatus};
 use fc_api::v1::methods as m;
 use fc_api::v1::notes::{CreateNote, ListNotes, NoteIds, NoteRef, UpdateNote};
 use fc_api::v1::oplog::{Actor, UndoResult};
+use fc_api::v1::plugins::{
+    InspectPackage, InstallPlugin, PermissionDto, PluginDto, PluginRef, RunPluginCommand,
+    SetPluginEnabled, SetPluginPermissions, UninstallPlugin,
+};
 use fc_api::{ApiError, ErrorCode, API_VERSION};
 use fc_app::App;
 use fc_core::attribute::AttributeKind;
@@ -147,6 +153,7 @@ pub fn run(ctx: &Ctx<'_>, command: &Command, stdin: &mut dyn Read) -> Result<Str
         Command::Deck(c) => deck(ctx, c),
         Command::Note(c) => note(ctx, c),
         Command::Attribute(c) => attribute(ctx, c),
+        Command::Plugin(c) => plugin(ctx, c),
         Command::Undo => {
             let r = call::<m::OplogUndo>(ctx.app, &Empty {})?;
             ctx.out(&r, |r| undo_line(&ctx.text, "cli.undone", r))
@@ -616,4 +623,224 @@ fn option(ctx: &Ctx<'_>, c: &OptionCommand) -> Result<String, ApiError> {
             })
         }
     }
+}
+
+fn path_str(p: &std::path::Path) -> String {
+    p.display().to_string()
+}
+
+fn wire_name<T: Serialize>(v: &T) -> String {
+    serde_json::to_value(v)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+fn permission_list(text: &Catalog, perms: &[PermissionDto]) -> String {
+    let mut buf = String::new();
+    for p in perms {
+        let key = match (p.granted, p.sensitive) {
+            (true, _) => "cli.plugin.perm_granted",
+            (false, true) => "cli.plugin.perm_sensitive",
+            (false, false) => "cli.plugin.perm_off",
+        };
+        let _ = writeln!(
+            buf,
+            "  {}",
+            text.with(key, "permission", p.permission.clone())
+        );
+    }
+    buf.trim_end().to_owned()
+}
+
+fn plugin_line(text: &Catalog, p: &PluginDto) -> String {
+    text.text(
+        "cli.plugin.line",
+        &params(&[
+            ("name", p.name.clone()),
+            ("version", p.version.clone()),
+            ("id", p.id.clone()),
+            ("status", wire_name(&p.status)),
+        ]),
+    )
+}
+
+fn plugin(ctx: &Ctx<'_>, c: &PluginCommand) -> Result<String, ApiError> {
+    let app = ctx.app;
+    let set_enabled = |id: &str, enabled: bool| -> Result<String, ApiError> {
+        let p = call::<m::PluginsSetEnabled>(
+            app,
+            &SetPluginEnabled {
+                id: id.to_owned(),
+                enabled,
+            },
+        )?;
+        ctx.out(&p, |p| plugin_line(&ctx.text, p))
+    };
+    match c {
+        PluginCommand::List => {
+            let list = call::<m::PluginsList>(app, &Empty {})?;
+            ctx.out(&list, |l| {
+                if l.plugins.is_empty() {
+                    return ctx.text.text("cli.plugin.none", &BTreeMap::new());
+                }
+                l.plugins
+                    .iter()
+                    .map(|p| plugin_line(&ctx.text, p))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+        }
+        PluginCommand::Inspect { path } => {
+            let info = call::<m::PluginsInspect>(
+                app,
+                &InspectPackage {
+                    path: path_str(path),
+                },
+            )?;
+            ctx.out(&info, |i| {
+                let head = ctx.text.text(
+                    "cli.plugin.package",
+                    &params(&[
+                        ("name", i.name.clone()),
+                        ("version", i.version.clone()),
+                        ("id", i.id.clone()),
+                    ]),
+                );
+                format!("{head}\n{}", permission_list(&ctx.text, &i.permissions))
+                    .trim_end()
+                    .to_owned()
+            })
+        }
+        PluginCommand::Install {
+            path,
+            grant,
+            grant_all,
+        } => {
+            let path = path_str(path);
+            let grant = if *grant_all {
+                call::<m::PluginsInspect>(app, &InspectPackage { path: path.clone() })?
+                    .permissions
+                    .into_iter()
+                    .map(|p| p.permission)
+                    .collect()
+            } else {
+                grant.clone()
+            };
+            let p = call::<m::PluginsInstall>(app, &InstallPlugin { path, grant })?;
+            ctx.out(&p, |p| {
+                let head = ctx.text.text(
+                    "cli.plugin.installed",
+                    &params(&[("name", p.name.clone()), ("version", p.version.clone())]),
+                );
+                format!("{head}\n{}", permission_list(&ctx.text, &p.permissions))
+                    .trim_end()
+                    .to_owned()
+            })
+        }
+        PluginCommand::Uninstall { id, delete_data } => {
+            let p = call::<m::PluginsUninstall>(
+                app,
+                &UninstallPlugin {
+                    id: id.clone(),
+                    delete_data: *delete_data,
+                },
+            )?;
+            ctx.out(&p, |p| {
+                ctx.text
+                    .with("cli.plugin.uninstalled", "name", p.name.clone())
+            })
+        }
+        PluginCommand::Enable { id } => set_enabled(id, true),
+        PluginCommand::Disable { id } => set_enabled(id, false),
+        PluginCommand::Grant { id, permissions } => {
+            let p = call::<m::PluginsSetPermissions>(
+                app,
+                &SetPluginPermissions {
+                    id: id.clone(),
+                    granted: permissions.clone(),
+                },
+            )?;
+            ctx.out(&p, |p| {
+                format!(
+                    "{}\n{}",
+                    plugin_line(&ctx.text, p),
+                    permission_list(&ctx.text, &p.permissions)
+                )
+                .trim_end()
+                .to_owned()
+            })
+        }
+        PluginCommand::Logs { id } => {
+            let logs = call::<m::PluginsLogs>(app, &PluginRef { id: id.clone() })?;
+            ctx.out(&logs, |l| {
+                if l.entries.is_empty() {
+                    return ctx.text.text("cli.plugin.no_logs", &BTreeMap::new());
+                }
+                l.entries
+                    .iter()
+                    .map(|e| format!("{} {} {}", e.at.0, wire_name(&e.level), e.message))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+        }
+        PluginCommand::Run {
+            id,
+            command,
+            params: raw,
+        } => {
+            let params: Value = match raw.as_deref().map(str::trim) {
+                None | Some("") => Value::Null,
+                Some(s) => serde_json::from_str(s).map_err(|e| invalid(format!("params: {e}")))?,
+            };
+            let r = call::<m::PluginsRun>(
+                app,
+                &RunPluginCommand {
+                    plugin_id: id.clone(),
+                    command: command.clone(),
+                    params,
+                },
+            )?;
+            pretty(&r.result)
+        }
+        PluginCommand::Pack { dir, wasm, out } => pack(ctx, dir, wasm.as_deref(), out.as_deref()),
+    }
+}
+
+/// `fc plugin pack`: a developer tool on local files, no collection involved.
+fn pack(
+    ctx: &Ctx<'_>,
+    dir: &std::path::Path,
+    wasm: Option<&std::path::Path>,
+    out: Option<&std::path::Path>,
+) -> Result<String, ApiError> {
+    let io = |e: std::io::Error| ApiError::new(ErrorCode::IoFile, e.to_string());
+    let wasm = wasm.map(std::fs::read).transpose().map_err(io)?;
+    let bytes = fc_plugins::package::pack_dir(dir, wasm.as_deref())
+        .map_err(|e| ApiError::new(ErrorCode::ValidationPluginPackage, e.to_string()))?;
+    // Same checks as an install (manifest, permissions, API version).
+    let pkg = fc_plugins::Package::read(&bytes, fc_plugins::APP_VERSION)
+        .map_err(|e| ApiError::new(ErrorCode::ValidationPluginPackage, e.to_string()))?;
+    let m = &pkg.manifest;
+    let target = out.map_or_else(
+        || dir.join(format!("{}-{}.fcplugin", m.id, m.version)),
+        std::path::Path::to_path_buf,
+    );
+    std::fs::write(&target, &bytes).map_err(io)?;
+    let result = serde_json::json!({
+        "path": path_str(&target),
+        "id": m.id,
+        "version": m.version,
+        "sha256": pkg.sha256,
+    });
+    ctx.out(&result, |_| {
+        ctx.text.text(
+            "cli.plugin.packed",
+            &params(&[
+                ("path", path_str(&target)),
+                ("id", m.id.clone()),
+                ("version", m.version.clone()),
+            ]),
+        )
+    })
 }
