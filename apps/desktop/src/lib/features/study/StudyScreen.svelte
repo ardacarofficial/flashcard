@@ -12,6 +12,7 @@
     StartSession,
   } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
+  import StudyAi from '../ai/StudyAi.svelte';
   import CardView from '../cards/CardView.svelte';
   import { defaultFlagKey, flagColor, hasFlag } from '../cards/flags';
   import { moduleKnownOn, moduleOn, trackModules } from '../cards/modules.svelte';
@@ -504,6 +505,8 @@
         {/if}
       {/if}
     </div>
+
+    <StudyAi cardId={card.card_id} {revealed} typed={card.type_answer ? typed : null} />
 
     {#if revealed}
       <div class="ratings">

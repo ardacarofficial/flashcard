@@ -149,18 +149,21 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [ ] İzni olmayan host fonksiyonu çağrısı reddedilir (test).
 - [ ] Sonsuz döngüye giren / panik yapan eklenti uygulamayı çökertmez (yakıt/zaman sınırı testi).
 - [ ] Eklenti API'si sürümlüdür; v1 eklentisi sonraki çekirdek sürümünde çalışmaya devam eder (sözleşme testi).
+- [ ] İzin deposu `permits`'i eklenti aktörleri için gerçek yapar: `ai:write` olup `ai_keys:write` olmayan eklenti sağlayıcı adresini `keep_key: true` ile değiştirirse anahtar **korunmaz**, izinliyse korunur (test; v0.7 birleşmesinde eklenir — bkz. [10 §23](10-v0.1-sozlesme.md)).
 
 ## 🤖 v0.8 · Yapay zeka
 
 **Kapsam:** [06 §1-2](06-ai-ve-entegrasyonlar.md): sağlayıcılar, anahtar zinciri, kullanım takibi, AI özellikleri, MCP istemcisi ve sunucusu.
 
 **Kabul kriterleri**
-- [ ] Sağlayıcılar sahte (mock) sunucuya karşı test edilir; gerçek API testleri isteğe bağlı.
-- [ ] API anahtarı veritabanında veya logda asla görünmez (test).
-- [ ] AI'a gönderilecek içerik kullanıcıya önizlenir.
+- [x] Sağlayıcılar sahte (mock) sunucuya karşı test edilir; gerçek API testleri isteğe bağlı. *(`fc_ai::mock`: Claude/OpenAI/uyumlu/Ollama tel biçimi ve hatalar `fc-ai/src/tests.rs`; uçtan uca `fc-app/src/modules/ai/tests.rs::generate_cards_end_to_end_is_level_aware`; gerçek API: `FC_AI_LIVE_*`)*
+- [x] API anahtarı veritabanında veya logda asla görünmez (test). *(`api_key_never_reaches_db_oplog_errors_events_or_jobs`: veritabanı dosyası + WAL, döküm, oplog, olaylar, işler, hatalar; `fc-ai`: `http_errors_map_to_kinds_and_never_carry_the_key`, `Secret` Debug'ı. Uygulamada log altyapısı yok; anahtar hiçbir `Debug`/hata metnine girmez)*
+- [x] AI'a gönderilecek içerik kullanıcıya önizlenir. *(`ai.preview` → `ai.run` önizleme özetiyle; `nothing_is_sent_that_was_not_previewed`; arayüz `ai.test.ts`)*
 - [x] Claude Desktop/Claude Code, MCP sunucusu üzerinden deste listeleyip kart ekleyebilir.
 
-> **Doğrulama (MCP, iz H `feat/v0.8-mcp`):** `fc-cli/tests/mcp_stdio.rs::claude_lists_decks_and_adds_cards_over_stdio` gerçek `fc --db <dosya> mcp serve` ikilisini Claude Desktop/Code'un yaptığı gibi başlatır ve stdin/stdout'tan satır satır JSON-RPC konuşur: `initialize` (`2025-06-18`) → `notifications/initialized` → `tools/list` → `tools/call list_decks` → `list_classifications` → `add_notes` (Seviye=B1) → `search_cards seviye>=B1`; ardından ayrı `fc` süreçleri notları görür, oplog aktörü `{"kind":"mcp","id":"claude-ai"}`, `fc undo` tek adımda geri alır; `--read-only` oturum yazma araçlarını listelemez/reddeder. Aynı akış bellek içi borudan `fc-mcp/tests/stdio_protocol.rs`'te; araç anlamı (sınıflandırma, onaylı toplu atama, yazma anahtarı, izinler) `fc-app` `modules/mcp/tests.rs` × 3 depoda. İstemci iskeleti: `mcp_tools_connects_to_an_external_server` (`fc mcp tools` → kayıtlı dış sunucu = başka bir `fc mcp serve`). Kurulum: [06 §2.1](06-ai-ve-entegrasyonlar.md). *(Sağlayıcı/anahtar/önizleme kriterleri iz G'nindir.)*
+> **Doğrulama (MCP, iz H `feat/v0.8-mcp`):** `fc-cli/tests/mcp_stdio.rs::claude_lists_decks_and_adds_cards_over_stdio` gerçek `fc --db <dosya> mcp serve` ikilisini Claude Desktop/Code'un yaptığı gibi başlatır ve stdin/stdout'tan satır satır JSON-RPC konuşur: `initialize` (`2025-06-18`) → `notifications/initialized` → `tools/list` → `tools/call list_decks` → `list_classifications` → `add_notes` (Seviye=B1) → `search_cards seviye>=B1`; ardından ayrı `fc` süreçleri notları görür, oplog aktörü `{"kind":"mcp","id":"claude-ai"}`, `fc undo` tek adımda geri alır; `--read-only` oturum yazma araçlarını listelemez/reddeder. Aynı akış bellek içi borudan `fc-mcp/tests/stdio_protocol.rs`'te; araç anlamı (sınıflandırma, onaylı toplu atama, yazma anahtarı, izinler) `fc-app` `modules/mcp/tests.rs` × 3 depoda. İstemci iskeleti: `mcp_tools_connects_to_an_external_server` (`fc mcp tools` → kayıtlı dış sunucu = başka bir `fc mcp serve`). Kurulum: [06 §2.1](06-ai-ve-entegrasyonlar.md).
+
+> **Kapsam (06 §1.4), iz G tur 2 (Faz 3 tur 3 ile birleşik):** PDF (sayfa aralığı) ve web sayfası kaynağı, açıklama/ipucu akışı ve çalışma ekranındaki açıkla/ipucu/AI kontrol düğmeleri eklendi — bkz. [10 §22](10-v0.1-sozlesme.md).
 
 ## 🌉 v0.9 · Dış dünya ile bağlantı
 

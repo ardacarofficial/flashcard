@@ -1,0 +1,263 @@
+{
+  "nav": {
+    "ai": "AI"
+  },
+  "modules": {
+    "ai": {
+      "name": "AI",
+      "description": "Cards from text, explanations, hints, answer checks and rewrites with Claude, OpenAI or a local model. Every request is shown before it is sent."
+    }
+  },
+  "ai": {
+    "tabs": {
+      "generate": "Make cards",
+      "providers": "Providers",
+      "usage": "Usage"
+    },
+    "kind": {
+      "anthropic": "Anthropic Claude",
+      "openai": "OpenAI",
+      "openai_compatible": "OpenAI-compatible",
+      "ollama": "Ollama (local)"
+    },
+    "feature": {
+      "generate_cards": "Make cards",
+      "fill_fields": "Fill fields",
+      "explain": "Explain",
+      "hint": "Hint",
+      "check_answer": "Check answer",
+      "improve": "Improve card",
+      "rewrite_leech": "Rewrite hard card",
+      "distractors": "Wrong options"
+    },
+    "preview": {
+      "heading": "Before sending",
+      "summary": "{provider} · {model} · {items} item(s) will be sent.",
+      "estimate": "About {tokens} input tokens, at most {max} output tokens.",
+      "cost": "At most {cost}.",
+      "cost_unknown": "No price for this model.",
+      "local": "This model runs on your computer.",
+      "missing_key": "This provider needs an API key. Add it under Providers.",
+      "show": "Show exactly what will be sent",
+      "system": "Instructions",
+      "message": "Message",
+      "images": "{count} image(s)",
+      "send": "Send",
+      "cancel": "Cancel"
+    },
+    "budget": {
+      "exceeded": "This goes over your monthly budget of {limit}.",
+      "warning": "You are close to your monthly budget of {limit}.",
+      "status": "{spent} of {limit} this month.",
+      "none": "No monthly budget set (Settings → AI)."
+    },
+    "generate": {
+      "pick_deck": "Pick a deck first.",
+      "notetype": "Note type",
+      "source": "Source",
+      "source_hint": "Paste a text to make cards from",
+      "count": "How many",
+      "instructions": "Extra instructions",
+      "instructions_hint": "e.g. focus on verbs",
+      "preview": "Preview",
+      "truncated": "The answer was cut off; there may be fewer notes than asked.",
+      "added": "Added {count} note(s), skipped {skipped}.",
+      "drafts": "{count} suggestion(s)",
+      "spent": "This request cost about {cost}.",
+      "keep": "Add",
+      "add": "Add {count} note(s)"
+    },
+    "providers": {
+      "heading": "Providers",
+      "none": "No provider yet. Add Claude, OpenAI or a local model.",
+      "no_keychain": "No system keychain: API keys cannot be stored here.",
+      "default": "default",
+      "local": "local",
+      "base_url": "Address",
+      "model": "Model",
+      "key": "API key",
+      "key_set": "An API key is stored in the system keychain.",
+      "key_missing": "No API key yet.",
+      "key_saved": "Key saved to the system keychain.",
+      "save_key": "Save key",
+      "remove_key": "Remove key",
+      "refresh": "Refresh models",
+      "refreshing": "Fetching the model list…",
+      "make_default": "Make default",
+      "delete": "Remove",
+      "kind": "Type",
+      "add": "Add provider",
+      "session_keychain": "Keys are kept only for this session on this system (they may disappear after you log out). You may need to enter them again.",
+      "move_key": "New address: {url}. An API key is stored for the old one. Send it to the new address too?",
+      "move_remove_key": "Change and remove the key",
+      "move_keep_key": "Change and keep the key"
+    },
+    "routes": {
+      "heading": "Model per feature",
+      "intro": "Use a strong model for making cards and a fast one for checks, for example.",
+      "provider": "Provider",
+      "default": "Default provider",
+      "model": "Model",
+      "model_default": "Provider's model"
+    },
+    "prices": {
+      "heading": "Prices",
+      "intro": "USD per million tokens, used for estimates. Providers change prices: keep them current.",
+      "model": "Model",
+      "input": "Input",
+      "output": "Output",
+      "delete": "Remove",
+      "save": "Save"
+    },
+    "usage": {
+      "month": "This month",
+      "week": "Last 7 days",
+      "line": "{requests} request(s) · {input} in / {output} out tokens · {cost}",
+      "by_feature": "By feature (this month)",
+      "by_model": "By model (this month)",
+      "empty": "No AI requests yet.",
+      "estimate_note": "Costs are estimates from the price table."
+    },
+    "job": {
+      "connecting": "Connecting…",
+      "waiting": "Waiting for the answer…",
+      "repairing": "Fixing the answer format…",
+      "reading_source": "Reading the source…"
+    },
+    "source": {
+      "from": "Source from",
+      "text": "Text",
+      "pdf": "PDF",
+      "url": "Web page",
+      "choose_pdf": "Choose PDF…",
+      "pdf_prompt": "Path of the PDF file",
+      "from_page": "From page",
+      "to_page": "to",
+      "read_pages": "Read pages",
+      "url_label": "Web page address",
+      "fetch": "Get text",
+      "url_note": "Only the page's text is read; no scripts run. Nothing goes to the AI until you preview and send.",
+      "pages_read": "Pages {from}–{to} of {count}. Edit the text below as you like.",
+      "page_read": "Text of “{title}”. Edit it below as you like.",
+      "truncated": "The text was long and has been cut. Pick fewer pages or a shorter part.",
+      "url_placeholder": "https://…"
+    },
+    "study": {
+      "hint": "AI hint",
+      "explain": "Explain",
+      "check": "Check with AI",
+      "verdict": {
+        "correct": "Correct",
+        "almost": "Almost",
+        "wrong": "Not quite"
+      }
+    }
+  },
+  "errors": {
+    "validation": {
+      "ai_provider": "Check the provider's name, address or model.",
+      "ai_key": "The API key looks wrong (empty, too long or with spaces).",
+      "ai_task": "This request cannot be sent as it is.",
+      "ai_price": "Prices must be numbers from 0, with a model name.",
+      "ai_source": "This source cannot be used (check the address, file or pages)."
+    },
+    "not_found": {
+      "ai_provider": "AI provider not found."
+    },
+    "conflict": {
+      "ai_no_provider": "No AI provider yet. Add one under AI → Providers.",
+      "ai_no_model": "Choose a model for this provider.",
+      "ai_preview_stale": "Something changed since the preview. Preview again."
+    },
+    "provider": {
+      "ai_unauthorized": "The provider rejected the API key (or none is set).",
+      "ai_rate_limited": "Rate limit reached. Try again later.",
+      "ai_invalid_request": "The provider refused the request.",
+      "ai_invalid_output": "The answer was not in the expected format.",
+      "ai_keychain": "The system keychain is not available.",
+      "ai_source": "The web page could not be fetched. Try again later."
+    }
+  },
+  "settings": {
+    "ai": {
+      "monthly_budget_usd": {
+        "label": "Monthly AI budget (USD)",
+        "description": "Warns when this month's estimated cost nears it. 0 = no budget."
+      },
+      "request_timeout_secs": {
+        "label": "AI request timeout (seconds)",
+        "description": "How long to wait for an answer."
+      },
+      "web": {
+        "allow_private_hosts": {
+          "label": "Allow fetching local-network pages",
+          "description": "Off by default: pages on this computer or your local network (localhost, 192.168.x.x, …) are blocked when making cards from a web address."
+        }
+      },
+      "max_retries": {
+        "label": "AI retries",
+        "description": "How often a rate-limited or unavailable request is retried."
+      },
+      "prompt": {
+        "description": "The instructions sent for this feature; parts in double braces are filled in. The request is always shown before sending.",
+        "generate_cards": {
+          "label": "Prompt: make cards"
+        },
+        "fill_fields": {
+          "label": "Prompt: fill fields"
+        },
+        "explain": {
+          "label": "Prompt: explain"
+        },
+        "hint": {
+          "label": "Prompt: hint"
+        },
+        "check_answer": {
+          "label": "Prompt: check answer"
+        },
+        "improve": {
+          "label": "Prompt: improve card"
+        },
+        "rewrite_leech": {
+          "label": "Prompt: rewrite hard card"
+        },
+        "distractors": {
+          "label": "Prompt: wrong options"
+        }
+      }
+    }
+  },
+  "commands": {
+    "ai": {
+      "providers": {
+        "list": "AI providers",
+        "create": "Add AI provider",
+        "update": "Edit AI provider",
+        "delete": "Remove AI provider",
+        "set_key": "Set AI API key",
+        "refresh_models": "Refresh AI models"
+      },
+      "routes": {
+        "list": "AI model per feature",
+        "set": "Set AI model for a feature"
+      },
+      "prices": {
+        "list": "AI prices",
+        "set": "Set AI price",
+        "delete": "Remove AI price"
+      },
+      "usage": {
+        "summary": "AI usage"
+      },
+      "preview": "Preview AI request",
+      "run": "Send AI request",
+      "notes": {
+        "add": "Add AI notes",
+        "update": "Apply AI suggestion"
+      },
+      "sources": {
+        "extract": "Read a card source (PDF, web page)"
+      }
+    }
+  }
+}

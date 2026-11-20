@@ -1,0 +1,32 @@
+// AI providers and features (v0.8).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// A provider field is invalid (`details.field`: `name`, `base_url`, `default_model`, `models`).
+ValidationAiProvider => Validation, "errors.validation.ai_provider";
+/// The API key is empty, too long or contains spaces/control characters.
+ValidationAiKey => Validation, "errors.validation.ai_key";
+/// The task cannot be sent (`details.reason`: `empty_source`, `count`, `no_fields`, `no_answer`, `images_unsupported`, …).
+ValidationAiTask => Validation, "errors.validation.ai_task";
+/// A card source cannot be used (`details.reason`: `url`, `pages`, `not_pdf`, `encrypted`, `no_text`, `too_large`, `content_type`, `io`).
+ValidationAiSource => Validation, "errors.validation.ai_source";
+/// A web page could not be fetched (`details.reason`: `http_status`, `unreachable`, `timeout`).
+ProviderAiSource => Provider, "errors.provider.ai_source";
+/// A price is negative or not a number, or the model id is empty.
+ValidationAiPrice => Validation, "errors.validation.ai_price";
+/// Provider not found (`details.id`).
+NotFoundAiProvider => NotFound, "errors.not_found.ai_provider";
+/// No AI provider is configured (add one in the AI settings).
+ConflictAiNoProvider => Conflict, "errors.conflict.ai_no_provider";
+/// No model is chosen for this provider/feature.
+ConflictAiNoModel => Conflict, "errors.conflict.ai_no_model";
+/// The request differs from what was previewed (data or settings changed): preview again.
+ConflictAiPreviewStale => Conflict, "errors.conflict.ai_preview_stale";
+/// The provider rejected the API key, or none is set (`details.provider`).
+ProviderAiUnauthorized => Provider, "errors.provider.ai_unauthorized";
+/// Rate limit or quota reached (`details.provider`); try again later.
+ProviderAiRateLimited => Provider, "errors.provider.ai_rate_limited";
+/// The provider refused the request as invalid (`details.provider`, `details.reason`).
+ProviderAiInvalidRequest => Provider, "errors.provider.ai_invalid_request";
+/// The answer did not match the expected format, even after a repair attempt (`details.reason`).
+ProviderAiInvalidOutput => Provider, "errors.provider.ai_invalid_output";
+/// The OS keychain is not available or refused (`details.reason`).
+ProviderAiKeychain => Provider, "errors.provider.ai_keychain";

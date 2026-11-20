@@ -43,4 +43,5 @@ modules! {
     planning,
     goals,
     optimizer,
+    ai,
 }

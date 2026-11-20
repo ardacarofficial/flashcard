@@ -185,6 +185,10 @@ define_id!(
     /// Goal id (v0.6).
     GoalId
 );
+define_id!(
+    /// Configured AI provider id (v0.8).
+    AiProviderId
+);
 
 #[cfg(test)]
 mod tests {

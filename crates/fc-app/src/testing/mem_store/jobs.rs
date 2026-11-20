@@ -85,11 +85,20 @@ impl JobWrite for MemTx<'_> {
     }
 
     fn claim_next_job(&mut self, now: Timestamp) -> StorageResult<Option<JobRecord>> {
+        self.claim_next_job_in(now, &[], false)
+    }
+
+    fn claim_next_job_in(
+        &mut self,
+        now: Timestamp,
+        kinds: &[&str],
+        only: bool,
+    ) -> StorageResult<Option<JobRecord>> {
         let next = self
             .s()
             .jobs
             .values()
-            .filter(|j| j.status == "queued")
+            .filter(|j| j.status == "queued" && kinds.contains(&j.kind.as_str()) == only)
             .min_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)))
             .map(|j| j.id);
         let Some(id) = next else {

@@ -175,4 +175,5 @@ domains! {
     search => SearchState,
     mcp => McpState,
     stats => StatsState,
+    ai => AiState,
 }

@@ -91,4 +91,5 @@ domains! {
     mcp,
     stats,
     planning,
+    ai,
 }

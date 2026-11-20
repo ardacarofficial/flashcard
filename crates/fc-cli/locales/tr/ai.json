@@ -1,0 +1,17 @@
+{
+  "oplog.summary.ai.providers.create": "AI sağlayıcısı eklendi: {name}",
+  "oplog.summary.ai.providers.update": "AI sağlayıcısı düzenlendi: {name}",
+  "oplog.summary.ai.providers.delete": "AI sağlayıcısı kaldırıldı: {name}",
+  "oplog.summary.ai.providers.set_key": "API anahtarı değişti: {name}",
+  "oplog.summary.ai.providers.refresh_models": "Model listesi yenileniyor",
+  "oplog.summary.ai.providers.restore": "AI sağlayıcısı geri geldi: {name}",
+  "oplog.summary.ai.providers.set_models": "Model listesi güncellendi",
+  "oplog.summary.ai.routes.set": "{feature} için AI modeli değişti",
+  "oplog.summary.ai.prices.set": "{model} fiyatı değişti",
+  "oplog.summary.ai.prices.delete": "{model} fiyatı kaldırıldı",
+  "oplog.summary.ai.usage.record": "AI kullanımı kaydedildi",
+  "oplog.summary.ai.run": "AI isteği gönderildi",
+  "oplog.summary.ai.notes.add": "{count} AI notu eklendi",
+  "oplog.summary.ai.notes.update": "AI önerisi uygulandı",
+  "oplog.summary.ai.sources.extract": "Kart kaynağı okundu"
+}

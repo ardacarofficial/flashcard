@@ -121,7 +121,15 @@ notes: number, } } | { "type": "collection_replaced" } | { "type": "data_changed
 /**
  * Cards.
  */
-ids: Array<CardId>, } } | { "type": "saved_queries_changed" } | { "type": "presets_changed" } | { "type": "exams_changed" } | { "type": "goals_changed" } | { "type": "undone", "data": { 
+ids: Array<CardId>, } } | { "type": "saved_queries_changed" } | { "type": "presets_changed" } | { "type": "exams_changed" } | { "type": "goals_changed" } | { "type": "ai_config_changed" } | { "type": "ai_partial", "data": { 
+/**
+ * Job.
+ */
+job_id: JobId, 
+/**
+ * Text so far.
+ */
+text: string, } } | { "type": "undone", "data": { 
 /**
  * Batch reverted.
  */

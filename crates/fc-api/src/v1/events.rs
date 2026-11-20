@@ -155,6 +155,17 @@ pub enum DomainEvent {
     ExamsChanged,
     /// Goals changed (refetch `goals.list`; v0.6).
     GoalsChanged,
+    /// AI providers, routes or prices changed (refetch `ai.*` lists; v0.8). Never carries a key.
+    AiConfigChanged,
+    /// Output of a running `ai.request` job so far (streamed explanations and hints, v0.8):
+    /// the whole text received until now, so a missed event loses nothing. The job's result
+    /// is still the final word.
+    AiPartial {
+        /// Job.
+        job_id: JobId,
+        /// Text so far.
+        text: String,
+    },
     /// A batch was undone.
     Undone {
         /// Batch reverted.

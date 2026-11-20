@@ -4,6 +4,7 @@
 //! pool); a few use the in-memory store. Raw `rusqlite` connections are used only to
 //! inspect the schema and the FTS index.
 
+mod ai;
 mod attributes;
 mod content;
 mod decks;

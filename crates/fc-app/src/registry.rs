@@ -110,6 +110,8 @@ pub struct Registry {
     modules: Vec<ModuleDescriptor>,
     card_types: BTreeMap<String, Arc<dyn CardTypeEngine>>,
     jobs: BTreeMap<&'static str, Arc<dyn JobHandler>>,
+    /// Shared services modules hand to the app (see [`Registry::provide`]).
+    extensions: Vec<Arc<dyn std::any::Any + Send + Sync>>,
     errors: Vec<String>,
 }
 
@@ -199,6 +201,56 @@ impl Registry {
     /// Handler of job `kind`.
     pub fn job_handler(&self, kind: &str) -> Option<&Arc<dyn JobHandler>> {
         self.jobs.get(kind)
+    }
+
+    /// Worker lanes of the registered jobs ([`crate::jobs::MAIN_LANE`] always first).
+    pub fn lanes(&self) -> Vec<&'static str> {
+        let mut lanes = vec![crate::jobs::MAIN_LANE];
+        for h in self.jobs.values() {
+            if !lanes.contains(&h.lane()) {
+                lanes.push(h.lane());
+            }
+        }
+        lanes
+    }
+
+    /// The claim filter of `lane`: its job kinds (`true` = only these), or for the main lane
+    /// the kinds of every other lane (`false` = all but these — unknown kinds too, so they
+    /// fail visibly instead of waiting forever).
+    pub(crate) fn lane_kinds(&self, lane: &str) -> (Vec<&'static str>, bool) {
+        let main = lane == crate::jobs::MAIN_LANE;
+        let kinds = self
+            .jobs
+            .values()
+            .filter(|h| {
+                if main {
+                    h.lane() != crate::jobs::MAIN_LANE
+                } else {
+                    h.lane() == lane
+                }
+            })
+            .map(|h| h.kind())
+            .collect();
+        (kinds, !main)
+    }
+
+    /// Makes a module's shared service reachable from the app (`App` methods a transport
+    /// calls, e.g. installing the keychain the `ai` module stores keys in). One per type.
+    pub fn provide<T: std::any::Any + Send + Sync>(&mut self, service: Arc<T>) {
+        if self.extension::<T>().is_some() {
+            self.errors.push(format!(
+                "service {} provided twice",
+                std::any::type_name::<T>()
+            ));
+        }
+        self.extensions.push(service);
+    }
+
+    /// The service of type `T`, if a module provided one.
+    pub fn extension<T: std::any::Any + Send + Sync>(&self) -> Option<Arc<T>> {
+        self.extensions
+            .iter()
+            .find_map(|e| Arc::clone(e).downcast::<T>().ok())
     }
 
     /// Registers a placeholder for `M` that fails with `INTERNAL_NOT_IMPLEMENTED`. Lets the
@@ -352,7 +404,7 @@ pub(crate) fn module_disabled(module: &str) -> AppError {
 /// (v0.7) — at which point this is the single place that enforces them. The one exception
 /// already: `mcp:write` (registering programs the app will launch) belongs to the user and
 /// the CLI alone — never to a plugin, automation or local-API client.
-fn permits(actor: &Actor, permission: &str) -> bool {
+pub(crate) fn permits(actor: &Actor, permission: &str) -> bool {
     match actor {
         Actor::User | Actor::Cli | Actor::System => true,
         Actor::Plugin(_) | Actor::Automation(_) | Actor::LocalApi(_) => permission != "mcp:write",

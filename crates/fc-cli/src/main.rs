@@ -410,6 +410,10 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // AI provider keys: the same OS keychain entries as the desktop app (v0.8).
+    app.set_secret_store(std::sync::Arc::new(fc_ai::secrets::OsKeychain::new(
+        fc_ai::secrets::SERVICE,
+    )));
     let ctx = commands::Ctx {
         app: &app,
         json: cli.json,
