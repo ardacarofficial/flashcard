@@ -199,7 +199,7 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** Okuma modu + kelime renklendirme + lemmatizasyon; altyazıdan kart + cümle madenciliği; artımlı okuma; Quizlet tarzı öğren modu; test oluşturucu; güven bazlı puanlama; zamanlı mod; odak modu; satır içi kart oluşturma.
 
 **Kabul kriterleri**
-- [x] Bilinen kelime durumu FSRS verisiyle tutarlı. *(okuma izi: olgun kart = istatistikteki "olgun" — `modules::reading::tests::{mem,sqlite}::word_colours_follow_fsrs_maturity`, test istatistik modülünün kendi `card_fact`/`stats.overview` olgun sayımıyla karşılaştırır; 10 bin kelime renklendirme < 50 ms: `bench_colouring_10k`; docs/10 §28)*
+- [x] Bilinen kelime durumu FSRS verisiyle tutarlı. *(okuma izi: olgun kart = istatistikteki "olgun" — `modules::reading::tests::{mem,sqlite}::word_colours_follow_fsrs_maturity`, test istatistik modülünün kendi `card_fact`/`stats.overview` olgun sayımıyla karşılaştırır; 10 bin kelime renklendirme < 50 ms: `bench_colouring_10k` (`#[ignore]`, release; v1.0'da ölçülen **14,9 ms**) — CI'da her `cargo test` ile koşan ölçekli eşi `bench_colouring_10k_scaled` (aynı 10 bin kelime, 300 kart; bütçe debug 1 s / release 100 ms) yalnız regresyonu yakalar, 50 ms'yi kanıtlamaz; docs/10 §28, §34)*
 - [x] .srt dosyasından cümle kartı, video varsa ses kesitiyle. *(okuma izi: `subtitle_file_to_sentence_card`, `subtitle_file_to_sentence_card_with_clip` — sahte ffmpeg ile; docs/10 §28)*
 - [x] Öğren modu: kart önce çoktan seçmeli, sonra yazarak sorulur; her aşamada doğru bilinince "öğrenildi" olur (yanlış yazılı cevap çoktan seçmeliye döner); oturum bir sınıflandırmayı hedefleyebilir (`seviye:A2`).
 - [x] Test oluşturucu: karışık soru tipli, yazdırılabilir (cevap anahtarı isteğe bağlı) kâğıt, puanlama; sınıflandırma hedefi (`sınav:TYT`); takvim (`cards`) asla değişmez; teslim geri alınabilir.
@@ -218,9 +218,9 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** İlk açılış rehberi; hazır başlangıç desteleri; TR/EN çevirilerin tamamı; temalar; uygulama kilidi; profiller; hatırlatıcılar ve tepsi; otomatik güncelleme (imzalı); çökme kurtarma; log dışa aktarma; performans çalışması; Windows kurulum dosyası (MSI/NSIS); kullanıcı rehberi.
 
 **Kabul kriterleri**
-- [ ] Performans hedefleri ([02 §34](02-ozellik-katalogu.md)) benchmark ile sağlanır.
+- [x] Performans hedefleri ([02 §34](02-ozellik-katalogu.md)) benchmark ile sağlanır. *(iz P: `fc-app/src/perf_tests.rs::perf_suite_100k` — `#[ignore]`, release, 100k not / 200k kart / 2M tekrar, ayrı süreçte ölçüm: açılış 753 ms < 2 sn, sıradaki kart medyan 9,7 ms < 20 ms (p95 26,9 ms < 50 ms), en yavaş arama 90 ms < 100 ms, tarayıcı sayfası 83 ms, 10 bin içe aktarma 1,2 sn, istatistik 666 ms / 2,97 sn / 2,7 sn, tepe bellek 313 MB < 400 MB; CI'da her `cargo test` ile `perf_suite_scaled` (1/10, debug, geniş bütçe) yalnız regresyonu yakalar; ayrıntı ve ölçüm koşulları docs/10 §34)*
 - [ ] Temiz bir Windows'ta kurulum → ilk açılış → çalışma → güncelleme akışı sorunsuz.
-- [ ] Tüm arayüz metinleri çeviri anahtarlarından gelir (sabit metin yok, lint ile).
+- [x] Tüm arayüz metinleri çeviri anahtarlarından gelir (sabit metin yok, lint ile). *(iz P: masaüstü `tests/no-hardcoded-text.test.ts` — her Svelte bileşeninin AST'si: işaretleme metni, görünen öznitelik/prop'lar, betik cümleleri; kullanılan her anahtar TR+EN; tarayıcı eklentisi `tests/unit/i18n.test.ts` — sayfalar, manifest `__MSG_…__`, betiklerin metin yazdığı yerler; backend `fc-app/src/i18n_lint_tests.rs` — modüllerin ilan ettiği her `*_key` ve kodun gönderdiği her ileti anahtarı TR+EN; her `ErrorCode` metni ve CLI'nin çevrilmiş hataları `fc-cli/src/i18n.rs`; docs/10 §34)*
 - [ ] İçe aktarmada ayırıcı otomatik algılama **yeni bir tutulmuş sette** ≥ %95 doğru (v0.5'ten devreden: şu an %92,9, 65/70; bkz. v0.5).
 
 ## 🔮 v1.0 sonrası

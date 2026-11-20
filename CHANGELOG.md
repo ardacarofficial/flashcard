@@ -2,6 +2,15 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## [Unreleased]
+
+### v1.0 iz P — performans, i18n tamlığı + lint, temalar (`feat/v1.0-perf`)
+- **Performans takımı** (`fc-app/src/perf_tests.rs`): 100k not / 200k kart / 2M tekrar kaydı (sınıflandırmalar, etiketler, her kart durumu) SQLite dosyasında kurulur, ayrı bir süreç masaüstü gibi açıp ölçer. docs/02 §34 hedefleri release'te karşılandı (yüklü 8 çekirdekli makinede): açılış 753 ms (< 2 sn), sıradaki kart medyan 9,7 ms (< 20 ms; p95 26,9 ms — SQLite WAL denetim noktası), 100k'da en yavaş arama 90 ms (< 100 ms), tarayıcıda herhangi bir sayfa 83 ms, 10 bin satır içe aktarma 1,2 sn, 2M tekrarda önbellekli özet 666 ms / sınıflandırma kırılımı 2,97 sn / deste kapsamı 2,7 sn, tepe bellek 313 MB; okuma modunda 10 bin kelime renklendirme 16,6 ms (< 50 ms). 1/10 ölçekli eşi her `cargo test`'te koşar. Sayılar ve ölçüm koşulları docs/10 §34.
+- **Düzeltilen darboğazlar:** kardeş gömme ve çalışma adayı okumaları dizini kullanmıyordu (`?n IS NULL OR …` → yalnız verilen koşullar); yük dengeleyici her cevapta binlerce vade zamanını okuyordu (gün başına sayım SQL'de, kapsayan dizin); kuyruktaki her kart için ayrı okuma (tek sorgu); her aramada tüm etiketlerin kullanım sayımı (sayımsız liste); sınıflandırma kırılımı ve deste kapsamlı istatistik 2M satırı belleğe alıyordu (akış halinde, yalın satır); enum sütunları satır başına JSON değeri üretiyordu. Tarayıcı: vade sıralaması dizinli, orta noktadan sonraki sayfalar dizini tersten yürür, sıralama yürüyüşü not satırlarını okumaz (migration **1070**).
+- **i18n lint:** masaüstünde Svelte AST taraması (işaretleme, görünen öznitelik/prop, betik cümleleri; her anahtar TR+EN), tarayıcı eklentisinde sayfa/manifest/betik taraması, backend'de modüllerin ilan ettiği ve kodun gönderdiği her `*_key`'in TR+EN metni. CLI hataları `message_key` çevirisiyle yazar. Bulunan eksik ayar etiketleri eklendi.
+- **Temalar** (docs/02 §31): açık/koyu/sistem, sakin hazır temalar (varsayılan, kâğıt, adaçayı, arduvaz, yüksek karşıtlık) ve özel vurgu rengi; renkler `fc_core::theme`'de hesaplanır (WCAG karşıtlığı korunur), `themes` modülü kapatılabilir, ayar tek geri al adımı.
+- **Ön yüz:** çalışma ekranı dışındaki her özellik ekranı ilk açılışta yüklenir (ayrı parça); `pnpm bundle:check` ilk yük bütçesini CI'da denetler.
+
 ## [0.10.0] — Faz 4 (v0.9 + v0.10 birleşik, `feat/phase4-integration`)
 
 ### Faz 4 entegrasyonu — tur 2, son (+ v0.9 otomasyon, yerel API/gelen kutusu, tarayıcı eklentisi)
