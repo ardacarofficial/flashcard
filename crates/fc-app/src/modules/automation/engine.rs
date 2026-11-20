@@ -1,14 +1,22 @@
 //! Running rules: what a commit brings ([`observe`], [`observe_group`]), dispatching it to the
 //! rules ([`dispatch`]) under the loop guard, one rule run ([`apply`], internal
-//! `automation.apply`: one batch = one undo step), the dry run ([`preview`]), manual runs and
-//! the scheduler ([`run_due`], [`spawn_scheduler`]).
+//! `automation.apply`), the dry run ([`preview`]), manual runs and the scheduler ([`run_due`],
+//! [`spawn_scheduler`]).
+//!
+//! **Undo.** A run triggered by a change is written as the continuation of the change's batch
+//! ([`OplogMode::Follow`]): `oplog.undo` after answering a card reverts the answer *and* what
+//! its rules did, in one step; redo replays both (without running rules again). The rules
+//! a run triggers continue the same batch. If another command committed in between (another
+//! thread), the run becomes its own undo step instead — the oplog keeps batches contiguous.
+//! Scheduled and manual runs are their own undo step.
 //!
 //! **Chains.** A rule run is a command; its commit is observed like any other, so the rules its
 //! actions trigger run too. They do not run *inside* it: while a dispatch is active on a thread,
 //! nested commits only queue their signals (with the chain of rules that produced them) and the
 //! outermost dispatch works through the queue in order, asking a
 //! [`LoopGuard`](fc_core::automation::LoopGuard) about each run: a rule already in its chain is a
-//! cycle, a chain at `automation.max_depth` stops, and one originating change starts at most
+//! cycle, a chain at `automation.max_depth` stops, and one source change (one commit, one due
+//! schedule, one manual run — each its own guard) starts at most
 //! `automation.max_runs_per_event` runs. Refusals are logged, never errors: the change that
 //! triggered the rules has committed already.
 //!
@@ -37,7 +45,10 @@ use fc_api::v1::methods::*;
 use fc_api::v1::oplog::{Actor, OplogKind};
 use fc_api::v1::study::AnswerCard;
 use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest};
-use fc_core::automation::{Admission, LoopGuard, RuleTrigger, SignalKind};
+use fc_core::automation::{
+    schedule_state, Admission, LoopGuard, RuleTrigger, ScheduleState, SignalKind,
+};
+use fc_core::query::compile_query;
 use fc_core::query::filter::Filter;
 use fc_core::rng::SplitMix64;
 use fc_core::time::FixedClock;
@@ -46,8 +57,8 @@ use fc_storage::repo::{AutomationRuleRecord, AutomationRunRecord, CardFilter};
 use fc_storage::Reads;
 use serde_json::Value;
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashSet, VecDeque};
-use std::sync::{Arc, Weak};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::sync::{Arc, Mutex, Weak};
 
 /// Most cards one run handles (the first ones in creation order; the rest wait for the next
 /// run — a scheduled rule catches up, a preview says `truncated`).
@@ -227,6 +238,30 @@ struct Job {
     only: Option<AutomationRuleId>,
     /// A manual run (runs the rule even if disabled).
     manual: bool,
+    /// The committed batch whose change this is. A rule run continues it
+    /// ([`OplogMode::Follow`]): the change and what its rules did are **one undo step**.
+    /// `None` (schedules, manual runs): the run is its own batch.
+    follows: Option<BatchId>,
+    /// Loop guard of the source job this job descends from (set by [`run_jobs`]).
+    guard: usize,
+}
+
+impl Job {
+    fn new(
+        signal: Signal,
+        only: Option<AutomationRuleId>,
+        manual: bool,
+        follows: Option<BatchId>,
+    ) -> Self {
+        Self {
+            signal,
+            chain: Vec::new(),
+            only,
+            manual,
+            follows,
+            guard: 0,
+        }
+    }
 }
 
 /// The dispatch active on this thread.
@@ -234,6 +269,8 @@ struct Frame {
     queue: VecDeque<Job>,
     /// Chain of the rule run in progress (signals committed now were produced by it).
     chain: Vec<AutomationRuleId>,
+    /// Loop guard of the rule run in progress (signals committed now count against it).
+    guard: usize,
 }
 
 thread_local! {
@@ -249,10 +286,11 @@ impl Drop for EndFrame {
     }
 }
 
-fn set_chain(chain: Vec<AutomationRuleId>) {
+fn set_running(chain: Vec<AutomationRuleId>, guard: usize) {
     FRAME.with(|f| {
         if let Some(fr) = f.borrow_mut().as_mut() {
             fr.chain = chain;
+            fr.guard = guard;
         }
     });
 }
@@ -261,40 +299,143 @@ fn next_job() -> Option<Job> {
     FRAME.with(|f| f.borrow_mut().as_mut().and_then(|fr| fr.queue.pop_front()))
 }
 
-/// Runs the rules a committed change triggers (see the module docs). Never fails: problems
-/// end up in the run log.
-pub(crate) fn dispatch(app: &App, observed: Option<Observed>) {
+/// Runs the rules a change committed as batch `source` triggers (see the module docs). Never
+/// fails: problems end up in the run log.
+///
+/// It runs on the committing thread, after the commit, before the triggering call returns.
+/// That is deliberate: a rule's run continues `source` only while `source` is still the
+/// newest batch, so running later (on another thread) would let the next answer slip in
+/// between and split the undo step. The cost is bounded instead: rules and compiled
+/// conditions are loaded once per dispatch, conditions are evaluated only over the cards the
+/// change touched, rules sharing a condition share one search (benchmark:
+/// `tests::bench`, < 20 ms per answer with 100 rules over 100k notes).
+pub(crate) fn dispatch(app: &App, observed: Option<Observed>, source: BatchId) {
     let Some(observed) = observed else { return };
     let jobs = observed
         .0
         .into_iter()
-        .map(|signal| Job {
-            signal,
-            chain: Vec::new(),
-            only: None,
-            manual: false,
-        })
+        .map(|signal| Job::new(signal, None, false, Some(source)))
         .collect();
-    let _ = run_jobs(app, jobs);
+    let _ = run_jobs(app, vec![jobs]);
 }
 
-/// Works through `jobs` (and everything they trigger), or — inside an active dispatch — queues
-/// them behind the run in progress. Returns the runs logged by this call.
-fn run_jobs(app: &App, jobs: Vec<Job>) -> AppResult<Vec<RunDto>> {
+/// A rule as one dispatch sees it (loaded once).
+struct LoadedRule {
+    record: AutomationRuleRecord,
+    trigger: RuleTrigger,
+}
+
+/// Compiled conditions of one dispatch (the catalog they resolve against is loaded once).
+/// Forgotten after every rule run that wrote something: an action may create the tag or deck
+/// a later condition names.
+struct Conditions {
+    now: Timestamp,
+    catalog: Option<crate::modules::browse::CatalogData>,
+    filters: HashMap<String, Result<Filter, ApiError>>,
+}
+
+impl Conditions {
+    fn new(now: Timestamp) -> Self {
+        Self {
+            now,
+            catalog: None,
+            filters: HashMap::new(),
+        }
+    }
+
+    fn invalidate(&mut self) {
+        self.catalog = None;
+        self.filters.clear();
+    }
+
+    /// The condition's filter ('' = every card).
+    fn filter(&mut self, reads: &dyn Reads, condition: &str) -> AppResult<Filter> {
+        if let Some(f) = self.filters.get(condition) {
+            return f.clone().map_err(AppError::Api);
+        }
+        let compiled = if condition.trim().is_empty() {
+            Ok(Filter::All)
+        } else {
+            if self.catalog.is_none() {
+                self.catalog = Some(crate::modules::browse::CatalogData::load(reads, self.now)?);
+            }
+            let data = self
+                .catalog
+                .as_ref()
+                .ok_or_else(|| ApiError::new(ErrorCode::Internal, "catalog not loaded"))?;
+            compile_query(condition, &data.catalog())
+                .map_err(|e| crate::modules::browse::query_error(&e).into_api())
+        };
+        self.filters.insert(condition.to_owned(), compiled.clone());
+        compiled.map_err(AppError::Api)
+    }
+
+    /// Live cards matching `condition` — among `scope` when given, else in the whole
+    /// collection — at most [`MAX_CARDS_PER_RUN`], in creation order.
+    fn matches(
+        &mut self,
+        app: &App,
+        condition: &str,
+        scope: Option<&[CardId]>,
+    ) -> AppResult<Vec<CardId>> {
+        let tx = app.store().read()?;
+        let filter = self.filter(&*tx, condition)?;
+        let mut ids = match scope {
+            Some(cards) => tx.search_card_ids_among(&filter, self.now, cards)?,
+            None => tx.search_card_ids(&filter, self.now)?,
+        };
+        ids.truncate(MAX_CARDS_PER_RUN);
+        Ok(ids)
+    }
+}
+
+/// The cards a signal concerns (its cards and its notes' cards); `None` = the whole
+/// collection.
+fn scope_of(app: &App, signal: &Signal) -> AppResult<Option<Vec<CardId>>> {
+    let Some(cards) = &signal.cards else {
+        return Ok(None);
+    };
+    let mut ids: Vec<CardId> = cards.iter().copied().collect();
+    if !signal.notes.is_empty() {
+        let tx = app.store().read()?;
+        let of_notes = tx.list_cards(&CardFilter {
+            note_ids: Some(signal.notes.iter().copied().collect()),
+            ..CardFilter::default()
+        })?;
+        ids.extend(of_notes.into_iter().map(|c| c.id));
+    }
+    Ok(Some(ids))
+}
+
+/// Works through `sources` (and everything they trigger), or — inside an active dispatch —
+/// queues them behind the run in progress. Every source job (the signals of one commit, one
+/// due schedule, one manual run) has its **own** loop guard, which the runs it triggers share.
+/// Returns the runs logged by this call.
+fn run_jobs(app: &App, sources: Vec<Vec<Job>>) -> AppResult<Vec<RunDto>> {
+    let n_sources = sources.len();
+    let mut queue: VecDeque<Job> = VecDeque::new();
+    for (i, jobs) in sources.into_iter().enumerate() {
+        for mut j in jobs {
+            j.guard = i;
+            queue.push_back(j);
+        }
+    }
     let nested = FRAME.with(|f| {
         let mut f = f.borrow_mut();
         match f.as_mut() {
             Some(fr) => {
-                for mut j in jobs {
+                for mut j in queue.drain(..) {
                     j.chain = fr.chain.clone();
+                    j.guard = fr.guard;
                     fr.queue.push_back(j);
                 }
                 true
             }
             None => {
                 *f = Some(Frame {
-                    queue: jobs.into(),
+                    queue: std::mem::take(&mut queue),
                     chain: Vec::new(),
+                    guard: 0,
                 });
                 false
             }
@@ -304,34 +445,62 @@ fn run_jobs(app: &App, jobs: Vec<Job>) -> AppResult<Vec<RunDto>> {
         return Ok(Vec::new());
     }
     let _end = EndFrame;
-    let mut guard = {
+    let now = app.now();
+    // Rules and limits: once per dispatch (actions cannot change rules or settings).
+    let (rules, mut guards) = {
         let tx = app.store().read()?;
-        LoopGuard::new(setting(&*tx, MAX_DEPTH, 3, 10)?, setting(&*tx, MAX_RUNS, 20, 100)?)
+        let rules: Vec<LoadedRule> = tx
+            .list_automation_rules(false)?
+            .into_iter()
+            .filter_map(|record| {
+                let trigger = trigger_of(&record).ok()?;
+                Some(LoadedRule { record, trigger })
+            })
+            .collect();
+        let guard =
+            LoopGuard::new(setting(&*tx, MAX_DEPTH, 3, 10)?, setting(&*tx, MAX_RUNS, 20, 100)?);
+        (rules, vec![guard; n_sources.max(1)])
     };
+    let mut conditions = Conditions::new(now);
     let mut out = Vec::new();
     let mut logged_outside = false;
     while let Some(job) = next_job() {
-        let rules = {
-            let tx = app.store().read()?;
-            tx.list_automation_rules(false)?
-        };
-        for rule in rules {
-            let selected = match job.only {
-                Some(id) => rule.id == id && (rule.enabled || job.manual),
-                None => rule.enabled,
-            };
-            let Ok(trigger) = trigger_of(&rule) else {
-                continue;
-            };
-            if !selected || !trigger.accepts(&job.signal.kind) {
-                continue;
-            }
-            let depth = u32::try_from(job.chain.len()).unwrap_or(u32::MAX);
+        let selected: Vec<&LoadedRule> = rules
+            .iter()
+            .filter(|r| {
+                let on = match job.only {
+                    Some(id) => r.record.id == id && (r.record.enabled || job.manual),
+                    None => r.record.enabled,
+                };
+                on && r.trigger.accepts(&job.signal.kind)
+            })
+            .collect();
+        if selected.is_empty() {
+            continue;
+        }
+        let depth = u32::try_from(job.chain.len()).unwrap_or(u32::MAX);
+        let scope = scope_of(app, &job.signal).map_err(AppError::into_api);
+        if matches!(&scope, Ok(Some(s)) if s.is_empty()) {
+            continue;
+        }
+        // Rules sharing a condition share one search — until a run writes something.
+        let mut found: HashMap<&str, Vec<CardId>> = HashMap::new();
+        for rule in selected {
+            let rule_ref = &rule.record;
             let log = |status: &str, matched: usize, error: Option<ApiError>| {
-                log_run(app, &rule, job.signal.kind, depth, matched, status, error)
+                log_run(app, rule_ref, job.signal.kind, depth, matched, status, error)
             };
-            let cards = match matched_cards(app, &rule, &job.signal) {
-                Ok(c) => c,
+            let condition = rule.record.condition.as_str();
+            let cards = match (found.get(condition), &scope) {
+                (Some(c), _) => Ok(c.clone()),
+                (None, Ok(scope)) => conditions.matches(app, condition, scope.as_deref()),
+                (None, Err(e)) => Err(AppError::Api(e.clone())),
+            };
+            let cards = match cards {
+                Ok(c) => {
+                    found.insert(condition, c.clone());
+                    c
+                }
                 Err(e) => {
                     out.push(log("failed", 0, Some(e.into_api()))?);
                     logged_outside = true;
@@ -346,7 +515,10 @@ fn run_jobs(app: &App, jobs: Vec<Job>) -> AppResult<Vec<RunDto>> {
                 }
                 continue;
             }
-            let admission = guard.admit(rule.id, &job.chain);
+            let guard = guards.get_mut(job.guard).ok_or_else(|| {
+                AppError::api(ErrorCode::Internal, "automation: unknown loop guard")
+            })?;
+            let admission = guard.admit(rule.record.id, &job.chain);
             if let Some(status) = admission.status() {
                 out.push(log(status, cards.len(), None)?);
                 logged_outside = true;
@@ -354,24 +526,35 @@ fn run_jobs(app: &App, jobs: Vec<Job>) -> AppResult<Vec<RunDto>> {
             }
             debug_assert_eq!(admission, Admission::Run);
             let mut chain = job.chain.clone();
-            chain.push(rule.id);
-            set_chain(chain);
-            let request = apply_request(&rule, &job, &cards, depth)?;
-            let actor = Actor::Automation(rule.id.to_string());
-            let result = app.invoke_with(&request, &actor, OplogMode::Write);
-            set_chain(Vec::new());
+            chain.push(rule.record.id);
+            set_running(chain, job.guard);
+            let request = apply_request(&rule.record, &job, &cards, depth)?;
+            let actor = Actor::Automation(rule.record.id.to_string());
+            let mode = match job.follows {
+                Some(batch) => OplogMode::Follow(batch),
+                None => OplogMode::Write,
+            };
+            let result = app.invoke_with(&request, &actor, mode);
+            set_running(Vec::new(), job.guard);
             match result.and_then(|v| crate::support::from_json::<ApplyResult>(&v)) {
-                Ok(r) => out.push(RunDto {
-                    seq: r.seq,
-                    rule_id: rule.id,
-                    at: app.now(),
-                    trigger: job.signal.kind.as_str().to_owned(),
-                    depth,
-                    matched: count(cards.len()),
-                    status: "applied".into(),
-                    batch_id: r.batch_id,
-                    error: None,
-                }),
+                Ok(r) => {
+                    if r.batch_id.is_some() {
+                        // It wrote: later conditions see its changes.
+                        found.clear();
+                        conditions.invalidate();
+                    }
+                    out.push(RunDto {
+                        seq: r.seq,
+                        rule_id: rule.record.id,
+                        at: app.now(),
+                        trigger: job.signal.kind.as_str().to_owned(),
+                        depth,
+                        matched: count(cards.len()),
+                        status: "applied".into(),
+                        batch_id: r.batch_id,
+                        error: None,
+                    });
+                }
                 Err(e) => {
                     out.push(log("failed", cards.len(), Some(e.into_api()))?);
                     logged_outside = true;
@@ -410,7 +593,7 @@ fn apply_request(
 }
 
 /// Logs a run that wrote nothing (no match, refused by the guard, failed) in its own small
-/// transaction.
+/// transaction — for a scheduled run, together with its `last_run_at` (see [`run_due`]).
 fn log_run(
     app: &App,
     rule: &AutomationRuleRecord,
@@ -432,6 +615,9 @@ fn log_run(
         error: error.as_ref().and_then(|e| serde_json::to_value(e).ok()),
     };
     let mut tx = app.store().write()?;
+    if kind == SignalKind::Schedule {
+        tx.set_automation_rule_last_run(rule.id, record.at)?;
+    }
     record.seq = tx.insert_automation_run(&record, KEEP_RUNS)?;
     tx.commit()?;
     Ok(run_dto(record))
@@ -459,37 +645,6 @@ fn condition_filter(reads: &dyn Reads, condition: &str, now: Timestamp) -> AppRe
     } else {
         crate::modules::browse::compile(reads, condition, now)
     }
-}
-
-/// Live cards the signal concerns that match the rule's condition, at most
-/// [`MAX_CARDS_PER_RUN`], in creation order.
-fn matched_cards(app: &App, rule: &AutomationRuleRecord, signal: &Signal) -> AppResult<Vec<CardId>> {
-    let tx = app.store().read()?;
-    let now = app.now();
-    let scope: Option<HashSet<CardId>> = match &signal.cards {
-        None => None,
-        Some(cards) => {
-            let mut set: HashSet<CardId> = cards.iter().copied().collect();
-            if !signal.notes.is_empty() {
-                let of_notes = tx.list_cards(&CardFilter {
-                    note_ids: Some(signal.notes.iter().copied().collect()),
-                    ..CardFilter::default()
-                })?;
-                set.extend(of_notes.into_iter().map(|c| c.id));
-            }
-            if set.is_empty() {
-                return Ok(Vec::new());
-            }
-            Some(set)
-        }
-    };
-    let filter = condition_filter(&*tx, &rule.condition, now)?;
-    Ok(tx
-        .search_card_ids(&filter, now)?
-        .into_iter()
-        .filter(|c| scope.as_ref().is_none_or(|s| s.contains(c)))
-        .take(MAX_CARDS_PER_RUN)
-        .collect())
 }
 
 // ------------------------------------------------------------------ one run
@@ -567,6 +722,10 @@ pub(crate) fn apply(
     let actions = actions_of(&rule)?;
     let results = run_actions(ctx, &actions, &req.card_ids)?;
     let batch_id: Option<BatchId> = ctx.has_oplog_entries().then_some(ctx.batch_id);
+    if req.trigger == SignalKind::Schedule.as_str() {
+        // Marked in the run's own transaction: a scheduled run is never lost (see `run_due`).
+        ctx.tx.set_automation_rule_last_run(rule.id, ctx.now)?;
+    }
     let seq = ctx.tx.insert_automation_run(
         &AutomationRunRecord {
             seq: 0,
@@ -597,64 +756,84 @@ pub(crate) fn apply(
 
 /// Handler of `automation.rules.run`: runs the rule now (even if disabled) over every card
 /// matching its condition — one undo step — followed by whatever it triggers.
-pub(crate) fn run_by_hand(req: RuleRef, app: &App, _actor: &Actor) -> AppResult<RunResult> {
+pub(crate) fn run_by_hand(req: RuleRef, app: &App, actor: &Actor) -> AppResult<RunResult> {
+    super::ensure_manager(actor)?;
     {
         let tx = app.store().read()?;
         require(&*tx, req.id)?;
     }
-    let runs = run_jobs(
-        app,
-        vec![Job {
-            signal: Signal::whole_collection(SignalKind::Manual),
-            chain: Vec::new(),
-            only: Some(req.id),
-            manual: true,
-        }],
-    )?;
+    let job = Job::new(
+        Signal::whole_collection(SignalKind::Manual),
+        Some(req.id),
+        true,
+        None,
+    );
+    let runs = run_jobs(app, vec![vec![job]])?;
     Ok(RunResult { runs })
 }
 
+/// One scheduler pass at a time (two would both find the same rules due).
+static SCHEDULER_PASS: Mutex<()> = Mutex::new(());
+
 /// Runs every enabled scheduled rule whose interval has passed since its last run (a new rule
-/// is due at once). Marks them run first, so a failing rule waits for its next interval.
+/// is due at once).
+///
+/// * Each due rule is its own source job, with its own loop-guard budget: however many rules
+///   are due, none is refused for the others' runs.
+/// * A rule's `last_run_at` is written in the transaction that applies or logs its run, never
+///   before: a run that did not happen is not marked, so it is not lost (it runs on the next
+///   pass). A failing run is logged — and marked — so it waits for its next interval.
+/// * Monotonic guard: a last run in the future means the wall clock went back; it is reset to
+///   now ([`ScheduleState::ClockWentBack`]) so the rule waits one interval at most, instead of
+///   until the clock catches up.
 pub fn run_due(app: &App) -> AppResult<Vec<RunDto>> {
     if !app.is_module_enabled(ID) {
         return Ok(Vec::new());
     }
+    let _pass = SCHEDULER_PASS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let now = app.now();
-    let due: Vec<AutomationRuleId> = {
-        let tx = app.store().read()?;
-        tx.list_automation_rules(false)?
-            .into_iter()
-            .filter(|r| r.enabled)
-            .filter(|r| {
-                trigger_of(r)
-                    .ok()
-                    .and_then(|t| t.schedule_ms())
-                    .is_some_and(|ms| r.last_run_at.is_none_or(|t| now.0 - t.0 >= ms))
-            })
-            .map(|r| r.id)
-            .collect()
-    };
-    if due.is_empty() {
-        return Ok(Vec::new());
-    }
+    let mut due = Vec::new();
+    let mut rebase = Vec::new();
     {
+        let tx = app.store().read()?;
+        for r in tx.list_automation_rules(false)? {
+            let Some(every) = trigger_of(&r).ok().and_then(|t| t.schedule_ms()) else {
+                continue;
+            };
+            if !r.enabled {
+                continue;
+            }
+            match schedule_state(r.last_run_at, now, every) {
+                ScheduleState::Due => due.push(r.id),
+                ScheduleState::ClockWentBack => rebase.push(r.id),
+                ScheduleState::Waiting => {}
+            }
+        }
+    }
+    if !rebase.is_empty() {
         let mut tx = app.store().write()?;
-        for id in &due {
+        for id in &rebase {
             tx.set_automation_rule_last_run(*id, now)?;
         }
         tx.commit()?;
     }
-    let jobs = due
+    if due.is_empty() {
+        return Ok(Vec::new());
+    }
+    let sources = due
         .into_iter()
-        .map(|id| Job {
-            signal: Signal::whole_collection(SignalKind::Schedule),
-            chain: Vec::new(),
-            only: Some(id),
-            manual: false,
+        .map(|id| {
+            vec![Job::new(
+                Signal::whole_collection(SignalKind::Schedule),
+                Some(id),
+                false,
+                None,
+            )]
         })
         .collect();
-    run_jobs(app, jobs)
+    run_jobs(app, sources)
 }
 
 /// Starts the scheduler thread (the desktop shell calls this once): every
@@ -677,7 +856,8 @@ pub fn spawn_scheduler(app: &Arc<App>) -> std::io::Result<std::thread::JoinHandl
 /// commands) in a write transaction that is dropped — rolled back — at the end: nothing is
 /// written, no oplog, no event. This is side-effect free because every action is undo-safe
 /// (database only: no files, no jobs).
-pub(crate) fn preview(req: PreviewRule, app: &App, _actor: &Actor) -> AppResult<RulePreview> {
+pub(crate) fn preview(req: PreviewRule, app: &App, actor: &Actor) -> AppResult<RulePreview> {
+    super::ensure_manager(actor)?;
     let now = app.now();
     let (rule_id, condition, actions) = {
         let tx = app.store().read()?;

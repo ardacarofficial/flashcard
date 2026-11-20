@@ -88,6 +88,11 @@ pub(crate) enum OplogMode<'g> {
     /// Dropped: compensation that leaves no history (discarding an unfinished import). With
     /// a group's batch id, its durable marker is removed in the same transaction.
     Discard(Option<BatchId>),
+    /// Written as the **continuation** of this committed batch (same batch id, `seq` going on)
+    /// when it is still the newest batch of the oplog, so that one undo step reverts both —
+    /// an automation rule's run and the change that triggered it (v0.9). If anything was
+    /// written in between, it is written as its own batch, like [`OplogMode::Write`].
+    Follow(BatchId),
 }
 
 /// One undo step written across several transactions (a long import writes in chunks so
@@ -764,6 +769,7 @@ impl App {
             first.summary = s;
         }
         let observed = crate::modules::automation::engine::observe_group(self, &entries);
+        let source = group.batch_id;
         let now = self.clock.now();
         let mut ids = self
             .ids
@@ -775,13 +781,14 @@ impl App {
             &mut **ids,
             entries,
             (group.batch_id, OplogKind::Do, None),
+            0,
             actor,
             now,
         )?;
         tx.delete_unfinished_batch(group.batch_id)?;
         tx.commit()?;
         drop(ids);
-        crate::modules::automation::engine::dispatch(self, observed);
+        crate::modules::automation::engine::dispatch(self, observed, source);
         Ok(())
     }
 
@@ -811,9 +818,13 @@ impl App {
             .map_err(|_| AppError::api(ErrorCode::Internal, "id generator poisoned"))?;
         let mut tx = self.store.write()?;
         waiting.acquired();
-        let batch_id = match &mode {
-            OplogMode::Defer(g) => g.batch_id,
-            _ => BatchId::generate(&mut **ids),
+        let (batch_id, first_seq) = match &mode {
+            OplogMode::Defer(g) => (g.batch_id, 0),
+            OplogMode::Follow(source) => match continuation(&*tx, *source)? {
+                Some(seq) => (*source, seq),
+                None => (BatchId::generate(&mut **ids), 0),
+            },
+            _ => (BatchId::generate(&mut **ids), 0),
         };
         let mut ctx = CommandCtx {
             tx: &mut *tx,
@@ -839,17 +850,18 @@ impl App {
         // Automation rules (v0.9) look at what a written batch did; deferred chunks are
         // observed when their group commits, discarded work never.
         let observed = match mode {
-            OplogMode::Write => {
+            OplogMode::Write | OplogMode::Follow(_) => {
                 crate::modules::automation::engine::observe(self, kind, &oplog, &events)
             }
             _ => None,
         };
         match mode {
-            OplogMode::Write => write_oplog(
+            OplogMode::Write | OplogMode::Follow(_) => write_oplog(
                 &mut *tx,
                 &mut **ids,
                 oplog,
                 (batch_id, kind, reverts),
+                first_seq,
                 actor,
                 now,
             )?,
@@ -885,7 +897,7 @@ impl App {
         tx.commit()?;
         drop(ids);
         self.after_commit(events, now, batch_id, actor);
-        crate::modules::automation::engine::dispatch(self, observed);
+        crate::modules::automation::engine::dispatch(self, observed, batch_id);
         Ok(response)
     }
 
@@ -910,12 +922,27 @@ impl App {
     }
 }
 
-/// Appends `entries` as batch `batch` (`(id, kind, reverts)`), `seq` from 0.
+/// The `seq` that continues batch `source` ([`OplogMode::Follow`]), if it is still the
+/// newest batch of the oplog and a `do` batch; `None` otherwise.
+fn continuation(reads: &dyn Reads, source: BatchId) -> AppResult<Option<u32>> {
+    let newest = reads.list_oplog(&fc_core::paging::PageRequest {
+        cursor: None,
+        limit: Some(1),
+    })?;
+    Ok(newest
+        .items
+        .first()
+        .filter(|r| r.batch_id == source && r.kind == OplogRecordKind::Do)
+        .map(|r| r.seq.saturating_add(1)))
+}
+
+/// Appends `entries` as batch `batch` (`(id, kind, reverts)`), `seq` from `first_seq`.
 fn write_oplog(
     tx: &mut dyn fc_storage::WriteTx,
     ids: &mut dyn IdGen,
     entries: Vec<PendingOplogEntry>,
     batch: (BatchId, OplogKind, Option<BatchId>),
+    first_seq: u32,
     actor: &Actor,
     now: fc_core::Timestamp,
 ) -> AppResult<()> {
@@ -926,7 +953,7 @@ fn write_oplog(
         let record = OplogRecord {
             id: OplogId::generate(ids),
             batch_id,
-            seq: u32::try_from(seq).unwrap_or(u32::MAX),
+            seq: first_seq.saturating_add(u32::try_from(seq).unwrap_or(u32::MAX)),
             command: entry.command,
             payload: entry.payload,
             inverse: serde_json::to_value(&entry.inverse)

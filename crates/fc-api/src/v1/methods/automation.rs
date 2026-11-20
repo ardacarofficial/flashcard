@@ -19,8 +19,9 @@ methods! {
     AutomationRulesRestore = "automation.rules.restore", Command, "automation", "automation:write", Internal, undo: true, RestoreRules => Empty;
     /// Runs a rule now over every card matching its condition (one undo step).
     AutomationRulesRun = "automation.rules.run", Command, "automation", "automation:write", Public, undo: false, RuleRef => RunResult;
-    /// Dry run: which cards a rule (saved or draft) would change; writes nothing.
-    AutomationPreview = "automation.preview", Query, "automation", "automation:read", Public, undo: false, PreviewRule => RulePreview;
+    /// Dry run: which cards a rule (saved or draft) would change. A command (it runs the
+    /// actions in a write transaction) that always rolls back: writes nothing, no undo step.
+    AutomationPreview = "automation.preview", Command, "automation", "automation:write", Public, undo: false, PreviewRule => RulePreview;
     /// The actions a rule may use (registry commands, public and undo-safe).
     AutomationActions = "automation.actions", Query, "automation", "automation:read", Public, undo: false, Empty => ActionList;
     /// The run log (newest first).

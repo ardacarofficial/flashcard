@@ -13,11 +13,20 @@
 //! * **Runs** ([`engine`]): after a commit the app observes what happened (notes added or
 //!   edited, cards answered or flagged, classification values changed, an import finished),
 //!   and every enabled rule whose trigger accepts it and whose condition matches some of the
-//!   cards runs, in order, **each run one undo step** (internal `automation.apply`). Rules a
-//!   run triggers run after it, under a [`fc_core::automation::LoopGuard`] (cycle detection,
-//!   depth limit, per-event budget). Scheduled rules run from [`engine::run_due`]. Every run is
-//!   logged (`automation_runs`, the newest [`KEEP_RUNS`]).
-//! * **Preview** (`automation.preview`): a dry run in a transaction that is always rolled back.
+//!   cards it touched runs, in order (internal `automation.apply`). A run triggered by a change
+//!   **continues that change's batch**: undoing the change (an answer in the study screen, a
+//!   note edit…) undoes what its rules did in the same step, and redo replays both. (Should
+//!   anything else commit in between, the run is its own undo step.) Scheduled and manual runs
+//!   are their own undo step. Rules a run triggers run after it, under a
+//!   [`fc_core::automation::LoopGuard`] (cycle detection, depth limit, budget per source
+//!   change). Scheduled rules run from [`engine::run_due`]. Every run is logged
+//!   (`automation_runs`, the newest [`KEEP_RUNS`]).
+//! * **Preview** (`automation.preview`): a command (`automation:write`: it takes the writer)
+//!   that is a dry run — its transaction is always rolled back.
+//! * **Who manages rules:** only the user's own clients ([`ensure_manager`]: `User`, `Cli`,
+//!   `System`), whatever permissions another actor holds — a rule acts later with the
+//!   automation actor's authority, so creating one must not lend it to plugins, MCP, local API
+//!   clients or rules.
 //!
 //! Switching the module off stops every rule (nothing is observed, `automation.apply` is
 //! refused) and hides the screen.
@@ -47,7 +56,6 @@ use serde_json::Value;
 
 #[cfg(doc)]
 use crate::registry::ensure_invocable;
-#[cfg(doc)]
 use fc_api::v1::oplog::Actor;
 
 /// Module id.
@@ -326,6 +334,22 @@ pub(crate) fn check_actions(registry: &Registry, actions: &[RuleAction]) -> AppR
     Ok(())
 }
 
+/// Rules are managed by the user's own clients only (`User`, `Cli`, `System`) — checked on
+/// top of the `automation:*` permission, so that no grant to another actor (a plugin, MCP, a
+/// local API client, a rule) ever lets it create, change, order, run or preview rules.
+pub(crate) fn ensure_manager(actor: &Actor) -> AppResult<()> {
+    match actor {
+        Actor::User | Actor::Cli | Actor::System => Ok(()),
+        other => Err(AppError::Api(
+            ApiError::new(
+                ErrorCode::PermissionDenied,
+                format!("{other:?} cannot manage automation rules"),
+            )
+            .with_detail("reason", "actor"),
+        )),
+    }
+}
+
 fn changed() -> Vec<DomainEvent> {
     vec![DomainEvent::AutomationChanged]
 }
@@ -369,6 +393,7 @@ fn runs(req: ListRuns, ctx: &QueryCtx<'_>) -> AppResult<RunList> {
 // ------------------------------------------------------------------ commands
 
 fn create(req: CreateRule, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<RuleDto>> {
+    ensure_manager(ctx.actor)?;
     let name = check_name(&req.name)?;
     check_trigger(&req.trigger)?;
     check_actions(ctx.registry, &req.actions)?;
@@ -406,6 +431,7 @@ fn create(req: CreateRule, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
 }
 
 fn update(req: UpdateRule, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<RuleDto>> {
+    ensure_manager(ctx.actor)?;
     let before = require(ctx.reads(), req.id)?;
     let mut rule = before.clone();
     if let Some(name) = &req.name {
@@ -447,6 +473,7 @@ fn update(req: UpdateRule, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
 }
 
 fn delete(req: RuleRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Empty>> {
+    ensure_manager(ctx.actor)?;
     let before = require(ctx.reads(), req.id)?;
     let rule = AutomationRuleRecord {
         deleted_at: Some(ctx.now),
@@ -466,6 +493,7 @@ fn delete(req: RuleRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Em
 }
 
 fn reorder(req: ReorderRules, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<RuleList>> {
+    ensure_manager(ctx.actor)?;
     let live = ctx.reads().list_automation_rules(false)?;
     let mut given = req.ids.clone();
     given.sort();

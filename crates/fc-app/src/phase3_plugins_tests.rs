@@ -6,7 +6,7 @@
 //! | `User`, `Cli`, `System` | everything |
 //! | `Mcp` | `MCP_PERMISSIONS` only (and only the methods its tools call) |
 //! | `Plugin` | its grants, never a forbidden area (`mcp`, `ai_keys`, `ai:write`, `io`, `oplog`, `stats:write`…) |
-//! | `Automation` | `AUTOMATION_PERMISSIONS`, only the rule actions (v0.9; `automation::tests`) |
+//! | `Automation` | its rule actions only (v0.9: `modules::automation::tests`) |
 //! | `LocalApi` | **nothing** until v0.9 defines their grants |
 
 use crate::modules::mcp::MCP_PERMISSIONS;
@@ -69,16 +69,10 @@ fn permits_is_right_for_every_actor() {
             MCP_PERMISSIONS.contains(&p.as_str()),
             "mcp: {p}"
         );
-        assert_eq!(
-            reg.permits(&Actor::Automation("a".into()), p),
-            crate::modules::automation::AUTOMATION_PERMISSIONS.contains(&p.as_str()),
-            "automation: {p}"
-        );
-        // Deny by default until v0.9 defines these actors' grants.
-        assert!(
-            !reg.permits(&Actor::LocalApi("c".into()), p),
-            "local API holds nothing ({p})"
-        );
+        // Deny by default until v0.9 defines these actors' grants. (The automation actor's
+        // part is `modules::automation::tests`.)
+        let actor = Actor::LocalApi("c".into());
+        assert!(!reg.permits(&actor, p), "{actor:?} holds nothing ({p})");
         assert!(
             !reg.permits(&Actor::Plugin("com.none".into()), p),
             "ungranted plugin: {p}"
@@ -120,9 +114,10 @@ fn denied(t: &TestApp, name: &str, actor: &Actor) -> bool {
 }
 
 /// Local API clients are refused every public method (reads included) and write nothing.
-/// (Automations reach exactly their rule actions since v0.9: `automation::tests`.)
+/// (The automation actor's part — only its rule actions — is
+/// `modules::automation::tests::automation_actor_reaches_only_its_actions`.)
 #[test]
-fn local_api_and_automation_are_denied_until_v09() {
+fn local_api_is_denied_until_v09() {
     let t = TestApp::mem();
     let before = crate::testing::suite::snapshot(&t);
     let actor = Actor::LocalApi("anki-connect".into());

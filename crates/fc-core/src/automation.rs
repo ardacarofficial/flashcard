@@ -1,13 +1,14 @@
 //! Automation rules (docs/02 §23, v0.9): "**when** (trigger) + **if** (query) + **do**
 //! (commands)". This module holds the pure parts: what can start a rule ([`RuleTrigger`]), what
 //! the app observed after a commit ([`SignalKind`]), whether a trigger accepts a signal, and the
-//! loop guard that keeps rules from triggering each other forever ([`LoopGuard`]).
+//! loop guard that keeps rules from triggering each other forever ([`LoopGuard`]), and when a
+//! scheduled rule is due ([`schedule_state`]).
 //!
 //! Everything that touches storage (evaluating the condition query, running the actions as
 //! commands, the run log) lives in `fc-app`'s `automation` module.
 
 use crate::card::Rating;
-use crate::AutomationRuleId;
+use crate::{AutomationRuleId, Timestamp};
 use serde::{Deserialize, Serialize};
 
 /// Shortest schedule interval, minutes.
@@ -107,6 +108,30 @@ impl RuleTrigger {
             Self::Schedule { every_mins } => Some(i64::from(*every_mins) * 60_000),
             _ => None,
         }
+    }
+}
+
+/// What the scheduler does with a scheduled rule now ([`schedule_state`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScheduleState {
+    /// Run it.
+    Due,
+    /// Its interval has not passed yet.
+    Waiting,
+    /// Its last run lies in the future: the wall clock went backwards. Its last run is reset to
+    /// now (not run), so the interval counts from now — the rule waits at most one interval
+    /// after a clock change instead of until the clock catches up.
+    ClockWentBack,
+}
+
+/// Monotonic guard of the scheduler: a rule never run is due; one whose interval `every_ms`
+/// has passed since `last_run` is due; a `last_run` after `now` means the clock moved back.
+pub fn schedule_state(last_run: Option<Timestamp>, now: Timestamp, every_ms: i64) -> ScheduleState {
+    match last_run {
+        None => ScheduleState::Due,
+        Some(last) if last.0 > now.0 => ScheduleState::ClockWentBack,
+        Some(last) if now.0 - last.0 >= every_ms => ScheduleState::Due,
+        Some(_) => ScheduleState::Waiting,
     }
 }
 
@@ -304,6 +329,26 @@ mod tests {
         assert_eq!(g.admit(id(2), &[id(1)]), Admission::Run);
         assert_eq!(g.admit(id(3), &[id(1), id(2)]), Admission::DepthLimit);
         assert_eq!(Admission::DepthLimit.status(), Some("skipped_depth"));
+    }
+
+    #[test]
+    fn schedule_survives_the_clock_going_back() {
+        let hour = 3_600_000;
+        let t = |ms: i64| Timestamp(ms);
+        assert_eq!(schedule_state(None, t(0), hour), ScheduleState::Due);
+        assert_eq!(
+            schedule_state(Some(t(0)), t(hour - 1), hour),
+            ScheduleState::Waiting
+        );
+        assert_eq!(
+            schedule_state(Some(t(0)), t(hour), hour),
+            ScheduleState::Due
+        );
+        // Last run "in the future": the clock moved back a day.
+        assert_eq!(
+            schedule_state(Some(t(25 * hour)), t(hour), hour),
+            ScheduleState::ClockWentBack
+        );
     }
 
     #[test]

@@ -5,8 +5,9 @@
 //! [`automation_rule_does_not_loop`] (a rule whose action re-triggers itself runs once; a chain
 //! of distinct rules stops at `automation.max_depth`; two rules re-triggering each other end by
 //! cycle detection even with the deepest limit; `automation.max_runs_per_event` caps one
-//! change). The rest of the scope: [`classified_note_rule_is_its_own_undo_step`] (condition with
-//! a classification → move to deck + tag; one undo step, actor `automation`),
+//! change). The rest of the scope: [`classified_note_rule_undoes_with_the_note`] (condition
+//! with a classification → move to deck + tag; one undo step with the note, actor
+//! `automation`), [`answer_and_its_rules_are_one_undo_step`],
 //! [`flag_and_answer_triggers`] (sets a classification value), [`preview_is_a_dry_run`],
 //! [`module_switch_stops_rules`], [`finished_import_triggers_rules`],
 //! [`scheduled_rules_run_when_due`].
@@ -61,7 +62,7 @@ macro_rules! suite {
 
 suite!(
     rules_crud_validates_and_undoes,
-    classified_note_rule_is_its_own_undo_step,
+    classified_note_rule_undoes_with_the_note,
     flag_and_answer_triggers,
     automation_rule_does_not_loop,
     preview_is_a_dry_run,
@@ -69,8 +70,15 @@ suite!(
     finished_import_triggers_rules,
     scheduled_rules_run_when_due,
     manual_runs_and_failures_are_logged,
-    actions_are_undo_safe_and_all_the_automation_actor_reaches,
+    actions_are_undo_safe,
+    automation_actor_reaches_only_its_actions,
     plugins_and_mcp_cannot_manage_rules,
+    only_the_users_clients_manage_rules,
+    answer_and_its_rules_are_one_undo_step,
+    follow_continues_only_the_newest_batch,
+    every_due_schedule_runs_with_its_own_budget,
+    schedule_survives_the_clock_going_back,
+    event_rules_search_only_the_touched_cards,
 );
 
 #[test]
@@ -446,7 +454,7 @@ fn rules_crud_validates_and_undoes(f: Factory) {
     assert!(w.t.ok::<AutomationRulesList>(Empty {}).rules.is_empty());
 }
 
-fn classified_note_rule_is_its_own_undo_step(f: Factory) {
+fn classified_note_rule_undoes_with_the_note(f: Factory) {
     let w = world(f);
     // "seviye:A1 → move to Tekrar and tag".
     let rule = w.rule(
@@ -469,7 +477,7 @@ fn classified_note_rule_is_its_own_undo_step(f: Factory) {
     assert_eq!(w.tags(a1.id), ["a1", "verbs"]);
     assert_eq!(w.card_deck(w.card(&b1)), w.verbs);
 
-    // The rule run is its own batch, recorded with the automation actor, after the note.
+    // The rule run continues the note's batch, its entries recorded with the automation actor.
     let top = w.newest(3);
     let actor = Actor::Automation(rule.id.to_string());
     assert_eq!(top[0].actor, actor);
@@ -477,6 +485,7 @@ fn classified_note_rule_is_its_own_undo_step(f: Factory) {
     assert_eq!(top[0].batch_id, top[1].batch_id);
     assert_eq!(top[2].actor, Actor::User);
     assert_eq!(top[2].command, "v1.notes.create");
+    assert_eq!(top[2].batch_id, top[0].batch_id, "one undo step");
     let runs = w.runs();
     assert_eq!(runs.len(), 1);
     assert_eq!(
@@ -485,16 +494,11 @@ fn classified_note_rule_is_its_own_undo_step(f: Factory) {
     );
     assert_eq!(runs[0].batch_id, Some(top[0].batch_id));
 
-    // Undo takes back the rule's step only; undoing it triggers no rule.
-    w.undo();
-    assert_eq!(w.card_deck(card), w.verbs);
-    assert_eq!(w.tags(a1.id), ["verbs"]);
-    assert_eq!(w.runs().len(), 1);
+    // One undo takes back the note and what its rule did; undoing triggers no rule.
     w.undo();
     assert_eq!(snapshot(&w.t), before);
-    // Redo replays both steps exactly (stored inverses are replayable).
-    w.redo();
-    assert_eq!(w.card_deck(card), w.verbs);
+    assert_eq!(w.runs().len(), 1);
+    // One redo replays both exactly (stored inverses are replayable) and runs no rule.
     w.redo();
     assert_eq!(w.card_deck(card), w.review);
     assert_eq!(w.tags(a1.id), ["a1", "verbs"]);
@@ -810,11 +814,9 @@ fn finished_import_triggers_rules(f: Factory) {
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].trigger, "imported");
     assert!(runs.iter().all(|r| r.rule_id != added.id));
-    // The import and the rule are two undo steps (rule first).
+    // The import and its rule are one undo step.
     w.undo();
     assert!(w.ids("tag:imported-a1").is_empty());
-    assert_eq!(w.ids("seviye:A1").len(), 1);
-    w.undo();
     assert!(w.ids("seviye:A1").is_empty());
 }
 
@@ -922,7 +924,7 @@ fn manual_runs_and_failures_are_logged(f: Factory) {
     assert_eq!(own.runs[0].status, "failed");
 }
 
-fn actions_are_undo_safe_and_all_the_automation_actor_reaches(f: Factory) {
+fn actions_are_undo_safe(f: Factory) {
     let w = world(f);
     let reg = w.t.app.registry();
     for (method, _) in ACTIONS {
@@ -934,6 +936,12 @@ fn actions_are_undo_safe_and_all_the_automation_actor_reaches(f: Factory) {
     }
     let listed = w.t.ok::<AutomationActions>(Empty {}).actions;
     assert_eq!(listed.len(), ACTIONS.len());
+}
+
+/// The automation actor's part of the actor matrix (`phase3_plugins_tests` holds the others).
+fn automation_actor_reaches_only_its_actions(f: Factory) {
+    let w = world(f);
+    let reg = w.t.app.registry();
     // The automation actor holds exactly its permissions…
     for d in catalog() {
         let actor = Actor::Automation("r".into());
@@ -996,4 +1004,384 @@ fn plugins_and_mcp_cannot_manage_rules(f: Factory) {
         "notes:write"
     )
     .is_err());
+}
+
+// ------------------------------------------------------------------ review fixes
+
+fn start_session(w: &W) -> SessionDto {
+    w.t.ok::<StudyStart>(StartSession {
+        kind: StudyKind::Normal,
+        mode: Some(StudyMode::Scheduled),
+        deck_id: Some(w.english),
+        include_subdecks: None,
+        filter: None,
+        from_session: None,
+        new_limit: None,
+        order: None,
+        tz_offset_mins: Some(0),
+    })
+}
+
+fn answer(w: &W, s: &SessionDto, rating: Rating) -> (CardId, SessionDto) {
+    let card = s.current.as_ref().unwrap().card_id;
+    let next = w.t.ok::<StudyAnswer>(AnswerCard {
+        session_id: s.id,
+        card_id: card,
+        rating,
+        duration_ms: 1000,
+        reveal_ms: None,
+    });
+    (card, next)
+}
+
+/// Undo in the study screen (`oplog.undo`) takes back the answer **and** what its rules did,
+/// in one step; redo replays both.
+fn answer_and_its_rules_are_one_undo_step(f: Factory) {
+    let w = world(f);
+    let leech = w.rule(
+        "Leech",
+        RuleTrigger::CardAnswered {
+            ratings: vec![Rating::Again],
+        },
+        "",
+        &[("bulk.set_suspended", json!({ "suspended": true })), add_tag("leech")],
+    );
+    w.note("one", None, &[]);
+    w.note("two", None, &[]);
+    let s = start_session(&w);
+    let before = snapshot(&w.t);
+    let (card, _) = answer(&w, &s, Rating::Again);
+    assert_eq!(w.ids("is:suspended tag:leech"), vec![card]);
+    // One batch: the answer (user) then the rule's actions (automation).
+    let top = w.newest(3);
+    assert!(top.iter().all(|e| e.batch_id == top[0].batch_id));
+    assert_eq!(top[2].command, "v1.study.answer");
+    assert_eq!(top[0].actor, Actor::Automation(leech.id.to_string()));
+    assert_eq!(w.runs()[0].batch_id, Some(top[0].batch_id));
+    let status = w.t.ok::<OplogStatus>(Empty {});
+    assert_eq!(
+        status.undo_summary.map(|s| s.key),
+        Some("oplog.summary.study.answer".to_owned())
+    );
+
+    w.undo();
+    assert_eq!(snapshot(&w.t), before, "answer and rule undone together");
+    w.redo();
+    assert_eq!(w.ids("is:suspended tag:leech"), vec![card]);
+    assert_eq!(w.runs().len(), 1, "undo/redo run no rule");
+    w.undo();
+    assert_eq!(snapshot(&w.t), before);
+}
+
+/// [`OplogMode::Follow`] continues a batch only while it is the newest; otherwise the run is
+/// its own undo step (another thread committed in between).
+fn follow_continues_only_the_newest_batch(f: Factory) {
+    use crate::app::OplogMode;
+    let w = world(f);
+    let create = |path: &str| fc_api::InvokeRequest {
+        method: format!("v1.{}", DecksCreate::NAME),
+        params: serde_json::to_value(CreateDeck {
+            path: path.into(),
+            parent_id: None,
+            description: None,
+            icon: None,
+            color: None,
+        })
+        .unwrap(),
+    };
+    let before = snapshot(&w.t);
+    deck(&w.t, "A");
+    let a = w.newest(1)[0].batch_id;
+    w.t.app
+        .invoke_with(&create("B"), &Actor::User, OplogMode::Follow(a))
+        .unwrap();
+    let top = w.newest(2);
+    assert_eq!((top[0].batch_id, top[1].batch_id), (a, a));
+    let after_ab = snapshot(&w.t);
+    deck(&w.t, "C");
+    w.t.app
+        .invoke_with(&create("D"), &Actor::User, OplogMode::Follow(a))
+        .unwrap();
+    let d = w.newest(1)[0].batch_id;
+    assert_ne!(d, a, "C came in between: D is its own batch");
+    w.undo(); // D
+    w.undo(); // C
+    assert_eq!(snapshot(&w.t), after_ab);
+    w.undo(); // A + B, one step
+    assert_eq!(snapshot(&w.t), before);
+}
+
+/// Review fix: the loop-guard budget is per source job — however many schedules are due, each
+/// runs — and a schedule is marked in its run's own transaction.
+fn every_due_schedule_runs_with_its_own_budget(f: Factory) {
+    let w = world(f);
+    w.set(MAX_RUNS, json!(1));
+    let n = w.note("x", None, &[]);
+    let rules: Vec<_> = (0..5)
+        .map(|i| {
+            w.rule(
+                &format!("S{i}"),
+                RuleTrigger::Schedule { every_mins: 60 },
+                "",
+                &[add_tag(&format!("s{i}"))],
+            )
+            .id
+        })
+        .collect();
+    let runs = super::run_due(&w.t.app).unwrap();
+    let got: Vec<_> = runs.iter().map(|r| (r.rule_id, r.status.as_str())).collect();
+    let want: Vec<_> = rules.iter().map(|id| (*id, "applied")).collect();
+    assert_eq!(got, want);
+    assert_eq!(w.tags(n.id), ["s0", "s1", "s2", "s3", "s4"]);
+    // Each rule's last run is the time its run was logged (same transaction).
+    let logged: BTreeMap<_, _> = w.runs().into_iter().map(|r| (r.rule_id, r.at)).collect();
+    for r in w.t.ok::<AutomationRulesList>(Empty {}).rules {
+        assert_eq!(r.last_run_at, logged.get(&r.id).copied(), "{}", r.name);
+    }
+    assert!(super::run_due(&w.t.app).unwrap().is_empty());
+    // Scheduled runs are their own undo steps (nothing to continue).
+    w.undo();
+    assert_eq!(w.tags(n.id), ["s0", "s1", "s2", "s3"]);
+}
+
+/// Review fix: a last run in the future (the clock went back) resets to now instead of
+/// stopping the schedule until the clock catches up.
+fn schedule_survives_the_clock_going_back(f: Factory) {
+    let w = world(f);
+    let n = w.note("x", None, &[]);
+    let rule = w.rule(
+        "Hourly",
+        RuleTrigger::Schedule { every_mins: 60 },
+        "",
+        &[add_tag("h")],
+    );
+    let set_last = |t: Timestamp| {
+        let mut tx = w.t.store.write().unwrap();
+        tx.set_automation_rule_last_run(rule.id, t).unwrap();
+        tx.commit().unwrap();
+    };
+    let last = || {
+        w.t.ok::<AutomationRulesList>(Empty {}).rules[0]
+            .last_run_at
+            .unwrap()
+    };
+    let future = Timestamp(w.t.app.now().0 + 86_400_000);
+    set_last(future);
+    assert!(super::run_due(&w.t.app).unwrap().is_empty(), "not run on a clock change");
+    let reset = last();
+    assert!(reset.0 < future.0 && reset.0 <= w.t.app.now().0, "reset to now");
+    assert!(super::run_due(&w.t.app).unwrap().is_empty(), "waits one interval");
+    assert!(w.tags(n.id).is_empty());
+    // An interval after the reset it runs again.
+    set_last(Timestamp(reset.0 - 3_600_000));
+    assert_eq!(super::run_due(&w.t.app).unwrap().len(), 1);
+    assert_eq!(w.tags(n.id), ["h"]);
+}
+
+/// Review fix: rules are managed by the user's own clients only, whatever permissions another
+/// actor holds — checked in the handlers, past the registry's permission check.
+fn only_the_users_clients_manage_rules(f: Factory) {
+    let w = world(f);
+    let rule = w.rule("R", RuleTrigger::NoteAdded, "", &[add_tag("x")]);
+    let draft = json!({
+        "name": "evil",
+        "trigger": { "kind": "note_added" },
+        "actions": [{ "method": "bulk.add_tags", "params": { "tags": ["x"] } }]
+    });
+    let calls = [
+        (AutomationRulesCreate::NAME, draft),
+        (AutomationRulesUpdate::NAME, json!({ "id": rule.id, "name": "y" })),
+        (AutomationRulesDelete::NAME, json!({ "id": rule.id })),
+        (AutomationRulesReorder::NAME, json!({ "ids": [rule.id] })),
+        (AutomationRulesRun::NAME, json!({ "id": rule.id })),
+        (AutomationPreview::NAME, json!({ "rule_id": rule.id })),
+    ];
+    let before = snapshot(&w.t);
+    for actor in [
+        Actor::LocalApi("l".into()),
+        Actor::Plugin("p".into()),
+        Actor::Mcp("m".into()),
+        Actor::Automation("a".into()),
+    ] {
+        for (m, p) in &calls {
+            // Trusted in-process call: no permission check, the handler still refuses.
+            let e = w
+                .t
+                .app
+                .invoke_trusted(
+                    &fc_api::InvokeRequest {
+                        method: format!("v1.{m}"),
+                        params: p.clone(),
+                    },
+                    &actor,
+                )
+                .unwrap_err();
+            assert_eq!(e.code, ErrorCode::PermissionDenied, "{actor:?} {m}");
+            assert_eq!(e.details.get("reason"), Some(&json!("actor")), "{actor:?} {m}");
+        }
+    }
+    assert_eq!(snapshot(&w.t), before);
+    assert!(w.runs().is_empty());
+    for actor in [Actor::User, Actor::Cli, Actor::System] {
+        let r = w.t.app.invoke(
+            &format!("v1.{}", AutomationPreview::NAME),
+            json!({ "rule_id": rule.id }),
+            &actor,
+        );
+        assert!(r.is_ok(), "{actor:?}: {r:?}");
+    }
+    // The preview is a write-permission command (it takes the writer), still a dry run.
+    let d = w.t.app.registry().descriptor(AutomationPreview::NAME).unwrap();
+    assert_eq!((d.kind, d.permission), (MethodKind::Command, "automation:write"));
+    assert!(!d.undoable);
+    assert_eq!(snapshot(&w.t), before);
+}
+
+/// Review fix: an event rule looks only at the cards the change touched; rules sharing a
+/// condition share one search until one of them writes.
+fn event_rules_search_only_the_touched_cards(f: Factory) {
+    let w = world(f);
+    for i in 0..20 {
+        w.note(&format!("n{i}"), None, &[]);
+    }
+    w.rule("A", RuleTrigger::NoteUpdated, "", &[add_tag("a")]);
+    w.rule("B", RuleTrigger::NoteUpdated, "", &[add_tag("b")]);
+    w.rule("C", RuleTrigger::NoteUpdated, "tag:a", &[add_tag("c")]);
+    let n = w.note("target", None, &[]);
+    w.edit(n.id, "x");
+    // B shares A's condition, C sees what A wrote in the same dispatch.
+    assert_eq!(w.tags(n.id), ["a", "b", "c", "x"]);
+    let top: Vec<(u32, u32, String)> = w
+        .runs()
+        .into_iter()
+        .rev()
+        .filter(|r| r.depth == 0)
+        .map(|r| (r.depth, r.matched, r.status))
+        .collect();
+    assert_eq!(top, vec![(0, 1, "applied".to_owned()); 3], "only the edited note's card");
+    assert_eq!(w.ids("tag:a").len(), 1);
+}
+
+/// Per-answer overhead of automation (review fix #1): 100 rules on "card answered", over a
+/// collection built directly through the storage layer, none matching the answered cards (the
+/// usual case: the cost is evaluating them). Overhead = median `study.answer` with the module
+/// on − with it off. Full size: `cargo test -p fc-app --release automation_bench_100k --
+/// --ignored --nocapture`; the CI variant runs with every `cargo test`.
+mod bench {
+    use super::*;
+    use fc_core::card::CardState;
+    use fc_core::note::searchable_text;
+    use std::time::Instant;
+
+    fn build(notes: usize) -> W {
+        let w = world(|| Arc::new(TempSqlite::new()));
+        let decks: Vec<DeckId> = (0..10).map(|i| deck(&w.t, &format!("İngilizce::D{i}"))).collect();
+        let first = w.note("seed", None, &[]);
+        let mut tx = w.t.store.write().unwrap();
+        let card0 = tx.get_card(w.card(&first)).unwrap().unwrap();
+        let note0 = tx.get_note(first.id).unwrap().unwrap();
+        let nt = tx.get_notetype(note0.notetype_id).unwrap().unwrap();
+        let t0 = w.t.app.now().0;
+        for i in 1..notes as u128 {
+            let mut note = note0.clone();
+            note.id = NoteId(uuid::Uuid::from_u128(0x0190_0000_0000_7000_8000_0002_0000_0000 | i));
+            note.fields.insert(
+                fc_core::notetype::FieldKey::new(builtin::FRONT),
+                format!("kelime {i}"),
+            );
+            note.checksum = format!("{i:016x}");
+            let mut card = card0.clone();
+            card.id = CardId(note.id.0);
+            card.note_id = note.id;
+            card.deck_id = decks[i as usize % decks.len()];
+            note.home_deck_id = card.deck_id;
+            let s = &mut card.scheduling;
+            s.state = CardState::Review;
+            s.stability = Some(20.0);
+            s.difficulty = Some(5.0);
+            s.last_review = Some(Timestamp(t0 - 30 * 86_400_000));
+            s.due = Some(Timestamp(t0 - 86_400_000 - i as i64));
+            s.reps = 5;
+            tx.insert_note(&note, &searchable_text(&nt, &note.fields)).unwrap();
+            tx.insert_card(&card).unwrap();
+        }
+        tx.commit().unwrap();
+        // 100 rules, 50 distinct conditions (pairs share one), none matching (lapses 0).
+        for i in 0..100 {
+            let condition = match (i / 2) % 5 {
+                0 => format!("deck:\"İngilizce::D{}\" lapses>={}", i % 10, 3 + i % 7),
+                1 => format!("lapses>{} stability<{}", 4 + i % 5, 100 + i),
+                2 => format!("deck:\"İngilizce::D{}\" seviye:C2", i % 10),
+                3 => format!("tag:missing{} or lapses>={}", i / 2, 9 + i % 3),
+                _ => format!("\"kelime {}\" lapses>=2", 500_000 + i / 2),
+            };
+            w.rule(
+                &format!("R{i}"),
+                RuleTrigger::CardAnswered { ratings: vec![] },
+                &condition,
+                &[add_tag("matched")],
+            );
+        }
+        w
+    }
+
+    fn median(mut v: Vec<f64>) -> f64 {
+        v.sort_by(f64::total_cmp);
+        v[v.len() / 2]
+    }
+
+    /// Milliseconds per answer, median of `n`.
+    fn answers(w: &W, n: usize) -> f64 {
+        let mut s = start_session(w);
+        let mut times = Vec::with_capacity(n);
+        for _ in 0..n {
+            let t = Instant::now();
+            let (_, next) = answer(w, &s, Rating::Good);
+            times.push(t.elapsed().as_secs_f64() * 1000.0);
+            s = next;
+        }
+        median(times)
+    }
+
+    fn set_module(w: &W, on: bool) {
+        w.t.ok::<ModulesSetEnabled>(SetModuleEnabled {
+            id: super::super::ID.into(),
+            enabled: on,
+        });
+    }
+
+    /// `(with rules, without, overhead)` in ms.
+    fn run(notes: usize, n: usize) -> (f64, f64, f64) {
+        let setup = Instant::now();
+        let w = build(notes);
+        let setup = setup.elapsed().as_secs_f64();
+        answers(&w, 3); // warm up
+        let on = answers(&w, n);
+        set_module(&w, false);
+        let off = answers(&w, n);
+        set_module(&w, true);
+        assert!(w.ids("tag:matched").is_empty(), "no rule matched");
+        assert!(w.runs().is_empty());
+        let overhead = (on - off).max(0.0);
+        println!(
+            "automation bench: 100 rules × {notes} notes (setup {setup:.1} s): \
+             answer {on:.2} ms with rules, {off:.2} ms without → overhead {overhead:.2} ms"
+        );
+        (on, off, overhead)
+    }
+
+    /// Release build, desktop-class machine: < 20 ms overhead per answer.
+    #[test]
+    #[ignore = "benchmark: builds a 100k-note collection"]
+    fn automation_bench_100k() {
+        let (_, _, overhead) = run(100_000, 40);
+        assert!(overhead < 20.0, "{overhead:.2} ms");
+    }
+
+    /// CI regression check (debug build, shared runners: generous budget).
+    #[test]
+    fn automation_bench_5k_scaled() {
+        let (_, _, overhead) = run(5_000, 15);
+        assert!(overhead < 150.0, "{overhead:.2} ms");
+    }
 }

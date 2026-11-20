@@ -452,7 +452,7 @@ export interface Methods {
   "automation.rules.delete": { kind: "command"; request: RuleRef; response: Empty };
   "automation.rules.reorder": { kind: "command"; request: ReorderRules; response: RuleList };
   "automation.rules.run": { kind: "command"; request: RuleRef; response: RunResult };
-  "automation.preview": { kind: "query"; request: PreviewRule; response: RulePreview };
+  "automation.preview": { kind: "command"; request: PreviewRule; response: RulePreview };
   "automation.actions": { kind: "query"; request: Empty; response: ActionList };
   "automation.runs.list": { kind: "query"; request: ListRuns; response: RunList };
 }
@@ -661,7 +661,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "automation.rules.delete": "command",
   "automation.rules.reorder": "command",
   "automation.rules.run": "command",
-  "automation.preview": "query",
+  "automation.preview": "command",
   "automation.actions": "query",
   "automation.runs.list": "query",
 };

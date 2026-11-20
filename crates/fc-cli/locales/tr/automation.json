@@ -5,5 +5,6 @@
   "oplog.summary.automation.rules.reorder": "Otomasyon kurallarının sırası değişti",
   "oplog.summary.automation.rules.restore": "Otomasyon kuralları geri getirildi",
   "oplog.summary.automation.rules.run": "Bir otomasyon kuralı çalıştırıldı",
+  "oplog.summary.automation.preview": "Bir otomasyon kuralı önizlendi (hiçbir şey yazılmadı)",
   "oplog.summary.automation.apply": "{name} otomasyon kuralı çalıştı"
 }

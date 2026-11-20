@@ -633,6 +633,37 @@ impl<M: Mode> SearchRead for SqliteTx<'_, M> {
         )
     }
 
+    fn search_card_ids_among(
+        &self,
+        filter: &Filter,
+        now: Timestamp,
+        among: &[CardId],
+    ) -> StorageResult<Vec<CardId>> {
+        let mut among = among.to_vec();
+        among.sort_unstable();
+        among.dedup();
+        if among.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Driven by the given ids (`CROSS JOIN` pins them as the outer loop, each a primary
+        // key probe); set predicates are correlated probes per row, never a materialized set.
+        let mut sql = Sql {
+            text: String::new(),
+            params: vec![json(&among)],
+            correlated: true,
+            note: "n.id",
+            needs_note: true,
+        };
+        let cond = compile(filter, now, false, &mut sql);
+        let text = format!(
+            "SELECT c.id FROM json_each(?1) j CROSS JOIN cards c ON c.id = j.value \
+             JOIN notes n ON n.id = c.note_id \
+             WHERE c.deleted_at IS NULL AND n.deleted_at IS NULL AND {cond} \
+             ORDER BY c.created_at, c.id"
+        );
+        card_ids(self.conn(), &text, &sql.params)
+    }
+
     fn list_saved_queries(&self) -> StorageResult<Vec<SavedQuery>> {
         all(
             self.conn(),
