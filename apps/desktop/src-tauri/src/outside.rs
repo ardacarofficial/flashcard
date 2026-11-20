@@ -230,7 +230,7 @@ pub fn clipboard_tick(
     is_private: impl FnOnce() -> bool,
     read: impl FnOnce() -> Option<String>,
 ) -> Option<String> {
-    if !app.is_module_enabled(fc_app::modules::clipboard::ID) {
+    if !app.is_module_enabled(fc_app::modules::clipboard::ID) || app.background_blocked() {
         *last = None;
         return None;
     }
@@ -312,8 +312,9 @@ impl ApiServerSlot {
 /// Returns an error text when it could not start (e.g. the port is taken).
 pub fn sync_api_server(app: &Arc<App>, slot: &ApiServerSlot) -> Result<(), String> {
     use fc_app::modules::local_api;
-    let want = app
-        .is_module_enabled(local_api::ID)
+    // v1.0: not while the app is locked or switching profile (the requests would be refused
+    // anyway); a restart on another profile binds a new server to that collection.
+    let want = (app.is_module_enabled(local_api::ID) && !app.background_blocked())
         .then(|| local_api::port(app).unwrap_or(local_api::DEFAULT_PORT));
     let mut guard = slot.0.lock().map_err(|e| e.to_string())?;
     let running = guard.as_ref().map(|(_, p)| *p);

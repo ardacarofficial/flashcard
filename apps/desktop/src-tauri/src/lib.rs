@@ -4,6 +4,7 @@
 pub mod ipc;
 pub mod media;
 pub mod outside;
+pub mod session;
 
 use std::sync::Arc;
 use tauri::Manager;
@@ -31,15 +32,18 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        // v1.0: study reminders as OS notifications.
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             ipc::invoke,
             outside::take_deep_links,
             outside::quick_add_prefill
         ])
         .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
-            let (status, mime, body) = match ctx.app_handle().path().app_data_dir() {
-                Ok(dir) => media::respond(&dir.join(COLLECTION_FILE), request.uri().path()),
-                Err(_) => (500, "text/plain", Vec::new()),
+            // The running profile's collection (v1.0); its media folder sits next to it.
+            let (status, mime, body) = match session::collection_path(ctx.app_handle()) {
+                Some(db) => media::respond(&db, request.uri().path()),
+                None => (500, "text/plain", Vec::new()),
             };
             tauri::http::Response::builder()
                 .status(status)
@@ -50,6 +54,8 @@ pub fn run() {
                 .unwrap_or_default()
         })
         .on_window_event(|window, event| {
+            // "Keep running in the tray" (v1.0).
+            session::on_window_event(window, event);
             // Coming back to the window: pick up what other processes (the CLI, an MCP
             // client such as Claude) changed meanwhile, right away instead of at the next tick.
             if matches!(event, tauri::WindowEvent::Focused(true)) {
@@ -82,6 +88,10 @@ pub fn run() {
                         fail(&e.to_string());
                     }
                     app.manage(collection.clone());
+                    // App lock idle watch, reminders, tray, profile switch (v1.0).
+                    if let Err(e) = session::start(app.handle(), &collection) {
+                        fail(&e.to_string());
+                    }
                     // Links, quick add, clipboard watcher, local API server (v0.9).
                     outside::start(app.handle(), collection);
                     Ok(())
@@ -122,19 +132,15 @@ impl fc_app::FilePicker for NativePicker {
     }
 }
 
+/// Opens the active profile's collection (v1.0: `profiles.json` in the app data folder picks
+/// it; the default profile is `<app data>/collection.db`, as before v1.0).
 fn open_collection(app: &tauri::App) -> Result<ipc::SharedApp, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let path = dir.join(COLLECTION_FILE);
-    let collection = fc_app::App::open_sqlite(&path).map_err(|e| {
-        let e = e.into_api();
-        format!("{}\n{}: {}", path.display(), e.code, e.message)
-    })?;
-    // AI provider keys live only in the OS keychain (v0.8).
-    collection.set_secret_store(Arc::new(fc_ai::secrets::OsKeychain::new(
-        fc_ai::secrets::SERVICE,
-    )));
-    Ok(Arc::new(collection))
+    // AI provider keys and the app lock's hash live only in the OS keychain (v0.8, v1.0).
+    let secrets = Arc::new(fc_ai::secrets::OsKeychain::new(fc_ai::secrets::SERVICE));
+    let (collection, _session) =
+        session::open_profile(&dir, secrets, Arc::new(fc_app::system::SystemClock))?;
+    Ok(collection)
 }
 
 /// Text of the startup error dialog. The UI dictionaries are not loaded yet (and the

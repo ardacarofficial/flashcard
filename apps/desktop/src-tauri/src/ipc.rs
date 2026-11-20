@@ -20,8 +20,10 @@ pub const EVENT_CHANNEL: &str = "fc://event";
 pub type SharedApp = Arc<App>;
 
 /// Dispatches a qualified method (`v1.decks.create`) with its params. A missing payload
-/// (`null`) means "no params" (`{}`).
+/// (`null`) means "no params" (`{}`). While the app is locked only the lock screen's methods
+/// get through (`PERMISSION_APP_LOCKED`, v1.0).
 pub fn dispatch(app: &App, command: &str, payload: Value) -> Result<Value, ApiError> {
+    fc_app::modules::profiles::gate(app, command)?;
     let params = match payload {
         Value::Null => Value::Object(serde_json::Map::new()),
         other => other,
