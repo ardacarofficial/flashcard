@@ -12,9 +12,7 @@
     "heading": "Çalış",
     "whole_collection": "Tüm desteler",
     "start": "Çalışmaya başla",
-    "start_hint": "Enter",
     "resume": "Oturuma devam et",
-    "practice": "Deneme modu (takvimi değiştirmez)",
     "filter_label": "Yalnızca şu kartlar",
     "filter_any": "Hepsi",
     "custom_start": "Özel oturum",
@@ -30,7 +28,6 @@
     "practice_badge": "Deneme",
     "show_answer": "Cevabı göster",
     "type_placeholder": "Cevabı yaz",
-    "check": "Kontrol et",
     "hint": "İpucu",
     "suspend": "Askıya al",
     "bury": "Göm",
@@ -58,20 +55,44 @@
     },
     "summary": {
       "heading": "Oturum bitti",
-      "answered": "Çalışılan kart: {n}",
       "accuracy": "Doğruluk: %{n}",
-      "time": "Süre: {min} dk {sec} sn",
-      "mistakes": "Yanlışlar: {n}",
       "repeat": "Yanlışları tekrar çalış",
-      "back": "Tamam"
+      "back": "Tamam",
+      "accuracy_label": "Doğruluk",
+      "cards": "Çalışılan kart",
+      "mistakes_label": "Yanlışlar",
+      "time_label": "Süre",
+      "time_value": "{min}:{sec}"
     },
-    "keys": "Boşluk: göster · 1–4: puanla · 1–9: seçenek seç · H: ipucu · S: askıya al · B: göm · Ctrl+1–7: bayrak · Z: geri al · Esc: bitir",
-    "choices": "Seçenekler"
+    "choices": "Seçenekler",
+    "start_heading": "Bugünkü tekrar",
+    "start_intro": "Vadesi gelen ve birkaç yeni kart.",
+    "custom_heading": "Özel oturum",
+    "custom_intro": "Filtrenin seçtiği kartları çalışır.",
+    "options": "Seçenekler",
+    "practice_label": "Pratik modu",
+    "practice_hint": "Cevaplar takvimi değiştirmez.",
+    "progress_label": "Oturum ilerlemesi",
+    "position": "{n} / {total}",
+    "end_label": "Oturumu bitir",
+    "rate_label": "Nasıl geçti?",
+    "more": "Diğer kart işlemleri",
+    "buttons": {
+      "still_learning": "Hâlâ öğreniyorum",
+      "know_it": "Biliyorum",
+      "use_four": "Dört cevap düğmesi göster",
+      "use_two": "İki cevap düğmesi göster"
+    },
+    "keyhint": {
+      "flip": "Çevir",
+      "rate": "Puanla"
+    }
   },
   "settings": {
     "study": {
       "new_per_session": { "label": "Oturum başına yeni kart", "description": "Normal oturumun tanıttığı yeni kart sayısı (0 = hiç)." },
       "type_answer": { "label": "Cevabı yazarak ver", "description": "Bir giriş kutusu gösterir ve yazılanı kontrol eder." },
+      "answer_buttons": { "label": "Cevap düğmeleri", "description": "İki düğme ya da aralıklarıyla dört düğme.", "two": "İki düğme", "four": "Dört düğme" },
       "hint_strategy": {
         "label": "İpucu türü",
         "description": "İpuçlarının cevabı nasıl açtığı.",

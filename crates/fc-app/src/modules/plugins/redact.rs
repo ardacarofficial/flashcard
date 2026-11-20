@@ -174,6 +174,10 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         // The backend judges a learn answer and grades a test against the card's answer: the
         // verdict says what the card holds, so they need the read permissions to run at all.
         "modes.learn.answer" | "modes.test.submit" => Oracle(STUDY_CARDS),
+        // v1.1 match: rounds hold card text (terms, definitions) like a session.
+        "modes.match.start" | "modes.match.finish" => Reads(STUDY_CARDS),
+        // Whether two tiles pair up says what the card holds: an oracle, like learn answers.
+        "modes.match.pick" => Oracle(STUDY_CARDS),
         "modes.inline.preview" => Reads(NOTES),
         // The duplicate count says which notes exist already.
         "modes.inline.create" => Oracle(NOTES),
@@ -833,6 +837,14 @@ mod tests {
             assert_eq!(exposure(m), Exposure::Oracle(STUDY_CARDS), "{m}");
             assert!(refuse_upfront(MethodKind::Command, exposure(m)), "{m}");
         }
+        // Match: rounds are sessions with card text; a pick is an oracle on the pairing.
+        for m in ["modes.match.start", "modes.match.finish"] {
+            assert_eq!(exposure(m), Exposure::Reads(STUDY_CARDS), "{m}");
+        }
+        let d = exposure("modes.match.start").domains();
+        domain_case("notes", d, json!({ "session_id": 1, "tiles": [{ "id": 0, "text": "SECRET" }] }), "SECRET");
+        assert_eq!(exposure("modes.match.pick"), Exposure::Oracle(STUDY_CARDS));
+        assert!(refuse_upfront(MethodKind::Command, exposure("modes.match.pick")));
         // Inline cards: notes; the duplicate count is an oracle on existing notes.
         assert_eq!(exposure("modes.inline.preview"), Exposure::Reads(NOTES));
         assert_eq!(exposure("modes.inline.create"), Exposure::Oracle(NOTES));

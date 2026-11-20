@@ -166,6 +166,11 @@ import type { LookupWord } from "./LookupWord";
 import type { MaintenanceStatus } from "./MaintenanceStatus";
 import type { MakeReadingCard } from "./MakeReadingCard";
 import type { MarkWords } from "./MarkWords";
+import type { MatchPick } from "./MatchPick";
+import type { MatchPickResult } from "./MatchPickResult";
+import type { MatchRef } from "./MatchRef";
+import type { MatchResultDto } from "./MatchResultDto";
+import type { MatchRoundDto } from "./MatchRoundDto";
 import type { McpServerDto } from "./McpServerDto";
 import type { McpServerList } from "./McpServerList";
 import type { McpServerRef } from "./McpServerRef";
@@ -542,6 +547,9 @@ export interface Methods {
   "modes.timed.start": { kind: "command"; request: StartTimer; response: SessionDto };
   "modes.test.paper": { kind: "query"; request: TestPaperRequest; response: TestPaperDto };
   "modes.test.submit": { kind: "command"; request: SubmitTest; response: TestPaperDto };
+  "modes.match.start": { kind: "command"; request: MatchRef; response: MatchRoundDto };
+  "modes.match.pick": { kind: "command"; request: MatchPick; response: MatchPickResult };
+  "modes.match.finish": { kind: "command"; request: MatchRef; response: MatchResultDto };
   "modes.inline.preview": { kind: "query"; request: InlinePreviewRequest; response: InlinePreview };
   "modes.inline.create": { kind: "command"; request: CreateInlineCards; response: InlineCardsCreated };
   "reading.items.list": { kind: "query"; request: ListReadingItems; response: ReadingItemList };
@@ -827,6 +835,9 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "modes.timed.start": "command",
   "modes.test.paper": "query",
   "modes.test.submit": "command",
+  "modes.match.start": "command",
+  "modes.match.pick": "command",
+  "modes.match.finish": "command",
   "modes.inline.preview": "query",
   "modes.inline.create": "command",
   "reading.items.list": "query",

@@ -379,18 +379,21 @@ pub(super) fn kind_str(kind: StudyKind) -> &'static str {
         StudyKind::Mistakes => "mistakes",
         StudyKind::Learn => "learn",
         StudyKind::Test => "test",
+        StudyKind::Match => "match",
     }
 }
 
 /// `review_log.mode` of an answer in session `config` (docs/10 §24): the mode the answer
 /// came from — `learn` (learn sessions), `timed` (timed sessions), `confidence` (rated on the
 /// confidence scale), else `normal` — prefixed `trial_` in trial sessions (plain trial
-/// answers stay `trial`). Test answers are `test` (written by the test module).
+/// answers stay `trial`). Test answers are `test` (written by the test module), match answers
+/// `match` (v1.1, the match module).
 pub(crate) fn review_mode(config: &SessionConfig, confidence: bool) -> String {
     let modes = config.modes.as_ref();
     let base = match config.kind {
         StudyKind::Learn => Some("learn"),
         StudyKind::Test => Some("test"),
+        StudyKind::Match => Some("match"),
         StudyKind::Normal | StudyKind::Custom | StudyKind::Mistakes => {
             if modes.is_some_and(|m| m.timed.is_some()) {
                 Some("timed")
@@ -403,6 +406,7 @@ pub(crate) fn review_mode(config: &SessionConfig, confidence: bool) -> String {
     };
     match (config.mode, base) {
         (_, Some("test")) => "test".to_owned(),
+        (_, Some("match")) => "match".to_owned(),
         (StudyMode::Scheduled, b) => b.unwrap_or("normal").to_owned(),
         (StudyMode::Trial, Some(b)) => format!("trial_{b}"),
         (StudyMode::Trial, None) => "trial".to_owned(),

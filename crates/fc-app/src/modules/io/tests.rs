@@ -1035,7 +1035,7 @@ fn fcpack_preserves_classifications_exactly() {
 }
 
 /// v0.10 review fix: imported history counts as `imported` (never against today's limits),
-/// except practice rows — `trial`, every `trial_<mode>` and `test` — which keep their mode
+/// except practice rows — `trial`, every `trial_<mode>`, `test` and `match` — which keep their mode
 /// (so statistics and FSRS optimization keep skipping them).
 #[test]
 fn imported_history_keeps_practice_modes() {
@@ -1055,7 +1055,7 @@ fn imported_history_keeps_practice_modes() {
     let card = note.cards[0].id;
     let modes = [
         "normal", "learn", "timed", "confidence", "trial", "trial_learn", "trial_timed",
-        "trial_confidence", "test",
+        "trial_confidence", "test", "match",
     ];
     {
         let mut tx = a.store.write().unwrap();
@@ -1107,7 +1107,8 @@ fn imported_history_keeps_practice_modes() {
     let imported = fc_storage::repo::REVIEW_MODE_IMPORTED.to_owned();
     let mut want = vec![imported.clone(), imported.clone(), imported.clone(), imported];
     want.extend(
-        ["test", "trial", "trial_confidence", "trial_learn", "trial_timed"].map(str::to_owned),
+        ["match", "test", "trial", "trial_confidence", "trial_learn", "trial_timed"]
+            .map(str::to_owned),
     );
     want.sort();
     assert_eq!(got, want);

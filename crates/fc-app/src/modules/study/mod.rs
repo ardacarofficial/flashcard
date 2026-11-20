@@ -58,6 +58,10 @@ pub const FOLD_TURKISH: &str = "study.fold_turkish";
 pub const AUTO_GRADE: &str = "study.auto_grade";
 /// Hint strategy (`first_letters`, `word_starts`, `partial`).
 pub const HINT_STRATEGY: &str = "study.hint_strategy";
+/// v1.1 display preference: answer buttons of the study screen — `two` ("Still learning" =
+/// again, "I know it" = good) or `four` (again / hard / good / easy with next intervals).
+/// Presentation only: the ratings and the scheduler are the same either way.
+pub const ANSWER_BUTTONS: &str = "study.answer_buttons";
 
 fn int_setting(key: &str, default: i64, min: i64, max: i64, advanced: bool) -> SettingDef {
     SettingDef {
@@ -96,6 +100,7 @@ pub fn descriptor() -> ModuleDescriptor {
             int_setting(NEW_PER_SESSION, 20, 0, 9_999, false),
             bool_setting(TYPE_ANSWER, false, &deck_scopes),
             choice_setting(HINT_STRATEGY, &["first_letters", "word_starts", "partial"], "first_letters"),
+            choice_setting(ANSWER_BUTTONS, &["two", "four"], "two"),
             advanced(choice_setting(SCHEDULER, &fc_study::scheduler::BUILTIN_IDS, "fsrs")),
             advanced(choice_setting(
                 ANSWER_CHECKER,

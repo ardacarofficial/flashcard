@@ -57,7 +57,7 @@ hints_used: number,
 /**
  * Where the review came from. Changes the schedule: `normal`, `learn`, `timed`,
  * `confidence` (v0.10 modes), `imported` (v0.5). Practice, schedule unchanged: `trial`,
- * `trial_learn`, `trial_timed`, `trial_confidence`, `test`.
+ * `trial_learn`, `trial_timed`, `trial_confidence`, `test`, `match` (v1.1).
  */
 mode: string, 
 /**

@@ -34,15 +34,16 @@ pub const SCHEDULED_REVIEW_MODES: [&str; 4] = ["normal", "learn", "timed", "conf
 
 /// Whether a `review_log.mode` is **practice** — the answer did not change the schedule:
 /// `trial`, `trial_<mode>` (v0.10 practice variants: `trial_learn`, `trial_timed`,
-/// `trial_confidence`) and `test`. Statistics and FSRS optimization skip these rows
+/// `trial_confidence`), `test` and `match` (v1.1). Statistics and FSRS optimization skip
+/// these rows
 /// ([`PRACTICE_MODE_SQL`] is the same rule in SQL).
 pub fn is_practice_mode(mode: &str) -> bool {
-    mode == "trial" || mode == "test" || mode.starts_with("trial_")
+    mode == "trial" || mode == "test" || mode == "match" || mode.starts_with("trial_")
 }
 
 /// [`is_practice_mode`] as an SQL condition on a `mode` column.
 pub const PRACTICE_MODE_SQL: &str =
-    "(mode = 'trial' OR mode = 'test' OR substr(mode, 1, 6) = 'trial_')";
+    "(mode = 'trial' OR mode = 'test' OR mode = 'match' OR substr(mode, 1, 6) = 'trial_')";
 
 /// A `review_log` row.
 #[derive(Debug, Clone, PartialEq)]

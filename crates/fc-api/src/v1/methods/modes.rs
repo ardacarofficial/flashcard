@@ -1,4 +1,4 @@
-//! v0.10 study modes: learn, test, confidence, timed, inline card creation. Learn and test
+//! v0.10 study modes: learn, test, confidence, timed, inline card creation; v1.1 match. Learn and test
 //! sessions start with `study.start` (kinds `learn`, `test`); timed/confidence are its options.
 
 use crate::v1::modes::*;
@@ -27,6 +27,18 @@ methods! {
     ModesTestPaper = "modes.test.paper", Query, "practice_test", "study:read", Public, undo: false, TestPaperRequest => TestPaperDto;
     /// Grades a test, logs one review per question (`mode = test`) and returns the score.
     ModesTestSubmit = "modes.test.submit", Command, "practice_test", "study:write", Public, undo: true, SubmitTest => TestPaperDto;
+
+    // ---- match (module `match`, v1.1) ----
+    /// Deals a new round of up to 6 pairs from the cards of a match session (`study.start
+    /// { kind: match }`); replaces an unfinished round. Session bookkeeping.
+    ModesMatchStart = "modes.match.start", Command, "match", "study:write", Public, undo: false, MatchRef => MatchRoundDto;
+    /// Pairs two tiles of the current round: right pairs leave the board, wrong ones count a
+    /// mistake. Session bookkeeping (a game move, not data).
+    ModesMatchPick = "modes.match.pick", Command, "match", "study:write", Public, undo: false, MatchPick => MatchPickResult;
+    /// Finishes a complete round: its time on the backend clock, the deck's best time, one
+    /// practice review per card (`mode = match`, schedule unchanged). Undo removes them and
+    /// restores the best time.
+    ModesMatchFinish = "modes.match.finish", Command, "match", "study:write", Public, undo: true, MatchRef => MatchResultDto;
 
     // ---- inline cards (module `inline_cards`) ----
     /// The cards `question :: answer` lines of a text would make.

@@ -23,11 +23,16 @@
     "inline_cards": {
       "name": "Satır içi kartlar",
       "description": "“soru :: cevap” satırları yazarak anında kart yap."
+    },
+    "match": {
+      "name": "Eşleştir",
+      "description": "Terimleri tanımlarıyla süreye karşı eşleştir."
     }
   },
   "nav": {
     "learn": "Öğren",
-    "test": "Test"
+    "test": "Test",
+    "match": "Eşleştir"
   },
   "settings": {
     "learn": {
@@ -117,6 +122,12 @@
         "label": "Hep odak modunda başla",
         "description": "Her çalışma oturumu odak modunda açılır."
       }
+    },
+    "match": {
+      "best_ms": {
+        "label": "En iyi eşleştirme süresi (ms)",
+        "description": "Bu destedeki en hızlı tur (0 = yok)."
+      }
     }
   },
   "errors": {
@@ -149,6 +160,11 @@
       "inline": {
         "preview": "Metinden kartları önizle",
         "create": "Metinden kart oluştur"
+      },
+      "match": {
+        "start": "Eşleştirme turu dağıt",
+        "pick": "Eşleştirme çifti seç",
+        "finish": "Eşleştirme turunu bitir"
       }
     }
   },
@@ -172,7 +188,16 @@
       "done": "{total} kartın hepsini öğrendin.",
       "again": "Yeniden öğren",
       "back": "Geri",
-      "keys": "1–4 seç · Enter kontrol/devam · Z geri al · Esc bitir"
+      "progress_label": "Öğrenme ilerlemesi",
+      "seg_learned": "Öğrenildi",
+      "seg_written": "Yazma adımında",
+      "end": "Öğrenmeyi bitir",
+      "missed": "{n} kez kaçtı",
+      "correct_option": "Doğru cevap",
+      "your_pick": "Senin cevabın",
+      "key_pick": "Seç",
+      "key_check": "Kontrol / devam",
+      "done_heading": "Harika"
     },
     "test": {
       "heading": "Deneme testi",
@@ -194,7 +219,6 @@
       "print_key": "Cevap anahtarını yazdır",
       "submit": "Teslim et",
       "score": "Puan: %{percent}",
-      "breakdown": "{correct} doğru · {almost} az kaldı · {wrong} yanlış · {blank} boş",
       "verdict": {
         "correct": "Doğru",
         "almost": "Az kaldı",
@@ -203,7 +227,20 @@
       },
       "key": "Cevap: {text}",
       "new": "Yeni test",
-      "number": "{n}."
+      "number": "{n}.",
+      "score_label": "Puan",
+      "n_correct": "{n} doğru",
+      "n_almost": "{n} az kaldı",
+      "n_wrong": "{n} yanlış",
+      "n_blank": "{n} boş",
+      "misses": "Tekrar bak ({n})",
+      "your": "Sen",
+      "correct_is": "Doğrusu",
+      "blank_answer": "—",
+      "answered": "{total} sorudan {n} cevaplandı",
+      "choose": "Seçenekler",
+      "is_right": "Bu cevap doğru mu?",
+      "all_kinds": "Hiçbiri seçilmedi: tüm tipler kullanılır."
     },
     "options": {
       "timed": "Süre sınırı",
@@ -214,7 +251,8 @@
       "scale": "Puanlama",
       "scale_default": "Varsayılan",
       "scale_buttons": "Dört düğme",
-      "scale_confidence": "Güven 1–5"
+      "scale_confidence": "Güven 1–5",
+      "timed_hint": "Her kart için süre sınırı."
     },
     "timer": {
       "left": "{s} sn kaldı",
@@ -245,6 +283,29 @@
       "close": "Kapat",
       "line": "Satır {n}",
       "truncated": "Yalnız ilk 500 satır kullanılır."
+    },
+    "match": {
+      "heading": "Eşleştir",
+      "start_heading": "Terimleri tanımlarla eşleştir",
+      "intro": "Tahtayı temizlemek için her terimi tanımıyla eşleştir, olabildiğince hızlı.",
+      "start": "Eşleştirmeye başla",
+      "time_label": "Süre",
+      "seconds": "{s} sn",
+      "pairs_left": "{n} çift kaldı",
+      "mistakes": "{n} yanlış",
+      "best": "En iyi {s} sn",
+      "end": "Eşleştirmeyi bitir",
+      "board": "Eşleştirme tahtası",
+      "term": "Terim: {text}",
+      "definition": "Tanım: {text}",
+      "how": "Önce bir terim, sonra tanımını seç. Esc bitirir.",
+      "new_best": "Yeni en iyi süre",
+      "summary": "{pairs} çift · {mistakes} yanlış",
+      "done": "Bitti",
+      "again": "Yeniden oyna",
+      "too_few": "Eşleştirmek için yeterli kart yok",
+      "too_few_hint": "Farklı cevaplı en az iki kart gerekir.",
+      "back": "Geri"
     }
   }
 }

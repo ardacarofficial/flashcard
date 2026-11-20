@@ -9,9 +9,11 @@
 //!   from a set of cards, and its scoring.
 //! * [`confidence`]: the 1–5 "how sure am I?" scale and its mapping onto the four ratings.
 //! * [`timed`]: the per-card time limit and what happens when it runs out.
+//! * [`matching`] (v1.1): match terms with definitions against the clock.
 
 pub mod confidence;
 pub mod learn;
+pub mod matching;
 pub mod test;
 pub mod timed;
 
@@ -36,6 +38,9 @@ pub struct ModesState {
     /// its countdown has not started yet.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timer: Option<timed::CardTimer>,
+    /// Match sessions (v1.1): the cards and the current round.
+    #[serde(rename = "match", skip_serializing_if = "Option::is_none")]
+    pub matching: Option<matching::MatchState>,
 }
 
 /// Mode options persisted with a session (`sessions.config.modes`; absent for plain
