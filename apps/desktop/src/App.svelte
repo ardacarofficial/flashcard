@@ -7,6 +7,7 @@
   import { deckPaths } from '$lib/components/deck-paths';
   import ShortcutHost from '$lib/features/browse/ShortcutHost.svelte';
   import PluginPanels from '$lib/features/plugins/PluginPanels.svelte';
+  import OutsideHost from '$lib/features/inbox/OutsideHost.svelte';
 
   interface MenuItem {
     id: string;
@@ -66,6 +67,12 @@
   function show(item: MenuItem) {
     screen = item.screen;
     active = item.id;
+  }
+
+  /** Opens the menu entry with `route` (flashcard:// links, v0.9). */
+  function openRoute(route: string) {
+    const item = menu.find((m) => m.route === route);
+    if (item) show(item);
   }
 
   async function loadModules() {
@@ -178,6 +185,9 @@
     {/if}
   </main>
 </div>
+
+<!-- Pairing requests, clipboard suggestions, flashcard:// links (v0.9). -->
+<OutsideHost open={openRoute} selectDeck={(id) => (selectedDeck = id)} />
 
 <!-- Keyboard shortcuts + command palette (v0.4); inert when the palette module is off. -->
 <ShortcutHost

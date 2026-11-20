@@ -1,0 +1,227 @@
+/**
+ * v0.9 inbox UI on the dev mock: review proposed cards (edit, pick a deck, accept / reject),
+ * approve a program asking to connect to the local API, the clipboard suggestion, flashcard://
+ * links routing, and the quick-add window.
+ */
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { i18n } from '$lib/i18n/index.svelte';
+import { api } from '$lib/api';
+import type { DeckTreeNode, EventEnvelope } from '$lib/api/types';
+import InboxScreen from './InboxScreen.svelte';
+import LocalApiScreen from './LocalApiScreen.svelte';
+import OutsideHost from './OutsideHost.svelte';
+import QuickAdd from './QuickAdd.svelte';
+import { linkTarget, type LinkResult, type Shell } from './shell';
+import type { ScreenCtx } from '../types';
+
+i18n.locale = 'en';
+
+function ctxWith(decks: DeckTreeNode[] = []): ScreenCtx {
+  return {
+    decks,
+    selectedDeck: null,
+    selectedPath: null,
+    selectDeck: () => {},
+    guarded: async (fn) => {
+      try {
+        await fn();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
+/** A fake shell: tests push links / clipboard text through it. */
+function fakeShell(links: LinkResult[] = [], prefill: string | null = null) {
+  const listeners = new Map<string, (p: unknown) => void>();
+  const shell: Shell = {
+    takeDeepLinks: async () => links.splice(0),
+    prefill: async () => prefill,
+    listen: async (event, cb) => {
+      listeners.set(event, cb);
+      return () => listeners.delete(event);
+    },
+    hide: vi.fn(async () => {}),
+  };
+  return { shell, fire: (event: string, payload: unknown) => listeners.get(event)?.(payload) };
+}
+
+async function deckNode(name: string): Promise<DeckTreeNode> {
+  await api.deck.create(name);
+  const tree = await api.deck.tree();
+  return tree.roots.find((n) => n.deck.name === name)!;
+}
+
+describe('<InboxScreen>', () => {
+  it('reviews proposals: edit, choose a deck, accept; reject; tabs', async () => {
+    const node = await deckNode('Inbox deck');
+    await api.call('inbox.add', {
+      front: 'badger',
+      back: 'porsuk',
+      fields: {},
+      tags: ['web'],
+      attributes: { Seviye: 'B1' },
+      context: { url: 'https://example.com/a', title: 'Badgers', sentence: 'The badger dug.' },
+    });
+    await api.call('inbox.add', { front: 'otter', fields: {}, tags: [], attributes: {} });
+    render(InboxScreen, { ctx: ctxWith([node]) });
+    expect(await screen.findByDisplayValue('badger')).toBeTruthy();
+    expect(screen.getByText('Seviye: B1')).toBeTruthy();
+    expect(screen.getByText('#web')).toBeTruthy();
+    expect(screen.getByText('Sentence: “The badger dug.”')).toBeTruthy();
+    expect(screen.getByText('From: Badgers')).toBeTruthy();
+
+    // No deck yet: accepting is refused by the backend, nothing changes.
+    const accept = screen.getAllByRole('button', { name: 'Accept' });
+    await fireEvent.click(accept[0]!);
+    expect((await api.call('inbox.count', {})).pending).toBe(2);
+
+    // Pick the deck, edit the back, accept.
+    const badgerDeck = screen.getAllByLabelText(/Deck/)[1] as HTMLSelectElement;
+    await fireEvent.change(badgerDeck, { target: { value: node.deck.id } });
+    await fireEvent.input(screen.getByDisplayValue('porsuk'), { target: { value: 'porsuk (hayvan)' } });
+    const spy = vi.spyOn(api, 'call');
+    await fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[1]!);
+    expect(await screen.findByText('1 cards added')).toBeTruthy();
+    const req = spy.mock.calls.find(([m]) => m === 'inbox.accept')![1] as { items: { deck_id: string; fields: unknown }[] };
+    expect(req.items[0]!.deck_id).toBe(node.deck.id);
+    expect(req.items[0]!.fields).toEqual({ front: 'badger', back: 'porsuk (hayvan)' });
+    spy.mockRestore();
+
+    // Reject the other one; it moves to the Rejected tab.
+    await waitFor(() => expect(screen.queryByDisplayValue('badger')).toBeNull());
+    await fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    expect(await screen.findByText('Nothing waiting.')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('tab', { name: 'Rejected' }));
+    expect(await screen.findByText('otter', { exact: false })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('tab', { name: 'Accepted' }));
+    expect(await screen.findByText('badger')).toBeTruthy();
+  });
+});
+
+describe('<LocalApiScreen>', () => {
+  it('approves a pending program with fewer permissions, then revokes it', async () => {
+    await api.call('modules.set_enabled', { id: 'local_api', enabled: true });
+    render(LocalApiScreen, { ctx: ctxWith() });
+    expect(await screen.findByText('Flashcard for Chrome')).toBeTruthy();
+    expect(screen.getByText(/127\.0\.0\.1:28735/)).toBeTruthy();
+    expect(screen.getByText('Waiting for you')).toBeTruthy();
+    // Untick "See your decks": only the inbox permission is granted.
+    await fireEvent.click(screen.getByLabelText('See your decks'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+    expect(await screen.findByText('Allowed')).toBeTruthy();
+    expect(screen.getByText('Permissions: Propose cards to the inbox')).toBeTruthy();
+    const [c] = (await api.call('local_api.clients.list', {})).clients;
+    expect(c!.scopes).toEqual(['inbox:write']);
+    await fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+    expect(await screen.findByText('Revoked')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(await screen.findByText('No programs yet.')).toBeTruthy();
+    await api.call('modules.set_enabled', { id: 'local_api', enabled: false });
+  });
+});
+
+describe('<OutsideHost>', () => {
+  it('asks the user when a program wants to connect', async () => {
+    const on = vi.spyOn(api, 'on');
+    const call = vi.spyOn(api, 'call').mockResolvedValue({} as never);
+    render(OutsideHost, { open: () => {}, selectDeck: () => {}, shell: fakeShell().shell });
+    await waitFor(() => expect(on).toHaveBeenCalled());
+    const handler = on.mock.calls.find(([p]) => p === 'local_api_pairing')![1];
+    handler({
+      seq: 1,
+      at: 0,
+      batch_id: null,
+      event: {
+        type: 'local_api_pairing',
+        data: {
+          client: {
+            id: 'c1',
+            name: 'Flashcard for Chrome',
+            kind: 'browser_extension',
+            origin: 'chrome-extension://abc',
+            requested_scopes: ['inbox:write', 'decks:read'],
+            scopes: [],
+            status: 'pending',
+            created_at: 0,
+            updated_at: 0,
+            last_used_at: null,
+          },
+        },
+      },
+    } as EventEnvelope);
+    expect(await screen.findByText('Flashcard for Chrome wants to connect to Flashcard.')).toBeTruthy();
+    expect(screen.getByText('Propose cards to the inbox')).toBeTruthy();
+    expect(screen.getByText('See your decks')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+    expect(call).toHaveBeenCalledWith('local_api.clients.approve', { id: 'c1', scopes: null });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    on.mockRestore();
+    call.mockRestore();
+  });
+
+  it('offers copied text and adds it to the inbox only when asked', async () => {
+    const { shell, fire } = fakeShell();
+    render(OutsideHost, { open: () => {}, selectDeck: () => {}, shell });
+    await waitFor(() => fire('fc://clipboard', { text: 'porsuk' }));
+    expect(await screen.findByText('Add “porsuk” as a card?')).toBeTruthy();
+    const before = (await api.call('inbox.count', {})).pending;
+    await fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect((await api.call('inbox.count', {})).pending).toBe(before);
+    fire('fc://clipboard', { text: 'porsuk' });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add to inbox' }));
+    expect(await screen.findByText('Added to the inbox')).toBeTruthy();
+    const list = await api.call('inbox.list', { status: null, page: { cursor: null, limit: null } });
+    expect(list.items[0]!.source).toEqual({ kind: 'clipboard' });
+    expect(list.pending).toBe(before + 1);
+  });
+
+  it('routes links handled before it listened (cold start) and later ones', async () => {
+    const opened: string[] = [];
+    const selected: (string | null)[] = [];
+    const { shell, fire } = fakeShell([
+      { url: 'flashcard://deck/d1', ok: { kind: 'navigate', target: { kind: 'deck', deck_id: 'd1' } } },
+    ]);
+    render(OutsideHost, { open: (r: string) => opened.push(r), selectDeck: (d: string | null) => selected.push(d), shell });
+    await waitFor(() => expect(opened).toEqual(['/decks']));
+    expect(selected).toEqual(['d1']);
+    const links: LinkResult[] = [
+      {
+        url: 'flashcard://wipe',
+        error: { code: 'VALIDATION_DEEP_LINK', message_key: 'errors.validation.deep_link', message: '', details: {}, retryable: false },
+      },
+    ];
+    shell.takeDeepLinks = async () => links.splice(0);
+    fire('fc://deep-link', null);
+    expect(await screen.findByText('Could not open the link. This link cannot be opened.')).toBeTruthy();
+  });
+
+  it('maps link outcomes to screens', () => {
+    expect(linkTarget({ kind: 'navigate', target: { kind: 'note', note_id: 'n' } })).toEqual({ route: '/notes', deck: null, proposed: false });
+    expect(linkTarget({ kind: 'navigate', target: { kind: 'study', deck_id: 'd', query: null } })).toEqual({ route: '/study', deck: 'd', proposed: false });
+    expect(linkTarget({ kind: 'navigate', target: { kind: 'study', deck_id: null, query: 'is:due' } }).route).toBe('/browse');
+    expect(linkTarget({ kind: 'inbox', item: {} as never })).toEqual({ route: '/inbox', deck: null, proposed: true });
+  });
+});
+
+describe('<QuickAdd>', () => {
+  it('prefills from the clipboard, adds a note, hides on Escape', async () => {
+    const node = await deckNode('Quick deck');
+    const { shell } = fakeShell([], 'porsuk');
+    render(QuickAdd, { shell });
+    expect(await screen.findByDisplayValue('porsuk')).toBeTruthy();
+    const deck = screen.getByLabelText('Deck') as HTMLSelectElement;
+    await fireEvent.change(deck, { target: { value: node.deck.id } });
+    await fireEvent.input(screen.getByLabelText('Back'), { target: { value: 'badger' } });
+    const spy = vi.spyOn(api.note, 'createClassic');
+    await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect(await screen.findByText('Card added')).toBeTruthy();
+    expect(spy).toHaveBeenCalledWith(node.deck.id, 'porsuk', 'badger', []);
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect(shell.hide).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});

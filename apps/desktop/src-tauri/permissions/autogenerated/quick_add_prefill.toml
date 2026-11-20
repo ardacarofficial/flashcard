@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-quick-add-prefill"
+description = "Enables the quick_add_prefill command without any pre-configured scope."
+commands.allow = ["quick_add_prefill"]
+
+[[permission]]
+identifier = "deny-quick-add-prefill"
+description = "Denies the quick_add_prefill command without any pre-configured scope."
+commands.deny = ["quick_add_prefill"]
