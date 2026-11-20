@@ -6,6 +6,7 @@ import type { AddMedia } from "./AddMedia";
 import type { AffectedCount } from "./AffectedCount";
 import type { AnswerCard } from "./AnswerCard";
 import type { AnswerCheckDto } from "./AnswerCheckDto";
+import type { ApplyToLeeches } from "./ApplyToLeeches";
 import type { AssignPreset } from "./AssignPreset";
 import type { AssignResult } from "./AssignResult";
 import type { AttributeDefDto } from "./AttributeDefDto";
@@ -37,6 +38,8 @@ import type { CheckAnswer } from "./CheckAnswer";
 import type { ClonePreset } from "./ClonePreset";
 import type { CreateBackup } from "./CreateBackup";
 import type { CreateDeck } from "./CreateDeck";
+import type { CreateExam } from "./CreateExam";
+import type { CreateGoal } from "./CreateGoal";
 import type { CreateNote } from "./CreateNote";
 import type { CreateNoteType } from "./CreateNoteType";
 import type { CreatePreset } from "./CreatePreset";
@@ -45,6 +48,8 @@ import type { DatabaseReport } from "./DatabaseReport";
 import type { DeckDto } from "./DeckDto";
 import type { DeckList } from "./DeckList";
 import type { DeckRef } from "./DeckRef";
+import type { DeckReports } from "./DeckReports";
+import type { DeckReportsRequest } from "./DeckReportsRequest";
 import type { DeckTree } from "./DeckTree";
 import type { DefineAttribute } from "./DefineAttribute";
 import type { DefineAttributeFromTemplate } from "./DefineAttributeFromTemplate";
@@ -54,12 +59,18 @@ import type { EffectiveAttributeList } from "./EffectiveAttributeList";
 import type { EffectiveAttributes } from "./EffectiveAttributes";
 import type { EffectivePreset } from "./EffectivePreset";
 import type { Empty } from "./Empty";
+import type { ExamDto } from "./ExamDto";
+import type { ExamList } from "./ExamList";
+import type { ExamRef } from "./ExamRef";
 import type { ExecuteBatch } from "./ExecuteBatch";
 import type { FindReplace } from "./FindReplace";
 import type { FlagDto } from "./FlagDto";
 import type { FlagList } from "./FlagList";
 import type { GetAttributeValues } from "./GetAttributeValues";
 import type { GetSettings } from "./GetSettings";
+import type { GoalDto } from "./GoalDto";
+import type { GoalList } from "./GoalList";
+import type { GoalRef } from "./GoalRef";
 import type { HintDto } from "./HintDto";
 import type { HintRequest } from "./HintRequest";
 import type { ImportPreview } from "./ImportPreview";
@@ -67,9 +78,14 @@ import type { InspectBackup } from "./InspectBackup";
 import type { JobDto } from "./JobDto";
 import type { JobList } from "./JobList";
 import type { JobRef } from "./JobRef";
+import type { LeechActionResult } from "./LeechActionResult";
+import type { LeechList } from "./LeechList";
+import type { LeechRequest } from "./LeechRequest";
 import type { LinkedNoteList } from "./LinkedNoteList";
 import type { ListAttributeTemplates } from "./ListAttributeTemplates";
 import type { ListAttributes } from "./ListAttributes";
+import type { ListExams } from "./ListExams";
+import type { ListGoals } from "./ListGoals";
 import type { ListNotes } from "./ListNotes";
 import type { ListOplog } from "./ListOplog";
 import type { ListTrash } from "./ListTrash";
@@ -98,6 +114,7 @@ import type { NoteTypeList } from "./NoteTypeList";
 import type { NoteTypeRef } from "./NoteTypeRef";
 import type { NoteTypeUsage } from "./NoteTypeUsage";
 import type { OplogPage } from "./OplogPage";
+import type { OptimizerStarted } from "./OptimizerStarted";
 import type { OptionChangeResult } from "./OptionChangeResult";
 import type { PaletteList } from "./PaletteList";
 import type { PostponeCards } from "./PostponeCards";
@@ -112,6 +129,7 @@ import type { PurgeResult } from "./PurgeResult";
 import type { PurgeTrash } from "./PurgeTrash";
 import type { QueryCheck } from "./QueryCheck";
 import type { QueryText } from "./QueryText";
+import type { RefreshStatsCache } from "./RefreshStatsCache";
 import type { RenameAttributeOption } from "./RenameAttributeOption";
 import type { RenameDeck } from "./RenameDeck";
 import type { RenameTag } from "./RenameTag";
@@ -122,6 +140,7 @@ import type { RepairResult } from "./RepairResult";
 import type { ResetSetting } from "./ResetSetting";
 import type { ResetShortcut } from "./ResetShortcut";
 import type { RestoreBackup } from "./RestoreBackup";
+import type { RunOptimizer } from "./RunOptimizer";
 import type { SavedQueryDto } from "./SavedQueryDto";
 import type { SavedQueryList } from "./SavedQueryList";
 import type { SavedQueryRef } from "./SavedQueryRef";
@@ -150,6 +169,11 @@ import type { ShortcutList } from "./ShortcutList";
 import type { StartExport } from "./StartExport";
 import type { StartImport } from "./StartImport";
 import type { StartSession } from "./StartSession";
+import type { StatsBreakdown } from "./StatsBreakdown";
+import type { StatsBreakdownRequest } from "./StatsBreakdownRequest";
+import type { StatsCacheInfo } from "./StatsCacheInfo";
+import type { StatsOverview } from "./StatsOverview";
+import type { StatsRequest } from "./StatsRequest";
 import type { StudyCardsChanged } from "./StudyCardsChanged";
 import type { SuggestLinks } from "./SuggestLinks";
 import type { SuspendCards } from "./SuspendCards";
@@ -161,12 +185,16 @@ import type { UndoResult } from "./UndoResult";
 import type { UndoStatus } from "./UndoStatus";
 import type { UpdateAttribute } from "./UpdateAttribute";
 import type { UpdateDeck } from "./UpdateDeck";
+import type { UpdateExam } from "./UpdateExam";
 import type { UpdateFlag } from "./UpdateFlag";
+import type { UpdateGoal } from "./UpdateGoal";
 import type { UpdateMcpServer } from "./UpdateMcpServer";
 import type { UpdateNote } from "./UpdateNote";
 import type { UpdateNoteType } from "./UpdateNoteType";
 import type { UpdatePreset } from "./UpdatePreset";
 import type { UpdateSavedQuery } from "./UpdateSavedQuery";
+import type { WorkloadEstimate } from "./WorkloadEstimate";
+import type { WorkloadRequest } from "./WorkloadRequest";
 
 /** API version prefix of qualified method names (`v1.decks.create`). */
 export const API_VERSION = "v1" as const;
@@ -305,6 +333,22 @@ export interface Methods {
   "mcp.servers.add": { kind: "command"; request: AddMcpServer; response: McpServerDto };
   "mcp.servers.update": { kind: "command"; request: UpdateMcpServer; response: McpServerDto };
   "mcp.servers.remove": { kind: "command"; request: McpServerRef; response: McpServerDto };
+  "stats.overview": { kind: "query"; request: StatsRequest; response: StatsOverview };
+  "stats.breakdown": { kind: "query"; request: StatsBreakdownRequest; response: StatsBreakdown };
+  "stats.leeches": { kind: "query"; request: LeechRequest; response: LeechList };
+  "stats.apply_to_leeches": { kind: "command"; request: ApplyToLeeches; response: LeechActionResult };
+  "stats.deck_reports": { kind: "query"; request: DeckReportsRequest; response: DeckReports };
+  "stats.refresh_cache": { kind: "command"; request: RefreshStatsCache; response: StatsCacheInfo };
+  "planning.exams.list": { kind: "query"; request: ListExams; response: ExamList };
+  "planning.exams.create": { kind: "command"; request: CreateExam; response: ExamDto };
+  "planning.exams.update": { kind: "command"; request: UpdateExam; response: ExamDto };
+  "planning.exams.delete": { kind: "command"; request: ExamRef; response: Empty };
+  "goals.list": { kind: "query"; request: ListGoals; response: GoalList };
+  "goals.create": { kind: "command"; request: CreateGoal; response: GoalDto };
+  "goals.update": { kind: "command"; request: UpdateGoal; response: GoalDto };
+  "goals.delete": { kind: "command"; request: GoalRef; response: Empty };
+  "optimizer.run": { kind: "command"; request: RunOptimizer; response: OptimizerStarted };
+  "optimizer.workload": { kind: "query"; request: WorkloadRequest; response: WorkloadEstimate };
 }
 
 /** Unqualified method name. */
@@ -452,4 +496,20 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "mcp.servers.add": "command",
   "mcp.servers.update": "command",
   "mcp.servers.remove": "command",
+  "stats.overview": "query",
+  "stats.breakdown": "query",
+  "stats.leeches": "query",
+  "stats.apply_to_leeches": "command",
+  "stats.deck_reports": "query",
+  "stats.refresh_cache": "command",
+  "planning.exams.list": "query",
+  "planning.exams.create": "command",
+  "planning.exams.update": "command",
+  "planning.exams.delete": "command",
+  "goals.list": "query",
+  "goals.create": "command",
+  "goals.update": "command",
+  "goals.delete": "command",
+  "optimizer.run": "command",
+  "optimizer.workload": "query",
 };

@@ -13,6 +13,7 @@ mod migrations;
 mod misc;
 mod notes;
 mod search;
+mod stats;
 mod store;
 mod study;
 mod tags;

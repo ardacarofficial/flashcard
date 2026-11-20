@@ -390,6 +390,8 @@ fn report(method: &str, e: &ApiError, json: bool) {
 }
 
 fn main() -> ExitCode {
+    // Before anything else (single-threaded): no shell variable changes behavior.
+    fc_app::system::pin_process_env();
     let cli = Cli::parse();
     if let Command::Mcp(mcp::McpCommand::Serve { read_only }) = &cli.command {
         // stdout belongs to the protocol: errors go to stderr only.

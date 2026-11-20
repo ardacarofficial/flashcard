@@ -1,0 +1,13 @@
+{
+  "oplog.summary.stats.refresh_cache": "Refreshed the statistics cache",
+  "oplog.summary.stats.apply_to_leeches": "Acted on {count} leeches",
+  "oplog.summary.planning.exams.create": "Added exam {name}",
+  "oplog.summary.planning.exams.update": "Edited exam {name}",
+  "oplog.summary.planning.exams.delete": "Removed exam {name}",
+  "oplog.summary.planning.exams.restore": "Restored exam {name}",
+  "oplog.summary.goals.create": "Set a goal",
+  "oplog.summary.goals.update": "Edited a goal",
+  "oplog.summary.goals.delete": "Removed a goal",
+  "oplog.summary.goals.restore": "Restored a goal",
+  "oplog.summary.optimizer.run": "Started FSRS optimization"
+}

@@ -302,9 +302,21 @@ pub(super) fn answer(req: AnswerCard, ctx: &mut CommandCtx<'_>) -> AppResult<Com
     let card_before = snapshot(&card);
     let before = session.scheduling_of(&card);
     let params = session.config.params(ctx.reads(), card.deck_id)?;
-    let outcome = scheduler(ctx.reads())?
+    let mut outcome = scheduler(ctx.reads())?
         .schedule(&before, req.rating, ctx.now, &params)
         .map_err(scheduler_error)?;
+    if session.config.mode == StudyMode::Scheduled {
+        // v0.6: load balancing, easy days, exam-date mode (no-op when `planning` is off).
+        crate::modules::planning::plan_outcome(
+            ctx.reads(),
+            ctx.registry,
+            &card,
+            &mut outcome,
+            session.config.study_day(),
+            ctx.now,
+            params.maximum_interval_days,
+        )?;
+    }
     let day_end = session.config.day_end(ctx.now);
     let duration = queue::clamp_duration(req.duration_ms, session.state.last_event_at, ctx.now);
     let reveal = req.reveal_ms.map(|r| r.min(duration));

@@ -432,15 +432,21 @@ impl<'a> EmptyCards<'a> {
     }
 }
 
-/// Interval previews of the four buttons.
+/// Interval previews of the four buttons. `plan` is applied to each outcome exactly as
+/// `study.answer` applies it (v0.6 planning: load balancing, easy days, exam-date mode), so a
+/// button shows the interval its answer will get.
 pub(super) fn previews(
     sched: &dyn Scheduler,
     state: &SchedulingState,
     now: Timestamp,
     params: &SchedulerParams,
+    plan: &mut dyn FnMut(&mut ReviewOutcome) -> AppResult<()>,
 ) -> AppResult<Vec<IntervalPreview>> {
-    let outcomes: [ReviewOutcome; 4] =
+    let mut outcomes: [ReviewOutcome; 4] =
         sched.preview(state, now, params).map_err(scheduler_error)?;
+    for o in &mut outcomes {
+        plan(o)?;
+    }
     Ok(RATINGS
         .iter()
         .zip(outcomes.iter())
@@ -505,7 +511,20 @@ pub(super) fn session_dto(v: View<'_>, s: &Session, now: Timestamp) -> AppResult
                 note_id: card.note_id,
                 deck_id: card.deck_id,
                 state: state.state,
-                intervals: previews(scheduler(reads)?, &state, now, &params)?,
+                intervals: previews(scheduler(reads)?, &state, now, &params, &mut |o| {
+                    if s.config.mode == StudyMode::Scheduled {
+                        crate::modules::planning::plan_outcome(
+                            reads,
+                            v.registry,
+                            &card,
+                            o,
+                            s.config.study_day(),
+                            now,
+                            params.maximum_interval_days,
+                        )?;
+                    }
+                    Ok(())
+                })?,
                 type_answer: rendered.types || type_setting,
                 flags: card.flags,
                 sides: rendered.card.sides,

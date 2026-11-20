@@ -14,6 +14,7 @@ pub mod card;
 pub mod content;
 pub mod deck;
 pub mod error;
+pub mod goal;
 pub mod i18n;
 pub mod id;
 pub mod note;
@@ -24,13 +25,15 @@ pub mod query;
 pub mod rng;
 pub mod settings;
 pub mod shortcut;
+pub mod stats;
 pub mod tag;
 pub mod time;
 
 pub use error::{CoreError, CoreResult};
 pub use id::{
-    AttributeDefId, AttributeOptionId, BatchId, CardId, DeckId, IdGen, JobId, McpServerId, NoteId,
-    NoteTypeId, OplogId, PresetId, ReviewLogId, SavedQueryId, SessionId, TagId, V7IdGen,
+    AttributeDefId, AttributeOptionId, BatchId, CardId, DeckId, ExamId, GoalId, IdGen, JobId,
+    McpServerId, NoteId, NoteTypeId, OplogId, PresetId, ReviewLogId, SavedQueryId, SessionId,
+    TagId, V7IdGen,
 };
 pub use rng::Rng;
 pub use time::{Clock, Timestamp};

@@ -18,6 +18,8 @@ pub const COLLECTION_FILE: &str = "collection.db";
 /// the process exits with status 1.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before Tauri starts any thread: no shell variable changes behavior (FSRS optimizer).
+    fc_app::system::pin_process_env();
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![ipc::invoke])

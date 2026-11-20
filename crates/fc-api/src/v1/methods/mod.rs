@@ -89,4 +89,6 @@ domains! {
     presets,
     browse,
     mcp,
+    stats,
+    planning,
 }

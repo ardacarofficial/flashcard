@@ -39,4 +39,8 @@ modules! {
     palette,
     presets,
     mcp,
+    stats,
+    planning,
+    goals,
+    optimizer,
 }

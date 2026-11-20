@@ -174,4 +174,5 @@ domains! {
     interop,
     search => SearchState,
     mcp => McpState,
+    stats => StatsState,
 }

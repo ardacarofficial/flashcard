@@ -74,4 +74,5 @@ domains! {
     interop: InteropRead, InteropWrite;
     search: SearchRead, SearchWrite;
     mcp: McpRead, McpWrite;
+    stats: StatsRead, StatsWrite;
 }

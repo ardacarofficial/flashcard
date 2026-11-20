@@ -316,16 +316,17 @@ fn upgrade_dump_runs_later_data_migrations_on_restored_rows() {
     };
     assert_eq!(folded, "isik", "the search index is written folded");
     let mut newer: Vec<migrate::Migration> = migrate::MIGRATIONS.to_vec();
-    // Numbered above every real migration, whichever releases are merged.
+    // One past the newest real migration (later tracks keep adding theirs).
+    let later = newer.iter().map(|m| m.version).max().unwrap() + 1;
     newer.push(migrate::Migration {
-        version: 9998,
-        name: "9998_test_fold",
+        version: later,
+        name: "test_fold",
         sql: "UPDATE notes_fts SET sort_field = sort_field || '!';
               CREATE TABLE fold_marker (n INTEGER NOT NULL);
               INSERT INTO fold_marker SELECT count(*) FROM notes;",
     });
     let up = crate::upgrade_dump_with(old.clone(), &newer).unwrap();
-    assert_eq!(*up.schema_versions.last().unwrap(), 9998);
+    assert_eq!(*up.schema_versions.last().unwrap(), later);
     assert_eq!(fts_col(&up), SqlValue::Text("isik!".into()));
     let marker = up.tables.iter().find(|t| t.name == "fold_marker").unwrap();
     assert_eq!(marker.rows[0].last(), Some(&SqlValue::Integer(1)));
@@ -333,4 +334,74 @@ fn upgrade_dump_runs_later_data_migrations_on_restored_rows() {
     let mut alien = old;
     alien.schema_versions.push(9999);
     assert!(crate::upgrade_dump(alien).is_err());
+}
+
+/// `fit_dump_to_schema` cuts a current dump to an older schema's tables and columns
+/// generically (no per-track list), and the result restores forward to the same rows.
+#[test]
+fn fit_dump_to_schema_drops_later_tables_and_columns() {
+    let fx = Fx::seeded();
+    fx.write(|tx| {
+        ensure_home(tx);
+        tx.insert_deck(&deck(1, None, "D")).unwrap();
+        add_note(tx, &note(1, "a", "b", &["t"], 1), 1);
+        tx.insert_review_logs(&[review(1, CardId(nid(1).0), 60)])
+            .unwrap();
+    });
+    let dump = fx.read(|r| r.dump_collection().unwrap());
+    assert!(dump.tables.iter().any(|t| t.name == "exam_dates"));
+    let v05: Vec<u32> = dump
+        .schema_versions
+        .iter()
+        .copied()
+        .filter(|v| *v < 500)
+        .collect();
+    let old = crate::fit_dump_to_schema(dump.clone(), &v05).unwrap();
+    assert_eq!(old.schema_versions, v05);
+    assert!(!old.tables.iter().any(|t| t.name == "exam_dates"));
+    for t in &old.tables {
+        assert!(
+            t.rows.iter().all(|r| r.len() == t.columns.len()),
+            "{}",
+            t.name
+        );
+    }
+    // Every table the older schema has is kept (same rows).
+    let names = |d: &crate::repo::CollectionDump| -> Vec<String> {
+        d.tables.iter().map(|t| t.name.clone()).collect()
+    };
+    assert!(names(&old).iter().all(|n| names(&dump).contains(n)));
+    // Exactly the tables that migrations from 0500 on create are dropped (v0.6 `exam_dates`,
+    // and whatever later tracks add, e.g. v0.8 `mcp_servers`).
+    let later: Vec<String> = names(&dump)
+        .into_iter()
+        .filter(|n| {
+            migrate::MIGRATIONS
+                .iter()
+                .any(|m| m.version >= 500 && m.sql.contains(&format!("CREATE TABLE {n} (")))
+        })
+        .collect();
+    assert!(later.contains(&"exam_dates".to_owned()), "{later:?}");
+    let dropped: Vec<String> = names(&dump)
+        .into_iter()
+        .filter(|n| !names(&old).contains(n))
+        .collect();
+    assert_eq!(dropped, later);
+    // Restoring it forward gives the current dump back.
+    assert_eq!(crate::upgrade_dump(old).unwrap(), dump);
+
+    // Columns too: a table a later migration widened loses the new columns and their values.
+    let mut widened = dump.clone();
+    let notes = widened
+        .tables
+        .iter_mut()
+        .find(|t| t.name == "notes")
+        .unwrap();
+    notes.columns.push("later_column".into());
+    for r in &mut notes.rows {
+        r.push(SqlValue::Integer(1));
+    }
+    let cut = crate::fit_dump_to_schema(widened, &dump.schema_versions).unwrap();
+    assert_eq!(cut, dump);
+    assert!(crate::fit_dump_to_schema(dump, &[1, 9_999]).is_err());
 }
