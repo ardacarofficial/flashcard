@@ -134,9 +134,11 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** [02 §17](02-ozellik-katalogu.md) istatistiklerinin tamamı; FSRS kişisel optimizasyonu; hedef hatırlama oranı (+ iş yükü tahmini); yük dengeleme; kolay günler; sınav tarihi modu; hedefler; deste karnesi.
 
 **Kabul kriterleri**
-- [ ] İstatistikler `review_log`'dan yeniden üretilebilir ve önbellekle aynı sonucu verir.
-- [ ] Optimizasyon arka plan işi olarak çalışır, iptal edilebilir.
-- [ ] Yük dengeleme simülasyonda günlük yük varyansını düşürür (test).
+- [x] İstatistikler `review_log`'dan yeniden üretilebilir ve önbellekle aynı sonucu verir.
+- [x] Optimizasyon arka plan işi olarak çalışır, iptal edilebilir.
+- [x] Yük dengeleme simülasyonda günlük yük varyansını düşürür (test).
+
+> **Doğrulama (`feat/v0.6-stats`):** (1) `fc-app/src/modules/stats/tests.rs::cache_equals_recomputation` (MemStore + SQLite bellek + dosya): her adımda önbellekli `stats.overview` = `fresh` yeniden hesaplama (alanı alanına) ve sayılan tekrar = `review_log`'un deneme dışı satırları; günler boyu cevaplar (SQLite'ta önbellek + eklenen satırlar katlanır), cevabın geri alınması (satır silinir → önbellek geçersiz), yinele, içe aktarılan tekrarlar (sayılır, `imported`), deneme oturumu (sayılmaz), not çöpe + kalıcı temizlik, ikinci takvim (UTC+3). Saf düzeyde `fc_core::stats::tests::aggregates_are_a_monoid` (proptest: parça parça toplanıp birleştirilen = tek seferde toplanan). (2) `optimizer_job_saves_weights` (iş → ağırlıklar preset'e, tek geri al), `optimizer_job_cancelled_before_it_runs`, `optimizer_job_cancelled_while_training` (gerçek arka plan çalışanı, SQLite dosyası: iş koşarken `jobs.cancel` → `cancelled`, preset değişmez); `fc_study::optimize::tests::abort_flag_interrupts_training` (eğitim başka iş parçacığından durdurulur). (3) `fc_study::planning::tests::load_balancing_lowers_daily_load_variance`: 365 gün, 120 gün boyunca günde 20 yeni kart, FSRS, olasılıkla hatırlama — 15 günlük hareketli ortalamaya göre günlük yük varyansı **29.5 → 8.4**, toplam iş ±%10 içinde, tepe yük daha düşük; `easy_days_get_fewer_reviews`, `exam_mode_maximizes_recall_on_exam_day`; uygulama düzeyinde `load_balancing_spreads_equal_cards`, `exam_mode_and_exam_commands`. Sınıflandırma kırılımı: `breakdown_by_classification`. Ayrıntı: [10 §18](10-v0.1-sozlesme.md).
 
 ## 🔌 v0.7 · Eklenti altyapısı
 
