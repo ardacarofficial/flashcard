@@ -117,6 +117,59 @@ Uygulama için resmi Rust MCP SDK'sı (`rmcp`) kullanılır.
 - **Hız sınırı** ve istek boyutu sınırı.
 - AnkiConnect uyumluluk katmanı (isteğe bağlı, eklenti olarak): Anki için yazılmış mevcut araçların bir kısmı doğrudan çalışabilir.
 
+#### Uygulanan hâli (v0.9, `crates/fc-http` + `fc-app` `local_api`/`inbox` modülleri) — **sözleşme**
+
+Tarayıcı eklentisi (iz K) ve diğer yerel istemciler bu bölüme göre yazılır. Tipler `fc-api`'den üretilir (`apps/desktop/src/lib/api/generated/`): elle DTO yazılmaz.
+
+**Sunucu**
+- Adres: yalnız `127.0.0.1` (ya da `[::1]`), varsayılan port **`28735`** (`local_api.port`). Yapılandırma tipi geri döngü dışı adresi **ifade edemez**; bağlanan soket ayrıca denetlenir.
+- Modül `local_api` **varsayılan kapalı** (Ayarlar → Modüller → "Yerel API"). Kapalıyken port dinlenmez. Açılınca masaüstü kabuğu sunucuyu başlatır; `fc --db <dosya> api serve [--port N]` aynı sunucuyu masaüstü olmadan başlatır (geliştirme/test).
+- `Host` başlığı `127.0.0.1:<port>`, `localhost:<port>` ya da `[::1]:<port>` olmalı (DNS yeniden bağlama koruması) → aksi `403 PERMISSION_ORIGIN_NOT_ALLOWED`.
+- **Origin:** `Origin` başlığı olmayan istek (curl, betik, yerel uygulama) kabul edilir. `Origin` varsa yalnız tarayıcı eklentisi şeması (`chrome-extension://`, `moz-extension://`, `extension://`) kabul edilir; web sayfası kökenleri (`http(s)://…`, `null`) her uçta `403 PERMISSION_ORIGIN_NOT_ALLOWED`. Eşleştirmede gelen `Origin` istemci kaydına yazılır; o istemcinin token'ı **yalnız aynı Origin'den** (ya da Origin'siz) geçer. CORS başlıkları (`Access-Control-Allow-Origin: <aynı köken>`, `Allow-Headers: authorization, content-type`, `Allow-Methods: GET, POST, OPTIONS`) yalnız eklenti kökenlerine döner; MV3 servis çalışanı `host_permissions: ["http://127.0.0.1/*"]` ile CORS'a zaten takılmaz.
+- **Gövde sınırı** 256 KiB → `413 VALIDATION_PAYLOAD_TOO_LARGE`. **Hız sınırı:** token başına saniyede 10 istek (anlık 30), eşleştirme isteği tüm sunucuda dakikada 5 ve aynı anda en çok 5 bekleyen → `429 CONFLICT_RATE_LIMITED` + `Retry-After` (saniye).
+- Kimlik: `Authorization: Bearer <token>`. Token yalnız istemciye bir kez verilir; veritabanında yalnız SHA-256 özeti tutulur. Aktör `Actor::LocalApi(<client_id>)` (oplog'da `{"kind":"local_api","id":"<client_id>"}`); yazmalar sıradan, geri alınabilir komuttur.
+
+**Uç noktalar**
+
+| Yöntem + yol | Token | Gövde → yanıt (TS tipi) | Not |
+|---|---|---|---|
+| `GET /v1/ping` | hayır | → `PingResponse` `{app: "flashcard", api_version: "v1", version}` | Uygulama açık mı? (kapalıysa bağlantı reddi → eklenti kuyruğa alır) |
+| `POST /v1/pair` | hayır | `PairRequest` `{client_name, client_kind: "browser_extension"\|"app"\|"script", scopes: string[]}` → `201 PairResponse` `{request_id, status: "pending", expires_at}` | Uygulamada onay penceresi açılır: "<ad> bağlanmak istiyor: <izinler>. İzin ver / Reddet". Kullanıcı izinleri daraltabilir. 10 dk içinde karar yoksa `expired` |
+| `GET /v1/pair/{request_id}` | hayır | → `PairStatusResponse` `{status: "pending"\|"approved"\|"denied"\|"expired", client_id?, token?, scopes}` | `token` **yalnız ilk** `approved` yanıtında döner (sonra hiç). Eşleştirmeyi başlatanla aynı Origin şart. Token sunucu belleğinde bekler: uygulama arada kapanırsa istek `expired` olur, yeniden eşleştirilir. Bilinmeyen kimlik → `404 NOT_FOUND_PAIRING` |
+| `GET /v1/auth` | evet | → `ApiClientDto` (kendi kaydı: `id, name, kind, scopes, status, …`) | Token hâlâ geçerli mi |
+| `GET /v1/methods` | evet | → `LocalApiMethodList` `{methods: [{name, kind, permission}]}` | Bu token'ın çağırabileceği metotlar |
+| `GET /v1/decks` | `decks:read` | → `DeckList` (`decks.list`: düz, `path` sıralı; `DeckDto.id/path/name`) | kolaylık |
+| `POST /v1/inbox` | `inbox:write` | `AddInboxItem` → `201 InboxItemDto` | kolaylık = `inbox.add` |
+| `POST /v1/<metot>` | metodun izni | metodun istek tipi → metodun yanıt tipi | yalnız aşağıdaki **açık liste**; ör. `POST /v1/attributes.effective {"deck_id": "…", "target": "note"}` |
+
+Başarı: `200` (oluşturmada `201`), gövde metodun yanıtıdır (zarf yok). Hata: gövde her zaman `ApiError` JSON'u (`code`, `message_key`, `message`, `details`, `retryable`); durum kodu kategoriden: `VALIDATION_*` 400 (`VALIDATION_PAYLOAD_TOO_LARGE` 413), `PERMISSION_UNAUTHENTICATED` 401 (token yok, bilinmiyor, reddedilmiş, iptal edilmiş ya da onay bekliyor — `details.reason`: `missing`/`invalid`/`pending`/`denied`/`revoked`), diğer `PERMISSION_*` 403, `NOT_FOUND_*` 404 (bilinmeyen ya da listede olmayan metot `NOT_FOUND_METHOD`), `CONFLICT_RATE_LIMITED` 429, `CONFLICT_MODULE_DISABLED` 503 (ör. `inbox` modülü kapalı), diğer `CONFLICT_*` 409, `PROVIDER_*`/`IO_*`/`INTERNAL*` 500.
+
+**İzin kapsamları** (istemci ister, kullanıcı onaylarken daraltabilir; başkası verilemez): `inbox:write`, `inbox:read`, `decks:read`, `decks:write`, `notetypes:read`, `notes:read`, `notes:write`, `attributes:read`, `tags:read`, `search:read`. Bilinmeyen/verilemez kapsam isteği `400 VALIDATION_API_SCOPE`.
+
+**HTTP'ye açık metotlar** (açık liste `fc_app::modules::local_api::HTTP_METHODS`; izin tek başına yetmez): `inbox.add`, `inbox.list`, `decks.list`, `decks.tree`, `decks.create`, `notetypes.list`, `notes.get`, `notes.create`, `attributes.effective`, `tags.list`, `search.cards`. **Hiçbir zaman:** iç metotlar, geri alınamaz/replay edilemez komutlar, `io.*`, `plugins.*`, `mcp.*`, `ai.*` (anahtarlar dahil), `oplog.*`, `settings.*`/`modules.*` yazmaları, `local_api.*` yönetimi, silme ve toplu işlemler.
+
+**`AddInboxItem`** (`inbox.add`):
+
+```json
+{
+  "front": "porsuk",
+  "back": "badger",
+  "fields": {},
+  "deck_id": "0193…",
+  "notetype_id": null,
+  "tags": ["web"],
+  "attributes": { "Seviye": "B1", "Sınav": ["YDS", "TOEFL"] },
+  "context": { "url": "https://…", "title": "Sayfa başlığı", "sentence": "The badger dug a hole." }
+}
+```
+
+- `front`/`back` Klasik not türünün kısayoludur; başka not türü için `fields` (`alan_anahtarı → değer`). En az bir alan dolu olmalı. Alan başına en çok 20 000 karakter, en çok 50 etiket.
+- `attributes`: anahtar = sınıflandırmanın **anahtarı, adı ya da kimliği**; değer = seçenek **etiketi ya da kimliği** (çoklu seçimde dizi), sayı/bool/metin türünde düz değer. Öğe eklenirken yalnız biçim denetlenir; deste ve seçenek **kabul edilirken** (o anki desteye göre) çözülür.
+- `deck_id`, `notetype_id`, `context`, `tags`, `fields`, `attributes` isteğe bağlı. Kaynak (`source`) istemci tarafından **verilmez**: sunucu aktörden yazar (`{kind: "local_api", client_id, client_name}`; masaüstünde `quick_add`, `clipboard`, `deep_link`, `user`). Bilinmeyen alan → `400 VALIDATION_INVALID_PARAMS`.
+- Yanıt `InboxItemDto` `{id, source, status: "pending", item: AddInboxItem, note_ids: [], created_at, updated_at}`.
+
+**Olaylar** (masaüstü): `inbox_changed` (`{pending}`), `local_api_pairing` (`{client_id, client_name, scopes}` — onay penceresini açar), `local_api_clients_changed`.
+
 ## 4. Gelen kutusu
 
 - Dış kaynaklardan (HTTP API, tarayıcı eklentisi, MCP, pano izleme, derin bağlantı) gelen öğeler önce `inbox`'a düşer.
