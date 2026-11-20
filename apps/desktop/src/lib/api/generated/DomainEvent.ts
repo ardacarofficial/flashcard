@@ -12,6 +12,7 @@ import type { JobDto } from "./JobDto";
 import type { JobId } from "./JobId";
 import type { NoteId } from "./NoteId";
 import type { NoteTypeId } from "./NoteTypeId";
+import type { PluginNotice } from "./PluginNotice";
 import type { SettingScope } from "./SettingScope";
 
 /**
@@ -137,7 +138,19 @@ reverted_batch_id: BatchId,
 /**
  * Summary.
  */
-summary: I18nMessage, } } | { "type": "study_cards_changed", "data": { 
+summary: I18nMessage, } } | { "type": "plugins_changed", "data": { 
+/**
+ * Plugin id.
+ */
+plugin_id: string, 
+/**
+ * Disabled by the app after repeated failures (notify the user).
+ */
+auto_disabled: boolean, } } | { "type": "plugin_notice", "data": { 
+/**
+ * The notice.
+ */
+notice: PluginNotice, } } | { "type": "study_cards_changed", "data": { 
 /**
  * Cards.
  */

@@ -3,4 +3,4 @@
 /**
  * Where a module contributes UI.
  */
-export type UiSlot = "main_menu" | "screen" | "settings_page" | "deck_action" | "note_action";
+export type UiSlot = "main_menu" | "screen" | "settings_page" | "deck_action" | "note_action" | "sidebar_panel" | "card_toolbar";

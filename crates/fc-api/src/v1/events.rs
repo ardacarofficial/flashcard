@@ -162,6 +162,19 @@ pub enum DomainEvent {
         /// Summary.
         summary: I18nMessage,
     },
+    /// Plugins were installed, updated, removed, switched or re-granted, or one was disabled
+    /// automatically (refetch `plugins.list`, `modules.list`, `plugins.locales`; v0.7).
+    PluginsChanged {
+        /// Plugin id.
+        plugin_id: String,
+        /// Disabled by the app after repeated failures (notify the user).
+        auto_disabled: bool,
+    },
+    /// A plugin asked to show a notice (`host.ui.notify`, v0.7).
+    PluginNotice {
+        /// The notice.
+        notice: super::plugins::PluginNotice,
+    },
     /// Study changed cards' scheduling or visibility (answer, suspend, bury, postpone and
     /// their undo): deck counts are stale.
     StudyCardsChanged {

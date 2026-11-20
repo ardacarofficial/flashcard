@@ -83,4 +83,6 @@ domains! {
     bulk,
     presets,
     browse,
+    plugins,
+    tts,
 }
