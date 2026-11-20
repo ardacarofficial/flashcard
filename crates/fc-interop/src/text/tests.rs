@@ -361,3 +361,40 @@ fn detection_masks_numbers_times_and_urls() {
     let d = detect("Merhaba, nasılsın?\nİyiyim, teşekkürler.\nSen nasılsın?");
     assert_eq!(d.columns, 1);
 }
+
+#[test]
+fn aligned_columns_split_on_blank_runs_only() {
+    let opts = TextOptions::new(ALIGNED, NEWLINE);
+    let text = "  kedi      cat  \ncat\t\tkedi\nbig dog   büyük köpek\nyalnız";
+    assert_eq!(
+        parse_delimited(text, &opts).unwrap(),
+        v(&[
+            &["kedi", "cat"],
+            &["cat", "kedi"],
+            &["big dog", "büyük köpek"],
+            &["yalnız"]
+        ])
+    );
+    let d = detect("kedi      cat\nköpek     dog\nkuş       bird");
+    assert_eq!(d.options.field_separator, ALIGNED);
+    // A real TSV with an empty cell stays a TSV.
+    let d = detect("a\tb\tc\nd\t\tf\ng\th\ti");
+    assert_eq!(d.options.field_separator, "\t");
+}
+
+#[test]
+fn tilde_sentences_and_hyphenated_words() {
+    assert_eq!(
+        detect("kedi ~ cat\nköpek ~ dog").options.field_separator,
+        "~"
+    );
+    let prose = "Evet, geliyorum.\nHayır, gelmiyorum.\nTamam, görüşürüz.";
+    assert_eq!(detect(prose).columns, 1);
+    // `word, meaning` pairs are still two columns.
+    assert_eq!(
+        detect("elma, apple\narmut, pear").options.field_separator,
+        ","
+    );
+    assert_eq!(detect("well-being\nup-to-date\nmother-in-law").columns, 1);
+    assert_eq!(detect("kedi-cat\nköpek-dog\nkuş-bird").columns, 2);
+}

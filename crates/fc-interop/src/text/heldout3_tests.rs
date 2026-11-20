@@ -1,14 +1,22 @@
-//! **Third held-out** separator-detection set (v1.0 acceptance: "≥ 95% on a new held-out
-//! set"). The samples (`heldout3_samples.rs`) were written by a separate author who never saw
-//! the detector or the earlier sets, and committed before the v1.0 detector changes, which
-//! were made only for the known misses of the second set (`heldout2_tests.rs`).
+//! **Third held-out** separator-detection set. The samples (`heldout3_samples.rs`) were
+//! written by a separate author who never saw the detector or the earlier sets, and committed
+//! before the v1.0 detector changes, which were made only for the known misses of the second
+//! set (`heldout2_tests.rs`).
+//!
+//! * Before the v1.0 changes: 96/109 (88.1%), count only.
+//! * **After the set-2 changes, measured once: 99/109 (90.8%)** — the honest held-out number
+//!   for that revision, below the ≥95% target. The misses were: `;` with commas inside the
+//!   values, ` / ` (Korean romanisation, organ names), ` - ` repeated inside a definition,
+//!   `=` inside `name: formula` values, `{{c1::…}}` cloze lines, a blank-line poem list,
+//!   `==`, and colon lines with a time or a second colon in the value.
 
 use super::heldout3_samples::samples;
 use super::*;
 
-/// Correct samples with the detector before the v1.0 changes (96/109 = 88.1%; only the count
-/// was looked at, not the misses).
+/// Correct samples before the v1.0 changes (count only).
 pub(super) const HELD_OUT_3_BEFORE: usize = 96;
+/// Correct samples at the one held-out measurement (see the module docs).
+pub(super) const HELD_OUT_3_MEASURED: usize = 99;
 
 #[test]
 fn held_out_3_detection_accuracy() {
@@ -25,6 +33,12 @@ fn held_out_3_detection_accuracy() {
         }
     }
     let correct = samples.len() - misses.len();
-    eprintln!("held-out 3 detection: {correct}/{}", samples.len());
-    let _ = (HELD_OUT_3_BEFORE, misses);
+    let report = format!(
+        "held-out 3 detection: {correct}/{} correct; misses:\n{}",
+        samples.len(),
+        misses.join("\n")
+    );
+    eprintln!("{report}");
+    assert!(HELD_OUT_3_BEFORE <= HELD_OUT_3_MEASURED);
+    assert!(correct >= HELD_OUT_3_MEASURED, "{report}");
 }

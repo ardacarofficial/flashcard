@@ -13,6 +13,10 @@ use serde::{Deserialize, Serialize};
 pub const NEWLINE: &str = "\n";
 /// Records separated by blank lines.
 pub const BLANK_LINE: &str = "\n\n";
+/// Field separator for columns aligned with blanks (`kedi      cat`, `cat\t\tkedi`): a run of
+/// two or more spaces, or any run of spaces and tabs that holds a tab. Indentation at the
+/// start of a line and blanks at its end are not separators.
+pub const ALIGNED: &str = "  ";
 
 /// How to split text into records and fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -262,7 +266,23 @@ impl<'a> Parser<'a> {
             }
         }
         let sep = self.opts.field_separator.as_str();
+        if sep == ALIGNED {
+            return self.aligned_sep_len();
+        }
         self.rest().starts_with(sep).then_some(sep.len())
+    }
+
+    /// Length of an [`ALIGNED`] separator at the cursor.
+    fn aligned_sep_len(&self) -> Option<usize> {
+        let rest = self.rest();
+        let run = rest.len() - rest.trim_start_matches([' ', '\t']).len();
+        let after = &rest[run..];
+        let line_start = self.i == 0 || self.s[..self.i].ends_with('\n');
+        let is_sep = (run >= 2 || rest[..run].contains('\t'))
+            && !line_start
+            && !after.is_empty()
+            && !after.starts_with('\n');
+        is_sep.then_some(run)
     }
 
     fn is_blank(&self, c: char) -> bool {
@@ -421,17 +441,25 @@ const FIELD_CANDIDATES: &[(&str, f64)] = &[
     ("->", 0.95),
     (">>", 0.95),
     (":", 0.93),
+    ("~", 0.92),
     ("=", 0.92),
     ("|", 0.91),
     (",", 0.9),
     (";", 0.88),
     ("-", 0.75),
+    (ALIGNED, 0.7),
 ];
 
 /// Two-column separators: a record with more fields is unlikely to be meant this way.
 const PAIR_SEPARATORS: &[&str] = &[
-    "::", " - ", " – ", " — ", " = ", " => ", "→", "=>", "->", ">>", ":", "=", "-",
+    "::", " - ", " – ", " — ", " = ", " => ", "→", "=>", "->", ">>", ":", "~", "=", "-",
 ];
+
+/// Sentence punctuation ending a line of prose.
+const SENTENCE_END: &[char] = &['.', '!', '?', '…'];
+
+/// A record share above which a pattern counts as "every line".
+const MOST_RECORDS: f64 = 0.75;
 
 const RECORD_CANDIDATES: &[(&str, f64)] = &[(NEWLINE, 1.0), (BLANK_LINE, 0.97), (";", 0.9)];
 
@@ -666,6 +694,14 @@ fn score(records: &[Vec<String>], fs: &str) -> Option<(f64, usize)> {
     if without as f64 > MAX_RECORDS_WITHOUT_SEPARATOR * n as f64 {
         return None;
     }
+    if fs == "-" && records.iter().any(|r| r.len() > 2) {
+        // `up-to-date`, `mother-in-law`: a bare hyphen chained inside words joins them.
+        return None;
+    }
+    if fs == "," && sentence_lines(records) {
+        // `Evet, geliyorum.` on every line: prose with a comma, not `word, meaning`.
+        return None;
+    }
     let share = hits as f64 / n as f64;
     let consistent: Vec<&Vec<String>> = records.iter().filter(|r| r.len() == mode).collect();
     let fields = (consistent.len() * mode).max(1);
@@ -680,6 +716,27 @@ fn score(records: &[Vec<String>], fs: &str) -> Option<(f64, usize)> {
         s *= 0.6;
     }
     Some((s, mode))
+}
+
+/// Whether most records read as one sentence each: a capital letter first, sentence
+/// punctuation last, and a lower-case word right after the first separator (`Evet,
+/// geliyorum.`). A `word, meaning` pair starts its second value fresh and has no full stop.
+fn sentence_lines(records: &[Vec<String>]) -> bool {
+    let prose = records
+        .iter()
+        .filter(|r| {
+            let (Some(first), Some(last)) = (r.first(), r.last()) else {
+                return false;
+            };
+            r.len() >= 2
+                && first.chars().next().is_some_and(char::is_uppercase)
+                && last
+                    .trim_end_matches(['"', '\'', ')'])
+                    .ends_with(SENTENCE_END)
+                && r[1].chars().next().is_some_and(char::is_lowercase)
+        })
+        .count();
+    prose as f64 > MOST_RECORDS * records.len() as f64
 }
 
 /// Whether most records (all but the last) end with `;`, i.e. `;` separates records.

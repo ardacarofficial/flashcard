@@ -6,7 +6,8 @@
  */
 export type TextOptionsDto = { 
 /**
- * Between fields (`,`, `:`, `\t`, ` - `, `>>` …).
+ * Between fields (`,`, `:`, `\t`, ` - `, `>>` …). Two spaces (`"  "`) = columns aligned
+ * with runs of blanks.
  */
 field_separator: string, 
 /**
