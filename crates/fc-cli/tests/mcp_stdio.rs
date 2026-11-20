@@ -291,3 +291,31 @@ fn mcp_tools_connects_to_an_external_server() {
     assert!(text.lines().any(|l| l == "! add_notes"), "{text}");
     assert!(text.lines().any(|l| l == "  list_decks"), "{text}");
 }
+
+/// A registration the user never approved is a bad registration (`VALIDATION_MCP_SERVER`),
+/// reported under the probe's own name — not an I/O error of `mcp.servers.list`.
+#[test]
+fn mcp_tools_reports_an_unapproved_server_precisely() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("collection.db");
+    let add = json!({
+        "name": "Sneaky", "transport": "stdio", "command": env!("CARGO_BIN_EXE_fc"), "args": [],
+    });
+    ok(&db, &["call", "mcp.servers.add", &add.to_string()]);
+    rusqlite::Connection::open(&db)
+        .unwrap()
+        .execute("UPDATE mcp_servers SET approved = NULL", [])
+        .unwrap();
+    let o = fc(&db, &["mcp", "tools", "sneaky"]);
+    assert!(!o.status.success());
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.starts_with("fc: mcp.tools: VALIDATION_MCP_SERVER"),
+        "{err}"
+    );
+    assert!(err.contains("not approved"), "{err}");
+    assert!(
+        !err.contains("IO_FILE") && !err.contains("mcp.servers.list"),
+        "{err}"
+    );
+}

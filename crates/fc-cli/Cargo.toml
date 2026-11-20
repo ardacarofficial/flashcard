@@ -28,6 +28,7 @@ clap.workspace = true
 fc-app = { path = "../fc-app", features = ["testing"] }
 fc-plugins = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
+rusqlite.workspace = true
 
 [lints]
 workspace = true

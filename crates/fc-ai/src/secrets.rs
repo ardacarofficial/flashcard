@@ -138,8 +138,8 @@ impl OsKeychain {
         }
     }
 
-    fn entry(&self, account: &str) -> Result<keyring::Entry, SecretError> {
-        keyring::Entry::new(&self.service, account).map_err(keychain_error)
+    fn entry(&self, account: &str) -> Result<keyring::Entry, keyring::Error> {
+        keyring::Entry::new(&self.service, account)
     }
 }
 
@@ -157,7 +157,9 @@ fn keychain_error(e: keyring::Error) -> SecretError {
 #[cfg(feature = "keychain")]
 impl SecretStore for OsKeychain {
     fn get(&self, account: &str) -> Result<Option<Secret>, SecretError> {
-        match self.entry(account)?.get_password() {
+        // Without a session keyring (headless Linux) `Entry::new` itself reports `NoEntry`:
+        // that is "no key stored", not a broken keychain.
+        match self.entry(account).and_then(|e| e.get_password()) {
             Ok(p) => Ok(Some(Secret::new(p))),
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(e) => Err(keychain_error(e)),
@@ -165,13 +167,13 @@ impl SecretStore for OsKeychain {
     }
 
     fn set(&self, account: &str, secret: &Secret) -> Result<(), SecretError> {
-        self.entry(account)?
-            .set_password(secret.expose())
+        self.entry(account)
+            .and_then(|e| e.set_password(secret.expose()))
             .map_err(keychain_error)
     }
 
     fn delete(&self, account: &str) -> Result<(), SecretError> {
-        match self.entry(account)?.delete_credential() {
+        match self.entry(account).and_then(|e| e.delete_credential()) {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(keychain_error(e)),
         }

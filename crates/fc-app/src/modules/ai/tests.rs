@@ -723,6 +723,63 @@ fn routes_pick_provider_and_model_per_feature() {
     assert_eq!(e.code, ErrorCode::ConflictAiNoProvider);
 }
 
+/// A keychain that fails every read (a headless session without a keyring).
+struct BrokenKeychain;
+
+impl fc_ai::secrets::SecretStore for BrokenKeychain {
+    fn get(&self, _: &str) -> Result<Option<fc_ai::secrets::Secret>, fc_ai::secrets::SecretError> {
+        Err(fc_ai::secrets::SecretError::Unavailable("no session keyring".into()))
+    }
+    fn set(&self, _: &str, _: &fc_ai::secrets::Secret) -> Result<(), fc_ai::secrets::SecretError> {
+        Err(fc_ai::secrets::SecretError::Unavailable("no session keyring".into()))
+    }
+    fn delete(&self, _: &str) -> Result<(), fc_ai::secrets::SecretError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn a_broken_keychain_stops_keyed_providers_but_not_keyless_ones() {
+    let local = MockServer::start(|_| {
+        MockResponse::json(&json!({"model": "llama3.2", "message": {"content": "{\"verdict\":\"almost\",\"feedback\":\"Close.\"}"},
+            "prompt_eval_count": 50, "eval_count": 5}))
+    });
+    let cloud = MockServer::start(|_| claude_tool(json!({"verdict": "wrong", "feedback": "No."})));
+    let t = app();
+    t.app.set_secret_store(Arc::new(BrokenKeychain));
+    let ollama = t.ok::<AiProvidersCreate>(CreateAiProvider {
+        kind: AiProviderKind::Ollama,
+        name: None,
+        base_url: Some(local.url()),
+        default_model: Some("llama3.2".into()),
+        is_default: None,
+    });
+    let claude = claude(&t, &cloud, None);
+    let d = deck(&t, "R");
+    let card = classic(&t, &d, "q", "a").cards[0].id;
+    let task = AiTask::CheckAnswer { card_id: card, given: "b".into() };
+    t.ok::<AiRoutesSet>(AiRouteDto {
+        feature: AiFeature::CheckAnswer,
+        provider_id: Some(ollama.id),
+        model: None,
+    });
+    let r = result(&run(&t, task.clone()));
+    assert_eq!(r.output, AiOutput::CheckAnswer { verdict: AiVerdict::Almost, feedback: "Close.".into() });
+    // A provider that needs a key still reports the keychain.
+    t.ok::<AiRoutesSet>(AiRouteDto {
+        feature: AiFeature::CheckAnswer,
+        provider_id: Some(claude.id),
+        model: None,
+    });
+    let p = preview(&t, task.clone());
+    let e = t.err::<AiRun>(RunAi { task, provider_id: None, model: None, preview_hash: p.preview_hash });
+    assert!(
+        matches!(e.code, ErrorCode::ProviderAiKeychain | ErrorCode::ProviderAiUnauthorized),
+        "{e:?}"
+    );
+    assert!(cloud.requests().is_empty());
+}
+
 #[test]
 fn prices_budget_and_usage_summary() {
     let t = app();

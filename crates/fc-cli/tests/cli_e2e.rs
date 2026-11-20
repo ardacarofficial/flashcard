@@ -356,3 +356,118 @@ fn purge_writes_a_history_barrier_that_undo_stops_at() {
     assert_eq!(purge(&db)["notes"], 0);
     assert_eq!(barriers(&db), 2);
 }
+
+fn default_preset(db: &Path) -> String {
+    json(
+        db,
+        &["call", "presets.create", r#"{"name":"P","config":null}"#],
+    )["id"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+/// `optimizer.run` answers `{"job": …}`: the CLI must still run the queued job now and print
+/// the finished one — not leave it queued for the next start to mark `interrupted`.
+#[test]
+fn a_wrapped_job_response_is_run_to_completion() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("collection.db");
+    ok(&db, &["deck", "list"]);
+    let params = serde_json::json!({ "preset_id": default_preset(&db) }).to_string();
+    let job = json(&db, &["call", "optimizer.run", &params]);
+    assert_eq!(job["kind"], "optimizer.run", "{job}");
+    assert_ne!(job["status"], "queued", "{job}");
+    // …and nothing is left behind to be interrupted by the next process.
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let open: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM jobs WHERE status IN ('queued','running','interrupted')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(open, 0);
+}
+
+/// A second process must not touch what the app that owns the collection is doing: a job
+/// that is running there stays running when `fc` starts.
+#[test]
+fn fc_does_not_interrupt_jobs_another_process_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("collection.db");
+    ok(&db, &["deck", "list"]);
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute(
+        "INSERT INTO jobs (id, kind, status, created_at, updated_at)
+         VALUES ('01J00000000000000000000000', 'import', 'running', 1, 1)",
+        [],
+    )
+    .unwrap();
+    ok(&db, &["deck", "list"]);
+    let status: String = conn
+        .query_row("SELECT status FROM jobs", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(status, "running");
+}
+
+/// An old schema is refused (never upgraded behind the app's back) unless `--migrate`.
+#[test]
+fn an_older_schema_needs_an_explicit_migrate() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("collection.db");
+    ok(&db, &["deck", "list"]);
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    // Forget the newest migration: the file now looks one version behind.
+    let (version, table) = ("MAX(version)", "schema_migrations");
+    let newest: i64 = conn
+        .query_row(&format!("SELECT {version} FROM {table}"), [], |r| r.get(0))
+        .unwrap();
+    conn.execute(&format!("DELETE FROM {table} WHERE version = {newest}"), [])
+        .unwrap();
+    drop(conn);
+    let refused = fc(&db, &["deck", "list"]);
+    assert!(!refused.status.success());
+    let err = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        err.contains("IO_DATABASE") && err.contains("migrated"),
+        "{err}"
+    );
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let still: i64 = conn
+        .query_row(
+            &format!("SELECT count(*) FROM {table} WHERE version = {newest}"),
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(still, 0, "refusing must not migrate");
+}
+
+/// `fc … | head` closes the pipe early: no panic, no noise.
+#[test]
+fn a_closed_stdout_pipe_is_not_a_panic() {
+    use std::process::Stdio;
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("collection.db");
+    for i in 0..40 {
+        ok(
+            &db,
+            &["deck", "create", &format!("Deck {i} {}", "x".repeat(50))],
+        );
+    }
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fc"))
+        .arg("--db")
+        .arg(&db)
+        .args(["deck", "list"])
+        .env_remove("FC_DB")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    drop(child.stdout.take()); // the reader goes away before fc writes
+    let out = child.wait_with_output().unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!err.contains("panicked"), "{err}");
+    assert_eq!(out.status.code(), Some(0), "{err}");
+}

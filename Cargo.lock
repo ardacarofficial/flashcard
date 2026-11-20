@@ -1357,6 +1357,7 @@ dependencies = [
  "fc-core",
  "fc-mcp",
  "fc-plugins",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

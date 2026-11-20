@@ -38,6 +38,22 @@ fn io(e: impl std::fmt::Display) -> ApiError {
     ApiError::new(ErrorCode::IoFile, e.to_string())
 }
 
+/// A client failure as a wire error: a registration that may not run (disabled, never
+/// approved) or cannot be used over its transport is a bad registration, not a file error.
+fn client_error(e: fc_mcp::McpError, server: Option<&str>) -> ApiError {
+    use fc_mcp::McpError as E;
+    let (field, msg) = match &e {
+        E::NotAllowed(m) => ("enabled", m.clone()),
+        E::Unsupported(m) => ("transport", m.clone()),
+        _ => return io(e),
+    };
+    let err = ApiError::new(ErrorCode::ValidationMcpServer, msg).with_detail("field", field);
+    match server {
+        Some(name) => err.with_detail("name", name),
+        None => err,
+    }
+}
+
 fn runtime() -> Result<tokio::runtime::Runtime, ApiError> {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -85,16 +101,19 @@ pub fn tools(ctx: &Ctx<'_>, server: Option<&str>, command: &[String]) -> Result<
     };
     let tools = runtime()?.block_on(async {
         let client = match (&registered, command.split_first()) {
-            (Some(s), _) => McpClient::connect_registered(s).await,
-            (None, Some((program, args))) => McpClient::connect_stdio(program, args).await,
+            (Some(s), _) => McpClient::connect_registered(s)
+                .await
+                .map_err(|e| client_error(e, Some(&s.name)))?,
+            (None, Some((program, args))) => {
+                McpClient::connect_stdio(program, args).await.map_err(io)?
+            }
             (None, None) => {
                 return Err(ApiError::new(
                     ErrorCode::ValidationInvalidParams,
                     "give a registered server name or a command after --",
                 ))
             }
-        }
-        .map_err(io)?;
+        };
         let tools = client.list_tools().await.map_err(io)?;
         client.close().await.map_err(io)?;
         Ok(tools)

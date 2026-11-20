@@ -279,8 +279,14 @@ fn connect(
         }
         (record, timeout, retries, media)
     };
-    let key = services.secrets().get(&key_account(id)).map_err(keychain_error)?;
     let kind = kind_of(parse_kind(&record.kind)?);
+    // A key-less provider (Ollama, a local OpenAI-compatible server) must not die on a
+    // missing/unusable keychain: no key is the normal case there.
+    let key = match services.secrets().get(&key_account(id)) {
+        Ok(key) => key,
+        Err(_) if !kind.needs_key() => None,
+        Err(e) => return Err(keychain_error(e)),
+    };
     let provider = fc_ai::build(ProviderConfig {
         kind,
         base_url: record.base_url.clone(),

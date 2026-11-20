@@ -309,6 +309,25 @@ impl App {
         Ok(app)
     }
 
+    /// Opens the collection for a process that may run next to the desktop app (the CLI): a
+    /// missing file is created (migrated, seeded: [`App::open_sqlite`]); an existing current
+    /// one is only [attached](App::attach_state), so the running app's jobs and import groups
+    /// stay untouched. An older schema is migrated only when `allow_migrate` is set —
+    /// otherwise it is refused (`IO_DATABASE`), never upgraded behind the app's back.
+    pub fn open_sqlite_shared(path: &std::path::Path, allow_migrate: bool) -> AppResult<Self> {
+        if !path.is_file() {
+            return Self::open_sqlite(path);
+        }
+        match Self::open_sqlite_current(path) {
+            Err(AppError::Storage(fc_storage::StorageError::NeedsMigration { .. }))
+                if allow_migrate =>
+            {
+                Self::open_sqlite(path)
+            }
+            other => other,
+        }
+    }
+
     /// Startup of a **secondary** process on a collection the app owns (`fc mcp serve`): loads
     /// module switches and the locale and records the oplog position — and writes nothing.
     /// [`App::load_state`]'s startup work belongs to the owning app alone: in a second process

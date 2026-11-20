@@ -6,7 +6,6 @@
 //!   paths, keys, names and labels to ids for you.
 //! * `fc call <method> [<json>|-]` invokes **any** public method with raw JSON params (`-` =
 //!   read them from stdin), so everything the app can do is reachable from the shell.
-#![allow(clippy::print_stdout)]
 
 mod commands;
 mod i18n;
@@ -36,6 +35,10 @@ pub struct Cli {
     /// Output language (default: the `app.locale` setting).
     #[arg(long, global = true, value_parser = parse_locale)]
     lang: Option<Locale>,
+    /// Upgrade an older collection schema (the desktop app normally does this; refuse by
+    /// default so a CLI call never rewrites a database another process owns).
+    #[arg(long, global = true)]
+    migrate: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -465,19 +468,30 @@ impl Command {
             Command::Undo => m::OplogUndo::NAME,
             Command::Redo => m::OplogRedo::NAME,
             Command::Mcp(mcp::McpCommand::Serve { .. }) => m::McpToolsList::NAME,
-            Command::Mcp(mcp::McpCommand::Tools { .. }) => m::McpServersList::NAME,
+            // A CLI-only probe (registered or ad-hoc server), not an API method — like `plugin.pack`.
+            Command::Mcp(mcp::McpCommand::Tools { .. }) => "mcp.tools",
             Command::Call { method, .. } => method,
         }
     }
 }
 
-fn report(method: &str, e: &ApiError, json: bool) {
-    if json {
-        let body = serde_json::to_string_pretty(e).unwrap_or_else(|_| e.message.clone());
-        eprintln!("{body}");
-    } else {
-        eprintln!("fc: {method}: {}: {}", e.code, e.message);
+/// Writes `text` + newline, ignoring a closed pipe (`fc … | head`): the reader is gone, which
+/// is not an error worth a panic or a message. Any other failure is returned.
+fn write_line(mut out: impl std::io::Write, text: &str) -> std::io::Result<()> {
+    match writeln!(out, "{text}").and_then(|()| out.flush()) {
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        other => other,
     }
+}
+
+fn report(method: &str, e: &ApiError, json: bool) {
+    let text = if json {
+        serde_json::to_string_pretty(e).unwrap_or_else(|_| e.message.clone())
+    } else {
+        format!("fc: {method}: {}: {}", e.code, e.message)
+    };
+    // Nowhere left to report to if stderr itself is closed.
+    let _ = write_line(std::io::stderr(), &text);
 }
 
 fn main() -> ExitCode {
@@ -494,7 +508,9 @@ fn main() -> ExitCode {
             }
         };
     }
-    let app = match App::open_sqlite(&cli.db) {
+    // Next to a running desktop app: an existing current collection is only attached (its
+    // jobs and import groups stay untouched); an old schema is refused unless `--migrate`.
+    let app = match App::open_sqlite_shared(&cli.db, cli.migrate) {
         Ok(app) => app,
         Err(e) => {
             report(cli.command.method(), &e.into_api(), cli.json);
@@ -511,10 +527,17 @@ fn main() -> ExitCode {
         text: i18n::Catalog::new(cli.lang.unwrap_or_else(|| app.locale())),
     };
     match commands::run(&ctx, &cli.command, &mut std::io::stdin().lock()) {
-        Ok(text) => {
-            println!("{text}");
-            ExitCode::SUCCESS
-        }
+        Ok(text) => match write_line(std::io::stdout().lock(), &text) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                report(
+                    cli.command.method(),
+                    &ApiError::new(fc_api::ErrorCode::IoFile, e.to_string()),
+                    cli.json,
+                );
+                ExitCode::FAILURE
+            }
+        },
         Err(e) => {
             report(cli.command.method(), &e, cli.json);
             ExitCode::FAILURE

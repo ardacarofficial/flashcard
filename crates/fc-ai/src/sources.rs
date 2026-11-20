@@ -175,8 +175,8 @@ impl HostResolver for SystemResolver {
 }
 
 /// Whether `ip` is an address a page fetch must never reach (loopback, private, link-local
-/// incl. cloud metadata, CGNAT, unique-local, unspecified, multicast, …). IPv4 embedded in
-/// IPv6 (mapped, NAT64) is judged by the IPv4 inside.
+/// incl. cloud metadata, CGNAT, unique-local, unspecified, multicast, Teredo, …). IPv4 embedded
+/// in IPv6 (mapped, NAT64, 6to4) is judged by the IPv4 inside.
 pub fn is_blocked_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
@@ -208,8 +208,19 @@ pub fn is_blocked_ip(ip: IpAddr) -> bool {
                 );
                 return is_blocked_ip(IpAddr::V4(v4));
             }
+            // 2002::/16 (6to4) carries an IPv4 address in bits 16..48: judge that one.
+            if seg[0] == 0x2002 {
+                let v4 = Ipv4Addr::new(
+                    (seg[1] >> 8) as u8,
+                    seg[1] as u8,
+                    (seg[2] >> 8) as u8,
+                    seg[2] as u8,
+                );
+                return is_blocked_ip(IpAddr::V4(v4));
+            }
             v6.is_loopback()
                 || v6.is_unspecified()
+                || (seg[0] == 0x2001 && seg[1] == 0) // 2001::/32 Teredo (tunnels to any v4)
                 || v6.is_multicast()
                 || (seg[0] & 0xFE00) == 0xFC00 // fc00::/7 unique-local
                 || (seg[0] & 0xFFC0) == 0xFE80 // fe80::/10 link-local

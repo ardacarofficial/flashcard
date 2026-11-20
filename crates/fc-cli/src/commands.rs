@@ -194,19 +194,29 @@ pub fn run(ctx: &Ctx<'_>, command: &Command, stdin: &mut dyn Read) -> Result<Str
             let response = ctx.app.invoke(&qualified, params, &Actor::Cli)?;
             // No background worker here: a job the call queued runs now, and the finished
             // job (with its result) is printed instead of the queued one.
-            if let Ok(job) = serde_json::from_value::<JobDto>(response.clone()) {
-                if job.status == JobStatus::Queued {
-                    ctx.app.run_pending_jobs().map_err(ApiError::from)?;
-                    let done = call::<m::JobsGet>(ctx.app, &JobRef { id: job.id })?;
-                    return pretty(
-                        &serde_json::to_value(done)
-                            .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?,
-                    );
-                }
+            if let Some(job) = queued_job(&response) {
+                ctx.app.run_pending_jobs().map_err(ApiError::from)?;
+                let done = call::<m::JobsGet>(ctx.app, &JobRef { id: job.id })?;
+                return pretty(
+                    &serde_json::to_value(done)
+                        .map_err(|e| ApiError::new(ErrorCode::Internal, e.to_string()))?,
+                );
             }
             pretty(&response)
         }
     }
+}
+
+/// The job a response started: a bare `JobDto`, or one wrapped as `{"job": …}` (the shape of
+/// `optimizer.run`'s `OptimizerStarted`). Only a still-queued job counts.
+fn queued_job(response: &Value) -> Option<JobDto> {
+    let inner = match response.get("job") {
+        Some(j) if response.as_object().is_some_and(|o| o.len() == 1) => j,
+        _ => response,
+    };
+    serde_json::from_value::<JobDto>(inner.clone())
+        .ok()
+        .filter(|j| j.status == JobStatus::Queued)
 }
 
 fn undo_line(text: &Catalog, key: &str, r: &UndoResult) -> String {
