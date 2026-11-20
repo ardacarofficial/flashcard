@@ -173,4 +173,5 @@ domains! {
     content => ContentState,
     interop,
     search => SearchState,
+    stats => StatsState,
 }

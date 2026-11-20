@@ -253,6 +253,12 @@ impl SearchWrite for MemTx<'_> {
         let before_cards = s.cards.len();
         s.cards.retain(|_, c| !old(c.deleted_at));
         let card_count = before_cards - s.cards.len();
+        // Their review history goes with them (SQLite: ON DELETE CASCADE).
+        let cards = &s.cards;
+        s.domains
+            .study
+            .reviews
+            .retain(|_, r| cards.contains_key(&r.card_id));
         let mut decks = 0u32;
         loop {
             let free: Vec<DeckId> = s

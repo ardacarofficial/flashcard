@@ -440,6 +440,12 @@ pub fn trial_mode_never_changes_cards(f: &Factory) {
 pub fn simulation_365_days(f: &Factory) {
     fn run(store: Arc<dyn Store>) -> (Vec<Card>, Vec<Vec<ReviewLogDto>>) {
         let t = T::new(store, 77);
+        // The replay below checks the pure scheduler; v0.6 planning (load balancing) would
+        // move due days within their fuzz range (its own simulation is in fc-study).
+        t.ok::<ModulesSetEnabled>(SetModuleEnabled {
+            id: "planning".into(),
+            enabled: false,
+        });
         let deck = t.deck("Yıl");
         let cards: Vec<CardId> = (0..8).map(|i| t.note(deck.id, &format!("w{i}"), "x")).collect();
         let mut rng = SplitMix64::new(42);

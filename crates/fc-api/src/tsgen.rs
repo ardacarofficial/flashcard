@@ -65,6 +65,8 @@ pub fn generate_into(dir: &Path) -> Result<(), GenError> {
     v1::io::ImportReport::export_all(&cfg)?;
     v1::io::ExportReport::export_all(&cfg)?;
     v1::io::RestoreReport::export_all(&cfg)?;
+    // Job result of the optimizer (v0.6).
+    v1::planning::OptimizerResult::export_all(&cfg)?;
 
     fs::write(dir.join("methods.ts"), methods_ts(&cfg))?;
     let files = list_ts_files(dir)?;

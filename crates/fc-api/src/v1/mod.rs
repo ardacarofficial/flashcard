@@ -15,9 +15,11 @@ pub mod modules;
 pub mod notes;
 pub mod notetypes;
 pub mod oplog;
+pub mod planning;
 pub mod presets;
 pub mod search;
 pub mod settings;
+pub mod stats;
 pub mod study;
 pub mod tags;
 

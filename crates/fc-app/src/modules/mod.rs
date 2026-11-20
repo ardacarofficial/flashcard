@@ -38,4 +38,8 @@ modules! {
     browse,
     palette,
     presets,
+    stats,
+    planning,
+    goals,
+    optimizer,
 }
