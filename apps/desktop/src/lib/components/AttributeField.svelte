@@ -1,6 +1,11 @@
+<!--
+  One classification value (v1.1: built from `$lib/ui`). Enum kinds use the custom Select,
+  multi-choice kinds a row of toggle chips, the rest an Input. Same props as before.
+-->
 <script lang="ts">
   import type { AttributeDefDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
+  import { Chip, Field, Input, Select } from '$lib/ui';
   import {
     controlFor,
     displayOptions,
@@ -19,62 +24,56 @@
   const control = $derived(controlFor(def.kind));
   const options = $derived(displayOptions(def));
   const inputId = $derived(`attr-${def.id}`);
-
-  function onSelect(e: Event) {
-    value = fromInput(def.kind, (e.currentTarget as HTMLSelectElement).value);
-  }
-  function onMulti(e: Event) {
-    const el = e.currentTarget as HTMLSelectElement;
-    value = fromInput(
-      def.kind,
-      Array.from(el.selectedOptions, (o) => o.value),
-    );
-  }
-  function onText(e: Event) {
-    value = fromInput(def.kind, (e.currentTarget as HTMLInputElement).value);
-  }
+  const label = $derived(def.required ? `${def.name} *` : def.name);
   const raw = $derived(toInput(value));
   const chosen = $derived(selectedChoices(value));
+
+  const selectOptions = $derived(
+    control === 'tristate'
+      ? [
+          { value: '', label: t('attribute.unset') },
+          { value: 'true', label: t('common.yes') },
+          { value: 'false', label: t('common.no') },
+        ]
+      : [{ value: '', label: t('attribute.unset') }, ...options.map((o) => ({ value: o.id, label: o.label }))],
+  );
+
+  function toggle(id: string) {
+    const next = chosen.includes(id) ? chosen.filter((c) => c !== id) : [...chosen, id];
+    value = fromInput(def.kind, next);
+  }
 </script>
 
-<div class="field" data-kind={def.kind}>
-  <label for={inputId}>
-    {def.name}
-    {#if def.required}<span class="muted" title={t('attribute.required')}>*</span>{/if}
-  </label>
-
-  {#if control === 'select'}
-    <select id={inputId} value={raw} onchange={onSelect}>
-      <option value="">{t('attribute.unset')}</option>
-      {#each options as o (o.id)}
-        <option value={o.id}>{o.label}</option>
-      {/each}
-    </select>
+<div class="attr" data-kind={def.kind}>
+  {#if control === 'select' || control === 'tristate'}
+    <Select id={inputId} {label} options={selectOptions} value={raw} onchange={(v) => (value = fromInput(def.kind, v))} />
   {:else if control === 'multiselect'}
-    <select id={inputId} multiple onchange={onMulti}>
-      {#each options as o (o.id)}
-        <option value={o.id} selected={chosen.includes(o.id)}>{o.label}</option>
-      {/each}
-    </select>
-  {:else if control === 'number'}
-    <input id={inputId} type="number" value={raw} oninput={onText} />
-  {:else if control === 'date'}
-    <input id={inputId} type="date" value={raw} oninput={onText} />
-  {:else if control === 'tristate'}
-    <select id={inputId} value={raw} onchange={onSelect}>
-      <option value="">{t('attribute.unset')}</option>
-      <option value="true">{t('common.yes')}</option>
-      <option value="false">{t('common.no')}</option>
-    </select>
+    <Field {label} id={inputId}>
+      {#snippet control(f)}
+        <div class="chips" id={f.id} role="group" aria-label={def.name}>
+          {#each options as o (o.id)}
+            <Chip size="sm" label={o.label} selected={chosen.includes(o.id)} onclick={() => toggle(o.id)} />
+          {/each}
+        </div>
+      {/snippet}
+    </Field>
   {:else}
-    <input id={inputId} type="text" value={raw} oninput={onText} />
+    <Input
+      id={inputId}
+      {label}
+      type={control === 'number' ? 'number' : control === 'date' ? 'date' : 'text'}
+      value={raw}
+      oninput={(e) => (value = fromInput(def.kind, e.currentTarget.value))}
+    />
   {/if}
 </div>
 
 <style>
-  .field {
+  .chips {
     display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-1);
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    min-height: var(--control-h-md);
+    align-items: center;
   }
 </style>

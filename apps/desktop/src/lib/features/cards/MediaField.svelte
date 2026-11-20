@@ -3,6 +3,7 @@
   import type { FieldKind } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import { resolveMedia } from './media';
+  import { Button, Trash2, Upload } from '$lib/ui';
 
   interface Props {
     value: string;
@@ -17,6 +18,8 @@
   let busy = $state(false);
   let error = $state<string | null>(null);
   let previewHtml = $state('');
+  let dragging = $state(false);
+  let input = $state<HTMLInputElement | null>(null);
   const accept = $derived(kind === 'audio' ? 'audio/*' : kind === 'video' ? 'video/*' : 'image/*');
 
   $effect(() => {
@@ -54,11 +57,17 @@
 
 <div
   class="media"
+  class:dragging
   role="group"
   aria-labelledby={`${id}-label`}
-  ondragover={(e) => e.preventDefault()}
+  ondragover={(e) => {
+    e.preventDefault();
+    dragging = true;
+  }}
+  ondragleave={() => (dragging = false)}
   ondrop={(e) => {
     e.preventDefault();
+    dragging = false;
     void take(e.dataTransfer?.files);
   }}
   onpaste={(e) => {
@@ -68,17 +77,20 @@
     }
   }}
 >
-  <span id={`${id}-label`}>{label}</span>
-  {#if previewHtml}
-    <div class="thumb">{@html previewHtml}</div>
-  {/if}
-  <div class="row">
-    <input {id} type="file" {accept} onchange={(e) => void take(e.currentTarget.files)} disabled={busy} />
-    {#if value}
-      <button type="button" class="small" onclick={() => (value = '')}>{t('editor.remove_media')}</button>
+  <span class="label" id={`${id}-label`}>{label}</span>
+  <div class="drop">
+    {#if previewHtml}
+      <div class="thumb">{@html previewHtml}</div>
     {/if}
+    <div class="row">
+      <Button size="sm" icon={Upload} loading={busy} onclick={() => input?.click()}>{t('editor.choose_file')}</Button>
+      {#if value}
+        <Button size="sm" variant="ghost" icon={Trash2} onclick={() => (value = '')}>{t('editor.remove_media')}</Button>
+      {/if}
+      <input bind:this={input} {id} class="file" type="file" {accept} onchange={(e) => void take(e.currentTarget.files)} disabled={busy} />
+    </div>
+    <span class="hint">{t('editor.drop_hint')}</span>
   </div>
-  <span class="muted hint">{t('editor.drop_hint')}</span>
   {#if error}<span class="error" role="alert">{error}</span>{/if}
 </div>
 
@@ -86,18 +98,45 @@
   .media {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-1);
+    gap: var(--space-1);
+  }
+  .label {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    color: var(--text-1);
+  }
+  .drop {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-control);
+    background: var(--surface-1);
+  }
+  .dragging .drop {
+    border-color: var(--accent);
+    background: var(--accent-soft);
   }
   .thumb :global(img) {
     max-width: 240px;
     max-height: 160px;
+    border-radius: var(--radius-control);
   }
   .row {
     display: flex;
-    gap: var(--fc-space-2);
+    gap: var(--space-2);
     align-items: center;
   }
+  .file {
+    display: none;
+  }
   .hint {
-    font-size: 0.85em;
+    font-size: var(--text-xs);
+    color: var(--text-3);
+  }
+  .error {
+    color: var(--danger);
+    font-size: var(--text-sm);
   }
 </style>

@@ -10,6 +10,7 @@
   import CardPreview from './CardPreview.svelte';
   import FieldInput from './FieldInput.svelte';
   import { moduleKnownOn, moduleOn, trackModules } from './modules.svelte';
+  import { Button, Chip, CircleAlert, CircleCheck, Icon, Select, Skeleton } from '$lib/ui';
 
   interface Props {
     deckId: string;
@@ -18,8 +19,10 @@
     noteId?: string | null;
     onsaved?: () => void;
     onopennote?: (id: string) => void;
+    /** v1.1 Create screen: the note type is chosen outside (no type picker here). */
+    fixedType?: string | null;
   }
-  let { deckId, deckName, noteId = null, onsaved, onopennote }: Props = $props();
+  let { deckId, deckName, noteId = null, onsaved, onopennote, fixedType = null }: Props = $props();
 
   const LAST_TYPE = 'fc.cards.last_notetype';
 
@@ -39,7 +42,11 @@
   let error = $state<string | null>(null);
   let status = $state<string | null>(null);
 
+  $effect(() => {
+    if (fixedType) ntId = fixedType;
+  });
   const nt = $derived(notetypes.find((n) => n.id === ntId) ?? null);
+  const typeOptions = $derived(notetypes.map((n) => ({ value: n.id, label: n.name })));
   const engines = $derived(nt ? nt.templates.map((x) => x.card_type) : []);
 
   function lastType(): string {
@@ -183,45 +190,48 @@
 
 <section class="editor">
   <div class="form-col">
-    <h2>{noteId ? t('note_editor.edit_heading') : t('note.add_heading')}</h2>
-    {#if !noteId}<p class="muted">{t('deck.current')}: {deckName}</p>{/if}
+    {#if !fixedType}
+      <header class="head">
+        <h2>{noteId ? t('note_editor.edit_heading') : t('note.add_heading')}</h2>
+        {#if !noteId}<p class="muted">{t('deck.current')}: {deckName}</p>{/if}
+      </header>
+    {/if}
 
     <form onsubmit={submit} novalidate>
-      <label>
-        {t('notetype.type')}
-        <select value={ntId} disabled={!!noteId} onchange={(e) => chooseType(e.currentTarget.value)}>
-          {#each notetypes as n (n.id)}
-            <option value={n.id}>{n.name}</option>
-          {/each}
-        </select>
-      </label>
+      {#if !fixedType}
+        <Select label={t('notetype.type')} options={typeOptions} value={ntId} disabled={!!noteId} onchange={chooseType} />
+      {/if}
 
       {#if nt}
         {#each nt.fields as field (field.key)}
           <FieldInput {field} bind:value={values[field.key]!} {values} {engines} />
         {/each}
+      {:else}
+        <Skeleton lines={3} />
       {/if}
 
       {#if defs.length > 0}
         <fieldset>
           <legend>{t('note.classifications')}</legend>
-          {#each defs as def (def.id)}
-            <AttributeField {def} bind:value={attrs[def.id]!} />
-          {/each}
+          <div class="attrs">
+            {#each defs as def (def.id)}
+              <AttributeField {def} bind:value={attrs[def.id]!} />
+            {/each}
+          </div>
         </fieldset>
       {/if}
 
       <div class="actions">
-        <button type="submit" class="primary" disabled={busy || !nt}>
+        <Button variant="primary" type="submit" loading={busy} disabled={busy || !nt}>
           {noteId ? t('note_editor.save') : t('note.add')}
-        </button>
-        {#if status}<span class="ok" role="status">{status}</span>{/if}
-        {#if error}<span class="error" role="alert">{error}</span>{/if}
+        </Button>
+        {#if status}<span class="ok" role="status"><Icon icon={CircleCheck} size={16} /> {status}</span>{/if}
+        {#if error}<span class="error" role="alert"><Icon icon={CircleAlert} size={16} /> {error}</span>{/if}
       </div>
     </form>
   </div>
 
-  <div class="side-col">
+  <aside class="side-col">
     <CardPreview cards={preview} {onopennote} />
     {#if noteId}
       <CardMetaPanel {noteId} />
@@ -233,53 +243,87 @@
           {:else}
             <ul class="links">
               {#each backlinks as b (b.id)}
-                <li><button class="small" onclick={() => onopennote?.(b.id)}>{b.title}</button></li>
+                <li><Chip size="sm" label={b.title} onclick={() => onopennote?.(b.id)} /></li>
               {/each}
             </ul>
           {/if}
         </section>
       {/if}
     {/if}
-  </div>
+  </aside>
 </section>
 
 <style>
   .editor {
     display: grid;
-    grid-template-columns: minmax(280px, 1fr) minmax(260px, 1fr);
-    gap: var(--fc-space-6);
+    grid-template-columns: minmax(0, 3fr) minmax(240px, 2fr);
+    gap: var(--space-8);
     align-items: start;
+  }
+  .head {
+    margin-bottom: var(--space-4);
+  }
+  h2 {
+    margin: 0;
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
+  }
+  h3 {
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    color: var(--text-2);
+  }
+  .muted {
+    margin: var(--space-1) 0 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
   }
   form,
   .side-col {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-3);
+    gap: var(--space-4);
   }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-1);
+  .side-col {
+    position: sticky;
+    top: var(--space-4);
   }
   fieldset {
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: var(--fc-space-3);
-    padding: var(--fc-space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: var(--space-3) var(--space-4) var(--space-4);
+    margin: 0;
   }
   legend {
-    color: var(--fc-text-muted);
-    padding: 0 var(--fc-space-1);
+    color: var(--text-2);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    padding: 0 var(--space-1);
+  }
+  .attrs {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--space-3);
   }
   .actions {
     display: flex;
-    gap: var(--fc-space-3);
+    gap: var(--space-3);
     align-items: center;
+    flex-wrap: wrap;
+  }
+  .ok,
+  .error {
+    display: inline-flex;
+    gap: var(--space-1);
+    align-items: center;
+    font-size: var(--text-sm);
   }
   .ok {
-    color: var(--fc-success);
+    color: var(--success);
+  }
+  .error {
+    color: var(--danger);
   }
   .links {
     list-style: none;
@@ -287,6 +331,14 @@
     margin: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: var(--fc-space-1);
+    gap: var(--space-1);
+  }
+  @media (max-width: 900px) {
+    .editor {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .side-col {
+      position: static;
+    }
   }
 </style>

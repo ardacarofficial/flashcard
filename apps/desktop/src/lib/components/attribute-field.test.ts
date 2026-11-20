@@ -90,19 +90,20 @@ describe('attribute field logic', () => {
 });
 
 describe('<AttributeField>', () => {
+  // v1.1: built from $lib/ui — a custom Select (combobox + listbox) and toggle chips.
   it('renders ordered_enum as a select with an unset option', async () => {
     render(AttributeField, { def: def('ordered_enum'), value: null });
-    const select = screen.getByLabelText('Attr ordered_enum') as HTMLSelectElement;
-    expect(select.tagName).toBe('SELECT');
-    expect(select.multiple).toBe(false);
-    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Seçilmedi', 'A1', 'B1']);
+    const box = screen.getByRole('combobox', { name: 'Attr ordered_enum' });
+    await fireEvent.click(box);
+    expect(screen.getAllByRole('option').map((o) => o.textContent?.trim())).toEqual(['Seçilmedi', 'A1', 'B1']);
   });
 
-  it('renders multi_enum as a multi-select', () => {
+  it('renders multi_enum as toggle chips', () => {
     render(AttributeField, { def: def('multi_enum'), value: { type: 'choices', value: ['o2'] } });
-    const select = screen.getByLabelText('Attr multi_enum') as HTMLSelectElement;
-    expect(select.multiple).toBe(true);
-    expect(Array.from(select.selectedOptions).map((o) => o.value)).toEqual(['o2']);
+    const group = screen.getByRole('group', { name: 'Attr multi_enum' });
+    expect(group).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'B1' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'A1' }).getAttribute('aria-pressed')).toBe('false');
   });
 
   it.each([
@@ -114,17 +115,19 @@ describe('<AttributeField>', () => {
     expect((screen.getByLabelText(`Attr ${kind}`) as HTMLInputElement).type).toBe(type);
   });
 
-  it('renders bool as a three-state select', () => {
+  it('renders bool as a three-state select', async () => {
     render(AttributeField, { def: def('bool'), value: null });
-    const select = screen.getByLabelText('Attr bool') as HTMLSelectElement;
-    expect(Array.from(select.options).map((o) => o.value)).toEqual(['', 'true', 'false']);
-    expect(select.value).toBe('');
+    const box = screen.getByRole('combobox', { name: 'Attr bool' });
+    expect(box.textContent).toContain('Seçilmedi');
+    await fireEvent.click(box);
+    expect(screen.getAllByRole('option')).toHaveLength(3);
   });
 
   it('marks required fields without native validation', () => {
     render(AttributeField, { def: def('text', { required: true }), value: null });
-    expect((screen.getByLabelText(/Attr text/) as HTMLInputElement).required).toBe(false);
-    expect(screen.getByTitle('Zorunlu')).toBeTruthy();
+    const input = screen.getByLabelText(/Attr text/) as HTMLInputElement;
+    expect(input.required).toBe(false);
+    expect(screen.getByText('Attr text *')).toBeTruthy();
   });
 
   it('reports changes back as typed values', async () => {

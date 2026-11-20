@@ -5,6 +5,7 @@
   import { completeLink, insertAt, linkQueryAt, mediaSnippet, wrapSelection, type Edit } from './content';
   import { uploadMedia } from './media';
   import { moduleOn } from './modules.svelte';
+  import { Button, Chip, Field, ImagePlus } from '$lib/ui';
 
   interface Props {
     value: string;
@@ -94,74 +95,110 @@
   }
 </script>
 
-<div class="md">
-  <label for={id}>{label}</label>
-  <div class="toolbar" role="toolbar" aria-label={t('editor.toolbar')}>
-    <button type="button" class="small" title={t('editor.bold')} onclick={() => wrap('**', '**')}><b>{t('editor.bold_short')}</b></button>
-    <button type="button" class="small" title={t('editor.italic')} onclick={() => wrap('*', '*')}><i>{t('editor.italic_short')}</i></button>
-    <button type="button" class="small" title={t('editor.code')} onclick={() => wrap('`', '`')}>{t('editor.code_short')}</button>
-    <button type="button" class="small" title={t('editor.math')} onclick={() => wrap('$', '$')}>∑</button>
-    {#if moduleOn('links')}
-      <button type="button" class="small" title={t('editor.link')} onclick={() => wrap('[[', ']]')}>[[ ]]</button>
+<Field {label} {id}>
+  {#snippet control(f)}
+    <div class="md" class:dragging>
+      <div class="toolbar" role="toolbar" aria-label={t('editor.toolbar')}>
+        <Button variant="ghost" size="sm" aria-label={t('editor.bold')} title={t('editor.bold')} onclick={() => wrap('**', '**')}><b>{t('editor.bold_short')}</b></Button>
+        <Button variant="ghost" size="sm" aria-label={t('editor.italic')} title={t('editor.italic')} onclick={() => wrap('*', '*')}><i>{t('editor.italic_short')}</i></Button>
+        <Button variant="ghost" size="sm" aria-label={t('editor.code')} title={t('editor.code')} onclick={() => wrap('`', '`')}><code>{t('editor.code_short')}</code></Button>
+        <Button variant="ghost" size="sm" aria-label={t('editor.math')} title={t('editor.math')} onclick={() => wrap('$', '$')}>∑</Button>
+        {#if moduleOn('links')}
+          <Button variant="ghost" size="sm" aria-label={t('editor.link')} title={t('editor.link')} onclick={() => wrap('[[', ']]')}>[[ ]]</Button>
+        {/if}
+        <span class="spacer"></span>
+        <Button variant="ghost" size="sm" icon={ImagePlus} loading={busy} aria-label={t('editor.media')} title={t('editor.media')} onclick={() => fileInput?.click()}>{t('editor.media_short')}</Button>
+        <input
+          bind:this={fileInput}
+          type="file"
+          accept="image/*,audio/*,video/*"
+          multiple
+          hidden
+          onchange={(e) => void addFiles([...(e.currentTarget.files ?? [])])}
+        />
+      </div>
+      <textarea
+        id={f.id}
+        aria-describedby={f.describedBy}
+        {rows}
+        bind:this={area}
+        bind:value
+        {onpaste}
+        {ondrop}
+        oninput={() => void oninput()}
+        ondragover={(e) => {
+          e.preventDefault();
+          dragging = true;
+        }}
+        ondragleave={() => (dragging = false)}
+        placeholder={t('editor.placeholder')}
+      ></textarea>
+    </div>
+    {#if suggestions.length > 0}
+      <ul class="suggest" role="listbox" aria-label={t('editor.link_suggestions')}>
+        {#each suggestions as s (s.id)}
+          <li role="option" aria-selected="false">
+            <Chip size="sm" label={s.title} onclick={() => pick(s)} />
+          </li>
+        {/each}
+      </ul>
     {/if}
-    <button type="button" class="small" title={t('editor.media')} disabled={busy} onclick={() => fileInput?.click()}>＋</button>
-    <input
-      bind:this={fileInput}
-      type="file"
-      accept="image/*,audio/*,video/*"
-      multiple
-      hidden
-      onchange={(e) => void addFiles([...(e.currentTarget.files ?? [])])}
-    />
-  </div>
-  <textarea
-    {id}
-    {rows}
-    bind:this={area}
-    bind:value
-    class:dragging
-    {onpaste}
-    {ondrop}
-    oninput={() => void oninput()}
-    ondragover={(e) => {
-      e.preventDefault();
-      dragging = true;
-    }}
-    ondragleave={() => (dragging = false)}
-    placeholder={t('editor.placeholder')}
-  ></textarea>
-  {#if suggestions.length > 0}
-    <ul class="suggest" role="listbox" aria-label={t('editor.link_suggestions')}>
-      {#each suggestions as s (s.id)}
-        <li role="option" aria-selected="false">
-          <button type="button" class="small" onclick={() => pick(s)}>{s.title}</button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-  {#if busy}<span class="muted">{t('editor.uploading')}</span>{/if}
-  {#if error}<span class="error" role="alert">{error}</span>{/if}
-</div>
+    {#if error}<span class="error" role="alert">{error}</span>{/if}
+  {/snippet}
+</Field>
 
 <style>
   .md {
-    display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    background: var(--surface-1);
+    transition: border-color var(--motion-fast) var(--ease);
+  }
+  .md:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .md.dragging {
+    border-style: dashed;
+    border-color: var(--accent);
   }
   .toolbar {
     display: flex;
-    gap: var(--fc-space-1);
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1);
+    border-bottom: 1px solid var(--border);
   }
-  textarea.dragging {
-    outline: 2px dashed var(--fc-accent);
+  .spacer {
+    flex: 1;
+  }
+  textarea {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
+    background: transparent;
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-md);
+    line-height: var(--leading);
+    padding: var(--space-3);
+    resize: vertical;
+    outline: none;
+  }
+  textarea::placeholder {
+    color: var(--text-3);
   }
   .suggest {
     list-style: none;
-    margin: 0;
+    margin: var(--space-2) 0 0;
     padding: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: var(--fc-space-1);
+    gap: var(--space-1);
+  }
+  .error {
+    color: var(--danger);
+    font-size: var(--text-sm);
   }
 </style>
