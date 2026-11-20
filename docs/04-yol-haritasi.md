@@ -180,7 +180,9 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [ ] Token'sız istek reddedilir; sadece localhost dinlenir.
 - [ ] Tarayıcı eklentisinden eklenen kelime gelen kutusuna düşer.
 - [ ] `flashcard://` linkleri uygulama kapalıyken de açar (tek örnek).
-- [ ] Otomasyon kuralı döngüye girmez (derinlik sınırı testi).
+- [x] Otomasyon kuralı döngüye girmez (derinlik sınırı testi).
+
+> **Doğrulama (otomasyon, iz J, `feat/v0.9-auto`):** `fc-app` `modules/automation/tests.rs` × 3 depo — `automation_rule_does_not_loop` (kendi eylemiyle kendini tetikleyen kural bir kez çalışır, ikincisi `skipped_cycle`; farklı kurallardan zincir `automation.max_depth`'te `skipped_depth` ile durur; birbirini sonsuza dek tetikleyen iki kural en derin sınırda bile döngü tespitiyle biter; `automation.max_runs_per_event` bir değişikliğin başlattığı çalışmaları sınırlar), `classified_note_rule_is_its_own_undo_step` (`seviye:A1` → desteye taşı + etiket; kural çalışması aktör `automation:<id>` ile **ayrı tek geri al adımı**, geri al/yinele birebir ve kural tetiklemez), `flag_and_answer_triggers` (kırmızı bayrak → `#düzelt` + Seviye ata; "Tekrar" cevabı → askıya al + `#leech`), `preview_is_a_dry_run` (hiçbir şey yazılmaz, olay/geçmiş/kayıt yok), `module_switch_stops_rules`, `finished_import_triggers_rules`, `scheduled_rules_run_when_due`, `manual_runs_and_failures_are_logged`, `actions_are_undo_safe_and_all_the_automation_actor_reaches` (her eylem public + geri alınabilir + replay edilebilir; otomasyon aktörü başka hiçbir public metoda ulaşamaz), `plugins_and_mcp_cannot_manage_rules`; `fc-core` `automation::tests` (döngü koruması), `fc-storage` `tests/automation.rs` (`0850` migration), masaüstü `automation.test.ts`. Ayrıntı: docs/10 §26.
 
 ## 🗣️ v0.10 · Öğrenme modları
 

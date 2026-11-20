@@ -4,6 +4,13 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased] — Faz 3 entegrasyonu (v0.6–v0.8 birleşik, `feat/phase3-integration`)
 
+### v0.9 Otomasyon kuralları (iz J, `feat/v0.9-auto`)
+- **"Ne zaman + eğer + yap" kuralları** (`automation` modülü): tetikleyiciler — not eklendi/düzenlendi, kart cevaplandı (puana göre), bayraklandı (renge göre), sınıflandırma değişti, içe aktarma bitti, zamanlanmış (15 dk–30 gün); koşul sorgu dilinde (sınıflandırmalar dahil, ör. `seviye:A1 lapses>=5`; seçenek adı değişse de çalışır); eylemler izinli, geri alınabilir komutlar: etiket ekle/kaldır, askıya al, göm, bayrak, desteye taşı, **sınıflandırma ata**, ilerlemeyi sıfırla.
+- **Her kural çalışması tek geri al adımı** (aktör `automation:<kural>`); geri al/yinele kural tetiklemez. Otomasyon aktörü yalnız bu eylemlere ulaşır (gerçek `permits()`), eklentiler ve MCP kural yönetemez.
+- **Döngü güvenliği:** döngü tespiti (kural kendini, doğrudan ya da başka kurallar üzerinden tetikleyemez), derinlik sınırı (`automation.max_depth`, 3) ve değişiklik başına bütçe (`automation.max_runs_per_event`, 20). Her çalışma kaydedilir (uygulandı / eşleşme yok / atlandı / başarısız).
+- **Önizleme (kuru çalışma):** kaydetmeden hangi kartların değişeceği; eylemler geri sarılan bir işlemde gerçekten çalıştırılır, hiçbir şey yazılmaz.
+- **Masaüstü:** Otomasyon ekranı (kural listesi, sıralama, aç/kapa, şimdi çalıştır, düzenleyici, önizleme, son çalışmalar), TR/EN; zamanlanmış kurallar için dakikalık zamanlayıcı. Migration `0850_automation`. docs/10 §26.
+
 ### Faz 3 entegrasyonu — tur 4 (+ v0.7 eklentiler)
 - v0.7 eklentiler v0.6 istatistik, v0.8 AI/MCP ve Faz 2 kurallarıyla birleşti. Workspace sürümü **0.8.0**.
 - **İzinler tek yerde, her aktör için doğru** (`Registry::permits`): kullanıcı/CLI/sistem her şey; MCP seçili izinler; eklenti yalnız verilenler; **otomasyon ve yerel API hiçbir şey** (v0.9'a kadar varsayılan ret; önceden neredeyse her şey). Eklentiler MCP sunucularına, AI anahtarlarına ve AI yazmalarına, `io`'ya, geçmişe (`oplog`), istatistik önbelleğine (`stats:write` verilemez) ve optimizer'a ulaşamaz — kayıtlı izin olsa da, hangi yoldan gelirse gelsin.
