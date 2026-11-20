@@ -153,10 +153,10 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** [06 §1-2](06-ai-ve-entegrasyonlar.md): sağlayıcılar, anahtar zinciri, kullanım takibi, AI özellikleri, MCP istemcisi ve sunucusu.
 
 **Kabul kriterleri**
-- [ ] Sağlayıcılar sahte (mock) sunucuya karşı test edilir; gerçek API testleri isteğe bağlı.
-- [ ] API anahtarı veritabanında veya logda asla görünmez (test).
-- [ ] AI'a gönderilecek içerik kullanıcıya önizlenir.
-- [ ] Claude Desktop/Claude Code, MCP sunucusu üzerinden deste listeleyip kart ekleyebilir.
+- [x] Sağlayıcılar sahte (mock) sunucuya karşı test edilir; gerçek API testleri isteğe bağlı. *(`fc_ai::mock`: Claude/OpenAI/uyumlu/Ollama tel biçimi ve hatalar `fc-ai/src/tests.rs`; uçtan uca `fc-app/src/modules/ai/tests.rs::generate_cards_end_to_end_is_level_aware`; gerçek API: `FC_AI_LIVE_*`)*
+- [x] API anahtarı veritabanında veya logda asla görünmez (test). *(`api_key_never_reaches_db_oplog_errors_events_or_jobs`: veritabanı dosyası + WAL, döküm, oplog, olaylar, işler, hatalar; `fc-ai`: `http_errors_map_to_kinds_and_never_carry_the_key`, `Secret` Debug'ı. Uygulamada log altyapısı yok; anahtar hiçbir `Debug`/hata metnine girmez)*
+- [x] AI'a gönderilecek içerik kullanıcıya önizlenir. *(`ai.preview` → `ai.run` önizleme özetiyle; `nothing_is_sent_that_was_not_previewed`; arayüz `ai.test.ts`)*
+- [ ] Claude Desktop/Claude Code, MCP sunucusu üzerinden deste listeleyip kart ekleyebilir. *(iz H)*
 
 ## 🌉 v0.9 · Dış dünya ile bağlantı
 
