@@ -1,0 +1,16 @@
+// App maintenance and updates (v1.0, track O).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// A draft key is empty, too long or has characters other than `a-z 0-9 . _ : -`.
+ValidationDraftKey => Validation, "errors.validation.draft_key";
+/// A draft payload is larger than the limit (`details.max_bytes`).
+ValidationDraftTooLarge => Validation, "errors.validation.draft_too_large";
+/// There is no update to install (check first).
+ConflictUpdateNotAvailable => Conflict, "errors.conflict.update_not_available";
+/// The update is not downloaded yet (or the download failed): nothing to apply.
+ConflictUpdateNotReady => Conflict, "errors.conflict.update_not_ready";
+/// This build cannot update itself (development build, CLI, or no updater installed).
+ProviderUpdateUnsupported => Provider, "errors.provider.update_unsupported";
+/// The update server could not be reached or answered with an error. Retryable.
+ProviderUpdateNetwork => Provider, "errors.provider.update_network";
+/// The downloaded update's signature does not match the app's update key: it was refused.
+ProviderUpdateSignature => Provider, "errors.provider.update_signature";

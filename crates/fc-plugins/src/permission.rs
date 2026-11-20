@@ -53,6 +53,9 @@ pub const FORBIDDEN_API_AREAS: &[&str] = &[
     // that authority.
     "automation",
     "local_api",
+    // v1.0: logs, crash reports, free export paths; installing updates.
+    "maintenance",
+    "updates",
 ];
 
 /// Single API permissions a plugin may never be granted (reading these areas is fine):

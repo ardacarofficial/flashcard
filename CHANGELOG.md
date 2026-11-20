@@ -9,6 +9,14 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 - **Gerçek Anki doğrulaması:** resmî `anki` 26.09.4 ile üretilmiş küçük paketler (yeni/eski düzen `.apkg`, `.colpkg`, zamanlamasız) test fikstürü; bizim `.apkg`/`.colpkg`'miz gerçek Anki'de açılıp karşılaştırılır (CI). Düzeltmeler: Anki 2.1.50+ WAL paketleri ve `unicase` harmanlaması okunur; resim maskesi Anki'nin kendi not türüyle dışa aktarılır; "Default" destesi çoğalmaz; aralık ve `lrt` doğru yazılır; resim/ses alanı medyası pakete girer.
 - **Kullanıcı rehberi** (TR/EN): `docs/guide/`.
 
+### v1.0 Windows sürümü — iz O (`feat/v1.0-release`: kurulum, imzalı güncelleme, çökme kurtarma, loglar)
+- **Kurulum:** NSIS (kullanıcı başına, yönetici izni yok, TR/EN) + isteğe bağlı MSI; WebView2 önyükleyici; sürüm workspace'ten. Kod imzası yok (K8, SmartScreen notu docs/07 §8).
+- **İmzalı otomatik güncelleme:** `tauri-plugin-updater`, Ed25519 açık anahtarı `tauri.conf.json`'da (özel anahtar repoda değil, GitHub sırrı). Yeni `updates` modülü: `updates.status/check/install/apply`; denetim yalnız istenince (`updates.check_on_start` varsayılan kapalı), indirme iptal edilebilir iş, imzası tutmayan indirme reddedilir, kurulumdan önce çalıştırma temiz kapanır.
+- **Çökme kurtarma:** çalıştırma işareti (`run.json`), panik kancası yerel çökme raporu yazar (gönderim yok, maskeli); düzgün kapanmayan çalıştırmadan sonra açılışta SQLite hızlı bütünlük denetimi ve kurtarma penceresi (açık oturuma devam, form taslakları, rapor). Yeni `maintenance.*` metotları ve form taslakları (migration `1050_maintenance`, not ekleme formu kendiliğinden kaydeder).
+- **Loglar:** `logs/flashcard.log`, boyutla döner (ayarlanabilir), her satır yazılmadan maskelenir; "Günlükleri dışa aktar" zip'i uygulamanın tuttuğu tam anahtarlarla bir kez daha maskeler. Yeni ekran *Günlükler ve güncellemeler*.
+- **CI/yayın:** `windows-smoke` (sessiz NSIS kurulumu + `Flashcard.exe --smoke`), `release.yml` (etiket `v*` → taslak Release, imzalı `latest.json`). Elle test betiği docs/07 §8.5.
+- Eklentiler `maintenance`/`updates` alanlarına erişemez; MCP, otomasyon ve yerel API de erişemez (testli).
+
 ## [0.10.0] — Faz 4 (v0.9 + v0.10 birleşik, `feat/phase4-integration`)
 
 ### Faz 4 entegrasyonu — tur 2, son (+ v0.9 otomasyon, yerel API/gelen kutusu, tarayıcı eklentisi)

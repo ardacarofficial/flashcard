@@ -96,7 +96,7 @@ Bağımlılık sürümleri `Cargo.lock` ve `pnpm-lock.yaml` ile sabitlenir.
 - İsteğe bağlı: `sccache`, `ffmpeg` (v0.10 altyazı/video), `cargo-nextest`.
 
 ### 6.2 Windows
-- Windows derlemesi ve kurulum dosyası GitHub Actions'ta (`windows-latest`) üretilir.
+- Windows derlemesi ve kurulum dosyası GitHub Actions'ta (`windows-2025`) üretilir.
 - Gerçek kullanım testleri proje sahibi tarafından Windows'ta yapılır.
 
 ### 6.3 VDS (ör. Hetzner CPX42: 8 vCPU, 16 GB RAM, 320 GB disk)
@@ -114,3 +114,72 @@ Bir görev şu durumda bitmiştir:
 4. Migration eklendiyse migration testi var.
 5. İlgili doküman güncellendi.
 6. Commit edildi ve push'landı.
+
+## 8. Windows sürümü: kurulum, imzalı güncelleme, yayın (v1.0, iz O)
+
+### 8.1 Kurulum dosyaları
+- `apps/desktop/src-tauri/tauri.conf.json` → `bundle.targets = ["nsis", "msi"]`. Sürüm `tauri.conf.json`'da yazmaz: workspace `Cargo.toml` sürümünden gelir (kurulum = uygulama = `maintenance.status.version`).
+- **NSIS (önerilen):** `installMode: currentUser` → yönetici izni istemez, `%LOCALAPPDATA%\Flashcard\` altına kurar; TR/EN kurulum dili. WebView2 yoksa **önyükleyici** sessizce indirir (`webviewInstallMode: downloadBootstrapper`).
+- **MSI (isteğe bağlı):** WiX, makine başına (yönetici ister) — kurumsal dağıtım için. Kullanıcıya önerilen NSIS'tir.
+- **Kod imzalama yok (docs/08 K8):** ilk açılışta SmartScreen "Windows kişisel bilgisayarınızı korudu" der → **Ek bilgi → Yine de çalıştır**. Bu beklenen davranıştır; güncellemelerin bütünlüğü ayrıca Ed25519 güncelleme imzasıyla korunur (aşağıda).
+
+### 8.2 İmzalı otomatik güncelleme
+- `tauri-plugin-updater`; manifest GitHub Release varlığı `latest.json` (`https://github.com/ardacarofficial/flashcard/releases/latest/download/latest.json`). Uygulama manifest'teki imzayı `tauri.conf.json → plugins.updater.pubkey` içindeki **açık anahtarla** doğrular; eşleşmeyen indirme reddedilir (`PROVIDER_UPDATE_SIGNATURE`). Akış backend'dedir (`updates.check → updates.install (iş) → updates.apply`), hiçbir şey kullanıcı tıklamadan kurulmaz; açılışta denetim varsayılan **kapalı** (`updates.check_on_start`).
+- **Anahtar çifti** repo dışında üretildi; repoda yalnız açık anahtar var. Özel anahtar **asla** commit edilmez. Yeni bir çift gerekirse: `pnpm -C apps/desktop tauri signer generate -w ~/.flashcard-keys/updater.key` (parola sorar) → `.pub` içeriğini `pubkey`'e yaz. *Anahtar değişirse eski sürümler yeni güncellemeleri kabul etmez* (bir kez elle kurulum gerekir).
+- **GitHub Actions sırları** (repo → Settings → Secrets and variables → Actions → *New repository secret*):
+  1. `TAURI_SIGNING_PRIVATE_KEY` = özel anahtar dosyasının **içeriği** (ör. `cat ~/.flashcard-keys/updater.key` çıktısını kopyala; dosya yolu değil).
+  2. `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = anahtarın parolası (bu makinede üretilen çift için `~/.flashcard-keys/updater.key.password`).
+  Sonra anahtar dosyalarını güvenli bir yere (parola yöneticisi) yedekle ve sunucudan sil. Sır yoksa yayın akışı yine kurulum dosyası üretir ama `latest.json` ve `.sig` olmadan (uyarı verir).
+
+### 8.3 Yayın akışı (`.github/workflows/release.yml`)
+1. `Cargo.toml` workspace sürümünü yükselt (ör. `1.0.0`), CHANGELOG'u güncelle, commit.
+2. `git tag v1.0.0 && git push origin v1.0.0` (etiket sürümle eşleşmezse akış durur).
+3. `windows-2025` NSIS + MSI derler, sır varsa güncelleme dosyalarını imzalar ve `latest.json` üretir, **taslak** (draft) bir Release oluşturur.
+4. Taslağı incele (dosya adları, notlar) → **Publish**. Güncelleyici yalnız yayımlanmış en son sürümü görür.
+
+### 8.4 CI duman testi (`ci.yml → windows-smoke`)
+NSIS kurulumunu release modda derler, `/S` ile **sessiz, kullanıcı başına** kurar, kurulu `Flashcard.exe --smoke --smoke-report=<dosya>` çalıştırır: geçici bir klasörde (kullanıcının koleksiyonu asla) koleksiyon oluştur + migrate, deste/not, çalış + geri al/yinele, bütünlük denetimi, taslak, içinde sahte API anahtarı olan bir log satırı → log dışa aktar → anahtarın pakette **olmadığını** doğrula. Çıkış kodu 0 değilse iş kırmızı. Sonra sessiz kaldırma.
+
+### 8.5 Elle Windows test betiği (proje sahibi; temiz bir Windows 10/11)
+Ön koşul: temiz bir Windows kullanıcısı (ya da VM / Windows Sandbox), internet. Yayımlanmış iki sürüm gerekir: **A** (ör. `v1.0.0`) ve ondan yeni **B** (ör. `v1.0.1`). Her adımda beklenen sonuç ✅ ile; tutmayan adımı not al, `Bakım → Günlükler ve güncellemeler → Günlükleri dışa aktar` paketini hataya ekle.
+
+**1. Temiz kurulum**
+1. Release A'dan `Flashcard_<A>_x64-setup.exe` indir, çift tıkla. ✅ SmartScreen uyarısı → *Ek bilgi → Yine de çalıştır* ile geçilir; **UAC (yönetici) sorulmaz**.
+2. Kurulum dilini seç, bitir. ✅ `%LOCALAPPDATA%\Flashcard\Flashcard.exe` var; Başlat menüsünde "Flashcard"; *Ayarlar → Uygulamalar*'da sürüm A görünür.
+3. (WebView2'siz makinede) ✅ önyükleyici sessizce WebView2'yi kurar, kurulum takılmaz.
+
+**2. İlk açılış**
+4. Flashcard'ı Başlat menüsünden aç. ✅ 2 sn içinde pencere; hata kutusu yok; dil sistem diline uygun (TR/EN).
+5. `%APPDATA%\app.flashcard.desktop\` aç. ✅ `collection.db`, `run.json` (uygulama açıkken), `logs\flashcard.log` var; log ilk satırında sürüm A ve `windows x86_64`.
+6. Menü → *Günlükler ve güncellemeler*. ✅ "Sürüm A", "Son çalıştırma düzgün kapandı" yazmaz/ilk açılış, çökme raporu yok, veritabanı denetimi "Sorun bulunmadı".
+
+**3. Çalışma**
+7. Bir deste oluştur, 3 not ekle (biri Türkçe karakterli: `kılıç → sword`). ✅ Kartlar listede.
+8. *Çalış* → 2 kartı cevapla, Ctrl+Z ile birini geri al. ✅ Kart geri gelir, sayaç doğru.
+9. *Ekle* ekranında bir alana "yarım" yaz, **kaydetmeden** 2 sn bekle.
+10. Görev Yöneticisi → Flashcard → **Görevi sonlandır** (çökme benzetimi).
+11. Yeniden aç. ✅ "Flashcard düzgün kapanmadı" penceresi: "Veritabanı denetlendi: sorun yok", "Bitmemiş bir çalışma oturumu", "Kaydedilmemiş 1 form". *Çalışmaya devam et* → kaldığın kart. *Ekle* ekranında "yarım" geri gelir.
+12. Uygulamayı normal kapat (X), yeniden aç. ✅ Kurtarma penceresi **çıkmaz**; `run.json` kapalıyken yoktur.
+
+**4. Günlük dışa aktarma**
+13. *Ayarlar → AI*'da bir sağlayıcıya sahte anahtar `sk-ant-api03-TESTTESTTESTTESTTESTTEST` gir (bağlantı başarısız olabilir, önemli değil).
+14. *Günlükler ve güncellemeler → Günlükleri dışa aktar…* → Masaüstüne kaydet. ✅ "… gizli bilgi çıkarıldı" mesajı; zip'i aç: `system.txt`, `logs\flashcard.log` var; Not Defteri'nde **`sk-ant` geçmez**, kullanıcı adın yerine `<user>` yazar.
+
+**5. Güncelleme (A → B)**
+15. *Günlükler ve güncellemeler → Güncellemeleri denetle*. ✅ "B sürümü çıktı" + sürüm notları.
+16. *İndir*. ✅ "İndiriliyor ve doğrulanıyor…" → "İndirildi ve doğrulandı"; iptal edilirse yeniden indirilebilir.
+17. *Kur ve yeniden başlat*. ✅ Uygulama kapanır, kurulum ilerleme penceresi (pasif, soru sormaz), uygulama B sürümüyle **kendiliğinden** açılır; UAC sorulmaz.
+18. ✅ Destelerin, notların, çalışma geçmişin, sınıflandırmaların aynen duruyor; **kurtarma penceresi çıkmaz** (güncelleme temiz kapanış sayılır); ekranda "Sürüm B".
+19. (İsteğe bağlı, imza testi) Release B'nin `.sig` dosyası bozulmuş bir kopyasıyla yerel bir `latest.json` sunulursa ✅ "İndirilen güncelleme bu uygulamanın anahtarıyla imzalı değil" hatası, hiçbir şey kurulmaz.
+
+**6. `flashcard://` soğuk başlatma**
+20. Uygulamayı **tamamen kapat** (tepside de yok; Görev Yöneticisi'nde Flashcard yok).
+21. `Win+R` → `flashcard://study?query=deck:Test` → Enter (7. adımdaki destenin adı `Test` varsayıldı). ✅ Uygulama açılır ve **Göz at ekranını açar; sorgu ekrana aktarılmaz** (kod: `shell.ts` `linkTarget`, docs/10 bilinen sınırlar) (soğuk başlatmada bağlantı kaybolmaz: pencere açılmadan gelen bağlantı kuyrukta bekler). Kurtarma penceresi çıkmaz.
+22. Uygulama açıkken `Win+R` → `flashcard://add?front=merhaba&back=hello` → ✅ ikinci pencere açılmaz, mevcut pencere öne gelir, öneri *Gelen kutusu*na düşer ("Gelen kutusuna önerildi").
+23. Uygulamayı yine tamamen kapat; tarayıcı adres çubuğuna `flashcard://add?front=soğuk&back=cold` yaz → ✅ "Flashcard'ı aç?" sorusu, kabul edince uygulama açılır, öneri *Gelen kutusu*na düşer, tek pencere vardır.
+
+**7. Kaldırma**
+24. *Ayarlar → Uygulamalar → Flashcard → Kaldır*. ✅ Yönetici sorulmaz, `%LOCALAPPDATA%\Flashcard` silinir. NSIS kaldırıcısındaki **"Uygulama verilerini sil"** kutusu: **işaretsizse** (varsayılan) veri klasörü `%APPDATA%\app.flashcard.desktop` kalır (yeniden kurulumda koleksiyon geri gelir); **işaretliyse** bu klasör (koleksiyon, ayarlar, loglar) kalıcı olarak silinir — geri alınamaz. Windows'un *Ayarlar → Uygulamalar* kaldırması kaldırıcıyı etkileşimli açtığı için kutu görünür; sessiz `/S` kaldırmada veri kalır.
+
+**8. MSI (isteğe bağlı)**
+25. Temiz makinede `Flashcard_<A>_x64_en-US.msi` → ✅ yönetici ister, `C:\Program Files\Flashcard\` altına kurar, 4–8. adımlar aynı geçer.

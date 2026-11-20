@@ -25,6 +25,10 @@ uuid.workspace = true
 base64.workspace = true
 # Unpredictable temporary folders for ffmpeg output (reading clips); also the test SQLite.
 tempfile.workspace = true
+# v1.0 maintenance: the `log` facade (the desktop app's file log is its backend) and the
+# exported log bundle.
+log = { version = "0.4", features = ["std"] }
+zip.workspace = true
 
 [dev-dependencies]
 # Integration tests use `fc_app::testing`.
@@ -32,6 +36,8 @@ fc-app = { path = ".", features = ["testing"] }
 fc-plugins = { workspace = true, features = ["testing"] }
 fc-interop = { workspace = true, features = ["fixtures"] }
 fc-ai = { workspace = true, features = ["mock"] }
+# Verifies a tampered signature against the real update key (same crate the updater uses).
+minisign-verify = "0.3"
 
 [features]
 ## In-memory store, a temp-file SQLite store and the storage-agnostic service test suite

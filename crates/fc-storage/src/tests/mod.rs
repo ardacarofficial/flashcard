@@ -11,6 +11,7 @@ mod content;
 mod decks;
 mod inbox;
 mod interop;
+mod maintenance;
 mod mcp;
 mod migrations;
 mod misc;

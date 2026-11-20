@@ -59,6 +59,8 @@ import type { ChangeNoteType } from "./ChangeNoteType";
 import type { ChangeNoteTypeResult } from "./ChangeNoteTypeResult";
 import type { CheckAnswer } from "./CheckAnswer";
 import type { CheckClipboard } from "./CheckClipboard";
+import type { CheckIntegrity } from "./CheckIntegrity";
+import type { ClearedCount } from "./ClearedCount";
 import type { ClipboardVerdict } from "./ClipboardVerdict";
 import type { ClonePreset } from "./ClonePreset";
 import type { ClosePluginUi } from "./ClosePluginUi";
@@ -88,6 +90,10 @@ import type { DeepLinkOutcome } from "./DeepLinkOutcome";
 import type { DefineAttribute } from "./DefineAttribute";
 import type { DefineAttributeFromTemplate } from "./DefineAttributeFromTemplate";
 import type { DeleteAttributeOption } from "./DeleteAttributeOption";
+import type { DraftDto } from "./DraftDto";
+import type { DraftList } from "./DraftList";
+import type { DraftRef } from "./DraftRef";
+import type { DraftResult } from "./DraftResult";
 import type { DuplicateList } from "./DuplicateList";
 import type { EffectiveAttributeList } from "./EffectiveAttributeList";
 import type { EffectiveAttributes } from "./EffectiveAttributes";
@@ -98,6 +104,7 @@ import type { ExamList } from "./ExamList";
 import type { ExamRef } from "./ExamRef";
 import type { ExecuteBatch } from "./ExecuteBatch";
 import type { ExpireCard } from "./ExpireCard";
+import type { ExportLogs } from "./ExportLogs";
 import type { ExtractAiSource } from "./ExtractAiSource";
 import type { ExtractClip } from "./ExtractClip";
 import type { FindReplace } from "./FindReplace";
@@ -124,6 +131,7 @@ import type { InlinePreviewRequest } from "./InlinePreviewRequest";
 import type { InspectBackup } from "./InspectBackup";
 import type { InspectPackage } from "./InspectPackage";
 import type { InstallPlugin } from "./InstallPlugin";
+import type { IntegrityDto } from "./IntegrityDto";
 import type { JobDto } from "./JobDto";
 import type { JobList } from "./JobList";
 import type { JobRef } from "./JobRef";
@@ -145,7 +153,9 @@ import type { ListRuns } from "./ListRuns";
 import type { ListTrash } from "./ListTrash";
 import type { ListVoices } from "./ListVoices";
 import type { LocalApiMethodList } from "./LocalApiMethodList";
+import type { LogExportDto } from "./LogExportDto";
 import type { LookupWord } from "./LookupWord";
+import type { MaintenanceStatus } from "./MaintenanceStatus";
 import type { MakeReadingCard } from "./MakeReadingCard";
 import type { MarkWords } from "./MarkWords";
 import type { McpServerDto } from "./McpServerDto";
@@ -209,6 +219,7 @@ import type { ReadingItemDto } from "./ReadingItemDto";
 import type { ReadingItemList } from "./ReadingItemList";
 import type { ReadingItemRef } from "./ReadingItemRef";
 import type { ReadingSessionDone } from "./ReadingSessionDone";
+import type { RecoveryDto } from "./RecoveryDto";
 import type { RefreshStatsCache } from "./RefreshStatsCache";
 import type { RenameAttributeOption } from "./RenameAttributeOption";
 import type { RenameDeck } from "./RenameDeck";
@@ -230,6 +241,7 @@ import type { RunList } from "./RunList";
 import type { RunOptimizer } from "./RunOptimizer";
 import type { RunPluginCommand } from "./RunPluginCommand";
 import type { RunResult } from "./RunResult";
+import type { SaveDraft } from "./SaveDraft";
 import type { SavedQueryDto } from "./SavedQueryDto";
 import type { SavedQueryList } from "./SavedQueryList";
 import type { SavedQueryRef } from "./SavedQueryRef";
@@ -301,6 +313,7 @@ import type { UpdatePreset } from "./UpdatePreset";
 import type { UpdateReadingItem } from "./UpdateReadingItem";
 import type { UpdateRule } from "./UpdateRule";
 import type { UpdateSavedQuery } from "./UpdateSavedQuery";
+import type { UpdateStatus } from "./UpdateStatus";
 import type { VoiceList } from "./VoiceList";
 import type { WordInfo } from "./WordInfo";
 import type { WordMarksChanged } from "./WordMarksChanged";
@@ -544,6 +557,20 @@ export interface Methods {
   "local_api.clients.revoke": { kind: "command"; request: ApiClientRef; response: ApiClientDto };
   "local_api.clients.remove": { kind: "command"; request: ApiClientRef; response: ApiClientDto };
   "local_api.methods": { kind: "query"; request: Empty; response: LocalApiMethodList };
+  "maintenance.status": { kind: "query"; request: Empty; response: MaintenanceStatus };
+  "maintenance.recovery.get": { kind: "query"; request: Empty; response: RecoveryDto };
+  "maintenance.recovery.dismiss": { kind: "command"; request: Empty; response: RecoveryDto };
+  "maintenance.integrity.check": { kind: "query"; request: CheckIntegrity; response: IntegrityDto };
+  "maintenance.logs.export": { kind: "command"; request: ExportLogs; response: LogExportDto };
+  "maintenance.crash_reports.clear": { kind: "command"; request: Empty; response: ClearedCount };
+  "maintenance.drafts.save": { kind: "command"; request: SaveDraft; response: DraftDto };
+  "maintenance.drafts.get": { kind: "query"; request: DraftRef; response: DraftResult };
+  "maintenance.drafts.list": { kind: "query"; request: Empty; response: DraftList };
+  "maintenance.drafts.discard": { kind: "command"; request: DraftRef; response: DraftResult };
+  "updates.status": { kind: "query"; request: Empty; response: UpdateStatus };
+  "updates.check": { kind: "query"; request: Empty; response: UpdateStatus };
+  "updates.install": { kind: "command"; request: Empty; response: JobDto };
+  "updates.apply": { kind: "command"; request: Empty; response: UpdateStatus };
 }
 
 /** Unqualified method name. */
@@ -791,4 +818,18 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "local_api.clients.revoke": "command",
   "local_api.clients.remove": "command",
   "local_api.methods": "query",
+  "maintenance.status": "query",
+  "maintenance.recovery.get": "query",
+  "maintenance.recovery.dismiss": "command",
+  "maintenance.integrity.check": "query",
+  "maintenance.logs.export": "command",
+  "maintenance.crash_reports.clear": "command",
+  "maintenance.drafts.save": "command",
+  "maintenance.drafts.get": "query",
+  "maintenance.drafts.list": "query",
+  "maintenance.drafts.discard": "command",
+  "updates.status": "query",
+  "updates.check": "query",
+  "updates.install": "command",
+  "updates.apply": "command",
 };

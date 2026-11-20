@@ -36,6 +36,10 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
 fc-http = { path = "../../../crates/fc-http" }
+# v1.0: signed updates (Ed25519/minisign, public key in tauri.conf.json) and the `log`
+# facade whose backend is fc-app's rotating, redacting file log.
+tauri-plugin-updater = "2"
+log = "0.4"
 
 # Content the OS marks as private (password managers) is skipped by the clipboard watcher.
 [target.'cfg(windows)'.dependencies]
