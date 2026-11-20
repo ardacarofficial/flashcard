@@ -15,18 +15,20 @@
     /** Element for a static card. */
     as?: 'div' | 'section' | 'article' | 'li';
     children: Snippet;
+    /** `data-testid` (visual-QA state hooks, docs/11 §5). */
+    testid?: string;
     class?: string;
   }
 
-  let { padding = 'md', elevated = false, onclick, label, as = 'div', children, class: klass = '' }: Props = $props();
+  let { padding = 'md', elevated = false, onclick, label, as = 'div', children, testid, class: klass = '' }: Props = $props();
 </script>
 
 {#if onclick}
-  <button type="button" class="fc-card pad-{padding} interactive {klass}" class:elevated aria-label={label} {onclick}>
+  <button type="button" class="fc-card pad-{padding} interactive {klass}" class:elevated aria-label={label} data-testid={testid} {onclick}>
     {@render children()}
   </button>
 {:else}
-  <svelte:element this={as} class="fc-card pad-{padding} {klass}" class:elevated>
+  <svelte:element this={as} class="fc-card pad-{padding} {klass}" class:elevated data-testid={testid}>
     {@render children()}
   </svelte:element>
 {/if}
