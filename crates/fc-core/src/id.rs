@@ -189,6 +189,10 @@ define_id!(
     /// Configured AI provider id (v0.8).
     AiProviderId
 );
+define_id!(
+    /// Automation rule id (v0.9).
+    AutomationRuleId
+);
 
 #[cfg(test)]
 mod tests {

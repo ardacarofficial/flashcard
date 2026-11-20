@@ -175,4 +175,4 @@ notice: PluginNotice, } } | { "type": "study_cards_changed", "data": {
 /**
  * Cards.
  */
-card_ids: Array<CardId>, } };
+card_ids: Array<CardId>, } } | { "type": "automation_changed" };

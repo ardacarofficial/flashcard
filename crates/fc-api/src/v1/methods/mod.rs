@@ -94,4 +94,5 @@ domains! {
     ai,
     plugins,
     tts,
+    automation,
 }

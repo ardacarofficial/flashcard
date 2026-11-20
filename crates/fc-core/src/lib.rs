@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 
 pub mod attribute;
+pub mod automation;
 pub mod card;
 pub mod content;
 pub mod deck;
@@ -37,5 +38,7 @@ pub use id::{
 };
 // v0.8 (own line so parallel tracks adding ids do not collide).
 pub use id::AiProviderId;
+// v0.9 automation rules.
+pub use id::AutomationRuleId;
 pub use rng::Rng;
 pub use time::{Clock, Timestamp};
