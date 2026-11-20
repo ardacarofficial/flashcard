@@ -9,6 +9,7 @@
     "dev": "node scripts/merge-locales.mjs && vite",
     "dev:mock": "node scripts/merge-locales.mjs && vite --mode mock",
     "build": "node scripts/merge-locales.mjs && vite build",
+    "bundle:check": "node scripts/check-bundle.mjs",
     "preview": "vite preview",
     "check": "node scripts/merge-locales.mjs && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tsconfig.node.json --noEmit",
     "test": "node scripts/merge-locales.mjs && vitest run",

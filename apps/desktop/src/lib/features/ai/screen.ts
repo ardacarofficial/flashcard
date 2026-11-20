@@ -1,4 +1,4 @@
-import AiScreen from './AiScreen.svelte';
+// Screens load on first open (v1.0 code splitting): each is its own chunk.
 import type { ScreenModule } from '../types';
 
-export default [{ id: 'ai', component: AiScreen, routes: ['/ai'], deckPicker: true }] satisfies ScreenModule;
+export default [{ id: 'ai', load: () => import('./AiScreen.svelte'), routes: ['/ai'], deckPicker: true }] satisfies ScreenModule;

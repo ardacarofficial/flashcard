@@ -44,6 +44,8 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    // `dist/.vite/manifest.json`: the chunk graph `scripts/check-bundle.mjs` budgets.
+    manifest: true,
   },
   test: {
     environment: 'jsdom',

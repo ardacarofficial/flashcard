@@ -3,7 +3,7 @@
   import { api, type ApiError } from '$lib/api';
   import type { DeckTreeNode, ModuleDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
-  import { SCREENS, type ScreenCtx, type ScreenDef } from '$lib/features';
+  import { SCREENS, resolveScreen, type ScreenCtx, type ScreenDef } from '$lib/features';
   import { deckPaths } from '$lib/components/deck-paths';
   import ShortcutHost from '$lib/features/browse/ShortcutHost.svelte';
   import PluginPanels from '$lib/features/plugins/PluginPanels.svelte';
@@ -178,8 +178,16 @@
           </select>
         </label>
       {/if}
-      {@const Screen = screen.component}
-      {#key active}<Screen {ctx} />{/key}
+      <!-- Lazy screens (v1.0 code splitting) load on first open; bundled ones render at once. -->
+      {#key active}
+        {#await resolveScreen(screen)}
+          <p class="muted">{t('common.loading')}</p>
+        {:then Screen}
+          <Screen {ctx} />
+        {:catch}
+          <p class="error" role="alert">{t('common.load_failed')}</p>
+        {/await}
+      {/key}
     {:else}
       <p class="muted">{t('common.loading')}</p>
     {/if}
