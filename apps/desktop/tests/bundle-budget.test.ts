@@ -44,9 +44,9 @@ describe('bundle budget', () => {
     ]);
   });
 
-  it('every screen except the first one the shell opens is lazy, and the script sees them all', () => {
+  it('every feature screen is lazy (the shell opens on its own Home), and the script sees them all', () => {
     const eager = SCREENS.filter((s) => s.component).map((s) => s.id);
-    expect(eager).toEqual(['study']);
+    expect(eager).toEqual([]);
     const lazy = lazyScreens(join(__dirname, '..', 'src', 'lib', 'features'));
     expect(lazy.length).toBe(SCREENS.length - eager.length);
   });

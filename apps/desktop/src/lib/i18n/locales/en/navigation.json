@@ -1,0 +1,47 @@
+{
+  "shell": {
+    "nav_label": "Main navigation",
+    "section": {
+      "home": "Home",
+      "library": "Library",
+      "create": "Create",
+      "search": "Search",
+      "stats": "Statistics"
+    },
+    "inbox": "Inbox",
+    "inbox_count": "Inbox, {count} waiting",
+    "settings": "Settings",
+    "settings_nav": "Settings sections",
+    "section_nav": "Pages in {section}",
+    "group": {
+      "general": "General",
+      "study": "Study",
+      "reading": "Reading and modes",
+      "connections": "Connections",
+      "plugins": "Plugins",
+      "data": "Data",
+      "profiles": "Profiles and lock",
+      "other": "More"
+    },
+    "profile": {
+      "menu": "Profile: {name}",
+      "default_name": "Main profile",
+      "switch": "Switch profile",
+      "lock": "Lock now"
+    },
+    "deck_picker": "Deck"
+  },
+  "home": {
+    "title": "Home",
+    "start": "Start studying",
+    "decks": "Your decks",
+    "deck_counts": "{due} due · {learning} learning · {new} new",
+    "deck_total": "{total} cards",
+    "empty_title": "No decks yet",
+    "empty_body": "Create your first deck to start studying.",
+    "empty_action": "Create your first deck",
+    "count_due": "Due",
+    "count_learning": "Learning",
+    "count_new": "New"
+  }
+}

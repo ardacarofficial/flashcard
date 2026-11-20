@@ -12,6 +12,11 @@ export interface ScreenCtx {
   guarded: (fn: () => Promise<unknown>) => Promise<boolean>;
   /** Route of the menu entry that opened the screen (plugin views read their target here). */
   route?: string | null;
+  /**
+   * Opens the page of a `main_menu` route (`'/study'`, `'/decks'`), wherever navigation.ts
+   * places it. Does nothing if that module is off. v1.1: screens link to each other with it.
+   */
+  navigate?: (route: string) => void;
 }
 
 /** A screen component (every screen takes the shell's context). */

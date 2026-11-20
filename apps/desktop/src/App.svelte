@@ -11,33 +11,30 @@
   import RecoveryHost from '$lib/features/maintenance/RecoveryHost.svelte';
   import LockHost from '$lib/features/profiles/LockHost.svelte';
   import OnboardingHost from '$lib/features/onboarding/OnboardingHost.svelte';
+  import { buildNavigation, samePlace, type NavEntry, type SectionId } from '$lib/shell/navigation';
+  import AppSidebar from '$lib/shell/AppSidebar.svelte';
+  import DeckPicker from '$lib/shell/DeckPicker.svelte';
+  import HomeScreen from '$lib/shell/HomeScreen.svelte';
+  import ProfileMenu from '$lib/shell/ProfileMenu.svelte';
+  import SettingsLayout from '$lib/shell/SettingsLayout.svelte';
+  import { Button, Spinner, Tabs, ToastHost } from '$lib/ui';
 
-  interface MenuItem {
-    id: string;
-    label_key: string;
-    screen: ScreenDef;
-    order: number;
-    route: string | null;
-  }
-
-  const routeMatches = (pattern: string, route: string) =>
-    pattern.endsWith('/*') ? route.startsWith(pattern.slice(0, -1)) : pattern === route;
-
-  /** Screen for a `main_menu` route, from the registered features. */
-  const screenOfRoute = (route: string | null): ScreenDef | null =>
-    SCREENS.find((s) => route !== null && s.routes?.some((p) => routeMatches(p, route))) ?? null;
+  /** The shell's own first page (not a module; docs/11 §2). Bundled: it is what opens first. */
+  const HOME: ScreenDef = { id: 'home', component: HomeScreen };
 
   let modules = $state<ModuleDto[]>([]);
   let decks = $state<DeckTreeNode[]>([]);
-  let screen = $state.raw<ScreenDef | null>(null);
-  /** Menu entry shown (several entries may share a screen: plugin views). */
-  let active = $state<string | null>(null);
+  /** Entry shown (several entries may share a screen: plugin views, extra places). */
+  let active = $state<string | null>('home');
   let selectedDeck = $state<string | null>(null);
   let error = $state<string | null>(null);
   /** App lock engaged (LockHost): no screen is mounted behind the lock screen. */
   let locked = $state(false);
   /** A plugin the app switched off (repeated failures), or plugins whose hooks were skipped. */
   let pluginNotice = $state<string | null>(null);
+  let inboxCount = $state(0);
+  /** Last page opened in each section / in Settings (the sidebar returns to it). */
+  const lastIn = new Map<string, string>();
 
   /** A plugin's display name (its locale's `name`), else its id. */
   function pluginName(id: string): string {
@@ -45,19 +42,22 @@
     return label === `plugin.${id}.name` ? id : label;
   }
 
-  const menu = $derived.by((): MenuItem[] => {
-    const ui = modules.filter((m) => m.enabled).flatMap((m) => m.ui);
-    const items = ui.flatMap((c): MenuItem[] => {
-      const s = c.slot === 'main_menu' ? screenOfRoute(c.route) : null;
-      return s ? [{ id: c.id, label_key: c.label_key, screen: s, order: c.order, route: c.route }] : [];
-    });
-    for (const s of SCREENS) {
-      if (s.slot && ui.some((c) => c.slot === s.slot?.name)) {
-        items.push({ id: s.id, label_key: s.slot.label_key, screen: s, order: s.slot.order, route: null });
-      }
-    }
-    return items.sort((a, b) => a.order - b.order);
+  const nav = $derived(buildNavigation(modules, SCREENS, HOME));
+  /** Every reachable entry, extra places included. */
+  const entries = $derived([
+    ...nav.sections.flatMap((s) => s.entries),
+    ...nav.settings.flatMap((g) => g.entries),
+    ...(nav.inbox ? [nav.inbox] : []),
+  ]);
+  const current = $derived(entries.find((e) => e.id === active) ?? null);
+  const screen = $derived(current?.screen ?? null);
+  const where = $derived.by((): SectionId | 'inbox' | 'settings' | null => {
+    const p = current?.place;
+    if (!p) return null;
+    return p.kind === 'section' ? p.id : p.kind;
   });
+  const sectionNow = $derived(current?.place.kind === 'section' ? (nav.sections.find((s) => samePlace({ kind: 'section', id: s.id }, current.place)) ?? null) : null);
+
   const paths = $derived(deckPaths(decks));
   const selectedPath = $derived(paths.find((p) => p.id === selectedDeck)?.path ?? null);
   const ctx = $derived<ScreenCtx>({
@@ -66,25 +66,39 @@
     selectedPath,
     selectDeck: (id) => (selectedDeck = id),
     guarded: (fn) => guarded(fn),
-    route: menu.find((m) => m.id === active)?.route ?? null,
+    route: current?.route ?? null,
+    navigate: (route) => openRoute(route),
   });
 
-  function show(item: MenuItem) {
-    screen = item.screen;
-    active = item.id;
+  const placeKey = (e: NavEntry) => (e.place.kind === 'section' ? `section.${e.place.id}` : e.place.kind);
+
+  function show(entry: NavEntry) {
+    active = entry.id;
+    lastIn.set(placeKey(entry), entry.id);
   }
 
-  /** Opens the menu entry with `route` (flashcard:// links, v0.9). */
+  function reopen(key: string, list: NavEntry[]) {
+    const last = lastIn.get(key);
+    const e = list.find((x) => x.id === last) ?? list[0];
+    if (e) show(e);
+  }
+
+  const openSection = (id: SectionId) => reopen(`section.${id}`, nav.sections.find((s) => s.id === id)?.entries ?? []);
+  const openSettings = () => reopen('settings', nav.settings.flatMap((g) => g.entries));
+  const openInbox = () => nav.inbox && show(nav.inbox);
+
+  /** Opens the entry with `route` (flashcard:// links, v0.9; `ctx.navigate`). */
   function openRoute(route: string) {
-    const item = menu.find((m) => m.route === route);
+    const item = nav.all.find((m) => m.route === route);
     if (item) show(item);
   }
 
   async function loadModules() {
     try {
       modules = (await api.modules.list()).modules;
-      const first = menu[0];
-      if (!screen && first) show(first);
+      // A switched-off module's page is gone: back home.
+      if (!current) show(nav.all[0]!);
+      void loadInbox();
     } catch (e) {
       fail(e);
     }
@@ -100,6 +114,18 @@
       if (selectedDeck && !deckPaths(decks).some((p) => p.id === selectedDeck)) selectedDeck = null;
     } catch (e) {
       fail(e);
+    }
+  }
+
+  async function loadInbox() {
+    if (!modules.some((m) => m.id === 'inbox' && m.enabled)) {
+      inboxCount = 0;
+      return;
+    }
+    try {
+      inboxCount = (await api.call('inbox.count', {})).pending;
+    } catch {
+      inboxCount = 0;
     }
   }
 
@@ -133,6 +159,9 @@
       const { plugin_ids, notice } = env.event.data;
       pluginNotice = td(notice.key, { ...notice.params, names: plugin_ids.map(pluginName).join(', ') });
     });
+    const unsubInbox = api.on('inbox_changed', (env) => {
+      if (env.event.type === 'inbox_changed') inboxCount = env.event.data.pending;
+    });
     // Live updates: any deck/study event (or undo/redo, import, restore) re-reads the tree.
     const unsub = api.on(
       ['deck_', 'study_', 'undone', 'redone', 'data_changed', 'imported', 'collection_'],
@@ -143,63 +172,77 @@
       void unsubModules.then((u) => u());
       void unsubNotice.then((u) => u());
       void unsubSkipped.then((u) => u());
+      void unsubInbox.then((u) => u());
     };
   });
 </script>
 
 <div class="shell">
-  <nav>
-    <div class="brand">{t('app.title')}</div>
-    <ul>
-      {#each menu as item (item.id)}
-        <li>
-          <button class:active={active === item.id} aria-current={active === item.id ? 'page' : undefined} onclick={() => show(item)}>
-            {td(item.label_key)}
-          </button>
-        </li>
-      {/each}
-    </ul>
-    <PluginPanels {modules} />
-  </nav>
+  <AppSidebar {nav} current={where} {inboxCount} {openSection} {openInbox} {openSettings}>
+    {#snippet profile()}
+      <ProfileMenu
+        openProfiles={nav.all.some((e) => e.route === '/profiles') ? () => openRoute('/profiles') : null}
+        {guarded}
+      />
+    {/snippet}
+    {#snippet panels()}<PluginPanels {modules} />{/snippet}
+  </AppSidebar>
 
   <main>
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
-    {#if pluginNotice}
-      <p class="notice" role="status">
-        {pluginNotice}
-        <button onclick={() => (pluginNotice = null)}>{t('plugins.notice.dismiss')}</button>
-      </p>
-    {/if}
-
-    {#if locked}
-      <!-- Behind the lock screen nothing mounts or loads (lazy chunks included). -->
-    {:else if screen}
-      {#if screen.deckPicker}
-        <label class="deck-pick">
-          {t('deck.current')}
-          <select bind:value={selectedDeck}>
-            <option value={null}>{t('deck.select_prompt')}</option>
-            {#each paths as p (p.id)}
-              <option value={p.id}>{p.path}</option>
-            {/each}
-          </select>
-        </label>
+    <div class="page">
+      {#if error}<p class="banner error" role="alert">{error}</p>{/if}
+      {#if pluginNotice}
+        <p class="banner notice" role="status">
+          <span>{pluginNotice}</span>
+          <Button size="sm" variant="ghost" onclick={() => (pluginNotice = null)}>{t('plugins.notice.dismiss')}</Button>
+        </p>
       {/if}
-      <!-- Lazy screens (v1.0 code splitting) load on first open; bundled ones render at once. -->
-      {#key active}
-        {#await resolveScreen(screen)}
-          <p class="muted">{t('common.loading')}</p>
-        {:then Screen}
-          <Screen {ctx} />
-        {:catch}
-          <p class="error" role="alert">{t('common.load_failed')}</p>
-        {/await}
-      {/key}
-    {:else}
-      <p class="muted">{t('common.loading')}</p>
-    {/if}
+
+      {#snippet body()}
+        {#if locked}
+          <!-- Behind the lock screen nothing mounts or loads (lazy chunks included). -->
+        {:else if screen}
+          {#if screen.deckPicker}
+            <DeckPicker {paths} value={selectedDeck} onchange={(id) => (selectedDeck = id)} />
+          {/if}
+          <!-- Lazy screens (v1.0 code splitting) load on first open; bundled ones render at once. -->
+          {#key active}
+            {#await resolveScreen(screen)}
+              <p class="loading" role="status"><Spinner /> {t('common.loading')}</p>
+            {:then Screen}
+              <Screen {ctx} />
+            {:catch}
+              <p class="banner error" role="alert">{t('common.load_failed')}</p>
+            {/await}
+          {/key}
+        {:else}
+          <p class="loading" role="status"><Spinner /> {t('common.loading')}</p>
+        {/if}
+      {/snippet}
+
+      {#if where === 'settings' && !locked}
+        <SettingsLayout groups={nav.settings} {active} open={show}>{@render body()}</SettingsLayout>
+      {:else}
+        {#if sectionNow && sectionNow.entries.length > 1 && !locked}
+          <div class="section-tabs">
+            <Tabs
+              label={t('shell.section_nav', { section: t(sectionNow.label_key) })}
+              tabs={sectionNow.entries.map((e) => ({ id: e.id, label: td(e.label_key) }))}
+              value={active ?? ''}
+              onchange={(id) => {
+                const e = sectionNow.entries.find((x) => x.id === id);
+                if (e) show(e);
+              }}
+            />
+          </div>
+        {/if}
+        {@render body()}
+      {/if}
+    </div>
   </main>
 </div>
+
+<ToastHost />
 
 <!-- First-run guide on a new, empty collection (v1.0). -->
 <OnboardingHost ondone={() => void loadDecks()} />
@@ -223,7 +266,7 @@
 
 <!-- Keyboard shortcuts + command palette (v0.4); inert when the palette module is off. -->
 <ShortcutHost
-  screens={menu.map((m) => ({ id: m.screen.id, label: td(m.label_key), open: () => show(m) }))}
+  screens={nav.all.map((m) => ({ id: m.screen.id, label: td(m.label_key), open: () => show(m) }))}
   activeScreen={screen?.id ?? null}
   {guarded}
 />
@@ -231,43 +274,48 @@
 <style>
   .shell {
     display: grid;
-    grid-template-columns: 200px 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     height: 100%;
   }
-  nav {
-    background: var(--fc-bg-subtle);
-    border-right: var(--fc-border-width) solid var(--fc-border);
-    padding: var(--fc-space-4) var(--fc-space-2);
-  }
-  .brand {
-    font-weight: 600;
-    padding: 0 var(--fc-space-2) var(--fc-space-4);
-  }
-  nav ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-1);
-  }
-  nav button {
-    width: 100%;
-    text-align: left;
-    border: none;
-    background: transparent;
-  }
-  nav button.active {
-    background: var(--fc-selected);
-  }
   main {
-    padding: var(--fc-space-6);
     overflow: auto;
+    background: var(--surface-0);
   }
-  .deck-pick {
+  .page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--space-8) var(--space-8) var(--space-12);
+  }
+  .section-tabs {
+    margin-bottom: var(--space-6);
+  }
+  .banner {
     display: flex;
-    gap: var(--fc-space-2);
     align-items: center;
-    margin-bottom: var(--fc-space-4);
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin: 0 0 var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-control);
+    font-size: var(--text-sm);
+  }
+  .banner.error {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+  .banner.notice {
+    background: var(--warning-soft);
+    color: var(--text-1);
+  }
+  .loading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-2);
+  }
+  @media (max-width: 1023.98px) {
+    .page {
+      padding: var(--space-6) var(--space-4) var(--space-8);
+    }
   }
 </style>

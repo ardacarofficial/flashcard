@@ -117,14 +117,16 @@ describe('attributes module off', () => {
 describe('palette module off', () => {
   it('global shortcuts still dispatch; only the palette goes away', async () => {
     render(App);
-    const nav = await screen.findByRole('navigation');
-    await screen.findByRole('button', { name: 'Settings' });
-    expect(nav.textContent).not.toContain('Shortcuts');
+    const nav = await screen.findByRole('navigation', { name: 'Main navigation' });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+    const settings = await screen.findByRole('navigation', { name: 'Settings sections' });
+    expect(settings.textContent).toContain('Reminders');
+    expect(settings.textContent).not.toContain('Shortcuts');
 
-    // Ctrl+F (ui.search) opens the browser.
+    // Ctrl+F (ui.search) opens the browser (the Search section).
     await waitFor(async () => {
       await fireEvent.keyDown(window, { key: 'f', code: 'KeyF', ctrlKey: true });
-      expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Browse');
+      expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Search');
     });
     // Ctrl+K (ui.palette) is still bound but opens nothing.
     await fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true });
