@@ -27,7 +27,7 @@ jobs:
       frontend: ${{ steps.d.outputs.frontend }}
       desktop: ${{ steps.d.outputs.desktop }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: d
         shell: bash
         run: |
@@ -41,7 +41,7 @@ jobs:
     name: Rust (fmt, clippy, test)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Tauri Linux bağımlılıkları
         run: |
           sudo apt-get update
@@ -78,7 +78,7 @@ jobs:
     name: TS tipleri güncel mi
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.100.0 # = rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
       - name: gen-ts --check
@@ -103,7 +103,7 @@ jobs:
       run:
         working-directory: apps/desktop
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: apps/desktop/package.json
@@ -127,7 +127,7 @@ jobs:
       run:
         working-directory: apps/desktop
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           package_json_file: apps/desktop/package.json
@@ -155,7 +155,7 @@ jobs:
       run:
         working-directory: apps/browser-extension
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: apps/browser-extension/package.json
@@ -185,7 +185,7 @@ jobs:
     name: Windows (build + test)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.100.0 # = rust-toolchain.toml
         with:
           targets: wasm32-unknown-unknown # example plugins built by the plugin tests
@@ -215,7 +215,7 @@ jobs:
     name: Windows (NSIS install + smoke)
     runs-on: windows-2025
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0 (= rust-toolchain.toml)
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -265,5 +265,5 @@ jobs:
     name: fc-core saflık kontrolü
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: bash .github/scripts/check-core-purity.sh
