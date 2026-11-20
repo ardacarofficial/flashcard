@@ -17,4 +17,9 @@ kinds: Array<AiProviderKindInfo>,
 /**
  * Whether API keys can be stored on this system (an OS keychain is available).
  */
-keychain: boolean, };
+keychain: boolean, 
+/**
+ * Stored keys last only for this login session or app run (Linux kernel keyring, memory
+ * fallback): the user may have to enter them again — the UI says so.
+ */
+keychain_session_only: boolean, };

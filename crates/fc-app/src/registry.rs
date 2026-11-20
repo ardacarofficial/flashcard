@@ -192,6 +192,37 @@ impl Registry {
         self.jobs.get(kind)
     }
 
+    /// Worker lanes of the registered jobs ([`crate::jobs::MAIN_LANE`] always first).
+    pub fn lanes(&self) -> Vec<&'static str> {
+        let mut lanes = vec![crate::jobs::MAIN_LANE];
+        for h in self.jobs.values() {
+            if !lanes.contains(&h.lane()) {
+                lanes.push(h.lane());
+            }
+        }
+        lanes
+    }
+
+    /// The claim filter of `lane`: its job kinds (`true` = only these), or for the main lane
+    /// the kinds of every other lane (`false` = all but these — unknown kinds too, so they
+    /// fail visibly instead of waiting forever).
+    pub(crate) fn lane_kinds(&self, lane: &str) -> (Vec<&'static str>, bool) {
+        let main = lane == crate::jobs::MAIN_LANE;
+        let kinds = self
+            .jobs
+            .values()
+            .filter(|h| {
+                if main {
+                    h.lane() != crate::jobs::MAIN_LANE
+                } else {
+                    h.lane() == lane
+                }
+            })
+            .map(|h| h.kind())
+            .collect();
+        (kinds, !main)
+    }
+
     /// Makes a module's shared service reachable from the app (`App` methods a transport
     /// calls, e.g. installing the keychain the `ai` module stores keys in). One per type.
     pub fn provide<T: std::any::Any + Send + Sync>(&mut self, service: Arc<T>) {
@@ -343,7 +374,7 @@ pub(crate) fn ensure_invocable(
 /// Whether `actor` holds `permission`. v0.1 has no grant store: the user, the CLI and the app
 /// itself hold every permission, and so do the other actors until plugin/local-API grants land
 /// (v0.7) — at which point this is the single place that enforces them.
-fn permits(actor: &Actor, _permission: &str) -> bool {
+pub(crate) fn permits(actor: &Actor, _permission: &str) -> bool {
     match actor {
         Actor::User | Actor::Cli | Actor::System => true,
         Actor::Plugin(_) | Actor::Automation(_) | Actor::LocalApi(_) => true,

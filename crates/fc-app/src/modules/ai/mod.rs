@@ -25,10 +25,13 @@ mod notes;
 mod prompts;
 mod providers;
 mod run;
+mod sources;
 mod usage;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_v2;
 
 use crate::app::App;
 use crate::module::{main_menu, ModuleDescriptor};
@@ -48,6 +51,10 @@ pub const ID: &str = "ai";
 pub const REQUEST_JOB: &str = "ai.request";
 /// Job kind of a model list refresh.
 pub const MODELS_JOB: &str = "ai.models";
+/// Job kind of a source extraction (PDF pages, web page).
+pub const SOURCE_JOB: &str = "ai.source";
+/// Worker lane of every AI job: network waits never hold up imports/exports.
+pub const LANE: &str = "ai";
 
 /// Setting: monthly budget in USD (`0` = none).
 pub const BUDGET: &str = "ai.monthly_budget_usd";
@@ -106,14 +113,55 @@ impl AiServices {
         }
     }
 
-    pub(crate) fn retry_pause(&self, attempt: u32) -> Duration {
-        Duration::from_millis(self.retry_base_ms.load(Ordering::SeqCst) << attempt.min(6))
+    /// Whether stored keys outlive this session (see [`SecretStore::persistent`]).
+    pub fn keys_persist(&self) -> bool {
+        self.secrets().persistent()
+    }
+
+    /// Pause before retry `attempt` (0-based): what the provider asked for (`Retry-After`)
+    /// plus up to 10 % jitter, else exponential backoff with "equal jitter" (half fixed, half
+    /// random), so clients that failed together do not retry together.
+    pub(crate) fn retry_pause(&self, attempt: u32, retry_after_ms: Option<u64>) -> Duration {
+        backoff(
+            self.retry_base_ms.load(Ordering::SeqCst),
+            attempt,
+            retry_after_ms,
+            jitter_unit(),
+        )
     }
 
     #[cfg(test)]
     pub(crate) fn set_retry_base_ms(&self, ms: u64) {
         self.retry_base_ms.store(ms, Ordering::SeqCst);
     }
+}
+
+/// See [`AiServices::retry_pause`]; `unit` is a random number in `[0, 1)`.
+pub(crate) fn backoff(base_ms: u64, attempt: u32, retry_after_ms: Option<u64>, unit: f64) -> Duration {
+    let unit = unit.clamp(0.0, 1.0);
+    let ms = match retry_after_ms {
+        // The server's wait is a minimum; the jitter only spreads clients out after it.
+        Some(after) => after + (after as f64 * 0.1 * unit) as u64,
+        None => {
+            let full = base_ms.saturating_mul(1 << attempt.min(6));
+            full / 2 + ((full / 2) as f64 * unit) as u64
+        }
+    };
+    Duration::from_millis(ms)
+}
+
+/// A random number in `[0, 1)` from the standard library's per-instance random hash keys
+/// (no extra dependency; jitter needs no quality randomness).
+fn jitter_unit() -> f64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0),
+    );
+    (h.finish() >> 11) as f64 / (1u64 << 53) as f64
 }
 
 impl App {
@@ -205,5 +253,6 @@ pub fn register(reg: &mut Registry) {
     providers::register(reg, &services);
     usage::register(reg);
     run::register(reg, &services);
+    sources::register(reg);
     notes::register(reg);
 }

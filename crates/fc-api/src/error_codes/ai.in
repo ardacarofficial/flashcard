@@ -6,6 +6,10 @@ ValidationAiProvider => Validation, "errors.validation.ai_provider";
 ValidationAiKey => Validation, "errors.validation.ai_key";
 /// The task cannot be sent (`details.reason`: `empty_source`, `count`, `no_fields`, `no_answer`, `images_unsupported`, …).
 ValidationAiTask => Validation, "errors.validation.ai_task";
+/// A card source cannot be used (`details.reason`: `url`, `pages`, `not_pdf`, `encrypted`, `no_text`, `too_large`, `content_type`, `io`).
+ValidationAiSource => Validation, "errors.validation.ai_source";
+/// A web page could not be fetched (`details.reason`: `http_status`, `unreachable`, `timeout`).
+ProviderAiSource => Provider, "errors.provider.ai_source";
 /// A price is negative or not a number, or the model id is empty.
 ValidationAiPrice => Validation, "errors.validation.ai_price";
 /// Provider not found (`details.id`).

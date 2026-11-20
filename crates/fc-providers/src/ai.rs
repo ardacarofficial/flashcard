@@ -89,6 +89,18 @@ pub trait AiProvider: Send + Sync {
     fn info(&self) -> ProviderInfo;
     /// Runs a completion.
     async fn complete(&self, request: CompletionRequest) -> ProviderResult<CompletionResponse>;
+    /// Runs a completion, calling `on_text` with each piece of output text as it arrives
+    /// (`Capability::Streaming`). The response is the same as [`AiProvider::complete`]'s. The
+    /// default implementation does not stream: it completes and hands over the whole text once.
+    async fn complete_stream(
+        &self,
+        request: CompletionRequest,
+        on_text: &(dyn for<'t> Fn(&'t str) + Send + Sync),
+    ) -> ProviderResult<CompletionResponse> {
+        let response = self.complete(request).await?;
+        on_text(&response.text);
+        Ok(response)
+    }
     /// Available model ids.
     async fn list_models(&self) -> ProviderResult<Vec<String>>;
 }

@@ -81,30 +81,13 @@ impl OpenAi {
     }
 }
 
-#[async_trait]
-impl AiProvider for OpenAi {
-    fn info(&self) -> ProviderInfo {
-        let compatible = self.config.kind == ProviderKind::OpenaiCompatible;
-        ProviderInfo {
-            id: self.config.kind.provider_id().into(),
-            name_key: if compatible {
-                "ai.kind.openai_compatible".into()
-            } else {
-                "ai.kind.openai".into()
-            },
-            capabilities: vec![Capability::StructuredOutput, Capability::Vision],
-            settings: vec![],
-            secret_keys: vec!["api_key".into()],
-            local: false,
-        }
-    }
-
-    async fn complete(&self, request: CompletionRequest) -> ProviderResult<CompletionResponse> {
-        let auth = self.auth()?;
-        let body = self.body(&request)?;
-        let v = self
-            .http
-            .post("/chat/completions", &Self::headers(&auth), &body)?;
+impl OpenAi {
+    /// A Chat Completions response → [`CompletionResponse`].
+    fn response(
+        &self,
+        v: &Value,
+        request: &CompletionRequest,
+    ) -> ProviderResult<CompletionResponse> {
         let choice = v
             .pointer("/choices/0")
             .ok_or_else(|| self.http.failed("response without choices"))?;
@@ -117,15 +100,119 @@ impl AiProvider for OpenAi {
             model: v
                 .get("model")
                 .and_then(Value::as_str)
-                .unwrap_or(model_of(&request)?)
+                .unwrap_or(model_of(request)?)
                 .to_owned(),
             text,
             usage: Usage {
-                input_tokens: u32_at(&v, "/usage/prompt_tokens"),
-                output_tokens: u32_at(&v, "/usage/completion_tokens"),
+                input_tokens: u32_at(v, "/usage/prompt_tokens"),
+                output_tokens: u32_at(v, "/usage/completion_tokens"),
             },
             truncated: choice.get("finish_reason").and_then(Value::as_str) == Some("length"),
         })
+    }
+}
+
+#[async_trait]
+impl AiProvider for OpenAi {
+    fn info(&self) -> ProviderInfo {
+        let compatible = self.config.kind == ProviderKind::OpenaiCompatible;
+        ProviderInfo {
+            id: self.config.kind.provider_id().into(),
+            name_key: if compatible {
+                "ai.kind.openai_compatible".into()
+            } else {
+                "ai.kind.openai".into()
+            },
+            capabilities: vec![
+                Capability::Streaming,
+                Capability::StructuredOutput,
+                Capability::Vision,
+            ],
+            settings: vec![],
+            secret_keys: vec!["api_key".into()],
+            local: false,
+        }
+    }
+
+    async fn complete(&self, request: CompletionRequest) -> ProviderResult<CompletionResponse> {
+        let auth = self.auth()?;
+        let body = self.body(&request)?;
+        let v = self
+            .http
+            .post("/chat/completions", &Self::headers(&auth), &body)?;
+        self.response(&v, &request)
+    }
+
+    async fn complete_stream(
+        &self,
+        request: CompletionRequest,
+        on_text: &(dyn for<'t> Fn(&'t str) + Send + Sync),
+    ) -> ProviderResult<CompletionResponse> {
+        if request.json_schema.is_some() {
+            let response = self.complete(request).await?;
+            on_text(&response.text);
+            return Ok(response);
+        }
+        let auth = self.auth()?;
+        let mut body = self.body(&request)?;
+        body["stream"] = json!(true);
+        if self.config.kind == ProviderKind::Openai {
+            // Usage comes in a last chunk only when asked for.
+            body["stream_options"] = json!({"include_usage": true});
+        }
+        let mut out = CompletionResponse {
+            model: model_of(&request)?.to_owned(),
+            text: String::new(),
+            usage: Usage::default(),
+            truncated: false,
+        };
+        let whole = self.http.post_stream(
+            "/chat/completions",
+            &Self::headers(&auth),
+            &body,
+            &mut |line| {
+                let Some(data) = line.strip_prefix("data:").map(str::trim) else {
+                    return Ok(true);
+                };
+                if data == "[DONE]" {
+                    return Ok(false);
+                }
+                let Ok(v) = serde_json::from_str::<Value>(data) else {
+                    return Ok(true);
+                };
+                if let Some(m) = v.get("model").and_then(Value::as_str) {
+                    out.model = m.to_owned();
+                }
+                if let Some(t) = v
+                    .pointer("/choices/0/delta/content")
+                    .and_then(Value::as_str)
+                {
+                    if !t.is_empty() {
+                        out.text.push_str(t);
+                        on_text(t);
+                    }
+                }
+                if v.pointer("/choices/0/finish_reason")
+                    .and_then(Value::as_str)
+                    == Some("length")
+                {
+                    out.truncated = true;
+                }
+                if v.get("usage").is_some_and(Value::is_object) {
+                    out.usage = Usage {
+                        input_tokens: u32_at(&v, "/usage/prompt_tokens"),
+                        output_tokens: u32_at(&v, "/usage/completion_tokens"),
+                    };
+                }
+                Ok(true)
+            },
+        )?;
+        if let Some(v) = whole {
+            let response = self.response(&v, &request)?;
+            on_text(&response.text);
+            return Ok(response);
+        }
+        Ok(out)
     }
 
     async fn list_models(&self) -> ProviderResult<Vec<String>> {

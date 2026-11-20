@@ -46,6 +46,9 @@ methods! {
     AiPreviewTask = "ai.preview", Query, "ai", "ai:read", Public, undo: false, PreviewAi => AiPreview;
     /// Sends a previewed request (same task + its `preview_hash`) as an `ai.request` job.
     AiRun = "ai.run", Command, "ai", "ai_requests:write", Public, undo: false, RunAi => JobDto;
+    /// Starts an `ai.source` job that extracts card-generation text from a PDF page range or a
+    /// web page. Reads/fetches only; nothing goes to an AI provider.
+    AiSourcesExtract = "ai.sources.extract", Command, "ai", "ai_requests:write", Public, undo: false, ExtractAiSource => JobDto;
     /// Adds reviewed AI drafts as notes, with their classification values — one undo step.
     AiNotesAdd = "ai.notes.add", Command, "ai", "notes:write", Public, undo: true, AddAiNotes => AiNotesAdded;
     /// Applies a suggestion to a note: sets the listed fields, keeps the rest — one undo step.

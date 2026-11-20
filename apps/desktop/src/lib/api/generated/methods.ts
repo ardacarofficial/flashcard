@@ -67,6 +67,7 @@ import type { EffectiveAttributes } from "./EffectiveAttributes";
 import type { EffectivePreset } from "./EffectivePreset";
 import type { Empty } from "./Empty";
 import type { ExecuteBatch } from "./ExecuteBatch";
+import type { ExtractAiSource } from "./ExtractAiSource";
 import type { FindReplace } from "./FindReplace";
 import type { FlagDto } from "./FlagDto";
 import type { FlagList } from "./FlagList";
@@ -326,6 +327,7 @@ export interface Methods {
   "ai.usage.summary": { kind: "query"; request: Empty; response: AiUsageSummary };
   "ai.preview": { kind: "query"; request: PreviewAi; response: AiPreview };
   "ai.run": { kind: "command"; request: RunAi; response: JobDto };
+  "ai.sources.extract": { kind: "command"; request: ExtractAiSource; response: JobDto };
   "ai.notes.add": { kind: "command"; request: AddAiNotes; response: AiNotesAdded };
   "ai.notes.update": { kind: "command"; request: UpdateAiNote; response: NoteDto };
 }
@@ -484,6 +486,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "ai.usage.summary": "query",
   "ai.preview": "query",
   "ai.run": "command",
+  "ai.sources.extract": "command",
   "ai.notes.add": "command",
   "ai.notes.update": "command",
 };

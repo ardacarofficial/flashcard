@@ -3,6 +3,7 @@
   import type {
     AiNoteDraft,
     AiPreview,
+    AiSourceInput,
     AiTask,
     AttributeAssignment,
     EffectiveAttributeDto,
@@ -14,7 +15,8 @@
   import { t, td } from '$lib/i18n/index.svelte';
   import type { ScreenCtx } from '../types';
   import JobProgress from '../io/JobProgress.svelte';
-  import { aiResult, previewTask, sendPreviewed, usd } from './ai';
+  import { pickFile } from '../io/files';
+  import { aiResult, extractSource, previewTask, sendPreviewed, usd } from './ai';
   import PreviewPanel from './PreviewPanel.svelte';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -35,6 +37,14 @@
   let notice = $state<string | null>(null);
   let error = $state<string | null>(null);
   let busy = $state(false);
+  /** Where the source text came from (progressive: shown only once used). */
+  let from = $state<'text' | 'pdf' | 'url'>('text');
+  let pdfPath = $state<string | null>(null);
+  let pageCount = $state<number | null>(null);
+  let fromPage = $state(1);
+  let toPage = $state(1);
+  let url = $state('');
+  let sourceInfo = $state<string | null>(null);
 
   const notetype = $derived(notetypes.find((n) => n.id === notetypeId) ?? null);
   const fieldName = (key: string) => notetype?.fields.find((f) => f.key === key)?.name ?? key;
@@ -57,6 +67,49 @@
       attrs = Object.fromEntries(r.attributes.map((a) => [a.def.id, a.suggested_value ?? initialValue(a.def)]));
     }, fail);
   });
+
+  async function readSource(input: AiSourceInput) {
+    busy = true;
+    error = null;
+    notice = null;
+    sourceInfo = null;
+    try {
+      const { job: done, text } = await extractSource(input, (j) => (job = j));
+      if (!text) {
+        error = td(done.error?.message_key ?? 'errors.internal.unexpected');
+        return;
+      }
+      source = text.text;
+      preview = null;
+      if (text.page_count !== null) {
+        pageCount = text.page_count;
+        fromPage = text.from_page ?? 1;
+        toPage = text.to_page ?? text.page_count;
+        sourceInfo = t('ai.source.pages_read', { from: fromPage, to: toPage, count: text.page_count });
+      } else {
+        sourceInfo = text.title ? t('ai.source.page_read', { title: text.title }) : null;
+      }
+      if (text.truncated) notice = t('ai.source.truncated');
+    } catch (e) {
+      fail(e);
+    } finally {
+      job = null;
+      busy = false;
+    }
+  }
+
+  async function choosePdf() {
+    const path = await pickFile([{ name: 'PDF', extensions: ['pdf'] }], t('ai.source.pdf_prompt'));
+    if (!path) return;
+    pdfPath = path;
+    pageCount = null;
+    await readSource({ kind: 'pdf', path, from_page: null, to_page: null });
+  }
+
+  const readPages = () =>
+    pdfPath && readSource({ kind: 'pdf', path: pdfPath, from_page: fromPage, to_page: toPage });
+
+  const readUrl = () => url.trim() && readSource({ kind: 'url', url: url.trim() });
 
   async function runPreview() {
     error = null;
@@ -140,6 +193,43 @@
       {#each defs as a (a.def.id)}
         <AttributeField def={a.def} bind:value={attrs[a.def.id]!} />
       {/each}
+      <div class="from" role="group" aria-label={t('ai.source.from')}>
+        <span>{t('ai.source.from')}</span>
+        <label><input type="radio" bind:group={from} value="text" /> {t('ai.source.text')}</label>
+        <label><input type="radio" bind:group={from} value="pdf" /> {t('ai.source.pdf')}</label>
+        <label><input type="radio" bind:group={from} value="url" /> {t('ai.source.url')}</label>
+      </div>
+      {#if from === 'pdf'}
+        <div class="row">
+          <button disabled={busy} onclick={() => void choosePdf()}>{t('ai.source.choose_pdf')}</button>
+          {#if pageCount !== null}
+            <label class="inline">
+              {t('ai.source.from_page')}
+              <input type="number" min="1" max={pageCount} bind:value={fromPage} />
+            </label>
+            <label class="inline">
+              {t('ai.source.to_page')}
+              <input type="number" min="1" max={pageCount} bind:value={toPage} />
+            </label>
+            <button disabled={busy || fromPage < 1 || toPage < fromPage} onclick={() => void readPages()}>
+              {t('ai.source.read_pages')}
+            </button>
+          {/if}
+        </div>
+      {:else if from === 'url'}
+        <div class="row">
+          <input
+            type="url"
+            bind:value={url}
+            placeholder={t('ai.source.url_placeholder')}
+            aria-label={t('ai.source.url_label')}
+            onkeydown={(e) => e.key === 'Enter' && void readUrl()}
+          />
+          <button disabled={busy || !url.trim()} onclick={() => void readUrl()}>{t('ai.source.fetch')}</button>
+        </div>
+        <p class="muted">{t('ai.source.url_note')}</p>
+      {/if}
+      {#if sourceInfo}<p class="muted" role="status">{sourceInfo}</p>{/if}
       <label>
         {t('ai.generate.source')}
         <textarea rows="8" bind:value={source} placeholder={t('ai.generate.source_hint')}></textarea>
@@ -209,6 +299,25 @@
   label {
     display: grid;
     gap: var(--fc-space-1);
+  }
+  .from,
+  .row {
+    display: flex;
+    gap: var(--fc-space-2);
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .from label,
+  .row label.inline {
+    display: flex;
+    align-items: center;
+    gap: var(--fc-space-1);
+  }
+  .row input[type='number'] {
+    width: 5em;
+  }
+  .row input[type='url'] {
+    flex: 1;
   }
   .keep {
     display: flex;

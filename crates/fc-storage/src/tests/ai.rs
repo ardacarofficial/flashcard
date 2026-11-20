@@ -179,3 +179,51 @@ fn routes_prices_and_usage() {
         assert!(!r.list_ai_prices().unwrap().contains(&price));
     });
 }
+
+/// Worker lanes: the AI lane claims only its kinds, the main lane everything else, each oldest
+/// first (v0.8: AI jobs never wait behind an import).
+#[test]
+fn jobs_are_claimed_per_lane() {
+    use crate::repo::JobRecord;
+    let job = |n: u128, kind: &str, at: i64| JobRecord {
+        id: fc_core::JobId(u(0x7100 + n)),
+        kind: kind.into(),
+        status: "queued".into(),
+        progress: None,
+        payload: serde_json::json!({}),
+        result: None,
+        error: None,
+        created_at: Timestamp(at),
+        updated_at: Timestamp(at),
+    };
+    let fx = Fx::new();
+    fx.write(|tx| {
+        tx.upsert_job(&job(1, "io.import", 10)).unwrap();
+        tx.upsert_job(&job(2, "ai.request", 20)).unwrap();
+        tx.upsert_job(&job(3, "io.export", 30)).unwrap();
+        tx.upsert_job(&job(4, "ai.models", 40)).unwrap();
+    });
+    let ai = ["ai.request", "ai.models", "ai.source"];
+    let claim = |kinds: &[&str], only: bool| {
+        fx.write(|tx| tx.claim_next_job_in(Timestamp(50), kinds, only).unwrap())
+            .map(|j| (j.kind, j.status))
+    };
+    assert_eq!(
+        claim(&ai, true),
+        Some(("ai.request".into(), "running".into()))
+    );
+    assert_eq!(
+        claim(&ai, false),
+        Some(("io.import".into(), "running".into()))
+    );
+    assert_eq!(
+        claim(&ai, true),
+        Some(("ai.models".into(), "running".into()))
+    );
+    assert_eq!(claim(&ai, true), None);
+    assert_eq!(
+        claim(&ai, false),
+        Some(("io.export".into(), "running".into()))
+    );
+    assert_eq!(claim(&ai, false), None);
+}

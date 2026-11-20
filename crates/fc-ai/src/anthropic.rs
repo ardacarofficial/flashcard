@@ -73,33 +73,71 @@ impl Anthropic {
         }
         Ok(body)
     }
+
+    fn headers(key: &str) -> [(&str, &str); 2] {
+        [("x-api-key", key), ("anthropic-version", VERSION)]
+    }
 }
 
-#[async_trait]
-impl AiProvider for Anthropic {
-    fn info(&self) -> ProviderInfo {
-        ProviderInfo {
-            id: self.config.kind.provider_id().into(),
-            name_key: "ai.kind.anthropic".into(),
-            capabilities: vec![
-                Capability::StructuredOutput,
-                Capability::Vision,
-                Capability::Tools,
-            ],
-            settings: vec![],
-            secret_keys: vec!["api_key".into()],
-            local: false,
+/// Folds one Anthropic SSE `data:` payload into `out`; text deltas go to `on_text`.
+fn sse_event(
+    v: &Value,
+    out: &mut CompletionResponse,
+    on_text: &(dyn for<'t> Fn(&'t str) + Send + Sync),
+) -> ProviderResult<()> {
+    match v.get("type").and_then(Value::as_str) {
+        Some("message_start") => {
+            if let Some(m) = v.pointer("/message/model").and_then(Value::as_str) {
+                out.model = m.to_owned();
+            }
+            out.usage.input_tokens = u32_at(v, "/message/usage/input_tokens");
+            out.usage.output_tokens = u32_at(v, "/message/usage/output_tokens");
         }
+        Some("content_block_delta") => {
+            if let Some(t) = v.pointer("/delta/text").and_then(Value::as_str) {
+                out.text.push_str(t);
+                on_text(t);
+            }
+        }
+        Some("message_delta") => {
+            if let Some(n) = v.pointer("/usage/output_tokens").and_then(Value::as_u64) {
+                out.usage.output_tokens = u32::try_from(n).unwrap_or(u32::MAX);
+            }
+            if v.pointer("/delta/stop_reason").and_then(Value::as_str) == Some("max_tokens") {
+                out.truncated = true;
+            }
+        }
+        Some("error") => {
+            let kind = match v.pointer("/error/type").and_then(Value::as_str) {
+                Some("overloaded_error") | Some("api_error") => ProviderErrorKind::Unavailable,
+                Some("rate_limit_error") => ProviderErrorKind::RateLimited,
+                Some("invalid_request_error") => ProviderErrorKind::InvalidRequest,
+                _ => ProviderErrorKind::Failed,
+            };
+            let message = v
+                .pointer("/error/message")
+                .and_then(Value::as_str)
+                .unwrap_or("stream error");
+            return Err(ProviderError::new(
+                kind,
+                format!(
+                    "builtin.ai.anthropic: {}",
+                    message.chars().take(300).collect::<String>()
+                ),
+            ));
+        }
+        _ => {}
     }
+    Ok(())
+}
 
-    async fn complete(&self, request: CompletionRequest) -> ProviderResult<CompletionResponse> {
-        let key = self.http.require_key()?;
-        let body = self.body(&request)?;
-        let v = self.http.post(
-            "/v1/messages",
-            &[("x-api-key", key), ("anthropic-version", VERSION)],
-            &body,
-        )?;
+impl Anthropic {
+    /// A Messages API response → [`CompletionResponse`].
+    fn response(
+        &self,
+        v: &Value,
+        request: &CompletionRequest,
+    ) -> ProviderResult<CompletionResponse> {
         let blocks = v
             .get("content")
             .and_then(Value::as_array)
@@ -128,15 +166,91 @@ impl AiProvider for Anthropic {
             model: v
                 .get("model")
                 .and_then(Value::as_str)
-                .unwrap_or(model_of(&request)?)
+                .unwrap_or(model_of(request)?)
                 .to_owned(),
             text,
             usage: Usage {
-                input_tokens: u32_at(&v, "/usage/input_tokens"),
-                output_tokens: u32_at(&v, "/usage/output_tokens"),
+                input_tokens: u32_at(v, "/usage/input_tokens"),
+                output_tokens: u32_at(v, "/usage/output_tokens"),
             },
             truncated: v.get("stop_reason").and_then(Value::as_str) == Some("max_tokens"),
         })
+    }
+}
+
+#[async_trait]
+impl AiProvider for Anthropic {
+    fn info(&self) -> ProviderInfo {
+        ProviderInfo {
+            id: self.config.kind.provider_id().into(),
+            name_key: "ai.kind.anthropic".into(),
+            capabilities: vec![
+                Capability::Streaming,
+                Capability::StructuredOutput,
+                Capability::Vision,
+                Capability::Tools,
+            ],
+            settings: vec![],
+            secret_keys: vec!["api_key".into()],
+            local: false,
+        }
+    }
+
+    async fn complete(&self, request: CompletionRequest) -> ProviderResult<CompletionResponse> {
+        let key = self.http.require_key()?;
+        let body = self.body(&request)?;
+        let v = self.http.post("/v1/messages", &Self::headers(key), &body)?;
+        self.response(&v, &request)
+    }
+
+    async fn complete_stream(
+        &self,
+        request: CompletionRequest,
+        on_text: &(dyn for<'t> Fn(&'t str) + Send + Sync),
+    ) -> ProviderResult<CompletionResponse> {
+        if request.json_schema.is_some() {
+            // Structured output arrives as one tool input: nothing to show while it streams.
+            let response = self.complete(request).await?;
+            on_text(&response.text);
+            return Ok(response);
+        }
+        let key = self.http.require_key()?;
+        let mut body = self.body(&request)?;
+        body["stream"] = json!(true);
+        let mut out = CompletionResponse {
+            model: model_of(&request)?.to_owned(),
+            text: String::new(),
+            usage: Usage::default(),
+            truncated: false,
+        };
+        let mut failure = None;
+        let whole =
+            self.http
+                .post_stream("/v1/messages", &Self::headers(key), &body, &mut |line| {
+                    let Some(data) = line.strip_prefix("data:") else {
+                        return Ok(true);
+                    };
+                    let Ok(v) = serde_json::from_str::<Value>(data.trim()) else {
+                        return Ok(true);
+                    };
+                    if let Err(e) = sse_event(&v, &mut out, on_text) {
+                        failure = Some(e);
+                        return Ok(false);
+                    }
+                    Ok(v.get("type").and_then(Value::as_str) != Some("message_stop"))
+                })?;
+        if let Some(v) = whole {
+            let response = self.response(&v, &request)?;
+            on_text(&response.text);
+            return Ok(response);
+        }
+        match failure {
+            Some(e) => Err(ProviderError {
+                message: crate::redact(&e.message, self.http.key()),
+                ..e
+            }),
+            None => Ok(out),
+        }
     }
 
     async fn list_models(&self) -> ProviderResult<Vec<String>> {

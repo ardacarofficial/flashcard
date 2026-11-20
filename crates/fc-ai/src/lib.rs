@@ -11,6 +11,8 @@
 //!   (`keychain` feature) and an in-memory store for tests. Keys are [`secrets::Secret`]s:
 //!   no `Display`, no `Serialize`, a redacted `Debug`, and provider errors are scrubbed of
 //!   them ([`redact`]).
+//! * [`sources`]: card-generation sources — text of a PDF page range (lopdf) and the
+//!   readable text of a web page (fetched with size/time limits, no scripts run).
 //! * [`block_on`]: runs a provider future on the calling thread (the app's job worker).
 //! * `mock` (feature, also in this crate's tests): a local HTTP server that records requests,
 //!   so every provider is tested without the network. Real-API tests are opt-in via
@@ -23,12 +25,15 @@ mod http;
 mod ollama;
 mod openai;
 pub mod secrets;
+pub mod sources;
 
 #[cfg(any(test, feature = "mock"))]
 pub mod mock;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_v2;
 
 pub use executor::block_on;
 pub use http::redact;

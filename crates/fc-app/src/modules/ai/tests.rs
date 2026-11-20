@@ -33,21 +33,21 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-const KEY: &str = "sk-ant-TEST-9f8e7d6c5b4a39281706";
+pub(super) const KEY: &str = "sk-ant-TEST-9f8e7d6c5b4a39281706";
 
-fn app_over(store: Arc<dyn Store>) -> TestApp {
+pub(super) fn app_over(store: Arc<dyn Store>) -> TestApp {
     let t = TestApp::new(store);
     t.app.set_secret_store(Arc::new(MemorySecrets::new()));
     t.app.ai_services().unwrap().set_retry_base_ms(0);
     t
 }
 
-fn app() -> TestApp {
+pub(super) fn app() -> TestApp {
     app_over(Arc::new(MemStore::new()))
 }
 
 /// Claude answering with a forced tool call carrying `input`.
-fn claude_tool(input: Value) -> MockResponse {
+pub(super) fn claude_tool(input: Value) -> MockResponse {
     MockResponse::json(&json!({
         "model": "claude-sonnet-5-5",
         "content": [{"type": "tool_use", "id": "t", "name": "emit_result", "input": input}],
@@ -56,7 +56,7 @@ fn claude_tool(input: Value) -> MockResponse {
     }))
 }
 
-fn claude_text(text: &str) -> MockResponse {
+pub(super) fn claude_text(text: &str) -> MockResponse {
     MockResponse::json(&json!({
         "model": "claude-sonnet-5-5",
         "content": [{"type": "text", "text": text}],
@@ -65,7 +65,7 @@ fn claude_text(text: &str) -> MockResponse {
     }))
 }
 
-fn claude(t: &TestApp, server: &MockServer, key: Option<&str>) -> AiProviderDto {
+pub(super) fn claude(t: &TestApp, server: &MockServer, key: Option<&str>) -> AiProviderDto {
     let p = t.ok::<AiProvidersCreate>(CreateAiProvider {
         kind: AiProviderKind::Anthropic,
         name: None,
@@ -82,7 +82,7 @@ fn claude(t: &TestApp, server: &MockServer, key: Option<&str>) -> AiProviderDto 
     }
 }
 
-fn deck(t: &TestApp, path: &str) -> DeckDto {
+pub(super) fn deck(t: &TestApp, path: &str) -> DeckDto {
     t.ok::<DecksCreate>(CreateDeck {
         path: path.into(),
         parent_id: None,
@@ -93,13 +93,13 @@ fn deck(t: &TestApp, path: &str) -> DeckDto {
 }
 
 /// "Dil::İngilizce" under a "Dil" deck with a Seviye (A1–C2) classification.
-struct Levels {
-    deck: DeckDto,
+pub(super) struct Levels {
+    pub(super) deck: DeckDto,
     seviye: AttributeDefId,
     b1: AttributeOptionId,
 }
 
-fn levels(t: &TestApp) -> Levels {
+pub(super) fn levels(t: &TestApp) -> Levels {
     let parent = deck(t, "Dil");
     let deck = deck(t, "Dil::İngilizce");
     let def = t.ok::<AttributesDefine>(DefineAttribute {
@@ -125,7 +125,7 @@ fn levels(t: &TestApp) -> Levels {
     }
 }
 
-fn generate(levels: &Levels, source: &str) -> AiTask {
+pub(super) fn generate(levels: &Levels, source: &str) -> AiTask {
     AiTask::GenerateCards {
         deck_id: levels.deck.id,
         notetype_id: CLASSIC_ID,
@@ -140,7 +140,7 @@ fn generate(levels: &Levels, source: &str) -> AiTask {
     }
 }
 
-fn preview(t: &TestApp, task: AiTask) -> AiPreview {
+pub(super) fn preview(t: &TestApp, task: AiTask) -> AiPreview {
     t.ok::<AiPreviewTask>(PreviewAi {
         task,
         provider_id: None,
@@ -149,7 +149,7 @@ fn preview(t: &TestApp, task: AiTask) -> AiPreview {
 }
 
 /// Previews, confirms and runs `task`; returns the finished job.
-fn run(t: &TestApp, task: AiTask) -> JobDto {
+pub(super) fn run(t: &TestApp, task: AiTask) -> JobDto {
     let p = preview(t, task.clone());
     let job = t.ok::<AiRun>(RunAi {
         task,
@@ -161,12 +161,12 @@ fn run(t: &TestApp, task: AiTask) -> JobDto {
     t.ok::<JobsGet>(JobRef { id: job.id })
 }
 
-fn result(job: &JobDto) -> AiJobResult {
+pub(super) fn result(job: &JobDto) -> AiJobResult {
     assert_eq!(job.status, JobStatus::Succeeded, "{:?}", job.error);
     serde_json::from_value(job.result.clone().unwrap()).unwrap()
 }
 
-fn classic(t: &TestApp, deck: &DeckDto, front: &str, back: &str) -> NoteDto {
+pub(super) fn classic(t: &TestApp, deck: &DeckDto, front: &str, back: &str) -> NoteDto {
     t.ok::<NotesCreate>(CreateNote {
         notetype_id: CLASSIC_ID,
         deck_id: deck.id,
@@ -383,6 +383,7 @@ fn api_key_never_reaches_db_oplog_errors_events_or_jobs() {
         default_model: "claude-haiku-5-5".into(),
         models: vec![],
         is_default: true,
+        keep_key: None,
     });
 
     let leaks = |what: &str, text: &str| {

@@ -86,7 +86,11 @@
       "make_default": "Make default",
       "delete": "Remove",
       "kind": "Type",
-      "add": "Add provider"
+      "add": "Add provider",
+      "session_keychain": "Keys are kept only for this session on this system (they may disappear after you log out). You may need to enter them again.",
+      "move_key": "New address: {url}. An API key is stored for the old one. Send it to the new address too?",
+      "move_remove_key": "Change and remove the key",
+      "move_keep_key": "Change and keep the key"
     },
     "routes": {
       "heading": "Model per feature",
@@ -117,7 +121,36 @@
     "job": {
       "connecting": "Connecting…",
       "waiting": "Waiting for the answer…",
-      "repairing": "Fixing the answer format…"
+      "repairing": "Fixing the answer format…",
+      "reading_source": "Reading the source…"
+    },
+    "source": {
+      "from": "Source from",
+      "text": "Text",
+      "pdf": "PDF",
+      "url": "Web page",
+      "choose_pdf": "Choose PDF…",
+      "pdf_prompt": "Path of the PDF file",
+      "from_page": "From page",
+      "to_page": "to",
+      "read_pages": "Read pages",
+      "url_label": "Web page address",
+      "fetch": "Get text",
+      "url_note": "Only the page's text is read; no scripts run. Nothing goes to the AI until you preview and send.",
+      "pages_read": "Pages {from}–{to} of {count}. Edit the text below as you like.",
+      "page_read": "Text of “{title}”. Edit it below as you like.",
+      "truncated": "The text was long and has been cut. Pick fewer pages or a shorter part.",
+      "url_placeholder": "https://…"
+    },
+    "study": {
+      "hint": "AI hint",
+      "explain": "Explain",
+      "check": "Check with AI",
+      "verdict": {
+        "correct": "Correct",
+        "almost": "Almost",
+        "wrong": "Not quite"
+      }
     }
   },
   "errors": {
@@ -125,7 +158,8 @@
       "ai_provider": "Check the provider's name, address or model.",
       "ai_key": "The API key looks wrong (empty, too long or with spaces).",
       "ai_task": "This request cannot be sent as it is.",
-      "ai_price": "Prices must be numbers from 0, with a model name."
+      "ai_price": "Prices must be numbers from 0, with a model name.",
+      "ai_source": "This source cannot be used (check the address, file or pages)."
     },
     "not_found": {
       "ai_provider": "AI provider not found."
@@ -140,7 +174,8 @@
       "ai_rate_limited": "Rate limit reached. Try again later.",
       "ai_invalid_request": "The provider refused the request.",
       "ai_invalid_output": "The answer was not in the expected format.",
-      "ai_keychain": "The system keychain is not available."
+      "ai_keychain": "The system keychain is not available.",
+      "ai_source": "The web page could not be fetched. Try again later."
     }
   },
   "settings": {
@@ -213,6 +248,9 @@
       "notes": {
         "add": "Add AI notes",
         "update": "Apply AI suggestion"
+      },
+      "sources": {
+        "extract": "Read a card source (PDF, web page)"
       }
     }
   }

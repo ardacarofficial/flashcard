@@ -65,6 +65,14 @@ pub trait JobWrite: JobRead {
     /// Claims the oldest `queued` job: sets it `running` with `updated_at = now` and returns
     /// it (`None` if the queue is empty).
     fn claim_next_job(&mut self, now: Timestamp) -> StorageResult<Option<JobRecord>>;
+    /// [`JobWrite::claim_next_job`] restricted to a worker lane: the oldest `queued` job whose
+    /// kind is in `kinds` (`only = true`) or is not in `kinds` (`only = false`).
+    fn claim_next_job_in(
+        &mut self,
+        now: Timestamp,
+        kinds: &[&str],
+        only: bool,
+    ) -> StorageResult<Option<JobRecord>>;
     /// Inserts or replaces an unfinished undo group.
     fn upsert_unfinished_batch(&mut self, batch: &UnfinishedBatchRecord) -> StorageResult<()>;
     /// Appends part `part` (its inverse calls) to an unfinished group.

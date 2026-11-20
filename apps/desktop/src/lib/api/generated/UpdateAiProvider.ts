@@ -3,6 +3,10 @@ import type { AiProviderId } from "./AiProviderId";
 
 /**
  * `ai.providers.update`: replaces the editable columns.
+ *
+ * Changing `base_url` removes the stored API key (a key must never follow a provider to a
+ * new host it was not entered for), unless `keep_key` is `true` **and** the caller may also
+ * write keys (`ai_keys:write`).
  */
 export type UpdateAiProvider = { 
 /**
@@ -28,4 +32,9 @@ models: Array<string>,
 /**
  * Make it the default (`false` on the default provider is ignored: pick another one).
  */
-is_default: boolean, };
+is_default: boolean, 
+/**
+ * When `base_url` changes: keep the stored key for the new address (the user confirmed;
+ * needs `ai_keys:write`). `null`/`false` = the key is removed.
+ */
+keep_key?: boolean | null, };

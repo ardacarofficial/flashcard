@@ -13,6 +13,7 @@ import type {
   AiProviderDto,
   AiProviderKind,
   AiRouteDto,
+  AiSourceText,
   AiTask,
   AiUsageTotals,
   JobDto,
@@ -130,7 +131,7 @@ export default {
       };
     };
     return {
-      'ai.providers.list': () => ({ providers, kinds: KINDS, keychain: true }),
+      'ai.providers.list': () => ({ providers, kinds: KINDS, keychain: true, keychain_session_only: false }),
       'ai.providers.create': (req) => {
         const info = KINDS.find((k) => k.kind === req.kind)!;
         const t = now();
@@ -156,6 +157,8 @@ export default {
       'ai.providers.update': (req) => {
         const p = find(req.id);
         if (req.is_default) for (const x of providers) x.is_default = false;
+        // As in fc-app: a key never follows the provider to a new address unconfirmed.
+        if (req.base_url.replace(/\/+$/, '') !== p.base_url && req.keep_key !== true) p.has_key = false;
         Object.assign(p, {
           name: req.name,
           base_url: req.base_url,
@@ -248,14 +251,49 @@ export default {
           truncated: false,
         };
         const t = now();
+        const jobId = id('job');
+        // Streamed features: the pieces arrive (as events) before the result.
+        const out = result.output;
+        if (out.feature === 'explain' || out.feature === 'hint') {
+          const words = out.text.split(' ');
+          for (let i = 1; i <= words.length; i++) {
+            emit({ type: 'ai_partial', data: { job_id: jobId, text: words.slice(0, i).join(' ') } });
+          }
+        }
         return {
-          id: id('job'),
+          id: jobId,
           kind: 'ai.request',
           status: 'succeeded',
           progress: 1,
           message: null,
           error: null,
           result: result as unknown as JsonValue,
+          created_at: t,
+          updated_at: t,
+        };
+      },
+      'ai.sources.extract': (req) => {
+        const t = now();
+        const src = req.source;
+        const text: AiSourceText =
+          src.kind === 'pdf'
+            ? {
+                title: src.path,
+                text: `Text of pages ${src.from_page ?? 1}–${src.to_page ?? 3} of ${src.path}.`,
+                page_count: 3,
+                from_page: src.from_page ?? 1,
+                to_page: src.to_page ?? 3,
+                truncated: false,
+              }
+            : { title: src.url, text: `Readable text of ${src.url}.`, page_count: null, from_page: null, to_page: null, truncated: false };
+        return {
+          id: id('job'),
+          kind: 'ai.source',
+          status: 'succeeded',
+          progress: 1,
+          message: null,
+          error: null,
+          result: text as unknown as JsonValue,
           created_at: t,
           updated_at: t,
         };

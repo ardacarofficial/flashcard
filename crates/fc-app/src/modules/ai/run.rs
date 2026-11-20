@@ -4,7 +4,7 @@ use super::context::{build, require_provider, Built, Target};
 use super::prompts::{parse, repair_message, OutputSpec, Parsed};
 use super::providers::{dto, has_key, keychain_error, kind_of, parse_kind};
 use super::usage::{budget, cost};
-use super::{key_account, AiServices, MODELS_JOB, REQUEST_JOB, RETRIES, TIMEOUT};
+use super::{key_account, AiServices, ID, LANE, MODELS_JOB, REQUEST_JOB, RETRIES, TIMEOUT};
 use crate::error::{AppError, AppResult};
 use crate::handler::{CommandCtx, CommandOutcome, QueryCtx};
 use crate::jobs::{JobContext, JobHandler};
@@ -13,6 +13,7 @@ use crate::support::summary;
 use fc_ai::secrets::Secret;
 use fc_ai::{MediaSource, ProviderConfig};
 use fc_api::v1::ai::*;
+use fc_api::v1::events::DomainEvent;
 use fc_api::v1::jobs::JobDto;
 use fc_api::v1::methods::{
     AiPreviewTask as PreviewMethod, AiProvidersSetModels, AiRun, AiUsageRecord as RecordMethod,
@@ -23,12 +24,19 @@ use fc_core::settings::SettingScope;
 use fc_core::AiProviderId;
 use fc_providers::ai::{AiProvider, CompletionRequest, CompletionResponse, ContentPart, Message, Role};
 use fc_providers::{ProviderError, ProviderErrorKind};
+use fc_storage::repo::AiProviderRecord;
 use fc_storage::Reads;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+/// Longest `Retry-After` a job waits for; a longer one fails the job ("try again later").
+const MAX_HONOURED_RETRY_AFTER_MS: u64 = 60_000;
+
+/// Least time between two `ai_partial` events of a streaming job.
+const PARTIAL_EVERY: Duration = Duration::from_millis(60);
 
 pub(super) fn register(reg: &mut Registry, services: &Arc<AiServices>) {
     let s = Arc::clone(services);
@@ -41,11 +49,23 @@ pub(super) fn register(reg: &mut Registry, services: &Arc<AiServices>) {
     reg.job(Arc::new(ModelsJob(Arc::clone(services))));
 }
 
-/// Hash of exactly what will be sent (provider, model and the full request).
-fn request_hash(provider: AiProviderId, request: &CompletionRequest) -> AppResult<String> {
-    let text = serde_json::to_string(&(provider, request))
-        .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+/// Hash of exactly what will be sent and where: the provider, its protocol and address, the
+/// model and the full request. Changing the provider's URL or kind after the preview makes
+/// `ai.run` refuse (`CONFLICT_AI_PREVIEW_STALE`).
+fn request_hash(provider: &AiProviderRecord, request: &CompletionRequest) -> AppResult<String> {
+    let text = serde_json::to_string(&(
+        provider.id,
+        &provider.kind,
+        &provider.base_url,
+        &request.model,
+        request,
+    ))
+    .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
     Ok(format!("{:016x}", fnv1a64(text.as_bytes())))
+}
+
+fn stale(message: &str) -> AppError {
+    AppError::api(ErrorCode::ConflictAiPreviewStale, message)
 }
 
 /// ≈ 4 characters per token, ~1.5k tokens per image (an estimate shown as such).
@@ -116,7 +136,7 @@ fn preview_of(services: &AiServices, reads: &dyn Reads, now: fc_core::Timestamp,
         estimated_input_tokens,
         estimated_cost_usd,
         items: b.items,
-        preview_hash: request_hash(b.provider.id, &b.request)?,
+        preview_hash: request_hash(&b.provider, &b.request)?,
         budget: budget(reads, now, estimated_cost_usd.unwrap_or(0.0))?,
     })
 }
@@ -137,6 +157,12 @@ fn preview(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RequestPayload {
     provider_id: AiProviderId,
+    /// Protocol and address the request was previewed for: the job refuses to send if the
+    /// provider changed since.
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    base_url: String,
     model: String,
     feature: AiFeature,
     request: CompletionRequest,
@@ -151,11 +177,8 @@ fn run(services: &AiServices, req: RunAi, ctx: &mut CommandCtx<'_>) -> AppResult
         model: req.model,
     };
     let built = build(ctx.reads(), ctx.registry, ctx.locale, &preview)?;
-    if request_hash(built.provider.id, &built.request)? != req.preview_hash {
-        return Err(AppError::api(
-            ErrorCode::ConflictAiPreviewStale,
-            "the request changed since it was previewed",
-        ));
+    if request_hash(&built.provider, &built.request)? != req.preview_hash {
+        return Err(stale("the request changed since it was previewed"));
     }
     if kind_of(parse_kind(&built.provider.kind)?).needs_key() && !has_key(services, built.provider.id) {
         return Err(AppError::Api(
@@ -165,6 +188,8 @@ fn run(services: &AiServices, req: RunAi, ctx: &mut CommandCtx<'_>) -> AppResult
     }
     let payload = RequestPayload {
         provider_id: built.provider.id,
+        kind: built.provider.kind.clone(),
+        base_url: built.provider.base_url.clone(),
         model: built.model,
         feature: built.feature,
         request: built.request,
@@ -233,10 +258,17 @@ fn connect(
     ctx: &JobContext<'_>,
     id: AiProviderId,
     images: &[String],
+    endpoint: Option<(&str, &str)>,
 ) -> AppResult<Connection> {
     let (record, timeout, retries, media) = {
         let reads = ctx.read()?;
         let record = require_provider(&*reads, id)?;
+        if let Some((kind, base_url)) = endpoint {
+            // The key goes only where the user saw the request going.
+            if record.kind != kind || record.base_url != base_url || record.deleted_at.is_some() {
+                return Err(stale("the provider changed since the request was previewed"));
+            }
+        }
         let timeout = setting_u64(&*reads, TIMEOUT, 120)?.clamp(5, 600);
         let retries = setting_u64(&*reads, RETRIES, 2)?.min(5) as u32;
         let mut media = HashMap::new();
@@ -278,7 +310,63 @@ fn pause(ctx: &JobContext<'_>, d: Duration) -> AppResult<()> {
     ctx.cancel.check()
 }
 
-/// Sends `request` (retrying rate limits and outages with growing pauses), records its usage.
+/// Streamed output so far, published as throttled `ai_partial` events.
+struct Partial<'a> {
+    ctx: &'a JobContext<'a>,
+    state: Mutex<(String, Option<Instant>)>,
+}
+
+impl<'a> Partial<'a> {
+    fn new(ctx: &'a JobContext<'a>) -> Self {
+        Self {
+            ctx,
+            state: Mutex::new((String::new(), None)),
+        }
+    }
+
+    fn emit(&self, text: String) {
+        self.ctx.publish(vec![DomainEvent::AiPartial {
+            job_id: self.ctx.job_id,
+            text,
+        }]);
+    }
+
+    fn push(&self, piece: &str) {
+        let Ok(mut s) = self.state.lock() else { return };
+        s.0.push_str(piece);
+        let due = s.1.is_none_or(|t| t.elapsed() >= PARTIAL_EVERY);
+        if due {
+            s.1 = Some(Instant::now());
+            let text = s.0.clone();
+            drop(s);
+            self.emit(text);
+        }
+    }
+
+    /// A new attempt starts from nothing (a retry must not append to a failed stream).
+    fn reset(&self) {
+        let Ok(mut s) = self.state.lock() else { return };
+        let had = !s.0.is_empty();
+        *s = (String::new(), None);
+        drop(s);
+        if had {
+            self.emit(String::new());
+        }
+    }
+
+    /// The last pieces, which throttling may have held back.
+    fn flush(&self) {
+        let text = match self.state.lock() {
+            Ok(s) => s.0.clone(),
+            Err(_) => return,
+        };
+        self.emit(text);
+    }
+}
+
+/// Sends `request` (retrying rate limits and outages: after the provider's `Retry-After`, else
+/// with growing, jittered pauses), records its usage. With `stream`, output text is published
+/// as it arrives.
 fn send(
     services: &AiServices,
     ctx: &JobContext<'_>,
@@ -286,12 +374,27 @@ fn send(
     feature: AiFeature,
     request: &CompletionRequest,
     attempts: &mut u32,
+    stream: Option<&Partial<'_>>,
 ) -> AppResult<CompletionResponse> {
     let mut attempt = 0;
     loop {
         ctx.cancel.check()?;
+        // Turned off while queued or between retries: nothing more goes out.
+        ctx.ensure_module_enabled(ID)?;
         *attempts += 1;
-        match fc_ai::block_on(conn.provider.complete(request.clone())) {
+        let result = match stream {
+            Some(partial) => {
+                partial.reset();
+                let on_text = |t: &str| partial.push(t);
+                let r = fc_ai::block_on(conn.provider.complete_stream(request.clone(), &on_text));
+                if r.is_ok() {
+                    partial.flush();
+                }
+                r
+            }
+            None => fc_ai::block_on(conn.provider.complete(request.clone())),
+        };
+        match result {
             Ok(response) => {
                 // Spent tokens are recorded even if the job is cancelled right after.
                 ctx.invoke::<RecordMethod>(&RecordAiUsage {
@@ -304,8 +407,12 @@ fn send(
                 ctx.cancel.check()?;
                 return Ok(response);
             }
-            Err(e) if e.retryable && attempt < conn.retries => {
-                pause(ctx, services.retry_pause(attempt))?;
+            Err(e)
+                if e.retryable
+                    && attempt < conn.retries
+                    && e.retry_after_ms.is_none_or(|ms| ms <= MAX_HONOURED_RETRY_AFTER_MS) =>
+            {
+                pause(ctx, services.retry_pause(attempt, e.retry_after_ms))?;
                 attempt += 1;
             }
             Err(e) => return Err(provider_error(e, &conn.name, conn.key.as_ref())),
@@ -356,6 +463,10 @@ impl JobHandler for RequestJob {
         REQUEST_JOB
     }
 
+    fn lane(&self) -> &'static str {
+        LANE
+    }
+
     fn run(&self, payload: Value, ctx: &JobContext<'_>) -> AppResult<Value> {
         let payload: RequestPayload = crate::support::from_json(&payload)?;
         let images: Vec<String> = payload
@@ -368,13 +479,32 @@ impl JobHandler for RequestJob {
                 ContentPart::Text { .. } => None,
             })
             .collect();
+        // Queued before the module was turned off: the request never leaves.
+        ctx.ensure_module_enabled(ID)?;
         ctx.report(None, "ai.job.connecting");
-        let conn = connect(&self.0, ctx, payload.provider_id, &images)?;
+        let conn = connect(
+            &self.0,
+            ctx,
+            payload.provider_id,
+            &images,
+            Some((&payload.kind, &payload.base_url)),
+        )?;
+        // Plain-text answers (explain, hint) are shown while they arrive.
+        let partial = Partial::new(ctx);
+        let stream = matches!(payload.spec, OutputSpec::Text).then_some(&partial);
         let mut attempts = 0;
         let mut input_tokens = 0u32;
         let mut output_tokens = 0u32;
         ctx.report(None, "ai.job.waiting");
-        let first = send(&self.0, ctx, &conn, payload.feature, &payload.request, &mut attempts)?;
+        let first = send(
+            &self.0,
+            ctx,
+            &conn,
+            payload.feature,
+            &payload.request,
+            &mut attempts,
+            stream,
+        )?;
         input_tokens += first.usage.input_tokens;
         output_tokens += first.usage.output_tokens;
         let mut truncated = first.truncated;
@@ -401,7 +531,7 @@ impl JobHandler for RequestJob {
                         text: repair_message(&problem),
                     }],
                 });
-                let second = send(&self.0, ctx, &conn, payload.feature, &repair, &mut attempts)?;
+                let second = send(&self.0, ctx, &conn, payload.feature, &repair, &mut attempts, None)?;
                 input_tokens += second.usage.input_tokens;
                 output_tokens += second.usage.output_tokens;
                 truncated = second.truncated;
@@ -443,9 +573,14 @@ impl JobHandler for ModelsJob {
         MODELS_JOB
     }
 
+    fn lane(&self) -> &'static str {
+        LANE
+    }
+
     fn run(&self, payload: Value, ctx: &JobContext<'_>) -> AppResult<Value> {
         let payload: ModelsPayload = crate::support::from_json(&payload)?;
-        let conn = connect(&self.0, ctx, payload.provider_id, &[])?;
+        ctx.ensure_module_enabled(ID)?;
+        let conn = connect(&self.0, ctx, payload.provider_id, &[], None)?;
         ctx.cancel.check()?;
         let models = fc_ai::block_on(conn.provider.list_models())
             .map_err(|e| provider_error(e, &conn.name, conn.key.as_ref()))?;

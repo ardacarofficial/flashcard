@@ -135,6 +135,9 @@ pub struct AiProviderList {
     pub kinds: Vec<AiProviderKindInfo>,
     /// Whether API keys can be stored on this system (an OS keychain is available).
     pub keychain: bool,
+    /// Stored keys last only for this login session or app run (Linux kernel keyring, memory
+    /// fallback): the user may have to enter them again — the UI says so.
+    pub keychain_session_only: bool,
 }
 
 /// `ai.providers.create`. Missing values come from the kind's defaults.
@@ -159,8 +162,13 @@ pub struct CreateAiProvider {
 }
 
 /// `ai.providers.update`: replaces the editable columns.
+///
+/// Changing `base_url` removes the stored API key (a key must never follow a provider to a
+/// new host it was not entered for), unless `keep_key` is `true` **and** the caller may also
+/// write keys (`ai_keys:write`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
 pub struct UpdateAiProvider {
     /// Id.
     pub id: AiProviderId,
@@ -174,6 +182,10 @@ pub struct UpdateAiProvider {
     pub models: Vec<String>,
     /// Make it the default (`false` on the default provider is ignored: pick another one).
     pub is_default: bool,
+    /// When `base_url` changes: keep the stored key for the new address (the user confirmed;
+    /// needs `ai_keys:write`). `null`/`false` = the key is removed.
+    #[serde(default)]
+    pub keep_key: Option<bool>,
 }
 
 /// A provider by id.
@@ -691,4 +703,55 @@ pub struct UpdateAiNote {
     pub note_id: NoteId,
     /// Field key → new value.
     pub fields: BTreeMap<String, String>,
+}
+
+// ------------------------------------------------------------------ sources
+
+/// Where card-generation text comes from (`ai.sources.extract`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub enum AiSourceInput {
+    /// Text of a PDF file's pages.
+    Pdf {
+        /// Absolute path of the file.
+        path: String,
+        /// First page (1-based; `null` = 1).
+        #[serde(default)]
+        from_page: Option<u32>,
+        /// Last page, inclusive (`null` = the last page).
+        #[serde(default)]
+        to_page: Option<u32>,
+    },
+    /// Readable text of a web page (fetched without running scripts; size and time limited).
+    Url {
+        /// `http(s)://…`
+        url: String,
+    },
+}
+
+/// `ai.sources.extract`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ExtractAiSource {
+    /// The source.
+    pub source: AiSourceInput,
+}
+
+/// Result of an `ai.source` job: text to put in the (editable) source box. Nothing is sent to
+/// an AI provider by extracting.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AiSourceText {
+    /// Document/page title.
+    pub title: Option<String>,
+    /// The text (cut to the source limit, see `truncated`).
+    pub text: String,
+    /// Pages in the PDF (`null` for web pages).
+    pub page_count: Option<u32>,
+    /// First page read.
+    pub from_page: Option<u32>,
+    /// Last page read.
+    pub to_page: Option<u32>,
+    /// The text was longer than a request may carry and was cut.
+    pub truncated: bool,
 }

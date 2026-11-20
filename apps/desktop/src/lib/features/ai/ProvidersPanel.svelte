@@ -14,6 +14,8 @@
   let notice = $state<string | null>(null);
   let error = $state<string | null>(null);
   let price = $state<AiPriceDto>({ model: '', input_per_mtok: 0, output_per_mtok: 0 });
+  /** A new address typed for a provider with a stored key: waits for keep/remove. */
+  let moving = $state<Record<string, string>>({});
 
   function fail(e: unknown) {
     error = td((e as ApiError).messageKey ?? 'errors.internal.unexpected');
@@ -48,7 +50,7 @@
 
   const add = () => act(() => api.call('ai.providers.create', { kind: newKind }));
 
-  function update(p: AiProviderDto, patch: Partial<AiProviderDto>) {
+  function update(p: AiProviderDto, patch: Partial<AiProviderDto>, keepKey: boolean | null = null) {
     const next = { ...p, ...patch };
     return act(() =>
       api.call('ai.providers.update', {
@@ -58,8 +60,22 @@
         default_model: next.default_model,
         models: next.models,
         is_default: next.is_default,
+        keep_key: keepKey,
       }),
     );
+  }
+
+  /** A key is never sent to a new address unless the user says so. */
+  function changeUrl(p: AiProviderDto, url: string) {
+    if (url.trim().replace(/\/+$/, '') === p.base_url) return;
+    if (p.has_key) moving[p.id] = url;
+    else void update(p, { base_url: url });
+  }
+
+  async function confirmMove(p: AiProviderDto, keep: boolean) {
+    const url = moving[p.id];
+    delete moving[p.id];
+    if (url !== undefined) await update(p, { base_url: url }, keep);
   }
 
   async function saveKey(p: AiProviderDto) {
@@ -94,6 +110,8 @@
   {/if}
   {#if list && !list.keychain}
     <p class="warn">{t('ai.providers.no_keychain')}</p>
+  {:else if list?.keychain_session_only}
+    <p class="warn" role="note">{t('ai.providers.session_keychain')}</p>
   {/if}
 
   <h3>{t('ai.providers.heading')}</h3>
@@ -112,10 +130,20 @@
         {t('ai.providers.base_url')}
         <input
           type="url"
-          value={p.base_url}
-          onchange={(e) => void update(p, { base_url: (e.currentTarget as HTMLInputElement).value })}
+          value={moving[p.id] ?? p.base_url}
+          onchange={(e) => changeUrl(p, (e.currentTarget as HTMLInputElement).value)}
         />
       </label>
+      {#if moving[p.id] !== undefined}
+        <div class="warn move" role="alert">
+          <p>{t('ai.providers.move_key', { url: moving[p.id] ?? '' })}</p>
+          <div class="actions">
+            <button onclick={() => void confirmMove(p, false)}>{t('ai.providers.move_remove_key')}</button>
+            <button onclick={() => void confirmMove(p, true)}>{t('ai.providers.move_keep_key')}</button>
+            <button onclick={() => delete moving[p.id]}>{t('ai.preview.cancel')}</button>
+          </div>
+        </div>
+      {/if}
       <label>
         {t('ai.providers.model')}
         <input

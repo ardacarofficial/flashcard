@@ -12,5 +12,6 @@
   "oplog.summary.ai.usage.record": "AI kullanımı kaydedildi",
   "oplog.summary.ai.run": "AI isteği gönderildi",
   "oplog.summary.ai.notes.add": "{count} AI notu eklendi",
-  "oplog.summary.ai.notes.update": "AI önerisi uygulandı"
+  "oplog.summary.ai.notes.update": "AI önerisi uygulandı",
+  "oplog.summary.ai.sources.extract": "Kart kaynağı okundu"
 }

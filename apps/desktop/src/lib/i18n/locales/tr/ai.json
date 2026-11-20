@@ -86,7 +86,11 @@
       "make_default": "Varsayılan yap",
       "delete": "Kaldır",
       "kind": "Tür",
-      "add": "Sağlayıcı ekle"
+      "add": "Sağlayıcı ekle",
+      "session_keychain": "Bu sistemde anahtarlar yalnızca bu oturum boyunca saklanır (oturumu kapatınca silinebilir). Yeniden girmen gerekebilir.",
+      "move_key": "Yeni adres: {url}. Eski adres için kayıtlı bir API anahtarı var. Yeni adrese de gönderilsin mi?",
+      "move_remove_key": "Değiştir, anahtarı sil",
+      "move_keep_key": "Değiştir, anahtarı koru"
     },
     "routes": {
       "heading": "Özellik başına model",
@@ -117,7 +121,36 @@
     "job": {
       "connecting": "Bağlanıyor…",
       "waiting": "Cevap bekleniyor…",
-      "repairing": "Cevap biçimi düzeltiliyor…"
+      "repairing": "Cevap biçimi düzeltiliyor…",
+      "reading_source": "Kaynak okunuyor…"
+    },
+    "source": {
+      "from": "Kaynak",
+      "text": "Metin",
+      "pdf": "PDF",
+      "url": "Web sayfası",
+      "choose_pdf": "PDF seç…",
+      "pdf_prompt": "PDF dosyasının yolu",
+      "from_page": "Sayfa",
+      "to_page": "ile",
+      "read_pages": "Sayfaları oku",
+      "url_label": "Web sayfası adresi",
+      "fetch": "Metni al",
+      "url_note": "Yalnızca sayfanın metni okunur, betik çalıştırılmaz. Önizleyip gönderene kadar AI'ya hiçbir şey gitmez.",
+      "pages_read": "{count} sayfadan {from}–{to} arası. Aşağıdaki metni dilediğin gibi düzenle.",
+      "page_read": "“{title}” metni. Aşağıda dilediğin gibi düzenle.",
+      "truncated": "Metin uzun olduğu için kısaltıldı. Daha az sayfa ya da daha kısa bir bölüm seç.",
+      "url_placeholder": "https://…"
+    },
+    "study": {
+      "hint": "AI ipucu",
+      "explain": "Açıkla",
+      "check": "AI ile kontrol et",
+      "verdict": {
+        "correct": "Doğru",
+        "almost": "Neredeyse",
+        "wrong": "Pek değil"
+      }
     }
   },
   "errors": {
@@ -125,7 +158,8 @@
       "ai_provider": "Sağlayıcının adını, adresini ya da modelini kontrol et.",
       "ai_key": "API anahtarı hatalı görünüyor (boş, çok uzun ya da boşluklu).",
       "ai_task": "Bu istek bu haliyle gönderilemez.",
-      "ai_price": "Fiyatlar 0'dan büyük sayı olmalı, model adı da gerekli."
+      "ai_price": "Fiyatlar 0'dan büyük sayı olmalı, model adı da gerekli.",
+      "ai_source": "Bu kaynak kullanılamıyor (adresi, dosyayı ya da sayfaları kontrol et)."
     },
     "not_found": {
       "ai_provider": "AI sağlayıcısı bulunamadı."
@@ -140,7 +174,8 @@
       "ai_rate_limited": "İstek sınırına ulaşıldı. Biraz sonra dene.",
       "ai_invalid_request": "Sağlayıcı isteği reddetti.",
       "ai_invalid_output": "Cevap beklenen biçimde değildi.",
-      "ai_keychain": "Sistem anahtar zinciri kullanılamıyor."
+      "ai_keychain": "Sistem anahtar zinciri kullanılamıyor.",
+      "ai_source": "Web sayfası alınamadı. Biraz sonra tekrar dene."
     }
   },
   "settings": {
@@ -213,6 +248,9 @@
       "notes": {
         "add": "AI notlarını ekle",
         "update": "AI önerisini uygula"
+      },
+      "sources": {
+        "extract": "Kart kaynağı oku (PDF, web sayfası)"
       }
     }
   }

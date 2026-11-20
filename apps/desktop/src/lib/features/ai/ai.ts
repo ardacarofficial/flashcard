@@ -1,6 +1,14 @@
 import { api } from '$lib/api';
-import type { AiJobResult, AiPreview, AiProviderId, AiTask, JobDto } from '$lib/api/types';
-import { followJob, isFinal } from '../io/job';
+import type {
+  AiJobResult,
+  AiPreview,
+  AiProviderId,
+  AiSourceInput,
+  AiSourceText,
+  AiTask,
+  JobDto,
+} from '$lib/api/types';
+import { followJob, isFinal, resultOf } from '../io/job';
 
 /** Which provider/model a request uses (`null` = the feature's route, else the default). */
 export interface Choice {
@@ -17,17 +25,46 @@ export function previewTask(task: AiTask, choice: Choice = DEFAULT_CHOICE): Prom
 
 /**
  * Sends what `preview` showed (the backend refuses if anything changed since) and waits for
- * the job. `onUpdate` sees progress snapshots.
+ * the job. `onUpdate` sees progress snapshots; `onPartial` sees the answer so far while it
+ * streams in (explanations and hints).
  */
 export async function sendPreviewed(
   task: AiTask,
   preview: AiPreview,
   choice: Choice = DEFAULT_CHOICE,
   onUpdate: (job: JobDto) => void = () => {},
+  onPartial: (text: string) => void = () => {},
 ): Promise<JobDto> {
-  const job = await api.call('ai.run', { task, ...choice, preview_hash: preview.preview_hash });
-  onUpdate(job);
-  return isFinal(job) ? job : followJob(job, onUpdate);
+  // Listen before the job exists: its first pieces may arrive before `ai.run` returns.
+  let jobId: string | null = null;
+  const early = new Map<string, string>();
+  const off = await api.on('ai_partial', (env) => {
+    if (env.event.type !== 'ai_partial') return;
+    const { job_id, text } = env.event.data;
+    if (jobId === null) early.set(job_id, text);
+    else if (job_id === jobId) onPartial(text);
+  });
+  try {
+    const job = await api.call('ai.run', { task, ...choice, preview_hash: preview.preview_hash });
+    jobId = job.id;
+    const seen = early.get(job.id);
+    if (seen !== undefined) onPartial(seen);
+    onUpdate(job);
+    return isFinal(job) ? job : await followJob(job, onUpdate);
+  } finally {
+    off();
+  }
+}
+
+/** Extracts card-source text from a PDF page range or a web page (nothing goes to an AI). */
+export async function extractSource(
+  source: AiSourceInput,
+  onUpdate: (job: JobDto) => void = () => {},
+): Promise<{ job: JobDto; text: AiSourceText | null }> {
+  const started = await api.call('ai.sources.extract', { source });
+  onUpdate(started);
+  const job = isFinal(started) ? started : await followJob(started, onUpdate);
+  return { job, text: resultOf<AiSourceText>(job) };
 }
 
 /** The typed result of a finished `ai.request` job. */

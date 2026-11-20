@@ -52,6 +52,12 @@ pub trait SecretStore: Send + Sync {
     fn set(&self, account: &str, secret: &Secret) -> Result<(), SecretError>;
     /// Removes the key of `account` (no error if absent).
     fn delete(&self, account: &str) -> Result<(), SecretError>;
+    /// Whether stored keys survive a logout/restart. `false` for stores that keep them only
+    /// for the session (process memory, the Linux kernel keyring): the UI warns that a key
+    /// may have to be entered again.
+    fn persistent(&self) -> bool {
+        true
+    }
 }
 
 /// Process memory only: tests, and the CLI/desktop fallback when there is no keychain.
@@ -85,6 +91,10 @@ impl SecretStore for MemorySecrets {
         self.lock()?.remove(account);
         Ok(())
     }
+
+    fn persistent(&self) -> bool {
+        false
+    }
 }
 
 /// No keychain: nothing is stored, setting a key fails (the app's default until a transport
@@ -103,6 +113,10 @@ impl SecretStore for NoSecrets {
 
     fn delete(&self, _account: &str) -> Result<(), SecretError> {
         Ok(())
+    }
+
+    fn persistent(&self) -> bool {
+        false
     }
 }
 
@@ -161,5 +175,11 @@ impl SecretStore for OsKeychain {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(keychain_error(e)),
         }
+    }
+
+    fn persistent(&self) -> bool {
+        // linux-native = the kernel keyring (keyutils): entries live as long as the login
+        // session. Windows Credential Manager and the macOS Keychain persist.
+        !cfg!(target_os = "linux")
     }
 }

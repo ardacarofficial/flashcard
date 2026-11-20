@@ -12,5 +12,6 @@
   "oplog.summary.ai.usage.record": "Recorded AI usage",
   "oplog.summary.ai.run": "Sent an AI request",
   "oplog.summary.ai.notes.add": "Added {count} AI note(s)",
-  "oplog.summary.ai.notes.update": "Applied an AI suggestion"
+  "oplog.summary.ai.notes.update": "Applied an AI suggestion",
+  "oplog.summary.ai.sources.extract": "Read a card source"
 }

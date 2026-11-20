@@ -7,6 +7,10 @@ use base64::Engine;
 use fc_providers::ai::ContentPart;
 use fc_providers::{ProviderError, ProviderErrorKind, ProviderResult};
 use serde_json::Value;
+use std::io::{BufRead, BufReader};
+
+/// Longest wait a provider's `Retry-After` is honoured up to (10 minutes).
+const MAX_RETRY_AFTER_MS: u64 = 600_000;
 
 /// Longest response body read (a generous cap: card batches are a few hundred KB at most).
 const MAX_BODY: u64 = 16 * 1024 * 1024;
@@ -99,6 +103,58 @@ impl Http {
         self.finish(response)
     }
 
+    /// `POST <base><path>` of a streaming request: a 2xx body is read line by line and each
+    /// line goes to `on_line` as it arrives (SSE `data:` lines, NDJSON objects…). `on_line`
+    /// returns `false` to stop reading. A server that ignores `stream` and answers with one
+    /// `application/json` document returns it as `Some` (the caller parses it as a plain
+    /// response).
+    pub(crate) fn post_stream(
+        &self,
+        path: &str,
+        headers: &[(&str, &str)],
+        body: &Value,
+        on_line: &mut dyn FnMut(&str) -> ProviderResult<bool>,
+    ) -> ProviderResult<Option<Value>> {
+        let url = format!("{}{path}", self.base);
+        let mut req = self
+            .agent
+            .post(&url)
+            .header("content-type", "application/json");
+        for (k, v) in headers {
+            req = req.header(*k, *v);
+        }
+        let body = serde_json::to_string(body).map_err(|e| self.failed(e.to_string()))?;
+        let response = req.send(body.as_str()).map_err(|e| self.transport(e))?;
+        let json = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.to_ascii_lowercase().starts_with("application/json"));
+        if !response.status().is_success() || json {
+            return self.finish(response).map(Some);
+        }
+        let reader = response
+            .into_body()
+            .into_with_config()
+            .limit(MAX_BODY)
+            .reader();
+        let mut lines = BufReader::new(reader);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            let n = lines
+                .read_line(&mut line)
+                .map_err(|e| self.transport(ureq::Error::Io(e)))?;
+            if n == 0 {
+                return Ok(None);
+            }
+            let l = line.trim_end_matches(['\r', '\n']);
+            if !on_line(l)? {
+                return Ok(None);
+            }
+        }
+    }
+
     /// `GET <base><path>`; returns the JSON response of a 2xx.
     pub(crate) fn get(&self, path: &str, headers: &[(&str, &str)]) -> ProviderResult<Value> {
         let url = format!("{}{path}", self.base);
@@ -112,6 +168,7 @@ impl Http {
 
     fn finish(&self, mut response: ureq::http::Response<ureq::Body>) -> ProviderResult<Value> {
         let status = response.status().as_u16();
+        let retry_after = retry_after_ms(response.headers());
         let text = response
             .body_mut()
             .with_config()
@@ -122,7 +179,9 @@ impl Http {
             return serde_json::from_str(&text)
                 .map_err(|e| self.failed(format!("invalid JSON response: {e}")));
         }
-        Err(self.status_error(status, &text))
+        Err(self
+            .status_error(status, &text)
+            .with_retry_after_ms(retry_after))
     }
 
     fn status_error(&self, status: u16, body: &str) -> ProviderError {
@@ -149,6 +208,7 @@ impl Http {
             kind,
             message,
             retryable,
+            retry_after_ms: None,
         }
     }
 
@@ -171,6 +231,23 @@ impl Http {
             redact(&message.into(), self.key.as_ref()),
         )
     }
+}
+
+/// The wait a response asks for: `retry-after-ms` (OpenAI) or `retry-after` in seconds
+/// (Anthropic, most servers; the HTTP-date form is ignored), capped at 10 minutes.
+pub(crate) fn retry_after_ms(headers: &ureq::http::HeaderMap) -> Option<u64> {
+    let number = |name: &str| -> Option<f64> {
+        headers
+            .get(name)?
+            .to_str()
+            .ok()?
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|v| v.is_finite() && *v >= 0.0)
+    };
+    let ms = number("retry-after-ms").or_else(|| number("retry-after").map(|s| s * 1000.0))?;
+    Some((ms.ceil() as u64).min(MAX_RETRY_AFTER_MS))
 }
 
 /// The human-readable part of a provider error body: `error.message` (Anthropic, OpenAI),

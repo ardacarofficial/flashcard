@@ -44,25 +44,55 @@ impl MockRequest {
 pub struct MockResponse {
     /// HTTP status.
     pub status: u16,
-    /// Body (sent as `application/json`).
+    /// Body (sent with `content_type` and a `content-length`) — unless `chunks` is set.
     pub body: String,
+    /// `content-type` header.
+    pub content_type: String,
+    /// Extra response headers.
+    pub headers: Vec<(String, String)>,
+    /// A streamed body: each part is written and flushed on its own, `chunk_delay_ms` apart,
+    /// without a `content-length` (the body ends when the connection closes).
+    pub chunks: Vec<String>,
+    /// Pause before each chunk.
+    pub chunk_delay_ms: u64,
 }
 
 impl MockResponse {
     /// `200` with a JSON body.
     pub fn json(v: &serde_json::Value) -> Self {
-        Self {
-            status: 200,
-            body: v.to_string(),
-        }
+        Self::status(200, v)
     }
 
     /// Any status with a JSON body.
     pub fn status(status: u16, v: &serde_json::Value) -> Self {
+        Self::text(status, "application/json", v.to_string())
+    }
+
+    /// Any status, content type and body.
+    pub fn text(status: u16, content_type: &str, body: impl Into<String>) -> Self {
         Self {
             status,
-            body: v.to_string(),
+            body: body.into(),
+            content_type: content_type.to_owned(),
+            headers: Vec::new(),
+            chunks: Vec::new(),
+            chunk_delay_ms: 0,
         }
+    }
+
+    /// `200` streaming `chunks` (`text/event-stream`, `application/x-ndjson`, …).
+    pub fn stream(content_type: &str, chunks: Vec<String>, delay_ms: u64) -> Self {
+        Self {
+            chunks,
+            chunk_delay_ms: delay_ms,
+            ..Self::text(200, content_type, "")
+        }
+    }
+
+    /// Adds a response header.
+    pub fn header(mut self, name: &str, value: &str) -> Self {
+        self.headers.push((name.to_owned(), value.to_owned()));
+        self
     }
 }
 
@@ -169,10 +199,92 @@ fn serve(
     let mut stream = stream;
     write!(
         stream,
-        "HTTP/1.1 {} Mock\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
-        response.status,
-        response.body.len(),
-        response.body
+        "HTTP/1.1 {} Mock\r\ncontent-type: {}\r\nconnection: close\r\n",
+        response.status, response.content_type
     )?;
-    stream.flush()
+    for (k, v) in &response.headers {
+        write!(stream, "{k}: {v}\r\n")?;
+    }
+    if response.chunks.is_empty() {
+        write!(
+            stream,
+            "content-length: {}\r\n\r\n{}",
+            response.body.len(),
+            response.body
+        )?;
+        return stream.flush();
+    }
+    write!(stream, "\r\n")?;
+    stream.flush()?;
+    for chunk in &response.chunks {
+        std::thread::sleep(std::time::Duration::from_millis(response.chunk_delay_ms));
+        stream.write_all(chunk.as_bytes())?;
+        stream.flush()?;
+    }
+    Ok(())
+}
+
+/// A small PDF with one page per entry of `pages` (Courier text, one line each) and the
+/// title `title` — for source extraction tests.
+pub fn sample_pdf(title: &str, pages: &[&str]) -> Vec<u8> {
+    use lopdf::content::{Content, Operation};
+    use lopdf::{dictionary, Document, Object, Stream, StringFormat};
+    let mut doc = Document::with_version("1.5");
+    let pages_id = doc.new_object_id();
+    let font_id = doc.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Courier",
+    });
+    let resources_id = doc.add_object(dictionary! {
+        "Font" => dictionary! { "F1" => font_id },
+    });
+    let mut kids = Vec::new();
+    for text in pages {
+        let content = Content {
+            operations: vec![
+                Operation::new("BT", vec![]),
+                Operation::new("Tf", vec!["F1".into(), 12.into()]),
+                Operation::new("Td", vec![50.into(), 700.into()]),
+                Operation::new(
+                    "Tj",
+                    vec![Object::String(
+                        text.as_bytes().to_vec(),
+                        StringFormat::Literal,
+                    )],
+                ),
+                Operation::new("ET", vec![]),
+            ],
+        };
+        let content_id = doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
+        let page_id = doc.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content_id,
+        });
+        kids.push(Object::Reference(page_id));
+    }
+    let count = kids.len() as i64;
+    doc.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Kids" => kids,
+            "Count" => count,
+            "Resources" => resources_id,
+            "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+        }),
+    );
+    let catalog_id = doc.add_object(dictionary! {
+        "Type" => "Catalog",
+        "Pages" => pages_id,
+    });
+    let info_id = doc.add_object(dictionary! {
+        "Title" => Object::String(title.as_bytes().to_vec(), StringFormat::Literal),
+    });
+    doc.trailer.set("Root", catalog_id);
+    doc.trailer.set("Info", info_id);
+    let mut out = Vec::new();
+    doc.save_to(&mut out).unwrap();
+    out
 }

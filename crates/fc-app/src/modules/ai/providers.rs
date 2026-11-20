@@ -7,7 +7,7 @@ use super::context::{require_live_provider, require_provider};
 use super::{key_account, AiServices, MODELS_JOB};
 use crate::error::{AppError, AppResult};
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
-use crate::registry::Registry;
+use crate::registry::{permits, Registry};
 use crate::support::summary;
 use fc_ai::secrets::{Secret, SecretError};
 use fc_ai::ProviderKind;
@@ -38,7 +38,8 @@ pub(super) fn register(reg: &mut Registry, services: &Arc<AiServices>) {
     let s = Arc::clone(services);
     reg.command::<AiProvidersSetKey>(move |r, ctx: &mut CommandCtx<'_>| set_key(&s, r, ctx));
     reg.command::<AiProvidersRefreshModels>(refresh_models);
-    reg.command::<AiProvidersRestore>(restore);
+    let s = Arc::clone(services);
+    reg.command::<AiProvidersRestore>(move |r, ctx: &mut CommandCtx<'_>| restore(&s, r, ctx));
     reg.command::<AiProvidersSetModels>(set_models);
     reg.query::<AiRoutesList>(|_: Empty, ctx: &QueryCtx<'_>| routes(ctx.tx));
     reg.command::<AiRoutesSet>(set_route);
@@ -239,6 +240,7 @@ fn list(services: &AiServices, reads: &dyn Reads) -> AppResult<AiProviderList> {
             .collect::<AppResult<_>>()?,
         kinds: ProviderKind::ALL.into_iter().map(kind_info).collect(),
         keychain: services.has_keychain(),
+        keychain_session_only: services.has_keychain() && !services.keys_persist(),
     })
 }
 
@@ -311,6 +313,10 @@ fn update(
     p.models = models;
     p.is_default = old.is_default || req.is_default;
     p.updated_at = ctx.now;
+    // A key was entered for one host: it never follows the provider to another one unless
+    // the user confirms and may manage keys anyway.
+    let keep_key = req.keep_key == Some(true) && permits(ctx.actor, KEYS_PERMISSION);
+    let drop_key = endpoint_changed(&old, &p) && !keep_key;
     let unchanged = AiProviderRecord {
         updated_at: p.updated_at,
         ..old.clone()
@@ -327,6 +333,12 @@ fn update(
     let mut rows = vec![snapshot(&old)?];
     if p.is_default && !old.is_default {
         rows.extend(clear_other_defaults(ctx, p.id)?);
+    }
+    if drop_key {
+        services
+            .secrets()
+            .delete(&key_account(p.id))
+            .map_err(keychain_error)?;
     }
     Ok(CommandOutcome {
         response: dto(services, &p)?,
@@ -371,13 +383,34 @@ fn delete(
     })
 }
 
-fn restore(req: RestoreAiProviders, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Empty>> {
+/// Permission needed to keep a key when a provider's address changes.
+const KEYS_PERMISSION: &str = "ai_keys:write";
+
+/// The provider now talks to a different host or protocol.
+fn endpoint_changed(old: &AiProviderRecord, new: &AiProviderRecord) -> bool {
+    old.base_url != new.base_url || old.kind != new.kind
+}
+
+fn restore(
+    services: &AiServices,
+    req: RestoreAiProviders,
+    ctx: &mut CommandCtx<'_>,
+) -> AppResult<CommandOutcome<Empty>> {
     let mut before = Vec::new();
     for row in &req.rows {
+        let restored = from_snapshot(row);
         if let Some(current) = ctx.reads().get_ai_provider(row.id)? {
             before.push(snapshot(&current)?);
+            // Undo/redo of an address change: the key stored now was meant for the current
+            // address, not the restored one.
+            if endpoint_changed(&current, &restored) {
+                services
+                    .secrets()
+                    .delete(&key_account(row.id))
+                    .map_err(keychain_error)?;
+            }
         }
-        ctx.tx.upsert_ai_provider(&from_snapshot(row))?;
+        ctx.tx.upsert_ai_provider(&restored)?;
     }
     let name = req.rows.first().map(|r| r.name.clone()).unwrap_or_default();
     Ok(CommandOutcome {

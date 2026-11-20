@@ -69,6 +69,8 @@ pub struct ProviderError {
     pub message: String,
     /// Whether retrying later may succeed.
     pub retryable: bool,
+    /// How long the provider asked to wait before retrying (`Retry-After`), in milliseconds.
+    pub retry_after_ms: Option<u64>,
 }
 
 impl ProviderError {
@@ -81,7 +83,14 @@ impl ProviderError {
                 kind,
                 ProviderErrorKind::RateLimited | ProviderErrorKind::Unavailable
             ),
+            retry_after_ms: None,
         }
+    }
+
+    /// The same error with the wait the provider asked for before a retry.
+    pub fn with_retry_after_ms(mut self, ms: Option<u64>) -> Self {
+        self.retry_after_ms = ms;
+        self
     }
 }
 
