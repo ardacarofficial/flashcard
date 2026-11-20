@@ -20,15 +20,19 @@
   let { open, selectDeck, shell = defaultShell() }: Props = $props();
 
   let pairing = $state<ApiClientDto | null>(null);
+  /** The permissions ticked in the approval dialog (all of them to begin with). */
+  let granted = $state<Record<string, boolean>>({});
+  const grantedScopes = $derived(pairing ? pairing.requested_scopes.filter((s) => granted[s]) : []);
   let suggestion = $state<string | null>(null);
   let notice = $state<string | null>(null);
 
   async function decide(approve: boolean) {
     const c = pairing;
+    const scopes = grantedScopes;
     pairing = null;
     if (!c) return;
     try {
-      await api.call(approve ? 'local_api.clients.approve' : 'local_api.clients.deny', approve ? { id: c.id, scopes: null } : { id: c.id });
+      await api.call(approve ? 'local_api.clients.approve' : 'local_api.clients.deny', approve ? { id: c.id, scopes } : { id: c.id });
     } catch (e) {
       notice = td((e as { messageKey?: string }).messageKey ?? 'errors.internal.unexpected');
     }
@@ -61,7 +65,11 @@
 
   onMount(() => {
     const unsubPairing = api.on('local_api_pairing', (env) => {
-      if (env.event.type === 'local_api_pairing') pairing = env.event.data.client;
+      if (env.event.type === 'local_api_pairing') {
+        const c = env.event.data.client;
+        granted = Object.fromEntries(c.requested_scopes.map((s) => [s, true]));
+        pairing = c;
+      }
     });
     const unsubClip = shell.listen(CLIPBOARD_EVENT, (p) => {
       const text = (p as { text?: unknown } | null)?.text;
@@ -85,13 +93,19 @@
       <p>{t('local_api.pairing.body', { name: pairing.name })}</p>
       {#if pairing.origin}<p class="muted">{t('local_api.origin', { origin: pairing.origin })}</p>{/if}
       <p>{t('local_api.pairing.asks')}</p>
-      <ul>
-        {#each pairing.requested_scopes as s (s)}<li>{td(`local_api.scope.${s}`)}</li>{/each}
-      </ul>
+      <fieldset>
+        <legend class="sr-only">{t('local_api.pairing.asks')}</legend>
+        {#each pairing.requested_scopes as s (s)}
+          <label>
+            <input type="checkbox" bind:checked={granted[s]} />
+            {td(`local_api.scope.${s}`)}
+          </label>
+        {/each}
+      </fieldset>
       <p class="muted">{t('local_api.pairing.hint')}</p>
       <div class="actions">
         <button onclick={() => decide(false)}>{t('local_api.deny')}</button>
-        <button onclick={() => decide(true)}>{t('local_api.approve')}</button>
+        <button onclick={() => decide(true)} disabled={grantedScopes.length === 0}>{t('local_api.approve')}</button>
       </div>
     </div>
   </div>
@@ -125,6 +139,21 @@
     padding: var(--fc-space-6);
     border-radius: var(--fc-radius, 6px);
     max-width: 28rem;
+  }
+  fieldset {
+    border: 0;
+    padding: 0;
+    margin: 0 0 var(--fc-space-2);
+  }
+  fieldset label {
+    display: block;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
   .actions {
     display: flex;

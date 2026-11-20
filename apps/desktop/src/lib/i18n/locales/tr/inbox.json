@@ -50,6 +50,14 @@
       "port": {
         "label": "Port",
         "description": "Uygulama yalnızca 127.0.0.1 üzerinde bu portu dinler. Modül yeniden açılınca geçerli olur."
+      },
+      "inbox_max_items": {
+        "label": "Program başına bekleyen öneri",
+        "description": "Bir programın gelen kutusunda bekletebileceği en fazla kart önerisi. Sen bazılarını işleyene kadar yenileri reddedilir."
+      },
+      "inbox_max_kib": {
+        "label": "Program başına bekleyen boyut (KiB)",
+        "description": "Bir programın gelen kutusunda bekletebileceği en fazla metin, kibibayt olarak."
       }
     }
   },
@@ -92,6 +100,7 @@
       "pairing": "Bağlantı isteği bulunamadı."
     },
     "conflict": {
+      "inbox_quota": "Bu programın bekleyen öneri sayısı çok fazla; önce gelen kutusundakilerden bazılarını işle.",
       "inbox_item_state": "Bu öğe zaten işlenmiş.",
       "rate_limited": "Çok fazla istek; biraz sonra tekrar dene.",
       "api_client_state": "Bu programın isteği zaten işlenmiş ya da süresi dolmuş."

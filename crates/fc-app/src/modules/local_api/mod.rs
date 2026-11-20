@@ -51,11 +51,20 @@ pub const PORT: &str = "local_api.port";
 /// Default port.
 pub const DEFAULT_PORT: u16 = 28735;
 
+/// Setting (app): most proposals one client may have waiting in the inbox.
+pub const INBOX_MAX_ITEMS: &str = "local_api.inbox_max_items";
+/// Default for [`INBOX_MAX_ITEMS`].
+pub const DEFAULT_INBOX_MAX_ITEMS: u32 = 500;
+/// Setting (app): most payload KiB one client may have waiting in the inbox.
+pub const INBOX_MAX_KIB: &str = "local_api.inbox_max_kib";
+/// Default for [`INBOX_MAX_KIB`] (4 MiB).
+pub const DEFAULT_INBOX_MAX_KIB: u64 = 4096;
+
 /// How long a pairing request waits for the user (ms). Older pending rows are hidden and
 /// cannot be approved; the server forgets their tokens.
 pub const PAIRING_TTL_MS: i64 = 10 * 60 * 1000;
 
-/// Most pending pairing requests at once.
+/// Most pending pairing requests at once (a newer one evicts the oldest).
 pub const MAX_PENDING: usize = 5;
 
 /// Scopes a local API client may be granted.
@@ -154,18 +163,44 @@ pub fn descriptor() -> ModuleDescriptor {
         description_key: "modules.local_api.description",
         enabled_by_default: false,
         can_disable: true,
-        settings: vec![SettingDef {
-            key: PORT.to_owned(),
-            kind: SettingKind::Integer {
-                min: Some(1024),
-                max: Some(65535),
+        settings: vec![
+            SettingDef {
+                key: PORT.to_owned(),
+                kind: SettingKind::Integer {
+                    min: Some(1024),
+                    max: Some(65535),
+                },
+                default: json!(DEFAULT_PORT),
+                label_key: format!("settings.{PORT}.label"),
+                description_key: Some(format!("settings.{PORT}.description")),
+                advanced: true,
+                scopes: vec![SettingScopeKind::App],
             },
-            default: json!(DEFAULT_PORT),
-            label_key: format!("settings.{PORT}.label"),
-            description_key: Some(format!("settings.{PORT}.description")),
-            advanced: true,
-            scopes: vec![SettingScopeKind::App],
-        }],
+            SettingDef {
+                key: INBOX_MAX_ITEMS.to_owned(),
+                kind: SettingKind::Integer {
+                    min: Some(1),
+                    max: Some(100_000),
+                },
+                default: json!(DEFAULT_INBOX_MAX_ITEMS),
+                label_key: format!("settings.{INBOX_MAX_ITEMS}.label"),
+                description_key: Some(format!("settings.{INBOX_MAX_ITEMS}.description")),
+                advanced: true,
+                scopes: vec![SettingScopeKind::App],
+            },
+            SettingDef {
+                key: INBOX_MAX_KIB.to_owned(),
+                kind: SettingKind::Integer {
+                    min: Some(16),
+                    max: Some(1_048_576),
+                },
+                default: json!(DEFAULT_INBOX_MAX_KIB),
+                label_key: format!("settings.{INBOX_MAX_KIB}.label"),
+                description_key: Some(format!("settings.{INBOX_MAX_KIB}.description")),
+                advanced: true,
+                scopes: vec![SettingScopeKind::App],
+            },
+        ],
         ui: vec![main_menu(
             "local_api.screen",
             "nav.local_api",
@@ -188,6 +223,7 @@ pub fn register(reg: &mut Registry) {
     reg.command::<LocalApiClientsRemove>(remove);
     reg.command::<LocalApiPair>(pair);
     reg.command::<LocalApiTouch>(touch);
+    reg.command::<LocalApiExpirePending>(expire_pending_handler);
 }
 
 // ------------------------------------------------------------------ conversions
@@ -304,6 +340,18 @@ fn port_of(reads: &dyn Reads) -> AppResult<u16> {
         .unwrap_or(DEFAULT_PORT))
 }
 
+/// What one client may have waiting in the inbox: (items, bytes), from the settings.
+pub(crate) fn inbox_quota(reads: &dyn Reads) -> AppResult<(u32, u64)> {
+    let get = |key: &str| -> AppResult<Option<u64>> {
+        Ok(resolve_stored(reads, &SettingScope::App, key)?.and_then(|(v, _)| v.as_u64()))
+    };
+    let items = get(INBOX_MAX_ITEMS)?
+        .and_then(|n| u32::try_from(n).ok())
+        .unwrap_or(DEFAULT_INBOX_MAX_ITEMS);
+    let kib = get(INBOX_MAX_KIB)?.unwrap_or(DEFAULT_INBOX_MAX_KIB);
+    Ok((items, kib.saturating_mul(1024)))
+}
+
 // ------------------------------------------------------------------ queries
 
 fn list(_req: Empty, ctx: &QueryCtx<'_>) -> AppResult<ApiClientList> {
@@ -370,23 +418,25 @@ fn pair(req: RecordPairing, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
         }
     }
     let scopes = checked_scopes(&req.scopes)?;
-    // Forget requests nobody decided in time, then cap the pending ones.
-    let mut pending = 0;
+    // Forget requests nobody decided in time. A client asking again replaces its own earlier
+    // request (same name and origin); when the queue is full the oldest request makes room, so
+    // a flood of requests can push out a real one but can never lock pairing.
+    let mut pending = Vec::new();
     for c in ctx.reads().list_api_clients()? {
         if expired(&c, ctx.now) {
             ctx.tx.delete_api_client(c.id)?;
         } else if c.status == "pending" {
-            pending += 1;
+            if c.name == name && c.origin == req.origin {
+                ctx.tx.delete_api_client(c.id)?;
+            } else {
+                pending.push(c);
+            }
         }
     }
-    if pending >= MAX_PENDING {
-        return Err(AppError::Api(
-            ApiError::new(
-                ErrorCode::ConflictRateLimited,
-                "too many pairing requests are waiting for the user",
-            )
-            .with_detail("retry_after_secs", 60),
-        ));
+    pending.sort_by_key(|c| (c.created_at, c.id));
+    let evict = (pending.len() + 1).saturating_sub(MAX_PENDING);
+    for c in pending.iter().take(evict) {
+        ctx.tx.delete_api_client(c.id)?;
     }
     let r = ApiClientRecord {
         id: ApiClientId::generate(ctx.ids),
@@ -408,6 +458,24 @@ fn pair(req: RecordPairing, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
         summary::<LocalApiPair>(),
         vec![DomainEvent::LocalApiPairing { client }],
     ))
+}
+
+/// The HTTP server starts with no memory of the tokens it handed out: requests still pending
+/// cannot be completed any more, so they are dropped rather than left to be approved.
+fn expire_pending_handler(_req: Empty, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Empty>> {
+    let mut any = false;
+    for c in ctx.reads().list_api_clients()? {
+        if c.status == "pending" {
+            ctx.tx.delete_api_client(c.id)?;
+            any = true;
+        }
+    }
+    let events = if any {
+        vec![DomainEvent::LocalApiClientsChanged]
+    } else {
+        vec![]
+    };
+    Ok(outcome(Empty {}, summary::<LocalApiExpirePending>(), events))
 }
 
 fn approve(
@@ -658,6 +726,18 @@ pub fn client(app: &App, id: ApiClientId) -> Result<Option<ApiClientDto>, ApiErr
         .filter(|r| !expired(r, now))
         .map(|r| dto(&r).map_err(AppError::into_api))
         .transpose()
+}
+
+/// Drops every pending pairing request (the HTTP server calls this when it starts).
+pub fn expire_pending(app: &App) -> Result<(), ApiError> {
+    app.invoke_trusted(
+        &InvokeRequest {
+            method: format!("{}.{}", fc_api::API_VERSION, LocalApiExpirePending::NAME),
+            params: json!({}),
+        },
+        &Actor::System,
+    )
+    .map(|_| ())
 }
 
 /// Notes a client's request time (the server calls this at most once a minute per client).

@@ -59,15 +59,21 @@ fn send(
     if !headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("host")) {
         req.push_str(&format!("Host: 127.0.0.1:{}\r\n", addr.port()));
     }
-    for (k, v) in headers {
+    let has = |name: &str| headers.iter().any(|(k, _)| k.eq_ignore_ascii_case(name));
+    // Every request names its client, as the contract asks; `("X-Flashcard-Client", "")`
+    // leaves it out, and a `Content-Type` of the test's own replaces the JSON one.
+    if !has("x-flashcard-client") {
+        req.push_str("X-Flashcard-Client: test\r\n");
+    }
+    for (k, v) in headers.iter().filter(|(_, v)| !v.is_empty()) {
         req.push_str(&format!("{k}: {v}\r\n"));
     }
     let body = body.unwrap_or_default();
     if !body.is_empty() || method == "POST" {
-        req.push_str(&format!(
-            "Content-Type: application/json\r\nContent-Length: {}\r\n",
-            body.len()
-        ));
+        if !has("content-type") {
+            req.push_str("Content-Type: application/json\r\n");
+        }
+        req.push_str(&format!("Content-Length: {}\r\n", body.len()));
     }
     req.push_str("\r\n");
     req.push_str(body);
@@ -178,7 +184,7 @@ impl Fx {
             id: pending.id,
             scopes: None,
         });
-        let r = self.get(&format!("/v1/pair/{id}"), &[]);
+        let r = self.post(&format!("/v1/pair/{id}"), &[], &json!({}));
         r.body["token"].as_str().unwrap().to_owned()
     }
 }
@@ -370,7 +376,10 @@ fn extension_word_lands_in_the_inbox() {
     assert_eq!(r.header("access-control-allow-origin"), Some(EXT));
     let request = r.body["request_id"].as_str().unwrap().to_owned();
     let poll = format!("/v1/pair/{request}");
-    assert_eq!(fx.get(&poll, &origin).body["status"], "pending");
+    assert_eq!(
+        fx.post(&poll, &origin, &json!({})).body["status"],
+        "pending"
+    );
 
     // 2. The app shows the request (event) and the user approves it.
     let events = fx.t.take_events();
@@ -387,18 +396,22 @@ fn extension_word_lands_in_the_inbox() {
     });
 
     // 3. The extension's GET carries no Origin; it gets the token once.
-    let r = fx.get(&poll, &[]);
+    let r = fx.post(&poll, &[], &json!({}));
     assert_eq!(r.body["status"], "approved");
     let token = r.body["token"].as_str().unwrap().to_owned();
     assert!(token.starts_with("fc1_"));
-    let again = fx.get(&poll, &origin);
+    let again = fx.post(&poll, &origin, &json!({}));
     assert_eq!(again.body["status"], "approved");
     assert!(
         again.body["token"].is_null(),
         "the token is handed out once"
     );
     // Another origin may not poll.
-    let r = fx.get(&poll, &[("Origin", "chrome-extension://someoneelse")]);
+    let r = fx.post(
+        &poll,
+        &[("Origin", "chrome-extension://someoneelse")],
+        &json!({}),
+    );
     assert_eq!(r.status, 403);
     // The token is not stored anywhere in the database.
     let mut db = std::fs::read(&fx.db).unwrap();
@@ -547,4 +560,161 @@ fn web_origins_big_bodies_and_bursts_are_refused() {
         codes.push(r.status);
     }
     assert!(codes.contains(&429), "{codes:?}");
+}
+
+#[test]
+fn every_request_but_ping_needs_the_client_header_and_json() {
+    let fx = Fx::new();
+    let token = fx.token(&["inbox:write", "decks:read"], None);
+    let auth = format!("Bearer {token}");
+    let a = [("Authorization", auth.as_str())];
+    let no_client = [("Authorization", auth.as_str()), ("X-Flashcard-Client", "")];
+    // The token alone is not enough, GETs that return user data included.
+    for path in ["/v1/decks", "/v1/auth", "/v1/methods"] {
+        assert_eq!(fx.get(path, &a).status, 200, "{path} with the header");
+        let r = fx.get(path, &no_client);
+        assert_eq!(r.status, 400, "{path} without it");
+        assert_eq!(r.body["details"]["reason"], "client_header");
+    }
+    // POSTs: JSON content type required (what a plain HTML form cannot send).
+    let body = json!({"front": "porsuk"}).to_string();
+    for ct in [
+        "text/plain",
+        "application/x-www-form-urlencoded",
+        "multipart/form-data",
+    ] {
+        let mut h = a.to_vec();
+        h.push(("Content-Type", ct));
+        let r = send(fx.addr(), "POST", "/v1/inbox", &h, Some(&body));
+        assert_eq!(r.status, 400, "{ct}");
+        assert_eq!(r.body["details"]["reason"], "content_type");
+    }
+    let r = send(fx.addr(), "POST", "/v1/inbox", &no_client, Some(&body));
+    assert_eq!(r.body["details"]["reason"], "client_header");
+    let mut h = a.to_vec();
+    h.push(("Content-Type", "Application/JSON; charset=utf-8"));
+    assert_eq!(
+        send(fx.addr(), "POST", "/v1/inbox", &h, Some(&body)).status,
+        201
+    );
+    assert!(
+        fx.t.ok::<InboxList>(ListInbox::default()).items.len() == 1,
+        "only the valid one"
+    );
+
+    // Pairing and polling are guarded the same way, and polling is a POST.
+    let pair = json!({"client_name": "x", "client_kind": "script", "scopes": ["inbox:write"]});
+    let r = send(
+        fx.addr(),
+        "POST",
+        "/v1/pair",
+        &[("X-Flashcard-Client", "")],
+        Some(&pair.to_string()),
+    );
+    assert_eq!(r.body["details"]["reason"], "client_header");
+    let r = send(
+        fx.addr(),
+        "POST",
+        "/v1/pair",
+        &[("Content-Type", "text/plain")],
+        Some(&pair.to_string()),
+    );
+    assert_eq!(r.body["details"]["reason"], "content_type");
+    let id = fx.post("/v1/pair", &[], &pair).body["request_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let poll = format!("/v1/pair/{id}");
+    assert_eq!(fx.get(&poll, &[]).status, 404, "a GET no longer polls");
+    let r = send(
+        fx.addr(),
+        "POST",
+        &poll,
+        &[("X-Flashcard-Client", "")],
+        Some("{}"),
+    );
+    assert_eq!(r.body["details"]["reason"], "client_header");
+    assert_eq!(fx.post(&poll, &[], &json!({})).body["status"], "pending");
+    // Ping stays open: it says only that the app is there.
+    let r = send(
+        fx.addr(),
+        "GET",
+        "/v1/ping",
+        &[("X-Flashcard-Client", "")],
+        None,
+    );
+    assert_eq!(r.status, 200);
+    // The extension's preflight may ask for the header.
+    let r = send(fx.addr(), "OPTIONS", "/v1/inbox", &[("Origin", EXT)], None);
+    assert!(r
+        .header("access-control-allow-headers")
+        .unwrap()
+        .to_lowercase()
+        .contains("x-flashcard-client"));
+}
+
+#[test]
+fn pairing_is_limited_per_client_name_and_never_locked_out() {
+    let fx = Fx::new();
+    let ask = |name: &str, origin: Option<&str>| {
+        let mut h = vec![];
+        if let Some(o) = origin {
+            h.push(("Origin", o));
+        }
+        fx.post(
+            "/v1/pair",
+            &h,
+            &json!({"client_name": name, "client_kind": "script", "scopes": ["inbox:write"]}),
+        )
+    };
+    // One name: three requests, then it waits (case and spacing do not make a new name).
+    // The server-wide allowance is five a minute, so this test spends four of them here.
+    let first: Vec<u16> = ["Noisy", "Noisy", "noisy", "NOISY "]
+        .iter()
+        .map(|n| ask(n, None).status)
+        .collect();
+    assert_eq!(first, [201, 201, 201, 429]);
+    // Another name (or the same name from an extension) is a different client.
+    assert_eq!(ask("Quiet", None).status, 201);
+    // Only one request per name stays pending: a repeat replaced its earlier one.
+    let rows =
+        fx.t.ok::<LocalApiClientsList>(fc_api::v1::common::Empty {})
+            .clients;
+    assert_eq!(rows.iter().filter(|c| c.name == "Noisy").count(), 1);
+    // The queue stays under its cap with names rotating: oldest makes room, no lockout.
+    for i in 0..3 {
+        let _ = ask(&format!("flood {i}"), None);
+    }
+    let rows =
+        fx.t.ok::<LocalApiClientsList>(fc_api::v1::common::Empty {})
+            .clients;
+    assert!(rows.len() <= fc_app::modules::local_api::MAX_PENDING);
+}
+
+#[test]
+fn pending_pairings_do_not_survive_a_restart() {
+    let fx = Fx::new();
+    let r = fx.post(
+        "/v1/pair",
+        &[],
+        &json!({"client_name": "Before restart", "client_kind": "script", "scopes": ["inbox:write"]}),
+    );
+    assert_eq!(r.status, 201);
+    let id =
+        fx.t.ok::<LocalApiClientsList>(fc_api::v1::common::Empty {})
+            .clients[0]
+            .id;
+    // The server (and with it every token it held) goes away and comes back.
+    let app = fx.app.clone();
+    fx.server.stop();
+    let server = Server::start(app, ServerConfig::localhost(0)).unwrap();
+    assert!(fx
+        .t
+        .ok::<LocalApiClientsList>(fc_api::v1::common::Empty {})
+        .clients
+        .is_empty());
+    let e =
+        fx.t.err::<LocalApiClientsApprove>(ApproveApiClient { id, scopes: None });
+    assert_eq!(e.code, fc_api::ErrorCode::NotFoundApiClient);
+    drop(server);
 }

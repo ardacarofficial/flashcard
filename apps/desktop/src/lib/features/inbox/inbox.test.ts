@@ -124,43 +124,76 @@ describe('<LocalApiScreen>', () => {
   });
 });
 
-describe('<OutsideHost>', () => {
-  it('asks the user when a program wants to connect', async () => {
-    const on = vi.spyOn(api, 'on');
-    const call = vi.spyOn(api, 'call').mockResolvedValue({} as never);
-    render(OutsideHost, { open: () => {}, selectDeck: () => {}, shell: fakeShell().shell });
-    await waitFor(() => expect(on).toHaveBeenCalled());
-    const handler = on.mock.calls.find(([p]) => p === 'local_api_pairing')![1];
-    handler({
-      seq: 1,
-      at: 0,
-      batch_id: null,
-      event: {
-        type: 'local_api_pairing',
-        data: {
-          client: {
-            id: 'c1',
-            name: 'Flashcard for Chrome',
-            kind: 'browser_extension',
-            origin: 'chrome-extension://abc',
-            requested_scopes: ['inbox:write', 'decks:read'],
-            scopes: [],
-            status: 'pending',
-            created_at: 0,
-            updated_at: 0,
-            last_used_at: null,
-          },
+function pairingEvent(): EventEnvelope {
+  return {
+    seq: 1,
+    at: 0,
+    batch_id: null,
+    event: {
+      type: 'local_api_pairing',
+      data: {
+        client: {
+          id: 'c1',
+          name: 'Flashcard for Chrome',
+          kind: 'browser_extension',
+          origin: 'chrome-extension://abc',
+          requested_scopes: ['inbox:write', 'decks:read'],
+          scopes: [],
+          status: 'pending',
+          created_at: 0,
+          updated_at: 0,
+          last_used_at: null,
         },
       },
-    } as EventEnvelope);
-    expect(await screen.findByText('Flashcard for Chrome wants to connect to Flashcard.')).toBeTruthy();
-    expect(screen.getByText('Propose cards to the inbox')).toBeTruthy();
-    expect(screen.getByText('See your decks')).toBeTruthy();
+    },
+  } as EventEnvelope;
+}
+
+async function openPairing() {
+  const on = vi.spyOn(api, 'on');
+  const call = vi.spyOn(api, 'call').mockResolvedValue({} as never);
+  render(OutsideHost, { open: () => {}, selectDeck: () => {}, shell: fakeShell().shell });
+  await waitFor(() => expect(on).toHaveBeenCalled());
+  on.mock.calls.find(([p]) => p === 'local_api_pairing')![1](pairingEvent());
+  expect(await screen.findByText('Flashcard for Chrome wants to connect to Flashcard.')).toBeTruthy();
+  return {
+    call,
+    done: () => {
+      on.mockRestore();
+      call.mockRestore();
+    },
+  };
+}
+
+describe('<OutsideHost>', () => {
+  it('asks the user when a program wants to connect, everything ticked to begin with', async () => {
+    const { call, done } = await openPairing();
+    expect(screen.getByLabelText('Propose cards to the inbox')).toBeTruthy();
+    expect(screen.getByLabelText('See your decks')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
-    expect(call).toHaveBeenCalledWith('local_api.clients.approve', { id: 'c1', scopes: null });
+    expect(call).toHaveBeenCalledWith('local_api.clients.approve', { id: 'c1', scopes: ['inbox:write', 'decks:read'] });
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-    on.mockRestore();
-    call.mockRestore();
+    done();
+  });
+
+  it('lets the user narrow the permissions before allowing, and never allows none', async () => {
+    const { call, done } = await openPairing();
+    await fireEvent.click(screen.getByLabelText('See your decks'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+    expect(call).toHaveBeenCalledWith('local_api.clients.approve', { id: 'c1', scopes: ['inbox:write'] });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    done();
+  });
+
+  it('keeps Allow off while nothing is ticked, and refusing sends no permissions', async () => {
+    const { call, done } = await openPairing();
+    await fireEvent.click(screen.getByLabelText('See your decks'));
+    await fireEvent.click(screen.getByLabelText('Propose cards to the inbox'));
+    expect((screen.getByRole('button', { name: 'Allow' }) as HTMLButtonElement).disabled).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'Refuse' }));
+    expect(call).toHaveBeenCalledWith('local_api.clients.deny', { id: 'c1' });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    done();
   });
 
   it('offers copied text and adds it to the inbox only when asked', async () => {

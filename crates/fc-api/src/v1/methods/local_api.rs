@@ -24,4 +24,7 @@ methods! {
     /// Internal: notes a client's last request (HTTP server, at most once a minute). Like
     /// `local_api.pair`, never in the oplog.
     LocalApiTouch = "local_api.touch", Command, "local_api", "local_api:write", Internal, undo: true (replay: false), ApiClientRef => Empty;
+    /// Internal: forgets every pending pairing request (HTTP server, when it starts: the
+    /// tokens it handed out only lived in its memory). Never in the oplog.
+    LocalApiExpirePending = "local_api.expire_pending", Command, "local_api", "local_api:write", Internal, undo: true (replay: false), Empty => Empty;
 }

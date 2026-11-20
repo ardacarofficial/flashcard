@@ -55,6 +55,21 @@ impl InboxRead for MemTx<'_> {
             .find(|i| i.client_id == Some(client) && i.client_ref.as_deref() == Some(client_ref))
             .cloned())
     }
+
+    fn inbox_client_usage(&self, client: ApiClientId, status: &str) -> StorageResult<(u32, u64)> {
+        let (n, bytes) = self
+            .s()
+            .domains
+            .inbox
+            .items
+            .values()
+            .filter(|i| i.client_id == Some(client) && i.status == status)
+            .fold((0usize, 0usize), |(n, b), i| (n + 1, b + i.payload.to_string().len()));
+        Ok((
+            u32::try_from(n).unwrap_or(u32::MAX),
+            u64::try_from(bytes).unwrap_or(u64::MAX),
+        ))
+    }
 }
 
 impl InboxWrite for MemTx<'_> {

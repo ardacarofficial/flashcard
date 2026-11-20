@@ -106,6 +106,19 @@ impl<M: Mode> InboxRead for SqliteTx<'_, M> {
             row,
         )
     }
+
+    fn inbox_client_usage(&self, client: ApiClientId, status: &str) -> StorageResult<(u32, u64)> {
+        let usage = one(
+            self.conn(),
+            T,
+            "SELECT count(*), COALESCE(SUM(length(CAST(payload AS BLOB))), 0)
+             FROM inbox WHERE client_id = ?1 AND status = ?2",
+            params![client.to_string(), status],
+            |r| Ok((r.get::<_, u32>(0)?, r.get::<_, i64>(1)?)),
+        )?
+        .unwrap_or((0, 0));
+        Ok((usage.0, u64::try_from(usage.1).unwrap_or(0)))
+    }
 }
 
 impl InboxWrite for SqliteTx<'_, WriteMode> {

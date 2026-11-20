@@ -50,6 +50,14 @@
       "port": {
         "label": "Port",
         "description": "The app listens on 127.0.0.1 at this port only. Takes effect when the module is switched on again."
+      },
+      "inbox_max_items": {
+        "label": "Waiting proposals per program",
+        "description": "Most card proposals one program may have waiting in the inbox. More are refused until you handle some."
+      },
+      "inbox_max_kib": {
+        "label": "Waiting size per program (KiB)",
+        "description": "Most text one program may have waiting in the inbox, in kibibytes."
       }
     }
   },
@@ -92,6 +100,7 @@
       "pairing": "Connection request not found."
     },
     "conflict": {
+      "inbox_quota": "This program has too many proposals waiting; handle some in the inbox first.",
       "inbox_item_state": "This inbox item was already handled.",
       "rate_limited": "Too many requests; try again shortly.",
       "api_client_state": "This program's request was already handled or has expired."

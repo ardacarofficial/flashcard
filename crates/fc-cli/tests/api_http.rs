@@ -1,6 +1,6 @@
 //! v0.9 acceptance over the real binaries — "a word added from the browser extension lands in
 //! the inbox": `fc api serve` (the same server the desktop runs) on a free loopback port; the
-//! extension's calls as raw HTTP from a `chrome-extension://` origin (pair → poll → token →
+//! extension's calls as raw HTTP from a `chrome-extension://` origin (pair → poll (POST) → token →
 //! `POST /v1/inbox`); the user's approval and the check through separate `fc call` processes
 //! (`local_api.clients.approve`, `inbox.list`). Also: the server refuses to start while the
 //! module is off, and refuses token-less requests.
@@ -77,7 +77,7 @@ fn http(
     let mut s = TcpStream::connect(addr).unwrap();
     let body = body.map(Value::to_string).unwrap_or_default();
     let mut req = format!(
-        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n",
+        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\nX-Flashcard-Client: acceptance-test\r\nContent-Type: application/json\r\nContent-Length: {}\r\n",
         addr.port(),
         body.len()
     );
@@ -147,7 +147,10 @@ fn extension_word_lands_in_the_inbox_through_fc_api_serve() {
     );
     assert_eq!(status, 201, "{pair}");
     let poll = format!("/v1/pair/{}", pair["request_id"].as_str().unwrap());
-    assert_eq!(http(addr, "GET", &poll, &[], None).1["status"], "pending");
+    assert_eq!(
+        http(addr, "POST", &poll, &origin, Some(&json!({}))).1["status"],
+        "pending"
+    );
 
     // The user approves (here headless, in another process).
     let clients = call(&db, "local_api.clients.list", &json!({}));
@@ -160,7 +163,7 @@ fn extension_word_lands_in_the_inbox_through_fc_api_serve() {
         &json!({"id": client["id"], "scopes": null}),
     );
 
-    let (_, approved) = http(addr, "GET", &poll, &[], None);
+    let (_, approved) = http(addr, "POST", &poll, &origin, Some(&json!({})));
     assert_eq!(approved["status"], "approved");
     let token = approved["token"].as_str().unwrap().to_owned();
     let auth = format!("Bearer {token}");

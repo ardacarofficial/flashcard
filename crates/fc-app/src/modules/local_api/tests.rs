@@ -41,6 +41,9 @@ suite!(
     tokens_are_bound_to_their_origin,
     resends_with_a_client_ref_are_idempotent,
     pending_requests_are_capped_and_expire,
+    a_full_queue_evicts_the_oldest_and_a_repeat_replaces_itself,
+    pending_requests_do_not_survive_a_server_start,
+    a_client_cannot_flood_the_inbox,
     local_api_writes_are_ordinary_undo_steps,
     restoring_a_backup_revokes_every_client,
     nothing_works_while_the_module_is_off,
@@ -315,18 +318,7 @@ pub(super) fn pending_requests_are_capped_and_expire(f: Factory) {
     for n in 0..u32::try_from(MAX_PENDING).unwrap() {
         pair(&t, n, &["inbox:write"], None);
     }
-    let e = record_pairing(
-        &t.app,
-        &PairRequest {
-            client_name: "one more".into(),
-            client_kind: ApiClientKind::Script,
-            scopes: vec!["inbox:write".into()],
-        },
-        None,
-        &hash(77),
-    )
-    .unwrap_err();
-    assert_eq!(e.code, ErrorCode::ConflictRateLimited);
+    assert_eq!(t.store.read().unwrap().list_api_clients().unwrap().len(), MAX_PENDING);
 
     // Age every pending request past the pairing window.
     {
@@ -451,4 +443,114 @@ pub(super) fn nothing_works_while_the_module_is_off(f: Factory) {
         ErrorCode::ConflictModuleDisabled
     );
     let _ = t.ok::<InboxList>(ListInbox::default());
+}
+
+pub(super) fn a_full_queue_evicts_the_oldest_and_a_repeat_replaces_itself(f: Factory) {
+    let t = TestApp::new(f());
+    enable(&t);
+    let max = u32::try_from(MAX_PENDING).unwrap();
+    let ids: Vec<_> = (0..max)
+        .map(|n| {
+            pair(&t, n, &["inbox:write"], None).id
+        })
+        .collect();
+    let newest = pair(&t, 99, &["inbox:write"], None);
+    let rows = t.store.read().unwrap().list_api_clients().unwrap();
+    assert_eq!(rows.len(), MAX_PENDING, "never locked out, never over the cap");
+    assert!(rows.iter().all(|c| c.id != ids[0]), "the oldest made room");
+    assert!(rows.iter().any(|c| c.id == newest.id));
+    assert!(rows.iter().any(|c| c.id == ids[1]));
+    // The evicted request's token no longer authenticates and it cannot be approved.
+    assert!(authenticate(&t.app, &hash(0), None).is_err());
+    assert_eq!(
+        t.err::<LocalApiClientsApprove>(ApproveApiClient { id: ids[0], scopes: None }).code,
+        ErrorCode::NotFoundApiClient
+    );
+
+    // The same client (name + origin) asking again replaces its earlier request.
+    let again = pair(&t, 99, &["inbox:write"], None);
+    let rows = t.store.read().unwrap().list_api_clients().unwrap();
+    assert_eq!(rows.len(), MAX_PENDING);
+    assert!(rows.iter().all(|c| c.id != newest.id));
+    assert!(rows.iter().any(|c| c.id == again.id));
+    assert!(rows.iter().any(|c| c.id == ids[1]), "others are untouched");
+}
+
+pub(super) fn pending_requests_do_not_survive_a_server_start(f: Factory) {
+    let t = TestApp::new(f());
+    enable(&t);
+    let waiting = pair(&t, 1, &["inbox:write"], Some(EXT));
+    let ok = approved(&t, 2, &["inbox:write"]);
+    t.take_events();
+    expire_pending(&t.app).unwrap();
+    assert!(t
+        .take_events()
+        .iter()
+        .any(|e| matches!(e.event, DomainEvent::LocalApiClientsChanged)));
+    assert_eq!(client(&t.app, waiting.id).unwrap(), None, "pending ones are gone");
+    assert!(
+        t.err::<LocalApiClientsApprove>(ApproveApiClient { id: waiting.id, scopes: None })
+            .code
+            == ErrorCode::NotFoundApiClient
+    );
+    assert_eq!(
+        client(&t.app, ok.id).unwrap().map(|c| c.status),
+        Some(ApiClientStatus::Approved),
+        "decided clients are kept"
+    );
+    // Nothing to drop is fine, and says nothing.
+    t.take_events();
+    expire_pending(&t.app).unwrap();
+    assert!(t.take_events().is_empty());
+}
+
+pub(super) fn a_client_cannot_flood_the_inbox(f: Factory) {
+    let t = TestApp::new(f());
+    enable(&t);
+    let a = approved(&t, 1, &["inbox:write", "inbox:read"]);
+    let b = approved(&t, 2, &["inbox:write", "inbox:read"]);
+    let set = |key: &str, v: u64| {
+        t.ok::<SettingsSet>(fc_api::v1::settings::SetSetting {
+            scope: SettingScope::App,
+            key: key.into(),
+            value: json!(v),
+        });
+    };
+    set(INBOX_MAX_ITEMS, 3);
+    for n in 0..3 {
+        add_inbox_item(&t.app, &a, item(&format!("w{n}"))).unwrap();
+    }
+    let e = add_inbox_item(&t.app, &a, item("one too many")).unwrap_err();
+    assert_eq!(e.code, ErrorCode::ConflictInboxQuota);
+    assert_eq!(e.details["limit"], "items");
+    assert_eq!(e.details["max"], 3);
+    // Another client has its own allowance; the user's own proposals are not limited.
+    add_inbox_item(&t.app, &b, item("fine")).unwrap();
+    t.ok::<InboxAdd>(item("mine"));
+    // Handling items frees room.
+    let first = t.ok::<InboxList>(ListInbox::default()).items;
+    let mine = first.iter().find(|i| matches!(&i.source, InboxSource::LocalApi { client_id, .. } if *client_id == a.id)).unwrap().id;
+    t.ok::<InboxReject>(fc_api::v1::inbox::InboxItemIds { ids: vec![mine] });
+    add_inbox_item(&t.app, &a, item("room again")).unwrap();
+    // A resend of a known client_ref is not a new item, so it passes even when full.
+    let mut keyed = item("keyed");
+    keyed.client_ref = Some("k1".into());
+    set(INBOX_MAX_ITEMS, 100);
+    let (first, created) = add_inbox_item(&t.app, &a, keyed.clone()).unwrap();
+    assert!(created);
+    set(INBOX_MAX_ITEMS, 1);
+    let (again, created) = add_inbox_item(&t.app, &a, keyed).unwrap();
+    assert!(!created);
+    assert_eq!(first.id, again.id);
+
+    // Size: a few KiB allowed, one big proposal is over.
+    set(INBOX_MAX_ITEMS, 1000);
+    let c = approved(&t, 3, &["inbox:write"]);
+    set(INBOX_MAX_KIB, 16);
+    let big = |n: usize| item(&"x".repeat(n));
+    add_inbox_item(&t.app, &c, big(9_000)).unwrap();
+    let e = add_inbox_item(&t.app, &c, big(9_000)).unwrap_err();
+    assert_eq!(e.code, ErrorCode::ConflictInboxQuota);
+    assert_eq!(e.details["limit"], "bytes");
+    add_inbox_item(&t.app, &c, big(100)).unwrap();
 }

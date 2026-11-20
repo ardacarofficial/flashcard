@@ -7,12 +7,17 @@
 //! * **Origins.** No `Origin` (curl, scripts, extension GETs) is fine; a browser-extension
 //!   origin is fine (CORS answered for it only); any web page origin is `403`. A token works
 //!   only from the origin it paired from (or with none).
+//! * **CSRF.** Beyond the `Origin` check: every request but `GET /v1/ping` — pairing and
+//!   polling included — needs the custom header [`CLIENT_HEADER`] and every `POST` needs
+//!   `Content-Type: application/json`. A page cannot send either cross-origin without a
+//!   preflight, so even a browser that sent no `Origin` could not reach user data.
 //! * **Tokens.** `Authorization: Bearer <token>`; made here from the OS random generator,
 //!   handed to the client once after the user approves the pairing, never stored — the app
 //!   keeps its SHA-256 hash.
 //! * **Limits.** Body ≤ [`MAX_BODY_BYTES`] (`413`), [`CLIENT_RATE_PER_SEC`] requests per
 //!   second per client (burst [`CLIENT_BURST`]), [`PAIR_PER_MINUTE`] pairing requests per
-//!   minute (`429` + `Retry-After`).
+//!   minute and [`PAIR_PER_NAME`] per client name per [`PAIR_NAME_WINDOW_SECS`] (`429` +
+//!   `Retry-After`).
 //!
 //! App calls are blocking (SQLite), so they run on tokio's blocking pool.
 
@@ -30,6 +35,13 @@ pub const CLIENT_RATE_PER_SEC: f64 = 10.0;
 pub const CLIENT_BURST: f64 = 30.0;
 /// Pairing requests per minute (whole server).
 pub const PAIR_PER_MINUTE: f64 = 5.0;
+/// Pairing requests one client name (per origin) may make within [`PAIR_NAME_WINDOW_SECS`].
+pub const PAIR_PER_NAME: f64 = 3.0;
+/// Window of [`PAIR_PER_NAME`] (seconds).
+pub const PAIR_NAME_WINDOW_SECS: f64 = 600.0;
+/// The header every request but `GET /v1/ping` must carry. A web page cannot add it to a
+/// cross-origin request without a CORS preflight, which only extensions pass.
+pub const CLIENT_HEADER: &str = "x-flashcard-client";
 
 /// The loopback interface to listen on. There is deliberately no other choice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -10,5 +10,6 @@
   "oplog.summary.local_api.clients.revoke": "Yerel API istemcisinin izni kaldırıldı",
   "oplog.summary.local_api.clients.remove": "Yerel API istemcisi silindi",
   "oplog.summary.local_api.pair": "Bir yerel API istemcisi bağlanmak istedi",
-  "oplog.summary.local_api.touch": "Bir yerel API istemcisi istek yaptı"
+  "oplog.summary.local_api.touch": "Bir yerel API istemcisi istek yaptı",
+  "oplog.summary.local_api.expire_pending": "Bekleyen yerel API bağlanma istekleri bırakıldı"
 }

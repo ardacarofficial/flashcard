@@ -33,7 +33,7 @@ use fc_api::{ApiError, ApiMethod, ErrorCode};
 use fc_core::attribute::AttributeTarget;
 use fc_core::notetype::builtin::CLASSIC_ID;
 use fc_core::notetype::NoteType;
-use fc_core::{DeckId, InboxItemId, NoteTypeId};
+use fc_core::{ApiClientId, DeckId, InboxItemId, NoteTypeId};
 use fc_storage::repo::InboxRecord;
 use fc_storage::Reads;
 use serde_json::Value;
@@ -319,6 +319,32 @@ fn source_of(reads: &dyn Reads, actor: &Actor, via: Option<InboxVia>) -> AppResu
     })
 }
 
+/// A local API client may not pile up proposals without bound: its pending items (count and
+/// text) stay under the user's quota (`local_api.inbox_max_items`, `local_api.inbox_max_kib`)
+/// until some are accepted or rejected. A resend of a known `client_ref` never gets here.
+fn check_quota(reads: &dyn Reads, client: ApiClientId, req: &AddInboxItem) -> AppResult<()> {
+    let (max_items, max_bytes) = crate::modules::local_api::inbox_quota(reads)?;
+    let (items, bytes) = reads.inbox_client_usage(client, "pending")?;
+    let incoming = u64::try_from(to_value(req)?.to_string().len()).unwrap_or(u64::MAX);
+    let over = |limit: &str, max: u64| {
+        AppError::Api(
+            ApiError::new(
+                ErrorCode::ConflictInboxQuota,
+                format!("this client has too much waiting in the inbox ({limit} limit {max})"),
+            )
+            .with_detail("limit", limit)
+            .with_detail("max", max),
+        )
+    };
+    if items >= max_items {
+        return Err(over("items", u64::from(max_items)));
+    }
+    if bytes.saturating_add(incoming) > max_bytes {
+        return Err(over("bytes", max_bytes));
+    }
+    Ok(())
+}
+
 // ------------------------------------------------------------------ commands
 
 fn add(req: AddInboxItem, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<InboxItemDto>> {
@@ -344,6 +370,9 @@ fn add(req: AddInboxItem, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<
                 events: vec![],
             });
         }
+    }
+    if let Some(c) = client_id {
+        check_quota(ctx.reads(), c, &req)?;
     }
     let item = AddInboxItem {
         front: trimmed(&req.front),
@@ -446,7 +475,7 @@ fn note_fields(
 }
 
 /// Classification assignments for a note in `deck`: references by id, key or name; values
-/// by option id or label (see `mcp::tools::parse_value`).
+/// by option id or label (see `support::attr_values::parse_value`).
 fn assignments(
     reads: &dyn Reads,
     deck: DeckId,
@@ -466,11 +495,11 @@ fn assignments(
         .map(|(reference, raw)| {
             let def = match defs.iter().find(|d| d.id.to_string() == reference.trim()) {
                 Some(d) => d,
-                None => crate::modules::mcp::tools::match_def(&defs, reference, "on this deck")?,
+                None => crate::support::attr_values::match_def(&defs, reference, "on this deck")?,
             };
             Ok(AttributeAssignment {
                 attr_id: def.id,
-                value: crate::modules::mcp::tools::parse_value(def, raw)?,
+                value: crate::support::attr_values::parse_value(def, raw)?,
             })
         })
         .collect::<Result<_, ApiError>>()

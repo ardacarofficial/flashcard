@@ -10,3 +10,6 @@ ConflictInboxItemState => Conflict, "errors.conflict.inbox_item_state";
 /// A `flashcard://` link was refused (`details.reason`: `scheme`, `too_long`, `target`,
 /// `missing`, `encoding`, `unsupported`, `id`).
 ValidationDeepLink => Validation, "errors.validation.deep_link";
+/// A local API client has too much waiting in the inbox (`details.limit`: `items` or `bytes`,
+/// `details.max`). It may send again after the user has handled some. HTTP 409.
+ConflictInboxQuota => Conflict, "errors.conflict.inbox_quota";

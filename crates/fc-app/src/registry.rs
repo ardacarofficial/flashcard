@@ -367,9 +367,9 @@ impl Registry {
                         .get(id)
                         .is_some_and(|g| g.contains(permission))
             }
-            Actor::Automation(_) => false,
             // v0.9: its approved scopes (∩ `local_api::GRANTABLE_SCOPES`), refreshed per request.
             Actor::LocalApi(id) => crate::modules::local_api::permits(self, id, permission),
+            Actor::Automation(_) => false,
         }
     }
 

@@ -2,7 +2,10 @@
 //! for every path — `Host`, `Origin` (+ CORS preflight), rate limits, body size, token — and
 //! every failure is an `ApiError` JSON body with a status from its code.
 
-use crate::{CLIENT_BURST, CLIENT_RATE_PER_SEC, MAX_BODY_BYTES, PAIR_PER_MINUTE};
+use crate::{
+    CLIENT_BURST, CLIENT_HEADER, CLIENT_RATE_PER_SEC, MAX_BODY_BYTES, PAIR_NAME_WINDOW_SECS,
+    PAIR_PER_MINUTE, PAIR_PER_NAME,
+};
 use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
@@ -70,6 +73,8 @@ struct Shared {
     pairings: Mutex<HashMap<String, Pairing>>,
     buckets: Mutex<HashMap<ApiClientId, Bucket>>,
     pair_bucket: Mutex<Bucket>,
+    /// Pairing allowance per `origin|client name`.
+    pair_names: Mutex<HashMap<String, Bucket>>,
     touched: Mutex<HashMap<ApiClientId, Instant>>,
 }
 
@@ -84,8 +89,12 @@ pub(crate) fn router(app: Arc<App>, port: u16) -> Router {
         pairings: Mutex::new(HashMap::new()),
         buckets: Mutex::new(HashMap::new()),
         pair_bucket: Mutex::new(Bucket::full(PAIR_PER_MINUTE)),
+        pair_names: Mutex::new(HashMap::new()),
         touched: Mutex::new(HashMap::new()),
     });
+    // Tokens handed out by an earlier run lived in its memory only: nothing can finish those
+    // pairings, so they must not wait to be approved. (Failing to tidy up is not fatal.)
+    let _ = local_api::expire_pending(&shared.app);
     Router::new().fallback(handle).with_state(shared)
 }
 
@@ -203,7 +212,7 @@ fn cors(mut r: Response, origin: Option<&str>, preflight: bool) -> Response {
         );
         h.insert(
             header::ACCESS_CONTROL_ALLOW_HEADERS,
-            HeaderValue::from_static("authorization, content-type"),
+            HeaderValue::from_static("authorization, content-type, x-flashcard-client"),
         );
         h.insert(
             header::ACCESS_CONTROL_MAX_AGE,
@@ -249,6 +258,37 @@ fn bearer(headers: &HeaderMap) -> Result<String, ApiError> {
             .with_detail("reason", "invalid"));
     }
     Ok(token.to_owned())
+}
+
+/// `X-Flashcard-Client: <who>` (1–100 printable characters) and, for a `POST`,
+/// `Content-Type: application/json`: what makes every browser request a preflighted one.
+fn csrf_guard(headers: &HeaderMap, method: &Method) -> Result<(), ApiError> {
+    let missing = |what: &str, reason: &str| {
+        api(
+            ErrorCode::ValidationInvalidParams,
+            &format!("{what} is required"),
+        )
+        .with_detail("reason", reason)
+    };
+    let client = headers
+        .get(CLIENT_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|v| (1..=100).contains(&v.len()) && v.chars().all(|c| !c.is_control()));
+    if client.is_none() {
+        return Err(missing("the X-Flashcard-Client header", "client_header"));
+    }
+    if method == Method::POST {
+        let json = headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .is_some_and(|m| m.trim().eq_ignore_ascii_case("application/json"));
+        if !json {
+            return Err(missing("Content-Type: application/json", "content_type"));
+        }
+    }
+    Ok(())
 }
 
 async fn read_json(body: Body, headers: &HeaderMap) -> Result<Value, ApiError> {
@@ -332,6 +372,9 @@ async fn route(
         .with_detail("method", path)
     };
     let rest = path.strip_prefix("/v1/").ok_or_else(not_found)?;
+    if !(method == Method::GET && rest == "ping") {
+        csrf_guard(headers, method)?;
+    }
     match (method.as_str(), rest) {
         ("GET", "ping") => Ok(json(
             StatusCode::OK,
@@ -342,7 +385,7 @@ async fn route(
             },
         )),
         ("POST", "pair") => pair(s, headers, origin, body).await,
-        ("GET", id) if id.starts_with("pair/") => {
+        ("POST", id) if id.starts_with("pair/") => {
             poll(s, id.trim_start_matches("pair/"), origin).await
         }
         ("GET", "auth" | "methods" | "decks") | ("POST", _) => {
@@ -442,6 +485,25 @@ async fn authenticate(
     Ok(client)
 }
 
+/// One client name (per origin) may ask only a few times in a while, whatever else is going on.
+fn pair_name_allowed(s: &Shared, origin: Option<&str>, name: &str) -> Result<(), ApiError> {
+    let key = format!(
+        "{}|{}",
+        origin.unwrap_or_default(),
+        name.trim().to_lowercase()
+    );
+    let mut map = lock(&s.pair_names);
+    if map.len() >= 256 {
+        // A bucket idle for the whole window is full again: forget it.
+        let window = Duration::from_secs_f64(PAIR_NAME_WINDOW_SECS);
+        map.retain(|_, b| b.last.elapsed() < window);
+    }
+    map.entry(key)
+        .or_insert_with(|| Bucket::full(PAIR_PER_NAME))
+        .take(PAIR_PER_NAME / PAIR_NAME_WINDOW_SECS, PAIR_PER_NAME)
+        .map_err(rate_limited)
+}
+
 async fn pair(
     s: &Arc<Shared>,
     headers: &HeaderMap,
@@ -452,6 +514,7 @@ async fn pair(
         .take(PAIR_PER_MINUTE / 60.0, PAIR_PER_MINUTE)
         .map_err(rate_limited)?;
     let req: PairRequest = parse(read_json(body, headers).await?)?;
+    pair_name_allowed(s, origin, &req.client_name)?;
     let token = format!(
         "fc1_{}",
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(random_bytes::<32>()?)
