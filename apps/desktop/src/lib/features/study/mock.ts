@@ -108,6 +108,7 @@ export default {
             mistakes: 0,
             current: null,
             next_due: null,
+            modes: null,
           },
           queue,
           again: [],
