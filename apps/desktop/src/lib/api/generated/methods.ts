@@ -194,6 +194,7 @@ import type { ShortcutList } from "./ShortcutList";
 import type { StartExport } from "./StartExport";
 import type { StartImport } from "./StartImport";
 import type { StartSession } from "./StartSession";
+import type { StartTimer } from "./StartTimer";
 import type { StatsBreakdown } from "./StatsBreakdown";
 import type { StatsBreakdownRequest } from "./StatsBreakdownRequest";
 import type { StatsCacheInfo } from "./StatsCacheInfo";
@@ -399,7 +400,7 @@ export interface Methods {
   "modes.learn.answer": { kind: "command"; request: LearnAnswer; response: LearnAnswerResult };
   "modes.confidence.answer": { kind: "command"; request: ConfidenceAnswer; response: SessionDto };
   "modes.timed.expire": { kind: "command"; request: ExpireCard; response: SessionDto };
-  "modes.timed.restart": { kind: "command"; request: SessionRef; response: SessionDto };
+  "modes.timed.start": { kind: "command"; request: StartTimer; response: SessionDto };
   "modes.test.paper": { kind: "query"; request: TestPaperRequest; response: TestPaperDto };
   "modes.test.submit": { kind: "command"; request: SubmitTest; response: TestPaperDto };
   "modes.inline.preview": { kind: "query"; request: InlinePreviewRequest; response: InlinePreview };
@@ -587,7 +588,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "modes.learn.answer": "command",
   "modes.confidence.answer": "command",
   "modes.timed.expire": "command",
-  "modes.timed.restart": "command",
+  "modes.timed.start": "command",
   "modes.test.paper": "query",
   "modes.test.submit": "command",
   "modes.inline.preview": "query",

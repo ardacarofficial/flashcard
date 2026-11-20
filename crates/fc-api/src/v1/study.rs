@@ -218,7 +218,10 @@ pub struct SessionDto {
     pub current: Option<StudyCardDto>,
     /// When the next waiting learning card becomes available, if any.
     pub next_due: Option<Timestamp>,
-    /// v0.10 study modes of the session (`null` when it uses none).
+    /// v0.10 study modes of the session (`null` when it uses none; may be absent from
+    /// clients/mocks written before v0.10).
+    #[serde(default)]
+    #[ts(optional = nullable)]
     pub modes: Option<super::modes::SessionModesDto>,
 }
 

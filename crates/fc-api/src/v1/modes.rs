@@ -100,7 +100,8 @@ pub struct TimerDto {
     pub seconds: u32,
     /// On timeout.
     pub on_timeout: TimeoutAction,
-    /// When the shown card's time runs out (`null` when no card is shown).
+    /// When the shown card's time runs out (`null` when no card is shown, or its countdown has
+    /// not started: the screen calls `modes.timed.start` when it shows the card).
     pub deadline: Option<Timestamp>,
 }
 
@@ -249,6 +250,16 @@ pub struct ExpireCard {
     /// Session (timed).
     pub session_id: SessionId,
     /// Shown card.
+    pub card_id: CardId,
+}
+
+/// `modes.timed.start`: the screen put `card_id` up; its countdown starts now (backend clock).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct StartTimer {
+    /// Session (timed).
+    pub session_id: SessionId,
+    /// The card the screen shows (must be the session's current card).
     pub card_id: CardId,
 }
 

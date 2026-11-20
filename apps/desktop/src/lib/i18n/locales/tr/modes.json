@@ -140,7 +140,7 @@
       },
       "timed": {
         "expire": "Kartın süresi doldu",
-        "restart": "Kart sayacını yeniden başlat"
+        "start": "Kart sayacını başlat"
       },
       "test": {
         "paper": "Test kâğıdı",

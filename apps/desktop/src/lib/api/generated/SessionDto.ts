@@ -61,6 +61,7 @@ current: StudyCardDto | null,
  */
 next_due: Timestamp | null, 
 /**
- * v0.10 study modes of the session (`null` when it uses none).
+ * v0.10 study modes of the session (`null` when it uses none; may be absent from
+ * clients/mocks written before v0.10).
  */
-modes: SessionModesDto | null, };
+modes?: SessionModesDto | null, };

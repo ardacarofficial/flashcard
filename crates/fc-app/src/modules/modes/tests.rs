@@ -6,7 +6,10 @@
 //! * test generator: mixed types, printable key, score, classification target, never
 //!   schedules, undoable → [`test_generator_mixes_types_scores_and_never_schedules`];
 //! * confidence scale mapped onto FSRS ratings → [`confidence_levels_map_onto_fsrs_ratings`];
-//! * timed mode on the backend clock → [`timed_mode_is_enforced_on_the_backend_clock`];
+//! * timed mode on the backend clock → [`timed_mode_is_enforced_on_the_backend_clock`]; the
+//!   countdown belongs to the card on screen → [`timed_countdown_belongs_to_the_card_on_screen`];
+//! * learn mode: recognition is not recall →
+//!   [`learn_choice_answers_do_not_rate_reviewed_cards`];
 //! * own `review_log.mode` per mode, statistics separate them, daily limits →
 //!   [`modes_log_their_own_review_mode_and_respect_daily_limits`];
 //! * inline card creation during study → [`inline_cards_during_study_are_one_undo_step`];
@@ -137,6 +140,14 @@ impl T {
         let id = n.cards[0].id;
         self.answers.borrow_mut().insert(id, back.to_owned());
         id
+    }
+
+    /// The screen shows the session's current card: its countdown starts (timed mode).
+    fn start_timer(&self, s: &SessionDto) -> SessionDto {
+        self.ok::<ModesTimedStart>(StartTimer {
+            session_id: s.id,
+            card_id: s.current.as_ref().unwrap().card_id,
+        })
     }
 
     fn answer_of(&self, card: CardId) -> String {
@@ -381,6 +392,78 @@ pub fn learn_mode_learns_cards_at_every_stage(f: &Factory) {
     assert_eq!(t.card(b1).scheduling.state, CardState::New, "B1 was not in the session");
 }
 
+/// Recognition is not recall (orchestrator decision on review #7): in a learn session, a
+/// multiple-choice answer on a card already in review is practice only — schedule unchanged,
+/// logged `trial_learn`, not counted by statistics; the written stage rates it (correct →
+/// Good, wrong → Again). New cards are rated at both stages.
+pub fn learn_choice_answers_do_not_rate_reviewed_cards(f: &Factory) {
+    let t = T::new(f(), 9);
+    let d = t.deck("Tanıma");
+    let cards: Vec<CardId> = ["ayı", "kurt", "tilki", "geyik"]
+        .iter()
+        .zip(["bear", "wolf", "fox", "deer"])
+        .map(|(f, b)| t.note(d.id, f, b, None))
+        .collect();
+    // Graduate every card to review ("Easy" on a new card).
+    let mut s = t.start(StudyKind::Normal, StudyMode::Scheduled, d.id, None, None);
+    while let Some(c) = s.current.clone() {
+        s = t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c.card_id, rating: Rating::Easy, duration_ms: 1_000, reveal_ms: None });
+    }
+    t.end(s.id);
+    assert!(cards.iter().all(|c| t.card(*c).scheduling.state == CardState::Review));
+    let reviewed = t.all_cards();
+    t.ok::<StatsRefreshCache>(Default::default());
+    let counted = t.reviews_total(true);
+
+    let s = t.start(StudyKind::Learn, StudyMode::Scheduled, d.id, None, None);
+    let first = s.current.as_ref().unwrap().card_id;
+    // Multiple choice, wrong then right: the card moves to the written stage, its schedule
+    // does not move.
+    let r = learn_step(&t, &s, false);
+    assert_eq!((r.stage, r.grade), (LearnStage::Choice, AnswerGrade::Wrong));
+    let mut s = r.session;
+    while s.current.as_ref().unwrap().card_id != first || learn_of(&s).stage != Some(LearnStage::Choice) {
+        let r = learn_step(&t, &s, true);
+        s = r.session;
+    }
+    let r = learn_step(&t, &s, true);
+    assert_eq!((r.stage, r.grade), (LearnStage::Choice, AnswerGrade::Correct));
+    assert_eq!(t.all_cards(), reviewed, "recognition changed no schedule");
+    let logs: Vec<_> = t.reviews(first).into_iter().skip(1).collect(); // after the "Easy"
+    assert_eq!(logs.len(), 2);
+    assert!(logs.iter().all(|l| l.mode == "trial_learn"));
+    assert_eq!(logs[0].rating, Rating::Again);
+    assert_eq!(logs[0].state_after, CardState::Review, "logged without a schedule change");
+    t.ok::<StatsRefreshCache>(Default::default());
+    assert_eq!(t.reviews_total(true), counted, "practice is not counted");
+    assert_eq!(t.reviews_total(false), counted);
+    let mut s = r.session;
+    // The written stage rates the card: right → Good.
+    while s.current.as_ref().unwrap().card_id != first {
+        s = learn_step(&t, &s, true).session;
+    }
+    assert_eq!(learn_of(&s).stage, Some(LearnStage::Written));
+    let r = learn_step(&t, &s, true);
+    assert!(r.learned);
+    let last = t.reviews(first).last().cloned().unwrap();
+    assert_eq!((last.mode.as_str(), last.rating), ("learn", Rating::Good));
+    assert_ne!(t.card(first).scheduling, reviewed.iter().find(|c| c.id == first).unwrap().scheduling);
+    t.end(r.session.id);
+    // A wrong written answer on a reviewed card is "Again" (it lapses).
+    let s = t.start(StudyKind::Learn, StudyMode::Scheduled, d.id, None, None);
+    let c = s.current.as_ref().unwrap().card_id;
+    assert_eq!(t.card(c).scheduling.state, CardState::Review);
+    let mut s = learn_step(&t, &s, true).session;
+    while s.current.as_ref().unwrap().card_id != c {
+        s = learn_step(&t, &s, true).session;
+    }
+    assert_eq!(learn_of(&s).stage, Some(LearnStage::Written));
+    learn_step(&t, &s, false);
+    let last = t.reviews(c).last().cloned().unwrap();
+    assert_eq!((last.mode.as_str(), last.rating), ("learn", Rating::Again));
+    assert_eq!(t.card(c).scheduling.state, CardState::Relearning);
+}
+
 fn exam_fixture(t: &T) -> (DeckDto, Vec<CardId>, Vec<CardId>) {
     let yks = t.deck("YKS");
     let exam = t.template("yks", yks.id);
@@ -599,10 +682,19 @@ pub fn confidence_levels_map_onto_fsrs_ratings(f: &Factory) {
     assert_eq!(e.code, ErrorCode::ValidationSessionMode);
 }
 
-/// Timed mode: the limit runs on the backend clock from when the card was shown; a late button
-/// answer is refused (`CONFLICT_TIME_UP`), an early expiry too (`CONFLICT_TIMER_RUNNING`);
-/// expiry answers "Again" (`timed`) or skips the card (no review, card unchanged); both are
-/// exactly undoable; a restart (resume) gives the shown card its full time again.
+fn deadline(s: &SessionDto) -> Option<Timestamp> {
+    s.modes.as_ref().unwrap().timer.unwrap().deadline
+}
+
+fn timer_not_started(e: &ApiError) {
+    assert_eq!(e.code, ErrorCode::ValidationSessionMode);
+    assert_eq!(e.details.get("reason").and_then(|v| v.as_str()), Some("timer_not_started"));
+}
+
+/// Timed mode: the limit runs on the backend clock from when the screen put the card up
+/// (`modes.timed.start`); a late button answer is refused (`CONFLICT_TIME_UP`), an early
+/// expiry too (`CONFLICT_TIMER_RUNNING`); expiry answers "Again" (`timed`) or skips the card
+/// (no review, card unchanged); both are exactly undoable; a countdown is never restarted.
 pub fn timed_mode_is_enforced_on_the_backend_clock(f: &Factory) {
     let t = T::new(f(), 4);
     let d = t.deck("Hızlı");
@@ -617,11 +709,30 @@ pub fn timed_mode_is_enforced_on_the_backend_clock(f: &Factory) {
         ..StartModes::default()
     };
     let s = t.start(StudyKind::Normal, StudyMode::Scheduled, d.id, None, Some(timed(TimeoutAction::Again)));
-    let timer = s.modes.as_ref().unwrap().timer.unwrap();
-    assert_eq!(timer.deadline, Some(t.now().plus_millis(10_000)));
-    // In time: an ordinary answer, logged as `timed`.
-    t.advance(5_000);
+    assert_eq!(deadline(&s), None, "the countdown starts when the screen shows the card");
     let c1 = s.current.clone().unwrap().card_id;
+    // A card whose countdown never started neither runs out nor takes an answer.
+    t.advance(60_000);
+    timer_not_started(&t.err::<ModesTimedExpire>(ExpireCard { session_id: s.id, card_id: c1 }));
+    timer_not_started(&t.err::<StudyAnswer>(AnswerCard {
+        session_id: s.id,
+        card_id: c1,
+        rating: Rating::Good,
+        duration_ms: 1_000,
+        reveal_ms: None,
+    }));
+    let s = t.start_timer(&s);
+    let started = t.now();
+    assert_eq!(deadline(&s), Some(started.plus_millis(10_000)));
+    // Starting again while it runs buys no time.
+    t.advance(2_000);
+    assert_eq!(deadline(&t.start_timer(&s)), Some(started.plus_millis(10_000)));
+    // Only the card on screen can be started.
+    let other = t.all_cards().into_iter().map(|c| c.id).find(|id| *id != c1).unwrap();
+    let e = t.err::<ModesTimedStart>(StartTimer { session_id: s.id, card_id: other });
+    assert_eq!(e.code, ErrorCode::ConflictNotCurrentCard);
+    // In time: an ordinary answer, logged as `timed`.
+    t.advance(3_000);
     let s = t.ok::<StudyAnswer>(AnswerCard {
         session_id: s.id,
         card_id: c1,
@@ -631,7 +742,9 @@ pub fn timed_mode_is_enforced_on_the_backend_clock(f: &Factory) {
     });
     assert_eq!(t.reviews(c1)[0].mode, "timed");
     let c2 = s.current.clone().unwrap().card_id;
-    assert_eq!(s.modes.as_ref().unwrap().timer.unwrap().deadline, Some(t.now().plus_millis(10_000)));
+    assert_eq!(deadline(&s), None, "the next card has not been shown yet");
+    let s = t.start_timer(&s);
+    assert_eq!(deadline(&s), Some(t.now().plus_millis(10_000)));
     // Too early to expire.
     t.advance(5_000);
     let e = t.err::<ModesTimedExpire>(ExpireCard { session_id: s.id, card_id: c2 });
@@ -646,8 +759,10 @@ pub fn timed_mode_is_enforced_on_the_backend_clock(f: &Factory) {
         reveal_ms: None,
     });
     assert_eq!(e.code, ErrorCode::ConflictTimeUp);
+    // ...and a run-out countdown cannot be restarted (any client: desktop, local API, plugins).
+    let e = t.err::<ModesTimedStart>(StartTimer { session_id: s.id, card_id: c2 });
+    assert_eq!(e.code, ErrorCode::ConflictTimeUp);
     let before = t.card(c2);
-    let session_before = t.session(s.id);
     let after = t.ok::<ModesTimedExpire>(ExpireCard { session_id: s.id, card_id: c2 });
     assert_eq!(after.modes.as_ref().unwrap().timed_out, 1);
     let log = &t.reviews(c2)[0];
@@ -656,13 +771,18 @@ pub fn timed_mode_is_enforced_on_the_backend_clock(f: &Factory) {
     t.undo();
     assert_eq!(t.card(c2), before);
     assert!(t.reviews(c2).is_empty());
-    assert_eq!(t.session(s.id), session_before);
+    // Undo puts the card back on screen with its countdown not started (full time again).
+    let undone = t.session(s.id);
+    assert_eq!(undone.current.as_ref().map(|c| c.card_id), Some(c2));
+    assert_eq!((undone.answered, undone.modes.as_ref().unwrap().timed_out), (s.answered, 0));
+    assert_eq!(deadline(&undone), None);
     t.redo();
     assert_eq!(t.reviews(c2).len(), 1);
     t.end(s.id);
 
     // Skip: the card leaves the session, no review, card unchanged; undo puts it back.
     let s = t.start(StudyKind::Normal, StudyMode::Scheduled, d.id, None, Some(timed(TimeoutAction::Skip)));
+    let s = t.start_timer(&s);
     let c3 = s.current.clone().unwrap().card_id;
     let card_before = t.card(c3);
     let reviews_before = t.reviews(c3).len();
@@ -673,18 +793,18 @@ pub fn timed_mode_is_enforced_on_the_backend_clock(f: &Factory) {
     assert_eq!(t.card(c3), card_before);
     assert_eq!(t.reviews(c3).len(), reviews_before);
     t.undo();
-    assert_eq!(t.session(s.id).current.unwrap().card_id, c3);
-    // Resume: a restart gives the shown card its full time again.
+    let undone = t.session(s.id);
+    assert_eq!(undone.current.as_ref().unwrap().card_id, c3);
+    assert_eq!(deadline(&undone), None);
+    // Resume much later: the screen starts the shown card's countdown afresh (by now a
+    // learning card may have come due before it).
     t.advance(60_000);
-    let resumed = t.ok::<ModesTimedRestart>(SessionRef { session_id: s.id });
-    assert_eq!(
-        resumed.modes.as_ref().unwrap().timer.unwrap().deadline,
-        Some(t.now().plus_millis(10_000))
-    );
+    let resumed = t.start_timer(&t.session(s.id));
+    assert_eq!(deadline(&resumed), Some(t.now().plus_millis(10_000)));
     t.advance(3_000);
     t.ok::<StudyAnswer>(AnswerCard {
         session_id: s.id,
-        card_id: c3,
+        card_id: resumed.current.unwrap().card_id,
         rating: Rating::Good,
         duration_ms: 3_000,
         reveal_ms: None,
@@ -701,8 +821,82 @@ pub fn timed_mode_is_enforced_on_the_backend_clock(f: &Factory) {
         .try_start(StudyKind::Learn, StudyMode::Scheduled, d.id, None, Some(timed(TimeoutAction::Again)))
         .unwrap_err();
     assert_eq!(e.code, ErrorCode::ValidationSessionMode);
-    let e = t.err::<ModesTimedRestart>(SessionRef { session_id: t.start(StudyKind::Custom, StudyMode::Trial, d.id, None, None).id });
+    let plain = t.start(StudyKind::Custom, StudyMode::Trial, d.id, None, None);
+    let e = t.err::<ModesTimedStart>(StartTimer {
+        session_id: plain.id,
+        card_id: plain.current.unwrap().card_id,
+    });
     assert_eq!(e.code, ErrorCode::ValidationSessionMode);
+}
+
+/// Review fix (v0.10): the countdown belongs to the card on screen. A card that comes on
+/// screen without an answer — after the shown card is suspended or buried, or a
+/// learning card coming back — has no countdown until the screen starts it, however long it
+/// waited; an undone card starts afresh. So a card nobody saw is never answered "Again".
+pub fn timed_countdown_belongs_to_the_card_on_screen(f: &Factory) {
+    let t = T::new(f(), 8);
+    let d = t.deck("Sayaç");
+    for i in 1..=4 {
+        t.note(d.id, &format!("s{i}"), &format!("c{i}"), None);
+    }
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, d.id, None, Some(StartModes {
+        timed: Some(TimedOptions { seconds: 10, on_timeout: TimeoutAction::Again }),
+        ..StartModes::default()
+    }));
+    // Suspend, then bury the shown card: the next one waits, unstarted, for the screen.
+    let mut removed = Vec::new();
+    for bury in [false, true] {
+        let shown = t.start_timer(&t.session(s.id));
+        let c = shown.current.unwrap().card_id;
+        t.advance(4_000);
+        if bury {
+            t.ok::<StudyBury>(BuryCards { card_ids: vec![c], buried: true, session_id: Some(s.id), tz_offset_mins: None });
+        } else {
+            t.ok::<StudySuspend>(SuspendCards { card_ids: vec![c], suspended: true, session_id: Some(s.id) });
+        }
+        removed.push(c);
+        t.advance(30_000); // longer than the limit
+        let next = t.session(s.id);
+        let n = next.current.as_ref().unwrap().card_id;
+        assert!(!removed.contains(&n));
+        assert_eq!(deadline(&next), None, "the next card's countdown has not started");
+        timer_not_started(&t.err::<ModesTimedExpire>(ExpireCard { session_id: s.id, card_id: n }));
+    }
+    // Undo (the bury): the card back on screen gets its full time, though its old countdown
+    // ran out long ago.
+    t.undo();
+    let back = t.session(s.id);
+    assert_eq!(back.current.as_ref().unwrap().card_id, removed[1]);
+    assert_eq!(deadline(&back), None);
+    let back = t.start_timer(&back);
+    assert_eq!(deadline(&back), Some(t.now().plus_millis(10_000)));
+    // A learning card coming back after "Again" starts a new countdown.
+    let c = removed[1];
+    t.advance(1_000);
+    let mut s2 = t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c, rating: Rating::Again, duration_ms: 1_000, reveal_ms: None });
+    let mut guard = 0;
+    while s2.current.as_ref().map(|x| x.card_id) != Some(c) {
+        guard += 1;
+        assert!(guard < 20);
+        match &s2.current {
+            Some(other) => {
+                let id = other.card_id;
+                assert_eq!(deadline(&s2), None);
+                t.start_timer(&s2);
+                s2 = t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: id, rating: Rating::Easy, duration_ms: 1_000, reveal_ms: None });
+            }
+            None => {
+                t.advance(60_000);
+                s2 = t.session(s.id);
+            }
+        }
+    }
+    t.advance(120_000);
+    let again = t.session(s.id);
+    assert_eq!(again.current.as_ref().unwrap().card_id, c);
+    assert_eq!(deadline(&again), None, "not the countdown of its first showing");
+    let again = t.start_timer(&again);
+    assert_eq!(deadline(&again), Some(t.now().plus_millis(10_000)));
 }
 
 /// Every mode writes `review_log` with its own `mode`: schedule-changing `learn`,
@@ -753,7 +947,7 @@ pub fn modes_log_their_own_review_mode_and_respect_daily_limits(f: &Factory) {
         timed: Some(TimedOptions { seconds: 30, on_timeout: TimeoutAction::Again }),
         ..StartModes::default()
     };
-    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, d.id, None, Some(timed.clone()));
+    let s = t.start_timer(&t.start(StudyKind::Normal, StudyMode::Scheduled, d.id, None, Some(timed.clone())));
     let c = s.current.unwrap().card_id;
     t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c, rating: Rating::Good, duration_ms: 1, reveal_ms: None });
     t.end(s.id);
@@ -763,7 +957,7 @@ pub fn modes_log_their_own_review_mode_and_respect_daily_limits(f: &Factory) {
     let s = t.start(StudyKind::Learn, StudyMode::Trial, d.id, None, None);
     let r = learn_step(&t, &s, true);
     t.end(r.session.id);
-    let s = t.start(StudyKind::Custom, StudyMode::Trial, d.id, None, Some(timed));
+    let s = t.start_timer(&t.start(StudyKind::Custom, StudyMode::Trial, d.id, None, Some(timed)));
     let c = s.current.unwrap().card_id;
     t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c, rating: Rating::Good, duration_ms: 1, reveal_ms: None });
     t.end(s.id);
@@ -888,6 +1082,8 @@ macro_rules! modes_suite {
             test_generator_mixes_types_scores_and_never_schedules,
             confidence_levels_map_onto_fsrs_ratings,
             timed_mode_is_enforced_on_the_backend_clock,
+            timed_countdown_belongs_to_the_card_on_screen,
+            learn_choice_answers_do_not_rate_reviewed_cards,
             modes_log_their_own_review_mode_and_respect_daily_limits,
             inline_cards_during_study_are_one_undo_step,
             modes_are_switchable_modules,

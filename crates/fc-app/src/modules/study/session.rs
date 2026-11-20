@@ -324,6 +324,10 @@ pub(crate) struct AnswerHooks<'a> {
     pub confidence: bool,
     /// Keep the card out of the engine's intraday re-queueing (learn mode re-queues itself).
     pub no_requeue: bool,
+    /// Practice only: the schedule (real or simulated) stays as it is and the review is
+    /// logged with the practice variant of its mode (`trial_<mode>`; learn mode's
+    /// multiple-choice answers on cards already in review).
+    pub practice: bool,
     /// Runs on the session state after the answer is recorded, before it is saved: the
     /// answered card, its note and queue category.
     #[allow(clippy::type_complexity)]
@@ -359,7 +363,10 @@ pub(crate) fn answer_core(
     let mut outcome = scheduler(ctx.reads())?
         .schedule(&before, req.rating, ctx.now, &params)
         .map_err(scheduler_error)?;
-    if session.config.mode == StudyMode::Scheduled {
+    if hooks.practice {
+        outcome.state = before.clone();
+        outcome.scheduled_days = 0;
+    } else if session.config.mode == StudyMode::Scheduled {
         // v0.6: load balancing, easy days, exam-date mode (no-op when `planning` is off).
         crate::modules::planning::plan_outcome(
             ctx.reads(),
@@ -383,6 +390,7 @@ pub(crate) fn answer_core(
     let mut restore_cards = Vec::new();
     let mut changed = Vec::new();
     match session.config.mode {
+        _ if hooks.practice => {}
         StudyMode::Scheduled => {
             restore_cards.push(card_before);
             card.scheduling = outcome.state.clone();
@@ -417,6 +425,8 @@ pub(crate) fn answer_core(
             requeue_at(&outcome.state, day_end)
         },
     );
+    // Its countdown ends with the answer (a card coming back later starts a new one).
+    crate::modules::modes::timed::card_left_screen(&mut session.state, card.id);
     if let Some(after) = hooks.after {
         after(&mut session.state, card.id, card.note_id, queue_kind);
     }
@@ -432,7 +442,14 @@ pub(crate) fn answer_core(
         duration_ms: duration,
         answer_duration_ms: reveal,
         hints_used,
-        mode: review_mode(&session.config, hooks.confidence),
+        mode: {
+            let mode = review_mode(&session.config, hooks.confidence);
+            if hooks.practice && !fc_storage::repo::is_practice_mode(&mode) {
+                format!("trial_{mode}")
+            } else {
+                mode
+            }
+        },
         stability_after: outcome.state.stability,
         difficulty_after: outcome.state.difficulty,
         created_at: ctx.now,

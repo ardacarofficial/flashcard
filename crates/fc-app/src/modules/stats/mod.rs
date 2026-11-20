@@ -9,7 +9,8 @@
 //!   equal a recomputation (`fc_core::stats::DayAggregate` is a monoid); a changed or removed
 //!   row (undo, purge, restore) invalidates it. `stats.refresh_cache` stores the extended cache;
 //!   a stale one is never used.
-//! * Imported reviews (`mode = imported`) count; trial reviews do not.
+//! * Imported reviews (`mode = imported`) count; practice reviews do not (`trial`, the v0.10
+//!   `trial_<mode>` variants and `test`: `fc_storage::repo::is_practice_mode`).
 //!
 //! `facts` holds the shared machinery the other v0.6 modules (`goals`, `planning`,
 //! `optimizer`) use too.

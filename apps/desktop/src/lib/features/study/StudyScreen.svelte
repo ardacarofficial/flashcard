@@ -160,8 +160,18 @@
     revealedAt = null;
   }
 
+  /**
+   * Timed mode (v0.10): the countdown of a card starts when the screen puts it up — the
+   * backend refuses to restart one, so a resumed or undone card keeps what it has.
+   */
+  async function startTimer(s: SessionDto): Promise<SessionDto> {
+    const timer = s.modes?.timer;
+    if (!timer || !s.current || timer.deadline !== null || s.ended_at !== null) return s;
+    return api.call('modes.timed.start', { session_id: s.id, card_id: s.current.card_id });
+  }
+
   async function settle(s: SessionDto) {
-    if (s.current) show(s);
+    if (s.current) show(await startTimer(s));
     else await finish(s);
   }
 
@@ -204,7 +214,7 @@
       notice = t('study.nothing');
       return;
     }
-    show(s);
+    show(await startTimer(s));
   }
 
   async function reload() {
@@ -217,7 +227,7 @@
   async function refresh() {
     if (!session) return;
     const s = await api.call('study.session', { session_id: session.id });
-    if (s.current && s.current.card_id === card?.card_id) session = s;
+    if (s.current && s.current.card_id === card?.card_id) session = await startTimer(s);
     else await settle(s);
   }
 
@@ -274,15 +284,20 @@
   async function rateConfidence(level: number) {
     if (!session || !card) return;
     const now = Date.now();
-    await settle(
-      await api.call('modes.confidence.answer', {
+    try {
+      const next = await api.call('modes.confidence.answer', {
         session_id: session.id,
         card_id: card.card_id,
         level,
         duration_ms: Math.max(0, now - shownAt),
         reveal_ms: revealedAt === null ? null : Math.max(0, revealedAt - shownAt),
-      }),
-    );
+      });
+      await settle(next);
+    } catch (e) {
+      // Timed mode: the backend clock says the time ran out (as in `rate`).
+      if (e instanceof ApiError && e.code === 'CONFLICT_TIME_UP') await expire();
+      else throw e;
+    }
   }
 
   /** Timed mode (v0.10): the card's time ran out. */
@@ -292,9 +307,8 @@
   }
 
   async function resume(s: SessionDto) {
-    // A resumed timed session gives the shown card its full time again.
-    const r = s.modes?.timer ? await api.call('modes.timed.restart', { session_id: s.id }) : s;
-    await settle(r);
+    // Timed: a card whose countdown never started gets it now (`settle`).
+    await settle(s);
   }
 
   async function run(a: StudyAction) {

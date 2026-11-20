@@ -140,7 +140,7 @@
       },
       "timed": {
         "expire": "Time up for the card",
-        "restart": "Restart the card timer"
+        "start": "Start the card timer"
       },
       "test": {
         "paper": "Test paper",

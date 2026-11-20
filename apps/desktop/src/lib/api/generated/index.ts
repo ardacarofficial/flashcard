@@ -337,6 +337,7 @@ export type * from "./StartExport";
 export type * from "./StartImport";
 export type * from "./StartModes";
 export type * from "./StartSession";
+export type * from "./StartTimer";
 export type * from "./StateCounts";
 export type * from "./StatsBreakdown";
 export type * from "./StatsBreakdownRequest";

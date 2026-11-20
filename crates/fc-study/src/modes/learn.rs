@@ -5,11 +5,17 @@
 //! the written stage. Cards that are not yet learned come back a few cards later
 //! ([`REQUEUE_GAP`]).
 //!
+//! **Recognition is not recall** ([`updates_schedule`]): a multiple-choice answer on a card
+//! already in review (or relearning) is practice only — it moves the card between stages but
+//! leaves its FSRS schedule alone; only the written stage rates such a card (correct → Good,
+//! almost → Hard, wrong → Again). New and learning cards are rated at both stages, and
+//! graduate through the written one.
+//!
 //! Cards without a usable multiple-choice question (no distinct distractor in the session)
 //! start at the written stage: "every stage" is every stage the card can be asked at.
 
 use crate::answer::Grade;
-use fc_core::card::Rating;
+use fc_core::card::{CardState, Rating};
 use fc_core::CardId;
 use serde::{Deserialize, Serialize};
 
@@ -164,6 +170,19 @@ pub const fn rating(grade: Grade) -> Rating {
     grade.suggested_rating()
 }
 
+/// Whether an answer at `stage` on a card in scheduling state `state` rates it (changes its
+/// FSRS schedule). Multiple choice only tests recognition: on a card already in review or
+/// relearning it is practice.
+pub const fn updates_schedule(stage: LearnStage, state: CardState) -> bool {
+    !matches!(
+        (stage, state),
+        (
+            LearnStage::Choice,
+            CardState::Review | CardState::Relearning
+        )
+    )
+}
+
 /// The distractor pool for `card`: the other cards' answers.
 pub fn pool(state: &LearnState, card: CardId) -> Vec<String> {
     state
@@ -240,5 +259,17 @@ mod tests {
         assert_eq!(requeue_index(10), REQUEUE_GAP);
         assert_eq!(requeue_index(1), 1);
         assert_eq!(requeue_index(0), 0);
+    }
+
+    #[test]
+    fn recognition_does_not_rate_reviewed_cards() {
+        for state in [CardState::New, CardState::Learning] {
+            assert!(updates_schedule(LearnStage::Choice, state));
+            assert!(updates_schedule(LearnStage::Written, state));
+        }
+        for state in [CardState::Review, CardState::Relearning] {
+            assert!(!updates_schedule(LearnStage::Choice, state));
+            assert!(updates_schedule(LearnStage::Written, state));
+        }
     }
 }

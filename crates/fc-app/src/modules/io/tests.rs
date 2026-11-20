@@ -1034,6 +1034,85 @@ fn fcpack_preserves_classifications_exactly() {
     assert_eq!(def.scope_deck_id, Some(lang.id));
 }
 
+/// v0.10 review fix: imported history counts as `imported` (never against today's limits),
+/// except practice rows — `trial`, every `trial_<mode>` and `test` — which keep their mode
+/// (so statistics and FSRS optimization keep skipping them).
+#[test]
+fn imported_history_keeps_practice_modes() {
+    use fc_core::{ReviewLogId, Timestamp};
+    use fc_storage::repo::ReviewLogRecord;
+    let dir = tempfile::tempdir().unwrap();
+    let a = sqlite();
+    let d = deck(&a, "Modlar");
+    let note = a.ok::<NotesCreate>(CreateNote {
+        notetype_id: CLASSIC_ID,
+        deck_id: d.id,
+        fields: [("front".into(), "kip".into()), ("back".into(), "mode".into())].into(),
+        tags: vec![],
+        attributes: vec![],
+        allow_duplicate: None,
+    });
+    let card = note.cards[0].id;
+    let modes = [
+        "normal", "learn", "timed", "confidence", "trial", "trial_learn", "trial_timed",
+        "trial_confidence", "test",
+    ];
+    {
+        let mut tx = a.store.write().unwrap();
+        for (i, mode) in modes.iter().enumerate() {
+            tx.insert_review_log(&ReviewLogRecord {
+                id: ReviewLogId(uuid::Uuid::from_u128(0x0190_0000_0000_7000_8000_0000_0000_0001 + i as u128)),
+                card_id: card,
+                session_id: None,
+                rating: Rating::Good,
+                state_before: CardState::New,
+                state_after: CardState::Learning,
+                scheduled_days: 0,
+                elapsed_days: 0,
+                duration_ms: 1_000,
+                answer_duration_ms: None,
+                hints_used: 0,
+                mode: (*mode).to_owned(),
+                stability_after: None,
+                difficulty_after: None,
+                created_at: Timestamp(1_772_445_600_000 + i as i64),
+            })
+            .unwrap();
+        }
+        tx.commit().unwrap();
+    }
+    let path = dir.path().join("modes.fcpack");
+    let job = a.ok::<IoExportStart>(StartExport {
+        format: ExportFormat::Fcpack,
+        path: path.to_string_lossy().into_owned(),
+        deck_id: Some(d.id),
+        include_history: Some(true),
+        text_options: None,
+    });
+    result::<ExportReport>(&finish(&a, &job));
+
+    let b = sqlite();
+    let mut req = file_import(&path, None);
+    req.include_history = Some(true);
+    let r = import(&b, req);
+    assert_eq!(r.added_reviews, modes.len() as u32);
+    let tx = b.store.read().unwrap();
+    let mut got: Vec<String> = tx
+        .review_logs_for_cards(&[card])
+        .unwrap()
+        .into_iter()
+        .map(|l| l.mode)
+        .collect();
+    got.sort();
+    let imported = fc_storage::repo::REVIEW_MODE_IMPORTED.to_owned();
+    let mut want = vec![imported.clone(), imported.clone(), imported.clone(), imported];
+    want.extend(
+        ["test", "trial", "trial_confidence", "trial_learn", "trial_timed"].map(str::to_owned),
+    );
+    want.sort();
+    assert_eq!(got, want);
+}
+
 // ------------------------------------------------------------------ backup
 
 #[test]

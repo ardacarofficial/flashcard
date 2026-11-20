@@ -2,7 +2,7 @@
 //! sessions start with `study.start` (kinds `learn`, `test`); timed/confidence are its options.
 
 use crate::v1::modes::*;
-use crate::v1::study::{SessionDto, SessionRef};
+use crate::v1::study::SessionDto;
 
 methods! {
     // ---- learn (module `learn`) ----
@@ -17,8 +17,10 @@ methods! {
     // ---- timed (module `timed`) ----
     /// The shown card's time ran out: answers "Again" or skips it (session option).
     ModesTimedExpire = "modes.timed.expire", Command, "timed", "study:write", Public, undo: true, ExpireCard => SessionDto;
-    /// Restarts the shown card's countdown (resuming a session). Session bookkeeping.
-    ModesTimedRestart = "modes.timed.restart", Command, "timed", "study:write", Public, undo: false, SessionRef => SessionDto;
+    /// Starts the countdown of the card the screen just put up (`TimerDto.deadline` was
+    /// `null`). No-op while it runs; never restarts one (`CONFLICT_TIME_UP` once it ran out).
+    /// Session bookkeeping.
+    ModesTimedStart = "modes.timed.start", Command, "timed", "study:write", Public, undo: false, StartTimer => SessionDto;
 
     // ---- test (module `practice_test`) ----
     /// The questions of a test session (answer key after submission or on request).

@@ -3,7 +3,10 @@
 //! saved query); each card is asked as multiple choice, then written; `modes.learn.answer`
 //! judges the answer, rates the card through the session engine (correct → good, almost →
 //! hard, wrong → again; `review_log.mode = learn`, or `trial_learn` in practice mode) and
-//! moves it between stages. A card is learned once correct at every stage.
+//! moves it between stages. A card is learned once correct at every stage. Recognition is not
+//! recall: a multiple-choice answer on a card already in review/relearning is practice only
+//! (schedule unchanged, `review_log.mode = trial_learn`); such cards are rated by the written
+//! stage alone ([`pure::updates_schedule`]).
 
 use super::{session_mode, setting};
 use crate::error::AppResult;
@@ -261,6 +264,7 @@ fn answer(req: LearnAnswer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
             i.stage = pure::LearnStage::Written;
         }
     }
+    let practice = !pure::updates_schedule(stage, session.scheduling_of(&card).state);
     let mut after_state = probe.clone();
     let step = probe
         .record(card.id, grade)
@@ -277,6 +281,7 @@ fn answer(req: LearnAnswer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
         AnswerHooks {
             confidence: false,
             no_requeue: true,
+            practice,
             after: Some(Box::new(move |state: &mut SessionState, card_id, note_id, kind| {
                 after_state.record(card_id, grade);
                 let learned = after_state.item(card_id).is_some_and(|i| i.learned);

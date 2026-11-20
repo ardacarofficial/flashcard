@@ -257,35 +257,42 @@ describe('test screen', () => {
 });
 
 describe('study screen modes', () => {
-  it('expires a timed card at its deadline and rates on the confidence scale with keys 1–5', async () => {
-    const levels = [1, 2, 3, 4, 5].map((level) => ({
-      level,
-      rating: (['again', 'again', 'hard', 'good', 'easy'] as const)[level - 1],
-      interval_ms: level * 60_000,
-    }));
-    const modes = (deadline: number) => ({
-      rating_scale: 'confidence',
-      confidence: levels,
-      timer: { seconds: 10, on_timeout: 'again', deadline },
-      timed_out: 0,
-      learn: null,
-      test: null,
-    });
-    const first = session({ modes: modes(Date.now() + 60_000) });
-    const second = session({ current: card('c-2', 'otter'), modes: modes(Date.now() + 300) });
-    const third = session({ current: card('c-3', 'heron'), modes: modes(Date.now() + 60_000) });
+  const levels = [1, 2, 3, 4, 5].map((level) => ({
+    level,
+    rating: (['again', 'again', 'hard', 'good', 'easy'] as const)[level - 1],
+    interval_ms: level * 60_000,
+  }));
+  const modes = (deadline: number | null) => ({
+    rating_scale: 'confidence',
+    confidence: levels,
+    timer: { seconds: 10, on_timeout: 'again', deadline },
+    timed_out: 0,
+    learn: null,
+    test: null,
+  });
+
+  it('starts each card\'s countdown when it shows, expires it at its deadline and rates on the confidence scale with keys 1–5', async () => {
+    // The backend sends a fresh card without a deadline; the screen starts its countdown.
+    const shown = (id: string, q: string, deadline: number | null) =>
+      session({ current: card(id, q), modes: modes(deadline) });
+    const started: string[] = [];
     call.mockImplementation(async (m, p) => {
       if (m === 'study.start') {
         expect(p.modes).toEqual({ timed: { seconds: 10, on_timeout: 'again' }, rating_scale: 'confidence', test: null });
-        return first;
+        return shown('c-1', 'badger', null);
+      }
+      if (m === 'modes.timed.start') {
+        started.push(p.card_id);
+        const q = { 'c-1': 'badger', 'c-2': 'otter', 'c-3': 'heron' }[p.card_id as string]!;
+        return shown(p.card_id, q, Date.now() + (p.card_id === 'c-2' ? 300 : 60_000));
       }
       if (m === 'modes.confidence.answer') {
         expect(p).toMatchObject({ card_id: 'c-1', level: 3 });
-        return second;
+        return shown('c-2', 'otter', null);
       }
       if (m === 'modes.timed.expire') {
         expect(p).toEqual({ session_id: 's-1', card_id: 'c-2' });
-        return third;
+        return shown('c-3', 'heron', null);
       }
       return base(m);
     });
@@ -301,6 +308,31 @@ describe('study screen modes', () => {
     await waitFor(() => expect(screen.getByTestId('question').textContent).toContain('otter'));
     // The countdown runs out → the backend is told; the next card shows.
     await waitFor(() => expect(screen.getByTestId('question').textContent).toContain('heron'), { timeout: 2_000 });
+    await waitFor(() => expect(started).toEqual(['c-1', 'c-2', 'c-3']));
+  });
+
+  it('sends a late confidence answer to expire, like a late button answer', async () => {
+    const { ApiError } = await import('$lib/api');
+    const first = session({ modes: modes(Date.now() + 60_000) });
+    const next = session({ current: card('c-2', 'otter'), modes: modes(Date.now() + 60_000) });
+    call.mockImplementation(async (m, p) => {
+      if (m === 'study.start') return first;
+      if (m === 'modes.confidence.answer') throw new (ApiError as any)('CONFLICT_TIME_UP');
+      if (m === 'modes.timed.expire') {
+        expect(p).toEqual({ session_id: 's-1', card_id: 'c-1' });
+        return next;
+      }
+      return base(m);
+    });
+    render(StudyScreen, { ctx: ctx() });
+    await fireEvent.click(await screen.findByLabelText('Time limit'));
+    await fireEvent.change(screen.getByLabelText('Rating'), { target: { value: 'confidence' } });
+    await key('Enter');
+    await key(' ');
+    await screen.findByText('How sure were you?');
+    await key('4');
+    await waitFor(() => expect(screen.getByTestId('question').textContent).toContain('otter'));
+    expect(call.mock.calls.map((c) => c[0])).not.toContain('modes.timed.start');
   });
 
   it('enters focus mode with F and creates inline cards with N without leaving the card', async () => {

@@ -31,6 +31,11 @@ pub struct ModesState {
     pub test: Option<test::TestState>,
     /// Timed sessions: cards whose time ran out.
     pub timed_out: u32,
+    /// Timed sessions: the countdown of the card on screen, started when the screen put it up
+    /// (`modes.timed.start`). Kept per card: a different card on screen, or an undo, means
+    /// its countdown has not started yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timer: Option<timed::CardTimer>,
 }
 
 /// Mode options persisted with a session (`sessions.config.modes`; absent for plain

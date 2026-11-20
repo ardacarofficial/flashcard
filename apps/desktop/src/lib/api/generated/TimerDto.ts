@@ -15,6 +15,7 @@ seconds: number,
  */
 on_timeout: TimeoutAction, 
 /**
- * When the shown card's time runs out (`null` when no card is shown).
+ * When the shown card's time runs out (`null` when no card is shown, or its countdown has
+ * not started: the screen calls `modes.timed.start` when it shows the card).
  */
 deadline: Timestamp | null, };

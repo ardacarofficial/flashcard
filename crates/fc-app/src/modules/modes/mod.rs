@@ -6,7 +6,7 @@
 //!   `modes.test.paper/submit`).
 //! * `confidence` ([`confidence`]): the 1–5 rating scale (`modes.confidence.answer`).
 //! * `timed` ([`timed`]): per-card time limit (`study.start { modes.timed }`,
-//!   `modes.timed.expire/restart`).
+//!   `modes.timed.start/expire`).
 //! * `focus` ([`focus`]): distraction-free study screen (settings only; the screen is the
 //!   frontend's).
 //! * `inline_cards` ([`inline_cards`]): `question :: answer` lines → notes
@@ -93,11 +93,6 @@ fn require_module(ctx: &CommandCtx<'_>, id: &str) -> AppResult<()> {
     } else {
         Err(crate::registry::module_disabled(id))
     }
-}
-
-/// When the card on screen was put there: the last answer, the start or a timer restart.
-pub(crate) fn shown_at(s: &Session) -> Timestamp {
-    s.state.last_event_at.unwrap_or(s.record.started_at)
 }
 
 // ------------------------------------------------------------------ engine hooks
@@ -218,7 +213,9 @@ pub(crate) fn session_modes(
             fc_study::modes::timed::TimeoutAction::Again => TimeoutAction::Again,
             fc_study::modes::timed::TimeoutAction::Skip => TimeoutAction::Skip,
         },
-        deadline: current.map(|_| t.deadline(shown_at(s))),
+        deadline: current
+            .and_then(|c| timed::started(s, c.card_id))
+            .map(|at| t.deadline(at)),
     });
     let learn = match s.config.kind {
         StudyKind::Learn => Some(learn::dto(v, s, shown)?),

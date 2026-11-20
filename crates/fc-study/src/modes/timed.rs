@@ -1,9 +1,10 @@
 //! Timed mode (docs/02 §6.1): every card has a time limit; when it runs out the card counts
 //! as "Again" or is skipped (settings). The limit is measured on the **backend's** clock from
-//! the moment the card was put on screen (the previous answer, the session start, or an
-//! explicit timer restart after a resume); the client only reports.
+//! the moment the card was put on screen ([`CardTimer`], started by the screen when it shows
+//! the card); the client only reports. A card whose countdown never started can neither be
+//! expired nor answered, so a card nobody saw never runs out.
 
-use fc_core::Timestamp;
+use fc_core::{CardId, Timestamp};
 use serde::{Deserialize, Serialize};
 
 /// Shortest limit, seconds.
@@ -22,6 +23,23 @@ pub enum TimeoutAction {
     Again,
     /// The card leaves the session unanswered (no review, schedule unchanged).
     Skip,
+}
+
+/// The countdown of one card: when it went on screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CardTimer {
+    /// Card on screen.
+    pub card_id: CardId,
+    /// When its countdown started.
+    pub started_at: Timestamp,
+}
+
+impl CardTimer {
+    /// When the countdown of `card` started, if `timer` is its countdown (`None`: another
+    /// card's, or none — `card`'s has not started).
+    pub fn of(timer: Option<&CardTimer>, card: CardId) -> Option<Timestamp> {
+        timer.filter(|t| t.card_id == card).map(|t| t.started_at)
+    }
 }
 
 /// Time limit of a session.
@@ -74,5 +92,18 @@ mod tests {
         assert!(t.is_late(shown, Timestamp(1_011_501)));
         assert!(!Timed { seconds: 2, ..t }.valid());
         assert!(!Timed { seconds: 601, ..t }.valid());
+    }
+
+    #[test]
+    fn a_countdown_belongs_to_one_card() {
+        let a = CardId(uuid::Uuid::from_u128(1));
+        let b = CardId(uuid::Uuid::from_u128(2));
+        let timer = CardTimer {
+            card_id: a,
+            started_at: Timestamp(5),
+        };
+        assert_eq!(CardTimer::of(Some(&timer), a), Some(Timestamp(5)));
+        assert_eq!(CardTimer::of(Some(&timer), b), None);
+        assert_eq!(CardTimer::of(None, a), None);
     }
 }

@@ -1,26 +1,33 @@
 //! `timed` module: timed mode (docs/02 §6.1, docs/03 §9). `study.start { modes.timed:
 //! { seconds, on_timeout } }` gives every card a time limit measured on the **backend clock**
-//! from when it was put on screen (previous answer, start, or `modes.timed.restart` after a
-//! resume). A button answer later than the limit (+ grace) is refused with
-//! `CONFLICT_TIME_UP`; `modes.timed.expire` (refused before the limit: `CONFLICT_TIMER_RUNNING`)
-//! answers the card "Again" through the session engine (`review_log.mode = timed`) or skips it
-//! (no review, schedule unchanged). Both are one undo step.
+//! from when the screen put it up: `modes.timed.start { card_id }` starts that card's countdown
+//! (kept per card in `ModesState.timer`; a no-op while it runs, refused once it ran out, so it
+//! can never buy more time). The countdown ends with the card's answer, and an undo forgets
+//! it (the card back on screen starts afresh); any other card on screen (after suspend, bury,
+//! postpone, a learning card coming due) has no countdown until the screen starts one, so a
+//! card nobody saw never runs out. A button answer later than the limit (+ grace) is refused
+//! with `CONFLICT_TIME_UP`, one without a started countdown with `VALIDATION_SESSION_MODE`
+//! (`timer_not_started`); `modes.timed.expire` (refused before the limit:
+//! `CONFLICT_TIMER_RUNNING`) answers the card "Again" through the session engine
+//! (`review_log.mode = timed`) or skips it (no review, schedule unchanged). Both are one undo
+//! step.
 
-use super::{session_mode, shown_at};
+use super::session_mode;
 use crate::error::AppResult;
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome};
 use crate::module::{choice_setting, ModuleDescriptor};
 use crate::modules::study::ext::*;
 use crate::registry::Registry;
 use crate::support::summary;
-use fc_api::v1::methods::{ModesTimedExpire, ModesTimedRestart, StudyRestore};
-use fc_api::v1::modes::ExpireCard;
-use fc_api::v1::study::{AnswerCard, RestoreStudy, SessionDto, SessionRef};
+use fc_api::v1::methods::{ModesTimedExpire, ModesTimedStart, StudyRestore};
+use fc_api::v1::modes::{ExpireCard, StartTimer};
+use fc_api::v1::study::{AnswerCard, RestoreStudy, SessionDto};
 use fc_api::{ApiError, ErrorCode};
 use fc_core::card::Rating;
 use fc_core::settings::{SettingDef, SettingKind, SettingScopeKind};
 use fc_core::{CardId, Timestamp};
-use fc_study::modes::timed::{TimeoutAction, Timed, MAX_SECONDS, MIN_SECONDS};
+use fc_study::modes::timed::{CardTimer, TimeoutAction, Timed, MAX_SECONDS, MIN_SECONDS};
+use fc_study::session::SessionState;
 use fc_study::session as queue;
 
 /// Module id.
@@ -61,7 +68,7 @@ pub fn descriptor() -> ModuleDescriptor {
 pub fn register(reg: &mut Registry) {
     reg.module(descriptor());
     reg.command::<ModesTimedExpire>(expire);
-    reg.command::<ModesTimedRestart>(restart);
+    reg.command::<ModesTimedStart>(start);
 }
 
 fn timed_of(s: &Session) -> AppResult<Timed> {
@@ -72,17 +79,53 @@ fn timed_of(s: &Session) -> AppResult<Timed> {
         .ok_or_else(|| session_mode("not_timed", "not a timed session"))
 }
 
-/// Refuses a button answer of `card` that comes later than its time limit (no-op in untimed
-/// sessions).
+/// When `card`'s countdown started (`None`: it has not).
+pub(super) fn started(s: &Session, card: CardId) -> Option<Timestamp> {
+    CardTimer::of(s.state.modes.as_ref().and_then(|m| m.timer.as_ref()), card)
+}
+
+/// The countdown of `card` ends (it was answered or left the session).
+pub(crate) fn card_left_screen(state: &mut SessionState, card: CardId) {
+    if let Some(m) = state.modes.as_mut() {
+        if m.timer.is_some_and(|t| t.card_id == card) {
+            m.timer = None;
+        }
+    }
+}
+
+/// Undo put an earlier state back: the card on screen starts afresh.
+pub(crate) fn forget_timer(state: &mut SessionState) {
+    if let Some(m) = state.modes.as_mut() {
+        m.timer = None;
+    }
+}
+
+fn not_started(card: CardId) -> crate::error::AppError {
+    crate::error::AppError::Api(
+        ApiError::new(
+            ErrorCode::ValidationSessionMode,
+            "the card's countdown has not started (modes.timed.start)",
+        )
+        .with_detail("reason", "timer_not_started")
+        .with_detail("card_id", card.to_string()),
+    )
+}
+
+/// Refuses a button answer of `card` that comes later than its time limit, or whose
+/// countdown never started (no-op in untimed sessions).
 pub(super) fn check_in_time(s: &Session, card: CardId, now: Timestamp) -> AppResult<()> {
-    match s.config.modes.as_ref().and_then(|m| m.timed) {
-        Some(t) if t.is_late(shown_at(s), now) => Err(ApiError::new(
+    let Some(t) = s.config.modes.as_ref().and_then(|m| m.timed) else {
+        return Ok(());
+    };
+    match started(s, card) {
+        None => Err(not_started(card)),
+        Some(at) if t.is_late(at, now) => Err(ApiError::new(
             ErrorCode::ConflictTimeUp,
             "the card's time ran out (modes.timed.expire)",
         )
         .with_detail("card_id", card.to_string())
         .into()),
-        _ => Ok(()),
+        Some(_) => Ok(()),
     }
 }
 
@@ -93,7 +136,7 @@ fn expire(req: ExpireCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
     if session.current(ctx.now).map(|e| e.card_id) != Some(req.card_id) {
         return Err(not_available(req.card_id));
     }
-    let shown = shown_at(&session);
+    let shown = started(&session, req.card_id).ok_or_else(|| not_started(req.card_id))?;
     if !timed.has_expired(shown, ctx.now) {
         let remaining = timed.deadline(shown).as_millis() - ctx.now.as_millis();
         return Err(ApiError::new(ErrorCode::ConflictTimerRunning, "the card still has time")
@@ -134,6 +177,7 @@ fn expire(req: ExpireCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
         TimeoutAction::Skip => {
             let before = session.snapshot();
             queue::remove_cards(&mut session.state, &[req.card_id]);
+            card_left_screen(&mut session.state, req.card_id);
             let m = session.state.modes.get_or_insert_with(Default::default);
             m.timed_out += 1;
             session.state.hint_card = None;
@@ -155,16 +199,36 @@ fn expire(req: ExpireCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
     }
 }
 
-fn restart(req: SessionRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<SessionDto>> {
+fn start(req: StartTimer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<SessionDto>> {
     let mut session = Session::load(ctx.reads(), req.session_id)?;
-    timed_of(&session)?;
+    let timed = timed_of(&session)?;
     session.require_open()?;
-    session.state.last_event_at = Some(ctx.now);
-    session.save(ctx.tx)?;
+    if session.current(ctx.now).map(|e| e.card_id) != Some(req.card_id) {
+        return Err(not_available(req.card_id));
+    }
+    match started(&session, req.card_id) {
+        // Never restarts a countdown: no extra time for a card already on screen.
+        Some(at) if ctx.now.as_millis() >= timed.deadline(at).as_millis() => {
+            return Err(ApiError::new(
+                ErrorCode::ConflictTimeUp,
+                "the card's time ran out (modes.timed.expire)",
+            )
+            .with_detail("card_id", req.card_id.to_string())
+            .into())
+        }
+        Some(_) => {}
+        None => {
+            session.state.modes.get_or_insert_with(Default::default).timer = Some(CardTimer {
+                card_id: req.card_id,
+                started_at: ctx.now,
+            });
+            session.save(ctx.tx)?;
+        }
+    }
     Ok(CommandOutcome {
         response: session_dto(View::cmd(ctx), &session, ctx.now)?,
         inverse: Vec::new(),
-        summary: summary::<ModesTimedRestart>(),
+        summary: summary::<ModesTimedStart>(),
         events: Vec::new(),
     })
 }
