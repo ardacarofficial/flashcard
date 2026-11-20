@@ -102,7 +102,9 @@
     "condition_example": "e.g. seviye:A1 lapses>=5",
     "inbox_condition_hint": "For inbox rules the query is checked on the card the proposal would become (e.g. deck:English seviye:B1).",
     "auto_accept_active": "Programs' proposals are accepted without your review by: {names}. Anything a paired program or a plugin proposes becomes a note at once (each program can propose at most its daily limit: Ctrl+K → setting local_api.inbox_daily_max).",
-    "auto_accept_warning": "This rule accepts proposals without your review: whatever a paired program or a plugin proposes becomes a note right away. Keep the condition narrow; each program is still held to its daily proposal limit (Ctrl+K → setting local_api.inbox_daily_max)."
+    "auto_accept_warning": "This rule accepts proposals without your review: whatever a paired program or a plugin proposes becomes a note right away. Keep the condition narrow; each program is still held to its daily proposal limit (Ctrl+K → setting local_api.inbox_daily_max).",
+    "rules": "Rules",
+    "none_hint": "For example: tag cards you keep forgetting, or move finished cards to another deck."
   },
   "errors": {
     "validation": {

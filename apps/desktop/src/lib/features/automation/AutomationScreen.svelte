@@ -15,6 +15,30 @@
     type ActionForm,
     type TriggerForm,
   } from './actions';
+  import {
+    Button,
+    Checkbox,
+    ChevronDown,
+    ChevronUp,
+    Chip,
+    EmptyState,
+    History,
+    Icon,
+    IconButton,
+    Input,
+    Pencil,
+    Play,
+    Plus,
+    Select,
+    Skeleton,
+    Switch,
+    Trash2,
+    TriangleAlert,
+    X,
+    Zap,
+  } from '$lib/ui';
+  import type { Tone } from '$lib/ui';
+  import { SettingsPage, SettingsSection } from '../core/kit';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -22,6 +46,7 @@
   const FLAGS = [1, 2, 3, 4, 5, 6, 7];
 
   let rules = $state<RuleDto[]>([]);
+  let loaded = $state(false);
   let runs = $state<RunDto[]>([]);
   let actionInfos = $state<ActionInfo[]>([]);
   let attrs = $state<AttributeDefDto[]>([]);
@@ -69,6 +94,7 @@
       rules = (await api.call('automation.rules.list', {})).rules;
       runs = (await api.call('automation.runs.list', { rule_id: null, limit: 20 })).runs;
     });
+    loaded = true;
   }
 
   function open(rule: RuleDto | null) {
@@ -163,168 +189,389 @@
     const unsub = api.on(['automation_changed', 'undone', 'redone', 'collection_replaced', 'data_changed'], () => void load());
     return () => void unsub.then((u) => u());
   });
+
+  const triggerOptions = $derived(TRIGGER_KINDS.map((k) => ({ value: k, label: t(`automation.trigger.${k}`) })));
+  const actionOptions = $derived(fitting.map((info) => ({ value: info.method, label: td(info.label_key) })));
+  const flagOptions = $derived(FLAGS.map((f) => ({ value: f, label: td(`browse.flags.${f}`) })));
+  const deckOptions = $derived([{ value: '', label: '—' }, ...decks.map((d) => ({ value: d.id, label: d.path }))]);
+  const attrOptions = $derived([{ value: '', label: '—' }, ...choiceAttrs.map((d) => ({ value: d.id, label: d.name }))]);
+  const valueOptions = (attrId: string) => [
+    { value: '', label: t('automation.clear') },
+    ...(choiceAttrs.find((d) => d.id === attrId)?.options ?? []).map((o) => ({ value: o.id, label: o.label })),
+  ];
+  const RUN_TONE: Record<string, Tone> = { applied: 'success', no_match: 'neutral', failed: 'danger' };
 </script>
 
-<h2>{t('automation.heading')}</h2>
-<p class="muted">{t('automation.intro')}</p>
+{#snippet headerActions()}
+  {#if !editing}
+    <Button variant="primary" icon={Plus} onclick={() => open(null)}>{t('automation.new')}</Button>
+  {/if}
+{/snippet}
 
-{#if autoAccepting.length > 0}
-  <p class="warn" role="note">{t('automation.auto_accept_active', { names: autoAccepting.map((r) => r.name).join(', ') })}</p>
-{/if}
-{#if rules.length === 0}<p class="muted">{t('automation.none')}</p>{/if}
-<ol class="rules">
-  {#each rules as rule, i (rule.id)}
-    <li>
-      <label><input type="checkbox" checked={rule.enabled} onchange={() => toggle(rule)} />
-        <strong>{rule.name}</strong></label>
-      <span class="muted">{triggerText(rule)}</span>
-      {#if rule.condition}<code>{rule.condition}</code>{/if}
-      <span class="muted">{rule.actions.map((a) => td(`automation.action.${a.method}`)).join(' · ')}</span>
-      <span class="buttons">
-        <button aria-label={t('automation.up')} disabled={i === 0} onclick={() => move(i, -1)}>↑</button>
-        <button aria-label={t('automation.down')} disabled={i === rules.length - 1} onclick={() => move(i, 1)}>↓</button>
-        <button onclick={() => open(rule)}>{t('automation.edit')}</button>
-        <button onclick={() => runNow(rule)}>{t('automation.run_now')}</button>
-        <button onclick={() => remove(rule)}>{t('automation.delete')}</button>
-      </span>
-    </li>
-  {/each}
-</ol>
+<SettingsPage title={t('automation.heading')} subtitle={t('automation.intro')} actions={headerActions}>
 
-{#if !editing}
-  <button onclick={() => open(null)}>{t('automation.new')}</button>
-{:else}
-  <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-    <h3>{editing.id ? t('automation.edit_rule') : t('automation.new')}</h3>
-    <label>{t('automation.name')} <input bind:value={name} /></label>
-    <label><input type="checkbox" bind:checked={enabled} /> {t('automation.enabled')}</label>
+  {#if autoAccepting.length > 0}
+    <p class="banner" role="note">
+      <Icon icon={TriangleAlert} size={16} />
+      <span>{t('automation.auto_accept_active', { names: autoAccepting.map((r) => r.name).join(', ') })}</span>
+    </p>
+  {/if}
 
-    <fieldset>
-      <legend>{t('automation.when')}</legend>
-      <label>{t('automation.trigger.label')}
-        <select bind:value={trigger.kind}>
-          {#each TRIGGER_KINDS as k (k)}<option value={k}>{t(`automation.trigger.${k}`)}</option>{/each}
-        </select></label>
-      {#if trigger.kind === 'card_answered'}
-        {#each RATINGS as r (r)}
-          <label><input type="checkbox" checked={trigger.ratings.includes(r)}
-            onchange={() => (trigger.ratings = toggleIn(trigger.ratings, r))} /> {t(`automation.rating.${r}`)}</label>
-        {/each}
-      {:else if trigger.kind === 'card_flagged'}
-        {#each FLAGS as f (f)}
-          <label><input type="checkbox" checked={trigger.flags.includes(f)}
-            onchange={() => (trigger.flags = toggleIn(trigger.flags, f))} /> {td(`browse.flags.${f}`)}</label>
-        {/each}
-      {:else if trigger.kind === 'schedule'}
-        <label>{t('automation.every_label')} <input type="number" min="15" bind:value={trigger.everyMins} /></label>
-      {/if}
-    </fieldset>
-
-    <fieldset>
-      <legend>{t('automation.if')}</legend>
-      <label>{t('automation.condition')} <input bind:value={condition} placeholder={t('automation.condition_example')} /></label>
-      {#if trigger.kind === 'inbox_added'}<p class="muted">{t('automation.inbox_condition_hint')}</p>{/if}
-    </fieldset>
-
-    <fieldset>
-      <legend>{t('automation.do')}</legend>
-      {#each actions as a, i (i)}
-        <div class="action">
-          <select aria-label={t('automation.action.label')} bind:value={a.method}>
-            {#each fitting as info (info.method)}<option value={info.method}>{td(info.label_key)}</option>{/each}
-          </select>
-          {#if a.method === 'bulk.add_tags' || a.method === 'bulk.remove_tags'}
-            <label>{t('automation.tags')} <input bind:value={a.tags} /></label>
-          {:else if a.method === 'bulk.set_suspended' || a.method === 'bulk.set_buried'}
-            <label><input type="checkbox" bind:checked={a.on} /> {t('automation.on')}</label>
-          {:else if a.method === 'bulk.set_flag'}
-            <select aria-label={t('automation.flag')} bind:value={a.flag}>
-              {#each FLAGS as f (f)}<option value={f}>{td(`browse.flags.${f}`)}</option>{/each}
-            </select>
-            <label><input type="checkbox" bind:checked={a.on} /> {t('automation.on')}</label>
-          {:else if a.method === 'bulk.move_cards' || a.method === 'inbox.accept'}
-            <select aria-label={t('automation.deck')} bind:value={a.deckId}>
-              <option value="">—</option>
-              {#each decks as d (d.id)}<option value={d.id}>{d.path}</option>{/each}
-            </select>
-          {:else if a.method === 'bulk.set_attribute'}
-            <select aria-label={t('automation.classification')} bind:value={a.attrId}>
-              <option value="">—</option>
-              {#each choiceAttrs as d (d.id)}<option value={d.id}>{d.name}</option>{/each}
-            </select>
-            <select aria-label={t('automation.value')} bind:value={a.optionId}>
-              <option value="">{t('automation.clear')}</option>
-              {#each choiceAttrs.find((d) => d.id === a.attrId)?.options ?? [] as o (o.id)}
-                <option value={o.id}>{o.label}</option>
-              {/each}
-            </select>
-          {/if}
-          <button type="button" onclick={() => (actions = actions.filter((_, j) => j !== i))}>{t('automation.remove_action')}</button>
+  {#if editing}
+    <SettingsSection title={editing.id ? t('automation.edit_rule') : t('automation.new')} icon={Pencil}>
+      <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
+        <div class="name-row">
+          <Input label={t('automation.name')} bind:value={name} />
+          <Switch label={t('automation.enabled')} bind:checked={enabled} />
         </div>
-      {/each}
-      <button type="button" onclick={() => (actions = [...actions, emptyAction(fitting[0]?.method ?? 'bulk.add_tags')])}>
-        {t('automation.add_action')}</button>
-    </fieldset>
-    {#if editingAutoAccept}<p class="warn" role="note">{t('automation.auto_accept_warning')}</p>{/if}
 
-    <div class="row">
-      <button type="submit">{t('automation.save')}</button>
-      <button type="button" onclick={runPreview}>{t('automation.preview')}</button>
-      <button type="button" onclick={() => (editing = null)}>{t('automation.cancel')}</button>
-    </div>
+        <fieldset class="step">
+          <legend><span class="num" aria-hidden="true">1</span>{t('automation.when')}</legend>
+          <Select label={t('automation.trigger.label')} options={triggerOptions} bind:value={trigger.kind} />
+          {#if trigger.kind === 'card_answered'}
+            <div class="checks">
+              {#each RATINGS as r (r)}
+                <Checkbox
+                  label={t(`automation.rating.${r}`)}
+                  checked={trigger.ratings.includes(r)}
+                  onchange={() => (trigger.ratings = toggleIn(trigger.ratings, r))}
+                />
+              {/each}
+            </div>
+          {:else if trigger.kind === 'card_flagged'}
+            <div class="checks">
+              {#each FLAGS as f (f)}
+                <Checkbox
+                  label={td(`browse.flags.${f}`)}
+                  checked={trigger.flags.includes(f)}
+                  onchange={() => (trigger.flags = toggleIn(trigger.flags, f))}
+                />
+              {/each}
+            </div>
+          {:else if trigger.kind === 'schedule'}
+            <Input type="number" min="15" label={t('automation.every_label')} bind:value={trigger.everyMins} />
+          {/if}
+        </fieldset>
 
-    {#if preview}
-      <section aria-label={t('automation.preview')}>
-        <p role="status">{t('automation.preview_summary', { matched: preview.matched, changed: preview.changed })}</p>
-        {#if preview.truncated}<p class="muted">{t('automation.truncated')}</p>{/if}
-        <ul>
-          {#each preview.cards as c (c.card_id)}
-            <li class:changes={c.changes}>{c.text} <span class="muted">{c.deck}</span>
-              {#if c.changes}<em>{t('automation.would_change')}</em>{/if}</li>
+        <fieldset class="step">
+          <legend><span class="num" aria-hidden="true">2</span>{t('automation.if')}</legend>
+          <Input
+            label={t('automation.condition')}
+            placeholder={t('automation.condition_example')}
+            hint={trigger.kind === 'inbox_added' ? t('automation.inbox_condition_hint') : undefined}
+            bind:value={condition}
+          />
+        </fieldset>
+
+        <fieldset class="step">
+          <legend><span class="num" aria-hidden="true">3</span>{t('automation.do')}</legend>
+          {#each actions as a, i (i)}
+            <div class="action">
+              <Select label={t('automation.action.label')} hideLabel options={actionOptions} bind:value={a.method} />
+              {#if a.method === 'bulk.add_tags' || a.method === 'bulk.remove_tags'}
+                <Input label={t('automation.tags')} hideLabel placeholder={t('automation.tags')} bind:value={a.tags} />
+              {:else if a.method === 'bulk.set_suspended' || a.method === 'bulk.set_buried'}
+                <Checkbox label={t('automation.on')} bind:checked={a.on} />
+              {:else if a.method === 'bulk.set_flag'}
+                <Select label={t('automation.flag')} hideLabel options={flagOptions} bind:value={a.flag} />
+                <Checkbox label={t('automation.on')} bind:checked={a.on} />
+              {:else if a.method === 'bulk.move_cards' || a.method === 'inbox.accept'}
+                <Select label={t('automation.deck')} hideLabel options={deckOptions} bind:value={a.deckId} />
+              {:else if a.method === 'bulk.set_attribute'}
+                <Select label={t('automation.classification')} hideLabel options={attrOptions} bind:value={a.attrId} />
+                <Select label={t('automation.value')} hideLabel options={valueOptions(a.attrId)} bind:value={a.optionId} />
+              {/if}
+              <IconButton
+                icon={X}
+                label={t('automation.remove_action')}
+                onclick={() => (actions = actions.filter((_, j) => j !== i))}
+              />
+            </div>
           {/each}
-        </ul>
-      </section>
-    {/if}
-  </form>
-{/if}
+          <div>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={Plus}
+              onclick={() => (actions = [...actions, emptyAction(fitting[0]?.method ?? 'bulk.add_tags')])}
+            >
+              {t('automation.add_action')}
+            </Button>
+          </div>
+        </fieldset>
 
-<h3>{t('automation.runs')}</h3>
-{#if runs.length === 0}<p class="muted">{t('automation.no_runs')}</p>{/if}
-<ul class="runs">
-  {#each runs as r (r.seq)}
-    <li><strong>{ruleName(r.rule_id)}</strong> · {td(`automation.status.${r.status}`)} · {td(`automation.trigger.${r.trigger}`)}
-      · {t('automation.matched', { n: r.matched })}
-      {#if r.error}<span class="muted">{r.error.message}</span>{/if}</li>
-  {/each}
-</ul>
+        {#if editingAutoAccept}
+          <p class="banner" role="note"><Icon icon={TriangleAlert} size={16} /><span>{t('automation.auto_accept_warning')}</span></p>
+        {/if}
+
+        {#if preview}
+          <section class="preview" aria-label={t('automation.preview')}>
+            <p class="summary" role="status">{t('automation.preview_summary', { matched: preview.matched, changed: preview.changed })}</p>
+            {#if preview.truncated}<p class="muted">{t('automation.truncated')}</p>{/if}
+            <ul>
+              {#each preview.cards as c (c.card_id)}
+                <li class:changes={c.changes}>
+                  <span class="text">{c.text}</span>
+                  <span class="muted">{c.deck}</span>
+                  {#if c.changes}<Chip size="sm" tone="accent" label={t('automation.would_change')} />{/if}
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
+
+        <div class="buttons">
+          <Button variant="ghost" onclick={() => (editing = null)}>{t('automation.cancel')}</Button>
+          <Button onclick={runPreview}>{t('automation.preview')}</Button>
+          <Button type="submit" variant="primary">{t('automation.save')}</Button>
+        </div>
+      </form>
+    </SettingsSection>
+  {/if}
+
+  <SettingsSection title={t('automation.rules')} icon={Zap}>
+    {#if !loaded}
+      <Skeleton lines={3} />
+    {:else if rules.length === 0}
+      <EmptyState size="sm" icon={Zap} title={t('automation.none')} description={t('automation.none_hint')} />
+    {:else}
+      <ol class="rules">
+        {#each rules as rule, i (rule.id)}
+          <li>
+            <Switch ariaLabel={rule.name} checked={rule.enabled} onchange={() => toggle(rule)} />
+            <div class="rule-text">
+              <strong>{rule.name}</strong>
+              <span class="muted">{triggerText(rule)}</span>
+              <span class="detail">
+                {#if rule.condition}<code>{rule.condition}</code>{/if}
+                <span class="muted">{rule.actions.map((a) => td(`automation.action.${a.method}`)).join(' · ')}</span>
+              </span>
+            </div>
+            <div class="rule-actions">
+              <IconButton size="sm" icon={ChevronUp} label={t('automation.up')} disabled={i === 0} onclick={() => move(i, -1)} />
+              <IconButton size="sm" icon={ChevronDown} label={t('automation.down')} disabled={i === rules.length - 1} onclick={() => move(i, 1)} />
+              <Button size="sm" variant="ghost" icon={Pencil} onclick={() => open(rule)}>{t('automation.edit')}</Button>
+              <Button size="sm" variant="ghost" icon={Play} onclick={() => runNow(rule)}>{t('automation.run_now')}</Button>
+              <IconButton size="sm" icon={Trash2} variant="ghost" label={t('automation.delete')} onclick={() => remove(rule)} />
+            </div>
+          </li>
+        {/each}
+      </ol>
+    {/if}
+  </SettingsSection>
+
+  <SettingsSection title={t('automation.runs')} icon={History}>
+    {#if !loaded}
+      <Skeleton lines={2} />
+    {:else if runs.length === 0}
+      <p class="muted">{t('automation.no_runs')}</p>
+    {:else}
+      <ul class="runs">
+        {#each runs as r (r.seq)}
+          <li>
+            <span class="dot {RUN_TONE[r.status] ?? 'warning'}" aria-hidden="true"></span>
+            <span class="run-text">
+              <strong>{ruleName(r.rule_id)}</strong> · {td(`automation.status.${r.status}`)} · {td(`automation.trigger.${r.trigger}`)}
+              · {t('automation.matched', { n: r.matched })}
+            </span>
+            {#if r.error}<span class="muted err">{r.error.message}</span>{/if}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </SettingsSection>
+</SettingsPage>
 
 <style>
-  .warn {
-    border-left: 3px solid var(--fc-danger);
-    padding-left: var(--space-2, 0.5rem);
+  .banner {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: 0;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-control);
+    background: var(--warning-soft);
+    color: var(--text-1);
+    font-size: var(--text-sm);
   }
-  .rules li,
-  .runs li {
+  .banner :global(svg) {
+    flex: none;
+    margin-top: 2px;
+    color: var(--warning);
+  }
+  .muted {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .name-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-4);
+    align-items: end;
+  }
+  .name-row :global(.fc-switch) {
+    padding-bottom: var(--space-2);
+  }
+  .step {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin: 0;
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-0);
+  }
+  .step legend {
+    float: left;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0;
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+  }
+  .step legend + :global(*) {
+    clear: both;
+  }
+  .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-soft);
+    color: var(--text-1);
+    font-size: var(--text-xs);
+  }
+  .checks {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2, 0.5rem);
-    align-items: baseline;
-  }
-  .buttons {
-    margin-left: auto;
-  }
-  fieldset {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2, 0.5rem);
+    gap: var(--space-2) var(--space-4);
   }
   .action {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2, 0.5rem);
-    width: 100%;
+    align-items: center;
+    gap: var(--space-2);
   }
-  .changes {
-    font-weight: 600;
+  .action :global(.fc-field) {
+    flex: 1 1 11rem;
+    min-width: 0;
+  }
+  .buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .preview {
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+  }
+  .summary {
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+  }
+  .preview ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 16rem;
+    overflow-y: auto;
+  }
+  .preview li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+    font-size: var(--text-sm);
+  }
+  .preview li.changes .text {
+    font-weight: var(--weight-semibold);
+  }
+  .rules,
+  .runs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .rules li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    flex-wrap: wrap;
+  }
+  .rules li + li,
+  .runs li + li {
+    border-top: 1px solid var(--border);
+  }
+  .rule-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+  .detail {
+    display: flex;
+    gap: var(--space-2);
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    padding: 1px var(--space-1);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+  }
+  .rule-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    flex-wrap: wrap;
+  }
+  .runs li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    flex-wrap: wrap;
+    font-size: var(--text-sm);
+  }
+  .run-text {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: var(--warning-solid);
+    flex: none;
+  }
+  .dot.success {
+    background: var(--success-solid);
+  }
+  .dot.neutral {
+    background: var(--border-strong);
+  }
+  .dot.danger {
+    background: var(--danger-solid);
+  }
+  .err {
+    flex-basis: 100%;
   }
 </style>

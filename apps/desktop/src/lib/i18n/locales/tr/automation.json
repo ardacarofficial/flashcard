@@ -102,7 +102,9 @@
     "condition_example": "ör. seviye:A1 lapses>=5",
     "inbox_condition_hint": "Gelen kutusu kurallarında sorgu, önerinin olacağı kartta denetlenir (ör. deck:İngilizce seviye:B1).",
     "auto_accept_active": "Programların önerilerini sen bakmadan kabul eden kurallar: {names}. Eşleştirilmiş bir programın ya da eklentinin önerdiği her şey hemen not olur (her program en çok günlük sınırı kadar önerebilir: Ctrl+K → local_api.inbox_daily_max ayarı).",
-    "auto_accept_warning": "Bu kural önerileri sen bakmadan kabul eder: eşleştirilmiş bir programın ya da eklentinin önerdiği her şey hemen not olur. Koşulu dar tut; her program yine de günlük öneri sınırına tabidir (Ctrl+K → local_api.inbox_daily_max ayarı)."
+    "auto_accept_warning": "Bu kural önerileri sen bakmadan kabul eder: eşleştirilmiş bir programın ya da eklentinin önerdiği her şey hemen not olur. Koşulu dar tut; her program yine de günlük öneri sınırına tabidir (Ctrl+K → local_api.inbox_daily_max ayarı).",
+    "rules": "Kurallar",
+    "none_hint": "Örneğin: sürekli unuttuğun kartları etiketle ya da biten kartları başka desteye taşı."
   },
   "errors": {
     "validation": {
