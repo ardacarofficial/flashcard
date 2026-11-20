@@ -120,6 +120,8 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         | "browse.purge_trash" => Refused(UNBOUNDED),
         "palette.list" | "modules.list" | "commands.list" => Reads(MODULES),
         "shortcuts.list" | "settings.schema" | "settings.get" => Reads(SETTINGS),
+        // v1.0: the app's colour scheme, preset and accent (app settings, nothing else).
+        "themes.current" | "themes.presets" => Reads(SETTINGS),
         "bulk.move_cards" | "bulk.set_suspended" | "bulk.set_buried" | "bulk.set_flag"
         | "bulk.reset_progress" | "flags.list" | "flags.update" | "cards.set_flag"
         | "cards.set_flags" | "cards.set_user_note" | "cards.meta" => Reads(CARDS),
