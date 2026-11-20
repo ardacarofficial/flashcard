@@ -29,7 +29,7 @@ trigger: string,
  */
 depth: number, 
 /**
- * Cards the condition matched.
+ * Cards the condition matched (inbox rules: inbox items).
  */
 matched: number, 
 /**

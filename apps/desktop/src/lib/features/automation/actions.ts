@@ -37,6 +37,8 @@ export function toAction(a: ActionForm): RuleAction {
       return { method: a.method, params: { flag: Number(a.flag), on: a.on } };
     case 'bulk.move_cards':
       return { method: a.method, params: { deck_id: a.deckId } };
+    case 'inbox.accept':
+      return { method: a.method, params: a.deckId ? { deck_id: a.deckId } : {} };
     case 'bulk.set_attribute': {
       const value: AttributeValue | null = a.optionId ? { type: 'choice', value: a.optionId } : null;
       return { method: a.method, params: { attr_id: a.attrId, value } };
@@ -71,8 +73,14 @@ export const TRIGGER_KINDS: TriggerKind[] = [
   'card_flagged',
   'classification_changed',
   'imported',
+  'inbox_added',
   'schedule',
 ];
+
+/** Inbox rules act on inbox items (selection `items`), every other rule on cards or notes. */
+export function fitsTrigger(selection: string, kind: TriggerKind): boolean {
+  return (selection === 'items') === (kind === 'inbox_added');
+}
 
 export interface TriggerForm {
   kind: TriggerKind;

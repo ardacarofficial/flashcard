@@ -18,6 +18,7 @@ pub mod error;
 pub mod goal;
 pub mod i18n;
 pub mod id;
+pub mod inbox;
 pub mod inline_cards;
 pub mod note;
 pub mod notetype;
@@ -44,5 +45,7 @@ pub use id::AiProviderId;
 pub use id::ReadingItemId;
 // v0.9 automation rules.
 pub use id::AutomationRuleId;
+// v0.9 local API + inbox (own line).
+pub use id::{ApiClientId, InboxItemId};
 pub use rng::Rng;
 pub use time::{Clock, Timestamp};

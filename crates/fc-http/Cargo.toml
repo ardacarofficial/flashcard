@@ -1,0 +1,27 @@
+[package]
+name = "fc-http"
+description = "Local HTTP API server (axum): loopback only, per-client tokens with scoped permissions, pairing approved by the user, CORS for the browser extension, rate and size limits."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fc-api.workspace = true
+fc-core.workspace = true
+fc-app = { path = "../fc-app" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+base64.workspace = true
+getrandom.workspace = true
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "sync", "time", "macros"] }
+
+[dev-dependencies]
+fc-app = { path = "../fc-app", features = ["testing"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -9,7 +9,7 @@ import type { PreviewCard } from "./PreviewCard";
  */
 export type RulePreview = { 
 /**
- * Cards matching the condition.
+ * Cards matching the condition (inbox rules: pending inbox items).
  */
 matched: number, 
 /**

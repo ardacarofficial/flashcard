@@ -32,6 +32,7 @@
 //! refused) and hides the screen.
 
 pub mod engine;
+mod inbox;
 #[cfg(test)]
 mod tests;
 
@@ -70,7 +71,9 @@ pub const MAX_RUNS: &str = "automation.max_runs_per_event";
 pub const KEEP_RUNS: u32 = 1000;
 
 /// What the automation actor holds (`Registry::permits`). Narrowed further to [`ACTIONS`].
-pub const AUTOMATION_PERMISSIONS: &[&str] = &["cards:write", "notes:write", "attributes:write"];
+/// `inbox:write` is for `inbox.accept` (phase 4: rules with the `inbox_added` trigger).
+pub const AUTOMATION_PERMISSIONS: &[&str] =
+    &["cards:write", "notes:write", "attributes:write", "inbox:write"];
 
 /// Which ids an action takes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,6 +82,9 @@ pub enum Selection {
     Cards,
     /// `note_ids`: the matched cards' notes.
     Notes,
+    /// `items`: the matched inbox items, as `[{"id": …}]` (+ the action's `deck_id`, if any,
+    /// on each) — rules with the `inbox_added` trigger only (phase 4).
+    InboxItems,
 }
 
 impl Selection {
@@ -87,7 +93,14 @@ impl Selection {
         match self {
             Self::Cards => "card_ids",
             Self::Notes => "note_ids",
+            Self::InboxItems => "items",
         }
+    }
+
+    /// Whether a rule with `trigger` may use an action taking this selection: inbox rules act
+    /// on inbox items, every other rule on cards or notes.
+    pub const fn fits(self, trigger: &RuleTrigger) -> bool {
+        matches!(self, Self::InboxItems) == trigger.is_inbox()
     }
 }
 
@@ -103,6 +116,8 @@ pub const ACTIONS: &[(&str, Selection)] = &[
     ("bulk.move_cards", Selection::Cards),
     ("bulk.set_attribute", Selection::Cards),
     ("bulk.reset_progress", Selection::Cards),
+    // Phase 4: "add note" — accepts the matched inbox items as notes (inbox rules).
+    ("inbox.accept", Selection::InboxItems),
 ];
 
 /// The selection of action `method`, if it is one.
@@ -287,18 +302,47 @@ pub(crate) fn canonical_condition(
 const PROBE_ID: &str = "01900000-0000-7000-8000-000000000000";
 
 /// The params `action` is called with for `ids` (the selection field set, overriding any).
+/// Inbox items become `[{"id": …, "deck_id": …}]`: an action-level `deck_id` is the deck each
+/// accepted item goes to when it names none of its own.
 pub(crate) fn action_params(action: &RuleAction, selection: Selection, ids: Value) -> Value {
     let mut params = match &action.params {
         Value::Object(m) => m.clone(),
         _ => serde_json::Map::new(),
     };
+    let ids = match selection {
+        Selection::InboxItems => {
+            let deck = params.remove("deck_id");
+            let items = ids
+                .as_array()
+                .map(|ids| {
+                    ids.iter()
+                        .map(|id| {
+                            let mut item = serde_json::Map::new();
+                            item.insert("id".into(), id.clone());
+                            if let Some(d) = &deck {
+                                item.insert("deck_id".into(), d.clone());
+                            }
+                            Value::Object(item)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            Value::Array(items)
+        }
+        Selection::Cards | Selection::Notes => ids,
+    };
     params.insert(selection.field().to_owned(), ids);
     Value::Object(params)
 }
 
-/// Checks the actions of a rule: 1–10, each an allow-listed command whose params (with a
-/// stand-in selection) parse and validate.
-pub(crate) fn check_actions(registry: &Registry, actions: &[RuleAction]) -> AppResult<()> {
+/// Checks the actions of a rule: 1–10, each an allow-listed command that fits the trigger's
+/// subject ([`Selection::fits`]) and whose params (with a stand-in selection) parse and
+/// validate.
+pub(crate) fn check_actions(
+    registry: &Registry,
+    trigger: &RuleTrigger,
+    actions: &[RuleAction],
+) -> AppResult<()> {
     if actions.is_empty() || actions.len() > MAX_ACTIONS {
         return Err(rule_error("actions", "a rule needs 1–10 actions"));
     }
@@ -311,6 +355,14 @@ pub(crate) fn check_actions(registry: &Registry, actions: &[RuleAction]) -> AppR
                 format!("{} is not an automation action", a.method),
             ));
         };
+        if !selection.fits(trigger) {
+            return Err(action_error(
+                i,
+                &a.method,
+                "trigger",
+                format!("{} does not act on what a {} rule matches", a.method, trigger.kind()),
+            ));
+        }
         if !a.params.is_object() {
             return Err(action_error(i, &a.method, "params", "params must be an object"));
         }
@@ -396,7 +448,7 @@ fn create(req: CreateRule, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
     ensure_manager(ctx.actor)?;
     let name = check_name(&req.name)?;
     check_trigger(&req.trigger)?;
-    check_actions(ctx.registry, &req.actions)?;
+    check_actions(ctx.registry, &req.trigger, &req.actions)?;
     let condition = canonical_condition(ctx.reads(), &req.condition, ctx.now)?;
     let position = ctx
         .reads()
@@ -448,8 +500,11 @@ fn update(req: UpdateRule, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
         rule.condition = canonical_condition(ctx.reads(), c, ctx.now)?;
     }
     if let Some(a) = &req.actions {
-        check_actions(ctx.registry, a)?;
         rule.actions = to_value(a)?;
+    }
+    if req.trigger.is_some() || req.actions.is_some() {
+        // A new trigger must fit the kept actions and vice versa.
+        check_actions(ctx.registry, &trigger_of(&rule)?, &actions_of(&rule)?)?;
     }
     let mut inverse = Vec::new();
     if rule != before {

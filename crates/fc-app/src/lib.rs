@@ -52,6 +52,8 @@ mod phase3_plugins_tests;
 #[cfg(test)]
 mod phase3_stats_tests;
 #[cfg(test)]
+mod phase4_permits_tests;
+#[cfg(test)]
 mod phase4_tests;
 #[cfg(test)]
 mod review_fixes_tests;

@@ -49,4 +49,9 @@ modules! {
     modes,
     reading,
     automation,
+    inbox,
+    deep_links,
+    clipboard,
+    quick_add,
+    local_api,
 }

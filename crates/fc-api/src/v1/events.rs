@@ -221,4 +221,16 @@ pub enum DomainEvent {
     },
     /// Automation rules or their run log changed (refetch `automation.*` lists; v0.9).
     AutomationChanged,
+    /// Inbox items arrived, were accepted, rejected or restored (v0.9): refetch the inbox.
+    InboxChanged {
+        /// Pending items now.
+        pending: u32,
+    },
+    /// A local API client asked to pair (v0.9): show the approval dialog.
+    LocalApiPairing {
+        /// The pending client.
+        client: super::local_api::ApiClientDto,
+    },
+    /// Local API clients were approved, denied, revoked or removed (v0.9).
+    LocalApiClientsChanged,
 }

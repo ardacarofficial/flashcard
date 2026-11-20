@@ -355,7 +355,12 @@ impl Registry {
     ///   `fc_plugins::permission::api_grantable`) even if a stored grant says otherwise.
     /// * An automation rule holds `modules::automation::AUTOMATION_PERMISSIONS` — and
     ///   [`ensure_access`] limits it to the rule action allow-list (v0.9).
-    /// * Local API clients hold **nothing** until v0.9 defines their grants (deny by default:
+    /// * A local API client holds the scopes the user approved for it, only those a client may
+    ///   be granted (`modules::local_api::GRANTABLE_SCOPES`), only while approved (v0.9) — and
+    ///   [`ensure_access`] limits it to the HTTP allow-list.
+    /// * `USER_ONLY_PERMISSIONS` (`mcp:write`, `settings:exec`) are never held by anyone but
+    ///   the user, the CLI and the app. A new actor kind holds nothing until its arm says so
+    ///   (deny by default: it never inherits the user's authority).
     ///   a new actor kind never inherits the user's authority).
     pub fn permits(&self, actor: &Actor, permission: &str) -> bool {
         match actor {
@@ -374,9 +379,14 @@ impl Registry {
             // v0.9: a rule's actions — further narrowed to the action allow-list in
             // [`ensure_access`].
             Actor::Automation(_) => {
-                crate::modules::automation::AUTOMATION_PERMISSIONS.contains(&permission)
+                !USER_ONLY_PERMISSIONS.contains(&permission)
+                    && crate::modules::automation::AUTOMATION_PERMISSIONS.contains(&permission)
             }
-            Actor::LocalApi(_) => false,
+            // v0.9: its approved scopes (∩ `local_api::GRANTABLE_SCOPES`), refreshed per request.
+            Actor::LocalApi(id) => {
+                !USER_ONLY_PERMISSIONS.contains(&permission)
+                    && crate::modules::local_api::permits(self, id, permission)
+            }
         }
     }
 
@@ -649,9 +659,14 @@ pub(crate) fn ensure_access(
     // An automation rule reaches only the undo-safe action allow-list (v0.9).
     let automation_blocked = matches!(actor, Actor::Automation(_))
         && !crate::modules::automation::action_reachable(name);
+    // A local API client reaches only the HTTP allow-list (public reads and undoable,
+    // replayable commands), not everything its scopes would cover (v0.9).
+    let local_api_blocked =
+        matches!(actor, Actor::LocalApi(_)) && !crate::modules::local_api::method_reachable(name);
     if visibility == Visibility::Internal
         || mcp_blocked
         || automation_blocked
+        || local_api_blocked
         || plugin_blocked
         || !registry.permits(actor, permission)
     {

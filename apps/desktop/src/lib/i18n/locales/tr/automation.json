@@ -65,6 +65,7 @@
       "card_flagged": "Kart bayraklanınca",
       "classification_changed": "Sınıflandırma değişince",
       "imported": "İçe aktarma bitince",
+      "inbox_added": "Gelen kutusuna öneri düşünce",
       "schedule": "Zamanlanmış",
       "manual": "Elle"
     },
@@ -93,9 +94,13 @@
         "move_cards": "Desteye taşı",
         "set_attribute": "Sınıflandırma ata",
         "reset_progress": "Unut (ilerlemeyi sıfırla)"
+      },
+      "inbox": {
+        "accept": "Not olarak kabul et"
       }
     },
-    "condition_example": "ör. seviye:A1 lapses>=5"
+    "condition_example": "ör. seviye:A1 lapses>=5",
+    "inbox_condition_hint": "Gelen kutusu kurallarında sorgu, önerinin olacağı kartta denetlenir (ör. deck:İngilizce seviye:B1)."
   },
   "errors": {
     "validation": {

@@ -117,12 +117,76 @@ Uygulama için resmi Rust MCP SDK'sı (`rmcp`) kullanılır.
 - **Hız sınırı** ve istek boyutu sınırı.
 - AnkiConnect uyumluluk katmanı (isteğe bağlı, eklenti olarak): Anki için yazılmış mevcut araçların bir kısmı doğrudan çalışabilir.
 
+#### Uygulanan hâli (v0.9, `crates/fc-http` + `fc-app` `local_api`/`inbox` modülleri) — **sözleşme**
+
+Tarayıcı eklentisi (iz K) ve diğer yerel istemciler bu bölüme göre yazılır. Tipler `fc-api`'den üretilir (`apps/desktop/src/lib/api/generated/`): elle DTO yazılmaz.
+
+**Sunucu**
+- Adres: yalnız `127.0.0.1` (ya da `[::1]`), varsayılan port **`28735`** (`local_api.port`). Yapılandırma tipi geri döngü dışı adresi **ifade edemez**; bağlanan soket ayrıca denetlenir.
+- Modül `local_api` **varsayılan kapalı** (Ayarlar → Modüller → "Yerel API"). Kapalıyken port dinlenmez. Açılınca masaüstü kabuğu sunucuyu başlatır; `fc --db <dosya> api serve [--port N]` aynı sunucuyu masaüstü olmadan başlatır (geliştirme/test).
+- `Host` başlığı `127.0.0.1:<port>`, `localhost:<port>` ya da `[::1]:<port>` olmalı (DNS yeniden bağlama koruması) → aksi `403 PERMISSION_ORIGIN_NOT_ALLOWED`.
+- **Origin:** `Origin` başlığı olmayan istek (curl, betik, yerel uygulama) kabul edilir. `Origin` varsa yalnız tarayıcı eklentisi şeması (`chrome-extension://`, `moz-extension://`, `extension://`) kabul edilir; web sayfası kökenleri (`http(s)://…`, `null`) her uçta `403 PERMISSION_ORIGIN_NOT_ALLOWED`. Eşleştirmede gelen `Origin` istemci kaydına yazılır; o istemcinin token'ı **yalnız aynı Origin'den ya da Origin'siz** geçer (MV3 servis çalışanı bazı isteklerde Origin taşımaz); başka bir Origin (web sayfası, başka eklenti) her zaman `403`. CORS başlıkları (`Access-Control-Allow-Origin: <aynı köken>`, `Allow-Headers: authorization, content-type, x-flashcard-client`, `Allow-Methods: GET, POST, OPTIONS`) yalnız eklenti kökenlerine döner; MV3 servis çalışanı `host_permissions: ["http://127.0.0.1/*"]` ile CORS'a zaten takılmaz.
+- **CSRF (Origin'e ek katman):** `GET /v1/ping` dışındaki **her** istek (eşleştirme ve yoklama dahil; kullanıcı verisi döndüren `GET`'ler dahil) `X-Flashcard-Client: <istemci adı>` başlığını taşımalı (1–100 yazdırılabilir karakter, içeriği önemsiz) ve her `POST` `Content-Type: application/json` (`; charset=…` olabilir) olmalı; aksi `400 VALIDATION_INVALID_PARAMS` (`details.reason`: `client_header` ya da `content_type`). Bir web sayfası bu başlığı/içerik türünü ön uçuşsuz gönderemez, ön uçuşu da yalnız eklenti kökenleri geçer; böylece `Origin` göndermeyen bir tarayıcı isteği (ör. `no-cors` `GET`) bile kullanıcı verisine ulaşamaz. Token tek başına yetmez. Eşleştirme durumu bu yüzden `GET` değil **`POST`** ile yoklanır (aşağıda).
+- **Gövde sınırı** 256 KiB → `413 VALIDATION_PAYLOAD_TOO_LARGE`. **Hız sınırı:** token başına saniyede 10 istek (anlık 30); eşleştirme isteği tüm sunucuda dakikada 5 ve **aynı istemci adı** (köken başına, büyük/küçük harf ve baştaki/sondaki boşluk önemsiz) 10 dakikada 3 → `429 CONFLICT_RATE_LIMITED` + `Retry-After` (saniye).
+- **Bekleyen eşleştirmeler:** aynı anda en çok 5; dolunca **en eskisi düşer** (kilitlenme yok: bir akın gerçek isteği itebilir ama eşleştirmeyi kapatamaz). Aynı ad + köken yeniden isterse önceki isteğinin yerini alır. Sunucu her açılışta bekleyen tüm istekleri **bırakır** (token'ları yalnız belleğinde yaşıyordu; yeniden başlatmadan sonra onaylanamaz, `404 NOT_FOUND_API_CLIENT`). Kararlanmış (onaylı/reddedilmiş/iptal) istemciler korunur.
+- **Gelen kutusu kotası (istemci başına):** bekleyen öğe sayısı ve metin boyutu sınırlıdır; aşılırsa `409 CONFLICT_INBOX_QUOTA` (`details.limit`: `items`/`bytes`, `details.max`) — kullanıcı birkaçını kabul/ret edince yeniden gönderilebilir. Sınırlar kullanıcının ayarıdır: `local_api.inbox_max_items` (varsayılan 500), `local_api.inbox_max_kib` (varsayılan 4096). Bilinen `client_ref` ile yeniden gönderim yeni öğe sayılmaz. Kullanıcının kendi önerileri sınırlanmaz.
+- Kimlik: `Authorization: Bearer <token>`. Token yalnız istemciye bir kez verilir; veritabanında yalnız SHA-256 özeti tutulur. Aktör `Actor::LocalApi(<client_id>)` (oplog'da `{"kind":"local_api","id":"<client_id>"}`); yazmalar sıradan, geri alınabilir komuttur.
+
+**Uç noktalar**
+
+| Yöntem + yol | Token | Gövde → yanıt (TS tipi) | Not |
+|---|---|---|---|
+| `GET /v1/ping` | hayır | → `PingResponse` `{app: "flashcard", api_version: "v1", version}` | Uygulama açık mı? (kapalıysa bağlantı reddi → eklenti kuyruğa alır) |
+| `POST /v1/pair` | hayır | `PairRequest` `{client_name, client_kind: "browser_extension"\|"app"\|"script", scopes: string[]}` → `201 PairResponse` `{request_id, status: "pending", expires_at}` | Uygulamada onay penceresi açılır: "<ad> bağlanmak istiyor: <izinler>. İzin ver / Reddet". Kullanıcı izinleri daraltabilir. 10 dk içinde karar yoksa `expired` |
+| `POST /v1/pair/{request_id}` | hayır | `{}` (boş gövde; `Content-Type: application/json` + `X-Flashcard-Client` gerekir) → `PairStatusResponse` `{status: "pending"\|"approved"\|"denied"\|"expired", client_id?, token?, scopes}` | `token` **yalnız ilk** `approved` yanıtında döner (sonra hiç). Origin eşleştirmeyi başlatanla aynı **ya da yok** olmalı (`request_id` yalnız isteyende olan tahmin edilemez bir sırdır). `GET /v1/pair/…` artık yoktur (`404`). Token sunucu belleğinde bekler: uygulama arada kapanırsa istek `expired` olur, yeniden eşleştirilir. Bilinmeyen kimlik → `404 NOT_FOUND_PAIRING` |
+| `GET /v1/auth` | evet | → `ApiClientDto` (kendi kaydı: `id, name, kind, scopes, status, …`) | Token hâlâ geçerli mi |
+| `GET /v1/methods` | evet | → `LocalApiMethodList` `{methods: [{name, kind, permission}]}` | Bu token'ın çağırabileceği metotlar |
+| `GET /v1/decks` | `decks:read` | → `DeckList` (`decks.list`: düz, `path` sıralı; `DeckDto.id/path/name`) | kolaylık |
+| `POST /v1/inbox` | `inbox:write` | `AddInboxItem` → `201 InboxItemDto` (aynı `client_ref` ile yeniden gönderimde `200` + mevcut öğe) | kolaylık = `inbox.add` |
+| `POST /v1/<metot>` | metodun izni | metodun istek tipi → metodun yanıt tipi | yalnız aşağıdaki **açık liste**; ör. `POST /v1/attributes.effective {"deck_id": "…", "target": "note"}` |
+
+Token isteyen uçlar (`/v1/ping` ve eşleştirme dışındakiler) `Authorization: Bearer <token>` + yukarıdaki CSRF başlıklarını birlikte ister.
+
+Başarı: `200` (oluşturmada `201`), gövde metodun yanıtıdır (zarf yok). Hata: gövde her zaman `ApiError` JSON'u (`code`, `message_key`, `message`, `details`, `retryable`); durum kodu kategoriden: `VALIDATION_*` 400 (`VALIDATION_PAYLOAD_TOO_LARGE` 413), `PERMISSION_UNAUTHENTICATED` 401 (token yok, bilinmiyor, reddedilmiş, iptal edilmiş ya da onay bekliyor — `details.reason`: `missing`/`invalid`/`pending`/`denied`/`revoked`), diğer `PERMISSION_*` 403, `NOT_FOUND_*` 404 (bilinmeyen ya da listede olmayan metot `NOT_FOUND_METHOD`), `CONFLICT_RATE_LIMITED` 429, `CONFLICT_MODULE_DISABLED` 503 (ör. `inbox` modülü kapalı), diğer `CONFLICT_*` 409 (`CONFLICT_INBOX_QUOTA` dahil), `PROVIDER_*`/`IO_*`/`INTERNAL*` 500.
+
+**İzin kapsamları** (istemci ister, kullanıcı onaylarken daraltabilir; başkası verilemez): `inbox:write`, `inbox:read`, `decks:read`, `decks:write`, `notetypes:read`, `notes:read`, `notes:write`, `attributes:read`, `tags:read`, `search:read`. Bilinmeyen/verilemez kapsam isteği `400 VALIDATION_API_SCOPE`.
+
+**HTTP'ye açık metotlar** (açık liste `fc_app::modules::local_api::HTTP_METHODS`; izin tek başına yetmez): `inbox.add`, `inbox.list`, `decks.list`, `decks.tree`, `decks.create`, `notetypes.list`, `notes.get`, `notes.create`, `attributes.effective`, `tags.list`, `search.cards`. **Hiçbir zaman:** iç metotlar, geri alınamaz/replay edilemez komutlar, `io.*`, `plugins.*`, `mcp.*`, `ai.*` (anahtarlar dahil), `oplog.*`, `settings.*`/`modules.*` yazmaları, `local_api.*` yönetimi, silme ve toplu işlemler.
+
+**`AddInboxItem`** (`inbox.add`):
+
+```json
+{
+  "front": "porsuk",
+  "back": "badger",
+  "fields": {},
+  "deck_id": "0193…",
+  "notetype_id": null,
+  "tags": ["web"],
+  "attributes": { "Seviye": "B1", "Sınav": ["YDS", "TOEFL"] },
+  "context": { "url": "https://…", "title": "Sayfa başlığı", "sentence": "The badger dug a hole." }
+}
+```
+
+- `front`/`back` Klasik not türünün kısayoludur; başka not türü için `fields` (`alan_anahtarı → değer`). En az bir alan dolu olmalı. Alan başına en çok 20 000 karakter, en çok 50 etiket.
+- `attributes`: anahtar = sınıflandırmanın **anahtarı, adı ya da kimliği**; değer = seçenek **etiketi ya da kimliği** (çoklu seçimde dizi), sayı/bool/metin türünde düz değer. Öğe eklenirken yalnız biçim denetlenir; deste ve seçenek **kabul edilirken** (o anki desteye göre) çözülür.
+- `client_ref` (1–100 karakter, isteğe bağlı): istemci başına tekil yeniden gönderim anahtarı; aynı anahtarla gelen ikinci istek yeni öğe yazmaz, ilkini döndürür.
+- `deck_id`, `notetype_id`, `context`, `tags`, `fields`, `attributes` isteğe bağlı. Kaynak (`source`) istemci tarafından **verilmez**: sunucu aktörden yazar (`{kind: "local_api", client_id, client_name}`; masaüstünde `clipboard`, `deep_link`, `user`). `via` alanı yalnız uygulamanın kendisine açıktır (istemci gönderirse `400`). Bilinmeyen alan → `400 VALIDATION_INVALID_PARAMS`.
+- Yanıt `InboxItemDto` `{id, source, status: "pending", item: AddInboxItem, note_ids: [], created_at, updated_at}`.
+
+**Olaylar** (masaüstü): `inbox_changed` (`{pending}`), `local_api_pairing` (`{client: ApiClientDto}` — bekleyen istemcinin kaydı: `id, name, kind, origin, requested_scopes, …`; onay penceresini açar, kullanıcı penceredeki kapsam onay kutularıyla izinleri daraltabilir), `local_api_clients_changed`.
+
 ## 4. Gelen kutusu
 
 - Dış kaynaklardan (HTTP API, tarayıcı eklentisi, MCP, pano izleme, derin bağlantı) gelen öğeler önce `inbox`'a düşer.
 - Öğe: ham veri + kaynak + bağlam (sayfa adresi, cümle, zaman).
 - Gelen kutusu ekranı: tek tek veya toplu onayla → not türü ve deste seç → ekle. AI ile alan doldurma seçeneği.
 - Kaynak bazında "doğrudan ekle" kuralı (otomasyon kurallarıyla birleşir).
+
+#### Uygulanan hâli (v0.9, `fc-app` `inbox` modülü)
+- Tablo `inbox` (0001) + migration `0800`: durum değişim zamanı, oluşan not kimlikleri, gönderen istemci ve `client_ref` (istemci başına tekil). Öğe = `AddInboxItem` (alanlar/ön-arka, deste, not türü, etiketler, sınıflandırmalar, bağlam) + kaynak (`InboxSource`: `user`, `clipboard`, `deep_link`, `local_api {client_id, client_name}`, `other {actor}`) — kaynak **her zaman aktörden** yazılır.
+- `inbox.add` (geri alınabilir; tersi iç `inbox.remove`), `inbox.list` / `inbox.count`, `inbox.accept` (her öğe için iç `notes.create`; **hepsi ya da hiçbiri, tek geri al adımı**; deste/not türü/alanlar/etiketler/sınıflandırmalar incelemede değiştirilebilir; hata `details.item_index`; benzer not `allow_duplicates` olmadan `CONFLICT_NOTE_DUPLICATE`), `inbox.reject` (tersi iç `inbox.restore`). Sınıflandırmalar **kabulde** hedef desteye göre çözülür (anahtar/ad/kimlik → seçenek etiketi/kimliği; MCP ile aynı çözümleyici).
+- Kaynak bazında "doğrudan ekle" otomasyon izinde (iz J); gelen kutusu `inbox_changed` olayını yayar.
 
 ## 5. Tarayıcı eklentisi
 
@@ -140,7 +204,16 @@ Uygulama için resmi Rust MCP SDK'sı (`rmcp`) kullanılır.
 - Tek örnek (single instance): uygulama açıksa bağlantı mevcut pencereye iletilir.
 - Kart içi `[[bağlantılar]]` da dahili olarak aynı yönlendiriciyi kullanır.
 
+#### Uygulanan hâli (v0.9)
+- Ayrıştırma saf: `fc_core::inbox::deeplink` (şema büyük/küçük harfe duyarsız, sondaki `/` yok sayılır, yüzde kodlama + `+`, en çok 8 KiB). `flashcard://add` ayrıca `notetype=`, `tags=a,b`, `field.<anahtar>=`, `attr.<sınıflandırma>=<etiket>` (tekrar = çoklu seçim) alır.
+- Anlam `deep_links.open` komutunda (modül `deep_links`): `deck`/`note`/`study` kimlikleri ve sorguyu denetleyip **hiçbir şey yazmadan** hedef döner; `add` **asla doğrudan not yazmaz**, kaynağı `deep_link` olan bir gelen kutusu önerisi olur (sıradan, geri alınabilir `inbox.add`); `import` şimdilik `VALIDATION_DEEP_LINK` (`reason: unsupported`).
+- Kabuk (`src-tauri/src/outside.rs`): `tauri-plugin-single-instance` **ilk** eklenti (ikinci başlatma argümanlarını çalışan örneğe verip çıkar), `tauri-plugin-deep-link` şeması `tauri.conf.json`'da (`flashcard`; kurulum dosyası kaydeder, geliştirme derlemesi çalışırken kaydeder). Açılıştaki bağlantı argümanlardan okunur; sonuçlar arayüz alana kadar kuyrukta bekler (`take_deep_links`), pencere öne gelir.
+
 ## 7. Global hızlı ekleme ve pano izleme
 
 - **Global kısayol** (ör. `Ctrl+Alt+N`): uygulama arka plandayken küçük, her zaman üstte bir ekleme penceresi. Panodaki metin önceden doldurulabilir.
 - **Pano izleme** (varsayılan kapalı): kopyalanan metin filtrelere uyuyorsa (uzunluk, dil, desen) köşede küçük bir öneri: "Kart olarak ekle?" Görmezden gelinirse kaybolur. Gizlilik için parola yöneticisi gibi uygulamalardan gelen içerik (işletim sistemi işaretliyse) yok sayılır.
+
+#### Uygulanan hâli (v0.9)
+- **Hızlı ekleme** (modül `quick_add`): kısayol ayarı `quick_add.shortcut` (varsayılan `CommandOrControl+Alt+N`, yeniden başlatınca), her zaman üstte küçük pencere (`index.html#quick-add`), Klasik not ekler (`notes.create`, geri alınabilir), Esc gizler. `quick_add.prefill_clipboard` (varsayılan açık) panoyu **yalnız kısayola basılınca** okur; parola/anahtar gibi görünen metni doldurmaz.
+- **Pano önerileri** (modül `clipboard`, **varsayılan kapalı**): kapalıyken kabuk panoyu **hiç okumaz**. Açıkken saniyede bir bakar; Windows'ta işletim sisteminin gizli işaretlediği içerik (`ExcludeClipboardContentFromMonitorProcessing`, geçmiş/bulut dışı) okunmadan atlanır; açıldığı anda panoda olan önerilmez; yalnız son metnin parmak izi tutulur. Karar `clipboard.check`'te (saf süzgeç `fc_core::inbox::clipboard`): uzunluk (`clipboard.min_chars`/`max_chars`), en çok 3 satır, URL/e-posta/dosya yolu değil, **sır gibi görünmüyor** (anahtar önekleri, JWT, Luhn'lu kart numarası, üç karakter sınıfı karıştıran tek "kelime"). Öneri kabul edilirse `inbox.add` (`via: clipboard`). Dil/desen süzgeci henüz yok.

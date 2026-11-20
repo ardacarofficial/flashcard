@@ -52,11 +52,24 @@ describe('automation rule editor (dev mock)', () => {
     expect(await screen.findByText(/applied · By hand · 3 cards/)).toBeTruthy();
   });
 
+  it('offers inbox actions only to inbox rules', async () => {
+    render(AutomationScreen, { ctx });
+    await fireEvent.click(await screen.findByRole('button', { name: 'New rule' }));
+    const action = () => screen.getByLabelText('Action') as HTMLSelectElement;
+    const options = () => [...action().options].map((o) => o.value);
+    expect(options()).not.toContain('inbox.accept');
+    await fireEvent.change(screen.getByLabelText('Trigger'), { target: { value: 'inbox_added' } });
+    expect(options()).toEqual(['inbox.accept']);
+    expect(action().value).toBe('inbox.accept');
+    expect(screen.getByText(/the card the proposal would become/)).toBeTruthy();
+  });
+
   it('round-trips triggers and action params', () => {
     const triggers: RuleTrigger[] = [
       { kind: 'schedule', every_mins: 90 },
       { kind: 'card_flagged', flags: [1, 7] },
       { kind: 'imported' },
+      { kind: 'inbox_added' },
     ];
     for (const t of triggers) {
       expect(toTrigger(fromTrigger(t))).toEqual(t);
@@ -67,6 +80,8 @@ describe('automation rule editor (dev mock)', () => {
       { method: 'bulk.set_attribute', params: { attr_id: 'a1', value: { type: 'choice', value: 'o1' } } },
       { method: 'bulk.set_suspended', params: { suspended: true } },
       { method: 'bulk.reset_progress', params: {} },
+      { method: 'inbox.accept', params: { deck_id: 'd1' } },
+      { method: 'inbox.accept', params: {} },
     ]) {
       expect(toAction(fromAction(a))).toEqual(a);
     }

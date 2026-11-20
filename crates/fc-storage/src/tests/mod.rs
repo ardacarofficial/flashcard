@@ -9,6 +9,7 @@ mod attributes;
 mod automation;
 mod content;
 mod decks;
+mod inbox;
 mod interop;
 mod mcp;
 mod migrations;

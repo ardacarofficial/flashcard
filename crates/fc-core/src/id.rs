@@ -197,6 +197,14 @@ define_id!(
     /// Automation rule id (v0.9).
     AutomationRuleId
 );
+define_id!(
+    /// Inbox item id (v0.9).
+    InboxItemId
+);
+define_id!(
+    /// Local HTTP API client id (v0.9).
+    ApiClientId
+);
 
 #[cfg(test)]
 mod tests {

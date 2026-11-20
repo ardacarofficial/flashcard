@@ -6,13 +6,14 @@
 
 use crate::error::ApiError;
 use fc_core::automation::RuleTrigger;
-use fc_core::{AutomationRuleId, BatchId, CardId, NoteId, Timestamp};
+use fc_core::{AutomationRuleId, BatchId, CardId, InboxItemId, NoteId, Timestamp};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
 
 /// One action: a registry command and its parameters **without** the selection field
-/// (`card_ids` / `note_ids`), which the rule fills with the matched cards (or their notes).
+/// (`card_ids` / `note_ids`; inbox rules: `items`), which the rule fills with the matched cards
+/// (or their notes, or the matched inbox items).
 /// Example: `{"method": "bulk.add_tags", "params": {"tags": ["leech"]}}`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
@@ -233,7 +234,7 @@ pub struct ActionPreview {
 /// written, no undo step, no event. The rule need not be saved or enabled.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct RulePreview {
-    /// Cards matching the condition.
+    /// Cards matching the condition (inbox rules: pending inbox items).
     pub matched: u32,
     /// Cards that would change (themselves or through their note).
     pub changed: u32,
@@ -258,7 +259,7 @@ pub struct RunDto {
     pub trigger: String,
     /// Chain depth (0 = started by a user change, the scheduler or by hand).
     pub depth: u32,
-    /// Cards the condition matched.
+    /// Cards the condition matched (inbox rules: inbox items).
     pub matched: u32,
     /// `applied`, `no_match` (a scheduled or manual run found no card), `skipped_cycle`,
     /// `skipped_depth`, `skipped_budget` or `failed`.
@@ -305,6 +306,9 @@ pub struct ApplyRule {
     pub rule_id: AutomationRuleId,
     /// Matched cards.
     pub card_ids: Vec<CardId>,
+    /// Matched inbox items (rules with the `inbox_added` trigger; phase 4).
+    #[serde(default)]
+    pub inbox_ids: Vec<InboxItemId>,
     /// What started it (log).
     pub trigger: String,
     /// Chain depth (log).

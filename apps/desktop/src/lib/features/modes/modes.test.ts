@@ -28,7 +28,7 @@ vi.mock('$lib/api', () => {
       on: async () => () => {},
       modules: {
         list: async () => ({
-          modules: Object.entries(enabled.value).map(([id, on]) => ({ id, enabled: on })),
+          modules: Object.entries(enabled.value).map(([id, on]) => ({ id, enabled: on, ui: [] })),
         }),
       },
     },

@@ -8,6 +8,7 @@
     TRIGGER_KINDS,
     emptyAction,
     fromAction,
+    fitsTrigger,
     fromTrigger,
     toAction,
     toTrigger,
@@ -44,6 +45,14 @@
     };
     walk(ctx.decks);
     return out;
+  });
+  // Actions that fit the chosen trigger (inbox rules accept inbox items; the rest act on cards).
+  const fitting = $derived(actionInfos.filter((i) => fitsTrigger(i.selection, trigger.kind)));
+  $effect(() => {
+    const ok = new Set(fitting.map((i) => i.method));
+    if (fitting.length > 0 && actions.some((a) => !ok.has(a.method))) {
+      actions = actions.map((a) => (ok.has(a.method) ? a : emptyAction(fitting[0]!.method)));
+    }
   });
   const choiceAttrs = $derived(attrs.filter((a) => a.kind === 'ordered_enum' || a.kind === 'enum'));
   const ruleName = (id: string) => rules.find((r) => r.id === id)?.name ?? '';
@@ -204,6 +213,7 @@
     <fieldset>
       <legend>{t('automation.if')}</legend>
       <label>{t('automation.condition')} <input bind:value={condition} placeholder={t('automation.condition_example')} /></label>
+      {#if trigger.kind === 'inbox_added'}<p class="muted">{t('automation.inbox_condition_hint')}</p>{/if}
     </fieldset>
 
     <fieldset>
@@ -211,7 +221,7 @@
       {#each actions as a, i (i)}
         <div class="action">
           <select aria-label={t('automation.action.label')} bind:value={a.method}>
-            {#each actionInfos as info (info.method)}<option value={info.method}>{td(info.label_key)}</option>{/each}
+            {#each fitting as info (info.method)}<option value={info.method}>{td(info.label_key)}</option>{/each}
           </select>
           {#if a.method === 'bulk.add_tags' || a.method === 'bulk.remove_tags'}
             <label>{t('automation.tags')} <input bind:value={a.tags} /></label>
@@ -222,7 +232,7 @@
               {#each FLAGS as f (f)}<option value={f}>{td(`browse.flags.${f}`)}</option>{/each}
             </select>
             <label><input type="checkbox" bind:checked={a.on} /> {t('automation.on')}</label>
-          {:else if a.method === 'bulk.move_cards'}
+          {:else if a.method === 'bulk.move_cards' || a.method === 'inbox.accept'}
             <select aria-label={t('automation.deck')} bind:value={a.deckId}>
               <option value="">—</option>
               {#each decks as d (d.id)}<option value={d.id}>{d.path}</option>{/each}
@@ -242,7 +252,7 @@
           <button type="button" onclick={() => (actions = actions.filter((_, j) => j !== i))}>{t('automation.remove_action')}</button>
         </div>
       {/each}
-      <button type="button" onclick={() => (actions = [...actions, emptyAction(actionInfos[0]?.method ?? 'bulk.add_tags')])}>
+      <button type="button" onclick={() => (actions = [...actions, emptyAction(fitting[0]?.method ?? 'bulk.add_tags')])}>
         {t('automation.add_action')}</button>
     </fieldset>
 

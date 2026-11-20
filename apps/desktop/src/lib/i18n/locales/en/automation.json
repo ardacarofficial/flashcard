@@ -65,6 +65,7 @@
       "card_flagged": "A card is flagged",
       "classification_changed": "A classification changes",
       "imported": "An import finishes",
+      "inbox_added": "A proposal arrives in the inbox",
       "schedule": "On a schedule",
       "manual": "By hand"
     },
@@ -93,9 +94,13 @@
         "move_cards": "Move to deck",
         "set_attribute": "Set a classification",
         "reset_progress": "Forget (reset progress)"
+      },
+      "inbox": {
+        "accept": "Accept as a note"
       }
     },
-    "condition_example": "e.g. seviye:A1 lapses>=5"
+    "condition_example": "e.g. seviye:A1 lapses>=5",
+    "inbox_condition_hint": "For inbox rules the query is checked on the card the proposal would become (e.g. deck:English seviye:B1)."
   },
   "errors": {
     "validation": {

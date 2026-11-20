@@ -1,0 +1,23 @@
+// Local HTTP API (v0.9).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// No usable token (`details.reason`: `missing`, `invalid`, `pending`, `denied`, `revoked`).
+/// HTTP 401.
+PermissionUnauthenticated => Permission, "errors.permission.unauthenticated";
+/// The request's `Origin` or `Host` is not allowed (web pages never are; a token works only
+/// from the origin it paired from). HTTP 403.
+PermissionOriginNotAllowed => Permission, "errors.permission.origin_not_allowed";
+/// Too many requests (`details.retry_after_secs`). HTTP 429.
+ConflictRateLimited => Conflict, "errors.conflict.rate_limited";
+/// Request body too large (`details.max_bytes`). HTTP 413.
+ValidationPayloadTooLarge => Validation, "errors.validation.payload_too_large";
+/// Unknown or non-grantable scope, or one the client did not ask for (`details.scope`).
+ValidationApiScope => Validation, "errors.validation.api_scope";
+/// A pairing request or client is invalid (`details.field`: `client_name`, `token_hash`,
+/// `origin`).
+ValidationApiClient => Validation, "errors.validation.api_client";
+/// Local API client not found (`details.id`).
+NotFoundApiClient => NotFound, "errors.not_found.api_client";
+/// Pairing request not found (`details.request_id`).
+NotFoundPairing => NotFound, "errors.not_found.pairing";
+/// The client is not in a state allowing this (`details.status`).
+ConflictApiClientState => Conflict, "errors.conflict.api_client_state";

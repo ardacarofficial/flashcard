@@ -45,6 +45,10 @@ pub enum RuleTrigger {
     ClassificationChanged,
     /// An import finished (its added and updated notes are checked).
     Imported,
+    /// A proposal arrived in the inbox (phase 4). Its subject is the **inbox item**, not cards:
+    /// the condition is evaluated on the card the item would become (deck, note type, fields,
+    /// tags, classifications), and the actions are inbox actions (accept).
+    InboxAdded,
     /// Every `every_mins` minutes, over the whole collection.
     Schedule {
         /// Interval, [`MIN_SCHEDULE_MINS`]–[`MAX_SCHEDULE_MINS`].
@@ -62,8 +66,14 @@ impl RuleTrigger {
             Self::CardFlagged { .. } => "card_flagged",
             Self::ClassificationChanged => "classification_changed",
             Self::Imported => "imported",
+            Self::InboxAdded => "inbox_added",
             Self::Schedule { .. } => "schedule",
         }
+    }
+
+    /// Whether the rule acts on inbox items (else on cards and notes).
+    pub const fn is_inbox(&self) -> bool {
+        matches!(self, Self::InboxAdded)
     }
 
     /// Checks the trigger's parameters. `Err` names the offending field.
@@ -91,6 +101,7 @@ impl RuleTrigger {
             | (Self::NoteUpdated, SignalKind::NoteUpdated)
             | (Self::ClassificationChanged, SignalKind::ClassificationChanged)
             | (Self::Imported, SignalKind::Imported)
+            | (Self::InboxAdded, SignalKind::InboxAdded)
             | (Self::Schedule { .. }, SignalKind::Schedule) => true,
             (Self::CardAnswered { ratings }, SignalKind::CardAnswered(r)) => {
                 ratings.is_empty() || ratings.contains(r)
@@ -150,6 +161,8 @@ pub enum SignalKind {
     ClassificationChanged,
     /// An import finished.
     Imported,
+    /// Proposals arrived in the inbox.
+    InboxAdded,
     /// The scheduler found a rule due.
     Schedule,
     /// The user ran a rule by hand.
@@ -166,6 +179,7 @@ impl SignalKind {
             Self::CardFlagged(_) => "card_flagged",
             Self::ClassificationChanged => "classification_changed",
             Self::Imported => "imported",
+            Self::InboxAdded => "inbox_added",
             Self::Schedule => "schedule",
             Self::Manual => "manual",
         }
@@ -271,6 +285,12 @@ mod tests {
         assert!(!RuleTrigger::NoteAdded.accepts(&SignalKind::Schedule));
         // A manual run names the rule: any trigger accepts it.
         assert!(RuleTrigger::Imported.accepts(&SignalKind::Manual));
+        // Phase 4: inbox rules start from inbox signals (and by hand) only.
+        assert!(RuleTrigger::InboxAdded.accepts(&SignalKind::InboxAdded));
+        assert!(RuleTrigger::InboxAdded.accepts(&SignalKind::Manual));
+        assert!(!RuleTrigger::InboxAdded.accepts(&SignalKind::NoteAdded));
+        assert!(!RuleTrigger::NoteAdded.accepts(&SignalKind::InboxAdded));
+        assert!(RuleTrigger::InboxAdded.is_inbox() && !RuleTrigger::NoteAdded.is_inbox());
         assert_eq!(every.schedule_ms(), Some(3_600_000));
         assert_eq!(RuleTrigger::NoteAdded.schedule_ms(), None);
     }

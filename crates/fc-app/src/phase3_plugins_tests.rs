@@ -7,7 +7,9 @@
 //! | `Mcp` | `MCP_PERMISSIONS` only (and only the methods its tools call) |
 //! | `Plugin` | its grants, never a forbidden area (`mcp`, `ai_keys`, `ai:write`, `io`, `oplog`, `stats:write`…) |
 //! | `Automation` | its rule actions only (v0.9: `modules::automation::tests`) |
-//! | `LocalApi` | **nothing** until v0.9 defines their grants |
+//! | `LocalApi` | its approved scopes on the HTTP allow-list (v0.9); an unapproved client nothing |
+//!
+//! Phase 4 round 2 adds the full actor × domain matrix: `phase4_permits_tests`.
 
 use crate::modules::mcp::MCP_PERMISSIONS;
 use crate::modules::plugins::redact::{exposure, Exposure};

@@ -80,6 +80,8 @@ suite!(
     schedule_survives_the_clock_going_back,
     event_rules_search_only_the_touched_cards,
     mode_answers_trigger_answer_rules,
+    inbox_rules_accept_classified_proposals,
+    inbox_actions_fit_inbox_triggers_only,
 );
 
 #[test]
@@ -1433,4 +1435,136 @@ fn mode_answers_trigger_answer_rules(f: Factory) {
     assert_eq!(top[1].command, "v1.modes.confidence.answer");
     w.undo();
     assert_eq!(snapshot(&w.t), before, "answer and rule undone together");
+}
+
+fn propose(w: &W, front: &str, deck: Option<DeckId>, level: &str) -> fc_api::v1::inbox::InboxItemDto {
+    w.t.ok::<InboxAdd>(fc_api::v1::inbox::AddInboxItem {
+        front: Some(front.into()),
+        back: Some(format!("{front}?")),
+        deck_id: deck,
+        attributes: BTreeMap::from([("Seviye".to_owned(), json!(level))]),
+        ..Default::default()
+    })
+}
+
+fn pending(w: &W) -> Vec<String> {
+    use fc_api::v1::inbox::ListInbox;
+    w.t.ok::<InboxList>(ListInbox::default())
+        .items
+        .into_iter()
+        .map(|i| i.item.front.unwrap_or_default())
+        .collect()
+}
+
+/// Phase 4 (track J deferred it to track I's inbox): "when a B1 word lands in the inbox, add it
+/// as a note" — the `inbox_added` trigger, a classification condition evaluated on the card
+/// the proposal would become, the `inbox.accept` action; one undo step with the proposal;
+/// the new note triggers `note_added` rules in turn.
+fn inbox_rules_accept_classified_proposals(f: Factory) {
+    let w = world(f);
+    w.rule(
+        "B1 words",
+        RuleTrigger::InboxAdded,
+        "seviye:B1",
+        &[("inbox.accept", json!({ "deck_id": w.english }))],
+    );
+    w.rule("Tag new", RuleTrigger::NoteAdded, "", &[add_tag("new")]);
+    let before = snapshot(&w.t);
+
+    // A1 stays for the user to review; B1 becomes a note (classified, in the item's deck).
+    propose(&w, "early", Some(w.english), "A1");
+    assert_eq!(pending(&w), ["early"]);
+    let b1 = propose(&w, "abandon", Some(w.english), "B1");
+    assert_eq!(pending(&w), ["early"]);
+    let cards = w.ids("seviye:B1 tag:new");
+    assert_eq!(cards.len(), 1, "accepted as a classified note, then tagged by its rule");
+    assert_eq!(w.card_deck(cards[0]), w.english);
+    // The run is logged with its trigger; the chain continues the same batch.
+    let runs = w.runs();
+    assert!(runs
+        .iter()
+        .any(|r| r.trigger == "inbox_added" && r.status == "applied" && r.matched == 1));
+    let top = w.newest(4);
+    assert!(top.iter().all(|e| e.batch_id == top[0].batch_id));
+    assert!(top.iter().any(|e| e.command == "v1.inbox.add"));
+    assert!(top.iter().any(|e| e.command == "v1.inbox.accept"));
+    assert!(top.iter().any(|e| matches!(&e.actor, Actor::Automation(_))));
+
+    // One undo takes back the proposal and everything its rules did.
+    w.undo();
+    assert!(w.ids("seviye:B1").is_empty());
+    assert_eq!(pending(&w), ["early"]);
+    {
+        let tx = w.t.store.read().unwrap();
+        assert!(tx.get_inbox_item(b1.id).unwrap().is_none());
+    }
+    w.redo();
+    assert_eq!(w.ids("seviye:B1 tag:new").len(), 1);
+    w.undo();
+    w.undo();
+    assert_eq!(snapshot(&w.t), before);
+    assert!(pending(&w).is_empty());
+
+    // Without a deck the classification cannot resolve: no match, the item waits.
+    propose(&w, "orphan", None, "B1");
+    assert_eq!(pending(&w), ["orphan"]);
+}
+
+/// Inbox actions only for inbox triggers and vice versa; a manual run of an inbox rule
+/// works through the pending items; preview counts them without writing.
+fn inbox_actions_fit_inbox_triggers_only(f: Factory) {
+    let w = world(f);
+    let actions = |m: &str, p: Value| {
+        vec![RuleAction {
+            method: m.into(),
+            params: p,
+        }]
+    };
+    let bad = |trigger: RuleTrigger, a: Vec<RuleAction>| {
+        let e = w.t.err::<AutomationRulesCreate>(CreateRule {
+            name: "x".into(),
+            enabled: None,
+            trigger,
+            condition: String::new(),
+            actions: a,
+        });
+        assert_eq!(code(&e).0, ErrorCode::ValidationAutomationRule);
+        assert_eq!(e.details.get("reason").and_then(Value::as_str), Some("trigger"));
+    };
+    bad(RuleTrigger::NoteAdded, actions("inbox.accept", json!({})));
+    bad(RuleTrigger::InboxAdded, actions("bulk.add_tags", json!({ "tags": ["x"] })));
+    bad(
+        RuleTrigger::Schedule { every_mins: 60 },
+        actions("inbox.accept", json!({})),
+    );
+    // A disabled inbox rule, run by hand over what is already pending.
+    propose(&w, "one", Some(w.english), "B2");
+    propose(&w, "two", Some(w.english), "A2");
+    let rule = w.t.ok::<AutomationRulesCreate>(CreateRule {
+        name: "B2".into(),
+        enabled: Some(false),
+        trigger: RuleTrigger::InboxAdded,
+        condition: "seviye:B2".into(),
+        actions: actions("inbox.accept", json!({})),
+    });
+    // Switching it to a card trigger would leave an inbox action behind.
+    let e = w.t.err::<AutomationRulesUpdate>(UpdateRule {
+        id: rule.id,
+        name: None,
+        enabled: None,
+        trigger: Some(RuleTrigger::NoteAdded),
+        condition: None,
+        actions: None,
+    });
+    assert_eq!(e.details.get("reason").and_then(Value::as_str), Some("trigger"));
+    let p = w.t.ok::<AutomationPreview>(PreviewRule {
+        rule_id: Some(rule.id),
+        draft: None,
+    });
+    assert_eq!((p.matched, p.changed), (1, 1));
+    assert_eq!(pending(&w).len(), 2, "preview writes nothing");
+    let r = w.t.ok::<AutomationRulesRun>(RuleRef { id: rule.id });
+    assert_eq!(r.runs[0].status, "applied");
+    assert_eq!(pending(&w), ["two"]);
+    assert_eq!(w.ids("seviye:B2").len(), 1);
 }

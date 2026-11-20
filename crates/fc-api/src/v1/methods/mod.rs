@@ -97,4 +97,6 @@ domains! {
     modes,
     reading,
     automation,
+    inbox,
+    local_api,
 }

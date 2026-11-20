@@ -182,6 +182,10 @@ fn replayable_methods_are_undoable_commands_without_side_channels() {
                 IoBackupLoad::NAME,
                 AiUsageRecord::NAME,
                 AutomationApply::NAME,
+                // v0.9: HTTP server bookkeeping with empty inverses, never in the oplog.
+                LocalApiPair::NAME,
+                LocalApiTouch::NAME,
+                LocalApiExpirePending::NAME,
             ]
             .contains(&d.name)
         {

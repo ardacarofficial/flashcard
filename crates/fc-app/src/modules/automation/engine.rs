@@ -39,6 +39,7 @@ use fc_api::v1::automation::*;
 use fc_api::v1::bulk::SetFlag;
 use fc_api::v1::cardtypes::SetCardFlag;
 use fc_api::v1::common::EntityRef;
+use fc_api::v1::inbox::InboxItemIds;
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::io::ImportedIds;
 use fc_api::v1::methods::*;
@@ -52,7 +53,7 @@ use fc_core::query::compile_query;
 use fc_core::query::filter::Filter;
 use fc_core::rng::SplitMix64;
 use fc_core::time::FixedClock;
-use fc_core::{AutomationRuleId, BatchId, CardId, NoteId, Timestamp, V7IdGen};
+use fc_core::{AutomationRuleId, BatchId, CardId, InboxItemId, NoteId, Timestamp, V7IdGen};
 use fc_storage::repo::{AutomationRuleRecord, AutomationRunRecord, CardFilter};
 use fc_storage::Reads;
 use serde_json::Value;
@@ -78,6 +79,8 @@ pub(crate) struct Signal {
     cards: Option<BTreeSet<CardId>>,
     /// Notes concerned (their live cards are checked).
     notes: BTreeSet<NoteId>,
+    /// Inbox items concerned (rules with the `inbox_added` trigger; phase 4).
+    inbox: BTreeSet<InboxItemId>,
 }
 
 impl Signal {
@@ -86,6 +89,7 @@ impl Signal {
             kind,
             cards: None,
             notes: BTreeSet::new(),
+            inbox: BTreeSet::new(),
         }
     }
 }
@@ -103,6 +107,7 @@ impl Observed {
             kind,
             cards: Some(BTreeSet::new()),
             notes: BTreeSet::new(),
+            inbox: BTreeSet::new(),
         });
         let last = self.0.len() - 1;
         &mut self.0[last]
@@ -116,6 +121,10 @@ impl Observed {
 
     fn note(&mut self, kind: SignalKind, note: NoteId) {
         self.entry(kind).notes.insert(note);
+    }
+
+    fn inbox(&mut self, item: InboxItemId) {
+        self.entry(SignalKind::InboxAdded).inbox.insert(item);
     }
 
     fn finish(self) -> Option<Self> {
@@ -153,6 +162,17 @@ pub(crate) fn observe(
         }
     }
     for e in entries {
+        // Inbox items added (`inbox.add`, also nested in `deep_links.open`): the inverse that
+        // removes them names them. A resend of the same `client_ref` has no inverse.
+        for inv in &e.inverse {
+            if parse_qualified_name(&inv.method) == Some(InboxRemove::NAME) {
+                if let Ok(ids) = serde_json::from_value::<InboxItemIds>(inv.params.clone()) {
+                    for id in ids.ids {
+                        o.inbox(id);
+                    }
+                }
+            }
+        }
         let Some(name) = parse_qualified_name(&e.command) else {
             continue;
         };
@@ -389,6 +409,19 @@ impl Conditions {
         compiled.map_err(AppError::Api)
     }
 
+    /// Pending inbox items whose would-be card matches `condition` — among `scope` when
+    /// given, else every pending item (inbox rules, phase 4).
+    fn inbox_matches(
+        &mut self,
+        app: &App,
+        condition: &str,
+        scope: Option<&BTreeSet<InboxItemId>>,
+    ) -> AppResult<Vec<InboxItemId>> {
+        let tx = app.store().read()?;
+        let filter = self.filter(&*tx, condition)?;
+        super::inbox::matching_items(&*tx, &filter, self.now, scope)
+    }
+
     /// Live cards matching `condition` — among `scope` when given, else in the whole
     /// collection — at most [`MAX_CARDS_PER_RUN`], in creation order.
     fn matches(
@@ -498,7 +531,12 @@ fn run_jobs(app: &App, sources: Vec<Vec<Job>>) -> AppResult<Vec<RunDto>> {
             continue;
         }
         let depth = u32::try_from(job.chain.len()).unwrap_or(u32::MAX);
-        let scope = scope_of(app, &job.signal).map_err(AppError::into_api);
+        let inbox_signal = job.signal.kind == SignalKind::InboxAdded;
+        let scope = if inbox_signal {
+            Ok(None)
+        } else {
+            scope_of(app, &job.signal).map_err(AppError::into_api)
+        };
         if matches!(&scope, Ok(Some(s)) if s.is_empty()) {
             continue;
         }
@@ -510,23 +548,37 @@ fn run_jobs(app: &App, sources: Vec<Vec<Job>>) -> AppResult<Vec<RunDto>> {
                 log_run(app, rule_ref, job.signal.kind, depth, matched, status, error)
             };
             let condition = rule.record.condition.as_str();
-            let cards = match (found.get(condition), &scope) {
-                (Some(c), _) => Ok(c.clone()),
-                (None, Ok(scope)) => conditions.matches(app, condition, scope.as_deref()),
-                (None, Err(e)) => Err(AppError::Api(e.clone())),
-            };
-            let cards = match cards {
-                Ok(c) => {
-                    found.insert(condition, c.clone());
-                    c
+            // What the rule acts on: cards (and their notes), or — inbox rules, phase 4 —
+            // pending inbox items (the signal's, or all of them by hand).
+            let found_now = if rule.trigger.is_inbox() {
+                conditions
+                    .inbox_matches(
+                        app,
+                        condition,
+                        job.signal.cards.is_some().then_some(&job.signal.inbox),
+                    )
+                    .map(|items| (Vec::new(), items))
+            } else {
+                match (found.get(condition), &scope) {
+                    (Some(c), _) => Ok(c.clone()),
+                    (None, Ok(scope)) => conditions.matches(app, condition, scope.as_deref()),
+                    (None, Err(e)) => Err(AppError::Api(e.clone())),
                 }
+                .inspect(|c| {
+                    found.insert(condition, c.clone());
+                })
+                .map(|c| (c, Vec::new()))
+            };
+            let (cards, items) = match found_now {
+                Ok(s) => s,
                 Err(e) => {
                     out.push(log("failed", 0, Some(e.into_api()))?);
                     logged_outside = true;
                     continue;
                 }
             };
-            if cards.is_empty() {
+            let matched = cards.len() + items.len();
+            if matched == 0 {
                 if job.signal.cards.is_none() {
                     // A scheduled or manual run that found nothing still ran.
                     out.push(log("no_match", 0, None)?);
@@ -539,7 +591,7 @@ fn run_jobs(app: &App, sources: Vec<Vec<Job>>) -> AppResult<Vec<RunDto>> {
             })?;
             let admission = guard.admit(rule.record.id, &job.chain);
             if let Some(status) = admission.status() {
-                out.push(log(status, cards.len(), None)?);
+                out.push(log(status, matched, None)?);
                 logged_outside = true;
                 continue;
             }
@@ -547,7 +599,7 @@ fn run_jobs(app: &App, sources: Vec<Vec<Job>>) -> AppResult<Vec<RunDto>> {
             let mut chain = job.chain.clone();
             chain.push(rule.record.id);
             set_running(chain, job.guard);
-            let request = apply_request(&rule.record, &job, &cards, depth)?;
+            let request = apply_request(&rule.record, &job, &cards, &items, depth)?;
             let actor = Actor::Automation(rule.record.id.to_string());
             let mode = match job.follows {
                 Some(batch) => OplogMode::Follow(batch),
@@ -568,14 +620,14 @@ fn run_jobs(app: &App, sources: Vec<Vec<Job>>) -> AppResult<Vec<RunDto>> {
                         at: app.now(),
                         trigger: job.signal.kind.as_str().to_owned(),
                         depth,
-                        matched: count(cards.len()),
+                        matched: count(matched),
                         status: "applied".into(),
                         batch_id: r.batch_id,
                         error: None,
                     });
                 }
                 Err(e) => {
-                    out.push(log("failed", cards.len(), Some(e.into_api()))?);
+                    out.push(log("failed", matched, Some(e.into_api()))?);
                     logged_outside = true;
                 }
             }
@@ -595,11 +647,13 @@ fn apply_request(
     rule: &AutomationRuleRecord,
     job: &Job,
     cards: &[CardId],
+    items: &[InboxItemId],
     depth: u32,
 ) -> AppResult<InvokeRequest> {
     let params = ApplyRule {
         rule_id: rule.id,
         card_ids: cards.to_vec(),
+        inbox_ids: items.to_vec(),
         trigger: job.signal.kind.as_str().to_owned(),
         depth,
         manual: job.manual,
@@ -675,6 +729,7 @@ fn run_actions(
     ctx: &mut CommandCtx<'_>,
     actions: &[RuleAction],
     cards: &[CardId],
+    items: &[InboxItemId],
 ) -> AppResult<Vec<Value>> {
     let mut live = Vec::with_capacity(cards.len());
     let mut notes = Vec::new();
@@ -704,6 +759,7 @@ fn run_actions(
         let ids = match selection {
             Selection::Cards => serde_json::to_value(&live),
             Selection::Notes => serde_json::to_value(&notes),
+            Selection::InboxItems => serde_json::to_value(items),
         }
         .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
         if ids.as_array().is_some_and(Vec::is_empty) {
@@ -739,7 +795,7 @@ pub(crate) fn apply(
         ));
     }
     let actions = actions_of(&rule)?;
-    let results = run_actions(ctx, &actions, &req.card_ids)?;
+    let results = run_actions(ctx, &actions, &req.card_ids, &req.inbox_ids)?;
     let batch_id: Option<BatchId> = ctx.has_oplog_entries().then_some(ctx.batch_id);
     if req.trigger == SignalKind::Schedule.as_str() {
         // Marked in the run's own transaction: a scheduled run is never lost (see `run_due`).
@@ -752,7 +808,7 @@ pub(crate) fn apply(
             at: ctx.now,
             trigger: req.trigger.clone(),
             depth: req.depth,
-            matched: count(req.card_ids.len()),
+            matched: count(req.card_ids.len() + req.inbox_ids.len()),
             status: "applied".into(),
             batch_id,
             error: None,
@@ -878,17 +934,18 @@ pub fn spawn_scheduler(app: &Arc<App>) -> std::io::Result<std::thread::JoinHandl
 pub(crate) fn preview(req: PreviewRule, app: &App, actor: &Actor) -> AppResult<RulePreview> {
     super::ensure_manager(actor)?;
     let now = app.now();
-    let (rule_id, condition, actions) = {
+    let (rule_id, trigger, condition, actions) = {
         let tx = app.store().read()?;
         match (req.rule_id, req.draft) {
             (Some(id), None) => {
                 let r = require(&*tx, id)?;
-                (Some(id), r.condition.clone(), actions_of(&r)?)
+                (Some(id), trigger_of(&r)?, r.condition.clone(), actions_of(&r)?)
             }
             (None, Some(d)) => {
                 check_draft_trigger(&d.trigger)?;
-                check_actions(app.registry(), &d.actions)?;
-                (None, canonical_condition(&*tx, &d.condition, now)?, d.actions)
+                check_actions(app.registry(), &d.trigger, &d.actions)?;
+                let condition = canonical_condition(&*tx, &d.condition, now)?;
+                (None, d.trigger, condition, d.actions)
             }
             _ => {
                 return Err(crate::support::invalid(
@@ -899,8 +956,15 @@ pub(crate) fn preview(req: PreviewRule, app: &App, actor: &Actor) -> AppResult<R
     };
     let mut tx = app.store().write()?;
     let filter = condition_filter(&*tx, &condition, now)?;
-    let all = tx.search_card_ids(&filter, now)?;
-    let truncated = all.len() > MAX_CARDS_PER_RUN;
+    // Inbox rules (phase 4) match pending inbox items, not cards.
+    let (all, items) = if trigger.is_inbox() {
+        let items = super::inbox::matching_items(&*tx, &filter, now, None)?;
+        (Vec::new(), items)
+    } else {
+        (tx.search_card_ids(&filter, now)?, Vec::new())
+    };
+    let truncated =
+        all.len() > MAX_CARDS_PER_RUN || items.len() >= super::inbox::MAX_ITEMS_PER_RUN;
     let cards: Vec<CardId> = all.iter().copied().take(MAX_CARDS_PER_RUN).collect();
     let actor = Actor::Automation(rule_id.map_or_else(|| "preview".to_owned(), |id| id.to_string()));
     let mut ids = V7IdGen::new(
@@ -922,7 +986,7 @@ pub(crate) fn preview(req: PreviewRule, app: &App, actor: &Actor) -> AppResult<R
         events: Vec::new(),
         check_modules: true,
     };
-    let results = run_actions(&mut ctx, &actions, &cards)?;
+    let results = run_actions(&mut ctx, &actions, &cards, &items)?;
     let events = std::mem::take(&mut ctx.events);
     drop(ctx);
     // Never committed: dropping the transaction rolls every action back.
@@ -932,7 +996,8 @@ pub(crate) fn preview(req: PreviewRule, app: &App, actor: &Actor) -> AppResult<R
     let reads = app.store().read()?;
     let index = crate::support::decks::DeckIndex::load(&*reads)?;
     let mut rows = Vec::new();
-    let mut changed = 0u32;
+    // Accepted inbox items all change (all or nothing).
+    let mut changed = count(items.len());
     for id in &cards {
         let Some(card) = reads.get_card(*id)? else {
             continue;
@@ -960,7 +1025,7 @@ pub(crate) fn preview(req: PreviewRule, app: &App, actor: &Actor) -> AppResult<R
         });
     }
     Ok(RulePreview {
-        matched: count(all.len()),
+        matched: count(all.len() + items.len()),
         changed,
         cards: list,
         actions: actions

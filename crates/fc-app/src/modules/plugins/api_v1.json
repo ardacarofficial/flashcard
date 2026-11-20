@@ -163,6 +163,10 @@
     "query",
     "notetypes:read"
   ],
+  "v1.clipboard.check": [
+    "query",
+    "clipboard:read"
+  ],
   "v1.commands.list": [
     "query",
     "modules:read"
@@ -226,6 +230,22 @@
   "v1.goals.update": [
     "command",
     "goals:write"
+  ],
+  "v1.inbox.add": [
+    "command",
+    "inbox:write"
+  ],
+  "v1.inbox.count": [
+    "query",
+    "inbox:read"
+  ],
+  "v1.inbox.list": [
+    "query",
+    "inbox:read"
+  ],
+  "v1.inbox.reject": [
+    "command",
+    "inbox:write"
   ],
   "v1.jobs.get": [
     "query",

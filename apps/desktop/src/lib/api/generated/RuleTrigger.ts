@@ -12,7 +12,7 @@ ratings: Array<Rating>, } | { "kind": "card_flagged",
 /**
  * Only these flags, 1–7 (empty = any).
  */
-flags: Array<number>, } | { "kind": "classification_changed" } | { "kind": "imported" } | { "kind": "schedule", 
+flags: Array<number>, } | { "kind": "classification_changed" } | { "kind": "imported" } | { "kind": "inbox_added" } | { "kind": "schedule", 
 /**
  * Interval, [`MIN_SCHEDULE_MINS`]–[`MAX_SCHEDULE_MINS`].
  */

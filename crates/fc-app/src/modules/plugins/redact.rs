@@ -183,6 +183,15 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         // Imports read any file or web page; clips run ffmpeg on a file.
         "reading.items.import" => Refused(FREE_PATHS),
         "reading.clips.extract" => Refused(PROGRAMS),
+        // v0.9: proposals are the user's to review; a plugin may propose and read them.
+        "inbox.add" | "inbox.list" | "inbox.count" | "inbox.reject" => Reads(&["inbox"]),
+        "inbox.accept" | "deep_links.open" => Refused("the user reviews the inbox"),
+        "clipboard.check" => Reads(&["clipboard"]),
+        // Phase 4: a rule acts later with the automation actor's authority, so managing,
+        // running, previewing or even listing rules is the user's alone; so is deciding which
+        // local HTTP API clients may talk to the app.
+        n if n.starts_with("automation.") => Refused("automation rules are the user's"),
+        n if n.starts_with("local_api.") => Refused("local API clients are the user's decision"),
         _ => Refused("not available to plugins"),
     }
 }
@@ -404,15 +413,25 @@ pub(crate) fn event_domains(event: &DomainEvent) -> &'static [Domain] {
         E::AiPartial { .. } => AI_NOTES,
         E::ReadingItemsChanged | E::WordMarksChanged { .. } => READING,
         E::AutomationChanged => &["automation"],
+        E::InboxChanged { .. } => &["inbox"],
+        E::LocalApiPairing { .. } | E::LocalApiClientsChanged => &["local_api"],
     }
 }
 
 /// Domains whose events a plugin is not even told about without their read permissions
-/// (statistics, planning, goals, AI, MCP — phase 3; reading — phase 4; automation): elsewhere an
-/// unreadable event still arrives cut to ids, these do not arrive at all, so a subscription
-/// alone says nothing (not even that an AI request is streaming or a goal changed).
-const GATED_EVENT_DOMAINS: &[Domain] =
-    &["stats", "planning", "goals", "ai", "mcp", "reading", "automation"];
+/// (statistics, planning, goals, AI, MCP — phase 3; reading, automation, local API — phase 4):
+/// elsewhere an unreadable event still arrives cut to ids, these do not arrive at all, so a
+/// subscription alone says nothing (not even that an AI request is streaming or a goal changed).
+const GATED_EVENT_DOMAINS: &[Domain] = &[
+    "stats",
+    "planning",
+    "goals",
+    "ai",
+    "mcp",
+    "reading",
+    "automation",
+    "local_api",
+];
 
 /// Whether an `event:` hook of a plugin holding `granted` is called for `event` at all.
 pub(crate) fn event_delivered(granted: &BTreeSet<String>, event: &DomainEvent) -> bool {
@@ -830,6 +849,61 @@ mod tests {
             assert!(!event_delivered(&grants(&["reading:write"]), e));
             assert!(event_delivered(&grants(&["reading:read"]), e));
         }
+    }
+
+    #[test]
+    fn domain_inbox() {
+        // Proposals: a plugin with `inbox:*` may propose, list, count and reject them…
+        for m in ["inbox.add", "inbox.list", "inbox.count", "inbox.reject"] {
+            assert_eq!(exposure(m), Exposure::Reads(&["inbox"]), "{m}");
+        }
+        let d = exposure("inbox.list").domains();
+        domain_case(
+            "inbox",
+            d,
+            json!({ "items": [{ "id": 1, "item": { "front": "SECRET", "context": { "url": "https://SECRET" } } }] }),
+            "SECRET",
+        );
+        // …but accepting one as a note is the user's review (or the user's own rule), and a
+        // `flashcard://` link is the OS talking to the app.
+        for m in ["inbox.accept", "deep_links.open"] {
+            assert!(matches!(exposure(m), Exposure::Refused(_)), "{m}");
+        }
+        assert_eq!(exposure("clipboard.check"), Exposure::Reads(&["clipboard"]));
+        // The pending count is a number: without `inbox:read` the event arrives as ids only.
+        let e = DomainEvent::InboxChanged { pending: 3 };
+        assert_eq!(event_domains(&e), &["inbox"]);
+        assert_eq!(filter(&grants(&["inbox:write"]), event_domains(&e), json!({ "pending": 3 })), json!({}));
+    }
+
+    #[test]
+    fn domain_automation() {
+        // Every automation method — reads included — is refused and unhookable: a rule acts
+        // with the automation actor's authority later, so a plugin may not shape one.
+        for d in fc_api::v1::methods::catalog().iter().filter(|d| d.module == "automation") {
+            assert!(matches!(exposure(d.name), Exposure::Refused(_)), "{}", d.name);
+            assert!(fc_plugins::permission::hook_target_allowed(d.name, d.permission).is_err(), "{}", d.name);
+        }
+        assert!(!fc_plugins::permission::api_grantable("automation:read"));
+        // Its event never arrives, whatever a (tampered) grant says.
+        let e = DomainEvent::AutomationChanged;
+        assert_eq!(event_domains(&e), &["automation"]);
+        assert!(!event_delivered(&grants(&["automation:read", "automation:write"]), &e));
+        assert!(!can_read(&grants(&["automation:read"]), &["automation"]));
+    }
+
+    #[test]
+    fn domain_local_api() {
+        for d in fc_api::v1::methods::catalog().iter().filter(|d| d.module == "local_api") {
+            assert!(matches!(exposure(d.name), Exposure::Refused(_)), "{}", d.name);
+            assert!(fc_plugins::permission::hook_target_allowed(d.name, d.permission).is_err(), "{}", d.name);
+        }
+        // A pairing request names the client and its origin: never delivered to a plugin.
+        for e in [DomainEvent::LocalApiClientsChanged] {
+            assert_eq!(event_domains(&e), &["local_api"]);
+            assert!(!event_delivered(&grants(&["local_api:read"]), &e));
+        }
+        assert!(!can_read(&grants(&["local_api:read"]), &["local_api"]));
     }
 
     #[test]

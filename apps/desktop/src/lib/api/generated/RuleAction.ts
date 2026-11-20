@@ -2,7 +2,8 @@
 
 /**
  * One action: a registry command and its parameters **without** the selection field
- * (`card_ids` / `note_ids`), which the rule fills with the matched cards (or their notes).
+ * (`card_ids` / `note_ids`; inbox rules: `items`), which the rule fills with the matched cards
+ * (or their notes, or the matched inbox items).
  * Example: `{"method": "bulk.add_tags", "params": {"tags": ["leech"]}}`.
  */
 export type RuleAction = { 

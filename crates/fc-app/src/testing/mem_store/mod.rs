@@ -179,4 +179,6 @@ domains! {
     plugins => PluginState,
     reading => ReadingState,
     automation => AutomationState,
+    inbox => InboxState,
+    local_api => LocalApiState,
 }

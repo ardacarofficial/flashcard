@@ -14,6 +14,7 @@ const ACTIONS = [
   ['bulk.move_cards', 'card_ids'],
   ['bulk.set_attribute', 'card_ids'],
   ['bulk.reset_progress', 'card_ids'],
+  ['inbox.accept', 'items'],
 ] as const;
 
 export default {

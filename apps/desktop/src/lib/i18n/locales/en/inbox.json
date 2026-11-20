@@ -1,0 +1,208 @@
+{
+  "nav": {
+    "inbox": "Inbox",
+    "local_api": "Local API"
+  },
+  "modules": {
+    "inbox": {
+      "name": "Inbox",
+      "description": "Cards proposed from outside the app (browser extension, links, local API, clipboard) wait here for your review."
+    },
+    "deep_links": {
+      "name": "Links",
+      "description": "Opens flashcard:// links from other programs. Links that add cards only propose them to the inbox."
+    },
+    "clipboard": {
+      "name": "Clipboard suggestions",
+      "description": "Off by default. When on, the app looks at text you copy and offers to add it as a card. Nothing is stored unless you accept; text that looks like a password, key or card number is ignored, and so is content your system marks as private."
+    },
+    "quick_add": {
+      "name": "Quick add",
+      "description": "A global shortcut opens a small window to add a card while the app is in the background."
+    },
+    "local_api": {
+      "name": "Local API",
+      "description": "Lets programs on this computer (such as the browser extension) talk to the app. Only this computer can connect, and each program needs your approval."
+    }
+  },
+  "settings": {
+    "clipboard": {
+      "min_chars": {
+        "label": "Shortest suggestion (characters)",
+        "description": "Copied text shorter than this is ignored."
+      },
+      "max_chars": {
+        "label": "Longest suggestion (characters)",
+        "description": "Copied text longer than this is ignored."
+      }
+    },
+    "quick_add": {
+      "shortcut": {
+        "label": "Quick add shortcut",
+        "description": "For example CommandOrControl+Alt+N. Takes effect after a restart."
+      },
+      "prefill_clipboard": {
+        "label": "Fill in copied text",
+        "description": "When the quick add window opens, put the copied text on the front."
+      }
+    },
+    "local_api": {
+      "port": {
+        "label": "Port",
+        "description": "The app listens on 127.0.0.1 at this port only. Takes effect when the module is switched on again."
+      },
+      "inbox_max_items": {
+        "label": "Waiting proposals per program",
+        "description": "Most card proposals one program may have waiting in the inbox. More are refused until you handle some."
+      },
+      "inbox_max_kib": {
+        "label": "Waiting size per program (KiB)",
+        "description": "Most text one program may have waiting in the inbox, in kibibytes."
+      }
+    }
+  },
+  "commands": {
+    "inbox": {
+      "add": "Propose a card to the inbox",
+      "list": "Inbox items",
+      "count": "Inbox count",
+      "accept": "Accept inbox items",
+      "reject": "Reject inbox items"
+    },
+    "deep_links": {
+      "open": "Open a flashcard:// link"
+    },
+    "clipboard": {
+      "check": "Check copied text"
+    },
+    "local_api": {
+      "clients": {
+        "list": "Local API clients",
+        "approve": "Approve a local API client",
+        "deny": "Refuse a local API client",
+        "revoke": "Revoke a local API client",
+        "remove": "Remove a local API client"
+      },
+      "methods": "Local API methods"
+    }
+  },
+  "errors": {
+    "validation": {
+      "inbox_item": "This card proposal is not valid.",
+      "deep_link": "This link cannot be opened.",
+      "payload_too_large": "The request is too large.",
+      "api_scope": "That permission cannot be granted.",
+      "api_client": "This connection request is not valid."
+    },
+    "not_found": {
+      "inbox_item": "Inbox item not found.",
+      "api_client": "Program not found.",
+      "pairing": "Connection request not found."
+    },
+    "conflict": {
+      "inbox_quota": "This program has too many proposals waiting; handle some in the inbox first.",
+      "inbox_item_state": "This inbox item was already handled.",
+      "rate_limited": "Too many requests; try again shortly.",
+      "api_client_state": "This program's request was already handled or has expired."
+    },
+    "permission": {
+      "unauthenticated": "The program is not connected (missing or revoked permission).",
+      "origin_not_allowed": "Requests from this origin are not allowed."
+    }
+  },
+  "inbox": {
+    "heading": "Inbox",
+    "intro": "Cards proposed from the browser extension, links, other programs and the clipboard. Nothing becomes a card until you accept it.",
+    "empty": "Nothing waiting.",
+    "tabs": {
+      "pending": "Waiting",
+      "accepted": "Accepted",
+      "rejected": "Rejected"
+    },
+    "select_all": "Select all",
+    "deck": "Deck",
+    "choose_deck": "Choose a deck",
+    "accept": "Accept",
+    "accept_selected": "Accept selected ({count})",
+    "reject": "Reject",
+    "reject_selected": "Reject selected ({count})",
+    "accepted": "{count} cards added",
+    "rejected": "{count} items rejected",
+    "edit": "Edit",
+    "front": "Front",
+    "back": "Back",
+    "tags": "Tags",
+    "classifications": "Classifications",
+    "from_page": "From",
+    "sentence": "Sentence",
+    "allow_duplicates": "Add even if a similar card exists",
+    "source": {
+      "user": "Added by you",
+      "clipboard": "Clipboard",
+      "deep_link": "Link",
+      "local_api": "{name}",
+      "other": "{actor}"
+    },
+    "badge": "{count} waiting"
+  },
+  "local_api": {
+    "heading": "Local API",
+    "intro": "Programs on this computer can propose cards and read your decks through the local API. Only this computer can connect, at 127.0.0.1:{port}. Each program asks once; you decide what it may do.",
+    "clients": "Connected programs",
+    "none": "No programs yet.",
+    "status": {
+      "pending": "Waiting for you",
+      "approved": "Allowed",
+      "denied": "Refused",
+      "revoked": "Revoked"
+    },
+    "scopes": "Permissions",
+    "last_used": "Last used {time}",
+    "never_used": "Not used yet",
+    "approve": "Allow",
+    "deny": "Refuse",
+    "revoke": "Revoke",
+    "remove": "Remove",
+    "origin": "From {origin}",
+    "pairing": {
+      "title": "Connection request",
+      "body": "{name} wants to connect to Flashcard.",
+      "asks": "It asks to:",
+      "hint": "Only allow programs you installed yourself. You can revoke this any time under Local API."
+    },
+    "scope": {
+      "inbox:write": "Propose cards to the inbox",
+      "inbox:read": "See the inbox",
+      "decks:read": "See your decks",
+      "decks:write": "Create decks",
+      "notetypes:read": "See note types",
+      "notes:read": "Read notes",
+      "notes:write": "Add notes directly",
+      "attributes:read": "See classifications",
+      "tags:read": "See tags",
+      "search:read": "Search cards"
+    },
+    "kind": {
+      "browser_extension": "Browser extension",
+      "app": "Program",
+      "script": "Script"
+    }
+  },
+  "clipboard": {
+    "suggest": "Add “{text}” as a card?",
+    "add": "Add to inbox",
+    "dismiss": "Dismiss",
+    "added": "Added to the inbox"
+  },
+  "deep_links": {
+    "added": "A link proposed a card; it is in your inbox.",
+    "failed": "Could not open the link."
+  },
+  "quick_add": {
+    "title": "Quick add",
+    "add": "Add",
+    "added": "Card added",
+    "close": "Close",
+    "no_deck": "Create a deck first."
+  }
+}
