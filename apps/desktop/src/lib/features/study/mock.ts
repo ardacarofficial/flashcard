@@ -4,6 +4,7 @@
  * `study` module; this only lets the screen run in a browser and in component tests.
  */
 import { err, menu, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
+import type { SettingDef } from '$lib/api/types';
 import type {
   MatchRoundDto,
   NoteDto,
@@ -69,8 +70,31 @@ const plainModes = (over: Partial<SessionModesDto>): SessionModesDto => ({
   ...over,
 });
 
+/** The study modes' settings as fc-app declares them (Settings → "Reading and modes"). */
+const def = (key: string, kind: SettingDef['kind'], value: unknown, advanced = false): { module: string; def: SettingDef } => ({
+  module: key.split('.')[0]!,
+  def: { key, kind, default: value, label_key: `settings.${key}.label`, description_key: `settings.${key}.description`, advanced, scopes: ['app'] },
+});
+const int = (min: number, max: number): SettingDef['kind'] => ({ type: 'integer', min, max });
+const choice = (...options: string[]): SettingDef['kind'] => ({ type: 'choice', options });
+const text = (max_len: number): SettingDef['kind'] => ({ type: 'text', max_len });
+const MODE_SETTINGS = [
+  def('study.answer_buttons', choice('two', 'four'), 'two'),
+  def('confidence.rating_scale', choice('buttons', 'confidence'), 'buttons'),
+  def('timed.seconds', int(3, 600), 20),
+  def('timed.on_timeout', choice('again', 'skip'), 'again'),
+  def('focus.fullscreen', { type: 'bool' }, true),
+  def('focus.hide_counts', { type: 'bool' }, true),
+  def('focus.auto', { type: 'bool' }, false),
+  def('learn.max_cards', int(1, 500), 20),
+  def('practice_test.questions', int(1, 200), 20),
+  def('reading.default_language', text(35), 'en'),
+  def('reading.vocabulary_query', text(2000), ''),
+  def('reading.ffmpeg_path', text(1000), 'ffmpeg', true),
+];
+
 export default {
-  modules: [module('study', [menu('study.session', 'nav.study', '/study', 5)])],
+  modules: [module('study', [menu('study.session', 'nav.study', '/study', 5), menu('study.mode_settings', 'nav.mode_settings', '/mode-settings', 90)])],
   handlers: ({ id, now, notes, ancestors, cardFlags }: MockEnv) => {
     const sessions = new Map<string, MockSession>();
     const undo: Array<{ id: string; snapshot: string }> = [];
@@ -214,6 +238,7 @@ export default {
     const remember = (s: MockSession) => undo.push({ id: s.dto.id, snapshot: JSON.stringify(s) });
 
     return {
+      'settings.schema': () => ({ settings: MODE_SETTINGS }),
       'study.start': (req) => {
         for (const s of sessions.values()) s.dto.ended_at ??= now();
         const from = req.from_session ? require(req.from_session) : null;

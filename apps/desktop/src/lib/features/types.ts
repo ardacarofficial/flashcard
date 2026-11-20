@@ -17,6 +17,11 @@ export interface ScreenCtx {
    * places it. Does nothing if that module is off. v1.1: screens link to each other with it.
    */
   navigate?: (route: string) => void;
+  /**
+   * v1.1: a study screen says a session is running (or over). The shell then switches to the
+   * focus layout — no deck picker, no section tabs, a centred column. Reset on every page change.
+   */
+  setFocus?: (on: boolean) => void;
 }
 
 /** A screen component (every screen takes the shell's context). */

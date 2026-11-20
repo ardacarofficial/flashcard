@@ -33,6 +33,8 @@
   /** A plugin the app switched off (repeated failures), or plugins whose hooks were skipped. */
   let pluginNotice = $state<string | null>(null);
   let inboxCount = $state(0);
+  /** A study session is running on the current screen (`ctx.setFocus`): focus layout. */
+  let focusOn = $state(false);
   /** Last page opened in each section / in Settings (the sidebar returns to it). */
   const lastIn = new Map<string, string>();
 
@@ -68,13 +70,17 @@
     guarded: (fn) => guarded(fn),
     route: current?.route ?? null,
     navigate: (route) => openRoute(route),
+    setFocus: (on) => (focusOn = on),
   });
+  /** Section pages drawn as tabs (study modes are opened from the deck page instead). */
+  const sectionTabs = $derived(sectionNow?.entries.filter((e) => e.tab) ?? []);
 
   const placeKey = (e: NavEntry) => (e.place.kind === 'section' ? `section.${e.place.id}` : e.place.kind);
 
   function show(entry: NavEntry) {
+    if (active !== entry.id) focusOn = false;
     active = entry.id;
-    lastIn.set(placeKey(entry), entry.id);
+    if (entry.tab) lastIn.set(placeKey(entry), entry.id);
   }
 
   function reopen(key: string, list: NavEntry[]) {
@@ -83,7 +89,8 @@
     if (e) show(e);
   }
 
-  const openSection = (id: SectionId) => reopen(`section.${id}`, nav.sections.find((s) => s.id === id)?.entries ?? []);
+  /** The sidebar returns to the section's last tab page (Library → the deck list, not a mode). */
+  const openSection = (id: SectionId) => reopen(`section.${id}`, nav.sections.find((s) => s.id === id)?.entries.filter((e) => e.tab) ?? []);
   const openSettings = () => reopen('settings', nav.settings.flatMap((g) => g.entries));
   const openInbox = () => nav.inbox && show(nav.inbox);
 
@@ -189,7 +196,7 @@
   </AppSidebar>
 
   <main>
-    <div class="page">
+    <div class="page" class:focus={focusOn && !locked}>
       {#if error}<p class="banner error" role="alert">{error}</p>{/if}
       {#if pluginNotice}
         <p class="banner notice" role="status">
@@ -202,7 +209,7 @@
         {#if locked}
           <!-- Behind the lock screen nothing mounts or loads (lazy chunks included). -->
         {:else if screen}
-          {#if screen.deckPicker}
+          {#if screen.deckPicker && !focusOn}
             <DeckPicker {paths} value={selectedDeck} onchange={(id) => (selectedDeck = id)} />
           {/if}
           <!-- Lazy screens (v1.0 code splitting) load on first open; bundled ones render at once. -->
@@ -223,14 +230,14 @@
       {#if where === 'settings' && !locked}
         <SettingsLayout groups={nav.settings} {active} open={show}>{@render body()}</SettingsLayout>
       {:else}
-        {#if sectionNow && sectionNow.entries.length > 1 && !locked}
+        {#if sectionNow && sectionTabs.length > 1 && !locked && !focusOn && current?.tab}
           <div class="section-tabs">
             <Tabs
               label={t('shell.section_nav', { section: t(sectionNow.label_key) })}
-              tabs={sectionNow.entries.map((e) => ({ id: e.id, label: td(e.label_key) }))}
+              tabs={sectionTabs.map((e) => ({ id: e.id, label: td(e.label_key) }))}
               value={active ?? ''}
               onchange={(id) => {
-                const e = sectionNow.entries.find((x) => x.id === id);
+                const e = sectionTabs.find((x) => x.id === id);
                 if (e) show(e);
               }}
             />
@@ -290,6 +297,14 @@
     max-width: 1200px;
     margin: 0 auto;
     padding: var(--space-8) var(--space-8) var(--space-12);
+  }
+  /* A running session (docs/11 §3): no picker or tabs, the card centred in a narrower column. */
+  .page.focus {
+    max-width: 880px;
+    padding-top: var(--space-6);
+  }
+  .page.focus > :global(*) {
+    margin-inline: auto;
   }
   .section-tabs {
     margin-bottom: var(--space-6);

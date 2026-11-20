@@ -37,7 +37,7 @@ Common props: most components accept `class`; sizes are `'sm' | 'md' | 'lg'`; to
 | **Button** | `variant` primary/secondary(default)/ghost/danger · `size` · `loading` · `icon` · `iconEnd` · `fullWidth` · `disabled` · `type` · `bind:element` · any `<button>` attr · children | `<Button variant="primary" icon={Plus} onclick={add}>{t('deck.new')}</Button>` |
 | **IconButton** | `icon` · `label` (required: accessible name + hover hint) · `variant` ghost(default)/secondary/primary/danger · `size` · `pressed` (toggle) · `loading` | `<IconButton icon={Pencil} label={t('common.rename')} onclick={edit} />` |
 | **Menu** | `items: MenuItem[]` (`{id,label,icon?,keys?,danger?,disabled?,onselect}` or `{id,separator:true}`) · `label` (trigger name, default "More actions") · `icon` · `trigger` snippet (custom content) · `align` start/end · `placement` bottom/top | `<Menu items={[{ id: 'del', label: t('common.delete'), danger: true, onselect: del }]} />` |
-| **Tile** | `icon` · `title` · `description?` · `meta?` · `disabled` · `onclick` | `<Tile icon={Repeat} title={t('…')} description={t('…')} onclick={learn} />` |
+| **Tile** | `icon` · `title` · `description?` · `meta?` · `disabled` · `onclick` · `testid` (`data-testid`) | `<Tile icon={Repeat} title={t('…')} description={t('…')} onclick={learn} />` |
 
 ## Form controls
 

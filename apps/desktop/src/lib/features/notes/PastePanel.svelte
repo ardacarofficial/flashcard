@@ -23,7 +23,8 @@
 
   /** Rows the preview returns at most (`io.import.preview` limit). */
   const LIMIT = 200;
-  const FIELD_SEPS: Record<string, string> = { tab: '\t', comma: ',', dash: ' - ' };
+  /** Named field separators; `spaces` is fc-interop's ALIGNED (two or more spaces). */
+  const FIELD_SEPS: Record<string, string> = { tab: '\t', comma: ',', dash: ' - ', spaces: '  ' };
   const RECORD_SEPS: Record<string, string> = { line: '\n', blank: '\n\n' };
 
   let text = $state('');
@@ -46,6 +47,7 @@
     { value: 'tab', label: t('create.paste.sep_tab') },
     { value: 'comma', label: t('create.paste.sep_comma') },
     { value: 'dash', label: t('create.paste.sep_dash') },
+    { value: 'spaces', label: t('create.paste.sep_spaces') },
     { value: 'custom', label: t('create.paste.sep_custom') },
   ]);
   const recordChoices = $derived([

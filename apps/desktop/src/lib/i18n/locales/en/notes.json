@@ -80,6 +80,7 @@
       "sep_tab": "Tab",
       "sep_comma": "Comma",
       "sep_dash": "Dash",
+      "sep_spaces": "Spaces",
       "sep_custom": "Custom",
       "rec_line": "New line",
       "rec_blank": "Blank line",

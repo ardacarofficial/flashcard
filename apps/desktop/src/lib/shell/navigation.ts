@@ -49,15 +49,16 @@ export const SETTINGS_GROUPS: readonly { id: SettingsGroupId; label_key: Message
  * also reachable from (`also`, e.g. Import also under Create). Pages within a place are
  * shown in this list's order (ties, e.g. several plugin views: the backend's `order`).
  */
-export const PLACEMENTS: readonly { route: string; place: Place; also?: Place[] }[] = [
-  // Library: decks, notes, and the study modes (the deck page opens them).
+export const PLACEMENTS: readonly { route: string; place: Place; also?: Place[]; tab?: false }[] = [
+  // Library: decks and notes as tabs; the study modes live here too, but are opened from the
+  // deck page's mode tiles and Home's "Start studying" (`tab: false`: no section tab).
   { route: '/decks', place: section('library') },
   { route: '/notes', place: section('library') },
-  { route: '/study', place: section('library') },
-  { route: '/learn', place: section('library') },
-  { route: '/test', place: section('library') },
-  { route: '/match', place: section('library') },
-  { route: '/reading', place: section('library') },
+  { route: '/study', place: section('library'), tab: false },
+  { route: '/learn', place: section('library'), tab: false },
+  { route: '/test', place: section('library'), tab: false },
+  { route: '/match', place: section('library'), tab: false },
+  { route: '/reading', place: section('library'), tab: false },
   { route: '/plugins/view/*', place: section('library') },
   // Create: add cards, generate with AI; import and starter decks are also here.
   { route: '/notes/new', place: section('create') },
@@ -75,6 +76,7 @@ export const PLACEMENTS: readonly { route: string; place: Place; also?: Place[] 
   { route: '/reminders', place: settings('general') },
   { route: '/presets', place: settings('study') },
   { route: '/notetypes', place: settings('study') },
+  { route: '/mode-settings', place: settings('reading') },
   { route: '/mcp', place: settings('connections') },
   { route: '/local-api', place: settings('connections') },
   { route: '/automation', place: settings('connections') },
@@ -90,12 +92,12 @@ const routeMatches = (pattern: string, route: string) =>
   pattern.endsWith('/*') ? route.startsWith(pattern.slice(0, -1)) : pattern === route;
 
 /** Placement of a route (exact patterns win over prefixes); `rank` = position in PLACEMENTS. */
-export function placementOf(route: string): { place: Place; also: Place[]; rank: number } {
+export function placementOf(route: string): { place: Place; also: Place[]; rank: number; tab: boolean } {
   const hit =
     PLACEMENTS.find((p) => !p.route.endsWith('/*') && p.route === route) ??
     PLACEMENTS.find((p) => p.route.endsWith('/*') && routeMatches(p.route, route));
-  if (hit) return { place: hit.place, also: hit.also ?? [], rank: PLACEMENTS.indexOf(hit) };
-  return { place: settings('other'), also: [], rank: PLACEMENTS.length };
+  if (hit) return { place: hit.place, also: hit.also ?? [], rank: PLACEMENTS.indexOf(hit), tab: hit.tab !== false };
+  return { place: settings('other'), also: [], rank: PLACEMENTS.length, tab: true };
 }
 
 /** One reachable page. */
@@ -114,11 +116,14 @@ export interface NavEntry {
   place: Place;
   /** `false` for an extra (`also`) place: the palette lists only primary entries. */
   primary: boolean;
+  /** Shown as a tab of its section (study modes are not: the deck page opens them). */
+  tab: boolean;
 }
 
 export interface Navigation {
   /** Visible sections in sidebar order with their pages (Home always; others when non-empty). */
   sections: { id: SectionId; label_key: MessageKey; icon: string; entries: NavEntry[] }[];
+  // (`entries` holds every page of the section; the shell draws tabs for those with `tab`.)
   /** Non-empty Settings groups in order. */
   settings: { id: SettingsGroupId; label_key: MessageKey; entries: NavEntry[] }[];
   inbox: NavEntry | null;
@@ -136,14 +141,14 @@ export function buildNavigation(modules: ModuleDto[], screens: ScreenDef[], home
   const ui = modules.filter((m) => m.enabled).flatMap((m) => m.ui);
   const screenOf = (route: string) => screens.find((s) => s.routes?.some((p) => routeMatches(p, route))) ?? null;
   const primary: NavEntry[] = [
-    { id: 'home', label_key: 'shell.section.home', icon: 'home', route: null, screen: home, order: 0, rank: -1, place: section('home'), primary: true },
+    { id: 'home', label_key: 'shell.section.home', icon: 'home', route: null, screen: home, order: 0, rank: -1, place: section('home'), primary: true, tab: true },
   ];
   for (const c of ui) {
     if (c.slot !== 'main_menu' || !c.route) continue;
     const s = screenOf(c.route);
     if (!s) continue;
-    const { place, rank } = placementOf(c.route);
-    primary.push({ id: c.id, label_key: c.label_key, icon: c.icon, route: c.route, screen: s, order: c.order, rank, place, primary: true });
+    const { place, rank, tab } = placementOf(c.route);
+    primary.push({ id: c.id, label_key: c.label_key, icon: c.icon, route: c.route, screen: s, order: c.order, rank, place, primary: true, tab });
   }
   // Screens opened by a slot (the Settings page for `settings_page` contributions).
   for (const s of screens) {
@@ -153,7 +158,7 @@ export function buildNavigation(modules: ModuleDto[], screens: ScreenDef[], home
     if (!first) continue;
     const { place, rank } = first.route ? placementOf(first.route) : { place: settings('general'), rank: 0 };
     // One entry for all of them (the page shows every contribution): named after the first.
-    primary.push({ id: s.id, label_key: first.label_key, icon: 'settings', route: null, screen: s, order: first.order, rank, place, primary: true });
+    primary.push({ id: s.id, label_key: first.label_key, icon: 'settings', route: null, screen: s, order: first.order, rank, place, primary: true, tab: true });
   }
   const extra: NavEntry[] = primary.flatMap((e) =>
     e.route ? placementOf(e.route).also.map((place) => ({ ...e, id: `${e.id}@${place.kind}.${'id' in place ? place.id : ''}`, place, primary: false })) : [],

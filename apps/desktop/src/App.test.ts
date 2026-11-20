@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { api } from '$lib/api';
+import { api, CLASSIC_NOTETYPE_ID } from '$lib/api';
 import { i18n } from '$lib/i18n/index.svelte';
 import App from './App.svelte';
 
@@ -41,9 +41,9 @@ describe('<App> on the dev mock transport', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
     const sub = await screen.findByRole('navigation', { name: 'Settings sections' });
     const groups = Array.from(sub.querySelectorAll('h2'), (h) => h.textContent?.trim());
-    expect(groups).toEqual(['General', 'Study', 'Connections', 'Plugins', 'Data', 'Profiles and lock']);
+    expect(groups).toEqual(['General', 'Study', 'Reading and modes', 'Connections', 'Plugins', 'Data', 'Profiles and lock']);
     const pages = Array.from(sub.querySelectorAll('button'), (b) => b.textContent?.trim());
-    expect(pages).toEqual(['General', 'Shortcuts', 'Reminders', 'Deck options', 'Note types', 'AI', 'MCP', 'Automation', 'Plugins', 'Import / export', 'Starter decks', 'Maintenance', 'Logs & updates', 'Profiles & lock']);
+    expect(pages).toEqual(['General', 'Shortcuts', 'Reminders', 'Deck options', 'Note types', 'Modes and reading', 'AI', 'MCP', 'Automation', 'Plugins', 'Import / export', 'Starter decks', 'Maintenance', 'Logs & updates', 'Profiles & lock']);
     await fireEvent.click(screen.getByRole('button', { name: 'Reminders' }));
     expect(sub.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Reminders');
 
@@ -53,9 +53,42 @@ describe('<App> on the dev mock transport', () => {
       const list = screen.queryByRole('tablist');
       return list ? Array.from(list.querySelectorAll('[role=tab]'), (t) => t.textContent?.trim()) : [];
     };
-    expect(await tabsOf('Library')).toEqual(['Decks', 'Notes', 'Study', 'Learn', 'Test', 'Match', 'Reading']);
+    // Library: Decks | Notes only; the study modes open from the deck page's tiles and Home.
+    expect(await tabsOf('Library')).toEqual(['Decks', 'Notes']);
     expect(await tabsOf('Search')).toEqual([]);
     expect(await tabsOf('Statistics')).toEqual(['Statistics', 'Planning', 'Goals']);
+  });
+
+  it('study modes open from the deck page; a running session gets the focus layout', async () => {
+    const deck = (await api.deck.create('Focus')).id;
+    await api.call('notes.create_many', {
+      notetype_id: CLASSIC_NOTETYPE_ID,
+      target: { kind: 'deck', id: deck },
+      notes: ['cat:kedi', 'dog:köpek', 'bird:kuş', 'fish:balık'].map((p) => ({ fields: { front: p.split(':')[0]!, back: p.split(':')[1]! } })),
+      tags: [],
+      attributes: [],
+      allow_duplicate: null,
+    });
+    render(App);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Library' }));
+    const rows = await screen.findAllByTestId('deck-row');
+    await fireEvent.click(rows.find((r) => r.textContent?.includes('Focus'))!);
+    expect(await screen.findByTestId('deck-mode-cards')).toBeTruthy();
+    // Match has its tile next to the other modes.
+    expect(await screen.findByTestId('deck-mode-match')).toBeTruthy();
+    await fireEvent.click(await screen.findByTestId('deck-mode-test'));
+    const page = document.querySelector('main .page')!;
+    // Before the session: deck picker, no Library tabs (modes are not tabs).
+    expect(await screen.findByRole('combobox', { name: 'Deck' })).toBeTruthy();
+    expect(screen.queryByRole('tablist', { name: 'Pages in Library' })).toBeNull();
+    expect(page.classList.contains('focus')).toBe(false);
+    await fireEvent.click(await screen.findByTestId('study-start'));
+    await waitFor(() => expect(page.classList.contains('focus')).toBe(true));
+    expect(screen.queryByRole('combobox', { name: 'Deck' })).toBeNull();
+    // Leaving the screen ends the focus layout; the sidebar goes back to the Library page.
+    await fireEvent.click(screen.getByRole('button', { name: 'Library' }));
+    await waitFor(() => expect(page.classList.contains('focus')).toBe(false));
+    expect(await screen.findByRole('tablist', { name: 'Pages in Library' })).toBeTruthy();
   });
 
   it('mounts no screen behind the lock screen, lazy ones included', async () => {

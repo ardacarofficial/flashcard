@@ -146,6 +146,8 @@
     card && moduleOn('flags') ? flagDefs.filter((f) => hasFlag(card.flags, f.flag)) : [],
   );
   const phase = $derived<StudyPhase>(summary ? 'done' : card ? (revealed ? 'answer' : 'question') : 'idle');
+  // A running session switches the shell to the focus layout (no picker, no tabs).
+  $effect(() => ctx.setFocus?.(phase === 'question' || phase === 'answer'));
   const filterDef = $derived(attrs.find((a) => a.id === filterAttr) ?? null);
   const twoButtons = $derived(buttons === 'two');
 
@@ -784,7 +786,7 @@
         </div>
       {:else}
         <div class="reveal-row">
-          <Button variant="primary" size="lg" onclick={() => void run({ kind: 'reveal' })}>
+          <Button variant="primary" size="lg" data-testid="flip" onclick={() => void run({ kind: 'reveal' })}>
             {t('study.show_answer')} <Kbd keys={['Space']} class="on-accent" />
           </Button>
         </div>
@@ -824,8 +826,10 @@
     flex-direction: column;
     gap: var(--space-4);
   }
+  /* Running session: one centred column as wide as the card; the answer bar sits under it. */
   .study.playing {
-    max-width: 760px;
+    max-width: 720px;
+    margin-inline: auto;
     gap: var(--space-3);
   }
   :global(.start-card) {

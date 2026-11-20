@@ -75,6 +75,8 @@
   }
 
   const playing = $derived(round !== null && round.tiles.length > 0 && result === null);
+  // A running round switches the shell to the focus layout (no picker, no tabs).
+  $effect(() => ctx.setFocus?.(playing));
   const elapsed = $derived(playing ? Math.max(0, now - shownAt) : (result?.time_ms ?? 0));
 
   const fmt = $derived(new Intl.NumberFormat(i18n.locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));

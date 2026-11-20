@@ -111,7 +111,18 @@ pub fn descriptor() -> ModuleDescriptor {
             advanced(bool_setting(AUTO_GRADE, false, &[SettingScopeKind::App])),
             int_setting(DAY_START_HOUR, 4, 0, 23, true),
         ],
-        ui: vec![main_menu("study.session", "nav.study", "study", "/study", 5)],
+        ui: vec![
+            main_menu("study.session", "nav.study", "study", "/study", 5),
+            // v1.1: Settings → "Reading and modes" (display options of the study modes,
+            // learn/test/timed/focus/reading settings; the page shows the enabled ones).
+            main_menu(
+                "study.mode_settings",
+                "nav.mode_settings",
+                "sliders",
+                "/mode-settings",
+                90,
+            ),
+        ],
     }
 }
 

@@ -101,3 +101,20 @@ describe('navigation (docs/11 §2)', () => {
     expect(nav.settings.map((g) => [g.id, g.entries.map((e) => e.screen.id)])).toEqual([['general', ['settings']]]);
   });
 });
+
+describe('section tabs (v1.1)', () => {
+  it('Library shows Decks | Notes as tabs; the study modes are reachable but not tabs', () => {
+    const modules = [
+      mod('decks', [menu('decks.tree', '/decks', 10)]),
+      mod('notes', [menu('notes.list', '/notes', 11)]),
+      mod('study', [menu('study.session', '/study', 5), menu('study.mode_settings', '/mode-settings', 90)]),
+      mod('match', [menu('study.match', '/match', 8)]),
+    ];
+    const nav = buildNavigation(modules, SCREENS, HOME);
+    const lib = nav.sections.find((s) => s.id === 'library')!;
+    expect(lib.entries.filter((e) => e.tab).map((e) => e.route)).toEqual(['/decks', '/notes']);
+    expect(lib.entries.filter((e) => !e.tab).map((e) => e.route)).toEqual(['/study', '/match']);
+    // Their settings live in Settings → "Reading and modes".
+    expect(nav.settings.find((g) => g.id === 'reading')?.entries.map((e) => e.route)).toEqual(['/mode-settings']);
+  });
+});

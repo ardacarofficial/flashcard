@@ -143,6 +143,8 @@ function pageChecks() {
   const hasOwnText = (el) => [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
   for (const el of all) {
     if (!hasOwnText(el) || !visible(el)) continue;
+    // Screen-reader-only text is clipped on purpose (1×1 px box).
+    if (el.closest('.sr-only')) continue;
     const s = getComputedStyle(el);
     if (s.overflowX === 'visible' && s.textOverflow !== 'ellipsis') continue;
     if (el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0) {
@@ -356,31 +358,49 @@ async function main() {
             }
           }
 
-          // key states: deck page, flipped flashcard
+          // key states: deck page, then each study mode from its tile (idle, running, flipped)
           if (count > 0) {
-            const first = page.locator(NAV).first();
-            await first.click();
-            await settle(page);
-            const deck = page.locator('[data-testid="deck-row"], .tree button.name, button.name').first();
-            if (await deck.count()) {
+            const openDeck = async () => {
+              // via Home, so the Library screen mounts afresh (its deck list, not the last deck page)
+              await page.locator(NAV).nth(0).click();
+              await settle(page);
+              await page.locator(NAV).nth(1).click();
+              await settle(page);
+              // the section reopens its last tab: go to the first one (the deck list)
+              const firstTab = page.locator('main [role=tab]').first();
+              if (await firstTab.count()) {
+                await firstTab.click().catch(() => {});
+                await settle(page);
+              }
+              const deck = page.locator('[data-testid="deck-row"], .tree button.name, button.name').first();
+              // the Library reopens the selected deck's page
+              if (await page.locator('[data-testid^="deck-mode-"]').count()) return true;
+              if (!(await deck.count())) return false;
               await deck.click().catch(() => {});
               await settle(page);
+              return true;
+            };
+            if (await openDeck()) {
               await snap('state-deck-page');
-            }
-            const study = page.locator(NAV).filter({ hasText: lang === 'tr' ? /çalış|study/i : /study/i }).first();
-            const startBtn = page.locator('[data-testid="study-start"], main button.primary').first();
-            if ((await study.count()) && (await study.isVisible())) {
-              await study.click();
-              await settle(page);
-              if (await startBtn.count()) {
-                await startBtn.click().catch(() => {});
+              const tiles = page.locator('[data-testid^="deck-mode-"]');
+              const ids = [];
+              for (let k = 0; k < (await tiles.count()); k++) ids.push(await tiles.nth(k).getAttribute('data-testid'));
+              for (const id of ids) {
+                const mode = id.replace('deck-mode-', '');
+                if (!(await openDeck())) break;
+                await page.locator(`[data-testid="${id}"]`).click().catch(() => {});
                 await settle(page);
-                await snap('state-study-question');
-                const flip = page.locator('[data-testid="flip"], main button.primary').first();
+                await snap(`state-${mode}`);
+                const start = page.locator('[data-testid="study-start"]').first();
+                if (!(await start.count())) continue;
+                await start.click().catch(() => {});
+                await settle(page);
+                await snap(`state-${mode}-active`);
+                const flip = page.locator('[data-testid="flip"]').first();
                 if (await flip.count()) {
                   await flip.click().catch(() => {});
                   await settle(page);
-                  await snap('state-study-flipped');
+                  await snap(`state-${mode}-flipped`);
                 }
               }
             }

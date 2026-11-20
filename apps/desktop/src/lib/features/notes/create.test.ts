@@ -102,3 +102,69 @@ describe('<CreateScreen> on the dev mock', () => {
     expect(notes.items.map((n) => n.sort_field).sort()).toEqual(['cat', 'dog']);
   });
 });
+
+describe('paste to import', () => {
+  const preview = (field_separator: string): ImportPreview =>
+    ({
+      format: 'text',
+      text_options: { field_separator, record_separator: '\n', quotes: true, max_fields: null },
+      confidence: 0.9,
+      columns: 2,
+      rows: [['kedi', 'cat']],
+      total_rows: 1,
+      suggested_columns: [
+        { kind: 'field', key: 'front' },
+        { kind: 'field', key: 'back' },
+      ],
+      package: null,
+    }) as ImportPreview;
+
+  it.each([
+    ['\t', 'Tab'],
+    [' - ', 'Dash'],
+    ['  ', 'Spaces'],
+    [',', 'Comma'],
+  ])('the separator control shows the separator Rust detected (%j → %s)', async (sep, label) => {
+    const real = api.call.bind(api);
+    const spy = vi.spyOn(api, 'call').mockImplementation(((method: string, req: unknown) =>
+      method === 'io.import.preview' ? Promise.resolve(preview(sep)) : real(method as never, req as never)) as typeof api.call);
+    const { default: PastePanel } = await import('./PastePanel.svelte');
+    render(PastePanel, {
+      open: true,
+      notetypeId: CLASSIC_NOTETYPE_ID,
+      deckId: null,
+      columns: [
+        { key: 'front', label: 'Front' },
+        { key: 'back', label: 'Back' },
+      ],
+      onadd: () => {},
+    });
+    await fireEvent.input(await screen.findByLabelText('Text to import'), { target: { value: `kedi${sep}cat` } });
+    const group = await screen.findByRole('radiogroup', { name: 'Between term and definition' }, { timeout: 2000 });
+    const checked = Array.from(group.querySelectorAll('[aria-checked="true"]'), (b) => b.textContent?.trim());
+    expect(checked).toEqual([label]);
+    spy.mockRestore();
+  });
+});
+
+describe('dev mock of io.import.preview', () => {
+  it.each([
+    ['kedi\tcat\nköpek\tdog', '\t'],
+    ['kedi  cat\nköpek  dog', '  '],
+    ['kedi - cat\nköpek - dog', ' - '],
+  ])('detects the separator like fc-interop instead of always answering comma (%j)', async (text, sep) => {
+    const p = await api.call('io.import.preview', {
+      source: { kind: 'text', text },
+      format: 'text',
+      text_options: null,
+      notetype_id: CLASSIC_NOTETYPE_ID,
+      deck_id: null,
+      limit: 10,
+    });
+    expect(p.text_options?.field_separator).toBe(sep);
+    expect(p.rows).toEqual([
+      ['kedi', 'cat'],
+      ['köpek', 'dog'],
+    ]);
+  });
+});

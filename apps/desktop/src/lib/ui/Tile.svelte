@@ -12,12 +12,14 @@
     disabled?: boolean;
     onclick: () => void;
     class?: string;
+    /** `data-testid` of the button (test and visual-QA hooks). */
+    testid?: string;
   }
 
-  let { icon, title, description, meta, disabled = false, onclick, class: klass = '' }: Props = $props();
+  let { icon, title, description, meta, disabled = false, onclick, class: klass = '', testid }: Props = $props();
 </script>
 
-<button type="button" class="fc-tile {klass}" {disabled} {onclick}>
+<button type="button" class="fc-tile {klass}" {disabled} {onclick} data-testid={testid}>
   <span class="icon"><Icon {icon} size={24} /></span>
   <span class="title">{title}</span>
   {#if description}<span class="desc">{description}</span>{/if}

@@ -61,6 +61,8 @@
   });
 
   const result = $derived(paper?.result ?? null);
+  // An open paper (not yet graded) switches the shell to the focus layout.
+  $effect(() => ctx.setFocus?.(paper !== null && result === null));
   const verdict = (i: number): TestVerdict | null => result?.items.find((x) => x.index === i)?.verdict ?? null;
   const answered = $derived(paper ? testAnswers(paper.questions, input).length : 0);
   const misses = $derived(paper && result ? paper.questions.filter((q) => verdict(q.index) !== 'correct') : []);

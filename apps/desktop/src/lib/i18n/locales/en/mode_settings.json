@@ -1,0 +1,13 @@
+{
+  "nav": {
+    "mode_settings": "Modes and reading"
+  },
+  "mode_settings": {
+    "title": "Modes and reading",
+    "subtitle": "How the study modes look and behave, and reading defaults.",
+    "study": "Studying cards",
+    "practice": "Learn, test and match",
+    "reading": "Reading",
+    "empty": "All study modes and reading are switched off."
+  }
+}

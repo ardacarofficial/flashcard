@@ -219,7 +219,7 @@
       <h2 id="deck-modes" class="section-title">{t('deck_page.modes')}</h2>
       <ul class="modes">
         {#each modes as m (m.id)}
-          <li><Tile icon={m.icon} title={m.title} description={m.desc} meta={m.meta} onclick={() => go(m.route)} /></li>
+          <li><Tile icon={m.icon} title={m.title} description={m.desc} meta={m.meta} testid="deck-mode-{m.id}" onclick={() => go(m.route)} /></li>
         {/each}
       </ul>
     </section>

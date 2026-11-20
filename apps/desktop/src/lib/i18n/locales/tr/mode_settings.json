@@ -1,0 +1,13 @@
+{
+  "nav": {
+    "mode_settings": "Modlar ve okuma"
+  },
+  "mode_settings": {
+    "title": "Modlar ve okuma",
+    "subtitle": "Çalışma modlarının görünümü ve davranışı, okuma varsayılanları.",
+    "study": "Kart çalışma",
+    "practice": "Öğren, test ve eşleştir",
+    "reading": "Okuma",
+    "empty": "Tüm çalışma modları ve okuma kapalı."
+  }
+}

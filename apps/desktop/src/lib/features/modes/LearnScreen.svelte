@@ -63,6 +63,8 @@
 
   const card = $derived(session?.current ?? null);
   const learn = $derived(session?.modes?.learn ?? null);
+  // A running session switches the shell to the focus layout (no picker, no tabs).
+  $effect(() => ctx.setFocus?.(session !== null && card !== null && learn !== null));
   const progress = $derived((feedback?.session ?? session ?? finished)?.modes?.learn?.progress ?? null);
 
   function show(s: SessionDto) {
