@@ -30,6 +30,8 @@
   let active = $state<string | null>(null);
   let selectedDeck = $state<string | null>(null);
   let error = $state<string | null>(null);
+  /** A plugin the app switched off (repeated failures, hook budget), with the reason. */
+  let pluginNotice = $state<string | null>(null);
 
   const menu = $derived.by((): MenuItem[] => {
     const ui = modules.filter((m) => m.enabled).flatMap((m) => m.ui);
@@ -99,6 +101,14 @@
     void loadDecks();
     // Plugins installed/removed/switched change the menu (v0.7).
     const unsubModules = api.on(['plugins_changed', 'module_toggled'], () => void loadModules());
+    const unsubNotice = api.on('plugins_changed', (env) => {
+      if (env.event.type !== 'plugins_changed' || !env.event.data.auto_disabled) return;
+      const { plugin_id, reason } = env.event.data;
+      const label = td(`plugin.${plugin_id}.name`);
+      const name = label === `plugin.${plugin_id}.name` ? plugin_id : label;
+      const why = reason ? td(reason.key, reason.params) : '';
+      pluginNotice = [t('plugins.notice.auto_disabled', { name }), why].filter(Boolean).join(' ');
+    });
     // Live updates: any deck/study event (or undo/redo, import, restore) re-reads the tree.
     const unsub = api.on(
       ['deck_', 'study_', 'undone', 'redone', 'imported', 'collection_'],
@@ -107,6 +117,7 @@
     return () => {
       void unsub.then((u) => u());
       void unsubModules.then((u) => u());
+      void unsubNotice.then((u) => u());
     };
   });
 </script>
@@ -128,6 +139,12 @@
 
   <main>
     {#if error}<p class="error" role="alert">{error}</p>{/if}
+    {#if pluginNotice}
+      <p class="notice" role="status">
+        {pluginNotice}
+        <button onclick={() => (pluginNotice = null)}>{t('plugins.notice.dismiss')}</button>
+      </p>
+    {/if}
 
     {#if screen}
       {#if screen.deckPicker}

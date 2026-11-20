@@ -418,7 +418,8 @@ pub mod host {
             }
         }
 
-        /// Stores `value` at `key`.
+        /// Stores `value` at `key`. Needs the `storage:kv` permission; refused past the
+        /// plugin's storage quota.
         pub fn set<T: Serialize>(key: &str, value: &T) -> Result<()> {
             let value = serde_json::to_value(value).map_err(Error::json)?;
             call_raw("kv.set", json!({ "key": key, "value": value })).map(|_| ())

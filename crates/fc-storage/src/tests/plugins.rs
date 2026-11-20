@@ -69,6 +69,9 @@ fn plugins_packages_and_kv_roundtrip() {
             vec![("n".into(), json!(3))]
         );
         assert_eq!(r.list_plugin_kv("com.x.a", "").unwrap().len(), 2);
+        // "n" + "3", "other" + "\"x\"".
+        assert_eq!(r.plugin_kv_usage("com.x.a").unwrap(), (2, 2 + 5 + 3));
+        assert_eq!(r.plugin_kv_usage("com.x.b").unwrap(), (0, 0));
     });
     // Soft delete hides it from the default list; hard delete drops its storage.
     let mut gone = record("com.x.a", &sha);

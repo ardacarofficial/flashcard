@@ -146,7 +146,12 @@ plugin_id: string,
 /**
  * Disabled by the app after repeated failures (notify the user).
  */
-auto_disabled: boolean, } } | { "type": "plugin_notice", "data": { 
+auto_disabled: boolean, 
+/**
+ * With `auto_disabled`: why, when it was not repeated failures (e.g.
+ * `plugins.notice.hook_budget`).
+ */
+reason: I18nMessage | null, } } | { "type": "plugin_notice", "data": { 
 /**
  * The notice.
  */

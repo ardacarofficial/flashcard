@@ -99,6 +99,19 @@ impl<M: Mode> PluginRead for SqliteTx<'_, M> {
             |r| Ok((r.get(0)?, json(r, 1)?)),
         )
     }
+
+    fn plugin_kv_usage(&self, plugin_id: &str) -> StorageResult<(u64, u64)> {
+        let row = one(
+            self.conn(),
+            "plugin_kv",
+            "SELECT COUNT(*), COALESCE(SUM(length(CAST(key AS BLOB)) + length(CAST(value AS BLOB))), 0)
+             FROM plugin_kv WHERE plugin_id = ?1",
+            params![plugin_id],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
+        )?;
+        let (n, bytes) = row.unwrap_or((0, 0));
+        Ok((n.max(0) as u64, bytes.max(0) as u64))
+    }
 }
 
 impl PluginWrite for SqliteTx<'_, WriteMode> {

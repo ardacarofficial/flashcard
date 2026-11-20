@@ -21,7 +21,13 @@
 //! `fc_plugins::permission::FORBIDDEN_API_AREAS` — and hooks on those methods
 //! (`FORBIDDEN_HOOK_PREFIXES`). A hook also needs the hooked method's own permission.
 //!
-//! Changes made by plugins never trigger `after:`/`event:` hooks (no cascades). A failing
+//! Changes made by plugins never trigger `after:`/`event:` hooks (no cascades): plugin
+//! writes, and the rollback of a failed plugin call, run as the plugin's actor; and nothing
+//! that happens *while* a hook runs (whatever the actor) is queued for `event:` hooks.
+//! **Hook budget:** one user action may run at most `plugins.max_hooks_per_action` hooks, and
+//! no hook may start inside another ([`Config::max_hook_depth`]). Past either, the action's
+//! remaining hooks are dropped, the plugin that would have run is switched off and the user
+//! is told (`plugins_changed` with `reason = plugins.notice.hook_budget`). A failing
 //! plugin never stops the core operation (a failing `before:` hook = continue without it,
 //! unless `plugins.before_hook_failure = reject`); faults (trap, fuel, deadline, memory, ABI)
 //! are counted and the plugin is switched off after `plugins.max_failures` in a row.
@@ -52,6 +58,7 @@ use fc_plugins::{
 use fc_storage::repo::PluginRecord;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::thread::ThreadId;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::path::PathBuf;
@@ -102,6 +109,15 @@ pub(crate) struct Config {
     pub limits: Limits,
     pub max_failures: u32,
     pub reject_on_hook_failure: bool,
+    /// Hooks one user action may run, all plugins together.
+    pub max_hooks_per_action: u32,
+    /// Hooks that may be running at once on one thread (1 = a hook never starts inside
+    /// another; nothing legitimate nests them).
+    pub max_hook_depth: u32,
+    /// Private storage per plugin: entries.
+    pub kv_max_keys: u64,
+    /// Private storage per plugin: bytes (keys + JSON values).
+    pub kv_max_bytes: u64,
 }
 
 impl Default for Config {
@@ -110,7 +126,43 @@ impl Default for Config {
             limits: Limits::default(),
             max_failures: 3,
             reject_on_hook_failure: false,
+            max_hooks_per_action: 200,
+            max_hook_depth: 1,
+            kv_max_keys: 10_000,
+            kv_max_bytes: 16 * 1024 * 1024,
         }
+    }
+}
+
+/// Hook accounting of the user action running on one thread (host calls are serviced on
+/// the thread that started the action, so nested work lands here too).
+#[derive(Debug, Default)]
+struct ActionState {
+    /// Open [`ActionScope`]s (nested dispatches).
+    scopes: u32,
+    /// Hooks running now.
+    depth: u32,
+    /// Hooks run so far in this action.
+    invocations: u32,
+    /// The budget was exceeded: no more hooks in this action.
+    tripped: bool,
+}
+
+/// One dispatch of [`App::invoke_hooked`]; the outermost one is the user action.
+pub(crate) struct ActionScope<'a>(&'a PluginHost);
+
+impl Drop for ActionScope<'_> {
+    fn drop(&mut self) {
+        self.0.with_action(|a| a.scopes = a.scopes.saturating_sub(1));
+    }
+}
+
+/// A running hook (see [`PluginHost::enter_hook`]).
+pub(crate) struct HookGuard<'a>(&'a PluginHost);
+
+impl Drop for HookGuard<'_> {
+    fn drop(&mut self) {
+        self.0.with_action(|a| a.depth = a.depth.saturating_sub(1));
     }
 }
 
@@ -149,6 +201,7 @@ pub(crate) struct Core {
     config: RwLock<Config>,
     counts: Mutex<HashMap<String, u32>>,
     pending: Mutex<Vec<RecordPluginFailure>>,
+    actions: Mutex<HashMap<ThreadId, ActionState>>,
     logs: Mutex<HashMap<String, VecDeque<PluginLogEntry>>>,
 }
 
@@ -200,6 +253,7 @@ impl Core {
                     failures: 0,
                     error: None,
                     disable: false,
+                    reason: None,
                 }
             }
             Err(e) if e.kind.is_fault() => {
@@ -209,14 +263,40 @@ impl Core {
                     failures: *count,
                     error: Some(e.to_string()),
                     disable: *count >= max,
+                    reason: None,
                 }
             }
             _ => return,
         };
+        drop(counts);
+        self.push_pending(entry);
+    }
+
+    fn push_pending(&self, entry: RecordPluginFailure) {
         if let Ok(mut p) = self.pending.lock() {
             p.retain(|r| r.id != entry.id || r.disable);
             p.push(entry);
         }
+    }
+
+    /// Switches `plugin` off at the end of the action, telling the user why.
+    fn disable(&self, plugin: &str, error: String, reason: I18nMessage) {
+        let failures = self
+            .counts
+            .lock()
+            .map(|mut c| {
+                let n = c.entry(plugin.to_owned()).or_insert(0);
+                *n += 1;
+                *n
+            })
+            .unwrap_or(1);
+        self.push_pending(RecordPluginFailure {
+            id: plugin.to_owned(),
+            failures,
+            error: Some(error),
+            disable: true,
+            reason: Some(reason),
+        });
     }
 
     /// Runs `op` with no host access (engines).
@@ -303,7 +383,7 @@ fn denied(func: &str, permission: &str, reason: &str) -> AppError {
     )
 }
 
-fn read_settings_config(reads: &dyn fc_storage::Reads) -> Config {
+pub(crate) fn read_settings_config(reads: &dyn fc_storage::Reads) -> Config {
     use fc_core::settings::SettingScope;
     let get = |key: &str| -> Option<Value> { reads.get_setting(&SettingScope::App, key).ok().flatten() };
     let int = |key: &str, default: u64| get(key).and_then(|v| v.as_u64()).unwrap_or(default);
@@ -320,6 +400,15 @@ fn read_settings_config(reads: &dyn fc_storage::Reads) -> Config {
             .unwrap_or(d.max_failures),
         reject_on_hook_failure: get(super::SETTING_HOOK_FAILURE)
             .is_some_and(|v| v.as_str() == Some("reject")),
+        max_hooks_per_action: u32::try_from(int(
+            super::SETTING_MAX_HOOKS,
+            u64::from(d.max_hooks_per_action),
+        ))
+        .unwrap_or(d.max_hooks_per_action),
+        max_hook_depth: d.max_hook_depth,
+        kv_max_keys: int(super::SETTING_KV_MAX_KEYS, d.kv_max_keys),
+        kv_max_bytes: int(super::SETTING_KV_MAX_MB, d.kv_max_bytes / (1024 * 1024))
+            .saturating_mul(1024 * 1024),
     }
 }
 
@@ -333,6 +422,98 @@ impl PluginHost {
 
     fn picker(&self) -> Option<Arc<dyn FilePicker>> {
         self.picker.read().ok().and_then(|p| p.clone())
+    }
+
+    /// Runs `f` on this thread's action state; drops the state once nothing uses it.
+    fn with_action<T>(&self, f: impl FnOnce(&mut ActionState) -> T) -> Option<T> {
+        let mut actions = self.core.actions.lock().ok()?;
+        let id = std::thread::current().id();
+        let state = actions.entry(id).or_default();
+        let out = f(state);
+        if state.scopes == 0 && state.depth == 0 {
+            actions.remove(&id);
+        }
+        Some(out)
+    }
+
+    /// Opens a dispatch; the outermost one on a thread starts a fresh hook budget.
+    pub(crate) fn begin_action(&self) -> ActionScope<'_> {
+        self.with_action(|a| a.scopes += 1);
+        ActionScope(self)
+    }
+
+    /// Events waiting for `event:` hooks.
+    #[cfg(test)]
+    pub(crate) fn queued_events(&self) -> usize {
+        self.events.lock().map(|q| q.len()).unwrap_or(0)
+    }
+
+    /// Plugins waiting to be switched off at the end of the action.
+    #[cfg(test)]
+    pub(crate) fn pending_disables(&self) -> Vec<String> {
+        self.core
+            .pending
+            .lock()
+            .map(|p| p.iter().filter(|r| r.disable).map(|r| r.id.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Whether a hook is running on this thread.
+    fn in_hook(&self) -> bool {
+        self.core
+            .actions
+            .lock()
+            .is_ok_and(|a| a.get(&std::thread::current().id()).is_some_and(|s| s.depth > 0))
+    }
+
+    /// Admits one hook run of `plugin` against the action's budget. Past the budget (too
+    /// many hooks in this action, or a hook inside a hook) the action runs no more hooks,
+    /// queued events are dropped and `plugin` is switched off with a notice.
+    pub(crate) fn enter_hook(
+        &self,
+        app: &App,
+        plugin: &str,
+        hook: &str,
+    ) -> Option<HookGuard<'_>> {
+        let config = self.core.config();
+        let verdict = self.with_action(|a| {
+            if a.tripped {
+                return Err(None);
+            }
+            if a.depth >= config.max_hook_depth.max(1) {
+                a.tripped = true;
+                return Err(Some("depth"));
+            }
+            if a.invocations >= config.max_hooks_per_action.max(1) {
+                a.tripped = true;
+                return Err(Some("count"));
+            }
+            a.depth += 1;
+            a.invocations += 1;
+            Ok(())
+        })?;
+        match verdict {
+            Ok(()) => Some(HookGuard(self)),
+            Err(None) => None,
+            Err(Some(limit)) => {
+                if let Ok(mut q) = self.events.lock() {
+                    q.clear();
+                }
+                let message = format!(
+                    "HOOK_BUDGET: {hook} exceeded the hook budget of one action ({limit}: at most {} hooks, {} at a time)",
+                    config.max_hooks_per_action, config.max_hook_depth
+                );
+                self.core.log(plugin, LogLevel::Error, &message, app.now());
+                self.core.disable(
+                    plugin,
+                    message,
+                    I18nMessage::key("plugins.notice.hook_budget")
+                        .param("hook", hook)
+                        .param("max", config.max_hooks_per_action.to_string()),
+                );
+                None
+            }
+        }
     }
 
     /// Active plugin by id.
@@ -588,6 +769,9 @@ impl PluginHost {
             else {
                 continue;
             };
+            let Some(_running) = self.enter_hook(app, &id, &hook) else {
+                break;
+            };
             let input = json!({ "hook": hook, "method": method, "params": params.clone() });
             let (r, _) = self.run_op(app, &plugin, ops::HOOK_BEFORE, input, Mode::Hook);
             let decided = r.and_then(|v| {
@@ -645,8 +829,12 @@ impl PluginHost {
             .unwrap_or_default();
         for id in ids {
             if let Some(plugin) = self.get(&id).filter(|p| hook_allowed(app.registry(), p, method)) {
+                let hook = format!("after:{method}");
+                let Some(_running) = self.enter_hook(app, &id, &hook) else {
+                    return;
+                };
                 let input = json!({
-                    "hook": format!("after:{method}"),
+                    "hook": hook,
                     "method": method,
                     "params": params,
                     "response": response,
@@ -658,7 +846,9 @@ impl PluginHost {
 
     /// Keeps committed events for `event:` hooks (not those caused by plugins).
     pub(crate) fn queue_events(&self, events: &[DomainEvent], actor: &Actor) {
-        if matches!(actor, Actor::Plugin(_)) || events.is_empty() {
+        // Re-entrancy guard: whatever a hook causes (its writes, a rollback, a nested
+        // dispatch) never feeds hooks again, whatever the actor.
+        if matches!(actor, Actor::Plugin(_)) || events.is_empty() || self.in_hook() {
             return;
         }
         let Ok(l) = self.loaded.read() else {
@@ -696,7 +886,11 @@ impl PluginHost {
             let value = serde_json::to_value(&event).unwrap_or(Value::Null);
             for id in ids {
                 if let Some(plugin) = self.get(&id) {
-                    let input = json!({ "hook": format!("event:{kind}"), "event": value });
+                    let hook = format!("event:{kind}");
+                    let Some(_running) = self.enter_hook(app, &id, &hook) else {
+                        return;
+                    };
+                    let input = json!({ "hook": hook, "event": value });
                     let _ = self.run_op(app, &plugin, ops::HOOK_EVENT, input, Mode::Reaction);
                 }
             }
@@ -834,9 +1028,11 @@ impl OpHost<'_> {
                     method: format!("{}.{}", fc_api::API_VERSION, PluginsRollback::NAME),
                     params: json!({ "calls": group.inverses_rev() }),
                 };
+                // As the plugin: undoing its writes must not look like a user or system change
+                // (that would feed `event:` hooks and could cascade).
                 let _ = self.app.invoke_with(
                     &request,
-                    &Actor::System,
+                    &actor,
                     OplogMode::Discard(Some(group.batch_id())),
                 );
             }
@@ -910,6 +1106,7 @@ impl OpHost<'_> {
             plugin_id: self.plugin.id().to_owned(),
             key,
             value,
+            restore: false,
         })
         .map(|_| Value::Null)
     }
@@ -1007,6 +1204,9 @@ impl OpHost<'_> {
                 Ok(json!(tx.list_plugin_kv(&id, &a.prefix)?))
             }
             host_fns::KV_SET => {
+                // Writing storage needs its own permission (declared and granted); deleting
+                // never does, so a plugin can always clean up.
+                self.require(func, "storage:kv")?;
                 let a: KeyArgs = Self::args(func, args)?;
                 self.kv_write(a.key, Some(a.value.unwrap_or(Value::Null)))
             }

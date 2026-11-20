@@ -40,6 +40,18 @@
           "continue": "Continue without it",
           "reject": "Cancel the action"
         }
+      },
+      "max_hooks_per_action": {
+        "label": "Plugin reactions per action",
+        "description": "Most plugin hooks one action of yours may set off. A plugin going past it is switched off."
+      },
+      "kv_max_keys": {
+        "label": "Storage entries per plugin",
+        "description": "Most entries one plugin may keep in its own storage."
+      },
+      "kv_max_mb": {
+        "label": "Storage size per plugin (MB)",
+        "description": "Most space one plugin's own storage may take."
       }
     },
     "tts": {
@@ -110,7 +122,12 @@
       "usage": "Disk use: {size} MB"
     },
     "saved": "Saved.",
-    "file_filter": "Flashcard plugin"
+    "file_filter": "Flashcard plugin",
+    "notice": {
+      "auto_disabled": "“{name}” was switched off.",
+      "hook_budget": "It set off too many reactions in one action ({hook}; at most {max}).",
+      "dismiss": "Dismiss"
+    }
   },
   "jobs": {
     "plugins": {

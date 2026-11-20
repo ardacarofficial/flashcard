@@ -53,7 +53,7 @@ export default {
       if (!p) throw err('NOT_FOUND_PLUGIN', 'errors.not_found.plugin', id);
       return p;
     };
-    const changed = (id: string) => emit({ type: 'plugins_changed', data: { plugin_id: id, auto_disabled: false } });
+    const changed = (id: string) => emit({ type: 'plugins_changed', data: { plugin_id: id, auto_disabled: false, reason: null } });
     const quiz = (step: number, correct: boolean | null): UiNode => ({
       kind: 'column',
       children: [

@@ -4,7 +4,12 @@
 //! * **Deadline:** wall-clock time spent *inside the plugin* is capped by
 //!   [`Limits::timeout`] (epoch interruption; time the plugin waits for a host call does not
 //!   count). An infinite loop ends either way.
-//! * **Memory:** linear memory may not grow past [`Limits::memory_bytes`].
+//! * **Memory:** all linear memory of an instance *together* may not grow past
+//!   [`Limits::memory_bytes`]; tables together are capped at [`MAX_TABLE_ELEMENTS`]. One
+//!   memory, a few tables, one instance. Proposals a plugin does not need and that would let
+//!   it get around these caps or the host's assumptions are switched off (multi-memory,
+//!   threads/shared memory, memory64, custom page sizes, GC, exceptions, stack switching,
+//!   component model…).
 //! * **Isolation:** a trap (panic, `unreachable`, out-of-bounds access…) becomes a
 //!   [`PluginError`]; the host never panics because of a plugin. Every call gets a fresh
 //!   instance (no state leaks between calls or after a failure).
@@ -26,7 +31,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 use wasmtime::{
-    AsContextMut, Caller, Config, Engine, InstancePre, Linker, Module, ResourceLimiter, Store, Trap,
+    AsContextMut, Caller, Config, Engine, InstancePre, Linker, Module, ResourceLimiter, Store,
+    Trap, WasmFeatures,
 };
 
 /// Epoch tick.
@@ -148,32 +154,80 @@ impl HostCalls for PureHost {
     }
 }
 
-struct Limiter {
-    memory_bytes: usize,
-    hit: bool,
+/// Most table elements one instance may hold, all tables together.
+pub const MAX_TABLE_ELEMENTS: usize = 100_000;
+/// Most tables per instance.
+const MAX_TABLES: usize = 4;
+
+/// Caps what one call may allocate. Totals are kept over *all* memories and tables of the
+/// store, so splitting an allocation over several of them gains nothing.
+#[derive(Debug)]
+pub(crate) struct Limiter {
+    pub(crate) memory_bytes: usize,
+    /// Bytes of linear memory in use, all memories.
+    pub(crate) memory_total: usize,
+    /// Table elements in use, all tables.
+    pub(crate) table_total: usize,
+    pub(crate) hit: bool,
+}
+
+impl Limiter {
+    pub(crate) fn new(memory_bytes: usize) -> Self {
+        Self {
+            memory_bytes,
+            memory_total: 0,
+            table_total: 0,
+            hit: false,
+        }
+    }
 }
 
 impl ResourceLimiter for Limiter {
     fn memory_growing(
         &mut self,
-        _current: usize,
+        current: usize,
         desired: usize,
         _maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
-        if desired > self.memory_bytes {
+        let total = self
+            .memory_total
+            .saturating_sub(current)
+            .saturating_add(desired);
+        if total > self.memory_bytes {
             self.hit = true;
             return Ok(false);
         }
+        self.memory_total = total;
         Ok(true)
     }
 
     fn table_growing(
         &mut self,
-        _current: usize,
+        current: usize,
         desired: usize,
         _maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
-        Ok(desired <= 100_000)
+        let total = self
+            .table_total
+            .saturating_sub(current)
+            .saturating_add(desired);
+        if total > MAX_TABLE_ELEMENTS {
+            return Ok(false);
+        }
+        self.table_total = total;
+        Ok(true)
+    }
+
+    fn instances(&self) -> usize {
+        1
+    }
+
+    fn tables(&self) -> usize {
+        MAX_TABLES
+    }
+
+    fn memories(&self) -> usize {
+        1
     }
 }
 
@@ -313,6 +367,25 @@ impl Runtime {
         config.consume_fuel(true);
         config.epoch_interruption(true);
         config.max_wasm_stack(1024 * 1024);
+        // Only what plugins need: one memory, no shared memory, no 64-bit memory (the memory
+        // cap and the host's 32-bit pointers rely on it), nothing that changes control flow
+        // or allocation outside the limiter.
+        config.wasm_features(
+            WasmFeatures::MULTI_MEMORY
+                | WasmFeatures::THREADS
+                | WasmFeatures::SHARED_EVERYTHING_THREADS
+                | WasmFeatures::MEMORY64
+                | WasmFeatures::CUSTOM_PAGE_SIZES
+                | WasmFeatures::COMPONENT_MODEL
+                | WasmFeatures::GC
+                | WasmFeatures::FUNCTION_REFERENCES
+                | WasmFeatures::EXCEPTIONS
+                | WasmFeatures::LEGACY_EXCEPTIONS
+                | WasmFeatures::STACK_SWITCHING
+                | WasmFeatures::WIDE_ARITHMETIC
+                | WasmFeatures::RELAXED_SIMD,
+            false,
+        );
         let engine = Engine::new(&config).map_err(|e| PluginError::abi(format!("engine: {e}")))?;
         let mut linker = Linker::new(&engine);
         linker
@@ -487,10 +560,7 @@ fn run(
     let mut store = Store::new(
         engine,
         CallState {
-            limiter: Limiter {
-                memory_bytes: limits.memory_bytes,
-                hit: false,
-            },
+            limiter: Limiter::new(limits.memory_bytes),
             to_host,
             from_host,
             pending: None,

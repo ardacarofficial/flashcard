@@ -16,6 +16,9 @@ pub const HOST_PERMISSIONS: &[&str] = &[
     "models:manage",
     "tts:provide",
     "card_types:provide",
+    // Its own private storage (`kv.set`; reading its own storage needs nothing). Bounded by
+    // a per-plugin quota the user sets (`plugins.kv_max_keys`, `plugins.kv_max_mb`).
+    "storage:kv",
 ];
 
 /// UI contribution points (`ui:<point>`).
@@ -284,6 +287,7 @@ mod tests {
             })
         );
         assert_eq!(k("tts:provide"), Ok(PermissionKind::Host));
+        assert_eq!(k("storage:kv"), Ok(PermissionKind::Host));
         assert_eq!(
             k("hooks:before:notes.create"),
             Ok(PermissionKind::Hook(HookPoint::Before(

@@ -40,6 +40,18 @@
           "continue": "Eklentisiz devam et",
           "reject": "İşlemi iptal et"
         }
+      },
+      "max_hooks_per_action": {
+        "label": "İşlem başına eklenti tepkisi",
+        "description": "Yaptığın tek bir işlemin tetikleyebileceği en fazla eklenti kancası. Bunu aşan eklenti kapatılır."
+      },
+      "kv_max_keys": {
+        "label": "Eklenti başına depo kaydı",
+        "description": "Bir eklentinin kendi deposunda tutabileceği en fazla kayıt."
+      },
+      "kv_max_mb": {
+        "label": "Eklenti başına depo boyutu (MB)",
+        "description": "Bir eklentinin kendi deposunun kaplayabileceği en fazla yer."
       }
     },
     "tts": {
@@ -110,7 +122,12 @@
       "usage": "Disk kullanımı: {size} MB"
     },
     "saved": "Kaydedildi.",
-    "file_filter": "Flashcard eklentisi"
+    "file_filter": "Flashcard eklentisi",
+    "notice": {
+      "auto_disabled": "“{name}” kapatıldı.",
+      "hook_budget": "Tek bir işlemde çok fazla tepki tetikledi ({hook}; en çok {max}).",
+      "dismiss": "Kapat"
+    }
   },
   "jobs": {
     "plugins": {

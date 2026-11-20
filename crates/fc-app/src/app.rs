@@ -494,6 +494,8 @@ impl App {
         trusted: bool,
         hooks: Hooks<'_>,
     ) -> AppResult<Value> {
+        // The outermost dispatch on this thread is one user action (hook budget, v0.7).
+        let _action = self.plugins.begin_action();
         let name = parse_qualified_name(method).ok_or_else(|| unknown_method(method))?;
         let Some(entry) = self.registry.entry(name) else {
             // Methods registered at runtime (plugin commands): run outside a transaction.

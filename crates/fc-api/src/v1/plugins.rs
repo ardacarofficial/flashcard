@@ -600,6 +600,10 @@ pub struct SetPluginKv {
     /// Value.
     #[ts(type = "unknown")]
     pub value: Option<Value>,
+    /// Puts back an earlier value (undo, redo, rollback of a failed call): not checked
+    /// against the storage quota, which the value already passed.
+    #[serde(default)]
+    pub restore: bool,
 }
 
 /// Internal: records a plugin failure (and the automatic disable).
@@ -614,6 +618,9 @@ pub struct RecordPluginFailure {
     pub error: Option<String>,
     /// Switch the plugin off.
     pub disable: bool,
+    /// Why it is switched off, for the user (`plugins.notice.*`; none = repeated failures).
+    #[serde(default)]
+    pub reason: Option<super::common::I18nMessage>,
 }
 
 /// Internal: crash recovery of an interrupted plugin operation.

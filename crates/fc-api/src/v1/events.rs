@@ -169,6 +169,10 @@ pub enum DomainEvent {
         plugin_id: String,
         /// Disabled by the app after repeated failures (notify the user).
         auto_disabled: bool,
+        /// With `auto_disabled`: why, when it was not repeated failures (e.g.
+        /// `plugins.notice.hook_budget`).
+        #[serde(default)]
+        reason: Option<I18nMessage>,
     },
     /// A plugin asked to show a notice (`host.ui.notify`, v0.7).
     PluginNotice {

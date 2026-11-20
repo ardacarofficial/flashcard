@@ -57,6 +57,12 @@ pub const SETTING_MEMORY: &str = "plugins.memory_mb";
 pub const SETTING_MAX_FAILURES: &str = "plugins.max_failures";
 /// Setting: what a failing `before:` hook does (`continue` without it, or `reject`).
 pub const SETTING_HOOK_FAILURE: &str = "plugins.before_hook_failure";
+/// Setting: hooks one user action may run (all plugins); past it the plugin is switched off.
+pub const SETTING_MAX_HOOKS: &str = "plugins.max_hooks_per_action";
+/// Setting: private storage entries per plugin.
+pub const SETTING_KV_MAX_KEYS: &str = "plugins.kv_max_keys";
+/// Setting: private storage size per plugin (MiB).
+pub const SETTING_KV_MAX_MB: &str = "plugins.kv_max_mb";
 
 fn int_setting(key: &str, default: i64, min: i64, max: i64, advanced: bool) -> SettingDef {
     SettingDef {
@@ -87,6 +93,9 @@ pub fn descriptor() -> ModuleDescriptor {
             int_setting(SETTING_MEMORY, 64, 1, 2048, true),
             int_setting(SETTING_MAX_FAILURES, 3, 1, 100, false),
             choice_setting(SETTING_HOOK_FAILURE, &["continue", "reject"], "continue"),
+            int_setting(SETTING_MAX_HOOKS, 200, 1, 10_000, true),
+            int_setting(SETTING_KV_MAX_KEYS, 10_000, 1, 1_000_000, true),
+            int_setting(SETTING_KV_MAX_MB, 16, 1, 1024, true),
         ],
         ui: vec![main_menu("plugins.manager", "nav.plugins", "puzzle", "/plugins", 92)],
     }
@@ -220,6 +229,7 @@ fn changed(id: &str) -> DomainEvent {
     DomainEvent::PluginsChanged {
         plugin_id: id.to_owned(),
         auto_disabled: false,
+        reason: None,
     }
 }
 
@@ -775,6 +785,9 @@ fn kv_set(req: SetPluginKv, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
         return Err(crate::support::invalid("kv value larger than 1 MiB"));
     }
     let old = ctx.reads().get_plugin_kv(&req.plugin_id, &req.key)?;
+    if !req.restore {
+        check_kv_quota(ctx.reads(), &req, old.as_ref())?;
+    }
     ctx.tx
         .set_plugin_kv(&req.plugin_id, &req.key, req.value.as_ref(), ctx.now)?;
     // The way back, so a failed plugin call rolls its storage back with everything else.
@@ -785,6 +798,7 @@ fn kv_set(req: SetPluginKv, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
             plugin_id: req.plugin_id.clone(),
             key: req.key.clone(),
             value: old,
+            restore: true,
         })?]
     };
     Ok(CommandOutcome {
@@ -793,6 +807,35 @@ fn kv_set(req: SetPluginKv, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
         summary: summary::<PluginsKvSet>(),
         events: vec![],
     })
+}
+
+/// A write that makes a plugin's storage bigger must stay within its quota (app settings
+/// `plugins.kv_max_keys` / `plugins.kv_max_mb`, which plugins cannot change). Shrinking
+/// writes always pass, so a full store can be cleaned up.
+fn check_kv_quota(reads: &dyn Reads, req: &SetPluginKv, old: Option<&Value>) -> AppResult<()> {
+    let size = |v: Option<&Value>| v.map_or(0, |v| (req.key.len() + v.to_string().len()) as u64);
+    let (old_size, new_size) = (size(old), size(req.value.as_ref()));
+    let adds_key = old.is_none() && req.value.is_some();
+    if !adds_key && new_size <= old_size {
+        return Ok(());
+    }
+    let config = host::read_settings_config(reads);
+    let (keys, bytes) = reads.plugin_kv_usage(&req.plugin_id)?;
+    let keys = keys + u64::from(adds_key);
+    let bytes = bytes.saturating_sub(old_size).saturating_add(new_size);
+    if keys > config.kv_max_keys || bytes > config.kv_max_bytes {
+        return Err(AppError::Api(
+            ApiError::new(
+                ErrorCode::ValidationInvalidParams,
+                format!("plugin storage quota exceeded for {}", req.plugin_id),
+            )
+            .with_detail("plugin_id", req.plugin_id.clone())
+            .with_detail("max_keys", config.kv_max_keys)
+            .with_detail("max_bytes", config.kv_max_bytes)
+            .with_detail("quota", "kv"),
+        ));
+    }
+    Ok(())
 }
 
 fn record_failure(
@@ -820,6 +863,7 @@ fn record_failure(
             vec![DomainEvent::PluginsChanged {
                 plugin_id: req.id,
                 auto_disabled: true,
+                reason: req.reason,
             }]
         } else {
             vec![]

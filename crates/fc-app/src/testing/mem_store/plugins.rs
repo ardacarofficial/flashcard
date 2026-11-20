@@ -69,6 +69,18 @@ impl PluginRead for MemTx<'_> {
             .map(|((_, k), v)| (k.clone(), v.clone()))
             .collect())
     }
+
+    fn plugin_kv_usage(&self, plugin_id: &str) -> StorageResult<(u64, u64)> {
+        let s = self.s();
+        let mut usage = (0u64, 0u64);
+        for ((p, k), v) in &s.domains.plugins.kv {
+            if p == plugin_id {
+                usage.0 += 1;
+                usage.1 += (k.len() + v.to_string().len()) as u64;
+            }
+        }
+        Ok(usage)
+    }
 }
 
 impl PluginWrite for MemTx<'_> {

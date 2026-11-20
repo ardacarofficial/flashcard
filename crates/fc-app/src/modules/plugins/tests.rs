@@ -9,7 +9,8 @@
 use super::*;
 use crate::testing::{MemStore, TempSqlite, TestApp};
 use fc_api::v1::cardtypes::{CardInteraction, CardRef};
-use fc_api::v1::decks::{CreateDeck, DeckDto};
+use fc_api::v1::decks::{CreateDeck, DeckDto, DeckRef};
+use fc_api::InvokeRequest;
 use fc_api::v1::modules::UiSlot;
 use fc_api::v1::notes::{CreateNote, NoteDto, NoteRef};
 use fc_api::v1::cardtypes::{CreateNoteType, NoteTypeInput};
@@ -53,6 +54,9 @@ suite!(
     hooks_cannot_reach_management_io_or_settings,
     plugins_get_no_free_paths_or_app_settings,
     plugin_storage_rolls_back_with_the_call,
+    failed_hook_rollback_does_not_cascade,
+    hook_budget_per_action,
+    plugin_storage_needs_permission_and_quota,
 );
 
 const AUTOFILL: &str = "com.example.autofill";
@@ -371,7 +375,7 @@ fn example_hook_fills_a_field(f: Factory) {
         &t,
         &dir,
         "autofill",
-        &["hooks:before:notes.create", "notes:write", "notetypes:read", "ui:command"],
+        &["hooks:before:notes.create", "notes:write", "notetypes:read", "ui:command", "storage:kv"],
     );
     let filled = classic(&t, &d, "sword", "");
     assert_eq!(filled.fields["back"], "kılıç");
@@ -447,6 +451,9 @@ fn host_calls_without_permission_are_refused(f: Factory) {
     assert_eq!(t.ok::<DecksList>(Empty {}), before, "nothing was written");
     // What is granted works.
     assert!(run(&t, MISBEHAVE, "allowed").unwrap().result["decks"].is_array());
+    // Writing its own storage needs `storage:kv` too.
+    let e = run(&t, MISBEHAVE, "kv").unwrap_err();
+    assert_eq!(e.details["code"], json!("PERMISSION_DENIED"));
     // The same check every caller goes through: a plugin actor without the grant…
     let actor = Actor::Plugin(MISBEHAVE.into());
     let e = t
@@ -556,7 +563,7 @@ fn misbehaving_plugins_cannot_crash_the_app(f: Factory) {
     assert!(p.last_error.is_some());
     assert!(t.take_events().iter().any(|e| matches!(
         &e.event,
-        DomainEvent::PluginsChanged { plugin_id, auto_disabled: true } if plugin_id == MISBEHAVE
+        DomainEvent::PluginsChanged { plugin_id, auto_disabled: true, reason: None } if plugin_id == MISBEHAVE
     )));
     assert_eq!(run(&t, MISBEHAVE, "ok").unwrap_err().code, ErrorCode::ConflictPluginInactive);
     // Its hooks are off now.
@@ -591,7 +598,7 @@ fn misbehaving_plugins_cannot_crash_the_app(f: Factory) {
 fn failed_operations_roll_back(f: Factory) {
     let t = TestApp::new(f());
     let dir = tempfile::tempdir().unwrap();
-    install(&t, &dir, "misbehave", &["ui:command", "decks:read", "decks:write"]);
+    install(&t, &dir, "misbehave", &["ui:command", "decks:read", "decks:write", "storage:kv"]);
     let before = t.ok::<DecksList>(Empty {});
     let status = t.ok::<OplogStatus>(Empty {});
     assert_eq!(fault_kind(run(&t, MISBEHAVE, "write-panic")), "TRAP");
@@ -687,7 +694,7 @@ fn install_update_uninstall_are_undoable(f: Factory) {
 
     let p = t.ok::<PluginsInstall>(InstallPlugin {
         path: path.clone(),
-        grant: vec!["ui:command".into()],
+        grant: vec!["ui:command".into(), "storage:kv".into()],
     });
     assert_eq!((p.version.as_str(), p.status), ("1.0.0", PluginStatus::Active));
     assert_eq!(p.contributes.commands.len(), 8);
@@ -1074,7 +1081,7 @@ fn plugins_get_no_free_paths_or_app_settings(f: Factory) {
 fn plugin_storage_rolls_back_with_the_call(f: Factory) {
     let t = TestApp::new(f());
     let dir = tempfile::tempdir().unwrap();
-    install(&t, &dir, "escape", &["ui:command", "decks:write"]);
+    install(&t, &dir, "escape", &["ui:command", "decks:write", "storage:kv"]);
     let status = t.ok::<OplogStatus>(Empty {});
     assert_eq!(fault_kind(run(&t, ESCAPE, "kv-then-panic")), "TRAP");
     assert_eq!(kv(&t, "secret"), None, "storage written before the crash is gone");
@@ -1097,4 +1104,163 @@ fn plugin_storage_rolls_back_with_the_call(f: Factory) {
     redo(&t);
     assert_eq!(kv(&t, "deck"), Some(json!(true)));
     assert_eq!(kv(&t, "n"), Some(json!(2)));
+}
+
+// ------------------------------------------------------------------ security re-review
+
+/// Installs a hand-written WAT plugin `id` (`wat`) declaring `permissions` and `commands`,
+/// granting `grant`.
+fn install_wat(
+    t: &TestApp,
+    dir: &tempfile::TempDir,
+    id: &str,
+    wat: &str,
+    permissions: &[&str],
+    commands: &[&str],
+    grant: &[&str],
+) -> PluginDto {
+    let list = |xs: &[&str]| xs.iter().map(|p| format!("\"{p}\"")).collect::<Vec<_>>().join(", ");
+    let manifest = format!(
+        "id = \"{id}\"\nname = \"{id}\"\nversion = \"1.0.0\"\napi_version = \"1\"\n\
+         authors = [\"Flashcard\"]\ndescription = \"Test fixture.\"\nmin_app_version = \"0.7.0\"\n\
+         permissions = [{}]\n\n[contributes]\ncommands = [{}]\n",
+        list(permissions),
+        list(commands),
+    );
+    let wasm = fc_plugins::testing::wat2wasm(wat.as_bytes()).unwrap();
+    let bytes = fc_plugins::package::pack(&manifest, &wasm, &[]).unwrap();
+    let path = dir.path().join(format!("{id}.fcplugin"));
+    std::fs::write(&path, bytes).unwrap();
+    t.ok::<PluginsInstall>(InstallPlugin {
+        path: path.display().to_string(),
+        grant: grant.iter().map(|g| (*g).to_owned()).collect(),
+    })
+}
+
+fn log_lines(t: &TestApp, id: &str, needle: &str) -> usize {
+    t.ok::<PluginsLogs>(PluginRef { id: id.into() })
+        .entries
+        .iter()
+        .filter(|l| l.message.contains(needle))
+        .count()
+}
+
+/// Finding 1, the exact repro: an `event:deck_deleted` hook creates decks PA and PB, then
+/// fails. Its writes are rolled back as the plugin, so neither they nor the rollback feed
+/// hooks again: one hook run per user action, deck count constant, every action fast.
+/// (Before the fix: 1 → 8 → 39 → 166+ hook runs, over 60 s by round 7.)
+fn failed_hook_rollback_does_not_cascade(f: Factory) {
+    const ID: &str = "com.test.cascade";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let perms = ["decks:write", "hooks:event:deck_deleted"];
+    install_wat(&t, &dir, ID, include_str!("fixtures/cascade.wat"), &perms, &[], &perms);
+    let decks = t.ok::<DecksList>(Empty {}).decks.len();
+    for round in 1..=8 {
+        let start = std::time::Instant::now();
+        let d = deck(&t, &format!("X{round}"));
+        t.ok::<DecksDelete>(DeckRef { id: d.id });
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(10),
+            "round {round} took {:?}",
+            start.elapsed()
+        );
+        assert_eq!(t.ok::<DecksList>(Empty {}).decks.len(), decks, "round {round}");
+        assert_eq!(log_lines(&t, ID, "boom"), round, "one hook run per action");
+    }
+    // A domain error is not a fault: the plugin stays on.
+    assert_eq!(plugin(&t, ID).status, PluginStatus::Active);
+}
+
+/// Hook budget: one user action runs at most `plugins.max_hooks_per_action` hooks; past it
+/// the rest are dropped and the plugin is switched off with an i18n notice.
+fn hook_budget_per_action(f: Factory) {
+    const ID: &str = "com.test.fail";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    set_app_setting(&t, SETTING_MAX_HOOKS, json!(2));
+    let perms = ["hooks:event:deck_created"];
+    install_wat(&t, &dir, ID, include_str!("fixtures/hook_fail.wat"), &perms, &[], &perms);
+    // Under the budget: fine.
+    deck(&t, "One");
+    assert_eq!(log_lines(&t, ID, "boom"), 1);
+    t.take_events();
+    // One action, four deck_created events: two hooks run, then the budget trips.
+    let start = std::time::Instant::now();
+    deck(&t, "A::B::C::D");
+    assert!(start.elapsed() < std::time::Duration::from_secs(10));
+    assert_eq!(log_lines(&t, ID, "boom"), 3);
+    assert_eq!(log_lines(&t, ID, "HOOK_BUDGET"), 1);
+    let p = plugin(&t, ID);
+    assert_eq!(p.status, PluginStatus::AutoDisabled);
+    assert!(p.last_error.unwrap_or_default().contains("HOOK_BUDGET"));
+    assert!(t.take_events().iter().any(|e| matches!(
+        &e.event,
+        DomainEvent::PluginsChanged { plugin_id, auto_disabled: true, reason: Some(r) }
+            if plugin_id == ID && r.key == "plugins.notice.hook_budget"
+    )));
+    // Off now: the next action runs no hook.
+    deck(&t, "Two");
+    assert_eq!(log_lines(&t, ID, "boom"), 3);
+}
+
+/// Re-entrancy guard: a hook never starts inside another one, and nothing that happens
+/// while a hook runs is queued for `event:` hooks, whatever the actor.
+#[test]
+fn hooks_do_not_nest_and_their_effects_do_not_queue() {
+    let t = TestApp::new(Arc::new(MemStore::new()));
+    let host = t.app.plugins();
+    let _action = host.begin_action();
+    let outer = host.enter_hook(&t.app, "com.test.a", "event:x").expect("first hook runs");
+    host.queue_events(&[DomainEvent::CollectionReplaced], &Actor::System);
+    assert_eq!(host.queued_events(), 0, "effects of a hook are not queued");
+    assert!(host.enter_hook(&t.app, "com.test.b", "event:y").is_none(), "no nesting");
+    drop(outer);
+    assert!(host.enter_hook(&t.app, "com.test.a", "event:x").is_none(), "action tripped");
+    assert_eq!(host.pending_disables(), vec!["com.test.b".to_owned()]);
+}
+
+/// Finding 3: `kv.set` needs `storage:kv`, and a plugin's storage is capped (entries and
+/// bytes, app settings plugins cannot reach). A refused write rolls back with the call.
+fn plugin_storage_needs_permission_and_quota(f: Factory) {
+    const ID: &str = "com.test.kvhog";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let wat = include_str!("fixtures/kv_hog.wat");
+    install_wat(&t, &dir, ID, wat, &["ui:command", "storage:kv"], &["go"], &["ui:command"]);
+    let usage = || t.app.store().read().unwrap().plugin_kv_usage(ID).unwrap();
+    // Declared but not granted: refused.
+    let e = run(&t, ID, "go").unwrap_err();
+    assert_eq!(e.details["code"], json!("PERMISSION_DENIED"));
+    assert_eq!(usage(), (0, 0));
+    t.ok::<PluginsSetPermissions>(SetPluginPermissions {
+        id: ID.into(),
+        granted: vec!["ui:command".into(), "storage:kv".into()],
+    });
+    // 2 × 600 KiB against 1 MiB: the second write is refused, the first rolled back.
+    set_app_setting(&t, SETTING_KV_MAX_MB, json!(1));
+    let e = run(&t, ID, "go").unwrap_err();
+    assert_eq!(e.details["code"], json!("VALIDATION_INVALID_PARAMS"));
+    assert!(e.details["message"].as_str().unwrap_or("").contains("quota"), "{e:?}");
+    assert_eq!(usage(), (0, 0));
+    // Room for both.
+    set_app_setting(&t, SETTING_KV_MAX_MB, json!(2));
+    run(&t, ID, "go").unwrap();
+    let (keys, bytes) = usage();
+    assert_eq!(keys, 2);
+    assert!(bytes > 1200 * 1024 && bytes < 1300 * 1024, "{bytes}");
+    // Entries: a third key is refused at 2; overwriting in place is not growth.
+    set_app_setting(&t, SETTING_KV_MAX_KEYS, json!(2));
+    run(&t, ID, "go").unwrap();
+    let set = |key: &str, restore: bool| {
+        let request = InvokeRequest {
+            method: format!("{}.{}", fc_api::API_VERSION, PluginsKvSet::NAME),
+            params: json!({ "plugin_id": ID, "key": key, "value": 1, "restore": restore }),
+        };
+        t.app.invoke_trusted(&request, &Actor::Plugin(ID.into()))
+    };
+    assert_eq!(set("c", false).unwrap_err().code, ErrorCode::ValidationInvalidParams);
+    // Putting back an earlier value (undo/rollback) is never refused.
+    set("c", true).unwrap();
+    assert_eq!(usage().0, 3);
 }

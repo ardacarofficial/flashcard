@@ -62,6 +62,8 @@ Install in the app: Plugins → Install from file (or `fc call v1.plugins.instal
 ## Rules of the road
 
 * Every call runs in a fresh instance: keep state in `host::kv` or a UI session's `state`.
+  Writing `host::kv` needs the `storage:kv` permission (reading and deleting do not); each
+  plugin's storage has a quota the user sets (entries and MB).
 * Storage (`host::kv`) and your own settings (`host::set_setting`) are written with the rest
   of the call: if the plugin fails, they are rolled back too.
 * Files only through the user's dialog: `host::fs::open` / `host::fs::save` (`fs:pick`, during

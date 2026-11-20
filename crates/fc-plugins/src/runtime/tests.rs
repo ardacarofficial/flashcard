@@ -221,3 +221,77 @@ fn host_time_does_not_count_against_the_deadline() {
         json!(1)
     );
 }
+
+/// 99 memories × 64 MiB against a 64 MiB cap (security review): refused at compile time,
+/// because multi-memory is off.
+#[test]
+fn many_memories_are_rejected() {
+    let rt = Runtime::new().unwrap();
+    let wat = include_str!("../../tests/fixtures/many_memories.wat");
+    let e = rt.compile(wat.as_bytes()).unwrap_err();
+    assert_eq!(e.kind, PluginErrorKind::Abi);
+    assert!(e.message.contains("multi"), "{}", e.message);
+}
+
+/// Other proposals that would sidestep the memory cap or the 32-bit host pointers.
+#[test]
+fn unneeded_proposals_are_off() {
+    let rt = Runtime::new().unwrap();
+    for (what, memory) in [
+        ("memory64", "(memory (export \"memory\") i64 1)"),
+        ("shared memory", "(memory (export \"memory\") 1 2 shared)"),
+    ] {
+        let m = module(PONG).replace("(memory (export \"memory\") 1)", memory);
+        assert!(rt.compile(m.as_bytes()).is_err(), "{what} must be refused");
+    }
+    // A second table is fine (reference types), but many are not.
+    let tables: String = (0..8)
+        .map(|i| format!("(table $t{i} 1 funcref)\n"))
+        .collect();
+    let m = module(PONG).replace("(global $heap", &format!("{tables}(global $heap"));
+    let p = rt.compile(m.as_bytes()).unwrap();
+    assert!(rt
+        .call(&p, "command", json!({}), &limits(), &mut PureHost)
+        .is_err());
+}
+
+/// The limiter caps memories and tables *together*, not each on its own, and allows one
+/// memory: checked on an engine that does allow multi-memory, so the caps hold even if a
+/// proposal is switched on later.
+#[test]
+fn limiter_counts_all_memories_and_tables_together() {
+    let mut config = Config::new();
+    config.wasm_multi_memory(true);
+    let engine = Engine::new(&config).unwrap();
+    let cap = 4 * 1024 * 1024;
+    let instantiate = |wat: &str| {
+        let module = Module::new(&engine, wat).unwrap();
+        let mut store = Store::new(&engine, Limiter::new(cap));
+        store.limiter(|l| l as &mut dyn ResourceLimiter);
+        let r = wasmtime::Instance::new(&mut store, &module, &[]);
+        (r.is_ok(), store.data().memory_total, store.data().hit)
+    };
+    // Two memories of 2 MiB each: refused (one memory per instance), although together
+    // they would fit.
+    let (ok, _, _) = instantiate("(module (memory 32) (memory 32))");
+    assert!(!ok);
+    // One memory: up to the cap.
+    let (ok, total, _) = instantiate("(module (memory 64))");
+    assert!(ok);
+    assert_eq!(total, cap);
+    let (ok, _, hit) = instantiate("(module (memory 65))");
+    assert!(!ok && hit);
+
+    // Growth is counted against the total as well.
+    let mut l = Limiter::new(cap);
+    assert!(l.memory_growing(0, cap / 2, None).unwrap());
+    assert!(l.memory_growing(0, cap / 2, None).unwrap());
+    assert!(!l.memory_growing(cap / 2, cap / 2 + 65536, None).unwrap());
+    assert!(l.hit);
+    // Tables: total elements.
+    let mut l = Limiter::new(cap);
+    assert!(l.table_growing(0, MAX_TABLE_ELEMENTS / 2, None).unwrap());
+    assert!(l.table_growing(0, MAX_TABLE_ELEMENTS / 2, None).unwrap());
+    assert!(!l.table_growing(0, 1, None).unwrap());
+    assert_eq!(l.memories(), 1);
+}
