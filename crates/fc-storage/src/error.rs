@@ -66,6 +66,10 @@ pub enum StorageError {
         /// OS error text.
         message: String,
     },
+    /// A statement was stopped because the caller's deadline passed
+    /// ([`crate::interrupt::deadline`]); its transaction is rolled back.
+    #[error("interrupted: deadline passed")]
+    Interrupted,
     /// Any other SQLite error.
     #[error("sqlite: {0}")]
     Sqlite(rusqlite::Error),
@@ -85,6 +89,7 @@ pub(crate) fn in_table(e: rusqlite::Error, table: &'static str) -> StorageError 
     match &e {
         rusqlite::Error::SqliteFailure(f, msg) => match f.code {
             C::DatabaseBusy | C::DatabaseLocked => StorageError::Busy,
+            C::OperationInterrupted => StorageError::Interrupted,
             C::ConstraintViolation => StorageError::Constraint {
                 constraint: constraint_name(msg.as_deref().unwrap_or_default()),
             },

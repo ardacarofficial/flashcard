@@ -162,6 +162,10 @@ pub trait HostCalls {
     fn paused(&mut self) -> Duration {
         Duration::ZERO
     }
+
+    /// The plugin call's deadline, given before each [`HostCalls::call`]: work the host does
+    /// for that call should stop by then (the app interrupts database statements at it).
+    fn deadline(&mut self, _deadline: Instant) {}
 }
 
 /// A host offering nothing but `log` (pure contexts: card type engines, TTS synthesis).
@@ -723,13 +727,16 @@ impl<'l> CallBudget<'l> {
                 // The raw request is not needed any more while the host works.
                 drop(msg);
                 let reply = match parsed {
-                    Ok(req) => match host.call(&req.func, req.args) {
-                        Ok(v) => HostReply {
-                            ok: Some(v),
-                            err: None,
-                        },
-                        Err(e) => error_reply(e),
-                    },
+                    Ok(req) => {
+                        host.deadline(self.deadline);
+                        match host.call(&req.func, req.args) {
+                            Ok(v) => HostReply {
+                                ok: Some(v),
+                                err: None,
+                            },
+                            Err(e) => error_reply(e),
+                        }
+                    }
                     Err(e) => error_reply(invalid_request(&e)),
                 };
                 self.deadline += host.paused();

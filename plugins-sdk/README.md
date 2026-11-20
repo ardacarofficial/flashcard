@@ -69,9 +69,14 @@ Install in the app: Plugins → Install from file (or `fc call v1.plugins.instal
 * Files only through the user's dialog: `host::fs::open` / `host::fs::save` (`fs:pick`, during
   a user-started command or view). You get a file name and bytes, never a path.
 * Never grantable: `plugins:*`, `io:*`, `mcp:*`, `ai_keys:*`, `ai_requests:*`,
-  `settings:write`, `modules:write`, `oplog:write`, `ai:write`. A `hooks:before|after:<method>`
-  needs that method's own permission as well, and plugin management, settings, modules,
-  undo, `io.*`, `batch.*`, `jobs.*`, `mcp.*` and AI provider methods cannot be hooked.
+  `settings:write`, `modules:write`, `oplog:write`, `oplog:read`, `ai:write`, `batch:write`,
+  `jobs:write`. A `hooks:before|after:<method>` needs that method's own permission and the
+  read permission of the data it sees (`notes:read` for `notes.create`…), and plugin
+  management, settings, modules, undo, `io.*`, `batch.*`, `jobs.*`, `mcp.*` and AI provider
+  methods cannot be hooked.
+* You see only what you may read: without `<area>:read` a query is refused, a command's
+  response and an `event:` hook's event are cut to ids; results that hold several areas (search
+  rows, study sessions) need each area's read permission (docs/05 §13).
 * `fc plugin pack <folder>` packs a built plugin; `fc plugin install <file> --grant …` installs it.
 * A `before:` hook may change params or reject, but cannot write. Changes made by plugins
   trigger no hooks. What an operation writes is one undo step, rolled back if the plugin fails.

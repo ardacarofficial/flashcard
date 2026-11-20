@@ -27,23 +27,35 @@
 //! **Hook budget:** one user action may run at most `plugins.max_hooks_per_action` hooks, for
 //! at most `plugins.hook_ms_per_action` together, and no hook may start inside another
 //! ([`Config::max_hook_depth`]). Past any of these, the action's remaining hooks are dropped,
-//! the plugin that would have run is switched off and the user is told (`plugins_changed`
-//! with `reason = plugins.notice.hook_budget`). A plugin whose hook *faulted* runs no more
-//! hooks in that action. So a user action never waits on plugins longer than the hook time
-//! budget plus one call's deadline.
+//! the plugin that *initiated* the work is switched off — the plugin whose operation made the
+//! calls ([`initiator`]), or, on a user's action, the plugin whose hook would have run — and
+//! the user is told (`plugins_changed` with `reason = plugins.notice.hook_budget`); a plugin's
+//! call past the budget is refused rather than run without the hooks. A plugin whose hook
+//! *faulted* runs no more hooks in that action. So a user action never waits on plugins
+//! longer than the hook time budget plus one call's deadline.
+//!
+//! **Initiator:** every budget is charged to the plugin that started the chain, never to one
+//! it ran into: the action's hook budget, the per-minute host call windows of hooks run inside
+//! its calls, and faults of other plugins' hooks and engines inside its calls (logged, not
+//! counted against them).
+//!
+//! **What plugins see:** every value handed to a plugin (results, errors, hook payloads,
+//! events, jobs) is filtered by its read permissions in [`super::redact`].
 //!
 //! **Host resources** (docs/05 §12): every host call is checked against
 //! `fc_plugins::limits` — request/reply size and count per plugin call (by the runtime),
 //! count per minute per plugin (here, [`RateWindows`]); every plugin call has a deadline that
 //! includes host time, a cap on host calls and on bytes moved (`plugins.timeout_ms`,
-//! `plugins.max_host_calls`, `plugins.host_mb_per_call`). What the host keeps for a plugin
+//! `plugins.max_host_calls`, `plugins.host_mb_per_call`); database statements of a host call
+//! stop at that deadline (`fc_storage::interrupt`), and whole-collection methods are not
+//! callable ([`super::redact::Exposure::Refused`]). What the host keeps for a plugin
 //! is bounded too: its log (a ring of short lines), its storage (quota), UI sessions (size and
 //! number), queued events (at most the action's hook budget). A failing
 //! plugin never stops the core operation (a failing `before:` hook = continue without it,
 //! unless `plugins.before_hook_failure = reject`); faults (trap, fuel, deadline, memory, ABI)
 //! are counted and the plugin is switched off after `plugins.max_failures` in a row.
 
-use super::{model_store, settings_values};
+use super::{model_store, redact, settings_values};
 use crate::app::{OplogMode, UndoGroup};
 use crate::error::{AppError, AppResult};
 use crate::registry::{ensure_invocable, ErasedHandler, Registry};
@@ -93,14 +105,71 @@ pub const MAX_PICKED_FILE_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Whether `plugin` may hook command `method` now: a public command, not one of the methods
 /// no plugin may hook, and the plugin holds the method's own permission (a hook never gives
-/// more than calling the method would).
+/// more than calling the method would) and the read permissions of the data the hook sees
+/// (the user's params and the response; [`redact::exposure`]).
 pub(crate) fn hook_allowed(registry: &Registry, plugin: &LoadedPlugin, method: &str) -> bool {
     registry.descriptor(method).is_some_and(|d| {
         d.visibility == fc_api::Visibility::Public
             && d.kind == fc_api::MethodKind::Command
             && fc_plugins::permission::hook_target_allowed(method, d.permission).is_ok()
             && plugin.has(d.permission)
+            && redact::can_read(&plugin.granted, redact::exposure(method).domains())
     })
+}
+
+thread_local! {
+    /// Plugins whose operations run on this thread, outermost first (host calls are
+    /// serviced on the thread that started the plugin call, so nested work lands here).
+    static CHAIN: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The plugin that started the work running on this thread (`None` = the user or the
+/// app). Every budget is charged to it: the hook budget of the action, per-minute host call
+/// windows, and faults of other plugins' hooks and engines its calls ran into.
+pub(crate) fn initiator() -> Option<String> {
+    CHAIN.with(|c| c.borrow().first().cloned())
+}
+
+/// Who pays for work `plugin` does now: the chain's initiator, else `plugin` itself.
+fn payer(plugin: &str) -> String {
+    initiator().unwrap_or_else(|| plugin.to_owned())
+}
+
+/// Whether `plugin` runs inside a chain another plugin started (its faults are then not
+/// its own to count: the initiator chose its input).
+fn foreign_chain(plugin: &str) -> Option<String> {
+    initiator().filter(|i| i != plugin)
+}
+
+/// Membership of a plugin operation in [`CHAIN`].
+struct ChainGuard;
+
+impl ChainGuard {
+    fn enter(plugin: &str) -> Self {
+        CHAIN.with(|c| c.borrow_mut().push(plugin.to_owned()));
+        Self
+    }
+}
+
+impl Drop for ChainGuard {
+    fn drop(&mut self) {
+        CHAIN.with(|c| {
+            c.borrow_mut().pop();
+        });
+    }
+}
+
+/// The refusal of a plugin's call once its action's hook budget is spent.
+fn hook_budget_refused(method: &str) -> AppError {
+    AppError::Api(
+        ApiError::new(
+            ErrorCode::ValidationPluginHostLimit,
+            format!("{method}: the hook budget of this action is spent"),
+        )
+        .with_detail("function", host_fns::INVOKE)
+        .with_detail("limit", "hook_budget")
+        .with_detail("method", method),
+    )
 }
 
 /// Hook policy of one dispatch.
@@ -369,8 +438,31 @@ impl Core {
                 "plugin is not loaded",
             )),
         };
-        self.record(plugin.id(), &r);
+        self.record_own(plugin.id(), &r, op, None);
         r
+    }
+
+    /// [`Core::record`], unless `plugin` ran inside a chain another plugin started: then a
+    /// fault is logged (with who started it) but not counted — the initiator chose the input,
+    /// and a plugin must not be able to switch another one off by feeding it. `at` = when, for
+    /// the log line (`None` = no line: engines have no clock at hand).
+    pub fn record_own<T>(
+        &self,
+        plugin: &str,
+        result: &Result<T, PluginError>,
+        op: &str,
+        at: Option<fc_core::Timestamp>,
+    ) {
+        match (foreign_chain(plugin), result, at) {
+            (None, ..) => self.record(plugin, result),
+            (Some(by), Err(e), Some(at)) if e.kind.is_fault() => self.log(
+                plugin,
+                LogLevel::Warn,
+                format!("{op}: {e} (in a call started by plugin {by}; not counted)"),
+                at,
+            ),
+            (Some(_), ..) => {}
+        }
     }
 }
 
@@ -574,6 +666,9 @@ impl PluginHost {
                 if let Ok(mut q) = self.events.lock() {
                     q.clear();
                 }
+                // The plugin whose calls made the hooks run pays, not the hook it ran into.
+                let culprit = payer(plugin);
+                let plugin = culprit.as_str();
                 let message = format!(
                     "HOOK_BUDGET: {hook} exceeded the hook budget of one action ({limit}: at most {} hooks, {} ms together, {} at a time)",
                     config.max_hooks_per_action,
@@ -797,6 +892,9 @@ impl PluginHost {
             );
         };
         let limits = self.core.config().limits;
+        // A user-started operation starts a chain: what its calls cause is charged to it.
+        let _chain = (mode == Mode::Operation && initiator().is_none())
+            .then(|| ChainGuard::enter(plugin.id()));
         let mut host = OpHost {
             app,
             plugin,
@@ -805,10 +903,11 @@ impl PluginHost {
             history: false,
             notices: Vec::new(),
             paused: Duration::ZERO,
+            deadline: None,
         };
         let r = rt.call(&compiled, op, input, &limits, &mut host);
         let notices = host.finish(r.is_ok());
-        self.core.record(plugin.id(), &r);
+        self.core.record_own(plugin.id(), &r, op, Some(app.now()));
         if mode != Mode::Operation && r.as_ref().is_err_and(|e| e.kind.is_fault()) {
             self.with_action(|a| a.faulted.insert(plugin.id().to_owned()));
         }
@@ -853,9 +952,17 @@ impl PluginHost {
             let _running = match self.enter_hook(app, &id, &hook) {
                 Admission::Run(guard) => guard,
                 Admission::Skip => continue,
+                // A plugin's call past the budget is refused: it must not go on without the
+                // hooks the user installed to check it.
+                Admission::Stop if skip.is_some() => return Err(hook_budget_refused(method)),
                 Admission::Stop => break,
             };
-            let input = json!({ "hook": hook, "method": method, "params": params.clone() });
+            let domains = redact::exposure(method).domains();
+            let input = json!({
+                "hook": hook,
+                "method": method,
+                "params": redact::filter(&plugin.granted, domains, params.clone()),
+            });
             let (r, _) = self.run_op(app, &plugin, ops::HOOK_BEFORE, input, Mode::Hook);
             let decided = r.and_then(|v| {
                 serde_json::from_value::<BeforeHookReply>(v).map_err(|e| {
@@ -918,11 +1025,12 @@ impl PluginHost {
                     Admission::Skip => continue,
                     Admission::Stop => return,
                 };
+                let domains = redact::exposure(method).domains();
                 let input = json!({
                     "hook": hook,
                     "method": method,
-                    "params": params,
-                    "response": response,
+                    "params": redact::filter(&plugin.granted, domains, params.clone()),
+                    "response": redact::filter(&plugin.granted, domains, response.clone()),
                 });
                 let _ = self.run_op(app, &plugin, ops::HOOK_AFTER, input, Mode::Reaction);
             }
@@ -973,7 +1081,6 @@ impl PluginHost {
                 .ok()
                 .and_then(|l| l.events.get(&kind).cloned())
                 .unwrap_or_default();
-            let value = serde_json::to_value(&event).unwrap_or(Value::Null);
             for id in ids {
                 if let Some(plugin) = self.get(&id) {
                     let hook = format!("event:{kind}");
@@ -982,7 +1089,8 @@ impl PluginHost {
                         Admission::Skip => continue,
                         Admission::Stop => return,
                     };
-                    let input = json!({ "hook": hook, "event": value });
+                    // Filtered by this plugin's read permissions for the event's domain.
+                    let input = json!({ "hook": hook, "event": redact::event(&plugin.granted, &event) });
                     let _ = self.run_op(app, &plugin, ops::HOOK_EVENT, input, Mode::Reaction);
                 }
             }
@@ -1058,6 +1166,9 @@ pub(crate) struct OpHost<'a> {
     notices: Vec<PluginNotice>,
     /// Time the current host call spent in a file dialog (the user's time, not the plugin's).
     paused: Duration,
+    /// The plugin call's deadline ([`HostCalls::deadline`]): database statements of a host
+    /// call stop there (`fc_storage::interrupt`).
+    deadline: Option<Instant>,
 }
 
 #[derive(serde::Deserialize)]
@@ -1134,6 +1245,8 @@ impl OpHost<'_> {
         std::mem::take(&mut self.notices)
     }
 
+    /// `invoke`: the public API filtered by the plugin's grants, its result and errors
+    /// filtered by its read permissions ([`redact`]).
     fn invoke(&mut self, method: &str, params: Value) -> AppResult<Value> {
         let app = self.app;
         let name = parse_qualified_name(method)
@@ -1150,7 +1263,25 @@ impl OpHost<'_> {
         if [OplogUndo::NAME, OplogRedo::NAME].contains(&d.name) {
             return Err(denied(method, d.permission, "plugins cannot undo or redo"));
         }
-        match &entry.handler {
+        let granted = &self.plugin.granted;
+        let exposure = redact::call_exposure(name, &params, self.plugin.id());
+        let domains = exposure.domains();
+        if let redact::Exposure::Refused(reason) = exposure {
+            return Err(denied(method, d.permission, reason));
+        }
+        if redact::refuse_upfront(d.kind, exposure) && !redact::can_read(granted, domains) {
+            let missing = redact::missing(granted, domains);
+            return Err(AppError::Api(
+                ApiError::new(
+                    ErrorCode::PermissionDenied,
+                    format!("{method}: its result needs {}", missing.join(", ")),
+                )
+                .with_detail("method", method)
+                .with_detail("permission", missing.first().cloned().unwrap_or_default())
+                .with_detail("missing", missing),
+            ));
+        }
+        let r = match &entry.handler {
             ErasedHandler::Query(_) => app.invoke_hooked(method, params, &actor, true, crate::modules::plugins::Hooks::Off),
             ErasedHandler::Action(_) => Err(denied(method, d.permission, "plugins cannot run plugin operations")),
             ErasedHandler::Command(_) => {
@@ -1163,21 +1294,33 @@ impl OpHost<'_> {
                 }
                 let params = if self.mode == Mode::Operation {
                     app.plugins()
-                        .before_hooks(app, name, params, &actor, Some(self.plugin.id()))?
+                        .before_hooks(app, name, params, &actor, Some(self.plugin.id()))
                 } else {
-                    params
+                    Ok(params)
                 };
-                let request = InvokeRequest {
-                    method: method.to_owned(),
-                    params,
-                };
-                let group = self.group()?;
-                let r = app.invoke_with(&request, &actor, OplogMode::Defer(group));
-                if r.is_ok() {
-                    self.history = true;
-                }
-                r
+                params.and_then(|params| {
+                    let request = InvokeRequest {
+                        method: method.to_owned(),
+                        params,
+                    };
+                    let group = self.group()?;
+                    let r = app.invoke_with(&request, &actor, OplogMode::Defer(group));
+                    if r.is_ok() {
+                        self.history = true;
+                    }
+                    r
+                })
             }
+        };
+        let granted = &self.plugin.granted;
+        match r {
+            Ok(v) => Ok(redact::filter(granted, domains, redact::jobs(granted, name, v))),
+            Err(e) => Err(AppError::Api(redact::error(
+                granted,
+                self.plugin.id(),
+                domains,
+                e.into_api(),
+            ))),
         }
     }
 
@@ -1243,15 +1386,28 @@ impl OpHost<'_> {
             return Ok(Value::Null);
         };
         let io = |e: std::io::Error| AppError::api(ErrorCode::IoFile, e.to_string());
-        let size = std::fs::metadata(&path).map_err(io)?.len();
-        if size > MAX_PICKED_FILE_BYTES {
-            return Err(AppError::Api(
+        let too_large = || {
+            AppError::Api(
                 ApiError::new(ErrorCode::ValidationInvalidParams, "file too large for a plugin")
                     .with_detail("function", func)
                     .with_detail("max_bytes", MAX_PICKED_FILE_BYTES),
-            ));
+            )
+        };
+        let file = std::fs::File::open(&path).map_err(io)?;
+        if file.metadata().map_err(io)?.len() > MAX_PICKED_FILE_BYTES {
+            return Err(too_large());
         }
-        let data = std::fs::read(&path).map_err(io)?;
+        // The size can lie (a device, a pipe, a file growing meanwhile): the limit holds
+        // while reading, never more than one byte past it is read.
+        let mut data = Vec::new();
+        std::io::Read::read_to_end(
+            &mut std::io::Read::take(file, MAX_PICKED_FILE_BYTES + 1),
+            &mut data,
+        )
+        .map_err(io)?;
+        if data.len() as u64 > MAX_PICKED_FILE_BYTES {
+            return Err(too_large());
+        }
         Ok(json!({
             "name": file_name(&path),
             "size": data.len(),
@@ -1441,12 +1597,12 @@ impl OpHost<'_> {
                             .and_then(|s| s.status(&id, m).ok())
                             .map(|s| serde_json::to_value(s).unwrap_or(Value::Null))
                             .unwrap_or(json!({ "state": "missing" }));
-                        let path = store
+                        // No path: a plugin never learns where files live.
+                        let ready = store
                             .as_ref()
                             .and_then(|s| s.path(&id, &m.id).ok())
-                            .filter(|p| p.is_file())
-                            .map(|p| p.display().to_string());
-                        json!({ "id": m.id, "status": status, "path": path })
+                            .is_some_and(|p| p.is_file());
+                        json!({ "id": m.id, "status": status, "ready": ready })
                     })
                     .collect();
                 Ok(json!(models))
@@ -1462,11 +1618,86 @@ impl OpHost<'_> {
 impl HostCalls for OpHost<'_> {
     fn call(&mut self, func: &str, args: Value) -> Result<Value, WireError> {
         self.paused = Duration::ZERO;
-        self.app.plugins().core.admit_rate(self.plugin.id(), func)?;
+        // Per-minute windows are the initiator's (another plugin's hooks it runs into spend
+        // its windows, never their own).
+        self.app.plugins().core.admit_rate(&payer(self.plugin.id()), func)?;
+        // Long database work stops at the plugin's deadline.
+        let _deadline = self.deadline.map(fc_storage::interrupt::deadline);
         self.dispatch(func, args).map_err(to_wire)
     }
 
     fn paused(&mut self) -> Duration {
         std::mem::take(&mut self.paused)
+    }
+
+    fn deadline(&mut self, deadline: Instant) {
+        self.deadline = Some(deadline);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::TestApp;
+    use fc_api::v1::decks::CreateDeck;
+    use fc_api::v1::methods::{DecksCreate, PluginsInstall};
+    use fc_api::v1::plugins::InstallPlugin;
+
+    /// Minor finding (a single long host call is not interrupted): database work of a host
+    /// call stops at the plugin call's deadline, not after it. Here the deadline has passed
+    /// when the call starts its listing: the statement is interrupted; without a deadline the
+    /// same call answers.
+    #[test]
+    fn host_call_database_work_stops_at_the_deadline() {
+        const ID: &str = "com.test.slow";
+        let t = TestApp::new(Arc::new(fc_storage::SqliteStore::open_in_memory().unwrap()));
+        for i in 0..300 {
+            t.ok::<DecksCreate>(CreateDeck {
+                path: format!("D{i}"),
+                parent_id: None,
+                description: None,
+                icon: None,
+                color: None,
+            });
+        }
+        let manifest = format!(
+            "id = \"{ID}\"\nname = \"{ID}\"\nversion = \"1.0.0\"\napi_version = \"1\"\n\
+             permissions = [\"decks:read\"]\n"
+        );
+        let wat = fc_plugins::testing::host_loop_wat(r#"{"fn":"log","args":{"message":"x"}}"#, 1);
+        let wasm = fc_plugins::testing::wat2wasm(wat.as_bytes()).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("slow.fcplugin");
+        std::fs::write(&path, fc_plugins::package::pack(&manifest, &wasm, &[]).unwrap()).unwrap();
+        t.ok::<PluginsInstall>(InstallPlugin {
+            path: path.display().to_string(),
+            grant: vec!["decks:read".into()],
+        });
+        let plugin = t.app.plugins().get(ID).expect("active");
+        let mut host = OpHost {
+            app: &t.app,
+            plugin: &plugin,
+            mode: Mode::Operation,
+            group: None,
+            history: false,
+            notices: Vec::new(),
+            paused: Duration::ZERO,
+            deadline: None,
+        };
+        let list = json!({ "method": "v1.decks.list", "params": {} });
+        let decks = HostCalls::call(&mut host, host_fns::INVOKE, list.clone()).unwrap();
+        assert!(decks["decks"].as_array().is_some_and(|d| d.len() >= 300), "{decks}");
+        HostCalls::deadline(&mut host, Instant::now());
+        let e = HostCalls::call(&mut host, host_fns::INVOKE, list).unwrap_err();
+        assert_eq!(e.details["interrupted"], json!(true), "{e:?}");
+        // The deadline ends with the host call: the app itself is not interrupted.
+        assert!(!fc_storage::interrupt::expired());
+        t.ok::<DecksCreate>(CreateDeck {
+            path: "After".into(),
+            parent_id: None,
+            description: None,
+            icon: None,
+            color: None,
+        });
     }
 }

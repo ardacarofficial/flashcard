@@ -51,8 +51,21 @@ pub const FORBIDDEN_API_AREAS: &[&str] = &["plugins", "io", "mcp", "ai_keys", "a
 ///   function (its namespace and schema only).
 /// * `oplog:write`: undo/redo belong to the user.
 /// * `ai:write`: AI providers and routes (could redirect requests and keys).
-pub const FORBIDDEN_API_PERMISSIONS: &[&str] =
-    &["settings:write", "modules:write", "oplog:write", "ai:write"];
+/// * `oplog:read`: the history holds every domain's data (payloads and inverses of notes,
+///   other plugins' settings and storage…); no single read permission covers it.
+/// * `batch:write`: runs many calls as one, bypassing the per-call result filtering and the
+///   `before:` hooks of the calls inside; a plugin makes the calls one by one instead (one
+///   undo step anyway).
+/// * `jobs:write`: cancelling jobs (backups, exports) acts on areas plugins never reach.
+pub const FORBIDDEN_API_PERMISSIONS: &[&str] = &[
+    "settings:write",
+    "modules:write",
+    "oplog:write",
+    "oplog:read",
+    "ai:write",
+    "batch:write",
+    "jobs:write",
+];
 
 /// Methods no plugin may hook, whatever it was granted: a `before:` hook rewrites the
 /// *user's* call, so a hook here would act with the user's authority (approve its own
@@ -322,6 +335,9 @@ mod tests {
             "ai_keys:write",
             "ai_requests:write",
             "ai:write",
+            "oplog:read",
+            "batch:write",
+            "jobs:write",
             "notes",
             "notes:delete",
             "hooks:during:x",
@@ -337,7 +353,7 @@ mod tests {
     #[test]
     fn hook_targets() {
         assert_eq!(hook_target_allowed("notes.create", "notes:write"), Ok(()));
-        for ok in ["ai:read", "settings:read", "modules:read", "oplog:read"] {
+        for ok in ["ai:read", "settings:read", "modules:read", "jobs:read"] {
             assert!(Permission::parse(ok).is_ok(), "{ok}");
         }
         for (method, perm) in [

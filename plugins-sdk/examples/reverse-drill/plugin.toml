@@ -5,7 +5,7 @@ api_version = "1"
 authors = ["Flashcard"]
 description = "A study mode: shows the back of a card, you type the front; answers are recorded through the study API."
 min_app_version = "0.7.0"
-permissions = ["ui:study_mode", "ui:menu", "study:write", "notes:read"]
+permissions = ["ui:study_mode", "ui:menu", "study:write", "study:read", "notes:read"]
 
 [contributes]
 study_modes = ["reverse"]

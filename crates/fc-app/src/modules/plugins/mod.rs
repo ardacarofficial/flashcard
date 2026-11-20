@@ -9,6 +9,7 @@
 
 pub(crate) mod engines;
 pub(crate) mod host;
+pub(crate) mod redact;
 mod ui;
 
 #[cfg(test)]
@@ -272,6 +273,15 @@ fn check_against_registry(registry: &Registry, m: &Manifest) -> AppResult<()> {
                     .map_err(|reason| bad(p, reason))?;
                 if !m.requests(d.permission) {
                     return Err(bad(p, "a hook needs the hooked method's own permission too"));
+                }
+                // A hook sees the user's params and the response: the data they hold.
+                let reads: Vec<String> =
+                    redact::exposure(&method).domains().iter().map(|d| format!("{d}:read")).collect();
+                if reads.iter().any(|r| !m.requests(r)) {
+                    return Err(bad(
+                        p,
+                        "a hook needs the read permissions of the data it sees too",
+                    ));
                 }
             }
             _ => {}

@@ -67,29 +67,9 @@
     "command",
     "attributes:write"
   ],
-  "v1.batch.execute": [
-    "command",
-    "batch:write"
-  ],
   "v1.browse.card_info": [
     "query",
     "cards:read"
-  ],
-  "v1.browse.check_database": [
-    "query",
-    "notes:read"
-  ],
-  "v1.browse.duplicates": [
-    "query",
-    "notes:read"
-  ],
-  "v1.browse.purge_trash": [
-    "command",
-    "notes:write"
-  ],
-  "v1.browse.repair_database": [
-    "command",
-    "notes:write"
   ],
   "v1.browse.trash": [
     "query",
@@ -211,10 +191,6 @@
     "command",
     "cards:write"
   ],
-  "v1.jobs.cancel": [
-    "command",
-    "jobs:write"
-  ],
   "v1.jobs.get": [
     "query",
     "jobs:read"
@@ -302,14 +278,6 @@
   "v1.notetypes.usage": [
     "query",
     "notetypes:read"
-  ],
-  "v1.oplog.list": [
-    "query",
-    "oplog:read"
-  ],
-  "v1.oplog.status": [
-    "query",
-    "oplog:read"
   ],
   "v1.palette.list": [
     "query",

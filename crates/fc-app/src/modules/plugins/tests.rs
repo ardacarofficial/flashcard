@@ -60,6 +60,12 @@ suite!(
     host_call_loops_are_bounded,
     host_call_loops_in_hooks_do_not_freeze_actions,
     ui_notify_needs_permission_and_is_rate_limited,
+    hook_budget_is_charged_to_the_initiator,
+    faults_in_another_plugins_chain_are_not_counted,
+    oplog_cannot_be_read_by_plugins,
+    results_are_filtered_by_read_permissions,
+    hooks_see_only_what_they_may_read,
+    fs_open_limit_holds_while_reading,
 );
 
 const AUTOFILL: &str = "com.example.autofill";
@@ -245,7 +251,7 @@ fn example_study_mode_plugin(f: Factory) {
         &t,
         &dir,
         "reverse-drill",
-        &["ui:study_mode", "ui:menu", "study:write", "notes:read"],
+        &["ui:study_mode", "ui:menu", "study:write", "study:read", "notes:read"],
     );
     // It shows up as a module with a main menu entry opening the mode.
     let modules = t.ok::<ModulesList>(Empty {}).modules;
@@ -378,7 +384,14 @@ fn example_hook_fills_a_field(f: Factory) {
         &t,
         &dir,
         "autofill",
-        &["hooks:before:notes.create", "notes:write", "notetypes:read", "ui:command", "storage:kv"],
+        &[
+            "hooks:before:notes.create",
+            "notes:write",
+            "notes:read",
+            "notetypes:read",
+            "ui:command",
+            "storage:kv",
+        ],
     );
     let filled = classic(&t, &d, "sword", "");
     assert_eq!(filled.fields["back"], "kılıç");
@@ -484,7 +497,11 @@ fn host_calls_without_permission_are_refused(f: Factory) {
     deck(&t, "blocked");
     t.ok::<PluginsSetPermissions>(SetPluginPermissions {
         id: MISBEHAVE.into(),
-        granted: vec!["hooks:before:decks.create".into(), "decks:write".into()],
+        granted: vec![
+            "hooks:before:decks.create".into(),
+            "decks:write".into(),
+            "decks:read".into(),
+        ],
     });
     let e = t.err::<DecksCreate>(CreateDeck {
         path: "blocked".into(),
@@ -616,7 +633,10 @@ fn failed_operations_roll_back(f: Factory) {
 
 /// The v1 surface a plugin may rely on: method names with kind and permission. Checked in;
 /// later app versions may add methods but never remove or change these
-/// (`FC_WRITE_PLUGIN_API_SNAPSHOT=1` regenerates it — only when starting API v2).
+/// (`FC_WRITE_PLUGIN_API_SNAPSHOT=1` regenerates it — only when starting API v2). Before
+/// v0.7 shipped, the fourth security review took out `oplog.list`/`oplog.status` (history
+/// holds every domain), `batch.execute` (bypassed result filtering and hooks), `jobs.cancel`
+/// and the whole-collection `browse.*` maintenance methods (work not bounded per call).
 const V1_SNAPSHOT: &str = include_str!("api_v1.json");
 
 fn plugin_api_v1_contract(f: Factory) {
@@ -628,6 +648,7 @@ fn plugin_api_v1_contract(f: Factory) {
         .filter(|d| {
             d.visibility == Visibility::Public
                 && fc_plugins::permission::api_grantable(d.permission)
+                && !matches!(redact::exposure(d.name), redact::Exposure::Refused(_))
         })
         .map(|d| {
             (
@@ -943,6 +964,16 @@ fn hooks_cannot_reach_management_io_or_settings(f: Factory) {
     t.ok::<PluginsSetPermissions>(SetPluginPermissions {
         id: ESCAPE.into(),
         granted: vec!["hooks:before:notes.create".into(), "notes:write".into()],
+    });
+    // …and the read permission of the data it sees.
+    assert_eq!(classic(&t, &d, "plain", "x").fields["front"], "plain");
+    t.ok::<PluginsSetPermissions>(SetPluginPermissions {
+        id: ESCAPE.into(),
+        granted: vec![
+            "hooks:before:notes.create".into(),
+            "notes:write".into(),
+            "notes:read".into(),
+        ],
     });
     assert_eq!(classic(&t, &d, "plain", "x").fields["front"], "hooked");
 
@@ -1390,4 +1421,225 @@ fn ui_notify_needs_permission_and_is_rate_limited(f: Factory) {
         fc_plugins::limits::HOST_LIMIT_CODE,
         host::code_str(ErrorCode::ValidationPluginHostLimit)
     );
+}
+
+// ------------------------------------------------------------------ fourth security review
+
+const ATTACKER: &str = "com.test.attacker";
+const VICTIM: &str = "com.test.victim";
+
+/// Request: `invoke` of `method` with `params`.
+fn invoke_request(method: &str, params: Value) -> String {
+    json!({ "fn": "invoke", "args": { "method": method, "params": params } }).to_string()
+}
+
+/// A plugin holding `grant` (+ `ui:command`) whose `go` command sends `request` `count` times
+/// and returns the last reply.
+fn install_looper(t: &TestApp, dir: &tempfile::TempDir, id: &str, request: &str, count: u32, grant: &[&str]) {
+    let wat = fc_plugins::testing::host_loop_wat(request, count);
+    let perms: Vec<&str> = grant.iter().copied().chain(["ui:command"]).collect();
+    install_wat(t, dir, id, &wat, &perms, &["go"], &perms);
+}
+
+/// What `go` returned, as text (its result or its error).
+fn go_text(t: &TestApp, id: &str) -> String {
+    match run(t, id, "go") {
+        Ok(r) => r.result.to_string(),
+        Err(e) => format!("{} {}", e.message, Value::Object(e.details)),
+    }
+}
+
+/// Finding 1, the exact repro: B hooks `before:decks.create`; A (only `decks:write` +
+/// `ui:command`) calls `decks.create` in a loop. The hook budget is A's: A is switched off,
+/// its call past the budget is refused (it never goes on without B's hook), B stays on.
+fn hook_budget_is_charged_to_the_initiator(f: Factory) {
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    set_app_setting(&t, SETTING_MAX_HOOKS, json!(20));
+    let perms = ["decks:write", "decks:read", "hooks:before:decks.create"];
+    install_wat(&t, &dir, VICTIM, include_str!("fixtures/hook_continue.wat"), &perms, &[], &perms);
+    let request = invoke_request("v1.decks.create", json!({ "path": "Flood" }));
+    install_looper(&t, &dir, ATTACKER, &request, 30, &["decks:write"]);
+    let decks = t.ok::<DecksList>(Empty {}).decks.len();
+    let e = run(&t, ATTACKER, "go").unwrap_err();
+    assert_eq!(e.details["code"], json!("VALIDATION_PLUGIN_HOST_LIMIT"), "{e:?}");
+    let victim = plugin(&t, VICTIM);
+    assert_eq!(victim.status, PluginStatus::Active);
+    assert_eq!(victim.failures, 0);
+    let attacker = plugin(&t, ATTACKER);
+    assert_eq!(attacker.status, PluginStatus::AutoDisabled);
+    assert!(attacker.last_error.unwrap_or_default().contains("HOOK_BUDGET"));
+    assert_eq!(t.ok::<DecksList>(Empty {}).decks.len(), decks, "the failed call rolled back");
+    // The user's own actions keep the victim's hook, and its budget is fresh.
+    deck(&t, "Mine");
+    assert_eq!(plugin(&t, VICTIM).status, PluginStatus::Active);
+}
+
+/// Sibling of finding 1: A cannot switch B off by feeding B's hook input it faults on. B's
+/// faults inside A's calls are logged, not counted; B's faults on the user's actions are.
+fn faults_in_another_plugins_chain_are_not_counted(f: Factory) {
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let perms = ["decks:write", "decks:read", "hooks:before:decks.create"];
+    install_wat(&t, &dir, VICTIM, include_str!("fixtures/hook_trap.wat"), &perms, &[], &perms);
+    let request = invoke_request("v1.decks.create", json!({ "path": "Fed" }));
+    install_looper(&t, &dir, ATTACKER, &request, 1, &["decks:write"]);
+    for _ in 0..5 {
+        let _ = run(&t, ATTACKER, "go");
+    }
+    let victim = plugin(&t, VICTIM);
+    assert_eq!((victim.status, victim.failures), (PluginStatus::Active, 0));
+    assert!(log_lines(&t, VICTIM, "not counted") >= 5);
+    // Its own fault on the user's action counts as before.
+    deck(&t, "User");
+    assert_eq!(plugin(&t, VICTIM).failures, 1);
+}
+
+/// Finding 2, the exact repro: `oplog:read` would hand out every domain (note text in
+/// payloads and inverses, other plugins' settings and storage). It cannot be requested,
+/// granted, or used from a tampered grant.
+fn oplog_cannot_be_read_by_plugins(f: Factory) {
+    const ID: &str = "com.test.oplog";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let d = deck(&t, "Private");
+    classic(&t, &d, "USER-SECRET", "x");
+    let request = invoke_request("v1.oplog.list", json!({}));
+    let wat = fc_plugins::testing::host_loop_wat(&request, 1);
+    // Not even requestable.
+    let manifest = format!(
+        "id = \"{ID}\"\nname = \"{ID}\"\nversion = \"1.0.0\"\napi_version = \"1\"\n\
+         permissions = [\"oplog:read\", \"ui:command\"]\n[contributes]\ncommands = [\"go\"]\n"
+    );
+    let wasm = fc_plugins::testing::wat2wasm(wat.as_bytes()).unwrap();
+    assert!(fc_plugins::package::pack(&manifest, &wasm, &[]).is_err(), "the packer refuses it");
+    let bytes = fc_plugins::testing::pack_unchecked(&[
+        ("plugin.toml", manifest.as_bytes()),
+        ("plugin.wasm", &wasm),
+    ])
+    .unwrap();
+    let path = dir.path().join("oplog.fcplugin");
+    std::fs::write(&path, bytes).unwrap();
+    let e = install_refused(&t, path.display().to_string(), &["oplog:read", "ui:command"]);
+    assert_eq!(e.code, ErrorCode::ValidationPluginManifest, "{e:?}");
+    // Calling it without the permission, and with a tampered grant: refused, nothing leaks.
+    install_looper(&t, &dir, ID, &request, 1, &[]);
+    for tampered in [false, true] {
+        if tampered {
+            let g = ["oplog:read", "ui:command"].iter().map(|s| (*s).to_owned()).collect();
+            t.app.registry().set_plugin_grants(ID, Some(g));
+        }
+        let out = go_text(&t, ID);
+        assert!(out.contains("PERMISSION_DENIED"), "{out}");
+        assert!(!out.contains("USER-SECRET"), "{out}");
+    }
+}
+
+/// Method results and errors are filtered by the caller's read permissions: a command's
+/// response is cut to ids without them, a query is refused, another plugin's settings scope
+/// is never readable.
+fn results_are_filtered_by_read_permissions(f: Factory) {
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let d = t.ok::<DecksCreate>(CreateDeck {
+        path: "Private".into(),
+        parent_id: None,
+        description: Some("USER-SECRET".into()),
+        icon: None,
+        color: None,
+    });
+    // decks:write only: renaming echoes the deck back — its ids only.
+    let rename = invoke_request("v1.decks.rename", json!({ "id": d.id, "name": "Renamed" }));
+    install_looper(&t, &dir, "com.test.writer", &rename, 1, &["decks:write"]);
+    let out = go_text(&t, "com.test.writer");
+    assert!(out.contains(&d.id.to_string()), "{out}");
+    assert!(!out.contains("USER-SECRET"), "{out}");
+    // With decks:read as well, the whole deck.
+    install_looper(&t, &dir, "com.test.reader", &rename, 1, &["decks:write", "decks:read"]);
+    assert!(go_text(&t, "com.test.reader").contains("USER-SECRET"));
+    // Search rows hold note text: search:read alone is not enough.
+    classic(&t, &d, "USER-SECRET", "x");
+    let search = invoke_request("v1.search.cards", json!({ "query": "" }));
+    install_looper(&t, &dir, "com.test.search", &search, 1, &["search:read"]);
+    let out = go_text(&t, "com.test.search");
+    assert!(out.contains("PERMISSION_DENIED") && out.contains("notes:read"), "{out}");
+    assert!(!out.contains("USER-SECRET"), "{out}");
+    // An oracle needs the read permission to run at all.
+    let replace = invoke_request(
+        "v1.bulk.find_replace",
+        json!({ "note_ids": [], "find": "USER-SECRET", "replace": "USER-SECRET" }),
+    );
+    install_looper(&t, &dir, "com.test.oracle", &replace, 1, &["notes:write"]);
+    assert!(go_text(&t, "com.test.oracle").contains("PERMISSION_DENIED"));
+    // Another plugin's settings: plugin data, whatever settings:read says.
+    let other = invoke_request(
+        "v1.settings.get",
+        json!({ "scope": { "kind": "plugin", "id": "com.test.writer" }, "keys": null }),
+    );
+    install_looper(&t, &dir, "com.test.settings", &other, 1, &["settings:read"]);
+    let out = go_text(&t, "com.test.settings");
+    assert!(out.contains("PERMISSION_DENIED") && out.contains("plugins:read"), "{out}");
+    // Whole-collection scans are not plugin work.
+    let scan = invoke_request("v1.browse.duplicates", json!({}));
+    install_looper(&t, &dir, "com.test.scan", &scan, 1, &["notes:read"]);
+    assert!(go_text(&t, "com.test.scan").contains("PERMISSION_DENIED"));
+}
+
+/// Minor finding: `event:` hooks get the event cut to ids without the read permission of its
+/// domain; `before:`/`after:` hooks need it to be installed at all.
+fn hooks_see_only_what_they_may_read(f: Factory) {
+    const ID: &str = "com.test.echo";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let seen = |t: &TestApp| -> String {
+        let tx = t.app.store().read().unwrap();
+        tx.get_plugin_kv(ID, "in").unwrap().unwrap_or(Value::Null).to_string()
+    };
+    let perms = ["hooks:event:deck_created", "storage:kv", "decks:read"];
+    let wat = include_str!("fixtures/echo_kv.wat");
+    install_wat(&t, &dir, ID, wat, &perms, &[], &["hooks:event:deck_created", "storage:kv"]);
+    let d = deck(&t, "USER-SECRET");
+    let got = seen(&t);
+    assert!(got.contains("deck_created") && got.contains(&d.id.to_string()), "{got}");
+    assert!(!got.contains("USER-SECRET"), "{got}");
+    t.ok::<PluginsSetPermissions>(SetPluginPermissions {
+        id: ID.into(),
+        granted: perms.iter().map(|p| (*p).to_owned()).collect(),
+    });
+    deck(&t, "USER-VISIBLE");
+    assert!(seen(&t).contains("USER-VISIBLE"));
+    // A command hook without the read permission of what it sees is not installable.
+    let manifest = "id = \"com.test.after\"\nname = \"After\"\nversion = \"1.0.0\"\n\
+                    api_version = \"1\"\npermissions = [\"hooks:after:decks.create\", \"decks:write\"]\n";
+    let wasm = fc_plugins::testing::wat2wasm(wat.as_bytes()).unwrap();
+    let bytes =
+        fc_plugins::testing::pack_unchecked(&[("plugin.toml", manifest.as_bytes()), ("plugin.wasm", &wasm)])
+            .unwrap();
+    let path = dir.path().join("after.fcplugin");
+    std::fs::write(&path, bytes).unwrap();
+    let e = install_refused(&t, path.display().to_string(), &[]);
+    assert_eq!(e.code, ErrorCode::ValidationPluginManifest);
+    assert!(e.message.contains("read permissions"), "{e:?}");
+}
+
+/// Minor finding: `fs.open` enforces its limit while reading, whatever the size claims (a
+/// device reports 0 bytes and never ends).
+fn fs_open_limit_holds_while_reading(f: Factory) {
+    const ID: &str = "com.test.open";
+    let endless = std::path::PathBuf::from("/dev/zero");
+    if !endless.exists() {
+        return;
+    }
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    t.app.set_file_picker(Arc::new(TestPicker {
+        open: Some(endless),
+        save: None,
+        suggested: std::sync::Mutex::new(Vec::new()),
+    }));
+    install_looper(&t, &dir, ID, r#"{"fn":"fs.open","args":{}}"#, 1, &["fs:pick"]);
+    let start = std::time::Instant::now();
+    let out = go_text(&t, ID);
+    assert!(out.contains("too large"), "{out}");
+    assert!(start.elapsed() < std::time::Duration::from_secs(5), "{:?}", start.elapsed());
 }
