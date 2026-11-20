@@ -2,7 +2,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n/index.svelte';
   import Toast from './Toast.svelte';
-  import { toast } from './toast.svelte';
+  import { toast } from './toast-store.svelte';
 </script>
 
 <section class="fc-toasts" aria-label={t('ui.notifications')}>

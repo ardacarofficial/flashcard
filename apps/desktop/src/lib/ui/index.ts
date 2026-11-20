@@ -38,6 +38,6 @@ export { default as Tile } from './Tile.svelte';
 export { default as Toast } from './Toast.svelte';
 export { default as ToastHost } from './ToastHost.svelte';
 export { default as Tooltip } from './Tooltip.svelte';
-export { toast, type ToastAction, type ToastItem } from './toast.svelte';
+export { toast, type ToastAction, type ToastItem } from './toast-store.svelte';
 export * from './icons';
 export type { MenuItem, SelectOption, Size, TabItem, TableColumn, Tone } from './types';

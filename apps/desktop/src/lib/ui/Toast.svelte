@@ -4,7 +4,7 @@
   import Icon from './Icon.svelte';
   import IconButton from './IconButton.svelte';
   import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from './icons';
-  import type { ToastItem } from './toast.svelte';
+  import type { ToastItem } from './toast-store.svelte';
 
   let { item, ondismiss }: { item: ToastItem; ondismiss: () => void } = $props();
 

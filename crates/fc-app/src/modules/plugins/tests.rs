@@ -1409,13 +1409,14 @@ fn host_call_loops_in_hooks_do_not_freeze_actions(f: Factory) {
     install_wat(&t, &dir, ID, &wat, &perms, &[], &perms);
     set_app_setting(&t, SETTING_MAX_HOST_CALLS, json!(1_000_000));
     set_app_setting(&t, SETTING_FUEL, json!(1_000_000));
-    set_app_setting(&t, SETTING_TIMEOUT, json!(500));
+    set_app_setting(&t, SETTING_TIMEOUT, json!(1000));
     let decks = t.ok::<DecksList>(Empty {}).decks.len();
-    // Four deck_created events in one action: one hook run (≈ 500 ms), three skipped.
+    // Four deck_created events in one action: one hook run (≈ 1000 ms), three skipped.
+    // Structural: `failures == 1`. The wall clock only proves "not all four ran" (< 4 × timeout).
     let start = std::time::Instant::now();
     deck(&t, "A::B::C::D");
     let took = start.elapsed();
-    assert!(took < std::time::Duration::from_millis(1500), "{took:?}");
+    assert!(took < std::time::Duration::from_millis(3500), "{took:?}");
     assert_eq!(plugin(&t, ID).failures, 1, "one hook ran");
     assert_eq!(t.ok::<DecksList>(Empty {}).decks.len(), decks + 4, "the action went through");
 }

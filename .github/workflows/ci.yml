@@ -56,6 +56,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: frontendDist klasörü (generate_context! için)
         run: mkdir -p apps/desktop/dist
+      - name: Dosya adı / import büyük-küçük harf çakışması (Windows)
+        run: node .github/scripts/check-case-collisions.mjs
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
@@ -135,7 +137,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - run: npx playwright install --with-deps chromium
+      - name: Chromium (playwright-core, pinned)
+        run: npx --yes playwright-core@1.56.1 install --with-deps chromium
       - run: pnpm screens
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
