@@ -358,9 +358,13 @@ impl Registry {
     pub fn permits(&self, actor: &Actor, permission: &str) -> bool {
         match actor {
             Actor::User | Actor::Cli | Actor::System => true,
-            Actor::Mcp(_) => crate::modules::mcp::MCP_PERMISSIONS.contains(&permission),
+            Actor::Mcp(_) => {
+                !USER_ONLY_PERMISSIONS.contains(&permission)
+                    && crate::modules::mcp::MCP_PERMISSIONS.contains(&permission)
+            }
             Actor::Plugin(id) => {
-                fc_plugins::permission::api_grantable(permission)
+                !USER_ONLY_PERMISSIONS.contains(&permission)
+                    && fc_plugins::permission::api_grantable(permission)
                     && read(&self.grants)
                         .get(id)
                         .is_some_and(|g| g.contains(permission))
@@ -665,6 +669,11 @@ pub(crate) fn module_disabled(module: &str) -> AppError {
         .with_detail("module", module),
     )
 }
+
+/// Permissions only the user, the CLI and the app itself hold ([`Registry::permits`]): both
+/// let the holder choose a program the app will launch (`mcp:write` registers MCP servers,
+/// `settings:exec` names an executable such as `reading.ffmpeg_path`).
+pub(crate) const USER_ONLY_PERMISSIONS: &[&str] = &["mcp:write", crate::settings::EXEC_PERMISSION];
 
 pub(crate) fn unknown_method(name: &str) -> AppError {
     AppError::Api(

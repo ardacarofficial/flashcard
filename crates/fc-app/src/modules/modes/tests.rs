@@ -903,7 +903,7 @@ pub fn timed_countdown_belongs_to_the_card_on_screen(f: &Factory) {
 /// `confidence`, `timed` (counted by statistics, cached = fresh) and practice `trial_learn`,
 /// `trial_timed`, `test` (not counted, `cards` unchanged). Daily limits: hand-picked sessions
 /// (learn, test) are not limited, but every schedule-changing answer counts against the
-/// deck's `new_per_day` for later normal sessions (docs/10 §24).
+/// deck's `new_per_day` for later normal sessions (docs/10 §27).
 pub fn modes_log_their_own_review_mode_and_respect_daily_limits(f: &Factory) {
     let t = T::new(f(), 5);
     let d = t.deck("Limitli");

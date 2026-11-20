@@ -59,6 +59,8 @@ pub const FORBIDDEN_API_AREAS: &[&str] = &["plugins", "io", "mcp", "ai_keys", "a
 /// * `jobs:write`: cancelling jobs (backups, exports) acts on areas plugins never reach.
 /// * `stats:write`: rebuilding the statistics cache is whole-history work (v0.6); the
 ///   optimizer (`optimizer.run`, `decks:write`) is refused by method in the app.
+/// * `settings:exec`: settings naming a program the app runs (`reading.ffmpeg_path`, v0.10);
+///   the app holds it for the user and the CLI alone (`fc_app` `USER_ONLY_PERMISSIONS`).
 pub const FORBIDDEN_API_PERMISSIONS: &[&str] = &[
     "settings:write",
     "modules:write",
@@ -68,6 +70,7 @@ pub const FORBIDDEN_API_PERMISSIONS: &[&str] = &[
     "batch:write",
     "jobs:write",
     "stats:write",
+    "settings:exec",
 ];
 
 /// Methods no plugin may hook, whatever it was granted: a `before:` hook rewrites the

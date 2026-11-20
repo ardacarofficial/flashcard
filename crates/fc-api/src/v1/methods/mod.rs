@@ -95,4 +95,5 @@ domains! {
     plugins,
     tts,
     modes,
+    reading,
 }

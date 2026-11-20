@@ -14,6 +14,7 @@ mod migrations;
 mod misc;
 mod notes;
 mod plugins;
+mod reading;
 mod search;
 mod stats;
 mod store;

@@ -1,0 +1,18 @@
+{
+  "oplog.summary.reading.items.create": "Added text {title}",
+  "oplog.summary.reading.items.import": "Started reading a file or page",
+  "oplog.summary.reading.items.update": "Edited text {title}",
+  "oplog.summary.reading.items.set_position": "Saved the reading position in {title}",
+  "oplog.summary.reading.items.delete": "Deleted text {title}",
+  "oplog.summary.reading.items.undelete": "Restored text {title}",
+  "oplog.summary.reading.items.restore_state": "Restored text {title}",
+  "oplog.summary.reading.queue.set": "Changed the reading queue: {title}",
+  "oplog.summary.reading.queue.read": "Read {title} for today",
+  "oplog.summary.reading.queue.postpone": "Postponed {title}",
+  "oplog.summary.reading.extracts.create": "Made extract {title}",
+  "oplog.summary.reading.extracts.cloze": "Made a cloze from {title}",
+  "oplog.summary.reading.words.mark": "Marked {count} word(s)",
+  "oplog.summary.reading.words.restore": "Restored {count} word mark(s)",
+  "oplog.summary.reading.cards.make": "Made a card for {word}",
+  "oplog.summary.reading.clips.extract": "Started cutting an audio clip"
+}

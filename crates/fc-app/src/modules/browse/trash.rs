@@ -60,7 +60,9 @@ pub(super) fn purge(req: PurgeTrash, ctx: &mut CommandCtx<'_>) -> AppResult<Comm
     // `0` days empties the trash, including what was trashed in this very millisecond.
     let cutoff = if days == 0 { Timestamp(before.0 + 1) } else { before };
     let c = ctx.tx.purge_trash(cutoff)?;
-    let total = c.notes + c.cards + c.decks;
+    // v0.10: trashed reading items go with the same retention.
+    let reading = ctx.tx.purge_reading_items(cutoff)?;
+    let total = c.notes + c.cards + c.decks + reading;
     if total > 0 {
         // Older inverses may refer to what is gone now: undo stops here instead of failing
         // with NOT_FOUND on every step before it.

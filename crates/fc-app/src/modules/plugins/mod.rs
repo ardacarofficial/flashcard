@@ -274,6 +274,10 @@ fn check_against_registry(registry: &Registry, m: &Manifest) -> AppResult<()> {
                 if !m.requests(d.permission) {
                     return Err(bad(p, "a hook needs the hooked method's own permission too"));
                 }
+                // A method no plugin may call cannot be hooked either.
+                if matches!(redact::exposure(&method), redact::Exposure::Refused(_)) {
+                    return Err(bad(p, "this method is not available to plugins"));
+                }
                 // A hook sees the user's params and the response: the data they hold.
                 let reads: Vec<String> =
                     redact::exposure(&method).domains().iter().map(|d| format!("{d}:read")).collect();

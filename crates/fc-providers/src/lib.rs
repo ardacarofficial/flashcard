@@ -19,6 +19,7 @@
 pub mod ai;
 pub mod card_types;
 pub mod language;
+pub mod lemma;
 pub mod provider;
 pub mod speech;
 pub mod strategy;

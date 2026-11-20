@@ -428,11 +428,30 @@ fn settings_get(req: GetSettings, ctx: &QueryCtx<'_>) -> AppResult<SettingValues
     })
 }
 
+/// Settings naming a program the app runs need [`crate::settings::EXEC_PERMISSION`] —
+/// checked here, against the issuing actor, so a `batch.execute`/undo/redo wrapper cannot
+/// launder the call.
+fn ensure_exec_permission(ctx: &CommandCtx<'_>, key: &str) -> AppResult<()> {
+    let perm = crate::settings::EXEC_PERMISSION;
+    if !crate::settings::is_exec_setting(key) || ctx.registry.permits(ctx.actor, perm) {
+        return Ok(());
+    }
+    Err(AppError::Api(
+        ApiError::new(
+            ErrorCode::PermissionDenied,
+            format!("setting {key} may only be changed by the user"),
+        )
+        .with_detail("key", key)
+        .with_detail("permission", perm),
+    ))
+}
+
 fn settings_set(
     req: SetSetting,
     ctx: &mut CommandCtx<'_>,
 ) -> AppResult<CommandOutcome<SettingValueDto>> {
     let def = find_def(ctx.registry, &req.key)?;
+    ensure_exec_permission(ctx, &req.key)?;
     if !def.scopes.contains(&req.scope.kind()) {
         return Err(CoreError::InvalidSettingValue {
             key: def.key,
@@ -441,6 +460,9 @@ fn settings_set(
         .into());
     }
     validate_setting_value(&def, &req.value)?;
+    if crate::settings::is_exec_setting(&req.key) {
+        crate::settings::validate_executable(&req.key, &req.value)?;
+    }
     chain_for(ctx.reads(), &req.scope)?;
     let old = ctx.reads().get_setting(&req.scope, &req.key)?;
     ctx.tx
@@ -476,6 +498,7 @@ fn settings_reset(
     ctx: &mut CommandCtx<'_>,
 ) -> AppResult<CommandOutcome<SettingValueDto>> {
     let def = find_def(ctx.registry, &req.key)?;
+    ensure_exec_permission(ctx, &req.key)?;
     chain_for(ctx.reads(), &req.scope)?;
     let old = ctx.reads().get_setting(&req.scope, &req.key)?;
     let msg = summary::<SettingsReset>().param("key", &req.key);

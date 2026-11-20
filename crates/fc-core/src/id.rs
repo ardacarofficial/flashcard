@@ -189,6 +189,10 @@ define_id!(
     /// Configured AI provider id (v0.8).
     AiProviderId
 );
+define_id!(
+    /// Reading-mode text, subtitle or extract id (v0.10).
+    ReadingItemId
+);
 
 #[cfg(test)]
 mod tests {

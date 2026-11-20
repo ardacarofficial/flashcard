@@ -259,6 +259,38 @@
     "query",
     "media:read"
   ],
+  "v1.modes.confidence.answer": [
+    "command",
+    "study:write"
+  ],
+  "v1.modes.inline.create": [
+    "command",
+    "notes:write"
+  ],
+  "v1.modes.inline.preview": [
+    "query",
+    "notes:read"
+  ],
+  "v1.modes.learn.answer": [
+    "command",
+    "study:write"
+  ],
+  "v1.modes.test.paper": [
+    "query",
+    "study:read"
+  ],
+  "v1.modes.test.submit": [
+    "command",
+    "study:write"
+  ],
+  "v1.modes.timed.expire": [
+    "command",
+    "study:write"
+  ],
+  "v1.modes.timed.start": [
+    "command",
+    "study:write"
+  ],
   "v1.modules.list": [
     "query",
     "modules:read"
@@ -370,6 +402,66 @@
   "v1.presets.update": [
     "command",
     "decks:write"
+  ],
+  "v1.reading.analyze": [
+    "query",
+    "reading:read"
+  ],
+  "v1.reading.cards.make": [
+    "command",
+    "notes:write"
+  ],
+  "v1.reading.extracts.cloze": [
+    "command",
+    "notes:write"
+  ],
+  "v1.reading.extracts.create": [
+    "command",
+    "reading:write"
+  ],
+  "v1.reading.items.create": [
+    "command",
+    "reading:write"
+  ],
+  "v1.reading.items.delete": [
+    "command",
+    "reading:write"
+  ],
+  "v1.reading.items.get": [
+    "query",
+    "reading:read"
+  ],
+  "v1.reading.items.list": [
+    "query",
+    "reading:read"
+  ],
+  "v1.reading.items.set_position": [
+    "command",
+    "reading:write"
+  ],
+  "v1.reading.items.update": [
+    "command",
+    "reading:write"
+  ],
+  "v1.reading.queue.postpone": [
+    "command",
+    "reading:write"
+  ],
+  "v1.reading.queue.read": [
+    "command",
+    "reading:write"
+  ],
+  "v1.reading.queue.set": [
+    "command",
+    "reading:write"
+  ],
+  "v1.reading.words.lookup": [
+    "query",
+    "reading:read"
+  ],
+  "v1.reading.words.mark": [
+    "command",
+    "reading:write"
   ],
   "v1.saved_queries.create": [
     "command",

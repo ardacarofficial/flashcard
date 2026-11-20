@@ -13,6 +13,7 @@
 //!   latest zstd `collection.anki21b` schema) and writing (legacy schema 11).
 //! * [`fcpack`]: our deck package (`.fcpack`), [`fcbackup`]: full collection backup.
 //! * [`media`]: media references inside field HTML. [`print`]: printable HTML.
+//! * [`subtitle`]: `.srt` / `.vtt` subtitles → cues (reading mode, v0.10).
 #![forbid(unsafe_code)]
 
 pub mod anki;
@@ -23,6 +24,7 @@ pub mod json;
 pub mod media;
 pub mod pack;
 pub mod print;
+pub mod subtitle;
 pub mod text;
 mod zipio;
 

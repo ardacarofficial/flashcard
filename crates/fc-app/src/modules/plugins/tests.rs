@@ -952,6 +952,22 @@ fn hooks_cannot_reach_management_io_or_settings(f: Factory) {
         assert_eq!(e.code, ErrorCode::ValidationPluginManifest, "{hook}: {e:?}");
         assert_eq!(e.details["permission"], json!(hook));
     }
+    // A method no plugin may call cannot be hooked even with its permissions in the manifest
+    // (v0.10: a `before:` hook could point the user's import or clip at any file).
+    for (i, (hook, perms)) in [
+        ("hooks:before:reading.items.import", ["reading:write", "reading:read"]),
+        ("hooks:before:reading.clips.extract", ["media:write", "media:read"]),
+        ("hooks:before:optimizer.run", ["decks:write", "decks:read"]),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut asked = vec!["ui:command", hook];
+        asked.extend(perms);
+        let e = install_refused(&t, escape_variant(&dir, &format!("r{i}"), &asked), &asked);
+        assert_eq!(e.code, ErrorCode::ValidationPluginManifest, "{hook}: {e:?}");
+        assert_eq!(e.details["permission"], json!(hook));
+    }
     // A hook without the hooked method's permission in the manifest is refused too.
     let e = install_refused(
         &t,

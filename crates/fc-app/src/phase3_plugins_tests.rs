@@ -28,6 +28,7 @@ fn all_permissions() -> BTreeSet<String> {
         "oplog:read",
         "stats:write",
         "plugins:read",
+        "settings:exec",
     ] {
         all.insert(p.to_owned());
     }
@@ -52,6 +53,8 @@ const NEVER_FOR_PLUGINS: &[&str] = &[
     "plugins:write",
     "batch:write",
     "jobs:write",
+    // v0.10: names a program the app runs (`reading.ffmpeg_path`).
+    "settings:exec",
 ];
 
 #[test]

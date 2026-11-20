@@ -47,4 +47,5 @@ modules! {
     plugins,
     tts,
     modes,
+    reading,
 }

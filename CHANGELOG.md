@@ -2,7 +2,14 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
-## [Unreleased] — Faz 3 entegrasyonu (v0.6–v0.8 birleşik, `feat/phase3-integration`)
+## [Unreleased] — Faz 4 entegrasyonu (v0.10, `feat/phase4-integration`)
+
+### Faz 4 entegrasyonu — tur 1 (v0.10 modlar + v0.10 okuma)
+- İki v0.10 izi v0.7 eklentileriyle birleşti: yeni metotlar eklenti süzme katmanında sınıflandı (öğren cevabı, test teslimi, satır içi kart ve okumadan kart **kâhin**: okuma izni olmadan çalışmaz), okuma olayları okuma izni olmadan gelmez, eklenti API'si (`api_v1.json`) yalnız büyüdü.
+- **Okuma güvenliği:** eklenti dosya/web içe aktaramaz, ffmpeg kesiti başlatamaz, bunlara kanca takamaz; altyazının video yolu eklentiye hiç görünmez ve eklenti onu ayarlayamaz. Genel kural: eklentinin çağıramadığı metoda kanca takılamaz. ffmpeg yolu (`settings:exec`) yalnız kullanıcı/CLI.
+- Okuma ekranında satır içi kart oluşturucu ("Yeni kartlar"). docs/10 §29.
+
+## Faz 3 entegrasyonu (v0.6–v0.8 birleşik, `feat/phase3-integration`)
 
 ### Faz 3 entegrasyonu — tur 4 (+ v0.7 eklentiler)
 - v0.7 eklentiler v0.6 istatistik, v0.8 AI/MCP ve Faz 2 kurallarıyla birleşti. Workspace sürümü **0.8.0**.
@@ -21,7 +28,18 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 - **Odak modu:** tam ekran, menü/deste seçici/sayaçlar gizli (F); ayarlar `focus.fullscreen`, `focus.hide_counts`, `focus.auto`.
 - **Satır içi kart oluşturma (RemNote tarzı):** `soru :: cevap` satırları kart olur (cloze `{{…}}`, `[[bağlantı]]`, kod içi `::` ayırıcı sayılmaz; `\::` kaçış). Çalışma ekranında N ile, oturumu bozmadan; önizleme yinelenenleri gösterir, oluşturma tek geri al adımı. `modes.inline.preview/create`; bileşen okuma ekranına da takılabilir.
 - **`review_log.mode` modları ayırır:** takvimi değiştirenler `normal`, `learn`, `timed`, `confidence`; pratik `trial`, `trial_learn`, `trial_timed`, `trial_confidence`, `test`. İstatistik ve FSRS optimizasyonu pratik satırları saymaz (`fc_storage::repo::is_practice_mode`); günlük limitler takvimi değiştiren **her** modu sayar, elle seçilen oturumlar (özel, yanlışlar, öğren, test) limitsizdir. Altı modül (`learn`, `practice_test`, `confidence`, `timed`, `focus`, `inline_cards`) ayarlardan kapatılabilir.
-- **Testler:** `fc-app/src/modules/modes/tests.rs` (9 senaryo × 3 depo), `io/tests.rs::imported_history_keeps_practice_modes`, `fc-study` modes (öğren/test/güven/zaman), `fc-core` inline_cards, masaüstü `features/modes/modes.test.ts`. docs/10 §24.
+- **Testler:** `fc-app/src/modules/modes/tests.rs` (9 senaryo × 3 depo), `io/tests.rs::imported_history_keeps_practice_modes`, `fc-study` modes (öğren/test/güven/zaman), `fc-core` inline_cards, masaüstü `features/modes/modes.test.ts`. docs/10 §27.
+
+### v0.10 Okuma modu, altyazı ve artımlı okuma — okuma izi (`feat/v0.10-reading`)
+- **Okuma modu (docs/02 §24):** metin yapıştır, dosya (`.txt`/`.html`/`.pdf`, her kodlama) ya da web sayfası aç; kelimeler LingQ tarzı renklenir — **yeni** (mavi), **öğreniliyor** (sarı), **biliniyor**, **yok sayıldı** (gri). Durum destedeki kartların FSRS verisinden gelir: olgun kart (aralık ≥ 21 gün, istatistikle aynı tanım) = biliniyor; kartı olmayan kelimede "Biliyorum" / "Yok say" işaretleri (geri alınabilir, toplu "tüm yeni kelimeleri bildim"). "Bu metnin %87'sini biliyorsun".
+- **Lemmatizasyon:** `run/running/ran` ve `kalem/kalemlerimizden` aynı kelime; yerleşik İngilizce ve Türkçe kural tabanlı lemmatizer'lar, diğer diller küçük harf (takılabilir `Lemmatizer` arayüzü). Kartın kelimesi `word` alanından (yoksa sıralama alanından) okunur; sayılan kartlar ayarla daraltılabilir.
+- **Kart yap:** tıklanan kelimeden **Kelime kartı** (cümle örnek olarak, kelime kalın) ya da yeni yerleşik **Cümle kartı** (cümle + çeviri + hedef kelime + kaynak/zaman damgası).
+- **Altyazıdan kart ve cümle madenciliği (§25):** `.srt`/`.vtt` yüklenir (etiketler, BOM, Windows-1254, VTT başlık/NOTE/STYLE), satırlar zamanlarıyla listelenir ve aynı motorla renklenir; video verilirse **ffmpeg** ile satırın ses kesiti (mp3) ve ekran görüntüsü (jpeg) karta eklenir (iptal edilebilir iş, ayarlanabilir ffmpeg yolu).
+- **Artımlı okuma (§26):** okuma kuyruğu (öncelikli, aralıklı: "bugünlük bu kadar" → 1, 2, 4… gün), erteleme, seçili parçadan **özüt** (kuyruğa yüksek öncelikle girer) ve özütten **cloze** kartı.
+- **Şema:** migration `0900_reading` (`reading_items`, `word_marks`); çöp temizliği okuma öğelerini de siler. API `reading.*` (UTF-16 ofsetler), olaylar `reading_items_changed`, `word_marks_changed`; hata kodları `error_codes/reading.in`. docs/10 §28.
+- **Masaüstü:** "Okuma" ekranı (kitaplık, okuma kuyruğu, okuyucu, kelime paneli), TR/EN.
+- **İnceleme düzeltmeleri:** ffmpeg yolu artık ayrı `settings:exec` izni ister (yalnız kullanıcı/CLI; eklenti, otomasyon, yerel API ve MCP değiştiremez), mevcut çalıştırılabilir dosyanın mutlak yolu olmalı, yedekten geri yüklemede silinir; ffmpeg stderr'i çalışırken okunur, Windows'ta konsol penceresi açılmaz, geçici klasör `tempfile`. Türkçe ek soyucu ünlü uyumlu şablonlar + en az 3 harfli kök kuralıyla aşırı kesmez (`ayna`, `hasta`, `anne`, `kedi` bozulmaz; `Türkiye`/`Türkiye'de` aynı anahtar). Kuyrukta vadesi gelenler önceliğe göre. Altyazıda boş satırsız cue'lar ve tek `<` düzgün. İngilizce kısaltmalar (`don't` → `do`) ve tireli kelimeler; `bit`/`US` yanlış eşleşmez. 10 bin kelime renklendirme ölçümü.
+- **Testler:** `fc-core::reading` (durum kuralı, özet, cümleler, aralıklar, cloze), `fc-providers::lemma`, `fc-interop::subtitle`, depolama `0900` migration + gidiş-dönüş, `fc-app` `modules/reading/tests.rs` (bellek + SQLite: FSRS tutarlılığı, Türkçe + işaret geri al, öğe/kuyruk/özüt/cloze, kartlar, `.srt` dosyasından cümle kartı, sahte ffmpeg ile kesit + hata yolları, modül anahtarı), `reading.test.ts`.
 
 ### Faz 3 entegrasyonu — tur 3 (+ v0.8 AI, `feat/phase3-integration`)
 - v0.8 AI, MCP, istatistik ve Faz 2 geçmiş kurallarıyla birleşti: AI'nin eklediği/düzenlediği notlar replay listesindeki sıradan geri al adımlarıdır (`ai.usage.record` defter satırı, replay edilemez); AI iş şeridi içe/dışa aktarma ve optimizer işleriyle yan yana çalışır, iptal edilebilir; MCP hiçbir `ai.*` metoduna (okumalar ve `batch.execute` içi dahil) erişemez, anahtar görmez; seviyeye duyarlı üretimin sınıflandırmaları istatistik kırılımlarında görünür, AI kullanımı yalnız AI ekranında. Menüde AI, Hedefler'den sonra. Testler `modules/ai/tests_phase3.rs`. docs/10 §22–§23.

@@ -80,12 +80,26 @@ const GOALS: &[Domain] = &["goals"];
 const AI: &[Domain] = &["ai"];
 /// AI requests and outputs hold note and source text.
 const AI_NOTES: &[Domain] = &["ai", "notes"];
+// Phase 4 (v0.10 reading). Word colours and lookups come from the cards of a word (an oracle
+// on note contents); cards made from a reading item copy its text into a note.
+const READING: &[Domain] = &["reading"];
+const READING_CARDS: &[Domain] = &["reading", "cards", "notes"];
+const READING_NOTES: &[Domain] = &["notes", "reading"];
 /// Never readable by a plugin.
 const PLUGINS: &[Domain] = &["plugins"];
 const IO: &[Domain] = &["io"];
 
 const UNBOUNDED: &str = "whole-collection work is not available to plugins";
 const AI_WRITES: &str = "AI writes are not available to plugins";
+const FREE_PATHS: &str = "free file paths and web pages are not available to plugins";
+const PROGRAMS: &str = "running programs (ffmpeg) is not available to plugins";
+
+/// Fields holding a **free file path** the app reads or hands to a program (a subtitle's
+/// video for ffmpeg clips). A plugin never sees them (stripped from everything [`filter`]
+/// passes) and never sets them: the reading handlers refuse them from callers without
+/// `io:read` (never grantable), and a `before:` hook's params keep the user's values
+/// ([`keep_user_only`]).
+pub(crate) const USER_ONLY_FIELDS: &[&str] = &["media_path"];
 
 /// What calling method `name` (unqualified) exposes. **Every** public method a plugin could
 /// be granted is listed (a test walks the catalog); anything else is refused.
@@ -159,6 +173,16 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "modes.inline.preview" => Reads(NOTES),
         // The duplicate count says which notes exist already.
         "modes.inline.create" => Oracle(NOTES),
+        // Phase 4, v0.10 reading.
+        "reading.items.list" | "reading.items.get" | "reading.items.create"
+        | "reading.items.update" | "reading.items.set_position" | "reading.items.delete"
+        | "reading.queue.set" | "reading.queue.read" | "reading.queue.postpone"
+        | "reading.extracts.create" | "reading.words.mark" => Reads(READING),
+        "reading.analyze" | "reading.words.lookup" => Reads(READING_CARDS),
+        "reading.extracts.cloze" | "reading.cards.make" => Oracle(READING_NOTES),
+        // Imports read any file or web page; clips run ffmpeg on a file.
+        "reading.items.import" => Refused(FREE_PATHS),
+        "reading.clips.extract" => Refused(PROGRAMS),
         _ => Refused("not available to plugins"),
     }
 }
@@ -241,13 +265,48 @@ pub(crate) fn ids_only(value: &Value) -> Value {
     }
 }
 
-/// `value` if `granted` reads all of `domains`, else [`ids_only`].
+/// `value` if `granted` reads all of `domains`, else [`ids_only`]; [`USER_ONLY_FIELDS`]
+/// never pass.
 pub(crate) fn filter(granted: &BTreeSet<String>, domains: &[Domain], value: Value) -> Value {
+    let value = strip_user_only(value);
     if can_read(granted, domains) {
         value
     } else {
         ids_only(&value)
     }
+}
+
+/// `value` without [`USER_ONLY_FIELDS`] (at any depth).
+pub(crate) fn strip_user_only(value: Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .filter(|(k, _)| !USER_ONLY_FIELDS.contains(&k.as_str()))
+                .map(|(k, v)| (k, strip_user_only(v)))
+                .collect(),
+        ),
+        Value::Array(xs) => Value::Array(xs.into_iter().map(strip_user_only).collect()),
+        v => v,
+    }
+}
+
+/// Params a `before:` hook returned, with the [`USER_ONLY_FIELDS`] of the user's `original`
+/// params put back (the hook never saw them and may not set them: the call runs with the
+/// user's authority).
+pub(crate) fn keep_user_only(original: &Value, mut replaced: Value) -> Value {
+    if let Value::Object(out) = &mut replaced {
+        for k in USER_ONLY_FIELDS {
+            match original.get(*k) {
+                Some(v) => {
+                    out.insert((*k).to_owned(), v.clone());
+                }
+                None => {
+                    out.remove(*k);
+                }
+            }
+        }
+    }
+    replaced
 }
 
 /// Domains of a job's message, error and result, by its kind.
@@ -260,6 +319,8 @@ fn job_domains(kind: &str) -> &'static [Domain] {
         // AI requests and model lists; extracted sources come from files and the web (io).
         "ai.request" | "ai.models" => AI_NOTES,
         "optimizer.run" => &["decks", "stats"],
+        // Reading imports (files, web pages) and ffmpeg clips: like imports.
+        "reading.import" | "reading.clip" => IO,
         _ => IO,
     }
 }
@@ -341,14 +402,15 @@ pub(crate) fn event_domains(event: &DomainEvent) -> &'static [Domain] {
         E::GoalsChanged => GOALS,
         E::AiConfigChanged => AI,
         E::AiPartial { .. } => AI_NOTES,
+        E::ReadingItemsChanged | E::WordMarksChanged { .. } => READING,
     }
 }
 
 /// Domains whose events a plugin is not even told about without their read permissions
-/// (statistics, planning, goals, AI, MCP — phase 3): elsewhere an unreadable event still
-/// arrives cut to ids, these do not arrive at all, so a subscription alone says nothing
-/// (not even that an AI request is streaming or a goal changed).
-const GATED_EVENT_DOMAINS: &[Domain] = &["stats", "planning", "goals", "ai", "mcp"];
+/// (statistics, planning, goals, AI, MCP — phase 3; reading — phase 4): elsewhere an
+/// unreadable event still arrives cut to ids, these do not arrive at all, so a subscription
+/// alone says nothing (not even that an AI request is streaming or a goal changed).
+const GATED_EVENT_DOMAINS: &[Domain] = &["stats", "planning", "goals", "ai", "mcp", "reading"];
 
 /// Whether an `event:` hook of a plugin holding `granted` is called for `event` at all.
 pub(crate) fn event_delivered(granted: &BTreeSet<String>, event: &DomainEvent) -> bool {
@@ -727,6 +789,45 @@ mod tests {
         assert_eq!(exposure("modes.inline.preview"), Exposure::Reads(NOTES));
         assert_eq!(exposure("modes.inline.create"), Exposure::Oracle(NOTES));
         domain_case("notes", NOTES, json!({ "cards": [{ "front": "SECRET" }] }), "SECRET");
+    }
+
+    #[test]
+    fn domain_reading() {
+        let d = exposure("reading.items.get").domains();
+        domain_case("reading", d, json!({ "id": 1, "title": "SECRET", "source": "SECRET.srt" }), "SECRET");
+        // Word colours and lookups come from the cards of a word: an oracle on notes.
+        let d = exposure("reading.analyze").domains();
+        domain_case("notes", d, json!({ "tokens": [{ "lemma": "SECRET", "status": "known" }] }), "SECRET");
+        domain_case("cards", d, json!({ "summary": { "known": 1, "word": "SECRET" } }), "SECRET");
+        // Cards and clozes copy the item's text into a note: both domains, before running.
+        for m in ["reading.cards.make", "reading.extracts.cloze"] {
+            assert_eq!(exposure(m), Exposure::Oracle(READING_NOTES), "{m}");
+        }
+        // Free file paths, web pages and ffmpeg: never, and never hookable.
+        for m in ["reading.items.import", "reading.clips.extract"] {
+            assert!(matches!(exposure(m), Exposure::Refused(_)), "{m}");
+        }
+        assert_eq!(job_domains("reading.import"), IO);
+        assert_eq!(job_domains("reading.clip"), IO);
+        // A media path never reaches a plugin, whatever it may read, at any depth.
+        let all = grants(&["reading:read", "notes:read", "cards:read"]);
+        let item = json!({ "items": [{ "id": 1, "title": "T", "media_path": "/home/me/SECRET.mp4" }] });
+        let seen = filter(&all, READING, item);
+        assert!(!text(&seen).contains("SECRET"), "{seen}");
+        assert_eq!(seen["items"][0]["title"], "T");
+        // A before: hook cannot set or clear it: the user's value is put back.
+        let user = json!({ "id": 1, "title": "T", "media_path": "/home/me/film.mp4" });
+        let hooked = keep_user_only(&user, json!({ "id": 1, "title": "U", "media_path": "/etc/passwd" }));
+        assert_eq!(hooked, json!({ "id": 1, "title": "U", "media_path": "/home/me/film.mp4" }));
+        let hooked = keep_user_only(&json!({ "id": 1 }), json!({ "id": 1, "media_path": "/etc/passwd" }));
+        assert_eq!(hooked, json!({ "id": 1 }));
+        // Reading events need `reading:read` to arrive at all.
+        let marks = DomainEvent::WordMarksChanged { language: "en".into() };
+        for e in [&DomainEvent::ReadingItemsChanged, &marks] {
+            assert_eq!(event_domains(e), READING);
+            assert!(!event_delivered(&grants(&["reading:write"]), e));
+            assert!(event_delivered(&grants(&["reading:read"]), e));
+        }
     }
 
     #[test]

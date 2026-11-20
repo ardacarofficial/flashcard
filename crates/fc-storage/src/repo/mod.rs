@@ -77,4 +77,5 @@ domains! {
     stats: StatsRead, StatsWrite;
     ai: AiRead, AiWrite;
     plugins: PluginRead, PluginWrite;
+    reading: ReadingRead, ReadingWrite;
 }
