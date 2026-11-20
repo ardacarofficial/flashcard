@@ -1,7 +1,7 @@
 import {
-  DEFAULT_LOCALE,
   LOCALES,
   detectLocale,
+  systemLanguages,
   interpolate,
   translate,
   translateDynamic,
@@ -14,18 +14,31 @@ export { LOCALES, type Locale, type MessageKey } from './core';
 
 const STORAGE_KEY = 'fc.locale';
 
-function initial(): Locale {
+const isLocale = (v: string | null | undefined): v is Locale => !!v && (LOCALES as readonly string[]).includes(v);
+
+/**
+ * Starting language (docs/11 §4 "varsayılan arayüz dili sistem dilinden"), the same in the
+ * app and in mock mode: `?lang=tr|en` in the URL (screenshots, `pnpm dev:mock`), else the
+ * language the user chose before, else the system language (TR system → TR), else TR.
+ */
+export function initialLocale(): Locale {
+  try {
+    const param = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('lang') : null;
+    if (isLocale(param)) return param;
+  } catch {
+    /* no location */
+  }
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved && (LOCALES as readonly string[]).includes(saved)) return saved as Locale;
+    if (isLocale(saved)) return saved;
   } catch {
     /* storage unavailable */
   }
-  return typeof navigator !== 'undefined' ? detectLocale(navigator.languages) : DEFAULT_LOCALE;
+  return detectLocale(systemLanguages());
 }
 
 // TODO(v0.1 integration): persist via `settings.set` (app scope) once the backend exposes it.
-const state = $state<{ locale: Locale }>({ locale: initial() });
+const state = $state<{ locale: Locale }>({ locale: initialLocale() });
 
 export const i18n = {
   get locale(): Locale {

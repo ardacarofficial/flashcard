@@ -60,6 +60,21 @@ export function flatKeys(dict: unknown, prefix = ''): string[] {
   );
 }
 
+/**
+ * The OS / browser language list: `navigator.languages` (WebView2 and WebKitGTK report the
+ * system UI language there), then the `Intl` default locale, which follows the OS too.
+ */
+export function systemLanguages(): string[] {
+  const out: string[] = [];
+  if (typeof navigator !== 'undefined') out.push(...(navigator.languages ?? []), ...(navigator.language ? [navigator.language] : []));
+  try {
+    out.push(Intl.DateTimeFormat().resolvedOptions().locale);
+  } catch {
+    /* no Intl */
+  }
+  return out;
+}
+
 export function detectLocale(languages: readonly string[]): Locale {
   for (const l of languages) {
     const base = l.toLowerCase().split('-')[0];
