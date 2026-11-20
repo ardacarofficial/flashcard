@@ -14,11 +14,8 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Manual re-run: choose the `v*` tag as the ref in the "Run workflow" dialog; any other ref is skipped.
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Existing tag to build (e.g. v1.0.0)'
-        required: true
 
 permissions:
   contents: write
@@ -34,15 +31,17 @@ env:
 jobs:
   windows:
     name: Windows installers (draft release)
-    runs-on: windows-latest
+    # workflow_dispatch is only honoured when run from a `v*` tag ref (no branch builds).
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-2025
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ github.ref }}
       - name: Tag matches the workspace version
         shell: bash
         env:
-          TAG: ${{ inputs.tag || github.ref_name }}
+          TAG: ${{ github.ref_name }}
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
           if [ "v$version" != "$TAG" ]; then
@@ -50,12 +49,11 @@ jobs:
             exit 1
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
-      - uses: dtolnay/rust-toolchain@1.100.0 # = rust-toolchain.toml
-      - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
+      - uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0 (= rust-toolchain.toml)
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           package_json_file: apps/desktop/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -78,7 +76,7 @@ jobs:
             echo 'args=--config src-tauri/tauri.unsigned.conf.json' >> "$GITHUB_OUTPUT"
           fi
       - name: Build installers and create the draft release
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -87,17 +85,17 @@ jobs:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
           args: ${{ steps.sign.outputs.args }}
-          tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: Flashcard ${{ inputs.tag || github.ref_name }}
+          tagName: ${{ github.ref_name }}
+          releaseName: Flashcard ${{ github.ref_name }}
           releaseBody: |
-            Windows installers for Flashcard ${{ env.VERSION }}.
+            ${{ steps.sign.outputs.signed == 'true' && format('Windows installers for Flashcard {0}.', env.VERSION) || format('UNSIGNED — in-app update not available. Windows installers for Flashcard {0} were built without update signatures (no `latest.json`); installed apps will not see this release as an update.', env.VERSION) }}
 
             * `Flashcard_${{ env.VERSION }}_x64-setup.exe` — recommended (per-user, no admin rights).
             * `Flashcard_${{ env.VERSION }}_x64_en-US.msi` — for managed installs (per-machine).
 
             The installers are not code-signed: Windows SmartScreen shows "Windows protected
-            your PC" → "More info" → "Run anyway" (docs/08 K8). Updates inside the app are
-            verified with the project's Ed25519 update key.
+            your PC" → "More info" → "Run anyway" (docs/08 K8).
+            ${{ steps.sign.outputs.signed == 'true' && 'Updates inside the app are verified with the project''s Ed25519 update key.' || 'UNSIGNED build: install manually; do not publish this draft as an update.' }}
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: ${{ steps.sign.outputs.signed == 'true' }}

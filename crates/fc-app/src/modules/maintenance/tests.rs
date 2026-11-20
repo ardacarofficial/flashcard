@@ -370,3 +370,42 @@ fn no_automated_actor_reaches_maintenance_or_updates(f: Factory) {
         }
     }
 }
+
+/// The REAL update public key (`tauri.conf.json`) rejects a forged / tampered signature,
+/// using the same minisign verification as the updater (not the fake updater).
+#[test]
+fn the_configured_update_key_rejects_a_tampered_signature() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    use minisign_verify::{PublicKey, Signature};
+
+    let conf_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../apps/desktop/src-tauri/tauri.conf.json");
+    let conf: Value = serde_json::from_str(&std::fs::read_to_string(conf_path).unwrap()).unwrap();
+    let pubkey_b64 = conf["plugins"]["updater"]["pubkey"].as_str().expect("updater pubkey configured");
+    let pubkey_text = String::from_utf8(STANDARD.decode(pubkey_b64).unwrap()).unwrap();
+    let key = PublicKey::decode(&pubkey_text).expect("configured pubkey parses");
+
+    // Same key id as the real key, but the Ed25519 bytes are not a signature of the payload.
+    let key_line = pubkey_text.lines().nth(1).unwrap();
+    let key_bytes = STANDARD.decode(key_line).unwrap();
+    let mut sig_bytes = b"ED".to_vec();
+    sig_bytes.extend_from_slice(&key_bytes[2..10]);
+    sig_bytes.extend_from_slice(&[7u8; 64]);
+    let sig_text = format!(
+        "untrusted comment: forged\n{}\ntrusted comment: forged\n{}\n",
+        STANDARD.encode(&sig_bytes),
+        STANDARD.encode([9u8; 64])
+    );
+    let sig = Signature::decode(&sig_text).expect("well-formed signature");
+    assert!(key.verify(b"installer bytes", &sig, false).is_err());
+
+    // A signature under a different key id is refused too.
+    let mut other = sig_bytes.clone();
+    other[2] ^= 0xff;
+    let sig_text = format!(
+        "untrusted comment: other\n{}\ntrusted comment: other\n{}\n",
+        STANDARD.encode(&other),
+        STANDARD.encode([9u8; 64])
+    );
+    let sig = Signature::decode(&sig_text).unwrap();
+    assert!(key.verify(b"installer bytes", &sig, false).is_err());
+}

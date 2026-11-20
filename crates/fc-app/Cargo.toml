@@ -36,6 +36,8 @@ fc-app = { path = ".", features = ["testing"] }
 fc-plugins = { workspace = true, features = ["testing"] }
 fc-interop = { workspace = true, features = ["fixtures"] }
 fc-ai = { workspace = true, features = ["mock"] }
+# Verifies a tampered signature against the real update key (same crate the updater uses).
+minisign-verify = "0.3"
 
 [features]
 ## In-memory store, a temp-file SQLite store and the storage-agnostic service test suite

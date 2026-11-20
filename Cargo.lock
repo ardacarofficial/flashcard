@@ -1664,6 +1664,7 @@ dependencies = [
  "fc-study",
  "getrandom 0.3.4",
  "log",
+ "minisign-verify",
  "serde",
  "serde_json",
  "tempfile",

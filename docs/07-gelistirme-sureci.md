@@ -96,7 +96,7 @@ Bağımlılık sürümleri `Cargo.lock` ve `pnpm-lock.yaml` ile sabitlenir.
 - İsteğe bağlı: `sccache`, `ffmpeg` (v0.10 altyazı/video), `cargo-nextest`.
 
 ### 6.2 Windows
-- Windows derlemesi ve kurulum dosyası GitHub Actions'ta (`windows-latest`) üretilir.
+- Windows derlemesi ve kurulum dosyası GitHub Actions'ta (`windows-2025`) üretilir.
 - Gerçek kullanım testleri proje sahibi tarafından Windows'ta yapılır.
 
 ### 6.3 VDS (ör. Hetzner CPX42: 8 vCPU, 16 GB RAM, 320 GB disk)
@@ -134,7 +134,7 @@ Bir görev şu durumda bitmiştir:
 ### 8.3 Yayın akışı (`.github/workflows/release.yml`)
 1. `Cargo.toml` workspace sürümünü yükselt (ör. `1.0.0`), CHANGELOG'u güncelle, commit.
 2. `git tag v1.0.0 && git push origin v1.0.0` (etiket sürümle eşleşmezse akış durur).
-3. `windows-latest` NSIS + MSI derler, sır varsa güncelleme dosyalarını imzalar ve `latest.json` üretir, **taslak** (draft) bir Release oluşturur.
+3. `windows-2025` NSIS + MSI derler, sır varsa güncelleme dosyalarını imzalar ve `latest.json` üretir, **taslak** (draft) bir Release oluşturur.
 4. Taslağı incele (dosya adları, notlar) → **Publish**. Güncelleyici yalnız yayımlanmış en son sürümü görür.
 
 ### 8.4 CI duman testi (`ci.yml → windows-smoke`)
@@ -174,12 +174,12 @@ NSIS kurulumunu release modda derler, `/S` ile **sessiz, kullanıcı başına** 
 
 **6. `flashcard://` soğuk başlatma**
 20. Uygulamayı **tamamen kapat** (tepside de yok; Görev Yöneticisi'nde Flashcard yok).
-21. `Win+R` → `flashcard://study?query=deck:Test` → Enter (7. adımdaki destenin adı `Test` varsayıldı). ✅ Uygulama açılır ve **doğrudan Göz at ekranına o sorguyla** gider (soğuk başlatmada bağlantı kaybolmaz: pencere açılmadan gelen bağlantı kuyrukta bekler). Kurtarma penceresi çıkmaz.
+21. `Win+R` → `flashcard://study?query=deck:Test` → Enter (7. adımdaki destenin adı `Test` varsayıldı). ✅ Uygulama açılır ve **Göz at ekranını açar; sorgu ekrana aktarılmaz** (kod: `shell.ts` `linkTarget`, docs/10 bilinen sınırlar) (soğuk başlatmada bağlantı kaybolmaz: pencere açılmadan gelen bağlantı kuyrukta bekler). Kurtarma penceresi çıkmaz.
 22. Uygulama açıkken `Win+R` → `flashcard://add?front=merhaba&back=hello` → ✅ ikinci pencere açılmaz, mevcut pencere öne gelir, öneri *Gelen kutusu*na düşer ("Gelen kutusuna önerildi").
 23. Uygulamayı yine tamamen kapat; tarayıcı adres çubuğuna `flashcard://add?front=soğuk&back=cold` yaz → ✅ "Flashcard'ı aç?" sorusu, kabul edince uygulama açılır, öneri *Gelen kutusu*na düşer, tek pencere vardır.
 
 **7. Kaldırma**
-24. *Ayarlar → Uygulamalar → Flashcard → Kaldır*. ✅ Yönetici sorulmaz, `%LOCALAPPDATA%\Flashcard` silinir; **veri klasörü `%APPDATA%\app.flashcard.desktop` kalır** (yeniden kurulumda koleksiyon geri gelir).
+24. *Ayarlar → Uygulamalar → Flashcard → Kaldır*. ✅ Yönetici sorulmaz, `%LOCALAPPDATA%\Flashcard` silinir. NSIS kaldırıcısındaki **"Uygulama verilerini sil"** kutusu: **işaretsizse** (varsayılan) veri klasörü `%APPDATA%\app.flashcard.desktop` kalır (yeniden kurulumda koleksiyon geri gelir); **işaretliyse** bu klasör (koleksiyon, ayarlar, loglar) kalıcı olarak silinir — geri alınamaz. Windows'un *Ayarlar → Uygulamalar* kaldırması kaldırıcıyı etkileşimli açtığı için kutu görünür; sessiz `/S` kaldırmada veri kalır.
 
 **8. MSI (isteğe bağlı)**
 25. Temiz makinede `Flashcard_<A>_x64_en-US.msi` → ✅ yönetici ister, `C:\Program Files\Flashcard\` altına kurar, 4–8. adımlar aynı geçer.
