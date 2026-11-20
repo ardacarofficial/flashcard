@@ -22,6 +22,7 @@ pub mod notetype;
 pub mod paging;
 pub mod preset;
 pub mod query;
+pub mod reading;
 pub mod rng;
 pub mod settings;
 pub mod shortcut;
@@ -37,5 +38,7 @@ pub use id::{
 };
 // v0.8 (own line so parallel tracks adding ids do not collide).
 pub use id::AiProviderId;
+// v0.10 reading.
+pub use id::ReadingItemId;
 pub use rng::Rng;
 pub use time::{Clock, Timestamp};
