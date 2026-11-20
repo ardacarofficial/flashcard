@@ -94,4 +94,6 @@ domains! {
     ai,
     plugins,
     tts,
+    inbox,
+    local_api,
 }

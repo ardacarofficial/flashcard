@@ -180,6 +180,9 @@ fn replayable_methods_are_undoable_commands_without_side_channels() {
                 IoImportDiscard::NAME,
                 IoBackupLoad::NAME,
                 AiUsageRecord::NAME,
+                // v0.9: HTTP server bookkeeping with empty inverses, never in the oplog.
+                LocalApiPair::NAME,
+                LocalApiTouch::NAME,
             ]
             .contains(&d.name)
         {

@@ -196,6 +196,7 @@ impl JobHandler for RestoreJob {
         // Older schema: migrate the restored rows forward (outside the writer).
         let mut dump = fc_storage::upgrade_dump(dump)?;
         forget_mcp_approvals(&mut dump);
+        crate::modules::local_api::forget_clients(&mut dump);
         ctx.cancel.check()?;
 
         // Safety backup of the current state first, into the app data folder.

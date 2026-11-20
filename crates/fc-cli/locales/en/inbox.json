@@ -1,0 +1,14 @@
+{
+  "oplog.summary.inbox.add": "Proposed a card to the inbox",
+  "oplog.summary.inbox.accept": "Accepted {count} inbox items",
+  "oplog.summary.inbox.reject": "Rejected {count} inbox items",
+  "oplog.summary.inbox.remove": "Removed inbox items",
+  "oplog.summary.inbox.restore": "Restored inbox items",
+  "oplog.summary.deep_links.open": "Opened a link",
+  "oplog.summary.local_api.clients.approve": "Approved a local API client",
+  "oplog.summary.local_api.clients.deny": "Refused a local API client",
+  "oplog.summary.local_api.clients.revoke": "Revoked a local API client",
+  "oplog.summary.local_api.clients.remove": "Removed a local API client",
+  "oplog.summary.local_api.pair": "A local API client asked to pair",
+  "oplog.summary.local_api.touch": "A local API client made a request"
+}

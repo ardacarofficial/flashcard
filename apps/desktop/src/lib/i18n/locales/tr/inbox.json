@@ -1,0 +1,199 @@
+{
+  "nav": {
+    "inbox": "Gelen kutusu",
+    "local_api": "Yerel API"
+  },
+  "modules": {
+    "inbox": {
+      "name": "Gelen kutusu",
+      "description": "Uygulama dışından (tarayıcı eklentisi, bağlantılar, yerel API, pano) önerilen kartlar burada senin onayını bekler."
+    },
+    "deep_links": {
+      "name": "Bağlantılar",
+      "description": "Diğer programlardan gelen flashcard:// bağlantılarını açar. Kart ekleyen bağlantılar kartı yalnızca gelen kutusuna önerir."
+    },
+    "clipboard": {
+      "name": "Pano önerileri",
+      "description": "Varsayılan olarak kapalı. Açıkken kopyaladığın metne bakar ve kart olarak eklemeyi önerir. Kabul etmezsen hiçbir şey saklanmaz; parola, anahtar ya da kart numarasına benzeyen metinler ve sistemin gizli olarak işaretlediği içerik yok sayılır."
+    },
+    "quick_add": {
+      "name": "Hızlı ekleme",
+      "description": "Uygulama arka plandayken genel bir kısayol, kart eklemek için küçük bir pencere açar."
+    },
+    "local_api": {
+      "name": "Yerel API",
+      "description": "Bu bilgisayardaki programların (ör. tarayıcı eklentisi) uygulamayla konuşmasını sağlar. Yalnızca bu bilgisayar bağlanabilir ve her program senin onayını ister."
+    }
+  },
+  "settings": {
+    "clipboard": {
+      "min_chars": {
+        "label": "En kısa öneri (karakter)",
+        "description": "Bundan kısa kopyalanan metin yok sayılır."
+      },
+      "max_chars": {
+        "label": "En uzun öneri (karakter)",
+        "description": "Bundan uzun kopyalanan metin yok sayılır."
+      }
+    },
+    "quick_add": {
+      "shortcut": {
+        "label": "Hızlı ekleme kısayolu",
+        "description": "Örneğin CommandOrControl+Alt+N. Yeniden başlatınca geçerli olur."
+      },
+      "prefill_clipboard": {
+        "label": "Kopyalanan metni doldur",
+        "description": "Hızlı ekleme penceresi açılınca kopyalanan metni ön yüze yazar."
+      }
+    },
+    "local_api": {
+      "port": {
+        "label": "Port",
+        "description": "Uygulama yalnızca 127.0.0.1 üzerinde bu portu dinler. Modül yeniden açılınca geçerli olur."
+      }
+    }
+  },
+  "commands": {
+    "inbox": {
+      "add": "Gelen kutusuna kart öner",
+      "list": "Gelen kutusu öğeleri",
+      "count": "Gelen kutusu sayısı",
+      "accept": "Gelen kutusu öğelerini kabul et",
+      "reject": "Gelen kutusu öğelerini reddet"
+    },
+    "deep_links": {
+      "open": "flashcard:// bağlantısı aç"
+    },
+    "clipboard": {
+      "check": "Kopyalanan metni denetle"
+    },
+    "local_api": {
+      "clients": {
+        "list": "Yerel API istemcileri",
+        "approve": "Yerel API istemcisini onayla",
+        "deny": "Yerel API istemcisini reddet",
+        "revoke": "Yerel API istemcisinin iznini kaldır",
+        "remove": "Yerel API istemcisini sil"
+      },
+      "methods": "Yerel API metotları"
+    }
+  },
+  "errors": {
+    "validation": {
+      "inbox_item": "Bu kart önerisi geçerli değil.",
+      "deep_link": "Bu bağlantı açılamıyor.",
+      "payload_too_large": "İstek çok büyük.",
+      "api_scope": "Bu izin verilemez.",
+      "api_client": "Bu bağlantı isteği geçerli değil."
+    },
+    "not_found": {
+      "inbox_item": "Gelen kutusu öğesi bulunamadı.",
+      "api_client": "Program bulunamadı.",
+      "pairing": "Bağlantı isteği bulunamadı."
+    },
+    "conflict": {
+      "inbox_item_state": "Bu öğe zaten işlenmiş.",
+      "rate_limited": "Çok fazla istek; biraz sonra tekrar dene.",
+      "api_client_state": "Bu programın isteği zaten işlenmiş ya da süresi dolmuş."
+    },
+    "permission": {
+      "unauthenticated": "Program bağlı değil (izin yok ya da kaldırılmış).",
+      "origin_not_allowed": "Bu kaynaktan gelen isteklere izin verilmiyor."
+    }
+  },
+  "inbox": {
+    "heading": "Gelen kutusu",
+    "intro": "Tarayıcı eklentisinden, bağlantılardan, diğer programlardan ve panodan önerilen kartlar. Sen kabul etmeden hiçbiri karta dönüşmez.",
+    "empty": "Bekleyen bir şey yok.",
+    "tabs": {
+      "pending": "Bekleyen",
+      "accepted": "Kabul edilen",
+      "rejected": "Reddedilen"
+    },
+    "select_all": "Tümünü seç",
+    "deck": "Deste",
+    "choose_deck": "Deste seç",
+    "accept": "Kabul et",
+    "accept_selected": "Seçilenleri kabul et ({count})",
+    "reject": "Reddet",
+    "reject_selected": "Seçilenleri reddet ({count})",
+    "accepted": "{count} kart eklendi",
+    "rejected": "{count} öğe reddedildi",
+    "edit": "Düzenle",
+    "front": "Ön yüz",
+    "back": "Arka yüz",
+    "tags": "Etiketler",
+    "classifications": "Sınıflandırmalar",
+    "from_page": "Kaynak",
+    "sentence": "Cümle",
+    "allow_duplicates": "Benzer kart olsa da ekle",
+    "source": {
+      "user": "Senin eklediğin",
+      "clipboard": "Pano",
+      "deep_link": "Bağlantı",
+      "local_api": "{name}",
+      "other": "{actor}"
+    },
+    "badge": "{count} bekliyor"
+  },
+  "local_api": {
+    "heading": "Yerel API",
+    "intro": "Bu bilgisayardaki programlar yerel API üzerinden kart önerebilir ve destelerini okuyabilir. Yalnızca bu bilgisayar 127.0.0.1:{port} adresinden bağlanabilir. Her program bir kez sorar; ne yapabileceğine sen karar verirsin.",
+    "clients": "Bağlı programlar",
+    "none": "Henüz program yok.",
+    "status": {
+      "pending": "Onayını bekliyor",
+      "approved": "İzinli",
+      "denied": "Reddedildi",
+      "revoked": "İzni kaldırıldı"
+    },
+    "scopes": "İzinler",
+    "last_used": "Son kullanım {time}",
+    "never_used": "Henüz kullanılmadı",
+    "approve": "İzin ver",
+    "deny": "Reddet",
+    "revoke": "İzni kaldır",
+    "remove": "Sil",
+    "origin": "Kaynak: {origin}",
+    "pairing": {
+      "title": "Bağlantı isteği",
+      "body": "{name} Flashcard'a bağlanmak istiyor.",
+      "asks": "İstediği izinler:",
+      "hint": "Yalnızca kendi kurduğun programlara izin ver. İzni istediğin zaman Yerel API ekranından kaldırabilirsin."
+    },
+    "scope": {
+      "inbox:write": "Gelen kutusuna kart önermek",
+      "inbox:read": "Gelen kutusunu görmek",
+      "decks:read": "Destelerini görmek",
+      "decks:write": "Deste oluşturmak",
+      "notetypes:read": "Not türlerini görmek",
+      "notes:read": "Notları okumak",
+      "notes:write": "Doğrudan not eklemek",
+      "attributes:read": "Sınıflandırmaları görmek",
+      "tags:read": "Etiketleri görmek",
+      "search:read": "Kart aramak"
+    },
+    "kind": {
+      "browser_extension": "Tarayıcı eklentisi",
+      "app": "Program",
+      "script": "Betik"
+    }
+  },
+  "clipboard": {
+    "suggest": "“{text}” kart olarak eklensin mi?",
+    "add": "Gelen kutusuna ekle",
+    "dismiss": "Kapat",
+    "added": "Gelen kutusuna eklendi"
+  },
+  "deep_links": {
+    "added": "Bir bağlantı kart önerdi; gelen kutunda.",
+    "failed": "Bağlantı açılamadı."
+  },
+  "quick_add": {
+    "title": "Hızlı ekleme",
+    "add": "Ekle",
+    "added": "Kart eklendi",
+    "close": "Kapat",
+    "no_deck": "Önce bir deste oluştur."
+  }
+}

@@ -46,4 +46,9 @@ modules! {
     ai,
     plugins,
     tts,
+    inbox,
+    deep_links,
+    clipboard,
+    quick_add,
+    local_api,
 }

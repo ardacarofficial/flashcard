@@ -42,7 +42,15 @@ pub const UI_POINTS: &[&str] = &[
 ///   plugin sees bytes and a file name, never a path).
 /// * `mcp`, `ai_keys`, `ai_requests`: external tool servers, API keys, paid AI calls (plugins
 ///   use the `ai:invoke` host permission).
-pub const FORBIDDEN_API_AREAS: &[&str] = &["plugins", "io", "mcp", "ai_keys", "ai_requests"];
+/// * `local_api`: approving local HTTP API clients (v0.9) is the user's decision.
+pub const FORBIDDEN_API_AREAS: &[&str] = &[
+    "plugins",
+    "io",
+    "mcp",
+    "ai_keys",
+    "ai_requests",
+    "local_api",
+];
 
 /// Single API permissions a plugin may never be granted (reading these areas is fine):
 ///

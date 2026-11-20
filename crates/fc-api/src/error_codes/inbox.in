@@ -1,0 +1,12 @@
+// Inbox, deep links, clipboard (v0.9).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// An inbox item is invalid (`details.field`: `content`, `field`, `tags`, `attributes`,
+/// `context`, `client_ref`, `via`, `deck`, `items`; `details.item_index` in `inbox.accept`).
+ValidationInboxItem => Validation, "errors.validation.inbox_item";
+/// Inbox item not found (`details.id`).
+NotFoundInboxItem => NotFound, "errors.not_found.inbox_item";
+/// The item is not pending any more (`details.id`, `details.status`).
+ConflictInboxItemState => Conflict, "errors.conflict.inbox_item_state";
+/// A `flashcard://` link was refused (`details.reason`: `scheme`, `too_long`, `target`,
+/// `missing`, `encoding`, `unsupported`, `id`).
+ValidationDeepLink => Validation, "errors.validation.deep_link";

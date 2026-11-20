@@ -70,6 +70,8 @@ pub fn generate_into(dir: &Path) -> Result<(), GenError> {
     // Job result of the ai module (`ai.request`).
     v1::ai::AiJobResult::export_all(&cfg)?;
     v1::ai::AiSourceText::export_all(&cfg)?;
+    // Local HTTP API transport DTOs (v0.9, for the browser extension).
+    v1::local_api::export_http_types(&cfg)?;
 
     fs::write(dir.join("methods.ts"), methods_ts(&cfg))?;
     let files = list_ts_files(dir)?;

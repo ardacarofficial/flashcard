@@ -150,6 +150,10 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "ai.preview" => Reads(AI_NOTES),
         // AI drafts are applied by the user (a plugin writes notes with `notes.*` directly).
         "ai.notes.add" | "ai.notes.update" => Refused(AI_WRITES),
+        // v0.9: proposals are the user's to review; a plugin may propose and read them.
+        "inbox.add" | "inbox.list" | "inbox.count" | "inbox.reject" => Reads(&["inbox"]),
+        "inbox.accept" | "deep_links.open" => Refused("the user reviews the inbox"),
+        "clipboard.check" => Reads(&["clipboard"]),
         _ => Refused("not available to plugins"),
     }
 }
@@ -332,6 +336,8 @@ pub(crate) fn event_domains(event: &DomainEvent) -> &'static [Domain] {
         E::GoalsChanged => GOALS,
         E::AiConfigChanged => AI,
         E::AiPartial { .. } => AI_NOTES,
+        E::InboxChanged { .. } => &["inbox"],
+        E::LocalApiPairing { .. } | E::LocalApiClientsChanged => &["local_api"],
     }
 }
 
@@ -339,7 +345,7 @@ pub(crate) fn event_domains(event: &DomainEvent) -> &'static [Domain] {
 /// (statistics, planning, goals, AI, MCP — phase 3): elsewhere an unreadable event still
 /// arrives cut to ids, these do not arrive at all, so a subscription alone says nothing
 /// (not even that an AI request is streaming or a goal changed).
-const GATED_EVENT_DOMAINS: &[Domain] = &["stats", "planning", "goals", "ai", "mcp"];
+const GATED_EVENT_DOMAINS: &[Domain] = &["stats", "planning", "goals", "ai", "mcp", "local_api"];
 
 /// Whether an `event:` hook of a plugin holding `granted` is called for `event` at all.
 pub(crate) fn event_delivered(granted: &BTreeSet<String>, event: &DomainEvent) -> bool {

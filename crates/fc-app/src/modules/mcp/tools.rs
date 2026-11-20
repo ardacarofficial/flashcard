@@ -609,7 +609,7 @@ fn value_view(def: &AttributeDefDto, v: &AttributeValue) -> Value {
 }
 
 /// Parses a tool value for `def` (`None` = clear). Labels match case/accent-insensitively.
-fn parse_value(def: &AttributeDefDto, raw: &Value) -> Result<Option<AttributeValue>, ApiError> {
+pub(crate) fn parse_value(def: &AttributeDefDto, raw: &Value) -> Result<Option<AttributeValue>, ApiError> {
     let bad = |why: &str| {
         ApiError::new(
             ErrorCode::ValidationAttributeValue,
@@ -691,7 +691,7 @@ fn parse_value(def: &AttributeDefDto, raw: &Value) -> Result<Option<AttributeVal
 }
 
 /// The definition whose key or name is `reference` (key match first).
-fn match_def<'d>(
+pub(crate) fn match_def<'d>(
     defs: &'d [AttributeDefDto],
     reference: &str,
     scope: &str,

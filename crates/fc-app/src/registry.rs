@@ -353,8 +353,10 @@ impl Registry {
     /// * A plugin holds only what it was granted, only while it is active, and never an area
     ///   no plugin may hold (`io`, `mcp`, `ai_keys`, `ai:write`, `oplog`… —
     ///   `fc_plugins::permission::api_grantable`) even if a stored grant says otherwise.
-    /// * Automations and local API clients hold **nothing** until v0.9 defines their grants
-    ///   (deny by default: a new actor kind never inherits the user's authority).
+    /// * A local API client holds the scopes the user approved for it, only those a client may
+    ///   be granted (`modules::local_api::GRANTABLE_SCOPES`), only while approved (v0.9).
+    /// * Automations hold **nothing** until their track defines their grants (deny by default:
+    ///   a new actor kind never inherits the user's authority).
     pub fn permits(&self, actor: &Actor, permission: &str) -> bool {
         match actor {
             Actor::User | Actor::Cli | Actor::System => true,
@@ -365,7 +367,9 @@ impl Registry {
                         .get(id)
                         .is_some_and(|g| g.contains(permission))
             }
-            Actor::Automation(_) | Actor::LocalApi(_) => false,
+            Actor::Automation(_) => false,
+            // v0.9: its approved scopes (∩ `local_api::GRANTABLE_SCOPES`), refreshed per request.
+            Actor::LocalApi(id) => crate::modules::local_api::permits(self, id, permission),
         }
     }
 
@@ -635,8 +639,13 @@ pub(crate) fn ensure_access(
             crate::modules::plugins::redact::exposure(name),
             crate::modules::plugins::redact::Exposure::Refused(_)
         );
+    // A local API client reaches only the HTTP allow-list (public reads and undoable,
+    // replayable commands), not everything its scopes would cover (v0.9).
+    let local_api_blocked =
+        matches!(actor, Actor::LocalApi(_)) && !crate::modules::local_api::method_reachable(name);
     if visibility == Visibility::Internal
         || mcp_blocked
+        || local_api_blocked
         || plugin_blocked
         || !registry.permits(actor, permission)
     {
