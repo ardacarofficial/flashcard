@@ -142,6 +142,7 @@ impl T {
             new_limit: None,
             order: None,
             tz_offset_mins: Some(0),
+            modes: None,
         })
     }
 
@@ -398,6 +399,7 @@ pub fn trial_mode_never_changes_cards(f: &Factory) {
         new_limit: None,
         order: None,
         tz_offset_mins: Some(0),
+        modes: None,
     });
     assert_eq!(trial.counts.new + trial.counts.review, 3);
     let ratings = [Rating::Again, Rating::Hard, Rating::Good, Rating::Again, Rating::Easy];
@@ -568,6 +570,7 @@ pub fn mistakes_session_repeats_again_cards(f: &Factory) {
         new_limit: None,
         order: None,
         tz_offset_mins: None,
+        modes: None,
     });
     let total = m.counts.new + m.counts.learning + m.counts.review;
     assert_eq!(total, 2);
@@ -590,6 +593,7 @@ pub fn mistakes_session_repeats_again_cards(f: &Factory) {
         new_limit: None,
         order: None,
         tz_offset_mins: None,
+        modes: None,
     });
     assert_eq!(e.code, ErrorCode::ValidationInvalidParams);
 }
@@ -668,6 +672,7 @@ pub fn custom_session_filters_by_classification(f: &Factory) {
             new_limit: None,
             order: Some(StudyOrder::Due),
             tz_offset_mins: Some(0),
+            modes: None,
         })
     };
     let due = start(StudyKind::Normal, filter(None));
@@ -892,6 +897,7 @@ pub fn study_errors(f: &Factory) {
         new_limit: None,
         order: None,
         tz_offset_mins: Some(10_000),
+        modes: None,
     });
     assert_eq!(e.code, ErrorCode::ValidationInvalidParams);
     // Rule 7: the module can be switched off.
@@ -922,6 +928,7 @@ pub fn new_limit_and_order(f: &Factory) {
         new_limit: Some(10),
         order: Some(StudyOrder::NewestFirst),
         tz_offset_mins: None,
+        modes: None,
     });
     assert_eq!(s.counts.new, 5);
     assert_eq!(s.current.unwrap().card_id, cards[4]);

@@ -35,7 +35,7 @@ use std::collections::{BTreeSet, HashMap};
 
 /// Resolved value of one of this module's settings at `scope` (stored value along the scope
 /// chain, else the schema default).
-pub(super) fn setting(reads: &dyn Reads, scope: &SettingScope, key: &str) -> AppResult<Value> {
+pub(crate) fn setting(reads: &dyn Reads, scope: &SettingScope, key: &str) -> AppResult<Value> {
     if let Some((v, _)) = resolve_stored(reads, scope, key)? {
         return Ok(v);
     }
@@ -47,18 +47,18 @@ pub(super) fn setting(reads: &dyn Reads, scope: &SettingScope, key: &str) -> App
         .ok_or_else(|| AppError::api(ErrorCode::Internal, format!("unknown setting {key}")))
 }
 
-pub(super) fn setting_bool(reads: &dyn Reads, scope: &SettingScope, key: &str) -> AppResult<bool> {
+pub(crate) fn setting_bool(reads: &dyn Reads, scope: &SettingScope, key: &str) -> AppResult<bool> {
     Ok(setting(reads, scope, key)?.as_bool().unwrap_or(false))
 }
 
-pub(super) fn setting_str(reads: &dyn Reads, scope: &SettingScope, key: &str) -> AppResult<String> {
+pub(crate) fn setting_str(reads: &dyn Reads, scope: &SettingScope, key: &str) -> AppResult<String> {
     Ok(setting(reads, scope, key)?
         .as_str()
         .unwrap_or_default()
         .to_owned())
 }
 
-pub(super) fn setting_u32(reads: &dyn Reads, scope: &SettingScope, key: &str) -> AppResult<u32> {
+pub(crate) fn setting_u32(reads: &dyn Reads, scope: &SettingScope, key: &str) -> AppResult<u32> {
     Ok(setting(reads, scope, key)?
         .as_u64()
         .and_then(|n| u32::try_from(n).ok())
@@ -71,14 +71,14 @@ pub(super) fn deck_scope(deck: Option<DeckId>) -> SettingScope {
 }
 
 /// The configured scheduler.
-pub(super) fn scheduler(reads: &dyn Reads) -> AppResult<&'static dyn Scheduler> {
+pub(crate) fn scheduler(reads: &dyn Reads) -> AppResult<&'static dyn Scheduler> {
     let id = setting_str(reads, &SettingScope::App, SCHEDULER)?;
     scheduler::builtin(&id)
         .or_else(|| scheduler::builtin(scheduler::FSRS_ID))
         .ok_or_else(|| AppError::api(ErrorCode::Internal, "no scheduler"))
 }
 
-pub(super) fn scheduler_error(e: StrategyError) -> AppError {
+pub(crate) fn scheduler_error(e: StrategyError) -> AppError {
     AppError::Api(
         ApiError::new(ErrorCode::ValidationSchedulerParams, e.0.clone()).with_detail("reason", e.0),
     )
@@ -129,12 +129,15 @@ fn params_from_preset(preset: &PresetConfig) -> SchedulerParams {
 
 /// Start options persisted in `sessions.config`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct SessionConfig {
+pub(crate) struct SessionConfig {
     pub kind: StudyKind,
     pub mode: StudyMode,
     pub deck_id: Option<DeckId>,
     pub tz_offset_mins: i32,
     pub day_start_hour: u8,
+    /// v0.10 mode options (timed, confidence); absent for plain sessions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modes: Option<fc_study::modes::ModesConfig>,
 }
 
 impl SessionConfig {
@@ -157,7 +160,7 @@ impl SessionConfig {
 
 /// A loaded session.
 #[derive(Debug, Clone)]
-pub(super) struct Session {
+pub(crate) struct Session {
     pub record: SessionRecord,
     pub config: SessionConfig,
     pub state: SessionState,
@@ -244,7 +247,7 @@ impl Session {
 }
 
 /// `CONFLICT_NOT_CURRENT_CARD` for `card`.
-pub(super) fn not_available(card: CardId) -> AppError {
+pub(crate) fn not_available(card: CardId) -> AppError {
     AppError::Api(
         ApiError::new(
             ErrorCode::ConflictNotCurrentCard,
@@ -260,21 +263,42 @@ pub(super) fn kind_str(kind: StudyKind) -> &'static str {
         StudyKind::Normal => "normal",
         StudyKind::Custom => "custom",
         StudyKind::Mistakes => "mistakes",
+        StudyKind::Learn => "learn",
+        StudyKind::Test => "test",
     }
 }
 
-/// `review_log.mode` of a session mode.
-pub(super) fn review_mode(mode: StudyMode) -> &'static str {
-    match mode {
-        StudyMode::Scheduled => "normal",
-        StudyMode::Trial => "trial",
+/// `review_log.mode` of an answer in session `config` (docs/10 §24): the mode the answer
+/// came from — `learn` (learn sessions), `timed` (timed sessions), `confidence` (rated on the
+/// confidence scale), else `normal` — prefixed `trial_` in trial sessions (plain trial
+/// answers stay `trial`). Test answers are `test` (written by the test module).
+pub(crate) fn review_mode(config: &SessionConfig, confidence: bool) -> String {
+    let modes = config.modes.as_ref();
+    let base = match config.kind {
+        StudyKind::Learn => Some("learn"),
+        StudyKind::Test => Some("test"),
+        StudyKind::Normal | StudyKind::Custom | StudyKind::Mistakes => {
+            if modes.is_some_and(|m| m.timed.is_some()) {
+                Some("timed")
+            } else if confidence {
+                Some("confidence")
+            } else {
+                None
+            }
+        }
+    };
+    match (config.mode, base) {
+        (_, Some("test")) => "test".to_owned(),
+        (StudyMode::Scheduled, b) => b.unwrap_or("normal").to_owned(),
+        (StudyMode::Trial, Some(b)) => format!("trial_{b}"),
+        (StudyMode::Trial, None) => "trial".to_owned(),
     }
 }
 
 // ------------------------------------------------------------------ cards
 
 /// A live card (not trashed, note live).
-pub(super) fn require_live_card(reads: &dyn Reads, id: CardId) -> AppResult<Card> {
+pub(crate) fn require_live_card(reads: &dyn Reads, id: CardId) -> AppResult<Card> {
     let card = reads
         .get_card(id)?
         .ok_or_else(|| err_id(ErrorCode::NotFoundCard, format!("card {id} not found"), id))?;
@@ -285,7 +309,7 @@ pub(super) fn require_live_card(reads: &dyn Reads, id: CardId) -> AppResult<Card
 }
 
 /// Study-owned columns of a card.
-pub(super) fn snapshot(card: &Card) -> CardStudySnapshot {
+pub(crate) fn snapshot(card: &Card) -> CardStudySnapshot {
     let s = &card.scheduling;
     CardStudySnapshot {
         id: card.id,
@@ -320,7 +344,7 @@ pub(super) fn apply_snapshot(card: &mut Card, snap: &CardStudySnapshot) {
 
 /// What rendering needs: reads plus the card type engines and the UI locale.
 #[derive(Clone, Copy)]
-pub(super) struct View<'a> {
+pub(crate) struct View<'a> {
     pub reads: &'a dyn Reads,
     pub registry: &'a Registry,
     pub locale: Locale,
@@ -345,7 +369,7 @@ impl<'a> View<'a> {
 }
 
 /// A card rendered by its card type engine (v0.3), plus what study derives from it.
-pub(super) struct StudyRender {
+pub(crate) struct StudyRender {
     pub card: CardRender,
     /// Text hints and typed-answer checks compare with: the engine's expected answer for
     /// typing card types, else the text of the answer part.
@@ -354,7 +378,7 @@ pub(super) struct StudyRender {
     pub types: bool,
 }
 
-pub(super) fn render_for_study(v: View<'_>, card: &Card) -> AppResult<StudyRender> {
+pub(crate) fn render_for_study(v: View<'_>, card: &Card) -> AppResult<StudyRender> {
     let note = require_note(v.reads, card.note_id)?;
     let nt = require_notetype(v.reads, note.notetype_id)?;
     let r = content::render_card(
@@ -396,7 +420,7 @@ pub(super) fn answer_text(html: &str) -> String {
 /// Whether cards are **empty** (v0.3: the note no longer yields them — a removed cloze
 /// number or mask, an optional reverse switched off). Study never shows them. Caches the
 /// card keys per note.
-pub(super) struct EmptyCards<'a> {
+pub(crate) struct EmptyCards<'a> {
     view: View<'a>,
     keys: HashMap<NoteId, BTreeSet<String>>,
     notetypes: HashMap<NoteTypeId, NoteType>,
@@ -476,7 +500,7 @@ pub(super) fn requeue_at(state: &SchedulingState, day_end: Timestamp) -> Option<
 }
 
 /// The session as the study screen sees it at `now`.
-pub(super) fn session_dto(v: View<'_>, s: &Session, now: Timestamp) -> AppResult<SessionDto> {
+pub(crate) fn session_dto(v: View<'_>, s: &Session, now: Timestamp) -> AppResult<SessionDto> {
     let reads = v.reads;
     // Cards deleted or emptied (v0.3) since the queue was built are skipped (a query cannot
     // rewrite the session; the next answer persists the queue without them).
@@ -497,6 +521,7 @@ pub(super) fn session_dto(v: View<'_>, s: &Session, now: Timestamp) -> AppResult
     }
     let s = &view;
     let (new, learning, review) = queue::counts(&s.state.queue);
+    let shown = live.clone();
     let current = match live {
         Some(card) => {
             let state = s.scheduling_of(&card);
@@ -557,6 +582,8 @@ pub(super) fn session_dto(v: View<'_>, s: &Session, now: Timestamp) -> AppResult
         } else {
             None
         },
+        // v0.10 study modes (learn stage/options, timer, confidence buttons, test state).
+        modes: crate::modules::modes::session_modes(v, s, shown.as_ref(), current.as_ref(), now)?,
         current,
     })
 }

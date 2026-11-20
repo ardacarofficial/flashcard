@@ -44,4 +44,5 @@ modules! {
     goals,
     optimizer,
     ai,
+    modes,
 }

@@ -1,0 +1,8 @@
+{
+  "oplog.summary.modes.learn.answer": "Öğren modunda kart cevaplandı",
+  "oplog.summary.modes.confidence.answer": "Kart güvenle puanlandı: {level}/5",
+  "oplog.summary.modes.timed.expire": "Kartın süresi doldu",
+  "oplog.summary.modes.timed.restart": "Kart sayacı yeniden başlatıldı",
+  "oplog.summary.modes.test.submit": "Test teslim edildi: %{percent}",
+  "oplog.summary.modes.inline.create": "Metinden {count} kart oluşturuldu"
+}

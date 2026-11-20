@@ -55,7 +55,9 @@ answer_duration_ms: number | null,
  */
 hints_used: number, 
 /**
- * `normal` (scheduled) or `trial`.
+ * Where the review came from. Changes the schedule: `normal`, `learn`, `timed`,
+ * `confidence` (v0.10 modes), `imported` (v0.5). Practice, schedule unchanged: `trial`,
+ * `trial_learn`, `trial_timed`, `trial_confidence`, `test`.
  */
 mode: string, 
 /**

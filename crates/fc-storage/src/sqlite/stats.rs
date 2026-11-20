@@ -5,6 +5,7 @@ use super::study::{review_row, REVIEW_COLS};
 use super::{all, exec, id, json, one, opt_id, opt_ms, opt_ts, to_json, ts};
 use super::{Mode, SqliteTx, WriteMode};
 use crate::error::StorageResult;
+use crate::repo::PRACTICE_MODE_SQL;
 use crate::repo::{
     ExamRecord, GoalRecord, ReviewLogMark, ReviewLogRecord, StatsCacheRecord, StatsRead, StatsWrite,
 };
@@ -54,7 +55,7 @@ impl<M: Mode> StatsRead for SqliteTx<'_, M> {
             REVIEWS,
             &format!(
                 "SELECT {REVIEW_COLS}, rowid FROM review_log
-                 WHERE rowid > ?1 AND mode <> 'trial'
+                 WHERE rowid > ?1 AND NOT {PRACTICE_MODE_SQL}
                    AND (?2 IS NULL OR card_id IN (SELECT value FROM json_each(?2)))
                  ORDER BY rowid"
             ),

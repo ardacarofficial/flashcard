@@ -1,0 +1,8 @@
+{
+  "oplog.summary.modes.learn.answer": "Answered a card in learn mode",
+  "oplog.summary.modes.confidence.answer": "Rated a card with confidence {level}/5",
+  "oplog.summary.modes.timed.expire": "A card's time ran out",
+  "oplog.summary.modes.timed.restart": "Restarted the card timer",
+  "oplog.summary.modes.test.submit": "Submitted a test: {percent}%",
+  "oplog.summary.modes.inline.create": "Created {count} card(s) from text"
+}
