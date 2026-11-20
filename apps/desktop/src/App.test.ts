@@ -12,7 +12,7 @@ describe('<App> on the dev mock transport', () => {
     await screen.findByRole('button', { name: 'Settings' });
     const nav = screen.getByRole('navigation');
     expect(Array.from(nav.querySelectorAll('button'), (b) => b.textContent?.trim())).toEqual([
-      'Study', 'Learn', 'Test', 'Decks', 'Deck options', 'Add', 'Inbox', 'Notes', 'Browse', 'Statistics', 'Planning', 'Goals', 'AI', 'Reading', 'Note types', 'Import / export', 'MCP', 'Automation', 'Maintenance', 'Plugins', 'Shortcuts', 'Settings',
+      'Study', 'Learn', 'Test', 'Decks', 'Deck options', 'Add', 'Inbox', 'Notes', 'Browse', 'Statistics', 'Planning', 'Goals', 'AI', 'Reading', 'Note types', 'Import / export', 'MCP', 'Automation', 'Maintenance', 'Plugins', 'Starter decks', 'Shortcuts', 'Reminders', 'Profiles & lock', 'Settings',
     ]);
     await fireEvent.click(await screen.findByRole('button', { name: 'Add' }));
     const deck = (await screen.findByLabelText('Deck')) as HTMLSelectElement;

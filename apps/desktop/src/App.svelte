@@ -8,6 +8,8 @@
   import ShortcutHost from '$lib/features/browse/ShortcutHost.svelte';
   import PluginPanels from '$lib/features/plugins/PluginPanels.svelte';
   import OutsideHost from '$lib/features/inbox/OutsideHost.svelte';
+  import LockHost from '$lib/features/profiles/LockHost.svelte';
+  import OnboardingHost from '$lib/features/onboarding/OnboardingHost.svelte';
 
   interface MenuItem {
     id: string;
@@ -185,6 +187,17 @@
     {/if}
   </main>
 </div>
+
+<!-- First-run guide on a new, empty collection (v1.0). -->
+<OnboardingHost ondone={() => void loadDecks()} />
+
+<!-- App lock screen (v1.0); drawn above everything while locked. -->
+<LockHost
+  onunlock={() => {
+    void loadModules();
+    void loadDecks();
+  }}
+/>
 
 <!-- Pairing requests, clipboard suggestions, flashcard:// links (v0.9). -->
 <OutsideHost open={openRoute} selectDeck={(id) => (selectedDeck = id)} />

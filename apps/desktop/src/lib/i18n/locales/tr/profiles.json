@@ -1,0 +1,96 @@
+{
+  "nav": { "profiles": "Profiller ve kilit" },
+  "modules": {
+    "profiles": {
+      "name": "Profiller ve uygulama kilidi",
+      "description": "Farklı kişiler ya da amaçlar için ayrı koleksiyonlar ve pencereyi kilitleyen bir PIN ya da parola."
+    }
+  },
+  "profiles": {
+    "heading": "Profiller",
+    "intro": "Her profil kendi desteleri, medyası ve ayarlarıyla ayrı bir koleksiyondur.",
+    "unavailable": "Profiller yalnız masaüstü uygulamasında var.",
+    "default_name": "Ana profil",
+    "active": "Kullanımda",
+    "locked": "PIN/parolayla kilitli",
+    "new_name": "Yeni profil adı",
+    "create": "Profil ekle",
+    "rename": "Yeniden adlandır",
+    "save": "Kaydet",
+    "cancel": "Vazgeç",
+    "switch": "Aç",
+    "switching": "Profil açılıyor — uygulama yeniden başlıyor…",
+    "delete": "Sil",
+    "confirm_delete": "“{name}” profili ve tüm kartları silinsin mi? Bu geri alınamaz.",
+    "delete_secret": "O profilin PIN'i/parolası"
+  },
+  "lock": {
+    "heading": "Uygulama kilidi",
+    "intro": "Dosyaları değil pencereyi kilitler: bilgisayar hesabını kullanabilen biri koleksiyonu yine de kopyalayabilir.",
+    "off": "Bu profil için kilit yok.",
+    "on_pin": "PIN ile kilitli.",
+    "on_password": "Parolayla kilitli.",
+    "kind": {
+      "pin": "PIN (rakam)",
+      "password": "Parola"
+    },
+    "new_secret": "Yeni PIN/parola",
+    "current_secret": "Şu anki PIN/parola",
+    "set": "Kilidi kur",
+    "change": "Değiştir",
+    "clear": "Kilidi kaldır",
+    "lock_now": "Şimdi kilitle",
+    "idle": "Hareketsizlikte kilitle",
+    "idle_never": "Hiçbir zaman",
+    "idle_minutes": "{count} dk",
+    "storage_secure": "Yalnız tuzlanmış bir Argon2id özeti, sistem anahtar zincirinde tutulur.",
+    "storage_file": "Yalnız tuzlanmış bir Argon2id özeti, profil listesi dosyasında tutulur (sistem anahtar zinciri burada yeniden başlatmada saklamıyor).",
+    "screen_title": "Flashcard kilitli",
+    "screen_profile": "Profil: {name}",
+    "enter": "PIN'ini ya da parolanı gir",
+    "unlock": "Kilidi aç",
+    "wrong": "PIN ya da parola yanlış.",
+    "wait": "Çok fazla deneme. {seconds} sn sonra tekrar dene.",
+    "other_profile": "Başka bir profil aç"
+  },
+  "commands": {
+    "profiles": {
+      "list": "Profiller",
+      "create": "Profil ekle",
+      "rename": "Profili yeniden adlandır",
+      "delete": "Profili sil",
+      "switch": "Başka profil aç"
+    },
+    "lock": {
+      "status": "Uygulama kilidi durumu",
+      "set": "Uygulama kilidini kur",
+      "configure": "Uygulama kilidi süresi",
+      "clear": "Uygulama kilidini kaldır",
+      "unlock": "Uygulamanın kilidini aç",
+      "lock": "Uygulamayı kilitle",
+      "activity": "Uygulamayı açık tut"
+    }
+  },
+  "errors": {
+    "validation": {
+      "profile_name": "Geçersiz profil adı.",
+      "lock_secret": "PIN 4–12 rakam, parola 6–128 karakter olmalı.",
+      "lock_idle": "Sunulan sürelerden birini seç."
+    },
+    "not_found": { "profile": "Profil bulunamadı." },
+    "conflict": {
+      "profile_name": "Bu adda bir profil var.",
+      "profile_active": "Kullanımdaki profil (ve ana profil) silinemez.",
+      "profile_limit": "Çok fazla profil.",
+      "profiles_unavailable": "Profiller yalnız masaüstü uygulamasında var.",
+      "lock_retry": "Çok fazla yanlış deneme. Biraz bekle.",
+      "lock_state": "Uygulama kilidi bunun için kurulu değil."
+    },
+    "io": { "profile": "Profil listesi ya da klasörü okunamadı veya yazılamadı." },
+    "permission": {
+      "app_locked": "Uygulama kilitli.",
+      "lock_secret": "PIN ya da parola yanlış."
+    },
+    "provider": { "lock_storage": "Kilidi tutan sistem anahtar zinciri hata verdi." }
+  }
+}
