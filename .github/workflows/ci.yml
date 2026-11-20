@@ -59,6 +59,12 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+      - name: Real Anki opens our exports (official anki package, isolated venv)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ankivenv"
+          "$RUNNER_TEMP/ankivenv/bin/pip" install --quiet anki==26.09.4
+          FC_ANKI_PYTHON="$RUNNER_TEMP/ankivenv/bin/python" \
+            cargo test -p fc-app --locked our_exports_open_in_real_anki -- --ignored
       - name: Plugin SDK (clippy + native tests of the SDK and example plugins)
         run: |
           cargo clippy --manifest-path plugins-sdk/Cargo.toml --workspace --all-targets -- -D warnings

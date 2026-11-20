@@ -33,8 +33,28 @@ fn sql(e: rusqlite::Error) -> InteropError {
 }
 
 /// Opens an in-memory copy of a collection database.
+///
+/// Anki 2.1.50+ writes `collection.anki21b` in WAL mode (header bytes 18–19 = 2), which an
+/// in-memory database cannot open ("unable to open database file"); the copy is switched to
+/// the rollback journal first. Nothing else in the file depends on the journal mode. Its
+/// name columns use Anki's own `unicase` collation (case-insensitive), registered here so
+/// the tables can be queried at all.
 pub(super) fn open_db(bytes: &[u8]) -> InteropResult<Connection> {
     let mut conn = Connection::open_in_memory().map_err(sql)?;
+    conn.create_collation("unicase", |a, b| {
+        a.to_lowercase()
+            .cmp(&b.to_lowercase())
+            .then_with(|| a.cmp(b))
+    })
+    .map_err(sql)?;
+    let mut owned;
+    let mut bytes = bytes;
+    if bytes.len() >= 20 && bytes.starts_with(b"SQLite format 3\0") && bytes[18..20] == [2, 2] {
+        owned = bytes.to_vec();
+        owned[18] = 1;
+        owned[19] = 1;
+        bytes = &owned;
+    }
     conn.deserialize_read_exact(rusqlite::MAIN_DB, bytes, bytes.len(), true)
         .map_err(sql)?;
     Ok(conn)
