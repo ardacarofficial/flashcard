@@ -15,6 +15,7 @@ mod automation;
 mod inbox;
 mod jobs;
 mod local_api;
+mod maintenance;
 mod mcp;
 mod notes;
 mod notetypes;

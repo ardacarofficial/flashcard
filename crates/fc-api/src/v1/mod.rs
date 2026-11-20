@@ -14,6 +14,7 @@ pub mod inbox;
 pub mod io;
 pub mod jobs;
 pub mod local_api;
+pub mod maintenance;
 pub mod mcp;
 pub mod methods;
 pub mod modes;

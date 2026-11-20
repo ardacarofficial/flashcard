@@ -99,4 +99,5 @@ domains! {
     automation,
     inbox,
     local_api,
+    maintenance,
 }
