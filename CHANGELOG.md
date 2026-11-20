@@ -4,6 +4,12 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased] — Faz 3 entegrasyonu (v0.6–v0.8 birleşik, `feat/phase3-integration`)
 
+### v0.9 tarayıcı eklentisi (iz K, `feat/v0.9-ext`)
+- **`apps/browser-extension`: Chromium MV3 eklentisi** (Chrome/Edge/Brave; TypeScript + Vite). Seçili kelime/cümle → sağ tık **Desteye ekle**, `Alt+Shift+A` ya da araç çubuğu → ön/arka yüz, deste ve destenin **sınıflandırmaları** (ör. Seviye; tüm türler, deste başına son kullanılan hatırlanır) → uygulamanın **gelen kutusuna** (`POST /v1/inbox`). Seçimin geçtiği cümle, sayfa başlığı ve adresi bağlam olarak gider.
+- **Eşleştirme:** eklenti uygulamadan onay ister, token `chrome.storage.local`'da; iptal edilince unutulur, yeniden bağlanmak önerilir. Yalnız `127.0.0.1`, telemetri yok.
+- **Uygulama kapalıyken kuyruk:** gönderilemeyenler sırayla saklanır, uygulama açılınca (en geç 1 dk) gönderilir; `client_ref` ile yeniden gönderme tekrar öğe yaratmaz; kalıcı ret ayarlarda listelenir. Uygulama kapalıyken son bilinen desteler gösterilir.
+- TR/EN (`chrome.i18n`). Testler: vitest (birim + docs/06 §3'e göre sahte API), Playwright (paketlenmemiş eklenti başsız Chromium'da; gerçek `fc api serve`'e karşı `FC_BIN` ile). CI'da `extension` işi. Ayrıntı: docs/06 §5, `apps/browser-extension/README.md`.
+
 ### Faz 3 entegrasyonu — tur 4 (+ v0.7 eklentiler)
 - v0.7 eklentiler v0.6 istatistik, v0.8 AI/MCP ve Faz 2 kurallarıyla birleşti. Workspace sürümü **0.8.0**.
 - **İzinler tek yerde, her aktör için doğru** (`Registry::permits`): kullanıcı/CLI/sistem her şey; MCP seçili izinler; eklenti yalnız verilenler; **otomasyon ve yerel API hiçbir şey** (v0.9'a kadar varsayılan ret; önceden neredeyse her şey). Eklentiler MCP sunucularına, AI anahtarlarına ve AI yazmalarına, `io`'ya, geçmişe (`oplog`), istatistik önbelleğine (`stats:write` verilemez) ve optimizer'a ulaşamaz — kayıtlı izin olsa da, hangi yoldan gelirse gelsin.

@@ -109,6 +109,29 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  extension:
+    name: Tarayıcı eklentisi (check, test, build, e2e)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/browser-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/browser-extension/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/browser-extension/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+
   windows:
     needs: detect
     if: needs.detect.outputs.desktop == 'true'
