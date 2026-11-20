@@ -99,4 +99,7 @@ domains! {
     automation,
     inbox,
     local_api,
+    onboarding,
+    session,
+    reminders,
 }

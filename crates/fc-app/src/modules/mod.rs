@@ -54,4 +54,7 @@ modules! {
     clipboard,
     quick_add,
     local_api,
+    onboarding,
+    reminders,
+    profiles,
 }

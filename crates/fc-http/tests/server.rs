@@ -718,3 +718,60 @@ fn pending_pairings_do_not_survive_a_restart() {
     assert_eq!(e.code, fc_api::ErrorCode::NotFoundApiClient);
     drop(server);
 }
+
+/// v1.0 / Phase-4 review: while the app is locked the server answers nothing but `ping`
+/// (`423 PERMISSION_APP_LOCKED`, pairing included); unlocked, the same token works again.
+#[test]
+fn a_locked_app_answers_nothing_but_ping() {
+    use fc_api::v1::session::{SetLock, Unlock};
+    use fc_app::modules::profiles::{ProfileStore, Session};
+    let fx = Fx::new();
+    let root = tempfile::tempdir().unwrap();
+    let session = Session::open(
+        ProfileStore::new(root.path()),
+        Arc::new(fc_ai::secrets::MemorySecrets::new()),
+        Arc::new(fc_app::system::SystemClock),
+    )
+    .unwrap();
+    fx.app.install_session(Arc::new(session));
+    let token = fx.token(&["decks:read"], None);
+    let auth = format!("Bearer {token}");
+    let decks = || fx.get("/v1/decks", &[("Authorization", auth.as_str())]);
+    assert_eq!(decks().status, 200);
+
+    let user = Actor::User;
+    fx.app
+        .call::<LockSet>(
+            &SetLock {
+                kind: fc_core::ux::lock::LockKind::Pin,
+                secret: "4821".into(),
+                current: None,
+                idle_minutes: None,
+            },
+            &user,
+        )
+        .unwrap();
+    fx.app
+        .call::<LockLock>(&fc_api::v1::common::Empty {}, &user)
+        .unwrap();
+    let r = decks();
+    assert_eq!(r.status, 423);
+    assert_eq!(r.code(), "PERMISSION_APP_LOCKED");
+    let r = fx.post(
+        "/v1/pair",
+        &[],
+        &json!({"client_name": "x", "client_kind": "script", "scopes": ["decks:read"]}),
+    );
+    assert_eq!(r.status, 423, "no pairing requests while locked");
+    assert_eq!(fx.get("/v1/ping", &[]).status, 200);
+
+    fx.app
+        .call::<LockUnlock>(
+            &Unlock {
+                secret: "4821".into(),
+            },
+            &user,
+        )
+        .unwrap();
+    assert_eq!(decks().status, 200);
+}

@@ -26,6 +26,7 @@ mod settings;
 mod stats;
 mod study;
 mod tags;
+mod ux;
 
 use crate::error::{in_table, StorageError, StorageResult};
 use crate::store::{ReadTx, WriteTx};

@@ -81,4 +81,5 @@ domains! {
     automation: AutomationRead, AutomationWrite;
     inbox: InboxRead, InboxWrite;
     local_api: LocalApiRead, LocalApiWrite;
+    ux: UxStateRead, UxStateWrite;
 }

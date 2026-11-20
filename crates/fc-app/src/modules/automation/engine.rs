@@ -862,7 +862,8 @@ static SCHEDULER_PASS: Mutex<()> = Mutex::new(());
 ///   now ([`ScheduleState::ClockWentBack`]) so the rule waits one interval at most, instead of
 ///   until the clock catches up.
 pub fn run_due(app: &App) -> AppResult<Vec<RunDto>> {
-    if !app.is_module_enabled(ID) {
+    // v1.0: nothing runs on its own while the app is locked or switching profile.
+    if !app.is_module_enabled(ID) || app.background_blocked() {
         return Ok(Vec::new());
     }
     let _pass = SCHEDULER_PASS

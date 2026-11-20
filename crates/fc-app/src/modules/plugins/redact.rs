@@ -415,6 +415,10 @@ pub(crate) fn event_domains(event: &DomainEvent) -> &'static [Domain] {
         E::AutomationChanged => &["automation"],
         E::InboxChanged { .. } => &["inbox"],
         E::LocalApiPairing { .. } | E::LocalApiClientsChanged => &["local_api"],
+        // v1.0: the user's own session (lock state, reminders) is nobody else's business.
+        E::LockChanged { .. } => &["lock"],
+        E::ProfileSwitched { .. } => &["profiles"],
+        E::ReminderDue { .. } => &["reminders"],
     }
 }
 
@@ -431,6 +435,9 @@ const GATED_EVENT_DOMAINS: &[Domain] = &[
     "reading",
     "automation",
     "local_api",
+    "lock",
+    "profiles",
+    "reminders",
 ];
 
 /// Whether an `event:` hook of a plugin holding `granted` is called for `event` at all.

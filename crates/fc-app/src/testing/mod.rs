@@ -101,7 +101,11 @@ pub struct TestApp {
 impl TestApp {
     /// New app over `store`: ticking clock from 2026-01-01, deterministic ids.
     pub fn new(store: Arc<dyn Store>) -> Self {
-        let clock: Arc<dyn Clock> = Arc::new(TickClock::new(1_767_225_600_000));
+        Self::with_clock(store, Arc::new(TickClock::new(1_767_225_600_000)))
+    }
+
+    /// New app over `store` reading time from `clock` (v1.0: reminders, the app lock).
+    pub fn with_clock(store: Arc<dyn Store>, clock: Arc<dyn Clock>) -> Self {
         let bus = Arc::new(InMemoryEventBus::new());
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = events.clone();

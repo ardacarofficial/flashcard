@@ -22,6 +22,7 @@ mod stats;
 mod store;
 mod study;
 mod tags;
+mod ux;
 
 use crate::error::StorageResult;
 use crate::repo::Writes;
