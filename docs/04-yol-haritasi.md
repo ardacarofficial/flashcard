@@ -158,6 +158,8 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [x] AI'a gönderilecek içerik kullanıcıya önizlenir. *(`ai.preview` → `ai.run` önizleme özetiyle; `nothing_is_sent_that_was_not_previewed`; arayüz `ai.test.ts`)*
 - [ ] Claude Desktop/Claude Code, MCP sunucusu üzerinden deste listeleyip kart ekleyebilir. *(iz H)*
 
+> **Kapsam (06 §1.4), iz G tur 2:** PDF (sayfa aralığı) ve web sayfası kaynağı, açıklama/ipucu akışı ve çalışma ekranındaki açıkla/ipucu/AI kontrol düğmeleri eklendi — bkz. [10 §18](10-v0.1-sozlesme.md).
+
 ## 🌉 v0.9 · Dış dünya ile bağlantı
 
 **Kapsam:** Yerel HTTP API, token ve izin onayı, gelen kutusu, tarayıcı eklentisi (Chromium tabanlı), derin bağlantılar, global hızlı ekleme, pano izleme, otomasyon kuralları.
