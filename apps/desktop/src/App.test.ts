@@ -52,7 +52,7 @@ describe('<App> on the dev mock transport', () => {
       const list = screen.queryByRole('tablist');
       return list ? Array.from(list.querySelectorAll('[role=tab]'), (t) => t.textContent?.trim()) : [];
     };
-    expect(await tabsOf('Library')).toEqual(['Decks', 'Notes', 'Study', 'Learn', 'Test', 'Reading']);
+    expect(await tabsOf('Library')).toEqual(['Decks', 'Notes', 'Study', 'Learn', 'Test', 'Match', 'Reading']);
     expect(await tabsOf('Search')).toEqual([]);
     expect(await tabsOf('Statistics')).toEqual(['Statistics', 'Planning', 'Goals']);
   });

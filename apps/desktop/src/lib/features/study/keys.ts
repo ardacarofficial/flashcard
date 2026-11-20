@@ -34,6 +34,11 @@ export interface KeyOptions {
   flags?: boolean;
   /** `combo → study action` from the shortcut editor ([`studyBindings`]); absent = defaults. */
   bindings?: ReadonlyMap<string, string>;
+  /**
+   * v1.1 two-button display (`study.answer_buttons = two`): the "hard" key (2) answers
+   * "I know it" (good), next to "Still learning" (again) on 1.
+   */
+  twoButtons?: boolean;
 }
 
 /**
@@ -116,7 +121,7 @@ export function keyAction(
       if (bound === 'study.bury') return { kind: 'bury' };
       if (phase === 'question') return bound === 'study.reveal' || key === 'Enter' ? { kind: 'reveal' } : null;
       const rating = { 'study.again': 'again', 'study.hard': 'hard', 'study.good': 'good', 'study.easy': 'easy' }[bound ?? ''] as Rating | undefined;
-      if (rating) return { kind: 'rate', rating };
+      if (rating) return { kind: 'rate', rating: opts.twoButtons && rating === 'hard' ? 'good' : rating };
       if (bound === 'study.reveal' || key === 'Enter') return { kind: 'rate', rating: 'good' };
       return null;
     }

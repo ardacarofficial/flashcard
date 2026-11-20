@@ -56,6 +56,7 @@ export const PLACEMENTS: readonly { route: string; place: Place; also?: Place[] 
   { route: '/study', place: section('library') },
   { route: '/learn', place: section('library') },
   { route: '/test', place: section('library') },
+  { route: '/match', place: section('library') },
   { route: '/reading', place: section('library') },
   { route: '/plugins/view/*', place: section('library') },
   // Create: add cards, generate with AI; import and starter decks are also here.
