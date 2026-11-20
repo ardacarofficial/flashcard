@@ -16,6 +16,7 @@ mod notetypes;
 mod oplog;
 pub(crate) mod search;
 mod settings;
+mod stats;
 mod study;
 mod tags;
 

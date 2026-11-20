@@ -18,10 +18,15 @@ const BACKUP: &str = "backup";
 /// Tables a dump never contains. `unfinished_batches(_parts)` are in-flight job state (an
 /// import's crash marker): jobs run one at a time and leftovers are rolled back at startup,
 /// so a backup never has rows there, and a restore must not touch a running group's marker.
+/// The v0.6 statistics cache (0500) is derived data: a restore replaces `review_log`, which
+/// invalidates the local cache through its generation/row-count checks.
 const EXCLUDED: &[&str] = &[
     "schema_migrations",
     "unfinished_batches",
     "unfinished_batch_parts",
+    "stats_day_cache",
+    "stats_cache_meta",
+    "review_log_generation",
 ];
 
 fn corrupt(message: impl ToString) -> StorageError {
