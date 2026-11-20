@@ -1,0 +1,16 @@
+{
+  "oplog.summary.onboarding.apply": "İlk açılış rehberiyle kuruldu",
+  "oplog.summary.onboarding.skip": "İlk açılış rehberi geçildi",
+  "oplog.summary.starter.install": "Başlangıç destesi eklendi",
+  "oplog.summary.profiles.create": "Profil eklendi",
+  "oplog.summary.profiles.rename": "Profil yeniden adlandırıldı",
+  "oplog.summary.profiles.delete": "Profil silindi",
+  "oplog.summary.profiles.switch": "Profil değiştirildi",
+  "oplog.summary.lock.set": "Uygulama kilidi kuruldu",
+  "oplog.summary.lock.configure": "Uygulama kilidi süresi değişti",
+  "oplog.summary.lock.clear": "Uygulama kilidi kaldırıldı",
+  "oplog.summary.lock.unlock": "Uygulamanın kilidi açıldı",
+  "oplog.summary.lock.lock": "Uygulama kilitlendi",
+  "oplog.summary.lock.activity": "Uygulama açık tutuldu",
+  "oplog.summary.reminders.test": "Deneme hatırlatması gönderildi"
+}

@@ -1,0 +1,16 @@
+{
+  "oplog.summary.onboarding.apply": "Set up from the first-run guide",
+  "oplog.summary.onboarding.skip": "Skipped the first-run guide",
+  "oplog.summary.starter.install": "Added a starter deck",
+  "oplog.summary.profiles.create": "Added a profile",
+  "oplog.summary.profiles.rename": "Renamed a profile",
+  "oplog.summary.profiles.delete": "Deleted a profile",
+  "oplog.summary.profiles.switch": "Switched profile",
+  "oplog.summary.lock.set": "Set the app lock",
+  "oplog.summary.lock.configure": "Changed the app lock timeout",
+  "oplog.summary.lock.clear": "Removed the app lock",
+  "oplog.summary.lock.unlock": "Unlocked the app",
+  "oplog.summary.lock.lock": "Locked the app",
+  "oplog.summary.lock.activity": "Kept the app unlocked",
+  "oplog.summary.reminders.test": "Sent a test reminder"
+}

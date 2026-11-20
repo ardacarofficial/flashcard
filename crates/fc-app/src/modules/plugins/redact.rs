@@ -192,6 +192,14 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         // local HTTP API clients may talk to the app.
         n if n.starts_with("automation.") => Refused("automation rules are the user's"),
         n if n.starts_with("local_api.") => Refused("local API clients are the user's decision"),
+        // v1.0: a plugin may see what the first-run guide and the starter decks offer, but
+        // setting up the collection, and when the user is reminded, are the user's.
+        "onboarding.status" | "onboarding.options" | "starter.list" => Reads(DECKS),
+        "onboarding.apply" | "onboarding.skip" | "starter.install" => {
+            Refused("the first-run setup is the user's")
+        }
+        "reminders.status" => Reads(&["reminders", "decks"]),
+        "reminders.test" => Refused("reminders are the user's"),
         _ => Refused("not available to plugins"),
     }
 }
