@@ -17,6 +17,7 @@ fc-storage = { path = "crates/fc-storage" }
 fc-providers = { path = "crates/fc-providers" }
 fc-app = { path = "crates/fc-app" }
 fc-interop = { path = "crates/fc-interop" }
+fc-ai = { path = "crates/fc-ai" }
 
 # external
 serde = { version = "1", features = ["derive"] }
