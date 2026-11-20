@@ -398,3 +398,34 @@ fn tilde_sentences_and_hyphenated_words() {
     assert_eq!(detect("well-being\nup-to-date\nmother-in-law").columns, 1);
     assert_eq!(detect("kedi-cat\nköpek-dog\nkuş-bird").columns, 2);
 }
+
+#[test]
+fn separator_hierarchy_and_repeated_definition_separators() {
+    let d = detect("das Kind, die Kinder; çocuk\nder Mann, die Männer; adam");
+    assert_eq!(d.options.field_separator, ";");
+    let d = detect("Ohm's law: V = IR\nMass-energy: E = mc^2");
+    assert_eq!(d.options.field_separator, ":");
+    let text = "Empathy - feeling\nApathy - no interest\nSympathy - sorry - not empathy";
+    let d = detect(text);
+    assert_eq!(d.options.max_fields, Some(2));
+    assert_eq!(
+        parse_delimited(text, &d.options).unwrap()[2],
+        ["Sympathy", "sorry - not empathy"]
+    );
+    let d = detect("Saat: 13:15\nNot: Kitap getir: sayfa 42\nDers: Matematik");
+    assert_eq!(d.options.max_fields, Some(2));
+    assert_eq!(detect("a / b / c\nd / e / f").columns, 3);
+}
+
+#[test]
+fn cloze_lines_and_paragraphs_are_one_column() {
+    let d = detect("The {{c1::cell}} divides.\n{{c1::Ankara}} is the capital.");
+    assert_eq!(d.columns, 1);
+    let poem = "Roses are red,\nviolets are blue.\n\nTwinkle, twinkle,\nlittle star.";
+    let d = detect(poem);
+    assert_eq!(d.options.record_separator, BLANK_LINE);
+    assert_eq!(parse_delimited(poem, &d.options).unwrap().len(), 2);
+    // A word list grouped by blank lines stays one word per record.
+    let d = detect("apple\npear\n\ncar\nbus");
+    assert_eq!(d.options.record_separator, NEWLINE);
+}

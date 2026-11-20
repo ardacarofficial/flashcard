@@ -9,6 +9,10 @@
 //!   values, ` / ` (Korean romanisation, organ names), ` - ` repeated inside a definition,
 //!   `=` inside `name: formula` values, `{{c1::…}}` cloze lines, a blank-line poem list,
 //!   `==`, and colon lines with a time or a second colon in the value.
+//! * The detector was then tuned for those misses (separator hierarchy `;` > `,` and `:` >
+//!   `=`, ` / ` and `==` candidates, a repeated pair separator stays in the definition,
+//!   cloze deletions are one token, prose paragraphs): **109/109, a tuned figure**. The
+//!   held-out check for that revision is the fourth set (`heldout4_tests.rs`).
 
 use super::heldout3_samples::samples;
 use super::*;
@@ -17,6 +21,8 @@ use super::*;
 pub(super) const HELD_OUT_3_BEFORE: usize = 96;
 /// Correct samples at the one held-out measurement (see the module docs).
 pub(super) const HELD_OUT_3_MEASURED: usize = 99;
+/// Correct samples now (tuned); lowering it means detection got worse.
+const HELD_OUT_3_FLOOR: usize = 109;
 
 #[test]
 fn held_out_3_detection_accuracy() {
@@ -39,6 +45,8 @@ fn held_out_3_detection_accuracy() {
         misses.join("\n")
     );
     eprintln!("{report}");
-    assert!(HELD_OUT_3_BEFORE <= HELD_OUT_3_MEASURED);
-    assert!(correct >= HELD_OUT_3_MEASURED, "{report}");
+    const {
+        const { assert!(HELD_OUT_3_BEFORE <= HELD_OUT_3_MEASURED) };
+    };
+    assert!(correct >= HELD_OUT_3_FLOOR, "{report}");
 }
