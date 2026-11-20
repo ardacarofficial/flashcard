@@ -30,7 +30,7 @@ uuid = { version = "1", default-features = false, features = ["std", "serde"] }
 ts-rs = { version = "12", features = ["serde-json-impl", "uuid-impl", "no-serde-warnings"] }
 rusqlite = { version = "0.43", features = ["bundled"] }
 async-trait = "0.1"
-getrandom = "0.3"
+getrandom = "0.4"
 clap = { version = "4", features = ["derive", "env"] }
 tempfile = "3"
 ammonia = "4"
