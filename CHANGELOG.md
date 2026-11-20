@@ -2,45 +2,21 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
-## [Unreleased] — Faz 4 entegrasyonu (v0.10, `feat/phase4-integration`)
+## [0.10.0] — Faz 4 (v0.9 + v0.10 birleşik, `feat/phase4-integration`)
+
+### Faz 4 entegrasyonu — tur 2, son (+ v0.9 otomasyon, yerel API/gelen kutusu, tarayıcı eklentisi)
+- Üç v0.9 izi v0.10 modlar/okuma, v0.7 eklentiler ve v0.8 AI/MCP ile birleşti. Workspace sürümü **0.10.0** (masaüstü, Tauri, tarayıcı eklentisi aynı).
+- **İzinler tek tabloda:** `Registry::permits`'te otomasyon (kural eylemleri) ve yerel API (onaylı kapsamlar) kolları yan yana; ikisi de kullanıcıya özel izinleri (`settings:exec`, `mcp:write`) asla tutmaz. Yeni test: her aktör × her hassas alan (eklentiler, MCP sunucuları, AI anahtarları/yazmaları, içe/dışa aktarma, `settings:exec`, geçmiş, kural yönetimi, yerel API istemcileri, okuma kesitleri, mod iç metotları, gelen kutusu). Kuralları yalnız kullanıcı/CLI/sistem yönetir; yerel API kural oluşturamaz, çalıştıramaz.
+- **Gelen kutusu → otomasyon:** yeni tetikleyici "gelen kutusuna öneri düşünce" ve eylem "not olarak kabul et" (`inbox.accept`, isteğe bağlı deste). Koşul, önerinin olacağı kart üzerinde aynı sorgu diliyle değerlendirilir — sınıflandırmalar destesine göre çözülür (`deck:İngilizce seviye:B1`). Öneri, kabulü ve kabulün tetiklediği kurallar **tek geri al adımı**. Gelen kutusu kuralları yalnız gelen kutusu eylemlerini, diğerleri yalnız kart eylemlerini kullanabilir.
+- **Mod cevapları kuralları tetikler:** öğren, güven ve zamanlı ("Tekrar") cevapları da "kart cevaplanınca" kurallarını çalıştırır.
+- **Eklentiler:** `automation.*` ve `local_api.*` açıkça reddedilir ve kancalanamaz; gelen kutusu/otomasyon/yerel API olayları süzme katmanında sınıflandı (alan başına test). Eklenti v1 yüzeyi yalnız büyüdü (`inbox.add/list/count/reject`, `clipboard.check`).
+- **Tarayıcı eklentisi gerçek sözleşmeyle:** elle yazılmış DTO dosyası silindi (tipler üretilmiş `@fc/api`'den), eşleştirme yoklaması `POST`, her istekte `X-Flashcard-Client` ve POST'ta JSON; `real-app.spec.ts` gerçek `fc api serve`'e karşı geçiyor ve CI'da `FC_BIN` ile koşuyor.
+- **Geçmiş:** gelen kutusu ve kural yazımları sıradan, replay edilebilir geri al adımları; çöp temizliği bariyerine uyar. docs/10 §33.
 
 ### Faz 4 entegrasyonu — tur 1 (v0.10 modlar + v0.10 okuma)
 - İki v0.10 izi v0.7 eklentileriyle birleşti: yeni metotlar eklenti süzme katmanında sınıflandı (öğren cevabı, test teslimi, satır içi kart ve okumadan kart **kâhin**: okuma izni olmadan çalışmaz), okuma olayları okuma izni olmadan gelmez, eklenti API'si (`api_v1.json`) yalnız büyüdü.
 - **Okuma güvenliği:** eklenti dosya/web içe aktaramaz, ffmpeg kesiti başlatamaz, bunlara kanca takamaz; altyazının video yolu eklentiye hiç görünmez ve eklenti onu ayarlayamaz. Genel kural: eklentinin çağıramadığı metoda kanca takılamaz. ffmpeg yolu (`settings:exec`) yalnız kullanıcı/CLI.
 - Okuma ekranında satır içi kart oluşturucu ("Yeni kartlar"). docs/10 §29.
-
-## Faz 3 entegrasyonu (v0.6–v0.8 birleşik, `feat/phase3-integration`)
-
-### v0.9 Otomasyon kuralları (iz J, `feat/v0.9-auto`)
-- **"Ne zaman + eğer + yap" kuralları** (`automation` modülü): tetikleyiciler — not eklendi/düzenlendi, kart cevaplandı (puana göre), bayraklandı (renge göre), sınıflandırma değişti, içe aktarma bitti, zamanlanmış (15 dk–30 gün); koşul sorgu dilinde (sınıflandırmalar dahil, ör. `seviye:A1 lapses>=5`; seçenek adı değişse de çalışır); eylemler izinli, geri alınabilir komutlar: etiket ekle/kaldır, askıya al, göm, bayrak, desteye taşı, **sınıflandırma ata**, ilerlemeyi sıfırla.
-- **Değişiklik ve kuralları tek geri al adımı:** kuralın çalışması tetikleyen batch'in devamı olarak yazılır (aktör `automation:<kural>`) — çalışma ekranında geri al cevabı ve kuralın yaptığını birlikte geri alır; geri al/yinele kural tetiklemez. Zamanlanmış/elle çalışma kendi adımı. Otomasyon aktörü yalnız bu eylemlere ulaşır (gerçek `permits()`); kuralları yalnız kullanıcının kendi istemcileri (kullanıcı/CLI/sistem) yönetir — eklentiler, MCP, yerel API ve kurallar izin alsa bile yönetemez.
-- **Hızlı:** olay kuralları yalnız olayın kartlarında aranır, kurallar ve koşullar dağıtım başına bir kez yüklenir, aynı koşul tek aramada; 100 kural × 100k notta cevap başına ek yük ~0,5 ms (bench).
-- **Zamanlayıcı:** her vadeli kural kendi bütçesiyle çalışır (hiçbiri kaybolmaz; `last_run_at` çalışmayla aynı işlemde yazılır); saat geri kayarsa durmaz.
-- **Döngü güvenliği:** döngü tespiti (kural kendini, doğrudan ya da başka kurallar üzerinden tetikleyemez), derinlik sınırı (`automation.max_depth`, 3) ve kaynak değişiklik başına bütçe (`automation.max_runs_per_event`, 20). Her çalışma kaydedilir (uygulandı / eşleşme yok / atlandı / başarısız).
-- **Önizleme (kuru çalışma):** kaydetmeden hangi kartların değişeceği; eylemler geri sarılan bir işlemde gerçekten çalıştırılır, hiçbir şey yazılmaz.
-- **Masaüstü:** Otomasyon ekranı (kural listesi, sıralama, aç/kapa, şimdi çalıştır, düzenleyici, önizleme, son çalışmalar), TR/EN; zamanlanmış kurallar için dakikalık zamanlayıcı. Migration `0850_automation`. docs/10 §26.
-
-### v0.9 dış dünya — yerel HTTP API, gelen kutusu, derin bağlantılar, hızlı ekleme, pano (iz I, `feat/v0.9-api`)
-- **Yerel HTTP API** (yeni crate `fc-http`, axum): yalnız `127.0.0.1`/`[::1]` (loopback dışı adres yapılandırmada yazılamaz), `Host` denetimi, web sayfası kökenleri her zaman `403`, CORS yalnız tarayıcı eklentisi kökenine; **eşleştirme + kullanıcı onayı** (`POST /v1/pair` → uygulamada "X bağlanmak istiyor" → izinleri daraltarak onay), token yalnız bir kez verilir ve **saklanmaz** (SHA-256 özeti), eşleştirildiği kökene bağlı; istemci başına kapsamlı izinler (`inbox:write`, `decks:read`…), açık metot listesi (iç, geri alınamaz, `io`/eklenti/MCP/AI anahtarı metotları asla); hız sınırı (`429` + `Retry-After`; eşleştirme ayrıca ad başına), 256 KiB gövde sınırı (`413`); **CSRF ek katmanı**: `ping` dışı her istek `X-Flashcard-Client` başlığı, her `POST` JSON `Content-Type` ister (eşleştirme yoklaması `POST /v1/pair/{id}`); bekleyen eşleştirmeler sunucu açılışında bırakılır, dolu kuyrukta en eskisi düşer; istemci başına gelen kutusu kotası (`local_api.inbox_max_items`/`inbox_max_kib`, `CONFLICT_INBOX_QUOTA`); onay penceresinde kapsam onay kutuları. Modül `local_api` **varsayılan kapalı**; `fc api serve` aynı sunucuyu masaüstü olmadan çalıştırır. Sözleşme docs/06 §3.
-- **Gelen kutusu:** eklentiden, bağlantılardan, panodan, yerel API'den gelen kart önerileri (bağlam: sayfa, cümle; sınıflandırma: `Seviye: B1`) inceleme ekranında düzenlenip desteye **tek geri al adımıyla** kabul edilir ya da reddedilir; tekrar gönderim `client_ref` ile çoğalmaz.
-- **`flashcard://` bağlantıları:** deste/not/çalışma bağlantıları ekranı açar, `add` bağlantısı yalnız gelen kutusuna önerir; **tek örnek** (ikinci başlatma bağlantıyı çalışan pencereye verir), uygulama kapalıyken açılış bağlantısı kaybolmaz.
-- **Global hızlı ekleme** penceresi (`Ctrl+Alt+N`, ayarlanabilir; pano metniyle doldurabilir) ve **pano önerileri** (varsayılan kapalı; kapalıyken pano okunmaz; parola/anahtar/kart numarası gibi görünen metin ve işletim sisteminin gizli işaretlediği içerik yok sayılır).
-- Yedekten geri yükleme tüm yerel API istemcilerini iptal eder. Migration `0800_inbox_local_api`. docs/10 §26.
-- **Testler:** `fc-http` gerçek TCP (token'sız ret, yalnız loopback, izin reddi, eklenti kelimesi gelen kutusuna, web kökeni/büyük gövde/patlama reddi); `fc-cli/tests/api_http.rs` gerçek ikililerle; `fc-app` `inbox`/`local_api` testleri × 3 depo; `fc-core` bağlantı ayrıştırıcı + pano süzgeci; depolama 0800; kabuk `outside.rs` (açılış/ikinci örnek bağlantıları, şema + tek örnek yapılandırması, pano izleyici, sunucu yaşam döngüsü); arayüz `features/inbox/inbox.test.ts`.
-
-### v0.9 tarayıcı eklentisi (iz K, `feat/v0.9-ext`)
-- **`apps/browser-extension`: Chromium MV3 eklentisi** (Chrome/Edge/Brave; TypeScript + Vite). Seçili kelime/cümle → sağ tık **Desteye ekle**, `Alt+Shift+A` ya da araç çubuğu → ön/arka yüz, deste ve destenin **sınıflandırmaları** (ör. Seviye; tüm türler, deste başına son kullanılan hatırlanır) → uygulamanın **gelen kutusuna** (`POST /v1/inbox`). Seçimin geçtiği cümle, sayfa başlığı ve adresi bağlam olarak gider.
-- **Eşleştirme:** eklenti uygulamadan onay ister, token `chrome.storage.local`'da; iptal edilince unutulur, yeniden bağlanmak önerilir. Yalnız `127.0.0.1`, telemetri yok.
-- **Uygulama kapalıyken kuyruk:** gönderilemeyenler sırayla saklanır, uygulama açılınca (en geç 1 dk) gönderilir; `client_ref` ile yeniden gönderme tekrar öğe yaratmaz; kalıcı ret ayarlarda listelenir. Uygulama kapalıyken son bilinen desteler gösterilir.
-- TR/EN (`chrome.i18n`). Testler: vitest (birim + docs/06 §3'e göre sahte API), Playwright (paketlenmemiş eklenti başsız Chromium'da; gerçek `fc api serve`'e karşı `FC_BIN` ile). CI'da `extension` işi. Ayrıntı: docs/06 §5, `apps/browser-extension/README.md`.
-
-### Faz 3 entegrasyonu — tur 4 (+ v0.7 eklentiler)
-- v0.7 eklentiler v0.6 istatistik, v0.8 AI/MCP ve Faz 2 kurallarıyla birleşti. Workspace sürümü **0.8.0**.
-- **İzinler tek yerde, her aktör için doğru** (`Registry::permits`): kullanıcı/CLI/sistem her şey; MCP seçili izinler; eklenti yalnız verilenler; **otomasyon ve yerel API hiçbir şey** (v0.9'a kadar varsayılan ret; önceden neredeyse her şey). Eklentiler MCP sunucularına, AI anahtarlarına ve AI yazmalarına, `io`'ya, geçmişe (`oplog`), istatistik önbelleğine (`stats:write` verilemez) ve optimizer'a ulaşamaz — kayıtlı izin olsa da, hangi yoldan gelirse gelsin.
-- **AI anahtarı adresle gider:** `ai_keys:write` olmadan `keep_key: true` anahtarı korumaz (Faz 3 tur 3'ten ertelenen test).
-- **Süzme katmanı yeni alanlarda:** istatistik, planlama, hedefler, AI, MCP; bu alanların olayları okuma izni olmayan eklentinin kancasına hiç gitmez.
-- **Eklenti TTS'i çalışmada:** kartın `{{tts:…}}` düğmesi kayıtlı sağlayıcıyla (eklenti) konuşur, yoksa tarayıcı sesine düşer.
-- Derleme: `dev`/`test` profillerinde `debug = "line-tables-only"` (daha küçük `target/`). docs/10 §25.
 
 ### v0.10 Öğrenme modları — iz M (`feat/v0.10-modes`: öğren, test, güven, zamanlı, odak, satır içi kart)
 - **Hepsi v0.2 oturum motorunun parçası:** öğren ve test yeni oturum **türleri** (`study.start { kind: learn | test }`), zamanlı ve güven bir oturumun **seçenekleri** (`study.start { modes: { timed, rating_scale } }`). Cevaplar motorun ortak yolundan (`study::ext::answer_core` + `AnswerHooks`) geçer: zamanlayıcı, planlama, `review_log`, tek geri al adımı (`study.restore`). `SessionDto.modes` ekranın ihtiyacını taşır (öğren aşaması/seçenekleri, sayaç, güven düğmeleri, test durumu). Eklemeli v1 değişiklikleri.
@@ -63,6 +39,41 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 - **Masaüstü:** "Okuma" ekranı (kitaplık, okuma kuyruğu, okuyucu, kelime paneli), TR/EN.
 - **İnceleme düzeltmeleri:** ffmpeg yolu artık ayrı `settings:exec` izni ister (yalnız kullanıcı/CLI; eklenti, otomasyon, yerel API ve MCP değiştiremez), mevcut çalıştırılabilir dosyanın mutlak yolu olmalı, yedekten geri yüklemede silinir; ffmpeg stderr'i çalışırken okunur, Windows'ta konsol penceresi açılmaz, geçici klasör `tempfile`. Türkçe ek soyucu ünlü uyumlu şablonlar + en az 3 harfli kök kuralıyla aşırı kesmez (`ayna`, `hasta`, `anne`, `kedi` bozulmaz; `Türkiye`/`Türkiye'de` aynı anahtar). Kuyrukta vadesi gelenler önceliğe göre. Altyazıda boş satırsız cue'lar ve tek `<` düzgün. İngilizce kısaltmalar (`don't` → `do`) ve tireli kelimeler; `bit`/`US` yanlış eşleşmez. 10 bin kelime renklendirme ölçümü.
 - **Testler:** `fc-core::reading` (durum kuralı, özet, cümleler, aralıklar, cloze), `fc-providers::lemma`, `fc-interop::subtitle`, depolama `0900` migration + gidiş-dönüş, `fc-app` `modules/reading/tests.rs` (bellek + SQLite: FSRS tutarlılığı, Türkçe + işaret geri al, öğe/kuyruk/özüt/cloze, kartlar, `.srt` dosyasından cümle kartı, sahte ffmpeg ile kesit + hata yolları, modül anahtarı), `reading.test.ts`.
+
+## [0.9.0] — v0.9 Dış dünya ile bağlantı (Faz 4'te 0.10.0 ile birlikte birleştirildi)
+
+### v0.9 Otomasyon kuralları (iz J, `feat/v0.9-auto`)
+- **"Ne zaman + eğer + yap" kuralları** (`automation` modülü): tetikleyiciler — not eklendi/düzenlendi, kart cevaplandı (puana göre), bayraklandı (renge göre), sınıflandırma değişti, içe aktarma bitti, zamanlanmış (15 dk–30 gün); koşul sorgu dilinde (sınıflandırmalar dahil, ör. `seviye:A1 lapses>=5`; seçenek adı değişse de çalışır); eylemler izinli, geri alınabilir komutlar: etiket ekle/kaldır, askıya al, göm, bayrak, desteye taşı, **sınıflandırma ata**, ilerlemeyi sıfırla.
+- **Değişiklik ve kuralları tek geri al adımı:** kuralın çalışması tetikleyen batch'in devamı olarak yazılır (aktör `automation:<kural>`) — çalışma ekranında geri al cevabı ve kuralın yaptığını birlikte geri alır; geri al/yinele kural tetiklemez. Zamanlanmış/elle çalışma kendi adımı. Otomasyon aktörü yalnız bu eylemlere ulaşır (gerçek `permits()`); kuralları yalnız kullanıcının kendi istemcileri (kullanıcı/CLI/sistem) yönetir — eklentiler, MCP, yerel API ve kurallar izin alsa bile yönetemez.
+- **Hızlı:** olay kuralları yalnız olayın kartlarında aranır, kurallar ve koşullar dağıtım başına bir kez yüklenir, aynı koşul tek aramada; 100 kural × 100k notta cevap başına ek yük ~0,5 ms (bench).
+- **Zamanlayıcı:** her vadeli kural kendi bütçesiyle çalışır (hiçbiri kaybolmaz; `last_run_at` çalışmayla aynı işlemde yazılır); saat geri kayarsa durmaz.
+- **Döngü güvenliği:** döngü tespiti (kural kendini, doğrudan ya da başka kurallar üzerinden tetikleyemez), derinlik sınırı (`automation.max_depth`, 3) ve kaynak değişiklik başına bütçe (`automation.max_runs_per_event`, 20). Her çalışma kaydedilir (uygulandı / eşleşme yok / atlandı / başarısız).
+- **Önizleme (kuru çalışma):** kaydetmeden hangi kartların değişeceği; eylemler geri sarılan bir işlemde gerçekten çalıştırılır, hiçbir şey yazılmaz.
+- **Masaüstü:** Otomasyon ekranı (kural listesi, sıralama, aç/kapa, şimdi çalıştır, düzenleyici, önizleme, son çalışmalar), TR/EN; zamanlanmış kurallar için dakikalık zamanlayıcı. Migration `0850_automation`. docs/10 §30.
+
+### v0.9 dış dünya — yerel HTTP API, gelen kutusu, derin bağlantılar, hızlı ekleme, pano (iz I, `feat/v0.9-api`)
+- **Yerel HTTP API** (yeni crate `fc-http`, axum): yalnız `127.0.0.1`/`[::1]` (loopback dışı adres yapılandırmada yazılamaz), `Host` denetimi, web sayfası kökenleri her zaman `403`, CORS yalnız tarayıcı eklentisi kökenine; **eşleştirme + kullanıcı onayı** (`POST /v1/pair` → uygulamada "X bağlanmak istiyor" → izinleri daraltarak onay), token yalnız bir kez verilir ve **saklanmaz** (SHA-256 özeti), eşleştirildiği kökene bağlı; istemci başına kapsamlı izinler (`inbox:write`, `decks:read`…), açık metot listesi (iç, geri alınamaz, `io`/eklenti/MCP/AI anahtarı metotları asla); hız sınırı (`429` + `Retry-After`; eşleştirme ayrıca ad başına), 256 KiB gövde sınırı (`413`); **CSRF ek katmanı**: `ping` dışı her istek `X-Flashcard-Client` başlığı, her `POST` JSON `Content-Type` ister (eşleştirme yoklaması `POST /v1/pair/{id}`); bekleyen eşleştirmeler sunucu açılışında bırakılır, dolu kuyrukta en eskisi düşer; istemci başına gelen kutusu kotası (`local_api.inbox_max_items`/`inbox_max_kib`, `CONFLICT_INBOX_QUOTA`); onay penceresinde kapsam onay kutuları. Modül `local_api` **varsayılan kapalı**; `fc api serve` aynı sunucuyu masaüstü olmadan çalıştırır. Sözleşme docs/06 §3.
+- **Gelen kutusu:** eklentiden, bağlantılardan, panodan, yerel API'den gelen kart önerileri (bağlam: sayfa, cümle; sınıflandırma: `Seviye: B1`) inceleme ekranında düzenlenip desteye **tek geri al adımıyla** kabul edilir ya da reddedilir; tekrar gönderim `client_ref` ile çoğalmaz.
+- **`flashcard://` bağlantıları:** deste/not/çalışma bağlantıları ekranı açar, `add` bağlantısı yalnız gelen kutusuna önerir; **tek örnek** (ikinci başlatma bağlantıyı çalışan pencereye verir), uygulama kapalıyken açılış bağlantısı kaybolmaz.
+- **Global hızlı ekleme** penceresi (`Ctrl+Alt+N`, ayarlanabilir; pano metniyle doldurabilir) ve **pano önerileri** (varsayılan kapalı; kapalıyken pano okunmaz; parola/anahtar/kart numarası gibi görünen metin ve işletim sisteminin gizli işaretlediği içerik yok sayılır).
+- Yedekten geri yükleme tüm yerel API istemcilerini iptal eder. Migration `0800_inbox_local_api`. docs/10 §31.
+- **Testler:** `fc-http` gerçek TCP (token'sız ret, yalnız loopback, izin reddi, eklenti kelimesi gelen kutusuna, web kökeni/büyük gövde/patlama reddi); `fc-cli/tests/api_http.rs` gerçek ikililerle; `fc-app` `inbox`/`local_api` testleri × 3 depo; `fc-core` bağlantı ayrıştırıcı + pano süzgeci; depolama 0800; kabuk `outside.rs` (açılış/ikinci örnek bağlantıları, şema + tek örnek yapılandırması, pano izleyici, sunucu yaşam döngüsü); arayüz `features/inbox/inbox.test.ts`.
+
+### v0.9 tarayıcı eklentisi (iz K, `feat/v0.9-ext`)
+- **`apps/browser-extension`: Chromium MV3 eklentisi** (Chrome/Edge/Brave; TypeScript + Vite). Seçili kelime/cümle → sağ tık **Desteye ekle**, `Alt+Shift+A` ya da araç çubuğu → ön/arka yüz, deste ve destenin **sınıflandırmaları** (ör. Seviye; tüm türler, deste başına son kullanılan hatırlanır) → uygulamanın **gelen kutusuna** (`POST /v1/inbox`). Seçimin geçtiği cümle, sayfa başlığı ve adresi bağlam olarak gider.
+- **Eşleştirme:** eklenti uygulamadan onay ister, token `chrome.storage.local`'da; iptal edilince unutulur, yeniden bağlanmak önerilir. Yalnız `127.0.0.1`, telemetri yok.
+- **Uygulama kapalıyken kuyruk:** gönderilemeyenler sırayla saklanır, uygulama açılınca (en geç 1 dk) gönderilir; `client_ref` ile yeniden gönderme tekrar öğe yaratmaz; kalıcı ret ayarlarda listelenir. Uygulama kapalıyken son bilinen desteler gösterilir.
+- TR/EN (`chrome.i18n`). Testler: vitest (birim + docs/06 §3'e göre sahte API), Playwright (paketlenmemiş eklenti başsız Chromium'da; gerçek `fc api serve`'e karşı `FC_BIN` ile). CI'da `extension` işi. Ayrıntı: docs/06 §5, `apps/browser-extension/README.md`.
+
+## Faz 3 entegrasyonu (v0.6–v0.8 birleşik, `feat/phase3-integration`)
+
+### Faz 3 entegrasyonu — tur 4 (+ v0.7 eklentiler)
+- v0.7 eklentiler v0.6 istatistik, v0.8 AI/MCP ve Faz 2 kurallarıyla birleşti. Workspace sürümü **0.8.0**.
+- **İzinler tek yerde, her aktör için doğru** (`Registry::permits`): kullanıcı/CLI/sistem her şey; MCP seçili izinler; eklenti yalnız verilenler; **otomasyon ve yerel API hiçbir şey** (v0.9'a kadar varsayılan ret; önceden neredeyse her şey). Eklentiler MCP sunucularına, AI anahtarlarına ve AI yazmalarına, `io`'ya, geçmişe (`oplog`), istatistik önbelleğine (`stats:write` verilemez) ve optimizer'a ulaşamaz — kayıtlı izin olsa da, hangi yoldan gelirse gelsin.
+- **AI anahtarı adresle gider:** `ai_keys:write` olmadan `keep_key: true` anahtarı korumaz (Faz 3 tur 3'ten ertelenen test).
+- **Süzme katmanı yeni alanlarda:** istatistik, planlama, hedefler, AI, MCP; bu alanların olayları okuma izni olmayan eklentinin kancasına hiç gitmez.
+- **Eklenti TTS'i çalışmada:** kartın `{{tts:…}}` düğmesi kayıtlı sağlayıcıyla (eklenti) konuşur, yoksa tarayıcı sesine düşer.
+- Derleme: `dev`/`test` profillerinde `debug = "line-tables-only"` (daha küçük `target/`). docs/10 §25.
 
 ### Faz 3 entegrasyonu — tur 3 (+ v0.8 AI, `feat/phase3-integration`)
 - v0.8 AI, MCP, istatistik ve Faz 2 geçmiş kurallarıyla birleşti: AI'nin eklediği/düzenlediği notlar replay listesindeki sıradan geri al adımlarıdır (`ai.usage.record` defter satırı, replay edilemez); AI iş şeridi içe/dışa aktarma ve optimizer işleriyle yan yana çalışır, iptal edilebilir; MCP hiçbir `ai.*` metoduna (okumalar ve `batch.execute` içi dahil) erişemez, anahtar görmez; seviyeye duyarlı üretimin sınıflandırmaları istatistik kırılımlarında görünür, AI kullanımı yalnız AI ekranında. Menüde AI, Hedefler'den sonra. Testler `modules/ai/tests_phase3.rs`. docs/10 §22–§23.
@@ -100,18 +111,15 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 ## [0.7.0] — Yayımlanmadı · Eklenti altyapısı (iz F, `feat/v0.7-plugins`)
 
 ### Eklendi
-- **`fc-plugins` crate'i:** WASM çalışma zamanı (wasmtime 50): çağrı başına **yakıt**, çağrının tamamına duvar saati **son tarihi** (epoch + host çağrısı giriş/çıkışı; host süresi sayılır), örnek başına **bellek sınırı**; her çağrı taze örnek; tuzak/panik/sonsuz döngü hata olur, uygulama çökmez. Host çağrıları çağıran iş parçacığında servis edilir (kapsamlı işçi iş parçacığı + kanallar), böylece host tarafı yazma işlemi dahil her şeyi ödünç alabilir. **ABI v1** (`fc_plugins::abi`: `fc_abi_version`/`fc_alloc`/`fc_handle` + `fc.host_call`/`fc.host_reply`, JSON zarflar) ve dondurulmuş elle yazılmış v1 fikstürü (`tests/fixtures/abi_v1.wat`). `plugin.toml` manifesti (izinler, katkılar, `api_version`, `min_app_version`), izin sözlüğü (API izinleri, `hooks:before|after:<metot>`, `hooks:event:<olay>`, `network:<host>`, `ui:*`, sağlayıcı izinleri; hassas izinler işaretli), `.fcplugin` paketi (boyut sınırlı okuma), `PluginRegistrySource` + `FileSource` (yalnız dosyadan kurulum, 08 K3), model indirme yöneticisi (`file://` getirici, devam ettirilebilir, SHA-256 doğrulamalı, disk kullanımı, silme).
-- **`plugins` modülü:** `plugins.list/inspect/install/uninstall/set_enabled/set_permissions/settings.get/settings.set/locales/logs/run/ui.open/ui.act/ui.close/models.*` (+ iç `plugins.restore/kv.set/record_failure/rollback`). Kurma, güncelleme, kaldırma (isteğe bağlı veri silme), aç/kapa, izinler, ayarlar **geri alınabilir**. Eklenti API'si = public API'nin izinlerle süzülmüş hali (`ensure_invocable`, eklenti aktörü için izin kaydı `Registry::permits`). Kancalar: `before:` (parametreyi değiştir/reddet; hata = eklentisiz devam, ayarla `reject`), `after:`, `event:`; eklentinin yaptığı değişiklikler kanca tetiklemez. Eklenti işlemi (komut, görünüm, çalışma modu adımı) **tek geri al adımı**; eklenti hata verirse yazdıkları geri sarılır. Art arda `plugins.max_failures` hata → otomatik kapatma + `plugins_changed{auto_disabled}`.
-- **Katkılar:** kart türü (`CardTypeEngine`), TTS sağlayıcı (`TtsProvider`), komutlar (çalışma zamanında kayıtlı `v1.plugin.<id>.<komut>`; palette ve `commands.list`'te), bildirimsel arayüzlü görünümler ve çalışma modları, ana menü / kenar paneli / kart altı düğme katkıları (`modules.list`'te eklenti modülleri), şemalı eklenti ayarları, eklentiye özel KV, eklentinin kendi çevirileri.
-- **`tts` modülü:** `tts.providers/voices/synthesize` (yerleşik ya da eklenti sağlayıcıları; ayar `tts.provider`).
-- **Kayıt defteri çalışma zamanı kaydı:** `Registry::register_dynamic` (`Arc<str>` anahtarlı metotlar), `register_card_type`/`register_tts` (`&self`), eklenti izinleri; statik katalog aynen. Yeni işleyici türü `Registry::action` (işlem dışı çalışan metotlar).
-- **SDK:** `plugins-sdk/rust` (`fc-plugin-sdk`: `Plugin` trait'i, `export_plugin!`, tipli `host::call::<M>()` (tipler fc-api'den), `kv`, `settings`, `log`, `notify`, arayüz kurucuları, yerel testler için sahte host) ve örnek eklentiler: `autofill` (kanca ile alan doldurma), `scramble-card` (kart türü), `tone-tts` (TTS), `reverse-drill` (çalışma modu), `misbehave` (test: döngü/panik/bellek/izinsiz çağrı), `escape` (test: sanal alandan kaçış denemeleri).
-- **Masaüstü:** Eklentiler ekranı (dosyadan kur + izin onayı, aç/kapa, izinler, ayarlar, günlük, kaldır, indirmeler), bildirimsel arayüz çizicisi, `/plugins/view/<id>/<görünüm>` rotası, kenar paneli ve kart altı düğmeleri; eklenti metinleri `plugins.locales`'tan.
-- Migration **`0600_plugins`** (`plugins` satırına çalışma durumu sütunları, `plugin_packages`).
-
-- **`fc plugin` CLI:** `list`, `inspect`, `install [--grant …|--grant-all]`, `uninstall [--delete-data]`, `enable`, `disable`, `grant`, `logs`, `run`, `pack`.
-- **`fs:pick`:** host fonksiyonları `fs.open`/`fs.save`; yerel dosya penceresini host gösterir (`fc_app::FilePicker`, masaüstünde `rfd`), eklenti yalnız dosya adı + bayt alır. Eklentinin kendi ayarı için `settings.set` host fonksiyonu. SDK: `host::fs`, `host::set_setting`.
-- Saldırgan test eklentisi `plugins-sdk/examples/escape` ve kaçış testleri (kanca, serbest yol, ayar, depo geri sarma).
+- **Workspace:** `fc-core`, `fc-api`, `fc-storage`, `fc-providers`, `fc-app`, `fc-cli` ve Tauri 2 kabuğu `fc-desktop`.
+- **fc-core:** saf alan modeli (UUIDv7 kimlikler, `Clock`/`Rng`, deste/not/not türü/kart/etiket), sınıflandırma tanımları + miras çözümü + hazır şablonlar (CEFR, YKS…). G/Ç yok (CI saflık betiği).
+- **fc-storage:** SQLite (WAL, tek yazıcı + okuma havuzu), checksum'lı migration'lar (`0001_init`, migrate öncesi yedek), tüm repository'ler, FTS5, deste alt ağacı çöpü, tam geri alınabilir seçenek silme/birleştirme.
+- **fc-api:** v1 metot kataloğu (public/internal), hata modeli, olaylar, `gen-ts` ile TypeScript tipleri (`--check` CI'da).
+- **fc-app:** komut/sorgu dağıtıcı, registry, oplog + geri al/yinele (iç ters metotlarla birebir), olay yolu, modüller, şemalı ayarlar, iş kuyruğu arayüzü; deste/not/etiket/sınıflandırma/ayar/modül handler'ları.
+- **fc-cli (`fc`):** `deck create/list/rename/move/delete/restore`, `note add/list/edit/delete/restore` (`--attr anahtar-veya-ad=değer`), `attribute define/apply-template/set/list/option add|rename|reorder|delete`, `undo`/`redo` (TR/EN özet), genel `fc call <metot> [<json>|-]` (yalnız public metotlar).
+- **Masaüstü:** Svelte 5 arayüz (deste ağacı, klasik not ekleme + sınıflandırma alanları, not listesi, ayarlar), TR/EN i18n, tema token'ları; tek `invoke` IPC + `fc://event` olay akışı; menüler `modules.list`'ten.
+- **Faz 2 hazırlığı:** metot kataloğu, hata kodları, repo trait'leri, `MemStore`, modül listesi ve i18n sözlükleri alan/özellik başına dosyalara bölündü; migration'lar klasörden otomatik toplanır ve numara aralıkları testle zorunlu (docs/10 §10).
+- **CI:** fmt, clippy `-D warnings`, testler, TS tip tutarlılığı, frontend check/test/build, Windows derlemesi, `fc-core` saflık kontrolü, dependabot.
 
 ### Güvenlik (bağımsız inceleme bulguları)
 - `before:`/`after:` kancaları artık `plugins.*`, `oplog.*`, `modules.*`, `settings.*`, `shortcuts.*`, `io.*`, `batch.*`, `jobs.*`, `mcp.*` ve AI sağlayıcı/anahtar metotlarına takılamaz; her kanca hedef metodun kendi iznini de ister (önceden bir eklenti kullanıcının izin değişikliğini ya da dışa aktarma yolunu yeniden yazabiliyordu).
@@ -125,10 +133,9 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 - **Veri akışı denetimi (dördüncü inceleme):** (1) *Bir eklenti diğerini kapatabiliyordu:* kanca bütçesi, ve her bütçe, zinciri **başlatan** eklentiye yazılır (`host::initiator`): A'nın `decks.create` döngüsü B'nin `before:` kancasını tüketince A kapanır, bütçeyi aşan çağrısı reddedilir (B'nin kancası olmadan devam etmez), B açık kalır; B'nin A'nın çağrısı içindeki arızaları B'ye sayılmaz (günlükte), kancaların dakikalık host çağrısı pencereleri A'nındır. (2) *`oplog:read` her okuma iznini atlatıyordu:* `oplog:read`, `batch:write` (sonuç süzmeyi ve kancaları atlatıyordu) ve `jobs:write` verilemez. **Tek süzme katmanı** `plugins::redact`: eklentiye giden her değer (metot sonucu, hata, `before:`/`after:`/`event:` kanca girdisi, iş sonucu, başka eklentinin ayar kapsamı) çağıran eklentinin o veri alanındaki **okuma** izniyle süzülür; izin yoksa sorgu reddedilir, komut yanıtı ve olay yalnız kimliklere indirilir; çapraz alanlı sonuçlar (arama satırları, kart bilgisi, çalışma oturumu) her alanın iznini ister; `bulk.find_replace` (kâhin) okuma izni olmadan çalışmaz; `before:`/`after:` kancası gördüğü verinin okuma iznini de ister (kurulumda ve çalışırken). Her alana bir birim testi, katalogdaki her metodun sınıflandırıldığını denetleyen test. (3) *Uzun tek host çağrısı:* `fc_storage::interrupt` — host çağrısının veritabanı ifadeleri eklenti çağrısının son tarihinde kesilir (SQLite ilerleme işleyicisi); tüm koleksiyonu tarayan `browse.duplicates/check_database/repair_database/purge_trash` eklentilere kapalı. (4) `fs.open` sınırı okurken de uygular (`/dev/zero` testi). `models.list` artık yol değil `ready` döner. docs/05 §13 tehdit modeli.
 - **Eklenti başına kanca bütçesi (beşinci inceleme):** paylaşılan işlem bütçesi, kullanıcı işleminde sıradaki kancanın sahibini kapatıyordu: `com.aaa.victim` + `com.zzz.attacker` (ikisi de `event:note_updated`), 150 nota `bulk.add_tags` → kurban `AutoDisabled`; tek zararsız eklenti bile 201+ notta kapanıyordu. Artık her eklentinin işlem başına kendi sayı/süre bütçesi var; aşanın yalnız kendi kalan kancaları atlanır, kullanıcıya işlem başına tek bildirim (`DomainEvent::PluginHooksSkipped`, `plugins.notice.hooks_skipped`), bütçe aşımı kimseyi kapatmaz (eklenti işleminde bütçeyi aşan çağrı yine reddedilir). Kapatma yalnız eklentinin kendi arızalarıyla (döngüdeki kanca zaman aşımıyla `plugins.max_failures` sonra kapanır). `event:` kuyruğu abone eklenti başına sınırlı. `plugins.notice.hook_budget` kaldırıldı.
 ### Değişti
-- Workspace sürümü `0.7.0`; `fc_plugins::APP_VERSION` artık `CARGO_PKG_VERSION`. Eklentilere açık v1 metot anlık görüntüsünden (`api_v1.json`) eklentiye verilemeyen metotlar çıktı. `ErasedHandler::validate` (kapsamlı `match` yerine).
-- `ensure_invocable` artık kayıt defterini alır; eklenti aktörleri yalnızca verilen izinlerle çağırabilir (önceden her şey serbestti). `Registry::card_type_engine`/`card_types` artık `Arc` döndürür.
-- İki yedek testi (`upgrade_dump_runs_later_data_migrations_on_restored_rows`, `restoring_an_older_schema_backup_migrates_it_forward`) sonraki sürümlerin migration'larına dayanıklı hale getirildi.
-- `rust-toolchain.toml` ve CI `wasm32-unknown-unknown` hedefini kurar (örnek eklentiler testlerde derlenir).
+- `decks.create` isteğe bağlı `parent_id` alır; deste yolunu artık Rust kurar (arayüz birleştirmiyor).
+- Masaüstü başlangıç hatası yerel hata penceresinde gösterilir.
+- `rust-toolchain.toml` 1.100.0'a sabitlendi.
 
 ## [0.6.0] — Yayımlanmadı · İstatistik ve akıllı planlama (iz E, `feat/v0.6-stats`)
 
@@ -177,60 +184,59 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 ## [0.5.0] — Yayımlanmadı · İçe / dışa aktarma (iz D, `feat/v0.5-io`)
 
 ### Eklendi
-- **`fc-interop` crate'i** (saf, bayt girer bayt çıkar): esnek ayırıcılı metin/CSV/TSV (tırnak, özel ayırıcı, `max_fields`) + ayırıcı otomatik algılama; kendi JSON not biçimimiz; Quizlet metni; Anki `.apkg`/`.colpkg` okuma (eski `collection.anki2`/`.anki21` ve yeni zstd `collection.anki21b` + protobuf) ve yazma (şema 11) — cloze, medya, zamanlama ve tekrar geçmişi korunur; `.fcpack` deste paketi (sınıflandırma tanım/seçenek/değerleri kimlikleriyle); `.fcbackup` tam yedek; yazdırma HTML'i (çift taraflı baskı için aynalı arka yüzler).
-- **İş kuyruğu çalışanı:** `fc_app::jobs::spawn_worker`, `App::run_pending_jobs`, modül başına `Registry::job`; `jobs.cancel` işin iptal işaretini yazıcıyı beklemeden verir; işler yazmayı yalnızca komutlarla yapar.
-- **`io` modülü:** `io.import.preview/start`, `io.export.start`, `io.backup.create/inspect/restore`, `io.print.render`. İçe aktarma tek işlem + **tek geri al** adımıdır, yazarken iptal edilirse tamamen geri sarılır; tekrar edenler için atla/güncelle/yine de ekle; sütunlar alan/etiket/sınıflandırmaya eşlenir (istenirse eksik seçenekler oluşturulur). Geri yükleme önce mevcut durumun yedeğini alır.
-- **Depolama:** `0400_interop` (medya içeriği `media_blobs`), medya/tekrar kaydı/koleksiyon döküm-yükleme repo alanı.
-- **Masaüstü:** İçe/dışa aktar ekranı (önizleme, sütun eşleme, ilerleme + iptal, geri al), dışa aktarma, yedek/geri yükleme, yazdırma; Tauri dosya diyaloğu (yalnız aç/kaydet izni); TR/EN.
-- **CLI:** `fc call` kuyruğa aldığı işi hemen çalıştırıp bitmiş işi yazar.
+- **Workspace:** `fc-core`, `fc-api`, `fc-storage`, `fc-providers`, `fc-app`, `fc-cli` ve Tauri 2 kabuğu `fc-desktop`.
+- **fc-core:** saf alan modeli (UUIDv7 kimlikler, `Clock`/`Rng`, deste/not/not türü/kart/etiket), sınıflandırma tanımları + miras çözümü + hazır şablonlar (CEFR, YKS…). G/Ç yok (CI saflık betiği).
+- **fc-storage:** SQLite (WAL, tek yazıcı + okuma havuzu), checksum'lı migration'lar (`0001_init`, migrate öncesi yedek), tüm repository'ler, FTS5, deste alt ağacı çöpü, tam geri alınabilir seçenek silme/birleştirme.
+- **fc-api:** v1 metot kataloğu (public/internal), hata modeli, olaylar, `gen-ts` ile TypeScript tipleri (`--check` CI'da).
+- **fc-app:** komut/sorgu dağıtıcı, registry, oplog + geri al/yinele (iç ters metotlarla birebir), olay yolu, modüller, şemalı ayarlar, iş kuyruğu arayüzü; deste/not/etiket/sınıflandırma/ayar/modül handler'ları.
+- **fc-cli (`fc`):** `deck create/list/rename/move/delete/restore`, `note add/list/edit/delete/restore` (`--attr anahtar-veya-ad=değer`), `attribute define/apply-template/set/list/option add|rename|reorder|delete`, `undo`/`redo` (TR/EN özet), genel `fc call <metot> [<json>|-]` (yalnız public metotlar).
+- **Masaüstü:** Svelte 5 arayüz (deste ağacı, klasik not ekleme + sınıflandırma alanları, not listesi, ayarlar), TR/EN i18n, tema token'ları; tek `invoke` IPC + `fc://event` olay akışı; menüler `modules.list`'ten.
+- **Faz 2 hazırlığı:** metot kataloğu, hata kodları, repo trait'leri, `MemStore`, modül listesi ve i18n sözlükleri alan/özellik başına dosyalara bölündü; migration'lar klasörden otomatik toplanır ve numara aralıkları testle zorunlu (docs/10 §10).
+- **CI:** fmt, clippy `-D warnings`, testler, TS tip tutarlılığı, frontend check/test/build, Windows derlemesi, `fc-core` saflık kontrolü, dependabot.
 
 ### Değişti
-- `JobDto.result` ve `imported` / `collection_replaced` olayları eklendi (eklemeli).
-- **v0.5 inceleme düzeltmeleri:** büyük içe aktarma ~500 satırlık parçalarla kendi işlemlerinde yazılır (çalışırken çalışma/düzenleme komutları zaman aşımına uğramaz), yine tek geri al adımıdır; iptal işlenmiş parçaları iz bırakmadan kaldırır (`io.import.discard`). Zip/zstd bombalarına toplam bütçe. Windows-1254 ve UTF-16 metin dosyaları. Eski şemalı yedek geri yüklenirken sonraki migration'lardan geçirilir; güvenlik yedeği uygulama veri klasörüne yazılır. İş sonu durumu yazımı yeniden denenir. Anki gömülü kartları korunur. Medya `MediaStore` trait'i arkasında (v0.3 deposuna bağlanmaya hazır), alan referansı `media:<sha256>`. Ayırıcı algılama için ayrı tutulmuş örnek seti (40/46). Ardından: algılama sayı/saat/URL parçalarını maskeler, gerekirse `max_fields` önerir, `::`/`–`/`—`/`→` adayları, Anki `#separator:` başlıkları (2. tutulmuş set: ilk ölçüm 63/70, şimdi 65/70). **Çökme güvenliği:** içe aktarma parçaları kalıcı bir işaretle (`0401_unfinished_batches`) izlenir; uygulama parçalar arasında kapanırsa açılışta işlenmiş parçalar geri sarılır.
+- `decks.create` isteğe bağlı `parent_id` alır; deste yolunu artık Rust kurar (arayüz birleştirmiyor).
+- Masaüstü başlangıç hatası yerel hata penceresinde gösterilir.
+- `rust-toolchain.toml` 1.100.0'a sabitlendi.
 
 ## [0.4.0] — Yayımlanmadı · Kart yönetimi (iz C, `feat/v0.4-manage`)
 
 ### Eklendi
-- **Sorgu dili (`fc-core::query`, saf):** ayrıştırıcı → sözdizimsel AST (karakter konumlu hatalar) → katalogla çözümleme → `Filter`; bellek içi referans değerlendirici. Serbest metin (FTS5 önek/ifade, `*` joker), `deck:`/`deste:`, `tag:`/`etiket:`, `notetype:`, `type:`, `card:`, `is:`, `flag:`, `stability/difficulty/lapses/reps/retrievability` karşılaştırmaları, `added/edited/reviewed/due:N`, `re:`, alan joker/regex, `nid:`/`cid:`, `-`/`NOT`/`OR`/parantez. **Sınıflandırmalar** anahtar ya da (yerelleştirilmiş) adla: `seviye:B1`, `seviye>=B1` (sıralı seçimde seçenek sırasıyla), `sınav:TYT ders:fizik`, sayı/tarih/evet-hayır/metin, `x:*`. Türkçe katlama (ı/İ/ş/ç/ğ/ö/ü).
-- **fc-storage `search` alanı:** `Filter` → SQL + FTS5 (alan jokerlerinde FTS ön süzgeci), SQL fonksiyonları (`fc_fold`, `fc_glob`, `fc_html_glob`, `fc_regex`…), kayıtlı sorgular, tekrar grupları, çöp listesi, kart tekrar geçmişi, bütünlük raporu. Migration `0300_search` (mevcut FTS satırlarını katlar, sıralama indeksleri).
-- **API (eklemeli):** `search.cards/ids/check`, `saved_queries.*`, `bulk.move_cards/set_suspended/set_buried/set_flag/reset_progress/add_tags/remove_tags/find_replace/set_attribute` (+ iç `bulk.restore_*`), `browse.card_info/duplicates/trash/check_database/repair_database`, `palette.list`, `shortcuts.list/set/reset`; hata kodları `VALIDATION_QUERY` (+`kind/start/end`), `VALIDATION_SAVED_QUERY_NAME`, `VALIDATION_SHORTCUT`, `VALIDATION_FIND_REPLACE`, `NOT_FOUND_SAVED_QUERY`, `NOT_FOUND_SHORTCUT_ACTION`, `CONFLICT_SHORTCUT`; olaylar `cards_changed`, `saved_queries_changed`.
-- **fc-app modülleri `browse` ve `palette`** (ayrı ayrı kapatılabilir). Her toplu işlem tek komut = tek geri al (birebir anlık görüntü tersi).
-- **Masaüstü:** kart tarayıcısı (canlı konumlu sorgu hatası, kayıtlı sorgular, sıralanabilir tablo, not modu, "eşleşenlerin hepsini seç", toplu işlem çubuğu, kart bilgisi), bakım ekranı (çöp kutusu, tekrarlar, veritabanı denetimi + onarım), kısayol düzenleyici (kaydet/kaldır/varsayılan, çakışmalar), Ctrl+K komut paleti (tüm public metotlar + ekranlar).
-
-- **Deste ayar şablonları (`presets` modülü):** `presets.list/get/for_deck/create/update/clone/delete/assign` (+ iç `presets.restore`), Rust'ta doğrulanan şemalı ayar (`PresetConfig`: yeni/gün, tekrar/gün, (yeniden) öğrenme adımları, hedef hatırlama, FSRS parametreleri, kardeş gömme, yeni/tekrar sırası; şema docs/10 §16.1), destede yoksa en yakın üst destenin şablonu, o da yoksa varsayılanlar (`modules::presets::effective`, v0.2'nin okuyacağı tek yer). Hepsi geri alınabilir. Hata kodları `VALIDATION_PRESET_NAME`, `VALIDATION_PRESET_CONFIG` (`field`), `NOT_FOUND_PRESET`, `CONFLICT_PRESET_NAME`; olay `presets_changed`. Masaüstü: "Deste ayarları" düzenleyicisi.
-- **Çöp saklama süresi:** ayar `browse.trash_retention_days` (varsayılan 30, 1–3650), `browse.purge_trash` (kalıcı silme; `older_than_days: 0` = çöpü boşalt), açılışta otomatik temizlik ve v0.5 işçi havuzu için `PurgeTrashJob`. Bakım ekranında "Çöpü boşalt".
-- **Veritabanı denetimi:** alanı eksik notlar (`broken_fields`, onarım: boş alan eklenir, geri alınabilir) ve sahipsiz sınıflandırma değerlerinin silinmesi.
-- Migration `0301_search_covering` (arama birleşimi için kapsayan indeksler + çöpteki notların kısmi indeksi).
+- **Workspace:** `fc-core`, `fc-api`, `fc-storage`, `fc-providers`, `fc-app`, `fc-cli` ve Tauri 2 kabuğu `fc-desktop`.
+- **fc-core:** saf alan modeli (UUIDv7 kimlikler, `Clock`/`Rng`, deste/not/not türü/kart/etiket), sınıflandırma tanımları + miras çözümü + hazır şablonlar (CEFR, YKS…). G/Ç yok (CI saflık betiği).
+- **fc-storage:** SQLite (WAL, tek yazıcı + okuma havuzu), checksum'lı migration'lar (`0001_init`, migrate öncesi yedek), tüm repository'ler, FTS5, deste alt ağacı çöpü, tam geri alınabilir seçenek silme/birleştirme.
+- **fc-api:** v1 metot kataloğu (public/internal), hata modeli, olaylar, `gen-ts` ile TypeScript tipleri (`--check` CI'da).
+- **fc-app:** komut/sorgu dağıtıcı, registry, oplog + geri al/yinele (iç ters metotlarla birebir), olay yolu, modüller, şemalı ayarlar, iş kuyruğu arayüzü; deste/not/etiket/sınıflandırma/ayar/modül handler'ları.
+- **fc-cli (`fc`):** `deck create/list/rename/move/delete/restore`, `note add/list/edit/delete/restore` (`--attr anahtar-veya-ad=değer`), `attribute define/apply-template/set/list/option add|rename|reorder|delete`, `undo`/`redo` (TR/EN özet), genel `fc call <metot> [<json>|-]` (yalnız public metotlar).
+- **Masaüstü:** Svelte 5 arayüz (deste ağacı, klasik not ekleme + sınıflandırma alanları, not listesi, ayarlar), TR/EN i18n, tema token'ları; tek `invoke` IPC + `fc://event` olay akışı; menüler `modules.list`'ten.
+- **Faz 2 hazırlığı:** metot kataloğu, hata kodları, repo trait'leri, `MemStore`, modül listesi ve i18n sözlükleri alan/özellik başına dosyalara bölündü; migration'lar klasörden otomatik toplanır ve numara aralıkları testle zorunlu (docs/10 §10).
+- **CI:** fmt, clippy `-D warnings`, testler, TS tip tutarlılığı, frontend check/test/build, Windows derlemesi, `fc-core` saflık kontrolü, dependabot.
 
 ### Değişti
-- SQLite bağlantı başına sayfa önbelleği 64 MiB (`CACHE_SIZE_KIB`); FTS metni katlanmış yazılır.
-- **Bayrak numaraları Anki'ninki:** 1 kırmızı, 2 turuncu, 3 yeşil, 4 mavi, 5 pembe, 6 turkuaz, 7 mor (önceden 5 = mor); arayüz 7 bayrağın hepsini sunar. Özel bayrak adları (v0.3 `card_flag_defs`) için tek bağlama noktası `browse::flag_names`.
-- **Kayıtlı sorgular kanonik saklanır:** sınıflandırma anahtarları `attr_<id>`, seçenek etiketleri seçenek kimliği olarak; gösterilirken güncel adlarla yazılır. Seçenek/anahtar yeniden adlandırılınca sorgu bozulmaz, `seviye>=B1` güncel sıralamayı izler.
-- **Arama hızı:** sayım ile sayfa ayrıldı (pencere sayımı her eşleşmeyi sıralatıyordu); not sütunu gerekmeyen sorgular `notes` birleşimi olmadan, büyük sonuçlarda sayfa sıralama indeksinden okunur. Yaygın etiket sorgusu ~90 → ~50 ms (100k).
-- Geri al, toplu işlemlerde `updated_at`'i eski haline getirir (geri alınan değişiklik `edited:N`'de görünmez).
+- `decks.create` isteğe bağlı `parent_id` alır; deste yolunu artık Rust kurar (arayüz birleştirmiyor).
+- Masaüstü başlangıç hatası yerel hata penceresinde gösterilir.
+- `rust-toolchain.toml` 1.100.0'a sabitlendi.
 
 ### Testler
-- Proptest: yazdır→ayrıştır gidiş-dönüş, ayrıştırıcı toplamlığı + sınır içi hata konumları, olumsuzlama tümleyeni; SQL ↔ referans değerlendirici (her atom + 300 rastgele bileşik sorgu); 1000 kartlık toplu işlemlerin tek geri alla birebir dönüşü; palet tamlığı; 100k not benchmark'ı (`#[ignore]`, docs/04) ve CI'da koşan 20k benchmark'ı (`bench_search_20k_scaled`, bütçe 60 ms); sıralı tarama = tam sıralama testi; kayıtlı sorgunun yeniden adlandırma/sıralama sonrası çalışması; şablon CRUD/miras/geri al; çöp temizliği; denetimde eksik alan ve sahipsiz değer onarımı.
-
+- `store_suite!` (28 servis testi) MemStore, SQLite bellek ve SQLite dosya üzerinde.
+- Uçtan uca kabul testi (`fc-app/src/acceptance.rs`) ve gerçek `fc` ikilisiyle CLI testi.
 ## [0.3.0] — Yayımlanmadı · Kart türleri ve içerik (iz B, `feat/v0.3-cards`)
 
 ### Eklendi
-- **Şablon dili** (`fc-core::content::template`, saf): `{{alan}}`, `{{#alan}}…{{/alan}}`, `{{^alan}}`, `{{text:}}`, `{{tts:[dil:]}}`, `{{type:[cloze:]}}`, `{{hint:}}`, `{{cloze:}}`, `{{FrontSide}}`/`{{Deck}}`/`{{Tags}}`/`{{Card}}`/`{{Type}}`; şablon doğrulama ve anahtar üretimi.
-- **İçerik:** Markdown (tablo, üstü çizili, görev listesi, `$…$`/`$$…$$` → `span.math`), cloze `{{c1::cevap::ipucu}}`, `[[bağlantı|etiket]]`, `media:<sha256>` başvuruları. **HTML temizleme Rust'ta** (ammonia, izin listesi; yalnız `media:`/`note:`/http(s)/mailto URL'leri, sınırlı sınıf ve stil) + CSS temizleme; 36 XSS vektörü testi.
-- **`CardTypeEngine`** üretir / gösterir / değerlendirir; motorlar `Registry::card_type` ile kaydolur. Yerleşik motorlar: klasik, yazarak, cloze, çoktan seçmeli (deterministik karıştırma, desteden otomatik çeldirici), resim üzerinde gizleme (sabit numaralı maskeler, iki mod).
-- **Hazır not türleri** (ilk açılışta tohumlanır, TR/EN adlarla): Klasik, Klasik + ters, İsteğe bağlı ters, Yazarak cevaplama, Boşluk doldurma, Çoktan seçmeli, Resim üzerinde gizleme, Resimli quiz, Sesli kart, Kelime kartı.
-- **Not türü editörü** (`notetypes.create/update/delete/restore/usage`): alan ekle/çıkar/yeniden adlandır/sırala, şablonlar, CSS; kartlı şablon silinemez, yeni şablon mevcut notlara kart üretir, alan çıkarma geri alınabilir (`notetypes.restore_version`).
-- **Kart gösterimi ve önizleme** (`cards.render`, `cards.preview`): temizlenmiş HTML, etkileşim (kendin puanla / yaz / seç), TTS istekleri; not düzenlenince yeni kartlar (yeni cloze, dolan isteğe bağlı ters) üretilir, mevcut kartlar asla silinmez.
-- **Medya deposu** (`media.add/get/list/read`): içerik hash'iyle tekilleştirme (`media/<ab>/<sha256>`), MIME algılama, başvuru sayımı; masaüstünde `fcmedia://` protokolü.
-- **`[[Bağlantılar]]` ve geri bağlantılar** (`links.backlinks`, `links.suggest`): okuma anında çözülür (sonradan yaratılan nota bağlantı da çalışır).
-- **Bayraklar** (yedi renk, özel adlar; `flags.list/update`, `cards.set_flag/set_flags`) ve **kart notu** (`cards.set_user_note`, `cards.meta`).
-- **Modüller:** `cardtypes` (omurga), `media` (omurga), `links`, `flags`, `card_notes`, `math`, `code_highlight` (son ikisi yalnız arayüz anahtarı).
-- **Migration `0200_card_content`:** `note_media`, `note_link_refs`, `note_keys`, `card_flag_defs` (+ test).
-- **Masaüstü:** not türü ekranı (canlı önizleme, sınıflandırmalar alanların yanında), her not türü için not editörü (Markdown araç çubuğu, yapıştır/sürükle-bırak medya, `[[` tamamlama, maske çizici, kart önizleme), not listesinden düzenleme (kart bayrakları, kart notu, geri bağlantılar), KaTeX ve kod renklendirme (tembel yükleme); TR/EN metinler.
+- **Workspace:** `fc-core`, `fc-api`, `fc-storage`, `fc-providers`, `fc-app`, `fc-cli` ve Tauri 2 kabuğu `fc-desktop`.
+- **fc-core:** saf alan modeli (UUIDv7 kimlikler, `Clock`/`Rng`, deste/not/not türü/kart/etiket), sınıflandırma tanımları + miras çözümü + hazır şablonlar (CEFR, YKS…). G/Ç yok (CI saflık betiği).
+- **fc-storage:** SQLite (WAL, tek yazıcı + okuma havuzu), checksum'lı migration'lar (`0001_init`, migrate öncesi yedek), tüm repository'ler, FTS5, deste alt ağacı çöpü, tam geri alınabilir seçenek silme/birleştirme.
+- **fc-api:** v1 metot kataloğu (public/internal), hata modeli, olaylar, `gen-ts` ile TypeScript tipleri (`--check` CI'da).
+- **fc-app:** komut/sorgu dağıtıcı, registry, oplog + geri al/yinele (iç ters metotlarla birebir), olay yolu, modüller, şemalı ayarlar, iş kuyruğu arayüzü; deste/not/etiket/sınıflandırma/ayar/modül handler'ları.
+- **fc-cli (`fc`):** `deck create/list/rename/move/delete/restore`, `note add/list/edit/delete/restore` (`--attr anahtar-veya-ad=değer`), `attribute define/apply-template/set/list/option add|rename|reorder|delete`, `undo`/`redo` (TR/EN özet), genel `fc call <metot> [<json>|-]` (yalnız public metotlar).
+- **Masaüstü:** Svelte 5 arayüz (deste ağacı, klasik not ekleme + sınıflandırma alanları, not listesi, ayarlar), TR/EN i18n, tema token'ları; tek `invoke` IPC + `fc://event` olay akışı; menüler `modules.list`'ten.
+- **Faz 2 hazırlığı:** metot kataloğu, hata kodları, repo trait'leri, `MemStore`, modül listesi ve i18n sözlükleri alan/özellik başına dosyalara bölündü; migration'lar klasörden otomatik toplanır ve numara aralıkları testle zorunlu (docs/10 §10).
+- **CI:** fmt, clippy `-D warnings`, testler, TS tip tutarlılığı, frontend check/test/build, Windows derlemesi, `fc-core` saflık kontrolü, dependabot.
 
 ### Değişti
-- `notes.create` kartları not türü şablonlarının motorlarından üretir (`standard_card_specs` yerine); `notes.update` eksik kartları ekler (tersi `cards.trash_generated`).
-- CSP: `style-src 'unsafe-inline'` (kart CSS'i, KaTeX), `media-src fcmedia:`, `font-src data:`.
+- `decks.create` isteğe bağlı `parent_id` alır; deste yolunu artık Rust kurar (arayüz birleştirmiyor).
+- Masaüstü başlangıç hatası yerel hata penceresinde gösterilir.
+- `rust-toolchain.toml` 1.100.0'a sabitlendi.
 
 ### Düzeltildi (inceleme)
 - Not türü CSS'i kapsamdan kaçamaz: `sanitize_css` kaçışları normalleştirir, parantezleri dengeler; frontend dengesiz CSS'i basmaz.
@@ -243,25 +249,27 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 ## [0.2.0] — Yayımlanmadı · Çalışma çekirdeği (iz A, `feat/v0.2-study`)
 
 ### Eklendi
-- **`fc-study` (yeni saf crate):** FSRS zamanlayıcı (`fsrs-rs` 7, **FSRS-6** modeli, varsayılan ağırlıklar; ağırlıklar preset'ten değiştirilebilir) ve SM-2 yedeği aynı `Scheduler` arayüzünün arkasında; Anki uyumlu öğrenme/yeniden öğrenme adımları (adım `due - last_review`'dan çıkarılır, şema değişmez); cevap kontrolcüleri (birebir, normalize — Türkçe harf eşdeğerliği ayarlı —, yazım toleranslı, çoklu cevap; `doğru/neredeyse/yanlış` + fark); ipucu stratejileri (ilk harfler, kelime başları, kısmi); çalışma kuyruğu (öğrenme → vadesi gelen → yeni, kardeş gömme, sıralama, tohumlu karıştırma); çalışma günü sınırı (yerel saat + devir saati; FSRS'in `elapsed_days`'i takvim günüdür, vade gün başına hizalanır). G/Ç yok; saflık betiği artık bu crate'i de denetler.
-- **`study` modülü (fc-app):** kalıcı oturum motoru (`sessions`, çökme kurtarma: `study.active`), `study.start/session/answer/hint/check_answer/end/summary`, `study.suspend/bury/postpone`, `study.card_history` (geçmiş + hatırlama olasılığı), iç ters metot `study.restore`. Puanlama tek adımda geri alınır: kart sütunları, gömülen kardeşler, oturum durumu ve `review_log` satırı birebir döner. Deneme modu `review_log`'a `mode = "trial"` yazar, `cards`'a hiç dokunmaz. Yanlışları tekrar (mistakes) oturumu, sınıflandırmaya göre özel oturum (yapılı filtre; v0.4 sorgu dili gelince bağlanacak), cevap süresi (istemci bildirir, arka uç kendi saatiyle sınırlar). Ayarlar: zamanlayıcı, oturum başına yeni kart, sıra, kardeş gömme, yazarak cevap, cevap kontrolcüsü, Türkçe eşdeğerlik, otomatik puanlama, ipucu türü, gün başlangıç saati.
-- **Depolama:** `0100_study.sql` (oturum ve açık oturum indeksleri), `StudyRead/StudyWrite` (oturumlar, `review_log`, sınıflandırma koşullu aday kartlar), SQLite + `MemStore` uygulamaları.
-- **API:** `v1.study.*` DTO'ları ve 13 metot, hata kodları `NOT_FOUND_SESSION`, `CONFLICT_SESSION_ENDED`, `CONFLICT_NOT_CURRENT_CARD`, `VALIDATION_SCHEDULER_PARAMS`, olay `study_cards_changed`; TS tipleri üretildi.
-- **Masaüstü:** Çalış ekranı (`features/study/`): tamamen klavyeyle (Boşluk göster, 1–4 puanla, H ipucu, S askıya al, B göm, Z geri al, Esc bitir, R yanlışları tekrar), sonraki aralık butonların üstünde, deneme modu, sınıflandırma filtresi, erteleme, oturum sonu ekranı (sayı, doğruluk, süre, yanlışlar), yazarak cevap + fark; TR/EN metinler; geliştirme mock'u.
-- **CLI:** study komutlarının geri al özetleri (TR/EN).
+- **Workspace:** `fc-core`, `fc-api`, `fc-storage`, `fc-providers`, `fc-app`, `fc-cli` ve Tauri 2 kabuğu `fc-desktop`.
+- **fc-core:** saf alan modeli (UUIDv7 kimlikler, `Clock`/`Rng`, deste/not/not türü/kart/etiket), sınıflandırma tanımları + miras çözümü + hazır şablonlar (CEFR, YKS…). G/Ç yok (CI saflık betiği).
+- **fc-storage:** SQLite (WAL, tek yazıcı + okuma havuzu), checksum'lı migration'lar (`0001_init`, migrate öncesi yedek), tüm repository'ler, FTS5, deste alt ağacı çöpü, tam geri alınabilir seçenek silme/birleştirme.
+- **fc-api:** v1 metot kataloğu (public/internal), hata modeli, olaylar, `gen-ts` ile TypeScript tipleri (`--check` CI'da).
+- **fc-app:** komut/sorgu dağıtıcı, registry, oplog + geri al/yinele (iç ters metotlarla birebir), olay yolu, modüller, şemalı ayarlar, iş kuyruğu arayüzü; deste/not/etiket/sınıflandırma/ayar/modül handler'ları.
+- **fc-cli (`fc`):** `deck create/list/rename/move/delete/restore`, `note add/list/edit/delete/restore` (`--attr anahtar-veya-ad=değer`), `attribute define/apply-template/set/list/option add|rename|reorder|delete`, `undo`/`redo` (TR/EN özet), genel `fc call <metot> [<json>|-]` (yalnız public metotlar).
+- **Masaüstü:** Svelte 5 arayüz (deste ağacı, klasik not ekleme + sınıflandırma alanları, not listesi, ayarlar), TR/EN i18n, tema token'ları; tek `invoke` IPC + `fc://event` olay akışı; menüler `modules.list`'ten.
+- **Faz 2 hazırlığı:** metot kataloğu, hata kodları, repo trait'leri, `MemStore`, modül listesi ve i18n sözlükleri alan/özellik başına dosyalara bölündü; migration'lar klasörden otomatik toplanır ve numara aralıkları testle zorunlu (docs/10 §10).
+- **CI:** fmt, clippy `-D warnings`, testler, TS tip tutarlılığı, frontend check/test/build, Windows derlemesi, `fc-core` saflık kontrolü, dependabot.
 
 ### Testler
-- `fc-study`: 35+ test — FSRS-6 formüllerinin bağımsız referans uygulamasıyla 365 günlük deterministik simülasyon (adımlı/adımsız, 4 tohum); günün rastgele saatlerinde (sabah erken, gece geç, devir saati çevresi, 8 saat dilimi) 2 yıllık simülasyon, bağımsız takvimle (`elapsed_days`, aralık, vade) karşılaştırma; ilk tekrar referans değerleri, adım makinesi, SM-2, kontrolcüler, ipuçları, kuyruk.
-- `study` servis testleri: 17 senaryo × 3 depo (MemStore, SQLite bellek, SQLite dosya) — puanla → geri al → kart birebir (yeni kart ve review kartta Again/lapse), geri alma biten oturumu açmaz, deneme modunda `cards` değişmez, uygulama düzeyinde 365 günlük simülasyon + `review_log`'dan yeniden hesaplama, yeniden başlatmada oturum sürer, …
-- Depolama: migration 0100'ün v0.1 veritabanını yükseltmesi, oturum/`review_log`/aday kart sorguları.
-- Arayüz: tüm oturumun yalnızca klavyeyle yürütüldüğü bileşen testi, tuş haritası ve aralık biçimi testleri.
-
+- `store_suite!` (28 servis testi) MemStore, SQLite bellek ve SQLite dosya üzerinde.
+- Uçtan uca kabul testi (`fc-app/src/acceptance.rs`) ve gerçek `fc` ikilisiyle CLI testi.
 ## [0.1.0] — Yayımlanmadı (inceleme bekliyor)
 
 v0.1 · Temel: her şeyin üstüne kurulacağı iskelet ve API sözleşmesinin ilk hali (docs/04, docs/10).
 
 ### Değişti
-- **Faz 2 hazırlığı:** arayüz ekranları ve mock işleyiciler `lib/features/<alan>/` altında dosya başına kaydedilir (`import.meta.glob`); `App.svelte` ekranı genel çizer. `.gitattributes` (LF). CLI tüm insan çıktısını `--lang` kataloğundan üretir. docs/10 §10 tarifi genişletildi.
+- `decks.create` isteğe bağlı `parent_id` alır; deste yolunu artık Rust kurar (arayüz birleştirmiyor).
+- Masaüstü başlangıç hatası yerel hata penceresinde gösterilir.
+- `rust-toolchain.toml` 1.100.0'a sabitlendi.
 
 ### Eklendi
 - **Workspace:** `fc-core`, `fc-api`, `fc-storage`, `fc-providers`, `fc-app`, `fc-cli` ve Tauri 2 kabuğu `fc-desktop`.

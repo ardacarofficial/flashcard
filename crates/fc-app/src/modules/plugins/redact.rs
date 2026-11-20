@@ -899,10 +899,9 @@ mod tests {
             assert!(fc_plugins::permission::hook_target_allowed(d.name, d.permission).is_err(), "{}", d.name);
         }
         // A pairing request names the client and its origin: never delivered to a plugin.
-        for e in [DomainEvent::LocalApiClientsChanged] {
-            assert_eq!(event_domains(&e), &["local_api"]);
-            assert!(!event_delivered(&grants(&["local_api:read"]), &e));
-        }
+        let e = DomainEvent::LocalApiClientsChanged;
+        assert_eq!(event_domains(&e), &["local_api"]);
+        assert!(!event_delivered(&grants(&["local_api:read"]), &e));
         assert!(!can_read(&grants(&["local_api:read"]), &["local_api"]));
     }
 

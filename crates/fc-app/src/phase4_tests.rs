@@ -1,12 +1,16 @@
-//! Phase-4 integration, round 1 (v0.10 modes + v0.10 reading next to v0.7 plugins, v0.8
+//! Phase-4 integration, rounds 1 and 2 (v0.10 modes + v0.10 reading next to v0.7 plugins, v0.8
 //! MCP/AI and the Phase-2 history rules; docs/10 §29).
 //!
 //! * Reading items, the reading queue, word marks and inline cards are ordinary undo steps:
 //!   every forward command and stored inverse is replayable, the job starters
 //!   (`reading.items.import`, `reading.clips.extract`) and the timer start are not; undo stops
 //!   at the trash-purge barrier (which also purges trashed reading items).
-//! * MCP reaches no reading or modes method (no tool calls them); automations and the local
-//!   API reach nothing (`phase3_plugins_tests`).
+//! * MCP reaches no reading or modes method (no tool calls them); what every actor reaches is
+//!   one matrix in `phase4_permits_tests` (round 2).
+//!
+//! Round 2 (v0.9 automation + local API/inbox; docs/10 §33): inbox proposals, their acceptance
+//! by a rule, rejections and rule management are ordinary, replayable undo steps behind the
+//! purge barrier (`automation_and_inbox_steps_*`).
 
 use crate::testing::{MemStore, TempSqlite, TestApp};
 use fc_api::v1::common::Empty;
@@ -169,4 +173,141 @@ fn mcp_reaches_no_reading_or_modes_method() {
     assert!(!crate::modules::mcp::MCP_PERMISSIONS
         .iter()
         .any(|p| p.starts_with("reading")));
+}
+
+// ------------------------------------------------------------------ round 2: v0.9
+
+/// Inbox items and automation rules as the user sees them (status and notes of every item,
+/// every rule with its switch).
+fn inbox_and_rules(t: &TestApp) -> Value {
+    let items =
+        |status: &str| call(t, "v1.inbox.list", json!({ "status": status }))["items"].clone();
+    json!({
+        "pending": items("pending"),
+        "accepted": items("accepted"),
+        "rejected": items("rejected"),
+        "rules": call(t, "v1.automation.rules.list", json!({}))["rules"],
+        "snapshot": crate::testing::suite::snapshot(t),
+    })
+}
+
+/// Phase 4 round 2 (docs/10 §33): inbox proposals, their acceptance by a rule, rejections and
+/// rule management are ordinary undo steps — every forward command and stored inverse is
+/// replayable, undo/redo walk them exactly (redo runs no rule), and undo stops at the
+/// trash-purge barrier like everywhere else.
+fn automation_and_inbox_steps_are_replayable_behind_barriers(t: &TestApp) {
+    let logged_before = t.ok::<OplogList>(ListOplog::default()).items.len();
+    let deck = call(t, "v1.decks.create", json!({ "path": "Inbox" }));
+    let accept = call(
+        t,
+        "v1.automation.rules.create",
+        json!({
+            "name": "Accept", "trigger": { "kind": "inbox_added" }, "condition": "",
+            "actions": [{ "method": "inbox.accept", "params": { "deck_id": deck["id"] } }],
+        }),
+    );
+    let tagger = call(
+        t,
+        "v1.automation.rules.create",
+        json!({
+            "name": "Tag", "trigger": { "kind": "note_added" }, "condition": "",
+            "actions": [{ "method": "bulk.add_tags", "params": { "tags": ["from-inbox"] } }],
+        }),
+    );
+    let start = inbox_and_rules(t);
+    // Proposal → accepted by the rule → tagged by the next one: one undo step.
+    call(
+        t,
+        "v1.inbox.add",
+        json!({ "front": "badger", "back": "porsuk" }),
+    );
+    let accepted = call(t, "v1.inbox.list", json!({ "status": "accepted" }));
+    let note = accepted["items"][0]["note_ids"][0].clone();
+    assert!(note.is_string(), "{accepted}");
+    let got = call(t, "v1.notes.get", json!({ "id": note }));
+    assert_eq!(got["tags"], json!(["from-inbox"]));
+    call(
+        t,
+        "v1.automation.rules.update",
+        json!({ "id": accept["id"], "enabled": false }),
+    );
+    let otter = call(t, "v1.inbox.add", json!({ "front": "otter" }));
+    call(t, "v1.inbox.reject", json!({ "ids": [otter["id"]] }));
+    call(
+        t,
+        "v1.automation.rules.delete",
+        json!({ "id": tagger["id"] }),
+    );
+
+    let log = t.ok::<OplogList>(ListOplog::default());
+    let new = &log.items[..log.items.len() - logged_before];
+    for cmd in [
+        "v1.inbox.add",
+        "v1.inbox.accept",
+        "v1.inbox.reject",
+        "v1.bulk.add_tags",
+        "v1.automation.rules.create",
+        "v1.automation.rules.update",
+        "v1.automation.rules.delete",
+    ] {
+        assert!(new.iter().any(|e| e.command == cmd), "{cmd} logged");
+    }
+    assert!(new
+        .iter()
+        .any(|e| e.command == "v1.inbox.accept" && matches!(e.actor, Actor::Automation(_))));
+    for e in new {
+        assert!(replayable(t, &e.command), "forward {}", e.command);
+        for inv in &e.inverse {
+            assert!(
+                replayable(t, &inv.method),
+                "inverse {} of {}",
+                inv.method,
+                e.command
+            );
+        }
+    }
+    // A rule run and the local API's bookkeeping are never replayed.
+    for name in [
+        AutomationApply::NAME,
+        LocalApiPair::NAME,
+        LocalApiTouch::NAME,
+    ] {
+        assert!(!replayable(t, name), "{name}");
+    }
+
+    // Undo/redo walk the five steps exactly (the proposal and what its rules did are one).
+    let end = inbox_and_rules(t);
+    for _ in 0..5 {
+        t.ok::<OplogUndo>(Empty {});
+    }
+    assert_eq!(inbox_and_rules(t), start);
+    for _ in 0..5 {
+        t.ok::<OplogRedo>(Empty {});
+    }
+    assert_eq!(inbox_and_rules(t), end, "redo replays, runs no rule");
+
+    // Purging the trash is a barrier: the accepted note goes, a later proposal undoes, then
+    // undo stops.
+    call(t, "v1.notes.delete", json!({ "ids": [note] }));
+    call(t, "v1.browse.purge_trash", json!({ "older_than_days": 0 }));
+    call(t, "v1.inbox.add", json!({ "front": "later" }));
+    t.ok::<OplogUndo>(Empty {});
+    let e = t.err::<OplogUndo>(Empty {});
+    assert_eq!(e.code, ErrorCode::ConflictHistoryBarrier, "{e:?}");
+    assert_eq!(e.details["reason"], "purge");
+}
+
+#[test]
+fn automation_and_inbox_steps_mem() {
+    automation_and_inbox_steps_are_replayable_behind_barriers(&TestApp::new(
+        Arc::new(MemStore::new()) as Arc<dyn Store>,
+    ));
+}
+
+#[test]
+fn automation_and_inbox_steps_sqlite() {
+    automation_and_inbox_steps_are_replayable_behind_barriers(&TestApp::new(Arc::new(
+        TempSqlite::new(),
+    )
+        as Arc<dyn Store>));
 }
