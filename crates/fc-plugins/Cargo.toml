@@ -20,6 +20,7 @@ wasmtime = { version = "50", default-features = false, features = ["cranelift", 
 
 [dev-dependencies]
 tempfile.workspace = true
+wat = "1"
 
 [features]
 ## Builds the example plugins of `plugins-sdk/` for tests (`fc_plugins::testing`).
