@@ -176,4 +176,5 @@ domains! {
     mcp => McpState,
     stats => StatsState,
     ai => AiState,
+    reading => ReadingState,
 }
