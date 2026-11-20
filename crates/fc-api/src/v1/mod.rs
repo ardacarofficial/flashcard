@@ -10,6 +10,7 @@ pub mod decks;
 pub mod events;
 pub mod io;
 pub mod jobs;
+pub mod mcp;
 pub mod methods;
 pub mod modules;
 pub mod notes;

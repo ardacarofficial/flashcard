@@ -83,4 +83,5 @@ domains! {
     bulk,
     presets,
     browse,
+    mcp,
 }

@@ -8,6 +8,7 @@ mod attributes;
 mod content;
 mod decks;
 mod interop;
+mod mcp;
 mod migrations;
 mod misc;
 mod notes;

@@ -322,10 +322,12 @@ pub(crate) fn ensure_invocable(
 /// Whether `actor` holds `permission`. v0.1 has no grant store: the user, the CLI and the app
 /// itself hold every permission, and so do the other actors until plugin/local-API grants land
 /// (v0.7) — at which point this is the single place that enforces them.
-fn permits(actor: &Actor, _permission: &str) -> bool {
+fn permits(actor: &Actor, permission: &str) -> bool {
     match actor {
         Actor::User | Actor::Cli | Actor::System => true,
         Actor::Plugin(_) | Actor::Automation(_) | Actor::LocalApi(_) => true,
+        // v0.8: MCP clients hold a fixed, curated set (docs/06 §2.1).
+        Actor::Mcp(_) => crate::modules::mcp::MCP_PERMISSIONS.contains(&permission),
     }
 }
 

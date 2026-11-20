@@ -11,6 +11,7 @@ mod decks;
 mod interop;
 pub use interop::{upgrade_dump, upgrade_dump_with};
 mod jobs;
+mod mcp;
 mod notes;
 mod notetypes;
 mod oplog;

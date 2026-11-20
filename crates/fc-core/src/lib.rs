@@ -29,8 +29,8 @@ pub mod time;
 
 pub use error::{CoreError, CoreResult};
 pub use id::{
-    AttributeDefId, AttributeOptionId, BatchId, CardId, DeckId, IdGen, JobId, NoteId, NoteTypeId,
-    OplogId, PresetId, ReviewLogId, SavedQueryId, SessionId, TagId, V7IdGen,
+    AttributeDefId, AttributeOptionId, BatchId, CardId, DeckId, IdGen, JobId, McpServerId, NoteId,
+    NoteTypeId, OplogId, PresetId, ReviewLogId, SavedQueryId, SessionId, TagId, V7IdGen,
 };
 pub use rng::Rng;
 pub use time::{Clock, Timestamp};

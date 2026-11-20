@@ -1219,6 +1219,9 @@ fn restoring_an_older_schema_backup_migrates_it_forward() {
     for row in &mut fts.rows {
         row[col] = fc_storage::repo::SqlValue::Text("{{c1::STALE}} <b>raw</b>".into());
     }
+    // Tables added by later releases (e.g. v0.8 `mcp_servers`) did not exist in that schema:
+    // leave empty ones out (the forward migration recreates them, still empty).
+    dump.tables.retain(|t| !t.rows.is_empty());
     dump.schema_versions = older.clone();
     let mut manifest = b.manifest.clone();
     manifest.schema_versions = older;
