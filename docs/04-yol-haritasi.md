@@ -177,10 +177,16 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** Yerel HTTP API, token ve izin onayı, gelen kutusu, tarayıcı eklentisi (Chromium tabanlı), derin bağlantılar, global hızlı ekleme, pano izleme, otomasyon kuralları.
 
 **Kabul kriterleri**
-- [ ] Token'sız istek reddedilir; sadece localhost dinlenir.
-- [ ] Tarayıcı eklentisinden eklenen kelime gelen kutusuna düşer.
-- [ ] `flashcard://` linkleri uygulama kapalıyken de açar (tek örnek).
+- [x] Token'sız istek reddedilir; sadece localhost dinlenir.
+- [x] Tarayıcı eklentisinden eklenen kelime gelen kutusuna düşer. *(sunucu tarafı; eklentinin kendisi iz K)*
+- [x] `flashcard://` linkleri uygulama kapalıyken de açar (tek örnek). *(kabuk mantığı testli; gerçek Windows kurulumunda elle denenmedi)*
 - [ ] Otomasyon kuralı döngüye girmez (derinlik sınırı testi).
+
+> **Doğrulama (iz I, `feat/v0.9-api`):**
+> - *Token'sız ret + yalnız localhost:* `crates/fc-http/tests/server.rs` gerçek TCP üzerinden — `token_less_requests_are_refused` (token'sız/yanlış/onay bekleyen token → `401 PERMISSION_UNAUTHENTICATED`, hiçbir şey yazılmaz; yalnız `ping` ve eşleştirme cevap verir), `only_loopback_is_listened_on` (bağlanan adres loopback; makinenin loopback dışı arayüzünden bağlantı kurulamaz; `Host: evil.example` → `403`; aynı port meşgulse başka porta kaçmaz) + birim `config_names_loopback_only` (`ServerConfig` loopback dışı adresi **ifade edemez**: `0.0.0.0`, LAN, `[::]`, alan adı reddedilir). İzin reddi: `permissions_are_denied_outside_scopes_and_allow_list` (verilmeyen kapsam → `403`, açık liste dışı metot → `404`, iptal → `401 revoked`, modül kapalı → `503`), servis düzeyinde `fc-app` `local_api::tests::local_api_reaches_only_its_allow_list_with_granted_scopes` (her public metot, verilebilen tüm kapsamlarla: liste dışı hepsi `PERMISSION_DENIED`, hiçbir şey yazılmaz) × 3 depo.
+> - *Eklentiden kelime → gelen kutusu:* `fc-http` `extension_word_lands_in_the_inbox` (`chrome-extension://` kökeninden ön uçuş + `POST /v1/pair` → bekliyor → uygulamada onay → Origin'siz GET ile token **bir kez** → desteler + `attributes.effective` → `POST /v1/inbox` (bağlam + `Seviye: B1` + `client_ref`) `201`, yeniden gönderim `200` aynı öğe → `inbox.list`'te kaynak `local_api` → kabul → `seviye:B1` not; token veritabanı dosyasında/WAL'da yok); gerçek ikililerle `fc-cli/tests/api_http.rs` (`fc api serve` + ham HTTP + ayrı `fc call` süreçleriyle onay ve `inbox.list`).
+> - *`flashcard://` uygulama kapalıyken (tek örnek):* `apps/desktop/src-tauri/src/outside.rs` testleri — `cold_start_link_is_handled_and_kept_for_the_ui` (işletim sisteminin argüman olarak verdiği bağlantı açılışta işlenir, arayüz dinlemeye başlayana kadar kuyrukta bekler), `second_instance_links_reach_the_running_app` (ikinci başlatmanın argümanları çalışan örneğe gider; `add` bağlantısı gelen kutusuna düşer, hatalı bağlantı hata döner), `scheme_and_single_instance_are_configured` (`tauri.conf.json` `flashcard` şemasını kaydeder, `tauri-plugin-single-instance` ilk eklenti); saf ayrıştırıcı `fc_core::inbox::deeplink::tests`; uygulama anlamı `fc-app` `inbox::tests::deep_links_navigate_or_propose_never_write_notes` × 3 depo; arayüz yönlendirmesi `features/inbox/inbox.test.ts`. **Sınır:** işletim sistemi kaydı ve gerçek ikinci süreç (Windows kurulum dosyası) bu ortamda çalıştırılamadı.
+> - Ayrıntı ve kararlar: [10 §26](10-v0.1-sozlesme.md), sözleşme [06 §3](06-ai-ve-entegrasyonlar.md).
 
 ## 🗣️ v0.10 · Öğrenme modları
 

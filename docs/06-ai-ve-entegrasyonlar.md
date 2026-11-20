@@ -178,6 +178,11 @@ Başarı: `200` (oluşturmada `201`), gövde metodun yanıtıdır (zarf yok). Ha
 - Gelen kutusu ekranı: tek tek veya toplu onayla → not türü ve deste seç → ekle. AI ile alan doldurma seçeneği.
 - Kaynak bazında "doğrudan ekle" kuralı (otomasyon kurallarıyla birleşir).
 
+#### Uygulanan hâli (v0.9, `fc-app` `inbox` modülü)
+- Tablo `inbox` (0001) + migration `0800`: durum değişim zamanı, oluşan not kimlikleri, gönderen istemci ve `client_ref` (istemci başına tekil). Öğe = `AddInboxItem` (alanlar/ön-arka, deste, not türü, etiketler, sınıflandırmalar, bağlam) + kaynak (`InboxSource`: `user`, `clipboard`, `deep_link`, `local_api {client_id, client_name}`, `other {actor}`) — kaynak **her zaman aktörden** yazılır.
+- `inbox.add` (geri alınabilir; tersi iç `inbox.remove`), `inbox.list` / `inbox.count`, `inbox.accept` (her öğe için iç `notes.create`; **hepsi ya da hiçbiri, tek geri al adımı**; deste/not türü/alanlar/etiketler/sınıflandırmalar incelemede değiştirilebilir; hata `details.item_index`; benzer not `allow_duplicates` olmadan `CONFLICT_NOTE_DUPLICATE`), `inbox.reject` (tersi iç `inbox.restore`). Sınıflandırmalar **kabulde** hedef desteye göre çözülür (anahtar/ad/kimlik → seçenek etiketi/kimliği; MCP ile aynı çözümleyici).
+- Kaynak bazında "doğrudan ekle" otomasyon izinde (iz J); gelen kutusu `inbox_changed` olayını yayar.
+
 ## 5. Tarayıcı eklentisi
 
 - Chromium tabanlı tarayıcılar (Chrome, Edge, Brave) için; Firefox ileride.
@@ -194,7 +199,16 @@ Başarı: `200` (oluşturmada `201`), gövde metodun yanıtıdır (zarf yok). Ha
 - Tek örnek (single instance): uygulama açıksa bağlantı mevcut pencereye iletilir.
 - Kart içi `[[bağlantılar]]` da dahili olarak aynı yönlendiriciyi kullanır.
 
+#### Uygulanan hâli (v0.9)
+- Ayrıştırma saf: `fc_core::inbox::deeplink` (şema büyük/küçük harfe duyarsız, sondaki `/` yok sayılır, yüzde kodlama + `+`, en çok 8 KiB). `flashcard://add` ayrıca `notetype=`, `tags=a,b`, `field.<anahtar>=`, `attr.<sınıflandırma>=<etiket>` (tekrar = çoklu seçim) alır.
+- Anlam `deep_links.open` komutunda (modül `deep_links`): `deck`/`note`/`study` kimlikleri ve sorguyu denetleyip **hiçbir şey yazmadan** hedef döner; `add` **asla doğrudan not yazmaz**, kaynağı `deep_link` olan bir gelen kutusu önerisi olur (sıradan, geri alınabilir `inbox.add`); `import` şimdilik `VALIDATION_DEEP_LINK` (`reason: unsupported`).
+- Kabuk (`src-tauri/src/outside.rs`): `tauri-plugin-single-instance` **ilk** eklenti (ikinci başlatma argümanlarını çalışan örneğe verip çıkar), `tauri-plugin-deep-link` şeması `tauri.conf.json`'da (`flashcard`; kurulum dosyası kaydeder, geliştirme derlemesi çalışırken kaydeder). Açılıştaki bağlantı argümanlardan okunur; sonuçlar arayüz alana kadar kuyrukta bekler (`take_deep_links`), pencere öne gelir.
+
 ## 7. Global hızlı ekleme ve pano izleme
 
 - **Global kısayol** (ör. `Ctrl+Alt+N`): uygulama arka plandayken küçük, her zaman üstte bir ekleme penceresi. Panodaki metin önceden doldurulabilir.
 - **Pano izleme** (varsayılan kapalı): kopyalanan metin filtrelere uyuyorsa (uzunluk, dil, desen) köşede küçük bir öneri: "Kart olarak ekle?" Görmezden gelinirse kaybolur. Gizlilik için parola yöneticisi gibi uygulamalardan gelen içerik (işletim sistemi işaretliyse) yok sayılır.
+
+#### Uygulanan hâli (v0.9)
+- **Hızlı ekleme** (modül `quick_add`): kısayol ayarı `quick_add.shortcut` (varsayılan `CommandOrControl+Alt+N`, yeniden başlatınca), her zaman üstte küçük pencere (`index.html#quick-add`), Klasik not ekler (`notes.create`, geri alınabilir), Esc gizler. `quick_add.prefill_clipboard` (varsayılan açık) panoyu **yalnız kısayola basılınca** okur; parola/anahtar gibi görünen metni doldurmaz.
+- **Pano önerileri** (modül `clipboard`, **varsayılan kapalı**): kapalıyken kabuk panoyu **hiç okumaz**. Açıkken saniyede bir bakar; Windows'ta işletim sisteminin gizli işaretlediği içerik (`ExcludeClipboardContentFromMonitorProcessing`, geçmiş/bulut dışı) okunmadan atlanır; açıldığı anda panoda olan önerilmez; yalnız son metnin parmak izi tutulur. Karar `clipboard.check`'te (saf süzgeç `fc_core::inbox::clipboard`): uzunluk (`clipboard.min_chars`/`max_chars`), en çok 3 satır, URL/e-posta/dosya yolu değil, **sır gibi görünmüyor** (anahtar önekleri, JWT, Luhn'lu kart numarası, üç karakter sınıfı karıştıran tek "kelime"). Öneri kabul edilirse `inbox.add` (`via: clipboard`). Dil/desen süzgeci henüz yok.
