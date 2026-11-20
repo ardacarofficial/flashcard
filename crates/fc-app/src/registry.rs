@@ -14,12 +14,13 @@ use fc_api::v1::oplog::Actor;
 use fc_api::{
     ApiError, ApiMethod, ErrorCode, InvokeRequest, MethodDescriptor, MethodKind, Visibility,
 };
+use fc_providers::speech::TtsProvider;
 use fc_providers::strategy::CardTypeEngine;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 /// Type-erased command handler.
 pub(crate) trait ErasedCommand: Send + Sync {
@@ -33,8 +34,76 @@ pub(crate) trait ErasedQuery: Send + Sync {
     fn run(&self, params: Value, ctx: &QueryCtx<'_>) -> AppResult<Value>;
 }
 
+/// Type-erased action handler (see [`Registry::action`]).
+pub(crate) trait ErasedAction: Send + Sync {
+    fn validate(&self, params: &Value) -> AppResult<()>;
+    fn run(&self, params: Value, app: &crate::App, actor: &Actor) -> AppResult<Value>;
+}
+
+/// Handles method `M` **outside** any transaction, with the app at hand (plugin operations:
+/// the plugin's host calls are separate invokes, recorded as one undo step by the handler).
+pub trait ActionHandler<M: ApiMethod>: Send + Sync + 'static {
+    /// Runs the action.
+    fn run(&self, req: M::Request, app: &crate::App, actor: &Actor) -> AppResult<M::Response>;
+}
+
+impl<M, F> ActionHandler<M> for F
+where
+    M: ApiMethod,
+    F: Fn(M::Request, &crate::App, &Actor) -> AppResult<M::Response> + Send + Sync + 'static,
+{
+    fn run(&self, req: M::Request, app: &crate::App, actor: &Actor) -> AppResult<M::Response> {
+        self(req, app, actor)
+    }
+}
+
 struct TypedCommand<M, H>(H, PhantomData<fn() -> M>);
 struct TypedQuery<M, H>(H, PhantomData<fn() -> M>);
+struct TypedAction<M, H>(H, PhantomData<fn() -> M>);
+
+impl<M: ApiMethod, H: ActionHandler<M>> ErasedAction for TypedAction<M, H> {
+    fn validate(&self, params: &Value) -> AppResult<()> {
+        parse::<M::Request>(M::NAME, params.clone()).map(|_| ())
+    }
+
+    fn run(&self, params: Value, app: &crate::App, actor: &Actor) -> AppResult<Value> {
+        let req: M::Request = parse(M::NAME, params)?;
+        to_value(&self.0.run(req, app, actor)?)
+    }
+}
+
+/// A method registered at runtime (plugin commands, v0.7): not part of the static `v1`
+/// catalog, keyed by its full unversioned name (`plugin.<plugin id>.<command>`). Always a
+/// public command whose sub-calls are what the oplog records.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DynamicMethod {
+    /// Unversioned name.
+    pub name: Arc<str>,
+    /// Owning module (`plugins`).
+    pub module: Arc<str>,
+    /// Permission needed to call it.
+    pub permission: Arc<str>,
+    /// i18n key of its label (command palette).
+    pub label_key: Arc<str>,
+}
+
+impl DynamicMethod {
+    /// Versioned wire name.
+    pub fn qualified_name(&self) -> String {
+        format!("{}.{}", fc_api::API_VERSION, self.name)
+    }
+}
+
+/// Runs a [`DynamicMethod`] (outside any transaction, like an action).
+pub trait DynamicHandler: Send + Sync {
+    /// Runs the call.
+    fn invoke(&self, params: Value, app: &crate::App, actor: &Actor) -> AppResult<Value>;
+}
+
+struct DynamicEntry {
+    method: DynamicMethod,
+    handler: Arc<dyn DynamicHandler>,
+}
 
 fn parse<T: DeserializeOwned>(method: &str, params: Value) -> AppResult<T> {
     serde_json::from_value(params).map_err(|e| {
@@ -80,6 +149,7 @@ impl<M: ApiMethod, H: QueryHandler<M>> ErasedQuery for TypedQuery<M, H> {
 pub(crate) enum ErasedHandler {
     Command(Box<dyn ErasedCommand>),
     Query(Box<dyn ErasedQuery>),
+    Action(Box<dyn ErasedAction>),
 }
 
 pub(crate) struct Entry {
@@ -93,13 +163,32 @@ pub(crate) struct Entry {
 pub struct RegistryError(pub Vec<String>);
 
 /// Methods, modules and card type engines known to the app.
+///
+/// The static part (catalog methods, modules, built-in engines, jobs) is filled by
+/// `register()` functions and frozen by [`Registry::finish`]. The **runtime** part (v0.7) can
+/// change while the app runs, through `&self`: methods with `Arc<str>` keys
+/// ([`Registry::register_dynamic`]), card type engines and TTS providers contributed by
+/// plugins, and the permission grants of plugin actors ([`Registry::set_plugin_grants`]).
 #[derive(Default)]
 pub struct Registry {
     entries: BTreeMap<&'static str, Entry>,
     modules: Vec<ModuleDescriptor>,
-    card_types: BTreeMap<String, Arc<dyn CardTypeEngine>>,
+    card_types: RwLock<BTreeMap<String, Arc<dyn CardTypeEngine>>>,
     jobs: BTreeMap<&'static str, Arc<dyn JobHandler>>,
+    dynamic: RwLock<BTreeMap<Arc<str>, DynamicEntry>>,
+    tts: RwLock<BTreeMap<String, Arc<dyn TtsProvider>>>,
+    grants: RwLock<HashMap<String, Arc<BTreeSet<String>>>>,
     errors: Vec<String>,
+}
+
+fn read<T>(lock: &RwLock<T>) -> std::sync::RwLockReadGuard<'_, T> {
+    lock.read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn write<T>(lock: &RwLock<T>) -> std::sync::RwLockWriteGuard<'_, T> {
+    lock.write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl Registry {
@@ -121,19 +210,125 @@ impl Registry {
     /// an engine registered here; templates refer to it by id).
     pub fn card_type(&mut self, engine: Arc<dyn CardTypeEngine>) {
         let id = engine.info().id;
-        if self.card_types.insert(id.clone(), engine).is_some() {
+        if write(&self.card_types).insert(id.clone(), engine).is_some() {
             self.errors.push(format!("card type {id} registered twice"));
         }
     }
 
+    /// Runtime registration of a card type engine (plugins). Returns `false` (and changes
+    /// nothing) if the id is taken.
+    pub fn register_card_type(&self, engine: Arc<dyn CardTypeEngine>) -> bool {
+        let id = engine.info().id;
+        let mut map = write(&self.card_types);
+        if map.contains_key(&id) {
+            return false;
+        }
+        map.insert(id, engine);
+        true
+    }
+
+    /// Removes runtime-registered card types whose id starts with `prefix`.
+    pub fn unregister_card_types(&self, prefix: &str) {
+        write(&self.card_types).retain(|id, _| !id.starts_with(prefix));
+    }
+
     /// Card type engine by id.
-    pub fn card_type_engine(&self, id: &str) -> Option<&Arc<dyn CardTypeEngine>> {
-        self.card_types.get(id)
+    pub fn card_type_engine(&self, id: &str) -> Option<Arc<dyn CardTypeEngine>> {
+        read(&self.card_types).get(id).cloned()
     }
 
     /// Registered card type engines, by id.
-    pub fn card_types(&self) -> impl Iterator<Item = &Arc<dyn CardTypeEngine>> {
-        self.card_types.values()
+    pub fn card_types(&self) -> Vec<Arc<dyn CardTypeEngine>> {
+        read(&self.card_types).values().cloned().collect()
+    }
+
+    /// Runtime registration of a TTS provider (built-in or plugin). Replaces one with the
+    /// same id.
+    pub fn register_tts(&self, provider: Arc<dyn TtsProvider>) {
+        write(&self.tts).insert(provider.info().id, provider);
+    }
+
+    /// Removes TTS providers whose id starts with `prefix`.
+    pub fn unregister_tts(&self, prefix: &str) {
+        write(&self.tts).retain(|id, _| !id.starts_with(prefix));
+    }
+
+    /// TTS provider by id.
+    pub fn tts_provider(&self, id: &str) -> Option<Arc<dyn TtsProvider>> {
+        read(&self.tts).get(id).cloned()
+    }
+
+    /// TTS providers, by id.
+    pub fn tts_providers(&self) -> Vec<Arc<dyn TtsProvider>> {
+        read(&self.tts).values().cloned().collect()
+    }
+
+    /// Runtime registration of a method outside the static catalog. Returns `false` if the
+    /// name is a catalog method or already registered.
+    pub fn register_dynamic(
+        &self,
+        method: DynamicMethod,
+        handler: Arc<dyn DynamicHandler>,
+    ) -> bool {
+        if self.entries.contains_key(&*method.name) {
+            return false;
+        }
+        let mut map = write(&self.dynamic);
+        if map.contains_key(&method.name) {
+            return false;
+        }
+        map.insert(method.name.clone(), DynamicEntry { method, handler });
+        true
+    }
+
+    /// Removes runtime methods whose name starts with `prefix`.
+    pub fn unregister_dynamic(&self, prefix: &str) {
+        write(&self.dynamic).retain(|name, _| !name.starts_with(prefix));
+    }
+
+    /// Runtime methods, by name.
+    pub fn dynamic_methods(&self) -> Vec<DynamicMethod> {
+        read(&self.dynamic)
+            .values()
+            .map(|e| e.method.clone())
+            .collect()
+    }
+
+    pub(crate) fn dynamic_entry(
+        &self,
+        name: &str,
+    ) -> Option<(DynamicMethod, Arc<dyn DynamicHandler>)> {
+        read(&self.dynamic)
+            .get(name)
+            .map(|e| (e.method.clone(), e.handler.clone()))
+    }
+
+    /// Sets (`Some`) or revokes (`None`) everything plugin `id` may do as an actor. A plugin
+    /// without an entry may do nothing.
+    pub fn set_plugin_grants(&self, id: &str, grants: Option<BTreeSet<String>>) {
+        let mut map = write(&self.grants);
+        match grants {
+            Some(g) => {
+                map.insert(id.to_owned(), Arc::new(g));
+            }
+            None => {
+                map.remove(id);
+            }
+        }
+    }
+
+    /// Whether `actor` holds `permission`: the single place permissions are enforced.
+    /// The user, the CLI and the app hold every permission; a plugin only what it was granted
+    /// (and only while it is active). Automations and local API clients keep every
+    /// permission until their grants land (v0.9).
+    pub fn permits(&self, actor: &Actor, permission: &str) -> bool {
+        match actor {
+            Actor::User | Actor::Cli | Actor::System => true,
+            Actor::Plugin(id) => read(&self.grants)
+                .get(id)
+                .is_some_and(|g| g.contains(permission)),
+            Actor::Automation(_) | Actor::LocalApi(_) => true,
+        }
     }
 
     fn insert<M: ApiMethod>(&mut self, expected: MethodKind, handler: ErasedHandler) {
@@ -174,6 +369,13 @@ impl Registry {
     pub fn query<M: ApiMethod>(&mut self, handler: impl QueryHandler<M>) {
         let erased = TypedQuery::<M, _>(handler, PhantomData);
         self.insert::<M>(MethodKind::Query, ErasedHandler::Query(Box::new(erased)));
+    }
+
+    /// Registers `M` as an **action**: it runs outside any transaction with the app at hand
+    /// (plugin operations). The catalog kind stays as declared; access checks are the same.
+    pub fn action<M: ApiMethod>(&mut self, handler: impl ActionHandler<M>) {
+        let erased = TypedAction::<M, _>(handler, PhantomData);
+        self.insert::<M>(M::KIND, ErasedHandler::Action(Box::new(erased)));
     }
 
     /// Registers the handler of a background job kind (docs/03 §12).
@@ -250,7 +452,10 @@ impl Registry {
         let ErasedHandler::Command(handler) = &entry.handler else {
             return Err(AppError::api(
                 ErrorCode::ValidationInvalidParams,
-                format!("{} is a query; only commands can be nested", request.method),
+                format!(
+                    "{} is not a transactional command; only those can be nested",
+                    request.method
+                ),
             ));
         };
         run_recorded(
@@ -293,40 +498,52 @@ pub(crate) fn run_recorded(
 /// internal methods are rejected (`PERMISSION_DENIED`), then the actor's permission, then the
 /// owning module's switch (`CONFLICT_MODULE_DISABLED`).
 pub(crate) fn ensure_invocable(
+    registry: &Registry,
     d: &MethodDescriptor,
     actor: &Actor,
     module_enabled: bool,
 ) -> AppResult<()> {
-    if d.visibility == Visibility::Internal || !permits(actor, d.permission) {
+    ensure_access(
+        registry,
+        &d.qualified_name(),
+        d.visibility,
+        d.permission,
+        d.module,
+        actor,
+        module_enabled,
+    )
+}
+
+/// [`ensure_invocable`] over the parts of a method (static or [`DynamicMethod`]).
+pub(crate) fn ensure_access(
+    registry: &Registry,
+    qualified: &str,
+    visibility: Visibility,
+    permission: &str,
+    module: &str,
+    actor: &Actor,
+    module_enabled: bool,
+) -> AppResult<()> {
+    if visibility == Visibility::Internal || !registry.permits(actor, permission) {
         return Err(AppError::Api(
             ApiError::new(
                 ErrorCode::PermissionDenied,
-                format!("{} may not be called here", d.qualified_name()),
+                format!("{qualified} may not be called here"),
             )
-            .with_detail("method", d.qualified_name())
-            .with_detail("permission", d.permission),
+            .with_detail("method", qualified)
+            .with_detail("permission", permission),
         ));
     }
     if !module_enabled {
         return Err(AppError::Api(
             ApiError::new(
                 ErrorCode::ConflictModuleDisabled,
-                format!("module {} is disabled", d.module),
+                format!("module {module} is disabled"),
             )
-            .with_detail("module", d.module),
+            .with_detail("module", module),
         ));
     }
     Ok(())
-}
-
-/// Whether `actor` holds `permission`. v0.1 has no grant store: the user, the CLI and the app
-/// itself hold every permission, and so do the other actors until plugin/local-API grants land
-/// (v0.7) — at which point this is the single place that enforces them.
-fn permits(actor: &Actor, _permission: &str) -> bool {
-    match actor {
-        Actor::User | Actor::Cli | Actor::System => true,
-        Actor::Plugin(_) | Actor::Automation(_) | Actor::LocalApi(_) => true,
-    }
 }
 
 pub(crate) fn unknown_method(name: &str) -> AppError {

@@ -38,4 +38,6 @@ modules! {
     browse,
     palette,
     presets,
+    plugins,
+    tts,
 }

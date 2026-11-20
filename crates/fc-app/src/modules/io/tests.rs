@@ -1202,14 +1202,16 @@ fn restoring_an_older_schema_backup_migrates_it_forward() {
     result::<ExportReport>(&finish(&t, &job));
     // Rewrite it as a backup from a build without 0302 and the v0.5 migrations (04xx; their
     // tables are not in dumps). Older cuts would need the tables later migrations add removed and
-    // derived rows (v0.3 `note_keys`, …) rebuilt — not something a dump can fake.
+    // derived rows (v0.3 `note_keys`, …) rebuilt — not something a dump can fake. Migrations of
+    // later releases (05xx+, e.g. v0.7's plugin tables) stay applied: they do not depend on
+    // 0302/04xx, and their tables are in the dump.
     let b = fc_interop::fcbackup::read(&std::fs::read(&path).unwrap()).unwrap();
     let mut dump: fc_storage::repo::CollectionDump = serde_json::from_slice(&b.collection).unwrap();
     let older: Vec<u32> = dump
         .schema_versions
         .iter()
         .copied()
-        .filter(|v| *v < 302)
+        .filter(|v| *v < 302 || *v >= 500)
         .collect();
     assert!(older.len() < dump.schema_versions.len());
     // …whose search index was written the old way (0302 and the restore rebuild it).

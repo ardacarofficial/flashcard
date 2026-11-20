@@ -1,0 +1,17 @@
+{
+  "oplog.summary.plugins.install": "Installed plugin {name} {version}",
+  "oplog.summary.plugins.uninstall": "Uninstalled plugin {name}",
+  "oplog.summary.plugins.set_enabled": "Turned plugin {name} on/off",
+  "oplog.summary.plugins.set_permissions": "Changed the permissions of plugin {name}",
+  "oplog.summary.plugins.settings.set": "Changed setting {key} of plugin {name}",
+  "oplog.summary.plugins.run": "Plugin {plugin}",
+  "oplog.summary.plugins.ui.open": "Opened a plugin view",
+  "oplog.summary.plugins.ui.act": "Plugin view action",
+  "oplog.summary.plugins.ui.close": "Closed a plugin view",
+  "oplog.summary.plugins.models.download": "Started a model download",
+  "oplog.summary.plugins.models.delete": "Deleted a model",
+  "oplog.summary.plugins.restore": "Restored plugin {name}",
+  "oplog.summary.plugins.kv.set": "Plugin storage",
+  "oplog.summary.plugins.record_failure": "Plugin failure recorded",
+  "oplog.summary.plugins.rollback": "Rolled back a plugin operation"
+}

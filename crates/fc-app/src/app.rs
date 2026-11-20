@@ -4,9 +4,10 @@ use crate::error::{AppError, AppResult};
 use crate::events::{EventBus, InMemoryEventBus};
 use crate::handler::{CommandCtx, PendingOplogEntry, QueryCtx};
 use crate::jobs::Invoker;
+use crate::modules::plugins::{Hooks, PluginHost};
 use crate::registry::{
-    ensure_invocable, run_recorded, unknown_method, ErasedCommand, ErasedHandler, Registry,
-    RegistryError,
+    ensure_access, ensure_invocable, run_recorded, unknown_method, ErasedCommand, ErasedHandler,
+    Registry, RegistryError,
 };
 use crate::settings::SettingsSchema;
 use crate::system::{OsRng, SystemClock};
@@ -18,7 +19,7 @@ use fc_api::v1::events::EventEnvelope;
 use fc_api::v1::jobs::{JobRef, JobStatus};
 use fc_api::v1::methods::JobsCancel;
 use fc_api::v1::oplog::{Actor, OplogKind};
-use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest};
+use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest, Visibility};
 use fc_core::i18n::Locale;
 use fc_core::notetype::builtin;
 use fc_core::settings::SettingScope;
@@ -72,6 +73,8 @@ pub struct App {
     writers_waiting: AtomicUsize,
     /// Folder of the collection file (`None` until known; see [`App::data_dir`]).
     data_dir: OnceLock<PathBuf>,
+    /// Plugin runtime: loaded plugins, hooks, UI sessions (v0.7).
+    plugins: PluginHost,
 }
 
 /// Where a command's oplog entries go.
@@ -135,7 +138,7 @@ fn part_inverses(entries: &[PendingOplogEntry]) -> AppResult<Value> {
 
 /// The rollback call of a marker with its parts' inverses filled in (newest first) as
 /// `params.calls`.
-fn rollback_request(rollback: &Value, parts: &[Value]) -> AppResult<InvokeRequest> {
+pub(crate) fn rollback_request(rollback: &Value, parts: &[Value]) -> AppResult<InvokeRequest> {
     let internal = |e: serde_json::Error| AppError::api(ErrorCode::Internal, e.to_string());
     let mut calls: Vec<InvokeRequest> = Vec::new();
     for part in parts.iter().rev() {
@@ -203,6 +206,7 @@ impl App {
             jobs: crate::jobs::JobRuntime::default(),
             writers_waiting: AtomicUsize::new(0),
             data_dir: OnceLock::new(),
+            plugins: PluginHost::default(),
         })
     }
 
@@ -229,6 +233,8 @@ impl App {
         tx.commit()?;
         self.reload_cached_state()?;
         self.roll_back_unfinished_groups()?;
+        // Plugins load best effort: a broken plugin is reported on its row, never blocks.
+        self.plugins.reload(self);
         // Best effort: an expired-trash purge that fails must not keep the collection closed
         // (it runs again next start, and the user can run `browse.purge_trash`).
         let _ = crate::modules::browse::purge_on_startup(self);
@@ -302,6 +308,16 @@ impl App {
         ) {
             self.jobs.notify();
         }
+        let plugins = events.iter().any(|e| match e {
+            DomainEvent::PluginsChanged { .. } | DomainEvent::CollectionReplaced => true,
+            DomainEvent::SettingChanged { scope, key } => {
+                *scope == SettingScope::App && key.starts_with("plugins.")
+            }
+            _ => false,
+        });
+        if plugins {
+            self.plugins.reload(self);
+        }
         let relevant = events.iter().any(|e| match e {
             DomainEvent::ModuleToggled { .. } | DomainEvent::CollectionReplaced => true,
             DomainEvent::SettingChanged { scope, key } => {
@@ -359,6 +375,11 @@ impl App {
             };
             self.events.publish(&envelope);
         }
+    }
+
+    /// The plugin host.
+    pub(crate) fn plugins(&self) -> &PluginHost {
+        &self.plugins
     }
 
     /// The registry (for `commands.list`, transports and tests).
@@ -448,11 +469,47 @@ impl App {
         actor: &Actor,
         trusted: bool,
     ) -> AppResult<Value> {
+        let hooks = if trusted {
+            Hooks::Off
+        } else {
+            Hooks::Run { skip: None }
+        };
+        self.invoke_hooked(method, params, actor, trusted, hooks)
+    }
+
+    /// [`App::invoke_inner`] with an explicit plugin hook policy (v0.7): client calls run
+    /// `before:`/`after:` hooks and deliver queued events to plugins; plugins' own host calls
+    /// choose their policy (see `modules::plugins`).
+    pub(crate) fn invoke_hooked(
+        &self,
+        method: &str,
+        params: Value,
+        actor: &Actor,
+        trusted: bool,
+        hooks: Hooks<'_>,
+    ) -> AppResult<Value> {
         let name = parse_qualified_name(method).ok_or_else(|| unknown_method(method))?;
-        let entry = self
-            .registry
-            .entry(name)
-            .ok_or_else(|| unknown_method(method))?;
+        let Some(entry) = self.registry.entry(name) else {
+            // Methods registered at runtime (plugin commands): run outside a transaction.
+            let (m, handler) = self
+                .registry
+                .dynamic_entry(name)
+                .ok_or_else(|| unknown_method(method))?;
+            if !trusted {
+                ensure_access(
+                    &self.registry,
+                    &m.qualified_name(),
+                    Visibility::Public,
+                    &m.permission,
+                    &m.module,
+                    actor,
+                    self.is_module_enabled(&m.module),
+                )?;
+            }
+            let result = handler.invoke(params, self, actor);
+            self.plugins.after_operation(self);
+            return result;
+        };
         let d = &entry.descriptor;
         if trusted {
             if !self.is_module_enabled(d.module) {
@@ -465,7 +522,7 @@ impl App {
                 ));
             }
         } else {
-            ensure_invocable(d, actor, self.is_module_enabled(d.module))?;
+            ensure_invocable(&self.registry, d, actor, self.is_module_enabled(d.module))?;
         }
         if name == JobsCancel::NAME {
             // Signal a running job before waiting for the writer it may be holding.
@@ -485,8 +542,33 @@ impl App {
                 };
                 h.run(params, &ctx)
             }
+            ErasedHandler::Action(h) => {
+                h.validate(&params)?;
+                let result = h.run(params, self, actor);
+                self.plugins.after_operation(self);
+                result
+            }
             ErasedHandler::Command(h) => {
-                self.run_command(h.as_ref(), d, method, params, actor, OplogMode::Write)
+                let Hooks::Run { skip } = hooks else {
+                    return self.run_command(
+                        h.as_ref(),
+                        d,
+                        method,
+                        params,
+                        actor,
+                        OplogMode::Write,
+                    );
+                };
+                let params = self.plugins.before_hooks(self, name, params, actor, skip)?;
+                let kept = self.plugins.has_after_hooks(name).then(|| params.clone());
+                let response =
+                    self.run_command(h.as_ref(), d, method, params, actor, OplogMode::Write)?;
+                if let Some(params) = kept {
+                    self.plugins
+                        .after_hooks(self, name, &params, &response, actor);
+                }
+                self.plugins.after_operation(self);
+                Ok(response)
             }
         }
     }
@@ -689,7 +771,7 @@ impl App {
                 }
                 group.pending.extend(oplog);
                 drop(ids);
-                self.after_commit(events, now, batch_id);
+                self.after_commit(events, now, batch_id, actor);
                 return Ok(response);
             }
             OplogMode::Discard(group) => {
@@ -700,12 +782,19 @@ impl App {
         }
         tx.commit()?;
         drop(ids);
-        self.after_commit(events, now, batch_id);
+        self.after_commit(events, now, batch_id, actor);
         Ok(response)
     }
 
-    fn after_commit(&self, events: Vec<DomainEvent>, now: fc_core::Timestamp, batch_id: BatchId) {
+    fn after_commit(
+        &self,
+        events: Vec<DomainEvent>,
+        now: fc_core::Timestamp,
+        batch_id: BatchId,
+        actor: &Actor,
+    ) {
         self.apply_committed(&events);
+        self.plugins.queue_events(&events, actor);
         for event in events {
             let envelope = EventEnvelope {
                 seq: self.event_seq.fetch_add(1, Ordering::SeqCst),

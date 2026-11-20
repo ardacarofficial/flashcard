@@ -1,0 +1,522 @@
+{
+  "v1.attributes.define": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.attributes.define_from_template": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.attributes.delete": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.attributes.effective": [
+    "query",
+    "attributes:read"
+  ],
+  "v1.attributes.get": [
+    "query",
+    "attributes:read"
+  ],
+  "v1.attributes.list": [
+    "query",
+    "attributes:read"
+  ],
+  "v1.attributes.option.add": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.attributes.option.delete": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.attributes.option.merge": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.attributes.option.rename": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.attributes.option.reorder": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.attributes.option.set_color": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.attributes.restore": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.attributes.templates": [
+    "query",
+    "attributes:read"
+  ],
+  "v1.attributes.update": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.attributes.values.get": [
+    "query",
+    "attributes:read"
+  ],
+  "v1.attributes.values.set": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.batch.execute": [
+    "command",
+    "batch:write"
+  ],
+  "v1.browse.card_info": [
+    "query",
+    "cards:read"
+  ],
+  "v1.browse.check_database": [
+    "query",
+    "notes:read"
+  ],
+  "v1.browse.duplicates": [
+    "query",
+    "notes:read"
+  ],
+  "v1.browse.purge_trash": [
+    "command",
+    "notes:write"
+  ],
+  "v1.browse.repair_database": [
+    "command",
+    "notes:write"
+  ],
+  "v1.browse.trash": [
+    "query",
+    "notes:read"
+  ],
+  "v1.bulk.add_tags": [
+    "command",
+    "notes:write"
+  ],
+  "v1.bulk.change_notetype": [
+    "command",
+    "notes:write"
+  ],
+  "v1.bulk.find_replace": [
+    "command",
+    "notes:write"
+  ],
+  "v1.bulk.move_cards": [
+    "command",
+    "cards:write"
+  ],
+  "v1.bulk.remove_tags": [
+    "command",
+    "notes:write"
+  ],
+  "v1.bulk.reset_progress": [
+    "command",
+    "cards:write"
+  ],
+  "v1.bulk.set_attribute": [
+    "command",
+    "attributes:write"
+  ],
+  "v1.bulk.set_buried": [
+    "command",
+    "cards:write"
+  ],
+  "v1.bulk.set_flag": [
+    "command",
+    "cards:write"
+  ],
+  "v1.bulk.set_suspended": [
+    "command",
+    "cards:write"
+  ],
+  "v1.cards.meta": [
+    "query",
+    "cards:read"
+  ],
+  "v1.cards.preview": [
+    "query",
+    "cards:read"
+  ],
+  "v1.cards.render": [
+    "query",
+    "cards:read"
+  ],
+  "v1.cards.set_flag": [
+    "command",
+    "cards:write"
+  ],
+  "v1.cards.set_flags": [
+    "command",
+    "cards:write"
+  ],
+  "v1.cards.set_user_note": [
+    "command",
+    "cards:write"
+  ],
+  "v1.cardtypes.list": [
+    "query",
+    "notetypes:read"
+  ],
+  "v1.commands.list": [
+    "query",
+    "modules:read"
+  ],
+  "v1.decks.create": [
+    "command",
+    "decks:write"
+  ],
+  "v1.decks.delete": [
+    "command",
+    "decks:write"
+  ],
+  "v1.decks.get": [
+    "query",
+    "decks:read"
+  ],
+  "v1.decks.list": [
+    "query",
+    "decks:read"
+  ],
+  "v1.decks.move": [
+    "command",
+    "decks:write"
+  ],
+  "v1.decks.rename": [
+    "command",
+    "decks:write"
+  ],
+  "v1.decks.restore": [
+    "command",
+    "decks:write"
+  ],
+  "v1.decks.tree": [
+    "query",
+    "decks:read"
+  ],
+  "v1.decks.update": [
+    "command",
+    "decks:write"
+  ],
+  "v1.flags.list": [
+    "query",
+    "cards:read"
+  ],
+  "v1.flags.update": [
+    "command",
+    "cards:write"
+  ],
+  "v1.io.backup.create": [
+    "command",
+    "io:write"
+  ],
+  "v1.io.backup.inspect": [
+    "query",
+    "io:read"
+  ],
+  "v1.io.backup.restore": [
+    "command",
+    "io:write"
+  ],
+  "v1.io.export.start": [
+    "command",
+    "io:write"
+  ],
+  "v1.io.import.preview": [
+    "query",
+    "io:read"
+  ],
+  "v1.io.import.start": [
+    "command",
+    "io:write"
+  ],
+  "v1.io.print.render": [
+    "query",
+    "io:read"
+  ],
+  "v1.jobs.cancel": [
+    "command",
+    "jobs:write"
+  ],
+  "v1.jobs.get": [
+    "query",
+    "jobs:read"
+  ],
+  "v1.jobs.list": [
+    "query",
+    "jobs:read"
+  ],
+  "v1.links.backlinks": [
+    "query",
+    "notes:read"
+  ],
+  "v1.links.suggest": [
+    "query",
+    "notes:read"
+  ],
+  "v1.media.add": [
+    "command",
+    "media:write"
+  ],
+  "v1.media.get": [
+    "query",
+    "media:read"
+  ],
+  "v1.media.list": [
+    "query",
+    "media:read"
+  ],
+  "v1.media.read": [
+    "query",
+    "media:read"
+  ],
+  "v1.modules.list": [
+    "query",
+    "modules:read"
+  ],
+  "v1.modules.set_enabled": [
+    "command",
+    "modules:write"
+  ],
+  "v1.notes.create": [
+    "command",
+    "notes:write"
+  ],
+  "v1.notes.delete": [
+    "command",
+    "notes:write"
+  ],
+  "v1.notes.get": [
+    "query",
+    "notes:read"
+  ],
+  "v1.notes.list": [
+    "query",
+    "notes:read"
+  ],
+  "v1.notes.restore": [
+    "command",
+    "notes:write"
+  ],
+  "v1.notes.update": [
+    "command",
+    "notes:write"
+  ],
+  "v1.notetypes.create": [
+    "command",
+    "notetypes:write"
+  ],
+  "v1.notetypes.delete": [
+    "command",
+    "notetypes:write"
+  ],
+  "v1.notetypes.get": [
+    "query",
+    "notetypes:read"
+  ],
+  "v1.notetypes.list": [
+    "query",
+    "notetypes:read"
+  ],
+  "v1.notetypes.restore": [
+    "command",
+    "notetypes:write"
+  ],
+  "v1.notetypes.update": [
+    "command",
+    "notetypes:write"
+  ],
+  "v1.notetypes.usage": [
+    "query",
+    "notetypes:read"
+  ],
+  "v1.oplog.list": [
+    "query",
+    "oplog:read"
+  ],
+  "v1.oplog.redo": [
+    "command",
+    "oplog:write"
+  ],
+  "v1.oplog.status": [
+    "query",
+    "oplog:read"
+  ],
+  "v1.oplog.undo": [
+    "command",
+    "oplog:write"
+  ],
+  "v1.palette.list": [
+    "query",
+    "modules:read"
+  ],
+  "v1.presets.assign": [
+    "command",
+    "decks:write"
+  ],
+  "v1.presets.clone": [
+    "command",
+    "decks:write"
+  ],
+  "v1.presets.create": [
+    "command",
+    "decks:write"
+  ],
+  "v1.presets.delete": [
+    "command",
+    "decks:write"
+  ],
+  "v1.presets.for_deck": [
+    "query",
+    "decks:read"
+  ],
+  "v1.presets.get": [
+    "query",
+    "decks:read"
+  ],
+  "v1.presets.list": [
+    "query",
+    "decks:read"
+  ],
+  "v1.presets.update": [
+    "command",
+    "decks:write"
+  ],
+  "v1.saved_queries.create": [
+    "command",
+    "search:write"
+  ],
+  "v1.saved_queries.delete": [
+    "command",
+    "search:write"
+  ],
+  "v1.saved_queries.list": [
+    "query",
+    "search:read"
+  ],
+  "v1.saved_queries.update": [
+    "command",
+    "search:write"
+  ],
+  "v1.search.cards": [
+    "query",
+    "search:read"
+  ],
+  "v1.search.check": [
+    "query",
+    "search:read"
+  ],
+  "v1.search.ids": [
+    "query",
+    "search:read"
+  ],
+  "v1.settings.get": [
+    "query",
+    "settings:read"
+  ],
+  "v1.settings.reset": [
+    "command",
+    "settings:write"
+  ],
+  "v1.settings.schema": [
+    "query",
+    "settings:read"
+  ],
+  "v1.settings.set": [
+    "command",
+    "settings:write"
+  ],
+  "v1.shortcuts.list": [
+    "query",
+    "settings:read"
+  ],
+  "v1.shortcuts.reset": [
+    "command",
+    "settings:write"
+  ],
+  "v1.shortcuts.set": [
+    "command",
+    "settings:write"
+  ],
+  "v1.study.active": [
+    "query",
+    "study:read"
+  ],
+  "v1.study.answer": [
+    "command",
+    "study:write"
+  ],
+  "v1.study.bury": [
+    "command",
+    "study:write"
+  ],
+  "v1.study.card_history": [
+    "query",
+    "study:read"
+  ],
+  "v1.study.check_answer": [
+    "query",
+    "study:read"
+  ],
+  "v1.study.end": [
+    "command",
+    "study:write"
+  ],
+  "v1.study.hint": [
+    "command",
+    "study:write"
+  ],
+  "v1.study.postpone": [
+    "command",
+    "study:write"
+  ],
+  "v1.study.session": [
+    "query",
+    "study:read"
+  ],
+  "v1.study.start": [
+    "command",
+    "study:write"
+  ],
+  "v1.study.summary": [
+    "query",
+    "study:read"
+  ],
+  "v1.study.suspend": [
+    "command",
+    "study:write"
+  ],
+  "v1.tags.list": [
+    "query",
+    "tags:read"
+  ],
+  "v1.tags.merge": [
+    "command",
+    "tags:write"
+  ],
+  "v1.tags.rename": [
+    "command",
+    "tags:write"
+  ],
+  "v1.tags.set_color": [
+    "command",
+    "tags:write"
+  ],
+  "v1.tts.providers": [
+    "query",
+    "tts:read"
+  ],
+  "v1.tts.synthesize": [
+    "query",
+    "tts:read"
+  ],
+  "v1.tts.voices": [
+    "query",
+    "tts:read"
+  ]
+}

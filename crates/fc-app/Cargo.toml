@@ -14,6 +14,8 @@ fc-storage.workspace = true
 fc-providers.workspace = true
 fc-study = { path = "../fc-study" }
 fc-interop.workspace = true
+fc-plugins.workspace = true
+async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -25,6 +27,7 @@ tempfile = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
+fc-plugins = { workspace = true, features = ["testing"] }
 fc-interop = { workspace = true, features = ["fixtures"] }
 
 [features]

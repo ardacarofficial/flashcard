@@ -286,6 +286,7 @@ fn palette_list(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<PaletteList> {
                 .is_some_and(|e| match &e.handler {
                     ErasedHandler::Command(h) => h.validate(&empty).is_ok(),
                     ErasedHandler::Query(h) => h.validate(&empty).is_ok(),
+                    ErasedHandler::Action(h) => h.validate(&empty).is_ok(),
                 });
             PaletteEntry {
                 kind: d.kind,
@@ -302,6 +303,16 @@ fn palette_list(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<PaletteList> {
             }
         })
         .collect();
+    // Plugin commands registered at runtime (v0.7), labeled from the plugin's locale files.
+    entries.extend(ctx.registry.dynamic_methods().into_iter().map(|m| PaletteEntry {
+        kind: fc_api::MethodKind::Command,
+        module: m.module.to_string(),
+        label_key: m.label_key.to_string(),
+        direct: true,
+        enabled: states.get(&*m.module).copied().unwrap_or(false),
+        shortcut: None,
+        method: m.qualified_name(),
+    }));
     entries.sort_by(|a, b| a.method.cmp(&b.method));
     Ok(PaletteList { entries })
 }
