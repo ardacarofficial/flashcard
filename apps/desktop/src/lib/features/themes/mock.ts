@@ -22,7 +22,19 @@ const tokens = (bg: string, text: string, accent: string): Record<string, string
 });
 
 const PRESETS: ThemePresetDto[] = [
-  { id: 'default', name_key: 'themes.preset.default', light: tokens('#ffffff', '#1c1917', '#2f6fdb'), dark: tokens('#161514', '#ecebe9', '#6b9bf0') },
+  // Mirrors fc_core::theme's default preset (v1.1, docs/11 §4) so mock screenshots match the app.
+  {
+    id: 'default',
+    name_key: 'themes.preset.default',
+    light: {
+      bg: '#f6f6f8', 'bg-subtle': '#eeeef2', surface: '#ffffff', text: '#18181b', 'text-muted': '#5f5f6b', border: '#e4e4e9',
+      accent: '#5b47e0', 'accent-text': '#ffffff', danger: '#c03636', success: '#157a53', focus: '#5b47e0', selected: '#e0def5',
+    },
+    dark: {
+      bg: '#121214', 'bg-subtle': '#18181c', surface: '#1e1e23', text: '#ededf0', 'text-muted': '#a1a1aa', border: '#2e2e35',
+      accent: '#8b7cf6', 'accent-text': '#000000', danger: '#ef6f62', success: '#3ec28f', focus: '#8b7cf6', selected: '#343053',
+    },
+  },
   { id: 'sage', name_key: 'themes.preset.sage', light: tokens('#f7f9f6', '#1d241f', '#3f7a5a'), dark: tokens('#141916', '#e3ebe5', '#7cc19a') },
 ];
 

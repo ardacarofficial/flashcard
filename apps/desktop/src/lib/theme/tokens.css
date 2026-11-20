@@ -1,37 +1,199 @@
 /*
- * Theme tokens. Components use ONLY these variables — no raw colours.
- * data-theme="light" | "dark" forces a theme; absent = follow the OS.
+ * Design tokens (docs/11 §4). Components use ONLY these variables — no raw colours.
+ * data-theme="light" | "dark" forces a scheme; absent = follow the OS.
+ *
+ * Two layers:
+ *
+ * 1. `--fc-*` theme colours. The backend (`themes.current`, fc_core::theme) overrides them
+ *    per preset and custom accent (theme.svelte.ts); the values below are the default
+ *    preset's and must match it (fc_core::theme `default_preset_matches_the_css_fallback`).
+ * 2. Design-system tokens (`--surface-*`, `--text-*`, `--accent`, `--space-*`, …) built on
+ *    layer 1, so presets and the custom accent keep working. New code uses layer 2.
  */
+
+/* Inter (SIL OFL 1.1, src/assets/licenses/Inter-OFL.txt), bundled: never loaded from the network. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('../../assets/fonts/inter-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  /* Turkish ğ ş İ … live here. */
+  src: url('../../assets/fonts/inter-latin-ext-wght-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
-  --fc-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --fc-font-size: 14px;
-  --fc-space-1: 4px;
-  --fc-space-2: 8px;
-  --fc-space-3: 12px;
-  --fc-space-4: 16px;
-  --fc-space-6: 24px;
+  /* ---------------------------------------------------------------- layer 1: theme */
+  --fc-bg: light-dark(#f6f6f8, #121214);
+  --fc-bg-subtle: light-dark(#eeeef2, #18181c);
+  --fc-surface: light-dark(#ffffff, #1e1e23);
+  --fc-text: light-dark(#18181b, #ededf0);
+  --fc-text-muted: light-dark(#5f5f6b, #a1a1aa);
+  --fc-border: light-dark(#e4e4e9, #2e2e35);
+  --fc-accent: light-dark(#5b47e0, #8b7cf6);
+  --fc-accent-text: light-dark(#ffffff, #000000);
+  --fc-danger: light-dark(#c03636, #ef6f62);
+  --fc-success: light-dark(#157a53, #3ec28f);
+  --fc-focus: light-dark(#5b47e0, #8b7cf6);
+  --fc-selected: light-dark(#e0def5, #343053);
+
+  /* ---------------------------------------------------------------- layer 2: palette */
+  /* Neutral grey scale (static; for illustrations, skeletons, charts — not for themed surfaces). */
+  --gray-50: #f9f9fb;
+  --gray-100: #f2f2f5;
+  --gray-200: #e4e4e9;
+  --gray-300: #d1d1d8;
+  --gray-400: #a1a1aa;
+  --gray-500: #71717b;
+  --gray-600: #5f5f6b;
+  --gray-700: #3f3f47;
+  --gray-800: #27272c;
+  --gray-900: #18181b;
+  --gray-950: #0d0d0f;
+
+  /* Surfaces: page, raised (cards, menus), sunken / hover. */
+  --surface-0: var(--fc-bg);
+  --surface-1: var(--fc-surface);
+  --surface-2: var(--fc-bg-subtle);
+  --border: var(--fc-border);
+  --border-strong: color-mix(in srgb, var(--fc-border) 60%, var(--fc-text-muted));
+  /* Text: primary (≥ 7:1), secondary (≥ 4.5:1), tertiary (disabled / decorative only). */
+  --text-1: var(--fc-text);
+  --text-2: var(--fc-text-muted);
+  --text-3: color-mix(in srgb, var(--fc-text-muted) 70%, var(--fc-bg));
+
+  /* Disabled controls: clearly inert, still legible (>= 4.5:1 text on fill, both themes). */
+  --disabled-bg: light-dark(#e4e4e9, #2e2e35);
+  --disabled-fg: light-dark(#5f5f6b, #a1a1aa);
+  --disabled-border: light-dark(#d1d1d8, #3f3f47);
+
+  /* Accent (default #5B47E0). `-soft` = selected / tinted backgrounds. */
+  --accent: var(--fc-accent);
+  --accent-fg: var(--fc-accent-text);
+  --accent-soft: var(--fc-selected);
+  --accent-hover: color-mix(in srgb, var(--fc-accent) 88%, var(--fc-text));
+  --focus-ring: var(--fc-focus);
+
+  /*
+   * Status hues: success #1F9D6B, warning #C98A0B, danger #D64545 (docs/11). The plain token
+   * is readable as text (AA 4.5:1 on every surface); `-solid` fills carry `-solid-fg`;
+   * `-soft` is a tinted background for chips and banners (text on it uses the plain token).
+   */
+  /* Darkened (light) / lightened (dark) towards the text colour so success text also reads on
+     --success-soft (chips, badges): 5.3:1 light, 6.3:1 dark (plain #157a53 was 4.38:1). */
+  --success: color-mix(in srgb, var(--fc-success) 85%, var(--fc-text));
+  --success-solid: light-dark(#157a53, #3ec28f);
+  --success-solid-fg: light-dark(#ffffff, #000000);
+  --success-soft: color-mix(in srgb, var(--fc-success) 14%, var(--fc-surface));
+  --warning: light-dark(#8a5c00, #e0a82e);
+  --warning-solid: #c98a0b;
+  --warning-solid-fg: #000000;
+  --warning-soft: color-mix(in srgb, #c98a0b 16%, var(--fc-surface));
+  --danger: var(--fc-danger);
+  --danger-solid: light-dark(#c03636, #ef6f62);
+  --danger-solid-fg: light-dark(#ffffff, #000000);
+  --danger-soft: color-mix(in srgb, var(--fc-danger) 12%, var(--fc-surface));
+
+  /* ---------------------------------------------------------------- typography */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 40px;
+  --leading: 1.5;
+  --leading-tight: 1.4;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ---------------------------------------------------------------- space, shape, depth, motion */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.06), 0 1px 1px rgb(0 0 0 / 0.04);
+  --shadow-2: 0 8px 24px rgb(0 0 0 / 0.1), 0 2px 6px rgb(0 0 0 / 0.06);
+  --motion-fast: 150ms;
+  --motion: 200ms;
+  --motion-slow: 250ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --control-h-sm: 28px;
+  --control-h-md: 36px;
+  --control-h-lg: 44px;
+  --sidebar-w: 232px;
+  --sidebar-w-collapsed: 64px;
+  /*
+   * Page container (one for every page, App.svelte `.page`): content width and side padding,
+   * left-aligned next to the sidebar so every page starts at the same x. `wide` is the
+   * documented variant for tables and charts (Search, Statistics: ScreenDef `width: 'wide'`).
+   */
+  --content-max: 1120px;
+  --content-max-wide: 1440px;
+  --content-pad-x: var(--space-8);
+
+  /* ---------------------------------------------------------------- v1.0 aliases (existing screens) */
+  --fc-font: var(--font-sans);
+  --fc-font-size: var(--text-sm);
+  --fc-space-1: var(--space-1);
+  --fc-space-2: var(--space-2);
+  --fc-space-3: var(--space-3);
+  --fc-space-4: var(--space-4);
+  --fc-space-6: var(--space-6);
   --fc-radius: 6px;
   --fc-border-width: 1px;
 
-  --fc-bg: light-dark(#ffffff, #161514);
-  --fc-bg-subtle: light-dark(#f5f5f4, #1f1e1c);
-  --fc-surface: light-dark(#ffffff, #1f1e1c);
-  --fc-text: light-dark(#1c1917, #ecebe9);
-  --fc-text-muted: light-dark(#6b6560, #a19d98);
-  --fc-border: light-dark(#e2e0dd, #34322f);
-  --fc-accent: light-dark(#2f6fdb, #6b9bf0);
-  --fc-accent-text: light-dark(#ffffff, #0c0c0c);
-  --fc-danger: light-dark(#c0392b, #ef6f62);
-  --fc-success: light-dark(#2e7d4f, #6cc28d);
-  --fc-focus: light-dark(#2f6fdb, #6b9bf0);
-  --fc-selected: light-dark(#e8eefb, #23324d);
   color-scheme: light dark; /* follow the OS */
 }
 
-/* Forced themes. Each token is declared once, above, via light-dark(). */
+@media (max-width: 1023.98px) {
+  :root {
+    --content-pad-x: var(--space-4);
+  }
+}
+
+/* Forced schemes. Each colour is declared once, above, via light-dark(). */
 :root[data-theme='light'] {
   color-scheme: light;
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 8px 24px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 8px 24px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion: 0ms;
+    --motion-slow: 0ms;
+  }
 }

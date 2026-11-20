@@ -1,16 +1,36 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
-  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import type { McpServerDto, McpToolList, McpTransport } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import type { ScreenCtx } from '../types';
   import { claudeCodeCommand, claudeDesktopConfig } from './snippets';
+  import {
+    Button,
+    ChevronDown,
+    ChevronUp,
+    Chip,
+    Dialog,
+    EmptyState,
+    Icon,
+    Input,
+    Plus,
+    SegmentedControl,
+    Server,
+    Skeleton,
+    Switch,
+    Terminal,
+    Textarea,
+    TriangleAlert,
+    Bot,
+  } from '$lib/ui';
+  import { FormRow, SettingsPage, SettingsSection } from '../core/kit';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
   let tools = $state<McpToolList | null>(null);
-  let servers = $state<McpServerDto[]>([]);
+  let servers = $state<McpServerDto[] | null>(null);
+  let showSetup = $state(false);
 
   // Add-server form.
   let name = $state('');
@@ -33,8 +53,9 @@
 
   async function load() {
     await ctx.guarded(async () => {
-      tools = await api.call('mcp.tools.list', {});
-      servers = (await api.call('mcp.servers.list', {})).servers;
+      const [nextTools, list] = await Promise.all([api.call('mcp.tools.list', {}), api.call('mcp.servers.list', {})]);
+      tools = nextTools;
+      servers = list.servers;
     });
   }
 
@@ -106,151 +127,266 @@
     const unsub = api.on(['data_changed', 'undone', 'redone'], () => void load());
     return () => void unsub.then((u) => u());
   });
+  const transports = $derived([
+    { value: 'stdio' as McpTransport, label: t('mcp.client.stdio') },
+    { value: 'http' as McpTransport, label: t('mcp.client.http') },
+  ]);
 </script>
 
-<h2>{t('mcp.heading')}</h2>
-
-<section aria-labelledby="mcp-server">
-  <h3 id="mcp-server">{t('mcp.server.heading')}</h3>
-  <p class="muted">{t('mcp.server.intro')}</p>
-  {#if tools}
-    <label class="check">
-      <input
-        type="checkbox"
-        checked={tools.writes_allowed}
-        onchange={(e) => void setWrites(e.currentTarget.checked)}
-      />
-      {t('mcp.server.allow_writes')}
-    </label>
-    {#if !tools.writes_allowed}<p class="muted" role="status">{t('mcp.server.read_only_note')}</p>{/if}
-
-    <details>
-      <summary>{t('mcp.server.setup')}</summary>
-      <p>{t('mcp.server.claude_code')}</p>
-      <pre><code>{claudeCodeCommand()}</code></pre>
-      <p>{t('mcp.server.claude_desktop')}</p>
-      <pre><code>{claudeDesktopConfig()}</code></pre>
-      <p class="muted">{t('mcp.server.db_hint')}</p>
-    </details>
-
-    <h4>{t('mcp.server.tools')}</h4>
-    <ul class="tools">
-      {#each tools.tools as tool (tool.name)}
-        <li class:off={tool.access === 'write' && !tools.writes_allowed}>
-          {td(`mcp.tools.${tool.name}`)}
-          <span class="muted">
-            · {t(tool.access === 'read' ? 'mcp.server.read' : 'mcp.server.write')}{#if tool.destructive}
-              · {t('mcp.server.changes_content')}{/if}
-          </span>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-</section>
-
-<section aria-labelledby="mcp-client">
-  <h3 id="mcp-client">{t('mcp.client.heading')}</h3>
-  <p class="muted">{t('mcp.client.intro')}</p>
-  {#if servers.length === 0}
-    <p class="muted">{t('mcp.client.none')}</p>
-  {:else}
-    <ul>
-      {#each servers as s (s.id)}
-        <li>
-          <label class="check">
-            <input
-              type="checkbox"
-              checked={s.enabled}
-              disabled={!s.approved}
-              onchange={() => void toggle(s)}
-            />
-            <strong>{s.name}</strong>
-          </label>
-          <code>{launches(s)}</code>
-          {#if !s.approved}
-            <span class="warn" role="status">{t('mcp.client.not_approved')}</span>
-            <button type="button" onclick={() => (pending = { server: s })}>{t('mcp.client.approve')}</button>
-          {/if}
-          <button type="button" class="danger" onclick={() => void remove(s)}>{t('mcp.client.remove')}</button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-
-  <form
-    onsubmit={(e) => {
-      e.preventDefault();
-      pending = { server: null };
-    }}
-  >
-    <label>{t('mcp.client.name')} <input bind:value={name} /></label>
-    <label>
-      {t('mcp.client.transport')}
-      <select bind:value={transport}>
-        <option value="stdio">{t('mcp.client.stdio')}</option>
-        <option value="http">{t('mcp.client.http')}</option>
-      </select>
-    </label>
-    {#if transport === 'stdio'}
-      <label>{t('mcp.client.command')} <input bind:value={command} /></label>
-      <label>{t('mcp.client.args')} <textarea rows="3" bind:value={args}></textarea></label>
+<SettingsPage title={t('mcp.heading')} subtitle={t('mcp.subtitle')}>
+  <SettingsSection title={t('mcp.server.heading')} description={t('mcp.server.intro')} icon={Bot} body="rows">
+    {#if !tools}
+      <div class="pad"><Skeleton lines={3} /></div>
     {:else}
-      <label>{t('mcp.client.url')} <input type="url" bind:value={url} /></label>
+      <FormRow
+        label={t('mcp.server.allow_writes')}
+        description={tools.writes_allowed ? t('settings.mcp.server.allow_writes.description') : t('mcp.server.read_only_note')}
+      >
+        <Switch ariaLabel={t('mcp.server.allow_writes')} checked={tools.writes_allowed} onchange={(on) => void setWrites(on)} />
+      </FormRow>
+      <FormRow label={t('mcp.server.setup')} description={t('mcp.server.setup_hint')} stack={showSetup}>
+        <Button
+          size="sm"
+          variant="secondary"
+          iconEnd={showSetup ? ChevronUp : ChevronDown}
+          aria-expanded={showSetup}
+          aria-controls="mcp-setup"
+          onclick={() => (showSetup = !showSetup)}
+        >
+          {showSetup ? t('mcp.server.hide_setup') : t('mcp.server.show_setup')}
+        </Button>
+        {#if showSetup}
+          <div id="mcp-setup" class="setup">
+            <p class="sub">{t('mcp.server.claude_code')}</p>
+            <pre><code>{claudeCodeCommand()}</code></pre>
+            <p class="sub">{t('mcp.server.claude_desktop')}</p>
+            <pre><code>{claudeDesktopConfig()}</code></pre>
+            <p class="muted">{t('mcp.server.db_hint')}</p>
+          </div>
+        {/if}
+      </FormRow>
+      <FormRow label={t('mcp.server.tools')} stack>
+        <ul class="tools">
+          {#each tools.tools as tool (tool.name)}
+            {@const off = tool.access === 'write' && !tools.writes_allowed}
+            <li class:off>
+              <span class="tool-name">{td(`mcp.tools.${tool.name}`)}</span>
+              <span class="tags">
+                <Chip size="sm" tone={tool.access === 'read' ? 'neutral' : 'accent'} label={t(tool.access === 'read' ? 'mcp.server.read' : 'mcp.server.write')} />
+                {#if tool.destructive}<Chip size="sm" tone="warning" label={t('mcp.server.changes_content')} />{/if}
+              </span>
+            </li>
+          {/each}
+        </ul>
+      </FormRow>
     {/if}
-    <button type="submit" disabled={!name.trim()}>{t('mcp.client.add')}</button>
-  </form>
-</section>
+  </SettingsSection>
+
+  <SettingsSection title={t('mcp.client.heading')} description={t('mcp.client.intro')} icon={Server}>
+    {#if servers === null}
+      <Skeleton lines={2} />
+    {:else if servers.length === 0}
+      <EmptyState size="sm" icon={Server} title={t('mcp.client.none')} />
+    {:else}
+      <ul class="servers">
+        {#each servers as s (s.id)}
+          <li>
+            <Switch ariaLabel={s.name} checked={s.enabled} disabled={!s.approved} onchange={() => void toggle(s)} />
+            <div class="server-text">
+              <strong>{s.name}</strong>
+              <code>{launches(s)}</code>
+            </div>
+            <div class="server-actions">
+              {#if !s.approved}
+                <span class="warn" role="status"><Icon icon={TriangleAlert} size={16} />{t('mcp.client.not_approved')}</span>
+                <Button size="sm" onclick={() => (pending = { server: s })}>{t('mcp.client.approve')}</Button>
+              {/if}
+              <Button size="sm" variant="ghost" onclick={() => void remove(s)}>{t('mcp.client.remove')}</Button>
+            </div>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+
+    <form
+      class="add"
+      onsubmit={(e) => {
+        e.preventDefault();
+        pending = { server: null };
+      }}
+    >
+      <h3>{t('mcp.client.add_heading')}</h3>
+      <div class="grid">
+        <Input label={t('mcp.client.name')} bind:value={name} />
+        <div class="transport">
+          <span class="label" aria-hidden="true">{t('mcp.client.transport')}</span>
+          <SegmentedControl label={t('mcp.client.transport')} options={transports} bind:value={transport} />
+        </div>
+      </div>
+      {#if transport === 'stdio'}
+        <Input label={t('mcp.client.command')} icon={Terminal} bind:value={command} />
+        <Textarea label={t('mcp.client.args')} rows={3} bind:value={args} />
+      {:else}
+        <Input type="url" label={t('mcp.client.url')} bind:value={url} />
+      {/if}
+      <div class="row-end">
+        <Button type="submit" variant="primary" icon={Plus} disabled={!name.trim()}>{t('mcp.client.add')}</Button>
+      </div>
+    </form>
+  </SettingsSection>
+</SettingsPage>
 
 {#if pending}
   {@const target = pending.server}
-  <ConfirmDialog
-    message={t(target ? 'mcp.client.confirm_approve' : 'mcp.client.confirm_add', {
-      command: target ? launches(target) : launches({ transport, command, args: lines(args), url }),
-    })}
-    confirmLabel={t(target ? 'mcp.client.trust_approve' : 'mcp.client.trust_add')}
-    onconfirm={() => void (target ? approve(target) : add())}
-    oncancel={() => (pending = null)}
-  />
+  <Dialog
+    open
+    role="alertdialog"
+    size="sm"
+    title={t(target ? 'mcp.client.approve_title' : 'mcp.client.add_title')}
+    onclose={() => (pending = null)}
+  >
+    <p class="confirm">
+      {t(target ? 'mcp.client.confirm_approve' : 'mcp.client.confirm_add', {
+        command: target ? launches(target) : launches({ transport, command, args: lines(args), url }),
+      })}
+    </p>
+    {#snippet footer()}
+      <Button variant="ghost" onclick={() => (pending = null)}>{t('common.cancel')}</Button>
+      <Button variant="danger" onclick={() => void (target ? approve(target) : add())}>
+        {t(target ? 'mcp.client.trust_approve' : 'mcp.client.trust_add')}
+      </Button>
+    {/snippet}
+  </Dialog>
 {/if}
 
+
 <style>
-  .warn {
-    color: var(--fc-danger, inherit);
+  .pad {
+    padding: var(--space-4) var(--space-6);
   }
-  section {
-    margin-bottom: var(--fc-space-6);
-  }
-  ul {
-    list-style: none;
-    padding: 0;
-  }
-  li {
-    margin: var(--fc-space-1) 0;
-    display: flex;
-    gap: var(--fc-space-2);
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .tools li.off {
-    opacity: 0.5;
-  }
-  label {
-    display: block;
-    margin: var(--fc-space-2) 0;
-  }
-  label input:not([type='checkbox']),
-  label select,
-  label textarea {
-    display: block;
+  .setup {
     width: 100%;
-    max-width: 24rem;
   }
-  li label.check {
-    margin: 0;
+  .sub {
+    margin: var(--space-3) 0 var(--space-1);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
   }
   pre {
+    margin: 0;
+    padding: var(--space-3);
     overflow-x: auto;
-    padding: var(--fc-space-2);
-    background: var(--fc-surface-2, transparent);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+  }
+  .muted {
+    margin: var(--space-2) 0 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .tools {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: var(--space-1) var(--space-6);
+  }
+  .tools li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    font-size: var(--text-sm);
+    border-bottom: 1px solid var(--border);
+  }
+  .tools li.off {
+    color: var(--text-3);
+  }
+  .tags {
+    display: flex;
+    gap: var(--space-1);
+    flex: none;
+  }
+  .servers {
+    list-style: none;
+    margin: 0 0 var(--space-6);
+    padding: 0;
+  }
+  .servers li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    flex-wrap: wrap;
+  }
+  .servers li + li {
+    border-top: 1px solid var(--border);
+  }
+  .server-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 12rem;
+  }
+  .server-text code {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-2);
+    overflow-wrap: anywhere;
+  }
+  .server-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .warn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--warning);
+    font-size: var(--text-sm);
+  }
+  .add {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+  }
+  .add h3 {
+    margin: 0;
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: var(--space-3);
+    align-items: end;
+  }
+  .transport {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+  }
+  .label {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+  }
+  .row-end {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .confirm {
+    margin: 0;
+    overflow-wrap: anywhere;
   }
 </style>

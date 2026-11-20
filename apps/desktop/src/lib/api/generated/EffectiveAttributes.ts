@@ -7,9 +7,9 @@ import type { DeckId } from "./DeckId";
  */
 export type EffectiveAttributes = { 
 /**
- * Deck.
+ * Deck (`null` = only the collection-wide definitions — what a new top-level deck gets).
  */
-deck_id: DeckId, 
+deck_id?: DeckId | null, 
 /**
  * Note or card.
  */

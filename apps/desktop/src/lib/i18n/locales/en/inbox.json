@@ -130,8 +130,8 @@
     "accept_selected": "Accept selected ({count})",
     "reject": "Reject",
     "reject_selected": "Reject selected ({count})",
-    "accepted": "{count} cards added",
-    "rejected": "{count} items rejected",
+    "accepted": "{count, plural, one {# card} other {# cards}} added",
+    "rejected": "{count, plural, one {# item} other {# items}} rejected",
     "edit": "Edit",
     "front": "Front",
     "back": "Back",
@@ -147,7 +147,9 @@
       "local_api": "{name}",
       "other": "{actor}"
     },
-    "badge": "{count} waiting"
+    "badge": "{count} waiting",
+    "empty_other": "Nothing here yet.",
+    "empty_hint": "Cards proposed by the browser extension or other programs wait here for you."
   },
   "local_api": {
     "heading": "Local API",

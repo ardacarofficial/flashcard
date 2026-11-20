@@ -1,4 +1,10 @@
+<!--
+  Search (docs/11 §2–3): query bar with syntax help and saved searches, a virtualised result
+  table with a column chooser, a bulk actions bar for the selection and a card info side
+  sheet. The query language, sorting and every change run in Rust (`search.*`, `bulk.*`).
+-->
 <script lang="ts">
+  import { formatDate } from '$lib/format';
   import { onMount, untrack } from 'svelte';
   import { api, type ApiError } from '$lib/api';
   import type {
@@ -13,23 +19,43 @@
     SavedQueryDto,
   } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
-  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import { deckPaths } from '$lib/components/deck-paths';
+  import {
+    ArrowDown,
+    ArrowUp,
+    Button,
+    Checkbox,
+    Chip,
+    CircleHelp,
+    Columns3,
+    Dialog,
+    EmptyState,
+    Icon,
+    IconButton,
+    Input,
+    Menu,
+    PageHeader,
+    Search,
+    SegmentedControl,
+    Select,
+    Skeleton,
+    Star,
+    Table,
+    toast,
+    type MenuItem,
+    type TableColumn,
+  } from '$lib/ui';
   import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
+  import NoteEditDialog from '../cards/NoteEditDialog.svelte';
   import type { ScreenCtx } from '../types';
+  import BulkBar from './BulkBar.svelte';
+  import CardInfoSheet from './CardInfoSheet.svelte';
+  import { COLUMNS, loadColumns, saveColumns, stateLabel, stateTone, type ColumnId } from './columns';
+  import QueryHelp from './QueryHelp.svelte';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
   const PAGE = 100;
-  const COLUMNS: { key: CardSortKey | null; label: string }[] = [
-    { key: 'sort_field', label: 'browse.col.sort_field' },
-    { key: null, label: 'browse.col.deck' },
-    { key: null, label: 'browse.col.state' },
-    { key: 'due', label: 'browse.col.due' },
-    { key: 'lapses', label: 'browse.col.lapses' },
-    { key: null, label: 'browse.col.tags' },
-    { key: 'created', label: 'browse.col.created' },
-  ];
 
   let query = $state('');
   let ran = $state('');
@@ -38,73 +64,49 @@
   let descending = $state(false);
   let rows = $state<CardRow[]>([]);
   let total = $state(0);
+  let loaded = $state(false);
+  let loading = $state(false);
+  let loadError = $state<string | null>(null);
   let queryError = $state<QueryErrorDto | null>(null);
   let selected = $state<Map<string, string>>(new Map()); // card → note
   let saved = $state<SavedQueryDto[]>([]);
-  let saveName = $state('');
   let info = $state<CardInfo | null>(null);
-  let notice = $state<string | null>(null);
+  let editing = $state<CardInfo | null>(null);
   let confirmDelete = $state(false);
   let attrs = $state<AttributeDefDto[]>([]);
-
-  // Bulk inputs.
-  let moveTo = $state<string>('');
-  // Anki's numbering: 1 red, 2 orange, 3 green, 4 blue, 5 pink, 6 turquoise, 7 purple. Names
-  // come from v0.3's `flags.list` (`card_flag_defs`; a custom name also works as `flag:<name>`
-  // in queries, `browse::flag_names`), else the localized default.
-  const FLAGS = [1, 2, 3, 4, 5, 6, 7] as const;
   let flagDefs = $state<FlagDto[]>([]);
-  // Change note type (default mapping: same field/template keys, then by position).
   let noteTypes = $state<NoteTypeDto[]>([]);
-  let changeTo = $state('');
-  async function loadNoteTypes() {
-    try {
-      noteTypes = (await api.call('notetypes.list', {})).notetypes;
-    } catch {
-      noteTypes = [];
-    }
-  }
-  async function changeNoteType() {
-    const ok = await ctx.guarded(async () => {
-      const r = await api.call('bulk.change_notetype', {
-        note_ids: noteSelection,
-        notetype_id: changeTo,
-        field_map: null,
-        template_map: null,
-      });
-      notice = t('browse.bulk.notetype_done', {
-        notes: r.notes,
-        kept: r.cards_kept,
-        trashed: r.cards_trashed,
-        created: r.cards_created,
-      });
-    });
-    if (ok) await refresh();
-  }
-  const flagLabel = (n: number): string =>
-    flagDefs.find((f) => f.flag === n)?.name ?? td(`browse.flags.${n}`);
-  async function loadFlags() {
-    try {
-      flagDefs = (await api.call('flags.list', {})).flags;
-    } catch {
-      flagDefs = []; // flags module off: default names
-    }
-  }
-  let flag = $state(1);
-  let tag = $state('');
-  let find = $state('');
-  let replace = $state('');
-  let field = $state('');
-  let regex = $state(false);
-  let matchCase = $state(false);
-  let attrId = $state('');
-  let attrValue = $state('');
+  let helpOpen = $state(false);
+  let columnsOpen = $state(false);
+  let saveOpen = $state(false);
+  let saveName = $state('');
+  let shown = $state<ColumnId[]>(loadColumns());
+  let activeKey = $state<string | null>(null);
 
   const paths = $derived(deckPaths(ctx.decks));
-  const enumAttrs = $derived(attrs.filter((a) => a.options.length > 0));
-  const attr = $derived(enumAttrs.find((a) => a.id === attrId) ?? null);
   const cards = $derived([...selected.keys()]);
   const notes = $derived([...new Set(selected.values())]);
+  /** Notes of a "select all" (cards outside the loaded page have no row to map from). */
+  let allNotes = $state<string[] | null>(null);
+  const noteSelection = $derived(allNotes ?? notes.filter(Boolean));
+  const selectedKeys = $derived(new Set(selected.keys()));
+  const allChecked = $derived(total > 0 && selected.size >= total);
+
+  const fmtDate = (ms: number | null) => (ms === null ? t('common.none') : formatDate(ms));
+
+  const tableColumns = $derived<TableColumn<CardRow>[]>([
+    { id: 'select', header: '', width: '44px' },
+    ...COLUMNS.filter((c) => shown.includes(c.id)).map((c) => ({
+      id: c.id,
+      header: td(c.label) + (c.sort && c.sort === sort ? (descending ? ' ↓' : ' ↑') : ''),
+      width: c.width,
+      align: c.id === 'lapses' || c.id === 'reps' ? ('end' as const) : ('start' as const),
+    })),
+  ]);
+
+  const sortOptions = $derived(
+    COLUMNS.filter((c) => c.sort).map((c) => ({ value: c.sort as CardSortKey, label: td(c.label) })),
+  );
 
   function errorText(e: QueryErrorDto): string {
     const msg = td(`errors.query.${e.kind}`, e.params);
@@ -127,15 +129,10 @@
 
   async function run(append = false) {
     const offset = append ? rows.length : 0;
+    loading = true;
+    loadError = null;
     try {
-      const page = await api.call('search.cards', {
-        query,
-        sort,
-        descending,
-        notes_only: notesOnly,
-        offset,
-        limit: PAGE,
-      });
+      const page = await api.call('search.cards', { query, sort, descending, notes_only: notesOnly, offset, limit: PAGE });
       rows = append ? [...rows, ...page.items] : page.items;
       total = page.total;
       ran = query;
@@ -156,9 +153,14 @@
               .map(([k, v]) => [k, String(v)]),
           ),
         };
+      } else if (!loaded) {
+        loadError = td(err.messageKey ?? 'errors.internal.unexpected');
       } else {
         await ctx.guarded(() => Promise.reject(e));
       }
+    } finally {
+      loaded = true;
+      loading = false;
     }
   }
 
@@ -168,12 +170,14 @@
   }
 
   async function loadSaved() {
-    await ctx.guarded(async () => (saved = (await api.call('saved_queries.list', {})).items));
+    try {
+      saved = (await api.call('saved_queries.list', {})).items;
+    } catch {
+      saved = [];
+    }
   }
 
-  function sortBy(key: CardSortKey | null) {
-    if (!key) return;
-    descending = sort === key ? !descending : false;
+  function setSort(key: CardSortKey) {
     sort = key;
     void run();
   }
@@ -186,9 +190,10 @@
     selected = next;
   }
 
-  /** Notes of a "select all" (cards outside the loaded page have no row to map from). */
-  let allNotes = $state<string[] | null>(null);
-  const noteSelection = $derived(allNotes ?? notes.filter(Boolean));
+  function clearSelection() {
+    selected = new Map();
+    allNotes = null;
+  }
 
   async function selectAll() {
     await ctx.guarded(async () => {
@@ -199,12 +204,27 @@
     });
   }
 
-  async function bulk(fn: () => Promise<BulkResult>) {
+  async function bulk(fn: () => Promise<BulkResult>): Promise<boolean> {
+    let message = '';
     const ok = await ctx.guarded(async () => {
       const r = await fn();
-      notice = t('browse.bulk.done', { changed: r.changed, skipped: r.skipped });
+      message = t('browse.bulk.done', { changed: r.changed, skipped: r.skipped });
     });
-    if (ok) await refresh();
+    if (ok) {
+      toast.show(message, { tone: 'success', action: { label: t('create.undo'), run: () => void ctx.guarded(() => api.call('oplog.undo', {})) } });
+      await refresh();
+    }
+    return ok;
+  }
+
+  async function runOther(fn: () => Promise<unknown>): Promise<boolean> {
+    let message: unknown = null;
+    const ok = await ctx.guarded(async () => (message = await fn()));
+    if (ok) {
+      if (typeof message === 'string') toast.show(message, { tone: 'success' });
+      await refresh();
+    }
+    return ok;
   }
 
   async function showInfo(cardId: string) {
@@ -212,32 +232,52 @@
   }
 
   async function saveQuery() {
-    const ok = await ctx.guarded(() =>
-      api.call('saved_queries.create', { name: saveName, query: ran || query, icon: null, position: null }),
-    );
-    if (ok) saveName = '';
+    const ok = await ctx.guarded(() => api.call('saved_queries.create', { name: saveName.trim(), query: ran || query, icon: null, position: null }));
+    if (ok) {
+      saveName = '';
+      saveOpen = false;
+      toast.show(t('browse.saved_done'), { tone: 'success' });
+      await loadSaved();
+    }
   }
 
   async function deleteNotes() {
     confirmDelete = false;
+    const n = noteSelection.length;
     const ok = await ctx.guarded(() => api.call('notes.delete', { ids: noteSelection }));
-    if (ok) await refresh();
+    if (ok) {
+      toast.show(t('browse.deleted', { count: n }), { action: { label: t('create.undo'), run: () => void ctx.guarded(() => api.call('oplog.undo', {})) } });
+      await refresh();
+    }
   }
 
-  function attrValuePayload() {
-    if (!attr || attrValue === '') return null;
-    return attr.kind === 'multi_enum'
-      ? { type: 'choices' as const, value: [attrValue] }
-      : { type: 'choice' as const, value: attrValue };
+  function useSaved(s: SavedQueryDto) {
+    query = s.query;
+    void run();
   }
 
-  const fmtDate = (ms: number | null) => (ms === null ? t('common.none') : new Date(ms).toLocaleDateString(i18n.locale));
+  const savedItems = $derived<MenuItem[]>([
+    ...saved.map((s) => ({ id: `q-${s.id}`, label: s.name, onselect: () => useSaved(s) })),
+    ...(saved.length ? [{ id: 'sep', separator: true as const }] : []),
+    { id: 'save', label: `${t('browse.save')}…`, disabled: !(ran || query).trim(), onselect: () => (saveOpen = true) },
+    ...saved.map((s) => ({
+      id: `del-${s.id}`,
+      label: t('browse.delete_saved', { name: s.name }),
+      danger: true,
+      onselect: () => void ctx.guarded(() => api.call('saved_queries.delete', { id: s.id })).then(() => loadSaved()),
+    })),
+  ]);
+
+  function toggleColumn(id: ColumnId, on: boolean) {
+    shown = on ? COLUMNS.filter((c) => c.id === id || shown.includes(c.id)).map((c) => c.id) : shown.filter((c) => c !== id);
+    saveColumns(shown);
+  }
 
   function onShortcut(e: Event) {
     const action = (e as CustomEvent<string>).detail;
     if (action === 'browse.select_all') void selectAll();
     else if (action === 'browse.suspend' && cards.length) void bulk(() => api.call('bulk.set_suspended', { card_ids: cards, suspended: true }));
-    else if (action === 'browse.info' && cards[0]) void showInfo(cards[0]);
+    else if (action === 'browse.info' && (activeKey ?? cards[0])) void showInfo((activeKey ?? cards[0])!);
     else if (action === 'browse.delete' && cards.length) confirmDelete = true;
   }
 
@@ -248,17 +288,16 @@
       attrs = [];
       return;
     }
-    untrack(() => void ctx.guarded(async () => (attrs = (await api.call('attributes.list', {})).defs)));
+    untrack(() => void api.call('attributes.list', {}).then((r) => (attrs = r.defs), () => (attrs = [])));
   });
 
   onMount(() => {
     void run();
     void loadSaved();
-    void loadFlags();
-    void loadNoteTypes();
+    void api.call('flags.list', {}).then((r) => (flagDefs = r.flags), () => (flagDefs = []));
+    void api.call('notetypes.list', {}).then((r) => (noteTypes = r.notetypes), () => (noteTypes = []));
     const unsub = api.on(['saved_queries', 'flags_changed', 'undone', 'redone', 'data_changed'], () => {
       void loadSaved();
-      void loadFlags();
       void refresh();
     });
     window.addEventListener('fc:shortcut', onShortcut);
@@ -270,292 +309,318 @@
 </script>
 
 <div class="browse">
-  <aside>
-    <h3>{t('browse.saved')}</h3>
-    {#if saved.length === 0}<p class="muted">{t('browse.no_saved')}</p>{/if}
-    <ul>
-      {#each saved as s (s.id)}
-        <li>
-          <button class="link" onclick={() => ((query = s.query), void run())}>{s.name}</button>
-          <button class="icon" aria-label={t('browse.delete_saved', { name: s.name })} onclick={() => ctx.guarded(() => api.call('saved_queries.delete', { id: s.id }))}>×</button>
-        </li>
-      {/each}
-    </ul>
-    <form class="save" onsubmit={(e) => (e.preventDefault(), void saveQuery())}>
-      <input bind:value={saveName} placeholder={t('browse.save_name')} aria-label={t('browse.save_name')} />
-      <button type="submit" disabled={!saveName.trim()}>{t('browse.save')}</button>
+  <header class="head">
+    <PageHeader title={t('browse.heading')} class="page-head" />
+    <form
+      class="query"
+      role="search"
+      onsubmit={(e) => {
+        e.preventDefault();
+        void run();
+      }}
+    >
+      <Input
+        class="q"
+        type="search"
+        icon={Search}
+        size="lg"
+        label={t('browse.query_label')}
+        hideLabel
+        bind:value={query}
+        oninput={onInput}
+        placeholder={t('browse.query_placeholder')}
+        error={queryError ? errorText(queryError) : null}
+        spellcheck="false"
+        autocomplete="off"
+      />
+      <IconButton icon={CircleHelp} variant="secondary" size="lg" label={t('browse.syntax.open')} pressed={helpOpen} onclick={() => (helpOpen = !helpOpen)} />
+      <Menu items={savedItems} label={t('browse.saved')} triggerClass="saved-trigger">
+        {#snippet trigger()}<span class="saved"><Icon icon={Star} size={16} />{t('browse.saved_short')}</span>{/snippet}
+      </Menu>
+      <Button type="submit" variant="primary" size="lg">{t('browse.run')}</Button>
     </form>
-  </aside>
-
-  <section>
-    <form class="query" onsubmit={(e) => (e.preventDefault(), void run())}>
-      <label class="grow">
-        <span class="sr">{t('browse.query_label')}</span>
-        <input
-          bind:value={query}
-          oninput={onInput}
-          placeholder={t('browse.query_placeholder')}
-          aria-label={t('browse.query_label')}
-          aria-invalid={queryError !== null}
-          spellcheck="false"
-        />
-      </label>
-      <button type="submit">{t('browse.query_label')}</button>
-      <label class="inline"><input type="checkbox" bind:checked={notesOnly} onchange={() => void run()} /> {t('browse.notes_only')}</label>
-    </form>
-    {#if queryError}
-      <p class="error" role="alert">{errorText(queryError)}</p>
-    {:else}
-      <p class="muted small">{t('browse.help')}</p>
+    {#if helpOpen}
+      <QueryHelp onpick={(q) => ((query = q), void run())} />
     {/if}
+  </header>
 
-    <p class="summary">
-      {notesOnly ? t('browse.results_notes', { count: total }) : t('browse.results', { count: total })}
-      {#if selected.size > 0}
-        · {t('browse.selected', { count: selected.size })}
-        <button class="link" onclick={() => ((selected = new Map()), (allNotes = null))}>{t('browse.clear_selection')}</button>
+  <div class="toolbar">
+    <div class="left">
+      {#if total > 0}
+        <Checkbox
+          checked={allChecked}
+          indeterminate={selected.size > 0 && !allChecked}
+          ariaLabel={t('browse.select_all', { count: total })}
+          onchange={(on) => (on ? void selectAll() : clearSelection())}
+        />
       {/if}
-      {#if total > 0 && selected.size < total}
-        <button class="link" onclick={() => void selectAll()}>{t('browse.select_all', { count: total })}</button>
-      {/if}
-    </p>
-    {#if notice}<p class="muted" role="status">{notice}</p>{/if}
+      <span class="summary" aria-live="polite">
+        {notesOnly ? t('browse.results_notes', { count: total }) : t('browse.results', { count: total })}
+      </span>
+    </div>
+    <div class="right">
+      <SegmentedControl
+        size="sm"
+        label={t('browse.view')}
+        options={[
+          { value: false, label: t('browse.view_cards') },
+          { value: true, label: t('browse.view_notes') },
+        ]}
+        bind:value={notesOnly}
+        onchange={() => void run()}
+      />
+      <Select size="sm" label={t('browse.sort')} hideLabel options={sortOptions} value={sort} onchange={setSort} class="sort" />
+      <IconButton
+        size="sm"
+        variant="secondary"
+        icon={descending ? ArrowDown : ArrowUp}
+        label={descending ? t('browse.sort_desc') : t('browse.sort_asc')}
+        onclick={() => ((descending = !descending), void run())}
+      />
+      <IconButton size="sm" variant="secondary" icon={Columns3} label={t('browse.columns')} onclick={() => (columnsOpen = true)} data-testid="open-dialog-columns" />
+    </div>
+  </div>
 
-    {#if selected.size > 0}
-      <div class="bulk" role="group" aria-label={t('browse.bulk.heading')}>
-        <div class="row">
-          <select bind:value={moveTo} aria-label={t('browse.bulk.move')}>
-            <option value="">{t('browse.bulk.move')}</option>
-            {#each paths as p (p.id)}<option value={p.id}>{p.path}</option>{/each}
-          </select>
-          <button disabled={!moveTo} onclick={() => bulk(() => api.call('bulk.move_cards', { card_ids: cards, deck_id: moveTo }))}>{t('browse.bulk.apply')}</button>
-          <button onclick={() => bulk(() => api.call('bulk.set_suspended', { card_ids: cards, suspended: true }))}>{t('browse.bulk.suspend')}</button>
-          <button onclick={() => bulk(() => api.call('bulk.set_suspended', { card_ids: cards, suspended: false }))}>{t('browse.bulk.unsuspend')}</button>
-          <button onclick={() => bulk(() => api.call('bulk.set_buried', { card_ids: cards, buried: true }))}>{t('browse.bulk.bury')}</button>
-          <button onclick={() => bulk(() => api.call('bulk.set_buried', { card_ids: cards, buried: false }))}>{t('browse.bulk.unbury')}</button>
-          <button onclick={() => bulk(() => api.call('bulk.reset_progress', { card_ids: cards }))}>{t('browse.bulk.reset')}</button>
-          <button class="danger" onclick={() => (confirmDelete = true)}>{t('browse.bulk.delete')}</button>
-        </div>
-        <div class="row">
-          <select bind:value={flag} aria-label={t('browse.bulk.flag')}>
-            {#each FLAGS as f (f)}<option value={f}>{flagLabel(f)}</option>{/each}
-          </select>
-          <button onclick={() => bulk(() => api.call('bulk.set_flag', { card_ids: cards, flag, on: true }))}>{t('browse.bulk.flag')}</button>
-          <button onclick={() => bulk(() => api.call('bulk.set_flag', { card_ids: cards, flag: 0, on: false }))}>{t('browse.bulk.flag_clear')}</button>
-          <input bind:value={tag} placeholder={t('browse.bulk.tag')} aria-label={t('browse.bulk.tag')} />
-          <button disabled={!tag.trim()} onclick={() => bulk(() => api.call('bulk.add_tags', { note_ids: noteSelection, tags: [tag] }))}>{t('browse.bulk.add_tag')}</button>
-          <button disabled={!tag.trim()} onclick={() => bulk(() => api.call('bulk.remove_tags', { note_ids: noteSelection, tags: [tag] }))}>{t('browse.bulk.remove_tag')}</button>
-        </div>
-        {#if enumAttrs.length > 0}
-          <div class="row">
-            <select bind:value={attrId} aria-label={t('browse.bulk.classification')}>
-              <option value="">{t('browse.bulk.classification')}</option>
-              {#each enumAttrs as a (a.id)}<option value={a.id}>{a.name}</option>{/each}
-            </select>
-            {#if attr}
-              <select bind:value={attrValue} aria-label={t('browse.bulk.value')}>
-                <option value="">{t('browse.bulk.clear_value')}</option>
-                {#each attr.options as o (o.id)}<option value={o.id}>{o.label}</option>{/each}
-              </select>
-              <button onclick={() => bulk(() => api.call('bulk.set_attribute', { card_ids: cards, attr_id: attrId, value: attrValuePayload() }))}>{t('browse.bulk.apply')}</button>
-            {/if}
-          </div>
+  {#if selected.size > 0}
+    <BulkBar
+      count={selected.size}
+      {cards}
+      notes={noteSelection}
+      decks={paths}
+      flags={flagDefs}
+      {attrs}
+      {noteTypes}
+      {bulk}
+      run={runOther}
+      onclear={clearSelection}
+      bind:deleting={confirmDelete}
+    />
+  {/if}
+
+  {#if loadError}
+    <EmptyState title={t('browse.load_failed')} description={loadError} action={{ label: t('create.retry'), onclick: () => void run() }} />
+  {:else if !loaded}
+    <div class="skeleton" aria-busy="true" aria-label={t('create.loading')}>
+      {#each [0, 1, 2, 3, 4, 5] as i (i)}<Skeleton shape="control" height="44px" />{/each}
+    </div>
+  {:else if total === 0 && !ran.trim()}
+    <EmptyState
+      title={t('browse.empty_collection')}
+      description={t('browse.empty_collection_hint')}
+      action={ctx.navigate ? { label: t('browse.create_cards'), onclick: () => ctx.navigate?.('/notes/new') } : undefined}
+    />
+  {:else}
+    <Table
+      {rows}
+      columns={tableColumns}
+      rowKey={(r) => r.card_id}
+      label={t('browse.table')}
+      height={`min(${(rows.length + 1) * 44 + 2}px, calc(100vh - 280px))`}
+      {selectedKeys}
+      bind:activeKey
+      onrowclick={(r) => void showInfo(r.card_id)}
+    >
+      {#snippet cell(r, c)}
+        {#if c.id === 'select'}
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <span class="check" data-testid="browse-select" onclick={(e) => e.stopPropagation()}>
+            <Checkbox checked={selected.has(r.card_id)} ariaLabel={t('browse.select_row', { name: r.sort_field })} onchange={() => toggle(r)} />
+          </span>
+        {:else if c.id === 'sort_field'}
+          <span class="name" data-testid="browse-row">{r.sort_field || t('common.none')}</span>
+        {:else if c.id === 'deck'}
+          <span class="muted ellipsis">{r.deck_path}</span>
+        {:else if c.id === 'state'}
+          <Chip size="sm" tone={stateTone(r)} label={stateLabel(r)} />
+        {:else if c.id === 'due'}
+          <span class="num">{fmtDate(r.due)}</span>
+        {:else if c.id === 'lapses'}
+          <span class="num">{r.lapses}</span>
+        {:else if c.id === 'reps'}
+          <span class="num">{r.reps}</span>
+        {:else if c.id === 'tags'}
+          <span class="muted ellipsis">{r.tags.map((x) => `#${x}`).join(' ')}</span>
+        {:else if c.id === 'created'}
+          <span class="num">{fmtDate(r.created_at)}</span>
         {/if}
-        <details>
-          <summary>{t('browse.bulk.find_replace')}</summary>
-          <div class="row">
-            <input bind:value={find} placeholder={t('browse.bulk.find')} aria-label={t('browse.bulk.find')} />
-            <input bind:value={replace} placeholder={t('browse.bulk.replace')} aria-label={t('browse.bulk.replace')} />
-            <input bind:value={field} placeholder={t('browse.bulk.all_fields')} aria-label={t('browse.bulk.field')} />
-            <label class="inline"><input type="checkbox" bind:checked={regex} /> {t('browse.bulk.regex')}</label>
-            <label class="inline"><input type="checkbox" bind:checked={matchCase} /> {t('browse.bulk.match_case')}</label>
-            <button disabled={!find} onclick={() => bulk(() => api.call('bulk.find_replace', { note_ids: noteSelection, find, replace, field: field.trim() || null, regex, match_case: matchCase }))}>{t('browse.bulk.apply')}</button>
-          </div>
-        </details>
-        <details>
-          <summary>{t('browse.bulk.change_notetype')}</summary>
-          <div class="row">
-            <select bind:value={changeTo} aria-label={t('browse.bulk.notetype')}>
-              <option value="">{t('browse.bulk.notetype')}</option>
-              {#each noteTypes as nt (nt.id)}<option value={nt.id}>{nt.name}</option>{/each}
-            </select>
-            <button disabled={!changeTo} onclick={() => void changeNoteType()}>{t('browse.bulk.apply')}</button>
-          </div>
-          <p class="muted">{t('browse.bulk.notetype_help')}</p>
-        </details>
+      {/snippet}
+      {#snippet empty()}
+        <div class="no-match">
+          <EmptyState size="sm" title={t('browse.empty')} description={t('browse.empty_hint')} action={{ label: t('browse.clear_query'), onclick: () => ((query = ''), void run()) }} />
+        </div>
+      {/snippet}
+    </Table>
+    {#if rows.length < total}
+      <div class="more">
+        <Button loading={loading} onclick={() => void run(true)}>{t('browse.load_more')}</Button>
+        <span class="muted">{t('browse.showing', { shown: rows.length, total })}</span>
       </div>
     {/if}
-
-    {#if rows.length === 0}
-      <p class="muted">{t('browse.empty')}</p>
-    {:else}
-      <table>
-        <thead>
-          <tr>
-            <th><span class="sr">{t('browse.selected', { count: selected.size })}</span></th>
-            {#each COLUMNS as c (c.label)}
-              <th aria-sort={c.key === sort ? (descending ? 'descending' : 'ascending') : undefined}>
-                {#if c.key}
-                  <button class="link" onclick={() => sortBy(c.key)}>{td(c.label)}{c.key === sort ? (descending ? ' ↓' : ' ↑') : ''}</button>
-                {:else}
-                  {td(c.label)}
-                {/if}
-              </th>
-            {/each}
-          </tr>
-        </thead>
-        <tbody>
-          {#each rows as r (r.card_id)}
-            <tr class:selected={selected.has(r.card_id)}>
-              <td><input type="checkbox" checked={selected.has(r.card_id)} onchange={() => toggle(r)} aria-label={t('browse.select_row', { name: r.sort_field })} /></td>
-              <td><button class="link" onclick={() => void showInfo(r.card_id)}>{r.sort_field || t('common.none')}</button></td>
-              <td>{r.deck_path}</td>
-              <td>{r.suspended ? t('browse.state.suspended') : r.buried ? t('browse.state.buried') : td(`browse.state.${r.state}`)}</td>
-              <td>{fmtDate(r.due)}</td>
-              <td>{r.lapses}</td>
-              <td>{r.tags.join(' ')}</td>
-              <td>{fmtDate(r.created_at)}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-      {#if rows.length < total}
-        <button onclick={() => void run(true)}>{t('browse.load_more')}</button>
-      {/if}
-    {/if}
-  </section>
+  {/if}
 </div>
 
-{#if info}
-  <div class="info" role="dialog" aria-label={t('browse.info.heading')}>
-    <h3>{t('browse.info.heading')}: {info.card.sort_field}</h3>
-    <dl>
-      <dt>{t('browse.col.deck')}</dt><dd>{info.card.deck_path}</dd>
-      <dt>{t('browse.info.added')}</dt><dd>{fmtDate(info.card.created_at)}</dd>
-      <dt>{t('browse.info.due')}</dt><dd>{fmtDate(info.card.due)}</dd>
-      <dt>{t('browse.info.stability')}</dt><dd>{info.card.stability?.toFixed(1) ?? t('common.none')}</dd>
-      <dt>{t('browse.info.difficulty')}</dt><dd>{info.card.difficulty?.toFixed(1) ?? t('common.none')}</dd>
-      <dt>{t('browse.info.retrievability')}</dt><dd>{info.retrievability === null ? t('common.none') : `${Math.round(info.retrievability * 100)}%`}</dd>
-    </dl>
-    <h4>{t('browse.info.reviews')}</h4>
-    {#if info.reviews.length === 0}
-      <p class="muted">{t('browse.info.no_reviews')}</p>
-    {:else}
-      <ul>
-        {#each info.reviews as rv, i (i)}<li>{fmtDate(rv.at)} · {rv.rating} · {rv.scheduled_days}</li>{/each}
-      </ul>
-    {/if}
-    <button onclick={() => (info = null)}>{t('browse.info.close')}</button>
-  </div>
-{/if}
+<CardInfoSheet {info} onclose={() => (info = null)} onedit={(i) => ((editing = i), (info = null))} />
 
-{#if confirmDelete}
-  <ConfirmDialog
-    message={t('browse.bulk.delete')}
-    hint={t('note.undo_hint')}
-    confirmLabel={t('common.delete')}
-    onconfirm={() => void deleteNotes()}
-    oncancel={() => (confirmDelete = false)}
+{#if editing}
+  <NoteEditDialog
+    noteId={editing.note.id}
+    deckId={editing.card.deck_id}
+    deckName={editing.card.deck_path}
+    onclose={() => ((editing = null), void refresh())}
   />
 {/if}
 
+<Dialog bind:open={columnsOpen} title={t('browse.columns')} size="sm">
+  <div class="cols">
+    {#each COLUMNS as c (c.id)}
+      <Checkbox label={td(c.label)} checked={shown.includes(c.id)} disabled={c.fixed} onchange={(on) => toggleColumn(c.id, on)} />
+    {/each}
+  </div>
+</Dialog>
+
+<Dialog bind:open={saveOpen} title={t('browse.save')} size="sm">
+  <form
+    id="save-query"
+    class="cols"
+    onsubmit={(e) => {
+      e.preventDefault();
+      void saveQuery();
+    }}
+  >
+    <Input label={t('browse.save_name')} bind:value={saveName} />
+    <code class="code">{ran || query}</code>
+  </form>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (saveOpen = false)}>{t('common.cancel')}</Button>
+    <Button variant="primary" type="submit" form="save-query" disabled={!saveName.trim()}>{t('browse.save')}</Button>
+  {/snippet}
+</Dialog>
+
+<Dialog bind:open={confirmDelete} role="alertdialog" title={t('browse.delete_title', { count: noteSelection.length })} description={t('note.undo_hint')} size="sm">
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (confirmDelete = false)}>{t('common.cancel')}</Button>
+    <Button variant="danger" onclick={() => void deleteNotes()}>{t('common.delete')}</Button>
+  {/snippet}
+</Dialog>
+
 <style>
   .browse {
-    display: grid;
-    grid-template-columns: 200px 1fr;
-    gap: var(--fc-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-width: 0;
   }
-  aside ul {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 var(--fc-space-3);
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
   }
-  aside li {
+  .head :global(.page-head) {
+    margin-bottom: 0;
+  }
+  .query {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-start;
+  }
+  .query :global(.q) {
+    flex: 1;
+    min-width: 0;
+  }
+  .query :global(button.saved-trigger) {
+    height: var(--control-h-lg);
+    padding: 0 var(--space-4);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    background: var(--surface-1);
+    color: var(--text-1);
+  }
+  .saved {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: var(--weight-medium);
+  }
+  .toolbar {
     display: flex;
     justify-content: space-between;
-  }
-  .save,
-  .query,
-  .row {
-    display: flex;
+    align-items: center;
+    gap: var(--space-3);
     flex-wrap: wrap;
-    gap: var(--fc-space-2);
+  }
+  .left,
+  .right {
+    display: flex;
     align-items: center;
+    gap: var(--space-2);
   }
-  .save {
-    flex-direction: column;
-    align-items: stretch;
+  .left {
+    gap: var(--space-3);
+    padding-inline-start: var(--space-4);
   }
-  .grow {
-    flex: 1;
+  .right :global(.sort) {
+    width: 150px;
   }
-  .grow input {
-    width: 100%;
+  .summary {
+    font-weight: var(--weight-semibold);
+    font-size: var(--text-sm);
   }
-  .inline {
-    display: inline-flex;
-    gap: var(--fc-space-1);
-    align-items: center;
-  }
-  .bulk {
+  .skeleton {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-2);
-    padding: var(--fc-space-2);
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    margin-bottom: var(--fc-space-3);
+    gap: var(--space-1);
   }
-  table {
-    width: 100%;
-    border-collapse: collapse;
+  .check {
+    display: inline-flex;
   }
-  th,
-  td {
-    text-align: left;
-    padding: var(--fc-space-1) var(--fc-space-2);
-    border-bottom: var(--fc-border-width) solid var(--fc-border);
-  }
-  tr.selected {
-    background: var(--fc-selected);
-  }
-  .link {
-    border: none;
-    background: transparent;
-    padding: 0;
-    color: inherit;
-    text-align: left;
-  }
-  .icon {
-    border: none;
-    background: transparent;
-  }
-  .small {
-    font-size: 0.85em;
-  }
-  .sr {
-    position: absolute;
-    width: 1px;
-    height: 1px;
+  .name {
+    font-weight: var(--weight-medium);
     overflow: hidden;
-    clip: rect(0 0 0 0);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .info {
-    position: fixed;
-    right: var(--fc-space-4);
-    top: var(--fc-space-4);
-    width: 320px;
-    background: var(--fc-surface);
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    padding: var(--fc-space-3);
+  .ellipsis {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
   }
-  dl {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--fc-space-1) var(--fc-space-3);
+  .muted {
+    color: var(--text-2);
   }
-  dd {
-    margin: 0;
+  .num {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-2);
+  }
+  .no-match {
+    padding: var(--space-8) 0;
+  }
+  .more {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    justify-content: center;
+  }
+  .more .muted {
+    font-size: var(--text-sm);
+  }
+  .cols {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .code {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text-2);
+    background: var(--surface-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 1000px) {
+    .query {
+      flex-wrap: wrap;
+    }
   }
 </style>

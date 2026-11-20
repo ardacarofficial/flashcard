@@ -90,7 +90,10 @@
       "session_keychain": "Bu sistemde anahtarlar yalnızca bu oturum boyunca saklanır (oturumu kapatınca silinebilir). Yeniden girmen gerekebilir.",
       "move_key": "Yeni adres: {url}. Eski adres için kayıtlı bir API anahtarı var. Yeni adrese de gönderilsin mi?",
       "move_remove_key": "Değiştir, anahtarı sil",
-      "move_keep_key": "Değiştir, anahtarı koru"
+      "move_keep_key": "Değiştir, anahtarı koru",
+      "intro": "Her istek gönderilmeden önce sana gösterilir. Anahtarlar sistem anahtar zincirinde kalır.",
+      "more": "{name} için diğer işlemler",
+      "load_failed": "Sağlayıcılar yüklenemedi."
     },
     "routes": {
       "heading": "Özellik başına model",
@@ -107,7 +110,8 @@
       "input": "Girdi",
       "output": "Çıktı",
       "delete": "Kaldır",
-      "save": "Kaydet"
+      "save": "Kaydet",
+      "actions": "İşlemler"
     },
     "usage": {
       "month": "Bu ay",
@@ -116,7 +120,10 @@
       "by_feature": "Özelliğe göre (bu ay)",
       "by_model": "Modele göre (bu ay)",
       "empty": "Henüz AI isteği yok.",
-      "estimate_note": "Maliyetler fiyat tablosundan tahmindir."
+      "estimate_note": "Maliyetler fiyat tablosundan tahmindir.",
+      "budget": "Aylık bütçe",
+      "requests": "{n} istek",
+      "tokens": "{input} girdi / {output} çıktı token’ı"
     },
     "job": {
       "connecting": "Bağlanıyor…",
@@ -151,7 +158,8 @@
         "almost": "Neredeyse",
         "wrong": "Pek değil"
       }
-    }
+    },
+    "subtitle": "Metinden kart üret; uygulamanın kullanabileceği sağlayıcıları ve modelleri seç."
   },
   "errors": {
     "validation": {

@@ -65,6 +65,12 @@
     },
     "bulk": {
       "change_notetype": "Not türünü değiştir"
+    },
+    "decks": {
+      "summaries": "Deste ilerlemesi"
+    },
+    "notes": {
+      "terms": "Deste terim listesi"
     }
   },
   "shortcuts": {

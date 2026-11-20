@@ -136,29 +136,30 @@ const DARK_SUCCESS: &str = "#6cc28d";
 /// The built-in presets: calm, low-saturation palettes (docs/01: no decoration for its own
 /// sake) and one high-contrast palette.
 pub const PRESETS: &[Preset] = &[
+    // v1.1 design system (docs/11 §4): cool neutrals and an indigo accent (#5B47E0).
     Preset {
         id: DEFAULT_PRESET,
         light: Base {
-            bg: "#ffffff",
-            bg_subtle: "#f5f5f4",
+            bg: "#f6f6f8",
+            bg_subtle: "#eeeef2",
             surface: "#ffffff",
-            text: "#1c1917",
-            text_muted: "#6b6560",
-            border: "#e2e0dd",
-            accent: "#2f6fdb",
-            danger: LIGHT_DANGER,
-            success: LIGHT_SUCCESS,
+            text: "#18181b",
+            text_muted: "#5f5f6b",
+            border: "#e4e4e9",
+            accent: "#5b47e0",
+            danger: "#c03636",
+            success: "#157a53",
         },
         dark: Base {
-            bg: "#161514",
-            bg_subtle: "#1f1e1c",
-            surface: "#1f1e1c",
-            text: "#ecebe9",
-            text_muted: "#a19d98",
-            border: "#34322f",
-            accent: "#6b9bf0",
-            danger: DARK_DANGER,
-            success: DARK_SUCCESS,
+            bg: "#121214",
+            bg_subtle: "#18181c",
+            surface: "#1e1e23",
+            text: "#ededf0",
+            text_muted: "#a1a1aa",
+            border: "#2e2e35",
+            accent: "#8b7cf6",
+            danger: "#ef6f62",
+            success: "#3ec28f",
         },
     },
     Preset {
@@ -435,8 +436,8 @@ mod tests {
         // apps/desktop/src/lib/theme/tokens.css declares the same values (shown before the
         // backend answers and when the themes module is off).
         let t = resolve("default", None);
-        assert_eq!(t.light["accent"], "#2f6fdb");
-        assert_eq!(t.dark["bg"], "#161514");
+        assert_eq!(t.light["accent"], "#5b47e0");
+        assert_eq!(t.dark["bg"], "#121214");
         assert_eq!(t.light["accent-text"], "#ffffff");
     }
 

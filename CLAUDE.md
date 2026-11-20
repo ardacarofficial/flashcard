@@ -6,7 +6,7 @@ Bu dosya, bu repoda çalışan AI ajanları için başlangıç bağlamıdır.
 
 Rust + Tauri 2 ile masaüstü flash kart uygulaması. Tüm plan `docs/` klasöründedir. **Bir işe başlamadan önce `docs/README.md` ve ilgili dokümanları oku.**
 
-- Durum: **v0.1 (Temel) tamamlandı** (`v0.1.0`). **Faz 2 (v0.2–v0.5) `main`'de** (`v0.5.0`). **Faz 3 (v0.6 istatistik, v0.7 eklentiler, v0.8 AI + MCP) `main`'de** (workspace `0.8.0`). **Faz 4 (v0.9–v0.10) `main`'de** (`v0.10.0`). **v1.0 entegre edildi** (`feat/v1.0-integration`, workspace `1.0.0`: iz Q kalite, iz O Windows sürümü, iz N UX, iz P performans/i18n/temalar); **son inceleme ve elle Windows koşusu bekliyor** (v1.0 integrated, pending final review and a manual Windows run) — bkz. `docs/04-yol-haritasi.md` ve `docs/10-v0.1-sozlesme.md` §19–§37.
+- Durum: **v1.1.0 arayüz tasarımı tamamlandı** (`feat/v1.1-design`: tasarım sistemi + 4 ekran izi birleşti; push/inceleme bekliyor) — bkz. `docs/11-tasarim.md`. v1.0.0 `main`'de yayınlı (elle Windows koşusu bekliyor).
 - Öncelikli platform: **Windows** (macOS/Linux sonra).
 
 ## İletişim
@@ -25,7 +25,7 @@ Rust + Tauri 2 ile masaüstü flash kart uygulaması. Tüm plan `docs/` klasör�
 6. Şema değişikliği = yeni migration + migration testi.
 7. Her özellik bir **modül**dür, ayarlardan kapatılabilir; arayüz menüleri `modules.list`'ten çizilir.
 8. Arayüzde sabit metin yok, her şey i18n anahtarı (TR/EN).
-9. AI slop yok: sade varsayılanlar, aşamalı gösterim, gereksiz süs yok.
+9. AI slop yok: sade varsayılanlar, aşamalı gösterim, gereksiz süs yok. **Sade ≠ tasarımsız:** her ekran `docs/11-tasarim.md` tasarım sistemini kullanır ve görsel denetimden geçer.
 10. Telemetri yok. API anahtarları sadece işletim sistemi anahtar zincirinde.
 
 ## Komutlar

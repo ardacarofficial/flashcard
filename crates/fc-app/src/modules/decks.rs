@@ -18,7 +18,7 @@ use fc_api::{ApiError, ErrorCode};
 use fc_core::deck::{check_move, normalize_deck_segment, Deck, DeckPath};
 use fc_core::settings::SettingScopeKind;
 use fc_core::DeckId;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Module id.
 pub const ID: &str = "decks";
@@ -49,6 +49,7 @@ pub fn register(reg: &mut Registry) {
     reg.module(descriptor());
     reg.query::<DecksTree>(tree);
     reg.query::<DecksList>(list);
+    reg.query::<DecksSummaries>(summaries);
     reg.query::<DecksGet>(get);
     reg.command::<DecksCreate>(create);
     reg.command::<DecksRename>(rename);
@@ -132,6 +133,130 @@ fn tree(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<DeckTree> {
         .map(|d| node(&index, &own, d))
         .collect();
     Ok(DeckTree { roots })
+}
+
+/// Per-deck accumulator of [`summaries`].
+#[derive(Default)]
+struct Progress {
+    new: u32,
+    learning: u32,
+    mastered: u32,
+    /// Last review of the deck's cards, sub-decks included.
+    last: Option<fc_core::Timestamp>,
+    /// Last review of the deck's own cards (the recent list).
+    own_last: Option<fc_core::Timestamp>,
+    /// `(definition, option)` → notes.
+    chips: HashMap<(usize, usize), u32>,
+}
+
+/// Chips shown per deck.
+const DECK_CHIPS: usize = 3;
+
+fn summaries(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<DeckSummaries> {
+    use fc_core::stats::{card_mastery, mastered_percent, Mastery};
+    let reads = ctx.tx;
+    let index = DeckIndex::load(reads)?;
+    let live: HashSet<DeckId> = index.live().map(|d| d.id).collect();
+    let mut today = DeckCounts::default();
+    for (id, c) in reads.card_counts_by_deck(ctx.now)? {
+        if live.contains(&id) {
+            today.new += c.new;
+            today.learning += c.learning;
+            today.due += c.review_due;
+            today.total += c.total;
+        }
+    }
+    let cards = reads.study_cards(&fc_storage::repo::StudyCardFilter {
+        include_suspended: true,
+        ..Default::default()
+    })?;
+    let mut progress: HashMap<DeckId, Progress> = HashMap::new();
+    // Note → decks (with ancestors) its cards are in: a note's chips count once per deck.
+    let mut note_decks: HashMap<fc_core::NoteId, HashSet<DeckId>> = HashMap::new();
+    let mut card_note = HashMap::new();
+    for card in &cards {
+        card_note.insert(card.id, card.note_id);
+        let level = card_mastery(&card.scheduling);
+        let reviewed = card.scheduling.last_review;
+        let chain = index.ancestry(card.deck_id).unwrap_or_default();
+        let decks = note_decks.entry(card.note_id).or_default();
+        for d in chain {
+            decks.insert(d);
+            let p = progress.entry(d).or_default();
+            match level {
+                Mastery::New => p.new += 1,
+                Mastery::Learning => p.learning += 1,
+                Mastery::Mastered => p.mastered += 1,
+            }
+            p.last = p.last.max(reviewed);
+            if d == card.deck_id {
+                p.own_last = p.own_last.max(reviewed);
+            }
+        }
+    }
+    let notes: HashSet<fc_core::NoteId> = note_decks.keys().copied().collect();
+    let choices = crate::support::attrs::note_choices(reads, &card_note, &notes)?;
+    for (note, values) in &choices.of_note {
+        for d in note_decks.get(note).into_iter().flatten() {
+            let p = progress.entry(*d).or_default();
+            for v in values {
+                *p.chips.entry(*v).or_default() += 1;
+            }
+        }
+    }
+    // Tree order: depth-first in sibling order.
+    fn walk(index: &DeckIndex, parent: Option<DeckId>, order: &mut Vec<DeckId>) {
+        for d in index.children(parent) {
+            order.push(d.id);
+            walk(index, Some(d.id), order);
+        }
+    }
+    let mut order = Vec::new();
+    walk(&index, None, &mut order);
+    let mut decks = Vec::with_capacity(order.len());
+    let mut recent: Vec<(fc_core::Timestamp, usize, DeckId)> = Vec::new();
+    for (pos, id) in order.into_iter().enumerate() {
+        let p = progress.remove(&id).unwrap_or_default();
+        if let Some(at) = p.own_last {
+            recent.push((at, pos, id));
+        }
+        let mut chips: Vec<((usize, usize), u32)> = p.chips.into_iter().collect();
+        chips.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        let chips = chips
+            .into_iter()
+            .take(DECK_CHIPS)
+            .filter_map(|((di, oi), n)| {
+                let def = choices.defs.get(di)?;
+                let option = def.options.get(oi)?;
+                Some(DeckChip {
+                    attr_id: def.id,
+                    name: def.name.clone(),
+                    label: option.label.clone(),
+                    notes: n,
+                })
+            })
+            .collect();
+        let total = p.new + p.learning + p.mastered;
+        decks.push(DeckSummary {
+            deck_id: id,
+            new: p.new,
+            learning: p.learning,
+            mastered: p.mastered,
+            mastered_pct: mastered_percent(p.mastered, total),
+            last_studied_at: p.last,
+            chips,
+        });
+    }
+    recent.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    Ok(DeckSummaries {
+        today,
+        decks,
+        recent: recent
+            .into_iter()
+            .take(RECENT_DECKS)
+            .map(|(_, _, id)| id)
+            .collect(),
+    })
 }
 
 fn list(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<DeckList> {

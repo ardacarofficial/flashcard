@@ -99,7 +99,7 @@
     "logs": "Log",
     "logs_empty": "Nothing logged.",
     "last_error": "Last error: {error}",
-    "failures": "{count} failure(s) in a row",
+    "failures": "{count, plural, one {# failure} other {# failures}} in a row",
     "install_heading": "Install “{name}” {version}?",
     "installed_version": "Installed now: {version}",
     "install_confirm": "Install",
@@ -119,7 +119,9 @@
     "view": {
       "close": "Close",
       "done": "Finished.",
-      "recorder_unavailable": "Recording is not available yet."
+      "recorder_unavailable": "Recording is not available yet.",
+      "choice": "Choose one",
+      "progress": "Progress"
     },
     "models": {
       "heading": "Downloads",
@@ -137,9 +139,13 @@
     "file_filter": "Flashcard plugin",
     "notice": {
       "auto_disabled": "“{name}” was switched off.",
-      "hooks_skipped": "Some plugins reacted too often in one action, so their remaining reactions were skipped ({names}; at most {max} reactions or {ms} ms per plugin). Nothing was switched off.",
+      "hooks_skipped": "Some plugins reacted too often in one action, so their remaining reactions were skipped ({names}; at most {max, plural, one {# reaction} other {# reactions}} or {ms} ms per plugin). Nothing was switched off.",
       "dismiss": "Dismiss"
-    }
+    },
+    "empty_hint": "Plugins add card types, study modes and voices. They run in a sandbox.",
+    "installed": "Installed plugins",
+    "no_permissions": "This plugin needs no permissions.",
+    "show_logs": "Show log"
   },
   "jobs": {
     "plugins": {

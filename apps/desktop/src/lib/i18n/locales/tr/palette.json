@@ -44,6 +44,7 @@
     },
     "notes": {
       "create": "Yeni not",
+      "create_many": "Not seti oluştur",
       "update": "Notu düzenle",
       "delete": "Notları sil",
       "restore": "Notları geri getir",

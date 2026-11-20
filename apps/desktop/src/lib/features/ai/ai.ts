@@ -1,3 +1,4 @@
+import { formatCurrency } from '$lib/format';
 import { api } from '$lib/api';
 import type {
   AiJobResult,
@@ -75,6 +76,5 @@ export function aiResult(job: JobDto): AiJobResult | null {
 /** `$0.0123` style; `null` = unknown. */
 export function usd(v: number | null | undefined): string | null {
   if (v === null || v === undefined) return null;
-  if (v === 0) return '$0';
-  return v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`;
+  return formatCurrency(v, 'USD');
 }

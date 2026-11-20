@@ -126,7 +126,7 @@ fn v01_acceptance_on_sqlite_file() {
     });
     let live = |t: &TestApp| {
         t.ok::<AttributesEffective>(EffectiveAttributes {
-            deck_id: en.id,
+            deck_id: Some(en.id),
             target: AttributeTarget::Note,
         })
         .attributes
@@ -138,7 +138,7 @@ fn v01_acceptance_on_sqlite_file() {
     assert_eq!(live(&t), 1, "define redone");
     let opt = |label: &str| seviye.options.iter().find(|o| o.label == label).unwrap().id;
     let eff = t.ok::<AttributesEffective>(EffectiveAttributes {
-        deck_id: en.id,
+        deck_id: Some(en.id),
         target: AttributeTarget::Note,
     });
     assert_eq!(eff.attributes.len(), 1);

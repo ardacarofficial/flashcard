@@ -44,6 +44,7 @@
     },
     "notes": {
       "create": "New note",
+      "create_many": "Create a set of notes",
       "update": "Edit note",
       "delete": "Delete notes",
       "restore": "Restore notes",

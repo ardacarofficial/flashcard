@@ -9,6 +9,10 @@
   import { api } from '$lib/api';
   import type { ApiClientDto, DeckId } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
+  // Eager (App mounts it): lib/ui file by file, never the barrel.
+  import Button from '$lib/ui/Button.svelte';
+  import Checkbox from '$lib/ui/Checkbox.svelte';
+  import Dialog from '$lib/ui/Dialog.svelte';
   import { CLIPBOARD_EVENT, DEEP_LINK_EVENT, defaultShell, linkTarget, type Shell } from './shell';
 
   interface Props {
@@ -94,92 +98,91 @@
 </script>
 
 {#if pairing}
-  <div class="backdrop" role="presentation">
-    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="pairing-title">
-      <h2 id="pairing-title">{t('local_api.pairing.title')}</h2>
-      <p>{t('local_api.pairing.body', { name: pairing.name })}</p>
-      {#if pairing.origin}<p class="muted">{t('local_api.origin', { origin: pairing.origin })}</p>{/if}
-      <p>{t('local_api.pairing.asks')}</p>
-      <fieldset>
-        <legend class="sr-only">{t('local_api.pairing.asks')}</legend>
-        {#each pairing.requested_scopes as s (s)}
-          <label>
-            <input type="checkbox" bind:checked={granted[s]} />
-            {td(`local_api.scope.${s}`)}
-          </label>
-        {/each}
-      </fieldset>
-      <p class="muted">{t('local_api.pairing.hint')}</p>
-      <div class="actions">
-        <button onclick={() => decide(false)}>{t('local_api.deny')}</button>
-        <button onclick={() => decide(true)} disabled={grantedScopes.length === 0}>{t('local_api.approve')}</button>
-      </div>
+  <Dialog
+    open={true}
+    role="alertdialog"
+    dismissible={false}
+    title={t('local_api.pairing.title')}
+    description={t('local_api.pairing.body', { name: pairing.name })}
+    size="sm"
+  >
+    {#if pairing.origin}<p class="muted">{t('local_api.origin', { origin: pairing.origin })}</p>{/if}
+    <fieldset>
+      <legend>{t('local_api.pairing.asks')}</legend>
+      {#each pairing.requested_scopes as s (s)}
+        <Checkbox label={td(`local_api.scope.${s}`)} bind:checked={granted[s]} />
+      {/each}
+    </fieldset>
+    <p class="muted">{t('local_api.pairing.hint')}</p>
+    {#snippet footer()}
+      <Button variant="ghost" onclick={() => decide(false)}>{t('local_api.deny')}</Button>
+      <Button variant="primary" onclick={() => decide(true)} disabled={grantedScopes.length === 0}>{t('local_api.approve')}</Button>
+    {/snippet}
+  </Dialog>
+{/if}
+
+<div class="toasts">
+  {#if suggestion}
+    <div class="toast" role="status">
+      <span class="msg">{t('clipboard.suggest', { text: suggestion })}</span>
+      <Button size="sm" variant="primary" onclick={addSuggestion}>{t('clipboard.add')}</Button>
+      <Button size="sm" variant="ghost" onclick={() => (suggestion = null)}>{t('clipboard.dismiss')}</Button>
     </div>
-  </div>
-{/if}
-
-{#if suggestion}
-  <div class="toast" role="status">
-    <span>{t('clipboard.suggest', { text: suggestion })}</span>
-    <button onclick={addSuggestion}>{t('clipboard.add')}</button>
-    <button onclick={() => (suggestion = null)}>{t('clipboard.dismiss')}</button>
-  </div>
-{/if}
-
-{#if notice}
-  <div class="toast notice" role="status">
-    <span>{notice}</span>
-    <button onclick={() => (notice = null)}>{t('clipboard.dismiss')}</button>
-  </div>
-{/if}
+  {/if}
+  {#if notice}
+    <div class="toast" role="status">
+      <span class="msg">{notice}</span>
+      <Button size="sm" variant="ghost" onclick={() => (notice = null)}>{t('clipboard.dismiss')}</Button>
+    </div>
+  {/if}
+</div>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    background: color-mix(in srgb, var(--fc-text) 40%, transparent);
-  }
-  .dialog {
-    background: var(--fc-bg);
-    padding: var(--fc-space-6);
-    border-radius: var(--fc-radius, 6px);
-    max-width: 28rem;
-  }
   fieldset {
-    border: 0;
-    padding: 0;
-    margin: 0 0 var(--fc-space-2);
-  }
-  fieldset label {
-    display: block;
-  }
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-  }
-  .actions {
     display: flex;
-    gap: var(--fc-space-2);
-    justify-content: flex-end;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: var(--space-3) 0;
+    padding: 0;
+    border: 0;
+  }
+  legend {
+    margin-bottom: var(--space-2);
+    padding: 0;
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    color: var(--text-1);
+  }
+  .muted {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .toasts {
+    position: fixed;
+    right: var(--space-4);
+    bottom: var(--space-4);
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-width: min(420px, calc(100vw - 2 * var(--space-4)));
   }
   .toast {
-    position: fixed;
-    right: var(--fc-space-4);
-    bottom: var(--fc-space-4);
     display: flex;
-    gap: var(--fc-space-2);
+    gap: var(--space-2);
     align-items: center;
-    background: var(--fc-bg);
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius, 6px);
-    padding: var(--fc-space-2) var(--fc-space-3);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    box-shadow: var(--shadow-2);
+    color: var(--text-1);
+    font-size: var(--text-sm);
   }
-  .toast.notice {
-    bottom: calc(var(--fc-space-4) * 4);
+  .msg {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 </style>

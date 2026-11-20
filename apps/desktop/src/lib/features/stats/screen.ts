@@ -2,7 +2,7 @@
 import type { ScreenModule } from '../types';
 
 export default [
-  { id: 'stats', load: () => import('./StatsScreen.svelte'), routes: ['/stats'] },
-  { id: 'planning', load: () => import('./PlanningScreen.svelte'), routes: ['/planning'] },
-  { id: 'goals', load: () => import('./GoalsScreen.svelte'), routes: ['/goals'] },
+  { id: 'stats', load: () => import('./StatsScreen.svelte'), routes: ['/stats'], width: 'wide' },
+  { id: 'planning', load: () => import('./PlanningScreen.svelte'), routes: ['/planning'], width: 'wide' },
+  { id: 'goals', load: () => import('./GoalsScreen.svelte'), routes: ['/goals'], width: 'wide' },
 ] satisfies ScreenModule;

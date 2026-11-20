@@ -33,7 +33,7 @@
     "no_saved": "Henüz kayıtlı sorgu yok.",
     "delete_saved": "“{name}” kayıtlı sorgusunu sil",
     "col": {
-      "sort_field": "Sıralama alanı",
+      "front": "Ön yüz",
       "deck": "Deste",
       "state": "Durum",
       "due": "Vade",
@@ -79,7 +79,12 @@
       "notetype": "Not türü",
       "notetype_help": "Alanlar ve kartlar önce anahtarla, sonra sırayla eşlenir; eşleşmeyen şablonların kartları çöpe gider. Tek adımda geri alınır.",
       "notetype_done": "{notes} not taşındı: {kept} kart korundu, {trashed} çöpe, {created} yeni.",
-      "done": "{changed} değişti, {skipped} aynı kaldı."
+      "done": "{changed} değişti, {skipped} aynı kaldı.",
+      "move_short": "Taşı",
+      "tags": "Etiketler",
+      "more": "Diğer işlemler",
+      "choose_deck": "Bir deste seç",
+      "tag_placeholder": "ör. fiil"
     },
     "flags": {
       "1": "Kırmızı",
@@ -99,9 +104,63 @@
       "retrievability": "Şu an hatırlama",
       "reviews": "Tekrarlar",
       "no_reviews": "Henüz tekrar edilmedi.",
-      "close": "Kapat"
+      "close": "Kapat",
+      "last_review": "Son tekrar",
+      "interval": "{days} g",
+      "edit": "Notu düzenle",
+      "rating": {
+        "again": "Tekrar",
+        "hard": "Zor",
+        "good": "İyi",
+        "easy": "Kolay"
+      }
     },
-    "error_at": "{start}–{end} arası"
+    "error_at": "{start}–{end} arası",
+    "heading": "Ara",
+    "run": "Ara",
+    "view": "Göster",
+    "view_cards": "Kartlar",
+    "view_notes": "Notlar",
+    "sort": "Sırala",
+    "sort_asc": "Artan — azalana çevir",
+    "sort_desc": "Azalan — artana çevir",
+    "columns": "Sütunlar",
+    "table": "Arama sonuçları",
+    "load_failed": "Kartlar yüklenemedi.",
+    "empty_collection": "Henüz kart yok",
+    "empty_collection_hint": "Oluşturduğun ya da içe aktardığın kartlar burada görünür.",
+    "create_cards": "Kart oluştur",
+    "empty_hint": "Daha az filtre ya da başka kelimeler dene.",
+    "clear_query": "Aramayı temizle",
+    "showing": "{total} kartın {shown} tanesi gösteriliyor",
+    "saved_done": "Arama kaydedildi.",
+    "deleted": "{count} not silindi.",
+    "delete_title": "{count} not silinsin mi?",
+    "syntax": {
+      "open": "Arama söz dizimi",
+      "heading": "Arama söz dizimi",
+      "text_q": "fotosentez",
+      "text_d": "Kartta herhangi bir yerde geçen kelimeler",
+      "deck_q": "deck:İngilizce",
+      "deck_d": "Bir destedeki (ve alt destelerindeki) kartlar",
+      "tag_q": "tag:fiil",
+      "tag_d": "Etiketli kartlar",
+      "is_q": "is:due",
+      "is_d": "Bugün vadesi gelenler; ayrıca is:new, is:suspended, is:flagged",
+      "level_q": "level>=B1",
+      "level_d": "Bir sınıflandırma değeri ve üstü",
+      "added_q": "added:7",
+      "added_d": "Son 7 günde eklenenler",
+      "prop_q": "lapses>=3",
+      "prop_d": "Ayrıca stability, difficulty, reps",
+      "not_q": "-tag:kolay",
+      "not_d": "Eksi işareti hariç tutar",
+      "or_q": "(kedi OR köpek)",
+      "or_d": "İkisinden biri",
+      "phrase_q": "\"tam ifade\"",
+      "phrase_d": "Tırnak kelimeleri bir arada tutar"
+    },
+    "saved_short": "Kayıtlı"
   },
   "maintenance": {
     "heading": "Bakım",
@@ -170,7 +229,15 @@
       "suspend": "Seçimi askıya al",
       "info": "Kart bilgisi",
       "delete": "Seçimi sil"
-    }
+    },
+    "intro": "Bir kısayola tıklayın, sonra yeni tuş birleşimine basın. Esc vazgeçer.",
+    "filter_placeholder": "Kısayollarda ara",
+    "empty": "Filtreyle eşleşen kısayol yok.",
+    "clear_filter": "Filtreyi temizle",
+    "record_for": "“{action}” için yeni tuşlara basın",
+    "change_for": "“{action}” kısayolunu değiştir",
+    "unbind_for": "“{action}” kısayolunu kaldır",
+    "unbound_text": "Atanmamış"
   },
   "errors": {
     "validation": {

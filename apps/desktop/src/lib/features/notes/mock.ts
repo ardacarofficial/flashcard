@@ -1,5 +1,5 @@
 import { err, menu, module, settingsPage, type MockEnv, type MockFeature } from '$lib/api/mock/env';
-import type { NoteDto } from '$lib/api/types';
+import type { ApiError, CreateNote, NoteDto } from '$lib/api/types';
 
 export default {
   modules: [
@@ -8,11 +8,15 @@ export default {
       menu('notes.list', 'nav.notes', '/notes', 30),
     ]),
   ],
-  handlers: ({ now, id, emit, notes, requireDeck }: MockEnv) => ({
-  'notes.create': (req) => {
+  handlers: ({ now, id, emit, notes, decks, requireDeck, requireName, addDeck, sameName, pathOf }: MockEnv) => {
+  const create = (req: CreateNote): NoteDto => {
     requireDeck(req.deck_id);
     if (!req.fields.front?.trim()) {
       throw err('VALIDATION_FIELD_REQUIRED', 'errors.validation.field_required', 'front');
+    }
+    const front = req.fields.front.trim().toLocaleLowerCase();
+    if (!req.allow_duplicate && notes.some((n) => n.notetype_id === req.notetype_id && n.fields.front?.trim().toLocaleLowerCase() === front)) {
+      throw err('CONFLICT_NOTE_DUPLICATE', 'errors.conflict.note_duplicate', front);
     }
     const t = now();
     const n: NoteDto = {
@@ -39,6 +43,48 @@ export default {
     notes.push(n);
     emit({ type: 'note_created', data: { note_id: n.id, deck_id: req.deck_id } });
     return n;
+  };
+  return {
+  'notes.create': create,
+
+  // v1.1: a set from the Create screen (the real backend makes it one undo step).
+  'notes.create_many': (req) => {
+    const blank = (f: Record<string, string>) => Object.values(f).every((v) => !v.trim());
+    if (req.notes.length === 0 || req.notes.length > 1000) {
+      throw err('VALIDATION_INVALID_PARAMS', 'errors.validation.invalid_params', 'notes');
+    }
+    if (req.notes.every((d) => blank(d.fields))) {
+      throw err('VALIDATION_FIELD_REQUIRED', 'errors.validation.field_required', 'notes');
+    }
+    let deckId: string;
+    if (req.target.kind === 'deck') {
+      deckId = requireDeck(req.target.id).id;
+    } else {
+      const name = requireName(req.target.path);
+      const parent = req.target.parent_id ? requireDeck(req.target.parent_id) : null;
+      if (decks.some((d) => d.parent_id === (parent?.id ?? null) && sameName(d.name, name))) {
+        throw err('CONFLICT_DECK_EXISTS', 'errors.conflict.deck_exists', name);
+      }
+      const d = addDeck(name, parent);
+      d.description = req.target.description ?? '';
+      emit({ type: 'deck_created', data: { deck: { ...d, path: pathOf(d) } } });
+      deckId = d.id;
+    }
+    const out = { deck_id: deckId, note_ids: [] as string[], empty_rows: [] as number[], duplicate_rows: [] as number[] };
+    req.notes.forEach((draft, row) => {
+      if (blank(draft.fields)) {
+        out.empty_rows.push(row);
+        return;
+      }
+      try {
+        const n = create({ notetype_id: req.notetype_id, deck_id: deckId, fields: draft.fields, tags: req.tags, attributes: req.attributes, allow_duplicate: req.allow_duplicate ?? null });
+        out.note_ids.push(n.id);
+      } catch (e) {
+        if ((e as ApiError).code === 'CONFLICT_NOTE_DUPLICATE') out.duplicate_rows.push(row);
+        else throw { ...(e as ApiError), details: { ...(e as ApiError).details, row } };
+      }
+    });
+    return out;
   },
   'notes.list': ({ deck_id }) => ({
     items: notes
@@ -65,5 +111,6 @@ export default {
     emit({ type: 'notes_deleted', data: { ids: gone } });
     return { decks: 0, notes: gone.length, cards: gone.length };
   },
-  }),
+  };
+  },
 } satisfies MockFeature;

@@ -1,0 +1,34 @@
+{
+  "shell": {
+    "nav_label": "Main navigation",
+    "section": {
+      "home": "Home",
+      "library": "Library",
+      "create": "Create",
+      "search": "Search",
+      "stats": "Statistics"
+    },
+    "inbox": "Inbox",
+    "inbox_count": "Inbox, {count} waiting",
+    "settings": "Settings",
+    "settings_nav": "Settings sections",
+    "section_nav": "Pages in {section}",
+    "group": {
+      "general": "General",
+      "study": "Study",
+      "reading": "Reading and modes",
+      "connections": "Connections",
+      "plugins": "Plugins",
+      "data": "Data",
+      "profiles": "Profiles and lock",
+      "other": "More"
+    },
+    "profile": {
+      "menu": "Profile: {name}",
+      "default_name": "Main profile",
+      "switch": "Switch profile",
+      "lock": "Lock now"
+    },
+    "deck_picker": "Deck"
+  }
+}

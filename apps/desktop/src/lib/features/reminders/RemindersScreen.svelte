@@ -1,13 +1,16 @@
+<!--
+  Settings → General → Reminders: the daily study reminder and the tray (v1.0, docs/02 §19).
+  The settings are ordinary app settings; the backend decides when a reminder is due and the
+  desktop shell shows it as an OS notification.
+-->
 <script lang="ts">
-  /**
-   * Daily study reminder and the tray (v1.0, docs/02 §19). The settings are ordinary app
-   * settings; the backend decides when a reminder is due and the desktop shell shows it as an
-   * OS notification.
-   */
+  import { formatDateTime } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { ReminderStatus } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
+  import { Bell, Button, Chip, Clock, Icon, Switch, TimeField } from '$lib/ui';
+  import { FormRow, LoadState, SettingsPage, SettingsSection } from '../core/kit';
   import type { ScreenCtx } from '../types';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -15,24 +18,21 @@
   const DAYS = [0, 1, 2, 3, 4, 5, 6];
 
   let status = $state<ReminderStatus | null>(null);
+  let failed = $state(false);
   let notice = $state<string | null>(null);
 
   const pad = (n: number) => n.toString().padStart(2, '0');
   const time = $derived(status ? `${pad(Math.floor(status.minute_of_day / 60))}:${pad(status.minute_of_day % 60)}` : '');
   const next = $derived(
     status?.next_at != null
-      ? new Date(status.next_at).toLocaleString(i18n.locale === 'tr' ? 'tr-TR' : 'en-GB', {
-          weekday: 'long',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
+      ? formatDateTime(status.next_at, { weekday: 'long', hour: '2-digit', minute: '2-digit' })
       : null,
   );
 
   async function load() {
-    await ctx.guarded(async () => {
+    failed = !(await ctx.guarded(async () => {
       status = await api.call('reminders.status', { tz_offset_mins: -new Date().getTimezoneOffset() });
-    });
+    }));
   }
 
   async function set(key: string, value: unknown) {
@@ -67,56 +67,96 @@
   onMount(() => void load());
 </script>
 
-<section>
-  <h1>{t('reminders.heading')}</h1>
-  <p class="muted">{t('reminders.intro')}</p>
-  {#if status}
-    <label class="row">
-      <input type="checkbox" checked={status.enabled} onchange={(e) => void toggle('enabled', e.currentTarget.checked)} />
-      {t('reminders.enabled')}
-    </label>
-    <fieldset disabled={!status.enabled}>
-      <label class="row">
-        {t('reminders.time')}
-        <input type="time" value={time} onchange={(e) => void setTime(e.currentTarget.value)} />
-      </label>
-      <div class="row" role="group" aria-label={t('reminders.days')}>
-        <span>{t('reminders.days')}</span>
-        {#each DAYS as d (d)}
-          <label class="day">
-            <input type="checkbox" checked={(status.weekdays & (1 << d)) !== 0} onchange={() => void toggleDay(d)} />
-            {td(`reminders.day.${d}`)}
-          </label>
-        {/each}
+<SettingsPage title={t('reminders.heading')} subtitle={t('reminders.intro')}>
+  {#if !status}
+    <SettingsSection>
+      <LoadState state={failed ? 'error' : 'loading'} retry={() => void load()} lines={4} />
+    </SettingsSection>
+  {:else}
+    <div class="today" role="status">
+      <span class="ic"><Icon icon={Bell} size={20} /></span>
+      <div>
+        <p class="strong">{t('reminders.today', { due: status.counts.due, new: status.counts.new })}</p>
+        <p class="muted">
+          {#if status.studied_today}{t('reminders.studied')}{:else}{next ? t('reminders.next', { when: next }) : t('reminders.none')}{/if}
+        </p>
       </div>
-    </fieldset>
-    <label class="row">
-      <input type="checkbox" checked={status.keep_in_tray} onchange={(e) => void toggle('keep_in_tray', e.currentTarget.checked)} />
-      {t('reminders.keep_in_tray')}
-    </label>
-    <p>{t('reminders.today', { due: status.counts.due, new: status.counts.new })}</p>
-    {#if status.studied_today}<p class="muted">{t('reminders.studied')}</p>{/if}
-    <p class="muted">{next ? t('reminders.next', { when: next }) : t('reminders.none')}</p>
-    <button onclick={() => void test()}>{t('reminders.test')}</button>
-    {#if notice}<p role="status">{notice}</p>{/if}
+    </div>
+
+    <SettingsSection title={t('reminders.daily')} icon={Clock} body="rows">
+      <FormRow label={t('reminders.enabled')} description={t('settings.reminders.enabled.description')}>
+        <Switch checked={status.enabled} ariaLabel={t('reminders.enabled')} onchange={(v) => void toggle('enabled', v)} />
+      </FormRow>
+      <FormRow label={t('reminders.time')} description={t('reminders.time_hint')}>
+        <div>
+          <TimeField value={time} label={t('reminders.time')} onchange={(v) => void setTime(v)} />
+        </div>
+      </FormRow>
+      <FormRow label={t('reminders.days')} description={t('settings.reminders.weekdays.description')} stack>
+        <div class="days" role="group" aria-label={t('reminders.days')}>
+          {#each DAYS as d (d)}
+            {@const on = (status.weekdays & (1 << d)) !== 0}
+            <Chip
+              label={td(`reminders.day.${d}`)}
+              selected={on}
+              tone={on ? 'accent' : 'neutral'}
+              onclick={() => void toggleDay(d)}
+            />
+          {/each}
+        </div>
+      </FormRow>
+      <FormRow label={t('reminders.test_row')} description={t('reminders.test_hint')}>
+        {#if notice}<span class="ok" role="status">{notice}</span>{/if}
+        <Button size="sm" icon={Bell} onclick={() => void test()}>{t('reminders.test')}</Button>
+      </FormRow>
+    </SettingsSection>
+
+    <SettingsSection title={t('reminders.tray')} body="rows">
+      <FormRow label={t('reminders.keep_in_tray')} description={t('settings.reminders.keep_in_tray.description')}>
+        <Switch checked={status.keep_in_tray} ariaLabel={t('reminders.keep_in_tray')} onchange={(v) => void toggle('keep_in_tray', v)} />
+      </FormRow>
+    </SettingsSection>
   {/if}
-</section>
+</SettingsPage>
 
 <style>
-  .row {
+  .today {
     display: flex;
-    gap: var(--fc-space-2);
     align-items: center;
-    margin: var(--fc-space-2) 0;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-6);
+    border-radius: var(--radius-card);
+    background: var(--accent-soft);
   }
-  fieldset {
-    border: none;
-    padding: 0;
+  .ic {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex: none;
+    border-radius: var(--radius-pill);
+    background: var(--surface-1);
+    color: var(--accent);
+  }
+  .today p {
     margin: 0;
   }
-  .day {
-    display: inline-flex;
-    gap: var(--fc-space-1);
-    align-items: center;
+  .strong {
+    font-weight: var(--weight-semibold);
+    color: var(--text-1);
+  }
+  .muted {
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .ok {
+    color: var(--success);
+    font-size: var(--text-sm);
   }
 </style>

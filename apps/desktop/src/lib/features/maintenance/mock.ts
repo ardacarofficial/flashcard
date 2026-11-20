@@ -3,7 +3,7 @@
  * report, an update to "download". Crash detection, redaction, the integrity check and the
  * signature check live in fc-app and the desktop shell.
  */
-import { err, menu, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
+import { err, menu, mockScenario, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
 import type { DraftDto, IntegrityDto, UpdateStatus } from '$lib/api/types';
 
 export default {
@@ -30,7 +30,7 @@ export default {
       check_on_start: false,
       check_due: false,
       last_checked_at: null,
-      available: null,
+      available: mockScenario() === 'update' ? { version: '1.1.1', notes: 'Fixes and small improvements.', date: null } : null,
       phase: 'idle',
       install_job: null,
       last_error: null,

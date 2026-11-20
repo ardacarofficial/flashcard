@@ -49,11 +49,14 @@ describe('study screen', () => {
         attributes: [],
       });
     }
+    // Four answer buttons with their intervals (the v1.1 display preference).
+    await api.call('settings.set', { scope: { kind: 'app' }, key: 'study.answer_buttons', value: 'four' });
     render(StudyScreen, { ctx: ctx(deck.id) });
     await screen.findByRole('button', { name: /Study now/ });
 
     await key('Enter'); // start
     await side('question', 'dog');
+    expect(screen.getByTestId('study-count').textContent).toBe('1 / 2');
     expect(screen.queryByTestId('answer')).toBeNull();
 
     await key('h'); // hint
@@ -83,16 +86,16 @@ describe('study screen', () => {
 
     // Summary.
     await screen.findByText('Session complete');
-    expect(screen.getByText('Cards studied: 3')).toBeTruthy();
-    expect(screen.getByText('Mistakes: 1')).toBeTruthy();
-    expect(screen.getByText('Accuracy: 67%')).toBeTruthy();
+    expect(screen.getByTestId('summary-answered').textContent).toBe('3');
+    expect(screen.getByTestId('summary-mistakes').textContent).toBe('1');
+    expect(screen.getByText('2 of 3 correct')).toBeTruthy();
 
     await key('r'); // repeat mistakes: only "dog"
     await side('question', 'dog');
     await key(' ');
     await screen.findByTestId('answer');
     await key('4');
-    await screen.findByText('Cards studied: 1');
+    await waitFor(() => expect(screen.getByTestId('summary-answered').textContent).toBe('1'));
 
     await key('Enter'); // back to the start panel
     await screen.findByRole('button', { name: /Study now/ });
@@ -136,6 +139,39 @@ describe('study screen', () => {
     await screen.findByText('one');
     await key('Escape');
     await screen.findByText('Session complete');
-    expect(screen.getByText('Cards studied: 0')).toBeTruthy();
+    expect(screen.getByTestId('summary-answered').textContent).toBe('0');
+  });
+
+  it('shows two answer buttons by default: 1 = Still learning, 2 = I know it', async () => {
+    await api.call('settings.set', { scope: { kind: 'app' }, key: 'study.answer_buttons', value: 'two' });
+    const deck = await api.call('decks.create', { path: 'İki', parent_id: null });
+    for (const [front, back] of [['sun', 'güneş'], ['moon', 'ay']]) {
+      await api.call('notes.create', {
+        notetype_id: CLASSIC_NOTETYPE_ID,
+        deck_id: deck.id,
+        fields: { front: front!, back: back! },
+        tags: [],
+        attributes: [],
+      });
+    }
+    render(StudyScreen, { ctx: ctx(deck.id) });
+    await screen.findByRole('button', { name: /Study now/ });
+    await key('Enter');
+    await side('question', 'sun');
+    await key(' ');
+    await screen.findByRole('button', { name: /Still learning/ });
+    expect(screen.getByRole('button', { name: /I know it/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Hard/ })).toBeNull();
+    await key('2'); // I know it = good: sun is done
+    await side('question', 'moon');
+    await key(' ');
+    await screen.findByTestId('answer');
+    await key('1'); // still learning = again: moon comes back
+    await side('question', 'moon');
+    await key(' ');
+    await screen.findByTestId('answer');
+    await key('2');
+    await screen.findByText('Session complete');
+    expect(screen.getByTestId('summary-mistakes').textContent).toBe('1');
   });
 });

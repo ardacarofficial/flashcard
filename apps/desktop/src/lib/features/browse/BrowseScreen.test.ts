@@ -27,7 +27,7 @@ describe('<BrowseScreen> on the dev mock', () => {
     const decks = (await api.deck.tree()).roots;
     await api.note.createClassic(decks[0]!.deck.id, 'kılıç', 'sword', []);
     render(BrowseScreen, { ctx: { ...ctx, decks } });
-    expect(await screen.findByText('1 card(s)')).toBeTruthy();
+    expect(await screen.findByText('1 card')).toBeTruthy();
     const input = screen.getByLabelText('Search', { selector: 'input' });
     await fireEvent.input(input, { target: { value: 'tag:"x' } });
     const alert = await screen.findByRole('alert', {}, { timeout: 2000 });

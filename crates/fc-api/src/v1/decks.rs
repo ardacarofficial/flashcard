@@ -1,6 +1,6 @@
 //! Deck DTOs.
 
-use fc_core::{CardId, DeckId, NoteId, PresetId, Timestamp};
+use fc_core::{AttributeDefId, CardId, DeckId, NoteId, PresetId, Timestamp};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -150,3 +150,51 @@ pub struct UpdateDeck {
     /// Color (`null` clears).
     pub color: Option<String>,
 }
+
+/// A classification value common in a deck (`Seviye: B1`), for the chips of the Library and
+/// the deck page (v1.1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct DeckChip {
+    /// Classification.
+    pub attr_id: AttributeDefId,
+    /// Classification name (user text).
+    pub name: String,
+    /// Value label (user text).
+    pub label: String,
+    /// Notes of the deck (with sub-decks) carrying the value.
+    pub notes: u32,
+}
+
+/// Progress of a deck with its sub-decks (v1.1 Library / deck page): every live card by
+/// [`fc_core::stats::Mastery`], when it was last studied and its most common classification values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct DeckSummary {
+    /// Deck.
+    pub deck_id: DeckId,
+    /// Never studied cards.
+    pub new: u32,
+    /// Cards being learnt (learning steps, short intervals).
+    pub learning: u32,
+    /// Mastered (mature) cards.
+    pub mastered: u32,
+    /// `mastered` out of all cards, 0–100.
+    pub mastered_pct: u8,
+    /// Last review of any of its cards (`null` = never studied).
+    pub last_studied_at: Option<Timestamp>,
+    /// Up to three most common classification values, most notes first.
+    pub chips: Vec<DeckChip>,
+}
+
+/// Response of `decks.summaries`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct DeckSummaries {
+    /// Today's counts of the whole collection (the sum of the top-level decks of `decks.tree`).
+    pub today: DeckCounts,
+    /// Every live deck, in tree order.
+    pub decks: Vec<DeckSummary>,
+    /// Recently studied decks, most recent first (at most [`RECENT_DECKS`]).
+    pub recent: Vec<DeckId>,
+}
+
+/// Length of [`DeckSummaries::recent`].
+pub const RECENT_DECKS: usize = 6;

@@ -13,7 +13,9 @@
 //! * own `review_log.mode` per mode, statistics separate them, daily limits →
 //!   [`modes_log_their_own_review_mode_and_respect_daily_limits`];
 //! * inline card creation during study → [`inline_cards_during_study_are_one_undo_step`];
-//! * every mode is a switchable module → [`modes_are_switchable_modules`].
+//! * every mode is a switchable module → [`modes_are_switchable_modules`];
+//! * v1.1 match: rounds, picks, backend clock, best time, practice reviews, undo →
+//!   [`match_rounds_are_timed_practice_and_undoable`].
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use crate::{App, AppDeps};
@@ -1075,6 +1077,118 @@ pub fn modes_are_switchable_modules(f: &Factory) {
     assert!(!focus.enabled && focus.methods.is_empty());
 }
 
+/// v1.1 match (docs/11 §3): a round of six pairs from the session's cards, dealt
+/// reproducibly; picks are validated and wrong ones counted; the clock is the backend's and
+/// stops at the last match; finishing logs one `match` review per card without touching the
+/// schedule (not counted by statistics), keeps the deck's best time and is one undo step.
+pub fn match_rounds_are_timed_practice_and_undoable(f: &Factory) {
+    let play = |seed: u64| {
+        let t = T::new(f(), seed);
+        let d = t.deck("Eşleştir");
+        let mut pairs = HashMap::new();
+        for i in 1..=8 {
+            let (front, back) = (format!("terim {i}"), format!("tanım {i}"));
+            t.note(d.id, &front, &back, None);
+            pairs.insert(front, back);
+        }
+        let s = t.start(StudyKind::Match, StudyMode::Scheduled, d.id, None, None);
+        assert!(s.current.is_none(), "a match is played by rounds, not card by card");
+        let r = t.ok::<ModesMatchStart>(MatchRef { session_id: s.id });
+        (t, d, s, pairs, r)
+    };
+    let (t, d, s, pairs, r) = play(11);
+    assert_eq!((r.round, r.pairs, r.tiles.len(), r.cards, r.best_ms), (1, 6, 12, 8, None));
+    assert_eq!(r.tiles.iter().filter(|x| x.side == MatchSide::Term).count(), 6);
+    // Reproducible: the same session deals the same board.
+    assert_eq!(play(11).4.tiles, r.tiles);
+    let cards_before = t.all_cards();
+    let tile = |side: MatchSide, text: &str| r.tiles.iter().find(|x| x.side == side && x.text == text).unwrap().id;
+    let terms: Vec<&MatchTileDto> = r.tiles.iter().filter(|x| x.side == MatchSide::Term).collect();
+    let def_of = |term: &str| tile(MatchSide::Definition, &pairs[term]);
+    // Validation: finish too early, two terms, an unknown tile.
+    assert_eq!(t.err::<ModesMatchFinish>(MatchRef { session_id: s.id }).code, ErrorCode::ValidationSessionMode);
+    let e = t.err::<ModesMatchPick>(MatchPick { session_id: s.id, first: terms[0].id, second: terms[1].id });
+    assert_eq!(e.code, ErrorCode::ValidationSessionMode);
+    let e = t.err::<ModesMatchPick>(MatchPick { session_id: s.id, first: terms[0].id, second: 99 });
+    assert_eq!(e.code, ErrorCode::ValidationInvalidParams);
+    // A wrong pair is a mistake; a right one leaves the board.
+    let wrong = t.ok::<ModesMatchPick>(MatchPick { session_id: s.id, first: terms[0].id, second: def_of(&terms[1].text) });
+    assert!(!wrong.correct && !wrong.complete);
+    assert_eq!(wrong.round.mistakes, 1);
+    t.advance(5_000);
+    for (i, term) in terms.iter().enumerate() {
+        let p = t.ok::<ModesMatchPick>(MatchPick { session_id: s.id, first: def_of(&term.text), second: term.id });
+        assert!(p.correct);
+        assert_eq!(p.complete, i == 5);
+        assert!(p.round.tiles.iter().filter(|x| x.id == term.id).all(|x| x.matched));
+    }
+    let again = t.err::<ModesMatchPick>(MatchPick { session_id: s.id, first: terms[0].id, second: def_of(&terms[0].text) });
+    assert_eq!(again.code, ErrorCode::ValidationSessionMode);
+    // The clock stopped at the last match.
+    t.advance(60_000);
+    let res = t.ok::<ModesMatchFinish>(MatchRef { session_id: s.id });
+    assert_eq!((res.time_ms, res.mistakes, res.pairs, res.previous_best_ms, res.new_best), (5_000, 1, 6, None, true));
+    assert_eq!(res.round.best_ms, Some(5_000));
+    assert_eq!(res.round.finished_ms, Some(5_000));
+    assert_eq!(t.err::<ModesMatchFinish>(MatchRef { session_id: s.id }).code, ErrorCode::ValidationSessionMode);
+    // Practice: one `match` review per card, two missed pairs rated again, cards untouched.
+    let logs = t.all_reviews();
+    assert_eq!(logs.len(), 6);
+    assert!(logs.iter().all(|l| l.mode == "match" && l.scheduled_days == 0 && l.state_before == l.state_after));
+    assert_eq!(logs.iter().filter(|l| l.rating == Rating::Again).count(), 2);
+    assert_eq!(t.all_cards(), cards_before, "a match never changes cards");
+    assert_eq!(t.reviews_total(true), 0, "statistics do not count match answers");
+    assert!(fc_storage::repo::is_practice_mode("match"));
+    // The best time is the deck's.
+    let best = |t: &T| t.store.read().unwrap().get_setting(&SettingScope::Deck(d.id), "match.best_ms").unwrap();
+    assert_eq!(best(&t), Some(serde_json::json!(5_000)));
+    // Undo: reviews gone, round unfinished, no best time; redo: all back.
+    t.undo();
+    assert!(t.all_reviews().is_empty());
+    assert_eq!(best(&t), None);
+    t.redo();
+    assert_eq!(t.all_reviews().len(), 6);
+    assert_eq!(best(&t), Some(serde_json::json!(5_000)));
+    // Round 2: faster → a new best; round 3: slower → the best stays.
+    let finish_round = |ms: i64| {
+        let r = t.ok::<ModesMatchStart>(MatchRef { session_id: s.id });
+        t.advance(ms);
+        let terms: Vec<MatchTileDto> = r.tiles.iter().filter(|x| x.side == MatchSide::Term).cloned().collect();
+        for term in &terms {
+            let def = r.tiles.iter().find(|x| x.side == MatchSide::Definition && x.text == pairs[&term.text]).unwrap();
+            t.ok::<ModesMatchPick>(MatchPick { session_id: s.id, first: term.id, second: def.id });
+        }
+        (r.round, t.ok::<ModesMatchFinish>(MatchRef { session_id: s.id }))
+    };
+    let (n, r2) = finish_round(3_000);
+    assert_eq!((n, r2.time_ms, r2.previous_best_ms, r2.new_best), (2, 3_000, Some(5_000), true));
+    let (n, r3) = finish_round(9_000);
+    assert_eq!((n, r3.new_best, r3.round.best_ms), (3, false, Some(3_000)));
+    assert_eq!(best(&t), Some(serde_json::json!(3_000)));
+    // A deck with one card: no round.
+    let one = t.deck("Tek");
+    t.note(one.id, "yalnız", "alone", None);
+    let s1 = t.start(StudyKind::Match, StudyMode::Scheduled, one.id, None, None);
+    let r = t.ok::<ModesMatchStart>(MatchRef { session_id: s1.id });
+    assert!(r.tiles.is_empty());
+    assert_eq!((r.pairs, r.cards), (0, 1));
+    // `modes.match.*` on another kind of session; the module switch.
+    let normal = t.start(StudyKind::Normal, StudyMode::Trial, d.id, None, None);
+    assert_eq!(t.err::<ModesMatchStart>(MatchRef { session_id: normal.id }).code, ErrorCode::ValidationSessionMode);
+    t.module("match", false);
+    let e = t.try_start(StudyKind::Match, StudyMode::Scheduled, d.id, None, None).unwrap_err();
+    assert_eq!(e.code, ErrorCode::ConflictModuleDisabled);
+    assert_eq!(t.err::<ModesMatchStart>(MatchRef { session_id: s1.id }).code, ErrorCode::ConflictModuleDisabled);
+    // v1.1: the study screen's answer buttons are a validated display preference.
+    t.set(SettingScope::App, "study.answer_buttons", serde_json::json!("four"));
+    let e = t.err::<SettingsSet>(SetSetting {
+        scope: SettingScope::App,
+        key: "study.answer_buttons".into(),
+        value: serde_json::json!("three"),
+    });
+    assert_eq!(e.code, ErrorCode::ValidationSettingValue);
+}
+
 macro_rules! modes_suite {
     ($factory:expr) => {
         modes_suite!(@tests $factory;
@@ -1087,6 +1201,7 @@ macro_rules! modes_suite {
             modes_log_their_own_review_mode_and_respect_daily_limits,
             inline_cards_during_study_are_one_undo_step,
             modes_are_switchable_modules,
+            match_rounds_are_timed_practice_and_undoable,
         );
     };
     (@tests $factory:expr; $($name:ident),* $(,)?) => {

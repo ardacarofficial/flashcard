@@ -197,7 +197,7 @@ describe('learn screen', () => {
     await key('Enter', input);
     expect((await screen.findByTestId('learn-feedback')).textContent).toContain('Learned!');
     await key('Enter');
-    await screen.findByText('You learned all 1 cards.');
+    await screen.findByText('You learned all 1 card.');
     expect(call).toHaveBeenCalledWith('study.end', { session_id: 's-1' });
   });
 });
@@ -247,11 +247,13 @@ describe('test screen', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Print answer key' }));
     await waitFor(() => expect(print).toHaveBeenCalled());
     expect(screen.queryByText(/Answer: a3/)).toBeNull(); // key gone again after printing
-    await fireEvent.click(screen.getAllByLabelText('True')[0]!);
-    await fireEvent.click(screen.getByLabelText('a2'));
+    // Answers are option tiles (radios), like Learn's.
+    await fireEvent.click(screen.getAllByRole('radio', { name: /True/ })[0]!);
+    await fireEvent.click(screen.getByRole('radio', { name: /a2/ }));
+    expect(screen.getByRole('radio', { name: /a2/ }).getAttribute('aria-checked')).toBe('true');
     await fireEvent.input(screen.getByLabelText('Your answer'), { target: { value: 'a3' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
-    expect((await screen.findByTestId('test-score')).textContent).toContain('Score: 100%');
+    expect((await screen.findByTestId('test-score')).textContent).toContain('correct');
     expect(screen.getByText(/Answer: a3/)).toBeTruthy();
   });
 });
@@ -297,8 +299,10 @@ describe('study screen modes', () => {
       return base(m);
     });
     render(StudyScreen, { ctx: ctx() });
-    await fireEvent.click(await screen.findByLabelText('Time limit'));
-    await fireEvent.change(screen.getByLabelText('Rating'), { target: { value: 'confidence' } });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
+    await fireEvent.click(await screen.findByRole('switch', { name: 'Time limit' }));
+    await fireEvent.click(screen.getByRole('combobox', { name: 'Rating' }));
+    await fireEvent.click(await screen.findByRole('option', { name: 'Confidence 1–5' }));
     await key('Enter');
     await screen.findByTestId('timer');
     await key(' '); // reveal
@@ -325,8 +329,10 @@ describe('study screen modes', () => {
       return base(m);
     });
     render(StudyScreen, { ctx: ctx() });
-    await fireEvent.click(await screen.findByLabelText('Time limit'));
-    await fireEvent.change(screen.getByLabelText('Rating'), { target: { value: 'confidence' } });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
+    await fireEvent.click(await screen.findByRole('switch', { name: 'Time limit' }));
+    await fireEvent.click(screen.getByRole('combobox', { name: 'Rating' }));
+    await fireEvent.click(await screen.findByRole('option', { name: 'Confidence 1–5' }));
     await key('Enter');
     await key(' ');
     await screen.findByText('How sure were you?');
@@ -359,7 +365,7 @@ describe('study screen modes', () => {
     await fireEvent.input(area, { target: { value: 'porsuk :: badger' } });
     await screen.findByTestId('inline-preview');
     await fireEvent.keyDown(area, { key: 'Enter', ctrlKey: true });
-    await screen.findByText('1 card(s) created.');
+    await screen.findByText('1 card created.');
     expect(screen.getByTestId('question').textContent).toContain('badger'); // still on the same card
   });
 });

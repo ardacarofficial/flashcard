@@ -395,6 +395,104 @@ pub struct SubmitTest {
     pub duration_ms: u32,
 }
 
+// ------------------------------------------------------------------ match (v1.1)
+
+/// Which half of a pair a match tile shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum MatchSide {
+    /// The card's question.
+    Term,
+    /// The card's answer.
+    Definition,
+}
+
+/// One tile of a match board.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct MatchTileDto {
+    /// Tile id (its index on the board; `modes.match.pick` names tiles by it).
+    pub id: u32,
+    /// Half.
+    pub side: MatchSide,
+    /// Text (plain).
+    pub text: String,
+    /// Matched: the tile has left the board.
+    pub matched: bool,
+}
+
+/// A match round (`modes.match.start`, `modes.match.pick`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct MatchRoundDto {
+    /// Session (kind `match`).
+    pub session_id: SessionId,
+    /// Round number (1 = first).
+    pub round: u32,
+    /// Tiles in board order (empty when the session has fewer than two usable cards).
+    pub tiles: Vec<MatchTileDto>,
+    /// Pairs on the board.
+    pub pairs: u32,
+    /// Pairs matched.
+    pub matched: u32,
+    /// Wrong picks.
+    pub mistakes: u32,
+    /// When the board was dealt (backend clock).
+    pub started_at: Timestamp,
+    /// Board time once finished, ms.
+    pub finished_ms: Option<u32>,
+    /// Best finished time for this deck so far, ms (`null`: none yet).
+    pub best_ms: Option<u32>,
+    /// Usable cards of the session (rounds draw from them).
+    pub cards: u32,
+}
+
+/// Names a match session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct MatchRef {
+    /// Session (kind `match`).
+    pub session_id: SessionId,
+}
+
+/// `modes.match.pick`: pairs two tiles (a term and a definition, either order).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct MatchPick {
+    /// Session (kind `match`).
+    pub session_id: SessionId,
+    /// First tile id.
+    pub first: u32,
+    /// Second tile id.
+    pub second: u32,
+}
+
+/// Result of a pick.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct MatchPickResult {
+    /// The tiles were one card's term and definition (they leave the board).
+    pub correct: bool,
+    /// Every pair is matched: call `modes.match.finish`.
+    pub complete: bool,
+    /// The round after the pick.
+    pub round: MatchRoundDto,
+}
+
+/// Result of a finished round (`modes.match.finish`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct MatchResultDto {
+    /// Board time, ms (backend clock, from the deal to the finish).
+    pub time_ms: u32,
+    /// Wrong picks.
+    pub mistakes: u32,
+    /// Pairs.
+    pub pairs: u32,
+    /// Best time for the deck before this round, ms.
+    pub previous_best_ms: Option<u32>,
+    /// This round set a new best time.
+    pub new_best: bool,
+    /// The finished round.
+    pub round: MatchRoundDto,
+}
+
 // ------------------------------------------------------------------ inline cards
 
 /// `modes.inline.preview`: the cards a text would make (`question :: answer` lines).

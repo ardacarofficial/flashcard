@@ -1,4 +1,11 @@
 <script lang="ts">
+  /**
+   * Flashcards (spaced repetition, docs/11 §3): a big centred card that flips with Space,
+   * answer buttons under it — two by default ("Still learning" = again, "I know it" = good) or
+   * the four ratings with their next intervals (`study.answer_buttons`, a display preference
+   * stored in settings). The backend runs the session; this screen only shows and reports.
+   */
+  import { formatPercent100 } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type {
@@ -14,6 +21,31 @@
   } from '$lib/api/types';
   import { ApiError } from '$lib/api';
   import { t, td } from '$lib/i18n/index.svelte';
+  import {
+    Button,
+    Card,
+    ChevronDown,
+    ChevronUp,
+    Chip,
+    CircleCheck,
+    Flashcard,
+    Icon,
+    IconButton,
+    Input,
+    Kbd,
+    Menu,
+    OptionTile,
+    PageHeader,
+    ProgressBar,
+    ProgressRing,
+    Repeat,
+    Select,
+    Skeleton,
+    Switch,
+    Undo2,
+    X,
+    type MenuItem,
+  } from '$lib/ui';
   import StudyAi from '../ai/StudyAi.svelte';
   import CardView from '../cards/CardView.svelte';
   import PluginToolbar from '../plugins/PluginToolbar.svelte';
@@ -32,10 +64,16 @@
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
+  /** v1.1 display preference (`study.answer_buttons`): two or four answer buttons. */
+  const BUTTONS_KEY = 'study.answer_buttons';
+
   let session = $state<SessionDto | null>(null);
   let summary = $state<SessionSummary | null>(null);
   let resumable = $state<SessionDto | null>(null);
+  let loading = $state(true);
   let revealed = $state(false);
+  /** Which face the card shows (the learner may flip back to the question). */
+  let flipped = $state(false);
   let hint = $state<string | null>(null);
   let typed = $state('');
   let check = $state<AnswerCheckDto | null>(null);
@@ -47,10 +85,12 @@
   let customQuery = $state('');
   let savedQueries = $state<SavedQueryDto[]>([]);
   let savedId = $state('');
-  let postponeDays = $state(1);
+  let postponeDays = $state<number | string>(1);
   let modeOptions = $state<StartModes | null>(null);
   let composing = $state(false);
+  let showOptions = $state(false);
   let notice = $state<string | null>(null);
+  let buttons = $state<'two' | 'four'>('two');
   let busy = false;
   let shownAt = 0;
   let revealedAt: number | null = null;
@@ -74,9 +114,23 @@
     }
   }
 
+  async function loadButtons() {
+    try {
+      const r = await api.call('settings.get', { scope: { kind: 'app' }, keys: [BUTTONS_KEY] });
+      const v = r.values.find((x) => x.key === BUTTONS_KEY)?.value;
+      buttons = v === 'four' ? 'four' : 'two';
+    } catch {
+      buttons = 'two';
+    }
+  }
+
   $effect(() => {
     void loadBindings();
-    const unsub = api.on(['setting_changed', 'module_toggled'], () => void loadBindings());
+    void loadButtons();
+    const unsub = api.on(['setting_changed', 'module_toggled'], () => {
+      void loadBindings();
+      void loadButtons();
+    });
     return () => void unsub.then((u) => u());
   });
 
@@ -94,15 +148,21 @@
     card && moduleOn('flags') ? flagDefs.filter((f) => hasFlag(card.flags, f.flag)) : [],
   );
   const phase = $derived<StudyPhase>(summary ? 'done' : card ? (revealed ? 'answer' : 'question') : 'idle');
+  // A running session switches the shell to the focus layout (no picker, no tabs).
+  // The session's end screen (summary) stays in the same centred column.
+  $effect(() => ctx.setFocus?.(phase !== 'idle'));
   const filterDef = $derived(attrs.find((a) => a.id === filterAttr) ?? null);
+  const twoButtons = $derived(buttons === 'two');
 
   onMount(() => {
     trackModules();
-    void ctx.guarded(async () => {
-      const open = (await api.call('study.active', {})).session;
-      // Learn and test sessions resume on their own screens.
-      resumable = open && open.kind !== 'learn' && open.kind !== 'test' ? open : null;
-    });
+    void ctx
+      .guarded(async () => {
+        const open = (await api.call('study.active', {})).session;
+        // Learn, test and match sessions resume on their own screens.
+        resumable = open && !['learn', 'test', 'match'].includes(open.kind) ? open : null;
+      })
+      .finally(() => (loading = false));
     void loadSaved();
     const unsub = api.on(['saved_queries', 'module_toggled'], () => void loadSaved());
     return () => void unsub.then((u) => u());
@@ -149,10 +209,17 @@
     );
   });
 
+  // A new classification clears its value.
+  $effect(() => {
+    void filterAttr;
+    filterValue = '';
+  });
+
   function show(s: SessionDto) {
     session = s;
     summary = null;
     revealed = false;
+    flipped = false;
     hint = null;
     typed = '';
     check = null;
@@ -258,6 +325,7 @@
   async function reveal() {
     if (card?.type_answer && !check) await checkTyped();
     revealed = true;
+    flipped = true;
     revealedAt = Date.now();
     input?.blur();
   }
@@ -310,6 +378,12 @@
   async function resume(s: SessionDto) {
     // Timed: a card whose countdown never started gets it now (`settle`).
     await settle(s);
+  }
+
+  /** Two or four answer buttons: a display preference the backend validates and stores. */
+  async function setButtons(v: 'two' | 'four') {
+    buttons = v;
+    await api.call('settings.set', { scope: { kind: 'app' }, key: BUTTONS_KEY, value: v });
   }
 
   async function run(a: StudyAction) {
@@ -387,11 +461,14 @@
   }
 
   function onKey(e: KeyboardEvent) {
+    // The card (or another control) handled it already (e.g. Space on the focused card).
+    if (e.defaultPrevented) return;
     const el = e.target as HTMLElement | null;
     const tag = el?.tagName ?? '';
     const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
     // Buttons handle their own Enter/Space; keep shortcuts working everywhere else.
-    if (tag === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
+    const asButton = tag === 'BUTTON' || (el instanceof HTMLElement && el.getAttribute('role') === 'button');
+    if (asButton && (e.key === 'Enter' || e.key === ' ')) return;
     // v0.10: inline cards (N), confidence levels (1–5) on the answer side.
     if (card && plainKey(e) && e.key.toLowerCase() === 'n' && moduleOn('inline_cards')) {
       e.preventDefault();
@@ -410,6 +487,7 @@
       choices: choice?.options.length ?? 0,
       flags: moduleOn('flags'),
       bindings,
+      twoButtons,
     });
     if (!action) return;
     e.preventDefault();
@@ -424,12 +502,17 @@
     }
   }
 
+  /** The learner flipped the card (click / Space on it): the first flip reveals the answer. */
+  function onflip(f: boolean) {
+    if (f && !revealed) void run({ kind: 'reveal' });
+  }
+
   async function postpone() {
     notice = null;
     await ctx.guarded(async () => {
       const r = await api.call('study.postpone', {
         deck_id: ctx.selectedDeck,
-        days: postponeDays,
+        days: Number(postponeDays) || 1,
         tz_offset_mins: tzOffsetMins(),
       });
       notice = t('study.postponed', { count: r.cards });
@@ -444,280 +527,655 @@
   const confidence = $derived(session?.modes?.rating_scale === 'confidence' && (session.modes?.confidence.length ?? 0) > 0);
 
   const accuracy = $derived(summary && summary.answered > 0 ? Math.round((summary.correct * 100) / summary.answered) : 0);
+
+  // "12 / 40": this card's position among answered + remaining (display only).
+  const remaining = $derived(session ? session.counts.new + session.counts.learning + session.counts.review : 0);
+  const position = $derived(session ? session.answered + 1 : 0);
+  const total = $derived(session ? session.answered + Math.max(remaining, 1) : 0);
+
+  const attrOptions = $derived([
+    { value: '', label: t('study.filter_any') },
+    ...attrs.map((a) => ({ value: a.id, label: a.name })),
+  ]);
+  const valueOptions = $derived([
+    { value: '', label: t('study.filter_any') },
+    ...(filterDef?.options ?? []).map((o) => ({ value: o.id, label: o.label })),
+  ]);
+  const savedOptions = $derived([
+    { value: '', label: t('study.filter_any') },
+    ...savedQueries.map((q) => ({ value: q.id, label: q.name })),
+  ]);
+
+  const toolItems = $derived<MenuItem[]>([
+    { id: 'suspend', label: t('study.suspend'), keys: ['S'], onselect: () => void run({ kind: 'suspend' }) },
+    { id: 'bury', label: t('study.bury'), keys: ['B'], onselect: () => void run({ kind: 'bury' }) },
+    ...(moduleOn('inline_cards')
+      ? [{ id: 'inline', label: t('modes.inline.open'), keys: ['N'], onselect: () => (composing = true) }]
+      : []),
+    { id: 'sep', separator: true as const },
+    twoButtons
+      ? { id: 'buttons', label: t('study.buttons.use_four'), onselect: () => void ctx.guarded(() => setButtons('four')) }
+      : { id: 'buttons', label: t('study.buttons.use_two'), onselect: () => void ctx.guarded(() => setButtons('two')) },
+  ]);
+
+  const minutes = (ms: number) => Math.floor(ms / 60_000);
+  const seconds = (ms: number) => String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0');
 </script>
 
 <svelte:window onkeydown={onKey} />
 
-<section class="study">
-  <h2>{t('study.heading')}</h2>
-
+<section class="study" class:playing={phase === 'question' || phase === 'answer'}>
   {#if phase === 'idle'}
-    <div class="panel">
-      <p class="muted">{ctx.selectedPath ?? t('study.whole_collection')}</p>
-      {#if resumable}
-        <button onclick={() => resumable && void ctx.guarded(() => resume(resumable!))}>{t('study.resume')}</button>
-      {/if}
-      <label class="row">
-        <input type="checkbox" bind:checked={practice} />
-        {t('study.practice')}
-      </label>
-      <StudyModeOptions bind:value={modeOptions} />
-      {#if attrs.length > 0}
-        <div class="row">
-          <label>
-            {t('study.filter_label')}
-            <select bind:value={filterAttr}>
-              <option value="">{t('study.filter_any')}</option>
-              {#each attrs as a (a.id)}
-                <option value={a.id}>{a.name}</option>
-              {/each}
-            </select>
-          </label>
-          {#if filterDef}
-            <select bind:value={filterValue} aria-label={filterDef.name}>
-              <option value="">{t('study.filter_any')}</option>
-              {#each filterDef.options as o (o.id)}
-                <option value={o.id}>{o.label}</option>
-              {/each}
-            </select>
-          {/if}
+    <PageHeader title={t('study.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
+    {#if loading}
+      <div class="start-card"><Skeleton shape="card" height="200px" /></div>
+    {:else}
+      <Card padding="lg" class="start-card">
+        <div class="start">
+          <div class="start-text">
+            <h2>{custom ? t('study.custom_heading') : t('study.start_heading')}</h2>
+            <p>{custom ? t('study.custom_intro') : t('study.start_intro')}</p>
+          </div>
+          <div class="start-actions">
+            {#if resumable}
+              <Button size="lg" onclick={() => resumable && void ctx.guarded(() => resume(resumable!))}>
+                {t('study.resume')}
+              </Button>
+            {/if}
+            <Button variant="primary" size="lg" data-testid="study-start" onclick={() => void run({ kind: 'start' })}>
+              {custom ? t('study.custom_start') : t('study.start')}
+              <Kbd keys={['Enter']} class="on-accent" />
+            </Button>
+          </div>
         </div>
-      {/if}
-      {#if moduleOn('browse')}
-        <div class="row">
-          <label>
-            {t('study.query_label')}
-            <input
-              bind:value={customQuery}
-              disabled={savedId !== ''}
-              placeholder={t('study.query_placeholder')}
-              spellcheck="false"
-            />
-          </label>
-          {#if savedQueries.length > 0}
-            <label>
-              {t('study.saved_label')}
-              <select bind:value={savedId}>
-                <option value="">{t('study.filter_any')}</option>
-                {#each savedQueries as q (q.id)}
-                  <option value={q.id}>{q.name}</option>
-                {/each}
-              </select>
-            </label>
-          {/if}
-        </div>
-      {/if}
-      <button class="primary" onclick={() => void run({ kind: 'start' })}>
-        {custom ? t('study.custom_start') : t('study.start')}
-        <kbd>{t('study.start_hint')}</kbd>
-      </button>
-      {#if notice}<p class="muted" role="status">{notice}</p>{/if}
-      <div class="row postpone">
-        <label>
-          {t('study.postpone_label')}
-          <input type="number" min="1" max="365" bind:value={postponeDays} aria-label={t('study.postpone_days')} />
-        </label>
-        <button onclick={() => void postpone()}>{t('study.postpone')}</button>
-      </div>
-    </div>
-  {:else if phase === 'done' && summary}
-    <div class="panel" role="status">
-      <h3>{t('study.summary.heading')}</h3>
-      <p>{t('study.summary.answered', { n: summary.answered })}</p>
-      <p>{t('study.summary.accuracy', { n: accuracy })}</p>
-      <p>
-        {t('study.summary.time', {
-          min: Math.floor(summary.time_ms / 60_000),
-          sec: Math.floor((summary.time_ms % 60_000) / 1000),
-        })}
-      </p>
-      <p>{t('study.summary.mistakes', { n: summary.mistakes })}</p>
-      <div class="row">
-        {#if summary.mistakes > 0}
-          <button onclick={() => void run({ kind: 'repeat' })}>{t('study.summary.repeat')} <kbd>{'R'}</kbd></button>
+        {#if notice}
+          <p class="notice" role="status"><span class="dot" aria-hidden="true"></span>{notice}</p>
         {/if}
-        <button class="primary" onclick={() => void run({ kind: 'back' })}>{t('study.summary.back')}</button>
-      </div>
+        <div class="opts-toggle">
+          <Button
+            variant="ghost"
+            size="sm"
+            iconEnd={showOptions ? ChevronUp : ChevronDown}
+            aria-expanded={showOptions}
+            aria-controls="study-options"
+            onclick={() => (showOptions = !showOptions)}
+          >
+            {t('study.options')}
+          </Button>
+          {#if practice}<Chip size="sm" tone="accent" label={t('study.practice_badge')} />{/if}
+        </div>
+        {#if showOptions}
+          <div id="study-options" class="options">
+            <Switch label={t('study.practice_label')} description={t('study.practice_hint')} bind:checked={practice} />
+            <StudyModeOptions bind:value={modeOptions} />
+            {#if attrs.length > 0}
+              <div class="row">
+                <Select label={t('study.filter_label')} options={attrOptions} bind:value={filterAttr} />
+                {#if filterDef}
+                  <Select label={filterDef.name} options={valueOptions} bind:value={filterValue} />
+                {/if}
+              </div>
+            {/if}
+            {#if moduleOn('browse')}
+              <div class="row">
+                <Input
+                  class="grow"
+                  label={t('study.query_label')}
+                  bind:value={customQuery}
+                  disabled={savedId !== ''}
+                  placeholder={t('study.query_placeholder')}
+                  spellcheck="false"
+                />
+                {#if savedQueries.length > 0}
+                  <Select label={t('study.saved_label')} options={savedOptions} bind:value={savedId} />
+                {/if}
+              </div>
+            {/if}
+            <div class="row postpone">
+              <Input
+                class="days"
+                type="number"
+                min="1"
+                max="365"
+                label={t('study.postpone_label')}
+                hint={t('study.postpone_days')}
+                bind:value={postponeDays}
+              />
+              <Button onclick={() => void postpone()}>{t('study.postpone')}</Button>
+            </div>
+          </div>
+        {/if}
+      </Card>
+    {/if}
+  {:else if phase === 'done' && summary}
+    <div class="summary" role="status">
+      <Card padding="lg" elevated>
+        <div class="summary-head">
+          <ProgressRing label={t('study.summary.accuracy_label')} value={accuracy} size={112} tone="success">
+            <span class="ring-value">{formatPercent100(accuracy)}</span>
+          </ProgressRing>
+          <div>
+            <h2>{t('study.summary.heading')}</h2>
+            <p class="muted">{t('study.summary.accuracy', { correct: summary.correct, total: summary.answered })}</p>
+          </div>
+        </div>
+        <dl class="stats">
+          <div><dt>{t('study.summary.cards')}</dt><dd data-testid="summary-answered">{summary.answered}</dd></div>
+          <div><dt>{t('study.summary.mistakes_label')}</dt><dd data-testid="summary-mistakes">{summary.mistakes}</dd></div>
+          <div>
+            <dt>{t('study.summary.time_label')}</dt>
+            <dd>{t('study.summary.time_value', { min: minutes(summary.time_ms), sec: seconds(summary.time_ms) })}</dd>
+          </div>
+        </dl>
+        <div class="summary-actions">
+          {#if summary.mistakes > 0}
+            <Button icon={Repeat} onclick={() => void run({ kind: 'repeat' })}>
+              {t('study.summary.repeat')} <Kbd keys={['R']} />
+            </Button>
+          {/if}
+          <Button variant="primary" onclick={() => void run({ kind: 'back' })}>
+            {t('study.summary.back')} <Kbd keys={['Enter']} class="on-accent" />
+          </Button>
+        </div>
+      </Card>
     </div>
   {:else if session && card}
-    <div class="meta muted">
-      <span data-focus-hide>{t('study.remaining', session.counts)}</span>
-      {#if session.mode === 'trial'}<span class="badge">{t('study.practice_badge')}</span>{/if}
-      {#each cardFlags as f (f.flag)}
-        <span class="flag" style:--flag={flagColor(f)} data-testid="flag">{f.name ?? td(defaultFlagKey(f.flag))}</span>
-      {/each}
+    <div class="topbar">
+      <div class="progress" data-focus-hide>
+        <ProgressBar label={t('study.progress_label')} value={position - 1} max={total} size="sm" />
+        <span class="count" data-testid="study-count">{t('study.position', { n: position, total })}</span>
+      </div>
+      <div class="badges">
+        {#if session.mode === 'trial'}<Chip size="sm" tone="accent" label={t('study.practice_badge')} />{/if}
+        {#each cardFlags as f (f.flag)}
+          <span class="flag" style:--flag={flagColor(f)} data-testid="flag">{f.name ?? td(defaultFlagKey(f.flag))}</span>
+        {/each}
+      </div>
+      <IconButton icon={X} label={t('study.end_label')} onclick={() => void run({ kind: 'end' })} data-testid="study-end" />
     </div>
+    <p class="remaining" data-focus-hide>{t('study.remaining', session.counts)}</p>
     {#if session.modes?.timer}
       <TimerBar timer={session.modes.timer} onexpire={() => void ctx.guarded(expire)} />
     {/if}
+
     <div class="stage">
-      <CardView sides={card.sides} showAnswer={revealed} interactive={false} testid={revealed ? 'answer' : 'question'} />
+      <Flashcard bind:flipped {onflip} fit={false} class="study-card">
+        {#snippet front()}
+          <div class="face-body">
+            <CardView sides={card.sides} showAnswer={false} interactive={false} testid="question" />
+          </div>
+        {/snippet}
+        {#snippet back()}
+          <div class="face-body">
+            {#if revealed}
+              <CardView sides={card.sides} showAnswer={true} interactive={false} testid="answer" />
+            {/if}
+          </div>
+        {/snippet}
+      </Flashcard>
       <PluginToolbar cardId={card.card_id} />
-      {#if hint && !revealed}<p class="hint muted" data-testid="hint">{hint}</p>{/if}
+      {#if hint && !revealed}<p class="hint" data-testid="hint">{hint}</p>{/if}
       {#if choice}
         <div class="choices" role="group" aria-label={t('study.choices')}>
           {#each choice.options as option, i (i)}
-            <button
-              class:right={revealed && i === choice.correct}
-              class:wrong={revealed && picked === i && i !== choice.correct}
+            <OptionTile
+              kbd={String(i + 1)}
+              result={revealed && i === choice.correct ? 'right' : revealed && picked === i ? 'miss' : null}
+              rightLabel={t('study.choice_right')}
+              missLabel={t('study.choice_wrong')}
               disabled={revealed}
               onclick={() => void run({ kind: 'choose', index: i })}
-            >
-              <span>{@html option}</span>
-              <kbd>{i + 1}</kbd>
-            </button>
+            >{@html option}</OptionTile>
           {/each}
         </div>
       {/if}
       {#if card.type_answer}
-        <input
-          bind:this={input}
-          bind:value={typed}
-          disabled={revealed}
-          placeholder={t('study.type_placeholder')}
-          aria-label={t('study.type_placeholder')}
-          onkeydown={onTypedKey}
-        />
+        <div class="typed">
+          <Input
+            bind:element={input}
+            bind:value={typed}
+            size="lg"
+            disabled={revealed}
+            label={t('study.type_placeholder')}
+            hideLabel
+            placeholder={t('study.type_placeholder')}
+            onkeydown={onTypedKey}
+          />
+        </div>
       {/if}
-      {#if revealed}
-        {#if check}
-          <p class="check {check.grade}" role="status">
-            {t(`study.grade.${check.grade}`)}:
-            {#each check.diff as d, i (i)}<span class="diff {d.kind}">{d.text}</span>{/each}
-          </p>
-          {#if check.grade !== 'correct'}<p class="muted">{t('study.expected', { text: check.expected })}</p>{/if}
-        {/if}
+      {#if revealed && check}
+        <div class="check {check.grade}" role="status">
+          <strong>{t(`study.grade.${check.grade}`)}</strong>
+          <span class="diffs">{#each check.diff as d, i (i)}<span class="diff {d.kind}">{d.text}</span>{/each}</span>
+          {#if check.grade !== 'correct'}<span class="expected">{t('study.expected', { text: check.expected })}</span>{/if}
+        </div>
       {/if}
     </div>
 
     <StudyAi cardId={card.card_id} {revealed} typed={card.type_answer ? typed : null} />
 
-    {#if revealed && confidence && session.modes}
-      <ConfidenceButtons levels={session.modes.confidence} onrate={(l) => void ctx.guarded(() => rateConfidence(l))} />
-    {:else if revealed}
-      <div class="ratings">
-        {#each RATINGS as r, i (r)}
-          <button
-            class:suggested={check?.suggested_rating === r}
-            onclick={() => void run({ kind: 'rate', rating: r })}
-          >
-            <small>{interval(card.intervals[i]?.interval_ms ?? 0)}</small>
-            {t(`study.rating.${r}`)}
-            <kbd>{i + 1}</kbd>
+    <div class="answer-bar">
+      {#if revealed && confidence && session.modes}
+        <ConfidenceButtons levels={session.modes.confidence} onrate={(l) => void ctx.guarded(() => rateConfidence(l))} />
+      {:else if revealed && twoButtons}
+        <div class="two" role="group" aria-label={t('study.rate_label')}>
+          <button type="button" class="big again" onclick={() => void run({ kind: 'rate', rating: 'again' })}>
+            <Icon icon={Repeat} size={20} />
+            <span class="big-label">{t('study.buttons.still_learning')}</span>
+            <Kbd keys={['1']} />
           </button>
-        {/each}
-      </div>
-    {:else}
-      <div class="row">
-        <button class="primary" onclick={() => void run({ kind: 'reveal' })}>{t('study.show_answer')} <kbd>␣</kbd></button>
-        <button onclick={() => void run({ kind: 'hint' })}>{t('study.hint')} <kbd>{'H'}</kbd></button>
-      </div>
-    {/if}
-    <div class="row tools">
-      <button onclick={() => void run({ kind: 'undo' })}>{t('study.undo')} <kbd>{'Z'}</kbd></button>
-      <button onclick={() => void run({ kind: 'suspend' })}>{t('study.suspend')} <kbd>{'S'}</kbd></button>
-      <button onclick={() => void run({ kind: 'bury' })}>{t('study.bury')} <kbd>{'B'}</kbd></button>
-      <button onclick={() => void run({ kind: 'end' })}>{t('study.end')} <kbd>{'Esc'}</kbd></button>
-      <FocusToggle />
-      {#if moduleOn('inline_cards')}
-        <button onclick={() => (composing = true)}>{t('modes.inline.open')} <kbd>{'N'}</kbd></button>
+          <button type="button" class="big good" onclick={() => void run({ kind: 'rate', rating: 'good' })}>
+            <Icon icon={CircleCheck} size={20} />
+            <span class="big-label">{t('study.buttons.know_it')}</span>
+            <Kbd keys={['2']} />
+          </button>
+        </div>
+      {:else if revealed}
+        <div class="ratings" role="group" aria-label={t('study.rate_label')}>
+          {#each RATINGS as r, i (r)}
+            <button
+              type="button"
+              class="rating {r}"
+              class:suggested={check?.suggested_rating === r}
+              onclick={() => void run({ kind: 'rate', rating: r })}
+            >
+              <span class="r-name">{t(`study.rating.${r}`)}</span>
+              <span class="r-meta"><span>{interval(card.intervals[i]?.interval_ms ?? 0)}</span><Kbd keys={[String(i + 1)]} /></span>
+            </button>
+          {/each}
+        </div>
+      {:else}
+        <div class="reveal-row">
+          <Button variant="primary" size="lg" data-testid="flip" onclick={() => void run({ kind: 'reveal' })}>
+            {t('study.show_answer')} <Kbd keys={['Space']} class="on-accent" />
+          </Button>
+        </div>
       {/if}
+    </div>
+
+    <div class="tools">
+      <Button variant="ghost" size="sm" disabled={revealed} onclick={() => void run({ kind: 'hint' })}>
+        {t('study.hint')} <Kbd keys={['H']} />
+      </Button>
+      <Button variant="ghost" size="sm" icon={Undo2} onclick={() => void run({ kind: 'undo' })}>
+        {t('study.undo')} <Kbd keys={['Z']} />
+      </Button>
+      <FocusToggle />
+      <Menu items={toolItems} label={t('study.more')} placement="top" />
     </div>
     {#if composing}
       <InlineComposer deckId={card.deck_id} guarded={ctx.guarded} onclose={() => (composing = false)} />
     {/if}
-    <p class="muted keys">{t('study.keys')}</p>
+    <!-- Only keys no button on screen shows already (the reveal and rating buttons carry theirs). -->
+    <p class="keys" data-focus-hide>
+      {#if revealed}<span><Kbd keys={['Space']} /> {t('study.keyhint.flip')}</span>{/if}
+      <span><Kbd keys={['Esc']} /> {t('study.end')}</span>
+    </p>
   {/if}
 </section>
 
 <style>
   .study {
+    max-width: 880px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  /* Running session: one centred column as wide as the card; the answer bar sits under it. */
+  .study.playing {
+    max-width: 720px;
+    margin-inline: auto;
+    gap: var(--space-3);
+  }
+  :global(.start-card) {
     max-width: 720px;
   }
-  .panel,
-  .stage {
+  .start {
     display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-3);
-  }
-  .stage {
-    margin: var(--fc-space-3) 0;
-  }
-  .stage :global(.card) {
-    font-size: 1.4em;
-    padding: var(--fc-space-6);
-  }
-  .choices {
-    display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-2);
-  }
-  .choices button {
-    display: flex;
+    align-items: center;
     justify-content: space-between;
-    text-align: left;
+    gap: var(--space-6);
+    flex-wrap: wrap;
   }
-  .choices .right {
-    border-color: var(--fc-success);
+  .start-text h2 {
+    margin: 0 0 var(--space-1);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-semibold);
   }
-  .choices .wrong {
-    border-color: var(--fc-danger);
+  .start-text p {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+    max-width: 44ch;
   }
-  .flag {
-    border-left: 0.6em solid var(--flag);
-    padding-left: var(--fc-space-1);
+  .start-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  :global(.on-accent kbd) {
+    background: transparent;
+    border-color: color-mix(in srgb, var(--accent-fg) 45%, transparent);
+    color: var(--accent-fg);
+  }
+  .notice {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-4) 0 0;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .notice .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-3);
+  }
+  .opts-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-6);
+    margin-left: calc(-1 * var(--space-2));
+  }
+  .options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
   }
   .row {
     display: flex;
-    gap: var(--fc-space-2);
-    align-items: center;
+    gap: var(--space-3);
     flex-wrap: wrap;
+    align-items: flex-end;
   }
-  .meta {
+  .row :global(.grow) {
+    flex: 1;
+    min-width: 220px;
+  }
+  .row :global(.days) {
+    width: 200px;
+  }
+  /* Session. */
+  .topbar {
     display: flex;
-    gap: var(--fc-space-2);
+    align-items: center;
+    gap: var(--space-3);
   }
-  .badge {
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    padding: 0 var(--fc-space-1);
+  .progress {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
   }
-  .ratings {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: var(--fc-space-2);
+  .progress :global(.fc-progress) {
+    flex: 1;
   }
-  .ratings button {
+  .count {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .badges {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+  }
+  .flag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .flag::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--flag);
+  }
+  .remaining {
+    margin: calc(-1 * var(--space-2)) 0 0;
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .stage {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
   }
-  .ratings button.suggested {
-    border-color: var(--fc-accent);
+  .stage :global(.study-card) {
+    min-height: 260px;
+    max-height: 380px;
   }
-  .tools {
-    margin-top: var(--fc-space-4);
+  .face-body {
+    width: 100%;
+    max-height: 100%;
+    overflow: auto;
   }
-  kbd {
-    color: var(--fc-text-muted);
-    font-size: 0.8em;
-    margin-left: var(--fc-space-1);
+  .face-body :global(.card) {
+    background: transparent;
+    border: none;
+    padding: 0;
+    min-height: 0;
+    font-size: var(--text-2xl);
+    line-height: var(--leading-tight);
+    color: var(--text-1);
+  }
+  .hint {
+    margin: 0;
+    text-align: center;
+    font-family: var(--font-mono);
+    color: var(--text-2);
+    letter-spacing: 0.08em;
+  }
+  .choices {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+  .typed {
+    max-width: 560px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .check {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: baseline;
+    justify-content: center;
+    font-size: var(--text-sm);
+  }
+  .check.correct strong {
+    color: var(--success);
+  }
+  .check.almost strong {
+    color: var(--warning);
+  }
+  .check.wrong strong {
+    color: var(--danger);
+  }
+  .expected {
+    color: var(--text-2);
   }
   .diff.missing {
     text-decoration: underline;
-    color: var(--fc-danger);
+    color: var(--danger);
   }
   .diff.extra {
     text-decoration: line-through;
-    color: var(--fc-danger);
+    color: var(--danger);
   }
-  .check.correct {
-    color: var(--fc-success);
+  .answer-bar {
+    min-height: 72px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+  .reveal-row {
+    display: flex;
+    justify-content: center;
+  }
+  .two {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+    width: 100%;
+    max-width: 560px;
+  }
+  .big,
+  .rating {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: 56px;
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    color: var(--text-1);
+    font: inherit;
+    font-weight: var(--weight-semibold);
+    cursor: pointer;
+    transition: border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
+  }
+  .big:focus-visible,
+  .rating:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .big.again {
+    color: var(--warning);
+    border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+  }
+  .big.again:hover {
+    background: var(--warning-soft);
+  }
+  .big.good {
+    color: var(--success);
+    border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+  }
+  .big.good:hover {
+    background: var(--success-soft);
+  }
+  .big-label {
+    color: var(--text-1);
+  }
+  .ratings {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-2);
+    width: 100%;
+  }
+  .rating {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .rating:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .rating.suggested {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .r-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-regular);
+    color: var(--text-2);
+  }
+  .tools {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--space-1);
+    flex-wrap: wrap;
   }
   .keys {
-    font-size: 0.85em;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    margin: 0;
+    font-size: var(--text-xs);
+    color: var(--text-2);
   }
-  .postpone input {
-    width: 5em;
+  .keys span {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  /* Summary. */
+  .summary {
+    max-width: 560px;
+    width: 100%;
+    /* The end screen sits centred in the focus column. */
+    margin: var(--space-12) auto 0;
+  }
+  .summary-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+  }
+  .summary-head h2 {
+    margin: 0 0 var(--space-1);
+    font-size: var(--text-2xl);
+    font-weight: var(--weight-bold);
+  }
+  .ring-value {
+    font-size: var(--text-xl);
+    font-weight: var(--weight-bold);
+  }
+  .muted {
+    margin: 0;
+    color: var(--text-2);
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3);
+    margin: var(--space-6) 0;
+  }
+  .stats div {
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+  }
+  .stats dt {
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .stats dd {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-xl);
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+  }
+  .summary-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+  }
+  @media (max-width: 720px) {
+    .choices,
+    .ratings {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 </style>

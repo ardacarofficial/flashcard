@@ -25,22 +25,24 @@ export default {
       jobs.set(job.id, job);
       return job;
     };
-    const options: TextOptionsDto = {
-      field_separator: ',',
-      record_separator: '\n',
-      quotes: true,
-      max_fields: null,
+    /** A rough stand-in for fc-interop's `detect`: the first separator every line holds. */
+    const detect = (text: string): TextOptionsDto => {
+      const lines = text.split('\n').filter((l) => l.trim());
+      const field = ['\t', ' - ', '::', ':', ',', ';', '  '].find((sep) => lines.length > 0 && lines.every((l) => l.includes(sep))) ?? ',';
+      return { field_separator: field, record_separator: '\n', quotes: true, max_fields: null };
     };
-    const rows = (text: string) =>
+    const rows = (text: string, opts: TextOptionsDto = detect(text)) =>
       text
-        .split('\n')
+        .split(opts.record_separator)
         .filter((l) => l.trim())
-        .map((l) => l.split(/\t|,|:/).map((s) => s.trim()));
+        .map((l) => (opts.field_separator === '  ' ? l.trim().split(/\s{2,}/) : l.split(opts.field_separator)).map((s) => s.trim()));
     const textOf = (s: { kind: 'text'; text: string } | { kind: 'file'; path: string }) =>
       s.kind === 'text' ? s.text : '';
     return {
       'io.import.preview': (req) => {
-        const all = rows(textOf(req.source));
+        const text = textOf(req.source);
+        const options = req.text_options ?? detect(text);
+        const all = rows(text, options);
         return {
           format: 'text',
           text_options: options,

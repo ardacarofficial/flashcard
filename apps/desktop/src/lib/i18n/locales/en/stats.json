@@ -117,7 +117,8 @@
       "query": "Query",
       "query_hint": "e.g. tag:verbs or level:B1",
       "range": "Period",
-      "apply": "Show"
+      "apply": "Show",
+      "label": "Filter statistics"
     },
     "range": {
       "30": "Last 30 days",
@@ -127,12 +128,12 @@
     },
     "streak": {
       "label": "Streak",
-      "days": "{n} days",
-      "longest": "Longest: {n} days"
+      "days": "{n, plural, one {# day} other {# days}}",
+      "longest": "Longest: {n, plural, one {# day} other {# days}}"
     },
     "reviews": {
       "label": "Reviews",
-      "detail": "{days} of {total} days studied"
+      "detail": "{days} of {total, plural, one {# day} other {# days}} studied"
     },
     "time": {
       "label": "Study time",
@@ -146,11 +147,17 @@
     "imported": "Including {n} imported reviews",
     "heatmap": {
       "heading": "Activity",
-      "day": "{date}: {n} reviews"
+      "day": "{date}: {n, plural, one {# review} other {# reviews}}",
+      "intro": "Reviews per day.",
+      "summary": "{label}: {days, plural, one {# day} other {# days}}, at most {max, plural, one {# review} other {# reviews}} a day",
+      "less": "Less",
+      "more": "More"
     },
     "forecast": {
       "heading": "Forecast",
-      "overdue": "{n} overdue (counted today)"
+      "overdue": "{n} overdue (counted today)",
+      "intro": "Cards due in the next 30 days.",
+      "day": "{date}: {n} due"
     },
     "states": {
       "heading": "Memory states",
@@ -172,7 +179,8 @@
       "relearn": "Relearning",
       "all": "All",
       "answers": "Answers",
-      "rate": "Success"
+      "rate": "Success",
+      "answers_n": "{n, plural, one {# answer} other {# answers}}"
     },
     "trend": {
       "heading": "Progress",
@@ -180,7 +188,8 @@
       "monthly": "Monthly"
     },
     "hours": {
-      "heading": "Best hours"
+      "heading": "Best hours",
+      "intro": "Success rate by hour of the day."
     },
     "times": {
       "heading": "Answer times",
@@ -205,17 +214,22 @@
       "settled": "Settled",
       "retention": "Retention",
       "due_today": "Due today",
-      "due_week": "Due in 7 days"
+      "due_week": "Due in 7 days",
+      "intro": "Compare progress across the values of a classification.",
+      "empty": "No cards with this classification yet."
     },
     "leeches": {
       "heading": "Leeches",
-      "count": "{n} cards forgotten at least {threshold} times",
+      "count": "{n, plural, one {# card} other {# cards}} forgotten at least {threshold, plural, one {# time} other {# times}}",
       "none": "No leeches.",
       "lapses": "Lapses",
       "suspend": "Suspend",
       "tag": "Tag “leech”",
       "card": "Card",
-      "applied": "{changed} changed, {skipped} already done"
+      "applied": "{changed} changed, {skipped} already done",
+      "intro": "Cards you keep forgetting; rewrite or set them aside.",
+      "lapses_n": "{n, plural, one {# lapse} other {# lapses}}",
+      "more": "and {n} more"
     },
     "report": {
       "heading": "Deck report cards",
@@ -223,9 +237,28 @@
       "settled": "Settled",
       "studied": "Studied",
       "recall": "Recall now",
-      "due": "Due today"
+      "due": "Due today",
+      "intro": "How far along each deck is."
     },
-    "empty": "No reviews in this period yet."
+    "empty": "No reviews in this period yet.",
+    "subtitle": "Your reviews, memory and what is coming up.",
+    "overview": "Overview",
+    "range_short": {
+      "30": "30 days",
+      "90": "90 days",
+      "365": "Year",
+      "all": "All"
+    },
+    "empty_hint": "Study a few cards and your activity shows up here.",
+    "start": "Start studying",
+    "weekday": {
+      "mon": "Mon",
+      "wed": "Wed",
+      "fri": "Fri"
+    },
+    "more": {
+      "heading": "Habits and memory"
+    }
   },
   "planning": {
     "heading": "Planning",
@@ -246,10 +279,13 @@
       "query_hint": "e.g. exam:TYT",
       "add": "Add exam",
       "delete": "Remove",
-      "days_left": "in {n} days",
+      "days_left": "in {n, plural, one {# day} other {# days}}",
       "today": "today",
       "past": "past",
-      "cards": "{n} cards"
+      "cards": "{n, plural, one {# card} other {# cards}}",
+      "none_hint": "Add one below and its cards come back just before the day.",
+      "delete_named": "Remove {name}",
+      "new": "New exam date"
     },
     "optimizer": {
       "heading": "FSRS optimizer",
@@ -257,11 +293,12 @@
       "preset": "Preset",
       "none": "Create a preset in Deck options first.",
       "run": "Optimize",
-      "done": "Saved {n} parameters into the preset (undoable).",
+      "done": "Saved {n, plural, one {# parameter} other {# parameters}} into the preset (undoable).",
       "cancelled": "Optimization cancelled.",
       "failed": "Optimization failed.",
       "working": "Optimizing…",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "preset_hint": "Parameters are saved into this preset; you can undo it."
     },
     "workload": {
       "heading": "Desired retention and workload",
@@ -270,8 +307,10 @@
       "per_day": "Reviews / day",
       "relative": "Relative",
       "current": "current",
-      "basis": "Based on {n} review cards and {new} new cards per day."
-    }
+      "basis": "Based on {n} review cards and {new} new cards per day.",
+      "intro": "How many reviews a day each desired retention would cost."
+    },
+    "subtitle": "Shape when reviews happen: lighter days, exam dates and your target retention."
   },
   "optimizer": {
     "progress": {
@@ -296,12 +335,17 @@
     "delete": "Remove",
     "progress": "{current} / {target}",
     "daily": "today",
-    "done": "Reached 🎉",
+    "done": "Reached",
     "on_track": "On track: reached by {date}",
-    "late": "At this pace you'll be {n} days late",
-    "early": "At this pace you'll finish {n} days early",
+    "late": "At this pace you'll be {n, plural, one {# day} other {# days}} late",
+    "early": "At this pace you'll finish {n, plural, one {# day} other {# days}} early",
     "eta": "At this pace: {date}",
-    "no_pace": "No pace yet"
+    "no_pace": "No pace yet",
+    "subtitle": "Targets with a deadline and a forecast at your current pace.",
+    "none_hint": "Set one below, e.g. 500 cards by the end of the month.",
+    "delete_named": "Remove goal: {name}",
+    "new": "New goal",
+    "new_hint": "Leave the deadline empty for a daily goal."
   },
   "errors": {
     "validation": {

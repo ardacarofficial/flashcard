@@ -45,7 +45,8 @@
         "label": "Tema",
         "description": "Açık, koyu ya da sistem ayarına uy."
       }
-    }
+    },
+    "general_intro": "Dil, renkler ve uygulamanın görünümü."
   },
   "lang": {
     "tr": "Türkçe",

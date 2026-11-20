@@ -89,7 +89,7 @@ describe('<McpScreen> on the dev mock', () => {
         : real(method as never, params)) as never);
     render(McpScreen, { ctx });
     expect(await screen.findByText('Not approved')).toBeTruthy();
-    expect((screen.getByRole('checkbox', { name: /Restored/ }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('switch', { name: /Restored/ }) as HTMLInputElement).disabled).toBe(true);
     await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     expect(await screen.findByText(/never been approved/)).toBeTruthy();
     spy.mockRestore();

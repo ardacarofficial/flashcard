@@ -56,7 +56,7 @@ pub fn effective(app: &App, deck: DeckId) -> Result<Vec<EffectiveAttributeDto>, 
     Ok(call::<m::AttributesEffective>(
         app,
         &EffectiveAttributes {
-            deck_id: deck,
+            deck_id: Some(deck),
             target: AttributeTarget::Note,
         },
     )?
@@ -102,7 +102,7 @@ pub fn attr(app: &App, reference: &str, deck: Option<&str>) -> Result<AttributeD
                 call::<m::AttributesEffective>(
                     app,
                     &EffectiveAttributes {
-                        deck_id: id,
+                        deck_id: Some(id),
                         target: AttributeTarget::Card,
                     },
                 )?

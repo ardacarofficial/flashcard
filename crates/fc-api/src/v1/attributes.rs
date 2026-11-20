@@ -97,9 +97,11 @@ pub struct ListAttributes {
 /// `attributes.effective`: definitions applicable to a deck (inheritance resolved).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
 pub struct EffectiveAttributes {
-    /// Deck.
-    pub deck_id: DeckId,
+    /// Deck (`null` = only the collection-wide definitions — what a new top-level deck gets).
+    #[serde(default)]
+    pub deck_id: Option<DeckId>,
     /// Note or card.
     pub target: AttributeTarget,
 }

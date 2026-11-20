@@ -4,6 +4,30 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased]
 
+## [1.1.0] — v1.1 arayüz tasarımı (`feat/v1.1-design`)
+
+Workspace sürümü `1.1.0`. Arayüz baştan tasarlandı (docs/11); davranış ve iş mantığı Rust'ta kaldı.
+
+### Tasarım sistemi ve kabuk
+- `$lib/ui`: Button, IconButton, Input, Textarea, Select (özel liste kutusu), Checkbox, Switch, SegmentedControl, RadioGroup, Chip/Badge, Card, Tile, Dialog/Sheet, Menu, Tabs, Tooltip, Toast, ProgressBar/Ring, EmptyState, Skeleton, sanal Table, Kbd, Avatar, Sidebar/NavItem, PageHeader, çevrilebilir Flashcard; token'lar (`theme/tokens.css`), paketlenmiş Inter ve Lucide simgeleri.
+- Kenar çubuğu 5 bölüm (Ana sayfa, Kütüphane, Oluştur, Ara, İstatistik) + Gelen kutusu + Ayarlar + profil; modül → bölüm/grup eşlemesi tek yerde (`navigation.ts`). Ayarlar gruplu alt menü; yeni **Okuma ve modlar** grubu (`study.mode_settings` → şema güdümlü sayfa: cevap düğmeleri, güven ölçeği, süreli/odak mod, öğren/test uzunluğu, okuma varsayılanları).
+- Kütüphane sekmeleri yalnız **Desteler | Notlar**; çalışma modları deste sayfasının mod döşemelerinden (Eşleştir dahil) ve Ana sayfadaki "Çalışmaya başla"dan açılır.
+- **Odak düzeni:** Kartlar / Öğren / Test / Eşleştir'de oturum sürerken deste seçici ve sekmeler gizlenir, kart ve cevap düğmeleri ortalanır, kısayol ipuçları 1280 ve 900 genişlikte görünür (`ScreenCtx.setFocus`).
+- Ham `<select>`/checkbox/radio kalmadı: lint testi istisnasız (izin listesi silindi).
+
+### Ekranlar
+- **Ana sayfa** (bugün, çalışmaya başla, seri, hedef, gelen kutusu, son desteler), **Kütüphane** ve **deste sayfası** (önizleme kartı, mod döşemeleri, ilerleme, terim listesi) — Rust: `decks.summaries`, `notes.terms`.
+- **Çalışma modları** yeniden: Kartlar (varsayılan 2 düğme, ayarla 4; `study.answer_buttons`), Öğren, Test, süreli/güven/odak; yeni **Eşleştir** modu (Rust `modes.match.*`, pratik modu, en iyi süre).
+- **Oluştur** (satır satır terim–tanım, yapıştırarak içe aktarma, tek geri al adımı — `notes.create_many`), **Ara** (sorgu çubuğu, sanal tablo, toplu işlemler), not düzenleyici, **Gelen kutusu**, **Okuma**.
+- **İstatistik**, Planlama, Hedefler; Ayarlar sayfaları (Genel, Çalışma, Bağlantılar, Eklentiler, Veri, Profiller ve kilit), ilk açılış, kilit ekranı, kurtarma/güncelleme pencereleri.
+- AI ile üret, Hızlı ekle penceresi, dış istekler (eşleştirme onayı, pano önerisi), Notlar listesi de tasarım sistemine geçti.
+- Yapıştırarak içe aktarmada ayırıcı denetimi Rust'ın algıladığı ayırıcıyı gösterir (yeni "Boşluklar" seçeneği = hizalı sütunlar); geliştirme mock'u da artık algılar.
+
+### Performans, erişilebilirlik, görsel denetim
+- İlk JS **160,6 kB** (bütçe 320 kB): yalnız etkin dilin sözlüğü yüklenir; ilk yüklenen kod `$lib/ui`'yi dosya dosya alır (lint: `tests/eager-imports.test.ts`).
+- Başarı rengi açık temada metin rengine doğru koyulaştırıldı (çip/rozet üzerinde 4,38 → 5,3:1); durum renkleri kendi yumuşak zeminlerinde de AA (testli).
+- `pnpm -C apps/desktop screens`: TR/EN × açık/koyu × 1280/900 ekran görüntüleri, deste sayfasından her mod (boş, çalışırken, çevrilmiş); `text-clipped` `.sr-only` öğeleri yok sayar.
+
 ## [1.0.0] — v1.0 Cila ve Windows sürümü (`feat/v1.0-integration`)
 
 Workspace sürümü `1.0.0`. Elle yapılacak son adım: temiz bir Windows'ta kurulum → ilk açılış → çalışma → güncelleme betiği (docs/07 §8), henüz gerçek bir Windows'ta koşulmadı.

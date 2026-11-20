@@ -9,6 +9,7 @@
   import { api } from '$lib/api';
   import type { RecoveryDto, UpdateInfoDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
+  import { Button, CircleAlert, CircleCheck, Dialog, FileText, GraduationCap, Icon, IconButton, RefreshCw, TriangleAlert, X } from '$lib/ui';
 
   interface Props {
     /** Opens the menu entry with this route. */
@@ -18,6 +19,10 @@
 
   let offer = $state<RecoveryDto | null>(null);
   let available = $state<UpdateInfoDto | null>(null);
+  let dialogOpen = $state(false);
+  $effect(() => {
+    dialogOpen = !!offer?.reason;
+  });
 
   async function dismiss() {
     offer = null;
@@ -53,72 +58,98 @@
 </script>
 
 {#if offer?.reason}
-  <div class="backdrop">
-    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="recovery-title">
-      <h2 id="recovery-title">
-        {offer.reason === 'crash' ? t('app_maintenance.recovery.title_crash') : t('app_maintenance.recovery.title_unclean')}
-      </h2>
-      <p>{t('app_maintenance.recovery.intro')}</p>
-      {#if offer.integrity}
-        <p class={offer.integrity.ok ? '' : 'error'}>
-          {offer.integrity.ok ? t('app_maintenance.recovery.integrity_ok') : t('app_maintenance.recovery.integrity_bad')}
-        </p>
+  {@const o = offer}
+  <Dialog
+    bind:open={dialogOpen}
+    title={o.reason === 'crash' ? t('app_maintenance.recovery.title_crash') : t('app_maintenance.recovery.title_unclean')}
+    description={t('app_maintenance.recovery.intro')}
+    initialFocus="[data-recovery-primary]"
+    onclose={() => void dismiss()}
+  >
+    <ul class="items">
+      {#if o.integrity}
+        <li class={o.integrity.ok ? 'ok' : 'bad'}>
+          <Icon icon={o.integrity.ok ? CircleCheck : CircleAlert} size={20} />
+          <span>{o.integrity.ok ? t('app_maintenance.recovery.integrity_ok') : t('app_maintenance.recovery.integrity_bad')}</span>
+        </li>
       {/if}
-      <ul>
-        {#if offer.session}<li>{t('app_maintenance.recovery.session')}</li>{/if}
-        {#if offer.drafts.length > 0}<li>{t('app_maintenance.recovery.drafts', { count: offer.drafts.length })}</li>{/if}
-        {#if offer.crash}<li class="muted">{t('app_maintenance.recovery.crash', { message: offer.crash.message })}</li>{/if}
-      </ul>
-      <div class="actions">
-        {#if offer.session}<button onclick={() => go('/study')}>{t('app_maintenance.recovery.resume')}</button>{/if}
-        <button onclick={() => go('/app-maintenance')}>{t('app_maintenance.recovery.details')}</button>
-        <button onclick={dismiss}>{t('app_maintenance.recovery.dismiss')}</button>
-      </div>
-    </div>
-  </div>
+      {#if o.session}<li><Icon icon={GraduationCap} size={20} /><span>{t('app_maintenance.recovery.session')}</span></li>{/if}
+      {#if o.drafts.length > 0}<li><Icon icon={FileText} size={20} /><span>{t('app_maintenance.recovery.drafts', { count: o.drafts.length })}</span></li>{/if}
+      {#if o.crash}<li class="muted"><Icon icon={TriangleAlert} size={20} /><span>{t('app_maintenance.recovery.crash', { message: o.crash.message })}</span></li>{/if}
+    </ul>
+    {#snippet footer()}
+      <Button variant="ghost" onclick={() => go('/app-maintenance')}>{t('app_maintenance.recovery.details')}</Button>
+      {#if o.session}
+        <Button onclick={dismiss}>{t('app_maintenance.recovery.dismiss')}</Button>
+        <Button variant="primary" data-recovery-primary onclick={() => go('/study')}>{t('app_maintenance.recovery.resume')}</Button>
+      {:else}
+        <Button variant="primary" data-recovery-primary onclick={dismiss}>{t('app_maintenance.recovery.dismiss')}</Button>
+      {/if}
+    {/snippet}
+  </Dialog>
 {/if}
 
 {#if available && !offer?.reason}
-  <div class="banner" role="status">
-    {t('app_maintenance.updates.banner', { version: available.version })}
-    <button onclick={() => { available = null; open('/app-maintenance'); }}>{t('app_maintenance.updates.open')}</button>
+  <div class="update" role="status">
+    <span class="icon" aria-hidden="true"><Icon icon={RefreshCw} size={20} /></span>
+    <span class="text">{t('app_maintenance.updates.banner', { version: available.version })}</span>
+    <Button size="sm" variant="primary" data-testid="update-open" onclick={() => { available = null; open('/app-maintenance'); }}>{t('app_maintenance.updates.open')}</Button>
+    <IconButton size="sm" icon={X} label={t('app_maintenance.updates.later')} onclick={() => (available = null)} />
   </div>
 {/if}
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgb(0 0 0 / 40%);
-    display: grid;
-    place-items: center;
-    z-index: 50;
-  }
-  .dialog {
-    background: var(--fc-surface);
-    color: var(--fc-text);
-    border-radius: var(--fc-radius);
-    padding: var(--fc-space-4);
-    max-width: 32rem;
-  }
-  .actions {
+  .items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
-    gap: var(--fc-space-2);
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: var(--space-3);
   }
-  .banner {
-    position: fixed;
-    right: var(--fc-space-3);
-    bottom: var(--fc-space-3);
-    background: var(--fc-surface);
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    padding: var(--fc-space-2) var(--fc-space-3);
+  .items li {
     display: flex;
-    gap: var(--fc-space-2);
+    align-items: flex-start;
+    gap: var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text-1);
+  }
+  .items :global(svg) {
+    flex: none;
+    color: var(--text-2);
+  }
+  .items .ok,
+  .items .ok :global(svg) {
+    color: var(--success);
+  }
+  .items .bad,
+  .items .bad :global(svg) {
+    color: var(--danger);
+  }
+  .items .muted {
+    color: var(--text-2);
+  }
+  .update {
+    position: fixed;
+    right: var(--space-4);
+    bottom: var(--space-4);
+    z-index: 40;
+    display: flex;
     align-items: center;
+    gap: var(--space-3);
+    max-width: min(28rem, calc(100vw - 2 * var(--space-4)));
+    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-2);
+    font-size: var(--text-sm);
   }
-  .error {
-    color: var(--fc-danger);
+  .icon {
+    display: inline-flex;
+    color: var(--accent);
+  }
+  .text {
+    flex: 1 1 auto;
   }
 </style>

@@ -94,7 +94,11 @@
       "fetch": "Fetch",
       "importing": "Reading the source…",
       "path_prompt": "Path of the file to read",
-      "media_prompt": "Path of the video or audio file"
+      "media_prompt": "Path of the video or audio file",
+      "description": "Paste a text, open a file or fetch a web page.",
+      "language_placeholder": "e.g. en",
+      "other_sources": "Or read from",
+      "first": "Add your first text"
     },
     "priority": {
       "label": "Priority",
@@ -106,7 +110,7 @@
     "queue": {
       "empty": "The reading queue is empty.",
       "due_now": "Due now",
-      "in_days": "Next in {n} day(s)",
+      "in_days": "Next in {n, plural, one {# day} other {# days}}",
       "add": "Queue",
       "remove": "Unqueue",
       "done": "Done for today",
@@ -163,6 +167,10 @@
       "reading_source": "Reading the source…",
       "cutting_audio": "Cutting the audio…",
       "taking_screenshot": "Taking the screenshot…"
-    }
+    },
+    "subtitle": "Read texts and subtitles; tap a word to look it up or make a card.",
+    "progress": "Read so far",
+    "delete_named": "Delete “{name}”",
+    "selection": "Selected text"
   }
 }

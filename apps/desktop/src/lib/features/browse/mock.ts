@@ -100,6 +100,13 @@ export default {
         const from = offset ?? 0;
         return { items: all.slice(from, from + (limit ?? 100)), total: all.length, offset: from };
       },
+      // v1.1 Search: the card info side sheet.
+      'browse.card_info': ({ card_id }) => {
+        const row = rows('').find((r) => r.card_id === card_id);
+        const note = notes.find((n) => n.id === row?.note_id);
+        if (!row || !note) throw err('NOT_FOUND_CARD', 'errors.not_found.card', card_id);
+        return { card: row, note, last_review: null, retrievability: null, reviews: [] };
+      },
       'search.ids': ({ query }) => {
         const all = rows(query);
         return { card_ids: all.map((r) => r.card_id), note_ids: [...new Set(all.map((r) => r.note_id))] };

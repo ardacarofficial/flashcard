@@ -1,7 +1,7 @@
 //! `notes` module: note CRUD and listing (docs/02 §2). A standard note type generates one card
 //! per template (`fc_core::card::standard_card_specs`); Classic yields one `forward` card.
 
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::registry::Registry;
@@ -16,6 +16,7 @@ use crate::support::notes::{
 use crate::support::{deleted, dto, err_id, summary};
 use fc_api::v1::cardtypes::CardIdList;
 use fc_api::v1::common::AffectedCount;
+use fc_api::v1::decks::{CreateDeck, DeckDto};
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::methods::*;
 use fc_api::v1::notes::*;
@@ -53,11 +54,13 @@ pub fn descriptor() -> ModuleDescriptor {
 pub fn register(reg: &mut Registry) {
     reg.module(descriptor());
     reg.command::<NotesCreate>(create);
+    reg.command::<NotesCreateMany>(create_many);
     reg.command::<NotesUpdate>(update);
     reg.command::<NotesDelete>(delete);
     reg.command::<NotesRestore>(restore);
     reg.query::<NotesGet>(get);
     reg.query::<NotesList>(list);
+    reg.query::<NotesTerms>(terms);
 }
 
 fn unique<T: PartialEq + Copy>(ids: &[T]) -> Vec<T> {
@@ -153,6 +156,96 @@ fn create(req: CreateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
             deck_id: req.deck_id,
         }],
         response,
+    })
+}
+
+/// Most notes per `notes.create_many` call.
+const MAX_MANY: usize = 1000;
+
+/// `notes.create_many`: the new deck (if any) and every note are nested `decks.create` /
+/// `notes.create` calls, so their oplog entries undo the whole save as one step.
+fn create_many(
+    req: CreateNotes,
+    ctx: &mut CommandCtx<'_>,
+) -> AppResult<CommandOutcome<NotesCreated>> {
+    if req.notes.is_empty() || req.notes.len() > MAX_MANY {
+        return Err(ApiError::new(
+            ErrorCode::ValidationInvalidParams,
+            format!("1–{MAX_MANY} notes per call"),
+        )
+        .with_detail("field", "notes")
+        .into());
+    }
+    let blank = |d: &NoteFieldsDraft| d.fields.values().all(|v| v.trim().is_empty());
+    if req.notes.iter().all(blank) {
+        return Err(ApiError::new(ErrorCode::ValidationFieldRequired, "every row is empty")
+            .with_detail("field", "notes")
+            .into());
+    }
+    let mark = ctx.oplog_mark();
+    let deck_id = match &req.target {
+        NotesTarget::Deck { id } => *id,
+        NotesTarget::NewDeck {
+            path,
+            parent_id,
+            description,
+        } => {
+            let deck = ctx.call(&inverse_call::<DecksCreate>(&CreateDeck {
+                path: path.clone(),
+                parent_id: *parent_id,
+                description: description.clone().filter(|d| !d.trim().is_empty()),
+                icon: None,
+                color: None,
+            })?)?;
+            crate::support::from_json::<DeckDto>(&deck)?.id
+        }
+    };
+    let mut out = NotesCreated {
+        deck_id,
+        note_ids: Vec::new(),
+        empty_rows: Vec::new(),
+        duplicate_rows: Vec::new(),
+    };
+    for (i, draft) in req.notes.iter().enumerate() {
+        let row = u32::try_from(i).unwrap_or(u32::MAX);
+        if blank(draft) {
+            out.empty_rows.push(row);
+            continue;
+        }
+        let create = CreateNote {
+            notetype_id: req.notetype_id,
+            deck_id,
+            fields: draft.fields.clone(),
+            tags: req.tags.clone(),
+            attributes: req.attributes.clone(),
+            allow_duplicate: req.allow_duplicate,
+        };
+        // A duplicate is refused before `notes.create` writes anything: skipping it leaves
+        // the transaction clean. Any other error names its row and rolls everything back.
+        match ctx.call(&inverse_call::<NotesCreate>(&create)?) {
+            Ok(v) => out
+                .note_ids
+                .push(crate::support::from_json::<NoteDto>(&v)?.id),
+            Err(AppError::Storage(e)) => return Err(AppError::Storage(e)),
+            Err(e) => {
+                let e = e.into_api();
+                if e.code == ErrorCode::ConflictNoteDuplicate {
+                    out.duplicate_rows.push(row);
+                } else {
+                    return Err(AppError::Api(e.with_detail("row", row)));
+                }
+            }
+        }
+    }
+    let count = out.note_ids.len();
+    let named = summary::<NotesCreateMany>().param("count", count);
+    ctx.name_nested_since(mark, named.clone());
+    Ok(CommandOutcome {
+        response: out,
+        // Undone through the nested entries (same batch).
+        inverse: vec![],
+        summary: named,
+        events: vec![],
     })
 }
 
@@ -365,3 +458,89 @@ fn list(req: ListNotes, ctx: &QueryCtx<'_>) -> AppResult<NotePage> {
         next_cursor: page.next_cursor,
     })
 }
+
+// ------------------------------------------------------------------ term list (v1.1)
+
+/// Notes of a deck as term | definition rows (the deck page's term list): the first two fields
+/// of the note type, the note's cards with their common flags and least advanced mastery, and
+/// its choice classification values. Paging and order are those of `notes.list`.
+fn terms(req: ListNotes, ctx: &QueryCtx<'_>) -> AppResult<TermPage> {
+    use fc_core::stats::{card_mastery, Mastery};
+    use std::collections::{HashMap, HashSet};
+    let reads = ctx.tx;
+    let page = list(req, ctx)?;
+    let ids: Vec<NoteId> = page.items.iter().map(|n| n.id).collect();
+    let cards = reads.list_cards(&CardFilter {
+        note_ids: Some(ids.clone()),
+        ..CardFilter::default()
+    })?;
+    let mut of_note: HashMap<NoteId, Vec<&Card>> = HashMap::new();
+    let mut card_note = HashMap::new();
+    for c in &cards {
+        of_note.entry(c.note_id).or_default().push(c);
+        card_note.insert(c.id, c.note_id);
+    }
+    let wanted: HashSet<NoteId> = ids.iter().copied().collect();
+    let choices = crate::support::attrs::note_choices(reads, &card_note, &wanted)?;
+    let mut types = HashMap::new();
+    let mut items = Vec::with_capacity(ids.len());
+    for id in ids {
+        let Some(note) = reads.get_note(id)? else {
+            continue;
+        };
+        if let std::collections::hash_map::Entry::Vacant(e) = types.entry(note.notetype_id) {
+            e.insert(require_notetype(reads, note.notetype_id)?);
+        }
+        let nt = &types[&note.notetype_id];
+        let field = |i: usize| {
+            nt.fields.get(i).map(|f| {
+                let value = note.fields.get(&f.key).cloned().unwrap_or_default();
+                TermField {
+                    key: f.key.to_string(),
+                    text: fc_core::note::strip_html(&value),
+                    value,
+                }
+            })
+        };
+        let Some(front) = field(0) else { continue };
+        let own = of_note.remove(&id).unwrap_or_default();
+        let flags = own.iter().map(|c| c.flags).reduce(|a, b| a & b).unwrap_or(0);
+        let mastery = own
+            .iter()
+            .map(|c| card_mastery(&c.scheduling))
+            .min()
+            .unwrap_or(Mastery::New);
+        let chips = choices
+            .of_note
+            .get(&id)
+            .into_iter()
+            .flatten()
+            .filter_map(|&(di, oi)| {
+                let def = choices.defs.get(di)?;
+                Some(TermChip {
+                    attr_id: def.id,
+                    name: def.name.clone(),
+                    label: def.options.get(oi)?.label.clone(),
+                })
+            })
+            .collect();
+        items.push(NoteTerm {
+            note_id: id,
+            notetype_id: note.notetype_id,
+            card_ids: own.iter().map(|c| c.id).collect(),
+            flags,
+            mastery,
+            back: field(1),
+            front,
+            chips,
+        });
+    }
+    Ok(TermPage {
+        items,
+        next_cursor: page.next_cursor,
+    })
+}
+
+#[cfg(test)]
+#[path = "notes_tests.rs"]
+mod tests;

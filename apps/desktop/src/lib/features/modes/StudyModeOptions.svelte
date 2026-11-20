@@ -4,6 +4,7 @@
   import { api } from '$lib/api';
   import type { RatingScale, StartModes, TimeoutAction } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
+  import { Input, Select, Switch } from '$lib/ui';
   import { moduleOn } from '../cards/modules.svelte';
   import { startModes } from './modes';
 
@@ -29,54 +30,55 @@
 
   $effect(() => {
     value = startModes(
-      timed && moduleOn('timed') ? { seconds, on_timeout: onTimeout } : null,
+      timed && moduleOn('timed') ? { seconds: Number(seconds) || 10, on_timeout: onTimeout } : null,
       scale !== '' && moduleOn('confidence') ? scale : null,
     );
   });
+
+  const timeouts = $derived([
+    { value: 'again' as TimeoutAction, label: t('modes.options.again') },
+    { value: 'skip' as TimeoutAction, label: t('modes.options.skip') },
+  ]);
+  const scales = $derived([
+    { value: '' as RatingScale | '', label: t('modes.options.scale_default') },
+    { value: 'buttons' as RatingScale | '', label: t('modes.options.scale_buttons') },
+    { value: 'confidence' as RatingScale | '', label: t('modes.options.scale_confidence') },
+  ]);
 </script>
 
 {#if moduleOn('timed') || moduleOn('confidence')}
-  <div class="row" data-testid="mode-options">
+  <div class="opts" data-testid="mode-options">
     {#if moduleOn('timed')}
-      <label class="row">
-        <input type="checkbox" bind:checked={timed} />
-        {t('modes.options.timed')}
-      </label>
+      <Switch label={t('modes.options.timed')} description={t('modes.options.timed_hint')} bind:checked={timed} />
       {#if timed}
-        <label>
-          {t('modes.options.seconds')}
-          <input type="number" min="3" max="600" bind:value={seconds} />
-        </label>
-        <label>
-          {t('modes.options.on_timeout')}
-          <select bind:value={onTimeout}>
-            <option value="again">{t('modes.options.again')}</option>
-            <option value="skip">{t('modes.options.skip')}</option>
-          </select>
-        </label>
+        <div class="row">
+          <Input class="secs" type="number" min="3" max="600" label={t('modes.options.seconds')} bind:value={seconds} />
+          <Select label={t('modes.options.on_timeout')} options={timeouts} bind:value={onTimeout} />
+        </div>
       {/if}
     {/if}
     {#if moduleOn('confidence')}
-      <label>
-        {t('modes.options.scale')}
-        <select bind:value={scale}>
-          <option value="">{t('modes.options.scale_default')}</option>
-          <option value="buttons">{t('modes.options.scale_buttons')}</option>
-          <option value="confidence">{t('modes.options.scale_confidence')}</option>
-        </select>
-      </label>
+      <div class="scale"><Select label={t('modes.options.scale')} options={scales} bind:value={scale} /></div>
     {/if}
   </div>
 {/if}
 
 <style>
+  .opts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
   .row {
     display: flex;
-    gap: var(--fc-space-2);
-    align-items: center;
+    gap: var(--space-3);
     flex-wrap: wrap;
+    align-items: flex-end;
   }
-  input[type='number'] {
-    width: 5em;
+  .scale {
+    max-width: 260px;
+  }
+  .row :global(.secs) {
+    width: 120px;
   }
 </style>

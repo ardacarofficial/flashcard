@@ -117,7 +117,8 @@
       "query": "Sorgu",
       "query_hint": "ör. tag:fiiller veya seviye:B1",
       "range": "Dönem",
-      "apply": "Göster"
+      "apply": "Göster",
+      "label": "İstatistikleri süz"
     },
     "range": {
       "30": "Son 30 gün",
@@ -146,11 +147,17 @@
     "imported": "{n} içe aktarılmış tekrar dahil",
     "heatmap": {
       "heading": "Aktivite",
-      "day": "{date}: {n} tekrar"
+      "day": "{date}: {n} tekrar",
+      "intro": "Günlük tekrar sayısı.",
+      "summary": "{label}: {days} gün, günde en çok {max} tekrar",
+      "less": "Az",
+      "more": "Çok"
     },
     "forecast": {
       "heading": "Gelecek tahmini",
-      "overdue": "{n} gecikmiş (bugüne sayıldı)"
+      "overdue": "{n} gecikmiş (bugüne sayıldı)",
+      "intro": "Önümüzdeki 30 günde vadesi gelecek kartlar.",
+      "day": "{date}: {n} kart"
     },
     "states": {
       "heading": "Hafıza durumu",
@@ -172,7 +179,8 @@
       "relearn": "Yeniden öğrenilen",
       "all": "Hepsi",
       "answers": "Cevap",
-      "rate": "Başarı"
+      "rate": "Başarı",
+      "answers_n": "{n} cevap"
     },
     "trend": {
       "heading": "Gelişim",
@@ -180,7 +188,8 @@
       "monthly": "Aylık"
     },
     "hours": {
-      "heading": "En verimli saatler"
+      "heading": "En verimli saatler",
+      "intro": "Günün saatine göre başarı oranı."
     },
     "times": {
       "heading": "Cevap süreleri",
@@ -205,7 +214,9 @@
       "settled": "Oturmuş",
       "retention": "Hatırlama",
       "due_today": "Bugün",
-      "due_week": "7 günde"
+      "due_week": "7 günde",
+      "intro": "Bir sınıflandırmanın değerleri arasında ilerlemeyi karşılaştır.",
+      "empty": "Bu sınıflandırmada henüz kart yok."
     },
     "leeches": {
       "heading": "Zor kartlar",
@@ -215,7 +226,10 @@
       "suspend": "Askıya al",
       "tag": "“leech” etiketi ekle",
       "card": "Kart",
-      "applied": "{changed} değişti, {skipped} zaten öyleydi"
+      "applied": "{changed} değişti, {skipped} zaten öyleydi",
+      "intro": "Sürekli unuttuğun kartlar; yeniden yaz ya da kenara koy.",
+      "lapses_n": "{n} unutma",
+      "more": "ve {n} kart daha"
     },
     "report": {
       "heading": "Deste karneleri",
@@ -223,9 +237,28 @@
       "settled": "Oturmuş",
       "studied": "Çalışılmış",
       "recall": "Şu an hatırlama",
-      "due": "Bugün"
+      "due": "Bugün",
+      "intro": "Her destenin ne kadar ilerlediği."
     },
-    "empty": "Bu dönemde henüz tekrar yok."
+    "empty": "Bu dönemde henüz tekrar yok.",
+    "subtitle": "Tekrarların, hafızan ve sırada ne olduğu.",
+    "overview": "Özet",
+    "range_short": {
+      "30": "30 gün",
+      "90": "90 gün",
+      "365": "Yıl",
+      "all": "Tümü"
+    },
+    "empty_hint": "Birkaç kart çalış, etkinliğin burada görünsün.",
+    "start": "Çalışmaya başla",
+    "weekday": {
+      "mon": "Pzt",
+      "wed": "Çar",
+      "fri": "Cum"
+    },
+    "more": {
+      "heading": "Alışkanlıklar ve hafıza"
+    }
   },
   "planning": {
     "heading": "Planlama",
@@ -249,7 +282,10 @@
       "days_left": "{n} gün sonra",
       "today": "bugün",
       "past": "geçti",
-      "cards": "{n} kart"
+      "cards": "{n} kart",
+      "none_hint": "Aşağıdan ekle; kartları sınavdan hemen önce tekrar gelsin.",
+      "delete_named": "{name} sınavını kaldır",
+      "new": "Yeni sınav tarihi"
     },
     "optimizer": {
       "heading": "FSRS optimizasyonu",
@@ -261,7 +297,8 @@
       "cancelled": "Optimizasyon iptal edildi.",
       "failed": "Optimizasyon başarısız.",
       "working": "Optimize ediliyor…",
-      "cancel": "İptal"
+      "cancel": "İptal",
+      "preset_hint": "Parametreler bu şablona kaydedilir; geri alabilirsin."
     },
     "workload": {
       "heading": "Hedef hatırlama ve iş yükü",
@@ -270,8 +307,10 @@
       "per_day": "Tekrar / gün",
       "relative": "Oran",
       "current": "şu anki",
-      "basis": "{n} tekrar kartına ve günde {new} yeni karta göre."
-    }
+      "basis": "{n} tekrar kartına ve günde {new} yeni karta göre.",
+      "intro": "Her hedef hatırlama oranının günde kaç tekrar gerektireceği."
+    },
+    "subtitle": "Tekrarların ne zaman yapılacağını ayarla: hafif günler, sınav tarihleri ve hedef hatırlama."
   },
   "optimizer": {
     "progress": {
@@ -296,12 +335,17 @@
     "delete": "Kaldır",
     "progress": "{current} / {target}",
     "daily": "bugün",
-    "done": "Ulaşıldı 🎉",
+    "done": "Ulaşıldı",
     "on_track": "Yolundasın: {date} tarihinde tamam",
     "late": "Bu hızla {n} gün geç kalırsın",
     "early": "Bu hızla {n} gün erken bitirirsin",
     "eta": "Bu hızla: {date}",
-    "no_pace": "Henüz bir hız yok"
+    "no_pace": "Henüz bir hız yok",
+    "subtitle": "Son tarihli hedefler ve şu anki hızınla tahmini.",
+    "none_hint": "Aşağıdan bir hedef koy, örneğin ay sonuna kadar 500 kart.",
+    "delete_named": "Hedefi kaldır: {name}",
+    "new": "Yeni hedef",
+    "new_hint": "Günlük hedef için son tarihi boş bırak."
   },
   "errors": {
     "validation": {

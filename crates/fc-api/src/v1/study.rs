@@ -32,6 +32,9 @@ pub enum StudyKind {
     /// v0.10 test: a paper of mixed question types from the chosen cards, scored on
     /// submission (`modes.test.paper`, `modes.test.submit`). Never changes the schedule.
     Test,
+    /// v1.1 match: rounds of terms and definitions to pair against the clock
+    /// (`modes.match.start/pick/finish`). Practice: never changes the schedule.
+    Match,
 }
 
 /// Whether answers change the schedule.
@@ -486,7 +489,7 @@ pub struct ReviewLogDto {
     pub hints_used: u32,
     /// Where the review came from. Changes the schedule: `normal`, `learn`, `timed`,
     /// `confidence` (v0.10 modes), `imported` (v0.5). Practice, schedule unchanged: `trial`,
-    /// `trial_learn`, `trial_timed`, `trial_confidence`, `test`.
+    /// `trial_learn`, `trial_timed`, `trial_confidence`, `test`, `match` (v1.1).
     pub mode: String,
     /// Stability after.
     pub stability_after: Option<f64>,

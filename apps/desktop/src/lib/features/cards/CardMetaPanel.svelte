@@ -115,12 +115,12 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-3);
+    gap: var(--space-3);
   }
   .row {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--fc-space-2);
+    gap: var(--space-2);
     align-items: center;
   }
   .flags {
@@ -152,18 +152,18 @@
   .note {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-1);
-    margin-top: var(--fc-space-1);
+    gap: var(--space-1);
+    margin-top: var(--space-1);
   }
   .names {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: var(--fc-space-2);
-    margin-top: var(--fc-space-2);
+    gap: var(--space-2);
+    margin-top: var(--space-2);
   }
   .names label {
     display: flex;
-    gap: var(--fc-space-1);
+    gap: var(--space-1);
     align-items: center;
   }
 </style>

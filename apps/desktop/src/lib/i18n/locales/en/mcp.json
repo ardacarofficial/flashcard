@@ -45,7 +45,10 @@
       "tools": "Tools",
       "read": "reads",
       "write": "writes",
-      "changes_content": "changes content"
+      "changes_content": "changes content",
+      "setup_hint": "What to paste into Claude Code or Claude Desktop.",
+      "show_setup": "Show setup",
+      "hide_setup": "Hide setup"
     },
     "tools": {
       "list_decks": "List decks",
@@ -77,8 +80,12 @@
       "confirm_add": "This app will start the following program whenever its AI features use this server: {command}. Only continue if you trust it.",
       "confirm_approve": "This server came from outside (a restored backup, for example) and has never been approved. Approving lets the app start: {command}. Only continue if you trust it.",
       "trust_add": "Add and trust",
-      "trust_approve": "Approve"
-    }
+      "trust_approve": "Approve",
+      "add_heading": "Add a server",
+      "add_title": "Trust this program?",
+      "approve_title": "Approve this server?"
+    },
+    "subtitle": "Connect AI assistants to your collection, and the app to external tool servers."
   },
   "errors": {
     "validation": {

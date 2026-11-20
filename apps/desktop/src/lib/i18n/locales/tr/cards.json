@@ -84,7 +84,9 @@
     "drop_hint": "Dosyayı buraya sürükle ya da yapıştır.",
     "bold_short": "K",
     "italic_short": "İ",
-    "code_short": "</>"
+    "code_short": "</>",
+    "choose_file": "Dosya seç",
+    "media_short": "Medya"
   },
   "masks": {
     "need_image": "Önce resmi ekle.",

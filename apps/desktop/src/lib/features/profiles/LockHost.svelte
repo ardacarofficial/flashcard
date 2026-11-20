@@ -18,6 +18,12 @@
   import type { LockState, ProfileDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import { defaultShell, DEEP_LINK_HELD_EVENT, type Shell } from '$lib/features/inbox/shell';
+  import Avatar from '$lib/ui/Avatar.svelte';
+  import Button from '$lib/ui/Button.svelte';
+  import Checkbox from '$lib/ui/Checkbox.svelte';
+  import Icon from '$lib/ui/Icon.svelte';
+  import Input from '$lib/ui/Input.svelte';
+  import { Lock, TriangleAlert } from '$lib/ui/icons';
 
   interface Props {
     /** Called after unlocking (the shell reloads what it could not load while locked). */
@@ -39,9 +45,14 @@
   /** Links held while locked; they run after unlock. */
   let held = $state<string[]>([]);
   let lastActivity = 0;
+  let field = $state<HTMLInputElement | null>(null);
 
   const locked = $derived(lock?.available === true && lock.locked);
   $effect(() => onlockchange?.(locked));
+  // The PIN field takes focus as soon as the lock screen shows.
+  $effect(() => {
+    if (locked && field) field.focus();
+  });
 
   async function refresh() {
     try {
@@ -139,55 +150,69 @@
 </script>
 
 {#if locked && lock}
+  {@const profile = lock.profile_name ?? t('profiles.default_name')}
   <div class="lock" role="dialog" aria-modal="true" aria-labelledby="lock-title">
-    <form onsubmit={lock.recovery_required ? recover : unlock}>
-      <h1 id="lock-title">{t('lock.screen_title')}</h1>
-      <p class="muted">{t('lock.screen_profile', { name: lock.profile_name ?? t('profiles.default_name') })}</p>
-      {#if lock.recovery_required}
-        <h2>{t('lock.recovery_title')}</h2>
-        <p>{t('lock.recovery_body')}</p>
-        <label class="check">
-          <input type="checkbox" bind:checked={confirmRecovery} />
-          {t('lock.recovery_confirm')}
-        </label>
-        {#if error}<p class="error" role="alert">{error}</p>{/if}
-        <button class="primary" type="submit" disabled={!confirmRecovery}>{t('lock.recover')}</button>
-      {:else}
-        <label>
-          {t('lock.enter')}
-          <!-- svelte-ignore a11y_autofocus -->
-          <input
+    <div class="panel">
+      <form class="card" onsubmit={lock.recovery_required ? recover : unlock}>
+        <span class="badge" class:warn={lock.recovery_required} aria-hidden="true">
+          <Icon icon={lock.recovery_required ? TriangleAlert : Lock} size={24} />
+        </span>
+        <h1 id="lock-title">{t('lock.screen_title')}</h1>
+        <p class="who">
+          <Avatar name={profile} size="sm" />
+          <span>{t('lock.screen_profile', { name: profile })}</span>
+        </p>
+        {#if lock.recovery_required}
+          <div class="recovery">
+            <h2>{t('lock.recovery_title')}</h2>
+            <p>{t('lock.recovery_body')}</p>
+            <Checkbox label={t('lock.recovery_confirm')} bind:checked={confirmRecovery} />
+          </div>
+          {#if error}<p class="error" role="alert">{error}</p>{/if}
+          <Button variant="danger" type="submit" fullWidth disabled={!confirmRecovery}>{t('lock.recover')}</Button>
+        {:else}
+          <Input
             type="password"
+            size="lg"
             autocomplete="current-password"
             inputmode={lock.kind === 'pin' ? 'numeric' : 'text'}
+            label={t('lock.enter')}
+            error={error}
             bind:value={secret}
-            autofocus
+            bind:element={field}
           />
-        </label>
-        {#if error}<p class="error" role="alert">{error}</p>{/if}
-        <button class="primary" type="submit" disabled={secret === ''}>{t('lock.unlock')}</button>
-      {/if}
+          <Button variant="primary" size="lg" type="submit" fullWidth disabled={secret === ''}>{t('lock.unlock')}</Button>
+        {/if}
+      </form>
       {#if held.length > 0}
-        <section aria-labelledby="lock-held">
+        <section class="card held" aria-labelledby="lock-held">
           <h2 id="lock-held">{t('lock.held_title')}</h2>
           <p class="muted">{t('lock.held_body')}</p>
-          <ul class="held">
+          <ul>
             {#each held as url (url)}
               <li><code>{url}</code></li>
             {/each}
           </ul>
-          <button type="button" onclick={() => void discardHeld()}>{t('lock.held_discard')}</button>
+          <Button size="sm" onclick={() => void discardHeld()}>{t('lock.held_discard')}</Button>
         </section>
       {/if}
       {#if others.length > 0}
-        <h2>{t('lock.other_profile')}</h2>
-        <ul>
-          {#each others as p (p.id)}
-            <li><button type="button" onclick={() => void open(p)}>{p.name ?? t('profiles.default_name')}</button></li>
-          {/each}
-        </ul>
+        <nav class="others" aria-labelledby="lock-others">
+          <h2 id="lock-others">{t('lock.other_profile')}</h2>
+          <ul>
+            {#each others as p (p.id)}
+              {@const name = p.name ?? t('profiles.default_name')}
+              <li>
+                <button type="button" class="other" aria-label={name} onclick={() => void open(p)}>
+                  <Avatar {name} size="sm" />
+                  <span>{name}</span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </nav>
       {/if}
-    </form>
+    </div>
   </div>
 {/if}
 
@@ -195,40 +220,150 @@
   .lock {
     position: fixed;
     inset: 0;
+    z-index: 200;
     display: grid;
     place-items: center;
-    background: var(--fc-bg);
-    z-index: 50;
+    overflow: auto;
+    padding: var(--space-6) var(--space-4);
+    background: var(--surface-0);
   }
-  form {
+  .panel {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-2);
-    width: min(360px, 90vw);
+    gap: var(--space-4);
+    width: min(400px, 100%);
   }
-  label {
+  .card {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-1);
+    gap: var(--space-4);
+    padding: var(--space-8) var(--space-6) var(--space-6);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
   }
-  label.check {
-    flex-direction: row;
+  form.card {
+    align-items: stretch;
+    text-align: center;
+  }
+  .badge {
+    align-self: center;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-soft);
+    color: var(--accent);
   }
-  ul.held {
+  .badge.warn {
+    background: var(--warning-soft);
+    color: var(--warning);
+  }
+  h1 {
+    margin: 0;
+    font-size: var(--text-xl);
+    font-weight: var(--weight-bold);
+    line-height: var(--leading-tight);
+  }
+  h2 {
+    margin: 0;
+    font-size: var(--text-md);
+    font-weight: var(--weight-semibold);
+  }
+  .who {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    margin: calc(-1 * var(--space-2)) 0 var(--space-2);
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  form.card :global(.fc-field) {
+    text-align: start;
+  }
+  .recovery {
+    display: flex;
     flex-direction: column;
-    gap: var(--fc-space-1);
+    gap: var(--space-3);
+    text-align: start;
+  }
+  .recovery p {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+    line-height: var(--leading);
+  }
+  .error {
+    margin: 0;
+    color: var(--danger);
+    font-size: var(--text-sm);
+  }
+  .held {
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-6);
+    align-items: flex-start;
+  }
+  .muted {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .held ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
     max-height: 10rem;
     overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
   }
-  ul.held code {
+  .held code {
     word-break: break-all;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
   }
-  ul {
+  .others {
+    text-align: center;
+  }
+  .others h2 {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    color: var(--text-2);
+    margin-bottom: var(--space-2);
+  }
+  .others ul {
     list-style: none;
+    margin: 0;
     padding: 0;
     display: flex;
     flex-wrap: wrap;
-    gap: var(--fc-space-2);
+    justify-content: center;
+    gap: var(--space-2);
+  }
+  .other {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-1);
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-sm);
+    cursor: pointer;
+  }
+  .other:hover {
+    border-color: var(--border-strong);
+  }
+  .other:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
   }
 </style>

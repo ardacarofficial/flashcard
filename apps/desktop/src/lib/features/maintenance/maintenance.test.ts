@@ -31,12 +31,12 @@ describe('maintenance screen (dev mock)', () => {
   it('shows logs and crash reports, exports logs, checks the database and clears reports', async () => {
     render(MaintenanceScreen, { ctx });
     expect(await screen.findByText('Version 1.0.0')).toBeTruthy();
-    expect(screen.getByText('2 file(s), 1.0 MB')).toBeTruthy();
+    expect(screen.getByText('2 files, 1.0 MB')).toBeTruthy();
     expect(screen.getByText(/example panic/)).toBeTruthy();
 
     vi.spyOn(window, 'prompt').mockReturnValue('/tmp/bug.zip');
     await fireEvent.click(screen.getByRole('button', { name: 'Export logs…' }));
-    expect(await screen.findByText('Saved 4 file(s) to /tmp/bug.zip. 2 secret(s) removed.')).toBeTruthy();
+    expect(await screen.findByText('Saved 4 files to /tmp/bug.zip. 2 secrets removed.')).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Check the database' }));
     expect(await screen.findByText('No problems found (12 ms).')).toBeTruthy();
@@ -89,7 +89,7 @@ describe('<RecoveryHost>', () => {
     render(RecoveryHost, { open: (r: string) => opened.push(r) });
     expect(await screen.findByText('Flashcard closed unexpectedly')).toBeTruthy();
     expect(screen.getByText('Database checked: no problems.')).toBeTruthy();
-    expect(screen.getByText('1 unsaved form(s), restored when you open them again')).toBeTruthy();
+    expect(screen.getByText('1 unsaved form, restored when you open them again')).toBeTruthy();
     expect(screen.getByText('Crash report: boom')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Resume studying' }));
     await waitFor(() => expect(opened).toEqual(['/study']));

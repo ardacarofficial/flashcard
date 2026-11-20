@@ -30,3 +30,4 @@ Bu klasör, uygulamanın **tam planını** içerir. Geliştirme boyunca pusulam�
 4. 🧹 **AI slop yok.** Sade varsayılanlar, aşamalı gösterim.
 5. 🧪 **Test edilmeyen kod ana dala girmez.**
 6. 🕵️ **Gizlilik:** Telemetri yok, veri kullanıcının bilgisayarında.
+- [11 · Tasarım (v1.1)](11-tasarim.md)

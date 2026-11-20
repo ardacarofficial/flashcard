@@ -2,7 +2,7 @@
  * Dev-only mock of the `profiles` module (profiles + app lock). Minimal: the real rules
  * (Argon2id hashes, back-off, separate collections, the IPC gate) live in fc-app.
  */
-import { menu, module, err, type MockEnv, type MockFeature } from '$lib/api/mock/env';
+import { menu, module, err, mockScenario, type MockEnv, type MockFeature } from '$lib/api/mock/env';
 import type { LockKind, LockState, ProfileDto } from '$lib/api/types';
 
 const IDLE_CHOICES = [0, 1, 5, 15, 30, 60];
@@ -17,6 +17,11 @@ export default {
     // The mock keeps the secret itself (the real app keeps only an Argon2id hash).
     let lock: { kind: LockKind; secret: string; idle: number } | null = null;
     let locked = false;
+    if (mockScenario() === 'locked') {
+      lock = { kind: 'pin', secret: '1234', idle: 15 };
+      locked = true;
+      profiles[0]!.locked = true;
+    }
     let failures = 0;
     let hashLost = false;
     mockLockHooks.loseHash = () => {

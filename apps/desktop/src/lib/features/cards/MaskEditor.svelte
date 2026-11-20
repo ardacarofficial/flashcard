@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SegmentedControl } from '$lib/ui';
   import { t } from '$lib/i18n/index.svelte';
   import { firstMediaHash, maskFromDrag, parseMasks, serializeMasks, type Masks } from './content';
   import { resolveMedia } from './media';
@@ -72,7 +73,8 @@
     value = serializeMasks({ ...masks, mode });
   }
 
-  const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
+  /** A 0–1 fraction as a CSS length (`calc(0.25 * 100%)`), not display text. */
+  const pct = (v: number) => `calc(${v} * 100%)`;
 </script>
 
 <div class="masks">
@@ -80,13 +82,16 @@
   {#if !src}
     <p class="muted">{t('masks.need_image')}</p>
   {:else}
-    <label class="mode">
-      {t('masks.mode')}
-      <select value={masks.mode} onchange={(e) => setMode(e.currentTarget.value as Masks['mode'])}>
-        <option value="hide_all">{t('masks.hide_all')}</option>
-        <option value="hide_one">{t('masks.hide_one')}</option>
-      </select>
-    </label>
+    <SegmentedControl
+      size="sm"
+      label={t('masks.mode')}
+      options={[
+        { value: 'hide_all', label: t('masks.hide_all') },
+        { value: 'hide_one', label: t('masks.hide_one') },
+      ]}
+      value={masks.mode}
+      onchange={(v) => setMode(v as Masks['mode'])}
+    />
     <div
       class="canvas"
       bind:this={box}
@@ -124,12 +129,7 @@
   .masks {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-1);
-  }
-  .mode {
-    display: flex;
-    gap: var(--fc-space-2);
-    align-items: center;
+    gap: var(--space-1);
   }
   .canvas {
     position: relative;

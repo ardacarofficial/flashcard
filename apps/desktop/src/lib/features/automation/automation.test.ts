@@ -24,13 +24,19 @@ const ctx: ScreenCtx = {
   },
 };
 
+/** Picks `option` in the lib/ui Select labelled `label`. */
+async function pick(label: string, option: string) {
+  await fireEvent.click(screen.getByRole('combobox', { name: label }));
+  await fireEvent.click(screen.getByRole('option', { name: option }));
+}
+
 describe('automation rule editor (dev mock)', () => {
   it('builds a rule, previews it without changing anything, saves and runs it', async () => {
     render(AutomationScreen, { ctx });
     expect(await screen.findByText('No rules yet.')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'New rule' }));
     await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Leech' } });
-    await fireEvent.change(screen.getByLabelText('Trigger'), { target: { value: 'card_answered' } });
+    await pick('Trigger', 'A card is answered');
     await fireEvent.click(screen.getByLabelText('Again'));
     await fireEvent.input(screen.getByLabelText('Cards (query)'), { target: { value: 'seviye:A1 lapses>=5' } });
     await fireEvent.input(screen.getByLabelText('Tags (comma separated)'), { target: { value: 'leech, zor' } });
@@ -55,12 +61,17 @@ describe('automation rule editor (dev mock)', () => {
   it('offers inbox actions only to inbox rules', async () => {
     render(AutomationScreen, { ctx });
     await fireEvent.click(await screen.findByRole('button', { name: 'New rule' }));
-    const action = () => screen.getByLabelText('Action') as HTMLSelectElement;
-    const options = () => [...action().options].map((o) => o.value);
-    expect(options()).not.toContain('inbox.accept');
-    await fireEvent.change(screen.getByLabelText('Trigger'), { target: { value: 'inbox_added' } });
-    expect(options()).toEqual(['inbox.accept']);
-    expect(action().value).toBe('inbox.accept');
+    const options = async () => {
+      const box = screen.getByRole('combobox', { name: 'Action' });
+      await fireEvent.click(box);
+      const labels = screen.getAllByRole('option').map((o) => o.textContent?.trim());
+      await fireEvent.keyDown(box, { key: 'Escape' });
+      return labels;
+    };
+    expect(await options()).not.toContain('Accept as a note');
+    await pick('Trigger', 'A proposal arrives in the inbox');
+    expect(await options()).toEqual(['Accept as a note']);
+    expect(screen.getByRole('combobox', { name: 'Action' }).textContent).toContain('Accept as a note');
     expect(screen.getByText(/the card the proposal would become/)).toBeTruthy();
     // Accepting without review is called out in the editor.
     await waitFor(() => expect(screen.getByText(/This rule accepts proposals without your review/)).toBeTruthy());

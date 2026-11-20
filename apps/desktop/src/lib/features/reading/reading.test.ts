@@ -69,7 +69,7 @@ describe('reading screen on the dev mock', () => {
 
     // Done for today → back to the library, the text is queued.
     await fireEvent.click(screen.getByRole('button', { name: 'Done for today' }));
-    expect(await screen.findByText('Next in 1 day(s)')).toBeTruthy();
+    expect(await screen.findByText('Next in 1 day')).toBeTruthy();
     await fireEvent.click(screen.getByRole('tab', { name: /Reading queue/ }));
     expect(await screen.findByRole('button', { name: 'The cat runs. The dog sleeps.' })).toBeTruthy();
   });
@@ -82,9 +82,9 @@ describe('reading screen on the dev mock', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'New cards' }));
     const area = await screen.findByRole('textbox', { name: 'New cards from text' });
     await fireEvent.input(area, { target: { value: 'porsuk :: badger\ngece :: night' } });
-    const create = await screen.findByRole('button', { name: /Create 2 card\(s\)/ });
+    const create = await screen.findByRole('button', { name: /Create 2 cards/ });
     await fireEvent.click(create);
-    expect(await screen.findByText('2 card(s) created.')).toBeTruthy();
+    expect(await screen.findByText('2 cards created.')).toBeTruthy();
     // Still reading the same text.
     expect(screen.getByText(/You know \d+% of this text/)).toBeTruthy();
   });

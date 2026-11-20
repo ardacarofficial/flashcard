@@ -92,23 +92,25 @@
     "logs": {
       "heading": "Logs",
       "intro": "The app keeps a local log. Export it to attach to a bug report: keys, tokens and passwords are removed first. Nothing is sent automatically.",
-      "files": "{count} file(s), {size}",
+      "files": "{count, plural, one {# file} other {# files}}, {size}",
       "export": "Export logs…",
-      "exported": "Saved {files} file(s) to {path}. {redactions} secret(s) removed.",
-      "save_prompt": "Where should the log bundle be saved?"
+      "exported": "Saved {files, plural, one {# file} other {# files}} to {path}. {redactions, plural, one {# secret} other {# secrets}} removed.",
+      "save_prompt": "Where should the log bundle be saved?",
+      "bundle": "Log bundle for a bug report"
     },
     "integrity": {
       "heading": "Database",
       "check": "Check the database",
       "ok": "No problems found ({ms} ms).",
       "problems": "Problems found: {count}. Restore a backup from Import & export.",
-      "never": "Not checked during this run."
+      "never": "Not checked during this run.",
+      "status": "Integrity check"
     },
     "crashes": {
       "heading": "Crash reports",
       "none": "No crash reports.",
       "clear": "Delete crash reports",
-      "cleared": "{count} report(s) deleted."
+      "cleared": "{count, plural, one {# report} other {# reports}} deleted."
     },
     "previous_run": {
       "clean": "The last run closed normally.",
@@ -122,7 +124,7 @@
       "integrity_bad": "The database check found problems. Open Maintenance for details.",
       "session": "An unfinished study session",
       "resume": "Resume studying",
-      "drafts": "{count} unsaved form(s), restored when you open them again",
+      "drafts": "{count, plural, one {# unsaved form} other {# unsaved forms}}, restored when you open them again",
       "crash": "Crash report: {message}",
       "details": "Open maintenance",
       "dismiss": "Continue"
@@ -139,11 +141,22 @@
       "ready": "Downloaded and verified. The app will close, install and start again.",
       "apply": "Install and restart",
       "banner": "Version {version} is available.",
-      "open": "See update"
+      "open": "See update",
+      "notes": "What’s new",
+      "later": "Later"
     },
     "size": {
       "kb": "{n} KB",
       "mb": "{n} MB"
     }
+  },
+  "maintenance": {
+    "subtitle": "Trash, duplicates and a health check of your collection.",
+    "trash_desc": "Deleted decks and notes wait here until you restore them or empty the trash.",
+    "duplicates_desc": "Notes whose first field is the same",
+    "check_desc": "Looks for broken links between cards, notes and decks, and repairs them on request.",
+    "results": "Results",
+    "duplicates_intro": "Find notes you added twice and tidy them up in Search.",
+    "check_row": "Check cards, notes and decks"
   }
 }

@@ -96,8 +96,11 @@ describe('attributes module off', () => {
     render(ImportPanel, { ctx });
     await fireEvent.input(screen.getByRole('textbox', { name: 'Paste text' }), { target: { value: 'a: b' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-    const column = (await screen.findByLabelText('Column 1')) as HTMLSelectElement;
-    expect(Array.from(column.options, (o) => o.textContent)).not.toContain('Seviye');
+    const column = await screen.findByRole('combobox', { name: 'Column 1' });
+    await fireEvent.click(column);
+    const options = screen.getAllByRole('option').map((o) => o.textContent?.trim());
+    expect(options).toContain("Don't import");
+    expect(options).not.toContain('Seviye');
     expect(screen.queryByRole('alert')).toBeNull();
     expect(attributeCalls()).toEqual([]);
   });
@@ -105,10 +108,12 @@ describe('attributes module off', () => {
   it('browser: no bulk classification, no attributes calls, no error', async () => {
     const ctx = ctxWith({ decks: (await api.deck.tree()).roots });
     render(BrowseScreen, { ctx });
-    await screen.findByText(/card\(s\)/);
+    await screen.findByText(/\d+ cards?/);
     window.dispatchEvent(new CustomEvent('fc:shortcut', { detail: 'browse.select_all' }));
-    await screen.findByRole('combobox', { name: 'Flag' });
-    expect(screen.queryByRole('combobox', { name: 'Classification' })).toBeNull();
+    // v1.1: the bulk bar's "More actions" menu offers no classification while it is off.
+    await fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+    expect(await screen.findByRole('menuitem', { name: /Find and replace/ })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: /Classification/ })).toBeNull();
     expect(ctx.failures).toEqual([]);
     expect(attributeCalls()).toEqual([]);
   });
@@ -117,14 +122,16 @@ describe('attributes module off', () => {
 describe('palette module off', () => {
   it('global shortcuts still dispatch; only the palette goes away', async () => {
     render(App);
-    const nav = await screen.findByRole('navigation');
-    await screen.findByRole('button', { name: 'Settings' });
-    expect(nav.textContent).not.toContain('Shortcuts');
+    const nav = await screen.findByRole('navigation', { name: 'Main navigation' });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+    const settings = await screen.findByRole('navigation', { name: 'Settings sections' });
+    expect(settings.textContent).toContain('Reminders');
+    expect(settings.textContent).not.toContain('Shortcuts');
 
-    // Ctrl+F (ui.search) opens the browser.
+    // Ctrl+F (ui.search) opens the browser (the Search section).
     await waitFor(async () => {
       await fireEvent.keyDown(window, { key: 'f', code: 'KeyF', ctrlKey: true });
-      expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Browse');
+      expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Search');
     });
     // Ctrl+K (ui.palette) is still bound but opens nothing.
     await fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true });

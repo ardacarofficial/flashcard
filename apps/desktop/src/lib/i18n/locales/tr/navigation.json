@@ -1,0 +1,34 @@
+{
+  "shell": {
+    "nav_label": "Ana gezinme",
+    "section": {
+      "home": "Ana sayfa",
+      "library": "Kütüphane",
+      "create": "Oluştur",
+      "search": "Ara",
+      "stats": "İstatistik"
+    },
+    "inbox": "Gelen kutusu",
+    "inbox_count": "Gelen kutusu, {count} bekliyor",
+    "settings": "Ayarlar",
+    "settings_nav": "Ayar bölümleri",
+    "section_nav": "{section} sayfaları",
+    "group": {
+      "general": "Genel",
+      "study": "Çalışma",
+      "reading": "Okuma ve modlar",
+      "connections": "Bağlantılar",
+      "plugins": "Eklentiler",
+      "data": "Veri",
+      "profiles": "Profiller ve kilit",
+      "other": "Diğer"
+    },
+    "profile": {
+      "menu": "Profil: {name}",
+      "default_name": "Ana profil",
+      "switch": "Profil değiştir",
+      "lock": "Şimdi kilitle"
+    },
+    "deck_picker": "Deste"
+  }
+}

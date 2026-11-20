@@ -161,3 +161,61 @@ pub(crate) fn uses_option(value: &AttributeValue, option: AttributeOptionId) -> 
         _ => false,
     }
 }
+
+/// Choice classification values (`enum`, `ordered_enum`, `multi_enum`) of notes, for chips
+/// (v1.1 Library / deck page). A card-level value counts for the card's note.
+pub(crate) struct NoteChoices {
+    /// Live choice definitions, in classification order (`position`, then name).
+    pub defs: Vec<AttributeDef>,
+    /// Note → `(definition index, option index)` pairs, in definition then option order.
+    pub of_note: HashMap<fc_core::NoteId, Vec<(usize, usize)>>,
+}
+
+/// [`NoteChoices`] of the notes owning `cards` (card → note). One storage read per option.
+pub(crate) fn note_choices(
+    reads: &dyn Reads,
+    cards: &HashMap<fc_core::CardId, fc_core::NoteId>,
+    notes: &std::collections::HashSet<fc_core::NoteId>,
+) -> AppResult<NoteChoices> {
+    use fc_core::attribute::AttributeKind;
+    let mut defs: Vec<AttributeDef> = reads
+        .list_attribute_defs(false)?
+        .into_iter()
+        .filter(|d| {
+            matches!(
+                d.kind,
+                AttributeKind::Enum | AttributeKind::OrderedEnum | AttributeKind::MultiEnum
+            )
+        })
+        .collect();
+    defs.sort_by(|a, b| {
+        a.position
+            .cmp(&b.position)
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    let mut of_note: HashMap<fc_core::NoteId, Vec<(usize, usize)>> = HashMap::new();
+    for (di, def) in defs.iter().enumerate() {
+        let mut options: Vec<(usize, &fc_core::attribute::AttributeOption)> =
+            def.options.iter().enumerate().collect();
+        options.sort_by_key(|(_, o)| o.order);
+        for (oi, option) in options {
+            for entity in reads.entities_with_option(def.id, option.id)? {
+                let note = match entity {
+                    EntityRef::Note(n) => Some(n),
+                    EntityRef::Card(c) => cards.get(&c).copied(),
+                };
+                let Some(note) = note.filter(|n| notes.contains(n)) else {
+                    continue;
+                };
+                let list = of_note.entry(note).or_default();
+                if !list.contains(&(di, oi)) {
+                    list.push((di, oi));
+                }
+            }
+        }
+    }
+    for list in of_note.values_mut() {
+        list.sort_unstable();
+    }
+    Ok(NoteChoices { defs, of_note })
+}

@@ -45,7 +45,8 @@
         "label": "Theme",
         "description": "Light, dark, or follow the system setting."
       }
-    }
+    },
+    "general_intro": "Language, colours and how the app looks."
   },
   "lang": {
     "tr": "Türkçe",

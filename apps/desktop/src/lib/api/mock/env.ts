@@ -4,6 +4,7 @@
  * Not a source of truth for behaviour: the real rules live in fc-app.
  */
 import type { MethodName, RequestOf, ResponseOf } from '../generated/methods';
+import { DEMO_COUNTS, seedDemo } from './seed';
 import type {
   ApiError,
   AttributeDefDto,
@@ -52,10 +53,33 @@ export interface MockFeature {
   handlers: (env: MockEnv) => Handlers;
 }
 
+/**
+ * Mock-mode scenario from the URL, for screenshot states that need a different start
+ * (`?mock=fresh` empty collection → first-run guide, `?mock=update` an update is out,
+ * `?mock=locked` the app starts locked, PIN 1234). Only `pnpm dev:mock` reads it.
+ */
+export type MockScenario = 'fresh' | 'update' | 'locked';
+export function mockScenario(): MockScenario | null {
+  if (import.meta.env.MODE !== 'mock') return null;
+  try {
+    const v = new URLSearchParams(globalThis.location?.search ?? '').get('mock');
+    return v === 'fresh' || v === 'update' || v === 'locked' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createMockEnv() {
 let seq = 0;
 let eventSeq = 0;
-const now = () => ++seq;
+/**
+ * Mock clock in **milliseconds since the Unix epoch**, like `fc_core::Timestamp` (the DTOs'
+ * `*_at` fields). It starts a day before the env is created and ticks one second per call, so
+ * records stay ordered and look recent (a bare counter showed up as 01.01.1970).
+ */
+const clockStart = Date.now() - 86_400_000;
+let tick = 0;
+const now = () => clockStart + ++tick * 1000;
 const id = (p: string) => `${p}-${(++seq).toString().padStart(4, '0')}`;
 const listeners = new Set<(e: EventEnvelope) => void>();
 const emit = (event: DomainEvent) => {
@@ -107,6 +131,12 @@ const attrs: AttributeDefDto[] = [
   },
 ];
 const notes: NoteDto[] = [];
+// Demo data only in `pnpm dev:mock` (vite --mode mock); tests start from an empty collection.
+if (mockScenario() === 'fresh') {
+  // A brand-new collection: no decks at all (the first-run guide shows).
+  decks.length = 0;
+  attrs.length = 0;
+} else if (import.meta.env.MODE === 'mock') seedDemo({ now, id, decks, attrs, notes, addDeck }, english.id);
 /** Flag bits per card id (`cards.set_flag` writes, card views read). */
 const cardFlags = new Map<string, number>();
 
@@ -116,7 +146,7 @@ const tree = (parent: string | null): DeckTreeNode[] =>
     .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
     .map((deck) => ({
       deck: { ...deck, path: pathOf(deck) },
-      counts: { new: 0, learning: 0, due: 0, total: 0 },
+      counts: (import.meta.env.MODE === 'mock' && DEMO_COUNTS[deck.name]) || { new: 0, learning: 0, due: 0, total: 0 },
       children: tree(deck.id),
     }));
 

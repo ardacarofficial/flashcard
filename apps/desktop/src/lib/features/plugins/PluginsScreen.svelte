@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDecimal } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { ModelList, PackageInfo, PluginDto, PluginLogEntry, PluginSettings } from '$lib/api/types';
@@ -6,6 +7,30 @@
   import { pickFile } from '../io/files';
   import type { ScreenCtx } from '../types';
   import { loadPluginTexts, uiText } from './texts.svelte';
+  import {
+    Button,
+    Card,
+    Checkbox,
+    ChevronDown,
+    ChevronUp,
+    Chip,
+    Dialog,
+    Download,
+    EmptyState,
+    HardDrive,
+    Icon,
+    Input,
+    Play,
+    Puzzle,
+    ScrollText,
+    Select,
+    Shield,
+    Switch,
+    Trash2,
+    Upload,
+    type Tone,
+  } from '$lib/ui';
+  import { FormRow, LoadState, SettingsPage, SettingsSection } from '../core/kit';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -22,14 +47,43 @@
   let removing = $state<{ id: string; deleteData: boolean } | null>(null);
   let notice = $state<string | null>(null);
 
-  const mb = (bytes: number | bigint) => (Number(bytes) / 1_000_000).toFixed(1);
+  const STATUS_TONE: Record<PluginDto['status'], Tone> = {
+    active: 'success',
+    disabled: 'neutral',
+    auto_disabled: 'warning',
+    broken: 'danger',
+  };
+  let failed = $state(false);
+  let installOpen = $state(false);
+  let removeOpen = $state(false);
+  $effect(() => {
+    installOpen = pending !== null;
+  });
+  $effect(() => {
+    removeOpen = removing !== null;
+  });
+
+  /** The plugin's translated name, else its manifest name. */
+  const nameOf = (p: { id: string; name: string }) => {
+    const key = `plugin.${p.id}.name`;
+    return td(key) === key ? p.name : td(key);
+  };
+  /** A plugin text with its manifest value as fallback. */
+  const optionLabel = (id: string, labelKey: string, o: string) => {
+    const key = `plugin.${id}.${labelKey}.${o}`;
+    return td(key) === key ? o : td(key);
+  };
+  const removingPlugin = $derived(removing ? plugins.find((p) => p.id === removing?.id) ?? null : null);
+
+  const mb = (bytes: number | bigint) => formatDecimal(Number(bytes) / 1_000_000, 1);
 
   async function load() {
-    await ctx.guarded(async () => {
+    const ok = await ctx.guarded(async () => {
       plugins = (await api.call('plugins.list', {})).plugins;
       models = await api.call('plugins.models.list', {});
       loaded = true;
     });
+    failed = !ok && !loaded;
   }
 
   async function chooseFile() {
@@ -130,197 +184,340 @@
   });
 </script>
 
-<h2>{t('plugins.heading')}</h2>
-<p class="muted">{t('plugins.intro')}</p>
-<button onclick={chooseFile}>{t('plugins.install')}</button>
+{#snippet perm(p: { permission: string; sensitive: boolean }, checked: boolean, set: (v: boolean) => void)}
+  <li>
+    <Checkbox {checked} onchange={set}>
+      <span class="perm"><code>{p.permission}</code>
+        {#if p.sensitive}<Chip size="sm" tone="warning" icon={Shield} label={t('plugins.sensitive')} />{/if}</span>
+    </Checkbox>
+  </li>
+{/snippet}
+
+<SettingsPage title={t('plugins.heading')} subtitle={t('plugins.intro')}>
+  {#snippet actions()}
+    <Button variant="primary" icon={Upload} onclick={chooseFile}>{t('plugins.install')}</Button>
+  {/snippet}
+
+  {#if !loaded}
+    <Card padding="lg">
+      {#if failed}<LoadState state="error" retry={() => void load()} />{:else}<LoadState state="loading" />{/if}
+    </Card>
+  {:else if plugins.length === 0}
+    <Card padding="lg">
+      <EmptyState icon={Puzzle} title={t('plugins.none')} description={t('plugins.empty_hint')}
+        action={{ label: t('plugins.install'), onclick: () => void chooseFile(), icon: Upload }} />
+    </Card>
+  {:else}
+    <ul class="plugins" aria-label={t('plugins.installed')}>
+      {#each plugins as p (p.id)}
+        {@const expanded = open === p.id}
+        <Card as="li" padding="none" class="plugin">
+          <div class="head">
+            <span class="badge" aria-hidden="true"><Icon icon={Puzzle} size={20} /></span>
+            <div class="titles">
+              <button class="name" aria-expanded={expanded} aria-controls={`plugin-${p.id}`} onclick={() => toggleOpen(p)}>
+                <span>{nameOf(p)}</span>
+                <Icon icon={expanded ? ChevronUp : ChevronDown} size={16} />
+              </button>
+              <p class="sub">
+                <span>{t('plugins.version', { version: p.version })}</span>
+                {#if p.description}<span class="dot" aria-hidden="true">·</span><span>{p.description}</span>{/if}
+              </p>
+            </div>
+            <div class="side">
+              <!-- On / off is the switch's job; the chip only flags trouble. -->
+              {#if p.status === 'auto_disabled' || p.status === 'broken'}
+                <Chip size="sm" tone={STATUS_TONE[p.status]} label={t(`plugins.status.${p.status}`)} />
+              {/if}
+              {#if p.status === 'auto_disabled'}
+                <Button size="sm" onclick={() => setEnabled(p, true)}>{t('plugins.enable')}</Button>
+              {/if}
+              <Switch checked={p.enabled} ariaLabel={p.enabled ? t('plugins.disable') : t('plugins.enable')}
+                onchange={(on) => void setEnabled(p, on)} />
+            </div>
+          </div>
+          {#if p.last_error && p.status !== 'active'}
+            <p class="error" role="alert">{t('plugins.last_error', { error: p.last_error })}</p>
+          {/if}
+
+          {#if expanded}
+            <div class="details" id={`plugin-${p.id}`}>
+              {#if notice}<p class="notice" role="status">{notice}</p>{/if}
+              {#if p.contributes.commands.length}
+                <div class="block">
+                  <h3>{t('plugins.contrib.commands')}</h3>
+                  <div class="row">
+                    {#each p.contributes.commands as c (c)}
+                      <Button size="sm" icon={Play} onclick={() => run(p, c)}>{td(`plugin.${p.id}.commands.${c}`)}</Button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+
+              <div class="block">
+                <h3>{t('plugins.permissions')}</h3>
+                {#if p.permissions.length === 0}
+                  <p class="muted">{t('plugins.no_permissions')}</p>
+                {:else}
+                  <ul class="perms">
+                    {#each p.permissions as x (x.permission)}
+                      {@render perm(x, grants[x.permission] ?? false, (v) => (grants[x.permission] = v))}
+                    {/each}
+                  </ul>
+                  <div><Button size="sm" onclick={() => savePermissions(p)}>{t('plugins.save_permissions')}</Button></div>
+                {/if}
+              </div>
+
+              {#if settings && settings.id === p.id && settings.schema.length}
+                <div class="block flush">
+                  <h3>{t('plugins.settings')}</h3>
+                  {#each settings.schema as def (def.key)}
+                    {@const value = settings.values[def.key]}
+                    {@const label = td(`plugin.${p.id}.${def.label_key}`)}
+                    <FormRow {label}>
+                      {#if def.kind.type === 'bool'}
+                        <Switch checked={value === true} ariaLabel={label} onchange={(v) => setSetting(p.id, def.key, v)} />
+                      {:else if def.kind.type === 'choice'}
+                        <Select hideLabel {label} value={String(value)}
+                          options={def.kind.options.map((o) => ({ value: o, label: optionLabel(p.id, def.label_key, o) }))}
+                          onchange={(v) => setSetting(p.id, def.key, v)} />
+                      {:else if def.kind.type === 'integer' || def.kind.type === 'float'}
+                        <Input hideLabel {label} type="number" value={Number(value)}
+                          onchange={(e: Event) => setSetting(p.id, def.key, Number((e.currentTarget as HTMLInputElement).value))} />
+                      {:else}
+                        <Input hideLabel {label} value={String(value ?? '')}
+                          onchange={(e: Event) => setSetting(p.id, def.key, (e.currentTarget as HTMLInputElement).value)} />
+                      {/if}
+                    </FormRow>
+                  {/each}
+                </div>
+              {/if}
+
+              <div class="block">
+                <h3>{t('plugins.logs')}</h3>
+                {#if logs === null}
+                  <div><Button size="sm" variant="ghost" icon={ScrollText} onclick={() => showLogs(p.id)}>{t('plugins.show_logs')}</Button></div>
+                {:else if logs.length === 0}
+                  <p class="muted">{t('plugins.logs_empty')}</p>
+                {:else}
+                  <pre class="logs">{logs.map((l) => `${l.level}  ${l.message}`).join('\n')}</pre>
+                {/if}
+              </div>
+
+              <div class="block footer">
+                <Button size="sm" variant="danger" icon={Trash2} onclick={() => (removing = { id: p.id, deleteData: false })}>{t('plugins.uninstall')}</Button>
+              </div>
+            </div>
+          {/if}
+        </Card>
+      {/each}
+    </ul>
+  {/if}
+
+  {#if models && models.models.length}
+    <SettingsSection title={t('plugins.models.heading')} icon={HardDrive} description={t('plugins.models.usage', { size: mb(models.disk_usage) })} body="rows">
+      {#each models.models as m (`${m.plugin_id}/${m.id}`)}
+        <FormRow label={m.name} description={`${t('plugins.models.size', { size: mb(m.size) })} · ${m.license} · ${t(`plugins.models.state.${m.state}`)}`}>
+          {#if m.state === 'ready'}
+            <Button size="sm" variant="ghost" icon={Trash2} onclick={() => model('delete', m.plugin_id, m.id)}>{t('plugins.models.delete')}</Button>
+          {:else}
+            <Button size="sm" icon={Download} onclick={() => model('download', m.plugin_id, m.id)}>{t('plugins.models.download')}</Button>
+          {/if}
+        </FormRow>
+      {/each}
+    </SettingsSection>
+  {/if}
+</SettingsPage>
 
 {#if pending}
-  <section class="dialog" aria-labelledby="install-heading">
-    <h3 id="install-heading">{t('plugins.install_heading', { name: pending.info.name, version: pending.info.version })}</h3>
-    {#if pending.info.description}<p>{pending.info.description}</p>{/if}
-    {#if pending.info.installed_version}
-      <p class="muted">{t('plugins.installed_version', { version: pending.info.installed_version })}</p>
+  {@const info = pending.info}
+  <Dialog bind:open={installOpen} title={t('plugins.install_heading', { name: info.name, version: info.version })}
+    description={info.description ?? undefined} onclose={() => (pending = null)}>
+    {#if info.installed_version}
+      <p class="muted">{t('plugins.installed_version', { version: info.installed_version })}</p>
     {/if}
     <p class="muted">{t('plugins.grant_hint')}</p>
     <ul class="perms">
-      {#each pending.info.permissions as perm (perm.permission)}
-        <li>
-          <label>
-            <input type="checkbox" bind:checked={pending.grant[perm.permission]} />
-            <code>{perm.permission}</code>
-            {#if perm.sensitive}<small class="sensitive">{t('plugins.sensitive')}</small>{/if}
-          </label>
-        </li>
+      {#each info.permissions as x (x.permission)}
+        {@render perm(x, pending.grant[x.permission] ?? false, (v) => pending && (pending.grant[x.permission] = v))}
       {/each}
     </ul>
-    <div class="row">
-      <button class="primary" onclick={install}>
-        {pending.info.installed_version ? t('plugins.update_confirm') : t('plugins.install_confirm')}
-      </button>
-      <button onclick={() => (pending = null)}>{t('plugins.cancel')}</button>
-    </div>
-  </section>
+    {#snippet footer()}
+      <Button onclick={() => (pending = null)}>{t('plugins.cancel')}</Button>
+      <Button variant="primary" onclick={install}>
+        {info.installed_version ? t('plugins.update_confirm') : t('plugins.install_confirm')}
+      </Button>
+    {/snippet}
+  </Dialog>
 {/if}
 
-{#if loaded && plugins.length === 0}
-  <p class="muted">{t('plugins.none')}</p>
-{/if}
-
-<ul class="plugins">
-  {#each plugins as p (p.id)}
-    <li class="plugin">
-      <div class="head">
-        <button class="link" aria-expanded={open === p.id} onclick={() => toggleOpen(p)}>
-          <strong>{td(`plugin.${p.id}.name`) === `plugin.${p.id}.name` ? p.name : td(`plugin.${p.id}.name`)}</strong>
-        </button>
-        <span class="muted">{t('plugins.version', { version: p.version })}</span>
-        <span class="status {p.status}">{t(`plugins.status.${p.status}`)}</span>
-        {#if p.enabled}
-          <button onclick={() => setEnabled(p, false)}>{t('plugins.disable')}</button>
-        {:else}
-          <button onclick={() => setEnabled(p, true)}>{t('plugins.enable')}</button>
-        {/if}
-        {#if p.status === 'auto_disabled'}
-          <button onclick={() => setEnabled(p, true)}>{t('plugins.enable')}</button>
-        {/if}
-      </div>
-      {#if p.description}<p class="muted">{p.description}</p>{/if}
-      {#if p.last_error && p.status !== 'active'}<p class="error">{t('plugins.last_error', { error: p.last_error })}</p>{/if}
-
-      {#if open === p.id}
-        <div class="details">
-          {#if notice}<p role="status">{notice}</p>{/if}
-          {#if p.contributes.commands.length}
-            <div class="row">
-              {#each p.contributes.commands as c (c)}
-                <button onclick={() => run(p, c)}>{td(`plugin.${p.id}.commands.${c}`)}</button>
-              {/each}
-            </div>
-          {/if}
-
-          <h4>{t('plugins.permissions')}</h4>
-          <ul class="perms">
-            {#each p.permissions as perm (perm.permission)}
-              <li>
-                <label>
-                  <input type="checkbox" bind:checked={grants[perm.permission]} />
-                  <code>{perm.permission}</code>
-                  {#if perm.sensitive}<small class="sensitive">{t('plugins.sensitive')}</small>{/if}
-                </label>
-              </li>
-            {/each}
-          </ul>
-          <button onclick={() => savePermissions(p)}>{t('plugins.save_permissions')}</button>
-
-          {#if settings && settings.id === p.id && settings.schema.length}
-            <h4>{t('plugins.settings')}</h4>
-            {#each settings.schema as def (def.key)}
-              {@const value = settings.values[def.key]}
-              <label class="setting">
-                {td(`plugin.${p.id}.${def.label_key}`)}
-                {#if def.kind.type === 'bool'}
-                  <input type="checkbox" checked={value === true} onchange={(e) => setSetting(p.id, def.key, e.currentTarget.checked)} />
-                {:else if def.kind.type === 'choice'}
-                  <select value={String(value)} onchange={(e) => setSetting(p.id, def.key, e.currentTarget.value)}>
-                    {#each def.kind.options as o (o)}<option value={o}>{td(`plugin.${p.id}.${def.label_key}.${o}`) === `plugin.${p.id}.${def.label_key}.${o}` ? o : td(`plugin.${p.id}.${def.label_key}.${o}`)}</option>{/each}
-                  </select>
-                {:else if def.kind.type === 'integer' || def.kind.type === 'float'}
-                  <input type="number" value={Number(value)} onchange={(e) => setSetting(p.id, def.key, Number(e.currentTarget.value))} />
-                {:else}
-                  <input value={String(value ?? '')} onchange={(e) => setSetting(p.id, def.key, e.currentTarget.value)} />
-                {/if}
-              </label>
-            {/each}
-          {/if}
-
-          <h4>{t('plugins.logs')}</h4>
-          {#if logs === null}
-            <button onclick={() => showLogs(p.id)}>{t('plugins.logs')}</button>
-          {:else if logs.length === 0}
-            <p class="muted">{t('plugins.logs_empty')}</p>
-          {:else}
-            <pre class="logs">{logs.map((l) => `${l.level}  ${l.message}`).join('\n')}</pre>
-          {/if}
-
-          {#if removing?.id === p.id}
-            <div class="row danger-zone">
-              <p>{t('plugins.confirm_uninstall', { name: p.name })}</p>
-              <label><input type="checkbox" bind:checked={removing.deleteData} /> {t('plugins.delete_data')}</label>
-              <button class="danger" onclick={uninstall}>{t('plugins.uninstall')}</button>
-              <button onclick={() => (removing = null)}>{t('plugins.cancel')}</button>
-            </div>
-          {:else}
-            <button class="danger" onclick={() => (removing = { id: p.id, deleteData: false })}>{t('plugins.uninstall')}</button>
-          {/if}
-        </div>
-      {/if}
-    </li>
-  {/each}
-</ul>
-
-{#if models && models.models.length}
-  <h3>{t('plugins.models.heading')}</h3>
-  <p class="muted">{t('plugins.models.usage', { size: mb(models.disk_usage) })}</p>
-  <ul>
-    {#each models.models as m (`${m.plugin_id}/${m.id}`)}
-      <li class="row">
-        <span>{m.name}</span>
-        <span class="muted">{t('plugins.models.size', { size: mb(m.size) })} · {m.license}</span>
-        <span>{t(`plugins.models.state.${m.state}`)}</span>
-        {#if m.state === 'ready'}
-          <button onclick={() => model('delete', m.plugin_id, m.id)}>{t('plugins.models.delete')}</button>
-        {:else}
-          <button onclick={() => model('download', m.plugin_id, m.id)}>{t('plugins.models.download')}</button>
-        {/if}
-      </li>
-    {/each}
-  </ul>
+{#if removing && removingPlugin}
+  <Dialog bind:open={removeOpen} role="alertdialog" size="sm" title={t('plugins.uninstall')}
+    description={t('plugins.confirm_uninstall', { name: removingPlugin.name })} onclose={() => (removing = null)}>
+    <Checkbox label={t('plugins.delete_data')} checked={removing.deleteData}
+      onchange={(v) => removing && (removing.deleteData = v)} />
+    {#snippet footer()}
+      <Button onclick={() => (removing = null)}>{t('plugins.cancel')}</Button>
+      <Button variant="danger" onclick={uninstall}>{t('plugins.uninstall')}</Button>
+    {/snippet}
+  </Dialog>
 {/if}
 
 <style>
-  .plugins,
-  .perms {
+  .plugins {
     list-style: none;
+    margin: 0;
     padding: 0;
-  }
-  .plugin {
-    border-bottom: var(--fc-border-width) solid var(--fc-border);
-    padding: var(--fc-space-3) 0;
-  }
-  .head,
-  .row {
     display: flex;
-    gap: var(--fc-space-2);
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .head {
+    display: flex;
     align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-6);
     flex-wrap: wrap;
   }
-  .link {
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex: none;
+    border-radius: var(--radius-control);
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .titles {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+  .name {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 0;
     border: none;
     background: none;
-    padding: 0;
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-md);
+    font-weight: var(--weight-semibold);
+    cursor: pointer;
+    border-radius: var(--radius-control);
   }
-  .status.auto_disabled,
-  .status.broken {
-    color: var(--fc-danger, firebrick);
+  .name :global(svg) {
+    color: var(--text-2);
   }
-  .sensitive {
-    color: var(--fc-danger, firebrick);
+  .name:hover span {
+    text-decoration: underline;
+  }
+  .name:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .sub {
+    margin: 2px 0 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-1);
+  }
+  .side {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .error {
+    margin: 0;
+    padding: 0 var(--space-6) var(--space-4);
+    color: var(--danger);
+    font-size: var(--text-sm);
   }
   .details {
-    padding-left: var(--fc-space-4);
+    border-top: 1px solid var(--border);
+    padding: var(--space-2) 0;
   }
-  .setting {
-    display: block;
-    margin: var(--fc-space-2) 0;
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-6);
+  }
+  .block.flush {
+    padding-inline: 0;
+  }
+  .block.flush h3 {
+    padding-inline: var(--space-6);
+  }
+  .block h3 {
+    margin: 0;
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .block.footer {
+    align-items: flex-start;
+  }
+  .row {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .perms {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .perm {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+  .muted {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .notice {
+    margin: var(--space-2) var(--space-6) 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
+    background: var(--success-soft);
+    color: var(--success);
+    font-size: var(--text-sm);
   }
   .logs {
+    margin: 0;
     max-height: 12rem;
     overflow: auto;
-    font-size: 0.85em;
+    padding: var(--space-3);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-1);
   }
-  .dialog {
-    border: var(--fc-border-width) solid var(--fc-border);
-    padding: var(--fc-space-4);
-    margin: var(--fc-space-4) 0;
+  @media (max-width: 1023.98px) {
+    .head,
+    .block {
+      padding-inline: var(--space-4);
+    }
+    .block.flush h3 {
+      padding-inline: var(--space-4);
+    }
   }
 </style>

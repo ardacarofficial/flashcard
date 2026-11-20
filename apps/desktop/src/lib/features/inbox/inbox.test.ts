@@ -82,12 +82,13 @@ describe('<InboxScreen>', () => {
     expect((await api.call('inbox.count', {})).pending).toBe(2);
 
     // Pick the deck, edit the back, accept.
-    const badgerDeck = screen.getAllByLabelText(/Deck/)[1] as HTMLSelectElement;
-    await fireEvent.change(badgerDeck, { target: { value: node.deck.id } });
+    // v1.1: the deck is the design-system Select (combobox + listbox).
+    await fireEvent.click(screen.getAllByRole('combobox', { name: 'Deck' })[1]!);
+    await fireEvent.click(await screen.findByRole('option', { name: 'Inbox deck' }));
     await fireEvent.input(screen.getByDisplayValue('porsuk'), { target: { value: 'porsuk (hayvan)' } });
     const spy = vi.spyOn(api, 'call');
     await fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[1]!);
-    expect(await screen.findByText('1 cards added')).toBeTruthy();
+    expect(await screen.findByText('1 card added')).toBeTruthy();
     const req = spy.mock.calls.find(([m]) => m === 'inbox.accept')![1] as { items: { deck_id: string; fields: unknown }[] };
     expect(req.items[0]!.deck_id).toBe(node.deck.id);
     expect(req.items[0]!.fields).toEqual({ front: 'badger', back: 'porsuk (hayvan)' });
@@ -248,8 +249,8 @@ describe('<QuickAdd>', () => {
     const { shell } = fakeShell([], 'porsuk');
     render(QuickAdd, { shell });
     expect(await screen.findByDisplayValue('porsuk')).toBeTruthy();
-    const deck = screen.getByLabelText('Deck') as HTMLSelectElement;
-    await fireEvent.change(deck, { target: { value: node.deck.id } });
+    await fireEvent.click(screen.getByRole('combobox', { name: 'Deck' }));
+    await fireEvent.click(await screen.findByRole('option', { name: node.deck.name }));
     await fireEvent.input(screen.getByLabelText('Back'), { target: { value: 'badger' } });
     const spy = vi.spyOn(api.note, 'createClassic');
     await fireEvent.click(screen.getByRole('button', { name: 'Add' }));

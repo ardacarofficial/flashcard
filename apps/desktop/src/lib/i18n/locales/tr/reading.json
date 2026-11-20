@@ -94,7 +94,11 @@
       "fetch": "Getir",
       "importing": "Kaynak okunuyor…",
       "path_prompt": "Okunacak dosyanın yolu",
-      "media_prompt": "Video ya da ses dosyasının yolu"
+      "media_prompt": "Video ya da ses dosyasının yolu",
+      "description": "Bir metin yapıştır, dosya aç ya da bir web sayfası getir.",
+      "language_placeholder": "ör. en",
+      "other_sources": "Ya da buradan oku",
+      "first": "İlk metnini ekle"
     },
     "priority": {
       "label": "Öncelik",
@@ -163,6 +167,10 @@
       "reading_source": "Kaynak okunuyor…",
       "cutting_audio": "Ses kesiliyor…",
       "taking_screenshot": "Ekran görüntüsü alınıyor…"
-    }
+    },
+    "subtitle": "Metin ve altyazı oku; bir kelimeye dokunup anlamına bak ya da kart yap.",
+    "progress": "Okunan kısım",
+    "delete_named": "“{name}” sil",
+    "selection": "Seçili metin"
   }
 }
