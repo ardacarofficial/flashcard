@@ -144,10 +144,10 @@
         />
         <span class="grow"></span>
         <Switch label={t('inbox.allow_duplicates')} bind:checked={allowDuplicates} />
-        <Button disabled={picked.length === 0} icon={X} onclick={() => reject(picked)}>
+        <Button size="sm" disabled={picked.length === 0} icon={X} onclick={() => reject(picked)}>
           {t('inbox.reject_selected', { count: picked.length })}
         </Button>
-        <Button variant="primary" icon={Check} disabled={picked.length === 0} onclick={() => accept(picked)}>
+        <Button size="sm" variant="primary" icon={Check} disabled={picked.length === 0} onclick={() => accept(picked)}>
           {t('inbox.accept_selected', { count: picked.length })}
         </Button>
       </div>
@@ -278,7 +278,7 @@
     overflow-wrap: anywhere;
   }
   .date {
-    color: var(--text-3);
+    color: var(--text-2);
     font-size: var(--text-xs);
   }
   .pair {

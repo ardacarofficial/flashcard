@@ -43,7 +43,7 @@
   const cid = $derived(id ?? `fc-check-${uid}`);
 </script>
 
-<label class="fc-check {klass}" class:disabled for={cid}>
+<label class="fc-check {klass}" class:disabled for={cid} data-fc-ui>
   <span class="box-wrap">
     <input
       id={cid}

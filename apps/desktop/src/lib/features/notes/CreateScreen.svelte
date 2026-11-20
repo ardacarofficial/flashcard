@@ -624,7 +624,7 @@
     font-weight: var(--weight-semibold);
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .thumb {
     position: relative;
@@ -664,7 +664,7 @@
   }
   .hint {
     margin: 0;
-    color: var(--text-3);
+    color: var(--text-2);
     font-size: var(--text-xs);
     text-align: center;
   }

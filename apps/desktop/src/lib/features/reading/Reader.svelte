@@ -276,7 +276,7 @@
   .cue {
     margin-right: var(--space-2);
     font-variant-numeric: tabular-nums;
-    color: var(--text-3);
+    color: var(--text-2);
     font-size: var(--text-sm);
   }
   button.w {
@@ -297,7 +297,7 @@
     background: transparent;
   }
   .w.ignored {
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .swatch.ignored {
     background: var(--surface-2);

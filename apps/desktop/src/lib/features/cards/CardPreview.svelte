@@ -69,21 +69,17 @@
   }
   .card {
     width: 100%;
+  }
+  .card.empty {
     box-sizing: border-box;
     min-height: 160px;
     padding: var(--space-6);
-    background: var(--surface-1);
-    border: 1px solid var(--border);
+    border: 1px dashed var(--border-strong);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-1);
-  }
-  .card.empty {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-3);
-    box-shadow: none;
-    border-style: dashed;
+    color: var(--text-2);
   }
   .card.empty p {
     margin: 0;

@@ -21,8 +21,10 @@
     onopennote?: (id: string) => void;
     /** v1.1 Create screen: the note type is chosen outside (no type picker here). */
     fixedType?: string | null;
+    /** Inside a titled dialog: no heading of its own. */
+    bare?: boolean;
   }
-  let { deckId, deckName, noteId = null, onsaved, onopennote, fixedType = null }: Props = $props();
+  let { deckId, deckName, noteId = null, onsaved, onopennote, fixedType = null, bare = false }: Props = $props();
 
   const LAST_TYPE = 'fc.cards.last_notetype';
 
@@ -190,7 +192,7 @@
 
 <section class="editor">
   <div class="form-col">
-    {#if !fixedType}
+    {#if !fixedType && !bare}
       <header class="head">
         <h2>{noteId ? t('note_editor.edit_heading') : t('note.add_heading')}</h2>
         {#if !noteId}<p class="muted">{t('deck.current')}: {deckName}</p>{/if}

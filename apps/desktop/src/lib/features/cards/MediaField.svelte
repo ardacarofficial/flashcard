@@ -133,7 +133,7 @@
   }
   .hint {
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .error {
     color: var(--danger);

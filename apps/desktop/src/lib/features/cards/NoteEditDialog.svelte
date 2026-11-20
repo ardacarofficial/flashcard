@@ -18,6 +18,6 @@
 
 <Dialog open title={t('note_editor.edit_heading')} size="lg" onclose={onclose}>
   {#key shown}
-    <NoteEditor noteId={shown} {deckId} {deckName} onopennote={(id) => (current = id)} />
+    <NoteEditor bare noteId={shown} {deckId} {deckName} onopennote={(id) => (current = id)} />
   {/key}
 </Dialog>
