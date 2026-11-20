@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDate } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { DeckId, InboxItemDto, InboxSource, InboxStatus } from '$lib/api/types';
@@ -105,7 +106,6 @@
     { id: 'rejected', label: t('inbox.tabs.rejected') },
   ]);
   const deckOptions = $derived(paths.map((p) => ({ value: p.id as string | null, label: p.path })));
-  const date = (ms: number) => new Date(ms).toLocaleDateString();
 
   onMount(() => {
     void load();
@@ -166,7 +166,7 @@
               <span class="from"><Icon icon={Globe} size={16} />{t('inbox.from_page')}: {item.item.context.title || item.item.context.url}</span>
             {/if}
             <span class="grow"></span>
-            <span class="date">{date(item.created_at)}</span>
+            <span class="date">{formatDate(item.created_at)}</span>
           </div>
 
           {#if tab === 'pending' && d}
@@ -209,8 +209,6 @@
 
 <style>
   .inbox {
-    max-width: 880px;
-    margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-4);

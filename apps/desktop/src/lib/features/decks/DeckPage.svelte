@@ -172,7 +172,7 @@
   const total = $derived(summary ? summary.new + summary.learning + summary.mastered : 0);
 </script>
 
-<PageHeader
+<PageHeader chrome={false}
   title={deck.name}
   subtitle={deck.parent_id ? deck.path : t('deck_page.cards', { count: node.counts.total })}
   back={{ label: t('deck_page.back'), onclick: onback }}

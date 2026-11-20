@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRawSnippet } from 'svelte';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { i18n } from '$lib/i18n/index.svelte';
-import { Checkbox, Dialog, Flashcard, Menu, Select, Switch, Table, Tabs } from './index';
+import { Checkbox, Dialog, Flashcard, Menu, NumberedRow, OptionTile, Select, Switch, Table, Tabs } from './index';
 
 i18n.locale = 'en';
 
@@ -281,5 +281,36 @@ describe('Table', () => {
   it('shows the empty text without rows', () => {
     render(Table<Row>, { rows: [], columns, rowKey: (r) => r.id, label: 'Cards' });
     expect(screen.getByText('Nothing here yet.')).toBeTruthy();
+  });
+});
+
+describe('OptionTile', () => {
+  it('is a radio with a letter marker when `checked` is set, and shows the result with an icon label', async () => {
+    const onclick = vi.fn();
+    const { rerender } = render(OptionTile, { label: 'gitmek', letter: 'A', checked: false, onclick });
+    const tile = screen.getByRole('radio', { name: /gitmek/ });
+    expect(tile.getAttribute('aria-checked')).toBe('false');
+    await fireEvent.click(tile);
+    expect(onclick).toHaveBeenCalledOnce();
+    await rerender({ label: 'gitmek', letter: 'A', checked: true, result: 'miss', missLabel: 'Your pick', disabled: true });
+    expect(screen.getByRole('radio').getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('img', { name: 'Your pick' })).toBeTruthy();
+  });
+
+  it('is a plain button with a shortcut key otherwise', () => {
+    render(OptionTile, { label: 'kedi', kbd: '1' });
+    const tile = screen.getByRole('button', { name: /kedi/ });
+    expect(tile.querySelector('kbd')?.textContent).toBe('1');
+  });
+});
+
+describe('NumberedRow', () => {
+  it('shows its number, the fields, the actions and an error', () => {
+    render(NumberedRow, { n: 3, error: 'Already in the deck', children: html('<span>fields</span>'), actions: html('<button>x</button>') });
+    const row = screen.getByRole('listitem');
+    expect(row.querySelector('.num')?.textContent).toBe('3');
+    expect(row.textContent).toContain('fields');
+    expect(screen.getByRole('alert').textContent).toBe('Already in the deck');
+    expect(row.classList.contains('invalid')).toBe(false);
   });
 });

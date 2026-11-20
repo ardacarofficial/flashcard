@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDateTime } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { ApiClientDto, ApiClientList } from '$lib/api/types';
@@ -81,7 +82,7 @@
               {/if}
               <div class="foot">
                 <p class="muted">
-                  {c.last_used_at ? t('local_api.last_used', { time: new Date(c.last_used_at).toLocaleString() }) : t('local_api.never_used')}
+                  {c.last_used_at ? t('local_api.last_used', { time: formatDateTime(c.last_used_at) }) : t('local_api.never_used')}
                 </p>
                 {#if c.status === 'approved'}
                   <Button size="sm" variant="danger" onclick={() => act('local_api.clients.revoke', c)}>{t('local_api.revoke')}</Button>

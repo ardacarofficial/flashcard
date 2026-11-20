@@ -30,7 +30,7 @@
       "record_separator": "Between cards",
       "newline": "New line",
       "blank_line": "Blank line",
-      "detected": "Detected automatically ({confidence}%). Change if it looks wrong.",
+      "detected": "Detected automatically ({confidence}). Change if it looks wrong.",
       "skip_first_row": "First row is a header",
       "preview": "Preview",
       "rows": "{shown} of {total} rows",

@@ -20,6 +20,7 @@
     IconButton,
     ImagePlus,
     Input,
+    NumberedRow,
     PageHeader,
     Plus,
     SegmentedControl,
@@ -434,40 +435,24 @@
       {:else}
         <ol class="rows" bind:this={list} aria-label={t('create.cards_heading')}>
           {#each rows as row, i (row.key)}
-            <li class="row" class:invalid={rowErrors[i]}>
-              <div class="row-top">
-                <span class="num" aria-hidden="true">{i + 1}</span>
-                <div class="row-actions">
-                  <IconButton
-                    size="sm"
-                    icon={ImagePlus}
-                    label={t('create.add_image', { n: i + 1 })}
-                    loading={uploading === row.key}
-                    onclick={() => pickImage(i)}
-                  />
-                  <IconButton size="sm" icon={Trash2} label={t('create.remove_row', { n: i + 1 })} onclick={() => removeRow(i)} />
-                </div>
-              </div>
+            <NumberedRow n={i + 1} invalid={!!rowErrors[i]} error={rowErrors[i] ?? null}>
               <div class="cells" class:has-image={!!row.image} style:--cols={Math.min(fields.length, 3)}>
                 {#each fields as f, c (f.key)}
-                  <div class="cell">
-                    <Textarea
-                      label={`${caption(c, f.name)} ${i + 1}`}
-                      hideLabel
-                      rows={1}
-                      autoGrow
-                      maxRows={8}
-                      value={row.fields[f.key] ?? ''}
-                      oninput={(e) => {
-                        row.fields[f.key] = e.currentTarget.value;
-                        if (rowErrors[i]) rowErrors = {};
-                      }}
-                      onkeydown={(e) => onCellKey(e, i, c)}
-                      data-cell="{i}:{c}"
-                      class="cell-input"
-                    />
-                    <span class="caption" aria-hidden="true">{caption(c, f.name)}</span>
-                  </div>
+                  <Textarea
+                    label={caption(c, f.name)}
+                    rows={1}
+                    autoGrow
+                    maxRows={8}
+                    value={row.fields[f.key] ?? ''}
+                    oninput={(e) => {
+                      row.fields[f.key] = e.currentTarget.value;
+                      if (rowErrors[i]) rowErrors = {};
+                    }}
+                    onkeydown={(e) => onCellKey(e, i, c)}
+                    data-cell="{i}:{c}"
+                    aria-label={`${caption(c, f.name)} ${i + 1}`}
+                    class="cell-input"
+                  />
                 {/each}
                 {#if row.image}
                   <div class="thumb">
@@ -476,8 +461,17 @@
                   </div>
                 {/if}
               </div>
-              {#if rowErrors[i]}<p class="row-error" role="alert">{rowErrors[i]}</p>{/if}
-            </li>
+              {#snippet actions()}
+                <IconButton
+                  size="sm"
+                  icon={ImagePlus}
+                  label={t('create.add_image', { n: i + 1 })}
+                  loading={uploading === row.key}
+                  onclick={() => pickImage(i)}
+                />
+                <IconButton size="sm" icon={Trash2} label={t('create.remove_row', { n: i + 1 })} onclick={() => removeRow(i)} />
+              {/snippet}
+            </NumberedRow>
           {/each}
         </ol>
         <Button size="lg" fullWidth icon={Plus} class="add-row" onclick={() => addRow()}>{t('create.add_row')}</Button>
@@ -509,8 +503,6 @@
 
 <style>
   .create {
-    max-width: 960px;
-    margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
@@ -528,7 +520,7 @@
   }
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: var(--space-4);
     align-items: start;
   }
@@ -555,79 +547,24 @@
     flex-direction: column;
     gap: var(--space-3);
   }
-  .row {
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    padding: var(--space-2) var(--space-4) var(--space-4) var(--space-4);
-    transition: border-color var(--motion-fast) var(--ease);
-  }
-  .row:focus-within {
-    border-color: var(--accent);
-  }
-  .row.invalid {
-    border-color: var(--danger);
-  }
-  .row-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--space-1);
-  }
-  .num {
-    font-weight: var(--weight-semibold);
-    color: var(--text-2);
-    font-size: var(--text-sm);
-    font-variant-numeric: tabular-nums;
-  }
-  .row-actions {
-    display: flex;
-    gap: var(--space-1);
-  }
   .cells {
     display: grid;
     grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
-    gap: var(--space-6);
+    gap: var(--space-4);
     align-items: start;
   }
   .cells.has-image {
     grid-template-columns: repeat(var(--cols), minmax(0, 1fr)) auto;
   }
-  .cell {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    grid-column: span 1;
-  }
-  .cells .cell:last-of-type {
-    grid-column: span 1;
-  }
   .create :global(.fc-page-header) {
     margin-bottom: 0;
   }
-  .cell :global(textarea) {
-    border: none;
-    border-bottom: 2px solid var(--border-strong);
-    border-radius: 0;
-    background: transparent;
-    padding-inline: 0;
+  .cells :global(textarea) {
     resize: none;
-    font-size: var(--text-md);
-    box-shadow: none;
-  }
-  .cell :global(textarea:focus) {
-    border-bottom-color: var(--accent);
-    outline: none;
-  }
-  .caption {
-    font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-2);
   }
   .thumb {
     position: relative;
+    margin-top: 26px;
     width: 96px;
     height: 72px;
     border-radius: var(--radius-control);
@@ -644,11 +581,6 @@
     position: absolute;
     top: var(--space-1);
     right: var(--space-1);
-  }
-  .row-error {
-    margin: var(--space-2) 0 0;
-    color: var(--danger);
-    font-size: var(--text-sm);
   }
   .body :global(.add-row) {
     min-height: 64px;

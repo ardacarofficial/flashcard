@@ -466,15 +466,23 @@
     font-family: var(--font-mono);
     font-size: var(--text-sm);
   }
+  /*
+   * Sticky save bar: a real bar (top rule, page background, space above it) that reserves its
+   * own room at the end of the editor, so the last section scrolls fully clear of it.
+   */
   .savebar {
     position: sticky;
     bottom: 0;
+    z-index: 1;
     display: flex;
     justify-content: flex-end;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-3) 0;
+    margin-top: var(--space-4);
+    padding: var(--space-3) 0 var(--space-4);
+    border-top: 1px solid var(--border);
     background: var(--surface-0);
+    box-shadow: 0 -8px 16px -12px rgb(0 0 0 / 0.25);
   }
   .ok {
     color: var(--success);

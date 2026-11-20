@@ -1,5 +1,6 @@
 <!-- Tree view of the Library: one row per deck (indented), with due count and mastery bar. -->
 <script lang="ts">
+  import { formatPercent100 } from '$lib/format';
   import type { DeckId, DeckSummary, DeckTreeNode } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import { Badge, ChevronDown, ChevronRight, IconButton, ProgressBar } from '$lib/ui';
@@ -56,7 +57,7 @@
             />
           {/if}
         </span>
-        <span class="pct">{s ? t('library.mastered', { pct: s.mastered_pct }) : ''}</span>
+        <span class="pct">{s ? t('library.mastered', { pct: formatPercent100(s.mastered_pct) }) : ''}</span>
       </div>
       {#if node.children.length && open}
         <Self nodes={node.children} {summaries} depth={depth + 1} {onopen} />

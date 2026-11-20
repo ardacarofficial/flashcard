@@ -88,7 +88,7 @@
   }
 </script>
 
-<section aria-labelledby="deck-terms">
+<section aria-labelledby="deck-terms" data-testid="term-list">
   <div class="head">
     <h2 id="deck-terms" class="section-title">
       {t('deck_page.terms')}

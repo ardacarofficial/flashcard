@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDateTime } from '$lib/format';
   import { api, type ApiError } from '$lib/api';
   import type { BackupInfo, ExportReport, JobDto, RestoreReport } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
@@ -106,7 +107,7 @@
   title={t('io.backup.confirm_title')}
   description={pending
     ? t('io.backup.confirm_body', {
-        date: new Date(pending.info.created_at).toLocaleString(i18n.locale),
+        date: formatDateTime(pending.info.created_at),
         notes: pending.info.counts['notes'] ?? 0,
       })
     : undefined}

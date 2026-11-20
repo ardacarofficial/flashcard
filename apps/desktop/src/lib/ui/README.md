@@ -26,6 +26,16 @@ Rules for screen lanes:
 - **Navigation**: screens link with `ctx.navigate('/route')` (never import other screens).
 - Colour is never the only cue: pair it with an icon or text.
 
+**Numbers and dates**: only through `$lib/format` (`formatPercent`, `formatPercent100`,
+`formatDecimal`, `formatCount`, `formatSeconds`, `formatDuration`, `formatDate`,
+`formatDateTime`, `formatRelative`, …) — Intl for the active language (TR `%35`, `15,0 sn`;
+EN `35%`, `15.0 s`). No `toFixed(` or hand-glued `%` in components (lint:
+`tests/number-format.test.ts`); translations take the formatted string (`"{pct} ustalaşıldı"`).
+
+**Page width**: the shell's `.page` is the one container (`--content-max`, `--content-pad-x`,
+left-aligned next to the sidebar); a screen does not centre itself or set its own page width.
+Tables and charts use the wide variant (`ScreenDef.width: 'wide'` → `--content-max-wide`).
+
 Common props: most components accept `class`; sizes are `'sm' | 'md' | 'lg'`; tones are
 `'neutral' | 'accent' | 'success' | 'warning' | 'danger'`. Bindable props are marked `bind:`.
 
@@ -37,6 +47,7 @@ Common props: most components accept `class`; sizes are `'sm' | 'md' | 'lg'`; to
 | **IconButton** | `icon` · `label` (required: accessible name + hover hint) · `variant` ghost(default)/secondary/primary/danger · `size` · `pressed` (toggle) · `loading` | `<IconButton icon={Pencil} label={t('common.rename')} onclick={edit} />` |
 | **Menu** | `items: MenuItem[]` (`{id,label,icon?,keys?,danger?,disabled?,onselect}` or `{id,separator:true}`) · `label` (trigger name, default "More actions") · `icon` · `trigger` snippet (custom content) · `align` start/end · `placement` bottom/top | `<Menu items={[{ id: 'del', label: t('common.delete'), danger: true, onselect: del }]} />` |
 | **Tile** | `icon` · `title` · `description?` · `meta?` · `disabled` · `onclick` · `testid` (`data-testid`) | `<Tile icon={Repeat} title={t('…')} description={t('…')} onclick={learn} />` |
+| **OptionTile** | `label` / children · `kbd` (shortcut key) or `letter` (A, B…) · `checked` (set → `role="radio"`, put tiles in a `role="radiogroup"`) · `result` right/miss + `rightLabel`/`missLabel` · `disabled` · `onclick` · `testid` — the large answer option of Learn, Test and Cards' multiple choice | `<OptionTile kbd="1" label={o} result={…} onclick={() => pick(i)} />` |
 
 ## Form controls
 
@@ -70,6 +81,7 @@ All wrap **Field** (label, hint, error with `aria-describedby`/`aria-invalid`). 
 | **Skeleton** | `width` · `height` · `shape` text/control/card/circle · `lines` | `<Skeleton shape="card" />` |
 | **Spinner** | `size` (decorative; announce loading in text) | `<Spinner />` |
 | **Table** | `rows` · `columns: TableColumn<T>[]` (`{id,header,width?,align?,value?}`) · `rowKey` · `label` · `rowHeight` (fixed, 44) · `height` (CSS) · `bind:activeKey` · `selectedKeys` · `onrowclick` · `cell` snippet `(row, column)` · `empty` snippet — virtualised grid; ↑/↓ PgUp/PgDn Home/End, Enter | `<Table rows={cards} {columns} rowKey={(c) => c.id} label={t('…')} onrowclick={open} />` |
+| **NumberedRow** | `n` · `invalid` · `error` · `actions` snippet · children (the row's fields) — one numbered card of an editable list (Create's rows), inside an `<ol>` | `<NumberedRow n={i + 1}>…{#snippet actions()}…{/snippet}</NumberedRow>` |
 | **Flashcard** | `front` / `back` snippets · `bind:flipped` · `onflip(flipped)` · `disabled` · `instant` · `fit` (shrink long text, default on) · `size` md/lg — Space/Enter/click flip; 3D flip off under `prefers-reduced-motion` | `<Flashcard bind:flipped>{#snippet front()}…{/snippet}{#snippet back()}…{/snippet}</Flashcard>` |
 
 ## Overlays and feedback
@@ -84,7 +96,7 @@ All wrap **Field** (label, hint, error with `aria-describedby`/`aria-invalid`). 
 
 | Component | Props | Usage |
 |---|---|---|
-| **PageHeader** | `title` (the page's `<h1>`) · `subtitle?` · `back?: {label,onclick}` · `meta` snippet (chips) · `actions` snippet · `tabs` snippet | `<PageHeader title={deck.name}>{#snippet actions()}<Menu …/>{/snippet}</PageHeader>` |
+| **PageHeader** | `title` (the page's `<h1>`) · `subtitle?` · `back?: {label,onclick}` · `meta` snippet (chips) · `actions` snippet · `tabs` snippet · `chrome` (default true: also draws the shell's deck picker among the actions and the section tabs under the title — `page-chrome.ts`; `false` on sub-pages like the deck page) | `<PageHeader title={deck.name}>{#snippet actions()}<Menu …/>{/snippet}</PageHeader>` |
 | **Tabs** | `tabs: TabItem[]` (`{id,label,icon?,badge?,disabled?}`) · `bind:value` · `label` · `variant` line/pill · `onchange(id)` · children snippet `(id)` (panel) | `<Tabs label={t('…')} {tabs} bind:value={tab} />` |
 | **Sidebar** | `label` · `collapsed` · `header` / children (NavItems) / `footer` snippets — icon-only below 1024 px | (app shell) |
 | **NavItem** | `label` · `icon` · `active` · `accent` · `badge` · `badgeLabel` · `collapsed` · `onclick` · `leading` snippet | (app shell) |
@@ -97,5 +109,9 @@ All wrap **Field** (label, hint, error with `aria-describedby`/`aria-invalid`). 
 - Sections with more than one tab page show them as tabs above the screen (`tab: false` in
   `PLACEMENTS` keeps a page out of the tabs — the study modes, opened from the deck page tiles
   and Home); Settings shows a grouped sub-navigation. Home is `features/home/HomeScreen.svelte`.
-- A study screen calls `ctx.setFocus(true)` while a session runs: the shell hides the deck
-  picker and the tabs and centres the column (focus layout); it resets on every page change.
+- A study screen calls `ctx.setFocus(true)` while a session runs (and on its end screen): the
+  shell hides the deck picker and the tabs and centres the column (focus layout); it resets on
+  every page change.
+- The deck picker (`deckPicker: true`) and the section tabs are not drawn above the screen: the
+  shell hands them to the screen's `PageHeader` (`setPageChrome`), so the title comes first.
+- Settings below 1024 px: the grouped sub-navigation collapses into one Select on top.

@@ -19,6 +19,8 @@ export { default as Input } from './Input.svelte';
 export { default as Kbd } from './Kbd.svelte';
 export { default as Menu } from './Menu.svelte';
 export { default as NavItem } from './NavItem.svelte';
+export { default as NumberedRow } from './NumberedRow.svelte';
+export { default as OptionTile } from './OptionTile.svelte';
 export { default as PageHeader } from './PageHeader.svelte';
 export { default as ProgressBar } from './ProgressBar.svelte';
 export { default as ProgressRing } from './ProgressRing.svelte';

@@ -33,7 +33,7 @@
     "no_saved": "Henüz kayıtlı sorgu yok.",
     "delete_saved": "“{name}” kayıtlı sorgusunu sil",
     "col": {
-      "sort_field": "Sıralama alanı",
+      "front": "Ön yüz",
       "deck": "Deste",
       "state": "Durum",
       "due": "Vade",

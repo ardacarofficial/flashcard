@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatPercent100 } from '$lib/format';
   import { onMount } from 'svelte';
   import type { IconNode } from 'lucide';
   import { api } from '$lib/api';
@@ -116,7 +117,7 @@
             </div>
             <div class="progress">
               <span class="amount">{t('goals.progress', { current: num(g.progress.current), target: num(g.goal.target) })}</span>
-              <span class="pc">{Math.round(g.progress.percent)}%</span>
+              <span class="pc">{formatPercent100(Math.round(g.progress.percent))}</span>
             </div>
             <ProgressBar
               size="lg"

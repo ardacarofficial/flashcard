@@ -1,10 +1,11 @@
 <!--
   The Settings page: grouped sub-navigation on the left (docs/11 §2), the chosen page on the
-  right. Hosts the existing admin screens unchanged (screen lanes restyle them).
+  right. Below 1024 px the sub-navigation collapses into one Select above the page.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { t, td } from '$lib/i18n/index.svelte';
+  import Select from '$lib/ui/Select.svelte';
   import type { NavEntry, Navigation } from './navigation';
 
   interface Props {
@@ -15,9 +16,23 @@
   }
 
   let { groups, active, open, children }: Props = $props();
+  const entries = $derived(groups.flatMap((g) => g.entries.map((e) => ({ e, group: t(g.label_key) }))));
+  const options = $derived(entries.map(({ e, group }) => ({ value: e.id, label: td(e.label_key), description: group })));
 </script>
 
 <div class="settings">
+  <div class="picker" data-testid="settings-select">
+    <Select
+      label={t('shell.settings_nav')}
+      hideLabel
+      {options}
+      value={active}
+      onchange={(id) => {
+        const hit = entries.find((x) => x.e.id === id);
+        if (hit) open(hit.e);
+      }}
+    />
+  </div>
   <nav class="subnav" aria-label={t('shell.settings_nav')}>
     {#each groups as g (g.id)}
       <div class="group">
@@ -97,13 +112,21 @@
   .content {
     min-width: 0;
   }
-  @media (max-width: 799.98px) {
+  .picker {
+    display: none;
+  }
+  /* Narrow window: the grouped list becomes one Select on top (no second column). */
+  @media (max-width: 1023.98px) {
     .settings {
       grid-template-columns: minmax(0, 1fr);
-      gap: var(--space-4);
+      gap: var(--space-6);
     }
     .subnav {
-      position: static;
+      display: none;
+    }
+    .picker {
+      display: block;
+      max-width: 360px;
     }
   }
 </style>

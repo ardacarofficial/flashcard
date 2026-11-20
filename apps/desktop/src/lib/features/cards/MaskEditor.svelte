@@ -73,7 +73,8 @@
     value = serializeMasks({ ...masks, mode });
   }
 
-  const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
+  /** A 0–1 fraction as a CSS length (`calc(0.25 * 100%)`), not display text. */
+  const pct = (v: number) => `calc(${v} * 100%)`;
 </script>
 
 <div class="masks">

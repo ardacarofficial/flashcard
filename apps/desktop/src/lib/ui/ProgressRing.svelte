@@ -1,7 +1,7 @@
 <!-- Circular progress (test score, goal). Shows the percentage in the middle unless `children` is given. -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { t } from '$lib/i18n/index.svelte';
+  import { formatPercent100 } from '$lib/format';
   import type { Tone } from './types';
 
   interface Props {
@@ -49,7 +49,7 @@
     />
   </svg>
   <span class="center" style:font-size="{Math.max(11, size / 4.5)}px">
-    {#if children}{@render children()}{:else}{t('ui.progress.percent', { value: percent })}{/if}
+    {#if children}{@render children()}{:else}{formatPercent100(percent)}{/if}
   </span>
 </div>
 

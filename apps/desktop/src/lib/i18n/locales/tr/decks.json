@@ -54,7 +54,7 @@
     "due": "{count} vadeli",
     "nothing_due": "Vadeli kart yok",
     "mastery": "{name} ilerlemesi",
-    "mastered": "%{pct} ustalaşıldı",
+    "mastered": "{pct} ustalaşıldı",
     "load_failed": "Deste ilerlemesi yüklenemedi.",
     "retry": "Tekrar dene",
     "open": "{name} destesini aç"

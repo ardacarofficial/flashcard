@@ -6,6 +6,7 @@
    * and keeps the deck's best time (`modes.match.*`); this screen only shows and reports.
    * Keys: Enter starts / plays again, Esc ends.
    */
+  import { formatDecimal } from '$lib/format';
   import { onDestroy, onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { MatchResultDto, MatchRoundDto, MatchTileDto } from '$lib/api/types';
@@ -76,11 +77,10 @@
 
   const playing = $derived(round !== null && round.tiles.length > 0 && result === null);
   // A running round switches the shell to the focus layout (no picker, no tabs).
-  $effect(() => ctx.setFocus?.(playing));
+  $effect(() => ctx.setFocus?.(playing || result !== null));
   const elapsed = $derived(playing ? Math.max(0, now - shownAt) : (result?.time_ms ?? 0));
 
-  const fmt = $derived(new Intl.NumberFormat(i18n.locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
-  const secs = (ms: number) => fmt.format(Math.floor(ms / 100) / 10);
+  const secs = (ms: number) => formatDecimal(Math.floor(ms / 100) / 10, 1);
 
   function show(r: MatchRoundDto) {
     round = r;
@@ -210,6 +210,7 @@
           aria-pressed={selected === tile.id}
           aria-label={t(tile.side === 'term' ? 'modes.match.term' : 'modes.match.definition', { text: tile.text })}
           data-testid="match-tile"
+          data-side={tile.side}
           onclick={() => void run(() => pick(tile))}
         >
           <span class="text">{tile.text}</span>
@@ -241,7 +242,7 @@
       </Card>
     </div>
   {:else if tooFew}
-    <PageHeader title={t('modes.match.heading')} subtitle={ctx.selectedPath ?? t('study.whole_collection')} />
+    <PageHeader title={t('modes.match.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
     <Card padding="lg">
       <EmptyState
         icon={Shuffle}
@@ -251,7 +252,7 @@
       />
     </Card>
   {:else}
-    <PageHeader title={t('modes.match.heading')} subtitle={ctx.selectedPath ?? t('study.whole_collection')} />
+    <PageHeader title={t('modes.match.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
     {#if loading}
       <Skeleton shape="card" height="200px" />
     {:else}
@@ -458,7 +459,8 @@
   .done {
     max-width: 480px;
     width: 100%;
-    margin-top: var(--space-4);
+    /* The end screen sits centred in the focus column. */
+    margin: var(--space-12) auto 0;
   }
   .result {
     display: flex;

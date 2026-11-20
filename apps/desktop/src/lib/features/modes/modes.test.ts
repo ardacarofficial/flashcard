@@ -247,8 +247,10 @@ describe('test screen', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Print answer key' }));
     await waitFor(() => expect(print).toHaveBeenCalled());
     expect(screen.queryByText(/Answer: a3/)).toBeNull(); // key gone again after printing
-    await fireEvent.click(screen.getAllByLabelText('True')[0]!);
-    await fireEvent.click(screen.getByLabelText('a2'));
+    // Answers are option tiles (radios), like Learn's.
+    await fireEvent.click(screen.getAllByRole('radio', { name: /True/ })[0]!);
+    await fireEvent.click(screen.getByRole('radio', { name: /a2/ }));
+    expect(screen.getByRole('radio', { name: /a2/ }).getAttribute('aria-checked')).toBe('true');
     await fireEvent.input(screen.getByLabelText('Your answer'), { target: { value: 'a3' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
     expect((await screen.findByTestId('test-score')).textContent).toContain('Score: 100%');

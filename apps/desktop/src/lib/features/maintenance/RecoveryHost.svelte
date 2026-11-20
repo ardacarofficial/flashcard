@@ -93,7 +93,7 @@
   <div class="update" role="status">
     <span class="icon" aria-hidden="true"><Icon icon={RefreshCw} size={20} /></span>
     <span class="text">{t('app_maintenance.updates.banner', { version: available.version })}</span>
-    <Button size="sm" variant="primary" onclick={() => { available = null; open('/app-maintenance'); }}>{t('app_maintenance.updates.open')}</Button>
+    <Button size="sm" variant="primary" data-testid="update-open" onclick={() => { available = null; open('/app-maintenance'); }}>{t('app_maintenance.updates.open')}</Button>
     <IconButton size="sm" icon={X} label={t('app_maintenance.updates.later')} onclick={() => (available = null)} />
   </div>
 {/if}

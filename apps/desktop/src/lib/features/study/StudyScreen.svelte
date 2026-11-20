@@ -5,6 +5,7 @@
    * the four ratings with their next intervals (`study.answer_buttons`, a display preference
    * stored in settings). The backend runs the session; this screen only shows and reports.
    */
+  import { formatPercent100 } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type {
@@ -33,6 +34,7 @@
     Input,
     Kbd,
     Menu,
+    OptionTile,
     PageHeader,
     ProgressBar,
     ProgressRing,
@@ -147,7 +149,8 @@
   );
   const phase = $derived<StudyPhase>(summary ? 'done' : card ? (revealed ? 'answer' : 'question') : 'idle');
   // A running session switches the shell to the focus layout (no picker, no tabs).
-  $effect(() => ctx.setFocus?.(phase === 'question' || phase === 'answer'));
+  // The session's end screen (summary) stays in the same centred column.
+  $effect(() => ctx.setFocus?.(phase !== 'idle'));
   const filterDef = $derived(attrs.find((a) => a.id === filterAttr) ?? null);
   const twoButtons = $derived(buttons === 'two');
 
@@ -563,7 +566,7 @@
 
 <section class="study" class:playing={phase === 'question' || phase === 'answer'}>
   {#if phase === 'idle'}
-    <PageHeader title={t('study.heading')} subtitle={ctx.selectedPath ?? t('study.whole_collection')} />
+    <PageHeader title={t('study.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
     {#if loading}
       <div class="start-card"><Skeleton shape="card" height="200px" /></div>
     {:else}
@@ -649,11 +652,11 @@
       <Card padding="lg" elevated>
         <div class="summary-head">
           <ProgressRing label={t('study.summary.accuracy_label')} value={accuracy} size={112} tone="success">
-            <span class="ring-value">{accuracy}%</span>
+            <span class="ring-value">{formatPercent100(accuracy)}</span>
           </ProgressRing>
           <div>
             <h2>{t('study.summary.heading')}</h2>
-            <p class="muted">{t('study.summary.accuracy', { n: accuracy })}</p>
+            <p class="muted">{t('study.summary.accuracy', { n: formatPercent100(accuracy) })}</p>
           </div>
         </div>
         <dl class="stats">
@@ -688,7 +691,7 @@
           <span class="flag" style:--flag={flagColor(f)} data-testid="flag">{f.name ?? td(defaultFlagKey(f.flag))}</span>
         {/each}
       </div>
-      <IconButton icon={X} label={t('study.end_label')} onclick={() => void run({ kind: 'end' })} />
+      <IconButton icon={X} label={t('study.end_label')} onclick={() => void run({ kind: 'end' })} data-testid="study-end" />
     </div>
     <p class="remaining" data-focus-hide>{t('study.remaining', session.counts)}</p>
     {#if session.modes?.timer}
@@ -715,17 +718,14 @@
       {#if choice}
         <div class="choices" role="group" aria-label={t('study.choices')}>
           {#each choice.options as option, i (i)}
-            <button
-              type="button"
-              class="choice"
-              class:right={revealed && i === choice.correct}
-              class:wrong={revealed && picked === i && i !== choice.correct}
+            <OptionTile
+              kbd={String(i + 1)}
+              result={revealed && i === choice.correct ? 'right' : revealed && picked === i ? 'miss' : null}
+              rightLabel={t('study.choice_right')}
+              missLabel={t('study.choice_wrong')}
               disabled={revealed}
               onclick={() => void run({ kind: 'choose', index: i })}
-            >
-              <Kbd keys={[String(i + 1)]} />
-              <span class="choice-text">{@html option}</span>
-            </button>
+            >{@html option}</OptionTile>
           {/each}
         </div>
       {/if}
@@ -806,14 +806,9 @@
     {#if composing}
       <InlineComposer deckId={card.deck_id} guarded={ctx.guarded} onclose={() => (composing = false)} />
     {/if}
+    <!-- Only keys no button on screen shows already (the reveal and rating buttons carry theirs). -->
     <p class="keys" data-focus-hide>
-      <span><Kbd keys={['Space']} /> {t('study.keyhint.flip')}</span>
-      {#if twoButtons}
-        <span><Kbd keys={['1']} /> {t('study.buttons.still_learning')}</span>
-        <span><Kbd keys={['2']} /> {t('study.buttons.know_it')}</span>
-      {:else}
-        <span><Kbd keys={['1']} />–<Kbd keys={['4']} /> {t('study.keyhint.rate')}</span>
-      {/if}
+      {#if revealed}<span><Kbd keys={['Space']} /> {t('study.keyhint.flip')}</span>{/if}
       <span><Kbd keys={['Esc']} /> {t('study.end')}</span>
     </p>
   {/if}
@@ -990,36 +985,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-2);
   }
-  .choice {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    min-height: 56px;
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    background: var(--surface-1);
-    color: var(--text-1);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-  .choice:hover:not(:disabled) {
-    border-color: var(--accent);
-  }
-  .choice:disabled {
-    cursor: default;
-    opacity: 1;
-    color: var(--text-2);
-  }
-  .choice.right {
-    border-color: var(--success);
-    background: var(--success-soft);
-  }
-  .choice.wrong {
-    border-color: var(--danger);
-    background: var(--danger-soft);
-  }
   .typed {
     max-width: 560px;
     width: 100%;
@@ -1088,8 +1053,7 @@
     transition: border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
   }
   .big:focus-visible,
-  .rating:focus-visible,
-  .choice:focus-visible {
+  .rating:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
@@ -1161,7 +1125,8 @@
   .summary {
     max-width: 560px;
     width: 100%;
-    margin-top: var(--space-4);
+    /* The end screen sits centred in the focus column. */
+    margin: var(--space-12) auto 0;
   }
   .summary-head {
     display: flex;

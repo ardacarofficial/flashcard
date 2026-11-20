@@ -140,6 +140,14 @@
   --control-h-lg: 44px;
   --sidebar-w: 232px;
   --sidebar-w-collapsed: 64px;
+  /*
+   * Page container (one for every page, App.svelte `.page`): content width and side padding,
+   * left-aligned next to the sidebar so every page starts at the same x. `wide` is the
+   * documented variant for tables and charts (Search, Statistics: ScreenDef `width: 'wide'`).
+   */
+  --content-max: 1120px;
+  --content-max-wide: 1440px;
+  --content-pad-x: var(--space-8);
 
   /* ---------------------------------------------------------------- v1.0 aliases (existing screens) */
   --fc-font: var(--font-sans);
@@ -153,6 +161,12 @@
   --fc-border-width: 1px;
 
   color-scheme: light dark; /* follow the OS */
+}
+
+@media (max-width: 1023.98px) {
+  :root {
+    --content-pad-x: var(--space-4);
+  }
 }
 
 /* Forced schemes. Each colour is declared once, above, via light-dark(). */

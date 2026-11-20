@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatPercent100 } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type {
@@ -327,7 +328,7 @@
               <p class="muted">{t('stats.hours.intro')}</p>
               <BarChart
                 label={t('stats.hours.heading')}
-                formatMax={(n) => `${Math.round(n)}%`}
+                formatMax={(n) => formatPercent100(Math.round(n))}
                 bars={bars(r.hours, (h) => `${h.hour}:00`, (h) => (h.stat.rate ?? 0) * 100, (h) => `${h.hour}:00 · ${h.stat.count} · ${pct(h.stat.rate)}`)}
               />
             {:else if id === 'times'}

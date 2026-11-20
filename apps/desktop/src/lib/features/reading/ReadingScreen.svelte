@@ -233,7 +233,6 @@
 
 <style>
   .reading {
-    max-width: 960px;
     display: flex;
     flex-direction: column;
     gap: var(--space-4);

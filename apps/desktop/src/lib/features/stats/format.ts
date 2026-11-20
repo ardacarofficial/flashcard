@@ -1,21 +1,22 @@
 /**
  * Display formatting of numbers the backend computed (rates, durations). Presentation only:
- * no statistic is derived here.
+ * no statistic is derived here. Thin names over `$lib/format` (the one locale-aware helper).
  */
+import { formatDecimal, formatNumber, formatPercent, formatPercent100, formatShortDate } from '$lib/format';
 
 /** `0.873` → `87%` (`–` when there is no rate). */
 export function pct(rate: number | null | undefined, digits = 0): string {
-  return rate === null || rate === undefined ? '–' : `${(rate * 100).toFixed(digits)}%`;
+  return formatPercent(rate, digits);
 }
 
 /** A 0–100 value as `42%`. */
 export function pct100(value: number, digits = 0): string {
-  return `${value.toFixed(digits)}%`;
+  return formatPercent100(value, digits);
 }
 
 /** Milliseconds as seconds with one decimal. */
 export function seconds(ms: number | null | undefined): string {
-  return ms === null || ms === undefined ? '–' : (ms / 1000).toFixed(1);
+  return ms === null || ms === undefined ? '–' : formatDecimal(ms / 1000, 1);
 }
 
 /** Milliseconds as whole minutes. */
@@ -25,7 +26,7 @@ export function minutes(ms: number): number {
 
 /** A number with at most `digits` decimals, trailing zeros dropped. */
 export function num(value: number, digits = 1): string {
-  return String(Number(value.toFixed(digits)));
+  return formatNumber(value, digits);
 }
 
 /** Client UTC offset in minutes (Istanbul: 180), as the backend expects it. */
@@ -43,9 +44,7 @@ export interface Bar {
 
 /** `2025-11-04` → `4 Nov` / `4 Kas` (display only; the date comes from the backend). */
 export function shortDate(date: string, locale: string): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return date;
-  return d.toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return formatShortDate(date, locale as 'tr' | 'en');
 }
 
 /** Weekday of a `YYYY-MM-DD` date, Monday = 0 (heatmap rows). */

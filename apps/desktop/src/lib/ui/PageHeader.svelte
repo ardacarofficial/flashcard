@@ -1,11 +1,14 @@
 <!--
   Page header: the page's one `<h1>`, an optional subtitle and back link, chips (`meta`) and
-  actions on the right. Section sub-navigation (Tabs) goes in `tabs`.
+  actions on the right. Section sub-navigation (Tabs) goes in `tabs`. The shell's own header
+  parts (deck picker, section tabs — `page-chrome.ts`) are drawn here too unless
+  `chrome={false}`, so every page starts with its title.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import Button from './Button.svelte';
   import { ChevronLeft } from './icons';
+  import { getPageChrome } from './page-chrome';
 
   interface Props {
     title: string;
@@ -14,10 +17,15 @@
     meta?: Snippet;
     actions?: Snippet;
     tabs?: Snippet;
+    /** Draw the shell's deck picker and section tabs (default). `false` on sub-pages. */
+    chrome?: boolean;
     class?: string;
   }
 
-  let { title, subtitle, back, meta, actions, tabs, class: klass = '' }: Props = $props();
+  let { title, subtitle, back, meta, actions, tabs, chrome = true, class: klass = '' }: Props = $props();
+  const shell = getPageChrome();
+  const shellActions = $derived(chrome ? (shell?.actions ?? null) : null);
+  const shellTabs = $derived(chrome ? (shell?.tabs ?? null) : null);
 </script>
 
 <header class="fc-page-header {klass}">
@@ -30,9 +38,14 @@
       {#if subtitle}<p class="subtitle">{subtitle}</p>{/if}
       {#if meta}<div class="meta">{@render meta()}</div>{/if}
     </div>
-    {#if actions}<div class="actions">{@render actions()}</div>{/if}
+    {#if actions || shellActions}
+      <div class="actions">
+        {#if shellActions}{@render shellActions()}{/if}
+        {#if actions}{@render actions()}{/if}
+      </div>
+    {/if}
   </div>
-  {#if tabs}<div class="tabs">{@render tabs()}</div>{/if}
+  {#if tabs}<div class="tabs">{@render tabs()}</div>{:else if shellTabs}<div class="tabs">{@render shellTabs()}</div>{/if}
 </header>
 
 <style>
@@ -82,6 +95,6 @@
     flex-wrap: wrap;
   }
   .tabs {
-    margin-top: var(--space-2);
+    margin-top: var(--space-3);
   }
 </style>

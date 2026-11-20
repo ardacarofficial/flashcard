@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDateTime } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { DatabaseReport, DuplicateGroup, TrashList } from '$lib/api/types';
@@ -40,7 +41,7 @@
     'broken_fields',
   ] as const;
 
-  const fmt = (ms: number) => new Date(ms).toLocaleString(i18n.locale);
+  const fmt = (ms: number) => formatDateTime(ms);
 
   async function loadTrash() {
     trashFailed = !(await ctx.guarded(async () => (trash = await api.call('browse.trash', { limit: null }))));

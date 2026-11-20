@@ -5,6 +5,7 @@
    * changes the schedule. The paper prints (with or without the answer key). After grading: a
    * score ring and the list of wrong answers.
    */
+  import { formatPercent100 } from '$lib/format';
   import { onMount, tick } from 'svelte';
   import { api } from '$lib/api';
   import type { TestAnswerDto, TestPaperDto, TestQuestionDto, TestQuestionKind, TestVerdict } from '$lib/api/types';
@@ -20,9 +21,9 @@
     Icon,
     Input,
     Minus,
+    OptionTile,
     PageHeader,
     ProgressRing,
-    RadioGroup,
     Skeleton,
     TriangleAlert,
     type Tone,
@@ -134,7 +135,13 @@
     if (q.kind === 'true_false' && a.truth != null) return truthText(a.truth);
     return a.text ?? t('modes.test.blank_answer');
   };
-  const choiceOptions = (q: TestQuestionDto) => q.options.map((o, i) => ({ value: i, label: o }));
+  const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  /** Graded paper: the right option (when the key is known) and a wrong pick. */
+  const tileResult = (q: TestQuestionDto, picked: boolean, isKey: boolean): 'right' | 'miss' | null => {
+    if (!result) return null;
+    if (q.key && isKey) return 'right';
+    return picked && verdict(q.index) !== 'correct' ? 'miss' : picked ? 'right' : null;
+  };
   const truthOptions = $derived([
     { value: true, label: t('modes.test.true') },
     { value: false, label: t('modes.test.false') },
@@ -144,7 +151,7 @@
 <section class="test" bind:this={top}>
   {#if paper}
     <div class="no-print">
-      <PageHeader title={t('modes.test.heading')} subtitle={ctx.selectedPath ?? t('study.whole_collection')}>
+      <PageHeader chrome={false} title={t('modes.test.heading')} subtitle={ctx.selectedPath ?? t('study.whole_collection')}>
         {#snippet actions()}
           <Button variant="ghost" icon={FileText} onclick={() => window.print()}>{t('modes.test.print')}</Button>
           <Button variant="ghost" onclick={() => void ctx.guarded(printKey)}>{t('modes.test.print_key')}</Button>
@@ -161,10 +168,10 @@
             size={120}
             tone={result.percent >= 80 ? 'success' : result.percent >= 50 ? 'warning' : 'danger'}
           >
-            <span class="pct">{result.percent}%</span>
+            <span class="pct">{formatPercent100(result.percent)}</span>
           </ProgressRing>
           <div class="score-text">
-            <h2>{t('modes.test.score', { percent: result.percent })}</h2>
+            <h2>{t('modes.test.score', { percent: formatPercent100(result.percent) })}</h2>
             <div class="chips">
               <Chip size="sm" tone="success" icon={CircleCheck} label={t('modes.test.n_correct', { n: result.correct })} />
               {#if result.almost > 0}<Chip size="sm" tone="warning" icon={TriangleAlert} label={t('modes.test.n_almost', { n: result.almost })} />{/if}
@@ -207,24 +214,37 @@
             </div>
             <div class="prompt">{@html q.prompt_html}</div>
             {#if q.kind === 'multiple_choice'}
-              <RadioGroup
-                label={t('modes.test.choose')}
-                hideLabel
-                name="q{q.index}"
-                options={choiceOptions(q)}
-                disabled={result !== null}
-                bind:value={input.choice[q.index]}
-              />
+              <div class="options" role="radiogroup" aria-label={t('modes.test.choose')}>
+                {#each q.options as option, i (i)}
+                  <OptionTile
+                    letter={LETTERS[i] ?? String(i + 1)}
+                    checked={input.choice[q.index] === i}
+                    result={tileResult(q, input.choice[q.index] === i, option === q.key?.expected)}
+                    rightLabel={t('modes.test.correct_is')}
+                    missLabel={t('modes.test.your')}
+                    disabled={result !== null}
+                    onclick={() => (input.choice[q.index] = i)}
+                    testid="option-{q.index}-{i}"
+                  >{@html option}</OptionTile>
+                {/each}
+              </div>
             {:else if q.kind === 'true_false'}
               <p class="statement">{t('modes.test.statement', { text: q.statement ?? '' })}</p>
-              <RadioGroup
-                label={t('modes.test.is_right')}
-                hideLabel
-                name="q{q.index}"
-                options={truthOptions}
-                disabled={result !== null}
-                bind:value={input.truth[q.index]}
-              />
+              <div class="options" role="radiogroup" aria-label={t('modes.test.is_right')}>
+                {#each truthOptions as o, i (o.value)}
+                  <OptionTile
+                    letter={LETTERS[i]}
+                    label={o.label}
+                    checked={input.truth[q.index] === o.value}
+                    result={tileResult(q, input.truth[q.index] === o.value, q.key?.truth === o.value)}
+                    rightLabel={t('modes.test.correct_is')}
+                    missLabel={t('modes.test.your')}
+                    disabled={result !== null}
+                    onclick={() => (input.truth[q.index] = o.value)}
+                    testid="option-{q.index}-{i}"
+                  />
+                {/each}
+              </div>
             {:else}
               <Input
                 bind:value={input.text[q.index]}
@@ -243,11 +263,11 @@
     </ol>
     {#if !result}
       <div class="submit no-print">
-        <Button variant="primary" size="lg" onclick={() => void ctx.guarded(submit)}>{t('modes.test.submit')}</Button>
+        <Button variant="primary" size="lg" data-testid="test-submit" onclick={() => void ctx.guarded(submit)}>{t('modes.test.submit')}</Button>
       </div>
     {/if}
   {:else}
-    <PageHeader title={t('modes.test.heading')} subtitle={ctx.selectedPath ?? t('study.whole_collection')} />
+    <PageHeader title={t('modes.test.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
     {#if loading}
       <Skeleton shape="card" height="240px" />
     {:else}
@@ -461,6 +481,11 @@
   .prompt :global(p) {
     margin: 0;
   }
+  .options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
   .statement {
     margin: 0 0 var(--space-3);
     padding: var(--space-2) var(--space-3);
@@ -472,6 +497,11 @@
     margin: var(--space-3) 0 0;
     font-size: var(--text-sm);
     color: var(--text-2);
+  }
+  @media (max-width: 720px) {
+    .options {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
   @media print {
     .no-print {

@@ -4,6 +4,7 @@
   desktop shell shows it as an OS notification.
 -->
 <script lang="ts">
+  import { formatDateTime } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { ReminderStatus } from '$lib/api/types';
@@ -24,11 +25,7 @@
   const time = $derived(status ? `${pad(Math.floor(status.minute_of_day / 60))}:${pad(status.minute_of_day % 60)}` : '');
   const next = $derived(
     status?.next_at != null
-      ? new Date(status.next_at).toLocaleString(i18n.locale === 'tr' ? 'tr-TR' : 'en-GB', {
-          weekday: 'long',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
+      ? formatDateTime(status.next_at, { weekday: 'long', hour: '2-digit', minute: '2-digit' })
       : null,
   );
 

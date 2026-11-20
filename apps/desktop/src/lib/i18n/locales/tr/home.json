@@ -27,7 +27,7 @@
     "all_decks": "Tüm desteler",
     "deck_due": "{count} vadeli",
     "deck_cards": "{count} kart",
-    "deck_mastered": "%{pct} ustalaşıldı",
+    "deck_mastered": "{pct} ustalaşıldı",
     "deck_open": "{name} destesini aç",
     "empty_title": "Henüz deste yok",
     "empty_body": "Çalışmaya başlamak için ilk desteni oluştur.",

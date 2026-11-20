@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatPercent } from '$lib/format';
   import { api, type ApiError } from '$lib/api';
   import type {
     ColumnTarget,
@@ -250,7 +251,7 @@
         <FormRow
           stack
           label={t('io.import.separators')}
-          description={preview.confidence !== null ? t('io.import.detected', { confidence: Math.round(preview.confidence * 100) }) : undefined}
+          description={preview.confidence !== null ? t('io.import.detected', { confidence: formatPercent(preview.confidence) }) : undefined}
         >
           <div class="seps">
             <Input

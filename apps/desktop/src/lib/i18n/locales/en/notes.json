@@ -90,7 +90,7 @@
       "preview": "Preview",
       "nothing": "Paste some text to see the cards here.",
       "found": "{count} card(s) found",
-      "confidence": "separators detected with {pct}% confidence",
+      "confidence": "separators detected with {pct} confidence",
       "more": "and {count} more",
       "too_many": "Only the first {max} rows fit in the editor. Use Import for longer lists.",
       "add": "Add {count} card(s)",

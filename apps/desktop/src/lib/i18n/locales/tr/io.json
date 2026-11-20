@@ -30,7 +30,7 @@
       "record_separator": "Kartlar arası",
       "newline": "Yeni satır",
       "blank_line": "Boş satır",
-      "detected": "Otomatik algılandı (%{confidence}). Yanlış görünüyorsa değiştir.",
+      "detected": "Otomatik algılandı ({confidence}). Yanlış görünüyorsa değiştir.",
       "skip_first_row": "İlk satır başlık",
       "preview": "Önizleme",
       "rows": "{total} satırın {shown} tanesi",

@@ -218,7 +218,7 @@
       "print": "Yazdır",
       "print_key": "Cevap anahtarını yazdır",
       "submit": "Teslim et",
-      "score": "Puan: %{percent}",
+      "score": "Puan: {percent}",
       "verdict": {
         "correct": "Doğru",
         "almost": "Az kaldı",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { i18n } from '$lib/i18n/index.svelte';
 import { translateDynamic } from '$lib/i18n/core';
 import PluginView from './PluginView.svelte';
@@ -60,11 +60,13 @@ describe('plugins (declarative UI on the dev mock)', () => {
   it('lists installed plugins with their status and permissions', async () => {
     render(PluginsScreen, { ctx });
     const name = await screen.findByRole('button', { name: 'Demo' });
-    expect(screen.getByText('On')).toBeTruthy();
+    // On/off is the switch alone (no "On" chip next to it).
+    expect(screen.getByRole('switch', { name: 'Turn off' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByText('On')).toBeNull();
     await fireEvent.click(name);
     expect(await screen.findByText('network:example.com')).toBeTruthy();
     expect(screen.getByText('asks separately')).toBeTruthy();
     await fireEvent.click(screen.getByRole('switch', { name: 'Turn off' }));
-    expect(await screen.findByText('Off')).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Turn on' }).getAttribute('aria-checked')).toBe('false'));
   });
 });

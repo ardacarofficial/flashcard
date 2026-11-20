@@ -148,7 +148,7 @@
     "heatmap": {
       "heading": "Aktivite",
       "day": "{date}: {n} tekrar",
-      "intro": "Günlük tekrar sayısı; koyu renk daha çok demek.",
+      "intro": "Günlük tekrar sayısı.",
       "summary": "{label}: {days} gün, günde en çok {max} tekrar",
       "less": "Az",
       "more": "Çok"

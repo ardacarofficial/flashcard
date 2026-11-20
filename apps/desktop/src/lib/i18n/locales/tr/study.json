@@ -55,7 +55,7 @@
     },
     "summary": {
       "heading": "Oturum bitti",
-      "accuracy": "Doğruluk: %{n}",
+      "accuracy": "Doğruluk: {n}",
       "repeat": "Yanlışları tekrar çalış",
       "back": "Tamam",
       "accuracy_label": "Doğruluk",
@@ -65,6 +65,8 @@
       "time_value": "{min}:{sec}"
     },
     "choices": "Seçenekler",
+    "choice_right": "Doğru seçenek",
+    "choice_wrong": "Senin seçimin",
     "start_heading": "Bugünkü tekrar",
     "start_intro": "Vadesi gelen ve birkaç yeni kart.",
     "custom_heading": "Özel oturum",

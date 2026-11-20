@@ -21,6 +21,7 @@
     Input,
     Kbd,
     PageHeader,
+    OptionTile,
     ProgressBar,
     Repeat,
     Skeleton,
@@ -64,7 +65,7 @@
   const card = $derived(session?.current ?? null);
   const learn = $derived(session?.modes?.learn ?? null);
   // A running session switches the shell to the focus layout (no picker, no tabs).
-  $effect(() => ctx.setFocus?.(session !== null && card !== null && learn !== null));
+  $effect(() => ctx.setFocus?.((session !== null && card !== null && learn !== null) || finished !== null));
   const progress = $derived((feedback?.session ?? session ?? finished)?.modes?.learn?.progress ?? null);
 
   function show(s: SessionDto) {
@@ -224,19 +225,15 @@
         {#each learn.options as option, i (i)}
           {@const right = feedback !== null && option === feedback.expected}
           {@const miss = feedback !== null && picked === i && !right}
-          <button
-            type="button"
-            class="option"
-            class:right
-            class:miss
+          <OptionTile
+            kbd={String(i + 1)}
+            label={option}
+            result={right ? 'right' : miss ? 'miss' : null}
+            rightLabel={t('modes.learn.correct_option')}
+            missLabel={t('modes.learn.your_pick')}
             disabled={feedback !== null}
             onclick={() => void run(() => answer(i))}
-          >
-            <Kbd keys={[String(i + 1)]} />
-            <span class="opt-text">{option}</span>
-            {#if right}<Icon icon={CircleCheck} size={20} label={t('modes.learn.correct_option')} />{/if}
-            {#if miss}<Icon icon={CircleAlert} size={20} label={t('modes.learn.your_pick')} />{/if}
-          </button>
+          />
         {/each}
       </div>
     {:else}
@@ -290,7 +287,7 @@
       </Card>
     </div>
   {:else}
-    <PageHeader title={t('modes.learn.heading')} subtitle={ctx.selectedPath ?? t('study.whole_collection')} />
+    <PageHeader title={t('modes.learn.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
     {#if loading}
       <Skeleton shape="card" height="200px" />
     {:else}
@@ -447,53 +444,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
   }
-  .option {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    min-height: 64px;
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    background: var(--surface-1);
-    color: var(--text-1);
-    font: inherit;
-    font-size: var(--text-md);
-    text-align: left;
-    cursor: pointer;
-    transition: border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
-  }
-  .opt-text {
-    flex: 1;
-  }
-  .option:hover:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--accent-soft);
-  }
-  .option:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
-  }
-  .option:disabled {
-    cursor: default;
-    opacity: 1;
-    color: var(--text-2);
-  }
-  .option.right {
-    border-color: var(--success);
-    background: var(--success-soft);
-    color: var(--text-1);
-  }
-  .option.right :global(svg) {
-    color: var(--success);
-  }
-  .option.miss {
-    border-color: var(--danger);
-    background: var(--danger-soft);
-  }
-  .option.miss :global(svg) {
-    color: var(--danger);
-  }
   .written {
     display: flex;
     gap: var(--space-2);
@@ -563,7 +513,8 @@
   .done {
     max-width: 480px;
     width: 100%;
-    margin-top: var(--space-4);
+    /* The end screen sits centred in the focus column. */
+    margin: var(--space-12) auto 0;
   }
   .done-body {
     display: flex;

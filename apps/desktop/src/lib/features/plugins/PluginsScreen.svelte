@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatDecimal } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { ModelList, PackageInfo, PluginDto, PluginLogEntry, PluginSettings } from '$lib/api/types';
@@ -74,7 +75,7 @@
   };
   const removingPlugin = $derived(removing ? plugins.find((p) => p.id === removing?.id) ?? null : null);
 
-  const mb = (bytes: number | bigint) => (Number(bytes) / 1_000_000).toFixed(1);
+  const mb = (bytes: number | bigint) => formatDecimal(Number(bytes) / 1_000_000, 1);
 
   async function load() {
     const ok = await ctx.guarded(async () => {
@@ -224,7 +225,10 @@
               </p>
             </div>
             <div class="side">
-              <Chip size="sm" tone={STATUS_TONE[p.status]} label={t(`plugins.status.${p.status}`)} />
+              <!-- On / off is the switch's job; the chip only flags trouble. -->
+              {#if p.status === 'auto_disabled' || p.status === 'broken'}
+                <Chip size="sm" tone={STATUS_TONE[p.status]} label={t(`plugins.status.${p.status}`)} />
+              {/if}
               {#if p.status === 'auto_disabled'}
                 <Button size="sm" onclick={() => setEnabled(p, true)}>{t('plugins.enable')}</Button>
               {/if}

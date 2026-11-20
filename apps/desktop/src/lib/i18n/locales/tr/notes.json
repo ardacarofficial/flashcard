@@ -90,7 +90,7 @@
       "preview": "Önizleme",
       "nothing": "Kartları burada görmek için metin yapıştır.",
       "found": "{count} kart bulundu",
-      "confidence": "ayırıcılar %{pct} güvenle algılandı",
+      "confidence": "ayırıcılar {pct} güvenle algılandı",
       "more": "ve {count} kart daha",
       "too_many": "Editöre yalnız ilk {max} satır sığar. Daha uzun listeler için İçe aktar'ı kullan.",
       "add": "{count} kart ekle",

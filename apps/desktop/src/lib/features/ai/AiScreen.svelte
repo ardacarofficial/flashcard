@@ -38,9 +38,6 @@
 </div>
 
 <style>
-  .ai {
-    max-width: 960px;
-  }
   .panel {
     padding-top: var(--space-2);
   }

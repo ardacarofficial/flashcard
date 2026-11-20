@@ -16,7 +16,7 @@ export interface ColumnDef {
 }
 
 export const COLUMNS: ColumnDef[] = [
-  { id: 'sort_field', label: 'browse.col.sort_field', sort: 'sort_field', width: 'minmax(180px, 3fr)', fixed: true },
+  { id: 'sort_field', label: 'browse.col.front', sort: 'sort_field', width: 'minmax(180px, 3fr)', fixed: true },
   { id: 'deck', label: 'browse.col.deck', sort: null, width: 'minmax(120px, 2fr)' },
   { id: 'state', label: 'browse.col.state', sort: null, width: '120px' },
   { id: 'due', label: 'browse.col.due', sort: 'due', width: '110px' },

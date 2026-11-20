@@ -4,6 +4,7 @@
   sheet. The query language, sorting and every change run in Rust (`search.*`, `bulk.*`).
 -->
 <script lang="ts">
+  import { formatDate } from '$lib/format';
   import { onMount, untrack } from 'svelte';
   import { api, type ApiError } from '$lib/api';
   import type {
@@ -91,7 +92,7 @@
   const selectedKeys = $derived(new Set(selected.keys()));
   const allChecked = $derived(total > 0 && selected.size >= total);
 
-  const fmtDate = (ms: number | null) => (ms === null ? t('common.none') : new Date(ms).toLocaleDateString(i18n.locale));
+  const fmtDate = (ms: number | null) => (ms === null ? t('common.none') : formatDate(ms));
 
   const tableColumns = $derived<TableColumn<CardRow>[]>([
     { id: 'select', header: '', width: '44px' },
@@ -422,11 +423,11 @@
       {#snippet cell(r, c)}
         {#if c.id === 'select'}
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-          <span class="check" onclick={(e) => e.stopPropagation()}>
+          <span class="check" data-testid="browse-select" onclick={(e) => e.stopPropagation()}>
             <Checkbox checked={selected.has(r.card_id)} ariaLabel={t('browse.select_row', { name: r.sort_field })} onchange={() => toggle(r)} />
           </span>
         {:else if c.id === 'sort_field'}
-          <span class="name">{r.sort_field || t('common.none')}</span>
+          <span class="name" data-testid="browse-row">{r.sort_field || t('common.none')}</span>
         {:else if c.id === 'deck'}
           <span class="muted ellipsis">{r.deck_path}</span>
         {:else if c.id === 'state'}

@@ -72,6 +72,7 @@
     {#snippet actions()}
       {#if ctx.decks.length > 0}
         <SegmentedControl
+          class="view-toggle"
           size="sm"
           label={t('library.view')}
           options={[

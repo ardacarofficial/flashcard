@@ -4,6 +4,7 @@
   the backend (`decks.tree` counts, `decks.summaries`); `summary` is null while it loads.
 -->
 <script lang="ts">
+  import { formatPercent100 } from '$lib/format';
   import type { DeckSummary, DeckTreeNode } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import { Badge, Card, Chip, ProgressBar, Skeleton } from '$lib/ui';
@@ -53,7 +54,7 @@
           { value: summary.new, label: t('deck_page.new'), tone: 'neutral' },
         ]}
       />
-      <span class="pct">{t('library.mastered', { pct: summary.mastered_pct })}</span>
+      <span class="pct">{t('library.mastered', { pct: formatPercent100(summary.mastered_pct) })}</span>
     {:else}
       <Skeleton shape="text" width="100%" />
     {/if}

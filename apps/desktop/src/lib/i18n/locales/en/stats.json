@@ -148,7 +148,7 @@
     "heatmap": {
       "heading": "Activity",
       "day": "{date}: {n} reviews",
-      "intro": "Reviews per day; darker means more.",
+      "intro": "Reviews per day.",
       "summary": "{label}: {days} days, at most {max} reviews a day",
       "less": "Less",
       "more": "More"

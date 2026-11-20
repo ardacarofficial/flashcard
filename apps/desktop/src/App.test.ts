@@ -50,6 +50,8 @@ describe('<App> on the dev mock transport', () => {
     // The other v1.0 screens live under the sections.
     const tabsOf = async (section: string) => {
       await fireEvent.click(screen.getByRole('button', { name: section }));
+      // The tabs are drawn by the (lazy) screen's PageHeader, under its title.
+      await waitFor(() => expect(document.querySelector('main h1')).toBeTruthy());
       const list = screen.queryByRole('tablist');
       return list ? Array.from(list.querySelectorAll('[role=tab]'), (t) => t.textContent?.trim()) : [];
     };
@@ -88,7 +90,9 @@ describe('<App> on the dev mock transport', () => {
     // Leaving the screen ends the focus layout; the sidebar goes back to the Library page.
     await fireEvent.click(screen.getByRole('button', { name: 'Library' }));
     await waitFor(() => expect(page.classList.contains('focus')).toBe(false));
-    expect(await screen.findByRole('tablist', { name: 'Pages in Library' })).toBeTruthy();
+    // (The Library reopens the deck's page: its back link, no section tabs on a sub-page.)
+    expect(await screen.findByTestId('deck-mode-cards')).toBeTruthy();
+    expect(screen.queryByRole('tablist', { name: 'Pages in Library' })).toBeNull();
   });
 
   it('mounts no screen behind the lock screen, lazy ones included', async () => {

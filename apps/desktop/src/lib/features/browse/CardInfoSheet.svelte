@@ -1,5 +1,6 @@
 <!-- Card info side sheet of the Search screen (`browse.card_info`): facts, review history, edit. -->
 <script lang="ts">
+  import { formatDate, formatDecimal, formatPercent } from '$lib/format';
   import type { CardInfo } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
   import { Button, Chip, Dialog, Pencil } from '$lib/ui';
@@ -17,8 +18,8 @@
     open = info !== null;
   });
 
-  const date = (ms: number | null) => (ms === null ? t('common.none') : new Date(ms).toLocaleDateString(i18n.locale));
-  const num = (v: number | null | undefined) => (v === null || v === undefined ? t('common.none') : v.toFixed(1));
+  const date = (ms: number | null) => (ms === null ? t('common.none') : formatDate(ms));
+  const num = (v: number | null | undefined) => (v === null || v === undefined ? t('common.none') : formatDecimal(v, 1));
 </script>
 
 <Dialog bind:open variant="sheet" title={t('browse.info.heading')} description={info?.card.sort_field ?? ''} {onclose}>
@@ -37,7 +38,7 @@
         <div><dt>{t('browse.info.difficulty')}</dt><dd>{num(info.card.difficulty)}</dd></div>
         <div>
           <dt>{t('browse.info.retrievability')}</dt>
-          <dd>{info.retrievability === null ? t('common.none') : `${Math.round(info.retrievability * 100)}%`}</dd>
+          <dd>{info.retrievability === null ? t('common.none') : formatPercent(info.retrievability)}</dd>
         </div>
         <div><dt>{t('browse.col.reps')}</dt><dd>{info.card.reps}</dd></div>
         <div><dt>{t('browse.col.lapses')}</dt><dd>{info.card.lapses}</dd></div>

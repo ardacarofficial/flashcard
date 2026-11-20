@@ -21,8 +21,13 @@
       "showing_back": "Arka yüz gösteriliyor. Çevirmek için Boşluk'a bas."
     },
     "progress": {
-      "value": "{value} / {max}",
-      "percent": "%{value}"
+      "value": "{value} / {max}"
+    },
+    "format": {
+      "seconds": "{n} sn",
+      "minutes": "{n} dk",
+      "hours": "{n} sa",
+      "megabytes": "{n} MB"
     }
   }
 }

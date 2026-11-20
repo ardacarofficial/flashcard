@@ -4,6 +4,7 @@
   added to the editor's rows. Separators can be overridden; nothing is saved here.
 -->
 <script lang="ts">
+  import { formatPercent } from '$lib/format';
   import { api, type ApiError } from '$lib/api';
   import type { ImportPreview, NoteTypeId, TextOptionsDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
@@ -180,7 +181,7 @@
       {:else}
         <p class="muted small">
           {t('create.paste.found', { count: preview.total_rows })}
-          {#if preview.confidence !== null}· {t('create.paste.confidence', { pct: Math.round(preview.confidence * 100) })}{/if}
+          {#if preview.confidence !== null}· {t('create.paste.confidence', { pct: formatPercent(preview.confidence) })}{/if}
         </p>
         <ol class="pairs">
           <li class="cols" aria-hidden="true">

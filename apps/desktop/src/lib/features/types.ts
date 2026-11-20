@@ -38,8 +38,10 @@ interface ScreenBase {
   routes?: string[];
   /** Slot whose mere presence adds one menu entry for this screen (e.g. `settings_page`). */
   slot?: { name: string; label_key: string; order: number };
-  /** Shell draws the deck picker above the screen. */
+  /** Shell adds the deck picker to the screen's header (PageHeader actions). */
   deckPicker?: boolean;
+  /** `wide`: the page uses `--content-max-wide` (tables, charts) instead of `--content-max`. */
+  width?: 'wide';
 }
 
 /**

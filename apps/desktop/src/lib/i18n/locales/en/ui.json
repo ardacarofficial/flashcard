@@ -21,8 +21,13 @@
       "showing_back": "Showing the back. Press Space to flip."
     },
     "progress": {
-      "value": "{value} of {max}",
-      "percent": "{value}%"
+      "value": "{value} of {max}"
+    },
+    "format": {
+      "seconds": "{n} s",
+      "minutes": "{n} min",
+      "hours": "{n} h",
+      "megabytes": "{n} MB"
     }
   }
 }

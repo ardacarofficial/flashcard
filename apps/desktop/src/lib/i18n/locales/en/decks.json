@@ -54,7 +54,7 @@
     "due": "{count} due",
     "nothing_due": "Nothing due",
     "mastery": "Progress of {name}",
-    "mastered": "{pct}% mastered",
+    "mastered": "{pct} mastered",
     "load_failed": "Couldn't load deck progress.",
     "retry": "Try again",
     "open": "Open {name}"

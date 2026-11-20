@@ -195,8 +195,6 @@
 
 <style>
   .reader {
-    max-width: 1100px;
-    margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-4);

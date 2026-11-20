@@ -55,7 +55,7 @@
     },
     "summary": {
       "heading": "Session complete",
-      "accuracy": "Accuracy: {n}%",
+      "accuracy": "Accuracy: {n}",
       "repeat": "Repeat mistakes",
       "back": "Done",
       "accuracy_label": "Accuracy",
@@ -65,6 +65,8 @@
       "time_value": "{min}:{sec}"
     },
     "choices": "Options",
+    "choice_right": "Correct option",
+    "choice_wrong": "Your pick",
     "start_heading": "Today's review",
     "start_intro": "Due cards and a few new ones.",
     "custom_heading": "Custom session",

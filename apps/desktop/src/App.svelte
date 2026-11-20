@@ -18,6 +18,7 @@
   import Spinner from '$lib/ui/Spinner.svelte';
   import Tabs from '$lib/ui/Tabs.svelte';
   import ToastHost from '$lib/ui/ToastHost.svelte';
+  import { setPageChrome } from '$lib/ui/page-chrome';
 
   /** The shell's own first page (not a module; docs/11 §2). Its own chunk, like every screen. */
   const HOME: ScreenDef = { id: 'home', load: () => import('$lib/features/home/HomeScreen.svelte') };
@@ -74,6 +75,18 @@
   });
   /** Section pages drawn as tabs (study modes are opened from the deck page instead). */
   const sectionTabs = $derived(sectionNow?.entries.filter((e) => e.tab) ?? []);
+
+  const showTabs = $derived(!!sectionNow && sectionTabs.length > 1 && !locked && !focusOn && !!current?.tab);
+  const showPicker = $derived(!!screen?.deckPicker && !focusOn && !locked);
+  // The screen's PageHeader draws these (title first, picker on the right, tabs under it).
+  setPageChrome({
+    get actions() {
+      return showPicker ? deckPickerChrome : null;
+    },
+    get tabs() {
+      return showTabs ? sectionTabsChrome : null;
+    },
+  });
 
   const placeKey = (e: NavEntry) => (e.place.kind === 'section' ? `section.${e.place.id}` : e.place.kind);
 
@@ -184,6 +197,26 @@
   });
 </script>
 
+{#snippet deckPickerChrome()}
+  <DeckPicker {paths} value={selectedDeck} onchange={(id) => (selectedDeck = id)} />
+{/snippet}
+
+{#snippet sectionTabsChrome()}
+  {#if sectionNow}
+    <div class="section-tabs">
+      <Tabs
+        label={t('shell.section_nav', { section: t(sectionNow.label_key) })}
+        tabs={sectionTabs.map((e) => ({ id: e.id, label: td(e.label_key) }))}
+        value={active ?? ''}
+        onchange={(id) => {
+          const e = sectionTabs.find((x) => x.id === id);
+          if (e) show(e);
+        }}
+      />
+    </div>
+  {/if}
+{/snippet}
+
 <div class="shell">
   <AppSidebar {nav} current={where} {inboxCount} {openSection} {openInbox} {openSettings}>
     {#snippet profile()}
@@ -196,7 +229,7 @@
   </AppSidebar>
 
   <main>
-    <div class="page" class:focus={focusOn && !locked}>
+    <div class="page" class:focus={focusOn && !locked} class:wide={screen?.width === 'wide' && where !== 'settings'}>
       {#if error}<p class="banner error" role="alert">{error}</p>{/if}
       {#if pluginNotice}
         <p class="banner notice" role="status">
@@ -209,9 +242,6 @@
         {#if locked}
           <!-- Behind the lock screen nothing mounts or loads (lazy chunks included). -->
         {:else if screen}
-          {#if screen.deckPicker && !focusOn}
-            <DeckPicker {paths} value={selectedDeck} onchange={(id) => (selectedDeck = id)} />
-          {/if}
           <!-- Lazy screens (v1.0 code splitting) load on first open; bundled ones render at once. -->
           {#key active}
             {#await resolveScreen(screen)}
@@ -230,19 +260,6 @@
       {#if where === 'settings' && !locked}
         <SettingsLayout groups={nav.settings} {active} open={show}>{@render body()}</SettingsLayout>
       {:else}
-        {#if sectionNow && sectionTabs.length > 1 && !locked && !focusOn && current?.tab}
-          <div class="section-tabs">
-            <Tabs
-              label={t('shell.section_nav', { section: t(sectionNow.label_key) })}
-              tabs={sectionTabs.map((e) => ({ id: e.id, label: td(e.label_key) }))}
-              value={active ?? ''}
-              onchange={(id) => {
-                const e = sectionTabs.find((x) => x.id === id);
-                if (e) show(e);
-              }}
-            />
-          </div>
-        {/if}
         {@render body()}
       {/if}
     </div>
@@ -293,21 +310,25 @@
     overflow: auto;
     background: var(--surface-0);
   }
+  /*
+   * One content container for every page (docs/11 §4 `--content-*`): same left offset and
+   * max-width everywhere; tables and charts (Search, Statistics) use the documented wide variant.
+   */
   .page {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: var(--space-8) var(--space-8) var(--space-12);
+    max-width: calc(var(--content-max) + 2 * var(--content-pad-x));
+    padding: var(--space-8) var(--content-pad-x) var(--space-12);
+  }
+  .page.wide {
+    max-width: calc(var(--content-max-wide) + 2 * var(--content-pad-x));
   }
   /* A running session (docs/11 §3): no picker or tabs, the card centred in a narrower column. */
   .page.focus {
     max-width: 880px;
+    margin: 0 auto;
     padding-top: var(--space-6);
   }
   .page.focus > :global(*) {
     margin-inline: auto;
-  }
-  .section-tabs {
-    margin-bottom: var(--space-6);
   }
   .banner {
     display: flex;
@@ -335,7 +356,8 @@
   }
   @media (max-width: 1023.98px) {
     .page {
-      padding: var(--space-6) var(--space-4) var(--space-8);
+      padding-top: var(--space-6);
+      padding-bottom: var(--space-8);
     }
   }
 </style>

@@ -27,7 +27,7 @@
     "all_decks": "All decks",
     "deck_due": "{count} due",
     "deck_cards": "{count} cards",
-    "deck_mastered": "{pct}% mastered",
+    "deck_mastered": "{pct} mastered",
     "deck_open": "Open {name}",
     "empty_title": "No decks yet",
     "empty_body": "Create your first deck to start studying.",
