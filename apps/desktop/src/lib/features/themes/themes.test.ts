@@ -25,11 +25,10 @@ describe('themes', () => {
     render(ThemeSettings);
     const sage = await screen.findByRole('radio', { name: /Sage/ });
     await fireEvent.click(sage);
-    await fireEvent.change(sage);
     await expect.poll(() => theme.current?.preset).toBe('sage');
     expect(document.documentElement.style.getPropertyValue('--fc-accent')).toBe('light-dark(#3f7a5a, #7cc19a)');
 
-    await fireEvent.change(screen.getByRole('combobox', { name: 'Colour scheme' }), { target: { value: 'dark' } });
+    await fireEvent.click(screen.getByRole('radio', { name: 'Dark' }));
     await expect.poll(() => document.documentElement.dataset.theme).toBe('dark');
 
     const picker = screen.getByLabelText('Use a custom accent');

@@ -25,7 +25,7 @@
         <ul>
           {#each g.entries as e (e.id)}
             <li>
-              <button type="button" class:active={e.id === active} aria-current={e.id === active ? 'page' : undefined} onclick={() => open(e)}>
+              <button type="button" data-testid="subnav-item" class:active={e.id === active} aria-current={e.id === active ? 'page' : undefined} onclick={() => open(e)}>
                 {td(e.label_key)}
               </button>
             </li>
