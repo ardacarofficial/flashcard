@@ -2,6 +2,7 @@
 //! behind `fc-api` (docs/03 §1).
 
 pub mod ipc;
+pub mod maintenance;
 pub mod media;
 pub mod outside;
 
@@ -21,6 +22,10 @@ pub const COLLECTION_FILE: &str = "collection.db";
 pub fn run() {
     // Before Tauri starts any thread: no shell variable changes behavior (FSRS optimizer).
     fc_app::system::pin_process_env();
+    // `Flashcard.exe --smoke`: self test in a temporary collection, then exit (CI, v1.0).
+    if let Some(args) = maintenance::smoke_args(std::env::args()) {
+        std::process::exit(maintenance::run_smoke(&args));
+    }
     let result = tauri::Builder::default()
         // First: a second launch hands its arguments (a flashcard:// link) to this instance
         // and exits (v0.9, docs/06 §6).
@@ -31,6 +36,8 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        // Signed updates (v1.0): driven by the backend's `updates.*` methods only.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             ipc::invoke,
             outside::take_deep_links,
@@ -65,7 +72,17 @@ pub fn run() {
             // Handled here rather than returned: depending on the platform Tauri runs setup
             // inside the event loop and would panic on an error instead of returning it.
             match open_collection(app) {
-                Ok(collection) => {
+                Ok((collection, boot, dir)) => {
+                    // Crash recovery, logs, integrity check after an unclean shutdown (v1.0).
+                    collection.start_maintenance(&dir, boot.log.clone(), boot.start.clone());
+                    maintenance::follow_log_settings(&collection);
+                    app.manage(Arc::new(boot.state));
+                    // Installed release builds update themselves (asking the user first).
+                    if !cfg!(debug_assertions) {
+                        collection.set_updater(Arc::new(maintenance::TauriUpdater::new(
+                            app.handle().clone(),
+                        )));
+                    }
                     ipc::forward_events(&collection, app.handle().clone());
                     ipc::watch_external_changes(collection.clone());
                     collection.set_file_picker(Arc::new(NativePicker));
@@ -89,9 +106,18 @@ pub fn run() {
                 Err(e) => fail(&e),
             }
         })
-        .run(tauri::generate_context!());
-    if let Err(e) = result {
-        fail(&e.to_string());
+        .build(tauri::generate_context!());
+    match result {
+        Ok(app) => app.run(|handle, event| {
+            // A normal exit ends the run cleanly: no recovery offer at the next start.
+            if let tauri::RunEvent::Exit = event {
+                if let Some(run) = handle.try_state::<maintenance::RunStateHandle>() {
+                    run.finish();
+                }
+                log::logger().flush();
+            }
+        }),
+        Err(e) => fail(&e.to_string()),
     }
 }
 
@@ -122,9 +148,13 @@ impl fc_app::FilePicker for NativePicker {
     }
 }
 
-fn open_collection(app: &tauri::App) -> Result<ipc::SharedApp, String> {
+fn open_collection(
+    app: &tauri::App,
+) -> Result<(ipc::SharedApp, maintenance::Boot, std::path::PathBuf), String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    // Before opening: the run marker, the log and the panic hook (v1.0).
+    let boot = maintenance::begin(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let path = dir.join(COLLECTION_FILE);
     let collection = fc_app::App::open_sqlite(&path).map_err(|e| {
         let e = e.into_api();
@@ -134,7 +164,7 @@ fn open_collection(app: &tauri::App) -> Result<ipc::SharedApp, String> {
     collection.set_secret_store(Arc::new(fc_ai::secrets::OsKeychain::new(
         fc_ai::secrets::SERVICE,
     )));
-    Ok(Arc::new(collection))
+    Ok((Arc::new(collection), boot, dir))
 }
 
 /// Text of the startup error dialog. The UI dictionaries are not loaded yet (and the
