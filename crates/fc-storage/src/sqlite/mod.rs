@@ -4,6 +4,7 @@
 //! implemented for both modes, `*Write` traits only for [`WriteMode`]. Per-area SQL lives in
 //! the sibling modules; this one holds the transaction type and column helpers.
 
+mod ai;
 mod attributes;
 mod cards;
 mod content;

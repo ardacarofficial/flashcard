@@ -173,6 +173,10 @@ define_id!(
     /// Saved query (named filter) id.
     SavedQueryId
 );
+define_id!(
+    /// Configured AI provider id (v0.8).
+    AiProviderId
+);
 
 #[cfg(test)]
 mod tests {

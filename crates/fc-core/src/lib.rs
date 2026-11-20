@@ -32,5 +32,7 @@ pub use id::{
     AttributeDefId, AttributeOptionId, BatchId, CardId, DeckId, IdGen, JobId, NoteId, NoteTypeId,
     OplogId, PresetId, ReviewLogId, SavedQueryId, SessionId, TagId, V7IdGen,
 };
+// v0.8 (own line so parallel tracks adding ids do not collide).
+pub use id::AiProviderId;
 pub use rng::Rng;
 pub use time::{Clock, Timestamp};
