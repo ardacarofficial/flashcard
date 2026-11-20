@@ -1,0 +1,215 @@
+{
+  "ext_name": {
+    "message": "Flashcard — add to deck"
+  },
+  "ext_short_name": {
+    "message": "Flashcard"
+  },
+  "ext_description": {
+    "message": "Select a word or sentence on any page and send it to the Flashcard app's inbox."
+  },
+  "action_title": {
+    "message": "Add to Flashcard"
+  },
+  "command_add_selection": {
+    "message": "Add the selected text to Flashcard"
+  },
+  "menu_add_selection": {
+    "message": "Add to deck"
+  },
+  "pair_client_name": {
+    "message": "Browser extension"
+  },
+  "popup_title": {
+    "message": "Add to deck"
+  },
+  "open_options": {
+    "message": "Settings"
+  },
+  "offline_intro": {
+    "message": "The Flashcard app is not reachable. Open the app and turn on Local API in Settings → Modules."
+  },
+  "retry": {
+    "message": "Try again"
+  },
+  "pair_intro": {
+    "message": "Connect the extension to the app once. The app will ask you to approve it."
+  },
+  "pair_start": {
+    "message": "Connect"
+  },
+  "pair_waiting": {
+    "message": "Waiting for approval in the Flashcard app…"
+  },
+  "pair_denied": {
+    "message": "The app denied the connection."
+  },
+  "pair_expired": {
+    "message": "The request expired. Connect again."
+  },
+  "pair_revoked": {
+    "message": "The app no longer accepts this extension. Connect again."
+  },
+  "pair_rate_limited": {
+    "message": "Too many connection requests. Wait a minute and try again."
+  },
+  "field_front": {
+    "message": "Front"
+  },
+  "field_back": {
+    "message": "Back"
+  },
+  "field_back_hint": {
+    "message": "Optional: fill it in later in the inbox"
+  },
+  "field_deck": {
+    "message": "Deck"
+  },
+  "deck_choose_later": {
+    "message": "Choose in the inbox"
+  },
+  "field_classifications": {
+    "message": "Classifications"
+  },
+  "context_title": {
+    "message": "Context"
+  },
+  "context_include": {
+    "message": "Save sentence and page address"
+  },
+  "cached_note": {
+    "message": "The app is closed: showing the last known decks. The item will be sent when the app opens."
+  },
+  "save": {
+    "message": "Add to inbox"
+  },
+  "conn_online": {
+    "message": "Connected"
+  },
+  "conn_offline": {
+    "message": "App closed"
+  },
+  "class_none": {
+    "message": "—"
+  },
+  "class_yes": {
+    "message": "Yes"
+  },
+  "class_no": {
+    "message": "No"
+  },
+  "class_invalid": {
+    "message": "Check these values: $names$",
+    "placeholders": {
+      "names": {
+        "content": "$1"
+      }
+    }
+  },
+  "class_required": {
+    "message": "Required: $names$",
+    "placeholders": {
+      "names": {
+        "content": "$1"
+      }
+    }
+  },
+  "front_required": {
+    "message": "Write something on the front."
+  },
+  "added_to_inbox": {
+    "message": "Added to the inbox."
+  },
+  "queued_offline": {
+    "message": "The app is closed. Saved; it will be sent when the app opens."
+  },
+  "queued_unpaired": {
+    "message": "Saved. Connect the extension again to send it."
+  },
+  "queued_busy": {
+    "message": "The app is busy or the inbox is turned off. Saved; it will be sent later."
+  },
+  "queue_full": {
+    "message": "Too many items are waiting. Open the app to send them first."
+  },
+  "error_validation": {
+    "message": "The app did not accept this item. Check the fields."
+  },
+  "error_not_found": {
+    "message": "Something it refers to no longer exists in the app."
+  },
+  "error_not_found_deck": {
+    "message": "That deck no longer exists. Pick another one."
+  },
+  "error_conflict": {
+    "message": "The app could not take the item right now."
+  },
+  "error_conflict_module_disabled": {
+    "message": "The inbox is turned off in the app (Settings → Modules)."
+  },
+  "error_permission": {
+    "message": "The extension is not allowed to do this. Check its permissions in the app."
+  },
+  "error_validation_payload_too_large": {
+    "message": "The text is too long."
+  },
+  "error_other": {
+    "message": "Something went wrong in the app."
+  },
+  "options_title": {
+    "message": "Flashcard extension settings"
+  },
+  "options_connection": {
+    "message": "Connection"
+  },
+  "options_port": {
+    "message": "Local API port"
+  },
+  "options_save_port": {
+    "message": "Save"
+  },
+  "options_port_hint": {
+    "message": "Same as Settings → Local API → Port in the app. Only 127.0.0.1 is used."
+  },
+  "options_conn_offline": {
+    "message": "The app is not reachable on this port."
+  },
+  "options_pairing": {
+    "message": "Pairing"
+  },
+  "options_paired": {
+    "message": "Connected to the app."
+  },
+  "options_unpaired": {
+    "message": "Not connected. Open the popup to connect."
+  },
+  "options_forget": {
+    "message": "Forget this connection"
+  },
+  "options_outbox": {
+    "message": "Waiting items"
+  },
+  "options_outbox_counts": {
+    "message": "$waiting$ waiting, $failed$ rejected by the app.",
+    "placeholders": {
+      "waiting": {
+        "content": "$1"
+      },
+      "failed": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_flush": {
+    "message": "Send now"
+  },
+  "options_retry_failed": {
+    "message": "Retry rejected"
+  },
+  "options_discard_failed": {
+    "message": "Discard rejected"
+  },
+  "options_discard_confirm": {
+    "message": "Discard the rejected items? This cannot be undone."
+  }
+}

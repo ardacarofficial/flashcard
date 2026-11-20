@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-i18n="options_title"></title>
+    <link rel="stylesheet" href="/src/ui.css" />
+  </head>
+  <body class="options">
+    <h1 data-i18n="options_title"></h1>
+
+    <section>
+      <h2 data-i18n="options_connection"></h2>
+      <form id="port-form" class="row">
+        <label class="field">
+          <span data-i18n="options_port"></span>
+          <input id="port" type="number" min="1" max="65535" required />
+        </label>
+        <button type="submit" data-i18n="options_save_port"></button>
+      </form>
+      <p class="muted" data-i18n="options_port_hint"></p>
+      <p id="conn-state" role="status"></p>
+    </section>
+
+    <section>
+      <h2 data-i18n="options_pairing"></h2>
+      <p id="pair-state" role="status"></p>
+      <button id="forget" type="button" data-i18n="options_forget"></button>
+    </section>
+
+    <section>
+      <h2 data-i18n="options_outbox"></h2>
+      <p id="outbox-state" role="status"></p>
+      <ul id="failed-list" class="failed"></ul>
+      <div class="row">
+        <button id="flush" type="button" data-i18n="options_flush"></button>
+        <button id="retry-failed" type="button" data-i18n="options_retry_failed"></button>
+        <button id="discard-failed" type="button" data-i18n="options_discard_failed"></button>
+      </div>
+    </section>
+
+    <script type="module" src="/src/options/main.ts"></script>
+  </body>
+</html>

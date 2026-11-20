@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "chrome"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@fc/api": ["../desktop/src/lib/api/generated/index.ts"],
+      "@fc/api/*": ["../desktop/src/lib/api/generated/*"]
+    }
+  },
+  "include": ["vite.config.ts", "playwright.config.ts", "tests/e2e/**/*.ts", "tests/mock-api/**/*.ts"]
+}
