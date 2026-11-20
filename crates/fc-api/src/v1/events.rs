@@ -148,6 +148,8 @@ pub enum DomainEvent {
     SavedQueriesChanged,
     /// Presets or deck preset assignments changed (refetch `presets.list`).
     PresetsChanged,
+    /// AI providers, routes or prices changed (refetch `ai.*` lists; v0.8). Never carries a key.
+    AiConfigChanged,
     /// A batch was undone.
     Undone {
         /// Batch reverted.

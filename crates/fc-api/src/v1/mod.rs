@@ -1,6 +1,7 @@
 //! API v1. Method names are unversioned inside this module (`decks.create`); on the wire they
 //! are qualified (`v1.decks.create`).
 
+pub mod ai;
 pub mod attributes;
 pub mod browse;
 pub mod bulk;
