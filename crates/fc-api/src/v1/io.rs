@@ -67,7 +67,8 @@ pub enum ExportFormat {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(optional_fields = nullable)]
 pub struct TextOptionsDto {
-    /// Between fields (`,`, `:`, `\t`, ` - `, `>>` …).
+    /// Between fields (`,`, `:`, `\t`, ` - `, `>>` …). Two spaces (`"  "`) = columns aligned
+    /// with runs of blanks.
     pub field_separator: String,
     /// Between records.
     pub record_separator: String,

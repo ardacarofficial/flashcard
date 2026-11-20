@@ -2,6 +2,13 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## [Unreleased]
+
+### v1.0 iz Q — içe aktarma kalitesi, gerçek Anki, kullanıcı rehberi (`feat/v1.0-quality`)
+- **Ayırıcı algılama:** `~`, ` / `, `==` ve hizalı sütunlar (boşluk/çift sekme) tanınır; cümle listeleri, tireli kelimeler, cloze satırları ve düzyazı paragraflar tek sütun kalır; `;` virgülü, `:` `=`'i geçer; tanımda tekrar eden ayırıcı tanımda kalır. Ayardan önce kör yazılmış yeni tutulmuş sette **%96,2 (100/104)**; önceki tutulmuş sette ayar öncesi %90,8 (99/109). docs/10 §34.
+- **Gerçek Anki doğrulaması:** resmî `anki` 26.09.4 ile üretilmiş küçük paketler (yeni/eski düzen `.apkg`, `.colpkg`, zamanlamasız) test fikstürü; bizim `.apkg`/`.colpkg`'miz gerçek Anki'de açılıp karşılaştırılır (CI). Düzeltmeler: Anki 2.1.50+ WAL paketleri ve `unicase` harmanlaması okunur; resim maskesi Anki'nin kendi not türüyle dışa aktarılır; "Default" destesi çoğalmaz; aralık ve `lrt` doğru yazılır; resim/ses alanı medyası pakete girer.
+- **Kullanıcı rehberi** (TR/EN): `docs/guide/`.
+
 ## [0.10.0] — Faz 4 (v0.9 + v0.10 birleşik, `feat/phase4-integration`)
 
 ### Faz 4 entegrasyonu — tur 2, son (+ v0.9 otomasyon, yerel API/gelen kutusu, tarayıcı eklentisi)

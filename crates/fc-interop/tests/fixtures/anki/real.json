@@ -1,0 +1,275 @@
+{
+ "anki_version": "26.09.4",
+ "media": [
+  "apple.png",
+  "hello.wav",
+  "map.png"
+ ],
+ "notes": [
+  {
+   "cards": [
+    {
+     "deck": "Lang::English",
+     "flags": 0,
+     "fsrs": {
+      "difficulty": 2.111,
+      "stability": 2.3065
+     },
+     "ivl": 2,
+     "lapses": 0,
+     "ord": 0,
+     "queue": 2,
+     "reps": 2,
+     "type": 2
+    }
+   ],
+   "fields": [
+    "apple",
+    "elma <img src=\"apple.png\">"
+   ],
+   "guid": "bJ7-Ox*g;W",
+   "notetype": "Basic",
+   "tags": [
+    "a1",
+    "fruit"
+   ]
+  },
+  {
+   "cards": [
+    {
+     "deck": "Lang::English",
+     "flags": 0,
+     "fsrs": {
+      "difficulty": 6.413,
+      "stability": 0.212
+     },
+     "ivl": 0,
+     "lapses": 0,
+     "ord": 0,
+     "queue": 1,
+     "reps": 1,
+     "type": 1
+    },
+    {
+     "deck": "Lang::English",
+     "flags": 0,
+     "fsrs": {
+      "difficulty": 1.0,
+      "stability": 8.2956
+     },
+     "ivl": 9,
+     "lapses": 0,
+     "ord": 1,
+     "queue": 2,
+     "reps": 1,
+     "type": 2
+    }
+   ],
+   "fields": [
+    "book",
+    "kitap"
+   ],
+   "guid": "m)K_C07`6}",
+   "notetype": "Basic (and reversed card)",
+   "tags": [
+    "a1"
+   ]
+  },
+  {
+   "cards": [
+    {
+     "deck": "Lang::English",
+     "flags": 0,
+     "fsrs": null,
+     "ivl": 0,
+     "lapses": 0,
+     "ord": 0,
+     "queue": -1,
+     "reps": 0,
+     "type": 0
+    }
+   ],
+   "fields": [
+    "to run",
+    "koşmak"
+   ],
+   "guid": "CX[ic<1jW/",
+   "notetype": "Basic (type in the answer)",
+   "tags": []
+  },
+  {
+   "cards": [
+    {
+     "deck": "Lang::English",
+     "flags": 0,
+     "fsrs": null,
+     "ivl": 0,
+     "lapses": 0,
+     "ord": 0,
+     "queue": -3,
+     "reps": 0,
+     "type": 0
+    },
+    {
+     "deck": "Lang::English",
+     "flags": 0,
+     "fsrs": null,
+     "ivl": 0,
+     "lapses": 0,
+     "ord": 1,
+     "queue": 0,
+     "reps": 0,
+     "type": 0
+    }
+   ],
+   "fields": [
+    "sun",
+    "güneş",
+    "y"
+   ],
+   "guid": "eBUGctvYgk",
+   "notetype": "Basic (optional reversed card)",
+   "tags": []
+  },
+  {
+   "cards": [
+    {
+     "deck": "Türkçe::Fiiller",
+     "flags": 1,
+     "fsrs": null,
+     "ivl": 0,
+     "lapses": 0,
+     "ord": 0,
+     "queue": 0,
+     "reps": 0,
+     "type": 0
+    },
+    {
+     "deck": "Türkçe::Fiiller",
+     "flags": 7,
+     "fsrs": null,
+     "ivl": 0,
+     "lapses": 0,
+     "ord": 1,
+     "queue": 2,
+     "reps": 0,
+     "type": 2
+    }
+   ],
+   "fields": [
+    "{{c1::Gitmek}} to go, {{c2::gelmek}} to come",
+    "Back <i>extra</i>"
+   ],
+   "guid": "X{k65sR>9",
+   "notetype": "Cloze",
+   "tags": [
+    "verbs"
+   ]
+  },
+  {
+   "cards": [
+    {
+     "deck": "Türkçe::Fiiller",
+     "flags": 0,
+     "fsrs": {
+      "difficulty": 2.118,
+      "stability": 2.3065
+     },
+     "ivl": 0,
+     "lapses": 0,
+     "ord": 0,
+     "queue": 1,
+     "reps": 1,
+     "type": 1
+    }
+   ],
+   "fields": [
+    "hello [sound:hello.wav]",
+    "merhaba"
+   ],
+   "guid": "iG?k1R%&Vi",
+   "notetype": "Basic",
+   "tags": [
+    "audio"
+   ]
+  },
+  {
+   "cards": [
+    {
+     "deck": "Lang::English",
+     "flags": 0,
+     "fsrs": {
+      "difficulty": 1.0,
+      "stability": 8.2956
+     },
+     "ivl": 9,
+     "lapses": 0,
+     "ord": 0,
+     "queue": 2,
+     "reps": 1,
+     "type": 2
+    }
+   ],
+   "fields": [
+    "badger",
+    "porsuk",
+    "The badger dug a hole."
+   ],
+   "guid": "m3aL#f0U8e",
+   "notetype": "Vocab TR",
+   "tags": [
+    "animal"
+   ]
+  },
+  {
+   "cards": [
+    {
+     "deck": "Default",
+     "flags": 0,
+     "fsrs": null,
+     "ivl": 0,
+     "lapses": 0,
+     "ord": 0,
+     "queue": 0,
+     "reps": 0,
+     "type": 0
+    },
+    {
+     "deck": "Default",
+     "flags": 0,
+     "fsrs": null,
+     "ivl": 0,
+     "lapses": 0,
+     "ord": 1,
+     "queue": 0,
+     "reps": 0,
+     "type": 0
+    },
+    {
+     "deck": "Default",
+     "flags": 0,
+     "fsrs": null,
+     "ivl": 0,
+     "lapses": 0,
+     "ord": 2,
+     "queue": 0,
+     "reps": 0,
+     "type": 0
+    }
+   ],
+   "fields": [
+    "{{c1::image-occlusion:rect:left=.1:top=.2:width=.3:height=.4:oi=1}}{{c2::image-occlusion:ellipse:left=.5:top=.1:rx=.1:ry=.15:oi=1}}{{c3::image-occlusion:polygon:points=.1,.7 .3,.9 .2,.95:oi=1}}",
+    "<img src=\"map.png\">",
+    "Map",
+    "",
+    ""
+   ],
+   "guid": "OLGh%Gz^mP",
+   "notetype": "Image Occlusion",
+   "tags": [
+    "io"
+   ]
+  }
+ ],
+ "revlog": 7
+}

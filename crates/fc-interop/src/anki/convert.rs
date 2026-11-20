@@ -22,6 +22,7 @@
 //!
 //! Export ([`from_pack`]) is the reverse; Anki ids are allocated from creation times.
 
+use super::occlusion;
 use super::template::map_field_refs;
 use super::*;
 use crate::media::{
@@ -133,6 +134,15 @@ impl ImportedNotetype {
 
 /// Field key of the image occlusion built-in's mask JSON.
 const MASKS: &str = "masks";
+
+/// The v0.3 image occlusion built-in (or a copy of it): its cards come from the mask engine.
+fn is_occlusion_builtin(nt: &NoteType) -> bool {
+    nt.templates
+        .iter()
+        .any(|t| t.card_type == builtins::engine::IMAGE_OCCLUSION)
+        && nt.field(&FieldKey::new(MASKS)).is_some()
+        && nt.field(&FieldKey::new("image")).is_some()
+}
 
 fn squash(s: &str) -> String {
     s.chars().filter(|c| !c.is_whitespace()).collect()
@@ -330,9 +340,13 @@ pub(crate) fn occlusion_masks(field: &str) -> String {
         hide_all |= props.get("oi").is_some_and(|v| v.trim() == "1");
         let bbox = match kind {
             "rect" => (|| Some((num("left")?, num("top")?, num("width")?, num("height")?)))(),
+            // Anki's editor writes radii; a hand-written `width`/`height` is read too.
             "ellipse" => (|| {
-                let (rx, ry) = (num("rx")?, num("ry")?);
-                Some((num("left")?, num("top")?, 2.0 * rx, 2.0 * ry))
+                let (w, h) = match (num("rx"), num("ry")) {
+                    (Some(rx), Some(ry)) => (2.0 * rx, 2.0 * ry),
+                    _ => (num("width")?, num("height")?),
+                };
+                Some((num("left")?, num("top")?, w, h))
             })(),
             "polygon" => props.get("points").and_then(|pts| {
                 let xy: Vec<(f64, f64)> = pts
@@ -373,7 +387,11 @@ pub(crate) fn occlusion_masks(field: &str) -> String {
     }
     let masks: Vec<serde_json::Value> = boxes
         .into_iter()
-        .map(|(n, (x, y, w, h))| serde_json::json!({ "n": n, "x": x, "y": y, "w": w, "h": h }))
+        .map(|(n, (x, y, w, h))| {
+            // Six decimals: a polygon's bounding box should not read `0.19999999999999998`.
+            let r = |v: f64| (v * 1e6).round() / 1e6;
+            serde_json::json!({ "n": n, "x": r(x), "y": r(y), "w": r(w), "h": r(h) })
+        })
         .collect();
     serde_json::json!({
         "mode": if hide_all { "hide_all" } else { "hide_one" },
@@ -398,6 +416,8 @@ fn deck_segments(name: &str) -> Vec<String> {
 struct FsrsData {
     s: Option<f64>,
     d: Option<f64>,
+    /// Last review (s), Anki 23.10+.
+    lrt: Option<i64>,
 }
 
 fn rating(ease: i64) -> Option<Rating> {
@@ -624,11 +644,15 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
             };
             let fsrs: FsrsData = serde_json::from_str(&ac.data).unwrap_or_default();
             let stability = fsrs.s.or((ac.ivl > 0).then_some(ac.ivl as f64));
-            let last = last_review.get(&ac.id).map(|t| Timestamp(*t)).or_else(|| {
-                (state == CardState::Review && ac.ivl > 0)
-                    .then(|| due.map(|d| Timestamp(d.0 - ac.ivl * DAY_MS)))
-                    .flatten()
-            });
+            let last = last_review
+                .get(&ac.id)
+                .map(|t| Timestamp(*t))
+                .or_else(|| fsrs.lrt.filter(|t| *t > 0).map(|t| Timestamp(t * 1000)))
+                .or_else(|| {
+                    (state == CardState::Review && ac.ivl > 0)
+                        .then(|| due.map(|d| Timestamp(d.0 - ac.ivl * DAY_MS)))
+                        .flatten()
+                });
             let id = CardId::from_uuid(derived_id(
                 ac.id,
                 &format!("card:{}:{}:{}", an.guid, ac.ord, ac.id),
@@ -779,8 +803,16 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
     let mut nt_ids = IdAlloc::default();
     let mut notetypes = Vec::new();
     let mut mids: HashMap<NoteTypeId, (i64, &NoteType)> = HashMap::new();
+    let mut occlusion_nts: HashSet<NoteTypeId> = HashSet::new();
     for nt in &pack.notetypes {
         let mid = nt_ids.take(nt.created_at.0);
+        if is_occlusion_builtin(nt) {
+            // Anki's own image occlusion note type, so Anki draws and edits the masks.
+            notetypes.push(occlusion::notetype(mid, &nt.name));
+            occlusion_nts.insert(nt.id);
+            mids.insert(nt.id, (mid, nt));
+            continue;
+        }
         let names: HashMap<String, String> = nt
             .fields
             .iter()
@@ -835,11 +867,18 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
     }];
     let mut dids: HashMap<DeckId, i64> = HashMap::new();
     for d in &pack.decks {
+        let name = pack.deck_path(d.id).join("::");
+        if name.to_lowercase() == "default" {
+            // Anki's own deck 1; a second "Default" would come back as "Default_".
+            dids.insert(d.id, 1);
+            decks[0].description = d.description.clone();
+            continue;
+        }
         let did = deck_alloc.take(d.created_at.0);
         dids.insert(d.id, did);
         decks.push(AnkiDeck {
             id: did,
-            name: pack.deck_path(d.id).join("::"),
+            name,
             description: d.description.clone(),
             filtered: false,
         });
@@ -855,6 +894,31 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
         };
         let nid = note_alloc.take(n.created_at.0);
         nids.insert(n.id, nid);
+        let value = |key: &str, kind: FieldKind| {
+            let v = n.fields.get(&FieldKey::new(key)).map_or("", String::as_str);
+            to_names(&anki_field(kind, v))
+        };
+        let fields: Vec<String> = if occlusion_nts.contains(&n.notetype_id) {
+            let masks = n
+                .fields
+                .get(&FieldKey::new(MASKS))
+                .map_or("", String::as_str);
+            vec![
+                occlusion::shapes(masks),
+                value("image", FieldKind::Image),
+                value("header", FieldKind::RichText),
+                value("extra", FieldKind::RichText),
+                String::new(),
+            ]
+        } else {
+            nt.fields
+                .iter()
+                .map(|f| {
+                    let v = n.fields.get(&f.key).map_or("", String::as_str);
+                    to_names(&anki_field(f.kind, v))
+                })
+                .collect()
+        };
         notes.push(AnkiNote {
             id: nid,
             guid: n.id.to_string(),
@@ -865,14 +929,7 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
                 .iter()
                 .map(|t| t.as_str().split_whitespace().collect::<Vec<_>>().join("_"))
                 .collect(),
-            fields: nt
-                .fields
-                .iter()
-                .map(|f| {
-                    let v = n.fields.get(&f.key).map_or("", String::as_str);
-                    to_names(&anki_field(f.kind, v))
-                })
-                .collect(),
+            fields,
         });
     }
     let note_nt: HashMap<NoteId, &NoteType> = pack
@@ -890,7 +947,15 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
         let (Some(nid), Some(nt)) = (nids.get(&c.note_id), note_nt.get(&c.note_id)) else {
             continue;
         };
-        let ord = if nt.kind == NoteTypeKind::Cloze {
+        let numbered = |prefix: char| {
+            c.template_key
+                .strip_prefix(prefix)
+                .and_then(|n| n.parse::<i64>().ok())
+                .map_or(0, |n| (n - 1).max(0))
+        };
+        let ord = if occlusion_nts.contains(&nt.id) {
+            numbered('m')
+        } else if nt.kind == NoteTypeKind::Cloze {
             c.template_key
                 .strip_prefix('c')
                 .and_then(|n| n.parse::<i64>().ok())
@@ -901,8 +966,7 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
                 .position(|t| t.key == c.template_key)
                 .map_or(0, |p| i64::try_from(p).unwrap_or(0))
         };
-        // Anki allows one card per (note, ord); a v0.3 card with no Anki template of its own
-        // (image occlusion masks) cannot be represented and is left out.
+        // Anki allows one card per (note, ord).
         if !used_ords.insert((*nid, ord)) {
             continue;
         }
@@ -911,15 +975,18 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
         let s = &c.scheduling;
         let position = i64::try_from(pos).unwrap_or(0) + 1;
         let sched = include_scheduling && s.state != CardState::New;
+        // Anki's interval is the scheduled gap (last review → due); stability only stands in
+        // when one of them is unknown.
         let interval = || {
-            s.stability
-                .map(|x| x.round() as i64)
-                .or_else(|| match (s.due, s.last_review) {
-                    (Some(d), Some(l)) => Some((d.0 - l.0).div_euclid(DAY_MS)),
-                    _ => None,
-                })
-                .unwrap_or(1)
-                .max(1)
+            match (s.due, s.last_review) {
+                (Some(d), Some(l)) if d.0 > l.0 => {
+                    Some((d.0 - l.0 + DAY_MS / 2).div_euclid(DAY_MS))
+                }
+                _ => None,
+            }
+            .or_else(|| s.stability.map(|x| x.round() as i64))
+            .unwrap_or(1)
+            .max(1)
         };
         let due_day = |t: Timestamp| (t.0.div_euclid(1000) - crt).div_euclid(86_400);
         let (ctype, queue, due, ivl, factor) = if !sched {
@@ -932,9 +999,20 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
                 _ => (1, 1, due_ts.0.div_euclid(1000), 0, 2500),
             }
         };
-        let data = match (sched, s.stability, s.difficulty) {
-            (true, Some(st), Some(d)) => serde_json::json!({ "s": st, "d": d }).to_string(),
-            _ => String::new(),
+        // Anki's card data: FSRS memory (`s`, `d`) and the last review time (`lrt`, s), which
+        // Anki 23.10+ otherwise fills in on "Check Database".
+        let mut data = serde_json::Map::new();
+        if let (true, Some(st), Some(d)) = (sched, s.stability, s.difficulty) {
+            data.insert("s".into(), st.into());
+            data.insert("d".into(), d.into());
+        }
+        if let (true, Some(l)) = (sched, s.last_review) {
+            data.insert("lrt".into(), l.0.div_euclid(1000).into());
+        }
+        let data = if data.is_empty() {
+            String::new()
+        } else {
+            serde_json::Value::Object(data).to_string()
         };
         cards.push(AnkiCard {
             id: cid,

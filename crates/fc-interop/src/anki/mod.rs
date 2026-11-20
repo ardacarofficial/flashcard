@@ -17,6 +17,7 @@
 pub mod convert;
 #[cfg(any(test, feature = "fixtures"))]
 pub mod fixtures;
+pub mod occlusion;
 mod proto;
 mod read;
 pub mod schema;
@@ -180,5 +181,7 @@ pub struct AnkiCollection {
     pub media: Vec<(String, Vec<u8>)>,
 }
 
+#[cfg(test)]
+mod real_tests;
 #[cfg(test)]
 mod tests;
