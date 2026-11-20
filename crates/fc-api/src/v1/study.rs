@@ -26,6 +26,12 @@ pub enum StudyKind {
     Custom,
     /// The cards rated "Again" in an earlier session (`from_session`).
     Mistakes,
+    /// v0.10 learn mode (Quizlet style): the chosen cards are asked as multiple choice, then
+    /// written, until each is correct at every stage (`modes.learn.answer`).
+    Learn,
+    /// v0.10 test: a paper of mixed question types from the chosen cards, scored on
+    /// submission (`modes.test.paper`, `modes.test.submit`). Never changes the schedule.
+    Test,
 }
 
 /// Whether answers change the schedule.
@@ -123,6 +129,9 @@ pub struct StartSession {
     /// Client UTC offset in minutes (Istanbul: 180), for the study-day boundary. Default 0.
     #[serde(default)]
     pub tz_offset_mins: Option<i32>,
+    /// v0.10 study modes: time limit, rating scale, test options.
+    #[serde(default)]
+    pub modes: Option<super::modes::StartModes>,
 }
 
 /// Request naming a session.
@@ -209,6 +218,11 @@ pub struct SessionDto {
     pub current: Option<StudyCardDto>,
     /// When the next waiting learning card becomes available, if any.
     pub next_due: Option<Timestamp>,
+    /// v0.10 study modes of the session (`null` when it uses none; may be absent from
+    /// clients/mocks written before v0.10).
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub modes: Option<super::modes::SessionModesDto>,
 }
 
 /// Response of `study.active`.
@@ -470,7 +484,9 @@ pub struct ReviewLogDto {
     pub answer_duration_ms: Option<u32>,
     /// Hints used.
     pub hints_used: u32,
-    /// `normal` (scheduled) or `trial`.
+    /// Where the review came from. Changes the schedule: `normal`, `learn`, `timed`,
+    /// `confidence` (v0.10 modes), `imported` (v0.5). Practice, schedule unchanged: `trial`,
+    /// `trial_learn`, `trial_timed`, `trial_confidence`, `test`.
     pub mode: String,
     /// Stability after.
     pub stability_after: Option<f64>,

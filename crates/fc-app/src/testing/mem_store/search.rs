@@ -126,6 +126,21 @@ impl SearchRead for MemTx<'_> {
         Ok(self.matching(filter, now).into_iter().map(|(c, _)| c.id).collect())
     }
 
+    fn search_card_ids_among(
+        &self,
+        filter: &Filter,
+        now: Timestamp,
+        among: &[CardId],
+    ) -> StorageResult<Vec<CardId>> {
+        let among: std::collections::HashSet<CardId> = among.iter().copied().collect();
+        Ok(self
+            .matching(filter, now)
+            .into_iter()
+            .map(|(c, _)| c.id)
+            .filter(|id| among.contains(id))
+            .collect())
+    }
+
     fn list_saved_queries(&self) -> StorageResult<Vec<SavedQuery>> {
         let mut v: Vec<SavedQuery> = self.s().domains.search.saved.values().cloned().collect();
         v.sort_by(|a, b| {

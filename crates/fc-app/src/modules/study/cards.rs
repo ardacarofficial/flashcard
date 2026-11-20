@@ -250,8 +250,10 @@ pub(super) fn restore(
         inverse.session = Some(s.snapshot());
         // Only the queue state: an ended session stays ended (start/end have no undo, so a
         // session ended since the snapshot must not reopen next to the new one).
-        s.record.state = snap.state.clone();
-        ctx.tx.upsert_session(&s.record)?;
+        s.state = crate::support::from_json(&snap.state)?;
+        // The card back on screen gets its full time again (timed mode, v0.10).
+        crate::modules::modes::timed::forget_timer(&mut s.state);
+        s.save(ctx.tx)?;
     }
     for id in &req.remove_reviews {
         if let Some(r) = ctx.reads().get_review_log(*id)? {

@@ -36,7 +36,7 @@ impl StatsRead for MemTx<'_> {
             .map(|(i, r)| (i64::try_from(i).unwrap_or(i64::MAX).saturating_add(1), r))
             .filter(|(seq, r)| {
                 *seq > after_seq
-                    && r.mode != "trial"
+                    && !fc_storage::repo::is_practice_mode(&r.mode)
                     && cards.is_none_or(|c| c.contains(&r.card_id))
             })
             .map(|(seq, r)| (seq, r.clone()))

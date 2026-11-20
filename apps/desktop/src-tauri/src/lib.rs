@@ -3,6 +3,7 @@
 
 pub mod ipc;
 pub mod media;
+pub mod outside;
 
 use std::sync::Arc;
 use tauri::Manager;
@@ -21,8 +22,20 @@ pub fn run() {
     // Before Tauri starts any thread: no shell variable changes behavior (FSRS optimizer).
     fc_app::system::pin_process_env();
     let result = tauri::Builder::default()
+        // First: a second launch hands its arguments (a flashcard:// link) to this instance
+        // and exits (v0.9, docs/06 §6).
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            outside::on_second_instance(app, argv);
+        }))
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![ipc::invoke])
+        .invoke_handler(tauri::generate_handler![
+            ipc::invoke,
+            outside::take_deep_links,
+            outside::quick_add_prefill
+        ])
         .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
             let (status, mime, body) = match ctx.app_handle().path().app_data_dir() {
                 Ok(dir) => media::respond(&dir.join(COLLECTION_FILE), request.uri().path()),
@@ -64,7 +77,13 @@ pub fn run() {
                         }
                         Err(e) => fail(&e.to_string()),
                     }
-                    app.manage(collection);
+                    // Scheduled automation rules (v0.9); the thread ends with the app.
+                    if let Err(e) = fc_app::modules::automation::spawn_scheduler(&collection) {
+                        fail(&e.to_string());
+                    }
+                    app.manage(collection.clone());
+                    // Links, quick add, clipboard watcher, local API server (v0.9).
+                    outside::start(app.handle(), collection);
                     Ok(())
                 }
                 Err(e) => fail(&e),

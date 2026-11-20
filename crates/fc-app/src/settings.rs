@@ -96,3 +96,69 @@ pub(crate) fn resolve_stored(
         .into_iter()
         .find_map(|(s, v)| v.map(|v| (v, s))))
 }
+
+/// Permission to change a setting that names a **program the app runs** (an executable path,
+/// e.g. `reading.ffmpeg_path`). Like `mcp:write`, only the user, the CLI and the app itself
+/// hold it (`Registry::permits`, `registry::USER_ONLY_PERMISSIONS`): a plugin, automation, local-API or MCP client that
+/// could point it elsewhere could make the app run any program.
+pub const EXEC_PERMISSION: &str = "settings:exec";
+
+/// Settings that name a program the app runs ([`EXEC_PERMISSION`]). They are validated with
+/// [`validate_executable`] when set **and** when used, and dropped from restored backups.
+pub const EXEC_SETTINGS: &[&str] = &[crate::modules::reading::FFMPEG_PATH];
+
+/// Whether `key` is one of the [`EXEC_SETTINGS`].
+pub fn is_exec_setting(key: &str) -> bool {
+    EXEC_SETTINGS.contains(&key)
+}
+
+/// Why `path` is not an acceptable executable: it must be an absolute path to an existing
+/// regular file that is executable (Unix: an `x` bit; Windows: an `.exe`).
+pub fn executable_problem(path: &str) -> Option<&'static str> {
+    let p = std::path::Path::new(path);
+    if path.trim() != path || !p.is_absolute() {
+        return Some("the program must be given by its absolute path");
+    }
+    let Ok(meta) = std::fs::metadata(p) else {
+        return Some("the program does not exist");
+    };
+    if !meta.is_file() {
+        return Some("the program is not a file");
+    }
+    if cfg!(windows) {
+        let exe = p
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("exe"));
+        if !exe {
+            return Some("the program must be an .exe file");
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        if meta.permissions().mode() & 0o111 == 0 {
+            return Some("the program is not executable");
+        }
+    }
+    None
+}
+
+/// Validates the value of an [`EXEC_SETTINGS`] entry: an empty text (= the default program
+/// looked up on `PATH`) or an [`executable_problem`]-free path.
+pub fn validate_executable(key: &str, value: &Value) -> Result<(), fc_core::error::CoreError> {
+    let bad = |reason: &str| fc_core::error::CoreError::InvalidSettingValue {
+        key: key.to_owned(),
+        reason: reason.to_owned(),
+    };
+    let Some(text) = value.as_str() else {
+        return Err(bad("expected text"));
+    };
+    if text.is_empty() {
+        return Ok(());
+    }
+    match executable_problem(text) {
+        None => Ok(()),
+        Some(reason) => Err(bad(reason)),
+    }
+}

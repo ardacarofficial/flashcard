@@ -91,8 +91,11 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
                 .ok_or_else(|| invalid("a mistakes session needs from_session"))?;
             Some(Session::load(ctx.reads(), from)?.state.again)
         }
-        StudyKind::Normal | StudyKind::Custom => matching,
+        StudyKind::Normal | StudyKind::Custom | StudyKind::Learn | StudyKind::Test => matching,
     };
+    // v0.10 modes: module switches, time limit, rating scale (validated before anything is
+    // written).
+    let modes_config = crate::modules::modes::prepare_start(ctx, &req)?;
     let scope_decks = deck_ids.clone();
     let mut candidates = ctx.reads().study_cards(&StudyCardFilter {
         deck_ids,
@@ -122,6 +125,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         tz_offset_mins: tz,
         day_start_hour: u8::try_from(setting_u32(ctx.reads(), &SettingScope::App, DAY_START_HOUR)?)
             .unwrap_or(fc_study::day::DEFAULT_ROLLOVER_HOUR),
+        modes: modes_config,
     };
     // Deck options (v0.4 presets, inherited from parent decks): order, sibling burying.
     let preset = effective_options(ctx.reads(), req.deck_id)?;
@@ -135,7 +139,9 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
     // Normal sessions respect the deck preset's daily limits (minus what was studied today).
     let daily = match req.kind {
         StudyKind::Normal => Some(daily_left(ctx, req.deck_id, scope_decks.as_deref(), &config)?),
-        StudyKind::Custom | StudyKind::Mistakes => None,
+        // Hand-picked sessions (custom, mistakes, learn, test) are not limited; their
+        // schedule-changing answers still count towards later normal sessions (docs/10 §24).
+        StudyKind::Custom | StudyKind::Mistakes | StudyKind::Learn | StudyKind::Test => None,
     };
     let new_limit = match (req.new_limit, daily) {
         (Some(n), _) => Some(n),
@@ -145,10 +151,10 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         (None, None) => None,
     };
     let review_limit = daily.map(|(_, reviews_left)| reviews_left);
-    let bury_siblings = req.kind != StudyKind::Mistakes && preset.bury_siblings;
+    let bury_siblings = buries_siblings(req.kind) && preset.bury_siblings;
     let due_only = match req.kind {
         StudyKind::Normal => filter.due_only.unwrap_or(true),
-        StudyKind::Custom => filter.due_only.unwrap_or(false),
+        StudyKind::Custom | StudyKind::Learn | StudyKind::Test => filter.due_only.unwrap_or(false),
         StudyKind::Mistakes => false,
     };
     // Seeded from the session id: shuffles are reproducible from the stored session.
@@ -170,6 +176,13 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
     if let Some(limit) = filter.limit {
         queue.truncate(limit as usize);
     }
+    let mut state = SessionState {
+        queue,
+        last_event_at: Some(ctx.now),
+        ..SessionState::default()
+    };
+    // v0.10: learn progress / test paper (no-op for other kinds).
+    crate::modules::modes::init_state(View::cmd(ctx), &req, &config, &mut state, &mut rng)?;
     end_open_sessions(ctx)?;
     let mut session = Session {
         record: SessionRecord {
@@ -183,11 +196,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
             ended_at: None,
         },
         config,
-        state: SessionState {
-            queue,
-            last_event_at: Some(ctx.now),
-            ..SessionState::default()
-        },
+        state,
     };
     session.save(ctx.tx)?;
     Ok(CommandOutcome {
@@ -212,7 +221,13 @@ fn daily_left(
     let since = day.start(day.index(ctx.now));
     let mut new = std::collections::HashSet::new();
     let mut reviewed = std::collections::HashSet::new();
-    for r in ctx.reads().review_logs_since(since, review_mode(StudyMode::Scheduled))? {
+    // Every schedule-changing answer counts, whatever mode it came from (v0.10).
+    let mut logs = Vec::new();
+    for mode in fc_storage::repo::SCHEDULED_REVIEW_MODES {
+        logs.extend(ctx.reads().review_logs_since(since, mode)?);
+    }
+    logs.sort_by_key(|r| r.created_at);
+    for r in logs {
         let set = match r.state_before {
             CardState::New => &mut new,
             CardState::Review => &mut reviewed,
@@ -289,11 +304,54 @@ fn siblings_to_bury(
         .collect())
 }
 
+/// Whether answering a card of a session of `kind` buries its siblings (hand-picked sets of
+/// mistakes, learn and test cards keep them).
+fn buries_siblings(kind: StudyKind) -> bool {
+    matches!(kind, StudyKind::Normal | StudyKind::Custom)
+}
+
 pub(super) fn answer(req: AnswerCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<SessionDto>> {
+    // v0.10: learn cards are judged (`modes.learn.answer`); a timed card past its time is
+    // answered by `modes.timed.expire`.
+    crate::modules::modes::check_button_answer(ctx, &req)?;
+    answer_core(ctx, &req, AnswerHooks::default())
+}
+
+/// What a v0.10 mode changes about an answer (extension point of the session engine).
+#[derive(Default)]
+pub(crate) struct AnswerHooks<'a> {
+    /// Rated on the confidence scale (`review_log.mode = confidence`).
+    pub confidence: bool,
+    /// Keep the card out of the engine's intraday re-queueing (learn mode re-queues itself).
+    pub no_requeue: bool,
+    /// Practice only: the schedule (real or simulated) stays as it is and the review is
+    /// logged with the practice variant of its mode (`trial_<mode>`; learn mode's
+    /// multiple-choice answers on cards already in review).
+    pub practice: bool,
+    /// Runs on the session state after the answer is recorded, before it is saved: the
+    /// answered card, its note and queue category.
+    #[allow(clippy::type_complexity)]
+    pub after: Option<Box<dyn FnOnce(&mut SessionState, CardId, fc_core::NoteId, queue::QueueKind) + 'a>>,
+}
+
+/// Rates `req.card_id` in its session: scheduling (or trial simulation), sibling burying,
+/// review log, session queue and counters — one undo step through `study.restore`. Shared
+/// by `study.answer` and the v0.10 modes.
+pub(crate) fn answer_core(
+    ctx: &mut CommandCtx<'_>,
+    req: &AnswerCard,
+    hooks: AnswerHooks<'_>,
+) -> AppResult<CommandOutcome<SessionDto>> {
     let mut session = Session::load(ctx.reads(), req.session_id)?;
     session.require_open()?;
     session.require_available(req.card_id, ctx.now)?;
     let session_before = session.snapshot();
+    let queue_kind = session
+        .state
+        .queue
+        .iter()
+        .find(|e| e.card_id == req.card_id)
+        .map_or(queue::QueueKind::New, |e| e.kind);
     drop_dead_cards(ctx, &mut session)?;
     let mut card = require_live_card(ctx.reads(), req.card_id)?;
     if EmptyCards::new(View::cmd(ctx)).is_empty(&card)? {
@@ -305,7 +363,10 @@ pub(super) fn answer(req: AnswerCard, ctx: &mut CommandCtx<'_>) -> AppResult<Com
     let mut outcome = scheduler(ctx.reads())?
         .schedule(&before, req.rating, ctx.now, &params)
         .map_err(scheduler_error)?;
-    if session.config.mode == StudyMode::Scheduled {
+    if hooks.practice {
+        outcome.state = before.clone();
+        outcome.scheduled_days = 0;
+    } else if session.config.mode == StudyMode::Scheduled {
         // v0.6: load balancing, easy days, exam-date mode (no-op when `planning` is off).
         crate::modules::planning::plan_outcome(
             ctx.reads(),
@@ -329,13 +390,14 @@ pub(super) fn answer(req: AnswerCard, ctx: &mut CommandCtx<'_>) -> AppResult<Com
     let mut restore_cards = Vec::new();
     let mut changed = Vec::new();
     match session.config.mode {
+        _ if hooks.practice => {}
         StudyMode::Scheduled => {
             restore_cards.push(card_before);
             card.scheduling = outcome.state.clone();
             card.updated_at = ctx.now;
             ctx.tx.update_card(&card)?;
             changed.push(card.id);
-            let bury = session.config.kind != StudyKind::Mistakes
+            let bury = buries_siblings(session.config.kind)
                 && effective_options(ctx.reads(), Some(card.deck_id))?.bury_siblings;
             if bury {
                 for mut sib in siblings_to_bury(ctx, &card, day_end)? {
@@ -357,8 +419,17 @@ pub(super) fn answer(req: AnswerCard, ctx: &mut CommandCtx<'_>) -> AppResult<Com
         req.rating == Rating::Again,
         duration,
         ctx.now,
-        requeue_at(&outcome.state, day_end),
+        if hooks.no_requeue {
+            None
+        } else {
+            requeue_at(&outcome.state, day_end)
+        },
     );
+    // Its countdown ends with the answer (a card coming back later starts a new one).
+    crate::modules::modes::timed::card_left_screen(&mut session.state, card.id);
+    if let Some(after) = hooks.after {
+        after(&mut session.state, card.id, card.note_id, queue_kind);
+    }
     let review = ReviewLogRecord {
         id: ReviewLogId::generate(ctx.ids),
         card_id: card.id,
@@ -371,7 +442,14 @@ pub(super) fn answer(req: AnswerCard, ctx: &mut CommandCtx<'_>) -> AppResult<Com
         duration_ms: duration,
         answer_duration_ms: reveal,
         hints_used,
-        mode: review_mode(session.config.mode).to_owned(),
+        mode: {
+            let mode = review_mode(&session.config, hooks.confidence);
+            if hooks.practice && !fc_storage::repo::is_practice_mode(&mode) {
+                format!("trial_{mode}")
+            } else {
+                mode
+            }
+        },
         stability_after: outcome.state.stability,
         difficulty_after: outcome.state.difficulty,
         created_at: ctx.now,

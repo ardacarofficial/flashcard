@@ -1,0 +1,130 @@
+{
+  "nav": {
+    "automation": "Otomasyon"
+  },
+  "modules": {
+    "automation": {
+      "name": "Otomasyon kuralları",
+      "description": "“Ne zaman … eğer … yap …” kuralları: kartları kendiliğinden etiketle, askıya al, taşı ya da sınıflandır."
+    }
+  },
+  "settings": {
+    "automation": {
+      "max_depth": {
+        "label": "Kural zinciri derinliği",
+        "description": "Kaç kural art arda birbirini tetikleyebilir (kural kendini asla yeniden tetiklemez)."
+      },
+      "max_runs_per_event": {
+        "label": "Değişiklik başına kural çalışması",
+        "description": "Bir değişikliğin ardından en çok bu kadar kural çalışır."
+      }
+    }
+  },
+  "automation": {
+    "heading": "Otomasyon kuralları",
+    "intro": "Bir şey olduğunda ve kartlar sorguya uyduğunda eylemler çalışır. Her çalışma tek geri al adımıdır.",
+    "none": "Henüz kural yok.",
+    "new": "Yeni kural",
+    "edit_rule": "Kuralı düzenle",
+    "edit": "Düzenle",
+    "delete": "Sil",
+    "run_now": "Şimdi çalıştır",
+    "up": "Yukarı taşı",
+    "down": "Aşağı taşı",
+    "name": "Ad",
+    "enabled": "Açık",
+    "when": "Ne zaman",
+    "if": "Eğer",
+    "do": "Yap",
+    "condition": "Kartlar (sorgu)",
+    "every_label": "Her (dakika)",
+    "every_mins": "{n} dakikada bir",
+    "tags": "Etiketler (virgülle)",
+    "on": "Açık",
+    "flag": "Bayrak",
+    "deck": "Deste",
+    "classification": "Sınıflandırma",
+    "value": "Değer",
+    "clear": "(temizle)",
+    "add_action": "Eylem ekle",
+    "remove_action": "Kaldır",
+    "save": "Kuralı kaydet",
+    "preview": "Önizle",
+    "cancel": "Vazgeç",
+    "preview_summary": "{matched} kart uyuyor, {changed} kart değişirdi. Hiçbir şey değiştirilmedi.",
+    "truncated": "Bir çalışmada yalnız ilk 5000 kart işlenir.",
+    "would_change": "değişirdi",
+    "runs": "Son çalışmalar",
+    "no_runs": "Henüz çalışma yok.",
+    "matched": "{n} kart",
+    "trigger": {
+      "label": "Tetikleyici",
+      "note_added": "Not eklenince",
+      "note_updated": "Not düzenlenince",
+      "card_answered": "Kart cevaplanınca",
+      "card_flagged": "Kart bayraklanınca",
+      "classification_changed": "Sınıflandırma değişince",
+      "imported": "İçe aktarma bitince",
+      "inbox_added": "Gelen kutusuna öneri düşünce",
+      "schedule": "Zamanlanmış",
+      "manual": "Elle"
+    },
+    "rating": {
+      "again": "Tekrar",
+      "hard": "Zor",
+      "good": "İyi",
+      "easy": "Kolay"
+    },
+    "status": {
+      "applied": "uygulandı",
+      "no_match": "uyan kart yok",
+      "skipped_cycle": "atlandı (kendini tetiklerdi)",
+      "skipped_depth": "atlandı (zincir çok derin)",
+      "skipped_budget": "atlandı (bir değişiklik için çok fazla çalışma)",
+      "failed": "başarısız"
+    },
+    "action": {
+      "label": "Eylem",
+      "bulk": {
+        "add_tags": "Etiket ekle",
+        "remove_tags": "Etiket kaldır",
+        "set_suspended": "Askıya al / bırak",
+        "set_buried": "Göm / çıkar",
+        "set_flag": "Bayrak koy / kaldır",
+        "move_cards": "Desteye taşı",
+        "set_attribute": "Sınıflandırma ata",
+        "reset_progress": "Unut (ilerlemeyi sıfırla)"
+      },
+      "inbox": {
+        "accept": "Not olarak kabul et"
+      }
+    },
+    "condition_example": "ör. seviye:A1 lapses>=5",
+    "inbox_condition_hint": "Gelen kutusu kurallarında sorgu, önerinin olacağı kartta denetlenir (ör. deck:İngilizce seviye:B1)."
+  },
+  "errors": {
+    "validation": {
+      "automation_rule": "Kuralı kontrol edin: bir adı, geçerli bir tetikleyicisi ve 1–10 izinli eylemi olmalı."
+    },
+    "not_found": {
+      "automation_rule": "Bu otomasyon kuralı artık yok."
+    }
+  },
+  "commands": {
+    "automation": {
+      "rules": {
+        "list": "Otomasyon kuralları",
+        "create": "Otomasyon kuralı ekle",
+        "update": "Otomasyon kuralını düzenle",
+        "delete": "Otomasyon kuralını sil",
+        "reorder": "Otomasyon kurallarını sırala",
+        "run": "Otomasyon kuralını şimdi çalıştır"
+      },
+      "preview": "Otomasyon kuralını önizle",
+      "actions": "Otomasyon eylemleri",
+      "runs": {
+        "list": "Otomasyon çalışma kaydı"
+      }
+    }
+  }
+}

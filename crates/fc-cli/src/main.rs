@@ -7,6 +7,7 @@
 //! * `fc call <method> [<json>|-]` invokes **any** public method with raw JSON params (`-` =
 //!   read them from stdin), so everything the app can do is reachable from the shell.
 
+mod api;
 mod commands;
 mod i18n;
 mod lookup;
@@ -64,6 +65,9 @@ enum Command {
     /// MCP: serve this collection to Claude Desktop / Claude Code, probe external servers.
     #[command(subcommand)]
     Mcp(mcp::McpCommand),
+    /// Local HTTP API: serve this collection to local programs (docs/06 §3).
+    #[command(subcommand)]
+    Api(api::ApiCommand),
     /// Invoke any public API method with JSON params, e.g.
     /// `fc call decks.rename '{"id":"…","name":"X"}'`. Prints the JSON response.
     Call {
@@ -470,6 +474,7 @@ impl Command {
             Command::Mcp(mcp::McpCommand::Serve { .. }) => m::McpToolsList::NAME,
             // A CLI-only probe (registered or ad-hoc server), not an API method — like `plugin.pack`.
             Command::Mcp(mcp::McpCommand::Tools { .. }) => "mcp.tools",
+            Command::Api(api::ApiCommand::Serve { .. }) => m::LocalApiClientsList::NAME,
             Command::Call { method, .. } => method,
         }
     }
@@ -501,6 +506,15 @@ fn main() -> ExitCode {
     if let Command::Mcp(mcp::McpCommand::Serve { read_only }) = &cli.command {
         // stdout belongs to the protocol: errors go to stderr only.
         return match mcp::serve(&cli.db, *read_only) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                report(cli.command.method(), &e, cli.json);
+                ExitCode::FAILURE
+            }
+        };
+    }
+    if let Command::Api(api::ApiCommand::Serve { port }) = &cli.command {
+        return match api::serve(&cli.db, *port) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 report(cli.command.method(), &e, cli.json);

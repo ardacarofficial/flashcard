@@ -177,4 +177,8 @@ domains! {
     stats => StatsState,
     ai => AiState,
     plugins => PluginState,
+    reading => ReadingState,
+    automation => AutomationState,
+    inbox => InboxState,
+    local_api => LocalApiState,
 }

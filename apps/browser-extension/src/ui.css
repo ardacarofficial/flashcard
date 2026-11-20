@@ -1,0 +1,55 @@
+:root {
+  --bg: #ffffff;
+  --fg: #1f1f1f;
+  --muted: #5f6368;
+  --line: #dadce0;
+  --accent: #1a73e8;
+  --ok: #188038;
+  --error: #b3261e;
+  color-scheme: light dark;
+  font: 13px/1.4 system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #202124;
+    --fg: #e8eaed;
+    --muted: #9aa0a6;
+    --line: #3c4043;
+    --accent: #8ab4f8;
+    --ok: #81c995;
+    --error: #f28b82;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); }
+body.popup { width: 360px; padding: 12px; }
+body.options { max-width: 560px; padding: 16px; }
+h1 { font-size: 15px; margin: 0; flex: 1; }
+h2 { font-size: 13px; margin: 20px 0 6px; }
+.bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.conn { font-size: 11px; color: var(--muted); }
+.conn[data-state='online']::before { content: '● '; color: var(--ok); }
+.conn[data-state='offline']::before { content: '● '; color: var(--muted); }
+.icon { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 2px 4px; }
+.field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.field > span, .field > label { color: var(--muted); font-size: 12px; }
+textarea, select, input[type='text'], input[type='number'], input[type='date'] {
+  font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; width: 100%;
+}
+textarea { resize: vertical; }
+.classes { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px 0; margin: 0 0 8px; }
+.classes legend { color: var(--muted); font-size: 12px; padding: 0 4px; }
+.choices { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.check { display: inline-flex; align-items: center; gap: 4px; }
+.ctx { margin-bottom: 8px; }
+.ctx summary { cursor: pointer; color: var(--muted); }
+.ctx blockquote { margin: 6px 0; padding-left: 8px; border-left: 3px solid var(--line); }
+.muted { color: var(--muted); font-size: 12px; }
+.msg:empty { display: none; }
+.msg[data-kind='ok'] { color: var(--ok); }
+.msg[data-kind='error'] { color: var(--error); }
+button { font: inherit; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: inherit; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); width: 100%; }
+button:disabled { opacity: 0.5; cursor: default; }
+.row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.failed { padding-left: 18px; }

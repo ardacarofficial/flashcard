@@ -353,19 +353,40 @@ impl Registry {
     /// * A plugin holds only what it was granted, only while it is active, and never an area
     ///   no plugin may hold (`io`, `mcp`, `ai_keys`, `ai:write`, `oplog`… —
     ///   `fc_plugins::permission::api_grantable`) even if a stored grant says otherwise.
-    /// * Automations and local API clients hold **nothing** until v0.9 defines their grants
-    ///   (deny by default: a new actor kind never inherits the user's authority).
+    /// * An automation rule holds `modules::automation::AUTOMATION_PERMISSIONS` — and
+    ///   [`ensure_access`] limits it to the rule action allow-list (v0.9).
+    /// * A local API client holds the scopes the user approved for it, only those a client may
+    ///   be granted (`modules::local_api::GRANTABLE_SCOPES`), only while approved (v0.9) — and
+    ///   [`ensure_access`] limits it to the HTTP allow-list.
+    /// * `USER_ONLY_PERMISSIONS` (`mcp:write`, `settings:exec`) are never held by anyone but
+    ///   the user, the CLI and the app. A new actor kind holds nothing until its arm says so
+    ///   (deny by default: it never inherits the user's authority).
+    ///   a new actor kind never inherits the user's authority).
     pub fn permits(&self, actor: &Actor, permission: &str) -> bool {
         match actor {
             Actor::User | Actor::Cli | Actor::System => true,
-            Actor::Mcp(_) => crate::modules::mcp::MCP_PERMISSIONS.contains(&permission),
+            Actor::Mcp(_) => {
+                !USER_ONLY_PERMISSIONS.contains(&permission)
+                    && crate::modules::mcp::MCP_PERMISSIONS.contains(&permission)
+            }
             Actor::Plugin(id) => {
-                fc_plugins::permission::api_grantable(permission)
+                !USER_ONLY_PERMISSIONS.contains(&permission)
+                    && fc_plugins::permission::api_grantable(permission)
                     && read(&self.grants)
                         .get(id)
                         .is_some_and(|g| g.contains(permission))
             }
-            Actor::Automation(_) | Actor::LocalApi(_) => false,
+            // v0.9: a rule's actions — further narrowed to the action allow-list in
+            // [`ensure_access`].
+            Actor::Automation(_) => {
+                !USER_ONLY_PERMISSIONS.contains(&permission)
+                    && crate::modules::automation::AUTOMATION_PERMISSIONS.contains(&permission)
+            }
+            // v0.9: its approved scopes (∩ `local_api::GRANTABLE_SCOPES`), refreshed per request.
+            Actor::LocalApi(id) => {
+                !USER_ONLY_PERMISSIONS.contains(&permission)
+                    && crate::modules::local_api::permits(self, id, permission)
+            }
         }
     }
 
@@ -635,8 +656,17 @@ pub(crate) fn ensure_access(
             crate::modules::plugins::redact::exposure(name),
             crate::modules::plugins::redact::Exposure::Refused(_)
         );
+    // An automation rule reaches only the undo-safe action allow-list (v0.9).
+    let automation_blocked = matches!(actor, Actor::Automation(_))
+        && !crate::modules::automation::action_reachable(name);
+    // A local API client reaches only the HTTP allow-list (public reads and undoable,
+    // replayable commands), not everything its scopes would cover (v0.9).
+    let local_api_blocked =
+        matches!(actor, Actor::LocalApi(_)) && !crate::modules::local_api::method_reachable(name);
     if visibility == Visibility::Internal
         || mcp_blocked
+        || automation_blocked
+        || local_api_blocked
         || plugin_blocked
         || !registry.permits(actor, permission)
     {
@@ -665,6 +695,11 @@ pub(crate) fn module_disabled(module: &str) -> AppError {
         .with_detail("module", module),
     )
 }
+
+/// Permissions only the user, the CLI and the app itself hold ([`Registry::permits`]): both
+/// let the holder choose a program the app will launch (`mcp:write` registers MCP servers,
+/// `settings:exec` names an executable such as `reading.ffmpeg_path`).
+pub(crate) const USER_ONLY_PERMISSIONS: &[&str] = &["mcp:write", crate::settings::EXEC_PERMISSION];
 
 pub(crate) fn unknown_method(name: &str) -> AppError {
     AppError::Api(

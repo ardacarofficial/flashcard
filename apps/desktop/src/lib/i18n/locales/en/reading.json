@@ -1,0 +1,168 @@
+{
+  "nav": {
+    "reading": "Reading"
+  },
+  "modules": {
+    "reading": {
+      "name": "Reading mode",
+      "description": "Read texts and subtitles with word colours from your cards, make cards from sentences, and keep long articles in a reading queue."
+    }
+  },
+  "settings": {
+    "reading": {
+      "default_language": {
+        "label": "Default reading language",
+        "description": "Language of new texts (BCP-47, e.g. en, tr, de)."
+      },
+      "vocabulary_query": {
+        "label": "Cards that count for word colours",
+        "description": "A search query (e.g. deck:English). Empty: every card."
+      },
+      "ffmpeg_path": {
+        "label": "ffmpeg program",
+        "description": "Used to cut audio clips and screenshots from videos. A name on PATH or a full path."
+      }
+    }
+  },
+  "commands": {
+    "reading": {
+      "items": {
+        "list": "Reading list",
+        "get": "Open a text",
+        "create": "Add a text to read",
+        "import": "Open a file or web page to read",
+        "update": "Edit a text",
+        "set_position": "Remember the reading position",
+        "delete": "Delete a text"
+      },
+      "queue": {
+        "set": "Add to / remove from the reading queue",
+        "read": "Done reading for today",
+        "postpone": "Postpone a text"
+      },
+      "extracts": {
+        "create": "Make an extract",
+        "cloze": "Make a cloze from a text"
+      },
+      "analyze": "Colour the words of a text",
+      "words": {
+        "mark": "Mark words",
+        "lookup": "Look up a word"
+      },
+      "cards": {
+        "make": "Make a card from a word"
+      },
+      "clips": {
+        "extract": "Cut an audio clip from the video"
+      }
+    }
+  },
+  "errors": {
+    "validation": {
+      "reading_text": "The text is empty or too long.",
+      "reading_range": "That part of the text cannot be used.",
+      "reading_source": "This file or page could not be read.",
+      "reading_clip": "There is no video or audio for this line."
+    },
+    "not_found": {
+      "reading_item": "Text not found."
+    },
+    "provider": {
+      "ffmpeg": "ffmpeg is missing or failed. Check the ffmpeg setting."
+    },
+    "conflict": {
+      "reading_notetype": "The built-in note type for this card was deleted. Restore it from the trash."
+    }
+  },
+  "reading": {
+    "heading": "Reading",
+    "tab": {
+      "library": "Library",
+      "queue": "Reading queue"
+    },
+    "add": {
+      "open": "New text",
+      "title": "Title",
+      "language": "Language",
+      "queue": "Add to the reading queue",
+      "body": "Text",
+      "save": "Save and read",
+      "file": "Open a file…",
+      "media": "Video for subtitles…",
+      "media_set": "Video chosen",
+      "url": "Web page",
+      "fetch": "Fetch",
+      "importing": "Reading the source…",
+      "path_prompt": "Path of the file to read",
+      "media_prompt": "Path of the video or audio file"
+    },
+    "priority": {
+      "label": "Priority",
+      "high": "High",
+      "normal": "Normal",
+      "low": "Low"
+    },
+    "empty": "No texts yet. Paste one or open a file.",
+    "queue": {
+      "empty": "The reading queue is empty.",
+      "due_now": "Due now",
+      "in_days": "Next in {n} day(s)",
+      "add": "Queue",
+      "remove": "Unqueue",
+      "done": "Done for today",
+      "postpone": "Postpone",
+      "postpone_days": "Days"
+    },
+    "kind": {
+      "text": "Text",
+      "subtitle": "Subtitles",
+      "extract": "Extract"
+    },
+    "delete": "Delete",
+    "back": "Back",
+    "known_pct": "You know {pct} of this text",
+    "status": {
+      "new": "New",
+      "learning": "Learning",
+      "known": "Known",
+      "ignored": "Ignored"
+    },
+    "mark_all_known": "Mark all new words as known",
+    "extract": {
+      "make": "Make an extract",
+      "made": "Extract added to the reading queue."
+    },
+    "cloze": {
+      "make": "Make a cloze",
+      "made": "Cloze card added."
+    },
+    "word": {
+      "heading": "Word",
+      "know": "I know this",
+      "ignore": "Ignore",
+      "clear": "Clear mark",
+      "mature": "mature",
+      "not_mature": "learning"
+    },
+    "card": {
+      "heading": "Make a card",
+      "kind": "Card",
+      "kind_word": "Word card",
+      "kind_sentence": "Sentence card",
+      "word": "Word",
+      "meaning": "Meaning",
+      "translation": "Translation of the sentence",
+      "clip": "Add audio and screenshot",
+      "clipping": "Cutting the clip…",
+      "clip_ready": "Clip ready",
+      "pick_deck": "Pick a deck above first.",
+      "make": "Make card",
+      "made": "Card added."
+    },
+    "job": {
+      "reading_source": "Reading the source…",
+      "cutting_audio": "Cutting the audio…",
+      "taking_screenshot": "Taking the screenshot…"
+    }
+  }
+}

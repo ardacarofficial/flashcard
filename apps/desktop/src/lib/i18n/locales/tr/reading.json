@@ -1,0 +1,168 @@
+{
+  "nav": {
+    "reading": "Okuma"
+  },
+  "modules": {
+    "reading": {
+      "name": "Okuma modu",
+      "description": "Metinleri ve altyazıları kartlarına göre renklenen kelimelerle oku, cümlelerden kart yap, uzun makaleleri okuma kuyruğunda tut."
+    }
+  },
+  "settings": {
+    "reading": {
+      "default_language": {
+        "label": "Varsayılan okuma dili",
+        "description": "Yeni metinlerin dili (BCP-47, ör. en, tr, de)."
+      },
+      "vocabulary_query": {
+        "label": "Kelime renklerinde sayılan kartlar",
+        "description": "Bir arama sorgusu (ör. deste:İngilizce). Boş: tüm kartlar."
+      },
+      "ffmpeg_path": {
+        "label": "ffmpeg programı",
+        "description": "Videolardan ses kesiti ve ekran görüntüsü almak için. PATH'teki adı ya da tam yolu."
+      }
+    }
+  },
+  "commands": {
+    "reading": {
+      "items": {
+        "list": "Okuma listesi",
+        "get": "Metni aç",
+        "create": "Okunacak metin ekle",
+        "import": "Okumak için dosya veya web sayfası aç",
+        "update": "Metni düzenle",
+        "set_position": "Okuma yerini hatırla",
+        "delete": "Metni sil"
+      },
+      "queue": {
+        "set": "Okuma kuyruğuna ekle / çıkar",
+        "read": "Bugünlük okudum",
+        "postpone": "Metni ertele"
+      },
+      "extracts": {
+        "create": "Özüt çıkar",
+        "cloze": "Metinden boşluk doldurma kartı yap"
+      },
+      "analyze": "Metnin kelimelerini renklendir",
+      "words": {
+        "mark": "Kelimeleri işaretle",
+        "lookup": "Kelimeye bak"
+      },
+      "cards": {
+        "make": "Kelimeden kart yap"
+      },
+      "clips": {
+        "extract": "Videodan ses kesiti al"
+      }
+    }
+  },
+  "errors": {
+    "validation": {
+      "reading_text": "Metin boş ya da çok uzun.",
+      "reading_range": "Metnin bu kısmı kullanılamıyor.",
+      "reading_source": "Bu dosya ya da sayfa okunamadı.",
+      "reading_clip": "Bu satır için video ya da ses yok."
+    },
+    "not_found": {
+      "reading_item": "Metin bulunamadı."
+    },
+    "provider": {
+      "ffmpeg": "ffmpeg bulunamadı ya da hata verdi. ffmpeg ayarını kontrol et."
+    },
+    "conflict": {
+      "reading_notetype": "Bu kartın yerleşik not türü silinmiş. Çöp kutusundan geri al."
+    }
+  },
+  "reading": {
+    "heading": "Okuma",
+    "tab": {
+      "library": "Kitaplık",
+      "queue": "Okuma kuyruğu"
+    },
+    "add": {
+      "open": "Yeni metin",
+      "title": "Başlık",
+      "language": "Dil",
+      "queue": "Okuma kuyruğuna ekle",
+      "body": "Metin",
+      "save": "Kaydet ve oku",
+      "file": "Dosya aç…",
+      "media": "Altyazının videosu…",
+      "media_set": "Video seçildi",
+      "url": "Web sayfası",
+      "fetch": "Getir",
+      "importing": "Kaynak okunuyor…",
+      "path_prompt": "Okunacak dosyanın yolu",
+      "media_prompt": "Video ya da ses dosyasının yolu"
+    },
+    "priority": {
+      "label": "Öncelik",
+      "high": "Yüksek",
+      "normal": "Normal",
+      "low": "Düşük"
+    },
+    "empty": "Henüz metin yok. Bir metin yapıştır ya da dosya aç.",
+    "queue": {
+      "empty": "Okuma kuyruğu boş.",
+      "due_now": "Şimdi okunacak",
+      "in_days": "{n} gün sonra",
+      "add": "Kuyruğa al",
+      "remove": "Kuyruktan çıkar",
+      "done": "Bugünlük bu kadar",
+      "postpone": "Ertele",
+      "postpone_days": "Gün"
+    },
+    "kind": {
+      "text": "Metin",
+      "subtitle": "Altyazı",
+      "extract": "Özüt"
+    },
+    "delete": "Sil",
+    "back": "Geri",
+    "known_pct": "Bu metnin {pct} kadarını biliyorsun",
+    "status": {
+      "new": "Yeni",
+      "learning": "Öğreniliyor",
+      "known": "Biliniyor",
+      "ignored": "Yok sayıldı"
+    },
+    "mark_all_known": "Tüm yeni kelimeleri bildim say",
+    "extract": {
+      "make": "Özüt çıkar",
+      "made": "Özüt okuma kuyruğuna eklendi."
+    },
+    "cloze": {
+      "make": "Boşluk doldurma yap",
+      "made": "Boşluk doldurma kartı eklendi."
+    },
+    "word": {
+      "heading": "Kelime",
+      "know": "Biliyorum",
+      "ignore": "Yok say",
+      "clear": "İşareti kaldır",
+      "mature": "oturmuş",
+      "not_mature": "öğreniliyor"
+    },
+    "card": {
+      "heading": "Kart yap",
+      "kind": "Kart",
+      "kind_word": "Kelime kartı",
+      "kind_sentence": "Cümle kartı",
+      "word": "Kelime",
+      "meaning": "Anlam",
+      "translation": "Cümlenin çevirisi",
+      "clip": "Ses ve ekran görüntüsü ekle",
+      "clipping": "Kesit alınıyor…",
+      "clip_ready": "Kesit hazır",
+      "pick_deck": "Önce yukarıdan bir deste seç.",
+      "make": "Kart yap",
+      "made": "Kart eklendi."
+    },
+    "job": {
+      "reading_source": "Kaynak okunuyor…",
+      "cutting_audio": "Ses kesiliyor…",
+      "taking_screenshot": "Ekran görüntüsü alınıyor…"
+    }
+  }
+}

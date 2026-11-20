@@ -109,6 +109,37 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  extension:
+    name: Tarayıcı eklentisi (check, test, build, e2e)
+    runs-on: ubuntu-24.04  # Playwright has no Chromium build for ubuntu-26.04 yet
+    defaults:
+      run:
+        working-directory: apps/browser-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/browser-extension/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/browser-extension/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      # The real app for `tests/e2e/real-app.spec.ts` (`fc api serve`): without FC_BIN it skips.
+      - uses: dtolnay/rust-toolchain@1.100.0 # = rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+      - name: fc (CLI) derle
+        working-directory: .
+        run: cargo build --locked -p fc-cli
+      - run: pnpm e2e
+        env:
+          FC_BIN: ${{ github.workspace }}/target/debug/fc
+
   windows:
     needs: detect
     if: needs.detect.outputs.desktop == 'true'

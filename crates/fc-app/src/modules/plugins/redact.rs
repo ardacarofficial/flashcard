@@ -80,12 +80,26 @@ const GOALS: &[Domain] = &["goals"];
 const AI: &[Domain] = &["ai"];
 /// AI requests and outputs hold note and source text.
 const AI_NOTES: &[Domain] = &["ai", "notes"];
+// Phase 4 (v0.10 reading). Word colours and lookups come from the cards of a word (an oracle
+// on note contents); cards made from a reading item copy its text into a note.
+const READING: &[Domain] = &["reading"];
+const READING_CARDS: &[Domain] = &["reading", "cards", "notes"];
+const READING_NOTES: &[Domain] = &["notes", "reading"];
 /// Never readable by a plugin.
 const PLUGINS: &[Domain] = &["plugins"];
 const IO: &[Domain] = &["io"];
 
 const UNBOUNDED: &str = "whole-collection work is not available to plugins";
 const AI_WRITES: &str = "AI writes are not available to plugins";
+const FREE_PATHS: &str = "free file paths and web pages are not available to plugins";
+const PROGRAMS: &str = "running programs (ffmpeg) is not available to plugins";
+
+/// Fields holding a **free file path** the app reads or hands to a program (a subtitle's
+/// video for ffmpeg clips). A plugin never sees them (stripped from everything [`filter`]
+/// passes) and never sets them: the reading handlers refuse them from callers without
+/// `io:read` (never grantable), and a `before:` hook's params keep the user's values
+/// ([`keep_user_only`]).
+pub(crate) const USER_ONLY_FIELDS: &[&str] = &["media_path"];
 
 /// What calling method `name` (unqualified) exposes. **Every** public method a plugin could
 /// be granted is listed (a test walks the catalog); anything else is refused.
@@ -150,6 +164,34 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "ai.preview" => Reads(AI_NOTES),
         // AI drafts are applied by the user (a plugin writes notes with `notes.*` directly).
         "ai.notes.add" | "ai.notes.update" => Refused(AI_WRITES),
+        // Phase 4, v0.10 study modes: results are study sessions and cards (like `study.*`).
+        "modes.confidence.answer" | "modes.timed.start" | "modes.timed.expire"
+        | "modes.test.paper" => Reads(STUDY_CARDS),
+        // The backend judges a learn answer and grades a test against the card's answer: the
+        // verdict says what the card holds, so they need the read permissions to run at all.
+        "modes.learn.answer" | "modes.test.submit" => Oracle(STUDY_CARDS),
+        "modes.inline.preview" => Reads(NOTES),
+        // The duplicate count says which notes exist already.
+        "modes.inline.create" => Oracle(NOTES),
+        // Phase 4, v0.10 reading.
+        "reading.items.list" | "reading.items.get" | "reading.items.create"
+        | "reading.items.update" | "reading.items.set_position" | "reading.items.delete"
+        | "reading.queue.set" | "reading.queue.read" | "reading.queue.postpone"
+        | "reading.extracts.create" | "reading.words.mark" => Reads(READING),
+        "reading.analyze" | "reading.words.lookup" => Reads(READING_CARDS),
+        "reading.extracts.cloze" | "reading.cards.make" => Oracle(READING_NOTES),
+        // Imports read any file or web page; clips run ffmpeg on a file.
+        "reading.items.import" => Refused(FREE_PATHS),
+        "reading.clips.extract" => Refused(PROGRAMS),
+        // v0.9: proposals are the user's to review; a plugin may propose and read them.
+        "inbox.add" | "inbox.list" | "inbox.count" | "inbox.reject" => Reads(&["inbox"]),
+        "inbox.accept" | "deep_links.open" => Refused("the user reviews the inbox"),
+        "clipboard.check" => Reads(&["clipboard"]),
+        // Phase 4: a rule acts later with the automation actor's authority, so managing,
+        // running, previewing or even listing rules is the user's alone; so is deciding which
+        // local HTTP API clients may talk to the app.
+        n if n.starts_with("automation.") => Refused("automation rules are the user's"),
+        n if n.starts_with("local_api.") => Refused("local API clients are the user's decision"),
         _ => Refused("not available to plugins"),
     }
 }
@@ -232,13 +274,48 @@ pub(crate) fn ids_only(value: &Value) -> Value {
     }
 }
 
-/// `value` if `granted` reads all of `domains`, else [`ids_only`].
+/// `value` if `granted` reads all of `domains`, else [`ids_only`]; [`USER_ONLY_FIELDS`]
+/// never pass.
 pub(crate) fn filter(granted: &BTreeSet<String>, domains: &[Domain], value: Value) -> Value {
+    let value = strip_user_only(value);
     if can_read(granted, domains) {
         value
     } else {
         ids_only(&value)
     }
+}
+
+/// `value` without [`USER_ONLY_FIELDS`] (at any depth).
+pub(crate) fn strip_user_only(value: Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .filter(|(k, _)| !USER_ONLY_FIELDS.contains(&k.as_str()))
+                .map(|(k, v)| (k, strip_user_only(v)))
+                .collect(),
+        ),
+        Value::Array(xs) => Value::Array(xs.into_iter().map(strip_user_only).collect()),
+        v => v,
+    }
+}
+
+/// Params a `before:` hook returned, with the [`USER_ONLY_FIELDS`] of the user's `original`
+/// params put back (the hook never saw them and may not set them: the call runs with the
+/// user's authority).
+pub(crate) fn keep_user_only(original: &Value, mut replaced: Value) -> Value {
+    if let Value::Object(out) = &mut replaced {
+        for k in USER_ONLY_FIELDS {
+            match original.get(*k) {
+                Some(v) => {
+                    out.insert((*k).to_owned(), v.clone());
+                }
+                None => {
+                    out.remove(*k);
+                }
+            }
+        }
+    }
+    replaced
 }
 
 /// Domains of a job's message, error and result, by its kind.
@@ -251,6 +328,8 @@ fn job_domains(kind: &str) -> &'static [Domain] {
         // AI requests and model lists; extracted sources come from files and the web (io).
         "ai.request" | "ai.models" => AI_NOTES,
         "optimizer.run" => &["decks", "stats"],
+        // Reading imports (files, web pages) and ffmpeg clips: like imports.
+        "reading.import" | "reading.clip" => IO,
         _ => IO,
     }
 }
@@ -332,14 +411,27 @@ pub(crate) fn event_domains(event: &DomainEvent) -> &'static [Domain] {
         E::GoalsChanged => GOALS,
         E::AiConfigChanged => AI,
         E::AiPartial { .. } => AI_NOTES,
+        E::ReadingItemsChanged | E::WordMarksChanged { .. } => READING,
+        E::AutomationChanged => &["automation"],
+        E::InboxChanged { .. } => &["inbox"],
+        E::LocalApiPairing { .. } | E::LocalApiClientsChanged => &["local_api"],
     }
 }
 
 /// Domains whose events a plugin is not even told about without their read permissions
-/// (statistics, planning, goals, AI, MCP — phase 3): elsewhere an unreadable event still
-/// arrives cut to ids, these do not arrive at all, so a subscription alone says nothing
-/// (not even that an AI request is streaming or a goal changed).
-const GATED_EVENT_DOMAINS: &[Domain] = &["stats", "planning", "goals", "ai", "mcp"];
+/// (statistics, planning, goals, AI, MCP — phase 3; reading, automation, local API — phase 4):
+/// elsewhere an unreadable event still arrives cut to ids, these do not arrive at all, so a
+/// subscription alone says nothing (not even that an AI request is streaming or a goal changed).
+const GATED_EVENT_DOMAINS: &[Domain] = &[
+    "stats",
+    "planning",
+    "goals",
+    "ai",
+    "mcp",
+    "reading",
+    "automation",
+    "local_api",
+];
 
 /// Whether an `event:` hook of a plugin holding `granted` is called for `event` at all.
 pub(crate) fn event_delivered(granted: &BTreeSet<String>, event: &DomainEvent) -> bool {
@@ -698,6 +790,119 @@ mod tests {
         assert!(GATED_EVENT_DOMAINS.contains(&"mcp"));
         // Another process's write (an MCP client) carries no payload: delivered to anyone.
         assert!(event_delivered(&grants(&[]), &DomainEvent::DataChanged));
+    }
+
+    #[test]
+    fn domain_modes() {
+        // Learn/confidence/timed/test results are sessions with card content.
+        for m in ["modes.confidence.answer", "modes.timed.start", "modes.timed.expire", "modes.test.paper"] {
+            assert_eq!(exposure(m), Exposure::Reads(STUDY_CARDS), "{m}");
+        }
+        let d = exposure("modes.test.paper").domains();
+        domain_case("notes", d, json!({ "questions": [{ "card_id": 1, "prompt": "SECRET" }] }), "SECRET");
+        domain_case("study", d, json!({ "session_id": 1, "key": [{ "card_id": 1, "answer": "SECRET" }] }), "SECRET");
+        // Judging an answer or grading a test is an oracle on the card's answer.
+        for m in ["modes.learn.answer", "modes.test.submit"] {
+            assert_eq!(exposure(m), Exposure::Oracle(STUDY_CARDS), "{m}");
+            assert!(refuse_upfront(MethodKind::Command, exposure(m)), "{m}");
+        }
+        // Inline cards: notes; the duplicate count is an oracle on existing notes.
+        assert_eq!(exposure("modes.inline.preview"), Exposure::Reads(NOTES));
+        assert_eq!(exposure("modes.inline.create"), Exposure::Oracle(NOTES));
+        domain_case("notes", NOTES, json!({ "cards": [{ "front": "SECRET" }] }), "SECRET");
+    }
+
+    #[test]
+    fn domain_reading() {
+        let d = exposure("reading.items.get").domains();
+        domain_case("reading", d, json!({ "id": 1, "title": "SECRET", "source": "SECRET.srt" }), "SECRET");
+        // Word colours and lookups come from the cards of a word: an oracle on notes.
+        let d = exposure("reading.analyze").domains();
+        domain_case("notes", d, json!({ "tokens": [{ "lemma": "SECRET", "status": "known" }] }), "SECRET");
+        domain_case("cards", d, json!({ "summary": { "known": 1, "word": "SECRET" } }), "SECRET");
+        // Cards and clozes copy the item's text into a note: both domains, before running.
+        for m in ["reading.cards.make", "reading.extracts.cloze"] {
+            assert_eq!(exposure(m), Exposure::Oracle(READING_NOTES), "{m}");
+        }
+        // Free file paths, web pages and ffmpeg: never, and never hookable.
+        for m in ["reading.items.import", "reading.clips.extract"] {
+            assert!(matches!(exposure(m), Exposure::Refused(_)), "{m}");
+        }
+        assert_eq!(job_domains("reading.import"), IO);
+        assert_eq!(job_domains("reading.clip"), IO);
+        // A media path never reaches a plugin, whatever it may read, at any depth.
+        let all = grants(&["reading:read", "notes:read", "cards:read"]);
+        let item = json!({ "items": [{ "id": 1, "title": "T", "media_path": "/home/me/SECRET.mp4" }] });
+        let seen = filter(&all, READING, item);
+        assert!(!text(&seen).contains("SECRET"), "{seen}");
+        assert_eq!(seen["items"][0]["title"], "T");
+        // A before: hook cannot set or clear it: the user's value is put back.
+        let user = json!({ "id": 1, "title": "T", "media_path": "/home/me/film.mp4" });
+        let hooked = keep_user_only(&user, json!({ "id": 1, "title": "U", "media_path": "/etc/passwd" }));
+        assert_eq!(hooked, json!({ "id": 1, "title": "U", "media_path": "/home/me/film.mp4" }));
+        let hooked = keep_user_only(&json!({ "id": 1 }), json!({ "id": 1, "media_path": "/etc/passwd" }));
+        assert_eq!(hooked, json!({ "id": 1 }));
+        // Reading events need `reading:read` to arrive at all.
+        let marks = DomainEvent::WordMarksChanged { language: "en".into() };
+        for e in [&DomainEvent::ReadingItemsChanged, &marks] {
+            assert_eq!(event_domains(e), READING);
+            assert!(!event_delivered(&grants(&["reading:write"]), e));
+            assert!(event_delivered(&grants(&["reading:read"]), e));
+        }
+    }
+
+    #[test]
+    fn domain_inbox() {
+        // Proposals: a plugin with `inbox:*` may propose, list, count and reject them…
+        for m in ["inbox.add", "inbox.list", "inbox.count", "inbox.reject"] {
+            assert_eq!(exposure(m), Exposure::Reads(&["inbox"]), "{m}");
+        }
+        let d = exposure("inbox.list").domains();
+        domain_case(
+            "inbox",
+            d,
+            json!({ "items": [{ "id": 1, "item": { "front": "SECRET", "context": { "url": "https://SECRET" } } }] }),
+            "SECRET",
+        );
+        // …but accepting one as a note is the user's review (or the user's own rule), and a
+        // `flashcard://` link is the OS talking to the app.
+        for m in ["inbox.accept", "deep_links.open"] {
+            assert!(matches!(exposure(m), Exposure::Refused(_)), "{m}");
+        }
+        assert_eq!(exposure("clipboard.check"), Exposure::Reads(&["clipboard"]));
+        // The pending count is a number: without `inbox:read` the event arrives as ids only.
+        let e = DomainEvent::InboxChanged { pending: 3 };
+        assert_eq!(event_domains(&e), &["inbox"]);
+        assert_eq!(filter(&grants(&["inbox:write"]), event_domains(&e), json!({ "pending": 3 })), json!({}));
+    }
+
+    #[test]
+    fn domain_automation() {
+        // Every automation method — reads included — is refused and unhookable: a rule acts
+        // with the automation actor's authority later, so a plugin may not shape one.
+        for d in fc_api::v1::methods::catalog().iter().filter(|d| d.module == "automation") {
+            assert!(matches!(exposure(d.name), Exposure::Refused(_)), "{}", d.name);
+            assert!(fc_plugins::permission::hook_target_allowed(d.name, d.permission).is_err(), "{}", d.name);
+        }
+        assert!(!fc_plugins::permission::api_grantable("automation:read"));
+        // Its event never arrives, whatever a (tampered) grant says.
+        let e = DomainEvent::AutomationChanged;
+        assert_eq!(event_domains(&e), &["automation"]);
+        assert!(!event_delivered(&grants(&["automation:read", "automation:write"]), &e));
+        assert!(!can_read(&grants(&["automation:read"]), &["automation"]));
+    }
+
+    #[test]
+    fn domain_local_api() {
+        for d in fc_api::v1::methods::catalog().iter().filter(|d| d.module == "local_api") {
+            assert!(matches!(exposure(d.name), Exposure::Refused(_)), "{}", d.name);
+            assert!(fc_plugins::permission::hook_target_allowed(d.name, d.permission).is_err(), "{}", d.name);
+        }
+        // A pairing request names the client and its origin: never delivered to a plugin.
+        let e = DomainEvent::LocalApiClientsChanged;
+        assert_eq!(event_domains(&e), &["local_api"]);
+        assert!(!event_delivered(&grants(&["local_api:read"]), &e));
+        assert!(!can_read(&grants(&["local_api:read"]), &["local_api"]));
     }
 
     #[test]

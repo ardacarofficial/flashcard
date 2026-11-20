@@ -157,6 +157,14 @@ pub enum DomainEvent {
     GoalsChanged,
     /// AI providers, routes or prices changed (refetch `ai.*` lists; v0.8). Never carries a key.
     AiConfigChanged,
+    /// Reading items or the reading queue changed (refetch `reading.items.list`; v0.10).
+    ReadingItemsChanged,
+    /// Word marks of a language changed (re-run `reading.analyze`; v0.10). Cards changing
+    /// colours arrive through the usual card/study events.
+    WordMarksChanged {
+        /// Language (primary subtag).
+        language: String,
+    },
     /// Output of a running `ai.request` job so far (streamed explanations and hints, v0.8):
     /// the whole text received until now, so a missed event loses nothing. The job's result
     /// is still the final word.
@@ -211,4 +219,18 @@ pub enum DomainEvent {
         /// Cards.
         card_ids: Vec<CardId>,
     },
+    /// Automation rules or their run log changed (refetch `automation.*` lists; v0.9).
+    AutomationChanged,
+    /// Inbox items arrived, were accepted, rejected or restored (v0.9): refetch the inbox.
+    InboxChanged {
+        /// Pending items now.
+        pending: u32,
+    },
+    /// A local API client asked to pair (v0.9): show the approval dialog.
+    LocalApiPairing {
+        /// The pending client.
+        client: super::local_api::ApiClientDto,
+    },
+    /// Local API clients were approved, denied, revoked or removed (v0.9).
+    LocalApiClientsChanged,
 }

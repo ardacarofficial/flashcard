@@ -142,6 +142,15 @@ pub const ALL: &[BuiltinNoteType] = &[
         },
         build: vocabulary,
     },
+    BuiltinNoteType {
+        key: "sentence",
+        id: id(11),
+        name: LocalizedText {
+            en: "Sentence card",
+            tr: "Cümle kartı",
+        },
+        build: sentence,
+    },
 ];
 
 /// Built-in by marker.
@@ -512,6 +521,35 @@ pub fn vocabulary(now: Timestamp, locale: Locale) -> NoteType {
     )
 }
 
+/// Sentence card (v0.10 sentence mining, docs/02 §25): a sentence from a text or subtitle
+/// with its target word in bold, the translation, the word and its meaning, where it came
+/// from (title + timestamp) and, from a video, the audio clip and a screenshot.
+pub fn sentence(now: Timestamp, locale: Locale) -> NoteType {
+    make(
+        now,
+        locale,
+        "sentence",
+        NoteTypeKind::Standard,
+        &[
+            f("sentence", "Sentence", "Cümle", FieldKind::RichText).uniq(),
+            f("translation", "Translation", "Çeviri", FieldKind::RichText),
+            f("word", "Word", "Kelime", FieldKind::RichText),
+            f("meaning", "Meaning", "Anlam", FieldKind::RichText),
+            f("source", "Source", "Kaynak", FieldKind::Text),
+            f("audio", "Audio", "Ses", FieldKind::Audio),
+            f("image", "Image", "Resim", FieldKind::Image),
+        ],
+        &[T {
+            key: "forward",
+            name: FORWARD.name,
+            front: "{{#image}}<div>{{image}}</div>{{/image}}{{sentence}}{{#audio}}<div>{{audio}}</div>{{/audio}}",
+            back: "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{translation}}{{#word}}<div class=\"fc-example\"><b>{{word}}</b>{{#meaning}}: {{meaning}}{{/meaning}}</div>{{/word}}{{#source}}<div class=\"fc-source\">{{source}}</div>{{/source}}",
+            engine: engine::CLASSIC,
+        }],
+        "",
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -533,7 +571,7 @@ mod tests {
             }
             assert!(ids.insert(b.id), "duplicate id {}", b.key);
         }
-        assert_eq!(ALL.len(), 10);
+        assert_eq!(ALL.len(), 11);
         assert_eq!(find("cloze").map(|b| b.id), Some(id(5)));
         assert_eq!(classic(Timestamp(1), Locale::Tr).name, "Klasik");
     }

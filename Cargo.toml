@@ -5,7 +5,7 @@ members = ["crates/*", "apps/desktop/src-tauri"]
 exclude = ["plugins-sdk"]
 
 [workspace.package]
-version = "0.8.0"
+version = "0.10.0"
 edition = "2021"
 rust-version = "1.86"
 license = "UNLICENSED"

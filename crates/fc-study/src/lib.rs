@@ -16,6 +16,7 @@
 //! * [`day`]: the study-day boundary (local rollover hour).
 //! * [`planning`]: v0.6 load balancing, easy days, exam-date mode, workload estimates.
 //! * [`optimize`]: v0.6 FSRS personal optimization (review histories → `fsrs-rs` weights).
+//! * [`modes`]: v0.10 learn mode, test generator, confidence rating, timed mode.
 //! * [`text`]: plain text of (sanitized) card HTML for checkers and hints; rendering is
 //!   v0.3's card type engines.
 #![forbid(unsafe_code)]
@@ -23,6 +24,7 @@
 pub mod answer;
 pub mod day;
 pub mod hint;
+pub mod modes;
 pub mod optimize;
 pub mod planning;
 pub mod scheduler;

@@ -110,13 +110,16 @@ pub const MAX_PICKED_FILE_BYTES: u64 = 8 * 1024 * 1024;
 /// Whether `plugin` may hook command `method` now: a public command, not one of the methods
 /// no plugin may hook, and the plugin holds the method's own permission (a hook never gives
 /// more than calling the method would) and the read permissions of the data the hook sees
-/// (the user's params and the response; [`redact::exposure`]).
+/// (the user's params and the response; [`redact::exposure`]). A method no plugin may call
+/// ([`redact::Exposure::Refused`]: free file paths, programs, whole-collection work) cannot
+/// be hooked either: a `before:` hook's params run with the user's authority.
 pub(crate) fn hook_allowed(registry: &Registry, plugin: &LoadedPlugin, method: &str) -> bool {
     registry.descriptor(method).is_some_and(|d| {
         d.visibility == fc_api::Visibility::Public
             && d.kind == fc_api::MethodKind::Command
             && fc_plugins::permission::hook_target_allowed(method, d.permission).is_ok()
             && plugin.has(d.permission)
+            && !matches!(redact::exposure(method), redact::Exposure::Refused(_))
             && redact::can_read(&plugin.granted, redact::exposure(method).domains())
     })
 }
@@ -1037,7 +1040,9 @@ impl PluginHost {
                 })
             });
             match decided {
-                Ok(BeforeHookReply::Continue { params: Some(p) }) => params = p,
+                Ok(BeforeHookReply::Continue { params: Some(p) }) => {
+                    params = redact::keep_user_only(&params, p);
+                }
                 Ok(BeforeHookReply::Continue { params: None }) => {}
                 Ok(BeforeHookReply::Reject { message }) => {
                     return Err(AppError::Api(

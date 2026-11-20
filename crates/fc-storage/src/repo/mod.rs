@@ -77,4 +77,8 @@ domains! {
     stats: StatsRead, StatsWrite;
     ai: AiRead, AiWrite;
     plugins: PluginRead, PluginWrite;
+    reading: ReadingRead, ReadingWrite;
+    automation: AutomationRead, AutomationWrite;
+    inbox: InboxRead, InboxWrite;
+    local_api: LocalApiRead, LocalApiWrite;
 }

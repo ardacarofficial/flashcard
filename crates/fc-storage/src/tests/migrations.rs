@@ -30,6 +30,7 @@ const TABLES: &[&str] = &[
     "plugin_kv",
     "goals",
     "ai_usage",
+    "api_clients",
     "notes_fts",
     "schema_migrations",
 ];
@@ -56,6 +57,9 @@ const INDICES: &[&str] = &[
     "attribute_values_value",
     "attribute_values_num",
     "jobs_status",
+    "inbox_status_created",
+    "inbox_client_ref",
+    "api_clients_token",
 ];
 
 fn fresh() -> Connection {

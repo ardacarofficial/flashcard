@@ -6,14 +6,17 @@
 
 mod ai;
 mod attributes;
+mod automation;
 mod content;
 mod decks;
+mod inbox;
 mod interop;
 mod mcp;
 mod migrations;
 mod misc;
 mod notes;
 mod plugins;
+mod reading;
 mod search;
 mod stats;
 mod store;

@@ -42,7 +42,18 @@ pub const UI_POINTS: &[&str] = &[
 ///   plugin sees bytes and a file name, never a path).
 /// * `mcp`, `ai_keys`, `ai_requests`: external tool servers, API keys, paid AI calls (plugins
 ///   use the `ai:invoke` host permission).
-pub const FORBIDDEN_API_AREAS: &[&str] = &["plugins", "io", "mcp", "ai_keys", "ai_requests"];
+/// * `local_api`: approving local HTTP API clients (v0.9) is the user's decision.
+pub const FORBIDDEN_API_AREAS: &[&str] = &[
+    "plugins",
+    "io",
+    "mcp",
+    "ai_keys",
+    "ai_requests",
+    // v0.9: a rule acts later as the automation actor — creating one would lend a plugin
+    // that authority.
+    "automation",
+    "local_api",
+];
 
 /// Single API permissions a plugin may never be granted (reading these areas is fine):
 ///
@@ -59,6 +70,8 @@ pub const FORBIDDEN_API_AREAS: &[&str] = &["plugins", "io", "mcp", "ai_keys", "a
 /// * `jobs:write`: cancelling jobs (backups, exports) acts on areas plugins never reach.
 /// * `stats:write`: rebuilding the statistics cache is whole-history work (v0.6); the
 ///   optimizer (`optimizer.run`, `decks:write`) is refused by method in the app.
+/// * `settings:exec`: settings naming a program the app runs (`reading.ffmpeg_path`, v0.10);
+///   the app holds it for the user and the CLI alone (`fc_app` `USER_ONLY_PERMISSIONS`).
 pub const FORBIDDEN_API_PERMISSIONS: &[&str] = &[
     "settings:write",
     "modules:write",
@@ -68,6 +81,7 @@ pub const FORBIDDEN_API_PERMISSIONS: &[&str] = &[
     "batch:write",
     "jobs:write",
     "stats:write",
+    "settings:exec",
 ];
 
 /// Methods no plugin may hook, whatever it was granted: a `before:` hook rewrites the
@@ -86,6 +100,9 @@ pub const FORBIDDEN_HOOK_PREFIXES: &[&str] = &[
     "ai.providers.",
     "ai.prices.",
     "ai.routes.",
+    "automation.",
+    // v0.9: approving and revoking local API clients is the user's decision.
+    "local_api.",
 ];
 
 /// Whether permission `p` (`<area>:<access>`) may be granted to a plugin at all.
