@@ -1,0 +1,319 @@
+{
+  "nav": {
+    "stats": "İstatistikler",
+    "planning": "Planlama",
+    "goals": "Hedefler"
+  },
+  "modules": {
+    "stats": {
+      "name": "İstatistikler",
+      "description": "Seri, başarı oranları, ısı haritası, tahmin, zor kartlar ve karneler — deste, etiket, sorgu veya sınıflandırma bazında."
+    },
+    "planning": {
+      "name": "Akıllı planlama",
+      "description": "Yük dengeleme, kolay günler ve sınav tarihleri."
+    },
+    "goals": {
+      "name": "Hedefler",
+      "description": "“Ay sonuna kadar 500 kelime” gibi hedefler ve gidişat tahmini."
+    },
+    "optimizer": {
+      "name": "FSRS optimizasyonu",
+      "description": "Tekrar geçmişinden FSRS parametrelerini öğrenir, hedef hatırlama oranının iş yükünü tahmin eder."
+    }
+  },
+  "settings": {
+    "stats": {
+      "leech_threshold": {
+        "label": "Zor kart eşiği",
+        "description": "Bu kadar kez unutulan kart zor kart sayılır."
+      }
+    },
+    "planning": {
+      "load_balance": {
+        "label": "Yük dengeleme",
+        "description": "Tekrarları eşdeğer günlere dağıtır; bir gün diğerlerinden çok daha yoğun olmaz."
+      },
+      "easy_days": {
+        "description": "Azaltılmış günlere daha az, en az günlere mümkün olduğunca az tekrar planlanır.",
+        "mon": {
+          "label": "Pazartesi",
+          "normal": "Normal",
+          "reduced": "Azaltılmış",
+          "minimum": "En az"
+        },
+        "tue": {
+          "label": "Salı",
+          "normal": "Normal",
+          "reduced": "Azaltılmış",
+          "minimum": "En az"
+        },
+        "wed": {
+          "label": "Çarşamba",
+          "normal": "Normal",
+          "reduced": "Azaltılmış",
+          "minimum": "En az"
+        },
+        "thu": {
+          "label": "Perşembe",
+          "normal": "Normal",
+          "reduced": "Azaltılmış",
+          "minimum": "En az"
+        },
+        "fri": {
+          "label": "Cuma",
+          "normal": "Normal",
+          "reduced": "Azaltılmış",
+          "minimum": "En az"
+        },
+        "sat": {
+          "label": "Cumartesi",
+          "normal": "Normal",
+          "reduced": "Azaltılmış",
+          "minimum": "En az"
+        },
+        "sun": {
+          "label": "Pazar",
+          "normal": "Normal",
+          "reduced": "Azaltılmış",
+          "minimum": "En az"
+        }
+      }
+    }
+  },
+  "commands": {
+    "stats": {
+      "overview": "İstatistikler",
+      "breakdown": "Sınıflandırmaya göre istatistik",
+      "leeches": "Zor kartlar",
+      "deck_reports": "Deste karneleri",
+      "refresh_cache": "İstatistik önbelleğini güncelle"
+    },
+    "planning": {
+      "exams": {
+        "list": "Sınav tarihleri",
+        "create": "Sınav tarihi ekle",
+        "update": "Sınav tarihini düzenle",
+        "delete": "Sınav tarihini kaldır"
+      }
+    },
+    "goals": {
+      "list": "Hedefler",
+      "create": "Hedef koy",
+      "update": "Hedefi düzenle",
+      "delete": "Hedefi kaldır"
+    },
+    "optimizer": {
+      "run": "FSRS parametrelerini optimize et",
+      "workload": "İş yükü tahmini"
+    }
+  },
+  "stats": {
+    "heading": "İstatistikler",
+    "scope": {
+      "deck": "Deste",
+      "all_decks": "Tüm desteler",
+      "query": "Sorgu",
+      "query_hint": "ör. tag:fiiller veya seviye:B1",
+      "range": "Dönem",
+      "apply": "Göster"
+    },
+    "range": {
+      "30": "Son 30 gün",
+      "90": "Son 90 gün",
+      "365": "Son 1 yıl",
+      "all": "Tüm zamanlar"
+    },
+    "streak": {
+      "label": "Seri",
+      "days": "{n} gün",
+      "longest": "En uzun: {n} gün"
+    },
+    "reviews": {
+      "label": "Tekrar",
+      "detail": "{total} günün {days} günü çalışıldı"
+    },
+    "time": {
+      "label": "Çalışma süresi",
+      "minutes": "{n} dk"
+    },
+    "retention": {
+      "label": "Gerçek hatırlama",
+      "target": "Hedef {target}",
+      "none": "Henüz tekrar yok"
+    },
+    "imported": "{n} içe aktarılmış tekrar dahil",
+    "heatmap": {
+      "heading": "Aktivite",
+      "day": "{date}: {n} tekrar"
+    },
+    "forecast": {
+      "heading": "Gelecek tahmini",
+      "overdue": "{n} gecikmiş (bugüne sayıldı)"
+    },
+    "states": {
+      "heading": "Hafıza durumu",
+      "new": "Yeni",
+      "learning": "Öğreniliyor",
+      "relearning": "Yeniden öğreniliyor",
+      "young": "Genç",
+      "mature": "Olgun",
+      "suspended": "Askıda",
+      "buried": "Gömülü",
+      "total": "Toplam"
+    },
+    "success": {
+      "heading": "Başarı oranı",
+      "kind": "Kartlar",
+      "learn": "Yeni / öğrenilen",
+      "young": "Genç",
+      "mature": "Olgun",
+      "relearn": "Yeniden öğrenilen",
+      "all": "Hepsi",
+      "answers": "Cevap",
+      "rate": "Başarı"
+    },
+    "trend": {
+      "heading": "Gelişim",
+      "weekly": "Haftalık",
+      "monthly": "Aylık"
+    },
+    "hours": {
+      "heading": "En verimli saatler"
+    },
+    "times": {
+      "heading": "Cevap süreleri",
+      "mean": "Ortalama {s} sn",
+      "slowest": "En yavaş kartlar",
+      "card": "Kart",
+      "up_to": "≤ {s} sn",
+      "over": "> {s} sn",
+      "seconds": "{s} sn"
+    },
+    "memory": {
+      "heading": "Stabilite ve zorluk",
+      "stability": "Stabilite (gün)",
+      "difficulty": "Zorluk"
+    },
+    "breakdown": {
+      "heading": "Sınıflandırmaya göre",
+      "pick": "Sınıflandırma",
+      "none_value": "Değeri yok",
+      "value": "Değer",
+      "cards": "Kart",
+      "settled": "Oturmuş",
+      "retention": "Hatırlama",
+      "due_today": "Bugün",
+      "due_week": "7 günde"
+    },
+    "leeches": {
+      "heading": "Zor kartlar",
+      "count": "En az {threshold} kez unutulan {n} kart",
+      "none": "Zor kart yok.",
+      "lapses": "Unutma",
+      "suspend": "Askıya al",
+      "tag": "“zor” etiketi ekle",
+      "card": "Kart"
+    },
+    "report": {
+      "heading": "Deste karneleri",
+      "deck": "Deste",
+      "settled": "Oturmuş",
+      "studied": "Çalışılmış",
+      "recall": "Şu an hatırlama",
+      "due": "Bugün"
+    },
+    "empty": "Bu dönemde henüz tekrar yok."
+  },
+  "planning": {
+    "heading": "Planlama",
+    "balance": {
+      "heading": "Yük dengeleme ve kolay günler",
+      "toggle": "Tekrarları dengeli dağıt",
+      "easy_days": "Kolay günler"
+    },
+    "exams": {
+      "heading": "Sınav tarihleri",
+      "intro": "Sınavın kartları sınavdan kısa süre önce yeniden tekrar edilir.",
+      "none": "Sınav tarihi yok.",
+      "name": "Ad",
+      "date": "Tarih",
+      "deck": "Deste",
+      "any_deck": "Herhangi bir deste",
+      "query": "Kartlar (sorgu)",
+      "query_hint": "ör. sınav:TYT",
+      "add": "Sınav ekle",
+      "delete": "Kaldır",
+      "days_left": "{n} gün sonra",
+      "today": "bugün",
+      "past": "geçti",
+      "cards": "{n} kart"
+    },
+    "optimizer": {
+      "heading": "FSRS optimizasyonu",
+      "intro": "Bir şablonu kullanan destelerin tekrar geçmişinden parametre öğrenir.",
+      "preset": "Şablon",
+      "none": "Önce Deste ayarları'nda bir şablon oluşturun.",
+      "run": "Optimize et",
+      "done": "{n} parametre şablona kaydedildi (geri alınabilir).",
+      "cancelled": "Optimizasyon iptal edildi.",
+      "failed": "Optimizasyon başarısız.",
+      "working": "Optimize ediliyor…",
+      "cancel": "İptal"
+    },
+    "workload": {
+      "heading": "Hedef hatırlama ve iş yükü",
+      "deck": "Deste",
+      "retention": "Hedef hatırlama",
+      "per_day": "Tekrar / gün",
+      "relative": "Oran",
+      "current": "şu anki",
+      "basis": "{n} tekrar kartına ve günde {new} yeni karta göre."
+    }
+  },
+  "optimizer": {
+    "progress": {
+      "collecting": "Tekrar geçmişi okunuyor…",
+      "training": "Eğitiliyor…"
+    }
+  },
+  "goals": {
+    "heading": "Hedefler",
+    "none": "Henüz hedef yok.",
+    "kind": {
+      "label": "Hedef",
+      "cards_learned": "Öğrenilen kart",
+      "study_minutes": "Çalışma dakikası",
+      "streak": "Seri (gün)",
+      "deck_completion": "Oturmuş kart (%)"
+    },
+    "target": "Hedef değer",
+    "deadline": "Son gün",
+    "query": "Kartlar (sorgu, isteğe bağlı)",
+    "add": "Hedef koy",
+    "delete": "Kaldır",
+    "progress": "{current} / {target}",
+    "daily": "bugün",
+    "done": "Ulaşıldı 🎉",
+    "on_track": "Yolundasın: {date} tarihinde tamam",
+    "late": "Bu hızla {n} gün geç kalırsın",
+    "early": "Bu hızla {n} gün erken bitirirsin",
+    "eta": "Bu hızla: {date}",
+    "no_pace": "Henüz bir hız yok"
+  },
+  "errors": {
+    "validation": {
+      "date": "Geçerli bir tarih girin (YYYY-AA-GG).",
+      "breakdown_attribute": "Yalnızca seçimli sınıflandırmalar kırılabilir.",
+      "goal_target": "Hedef değer bu hedef için aralık dışında.",
+      "exam_name": "Sınava bir ad verin (en çok 100 karakter)."
+    },
+    "not_found": {
+      "exam": "Sınav tarihi bulunamadı.",
+      "goal": "Hedef bulunamadı."
+    },
+    "conflict": {
+      "not_enough_reviews": "Optimizasyon için henüz yeterli tekrar yok."
+    }
+  }
+}

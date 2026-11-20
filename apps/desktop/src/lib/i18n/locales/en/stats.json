@@ -1,0 +1,319 @@
+{
+  "nav": {
+    "stats": "Statistics",
+    "planning": "Planning",
+    "goals": "Goals"
+  },
+  "modules": {
+    "stats": {
+      "name": "Statistics",
+      "description": "Streak, success rates, heatmap, forecast, leeches and report cards — by deck, tag, query or classification."
+    },
+    "planning": {
+      "name": "Smart planning",
+      "description": "Load balancing, easy days and exam dates."
+    },
+    "goals": {
+      "name": "Goals",
+      "description": "Targets like “500 words by the end of the month” with a pace forecast."
+    },
+    "optimizer": {
+      "name": "FSRS optimizer",
+      "description": "Learns FSRS parameters from your review history and estimates the workload of a desired retention."
+    }
+  },
+  "settings": {
+    "stats": {
+      "leech_threshold": {
+        "label": "Leech threshold",
+        "description": "A card forgotten this many times counts as a leech."
+      }
+    },
+    "planning": {
+      "load_balance": {
+        "label": "Load balancing",
+        "description": "Spread reviews over equivalent days so no day is much busier than another."
+      },
+      "easy_days": {
+        "description": "Fewer reviews are planned on reduced days, as few as possible on minimum days.",
+        "mon": {
+          "label": "Monday",
+          "normal": "Normal",
+          "reduced": "Reduced",
+          "minimum": "Minimum"
+        },
+        "tue": {
+          "label": "Tuesday",
+          "normal": "Normal",
+          "reduced": "Reduced",
+          "minimum": "Minimum"
+        },
+        "wed": {
+          "label": "Wednesday",
+          "normal": "Normal",
+          "reduced": "Reduced",
+          "minimum": "Minimum"
+        },
+        "thu": {
+          "label": "Thursday",
+          "normal": "Normal",
+          "reduced": "Reduced",
+          "minimum": "Minimum"
+        },
+        "fri": {
+          "label": "Friday",
+          "normal": "Normal",
+          "reduced": "Reduced",
+          "minimum": "Minimum"
+        },
+        "sat": {
+          "label": "Saturday",
+          "normal": "Normal",
+          "reduced": "Reduced",
+          "minimum": "Minimum"
+        },
+        "sun": {
+          "label": "Sunday",
+          "normal": "Normal",
+          "reduced": "Reduced",
+          "minimum": "Minimum"
+        }
+      }
+    }
+  },
+  "commands": {
+    "stats": {
+      "overview": "Statistics",
+      "breakdown": "Statistics by classification",
+      "leeches": "Leeches",
+      "deck_reports": "Deck report cards",
+      "refresh_cache": "Refresh the statistics cache"
+    },
+    "planning": {
+      "exams": {
+        "list": "Exam dates",
+        "create": "Add an exam date",
+        "update": "Edit an exam date",
+        "delete": "Remove an exam date"
+      }
+    },
+    "goals": {
+      "list": "Goals",
+      "create": "Set a goal",
+      "update": "Edit a goal",
+      "delete": "Remove a goal"
+    },
+    "optimizer": {
+      "run": "Optimize FSRS parameters",
+      "workload": "Workload estimate"
+    }
+  },
+  "stats": {
+    "heading": "Statistics",
+    "scope": {
+      "deck": "Deck",
+      "all_decks": "All decks",
+      "query": "Query",
+      "query_hint": "e.g. tag:verbs or level:B1",
+      "range": "Period",
+      "apply": "Show"
+    },
+    "range": {
+      "30": "Last 30 days",
+      "90": "Last 90 days",
+      "365": "Last year",
+      "all": "All time"
+    },
+    "streak": {
+      "label": "Streak",
+      "days": "{n} days",
+      "longest": "Longest: {n} days"
+    },
+    "reviews": {
+      "label": "Reviews",
+      "detail": "{days} of {total} days studied"
+    },
+    "time": {
+      "label": "Study time",
+      "minutes": "{n} min"
+    },
+    "retention": {
+      "label": "True retention",
+      "target": "Target {target}",
+      "none": "No reviews yet"
+    },
+    "imported": "Including {n} imported reviews",
+    "heatmap": {
+      "heading": "Activity",
+      "day": "{date}: {n} reviews"
+    },
+    "forecast": {
+      "heading": "Forecast",
+      "overdue": "{n} overdue (counted today)"
+    },
+    "states": {
+      "heading": "Memory states",
+      "new": "New",
+      "learning": "Learning",
+      "relearning": "Relearning",
+      "young": "Young",
+      "mature": "Mature",
+      "suspended": "Suspended",
+      "buried": "Buried",
+      "total": "Total"
+    },
+    "success": {
+      "heading": "Success rate",
+      "kind": "Cards",
+      "learn": "New / learning",
+      "young": "Young",
+      "mature": "Mature",
+      "relearn": "Relearning",
+      "all": "All",
+      "answers": "Answers",
+      "rate": "Success"
+    },
+    "trend": {
+      "heading": "Progress",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "hours": {
+      "heading": "Best hours"
+    },
+    "times": {
+      "heading": "Answer times",
+      "mean": "Average {s} s",
+      "slowest": "Slowest cards",
+      "card": "Card",
+      "up_to": "≤ {s} s",
+      "over": "> {s} s",
+      "seconds": "{s} s"
+    },
+    "memory": {
+      "heading": "Stability and difficulty",
+      "stability": "Stability (days)",
+      "difficulty": "Difficulty"
+    },
+    "breakdown": {
+      "heading": "By classification",
+      "pick": "Classification",
+      "none_value": "No value",
+      "value": "Value",
+      "cards": "Cards",
+      "settled": "Settled",
+      "retention": "Retention",
+      "due_today": "Due today",
+      "due_week": "Due in 7 days"
+    },
+    "leeches": {
+      "heading": "Leeches",
+      "count": "{n} cards forgotten at least {threshold} times",
+      "none": "No leeches.",
+      "lapses": "Lapses",
+      "suspend": "Suspend",
+      "tag": "Tag “leech”",
+      "card": "Card"
+    },
+    "report": {
+      "heading": "Deck report cards",
+      "deck": "Deck",
+      "settled": "Settled",
+      "studied": "Studied",
+      "recall": "Recall now",
+      "due": "Due today"
+    },
+    "empty": "No reviews in this period yet."
+  },
+  "planning": {
+    "heading": "Planning",
+    "balance": {
+      "heading": "Load balancing and easy days",
+      "toggle": "Spread reviews evenly",
+      "easy_days": "Easy days"
+    },
+    "exams": {
+      "heading": "Exam dates",
+      "intro": "Cards of an exam are reviewed again shortly before it.",
+      "none": "No exam dates.",
+      "name": "Name",
+      "date": "Date",
+      "deck": "Deck",
+      "any_deck": "Any deck",
+      "query": "Cards (query)",
+      "query_hint": "e.g. exam:TYT",
+      "add": "Add exam",
+      "delete": "Remove",
+      "days_left": "in {n} days",
+      "today": "today",
+      "past": "past",
+      "cards": "{n} cards"
+    },
+    "optimizer": {
+      "heading": "FSRS optimizer",
+      "intro": "Learns parameters from the review history of the decks using a preset.",
+      "preset": "Preset",
+      "none": "Create a preset in Deck options first.",
+      "run": "Optimize",
+      "done": "Saved {n} parameters into the preset (undoable).",
+      "cancelled": "Optimization cancelled.",
+      "failed": "Optimization failed.",
+      "working": "Optimizing…",
+      "cancel": "Cancel"
+    },
+    "workload": {
+      "heading": "Desired retention and workload",
+      "deck": "Deck",
+      "retention": "Desired retention",
+      "per_day": "Reviews / day",
+      "relative": "Relative",
+      "current": "current",
+      "basis": "Based on {n} review cards and {new} new cards per day."
+    }
+  },
+  "optimizer": {
+    "progress": {
+      "collecting": "Reading review history…",
+      "training": "Training…"
+    }
+  },
+  "goals": {
+    "heading": "Goals",
+    "none": "No goals yet.",
+    "kind": {
+      "label": "Goal",
+      "cards_learned": "Cards learned",
+      "study_minutes": "Minutes studied",
+      "streak": "Streak (days)",
+      "deck_completion": "Settled cards (%)"
+    },
+    "target": "Target",
+    "deadline": "Deadline",
+    "query": "Cards (query, optional)",
+    "add": "Set goal",
+    "delete": "Remove",
+    "progress": "{current} / {target}",
+    "daily": "today",
+    "done": "Reached 🎉",
+    "on_track": "On track: reached by {date}",
+    "late": "At this pace you'll be {n} days late",
+    "early": "At this pace you'll finish {n} days early",
+    "eta": "At this pace: {date}",
+    "no_pace": "No pace yet"
+  },
+  "errors": {
+    "validation": {
+      "date": "Enter a valid date (YYYY-MM-DD).",
+      "breakdown_attribute": "Only choice classifications can be broken down.",
+      "goal_target": "The target is out of range for this goal.",
+      "exam_name": "Give the exam a name (up to 100 characters)."
+    },
+    "not_found": {
+      "exam": "Exam date not found.",
+      "goal": "Goal not found."
+    },
+    "conflict": {
+      "not_enough_reviews": "Not enough reviews to optimize yet."
+    }
+  }
+}
