@@ -6,6 +6,7 @@
     AttributeDefDto,
     FlagDto,
     Rating,
+    SavedQueryDto,
     SessionDto,
     SessionSummary,
     StartSession,
@@ -16,7 +17,7 @@
   import { moduleOn, trackModules } from '../cards/modules.svelte';
   import type { ScreenCtx } from '../types';
   import { intervalLabel, tzOffsetMins } from './format';
-  import { keyAction, RATINGS, type StudyAction, type StudyPhase } from './keys';
+  import { keyAction, RATINGS, studyBindings, type StudyAction, type StudyPhase } from './keys';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -31,6 +32,10 @@
   let attrs = $state<AttributeDefDto[]>([]);
   let filterAttr = $state('');
   let filterValue = $state('');
+  /** Custom session from the query language (v0.4), or a saved query ("filtered deck"). */
+  let customQuery = $state('');
+  let savedQueries = $state<SavedQueryDto[]>([]);
+  let savedId = $state('');
   let postponeDays = $state(1);
   let notice = $state<string | null>(null);
   let busy = false;
@@ -41,6 +46,30 @@
   let flagDefs = $state<FlagDto[]>([]);
   /** Picked option of a choice card. */
   let picked = $state<number | null>(null);
+  /** Study keys from the shortcut editor (`palette` module); `undefined` = built-in defaults. */
+  let bindings = $state<Map<string, string> | undefined>(undefined);
+
+  async function loadBindings() {
+    try {
+      bindings = moduleOn('palette') ? studyBindings((await api.call('shortcuts.list', {})).items) : undefined;
+    } catch {
+      bindings = undefined;
+    }
+  }
+
+  $effect(() => {
+    void loadBindings();
+    const unsub = api.on(['setting_changed', 'module_toggled'], () => void loadBindings());
+    return () => void unsub.then((u) => u());
+  });
+
+  // The shell's global undo (Ctrl+Z, palette) or another screen may undo an answer: refresh.
+  $effect(() => {
+    const unsub = api.on(['undone', 'redone'], () => {
+      if (session && !busy) void ctx.guarded(reload);
+    });
+    return () => void unsub.then((u) => u());
+  });
 
   const card = $derived(session?.current ?? null);
   const choice = $derived(card?.sides.interaction.kind === 'choice' ? card.sides.interaction : null);
@@ -55,7 +84,18 @@
     void ctx.guarded(async () => {
       resumable = (await api.call('study.active', {})).session;
     });
+    void loadSaved();
+    const unsub = api.on(['saved_queries', 'module_toggled'], () => void loadSaved());
+    return () => void unsub.then((u) => u());
   });
+
+  async function loadSaved() {
+    try {
+      savedQueries = moduleOn('browse') ? (await api.call('saved_queries.list', {})).items : [];
+    } catch {
+      savedQueries = [];
+    }
+  }
 
   async function loadFlags() {
     try {
@@ -113,14 +153,25 @@
     resumable = null;
   }
 
+  const queryText = $derived(customQuery.trim());
+  const custom = $derived((filterAttr !== '' && filterValue !== '') || queryText !== '' || savedId !== '');
+
   function startRequest(): StartSession {
     const filtered = filterAttr !== '' && filterValue !== '';
+    const byQuery = queryText !== '' || savedId !== '';
     return {
-      kind: filtered ? 'custom' : 'normal',
+      kind: custom ? 'custom' : 'normal',
       mode: practice ? 'trial' : 'scheduled',
       deck_id: ctx.selectedDeck,
-      filter: filtered
-        ? { attributes: [{ attr_id: filterAttr, values: [filterValue] }], due_only: true }
+      filter: custom
+        ? {
+            attributes: filtered ? [{ attr_id: filterAttr, values: [filterValue] }] : [],
+            // A query decides due-ness itself (`is:due`); the classification picker studies
+            // what is due.
+            due_only: byQuery ? null : true,
+            query: savedId === '' && queryText !== '' ? queryText : null,
+            saved_query_id: savedId === '' ? null : savedId,
+          }
         : null,
       tz_offset_mins: tzOffsetMins(),
     };
@@ -276,6 +327,7 @@
     const action = keyAction(phase, e, typing, {
       choices: choice?.options.length ?? 0,
       flags: moduleOn('flags'),
+      bindings,
     });
     if (!action) return;
     e.preventDefault();
@@ -346,8 +398,32 @@
           {/if}
         </div>
       {/if}
+      {#if moduleOn('browse')}
+        <div class="row">
+          <label>
+            {t('study.query_label')}
+            <input
+              bind:value={customQuery}
+              disabled={savedId !== ''}
+              placeholder={t('study.query_placeholder')}
+              spellcheck="false"
+            />
+          </label>
+          {#if savedQueries.length > 0}
+            <label>
+              {t('study.saved_label')}
+              <select bind:value={savedId}>
+                <option value="">{t('study.filter_any')}</option>
+                {#each savedQueries as q (q.id)}
+                  <option value={q.id}>{q.name}</option>
+                {/each}
+              </select>
+            </label>
+          {/if}
+        </div>
+      {/if}
       <button class="primary" onclick={() => void run({ kind: 'start' })}>
-        {filterAttr && filterValue ? t('study.custom_start') : t('study.start')}
+        {custom ? t('study.custom_start') : t('study.start')}
         <kbd>{t('study.start_hint')}</kbd>
       </button>
       {#if notice}<p class="muted" role="status">{notice}</p>{/if}

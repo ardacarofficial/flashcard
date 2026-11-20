@@ -2,6 +2,8 @@
 //! are qualified (`v1.decks.create`).
 
 pub mod attributes;
+pub mod browse;
+pub mod bulk;
 pub mod cardtypes;
 pub mod common;
 pub mod decks;
@@ -13,6 +15,8 @@ pub mod modules;
 pub mod notes;
 pub mod notetypes;
 pub mod oplog;
+pub mod presets;
+pub mod search;
 pub mod settings;
 pub mod study;
 pub mod tags;

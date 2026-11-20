@@ -172,4 +172,5 @@ domains! {
     study => StudyState,
     content => ContentState,
     interop,
+    search => SearchState,
 }

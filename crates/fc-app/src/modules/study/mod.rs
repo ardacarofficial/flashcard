@@ -28,10 +28,6 @@ pub const ID: &str = "study";
 
 /// Scheduler (`fsrs`, `sm2`).
 pub const SCHEDULER: &str = "study.scheduler";
-/// Bury siblings of an answered card until the next day.
-pub const BURY_SIBLINGS: &str = "study.bury_siblings";
-/// Order of reviews/new cards (`due`, `random`, `hardest_first`, `newest_first`).
-pub const ORDER: &str = "study.order";
 /// New cards per normal session.
 pub const NEW_PER_SESSION: &str = "study.new_per_session";
 /// Local hour at which a study day starts.
@@ -82,8 +78,6 @@ pub fn descriptor() -> ModuleDescriptor {
         can_disable: true,
         settings: vec![
             int_setting(NEW_PER_SESSION, 20, 0, 9_999, false),
-            choice_setting(ORDER, &["due", "random", "hardest_first", "newest_first"], "due"),
-            bool_setting(BURY_SIBLINGS, true, &deck_scopes),
             bool_setting(TYPE_ANSWER, false, &deck_scopes),
             choice_setting(HINT_STRATEGY, &["first_letters", "word_starts", "partial"], "first_letters"),
             advanced(choice_setting(SCHEDULER, &fc_study::scheduler::BUILTIN_IDS, "fsrs")),

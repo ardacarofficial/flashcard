@@ -75,6 +75,8 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 > **Doğrulama (`feat/v0.2-study`):** (1) `fc-study/src/scheduler/tests.rs`: FSRS-6 formüllerinin spesifikasyondan yazılmış bağımsız f64 uygulamasıyla 365 günlük simülasyonlar (adımlı/adımsız, 4 tohum) her geçişte kararlılık/zorluk/aralık uyumu + ilk tekrar referans değerleri; `fc-app/src/modules/study/tests.rs::simulation_365_days` uygulama düzeyinde sabit saatle bir yıl, kart durumu `review_log`'dan birebir yeniden hesaplanır, iki koşu aynı. (2) `answer_undo_redo_is_exact`, `sibling_burying_is_undone_exactly`: geri alınca kartın **tüm** sütunları (gömülen kardeş dahil) eşit, `review_log` satırı silinir, oturum kartı yeniden gösterir; yinele birebir. (3) `trial_mode_never_changes_cards`: deneme oturumu (ipucu, kontrol, adımlar, geri al dahil) sonrası `cards` tablosunun tamamı aynı, `review_log` `mode = "trial"`. Hepsi MemStore + SQLite bellek + SQLite dosyada. (4) `apps/desktop/src/lib/features/study/StudyScreen.test.ts`: başlat → ipucu → göster → puanla → geri al → … → özet → yanlışları tekrar → geri dön, yalnızca tuş basışlarıyla. **Not:** FSRS-7 yerine FSRS-6 (bkz. 08 K10).
 >
 > **Faz 2 entegrasyonu (v0.2 × v0.3):** çalışma kartları v0.3 kart türü motoruyla çizilir (temizlenmiş HTML), boş kartlar atlanır, yazarak türler v0.2 kontrolcüleriyle, seçmeli kartlar motorla değerlendirilir, preset günlük limitleri uygulanır, bayraklar Anki numaralamasıyla gösterilir; uçtan uca `fc-app/src/phase2_tests.rs` (bkz. 10 §13).
+>
+> **Faz 2 tur 3 (+ v0.4):** çalışma deste ayarlarını yalnız `presets::effective` ile okur (deste → üst deste → varsayılanlar; limitler, adımlar, hedef hatırlama, FSRS ağırlıkları, en uzun aralık, kardeş gömme, yeni/tekrar sırası); şablon değişince bir sonraki kuyruk ve aralıklar değişir (`phase2_manage_tests.rs::deck_preset_drives_queue_and_intervals`). Özel oturum sorgu dilinden (`seviye:A2 is:due`) ya da kayıtlı sorgudan ("filtreli deste") başlar (`custom_sessions_from_queries`). Çalışma kısayolları kısayol düzenleyicisinden değiştirilebilir (`palette_and_shortcuts_cover_every_track`, `keys.test.ts`).
 
 ## 🧩 v0.3 · Kart türleri ve içerik
 
@@ -86,15 +88,28 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [x] Aynı medya iki kez eklenince tek dosya tutulur. → `same_media_twice_is_one_file_on_disk`, `same_media_twice_is_one_entry`, `fc-storage` `same_media_twice_is_one_file_and_one_row`
 - [x] HTML temizleme testleri (XSS vektörleri) geçer. → `fc-core` `content::html::tests::xss_vectors_are_neutralized` (36 vektör) + uçtan uca `rendering_is_sanitized` (alan, kullanıcı şablonu, seçenek, CSS)
 
+> **Faz 2 tur 3 (+ v0.4):** özel bayrak adları sorgu dilinde (`flag:önemli`, `flag:çok_zor`; TR/EN renk adları her zaman), bayrak *n* = bit *n − 1* (`phase2_manage_tests.rs::custom_flag_names_in_queries`). Arama dizini cloze/HTML/bağlantı işaretlemesinden arındırılmış, katlanmış düz metin tutar (`0302_search_plain_text`, `search_index_is_folded_plain_text`).
+
 ## 🛠️ v0.4 · Kart yönetimi
 
 **Kapsam:** Sorgu dili (ayrıştırıcı + SQL derleyici + FTS5); arama; kayıtlı filtreler; özel çalışma oturumları; kart tarayıcısı; toplu işlemler; bul-değiştir; çöp kutusu; tekrar tespiti; kart bilgi ekranı; veritabanı kontrolü; deste ayar şablonları; komut paleti; kısayol düzenleyici.
 
 **Kabul kriterleri**
-- [ ] Sorgu dili için ayrıştırıcı özellik tabanlı testleri; hatalı sorguda konumlu hata.
-- [ ] 100k notta arama < 100 ms (benchmark).
-- [ ] 1000 kartlık toplu işlem tek geri al ile tamamen geri döner.
-- [ ] Komut paleti kayıt defterindeki tüm komutları listeler.
+- [x] Sorgu dili için ayrıştırıcı özellik tabanlı testleri; hatalı sorguda konumlu hata.
+- [x] 100k notta arama < 100 ms (benchmark).
+- [x] 1000 kartlık toplu işlem tek geri al ile tamamen geri döner.
+- [x] Komut paleti kayıt defterindeki tüm komutları listeler.
+
+> **Doğrulama (`feat/v0.4-manage`):**
+> - *Özellik tabanlı testler + konumlu hata:* `fc-core/src/query/tests.rs` (proptest: `print_parse_roundtrip`, `parser_is_total_and_positions_are_in_bounds`, `query_alphabet_fuzz`, `term_spans_slice_the_source`, `negation_is_complement`; `errors_are_positioned_in_characters`, `classification_errors_are_positioned`). Uçtan uca: `fc-app/src/modules/browse/tests.rs::search_errors_are_positioned` (`VALIDATION_QUERY`, `details.start/end` karakter cinsinden). SQL derleyicisi referans değerlendiriciyle karşılaştırılır: `fc-storage/src/tests/search.rs` (`every_atom_agrees_…`, `random_queries_agree_…`: 300 rastgele bileşik sorgu).
+> - *Benchmark:* `cargo test -p fc-storage --release -- --ignored --nocapture bench_search_100k` — 100k not / 100k kart, tam tarayıcı isteği (toplam sayı + ilk 50 satır + satır verisi), 5 denemenin en iyisi; test her sorgu < 100 ms'yi doğrular. 8 çekirdek, yük ~2.5 (başka izler derlerken): boş sorgu ~17 ms, `kilic` ~30, `"kılıç kalkan"` ~5, `deck:İngilizce is:due` ~25–38, `tag:fiil -is:suspended` (koleksiyonun ~%48'i) **~50** (önce 88–95), `seviye>=B1 sınav:TYT` ~71–73 (en pahalısı, önce 65–72), `stability>20 lapses>=2` ~21–25, `retrievability<0.8` ~37–40, `front:kılıç*` ~58, `(seviye:B1 OR seviye:B2) app` ~42–45. Nasıl: sayım ve sayfa ayrı (pencere sayımı her eşleşmeyi sıralatıyordu); not sütunu okumayan süzgeçler `notes` birleşimi olmadan kapsayan indekslerden (`0301_search_covering`); ≥20k eşleşmede sayfa sıralama indeksinden okunup ilk sayfada durulur (küme yüklemleri ilişkili `EXISTS`), daha azında eşleşen rowid'ler sıralanır. **CI'da koşan küçük benchmark:** `bench_search_20k_scaled` (yoksayılmaz, her `cargo test`'te; 20k not, bütçe 100 ms × 20k/100k × 3 gürültü payı = 60 ms; ölçülen en kötü ~14 ms). Sıralı tarama = tam sıralama: `ordered_scan_pages_match_a_full_sort`.
+> - *1000 kart tek geri al:* `fc-app/src/modules/browse/tests.rs::bulk_ops_on_1000_cards_undo_in_one_step` (taşı, askı, göm, bayrak, sıfırla, etiket ekle/çıkar, bul-değiştir, sınıflandırma ata; her biri tek oplog girdisi, geri al → durum birebir, yinele → birebir) — MemStore, SQLite bellek ve SQLite dosya. Geri al `updated_at`'i de geri getirir: `undo_restores_modification_times`.
+> - *Komut paleti:* `…/browse/tests.rs::palette_lists_every_registry_command` (`palette.list` = registry'deki tüm public metotlar) + `apps/desktop/src/lib/features/browse/palette.test.ts` (arayüz her metodu listeler, her metodun TR/EN etiketi var).
+> - *Deste ayar şablonları:* `fc-app/src/modules/presets.rs` testleri (`crud_validation_and_undo`, `assignment_inheritance_delete_and_undo`, `module_can_be_disabled`; üç depoda) + `fc-core/src/preset.rs` (doğrulama, v0.1 satırlarının okunması) + `apps/desktop/src/lib/features/presets/PresetsScreen.test.ts`. Şema docs/10 §16.1.
+> - *Çöp kutusu (30 gün, ayarlanabilir):* `…/browse/tests.rs::trash_is_purged_after_retention` (süresi dolan silinir, yenisi kalır, `0` = boşalt, ayar doğrulanır); açılışta `App::load_state` temizler.
+> - *Kayıtlı sorgular yeniden adlandırma/sıralamaya dayanıklı:* `fc-core/src/query/tests.rs::stored_queries_follow_option_renames_and_reorders`, `…/browse/tests.rs::saved_queries_follow_option_renames_and_reorders`.
+> - *Veritabanı denetimi:* `…/browse/tests.rs::database_check_and_repair_undo` (yetim kart, vadesiz kart, eksik alan, sahipsiz değer; onar → sağlıklı, geri al → birebir).
+> - ~~**Kapsamdan kalanlar:**~~ **Faz 2 tur 3'te tamamlandı** (`fc-app/src/phase2_manage_tests.rs`, üç depoda; docs/10 §17): toplu "not türünü değiştir" (`bulk.change_notetype`: alan ve şablon eşleme, eşlenen şablonun kartı kimliği ve geçmişiyle kalır, tek geri al — `change_notetype_keeps_history_and_undoes`); özel çalışma oturumu (`StudyFilter.query` / `saved_query_id` → `search_card_ids`, kayıtlı sorgu = filtreli deste — `custom_sessions_from_queries`); özel bayrak adları (`browse::flag_names` ← `card_flag_defs` — `custom_flag_names_in_queries`). Komut paleti dört izin tüm komutlarını TR/EN etiketle listeler (`palette.test.ts`, `palette_and_shortcuts_cover_every_track`).
 
 ## 📥 v0.5 · İçe / dışa aktarma
 

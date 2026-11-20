@@ -39,7 +39,7 @@ from_session?: SessionId | null,
  */
 new_limit?: number | null, 
 /**
- * Order (default: `study.order`).
+ * Order (default: the deck preset's `new_order` / `review_order`).
  */
 order?: StudyOrder | null, 
 /**

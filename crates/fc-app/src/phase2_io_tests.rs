@@ -27,8 +27,8 @@ use fc_core::attribute::{AttributeKind, AttributeValue, EntityRef};
 use fc_core::card::{Card, CardState, Rating};
 use fc_core::content::builtin;
 use fc_core::content::media::media_hash;
-use fc_core::preset::{Preset, PresetConfig};
-use fc_core::{CardId, PresetId};
+use fc_core::preset::PresetConfig;
+use fc_core::CardId;
 use fc_interop::anki::fixtures as anki_fx;
 use fc_interop::anki::{AnkiCard, AnkiNote, AnkiRevlog};
 use fc_storage::repo::{CardFilter, CollectionDump, REVIEW_MODE_IMPORTED};
@@ -342,26 +342,17 @@ fn anki_import_study_backup_wipe_restore_is_identical() {
     assert_eq!(history.len(), 4);
     assert!(history.iter().all(|r| r.mode == REVIEW_MODE_IMPORTED));
     assert!(history.iter().any(|r| r.created_at.0 == TODAY - 60_000));
-    let preset = Preset {
-        id: PresetId(uuid::Uuid::from_u128(
-            0x0190_0000_0000_7000_8000_0000_0000_0099,
-        )),
+    let preset = t.ok::<PresetsCreate>(fc_api::v1::presets::CreatePreset {
         name: "Bir tekrar".into(),
-        config: PresetConfig {
+        config: Some(PresetConfig {
             reviews_per_day: 1,
             ..PresetConfig::default()
-        },
-        created_at: fc_core::Timestamp(1),
-        updated_at: fc_core::Timestamp(1),
-    };
-    {
-        let mut tx = t.store.write().unwrap();
-        tx.upsert_preset(&preset).unwrap();
-        let mut d = tx.get_deck(lang.id).unwrap().unwrap();
-        d.preset_id = Some(preset.id);
-        tx.update_deck(&d).unwrap();
-        tx.commit().unwrap();
-    }
+        }),
+    });
+    t.ok::<PresetsAssign>(fc_api::v1::presets::AssignPreset {
+        deck_ids: vec![lang.id],
+        preset_id: Some(preset.id),
+    });
     let start = || {
         t.ok::<StudyStart>(StartSession {
             kind: StudyKind::Normal,

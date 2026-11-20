@@ -1200,8 +1200,8 @@ fn restoring_an_older_schema_backup_migrates_it_forward() {
         path: path.to_string_lossy().into_owned(),
     });
     result::<ExportReport>(&finish(&t, &job));
-    // Rewrite it as a backup from a build without the v0.5 migrations (04xx; their tables
-    // are not in dumps). Older cuts would need the tables later migrations add removed and
+    // Rewrite it as a backup from a build without 0302 and the v0.5 migrations (04xx; their
+    // tables are not in dumps). Older cuts would need the tables later migrations add removed and
     // derived rows (v0.3 `note_keys`, …) rebuilt — not something a dump can fake.
     let b = fc_interop::fcbackup::read(&std::fs::read(&path).unwrap()).unwrap();
     let mut dump: fc_storage::repo::CollectionDump = serde_json::from_slice(&b.collection).unwrap();
@@ -1209,9 +1209,16 @@ fn restoring_an_older_schema_backup_migrates_it_forward() {
         .schema_versions
         .iter()
         .copied()
-        .filter(|v| *v < 400)
+        .filter(|v| *v < 302)
         .collect();
     assert!(older.len() < dump.schema_versions.len());
+    // …whose search index was written the old way (0302 and the restore rebuild it).
+    let fts = dump.tables.iter_mut().find(|t| t.name == "notes_fts").unwrap();
+    let col = fts.columns.iter().position(|c| c == "content").unwrap();
+    assert!(!fts.rows.is_empty());
+    for row in &mut fts.rows {
+        row[col] = fc_storage::repo::SqlValue::Text("{{c1::STALE}} <b>raw</b>".into());
+    }
     dump.schema_versions = older.clone();
     let mut manifest = b.manifest.clone();
     manifest.schema_versions = older;

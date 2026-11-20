@@ -2,7 +2,7 @@
 
 use crate::error::{CoreError, CoreResult};
 use crate::id::{DeckId, NoteId, NoteTypeId};
-use crate::notetype::{FieldKey, NoteType};
+use crate::notetype::{FieldDef, FieldKey, FieldKind, NoteType};
 use crate::tag::TagName;
 use crate::time::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -101,14 +101,54 @@ pub fn note_checksum(nt: &NoteType, fields: &FieldValues) -> String {
 
 /// Text indexed in `notes_fts`: stripped values of `searchable` fields, newline-separated.
 pub fn searchable_text(nt: &NoteType, fields: &FieldValues) -> String {
-    nt.fields
-        .iter()
-        .filter(|f| f.searchable)
+    searchable_text_of(&nt.fields, fields)
+}
+
+/// [`searchable_text`] over a field list (the storage layer rebuilds the index from the
+/// stored `notetypes.fields` JSON with it).
+pub fn searchable_text_of(defs: &[FieldDef], fields: &FieldValues) -> String {
+    defs.iter()
+        .filter(|f| f.searchable && !is_media_kind(f.kind))
         .filter_map(|f| fields.get(&f.key))
-        .map(|v| strip_html(v))
+        .map(|v| index_text(v))
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn is_media_kind(kind: FieldKind) -> bool {
+    matches!(kind, FieldKind::Image | FieldKind::Audio | FieldKind::Video)
+}
+
+/// Cloze deletions reduced to their answers and `[[links]]` to their labels (no other
+/// change). The search index applies it to the (already HTML-free) sort field.
+pub fn plain_markup(text: &str) -> String {
+    let no_cloze = crate::content::cloze::render_cloze(text, None, false);
+    crate::content::refs::links_to_labels(&no_cloze)
+}
+
+/// The plain text the search index holds for a field value: cloze markup reduced to its
+/// answers (`{{c1::Ankara::city}}` → `Ankara`), `[[links]]` to their label, HTML tags removed
+/// and entities decoded, bare `media:<hash>` references dropped, whitespace collapsed. Not
+/// folded (the storage layer folds: `fc_core::query::text::fold`).
+pub fn index_text(raw: &str) -> String {
+    without_media_refs(&strip_html(&plain_markup(raw)))
+}
+
+/// Index form of the (already HTML-free) sort field: [`plain_markup`] and bare media
+/// references dropped. Not folded.
+pub fn index_sort_text(sort_field: &str) -> String {
+    without_media_refs(&plain_markup(sort_field))
+}
+
+fn without_media_refs(text: &str) -> String {
+    text.split_whitespace()
+        .filter(|w| {
+            !w.strip_prefix(crate::content::refs::MEDIA_SCHEME)
+                .is_some_and(crate::content::refs::is_media_hash)
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Removes HTML tags, decodes the common entities and collapses whitespace. Not a sanitizer:
@@ -210,5 +250,18 @@ mod tests {
         let f = fv(&[("front", "<i>run</i>"), ("back", "koşmak")]);
         assert_eq!(sort_field_text(&nt(), &f), "run");
         assert_eq!(searchable_text(&nt(), &f), "run\nkoşmak");
+    }
+
+    #[test]
+    fn index_text_strips_markup() {
+        let h = "a".repeat(64);
+        assert_eq!(
+            index_text(&format!(
+                "<b>{{{{c1::Ankara::city}}}}</b> is in {{{{c2::Türkiye}}}} [[Başkent|capital]] \
+                 <img src=\"media:{h}\"> media:{h} &amp; more"
+            )),
+            "Ankara is in Türkiye capital & more"
+        );
+        assert_eq!(index_text("[[Ankara]]"), "Ankara");
     }
 }

@@ -20,15 +20,17 @@ pub mod note;
 pub mod notetype;
 pub mod paging;
 pub mod preset;
+pub mod query;
 pub mod rng;
 pub mod settings;
+pub mod shortcut;
 pub mod tag;
 pub mod time;
 
 pub use error::{CoreError, CoreResult};
 pub use id::{
     AttributeDefId, AttributeOptionId, BatchId, CardId, DeckId, IdGen, JobId, NoteId, NoteTypeId,
-    OplogId, PresetId, ReviewLogId, SessionId, TagId, V7IdGen,
+    OplogId, PresetId, ReviewLogId, SavedQueryId, SessionId, TagId, V7IdGen,
 };
 pub use rng::Rng;
 pub use time::{Clock, Timestamp};

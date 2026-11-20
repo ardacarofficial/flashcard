@@ -1,0 +1,8 @@
+{
+  "oplog.summary.presets.create": "Created preset {name}",
+  "oplog.summary.presets.update": "Edited preset {name}",
+  "oplog.summary.presets.clone": "Copied preset as {name}",
+  "oplog.summary.presets.delete": "Deleted preset {name}",
+  "oplog.summary.presets.assign": "Changed the preset of {count} deck(s)",
+  "oplog.summary.presets.restore": "Restored preset {name}"
+}

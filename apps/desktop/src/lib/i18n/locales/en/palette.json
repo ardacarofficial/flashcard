@@ -1,0 +1,131 @@
+{
+  "commands": {
+    "oplog": {
+      "undo": "Undo",
+      "redo": "Redo",
+      "status": "Undo status",
+      "list": "Operation history"
+    },
+    "batch": {
+      "execute": "Run a batch of commands"
+    },
+    "modules": {
+      "list": "List modules",
+      "set_enabled": "Turn a module on/off"
+    },
+    "commands": {
+      "list": "List commands"
+    },
+    "settings": {
+      "schema": "Settings schema",
+      "get": "Read settings",
+      "set": "Change a setting",
+      "reset": "Reset a setting"
+    },
+    "jobs": {
+      "list": "Background jobs",
+      "get": "Job details",
+      "cancel": "Cancel a job"
+    },
+    "decks": {
+      "tree": "Deck tree",
+      "list": "List decks",
+      "get": "Deck details",
+      "create": "New deck",
+      "rename": "Rename deck",
+      "move": "Move deck",
+      "update": "Edit deck",
+      "delete": "Delete deck",
+      "restore": "Restore deck"
+    },
+    "notetypes": {
+      "list": "List note types",
+      "get": "Note type details"
+    },
+    "notes": {
+      "create": "New note",
+      "update": "Edit note",
+      "delete": "Delete notes",
+      "restore": "Restore notes",
+      "get": "Note details",
+      "list": "List notes"
+    },
+    "tags": {
+      "list": "List tags",
+      "rename": "Rename tag",
+      "merge": "Merge tags",
+      "set_color": "Tag color"
+    },
+    "attributes": {
+      "list": "List classifications",
+      "effective": "Classifications of a deck",
+      "templates": "Classification templates",
+      "get": "Classification details",
+      "define": "New classification",
+      "define_from_template": "Classification from template",
+      "update": "Edit classification",
+      "delete": "Delete classification",
+      "restore": "Restore classification",
+      "option": {
+        "add": "Add option",
+        "rename": "Rename option",
+        "set_color": "Option color",
+        "reorder": "Reorder options",
+        "merge": "Merge options",
+        "delete": "Delete option"
+      },
+      "values": {
+        "get": "Read classification values",
+        "set": "Set classification values"
+      }
+    },
+    "search": {
+      "cards": "Search cards",
+      "ids": "All matching cards",
+      "check": "Check a query"
+    },
+    "saved_queries": {
+      "list": "Saved queries",
+      "create": "Save query",
+      "update": "Edit saved query",
+      "delete": "Delete saved query"
+    },
+    "bulk": {
+      "move_cards": "Move cards",
+      "set_suspended": "Suspend / unsuspend cards",
+      "set_buried": "Bury / unbury cards",
+      "set_flag": "Flag cards",
+      "reset_progress": "Forget cards",
+      "add_tags": "Add tags",
+      "remove_tags": "Remove tags",
+      "find_replace": "Find and replace",
+      "set_attribute": "Set classification"
+    },
+    "browse": {
+      "card_info": "Card info",
+      "duplicates": "Find duplicates",
+      "trash": "Trash",
+      "check_database": "Check database",
+      "repair_database": "Repair database",
+      "purge_trash": "Empty expired trash"
+    },
+    "palette": {
+      "list": "Command palette entries"
+    },
+    "shortcuts": {
+      "list": "Keyboard shortcuts",
+      "set": "Change a shortcut",
+      "reset": "Reset shortcuts"
+    },
+    "presets": {
+      "list": "Deck presets",
+      "get": "Preset details",
+      "for_deck": "Options of a deck",
+      "create": "New preset",
+      "update": "Edit preset",
+      "clone": "Copy preset",
+      "delete": "Delete preset",
+      "assign": "Assign preset to decks"
+    }
+  }
+}

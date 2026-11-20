@@ -32,14 +32,55 @@ export interface KeyOptions {
   choices?: number;
   /** The flags module is on (Ctrl/⌘+1–7 toggles flag n, Anki numbering). */
   flags?: boolean;
+  /** `combo → study action` from the shortcut editor ([`studyBindings`]); absent = defaults. */
+  bindings?: ReadonlyMap<string, string>;
 }
 
 /**
- * The study keyboard map (docs/02 §13): Space shows the answer, 1–4 rate, Space/Enter on the
- * answer rate "good", H hint, S suspend, B bury, Z (or Ctrl/⌘+Z) undo, Esc ends. Enter starts
- * a session and leaves the summary; R repeats the mistakes. On a choice card's question the
- * digits pick an option; Ctrl/⌘+1–7 toggles a flag. `typing` = focus is in a text field: then
- * only Escape is ours (the field gets every other key).
+ * Rebindable study actions (backend `palette::UI_ACTIONS`, context `study`; edited in the
+ * shortcut editor) with their default keys, in the backend's combo form.
+ */
+export const STUDY_DEFAULT_KEYS: Readonly<Record<string, string>> = {
+  Space: 'study.reveal',
+  '1': 'study.again',
+  '2': 'study.hard',
+  '3': 'study.good',
+  '4': 'study.easy',
+  H: 'study.hint',
+  S: 'study.suspend',
+  B: 'study.bury',
+  Z: 'study.undo',
+  Escape: 'study.end',
+};
+
+const NAMED: Readonly<Record<string, string>> = { ' ': 'Space', Spacebar: 'Space', Esc: 'Escape' };
+
+/** Unmodified key in the backend's combo form (`H`, `Space`, `1`). */
+function plainCombo(key: string): string {
+  const k = NAMED[key] ?? key;
+  return k.length === 1 ? k.toUpperCase() : k;
+}
+
+/**
+ * `combo → study action`: the defaults, with every study-context item of `shortcuts.list`
+ * replacing its action's key (`combo: null` = unbound).
+ */
+export function studyBindings(items: readonly { action: string; context: string; combo: string | null }[]): Map<string, string> {
+  const map = new Map(Object.entries(STUDY_DEFAULT_KEYS));
+  const listed = items.filter((i) => i.context === 'study');
+  for (const i of listed) for (const [combo, action] of map) if (action === i.action) map.delete(combo);
+  for (const i of listed) if (i.combo) map.set(i.combo, i.action);
+  return map;
+}
+
+/**
+ * The study keyboard map (docs/02 §13). Rebindable (defaults): Space shows the answer, 1–4
+ * rate, H hint, S suspend, B bury, Z undo, Esc ends — `opts.bindings` (from the shortcut
+ * editor) replaces these defaults. Fixed: on the answer the reveal key and Enter rate "good";
+ * Enter starts a session, shows the answer and leaves the summary; R repeats the mistakes; on a
+ * choice card's question the digits pick an option; Ctrl/⌘+1–7 toggles a flag; Ctrl/⌘+Z
+ * undoes only without `bindings` (otherwise it is the shell's global `ui.undo`). `typing` =
+ * focus is in a text field: then only the end key is ours.
  */
 export function keyAction(
   phase: StudyPhase,
@@ -50,12 +91,16 @@ export function keyAction(
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const mod = !!(e.ctrlKey || e.metaKey);
   const card = phase === 'question' || phase === 'answer';
-  if (key === 'Escape') return card ? { kind: 'end' } : null;
+  const bindings = opts.bindings ?? new Map(Object.entries(STUDY_DEFAULT_KEYS));
+  const bound = mod || e.altKey ? undefined : bindings.get(plainCombo(e.key));
+  if (bound === 'study.end') return card ? { kind: 'end' } : null;
   if (typing || e.altKey) return null;
-  if (key === 'z') return phase === 'idle' ? null : { kind: 'undo' };
   const digit = /^[1-9]$/.test(key) ? Number(key) : 0;
-  if (mod) return card && opts.flags && digit >= 1 && digit <= 7 ? { kind: 'flag', flag: digit } : null;
-  if (phase === 'question' && digit >= 1 && digit <= (opts.choices ?? 0)) return { kind: 'choose', index: digit - 1 };
+  if (mod) {
+    if (key === 'z') return opts.bindings || phase === 'idle' ? null : { kind: 'undo' };
+    return card && opts.flags && digit >= 1 && digit <= 7 ? { kind: 'flag', flag: digit } : null;
+  }
+  if (bound === 'study.undo') return phase === 'idle' ? null : { kind: 'undo' };
   switch (phase) {
     case 'idle':
       return key === 'Enter' ? { kind: 'start' } : null;
@@ -65,13 +110,14 @@ export function keyAction(
       return null;
     case 'question':
     case 'answer': {
-      if (key === 'h') return phase === 'question' ? { kind: 'hint' } : null;
-      if (key === 's') return { kind: 'suspend' };
-      if (key === 'b') return { kind: 'bury' };
-      if (phase === 'question') return key === ' ' || key === 'Enter' ? { kind: 'reveal' } : null;
-      const n = ['1', '2', '3', '4'].indexOf(key);
-      if (n >= 0) return { kind: 'rate', rating: RATINGS[n]! };
-      if (key === ' ' || key === 'Enter') return { kind: 'rate', rating: 'good' };
+      if (phase === 'question' && digit >= 1 && digit <= (opts.choices ?? 0)) return { kind: 'choose', index: digit - 1 };
+      if (bound === 'study.hint') return phase === 'question' ? { kind: 'hint' } : null;
+      if (bound === 'study.suspend') return { kind: 'suspend' };
+      if (bound === 'study.bury') return { kind: 'bury' };
+      if (phase === 'question') return bound === 'study.reveal' || key === 'Enter' ? { kind: 'reveal' } : null;
+      const rating = { 'study.again': 'again', 'study.hard': 'hard', 'study.good': 'good', 'study.easy': 'easy' }[bound ?? ''] as Rating | undefined;
+      if (rating) return { kind: 'rate', rating };
+      if (bound === 'study.reveal' || key === 'Enter') return { kind: 'rate', rating: 'good' };
       return null;
     }
   }

@@ -18,6 +18,9 @@
     "filter_label": "Yalnızca şu kartlar",
     "filter_any": "Hepsi",
     "custom_start": "Özel oturum",
+    "query_label": "Sorgu",
+    "query_placeholder": "ör. seviye:A2 is:due",
+    "saved_label": "Kayıtlı sorgu",
     "postpone_label": "Bugünün kartlarını ertele",
     "postpone_days": "Gün",
     "postpone": "Ertele",
@@ -68,15 +71,6 @@
   "settings": {
     "study": {
       "new_per_session": { "label": "Oturum başına yeni kart", "description": "Normal oturumun tanıttığı yeni kart sayısı (0 = hiç)." },
-      "order": {
-        "label": "Kart sırası",
-        "description": "Tekrarların ve yeni kartların sırası.",
-        "due": "Vadeye göre",
-        "random": "Rastgele",
-        "hardest_first": "Önce en zorlar",
-        "newest_first": "Önce en yeniler"
-      },
-      "bury_siblings": { "label": "Kardeşleri göm", "description": "Aynı notun diğer kartları yarına kalır." },
       "type_answer": { "label": "Cevabı yazarak ver", "description": "Bir giriş kutusu gösterir ve yazılanı kontrol eder." },
       "hint_strategy": {
         "label": "İpucu türü",

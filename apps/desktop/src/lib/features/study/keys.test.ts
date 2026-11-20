@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { keyAction } from './keys';
+import { keyAction, studyBindings } from './keys';
 import { intervalLabel } from './format';
 
 describe('study keymap', () => {
@@ -43,6 +43,37 @@ describe('study keymap', () => {
     expect(keyAction('question', { key: '8', ctrlKey: true }, false, { flags: true })).toBeNull();
     expect(keyAction('idle', { key: '1', ctrlKey: true }, false, { flags: true })).toBeNull();
     expect(keyAction('answer', { key: '3', ctrlKey: true }, false, { flags: false })).toBeNull();
+  });
+});
+
+describe('rebound study keys (shortcut editor)', () => {
+  const bindings = studyBindings([
+    { action: 'study.reveal', context: 'study', combo: 'J' },
+    { action: 'study.good', context: 'study', combo: 'G' },
+    { action: 'study.end', context: 'study', combo: 'Q' },
+    { action: 'study.undo', context: 'study', combo: 'U' },
+    { action: 'study.hint', context: 'study', combo: null },
+    { action: 'ui.palette', context: 'global', combo: 'Ctrl+K' },
+  ]);
+  const opts = { bindings };
+
+  it('uses the user\'s keys instead of the defaults', () => {
+    expect(keyAction('question', { key: 'j' }, false, opts)).toEqual({ kind: 'reveal' });
+    expect(keyAction('question', { key: ' ' }, false, opts)).toBeNull();
+    expect(keyAction('answer', { key: 'g' }, false, opts)).toEqual({ kind: 'rate', rating: 'good' });
+    expect(keyAction('answer', { key: '3' }, false, opts)).toBeNull();
+    expect(keyAction('answer', { key: 'j' }, false, opts)).toEqual({ kind: 'rate', rating: 'good' });
+    expect(keyAction('question', { key: 'h' }, false, opts)).toBeNull();
+    expect(keyAction('question', { key: 'q' }, true, opts)).toEqual({ kind: 'end' });
+    expect(keyAction('question', { key: 'Escape' }, false, opts)).toBeNull();
+    expect(keyAction('answer', { key: 'u' }, false, opts)).toEqual({ kind: 'undo' });
+  });
+
+  it('leaves Ctrl+Z to the shell (global ui.undo) and keeps the fixed keys', () => {
+    expect(keyAction('answer', { key: 'z', ctrlKey: true }, false, opts)).toBeNull();
+    expect(keyAction('question', { key: 'Enter' }, false, opts)).toEqual({ kind: 'reveal' });
+    expect(keyAction('question', { key: '2' }, false, { ...opts, choices: 3 })).toEqual({ kind: 'choose', index: 1 });
+    expect(keyAction('answer', { key: '7', ctrlKey: true }, false, { ...opts, flags: true })).toEqual({ kind: 'flag', flag: 7 });
   });
 });
 

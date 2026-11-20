@@ -25,8 +25,8 @@ use fc_api::ErrorCode;
 use fc_core::attribute::{AttributeKind, AttributeValue};
 use fc_core::card::{Card, Rating};
 use fc_core::content::builtin;
-use fc_core::preset::{Preset, PresetConfig};
-use fc_core::{AttributeDefId, AttributeOptionId, CardId, DeckId, NoteTypeId, PresetId};
+use fc_core::preset::PresetConfig;
+use fc_core::{AttributeDefId, AttributeOptionId, CardId, DeckId, NoteTypeId};
 use fc_storage::repo::CardFilter;
 use fc_storage::{SqliteStore, Store};
 use std::collections::BTreeMap;
@@ -320,6 +320,8 @@ pub fn study_renders_card_types_and_undo_is_exact(f: &Factory) {
             states: None,
             due_only: None,
             limit: None,
+            query: None,
+            saved_query_id: None,
         }),
     );
     assert_eq!(s.counts.new, 1);
@@ -438,30 +440,20 @@ pub fn trial_mode_leaves_cards_unchanged(f: &Factory) {
 pub fn preset_daily_limits_apply(f: &Factory) {
     let w = world(f);
     let t = &w.t;
-    // A preset with one new card a day on the parent deck (v0.4 adds presets.* commands;
-    // here it is written directly).
-    let preset = Preset {
-        id: PresetId(uuid::Uuid::from_u128(
-            0x0190_0000_0000_7000_8000_0000_0000_0077,
-        )),
+    // A preset with one new card a day on the parent deck.
+    let preset = t.ok::<PresetsCreate>(fc_api::v1::presets::CreatePreset {
         name: "Sıkı".into(),
-        config: PresetConfig {
+        config: Some(PresetConfig {
             new_per_day: 1,
             reviews_per_day: 0,
             desired_retention: 0.85,
             ..PresetConfig::default()
-        },
-        created_at: fc_core::Timestamp(1),
-        updated_at: fc_core::Timestamp(1),
-    };
-    {
-        let mut tx = t.store.write().unwrap();
-        tx.upsert_preset(&preset).unwrap();
-        let mut d = tx.get_deck(w.parent.id).unwrap().unwrap();
-        d.preset_id = Some(preset.id);
-        tx.update_deck(&d).unwrap();
-        tx.commit().unwrap();
-    }
+        }),
+    });
+    t.ok::<PresetsAssign>(fc_api::v1::presets::AssignPreset {
+        deck_ids: vec![w.parent.id],
+        preset_id: Some(preset.id),
+    });
     let s = start(t, StudyKind::Normal, StudyMode::Scheduled, w.parent.id);
     assert_eq!(s.counts.new, 1, "new_per_day = 1");
     let c = s.current.clone().unwrap();

@@ -340,6 +340,17 @@ pub fn sibling_burying_is_undone_exactly(f: &Factory) {
     let deck = t.deck("Dil");
     let note = t.note_of(nt, deck.id, "dog", "köpek");
     assert_eq!(note.cards.len(), 2);
+    // Sibling burying is a deck option (v0.4 preset, read through `presets::effective`; on
+    // by default).
+    let preset = t.ok::<PresetsCreate>(fc_api::v1::presets::CreatePreset {
+        name: "Göm".into(),
+        config: None,
+    });
+    assert!(preset.config.bury_siblings);
+    t.ok::<PresetsAssign>(fc_api::v1::presets::AssignPreset {
+        deck_ids: vec![deck.id],
+        preset_id: Some(preset.id),
+    });
     let s = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(deck.id));
     assert_eq!(s.counts.new, 1, "one card per note");
     let first = s.current.unwrap().card_id;
@@ -352,7 +363,14 @@ pub fn sibling_burying_is_undone_exactly(f: &Factory) {
     t.undo();
     assert_eq!(t.card(sibling), sib_before);
     // With burying off, both cards are queued.
-    t.set(super::BURY_SIBLINGS, serde_json::json!(false));
+    t.ok::<PresetsUpdate>(fc_api::v1::presets::UpdatePreset {
+        id: preset.id,
+        name: preset.name.clone(),
+        config: fc_core::preset::PresetConfig {
+            bury_siblings: false,
+            ..preset.config.clone()
+        },
+    });
     let s = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(deck.id));
     assert_eq!(s.counts.new, 2);
 }
@@ -630,6 +648,8 @@ pub fn custom_session_filters_by_classification(f: &Factory) {
         states: None,
         due_only,
         limit: None,
+        query: None,
+        saved_query_id: None,
     };
     let start = |kind, filter| {
         t.ok::<StudyStart>(StartSession {

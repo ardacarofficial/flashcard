@@ -5,6 +5,8 @@ import type { AddMedia } from "./AddMedia";
 import type { AffectedCount } from "./AffectedCount";
 import type { AnswerCard } from "./AnswerCard";
 import type { AnswerCheckDto } from "./AnswerCheckDto";
+import type { AssignPreset } from "./AssignPreset";
+import type { AssignResult } from "./AssignResult";
 import type { AttributeDefDto } from "./AttributeDefDto";
 import type { AttributeDefList } from "./AttributeDefList";
 import type { AttributeRef } from "./AttributeRef";
@@ -13,21 +15,32 @@ import type { AttributeValues } from "./AttributeValues";
 import type { BacklinksOf } from "./BacklinksOf";
 import type { BackupInfo } from "./BackupInfo";
 import type { BatchResult } from "./BatchResult";
+import type { BulkResult } from "./BulkResult";
 import type { BuryCards } from "./BuryCards";
 import type { CardFlagsList } from "./CardFlagsList";
 import type { CardHistory } from "./CardHistory";
 import type { CardHistoryRequest } from "./CardHistoryRequest";
+import type { CardInfo } from "./CardInfo";
+import type { CardInfoRef } from "./CardInfoRef";
 import type { CardMetaDto } from "./CardMetaDto";
 import type { CardMetaList } from "./CardMetaList";
 import type { CardPreviewList } from "./CardPreviewList";
 import type { CardRef } from "./CardRef";
+import type { CardSearchPage } from "./CardSearchPage";
+import type { CardSelection } from "./CardSelection";
 import type { CardTypeList } from "./CardTypeList";
 import type { CardsOfNote } from "./CardsOfNote";
+import type { ChangeNoteType } from "./ChangeNoteType";
+import type { ChangeNoteTypeResult } from "./ChangeNoteTypeResult";
 import type { CheckAnswer } from "./CheckAnswer";
+import type { ClonePreset } from "./ClonePreset";
 import type { CreateBackup } from "./CreateBackup";
 import type { CreateDeck } from "./CreateDeck";
 import type { CreateNote } from "./CreateNote";
 import type { CreateNoteType } from "./CreateNoteType";
+import type { CreatePreset } from "./CreatePreset";
+import type { CreateSavedQuery } from "./CreateSavedQuery";
+import type { DatabaseReport } from "./DatabaseReport";
 import type { DeckDto } from "./DeckDto";
 import type { DeckList } from "./DeckList";
 import type { DeckRef } from "./DeckRef";
@@ -35,10 +48,13 @@ import type { DeckTree } from "./DeckTree";
 import type { DefineAttribute } from "./DefineAttribute";
 import type { DefineAttributeFromTemplate } from "./DefineAttributeFromTemplate";
 import type { DeleteAttributeOption } from "./DeleteAttributeOption";
+import type { DuplicateList } from "./DuplicateList";
 import type { EffectiveAttributeList } from "./EffectiveAttributeList";
 import type { EffectiveAttributes } from "./EffectiveAttributes";
+import type { EffectivePreset } from "./EffectivePreset";
 import type { Empty } from "./Empty";
 import type { ExecuteBatch } from "./ExecuteBatch";
+import type { FindReplace } from "./FindReplace";
 import type { FlagDto } from "./FlagDto";
 import type { FlagList } from "./FlagList";
 import type { GetAttributeValues } from "./GetAttributeValues";
@@ -55,6 +71,7 @@ import type { ListAttributeTemplates } from "./ListAttributeTemplates";
 import type { ListAttributes } from "./ListAttributes";
 import type { ListNotes } from "./ListNotes";
 import type { ListOplog } from "./ListOplog";
+import type { ListTrash } from "./ListTrash";
 import type { MediaContent } from "./MediaContent";
 import type { MediaDto } from "./MediaDto";
 import type { MediaItems } from "./MediaItems";
@@ -64,43 +81,67 @@ import type { MergeTags } from "./MergeTags";
 import type { MethodList } from "./MethodList";
 import type { ModuleDto } from "./ModuleDto";
 import type { ModuleList } from "./ModuleList";
+import type { MoveCards } from "./MoveCards";
 import type { MoveDeck } from "./MoveDeck";
 import type { NoteDto } from "./NoteDto";
 import type { NoteIds } from "./NoteIds";
 import type { NotePage } from "./NotePage";
 import type { NoteRef } from "./NoteRef";
+import type { NoteTags } from "./NoteTags";
 import type { NoteTypeDto } from "./NoteTypeDto";
 import type { NoteTypeList } from "./NoteTypeList";
 import type { NoteTypeRef } from "./NoteTypeRef";
 import type { NoteTypeUsage } from "./NoteTypeUsage";
 import type { OplogPage } from "./OplogPage";
 import type { OptionChangeResult } from "./OptionChangeResult";
+import type { PaletteList } from "./PaletteList";
 import type { PostponeCards } from "./PostponeCards";
+import type { PresetDto } from "./PresetDto";
+import type { PresetForDeck } from "./PresetForDeck";
+import type { PresetList } from "./PresetList";
+import type { PresetRef } from "./PresetRef";
 import type { PreviewCards } from "./PreviewCards";
 import type { PreviewImport } from "./PreviewImport";
 import type { PrintDocument } from "./PrintDocument";
+import type { PurgeResult } from "./PurgeResult";
+import type { PurgeTrash } from "./PurgeTrash";
+import type { QueryCheck } from "./QueryCheck";
+import type { QueryText } from "./QueryText";
 import type { RenameAttributeOption } from "./RenameAttributeOption";
 import type { RenameDeck } from "./RenameDeck";
 import type { RenameTag } from "./RenameTag";
 import type { RenderPrint } from "./RenderPrint";
 import type { RenderedCardDto } from "./RenderedCardDto";
 import type { ReorderAttributeOptions } from "./ReorderAttributeOptions";
+import type { RepairResult } from "./RepairResult";
 import type { ResetSetting } from "./ResetSetting";
+import type { ResetShortcut } from "./ResetShortcut";
 import type { RestoreBackup } from "./RestoreBackup";
+import type { SavedQueryDto } from "./SavedQueryDto";
+import type { SavedQueryList } from "./SavedQueryList";
+import type { SavedQueryRef } from "./SavedQueryRef";
+import type { SearchCards } from "./SearchCards";
+import type { SearchIds } from "./SearchIds";
 import type { SessionDto } from "./SessionDto";
 import type { SessionRef } from "./SessionRef";
 import type { SessionSummary } from "./SessionSummary";
+import type { SetAttributeBulk } from "./SetAttributeBulk";
 import type { SetAttributeOptionColor } from "./SetAttributeOptionColor";
 import type { SetAttributeValues } from "./SetAttributeValues";
+import type { SetBuried } from "./SetBuried";
 import type { SetCardFlag } from "./SetCardFlag";
 import type { SetCardFlags } from "./SetCardFlags";
 import type { SetCardUserNote } from "./SetCardUserNote";
+import type { SetFlag } from "./SetFlag";
 import type { SetModuleEnabled } from "./SetModuleEnabled";
 import type { SetSetting } from "./SetSetting";
+import type { SetShortcut } from "./SetShortcut";
+import type { SetSuspended } from "./SetSuspended";
 import type { SetTagColor } from "./SetTagColor";
 import type { SettingValueDto } from "./SettingValueDto";
 import type { SettingValues } from "./SettingValues";
 import type { SettingsSchema } from "./SettingsSchema";
+import type { ShortcutList } from "./ShortcutList";
 import type { StartExport } from "./StartExport";
 import type { StartImport } from "./StartImport";
 import type { StartSession } from "./StartSession";
@@ -110,6 +151,7 @@ import type { SuspendCards } from "./SuspendCards";
 import type { TagChangeResult } from "./TagChangeResult";
 import type { TagDto } from "./TagDto";
 import type { TagList } from "./TagList";
+import type { TrashList } from "./TrashList";
 import type { UndoResult } from "./UndoResult";
 import type { UndoStatus } from "./UndoStatus";
 import type { UpdateAttribute } from "./UpdateAttribute";
@@ -117,6 +159,8 @@ import type { UpdateDeck } from "./UpdateDeck";
 import type { UpdateFlag } from "./UpdateFlag";
 import type { UpdateNote } from "./UpdateNote";
 import type { UpdateNoteType } from "./UpdateNoteType";
+import type { UpdatePreset } from "./UpdatePreset";
+import type { UpdateSavedQuery } from "./UpdateSavedQuery";
 
 /** API version prefix of qualified method names (`v1.decks.create`). */
 export const API_VERSION = "v1" as const;
@@ -215,6 +259,41 @@ export interface Methods {
   "io.backup.inspect": { kind: "query"; request: InspectBackup; response: BackupInfo };
   "io.backup.restore": { kind: "command"; request: RestoreBackup; response: JobDto };
   "io.print.render": { kind: "query"; request: RenderPrint; response: PrintDocument };
+  "search.cards": { kind: "query"; request: SearchCards; response: CardSearchPage };
+  "search.ids": { kind: "query"; request: QueryText; response: SearchIds };
+  "search.check": { kind: "query"; request: QueryText; response: QueryCheck };
+  "saved_queries.list": { kind: "query"; request: Empty; response: SavedQueryList };
+  "saved_queries.create": { kind: "command"; request: CreateSavedQuery; response: SavedQueryDto };
+  "saved_queries.update": { kind: "command"; request: UpdateSavedQuery; response: SavedQueryDto };
+  "saved_queries.delete": { kind: "command"; request: SavedQueryRef; response: SavedQueryDto };
+  "bulk.move_cards": { kind: "command"; request: MoveCards; response: BulkResult };
+  "bulk.set_suspended": { kind: "command"; request: SetSuspended; response: BulkResult };
+  "bulk.set_buried": { kind: "command"; request: SetBuried; response: BulkResult };
+  "bulk.set_flag": { kind: "command"; request: SetFlag; response: BulkResult };
+  "bulk.reset_progress": { kind: "command"; request: CardSelection; response: BulkResult };
+  "bulk.add_tags": { kind: "command"; request: NoteTags; response: BulkResult };
+  "bulk.remove_tags": { kind: "command"; request: NoteTags; response: BulkResult };
+  "bulk.find_replace": { kind: "command"; request: FindReplace; response: BulkResult };
+  "bulk.set_attribute": { kind: "command"; request: SetAttributeBulk; response: BulkResult };
+  "bulk.change_notetype": { kind: "command"; request: ChangeNoteType; response: ChangeNoteTypeResult };
+  "presets.list": { kind: "query"; request: Empty; response: PresetList };
+  "presets.get": { kind: "query"; request: PresetRef; response: PresetDto };
+  "presets.for_deck": { kind: "query"; request: PresetForDeck; response: EffectivePreset };
+  "presets.create": { kind: "command"; request: CreatePreset; response: PresetDto };
+  "presets.update": { kind: "command"; request: UpdatePreset; response: PresetDto };
+  "presets.clone": { kind: "command"; request: ClonePreset; response: PresetDto };
+  "presets.delete": { kind: "command"; request: PresetRef; response: PresetDto };
+  "presets.assign": { kind: "command"; request: AssignPreset; response: AssignResult };
+  "browse.card_info": { kind: "query"; request: CardInfoRef; response: CardInfo };
+  "browse.duplicates": { kind: "query"; request: Empty; response: DuplicateList };
+  "browse.trash": { kind: "query"; request: ListTrash; response: TrashList };
+  "browse.check_database": { kind: "query"; request: Empty; response: DatabaseReport };
+  "browse.repair_database": { kind: "command"; request: Empty; response: RepairResult };
+  "browse.purge_trash": { kind: "command"; request: PurgeTrash; response: PurgeResult };
+  "palette.list": { kind: "query"; request: Empty; response: PaletteList };
+  "shortcuts.list": { kind: "query"; request: Empty; response: ShortcutList };
+  "shortcuts.set": { kind: "command"; request: SetShortcut; response: ShortcutList };
+  "shortcuts.reset": { kind: "command"; request: ResetShortcut; response: ShortcutList };
 }
 
 /** Unqualified method name. */
@@ -322,4 +401,39 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "io.backup.inspect": "query",
   "io.backup.restore": "command",
   "io.print.render": "query",
+  "search.cards": "query",
+  "search.ids": "query",
+  "search.check": "query",
+  "saved_queries.list": "query",
+  "saved_queries.create": "command",
+  "saved_queries.update": "command",
+  "saved_queries.delete": "command",
+  "bulk.move_cards": "command",
+  "bulk.set_suspended": "command",
+  "bulk.set_buried": "command",
+  "bulk.set_flag": "command",
+  "bulk.reset_progress": "command",
+  "bulk.add_tags": "command",
+  "bulk.remove_tags": "command",
+  "bulk.find_replace": "command",
+  "bulk.set_attribute": "command",
+  "bulk.change_notetype": "command",
+  "presets.list": "query",
+  "presets.get": "query",
+  "presets.for_deck": "query",
+  "presets.create": "command",
+  "presets.update": "command",
+  "presets.clone": "command",
+  "presets.delete": "command",
+  "presets.assign": "command",
+  "browse.card_info": "query",
+  "browse.duplicates": "query",
+  "browse.trash": "query",
+  "browse.check_database": "query",
+  "browse.repair_database": "command",
+  "browse.purge_trash": "command",
+  "palette.list": "query",
+  "shortcuts.list": "query",
+  "shortcuts.set": "command",
+  "shortcuts.reset": "command",
 };

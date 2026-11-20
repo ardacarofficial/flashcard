@@ -5,6 +5,7 @@
 //! keeps its FTS row (searches join `notes` and filter `deleted_at`), so restore needs no text.
 
 use super::decks::set_deleted;
+use super::search::{fts_sort_text, fts_text};
 use super::tags::{find_tag, TagCol};
 use super::{all, exec, exec_one, id, json, json_list, one, opt_ms, opt_ts, to_json, ts};
 use super::{Mode, SqliteTx, WriteMode};
@@ -116,7 +117,12 @@ fn write_fts(conn: &Connection, note: &Note, search_text: &str) -> StorageResult
             conn,
             "notes_fts",
             "UPDATE notes_fts SET note_id = ?2, sort_field = ?3, content = ?4 WHERE rowid = ?1",
-            params![rowid, nid, note.sort_field, search_text],
+            params![
+                rowid,
+                nid,
+                fts_sort_text(&note.sort_field),
+                fts_text(search_text)
+            ],
         )?;
         if n == 1 {
             return Ok(());
@@ -126,7 +132,7 @@ fn write_fts(conn: &Connection, note: &Note, search_text: &str) -> StorageResult
         conn,
         "notes_fts",
         "INSERT INTO notes_fts (note_id, sort_field, content) VALUES (?1, ?2, ?3)",
-        params![nid, note.sort_field, search_text],
+        params![nid, fts_sort_text(&note.sort_field), fts_text(search_text)],
     )?;
     let rowid = conn.last_insert_rowid();
     exec(

@@ -79,4 +79,8 @@ domains! {
     study,
     cardtypes,
     io,
+    search,
+    bulk,
+    presets,
+    browse,
 }

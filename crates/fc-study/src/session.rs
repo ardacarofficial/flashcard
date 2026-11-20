@@ -10,6 +10,7 @@
 //! session (learning cards are always kept: they are in progress).
 
 use fc_core::card::{Card, CardState, SchedulingState};
+use fc_core::preset::{NewCardOrder, ReviewOrder};
 use fc_core::rng::Rng;
 use fc_core::{CardId, NoteId, Timestamp};
 use serde::{Deserialize, Serialize};
@@ -103,6 +104,14 @@ pub enum Order {
     HardestFirst,
     /// Most recently added first.
     NewestFirst,
+    /// A deck preset's orders (`fc_core::preset`): new cards as added or shuffled; reviews by
+    /// due date, shuffled, or lowest recall probability first.
+    Preset {
+        /// New card order.
+        new: NewCardOrder,
+        /// Review order.
+        review: ReviewOrder,
+    },
 }
 
 /// Inputs of [`build_queue`].
@@ -188,6 +197,35 @@ pub fn build_queue(
         Order::NewestFirst => {
             reviews.sort_by_key(|(c, _)| std::cmp::Reverse(key(c)));
             new.sort_by_key(|(c, _)| std::cmp::Reverse(key(c)));
+        }
+        Order::Preset { new: n, review } => {
+            match review {
+                ReviewOrder::Due => reviews.sort_by_key(|(c, s)| (s.due, key(c))),
+                ReviewOrder::Random => {
+                    reviews.sort_by_key(|(c, _)| key(c));
+                    shuffle(&mut reviews, opts.rng);
+                }
+                ReviewOrder::Retrievability => {
+                    // Recall probability falls monotonically with elapsed time / stability
+                    // (FSRS forgetting curve), so the largest ratio is the least likely
+                    // recalled. Cards without a stability go last.
+                    let overdue = |s: &SchedulingState| match (s.stability, s.last_review) {
+                        (Some(st), Some(last)) if st > 0.0 => {
+                            (opts.now.0 - last.0).max(0) as f64 / st
+                        }
+                        _ => f64::NEG_INFINITY,
+                    };
+                    reviews.sort_by(|(a, sa), (b, sb)| {
+                        overdue(sb)
+                            .total_cmp(&overdue(sa))
+                            .then_with(|| key(a).cmp(&key(b)))
+                    });
+                }
+            }
+            new.sort_by_key(|(c, _)| key(c));
+            if n == NewCardOrder::Random {
+                shuffle(&mut new, opts.rng);
+            }
         }
     }
     let mut notes: HashSet<NoteId> = HashSet::new();
@@ -614,5 +652,57 @@ mod tests {
         );
         assert_eq!(clamp_duration(u32::MAX, None, NOW), MAX_ANSWER_MS);
         assert_eq!(clamp_duration(10, Some(Timestamp(NOW.0 + 5)), NOW), 0);
+    }
+
+    #[test]
+    fn preset_orders() {
+        let mk = |n: u128, state: CardState, due: i64, stability: f64, last: i64| {
+            let mut c = card(n, n, state, Some(due));
+            c.scheduling.stability = Some(stability);
+            c.scheduling.last_review = Some(Timestamp(last));
+            c
+        };
+        // R falls with elapsed / stability: card 2 (10 days over 1) < card 1 (20 over 100).
+        let cards = vec![
+            mk(1, CardState::Review, 10, 100.0, 0),
+            mk(2, CardState::Review, 20, 1.0, 90),
+            card(3, 3, CardState::New, None),
+            card(4, 4, CardState::New, None),
+        ];
+        let build = |order: Order| {
+            let mut rng = fc_core::rng::SplitMix64::new(7);
+            build_queue(
+                &cards,
+                |c| c.scheduling.clone(),
+                BuildOptions {
+                    now: Timestamp(100),
+                    day_end: Timestamp(1_000),
+                    due_only: true,
+                    new_limit: None,
+                    review_limit: None,
+                    order,
+                    bury_siblings: false,
+                    rng: &mut rng,
+                },
+            )
+            .into_iter()
+            .map(|e| e.card_id)
+            .collect::<Vec<_>>()
+        };
+        let ids = |ns: &[u128]| {
+            ns.iter()
+                .map(|n| CardId(Uuid::from_u128(*n)))
+                .collect::<Vec<_>>()
+        };
+        let due = build(Order::Preset {
+            new: NewCardOrder::Added,
+            review: ReviewOrder::Due,
+        });
+        assert_eq!(due, ids(&[1, 2, 3, 4]));
+        let weakest = build(Order::Preset {
+            new: NewCardOrder::Added,
+            review: ReviewOrder::Retrievability,
+        });
+        assert_eq!(weakest, ids(&[2, 1, 3, 4]));
     }
 }

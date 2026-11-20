@@ -35,4 +35,7 @@ modules! {
     card_notes,
     rich_content,
     io,
+    browse,
+    palette,
+    presets,
 }

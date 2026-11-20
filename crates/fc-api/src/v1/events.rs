@@ -139,6 +139,15 @@ pub enum DomainEvent {
     },
     /// The whole collection was replaced (backup restored): refetch everything.
     CollectionReplaced,
+    /// Scheduling/deck/flag/suspension columns of these cards changed (bulk operations).
+    CardsChanged {
+        /// Cards.
+        ids: Vec<CardId>,
+    },
+    /// Saved queries changed (refetch `saved_queries.list`).
+    SavedQueriesChanged,
+    /// Presets or deck preset assignments changed (refetch `presets.list`).
+    PresetsChanged,
     /// A batch was undone.
     Undone {
         /// Batch reverted.

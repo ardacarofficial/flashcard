@@ -10,7 +10,9 @@
 
 use super::cardtypes::RenderedSides;
 use fc_core::card::{CardState, Rating};
-use fc_core::{AttributeDefId, CardId, DeckId, NoteId, ReviewLogId, SessionId, Timestamp};
+use fc_core::{
+    AttributeDefId, CardId, DeckId, NoteId, ReviewLogId, SavedQueryId, SessionId, Timestamp,
+};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -53,7 +55,7 @@ pub enum StudyOrder {
 
 /// Classification condition: the card (or its note) has one of `values` for `attr_id`.
 /// Values are stored values: option ids for choice kinds, the number/text/`true`/`false`
-/// otherwise. (The query language of v0.4 will replace this structured form.)
+/// otherwise. (The query language — [`StudyFilter::query`] — covers this and more.)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct AttributeCondition {
@@ -80,6 +82,14 @@ pub struct StudyFilter {
     /// At most this many cards.
     #[serde(default)]
     pub limit: Option<u32>,
+    /// Query-language text (v0.4: `seviye:A2 is:due`, `deck:İngilizce tag:fiil`, …): only
+    /// matching cards. Positioned errors as in `search.cards` (`VALIDATION_QUERY`).
+    #[serde(default)]
+    pub query: Option<String>,
+    /// A saved query to study ("filtered deck"): resolved live from its canonical form, so
+    /// renamed classifications/options keep working. Not together with `query`.
+    #[serde(default)]
+    pub saved_query_id: Option<SavedQueryId>,
 }
 
 /// `study.start`.
@@ -107,7 +117,7 @@ pub struct StartSession {
     /// New cards at most (default: `study.new_per_session`).
     #[serde(default)]
     pub new_limit: Option<u32>,
-    /// Order (default: `study.order`).
+    /// Order (default: the deck preset's `new_order` / `review_order`).
     #[serde(default)]
     pub order: Option<StudyOrder>,
     /// Client UTC offset in minutes (Istanbul: 180), for the study-day boundary. Default 0.

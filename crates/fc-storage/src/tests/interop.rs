@@ -304,20 +304,28 @@ fn upgrade_dump_runs_later_data_migrations_on_restored_rows() {
     // Same schema: unchanged.
     assert_eq!(crate::upgrade_dump(old.clone()).unwrap(), old);
 
-    // A later build with a data migration (like v0.4's 0300 re-folding search text).
+    // A later build with a data migration (like v0.4's 0300 re-folding search text; the
+    // index is written folded since v0.4, so this one just marks the restored rows).
+    let fts_col = |d: &crate::repo::CollectionDump| {
+        let fts = d.tables.iter().find(|t| t.name == "notes_fts").unwrap();
+        let col = fts.columns.iter().position(|c| c == "sort_field").unwrap();
+        fts.rows[0][col].clone()
+    };
+    let SqlValue::Text(folded) = fts_col(&old) else {
+        panic!("sort_field is text")
+    };
+    assert_eq!(folded, "isik", "the search index is written folded");
     let mut newer: Vec<migrate::Migration> = migrate::MIGRATIONS.to_vec();
     newer.push(migrate::Migration {
         version: 499,
         name: "0499_test_fold",
-        sql: "UPDATE notes_fts SET sort_field = replace(sort_field, 'I', 'i');
+        sql: "UPDATE notes_fts SET sort_field = sort_field || '!';
               CREATE TABLE fold_marker (n INTEGER NOT NULL);
               INSERT INTO fold_marker SELECT count(*) FROM notes;",
     });
     let up = crate::upgrade_dump_with(old.clone(), &newer).unwrap();
     assert_eq!(*up.schema_versions.last().unwrap(), 499);
-    let fts = up.tables.iter().find(|t| t.name == "notes_fts").unwrap();
-    let col = fts.columns.iter().position(|c| c == "sort_field").unwrap();
-    assert_eq!(fts.rows[0][col], SqlValue::Text("işık".into()));
+    assert_eq!(fts_col(&up), SqlValue::Text("isik!".into()));
     let marker = up.tables.iter().find(|t| t.name == "fold_marker").unwrap();
     assert_eq!(marker.rows[0].last(), Some(&SqlValue::Integer(1)));
     // Unknown versions are refused.

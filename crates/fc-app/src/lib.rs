@@ -43,6 +43,8 @@ mod cards_tests;
 #[cfg(test)]
 mod phase2_io_tests;
 #[cfg(test)]
+mod phase2_manage_tests;
+#[cfg(test)]
 mod phase2_tests;
 #[cfg(test)]
 mod tests;

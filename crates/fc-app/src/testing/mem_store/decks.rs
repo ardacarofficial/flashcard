@@ -243,4 +243,8 @@ impl PresetWrite for MemTx<'_> {
         self.m().presets.insert(preset.id, preset.clone());
         Ok(())
     }
+
+    fn delete_preset(&mut self, id: PresetId) -> StorageResult<bool> {
+        Ok(self.m().presets.remove(&id).is_some())
+    }
 }

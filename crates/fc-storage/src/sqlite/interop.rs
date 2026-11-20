@@ -273,6 +273,9 @@ impl InteropWrite for SqliteTx<'_, WriteMode> {
                 st.execute(params_from_iter(values))?;
             }
         }
+        // The search index is derived: rebuild it from the loaded notes instead of trusting
+        // the backup's copy (older builds indexed differently).
+        conn.execute_batch(super::search::REBUILD_SEARCH_INDEX)?;
         Ok(())
     }
 

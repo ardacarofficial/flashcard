@@ -1,0 +1,84 @@
+{
+  "commands": {
+    "study": {
+      "start": "Çalışmaya başla",
+      "session": "Çalışma oturumu",
+      "active": "Açık çalışma oturumu",
+      "answer": "Kartı puanla",
+      "hint": "İpucu göster",
+      "check_answer": "Cevabı kontrol et",
+      "end": "Oturumu bitir",
+      "summary": "Oturum özeti",
+      "suspend": "Kartları askıya al (çalışma)",
+      "bury": "Kartları göm (çalışma)",
+      "postpone": "Bugünün kartlarını ertele",
+      "card_history": "Kartın tekrar geçmişi"
+    },
+    "notetypes": {
+      "create": "Yeni not türü",
+      "update": "Not türünü düzenle",
+      "delete": "Not türünü sil",
+      "restore": "Not türünü geri getir",
+      "usage": "Not türü kullanımı"
+    },
+    "cardtypes": {
+      "list": "Kart türleri"
+    },
+    "cards": {
+      "render": "Kartı göster",
+      "preview": "Kart önizleme",
+      "set_flag": "Kartları bayrakla",
+      "set_flags": "Kart bayraklarını ayarla",
+      "set_user_note": "Kart notu",
+      "meta": "Kart ayrıntıları"
+    },
+    "media": {
+      "add": "Medya ekle",
+      "get": "Medya ayrıntıları",
+      "list": "Medyaları listele",
+      "read": "Medyayı oku"
+    },
+    "links": {
+      "backlinks": "Geri bağlantılar",
+      "suggest": "Bağlantı öner"
+    },
+    "flags": {
+      "list": "Bayrakları listele",
+      "update": "Bayrağı adlandır / renklendir"
+    },
+    "io": {
+      "import": {
+        "preview": "İçe aktarma önizlemesi",
+        "start": "İçe aktar"
+      },
+      "export": {
+        "start": "Dışa aktar"
+      },
+      "backup": {
+        "create": "Yedek al",
+        "inspect": "Yedeği incele",
+        "restore": "Yedekten geri yükle"
+      },
+      "print": {
+        "render": "Kartları yazdır"
+      }
+    },
+    "bulk": {
+      "change_notetype": "Not türünü değiştir"
+    }
+  },
+  "shortcuts": {
+    "study": {
+      "reveal": "Cevabı göster",
+      "again": "Puan: tekrar",
+      "hard": "Puan: zor",
+      "good": "Puan: iyi",
+      "easy": "Puan: kolay",
+      "hint": "İpucu",
+      "suspend": "Kartı askıya al",
+      "bury": "Kartı göm",
+      "undo": "Son cevabı geri al",
+      "end": "Oturumu bitir"
+    }
+  }
+}

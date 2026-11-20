@@ -44,15 +44,6 @@ fn order_of(o: StudyOrder) -> Order {
     }
 }
 
-fn parse_order(s: &str) -> StudyOrder {
-    match s {
-        "random" => StudyOrder::Random,
-        "hardest_first" => StudyOrder::HardestFirst,
-        "newest_first" => StudyOrder::NewestFirst,
-        _ => StudyOrder::Due,
-    }
-}
-
 pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<SessionDto>> {
     let tz = req.tz_offset_mins.unwrap_or(0);
     if tz.abs() > MAX_TZ_OFFSET_MINS {
@@ -74,6 +65,25 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         }
         None => None,
     };
+    // Query-language filter (v0.4): text, or a saved query ("filtered deck").
+    let query = match (filter.query.as_deref().map(str::trim), filter.saved_query_id) {
+        (Some(q), Some(_)) if !q.is_empty() => {
+            return Err(invalid("give either filter.query or filter.saved_query_id"))
+        }
+        (_, Some(id)) => Some(crate::modules::browse::require_saved_query(ctx.reads(), id)?.query),
+        (Some(q), None) if !q.is_empty() => Some(q.to_owned()),
+        _ => None,
+    };
+    if query.is_some() && req.kind == StudyKind::Mistakes {
+        return Err(invalid("a mistakes session takes no query"));
+    }
+    let matching = match &query {
+        Some(q) => {
+            let compiled = crate::modules::browse::compile(ctx.reads(), q, ctx.now)?;
+            Some(ctx.reads().search_card_ids(&compiled, ctx.now)?)
+        }
+        None => None,
+    };
     let card_ids = match req.kind {
         StudyKind::Mistakes => {
             let from = req
@@ -81,7 +91,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
                 .ok_or_else(|| invalid("a mistakes session needs from_session"))?;
             Some(Session::load(ctx.reads(), from)?.state.again)
         }
-        StudyKind::Normal | StudyKind::Custom => None,
+        StudyKind::Normal | StudyKind::Custom => matching,
     };
     let scope_decks = deck_ids.clone();
     let mut candidates = ctx.reads().study_cards(&StudyCardFilter {
@@ -113,9 +123,14 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         day_start_hour: u8::try_from(setting_u32(ctx.reads(), &SettingScope::App, DAY_START_HOUR)?)
             .unwrap_or(fc_study::day::DEFAULT_ROLLOVER_HOUR),
     };
+    // Deck options (v0.4 presets, inherited from parent decks): order, sibling burying.
+    let preset = effective_options(ctx.reads(), req.deck_id)?;
     let order = match req.order {
-        Some(o) => o,
-        None => parse_order(&setting_str(ctx.reads(), &SettingScope::App, ORDER)?),
+        Some(o) => order_of(o),
+        None => Order::Preset {
+            new: preset.new_order,
+            review: preset.review_order,
+        },
     };
     // Normal sessions respect the deck preset's daily limits (minus what was studied today).
     let daily = match req.kind {
@@ -130,7 +145,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         (None, None) => None,
     };
     let review_limit = daily.map(|(_, reviews_left)| reviews_left);
-    let bury_siblings = req.kind != StudyKind::Mistakes && setting_bool(ctx.reads(), &scope, BURY_SIBLINGS)?;
+    let bury_siblings = req.kind != StudyKind::Mistakes && preset.bury_siblings;
     let due_only = match req.kind {
         StudyKind::Normal => filter.due_only.unwrap_or(true),
         StudyKind::Custom => filter.due_only.unwrap_or(false),
@@ -147,7 +162,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
             due_only,
             new_limit,
             review_limit,
-            order: order_of(order),
+            order,
             bury_siblings,
             rng: &mut rng,
         },
@@ -160,7 +175,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         record: SessionRecord {
             id,
             kind: kind_str(req.kind).to_owned(),
-            query: None,
+            query,
             config: serde_json::to_value(&config)
                 .map_err(|e| crate::AppError::api(fc_api::ErrorCode::Internal, e.to_string()))?,
             state: serde_json::Value::Null,
@@ -192,7 +207,7 @@ fn daily_left(
     decks: Option<&[fc_core::DeckId]>,
     config: &SessionConfig,
 ) -> AppResult<(u32, u32)> {
-    let preset = preset_of(ctx.reads(), deck)?;
+    let preset = effective_options(ctx.reads(), deck)?;
     let day = config.study_day();
     let since = day.start(day.index(ctx.now));
     let mut new = std::collections::HashSet::new();
@@ -309,7 +324,7 @@ pub(super) fn answer(req: AnswerCard, ctx: &mut CommandCtx<'_>) -> AppResult<Com
             ctx.tx.update_card(&card)?;
             changed.push(card.id);
             let bury = session.config.kind != StudyKind::Mistakes
-                && setting_bool(ctx.reads(), &SettingScope::Deck(card.deck_id), BURY_SIBLINGS)?;
+                && effective_options(ctx.reads(), Some(card.deck_id))?.bury_siblings;
             if bury {
                 for mut sib in siblings_to_bury(ctx, &card, day_end)? {
                     restore_cards.push(snapshot(&sib));

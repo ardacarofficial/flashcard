@@ -25,7 +25,7 @@ use fc_providers::strategy::{
 use fc_storage::repo::SessionRecord;
 use fc_storage::Reads;
 use fc_study::text::html_to_text;
-use fc_study::scheduler::{self, DEFAULT_MAXIMUM_INTERVAL_DAYS, RATINGS};
+use fc_study::scheduler::{self, RATINGS};
 use fc_study::session::{self as queue, SessionState, LEARN_AHEAD_MS};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -84,8 +84,8 @@ pub(super) fn scheduler_error(e: StrategyError) -> AppError {
     )
 }
 
-/// Scheduler parameters of `deck`: its preset's options (default preset when none).
-/// `maximum_interval_days` and `fsrs_weights` come from the preset's extra options.
+/// Scheduler parameters of `deck`: its effective preset (own, else the nearest ancestor's,
+/// else the defaults — v0.4 `presets::effective`, the one read path for deck options).
 pub(super) fn params_for_deck(
     reads: &dyn Reads,
     deck: DeckId,
@@ -94,40 +94,31 @@ pub(super) fn params_for_deck(
     if let Some(p) = cache.get(&deck) {
         return Ok(p.clone());
     }
-    let p = params_from_preset(&preset_of(reads, Some(deck))?);
+    let p = params_from_preset(&effective_options(reads, Some(deck))?);
     cache.insert(deck, p.clone());
     Ok(p)
 }
 
-/// Preset options of `deck` (its own preset; the defaults when it has none or for the whole
-/// collection). v0.4 owns the `presets.*` commands; study only reads.
-pub(super) fn preset_of(reads: &dyn Reads, deck: Option<DeckId>) -> AppResult<PresetConfig> {
-    let id = match deck {
-        Some(d) => reads.get_deck(d)?.and_then(|d| d.preset_id),
-        None => None,
-    };
-    Ok(match id {
-        Some(id) => reads.get_preset(id)?.map(|p| p.config),
-        None => None,
+/// Study options of `deck` through [`crate::modules::presets::effective`]; the defaults for
+/// whole-collection sessions (`None`) and decks that no longer exist.
+pub(super) fn effective_options(reads: &dyn Reads, deck: Option<DeckId>) -> AppResult<PresetConfig> {
+    match deck {
+        Some(d) if reads.get_deck(d)?.is_some() => {
+            Ok(crate::modules::presets::effective(reads, d)?.config)
+        }
+        _ => Ok(PresetConfig::default()),
     }
-    .unwrap_or_default())
 }
 
 fn params_from_preset(preset: &PresetConfig) -> SchedulerParams {
-    let max = preset
-        .extra
-        .get("maximum_interval_days")
-        .and_then(Value::as_u64)
-        .and_then(|n| u32::try_from(n).ok())
-        .filter(|n| *n > 0)
-        .unwrap_or(DEFAULT_MAXIMUM_INTERVAL_DAYS);
-    let extra = match preset.extra.get("fsrs_weights") {
-        Some(w) => serde_json::json!({ "weights": w }),
-        None => Value::Null,
+    let extra = if preset.fsrs_weights.is_empty() {
+        Value::Null
+    } else {
+        serde_json::json!({ "weights": preset.fsrs_weights })
     };
     SchedulerParams {
         desired_retention: preset.desired_retention,
-        maximum_interval_days: max,
+        maximum_interval_days: preset.maximum_interval_days,
         learning_steps_mins: preset.learning_steps_mins.clone(),
         relearning_steps_mins: preset.relearning_steps_mins.clone(),
         extra,

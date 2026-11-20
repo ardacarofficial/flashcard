@@ -210,7 +210,8 @@ impl App {
     /// seeds built-ins (the Classic note type, localized by `app.locale`), marks jobs left
     /// running/queued as interrupted, removes media files without a media entry (left by an
     /// undone `media.add`; redo works until the next start), then loads module switches and
-    /// the locale into memory. Idempotent. Seeding is not an undoable command, so it writes no oplog entry.
+    /// the locale into memory, rolls back crash-interrupted undo groups and purges the expired
+    /// trash (`browse.purge_trash`, v0.4). Idempotent. Seeding is not an undoable command, so it writes no oplog entry.
     pub fn load_state(&self) -> AppResult<()> {
         let now = self.clock.now();
         let mut tx = self.store.write()?;
@@ -227,7 +228,11 @@ impl App {
         tx.delete_orphan_media_files()?;
         tx.commit()?;
         self.reload_cached_state()?;
-        self.roll_back_unfinished_groups()
+        self.roll_back_unfinished_groups()?;
+        // Best effort: an expired-trash purge that fails must not keep the collection closed
+        // (it runs again next start, and the user can run `browse.purge_trash`).
+        let _ = crate::modules::browse::purge_on_startup(self);
+        Ok(())
     }
 
     /// Startup: undoes what undo groups left unfinished by a crash wrote (see [`UndoGroup`]).

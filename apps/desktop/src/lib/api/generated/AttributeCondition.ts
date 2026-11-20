@@ -4,7 +4,7 @@ import type { AttributeDefId } from "./AttributeDefId";
 /**
  * Classification condition: the card (or its note) has one of `values` for `attr_id`.
  * Values are stored values: option ids for choice kinds, the number/text/`true`/`false`
- * otherwise. (The query language of v0.4 will replace this structured form.)
+ * otherwise. (The query language — [`StudyFilter::query`] — covers this and more.)
  */
 export type AttributeCondition = { 
 /**

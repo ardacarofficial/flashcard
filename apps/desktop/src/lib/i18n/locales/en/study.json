@@ -18,6 +18,9 @@
     "filter_label": "Only cards with",
     "filter_any": "Any",
     "custom_start": "Custom session",
+    "query_label": "Query",
+    "query_placeholder": "e.g. level:A2 is:due",
+    "saved_label": "Saved query",
     "postpone_label": "Postpone today's cards",
     "postpone_days": "Days",
     "postpone": "Postpone",
@@ -68,15 +71,6 @@
   "settings": {
     "study": {
       "new_per_session": { "label": "New cards per session", "description": "How many new cards a normal session introduces (0 = none)." },
-      "order": {
-        "label": "Card order",
-        "description": "Order of reviews and new cards.",
-        "due": "By due date",
-        "random": "Random",
-        "hardest_first": "Hardest first",
-        "newest_first": "Newest first"
-      },
-      "bury_siblings": { "label": "Bury siblings", "description": "Other cards of the same note wait until tomorrow." },
       "type_answer": { "label": "Type the answer", "description": "Show an input and check what you type." },
       "hint_strategy": {
         "label": "Hint style",

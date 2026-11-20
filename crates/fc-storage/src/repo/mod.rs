@@ -72,4 +72,5 @@ domains! {
     study: StudyRead, StudyWrite;
     content: ContentRead, ContentWrite;
     interop: InteropRead, InteropWrite;
+    search: SearchRead, SearchWrite;
 }

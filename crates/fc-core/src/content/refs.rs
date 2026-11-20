@@ -63,6 +63,19 @@ pub fn extract_links(text: &str) -> Vec<LinkRef> {
     out
 }
 
+/// Replaces `[[links]]` with their label (or target) as plain text (search index).
+pub fn links_to_labels(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut pos = 0;
+    scan_links(text, |start, end, target, label| {
+        out.push_str(&text[pos..start]);
+        out.push_str(label.unwrap_or(target));
+        pos = end;
+    });
+    out.push_str(&text[pos..]);
+    out
+}
+
 /// Replaces `[[links]]` with HTML: `<a class="fc-link" href="note:<id>">label</a>` when
 /// `resolve(key)` finds the note, else `<span class="fc-link fc-link-missing">label</span>`.
 pub fn render_links(text: &str, resolve: &dyn Fn(&str) -> Option<String>) -> String {

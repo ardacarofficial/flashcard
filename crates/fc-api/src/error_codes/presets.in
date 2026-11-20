@@ -1,0 +1,10 @@
+// Deck option presets (v0.4).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// Preset name empty or too long.
+ValidationPresetName => Validation, "errors.validation.preset_name";
+/// A preset option is out of range (`details`: `field`, `reason`).
+ValidationPresetConfig => Validation, "errors.validation.preset_config";
+/// Preset not found (`details.id`).
+NotFoundPreset => NotFound, "errors.not_found.preset";
+/// Another preset already has this name (`details.name`).
+ConflictPresetName => Conflict, "errors.conflict.preset_name";

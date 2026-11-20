@@ -1,0 +1,215 @@
+{
+  "nav": {
+    "browse": "Browse",
+    "maintenance": "Maintenance",
+    "shortcuts": "Shortcuts"
+  },
+  "modules": {
+    "browse": {
+      "name": "Card browser",
+      "description": "Search with the query language, saved queries, bulk changes, trash and database check."
+    },
+    "palette": {
+      "name": "Command palette",
+      "description": "Run any command from the keyboard (Ctrl+K) and edit shortcuts."
+    }
+  },
+  "browse": {
+    "query_label": "Search",
+    "query_placeholder": "e.g. deck:English tag:verb level>=B1",
+    "help": "Words search the text; key:value filters. -x negates, OR combines, quotes group.",
+    "results": "{count} card(s)",
+    "results_notes": "{count} note(s)",
+    "notes_only": "One row per note",
+    "load_more": "Load more",
+    "empty": "No cards match.",
+    "selected": "{count} selected",
+    "select_all": "Select all {count}",
+    "select_row": "Select “{name}”",
+    "clear_selection": "Clear selection",
+    "saved": "Saved queries",
+    "save": "Save query",
+    "save_name": "Name",
+    "no_saved": "No saved queries yet.",
+    "delete_saved": "Delete saved query “{name}”",
+    "col": {
+      "sort_field": "Sort field",
+      "deck": "Deck",
+      "state": "State",
+      "due": "Due",
+      "lapses": "Lapses",
+      "reps": "Reps",
+      "tags": "Tags",
+      "created": "Added"
+    },
+    "state": {
+      "new": "New",
+      "learning": "Learning",
+      "review": "Review",
+      "relearning": "Relearning",
+      "suspended": "Suspended",
+      "buried": "Buried"
+    },
+    "bulk": {
+      "heading": "Change selection",
+      "move": "Move to deck",
+      "suspend": "Suspend",
+      "unsuspend": "Unsuspend",
+      "bury": "Bury",
+      "unbury": "Unbury",
+      "flag": "Flag",
+      "flag_clear": "Clear flags",
+      "reset": "Forget",
+      "add_tag": "Add tag",
+      "remove_tag": "Remove tag",
+      "tag": "Tag",
+      "find": "Find",
+      "replace": "Replace with",
+      "field": "Field",
+      "all_fields": "All fields",
+      "regex": "Regular expression",
+      "match_case": "Match case",
+      "find_replace": "Find and replace",
+      "classification": "Classification",
+      "value": "Value",
+      "clear_value": "Clear",
+      "apply": "Apply",
+      "delete": "Delete notes",
+      "change_notetype": "Change note type",
+      "notetype": "Note type",
+      "notetype_help": "Fields and cards are matched by key, then by position; cards of unmatched templates go to the trash. One undo step.",
+      "notetype_done": "{notes} note(s) moved: {kept} card(s) kept, {trashed} trashed, {created} new.",
+      "done": "{changed} changed, {skipped} unchanged."
+    },
+    "flags": {
+      "1": "Red",
+      "2": "Orange",
+      "3": "Green",
+      "4": "Blue",
+      "5": "Pink",
+      "6": "Turquoise",
+      "7": "Purple"
+    },
+    "info": {
+      "heading": "Card info",
+      "added": "Added",
+      "due": "Due",
+      "stability": "Stability",
+      "difficulty": "Difficulty",
+      "retrievability": "Recall now",
+      "reviews": "Reviews",
+      "no_reviews": "Not reviewed yet.",
+      "close": "Close"
+    },
+    "error_at": "at {start}–{end}"
+  },
+  "maintenance": {
+    "heading": "Maintenance",
+    "duplicates": "Duplicates",
+    "find_duplicates": "Find duplicates",
+    "no_duplicates": "No duplicates.",
+    "trash": "Trash",
+    "trash_empty": "The trash is empty.",
+    "restore": "Restore",
+    "trashed_decks": "Decks",
+    "trashed_notes": "Notes",
+    "check": "Database check",
+    "run_check": "Check",
+    "healthy": "No problems found.",
+    "repair": "Repair",
+    "repaired": "Repaired: {trashed} card(s) to trash, {rescheduled} rescheduled, {reindexed} note(s) re-indexed, {fixed} note(s) given missing fields, {removed} stray value(s) removed.",
+    "problem": {
+      "orphan_cards": "Cards of deleted notes: {count}",
+      "cards_in_trashed_decks": "Cards in deleted decks: {count}",
+      "unscheduled_cards": "Scheduled cards without a due date: {count}",
+      "missing_search_index": "Notes missing from search: {count}",
+      "cardless_notes": "Notes without cards: {count}",
+      "dangling_values": "Classification values of deleted items: {count}",
+      "broken_fields": "Notes missing fields: {count}"
+    },
+    "purge": "Empty trash",
+    "purge_hint": "Items are deleted for good after {days} days in the trash (Settings).",
+    "purged": "{count} item(s) deleted for good."
+  },
+  "palette": {
+    "title": "Command palette",
+    "placeholder": "Type a command or screen…",
+    "no_match": "No matching command.",
+    "params": "Parameters (JSON)",
+    "run": "Run",
+    "invalid_json": "Parameters must be a JSON object.",
+    "screen": "Screen",
+    "done": "Done."
+  },
+  "shortcuts": {
+    "heading": "Keyboard shortcuts",
+    "filter": "Filter",
+    "action": "Action",
+    "combo": "Shortcut",
+    "record": "Press keys…",
+    "change": "Change",
+    "unbind": "Remove",
+    "reset": "Default",
+    "reset_all": "Reset all",
+    "unbound": "—",
+    "conflicts": "Conflicts",
+    "context": {
+      "global": "Everywhere",
+      "browse": "Card browser",
+      "study": "Study"
+    },
+    "ui": {
+      "palette": "Open command palette",
+      "search": "Search cards",
+      "new_note": "New note",
+      "undo": "Undo",
+      "redo": "Redo"
+    },
+    "browse": {
+      "select_all": "Select all",
+      "suspend": "Suspend selection",
+      "info": "Card info",
+      "delete": "Delete selection"
+    }
+  },
+  "errors": {
+    "validation": {
+      "query": "The query is not valid.",
+      "saved_query_name": "Give the query a name (up to 100 characters).",
+      "shortcut": "Not a valid key combination.",
+      "find_replace": "The search pattern is not valid."
+    },
+    "not_found": {
+      "saved_query": "Saved query not found.",
+      "shortcut_action": "Unknown action."
+    },
+    "conflict": {
+      "shortcut": "That shortcut is already in use."
+    },
+    "query": {
+      "unclosed_quote": "A quote is not closed.",
+      "unclosed_paren": "A parenthesis is not closed.",
+      "unmatched_paren": "Closing parenthesis without an opening one.",
+      "expected_term": "A search term is missing here.",
+      "empty_value": "“{key}:” needs a value.",
+      "unknown_key": "Unknown filter “{key}”.",
+      "unsupported_operator": "“{key}” can't be compared with {op}.",
+      "invalid_number": "“{value}” is not a number.",
+      "invalid_date": "“{value}” is not a date (YYYY-MM-DD).",
+      "invalid_bool": "“{value}” is not yes/no.",
+      "unknown_option": "“{key}” has no option “{value}”.",
+      "unknown_state": "Unknown state “{value}”.",
+      "invalid_flag": "Unknown flag “{value}”.",
+      "invalid_id": "“{value}” is not an id.",
+      "invalid_regex": "Invalid regular expression: {message}"
+    }
+  },
+  "settings": {
+    "browse": {
+      "trash_retention_days": {
+        "label": "Keep trash for (days)",
+        "description": "Deleted decks and notes can be restored for this many days, then they are deleted for good."
+      }
+    }
+  }
+}

@@ -14,4 +14,6 @@ pub trait PresetRead {
 pub trait PresetWrite: PresetRead {
     /// Inserts or replaces.
     fn upsert_preset(&mut self, preset: &Preset) -> StorageResult<()>;
+    /// Deletes a preset row (decks must not refer to it any more). Returns whether it existed.
+    fn delete_preset(&mut self, id: PresetId) -> StorageResult<bool>;
 }
