@@ -1,0 +1,12 @@
+id = "com.example.misbehave"
+name = "Misbehave"
+version = "1.0.0"
+api_version = "1"
+authors = ["Flashcard"]
+description = "Test plugin: loops forever, panics, eats memory, calls what it may not. The app must survive all of it."
+min_app_version = "0.7.0"
+permissions = ["ui:command", "hooks:before:decks.create", "hooks:event:note_created", "decks:read", "decks:write"]
+
+[contributes]
+commands = ["ok", "loop", "panic", "alloc", "forbidden", "allowed", "kv", "write-panic"]
+locales = "locales"
