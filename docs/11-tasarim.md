@@ -74,6 +74,25 @@ Okuma modu ve İçe aktarma ayrıca deste sayfasından ve Oluştur'dan erişilir
 
 `apps/desktop/scripts/screens.mjs`: mock modunda uygulamayı açıp her ekranın **açık/koyu × TR/EN × 1280 ve 900 genişlik** ekran görüntüsünü `apps/desktop/screens/` (git'e girmez) altına alır; CI'da artefakt olarak yüklenir. Görsel denetçiler kodu değil bu görüntüleri değerlendirir: hiyerarşi, hizalama, boşluk tutarlılığı, taşma, kontrast, boş durumlar, ham kontrol kalmış mı.
 
+### Nasıl çalıştırılır
+
+```bash
+pnpm -C apps/desktop screens            # tüm TR/EN x açık/koyu x 1280/900 (yaklaşık 200+ PNG)
+pnpm -C apps/desktop screens --quick    # yalnız EN, açık, 1280
+pnpm -C apps/desktop screens --strict   # bulgu varsa çıkış kodu 1 (varsayılan: yalnız raporla)
+# diğer bayraklar: --langs tr --themes dark --widths 900 --url <çalışan dev:mock adresi> --out <klasör>
+```
+
+Çıktı `apps/desktop/screens/<dil>-<tema>-<genişlik>/<ekran>.png`, `index.html` (küçük resim ızgarası) ve `report.json`. Mock modunda vite başlatılır; Chromium `playwright-core` ile sürülür (yerelde `~/.cache/ms-playwright` önbelleği, yoksa `npx playwright install chromium`; `PLAYWRIGHT_CHROMIUM_EXECUTABLE` ile yol verilebilir). CI'da `screens` işi klasörü artefakt yükler.
+
+**Keşif:** ekranlar sabit listelenmez. Kenar çubuğundaki her düğme (`[data-testid="nav-item"]`, yoksa `nav ul button`) açılır; ekran içindeki alt gezinme öğeleri (`[data-testid="subnav-item"]`, `[data-testid^="settings-group"]`, `[role=tab]`) tek tek tıklanır. Dosya adları sıra numarası + EN etikettir (dil değişse de aynı kalır).
+
+**Durum kancaları (isteğe bağlı `data-testid`):** `deck-row` (deste sayfasını açan satır), `study-start` ve `flip` (çalışma başlat / kartı çevir), `open-dialog-*` (tıklanınca iletişim kutusu açan düğme; Esc ile kapatılır). Kanca yoksa v1.0 işaretlemesine düşülür.
+
+**Otomatik kontroller (report.json):** `overflow-x` (sayfa yatay taşması), `outside-viewport`, `text-clipped` (scrollWidth > clientWidth), `raw-control` (DOM'da `[data-fc-ui]` içinde olmayan `<select>`/checkbox/radio; `lib/ui` bileşenleri kendilerini `data-fc-ui` ile işaretler; ayrıca `raw-control-static`: `src/lib/ui` dışındaki `.svelte` kaynak taraması), `contrast` (WCAG AA, hesaplanmış renk ve birleşik arka plan), `i18n-raw-key` (ekranda ham `a.b.c` anahtarı). Ayrıca sayfa hataları `configs[].pageErrors` altında.
+
+Mock verisi (`src/lib/api/mock/seed.ts` ve `features/*/mock.ts`) gerçekçi görünmesi için çok desteli, Seviye/Sınav sınıflandırmalı, vadeli kartlı, istatistik geçmişli ve gelen kutusu dolu tutulur.
+
 ## 6. Kabul kriterleri (v1.1)
 
 - [ ] Kenar çubuğunda en çok 5 ana bölüm + Gelen kutusu + Ayarlar + profil; tüm eski ekranlara Ayarlar ya da ilgili bölümden ulaşılır.

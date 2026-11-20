@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "check": "node scripts/merge-locales.mjs && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tsconfig.node.json --noEmit",
     "test": "node scripts/merge-locales.mjs && vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "screens": "node scripts/screens.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.5",
@@ -29,6 +30,7 @@
     "@types/katex": "^0.16.8",
     "@types/node": "^22.20.5",
     "jsdom": "^31.0.1",
+    "playwright-core": "1.56.1",
     "svelte": "^5.58.0",
     "svelte-check": "^4.7.8",
     "typescript": "~5.8.3",

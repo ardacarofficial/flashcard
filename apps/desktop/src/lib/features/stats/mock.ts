@@ -14,7 +14,11 @@ function reviews(): ReviewStats {
     totals: { reviews: 120, time_ms: 1_800_000, days_studied: 9, days_in_range: 30, new_cards: 40, imported: 0 },
     success: { learn: rate(50, 45), young: rate(40, 34), mature: rate(30, 28), relearn: rate(0, 0), all: rate(120, 107) },
     true_retention: 62 / 70,
-    heatmap: [1, 2, 3].map((d) => ({ day: 20400 + d, date: `2025-11-0${d}`, reviews: 10 * d, time_ms: 60_000 * d })),
+    heatmap: Array.from({ length: 90 }, (_, d) => {
+      const n = (d * 37) % 11 === 0 ? 0 : 8 + ((d * 53) % 60);
+      const date = new Date(Date.UTC(2025, 7, 7 + d)).toISOString().slice(0, 10);
+      return { day: 20311 + d, date, reviews: n, time_ms: n * 15_000 };
+    }),
     weekly: [{ start_day: 20398, start_date: '2025-10-27', reviews: 120, pass: 107, rate: 107 / 120, new_cards: 40, time_ms: 1_800_000 }],
     monthly: [{ start_day: 20392, start_date: '2025-11-01', reviews: 120, pass: 107, rate: 107 / 120, new_cards: 40, time_ms: 1_800_000 }],
     hours: Array.from({ length: 24 }, (_, hour) => ({ hour, stat: hour === 9 ? rate(120, 107) : rate(0, 0) })),
@@ -28,12 +32,16 @@ function reviews(): ReviewStats {
 
 function cards(): CardStats {
   return {
-    states: { new: 10, learning: 2, relearning: 1, young: 20, mature: 7, suspended: 0, buried: 0, total: 40 },
-    forecast: [0, 1, 2].map((i) => ({ day: 20404 + i, date: `2025-11-0${4 + i}`, due: 5 + i })),
+    states: { new: 140, learning: 18, relearning: 6, young: 210, mature: 310, suspended: 9, buried: 2, total: 695 },
+    forecast: Array.from({ length: 30 }, (_, i) => ({
+      day: 20404 + i,
+      date: new Date(Date.UTC(2025, 10, 4 + i)).toISOString().slice(0, 10),
+      due: 12 + ((i * 7) % 29),
+    })),
     overdue: 0,
-    stability: [{ from: null, to: 1, count: 3 }],
-    difficulty: [{ from: null, to: 2, count: 3 }],
-    report: { cards: 40, studied: 30, mature: 7, settled_pct: 17.5, studied_pct: 75, mean_recall: 0.91 },
+    stability: [{ from: null, to: 1, count: 30 }, { from: 1, to: 7, count: 120 }, { from: 7, to: 30, count: 210 }, { from: 30, to: null, count: 180 }],
+    difficulty: [{ from: null, to: 3, count: 90 }, { from: 3, to: 6, count: 260 }, { from: 6, to: null, count: 120 }],
+    report: { cards: 695, studied: 545, mature: 310, settled_pct: 44.6, studied_pct: 78.4, mean_recall: 0.91 },
   };
 }
 
