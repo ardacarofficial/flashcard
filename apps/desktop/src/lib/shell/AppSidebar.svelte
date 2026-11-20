@@ -30,7 +30,7 @@
 <Sidebar label={t('shell.nav_label')}>
   {#snippet header()}
     <div class="brand">
-      <span class="mark" aria-hidden="true"></span>
+      <img class="mark" src="/favicon.svg" alt="" aria-hidden="true" />
       <span class="name">{t('app.title')}</span>
     </div>
   {/snippet}
@@ -75,9 +75,6 @@
     width: 24px;
     height: 24px;
     flex: none;
-    border-radius: 7px;
-    background: var(--accent);
-    box-shadow: inset -6px -6px 0 color-mix(in srgb, var(--accent-fg) 22%, transparent);
   }
   .panels {
     margin-top: var(--space-4);
