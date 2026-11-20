@@ -95,14 +95,16 @@
       "files": "{count} file(s), {size}",
       "export": "Export logs…",
       "exported": "Saved {files} file(s) to {path}. {redactions} secret(s) removed.",
-      "save_prompt": "Where should the log bundle be saved?"
+      "save_prompt": "Where should the log bundle be saved?",
+      "bundle": "Log bundle for a bug report"
     },
     "integrity": {
       "heading": "Database",
       "check": "Check the database",
       "ok": "No problems found ({ms} ms).",
       "problems": "Problems found: {count}. Restore a backup from Import & export.",
-      "never": "Not checked during this run."
+      "never": "Not checked during this run.",
+      "status": "Integrity check"
     },
     "crashes": {
       "heading": "Crash reports",
@@ -139,11 +141,22 @@
       "ready": "Downloaded and verified. The app will close, install and start again.",
       "apply": "Install and restart",
       "banner": "Version {version} is available.",
-      "open": "See update"
+      "open": "See update",
+      "notes": "What’s new",
+      "later": "Later"
     },
     "size": {
       "kb": "{n} KB",
       "mb": "{n} MB"
     }
+  },
+  "maintenance": {
+    "subtitle": "Trash, duplicates and a health check of your collection.",
+    "trash_desc": "Deleted decks and notes wait here until you restore them or empty the trash.",
+    "duplicates_desc": "Notes whose first field is the same",
+    "check_desc": "Looks for broken links between cards, notes and decks, and repairs them on request.",
+    "results": "Results",
+    "duplicates_intro": "Find notes you added twice and tidy them up in Search.",
+    "check_row": "Check cards, notes and decks"
   }
 }

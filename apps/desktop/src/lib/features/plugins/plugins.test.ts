@@ -64,7 +64,7 @@ describe('plugins (declarative UI on the dev mock)', () => {
     await fireEvent.click(name);
     expect(await screen.findByText('network:example.com')).toBeTruthy();
     expect(screen.getByText('asks separately')).toBeTruthy();
-    await fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
+    await fireEvent.click(screen.getByRole('switch', { name: 'Turn off' }));
     expect(await screen.findByText('Off')).toBeTruthy();
   });
 });
