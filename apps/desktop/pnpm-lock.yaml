@@ -187,6 +187,9 @@ importers:
       katex:
         specifier: ~0.16.47
         version: 0.16.47
+      lucide:
+        specifier: 0.460.0
+        version: 0.460.0
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^5.1.1
@@ -933,6 +936,9 @@ packages:
   lru-cache@11.5.3:
     resolution: {integrity: sha512-U4N8FgzmWxc8k1VH8Kr6lQg18U7Fjvby6wXHVRX/ZZ7IwWbRMgrRbP0Wrb5q5NVinryp4SQampHKdvtecItxUg==}
     engines: {node: 20 || >=22}
+
+  lucide@0.460.0:
+    resolution: {integrity: sha512-kEqx3yHU+q4S0k7RH183QFaDy6xepEcN3yVjiBhxM1qX/tSMrmOSuUQJCobiIYzB1q9m8RmAN0efPiXZq79JSQ==}
 
   lz-string@1.5.0:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
@@ -1729,6 +1735,8 @@ snapshots:
   loupe@3.2.1: {}
 
   lru-cache@11.5.3: {}
+
+  lucide@0.460.0: {}
 
   lz-string@1.5.0: {}
 

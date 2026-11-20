@@ -11,6 +11,9 @@ body {
   color: var(--fc-text);
   font-family: var(--fc-font);
   font-size: var(--fc-font-size);
+  line-height: var(--leading);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 #app {
   height: 100%;
