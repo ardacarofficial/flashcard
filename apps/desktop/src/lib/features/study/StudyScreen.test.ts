@@ -88,7 +88,7 @@ describe('study screen', () => {
     await screen.findByText('Session complete');
     expect(screen.getByTestId('summary-answered').textContent).toBe('3');
     expect(screen.getByTestId('summary-mistakes').textContent).toBe('1');
-    expect(screen.getByText('Accuracy: 67%')).toBeTruthy();
+    expect(screen.getByText('2 of 3 correct')).toBeTruthy();
 
     await key('r'); // repeat mistakes: only "dog"
     await side('question', 'dog');

@@ -18,8 +18,8 @@
     "query_label": "Search",
     "query_placeholder": "e.g. deck:English tag:verb level>=B1",
     "help": "Words search the text; key:value filters. -x negates, OR combines, quotes group.",
-    "results": "{count} card(s)",
-    "results_notes": "{count} note(s)",
+    "results": "{count, plural, one {# card} other {# cards}}",
+    "results_notes": "{count, plural, one {# note} other {# notes}}",
     "notes_only": "One row per note",
     "load_more": "Load more",
     "empty": "No cards match.",
@@ -78,7 +78,7 @@
       "change_notetype": "Change note type",
       "notetype": "Note type",
       "notetype_help": "Fields and cards are matched by key, then by position; cards of unmatched templates go to the trash. One undo step.",
-      "notetype_done": "{notes} note(s) moved: {kept} card(s) kept, {trashed} trashed, {created} new.",
+      "notetype_done": "{notes, plural, one {# note} other {# notes}} moved: {kept, plural, one {# card} other {# cards}} kept, {trashed} trashed, {created} new.",
       "done": "{changed} changed, {skipped} unchanged.",
       "move_short": "Move",
       "tags": "Tags",
@@ -134,8 +134,8 @@
     "clear_query": "Clear search",
     "showing": "Showing {shown} of {total}",
     "saved_done": "Search saved.",
-    "deleted": "Deleted {count} note(s).",
-    "delete_title": "Delete {count} note(s)?",
+    "deleted": "Deleted {count, plural, one {# note} other {# notes}}.",
+    "delete_title": "Delete {count, plural, one {# note} other {# notes}}?",
     "syntax": {
       "open": "Search syntax",
       "heading": "Search syntax",
@@ -176,7 +176,7 @@
     "run_check": "Check",
     "healthy": "No problems found.",
     "repair": "Repair",
-    "repaired": "Repaired: {trashed} card(s) to trash, {rescheduled} rescheduled, {reindexed} note(s) re-indexed, {fixed} note(s) given missing fields, {removed} stray value(s) removed.",
+    "repaired": "Repaired: {trashed, plural, one {# card} other {# cards}} to trash, {rescheduled} rescheduled, {reindexed, plural, one {# note} other {# notes}} re-indexed, {fixed, plural, one {# note} other {# notes}} given missing fields, {removed, plural, one {# stray value} other {# stray values}} removed.",
     "problem": {
       "orphan_cards": "Cards of deleted notes: {count}",
       "cards_in_trashed_decks": "Cards in deleted decks: {count}",
@@ -187,8 +187,8 @@
       "broken_fields": "Notes missing fields: {count}"
     },
     "purge": "Empty trash",
-    "purge_hint": "Items are deleted for good after {days} days in the trash (Settings).",
-    "purged": "{count} item(s) deleted for good."
+    "purge_hint": "Items are deleted for good after {days, plural, one {# day} other {# days}} in the trash (Settings).",
+    "purged": "{count, plural, one {# item} other {# items}} deleted for good."
   },
   "palette": {
     "title": "Command palette",

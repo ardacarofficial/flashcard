@@ -62,13 +62,18 @@
     return () => void unsub.then((u) => u());
   });
 
+  const subtitle = $derived(
+    summaries && summaries.decks.length !== ctx.decks.length
+      ? t('library.subtitle_total', { count: ctx.decks.length, total: summaries.decks.length })
+      : t('library.subtitle', { count: ctx.decks.length }),
+  );
   const open = (id: DeckId) => ctx.selectDeck(id);
 </script>
 
 {#if opened}
   <DeckPage {ctx} node={opened} summary={byId.get(opened.deck.id) ?? null} {modules} onback={() => ctx.selectDeck(null)} />
 {:else}
-  <PageHeader title={t('library.title')} subtitle={summaries ? t('library.subtitle', { count: summaries.decks.length }) : undefined}>
+  <PageHeader title={t('library.title')} subtitle={summaries ? subtitle : undefined}>
     {#snippet actions()}
       {#if ctx.decks.length > 0}
         <SegmentedControl

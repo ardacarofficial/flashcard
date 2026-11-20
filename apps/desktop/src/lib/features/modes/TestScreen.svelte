@@ -171,7 +171,7 @@
             <span class="pct">{formatPercent100(result.percent)}</span>
           </ProgressRing>
           <div class="score-text">
-            <h2>{t('modes.test.score', { percent: formatPercent100(result.percent) })}</h2>
+            <h2>{t('modes.test.score', { correct: result.correct, total: result.items.length })}</h2>
             <div class="chips">
               <Chip size="sm" tone="success" icon={CircleCheck} label={t('modes.test.n_correct', { n: result.correct })} />
               {#if result.almost > 0}<Chip size="sm" tone="warning" icon={TriangleAlert} label={t('modes.test.n_almost', { n: result.almost })} />{/if}
@@ -271,7 +271,7 @@
     {#if loading}
       <Skeleton shape="card" height="240px" />
     {:else}
-      <Card padding="lg" class="start-card">
+      <Card padding="lg" class="test-setup">
         <div class="setup-head">
           <span class="badge"><Icon icon={ClipboardCheck} size={24} /></span>
           <p class="intro">{t('modes.test.intro')}</p>
@@ -302,13 +302,15 @@
 
 <style>
   .test {
+    width: 100%;
     max-width: 800px;
+    margin-inline: auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
   }
-  :global(.start-card) {
-    max-width: 720px;
+  :global(.test-setup) {
+    max-width: none;
   }
   .setup-head {
     display: flex;

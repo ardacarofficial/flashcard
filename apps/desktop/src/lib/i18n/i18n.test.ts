@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DICTIONARIES, detectLocale, flatKeys, isLocaleLoaded, loadLocale, translate, translateDynamic } from './core';
+import { DICTIONARIES, detectLocale, flatKeys, interpolate, isLocaleLoaded, loadLocale, translate, translateDynamic } from './core';
 import { mergeLocales } from '../../../scripts/merge-locales.mjs';
 import { i18n, initialLocale, setLocale } from './index.svelte';
 
@@ -41,6 +41,14 @@ describe('i18n', () => {
 
   it('interpolates params', () => {
     expect(translate('en', 'deck.confirm_delete', { name: 'Verbs' })).toBe('Delete “Verbs” and its subdecks?');
+  });
+
+  it('picks ICU plural forms per locale', () => {
+    const m = '{n, plural, =0 {none} one {# card} other {# cards}}';
+    expect(interpolate(m, { n: 0 }, 'en')).toBe('none');
+    expect(interpolate(m, { n: 1 }, 'en')).toBe('1 card');
+    expect(interpolate(m, { n: 1234 }, 'en')).toBe('1,234 cards');
+    expect(translate('en', 'create.paste.add', { count: 1 })).toBe('Add 1 card');
   });
 
   it('dynamic keys fall back to the key itself', () => {

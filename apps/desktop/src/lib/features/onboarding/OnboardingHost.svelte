@@ -9,7 +9,7 @@
   import { api } from '$lib/api';
   import type { OnboardingChoices, OnboardingSubjectDto, StudyGoal } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
-  import { Button, Checkbox, CircleCheck, Dialog, Icon, Input } from '$lib/ui';
+  import { Button, Check, Checkbox, CircleCheck, Dialog, Icon, Input } from '$lib/ui';
 
   interface Props {
     /** Called after setup or skip (the shell re-reads decks). */
@@ -135,6 +135,7 @@
                     onkeydown={(e) => onkey(e, i)}
                   >
                     <span class="choice-title" id="ob-{s.subject}">{td(`onboarding.subject.${s.subject}`)}</span>
+                    {#if chosen}<span class="tick" aria-hidden="true"><Icon icon={Check} size={14} /></span>{/if}
                     <span class="choice-desc" id="ob-{s.subject}-d">
                       {s.template_id
                         ? t('onboarding.template', { name: td(`onboarding.templates.${s.template_id}`) })
@@ -225,6 +226,7 @@
     gap: var(--space-2);
   }
   .choice {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -246,9 +248,20 @@
     box-shadow: 0 0 0 1px var(--accent);
     background: var(--accent-soft);
   }
+  /* Focus is a neutral outer ring; selection is the accent fill + border + tick. */
   .choice:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline: 2px solid var(--text-1);
+    outline-offset: 3px;
+  }
+  .tick {
+    position: absolute;
+    top: var(--space-2);
+    inset-inline-end: var(--space-2);
+    display: inline-flex;
+    padding: 2px;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--accent-fg);
   }
   .choice-title {
     font-size: var(--text-sm);

@@ -197,7 +197,7 @@ describe('learn screen', () => {
     await key('Enter', input);
     expect((await screen.findByTestId('learn-feedback')).textContent).toContain('Learned!');
     await key('Enter');
-    await screen.findByText('You learned all 1 cards.');
+    await screen.findByText('You learned all 1 card.');
     expect(call).toHaveBeenCalledWith('study.end', { session_id: 's-1' });
   });
 });
@@ -253,7 +253,7 @@ describe('test screen', () => {
     expect(screen.getByRole('radio', { name: /a2/ }).getAttribute('aria-checked')).toBe('true');
     await fireEvent.input(screen.getByLabelText('Your answer'), { target: { value: 'a3' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
-    expect((await screen.findByTestId('test-score')).textContent).toContain('Score: 100%');
+    expect((await screen.findByTestId('test-score')).textContent).toContain('correct');
     expect(screen.getByText(/Answer: a3/)).toBeTruthy();
   });
 });
@@ -365,7 +365,7 @@ describe('study screen modes', () => {
     await fireEvent.input(area, { target: { value: 'porsuk :: badger' } });
     await screen.findByTestId('inline-preview');
     await fireEvent.keyDown(area, { key: 'Enter', ctrlKey: true });
-    await screen.findByText('1 card(s) created.');
+    await screen.findByText('1 card created.');
     expect(screen.getByTestId('question').textContent).toContain('badger'); // still on the same card
   });
 });

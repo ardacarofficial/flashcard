@@ -51,7 +51,7 @@
       "random": "Random",
       "retrievability": "Weakest memory first"
     },
-    "deck_count": "{n} deck(s)",
+    "deck_count": "{n, plural, one {# deck} other {# decks}}",
     "new_placeholder": "New preset name",
     "pick": "Choose a preset to edit its options.",
     "none_hint": "Create one to give some decks their own limits and steps.",

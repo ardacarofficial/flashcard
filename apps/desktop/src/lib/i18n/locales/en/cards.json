@@ -96,7 +96,7 @@
     "draw_hint": "Drag on the image to add a mask; click a mask to remove it.",
     "remove": "Remove mask",
     "remove_n": "Remove mask {n}",
-    "count": "{n} mask(s) = {n} card(s)"
+    "count": "{n, plural, one {# mask} other {# masks}} = {n, plural, one {# card} other {# cards}}"
   },
   "notetype": {
     "heading": "Note types",
@@ -128,7 +128,7 @@
     "move_up": "Move up",
     "move_down": "Move down",
     "remove": "Remove",
-    "usage": "{notes} note(s) use this type.",
+    "usage": "{notes, plural, one {# note} other {# notes}} use this type.",
     "builtin": "Built-in",
     "syntax": "{{field}} · {{#field}}…{{/field}} · {{cloze:field}} · {{type:field}} · {{hint:field}} · {{tts:en:field}} · {{FrontSide}}",
     "classifications": "Classifications asked in every note",

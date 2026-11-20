@@ -35,10 +35,13 @@
     }),
   );
   const cols = $derived(Math.max(1, Math.ceil((days.length + offset) / 7)));
-  const STEP = $derived(Math.min(29, Math.max(17, Math.floor((avail - 32 + GAP) / cols))));
+  /** Column pitch fills the card (min 17 px; a year scrolls); row pitch stays squarish (17–40 px). */
+  const STEP = $derived(Math.max(17, (avail - 32 + GAP) / cols));
+  const STEP_Y = $derived(Math.min(40, STEP));
   const CELL = $derived(STEP - GAP);
+  const CELL_Y = $derived(STEP_Y - GAP);
   const w = $derived(cols * STEP - GAP);
-  const h = $derived(7 * STEP - GAP);
+  const h = $derived(7 * STEP_Y - GAP);
   /** Month labels: the column where a new month starts. */
   const months = $derived(
     cells
@@ -56,11 +59,11 @@
       </div>
       <div class="body">
         <div class="days" aria-hidden="true">
-          {#each DAY_KEYS as d, i (d)}<span style:top="{i * 2 * STEP + (CELL - 14) / 2}px">{t(`stats.weekday.${d}`)}</span>{/each}
+          {#each DAY_KEYS as d, i (d)}<span style:top="{i * 2 * STEP_Y + (CELL_Y - 14) / 2}px">{t(`stats.weekday.${d}`)}</span>{/each}
         </div>
         <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={t('stats.heatmap.summary', { label, days: days.length, max })}>
           {#each cells as c (c.date)}
-            <rect class="l{c.lv}" x={c.col * STEP} y={c.row * STEP} width={CELL} height={CELL} rx="4">
+            <rect class="l{c.lv}" x={c.col * STEP} y={c.row * STEP_Y} width={CELL} height={CELL_Y} rx="4">
               <title>{t('stats.heatmap.day', { date: shortDate(c.date, i18n.locale), n: c.reviews })}</title>
             </rect>
           {/each}

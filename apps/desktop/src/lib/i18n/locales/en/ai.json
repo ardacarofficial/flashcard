@@ -32,7 +32,7 @@
     },
     "preview": {
       "heading": "Before sending",
-      "summary": "{provider} · {model} · {items} item(s) will be sent.",
+      "summary": "{provider} · {model} · {items, plural, one {# item} other {# items}} will be sent.",
       "estimate": "About {tokens} input tokens, at most {max} output tokens.",
       "cost": "At most {cost}.",
       "cost_unknown": "No price for this model.",
@@ -41,7 +41,7 @@
       "show": "Show exactly what will be sent",
       "system": "Instructions",
       "message": "Message",
-      "images": "{count} image(s)",
+      "images": "{count, plural, one {# image} other {# images}}",
       "send": "Send",
       "cancel": "Cancel"
     },
@@ -61,11 +61,11 @@
       "instructions_hint": "e.g. focus on verbs",
       "preview": "Preview",
       "truncated": "The answer was cut off; there may be fewer notes than asked.",
-      "added": "Added {count} note(s), skipped {skipped}.",
-      "drafts": "{count} suggestion(s)",
+      "added": "Added {count, plural, one {# note} other {# notes}}, skipped {skipped}.",
+      "drafts": "{count, plural, one {# suggestion} other {# suggestions}}",
       "spent": "This request cost about {cost}.",
       "keep": "Add",
-      "add": "Add {count} note(s)"
+      "add": "Add {count, plural, one {# note} other {# notes}}"
     },
     "providers": {
       "heading": "Providers",
@@ -116,13 +116,13 @@
     "usage": {
       "month": "This month",
       "week": "Last 7 days",
-      "line": "{requests} request(s) · {input} in / {output} out tokens · {cost}",
+      "line": "{requests, plural, one {# request} other {# requests}} · {input} in / {output} out tokens · {cost}",
       "by_feature": "By feature (this month)",
       "by_model": "By model (this month)",
       "empty": "No AI requests yet.",
       "estimate_note": "Costs are estimates from the price table.",
       "budget": "Monthly budget",
-      "requests": "{n} request(s)",
+      "requests": "{n, plural, one {# request} other {# requests}}",
       "tokens": "{input} in / {output} out tokens"
     },
     "job": {

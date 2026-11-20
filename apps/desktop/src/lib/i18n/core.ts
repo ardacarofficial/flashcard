@@ -54,11 +54,61 @@ function lookup(dict: unknown, key: string): string | undefined {
   return typeof cur === 'string' ? cur : undefined;
 }
 
-export function interpolate(s: string, params?: Params): string {
+const BCP: Record<string, string> = { tr: 'tr-TR', en: 'en-US' };
+const rules = new Map<string, Intl.PluralRules>();
+
+/** Index of the `}` closing the `{` at `open`. */
+function closing(s: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < s.length; i++) {
+    if (s[i] === '{') depth++;
+    else if (s[i] === '}' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * `{name}` substitution plus ICU plurals: `{n, plural, =0 {none} one {# card} other {# cards}}`
+ * (`#` = the number). Categories come from `Intl.PluralRules` of the locale (TR has only `other`).
+ */
+export function interpolate(s: string, params?: Params, locale: string = DEFAULT_LOCALE): string {
   if (!params) return s;
-  return s.replace(/\{(\w+)\}/g, (m, name: string) =>
-    name in params ? String(params[name]) : m,
-  );
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] !== '{') {
+      out += s[i];
+      continue;
+    }
+    const end = closing(s, i);
+    if (end < 0) {
+      out += s.slice(i);
+      break;
+    }
+    const body = s.slice(i + 1, end);
+    const head = /^(\w+)\s*,\s*plural\s*,/.exec(body);
+    const key = head?.[1];
+    if (head && key !== undefined && key in params) {
+      const n = Number(params[key]);
+      const opts = new Map<string, string>();
+      const re = /(=\d+|\w+)\s*\{/g;
+      let rest = body.slice(head[0].length);
+      for (let m = re.exec(rest); m; m = re.exec(rest)) {
+        const o = m.index + m[0].length - 1;
+        const c = closing(rest, o);
+        if (c < 0) break;
+        opts.set(m[1] ?? '', rest.slice(o + 1, c));
+        re.lastIndex = c + 1;
+      }
+      const tag = BCP[locale] ?? locale;
+      let pr = rules.get(tag);
+      if (!pr) rules.set(tag, (pr = new Intl.PluralRules(tag)));
+      const chosen = opts.get(`=${n}`) ?? opts.get(pr.select(n)) ?? opts.get('other') ?? '';
+      out += interpolate(chosen.replace(/#/g, new Intl.NumberFormat(tag).format(n)), params, locale);
+    } else if (/^\w+$/.test(body) && body in params) out += String(params[body]);
+    else out += s.slice(i, end + 1);
+    i = end;
+  }
+  return out;
 }
 
 /** Typed lookup. Falls back to EN (if loaded), then to the key itself. */
@@ -72,7 +122,7 @@ export function translate(locale: Locale, key: MessageKey, params?: Params): str
  */
 export function translateDynamic(locale: Locale, key: string, params?: Params): string {
   const s = lookup(DICTIONARIES[locale], key) ?? lookup(DICTIONARIES.en, key) ?? key;
-  return interpolate(s, params);
+  return interpolate(s, params, locale);
 }
 
 /** All leaf keys of a dictionary (used by tests to compare locales). */

@@ -31,10 +31,12 @@ describe('reminders screen (dev mock)', () => {
     expect(await screen.findByText('Today: 12 due, 20 new.')).toBeTruthy();
     await fireEvent.click(screen.getByRole('switch', { name: 'Remind me every day' }));
     expect(await setting('reminders.enabled')).toBe(true);
-    const time = screen.getByLabelText('Time') as HTMLInputElement;
-    expect(time.value).toBe('19:00');
-    await fireEvent.change(time, { target: { value: '07:30' } });
-    expect(await setting('reminders.minute_of_day')).toBe(7 * 60 + 30);
+    const [hour, minute, period] = screen.getAllByRole('combobox', { name: 'Time' });
+    expect(hour!.textContent).toContain('7')
+    expect(period!.textContent).toContain('PM');
+    await fireEvent.click(minute!);
+    await fireEvent.click(await screen.findByRole('option', { name: '30' }));
+    expect(await setting('reminders.minute_of_day')).toBe(19 * 60 + 30);
     await fireEvent.click(screen.getByRole('button', { name: 'Sun' }));
     expect(await setting('reminders.weekdays')).toBe(0b011_1111);
     await fireEvent.click(screen.getByRole('switch', { name: 'Closing the window keeps the app in the tray' }));

@@ -9,7 +9,7 @@
   import { api } from '$lib/api';
   import type { ReminderStatus } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
-  import { Bell, Button, Chip, Clock, Icon, Input, Switch } from '$lib/ui';
+  import { Bell, Button, Chip, Clock, Icon, Switch, TimeField } from '$lib/ui';
   import { FormRow, LoadState, SettingsPage, SettingsSection } from '../core/kit';
   import type { ScreenCtx } from '../types';
 
@@ -88,8 +88,8 @@
         <Switch checked={status.enabled} ariaLabel={t('reminders.enabled')} onchange={(v) => void toggle('enabled', v)} />
       </FormRow>
       <FormRow label={t('reminders.time')} description={t('reminders.time_hint')}>
-        <div class="time">
-          <Input type="time" value={time} label={t('reminders.time')} hideLabel onchange={(e: Event) => void setTime((e.currentTarget as HTMLInputElement).value)} />
+        <div>
+          <TimeField value={time} label={t('reminders.time')} onchange={(v) => void setTime(v)} />
         </div>
       </FormRow>
       <FormRow label={t('reminders.days')} description={t('settings.reminders.weekdays.description')} stack>
@@ -158,9 +158,5 @@
   .ok {
     color: var(--success);
     font-size: var(--text-sm);
-  }
-  .time.time :global(.fc-field) {
-    min-width: 0;
-    width: 9rem;
   }
 </style>

@@ -92,9 +92,9 @@
     "logs": {
       "heading": "Logs",
       "intro": "The app keeps a local log. Export it to attach to a bug report: keys, tokens and passwords are removed first. Nothing is sent automatically.",
-      "files": "{count} file(s), {size}",
+      "files": "{count, plural, one {# file} other {# files}}, {size}",
       "export": "Export logs…",
-      "exported": "Saved {files} file(s) to {path}. {redactions} secret(s) removed.",
+      "exported": "Saved {files, plural, one {# file} other {# files}} to {path}. {redactions, plural, one {# secret} other {# secrets}} removed.",
       "save_prompt": "Where should the log bundle be saved?",
       "bundle": "Log bundle for a bug report"
     },
@@ -110,7 +110,7 @@
       "heading": "Crash reports",
       "none": "No crash reports.",
       "clear": "Delete crash reports",
-      "cleared": "{count} report(s) deleted."
+      "cleared": "{count, plural, one {# report} other {# reports}} deleted."
     },
     "previous_run": {
       "clean": "The last run closed normally.",
@@ -124,7 +124,7 @@
       "integrity_bad": "The database check found problems. Open Maintenance for details.",
       "session": "An unfinished study session",
       "resume": "Resume studying",
-      "drafts": "{count} unsaved form(s), restored when you open them again",
+      "drafts": "{count, plural, one {# unsaved form} other {# unsaved forms}}, restored when you open them again",
       "crash": "Crash report: {message}",
       "details": "Open maintenance",
       "dismiss": "Continue"

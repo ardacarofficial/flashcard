@@ -108,7 +108,7 @@ describe('attributes module off', () => {
   it('browser: no bulk classification, no attributes calls, no error', async () => {
     const ctx = ctxWith({ decks: (await api.deck.tree()).roots });
     render(BrowseScreen, { ctx });
-    await screen.findByText(/card\(s\)/);
+    await screen.findByText(/\d+ cards?/);
     window.dispatchEvent(new CustomEvent('fc:shortcut', { detail: 'browse.select_all' }));
     // v1.1: the bulk bar's "More actions" menu offers no classification while it is off.
     await fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));

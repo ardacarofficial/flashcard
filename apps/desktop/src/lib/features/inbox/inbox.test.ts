@@ -88,7 +88,7 @@ describe('<InboxScreen>', () => {
     await fireEvent.input(screen.getByDisplayValue('porsuk'), { target: { value: 'porsuk (hayvan)' } });
     const spy = vi.spyOn(api, 'call');
     await fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[1]!);
-    expect(await screen.findByText('1 cards added')).toBeTruthy();
+    expect(await screen.findByText('1 card added')).toBeTruthy();
     const req = spy.mock.calls.find(([m]) => m === 'inbox.accept')![1] as { items: { deck_id: string; fields: unknown }[] };
     expect(req.items[0]!.deck_id).toBe(node.deck.id);
     expect(req.items[0]!.fields).toEqual({ front: 'badger', back: 'porsuk (hayvan)' });

@@ -37,7 +37,7 @@ describe('<AiScreen> on the dev mock', () => {
       target: { value: 'Plants turn light into sugar.' },
     });
     await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-    expect(await screen.findByText('Claude · claude-sonnet-5-5 · 1 item(s) will be sent.')).toBeTruthy();
+    expect(await screen.findByText('Claude · claude-sonnet-5-5 · 1 item will be sent.')).toBeTruthy();
     expect(screen.getByRole('alert').textContent).toContain('needs an API key');
     expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true);
     // The full request is there to read.
@@ -52,10 +52,10 @@ describe('<AiScreen> on the dev mock', () => {
     const send = await screen.findByRole('button', { name: 'Send' });
     expect((send as HTMLButtonElement).disabled).toBe(false);
     await fireEvent.click(send);
-    expect(await screen.findByText('2 suggestion(s)')).toBeTruthy();
+    expect(await screen.findByText('2 suggestions')).toBeTruthy();
     const before = (await api.call('notes.list', { deck_id: null, include_subdecks: null, page: { cursor: null, limit: 100 } })).items.length;
-    await fireEvent.click(screen.getByRole('button', { name: 'Add 2 note(s)' }));
-    expect(await screen.findByText('Added 2 note(s), skipped 0.')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Add 2 notes' }));
+    expect(await screen.findByText('Added 2 notes, skipped 0.')).toBeTruthy();
     const after = (await api.call('notes.list', { deck_id: null, include_subdecks: null, page: { cursor: null, limit: 100 } })).items.length;
     expect(after - before).toBe(2);
   });

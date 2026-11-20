@@ -22,7 +22,7 @@
     "postpone_label": "Postpone today's cards",
     "postpone_days": "Days",
     "postpone": "Postpone",
-    "postponed": "{count} card(s) postponed.",
+    "postponed": "{count, plural, one {# card} other {# cards}} postponed.",
     "nothing": "Nothing to study right now.",
     "remaining": "New {new} · Learning {learning} · Review {review}",
     "practice_badge": "Practice",
@@ -55,7 +55,7 @@
     },
     "summary": {
       "heading": "Session complete",
-      "accuracy": "Accuracy: {n}",
+      "accuracy": "{correct} of {total} correct",
       "repeat": "Repeat mistakes",
       "back": "Done",
       "accuracy_label": "Accuracy",

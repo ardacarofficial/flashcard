@@ -656,7 +656,7 @@
           </ProgressRing>
           <div>
             <h2>{t('study.summary.heading')}</h2>
-            <p class="muted">{t('study.summary.accuracy', { n: formatPercent100(accuracy) })}</p>
+            <p class="muted">{t('study.summary.accuracy', { correct: summary.correct, total: summary.answered })}</p>
           </div>
         </div>
         <dl class="stats">

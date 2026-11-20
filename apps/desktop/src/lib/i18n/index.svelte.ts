@@ -94,6 +94,6 @@ export function setRuntimeMessages(locale: Locale, prefix: string, messages: Rec
 /** For keys that come from the backend at runtime. */
 export function td(key: string, params?: Params): string {
   const extra = runtime[state.locale][key] ?? runtime.en[key];
-  if (extra !== undefined) return interpolate(extra, params);
+  if (extra !== undefined) return interpolate(extra, params, state.locale);
   return translateDynamic(state.locale, key, params);
 }

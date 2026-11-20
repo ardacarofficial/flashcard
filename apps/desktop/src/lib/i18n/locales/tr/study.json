@@ -55,7 +55,7 @@
     },
     "summary": {
       "heading": "Oturum bitti",
-      "accuracy": "Doğruluk: {n}",
+      "accuracy": "{total} karttan {correct} doğru",
       "repeat": "Yanlışları tekrar çalış",
       "back": "Tamam",
       "accuracy_label": "Doğruluk",

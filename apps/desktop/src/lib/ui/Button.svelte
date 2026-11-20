@@ -129,8 +129,18 @@
     background: color-mix(in srgb, var(--danger-solid) 88%, var(--text-1));
   }
   .fc-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
+    cursor: not-allowed;
+  }
+  .primary:disabled,
+  .danger:disabled {
+    background: var(--disabled-bg);
+    border-color: var(--disabled-border);
+    color: var(--disabled-fg);
+  }
+  .secondary:disabled,
+  .ghost:disabled {
+    color: var(--disabled-fg);
+    border-color: var(--disabled-border);
   }
   .fc-btn.loading {
     opacity: 0.8;

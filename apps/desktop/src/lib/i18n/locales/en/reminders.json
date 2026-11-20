@@ -50,7 +50,7 @@
     "none": "No reminder planned.",
     "test": "Send a test notification",
     "sent": "Test reminder sent.",
-    "notification": "{total} cards are waiting for you today ({due} due, {new} new).",
+    "notification": "{total, plural, one {# card} other {# cards}} are waiting for you today ({due} due, {new} new).",
     "daily": "Daily reminder",
     "time_hint": "Local time of the notification.",
     "test_hint": "Check that notifications reach you.",

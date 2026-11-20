@@ -50,7 +50,7 @@
     "choose_deck": "Choose a deck",
     "notetype": "Note type",
     "cards_heading": "Cards",
-    "count": "{count} card(s)",
+    "count": "{count, plural, one {# card} other {# cards}}",
     "term": "Term",
     "definition": "Definition",
     "add_row": "Add card",
@@ -61,8 +61,8 @@
     "keys_hint": "Tab goes to the next field; Enter on the last card adds a new one; Ctrl+Enter saves.",
     "save": "Create",
     "ai": "Generate with AI",
-    "saved": "Created {count} card(s).",
-    "saved_with_duplicates": "Created {count} card(s); {dupes} already existed and were kept here.",
+    "saved": "Created {count, plural, one {# card} other {# cards}}.",
+    "saved_with_duplicates": "Created {count, plural, one {# card} other {# cards}}; {dupes} already existed and were kept here.",
     "duplicate_row": "A card like this already exists.",
     "undo": "Undo",
     "no_fields": "This note type has no text fields.",
@@ -89,12 +89,12 @@
       "custom_record": "Custom separator between cards",
       "preview": "Preview",
       "nothing": "Paste some text to see the cards here.",
-      "found": "{count} card(s) found",
+      "found": "{count, plural, one {# card} other {# cards}} found",
       "confidence": "separators detected with {pct} confidence",
       "more": "and {count} more",
-      "too_many": "Only the first {max} rows fit in the editor. Use Import for longer lists.",
-      "add": "Add {count} card(s)",
-      "added": "Added {count} card(s) to the list."
+      "too_many": "Only the first {max, plural, one {# row} other {# rows}} fit in the editor. Use Import for longer lists.",
+      "add": "Add {count, plural, one {# card} other {# cards}}",
+      "added": "Added {count, plural, one {# card} other {# cards}} to the list."
     }
   }
 }

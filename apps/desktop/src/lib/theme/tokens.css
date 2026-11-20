@@ -72,6 +72,11 @@
   --text-2: var(--fc-text-muted);
   --text-3: color-mix(in srgb, var(--fc-text-muted) 70%, var(--fc-bg));
 
+  /* Disabled controls: clearly inert, still legible (>= 4.5:1 text on fill, both themes). */
+  --disabled-bg: light-dark(#e4e4e9, #2e2e35);
+  --disabled-fg: light-dark(#5f5f6b, #a1a1aa);
+  --disabled-border: light-dark(#d1d1d8, #3f3f47);
+
   /* Accent (default #5B47E0). `-soft` = selected / tinted backgrounds. */
   --accent: var(--fc-accent);
   --accent-fg: var(--fc-accent-text);

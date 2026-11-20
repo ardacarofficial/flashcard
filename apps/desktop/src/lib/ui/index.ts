@@ -16,6 +16,7 @@ export { default as Flashcard } from './Flashcard.svelte';
 export { default as Icon } from './Icon.svelte';
 export { default as IconButton } from './IconButton.svelte';
 export { default as Input } from './Input.svelte';
+export { default as TimeField } from './TimeField.svelte';
 export { default as Kbd } from './Kbd.svelte';
 export { default as Menu } from './Menu.svelte';
 export { default as NavItem } from './NavItem.svelte';

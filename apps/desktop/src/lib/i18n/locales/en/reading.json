@@ -110,7 +110,7 @@
     "queue": {
       "empty": "The reading queue is empty.",
       "due_now": "Due now",
-      "in_days": "Next in {n} day(s)",
+      "in_days": "Next in {n, plural, one {# day} other {# days}}",
       "add": "Queue",
       "remove": "Unqueue",
       "done": "Done for today",

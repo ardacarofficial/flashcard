@@ -128,12 +128,12 @@
     },
     "streak": {
       "label": "Streak",
-      "days": "{n} days",
-      "longest": "Longest: {n} days"
+      "days": "{n, plural, one {# day} other {# days}}",
+      "longest": "Longest: {n, plural, one {# day} other {# days}}"
     },
     "reviews": {
       "label": "Reviews",
-      "detail": "{days} of {total} days studied"
+      "detail": "{days} of {total, plural, one {# day} other {# days}} studied"
     },
     "time": {
       "label": "Study time",
@@ -147,9 +147,9 @@
     "imported": "Including {n} imported reviews",
     "heatmap": {
       "heading": "Activity",
-      "day": "{date}: {n} reviews",
+      "day": "{date}: {n, plural, one {# review} other {# reviews}}",
       "intro": "Reviews per day.",
-      "summary": "{label}: {days} days, at most {max} reviews a day",
+      "summary": "{label}: {days, plural, one {# day} other {# days}}, at most {max, plural, one {# review} other {# reviews}} a day",
       "less": "Less",
       "more": "More"
     },
@@ -180,7 +180,7 @@
       "all": "All",
       "answers": "Answers",
       "rate": "Success",
-      "answers_n": "{n} answers"
+      "answers_n": "{n, plural, one {# answer} other {# answers}}"
     },
     "trend": {
       "heading": "Progress",
@@ -220,7 +220,7 @@
     },
     "leeches": {
       "heading": "Leeches",
-      "count": "{n} cards forgotten at least {threshold} times",
+      "count": "{n, plural, one {# card} other {# cards}} forgotten at least {threshold, plural, one {# time} other {# times}}",
       "none": "No leeches.",
       "lapses": "Lapses",
       "suspend": "Suspend",
@@ -228,7 +228,7 @@
       "card": "Card",
       "applied": "{changed} changed, {skipped} already done",
       "intro": "Cards you keep forgetting; rewrite or set them aside.",
-      "lapses_n": "{n} lapses",
+      "lapses_n": "{n, plural, one {# lapse} other {# lapses}}",
       "more": "and {n} more"
     },
     "report": {
@@ -279,10 +279,10 @@
       "query_hint": "e.g. exam:TYT",
       "add": "Add exam",
       "delete": "Remove",
-      "days_left": "in {n} days",
+      "days_left": "in {n, plural, one {# day} other {# days}}",
       "today": "today",
       "past": "past",
-      "cards": "{n} cards",
+      "cards": "{n, plural, one {# card} other {# cards}}",
       "none_hint": "Add one below and its cards come back just before the day.",
       "delete_named": "Remove {name}",
       "new": "New exam date"
@@ -293,7 +293,7 @@
       "preset": "Preset",
       "none": "Create a preset in Deck options first.",
       "run": "Optimize",
-      "done": "Saved {n} parameters into the preset (undoable).",
+      "done": "Saved {n, plural, one {# parameter} other {# parameters}} into the preset (undoable).",
       "cancelled": "Optimization cancelled.",
       "failed": "Optimization failed.",
       "working": "Optimizing…",
@@ -337,8 +337,8 @@
     "daily": "today",
     "done": "Reached",
     "on_track": "On track: reached by {date}",
-    "late": "At this pace you'll be {n} days late",
-    "early": "At this pace you'll finish {n} days early",
+    "late": "At this pace you'll be {n, plural, one {# day} other {# days}} late",
+    "early": "At this pace you'll finish {n, plural, one {# day} other {# days}} early",
     "eta": "At this pace: {date}",
     "no_pace": "No pace yet",
     "subtitle": "Targets with a deadline and a forecast at your current pace.",
