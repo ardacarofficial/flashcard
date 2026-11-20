@@ -99,5 +99,5 @@ Mock verisi (`src/lib/api/mock/seed.ts` ve `features/*/mock.ts`) gerçekçi gör
 - [x] Hiçbir ekranda ham tarayıcı `<select>`/checkbox yok (lint testi `tests/raw-controls.test.ts`, izin listesi yok; görsel denetimde `raw-control` 0).
 - [x] Ana sayfa, Kütüphane, Deste sayfası, Kartlar, Öğren, Test, Eşleştir, Oluştur, Ara, İstatistik, Ayarlar ekranları tasarım sistemiyle; `pnpm screens --strict` TR/EN × açık/koyu × 1280/900 (≈500 görüntü) bulgusuz. Görüntüler insan gözüyle yalnız TR açık 1280/900'de tek tek incelendi; diğer yapılandırmalar otomatik denetimden geçti.
 - [x] Davranış değişmez: mevcut Rust ve ön yüz testleri geçer; yeni bileşenlerin testleri var.
-- [x] Performans bütçeleri (02 §34, ilk JS ≤ 320 kB) korunur — ilk JS 158,1 kB, CSS 33,6 kB; font ve simgeler yerel. İlk yüklenen kodda `$lib/ui` varili yasak (`tests/eager-imports.test.ts`).
+- [x] Performans bütçeleri (02 §34, ilk JS ≤ 320 kB) korunur — ilk JS 160,6 kB, CSS 35,8 kB; font ve simgeler yerel. İlk yüklenen kodda `$lib/ui` varili yasak (`tests/eager-imports.test.ts`).
 - [ ] Gerçek Tauri penceresinde (Windows) elle gezinti — yalnız mock modunda doğrulandı.

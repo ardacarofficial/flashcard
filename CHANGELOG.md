@@ -24,7 +24,7 @@ Workspace sürümü `1.1.0`. Arayüz baştan tasarlandı (docs/11); davranış v
 - Yapıştırarak içe aktarmada ayırıcı denetimi Rust'ın algıladığı ayırıcıyı gösterir (yeni "Boşluklar" seçeneği = hizalı sütunlar); geliştirme mock'u da artık algılar.
 
 ### Performans, erişilebilirlik, görsel denetim
-- İlk JS **158,1 kB** (bütçe 320 kB): yalnız etkin dilin sözlüğü yüklenir; ilk yüklenen kod `$lib/ui`'yi dosya dosya alır (lint: `tests/eager-imports.test.ts`).
+- İlk JS **160,6 kB** (bütçe 320 kB): yalnız etkin dilin sözlüğü yüklenir; ilk yüklenen kod `$lib/ui`'yi dosya dosya alır (lint: `tests/eager-imports.test.ts`).
 - Başarı rengi açık temada metin rengine doğru koyulaştırıldı (çip/rozet üzerinde 4,38 → 5,3:1); durum renkleri kendi yumuşak zeminlerinde de AA (testli).
 - `pnpm -C apps/desktop screens`: TR/EN × açık/koyu × 1280/900 ekran görüntüleri, deste sayfasından her mod (boş, çalışırken, çevrilmiş); `text-clipped` `.sr-only` öğeleri yok sayar.
 
