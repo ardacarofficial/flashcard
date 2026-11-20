@@ -117,7 +117,7 @@ job_id: JobId,
 /**
  * Notes added or updated.
  */
-notes: number, } } | { "type": "collection_replaced" } | { "type": "cards_changed", "data": { 
+notes: number, } } | { "type": "collection_replaced" } | { "type": "data_changed" } | { "type": "cards_changed", "data": { 
 /**
  * Cards.
  */

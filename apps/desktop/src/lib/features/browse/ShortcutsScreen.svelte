@@ -50,7 +50,7 @@
 
   onMount(() => {
     void load();
-    const unsub = api.on(['setting_changed', 'undone', 'redone'], () => void load());
+    const unsub = api.on(['setting_changed', 'undone', 'redone', 'data_changed'], () => void load());
     return () => void unsub.then((u) => u());
   });
 </script>

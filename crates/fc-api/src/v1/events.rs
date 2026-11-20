@@ -139,6 +139,9 @@ pub enum DomainEvent {
     },
     /// The whole collection was replaced (backup restored): refetch everything.
     CollectionReplaced,
+    /// Another process (the CLI, an MCP client…) changed the collection while the app was
+    /// open: refetch whatever is on screen.
+    DataChanged,
     /// Scheduling/deck/flag/suspension columns of these cards changed (bulk operations).
     CardsChanged {
         /// Cards.

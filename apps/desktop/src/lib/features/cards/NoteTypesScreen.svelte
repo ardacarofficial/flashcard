@@ -43,7 +43,7 @@
     trackModules();
     void load();
     api.call('cardtypes.list', {}).then((r) => (engines = r.card_types), fail);
-    const unsub = api.on(['note_type_changed', 'undone', 'redone'], () => void load());
+    const unsub = api.on(['note_type_changed', 'undone', 'redone', 'data_changed'], () => void load());
     return () => void unsub.then((u) => u());
   });
 

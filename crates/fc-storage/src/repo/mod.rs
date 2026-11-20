@@ -73,4 +73,5 @@ domains! {
     content: ContentRead, ContentWrite;
     interop: InteropRead, InteropWrite;
     search: SearchRead, SearchWrite;
+    mcp: McpRead, McpWrite;
 }

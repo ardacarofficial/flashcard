@@ -315,7 +315,12 @@ pub(crate) fn ensure_invocable(
     actor: &Actor,
     module_enabled: bool,
 ) -> AppResult<()> {
-    if d.visibility == Visibility::Internal || !permits(actor, d.permission) {
+    // An MCP client reaches exactly the methods its tools call (`mcp::tools::catalog`), not
+    // everything its permissions would cover: no tool deletes, so `notes.delete`,
+    // `decks.delete`, `browse.purge_trash`… stay unreachable however the call arrives.
+    let mcp_blocked =
+        matches!(actor, Actor::Mcp(_)) && !crate::modules::mcp::tools::method_reachable(d.name);
+    if d.visibility == Visibility::Internal || mcp_blocked || !permits(actor, d.permission) {
         return Err(AppError::Api(
             ApiError::new(
                 ErrorCode::PermissionDenied,
@@ -344,11 +349,15 @@ pub(crate) fn module_disabled(module: &str) -> AppError {
 
 /// Whether `actor` holds `permission`. v0.1 has no grant store: the user, the CLI and the app
 /// itself hold every permission, and so do the other actors until plugin/local-API grants land
-/// (v0.7) — at which point this is the single place that enforces them.
-fn permits(actor: &Actor, _permission: &str) -> bool {
+/// (v0.7) — at which point this is the single place that enforces them. The one exception
+/// already: `mcp:write` (registering programs the app will launch) belongs to the user and
+/// the CLI alone — never to a plugin, automation or local-API client.
+fn permits(actor: &Actor, permission: &str) -> bool {
     match actor {
         Actor::User | Actor::Cli | Actor::System => true,
-        Actor::Plugin(_) | Actor::Automation(_) | Actor::LocalApi(_) => true,
+        Actor::Plugin(_) | Actor::Automation(_) | Actor::LocalApi(_) => permission != "mcp:write",
+        // v0.8: MCP clients hold a fixed, curated set (docs/06 §2.1).
+        Actor::Mcp(_) => crate::modules::mcp::MCP_PERMISSIONS.contains(&permission),
     }
 }
 

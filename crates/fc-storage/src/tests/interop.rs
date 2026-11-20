@@ -316,15 +316,16 @@ fn upgrade_dump_runs_later_data_migrations_on_restored_rows() {
     };
     assert_eq!(folded, "isik", "the search index is written folded");
     let mut newer: Vec<migrate::Migration> = migrate::MIGRATIONS.to_vec();
+    // Numbered above every real migration, whichever releases are merged.
     newer.push(migrate::Migration {
-        version: 499,
-        name: "0499_test_fold",
+        version: 9998,
+        name: "9998_test_fold",
         sql: "UPDATE notes_fts SET sort_field = sort_field || '!';
               CREATE TABLE fold_marker (n INTEGER NOT NULL);
               INSERT INTO fold_marker SELECT count(*) FROM notes;",
     });
     let up = crate::upgrade_dump_with(old.clone(), &newer).unwrap();
-    assert_eq!(*up.schema_versions.last().unwrap(), 499);
+    assert_eq!(*up.schema_versions.last().unwrap(), 9998);
     assert_eq!(fts_col(&up), SqlValue::Text("isik!".into()));
     let marker = up.tables.iter().find(|t| t.name == "fold_marker").unwrap();
     assert_eq!(marker.rows[0].last(), Some(&SqlValue::Integer(1)));

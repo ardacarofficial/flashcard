@@ -47,10 +47,63 @@ Claude Desktop, Claude Code veya başka bir MCP istemcisi uygulamaya bağlanıp 
 - İzinler: MCP istemcisi bir "bağlantı" olarak kaydedilir; okuma/yazma izinleri ayrı ayrı verilir. Yazma işlemleri isteğe bağlı olarak gelen kutusuna düşer (onaylı mod).
 - Örnek: "Claude, bu makaleden 20 kart çıkar ve İngilizce destesine ekle."
 
+#### Uygulanan hâli (v0.8, `fc-mcp` + `fc-app` `mcp` modülü)
+
+- **Taşıma:** stdio. `fc --db <collection.db> mcp serve [--read-only]` koleksiyon dosyasını **doğrudan** açar (SQLite WAL; masaüstü açıkken de çalışır, ama masaüstü MCP'nin yaptığı değişikliği oplog konumunu yoklayarak ≤ 2 sn içinde ya da pencereye odaklanınca görür ve ekranlarını yeniler (`data_changed`); **masaüstünde Ctrl/⌘+Z oplog'un son adımını geri alır — bu Claude'un yaptığı adım da olabilir**). Sunucu şemayı **yükseltmez**: eski şemalı koleksiyonu reddeder, önce uygulamayı açmak gerekir. Çalışan uygulamaya yerel HTTP API üzerinden bağlanan köprü v0.9'da (yerel API ile) gelir. Dosya yoksa sunucu açılmaz (yanlış yolda boş koleksiyon yaratmaz); stdout yalnızca protokole aittir, hatalar stderr'e.
+- **Araçlar** (`fc_app::modules::mcp::tools::catalog`, `mcp.tools.list` ile de görülür): kayıt defterinden otomatik değil, **elle seçilmiş** ince sarmalayıcılar — her biri yalnız **public** v1 metotları çağırır; insan referanslarını (deste yolu, not türü/alan adı, sınıflandırma anahtarı/adı, seçenek etiketi) kimliğe çevirir:
+
+  | Araç | Okur/Yazar | Metotlar | Not |
+  |---|---|---|---|
+  | `list_decks` | okur | `decks.tree` | yol, kimlik, kart sayıları |
+  | `list_note_types` | okur | `notetypes.list` | alan anahtarları; varsayılan Klasik |
+  | `list_classifications` | okur | `attributes.effective` | destede geçerli (miraslı) sınıflandırmalar, seçenekler sırayla |
+  | `search_cards` | okur | `search.cards` | sorgu dili (`deck:İngilizce seviye>=B1 is:due`), konumlu hata |
+  | `get_note` | okur | `notes.get` | alanlar, etiketler, sınıflandırmalar etiketle |
+  | `create_deck` | yazar | `decks.create` | varsa olanı döndürür (idempotent) |
+  | `add_notes` | yazar | `batch.execute` + `notes.create` | ≤100 not, `{"Seviye":"B1"}`; **hepsi ya da hiçbiri, tek geri al adımı** |
+  | `update_note` | yazar (değiştirir) | `notes.update` | verilmeyen alan/etiket/sınıflandırma korunur |
+  | `set_classification` | yazar (değiştirir) | `search.ids` + `bulk.set_attribute` | **`confirm: true` olmadan yalnız önizler** (kaç not değişecek + `confirm_token`); uygulamak için aynı çağrı `confirm: true` ve bu belirteçle tekrarlanır (eşleşen küme değiştiyse reddedilir; en çok 2000 kart) |
+
+  Silen araç yok. Araç hataları MCP "tool error" olarak uygulamanın `ApiError` JSON'u (`code`, `message`, `details`; ör. `note_index`) döner, model okuyup düzeltebilir; bilinmeyen araç protokol hatasıdır. Araç ek açıklamaları: `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint=false`.
+- **İzinler:** aktör `Actor::Mcp(<clientInfo.name>)` (oplog'da `{"kind":"mcp","id":"claude-ai"}`). Bu aktör yalnız `MCP_PERMISSIONS`'ı taşır (`decks/notes/attributes:read+write`, `notetypes/search/settings/modules/mcp:read`, `batch:write`); ayar/modül değiştirme, geri al, iç metotlar, `mcp:write` (dış sunucu kaydetme = uygulamaya komut çalıştırtma) **reddedilir** — `batch.execute` içinde de. İzin tek başına yetmez: MCP aktörü yalnız araç kataloğunun çağırdığı metotlara erişir; silme/çöp boşaltma (`notes.delete`, `decks.delete`, `browse.purge_trash`) `notes:write` izniyle kapsansa da kapalıdır. `mcp:write` Plugin/Automation/LocalApi aktörlerine de verilmez (yalnız kullanıcı ve CLI). Yazmalar sıradan komuttur: doğrulanır, transaction, oplog (+ ters), uygulamadan geri alınır.
+- **Açma/kapama:** modül `mcp` (kapalıysa araç listesi boş, çağrılar `CONFLICT_MODULE_DISABLED`); ayar `mcp.server.allow_writes` (app, varsayılan açık; kapalıysa yazma araçları listelenmez ve `PERMISSION_MCP_READ_ONLY`); `--read-only` bayrağı aynısını süreç için yapar. Ayar ve modül her çağrıda veritabanından tazelenir (masaüstündeki değişiklik çalışan sunucuya yansır).
+
+#### Kurulum
+
+`fc` ikilisi `PATH`'te değilse tam yolunu yaz (Windows'ta ör. `C:\Program Files\Flashcard\fc.exe`; JSON içinde ters eğik çizgiler `\\` yazılır). Koleksiyon dosyası masaüstü uygulamasının veri klasöründeki `collection.db`'dir.
+
+**Claude Code:**
+
+```bash
+claude mcp add flashcard -- fc --db "/path/to/collection.db" mcp serve
+# yalnız okuma:
+claude mcp add flashcard-ro -- fc --db "/path/to/collection.db" mcp serve --read-only
+```
+
+**Claude Desktop** (`claude_desktop_config.json`; Windows `%APPDATA%\Claude\`, macOS `~/Library/Application Support/Claude/`):
+
+```json
+{
+  "mcpServers": {
+    "flashcard": {
+      "command": "fc",
+      "args": ["--db", "/path/to/collection.db", "mcp", "serve"]
+    }
+  }
+}
+```
+
+Uygulamadaki **MCP** ekranı aynı parçacıkları, araç listesini ve yazma anahtarını gösterir.
+
 ### 2.2 MCP istemcisi (uygulama → dış MCP sunucuları)
 - Kullanıcı MCP sunucusu ekler (komut veya URL).
 - Uygulamadaki AI özellikleri bu sunucuların araçlarını kullanabilir (ör. Notion'dan not çekip kart üretme, dosya sisteminden okuma).
 - Her araç çağrısı kullanıcıya gösterilir; hassas araçlar onay ister.
+
+#### Uygulanan hâli (v0.8: iskelet)
+- Kayıtlar: `mcp.servers.list/add/update/remove` (geri alınabilir; iç ters `mcp.servers.restore`), tablo `mcp_servers` (migration `0750`): ad (tekil), `stdio` (komut + argümanlar) ya da `http` (URL; saklanır, bağlanma henüz yok), açık/kapalı, **onay** (migration `0751`: kullanıcının onayladığı başlatma özeti; kaydı arayüzde komut gösterilip onaylanarak eklemek/kaydetmek onaylar, yedekten gelen ya da elle değişen satır onaysızdır). **Ortam değişkeni saklanmaz** (sırlar yalnız anahtar zincirinde).
+- `fc_mcp::McpClient`: kapalı ya da onaysız kaydı hiç başlatmaz (`McpError::NotAllowed`); aksi halde stdio sunucuyu başlatıp el sıkışır, araçları listeler (`ExternalTool`), araç çağırır, kapatır. Onay politikası `ExternalTool::needs_confirmation`: dış sunucunun ipuçları güvenilmez sayılır, yalnız politikayı sıkılaştırabilir — açıkça `readOnlyHint=true` ve yıkıcı olmayan araç dışında her çağrı kullanıcı onayı ister. AI özelliklerine (iz G) bağlama ve çağrıların arayüzde gösterilmesi sonraki adım.
+- CLI: `fc mcp tools <kayıtlı ad>` ya da `fc mcp tools -- <komut> <argümanlar…>` araçları listeler (`!` = onay ister).
 
 Uygulama için resmi Rust MCP SDK'sı (`rmcp`) kullanılır.
 

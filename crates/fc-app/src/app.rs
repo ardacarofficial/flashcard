@@ -72,6 +72,8 @@ pub struct App {
     writers_waiting: AtomicUsize,
     /// Folder of the collection file (`None` until known; see [`App::data_dir`]).
     data_dir: OnceLock<PathBuf>,
+    /// Oplog position this process has accounted for (see [`App::poll_external_changes`]).
+    oplog_seen: Mutex<Option<i64>>,
 }
 
 /// Where a command's oplog entries go.
@@ -203,6 +205,7 @@ impl App {
             jobs: crate::jobs::JobRuntime::default(),
             writers_waiting: AtomicUsize::new(0),
             data_dir: OnceLock::new(),
+            oplog_seen: Mutex::new(None),
         })
     }
 
@@ -232,6 +235,8 @@ impl App {
         // Best effort: an expired-trash purge that fails must not keep the collection closed
         // (it runs again next start, and the user can run `browse.purge_trash`).
         let _ = crate::modules::browse::purge_on_startup(self);
+        // Position from which other processes' commits count as news.
+        self.poll_external_changes()?;
         Ok(())
     }
 
@@ -281,6 +286,70 @@ impl App {
         }
         app.load_state()?;
         Ok(app)
+    }
+
+    /// Like [`App::open_sqlite`] for an existing collection that must **not** be migrated
+    /// (secondary processes such as `fc mcp serve`): an older schema is refused with
+    /// `IO_DATABASE` ("must be migrated by the app first"), never upgraded behind the app's back.
+    /// It only [attaches](App::attach_state): the app that owns the file may be running.
+    pub fn open_sqlite_current(path: &std::path::Path) -> AppResult<Self> {
+        let store = Arc::new(fc_storage::SqliteStore::open_current(path)?);
+        let app = Self::new(AppDeps::with_store(store))
+            .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+        if let Some(dir) = path.parent() {
+            app.set_data_dir(dir.to_path_buf());
+        }
+        app.attach_state()?;
+        Ok(app)
+    }
+
+    /// Startup of a **secondary** process on a collection the app owns (`fc mcp serve`): loads
+    /// module switches and the locale and records the oplog position — and writes nothing.
+    /// [`App::load_state`]'s startup work belongs to the owning app alone: in a second process
+    /// it would mark the app's running jobs interrupted, roll back an import still in progress
+    /// as if it had crashed, and purge the trash (a history barrier the user did not ask for).
+    pub fn attach_state(&self) -> AppResult<()> {
+        self.reload_cached_state()?;
+        self.poll_external_changes()?;
+        Ok(())
+    }
+
+    /// Notices commits other processes made (the CLI, `fc mcp serve`, …): when oplog entries
+    /// appeared since the last call whose actor is not this app's own (`user`/`system`), it
+    /// reloads the cached module/locale state and publishes [`DomainEvent::DataChanged`], so
+    /// open screens refetch. Returns whether it did. Cheap when nothing changed (one
+    /// `max(rowid)`): the desktop calls it on a timer and when its window gets focus. The
+    /// first call only records the position.
+    pub fn poll_external_changes(&self) -> AppResult<bool> {
+        let tx = self.store.read()?;
+        let now = tx.oplog_watermark()?;
+        let mut seen = self
+            .oplog_seen
+            .lock()
+            .map_err(|_| AppError::api(ErrorCode::Internal, "oplog watermark poisoned"))?;
+        let Some(before) = *seen else {
+            *seen = Some(now);
+            return Ok(false);
+        };
+        if now == before {
+            return Ok(false);
+        }
+        // Fewer entries than before: the log was replaced (restore) — treat as foreign.
+        let foreign = now < before
+            || tx.oplog_actors_after(before)?.iter().any(|a| {
+                !matches!(
+                    serde_json::from_value::<Actor>(a.clone()),
+                    Ok(Actor::User | Actor::System)
+                )
+            });
+        *seen = Some(now);
+        drop(seen);
+        drop(tx);
+        if foreign {
+            self.reload_cached_state()?;
+            self.publish(vec![DomainEvent::DataChanged], None);
+        }
+        Ok(foreign)
     }
 
     /// Re-reads module switches and the locale from storage into the in-memory caches.

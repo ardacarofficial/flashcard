@@ -1,0 +1,6 @@
+{
+  "oplog.summary.mcp.servers.add": "MCP sunucusu eklendi: {name}",
+  "oplog.summary.mcp.servers.update": "MCP sunucusu düzenlendi: {name}",
+  "oplog.summary.mcp.servers.remove": "MCP sunucusu kaldırıldı: {name}",
+  "oplog.summary.mcp.servers.restore": "MCP sunucusu geri getirildi: {name}"
+}

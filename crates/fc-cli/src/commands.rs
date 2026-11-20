@@ -155,6 +155,12 @@ pub fn run(ctx: &Ctx<'_>, command: &Command, stdin: &mut dyn Read) -> Result<Str
             let r = call::<m::OplogRedo>(ctx.app, &Empty {})?;
             ctx.out(&r, |r| undo_line(&ctx.text, "cli.redone", r))
         }
+        Command::Mcp(crate::mcp::McpCommand::Tools { server, command }) => {
+            crate::mcp::tools(ctx, server.as_deref(), command)
+        }
+        Command::Mcp(crate::mcp::McpCommand::Serve { .. }) => {
+            Err(invalid("fc mcp serve runs before the collection is opened"))
+        }
         Command::Call { method, params } => {
             let raw = match params.as_deref() {
                 Some("-") => {

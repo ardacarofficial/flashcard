@@ -1,0 +1,98 @@
+{
+  "nav": {
+    "mcp": "MCP"
+  },
+  "modules": {
+    "mcp": {
+      "name": "MCP",
+      "description": "Lets AI assistants such as Claude Desktop and Claude Code work with your collection, and connects external MCP servers."
+    }
+  },
+  "settings": {
+    "mcp": {
+      "server": {
+        "allow_writes": {
+          "label": "Let MCP clients make changes",
+          "description": "Off: assistants can only read (list decks, search, read notes)."
+        }
+      }
+    }
+  },
+  "commands": {
+    "mcp": {
+      "tools": {
+        "list": "MCP server tools"
+      },
+      "servers": {
+        "list": "External MCP servers",
+        "add": "Add an MCP server",
+        "update": "Edit an MCP server",
+        "remove": "Remove an MCP server"
+      }
+    }
+  },
+  "mcp": {
+    "heading": "MCP",
+    "server": {
+      "heading": "Use from Claude",
+      "intro": "AI assistants that speak MCP start this app's server and work with this collection. Every change they make is an ordinary step you can undo.",
+      "allow_writes": "Let assistants make changes",
+      "read_only_note": "Assistants can only read now.",
+      "setup": "Setup",
+      "claude_code": "Claude Code",
+      "claude_desktop": "Claude Desktop (claude_desktop_config.json)",
+      "db_hint": "Replace the path with your collection file.",
+      "tools": "Tools",
+      "read": "reads",
+      "write": "writes",
+      "changes_content": "changes content"
+    },
+    "tools": {
+      "list_decks": "List decks",
+      "list_note_types": "List note types",
+      "list_classifications": "List classifications of a deck",
+      "search_cards": "Search cards",
+      "get_note": "Read a note",
+      "create_deck": "Create a deck",
+      "add_notes": "Add notes",
+      "update_note": "Edit a note",
+      "set_classification": "Set a classification (asks for confirmation)"
+    },
+    "client": {
+      "heading": "External MCP servers",
+      "intro": "Servers whose tools the app's AI features may use. Each call is shown; tools that change things ask first.",
+      "none": "No servers yet.",
+      "name": "Name",
+      "transport": "Connection",
+      "stdio": "Command",
+      "http": "URL (HTTP)",
+      "command": "Command",
+      "args": "Arguments (one per line)",
+      "url": "URL",
+      "enabled": "Enabled",
+      "add": "Add server",
+      "remove": "Remove",
+      "not_approved": "Not approved",
+      "approve": "Approve",
+      "confirm_add": "This app will start the following program whenever its AI features use this server: {command}. Only continue if you trust it.",
+      "confirm_approve": "This server came from outside (a restored backup, for example) and has never been approved. Approving lets the app start: {command}. Only continue if you trust it.",
+      "trust_add": "Add and trust",
+      "trust_approve": "Approve"
+    }
+  },
+  "errors": {
+    "validation": {
+      "mcp_server": "Check the server: it needs a name, and a command (or an http(s) URL)."
+    },
+    "not_found": {
+      "mcp_server": "That MCP server no longer exists.",
+      "mcp_tool": "Unknown MCP tool."
+    },
+    "conflict": {
+      "mcp_server_name": "Another MCP server already has this name."
+    },
+    "permission": {
+      "mcp_read_only": "MCP clients may only read: changes are turned off."
+    }
+  }
+}

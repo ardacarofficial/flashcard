@@ -106,6 +106,47 @@ impl SqliteStore {
         })
     }
 
+    /// Opens an existing database **without migrating or snapshotting it**: for secondary
+    /// processes (`fc mcp serve`) that must not rewrite a collection the app owns. Fails with
+    /// [`StorageError::NeedsMigration`] when migrations are pending and with
+    /// [`StorageError::TooNew`] when the file is ahead of this build; never creates the file.
+    pub fn open_current(path: &Path) -> StorageResult<Self> {
+        let mut conn = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        migrate::configure_connection(&conn)?;
+        let latest = migrate::latest_version();
+        let found = migrate::current_version(&conn)?;
+        if found > latest {
+            return Err(StorageError::TooNew {
+                found,
+                supported: latest,
+            });
+        }
+        // Also catches an edited migration (checksum) and gaps, without applying anything.
+        if !migrate::pending_versions(&mut conn)?.is_empty() {
+            return Err(StorageError::NeedsMigration { found, latest });
+        }
+        let readers = (0..READ_POOL_SIZE)
+            .map(|_| {
+                let r = Connection::open_with_flags(
+                    path,
+                    OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+                )?;
+                migrate::configure_reader(&r)?;
+                Ok(Mutex::new(r))
+            })
+            .collect::<StorageResult<Vec<_>>>()?;
+        Ok(Self {
+            writer: Mutex::new(conn),
+            readers,
+            path: Some(path.to_owned()),
+            backup: None,
+            timeout: Duration::from_millis(u64::from(migrate::BUSY_TIMEOUT_MS)),
+        })
+    }
+
     /// Opens a private in-memory database (tests, CLI dry runs). Reads share the writer
     /// connection.
     pub fn open_in_memory() -> StorageResult<Self> {

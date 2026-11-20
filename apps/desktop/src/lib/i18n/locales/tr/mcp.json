@@ -1,0 +1,98 @@
+{
+  "nav": {
+    "mcp": "MCP"
+  },
+  "modules": {
+    "mcp": {
+      "name": "MCP",
+      "description": "Claude Desktop ve Claude Code gibi yapay zeka asistanlarının koleksiyonunla çalışmasını sağlar, dış MCP sunucularını bağlar."
+    }
+  },
+  "settings": {
+    "mcp": {
+      "server": {
+        "allow_writes": {
+          "label": "MCP istemcileri değişiklik yapabilsin",
+          "description": "Kapalıysa asistanlar yalnızca okuyabilir (desteleri listeleme, arama, not okuma)."
+        }
+      }
+    }
+  },
+  "commands": {
+    "mcp": {
+      "tools": {
+        "list": "MCP sunucusu araçları"
+      },
+      "servers": {
+        "list": "Dış MCP sunucuları",
+        "add": "MCP sunucusu ekle",
+        "update": "MCP sunucusunu düzenle",
+        "remove": "MCP sunucusunu kaldır"
+      }
+    }
+  },
+  "mcp": {
+    "heading": "MCP",
+    "server": {
+      "heading": "Claude'dan kullan",
+      "intro": "MCP konuşan yapay zeka asistanları bu uygulamanın sunucusunu başlatıp bu koleksiyonla çalışır. Yaptıkları her değişiklik geri alabileceğin sıradan bir adımdır.",
+      "allow_writes": "Asistanlar değişiklik yapabilsin",
+      "read_only_note": "Asistanlar şu an yalnızca okuyabilir.",
+      "setup": "Kurulum",
+      "claude_code": "Claude Code",
+      "claude_desktop": "Claude Desktop (claude_desktop_config.json)",
+      "db_hint": "Yolu kendi koleksiyon dosyanla değiştir.",
+      "tools": "Araçlar",
+      "read": "okur",
+      "write": "yazar",
+      "changes_content": "içeriği değiştirir"
+    },
+    "tools": {
+      "list_decks": "Desteleri listele",
+      "list_note_types": "Not türlerini listele",
+      "list_classifications": "Destenin sınıflandırmalarını listele",
+      "search_cards": "Kart ara",
+      "get_note": "Not oku",
+      "create_deck": "Deste oluştur",
+      "add_notes": "Not ekle",
+      "update_note": "Notu düzenle",
+      "set_classification": "Sınıflandırma ata (önce onay ister)"
+    },
+    "client": {
+      "heading": "Dış MCP sunucuları",
+      "intro": "Araçlarını uygulamanın yapay zeka özelliklerinin kullanabileceği sunucular. Her çağrı gösterilir; bir şey değiştiren araçlar önce sorar.",
+      "none": "Henüz sunucu yok.",
+      "name": "Ad",
+      "transport": "Bağlantı",
+      "stdio": "Komut",
+      "http": "URL (HTTP)",
+      "command": "Komut",
+      "args": "Argümanlar (her satıra bir tane)",
+      "url": "URL",
+      "enabled": "Açık",
+      "add": "Sunucu ekle",
+      "remove": "Kaldır",
+      "not_approved": "Onaylanmadı",
+      "approve": "Onayla",
+      "confirm_add": "Yapay zeka özellikleri bu sunucuyu kullandığında uygulama şu programı başlatacak: {command}. Yalnızca güveniyorsan devam et.",
+      "confirm_approve": "Bu sunucu dışarıdan geldi (örneğin geri yüklenen bir yedekten) ve hiç onaylanmadı. Onaylarsan uygulama şunu başlatabilir: {command}. Yalnızca güveniyorsan devam et.",
+      "trust_add": "Ekle ve güven",
+      "trust_approve": "Onayla"
+    }
+  },
+  "errors": {
+    "validation": {
+      "mcp_server": "Sunucuyu kontrol et: bir adı ve bir komutu (ya da http(s) adresi) olmalı."
+    },
+    "not_found": {
+      "mcp_server": "Bu MCP sunucusu artık yok.",
+      "mcp_tool": "Bilinmeyen MCP aracı."
+    },
+    "conflict": {
+      "mcp_server_name": "Bu adda başka bir MCP sunucusu var."
+    },
+    "permission": {
+      "mcp_read_only": "MCP istemcileri yalnızca okuyabilir: değişiklikler kapalı."
+    }
+  }
+}

@@ -29,7 +29,7 @@
   $effect(() => {
     const id = noteId;
     void load(id);
-    const unsub = api.on(['cards_updated', 'flags_changed', 'note', 'undone', 'redone'], () => void load(id));
+    const unsub = api.on(['cards_updated', 'flags_changed', 'note', 'undone', 'redone', 'data_changed'], () => void load(id));
     return () => void unsub.then((u) => u());
   });
 

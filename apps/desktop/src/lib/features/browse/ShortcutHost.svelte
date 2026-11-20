@@ -175,7 +175,7 @@
   onMount(() => {
     trackModules();
     void loadShortcuts();
-    const unsub = api.on(['setting_changed', 'module_toggled', 'undone', 'redone'], () => {
+    const unsub = api.on(['setting_changed', 'module_toggled', 'undone', 'redone', 'data_changed'], () => {
       void loadShortcuts();
       void loadEntries(paletteOn);
     });

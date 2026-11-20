@@ -154,6 +154,10 @@ define_id!(
     OplogId
 );
 define_id!(
+    /// External MCP server registration id (v0.8).
+    McpServerId
+);
+define_id!(
     /// Groups oplog entries that are undone together.
     BatchId
 );
