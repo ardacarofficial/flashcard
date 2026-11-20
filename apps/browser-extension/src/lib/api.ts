@@ -67,6 +67,11 @@ function isApiError(v: unknown): v is ApiError {
 export class LocalApi {
   constructor(private readonly cfg: ApiConfig) {}
 
+  /** The token this client sends (so a 401 can be attributed to it). */
+  get token(): string | undefined {
+    return this.cfg.token;
+  }
+
   get baseUrl(): string {
     return `http://127.0.0.1:${this.cfg.port}`;
   }

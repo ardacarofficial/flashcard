@@ -32,7 +32,7 @@ async function usePort(ext: Ext, port: number): Promise<void> {
 }
 
 /** Selects `word` inside `#p` and runs the context-menu capture on that tab. */
-async function selectAndCapture(ext: Ext, page: Page, word: string): Promise<void> {
+async function selectAndCapture(ext: Ext, page: Page, word: string, menuText?: string, menuUrl?: string): Promise<void> {
   await page.evaluate((w) => {
     const node = document.getElementById('p')?.firstChild;
     if (!node?.textContent) throw new Error('no text');
@@ -45,12 +45,16 @@ async function selectAndCapture(ext: Ext, page: Page, word: string): Promise<voi
     sel?.addRange(range);
   }, word);
   const url = page.url();
-  await ext.sw.evaluate(async (u) => {
-    const [tab] = await chrome.tabs.query({ url: u });
-    if (tab?.id === undefined) throw new Error('tab not found');
-    const capture = (globalThis as unknown as { __fcCapture: (id: number) => Promise<unknown> }).__fcCapture;
-    await capture(tab.id);
-  }, url);
+  await ext.sw.evaluate(
+    async ([u, text, pageUrl]) => {
+      // `tab.url` is hidden without host permission, so a URL query finds nothing there: use the active tab.
+      const [tab] = (await chrome.tabs.query({ url: u })).concat(await chrome.tabs.query({ active: true, lastFocusedWindow: true }));
+      if (tab?.id === undefined) throw new Error('tab not found');
+      const capture = (globalThis as unknown as { __fcCapture: (id: number, text?: string, pageUrl?: string) => Promise<unknown> }).__fcCapture;
+      await capture(tab.id, text, pageUrl);
+    },
+    [url, menuText, menuUrl] as const,
+  );
 }
 
 async function openPopup(ext: Ext): Promise<Page> {
@@ -159,6 +163,35 @@ test('while the app is closed the word is queued and delivered once it opens', a
   await expect(options.locator('#outbox-state')).toHaveText('0 waiting, 0 rejected by the app.');
   expect(api.inbox.map((i) => i.item.front)).toEqual(['setts']);
   expect(api.inbox[0]?.item.attributes).toEqual({ 'attr-seviye': 'opt-C1' });
+});
+
+test('on an origin outside host_permissions the page is not scripted: the menu text is used, without a sentence', async () => {
+  // https://example.test is not in host_permissions (only http://127.0.0.1/*). A real toolbar click or
+  // context-menu click would grant `activeTab` for that tab; automation cannot produce that user
+  // gesture, so what is provable here is the other half: with no grant, `executeScript` is denied
+  // and the capture degrades to the context menu's `selectionText` + page URL/title.
+  ext = await launch();
+  await usePort(ext, server.port);
+  const page = await ext.context.newPage();
+  await page.route('https://example.test/page.html', (route) =>
+    route.fulfill({
+      contentType: 'text/html; charset=utf-8',
+      body: '<!doctype html><title>Badgers of Europe</title><article><p id="p">Badgers live in setts. The badger dug a deep hole under the old oak.</p></article>',
+    }),
+  );
+  await page.goto('https://example.test/page.html');
+  await page.bringToFront();
+  await selectAndCapture(ext, page, 'badger', 'badger', 'https://example.test/page.html');
+
+  const stored = await ext.sw.evaluate(async () => (await chrome.storage.session.get(null)) as Record<string, unknown>);
+  const capture = Object.values(stored).find((v) => (v as { front?: string }).front === 'badger') as
+    | { front: string; sentence?: string; url: string; title: string }
+    | undefined;
+  expect(capture).toBeDefined();
+  expect(capture?.url).toBe('https://example.test/page.html');
+  expect(capture?.title).toBe(''); // the tab's title is hidden too without a grant
+  // Nothing was read from the page (no host permission, no activeTab grant): no sentence.
+  expect(capture?.sentence ?? '').toBe('');
 });
 
 test('the UI is Turkish when the browser is', async () => {

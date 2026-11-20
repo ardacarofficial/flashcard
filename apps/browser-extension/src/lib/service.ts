@@ -91,11 +91,14 @@ export class Service {
     return new LocalApi({ port, token: p.token, fetch: this.deps.fetch });
   }
 
-  /** On 401 the token is useless: forget it (the queue stays) so the popup offers pairing again. */
-  private async onFailure(f: Failure): Promise<void> {
-    if (f.kind !== 'unauthorized') return;
+  /**
+   * On 401 the token is useless: forget it (the queue stays) so the popup offers pairing again.
+   * Only the token that actually got the 401 is forgotten: a newer one (re-paired meanwhile) stays.
+   */
+  private async onFailure(f: Failure, usedToken: string | undefined): Promise<void> {
+    if (f.kind !== 'unauthorized' || !usedToken) return;
     const p = await this.pairing();
-    if (!p.token) return;
+    if (p.token !== usedToken) return;
     await this.savePairing({ last: 'revoked' });
   }
 
@@ -127,7 +130,18 @@ export class Service {
    * Polls the pending request once. The token is only in the **first** approved answer, so it is
    * stored before anything else happens.
    */
-  async pollPairing(): Promise<Result<Status['pairing'] | 'denied' | 'expired'>> {
+  pollPairing(): Promise<Result<Status['pairing'] | 'denied' | 'expired'>> {
+    // Single flight: the popup's timer does not wait for the previous request, and two answers
+    // racing would let a token-less "approved" overwrite the token the other one just stored.
+    this.polling ??= this.pollOnce().finally(() => {
+      this.polling = undefined;
+    });
+    return this.polling;
+  }
+
+  private polling: Promise<Result<Status['pairing'] | 'denied' | 'expired'>> | undefined;
+
+  private async pollOnce(): Promise<Result<Status['pairing'] | 'denied' | 'expired'>> {
     const p = await this.pairing();
     if (p.token) return { ok: true, value: 'paired' };
     if (!p.pending) return { ok: true, value: 'none' };
@@ -135,30 +149,37 @@ export class Service {
     const r = await api.pairingStatus(p.pending.requestId);
     if (!r.ok) {
       if (r.failure.kind === 'api' && r.failure.status === 404) {
-        await this.savePairing({ last: 'expired' });
-        return { ok: true, value: 'expired' };
+        return { ok: true, value: await this.settle(p.pending.requestId, { last: 'expired' }, 'expired') };
       }
       return r;
     }
-    return { ok: true, value: await this.applyPairStatus(r.value) };
+    return { ok: true, value: await this.applyPairStatus(p.pending.requestId, r.value) };
   }
 
-  private async applyPairStatus(s: PairStatusResponse): Promise<Status['pairing'] | 'denied' | 'expired'> {
+  /**
+   * Writes the outcome of request `requestId` only while that request is still the pending one:
+   * never over a token that was stored meanwhile, nor over a newer pairing attempt.
+   */
+  private async settle<R extends Status['pairing'] | 'denied' | 'expired'>(requestId: string, next: Pairing, value: R): Promise<R | Status['pairing']> {
+    const cur = await this.pairing();
+    if (cur.token) return 'paired';
+    if (cur.pending?.requestId !== requestId) return cur.pending ? 'pending' : 'none';
+    await this.savePairing(next);
+    return value;
+  }
+
+  private async applyPairStatus(requestId: string, s: PairStatusResponse): Promise<Status['pairing'] | 'denied' | 'expired'> {
     switch (s.status) {
       case 'approved':
         if (!s.token) {
           // Approved, but the token went to an earlier poll that never got stored: start over.
-          await this.savePairing({ last: 'expired' });
-          return 'expired';
+          return this.settle(requestId, { last: 'expired' }, 'expired');
         }
-        await this.savePairing({ token: s.token, clientId: s.client_id ?? undefined, scopes: s.scopes });
-        return 'paired';
+        return this.settle(requestId, { token: s.token, clientId: s.client_id ?? undefined, scopes: s.scopes }, 'paired');
       case 'denied':
-        await this.savePairing({ last: 'denied' });
-        return 'denied';
+        return this.settle(requestId, { last: 'denied' }, 'denied');
       case 'expired':
-        await this.savePairing({ last: 'expired' });
-        return 'expired';
+        return this.settle(requestId, { last: 'expired' }, 'expired');
       case 'pending':
         return 'pending';
     }
@@ -182,7 +203,7 @@ export class Service {
       await this.deps.local.set(KEYS.cache, { ...cache, decks: r.value });
       return { decks: r.value, cached: false };
     }
-    await this.onFailure(r.failure);
+    await this.onFailure(r.failure, api.token);
     return { decks: cache.decks ?? [], cached: true };
   }
 
@@ -196,7 +217,7 @@ export class Service {
       await this.deps.local.set(KEYS.cache, { ...cache, classifications });
       return { list: r.value, cached: false };
     }
-    await this.onFailure(r.failure);
+    await this.onFailure(r.failure, api.token);
     return { list: cache.classifications?.[deckId] ?? [], cached: true };
   }
 
@@ -214,7 +235,7 @@ export class Service {
     const api = await this.api();
     const r = await api.addToInbox(item);
     if (r.ok) return { status: 'sent' };
-    await this.onFailure(r.failure);
+    await this.onFailure(r.failure, api.token);
     const error = rejection(r.failure);
     return error ? { status: 'rejected', error } : this.queue(item, r.failure);
   }
@@ -231,7 +252,7 @@ export class Service {
     if (!p.token) return { sent: 0, failed: 0, stoppedBy: { kind: 'unauthorized' } };
     const api = await this.api();
     const report = await this.outbox.flush((item) => api.addToInbox(item));
-    if (report.stoppedBy) await this.onFailure(report.stoppedBy);
+    if (report.stoppedBy) await this.onFailure(report.stoppedBy, api.token);
     return report;
   }
 

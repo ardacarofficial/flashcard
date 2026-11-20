@@ -110,7 +110,10 @@ chrome.runtime.onMessage.addListener((msg: Request | LocalRequest, sender, sendR
   return true;
 });
 
-// e2e hook: lets the Playwright test run the same capture the context menu runs (menus cannot be
-// clicked by automation). The service-worker scope is private to the extension.
-(globalThis as { __fcCapture?: unknown }).__fcCapture = (tabId: number) =>
-  chrome.tabs.get(tabId).then((tab) => captureTab(tab));
+// e2e hook (test builds only, `vite build --mode e2e`): lets the Playwright test run the same
+// capture the context menu runs (menus cannot be clicked by automation). `fallbackText`/`pageUrl` are what the
+// menu reports as `selectionText`/`pageUrl`. The service-worker scope is private to the extension.
+if (__FC_E2E__) {
+  (globalThis as { __fcCapture?: unknown }).__fcCapture = (tabId: number, fallbackText?: string, pageUrl?: string) =>
+    chrome.tabs.get(tabId).then((tab) => captureTab(tab, fallbackText, pageUrl));
+}

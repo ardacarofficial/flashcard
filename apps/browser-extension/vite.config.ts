@@ -9,7 +9,9 @@ const here = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
  * popup and options page are separate entries with stable file names (the manifest points at them).
  * DTO types come from the desktop app's generated `fc-api` bindings (`@fc/api`, type-only).
  */
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // The e2e capture hook (`__FC_E2E__`) exists only in `vite build --mode e2e`, never in `pnpm build`.
+  define: { __FC_E2E__: JSON.stringify(mode === 'e2e') },
   resolve: {
     alias: { '@fc/api': here('../desktop/src/lib/api/generated/index.ts') },
   },
@@ -35,4 +37,4 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['tests/unit/**/*.test.ts'],
   },
-});
+}));

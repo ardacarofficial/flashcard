@@ -62,6 +62,42 @@ describe('pairing', () => {
     expect((await s.service.status()).paired).toBe(false);
   });
 
+  it('single-flights the poll: overlapping polls share one request and the token survives', async () => {
+    const s = setup({ autoApprove: -1 });
+    await s.service.startPairing();
+    s.mock.approve([...s.mock.clients.keys()][0]!);
+    const [a, b, c] = await Promise.all([s.service.pollPairing(), s.service.pollPairing(), s.service.pollPairing()]);
+    expect([a, b, c]).toEqual([{ ok: true, value: 'paired' }, { ok: true, value: 'paired' }, { ok: true, value: 'paired' }]);
+    expect((await s.local.get<Pairing>(KEYS.pairing))?.token).toMatch(/^tok-/);
+    expect(s.mock.log.filter((r) => r.path.startsWith('/v1/pair/'))).toHaveLength(1);
+  });
+
+  it('a late token-less answer never overwrites a stored token', async () => {
+    const s = setup({ autoApprove: -1 });
+    await s.service.startPairing();
+    const id = [...s.mock.clients.keys()][0]!;
+    s.mock.approve(id);
+    const first = await s.service.pollPairing(); // stores the token
+    expect(first).toEqual({ ok: true, value: 'paired' });
+    const token = (await s.local.get<Pairing>(KEYS.pairing))?.token;
+    // A second answer for the same request (token already handed out) arrives late.
+    const svc = s.service as unknown as { applyPairStatus(id: string, st: unknown): Promise<string> };
+    expect(await svc.applyPairStatus(id, { status: 'approved' })).toBe('paired');
+    expect((await s.local.get<Pairing>(KEYS.pairing))?.token).toBe(token);
+  });
+
+  it('a 401 only forgets the token that got it, not a newer one', async () => {
+    const s = setup();
+    await pair(s);
+    const old = (await s.local.get<Pairing>(KEYS.pairing))?.token;
+    const svc = s.service as unknown as { onFailure(f: { kind: 'unauthorized' }, t: string | undefined): Promise<void> };
+    await s.local.set(KEYS.pairing, { token: 'tok-newer' });
+    await svc.onFailure({ kind: 'unauthorized' }, old);
+    expect((await s.local.get<Pairing>(KEYS.pairing))?.token).toBe('tok-newer');
+    await svc.onFailure({ kind: 'unauthorized' }, 'tok-newer');
+    expect(await s.local.get<Pairing>(KEYS.pairing)).toEqual({ last: 'revoked' });
+  });
+
   it('forgets a revoked token on the next call but keeps queued items', async () => {
     const s = setup();
     await pair(s);
