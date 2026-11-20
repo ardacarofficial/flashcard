@@ -10,6 +10,7 @@
   "oplog.summary.lock.configure": "Uygulama kilidi süresi değişti",
   "oplog.summary.lock.clear": "Uygulama kilidi kaldırıldı",
   "oplog.summary.lock.unlock": "Uygulamanın kilidi açıldı",
+  "oplog.summary.lock.recover": "Bozuk uygulama kilidi sıfırlandı",
   "oplog.summary.lock.lock": "Uygulama kilitlendi",
   "oplog.summary.lock.activity": "Uygulama açık tutuldu",
   "oplog.summary.reminders.test": "Deneme hatırlatması gönderildi"

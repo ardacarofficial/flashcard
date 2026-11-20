@@ -11,6 +11,12 @@
 //! **first**) and exits. Either way the link goes through [`open_link`] and its outcome waits
 //! in [`DeepLinkInbox`] until the UI takes it (`take_deep_links`), so a link that arrives
 //! before the webview has loaded is not lost.
+//!
+//! **While locked** (v1.0 security review) a link is not handled at all — any web page can
+//! fire one, and handling it would add inbox items and tell whether a deck or note exists.
+//! Its URL waits in a small, deduplicated queue ([`MAX_HELD_LINKS`]) and is handled after
+//! unlock ([`release_held_links`]); `take_deep_links` is refused while locked. The media
+//! protocol and the quick-add prefill are closed too (`session::is_locked`).
 
 use crate::ipc::SharedApp;
 use fc_api::v1::events::{DomainEvent, EventEnvelope};
@@ -37,33 +43,50 @@ pub const CLIPBOARD_POLL: Duration = Duration::from_millis(1000);
 pub const API_SERVER_POLL: Duration = Duration::from_millis(2000);
 /// Most link outcomes kept for the UI.
 const MAX_QUEUED_LINKS: usize = 20;
+/// Most links kept unhandled while the app is locked (the oldest go first).
+pub const MAX_HELD_LINKS: usize = 10;
 
 // ------------------------------------------------------------------ deep links
 
-/// Outcomes of handled links, waiting for the UI.
+/// Outcomes of handled links waiting for the UI, and links held while the app is locked.
 #[derive(Debug, Default)]
-pub struct DeepLinkInbox(Mutex<Vec<Value>>);
+pub struct DeepLinkInbox {
+    outcomes: Mutex<Vec<Value>>,
+    held: Mutex<Vec<String>>,
+}
+
+fn guard<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 impl DeepLinkInbox {
     fn push(&self, v: Value) {
-        let mut q = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut q = guard(&self.outcomes);
         if q.len() >= MAX_QUEUED_LINKS {
             q.remove(0);
         }
         q.push(v);
     }
 
+    /// Keeps `url` for after unlock: once (a repeat moves it to the end), at most
+    /// [`MAX_HELD_LINKS`].
+    fn hold(&self, url: &str) {
+        let mut q = guard(&self.held);
+        q.retain(|u| u != url);
+        if q.len() >= MAX_HELD_LINKS {
+            q.remove(0);
+        }
+        q.push(url.to_owned());
+    }
+
+    /// Links held while locked.
+    pub fn held(&self) -> Vec<String> {
+        guard(&self.held).clone()
+    }
+
     /// Takes every waiting outcome.
     pub fn take(&self) -> Vec<Value> {
-        std::mem::take(
-            &mut *self
-                .0
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner),
-        )
+        std::mem::take(&mut *guard(&self.outcomes))
     }
 }
 
@@ -73,8 +96,13 @@ pub fn links_in_args<S: AsRef<str>>(args: &[S]) -> Option<String> {
 }
 
 /// Runs `deep_links.open` as the user and queues its outcome
-/// (`{url, ok: DeepLinkOutcome}` or `{url, error: ApiError}`).
-pub fn open_link(app: &App, queue: &DeepLinkInbox, url: &str) {
+/// (`{url, ok: DeepLinkOutcome}` or `{url, error: ApiError}`). While the app is locked the
+/// link is only held for after unlock; `false` then.
+pub fn open_link(app: &App, queue: &DeepLinkInbox, url: &str) -> bool {
+    if crate::session::is_locked(app) {
+        queue.hold(url);
+        return false;
+    }
     let r = app.call::<m::DeepLinksOpen>(
         &OpenDeepLink {
             url: url.to_owned(),
@@ -85,6 +113,24 @@ pub fn open_link(app: &App, queue: &DeepLinkInbox, url: &str) {
         Ok(outcome) => json!({ "url": url, "ok": outcome }),
         Err(error) => json!({ "url": url, "error": error }),
     });
+    true
+}
+
+/// Handles the links held while the app was locked (nothing while it still is). Returns how
+/// many were handled.
+pub fn release_held_links(app: &App, queue: &DeepLinkInbox) -> usize {
+    if crate::session::is_locked(app) {
+        return 0;
+    }
+    let held = std::mem::take(&mut *guard(&queue.held));
+    held.iter().filter(|url| open_link(app, queue, url)).count()
+}
+
+/// What `take_deep_links` answers: the waiting outcomes, refused while locked
+/// (`PERMISSION_APP_LOCKED`).
+pub fn take_links(app: &App, queue: &DeepLinkInbox) -> Result<Vec<Value>, fc_api::ApiError> {
+    fc_app::modules::profiles::gate(app, crate::session::SHELL_GATE)?;
+    Ok(queue.take())
 }
 
 /// Handles `url` and tells the UI; brings the main window forward.
@@ -95,15 +141,34 @@ pub fn deliver_link<R: Runtime>(handle: &AppHandle<R>, url: &str) {
     ) else {
         return;
     };
-    open_link(&app, &queue, url);
+    let handled = open_link(&app, &queue, url);
+    // Forward either way: while locked the user sees the lock screen.
     focus_main(handle);
-    let _ = handle.emit(DEEP_LINK_EVENT, ());
+    if handled {
+        let _ = handle.emit(DEEP_LINK_EVENT, ());
+    }
 }
 
-/// The UI takes the outcomes of links handled so far.
+/// After unlock: handle the held links and tell the UI.
+fn deliver_held_links<R: Runtime>(handle: &AppHandle<R>) {
+    let (Some(app), Some(queue)) = (
+        handle.try_state::<SharedApp>(),
+        handle.try_state::<DeepLinkInbox>(),
+    ) else {
+        return;
+    };
+    if release_held_links(&app, &queue) > 0 {
+        let _ = handle.emit(DEEP_LINK_EVENT, ());
+    }
+}
+
+/// The UI takes the outcomes of links handled so far (refused while locked).
 #[tauri::command]
-pub fn take_deep_links(queue: tauri::State<'_, DeepLinkInbox>) -> Vec<Value> {
-    queue.take()
+pub fn take_deep_links(
+    app: tauri::State<'_, SharedApp>,
+    queue: tauri::State<'_, DeepLinkInbox>,
+) -> Result<Vec<Value>, fc_api::ApiError> {
+    take_links(&app, &queue)
 }
 
 /// Single-instance callback: a second launch forwards its arguments here and exits.
@@ -145,6 +210,9 @@ fn setting(app: &App, key: &str) -> Option<Value> {
 /// its `prefill_clipboard` setting are on and the text is not something secret-looking.
 pub fn prefill_text(app: &App, clipboard: Option<String>) -> Option<String> {
     use fc_app::modules::quick_add::{ID, PREFILL_CLIPBOARD};
+    if crate::session::is_locked(app) {
+        return None;
+    }
     if !app.is_module_enabled(ID) || setting(app, PREFILL_CLIPBOARD) != Some(Value::Bool(true)) {
         return None;
     }
@@ -163,6 +231,10 @@ pub async fn quick_add_prefill<R: Runtime>(
 ) -> Result<Option<String>, fc_api::ApiError> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
     let app = state.inner().clone();
+    // Locked: the clipboard is not even read.
+    if crate::session::is_locked(&app) {
+        return Ok(None);
+    }
     let text = handle.clipboard().read_text().ok();
     tauri::async_runtime::spawn_blocking(move || prefill_text(&app, text))
         .await
@@ -392,6 +464,14 @@ pub fn start<R: Runtime>(handle: &AppHandle<R>, app: SharedApp) {
             deliver_link(&h, url.as_str());
         }
     });
+    // Links held while locked are handled once the user unlocks (off the event thread).
+    let h = handle.clone();
+    app.events().subscribe(Arc::new(move |e: &EventEnvelope| {
+        if matches!(e.event, DomainEvent::LockChanged { locked: false }) {
+            let h = h.clone();
+            std::thread::spawn(move || deliver_held_links(&h));
+        }
+    }));
     register_quick_add(handle, &app);
     watch_clipboard(handle.clone(), app.clone());
     attend_pairings(handle.clone(), &app);
@@ -403,6 +483,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
     use super::*;
+    use fc_api::v1::common::Empty;
     use fc_api::v1::decks::CreateDeck;
     use fc_api::v1::inbox::{DeepLinkOutcome, DeepLinkTarget, ListInbox};
     use fc_api::v1::modules::SetModuleEnabled;
@@ -471,6 +552,116 @@ mod tests {
             open_link(&t.app, &queue, &format!("flashcard://deck/{n}"));
         }
         assert_eq!(queue.take().len(), MAX_QUEUED_LINKS);
+    }
+
+    /// Security review: while locked a link (which any web page can fire) is not handled —
+    /// no inbox item, no answer about which ids exist — only held, bounded and deduplicated,
+    /// and handled after unlock; the UI cannot take outcomes while locked.
+    #[test]
+    fn links_wait_while_locked_and_run_after_unlock() {
+        use fc_api::v1::session::{SetLock, Unlock};
+        use fc_core::ux::lock::LockKind;
+        let root = tempfile::tempdir().unwrap();
+        let secrets = Arc::new(fc_ai::secrets::MemorySecrets::new());
+        let (app, _) = crate::session::open_profile(
+            root.path(),
+            secrets,
+            Arc::new(fc_app::system::SystemClock),
+        )
+        .unwrap();
+        let d = app
+            .call::<m::DecksCreate>(
+                &CreateDeck {
+                    path: "İngilizce".into(),
+                    parent_id: None,
+                    description: None,
+                    icon: None,
+                    color: None,
+                },
+                &Actor::User,
+            )
+            .unwrap()
+            .id;
+        let queue = DeepLinkInbox::default();
+        assert!(open_link(&app, &queue, &format!("flashcard://deck/{d}")));
+        app.call::<m::LockSet>(
+            &SetLock {
+                kind: LockKind::Pin,
+                secret: "4821".into(),
+                current: None,
+                idle_minutes: None,
+            },
+            &Actor::User,
+        )
+        .unwrap();
+        app.call::<m::LockLock>(&Empty {}, &Actor::User).unwrap();
+
+        // Outcomes from before the lock stay hidden while locked.
+        let e = take_links(&app, &queue).unwrap_err();
+        assert_eq!(e.code, fc_api::ErrorCode::PermissionAppLocked);
+        let add = format!("flashcard://add?deck={d}&front=porsuk&back=badger");
+        assert!(!open_link(&app, &queue, &add));
+        assert!(!open_link(&app, &queue, &add), "a repeat is held once");
+        assert!(!open_link(&app, &queue, "flashcard://deck/nope"));
+        for n in 0..MAX_HELD_LINKS * 2 {
+            open_link(&app, &queue, &format!("flashcard://deck/{n}"));
+        }
+        assert_eq!(queue.held().len(), MAX_HELD_LINKS, "bounded");
+        open_link(&app, &queue, &add);
+        assert_eq!(queue.held().last(), Some(&add));
+        assert_eq!(release_held_links(&app, &queue), 0, "nothing while locked");
+        app.reload_cached_state().ok();
+        let inbox = app
+            .call::<m::InboxList>(&ListInbox::default(), &Actor::System)
+            .unwrap();
+        assert!(inbox.items.is_empty(), "no inbox item while locked");
+
+        app.call::<m::LockUnlock>(
+            &Unlock {
+                secret: "4821".into(),
+            },
+            &Actor::User,
+        )
+        .unwrap();
+        assert_eq!(release_held_links(&app, &queue), MAX_HELD_LINKS);
+        assert!(queue.held().is_empty());
+        let taken = take_links(&app, &queue).unwrap();
+        assert_eq!(
+            taken[0]["ok"]["kind"], "navigate",
+            "the one from before the lock"
+        );
+        assert_eq!(taken.last().unwrap()["ok"]["kind"], "inbox");
+        let inbox = app
+            .call::<m::InboxList>(&ListInbox::default(), &Actor::User)
+            .unwrap();
+        assert_eq!(inbox.items.len(), 1, "handled once");
+    }
+
+    /// Security review: the quick-add prefill (clipboard text) is not given out while locked.
+    #[test]
+    fn quick_add_prefill_is_empty_while_locked() {
+        use fc_api::v1::session::SetLock;
+        use fc_core::ux::lock::LockKind;
+        let root = tempfile::tempdir().unwrap();
+        let (app, _) = crate::session::open_profile(
+            root.path(),
+            Arc::new(fc_ai::secrets::MemorySecrets::new()),
+            Arc::new(fc_app::system::SystemClock),
+        )
+        .unwrap();
+        assert!(prefill_text(&app, Some("porsuk".into())).is_some());
+        app.call::<m::LockSet>(
+            &SetLock {
+                kind: LockKind::Pin,
+                secret: "4821".into(),
+                current: None,
+                idle_minutes: None,
+            },
+            &Actor::User,
+        )
+        .unwrap();
+        app.call::<m::LockLock>(&Empty {}, &Actor::User).unwrap();
+        assert_eq!(prefill_text(&app, Some("porsuk".into())), None);
     }
 
     /// The scheme is registered by the bundle, and single-instance is the first plugin (it

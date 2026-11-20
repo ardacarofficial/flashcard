@@ -41,9 +41,10 @@ pub fn run() {
         ])
         .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
             // The running profile's collection (v1.0); its media folder sits next to it.
+            // Nothing while the app is locked (423).
             let (status, mime, body) = match session::collection_path(ctx.app_handle()) {
-                Some(db) => media::respond(&db, request.uri().path()),
-                None => (500, "text/plain", Vec::new()),
+                Ok(db) => media::respond(&db, request.uri().path()),
+                Err(status) => (status, "text/plain", Vec::new()),
             };
             tauri::http::Response::builder()
                 .status(status)

@@ -4,6 +4,7 @@ import { api } from '$lib/api';
 import { i18n } from '$lib/i18n/index.svelte';
 import LockHost from './LockHost.svelte';
 import ProfilesScreen from './ProfilesScreen.svelte';
+import { mockLockHooks } from './mock';
 import type { ScreenCtx } from '../types';
 
 i18n.locale = 'en';
@@ -56,5 +57,24 @@ describe('profiles and app lock (dev mock)', () => {
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Flashcard is locked' })).toBeNull());
     expect(onunlock).toHaveBeenCalled();
     expect((await api.call('lock.status', {})).locked).toBe(false);
+  });
+
+  it('a lock whose hash is gone stays locked until the user removes it explicitly', async () => {
+    const onunlock = vi.fn();
+    render(LockHost, { onunlock });
+    const before = await api.call('lock.status', {});
+    await api.call('lock.set', { kind: 'pin', secret: '4821', current: before.enabled ? '4821' : null, idle_minutes: null });
+    mockLockHooks.loseHash();
+    expect(await screen.findByRole('heading', { name: "The lock's data is missing" })).toBeTruthy();
+    expect(screen.queryByLabelText('Enter your PIN or password')).toBeNull();
+    await expect(api.call('lock.unlock', { secret: '4821' })).rejects.toBeTruthy();
+    const remove = screen.getByRole('button', { name: 'Remove the lock' });
+    expect((remove as HTMLButtonElement).disabled).toBe(true);
+    await fireEvent.click(screen.getByLabelText("I understand: remove this profile's lock"));
+    await fireEvent.click(remove);
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Flashcard is locked' })).toBeNull());
+    expect(onunlock).toHaveBeenCalled();
+    const st = await api.call('lock.status', {});
+    expect(st.enabled || st.locked || st.recovery_required).toBe(false);
   });
 });

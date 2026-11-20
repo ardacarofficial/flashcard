@@ -2,6 +2,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use super::secrets::{scoped_account, ProfileSecrets};
 use super::store::{PROFILES_DIR, REGISTRY_FILE};
 use super::*;
 use crate::testing::{MemStore, TestApp};
@@ -477,4 +478,148 @@ fn deleting_a_locked_profile_needs_its_secret() {
         id: kid.id,
         secret: Some("2468".into()),
     });
+}
+
+// ------------------------------------------------------------------ security review (v1.0)
+
+fn wrong(fx: &Fx, pin: &str) -> ErrorCode {
+    fx.t.err::<LockUnlock>(Unlock { secret: pin.into() }).code
+}
+
+/// Security review: the wrong-attempt back-off is kept in the registry per profile, so a
+/// restart does not hand out fresh attempts.
+#[test]
+fn wrong_attempt_back_off_survives_a_restart() {
+    let fx = Fx::new();
+    fx.set_pin("4821", Some(5));
+    fx.t.ok::<LockLock>(Empty {});
+    for _ in 0..FREE_ATTEMPTS {
+        assert_eq!(wrong(&fx, "0000"), ErrorCode::PermissionLockSecret);
+    }
+    assert!(fx.registry_text().contains("\"failures\": 5"), "{}", fx.registry_text());
+
+    // "Relaunch": a new session of the same profile is still waiting, with the same count.
+    let next = Arc::new(fx.open_session());
+    assert!(next.is_locked());
+    let st = next.status().unwrap();
+    assert_eq!(st.failures, FREE_ATTEMPTS);
+    assert!(st.retry_after_ms > 0);
+    let e = next.unlock("4821").unwrap_err().into_api();
+    assert_eq!(e.code, ErrorCode::ConflictLockRetry, "no free tries after a restart");
+
+    // Exponential: the next wrong one doubles the wait, also across a restart.
+    fx.clock.advance(1_000);
+    let e = next.unlock("0000").unwrap_err().into_api();
+    assert_eq!(e.details["retry_after_ms"], 2_000);
+    let again = fx.open_session();
+    assert_eq!(again.status().unwrap().retry_after_ms, 2_000);
+    fx.clock.advance(2_000);
+    assert!(again.unlock("4821").unwrap());
+    let after = fx.open_session().status().unwrap();
+    assert_eq!((after.failures, after.retry_after_ms), (0, 0), "reset on success");
+}
+
+/// Security review: check and record of an attempt are one step, so parallel wrong attempts
+/// cannot all slip into the free ones.
+#[test]
+fn parallel_attempts_share_no_free_slot() {
+    let fx = Fx::new();
+    fx.set_pin("4821", Some(5));
+    fx.t.ok::<LockLock>(Empty {});
+    let session = fx.session();
+    let codes: Vec<ErrorCode> = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..FREE_ATTEMPTS * 2)
+            .map(|_| {
+                let session = session.clone();
+                s.spawn(move || session.unlock("0000").unwrap_err().into_api().code)
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    let wrong = codes
+        .iter()
+        .filter(|c| **c == ErrorCode::PermissionLockSecret)
+        .count();
+    assert_eq!(wrong, FREE_ATTEMPTS as usize, "{codes:?}");
+    assert_eq!(session.status().unwrap().failures, FREE_ATTEMPTS);
+}
+
+/// Security review: a profile marked as locked whose hash is gone (keychain entry removed)
+/// fails closed — it starts locked, the PIN is not even checked, and only the explicit
+/// recovery flow removes the lock.
+#[test]
+fn a_lock_without_its_hash_fails_closed_until_recovered() {
+    let keychain = Arc::new(Keychain::default());
+    let fx = Fx::with_secrets(keychain.clone());
+    fx.set_pin("4821", Some(5));
+    // Recovery is refused while the hash is there.
+    let e = fx.t.err::<LockRecover>(Empty {});
+    assert_eq!(e.code, ErrorCode::ConflictLockState);
+    assert_eq!(e.details["reason"], "not_recoverable");
+    fx.t.ok::<LockLock>(Empty {});
+    keychain
+        .delete(&session::secret_account(DEFAULT_PROFILE_ID))
+        .unwrap();
+
+    let next = fx.open_session();
+    assert!(next.is_locked(), "a restart starts locked");
+    let st = fx.t.ok::<LockStatus>(Empty {});
+    assert!(st.locked && st.enabled && st.recovery_required);
+    let e = fx.t.err::<LockUnlock>(Unlock {
+        secret: "4821".into(),
+    });
+    assert_eq!(e.code, ErrorCode::ConflictLockState);
+    assert_eq!(e.details["reason"], "recovery_required");
+    assert!(fx.session().is_locked(), "not silently unlocked");
+    assert!(gate(&fx.t.app, "v1.decks.list").is_err());
+    let e = fx.t.err::<LockSet>(SetLock {
+        kind: LockKind::Pin,
+        secret: "1357".into(),
+        current: None,
+        idle_minutes: None,
+    });
+    assert_eq!(e.details["reason"], "recovery_required");
+    assert!(gate(&fx.t.app, "v1.lock.recover").is_ok(), "reachable from the lock screen");
+
+    fx.t.take_events();
+    let st = fx.t.ok::<LockRecover>(Empty {});
+    assert!(!st.locked && !st.enabled && !st.recovery_required);
+    assert_eq!(fx.lock_events(), vec![false]);
+    assert!(gate(&fx.t.app, "v1.decks.list").is_ok());
+    assert!(!fx.open_session().is_locked());
+    // A new lock can be set right away.
+    assert!(fx.set_pin("1357", None).enabled);
+}
+
+/// Security review: AI keys are per profile. The default profile keeps the pre-v1.0
+/// account names (existing keys and the CLI keep working); other profiles get their own.
+#[test]
+fn ai_keys_are_namespaced_per_profile() {
+    use crate::modules::ai::key_account;
+    let raw = Arc::new(MemorySecrets::new());
+    let fx = Fx::with_secrets(raw.clone());
+    let work = fx.t.ok::<ProfilesCreate>(CreateProfile { name: "İş".into() });
+    let provider = fc_core::AiProviderId::from_uuid(uuid::Uuid::nil());
+    let account = key_account(provider);
+
+    // A key set before profiles existed is the default profile's.
+    raw.set(&account, &Secret::new("sk-old")).unwrap();
+    let default = fx.session().profile_secrets();
+    assert_eq!(default.get(&account).unwrap().unwrap().expose(), "sk-old");
+
+    // The other profile does not see it, and its own key has its own account.
+    let theirs = ProfileSecrets::new(raw.clone(), &work.id);
+    assert!(theirs.get(&account).unwrap().is_none());
+    theirs.set(&account, &Secret::new("sk-work")).unwrap();
+    assert_eq!(
+        raw.get(&format!("profile.{}.{account}", work.id))
+            .unwrap()
+            .unwrap()
+            .expose(),
+        "sk-work"
+    );
+    assert_eq!(default.get(&account).unwrap().unwrap().expose(), "sk-old");
+    theirs.delete(&account).unwrap();
+    assert!(raw.get(&account).unwrap().is_some(), "only its own account");
+    assert_eq!(scoped_account(DEFAULT_PROFILE_ID, &account), account);
 }

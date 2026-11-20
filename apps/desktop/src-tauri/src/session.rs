@@ -27,14 +27,15 @@ pub const TRAY_ID: &str = "main";
 
 /// Opens the active profile of app data folder `root`: its session (locked when the profile
 /// has a lock) and its collection, with the session installed. `secrets` keeps the lock hash
-/// and AI keys (the OS keychain in the app).
+/// and AI keys (the OS keychain in the app); the collection sees only its profile's accounts
+/// (`Session::profile_secrets`: AI keys are not shared between profiles).
 pub fn open_profile(
     root: &Path,
     secrets: Arc<dyn fc_ai::secrets::SecretStore>,
     clock: Arc<dyn Clock>,
 ) -> Result<(SharedApp, Arc<Session>), String> {
     std::fs::create_dir_all(root).map_err(|e| format!("{}: {e}", root.display()))?;
-    let session = Session::open(ProfileStore::new(root), secrets.clone(), clock)
+    let session = Session::open(ProfileStore::new(root), secrets, clock)
         .map(Arc::new)
         .map_err(|e| {
             let e = e.into_api();
@@ -48,7 +49,7 @@ pub fn open_profile(
         let e = e.into_api();
         format!("{}\n{}: {}", path.display(), e.code, e.message)
     })?;
-    collection.set_secret_store(secrets);
+    collection.set_secret_store(session.profile_secrets());
     collection.install_session(session.clone());
     Ok((Arc::new(collection), session))
 }
@@ -190,12 +191,30 @@ pub fn on_window_event<R: Runtime>(window: &tauri::Window<R>, event: &tauri::Win
     }
 }
 
-/// The database file of the running profile (the media protocol serves its `media/`).
-pub fn collection_path<R: Runtime>(handle: &AppHandle<R>) -> Option<std::path::PathBuf> {
+/// Pseudo method name the shell's own entry points (media protocol, links, quick add) pass
+/// to [`profiles::gate`]: not on the lock screen's list, so refused while locked.
+pub const SHELL_GATE: &str = "v1.shell";
+
+/// Whether the window may not use the collection now (locked; also locks an idle app).
+pub fn is_locked(app: &fc_app::App) -> bool {
+    profiles::gate(app, SHELL_GATE).is_err()
+}
+
+/// The database file whose `media/` the media protocol serves, or the HTTP status to answer:
+/// 423 while the app is locked (no card images or audio behind the lock screen).
+pub fn media_db(app: &fc_app::App) -> Result<std::path::PathBuf, u16> {
+    if is_locked(app) {
+        return Err(423);
+    }
+    app.session().map(|s| s.collection_path()).ok_or(500)
+}
+
+/// [`media_db`] of the running app.
+pub fn collection_path<R: Runtime>(handle: &AppHandle<R>) -> Result<std::path::PathBuf, u16> {
     handle
         .try_state::<SharedApp>()
-        .and_then(|app| app.session())
-        .map(|s| s.collection_path())
+        .ok_or(500)
+        .and_then(|app| media_db(&app))
 }
 
 #[cfg(test)]
@@ -369,6 +388,84 @@ mod tests {
         drop(app);
         let again = open(root.path(), &secrets);
         assert!(again.session().unwrap().is_locked());
+    }
+
+    fn lock(app: &fc_app::App) {
+        user::<m::LockSet>(
+            app,
+            SetLock {
+                kind: LockKind::Pin,
+                secret: "4821".into(),
+                current: None,
+                idle_minutes: None,
+            },
+        );
+        user::<m::LockLock>(app, Empty {});
+    }
+
+    /// Security review: no media bytes behind the lock screen.
+    #[test]
+    fn media_protocol_is_gated_while_locked() {
+        let root = tempfile::tempdir().unwrap();
+        let secrets = Arc::new(fc_ai::secrets::MemorySecrets::new());
+        let app = open(root.path(), &secrets);
+        assert_eq!(media_db(&app), Ok(root.path().join(crate::COLLECTION_FILE)));
+        lock(&app);
+        assert_eq!(media_db(&app), Err(423));
+        assert!(is_locked(&app));
+        user::<m::LockUnlock>(
+            &app,
+            Unlock {
+                secret: "4821".into(),
+            },
+        );
+        assert!(media_db(&app).is_ok());
+    }
+
+    /// Security review: the collection's AI keys are its profile's keychain accounts; the
+    /// default profile keeps the pre-v1.0 names (existing keys keep working).
+    #[test]
+    fn ai_keys_are_scoped_to_the_open_profile() {
+        use fc_ai::secrets::{Secret, SecretStore};
+        let root = tempfile::tempdir().unwrap();
+        let secrets = Arc::new(fc_ai::secrets::MemorySecrets::new());
+        let account = "ai.provider.x";
+        secrets.set(account, &Secret::new("sk-default")).unwrap();
+        let first = open(root.path(), &secrets);
+        let ai = first.ai_services().unwrap().secrets();
+        assert_eq!(ai.get(account).unwrap().unwrap().expose(), "sk-default");
+        let work = user::<m::ProfilesCreate>(
+            &first,
+            CreateProfile {
+                name: "İş".into()
+            },
+        );
+        user::<m::ProfilesSwitch>(
+            &first,
+            SwitchProfile {
+                id: work.id.clone(),
+            },
+        );
+        drop(first);
+        let second = open(root.path(), &secrets);
+        let ai = second.ai_services().unwrap().secrets();
+        assert!(
+            ai.get(account).unwrap().is_none(),
+            "not the other profile's key"
+        );
+        ai.set(account, &Secret::new("sk-work")).unwrap();
+        assert_eq!(
+            secrets
+                .get(&format!("profile.{}.{account}", work.id))
+                .unwrap()
+                .unwrap()
+                .expose(),
+            "sk-work"
+        );
+        assert_eq!(
+            secrets.get(account).unwrap().unwrap().expose(),
+            "sk-default"
+        );
     }
 
     #[test]

@@ -583,6 +583,7 @@ export interface Methods {
   "lock.configure": { kind: "command"; request: ConfigureLock; response: LockState };
   "lock.clear": { kind: "command"; request: ClearLock; response: LockState };
   "lock.unlock": { kind: "command"; request: Unlock; response: LockState };
+  "lock.recover": { kind: "command"; request: Empty; response: LockState };
   "lock.lock": { kind: "command"; request: Empty; response: LockState };
   "lock.activity": { kind: "command"; request: Empty; response: Empty };
   "reminders.status": { kind: "query"; request: ReminderStatusRequest; response: ReminderStatus };
@@ -850,6 +851,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "lock.configure": "command",
   "lock.clear": "command",
   "lock.unlock": "command",
+  "lock.recover": "command",
   "lock.lock": "command",
   "lock.activity": "command",
   "reminders.status": "query",

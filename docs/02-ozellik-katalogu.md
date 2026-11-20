@@ -392,6 +392,19 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 
 - Açılışta parola/PIN. Belirli süre boşta kalınca kilitlenme.
 - Parola güvenli şekilde hash'lenir (Argon2). (Not: Bu bir erişim kilididir. İleride isteğe bağlı veritabanı şifreleme düşünülebilir, bkz. açık kararlar.)
+- Yanlış denemede artan bekleme (5 ücretsiz deneme, sonra 1 sn, 2 sn, 4 sn … en çok 5 dk). Sayaç ve bir sonraki deneme zamanı profil başına `profiles.json`'da tutulur: uygulamayı yeniden başlatmak yeni deneme hakkı vermez. Denemenin kontrolü ve kaydı tek kilit altındadır (paralel denemeler ücretsiz hakkı paylaşamaz).
+- **Kilitliyken** pencere yalnız kilit ekranına ulaşır; `flashcard://` bağlantıları işlenmez, sınırlı ve tekilleştirilmiş bir kuyrukta bekler, kilit açılınca işlenir; medya (`fcmedia://`) ve hızlı ekleme ön doldurması kapalıdır; yerel HTTP API, otomasyon zamanlayıcısı ve pano izleyici durur.
+- **Kapalı kalır (fail closed):** profil kilitli işaretli ama özeti yoksa (ör. anahtar zinciri kaydı silinmiş) uygulama kendiliğinden açılmaz; kilit ekranı açık bir kurtarma akışı gösterir (onay → `lock.recover` kilidi kaldırır, kullanıcı yenisini koyar).
+- AI sağlayıcı anahtarları profil başına ayrı anahtar zinciri hesaplarındadır (varsayılan profil eski adları korur: `ai.provider.<id>`; diğerleri `profile.<profil>.ai.provider.<id>`). Kilit özeti `lock.profile.<profil>`; yerel API belirteçleri koleksiyonun içinde (özet olarak) tutulur, yani zaten profile özeldir.
+
+**Tehdit modeli (kullanıcı için).** Uygulama kilidi yalnızca **gelişigüzel erişime** karşı korur: bilgisayarın başına oturan başka biri pencereyi açamasın diye. Şunlara karşı **korumaz**:
+
+- **Veritabanı şifrelenmez** (docs/08 K4): `collection.db` ve medya dosyaları diskte açıktır; dosyaları okuyabilen herkes içeriği görür.
+- Aynı işletim sistemi kullanıcısının haklarıyla çalışan herhangi bir süreç anahtar zinciri kaydını silebilir ya da `profiles.json`'u düzenleyebilir (kilidi kaldırmak, deneme sayacını sıfırlamak). Silinmiş özet sessizce açılmaz (yukarıda), ama kilit kaydı tümden silinirse profil kilitsiz açılır.
+- **MCP sunucusu (`fc mcp serve`) ve CLI** ayrı süreçlerdir ve kilidi yok sayar; koleksiyona doğrudan erişirler.
+- **Linux'ta** anahtar zinciri yeniden başlatmalar arasında saklamadığı için özet `profiles.json`'dadır (tuzlu Argon2id özeti; PIN'in kendisi değil, ama kısa bir PIN çevrimdışı tahminle bulunabilir).
+
+Gerçek koruma için işletim sistemi hesabını parolayla kilitleyin ve disk şifrelemesi (BitLocker, FileVault, LUKS) kullanın.
 
 ## 30. 🌍 Çoklu dil (i18n)
 

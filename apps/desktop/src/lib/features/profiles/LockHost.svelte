@@ -4,6 +4,10 @@
    * locked (at start, after the idle timeout, "lock now", the tray). While locked the IPC
    * bridge only lets the lock screen's methods through, so nothing behind it can load. User
    * input restarts the backend's idle timer (`lock.activity`, at most every 30 s).
+   *
+   * When the lock's hash is gone (`recovery_required`) the backend stays locked (fail
+   * closed): instead of the PIN field the screen offers the explicit recovery, which removes
+   * the lock after the user confirms (`lock.recover`).
    */
   import { onMount } from 'svelte';
   import { api, type ApiError } from '$lib/api';
@@ -22,6 +26,7 @@
   let secret = $state('');
   let error = $state<string | null>(null);
   let others = $state<ProfileDto[]>([]);
+  let confirmRecovery = $state(false);
   let lastActivity = 0;
 
   const locked = $derived(lock?.available === true && lock.locked);
@@ -56,9 +61,23 @@
         error = t('lock.wait', { seconds: Math.max(1, Math.ceil(ms / 1000)) });
       } else if (a.code === 'PERMISSION_LOCK_SECRET') {
         error = t('lock.wrong');
+      } else if (a.details['reason'] === 'recovery_required') {
+        await refresh();
       } else {
         error = td(a.messageKey ?? 'errors.internal.unexpected');
       }
+    }
+  }
+
+  async function recover(e: SubmitEvent) {
+    e.preventDefault();
+    error = null;
+    try {
+      lock = await api.call('lock.recover', {});
+      confirmRecovery = false;
+      if (!lock.locked) onunlock?.();
+    } catch (err) {
+      error = td((err as ApiError).messageKey ?? 'errors.internal.unexpected');
     }
   }
 
@@ -93,22 +112,33 @@
 
 {#if locked && lock}
   <div class="lock" role="dialog" aria-modal="true" aria-labelledby="lock-title">
-    <form onsubmit={unlock}>
+    <form onsubmit={lock.recovery_required ? recover : unlock}>
       <h1 id="lock-title">{t('lock.screen_title')}</h1>
       <p class="muted">{t('lock.screen_profile', { name: lock.profile_name ?? t('profiles.default_name') })}</p>
-      <label>
-        {t('lock.enter')}
-        <!-- svelte-ignore a11y_autofocus -->
-        <input
-          type="password"
-          autocomplete="current-password"
-          inputmode={lock.kind === 'pin' ? 'numeric' : 'text'}
-          bind:value={secret}
-          autofocus
-        />
-      </label>
-      {#if error}<p class="error" role="alert">{error}</p>{/if}
-      <button class="primary" type="submit" disabled={secret === ''}>{t('lock.unlock')}</button>
+      {#if lock.recovery_required}
+        <h2>{t('lock.recovery_title')}</h2>
+        <p>{t('lock.recovery_body')}</p>
+        <label class="check">
+          <input type="checkbox" bind:checked={confirmRecovery} />
+          {t('lock.recovery_confirm')}
+        </label>
+        {#if error}<p class="error" role="alert">{error}</p>{/if}
+        <button class="primary" type="submit" disabled={!confirmRecovery}>{t('lock.recover')}</button>
+      {:else}
+        <label>
+          {t('lock.enter')}
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            type="password"
+            autocomplete="current-password"
+            inputmode={lock.kind === 'pin' ? 'numeric' : 'text'}
+            bind:value={secret}
+            autofocus
+          />
+        </label>
+        {#if error}<p class="error" role="alert">{error}</p>{/if}
+        <button class="primary" type="submit" disabled={secret === ''}>{t('lock.unlock')}</button>
+      {/if}
       {#if others.length > 0}
         <h2>{t('lock.other_profile')}</h2>
         <ul>
@@ -140,6 +170,10 @@
     display: flex;
     flex-direction: column;
     gap: var(--fc-space-1);
+  }
+  label.check {
+    flex-direction: row;
+    align-items: center;
   }
   ul {
     list-style: none;

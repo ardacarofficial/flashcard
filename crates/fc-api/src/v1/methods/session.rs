@@ -24,6 +24,9 @@ methods! {
     LockClear = "lock.clear", Command, "profiles", "lock:write", Public, undo: false, ClearLock => LockState;
     /// Unlocks with the PIN/password.
     LockUnlock = "lock.unlock", Command, "profiles", "lock:write", Public, undo: false, Unlock => LockState;
+    /// Recovery for a lock whose hash is gone (removed keychain entry): removes the lock and
+    /// unlocks. Refused while the lock can still be checked.
+    LockRecover = "lock.recover", Command, "profiles", "lock:write", Public, undo: false, Empty => LockState;
     /// Locks now.
     LockLock = "lock.lock", Command, "profiles", "lock:write", Public, undo: false, Empty => LockState;
     /// The user is active (keyboard/mouse): restarts the idle timer.

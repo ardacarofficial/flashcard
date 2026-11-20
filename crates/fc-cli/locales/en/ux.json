@@ -10,6 +10,7 @@
   "oplog.summary.lock.configure": "Changed the app lock timeout",
   "oplog.summary.lock.clear": "Removed the app lock",
   "oplog.summary.lock.unlock": "Unlocked the app",
+  "oplog.summary.lock.recover": "Reset a broken app lock",
   "oplog.summary.lock.lock": "Locked the app",
   "oplog.summary.lock.activity": "Kept the app unlocked",
   "oplog.summary.reminders.test": "Sent a test reminder"

@@ -55,6 +55,12 @@ pub(crate) struct LockEntry {
     /// secret). Otherwise `None` and the hash is in the keychain.
     #[serde(default)]
     pub hash: Option<String>,
+    /// Wrong unlock attempts in a row (kept here so a restart does not reset the back-off).
+    #[serde(default)]
+    pub failures: u32,
+    /// Unix ms before which no attempt is checked (`0` = now).
+    #[serde(default)]
+    pub retry_at: i64,
 }
 
 impl RegistryFile {

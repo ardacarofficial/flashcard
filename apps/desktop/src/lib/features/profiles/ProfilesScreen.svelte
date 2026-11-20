@@ -178,6 +178,7 @@
     </form>
     {#if lock.enabled}
       <p class="muted">{lock.secure_storage ? t('lock.storage_secure') : t('lock.storage_file')}</p>
+      <p class="muted">{t('lock.scope_note')}</p>
     {/if}
   {/if}
 </section>

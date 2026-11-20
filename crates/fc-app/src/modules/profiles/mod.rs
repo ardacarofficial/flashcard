@@ -10,6 +10,7 @@
 //! * The module cannot be switched off: it is the session backbone (like `core`), and a lock
 //!   must not be removable by flipping a switch. With one profile and no PIN it does nothing.
 
+pub mod secrets;
 pub mod session;
 pub mod store;
 #[cfg(test)]
@@ -37,6 +38,7 @@ pub const ID: &str = "profiles";
 pub const ALLOWED_WHILE_LOCKED: &[&str] = &[
     "lock.status",
     "lock.unlock",
+    "lock.recover",
     "profiles.list",
     "profiles.switch",
 ];
@@ -76,6 +78,7 @@ pub fn register(reg: &mut Registry) {
     reg.action::<LockClear>(clear);
     reg.action::<LockUnlock>(unlock);
     reg.action::<LockLock>(lock_now);
+    reg.action::<LockRecover>(recover);
     reg.action::<LockActivity>(activity);
 }
 
@@ -185,6 +188,7 @@ fn unavailable_lock() -> LockState {
         enabled: false,
         kind: None,
         locked: false,
+        recovery_required: false,
         idle_minutes: 0,
         idle_choices: fc_core::ux::lock::IDLE_CHOICES.to_vec(),
         failures: 0,
@@ -278,6 +282,15 @@ fn unlock(req: Unlock, app: &App, actor: &Actor) -> AppResult<LockState> {
     ensure_user(actor)?;
     let s = session_of(app)?;
     if s.unlock(&req.secret)? {
+        app.publish(vec![DomainEvent::LockChanged { locked: false }], None);
+    }
+    s.status()
+}
+
+fn recover(_: Empty, app: &App, actor: &Actor) -> AppResult<LockState> {
+    ensure_user(actor)?;
+    let s = session_of(app)?;
+    if s.recover()? {
         app.publish(vec![DomainEvent::LockChanged { locked: false }], None);
     }
     s.status()

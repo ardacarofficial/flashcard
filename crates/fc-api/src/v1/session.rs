@@ -7,8 +7,14 @@
 //! The **app lock** is an access lock for the desktop window (not database encryption, docs/08
 //! K4): a PIN or password per profile, hashed with Argon2id, the hash kept in the OS keychain
 //! where it persists. While locked, the desktop bridge refuses every method except
-//! `lock.status`, `lock.unlock`, `profiles.list` and `profiles.switch`
-//! (`PERMISSION_APP_LOCKED`). Idle for the chosen time → locked.
+//! `lock.status`, `lock.unlock`, `lock.recover`, `profiles.list` and `profiles.switch`
+//! (`PERMISSION_APP_LOCKED`). Idle for the chosen time → locked. Wrong attempts back off
+//! (kept across restarts). A lock whose hash is gone fails closed: it stays locked until the
+//! user removes it with `lock.recover`.
+//!
+//! Threat model: protection against casual access only. Anything running as the same OS
+//! user can delete the keychain entry or edit `profiles.json`, and the CLI and the MCP
+//! server are separate processes that ignore the lock (docs/02 §29).
 //!
 //! None of these are collection writes: no oplog entry, no undo (a lock change must not be
 //! undoable). Only the user (desktop/CLI) may call them.
@@ -103,6 +109,9 @@ pub struct LockState {
     pub kind: Option<LockKind>,
     /// The app is locked now.
     pub locked: bool,
+    /// The profile is marked as locked but its hash is gone (e.g. the keychain entry was
+    /// removed): it stays locked; only `lock.recover` (which removes the lock) gets in.
+    pub recovery_required: bool,
     /// Idle minutes before locking (`0` = never).
     pub idle_minutes: u32,
     /// Choices for `idle_minutes`.

@@ -22,6 +22,11 @@ kind: LockKind | null,
  */
 locked: boolean, 
 /**
+ * The profile is marked as locked but its hash is gone (e.g. the keychain entry was
+ * removed): it stays locked; only `lock.recover` (which removes the lock) gets in.
+ */
+recovery_required: boolean, 
+/**
  * Idle minutes before locking (`0` = never).
  */
 idle_minutes: number, 

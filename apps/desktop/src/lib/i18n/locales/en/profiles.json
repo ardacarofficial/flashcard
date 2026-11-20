@@ -51,7 +51,12 @@
     "unlock": "Unlock",
     "wrong": "Wrong PIN or password.",
     "wait": "Too many attempts. Try again in {seconds} s.",
-    "other_profile": "Open another profile"
+    "other_profile": "Open another profile",
+    "scope_note": "The lock keeps out casual access to this window only: the collection is not encrypted, and the command line and the MCP server are not locked.",
+    "recovery_title": "The lock's data is missing",
+    "recovery_body": "This profile is locked, but its PIN/password hash is gone (for example, the system keychain entry was removed). Flashcard stays locked instead of opening without a check. You can remove the lock and then set a new one.",
+    "recovery_confirm": "I understand: remove this profile's lock",
+    "recover": "Remove the lock"
   },
   "commands": {
     "profiles": {
@@ -68,7 +73,8 @@
       "clear": "Remove the app lock",
       "unlock": "Unlock the app",
       "lock": "Lock the app",
-      "activity": "Keep the app unlocked"
+      "activity": "Keep the app unlocked",
+      "recover": "Reset a broken app lock"
     }
   },
   "errors": {

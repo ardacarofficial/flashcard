@@ -5,7 +5,15 @@
 //! The lock secret is never stored: only its Argon2id hash (PHC string, random salt), in the
 //! OS keychain (`fc_ai::secrets`, account `lock.profile.<id>`) when the keychain keeps secrets
 //! across restarts, else in the profile registry. Wrong attempts back off
-//! ([`fc_core::ux::lock::retry_delay_ms`]).
+//! ([`fc_core::ux::lock::retry_delay_ms`]); the count and the next allowed time are kept in the
+//! registry per profile, so a restart does not hand out fresh attempts. Checking and recording
+//! an attempt happen under one mutex (`io`), so parallel attempts cannot share a free slot.
+//!
+//! **Fail closed.** A profile marked as locked whose hash is gone (keychain entry or registry
+//! field removed) stays locked: unlocking is refused (`CONFLICT_LOCK_STATE`, reason
+//! `recovery_required`) and only the explicit recovery flow (`lock.recover`) removes the lock.
+//!
+//! AI keys of a profile live under its own keychain accounts ([`ProfileSecrets`]).
 
 use super::store::{io_error, LockEntry, ProfileEntry, ProfileStore, RegistryFile};
 use crate::error::{AppError, AppResult};
@@ -16,12 +24,14 @@ use fc_api::v1::session::{LockState, ProfileDto};
 use fc_api::{ApiError, ErrorCode};
 use fc_core::ux::lock::{
     idle_expired, retry_delay_ms, valid_idle_minutes, validate_secret, LockKind,
-    DEFAULT_IDLE_MINUTES, IDLE_CHOICES,
+    DEFAULT_IDLE_MINUTES, IDLE_CHOICES, MAX_RETRY_DELAY_MS,
 };
 use fc_core::ux::profile::{normalize_name, same_name, DEFAULT_PROFILE_ID, MAX_PROFILES};
 use fc_core::{Clock, Timestamp};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
+
+pub use super::secrets::{scoped_account, ProfileSecrets};
 
 /// Keychain account of a profile's lock hash.
 pub fn secret_account(profile_id: &str) -> String {
@@ -35,8 +45,25 @@ struct Runtime {
     /// no file or keychain I/O.
     idle: Option<u32>,
     last_activity: i64,
-    failures: u32,
-    retry_at: i64,
+}
+
+/// A profile's lock as found on disk.
+enum Effective {
+    /// No lock.
+    None,
+    /// A lock with its hash.
+    Ready(LockEntry, String),
+    /// Marked as locked, but the hash is gone: fails closed (see the module docs).
+    Missing(LockEntry),
+}
+
+impl Effective {
+    fn entry(&self) -> Option<&LockEntry> {
+        match self {
+            Self::None => None,
+            Self::Ready(l, _) | Self::Missing(l) => Some(l),
+        }
+    }
 }
 
 /// See the module docs.
@@ -78,6 +105,25 @@ fn not_found(id: &str) -> AppError {
         ApiError::new(ErrorCode::NotFoundProfile, format!("profile {id} not found"))
             .with_detail("id", id),
     )
+}
+
+fn retry_error(wait_ms: i64) -> AppError {
+    AppError::Api(
+        ApiError::new(ErrorCode::ConflictLockRetry, "too many wrong attempts")
+            .with_detail("retry_after_ms", wait_ms)
+            .retryable(true),
+    )
+}
+
+/// The lock's hash is gone: only `lock.recover` gets out.
+fn recovery_required() -> AppError {
+    lock_state("recovery_required")
+}
+
+/// Milliseconds until `retry_at`, capped so a clock set back cannot lock out for longer than
+/// the longest back-off.
+fn wait_ms(retry_at: i64, now: i64) -> i64 {
+    (retry_at - now).clamp(0, MAX_RETRY_DELAY_MS)
 }
 
 fn lock_state(reason: &str) -> AppError {
@@ -123,7 +169,8 @@ impl Session {
             retired: AtomicBool::new(false),
             io: Mutex::new(()),
         };
-        let idle = s.effective_lock(&file)?.map(|(l, _)| l.idle_minutes);
+        // A lock without its hash still starts locked (fail closed).
+        let idle = s.effective_lock(&file)?.entry().map(|l| l.idle_minutes);
         let now = s.now();
         {
             let mut rt = lock(&s.runtime);
@@ -170,28 +217,36 @@ impl Session {
         self.is_locked() || self.is_retired()
     }
 
-    /// The lock of `entry` with its hash, if it has a usable one. A lock whose hash is gone
-    /// (keychain entry removed by hand) does not lock: there is nothing to check against, and
-    /// whoever can remove keychain entries is the OS user anyway (docs/08 K4).
-    fn lock_with_hash(&self, entry: &ProfileEntry) -> AppResult<Option<(LockEntry, String)>> {
+    /// The lock of `entry` and its hash. A lock whose hash is gone (keychain entry removed by
+    /// hand) is [`Effective::Missing`]: it keeps the app locked until recovered.
+    fn lock_of(&self, entry: &ProfileEntry) -> AppResult<Effective> {
         let Some(l) = &entry.lock else {
-            return Ok(None);
+            return Ok(Effective::None);
         };
         if let Some(h) = &l.hash {
-            return Ok(Some((l.clone(), h.clone())));
+            return Ok(Effective::Ready(l.clone(), h.clone()));
         }
         let stored = self
             .secrets
             .get(&secret_account(&entry.id))
             .map_err(storage_error)?;
-        Ok(stored.map(|s| (l.clone(), s.expose().to_owned())))
+        Ok(match stored {
+            Some(s) => Effective::Ready(l.clone(), s.expose().to_owned()),
+            None => Effective::Missing(l.clone()),
+        })
     }
 
-    fn effective_lock(&self, file: &RegistryFile) -> AppResult<Option<(LockEntry, String)>> {
+    fn effective_lock(&self, file: &RegistryFile) -> AppResult<Effective> {
         match file.get(&self.profile_id) {
-            Some(p) => self.lock_with_hash(p),
-            None => Ok(None),
+            Some(p) => self.lock_of(p),
+            None => Ok(Effective::None),
         }
+    }
+
+    /// AI provider keys (and any other per-collection secret) of this profile: its own
+    /// keychain accounts ([`ProfileSecrets`]).
+    pub fn profile_secrets(&self) -> Arc<dyn SecretStore> {
+        Arc::new(ProfileSecrets::new(self.secrets.clone(), &self.profile_id))
     }
 
     fn current_entry(file: &RegistryFile, id: &str) -> AppResult<ProfileEntry> {
@@ -287,8 +342,12 @@ impl Session {
                     .with_detail("reason", reason),
             ));
         }
-        if let Some((_, hash)) = self.lock_with_hash(&entry)? {
-            self.attempt(secret.unwrap_or_default(), &hash)?;
+        match self.lock_of(&entry)? {
+            Effective::None => {}
+            Effective::Ready(_, hash) => {
+                self.attempt(&_io, &mut file, id, secret.unwrap_or_default(), &hash)?;
+            }
+            Effective::Missing(_) => return Err(recovery_required()),
         }
         file.profiles.retain(|p| p.id != id);
         self.store.save(&file)?;
@@ -324,53 +383,64 @@ impl Session {
     pub(crate) fn status(&self) -> AppResult<LockState> {
         let file = self.store.load()?;
         let entry = Self::current_entry(&file, &self.profile_id)?;
-        let effective = self.lock_with_hash(&entry)?;
+        let effective = self.lock_of(&entry)?;
+        let l = effective.entry();
         let now = self.now();
         let rt = lock(&self.runtime);
         Ok(LockState {
             available: true,
-            enabled: effective.is_some(),
-            kind: effective.as_ref().map(|(l, _)| l.kind),
+            enabled: l.is_some(),
+            kind: l.map(|l| l.kind),
             locked: rt.locked,
-            idle_minutes: effective
-                .as_ref()
-                .map_or(DEFAULT_IDLE_MINUTES, |(l, _)| l.idle_minutes),
+            recovery_required: matches!(effective, Effective::Missing(_)),
+            idle_minutes: l.map_or(DEFAULT_IDLE_MINUTES, |l| l.idle_minutes),
             idle_choices: IDLE_CHOICES.to_vec(),
-            failures: rt.failures,
-            retry_after_ms: (rt.retry_at - now).max(0),
+            failures: l.map_or(0, |l| l.failures),
+            retry_after_ms: l.map_or(0, |l| wait_ms(l.retry_at, now)),
             secure_storage: self.secrets.persistent(),
             profile_id: Some(entry.id.clone()),
             profile_name: entry.name.clone(),
         })
     }
 
-    /// One unlock attempt against `hash`, with back-off.
-    fn attempt(&self, secret: &str, hash: &str) -> AppResult<()> {
+    /// One attempt against `hash`, the lock of profile `id` in `file`, with back-off. The
+    /// caller holds `io` for the whole check → verify → record (`_io`), so parallel attempts
+    /// are serialised; the outcome is written to the registry right away (a restart keeps the
+    /// count). On success the counters in `file` are reset (and saved when they changed).
+    fn attempt(
+        &self,
+        _io: &MutexGuard<'_, ()>,
+        file: &mut RegistryFile,
+        id: &str,
+        secret: &str,
+        hash: &str,
+    ) -> AppResult<()> {
         let now = self.now();
-        {
-            let rt = lock(&self.runtime);
-            if now < rt.retry_at {
-                return Err(AppError::Api(
-                    ApiError::new(ErrorCode::ConflictLockRetry, "too many wrong attempts")
-                        .with_detail("retry_after_ms", rt.retry_at - now)
-                        .retryable(true),
-                ));
-            }
+        let l = file
+            .get_mut(id)
+            .and_then(|p| p.lock.as_mut())
+            .ok_or_else(|| lock_state("not_set"))?;
+        let wait = wait_ms(l.retry_at, now);
+        if wait > 0 {
+            return Err(retry_error(wait));
         }
-        // Slow on purpose (Argon2id); not under the runtime lock.
-        let ok = verify_secret(secret, hash);
-        let mut rt = lock(&self.runtime);
-        if ok {
-            rt.failures = 0;
-            rt.retry_at = 0;
+        // Slow on purpose (Argon2id).
+        if verify_secret(secret, hash) {
+            if l.failures != 0 || l.retry_at != 0 {
+                l.failures = 0;
+                l.retry_at = 0;
+                self.store.save(file)?;
+            }
             return Ok(());
         }
-        rt.failures = rt.failures.saturating_add(1);
-        let delay = retry_delay_ms(rt.failures);
-        rt.retry_at = now + delay;
+        l.failures = l.failures.saturating_add(1);
+        let failures = l.failures;
+        let delay = retry_delay_ms(failures);
+        l.retry_at = now + delay;
+        self.store.save(file)?;
         Err(AppError::Api(
             ApiError::new(ErrorCode::PermissionLockSecret, "wrong PIN or password")
-                .with_detail("failures", rt.failures)
+                .with_detail("failures", failures)
                 .with_detail("retry_after_ms", delay),
         ))
     }
@@ -389,6 +459,8 @@ impl Session {
             kind,
             idle_minutes: idle,
             hash: (!persistent).then_some(hash),
+            failures: 0,
+            retry_at: 0,
         });
         Ok(())
     }
@@ -422,13 +494,17 @@ impl Session {
             let _io = lock(&self.io);
             let mut file = self.store.load()?;
             let entry = Self::current_entry(&file, &self.profile_id)?;
-            let existing = self.lock_with_hash(&entry)?;
-            if let Some((_, hash)) = &existing {
-                let current = current.ok_or_else(|| lock_state("current_required"))?;
-                self.attempt(current, hash)?;
+            let existing = self.lock_of(&entry)?;
+            match &existing {
+                Effective::None => {}
+                Effective::Ready(_, hash) => {
+                    let current = current.ok_or_else(|| lock_state("current_required"))?;
+                    self.attempt(&_io, &mut file, &self.profile_id, current, hash)?;
+                }
+                Effective::Missing(_) => return Err(recovery_required()),
             }
             let idle = idle
-                .or(existing.as_ref().map(|(l, _)| l.idle_minutes))
+                .or(existing.entry().map(|l| l.idle_minutes))
                 .unwrap_or(DEFAULT_IDLE_MINUTES);
             Self::check_idle_choice(idle)?;
             let hash = hash_secret(secret)?;
@@ -466,10 +542,12 @@ impl Session {
             let _io = lock(&self.io);
             let mut file = self.store.load()?;
             let entry = Self::current_entry(&file, &self.profile_id)?;
-            let (_, hash) = self
-                .lock_with_hash(&entry)?
-                .ok_or_else(|| lock_state("not_set"))?;
-            self.attempt(current, &hash)?;
+            let hash = match self.lock_of(&entry)? {
+                Effective::None => return Err(lock_state("not_set")),
+                Effective::Ready(_, hash) => hash,
+                Effective::Missing(_) => return Err(recovery_required()),
+            };
+            self.attempt(&_io, &mut file, &self.profile_id, current, &hash)?;
             if let Some(e) = file.get_mut(&self.profile_id) {
                 e.lock = None;
             }
@@ -486,23 +564,55 @@ impl Session {
 
     /// Unlocks with the secret. `Ok(true)` when it was locked.
     pub(crate) fn unlock(&self, secret: &str) -> AppResult<bool> {
+        let io = lock(&self.io);
         if !self.is_locked() {
             return Ok(false);
         }
-        let file = self.store.load()?;
+        let mut file = self.store.load()?;
         let entry = Self::current_entry(&file, &self.profile_id)?;
-        let Some((_, hash)) = self.lock_with_hash(&entry)? else {
-            // The lock was removed meanwhile (or its hash is gone): nothing to check.
-            let mut rt = lock(&self.runtime);
-            rt.locked = false;
-            rt.idle = None;
-            return Ok(true);
-        };
-        self.attempt(secret, &hash)?;
+        match self.lock_of(&entry)? {
+            Effective::None => {
+                // The lock was removed meanwhile (`lock.clear` elsewhere, or the registry
+                // edited): nothing to check against.
+                let mut rt = lock(&self.runtime);
+                rt.locked = false;
+                rt.idle = None;
+                Ok(true)
+            }
+            // Fail closed: no hash, no unlock; the user has to go through `lock.recover`.
+            Effective::Missing(_) => Err(recovery_required()),
+            Effective::Ready(_, hash) => {
+                self.attempt(&io, &mut file, &self.profile_id, secret, &hash)?;
+                let now = self.now();
+                let mut rt = lock(&self.runtime);
+                let was = rt.locked;
+                rt.locked = false;
+                rt.last_activity = now;
+                Ok(was)
+            }
+        }
+    }
+
+    /// The recovery flow for a lock whose hash is gone: removes the lock (the user sets a new
+    /// one) and unlocks. Refused for a lock that can still be checked. `Ok(true)` when it was
+    /// locked.
+    pub(crate) fn recover(&self) -> AppResult<bool> {
+        let _io = lock(&self.io);
+        let mut file = self.store.load()?;
+        let entry = Self::current_entry(&file, &self.profile_id)?;
+        if !matches!(self.lock_of(&entry)?, Effective::Missing(_)) {
+            return Err(lock_state("not_recoverable"));
+        }
+        if let Some(e) = file.get_mut(&self.profile_id) {
+            e.lock = None;
+        }
+        self.store.save(&file)?;
+        let _ = self.secrets.delete(&secret_account(&self.profile_id));
         let now = self.now();
         let mut rt = lock(&self.runtime);
         let was = rt.locked;
         rt.locked = false;
+        rt.idle = None;
         rt.last_activity = now;
         Ok(was)
     }
@@ -511,7 +621,7 @@ impl Session {
     pub(crate) fn lock_now(&self) -> AppResult<bool> {
         let file = self.store.load()?;
         let entry = Self::current_entry(&file, &self.profile_id)?;
-        if self.lock_with_hash(&entry)?.is_none() {
+        if matches!(self.lock_of(&entry)?, Effective::None) {
             return Err(lock_state("not_set"));
         }
         let mut rt = lock(&self.runtime);

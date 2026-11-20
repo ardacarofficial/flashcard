@@ -7,6 +7,9 @@ import type { LockKind, LockState, ProfileDto } from '$lib/api/types';
 
 const IDLE_CHOICES = [0, 1, 5, 15, 30, 60];
 
+/** Test hook: simulates a removed keychain entry (the lock's hash is gone; fails closed). */
+export const mockLockHooks = { loseHash: () => {} };
+
 export default {
   modules: [{ ...module('profiles', [menu('profiles.screen', 'nav.profiles', '/profiles', 96)]), can_disable: false }],
   handlers: ({ now, id, emit }: MockEnv) => {
@@ -15,11 +18,18 @@ export default {
     let lock: { kind: LockKind; secret: string; idle: number } | null = null;
     let locked = false;
     let failures = 0;
+    let hashLost = false;
+    mockLockHooks.loseHash = () => {
+      hashLost = true;
+      locked = true;
+      emit({ type: 'lock_changed', data: { locked: true } });
+    };
     const state = (): LockState => ({
       available: true,
       enabled: lock !== null,
       kind: lock?.kind ?? null,
       locked,
+      recovery_required: lock !== null && hashLost,
       idle_minutes: lock?.idle ?? 15,
       idle_choices: IDLE_CHOICES,
       failures,
@@ -93,8 +103,24 @@ export default {
         return state();
       },
       'lock.unlock': ({ secret }) => {
+        if (locked && hashLost) {
+          const e = err('CONFLICT_LOCK_STATE', 'errors.conflict.lock_state', 'recovery_required');
+          e.details = { reason: 'recovery_required' };
+          throw e;
+        }
         if (locked) {
           check(secret);
+          locked = false;
+          emit({ type: 'lock_changed', data: { locked: false } });
+        }
+        return state();
+      },
+      'lock.recover': () => {
+        if (!lock || !hashLost) throw err('CONFLICT_LOCK_STATE', 'errors.conflict.lock_state', 'not_recoverable');
+        lock = null;
+        hashLost = false;
+        profiles[0]!.locked = false;
+        if (locked) {
           locked = false;
           emit({ type: 'lock_changed', data: { locked: false } });
         }

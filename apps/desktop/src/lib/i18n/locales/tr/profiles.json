@@ -51,7 +51,12 @@
     "unlock": "Kilidi aç",
     "wrong": "PIN ya da parola yanlış.",
     "wait": "Çok fazla deneme. {seconds} sn sonra tekrar dene.",
-    "other_profile": "Başka bir profil aç"
+    "other_profile": "Başka bir profil aç",
+    "scope_note": "Kilit yalnızca bu pencereye gelişigüzel erişimi engeller: koleksiyon şifrelenmez, komut satırı ve MCP sunucusu kilitlenmez.",
+    "recovery_title": "Kilit bilgisi kayıp",
+    "recovery_body": "Bu profil kilitli ama PIN/parola özeti yok (örneğin sistem anahtar zincirindeki kayıt silinmiş). Flashcard kontrolsüz açılmak yerine kilitli kalır. Kilidi kaldırıp sonra yenisini koyabilirsin.",
+    "recovery_confirm": "Anladım: bu profilin kilidini kaldır",
+    "recover": "Kilidi kaldır"
   },
   "commands": {
     "profiles": {
@@ -68,7 +73,8 @@
       "clear": "Uygulama kilidini kaldır",
       "unlock": "Uygulamanın kilidini aç",
       "lock": "Uygulamayı kilitle",
-      "activity": "Uygulamayı açık tut"
+      "activity": "Uygulamayı açık tut",
+      "recover": "Bozuk uygulama kilidini sıfırla"
     }
   },
   "errors": {
