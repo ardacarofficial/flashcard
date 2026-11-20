@@ -41,6 +41,32 @@ fn main() -> Result<(), Box<dyn Error>> {
         )?;
     }
     out.push_str("];\n");
+    // Error texts are the desktop dictionaries' `errors.*` (one source for every frontend):
+    // the CLI shows an error's `message_key` translated, like the app does (docs/02 §30).
+    let desktop = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?)
+        .join("../../apps/desktop/src/lib/i18n/locales");
+    println!("cargo:rerun-if-changed={}", desktop.display());
+    out.push_str(
+        "/// `(language, JSON)` of every desktop dictionary file (their `errors.*` texts).\n\
+         pub(crate) const DESKTOP_LOCALE_FILES: &[(&str, &str)] = &[\n",
+    );
+    for lang in sorted_entries(&desktop)? {
+        if !lang.is_dir() {
+            continue;
+        }
+        println!("cargo:rerun-if-changed={}", lang.display());
+        let lang_name = file_name(&lang)?;
+        for file in sorted_entries(&lang)? {
+            if file.extension().and_then(|e| e.to_str()) == Some("json") {
+                writeln!(
+                    out,
+                    "    ({lang_name:?}, include_str!({:?})),",
+                    file.display().to_string()
+                )?;
+            }
+        }
+    }
+    out.push_str("];\n");
     let dest = PathBuf::from(std::env::var("OUT_DIR")?).join("locales.rs");
     fs::write(dest, out)?;
     Ok(())

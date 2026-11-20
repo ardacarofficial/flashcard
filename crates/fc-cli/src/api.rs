@@ -3,9 +3,11 @@
 //! the `local_api` module must be on, clients pair and are approved in the app (or with
 //! `fc call local_api.clients.approve`).
 
+use crate::i18n::Catalog;
 use clap::Subcommand;
 use fc_api::{ApiError, ErrorCode};
 use fc_app::App;
+use fc_core::i18n::Locale;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -21,20 +23,21 @@ pub enum ApiCommand {
     },
 }
 
-/// Opens the collection (never migrating it, like `fc mcp serve`) and serves it.
-pub fn serve(db: &Path, port: Option<u16>) -> Result<(), ApiError> {
+/// Opens the collection (never migrating it, like `fc mcp serve`) and serves it. Messages in
+/// `lang` (default: the collection's `app.locale`; English before it is open).
+pub fn serve(db: &Path, port: Option<u16>, lang: Option<Locale>) -> Result<(), ApiError> {
     if !db.is_file() {
+        let text = Catalog::new(lang.unwrap_or(Locale::En));
         return Err(ApiError::new(
             ErrorCode::IoFile,
-            format!("no collection at {}", db.display()),
+            text.with("cli.api.no_collection", "path", db.display().to_string()),
         ));
     }
     let app = Arc::new(App::open_sqlite_current(db).map_err(fc_app::AppError::into_api)?);
-    fc_app::modules::local_api::ensure_enabled(&app).map_err(|e| {
-        ApiError {
-            message: "the local_api module is off; turn it on first: fc call modules.set_enabled '{\"id\":\"local_api\",\"enabled\":true}'".into(),
-            ..e
-        }
+    let text = Catalog::new(lang.unwrap_or_else(|| app.locale()));
+    fc_app::modules::local_api::ensure_enabled(&app).map_err(|e| ApiError {
+        message: text.text("cli.api.module_off", &Default::default()),
+        ..e
     })?;
     let port = match port {
         Some(p) => p,
@@ -42,7 +45,11 @@ pub fn serve(db: &Path, port: Option<u16>) -> Result<(), ApiError> {
     };
     let server = fc_http::Server::start(app.clone(), fc_http::ServerConfig::localhost(port))
         .map_err(|e| ApiError::new(ErrorCode::IoFile, e.to_string()))?;
-    eprintln!("fc api: listening on http://{}", server.local_addr());
+    // The address ends the line in every language: scripts and tests read it from there.
+    eprintln!(
+        "{}",
+        text.with("cli.api.listening", "addr", server.local_addr().to_string())
+    );
     loop {
         std::thread::sleep(Duration::from_secs(2));
         // Module switches and settings changed by other processes (the desktop, `fc call`).

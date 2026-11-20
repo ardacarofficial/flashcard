@@ -56,6 +56,13 @@
   });
   const choiceAttrs = $derived(attrs.filter((a) => a.kind === 'ordered_enum' || a.kind === 'enum'));
   const ruleName = (id: string) => rules.find((r) => r.id === id)?.name ?? '';
+  // Rules that accept inbox proposals without the user's review (integration round 1): a
+  // program paired with the local API (or a plugin) then writes notes straight into the
+  // collection, bounded only by its daily proposal limit.
+  const autoAccepting = $derived(
+    rules.filter((r) => r.enabled && r.trigger.kind === 'inbox_added' && r.actions.some((a) => a.method === 'inbox.accept')),
+  );
+  const editingAutoAccept = $derived(trigger.kind === 'inbox_added' && actions.some((a) => a.method === 'inbox.accept'));
 
   async function load() {
     await ctx.guarded(async () => {
@@ -161,6 +168,9 @@
 <h2>{t('automation.heading')}</h2>
 <p class="muted">{t('automation.intro')}</p>
 
+{#if autoAccepting.length > 0}
+  <p class="warn" role="note">{t('automation.auto_accept_active', { names: autoAccepting.map((r) => r.name).join(', ') })}</p>
+{/if}
 {#if rules.length === 0}<p class="muted">{t('automation.none')}</p>{/if}
 <ol class="rules">
   {#each rules as rule, i (rule.id)}
@@ -255,6 +265,7 @@
       <button type="button" onclick={() => (actions = [...actions, emptyAction(fitting[0]?.method ?? 'bulk.add_tags')])}>
         {t('automation.add_action')}</button>
     </fieldset>
+    {#if editingAutoAccept}<p class="warn" role="note">{t('automation.auto_accept_warning')}</p>{/if}
 
     <div class="row">
       <button type="submit">{t('automation.save')}</button>
@@ -288,6 +299,10 @@
 </ul>
 
 <style>
+  .warn {
+    border-left: 3px solid var(--fc-danger);
+    padding-left: var(--space-2, 0.5rem);
+  }
   .rules li,
   .runs li {
     display: flex;

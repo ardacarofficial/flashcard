@@ -20,6 +20,7 @@ pub mod i18n;
 pub mod id;
 pub mod inbox;
 pub mod inline_cards;
+pub mod maintenance;
 pub mod note;
 pub mod notetype;
 pub mod paging;
@@ -31,7 +32,9 @@ pub mod settings;
 pub mod shortcut;
 pub mod stats;
 pub mod tag;
+pub mod theme;
 pub mod time;
+pub mod ux;
 
 pub use error::{CoreError, CoreResult};
 pub use id::{

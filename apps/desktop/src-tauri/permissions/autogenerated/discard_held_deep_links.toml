@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-discard-held-deep-links"
+description = "Enables the discard_held_deep_links command without any pre-configured scope."
+commands.allow = ["discard_held_deep_links"]
+
+[[permission]]
+identifier = "deny-discard-held-deep-links"
+description = "Denies the discard_held_deep_links command without any pre-configured scope."
+commands.deny = ["discard_held_deep_links"]

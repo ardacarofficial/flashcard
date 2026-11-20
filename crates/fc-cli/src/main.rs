@@ -489,11 +489,12 @@ fn write_line(mut out: impl std::io::Write, text: &str) -> std::io::Result<()> {
     }
 }
 
-fn report(method: &str, e: &ApiError, json: bool) {
+/// Prints an error: the full JSON with `--json`, else code + translated text (+ details).
+fn report(method: &str, e: &ApiError, json: bool, text: &i18n::Catalog) {
     let text = if json {
         serde_json::to_string_pretty(e).unwrap_or_else(|_| e.message.clone())
     } else {
-        format!("fc: {method}: {}: {}", e.code, e.message)
+        format!("fc: {method}: {}", text.error(e))
     };
     // Nowhere left to report to if stderr itself is closed.
     let _ = write_line(std::io::stderr(), &text);
@@ -503,21 +504,23 @@ fn main() -> ExitCode {
     // Before anything else (single-threaded): no shell variable changes behavior.
     fc_app::system::pin_process_env();
     let cli = Cli::parse();
+    // Until the collection is open (its `app.locale`), errors use `--lang` or Turkish.
+    let early = i18n::Catalog::new(cli.lang.unwrap_or_default());
     if let Command::Mcp(mcp::McpCommand::Serve { read_only }) = &cli.command {
         // stdout belongs to the protocol: errors go to stderr only.
         return match mcp::serve(&cli.db, *read_only) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                report(cli.command.method(), &e, cli.json);
+                report(cli.command.method(), &e, cli.json, &early);
                 ExitCode::FAILURE
             }
         };
     }
     if let Command::Api(api::ApiCommand::Serve { port }) = &cli.command {
-        return match api::serve(&cli.db, *port) {
+        return match api::serve(&cli.db, *port, cli.lang) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                report(cli.command.method(), &e, cli.json);
+                report(cli.command.method(), &e, cli.json, &early);
                 ExitCode::FAILURE
             }
         };
@@ -527,14 +530,16 @@ fn main() -> ExitCode {
     let app = match App::open_sqlite_shared(&cli.db, cli.migrate) {
         Ok(app) => app,
         Err(e) => {
-            report(cli.command.method(), &e.into_api(), cli.json);
+            report(cli.command.method(), &e.into_api(), cli.json, &early);
             return ExitCode::from(2);
         }
     };
-    // AI provider keys: the same OS keychain entries as the desktop app (v0.8).
-    app.set_secret_store(std::sync::Arc::new(fc_ai::secrets::OsKeychain::new(
-        fc_ai::secrets::SERVICE,
-    )));
+    // AI provider keys: the same OS keychain entries as the desktop app (v0.8), those of the
+    // profile whose collection `--db` is (v1.0: profiles do not share keys).
+    app.set_secret_store(fc_app::modules::profiles::secrets::collection_secrets(
+        std::sync::Arc::new(fc_ai::secrets::OsKeychain::new(fc_ai::secrets::SERVICE)),
+        &cli.db,
+    ));
     let ctx = commands::Ctx {
         app: &app,
         json: cli.json,
@@ -548,12 +553,13 @@ fn main() -> ExitCode {
                     cli.command.method(),
                     &ApiError::new(fc_api::ErrorCode::IoFile, e.to_string()),
                     cli.json,
+                    &ctx.text,
                 );
                 ExitCode::FAILURE
             }
         },
         Err(e) => {
-            report(cli.command.method(), &e, cli.json);
+            report(cli.command.method(), &e, cli.json, &ctx.text);
             ExitCode::FAILURE
         }
     }

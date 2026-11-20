@@ -78,6 +78,11 @@ fn case_duplicate_tags_are_stored_once_and_reuse_existing_rows() {
         let tags = r.list_tags().unwrap();
         let names: Vec<_> = tags.iter().map(|(t, n)| (t.name.as_str(), *n)).collect();
         assert_eq!(names, [("Verb", 2), ("x", 1), ("Çay", 2)]);
+        let uncounted: Vec<_> = r.list_tags_uncounted().unwrap();
+        assert_eq!(
+            uncounted,
+            tags.iter().map(|(t, _)| t.clone()).collect::<Vec<_>>()
+        );
         let n2 = r.get_note(nid(2)).unwrap().unwrap();
         let n2_tags: Vec<_> = n2.tags.iter().map(|t| t.as_str()).collect();
         assert_eq!(

@@ -27,6 +27,7 @@ import type { AnswerCheckDto } from "./AnswerCheckDto";
 import type { ApiClientDto } from "./ApiClientDto";
 import type { ApiClientList } from "./ApiClientList";
 import type { ApiClientRef } from "./ApiClientRef";
+import type { ApplyOnboarding } from "./ApplyOnboarding";
 import type { ApplyToLeeches } from "./ApplyToLeeches";
 import type { ApproveApiClient } from "./ApproveApiClient";
 import type { AssignPreset } from "./AssignPreset";
@@ -59,11 +60,15 @@ import type { ChangeNoteType } from "./ChangeNoteType";
 import type { ChangeNoteTypeResult } from "./ChangeNoteTypeResult";
 import type { CheckAnswer } from "./CheckAnswer";
 import type { CheckClipboard } from "./CheckClipboard";
+import type { CheckIntegrity } from "./CheckIntegrity";
+import type { ClearLock } from "./ClearLock";
+import type { ClearedCount } from "./ClearedCount";
 import type { ClipboardVerdict } from "./ClipboardVerdict";
 import type { ClonePreset } from "./ClonePreset";
 import type { ClosePluginUi } from "./ClosePluginUi";
 import type { ClozeFromItem } from "./ClozeFromItem";
 import type { ConfidenceAnswer } from "./ConfidenceAnswer";
+import type { ConfigureLock } from "./ConfigureLock";
 import type { CreateAiProvider } from "./CreateAiProvider";
 import type { CreateBackup } from "./CreateBackup";
 import type { CreateDeck } from "./CreateDeck";
@@ -74,6 +79,7 @@ import type { CreateInlineCards } from "./CreateInlineCards";
 import type { CreateNote } from "./CreateNote";
 import type { CreateNoteType } from "./CreateNoteType";
 import type { CreatePreset } from "./CreatePreset";
+import type { CreateProfile } from "./CreateProfile";
 import type { CreateReadingItem } from "./CreateReadingItem";
 import type { CreateRule } from "./CreateRule";
 import type { CreateSavedQuery } from "./CreateSavedQuery";
@@ -88,6 +94,11 @@ import type { DeepLinkOutcome } from "./DeepLinkOutcome";
 import type { DefineAttribute } from "./DefineAttribute";
 import type { DefineAttributeFromTemplate } from "./DefineAttributeFromTemplate";
 import type { DeleteAttributeOption } from "./DeleteAttributeOption";
+import type { DeleteProfile } from "./DeleteProfile";
+import type { DraftDto } from "./DraftDto";
+import type { DraftList } from "./DraftList";
+import type { DraftRef } from "./DraftRef";
+import type { DraftResult } from "./DraftResult";
 import type { DuplicateList } from "./DuplicateList";
 import type { EffectiveAttributeList } from "./EffectiveAttributeList";
 import type { EffectiveAttributes } from "./EffectiveAttributes";
@@ -98,6 +109,7 @@ import type { ExamList } from "./ExamList";
 import type { ExamRef } from "./ExamRef";
 import type { ExecuteBatch } from "./ExecuteBatch";
 import type { ExpireCard } from "./ExpireCard";
+import type { ExportLogs } from "./ExportLogs";
 import type { ExtractAiSource } from "./ExtractAiSource";
 import type { ExtractClip } from "./ExtractClip";
 import type { FindReplace } from "./FindReplace";
@@ -124,6 +136,8 @@ import type { InlinePreviewRequest } from "./InlinePreviewRequest";
 import type { InspectBackup } from "./InspectBackup";
 import type { InspectPackage } from "./InspectPackage";
 import type { InstallPlugin } from "./InstallPlugin";
+import type { InstallStarter } from "./InstallStarter";
+import type { IntegrityDto } from "./IntegrityDto";
 import type { JobDto } from "./JobDto";
 import type { JobList } from "./JobList";
 import type { JobRef } from "./JobRef";
@@ -145,7 +159,11 @@ import type { ListRuns } from "./ListRuns";
 import type { ListTrash } from "./ListTrash";
 import type { ListVoices } from "./ListVoices";
 import type { LocalApiMethodList } from "./LocalApiMethodList";
+import type { LocaleRequest } from "./LocaleRequest";
+import type { LockState } from "./LockState";
+import type { LogExportDto } from "./LogExportDto";
 import type { LookupWord } from "./LookupWord";
+import type { MaintenanceStatus } from "./MaintenanceStatus";
 import type { MakeReadingCard } from "./MakeReadingCard";
 import type { MarkWords } from "./MarkWords";
 import type { McpServerDto } from "./McpServerDto";
@@ -176,6 +194,9 @@ import type { NoteTypeDto } from "./NoteTypeDto";
 import type { NoteTypeList } from "./NoteTypeList";
 import type { NoteTypeRef } from "./NoteTypeRef";
 import type { NoteTypeUsage } from "./NoteTypeUsage";
+import type { OnboardingChoices } from "./OnboardingChoices";
+import type { OnboardingResult } from "./OnboardingResult";
+import type { OnboardingState } from "./OnboardingState";
 import type { OpenDeepLink } from "./OpenDeepLink";
 import type { OpenPluginUi } from "./OpenPluginUi";
 import type { OplogPage } from "./OplogPage";
@@ -201,6 +222,9 @@ import type { PreviewCards } from "./PreviewCards";
 import type { PreviewImport } from "./PreviewImport";
 import type { PreviewRule } from "./PreviewRule";
 import type { PrintDocument } from "./PrintDocument";
+import type { ProfileDto } from "./ProfileDto";
+import type { ProfileList } from "./ProfileList";
+import type { ProfileSwitched } from "./ProfileSwitched";
 import type { PurgeResult } from "./PurgeResult";
 import type { PurgeTrash } from "./PurgeTrash";
 import type { QueryCheck } from "./QueryCheck";
@@ -209,9 +233,14 @@ import type { ReadingItemDto } from "./ReadingItemDto";
 import type { ReadingItemList } from "./ReadingItemList";
 import type { ReadingItemRef } from "./ReadingItemRef";
 import type { ReadingSessionDone } from "./ReadingSessionDone";
+import type { RecoveryDto } from "./RecoveryDto";
 import type { RefreshStatsCache } from "./RefreshStatsCache";
+import type { ReminderCounts } from "./ReminderCounts";
+import type { ReminderStatus } from "./ReminderStatus";
+import type { ReminderStatusRequest } from "./ReminderStatusRequest";
 import type { RenameAttributeOption } from "./RenameAttributeOption";
 import type { RenameDeck } from "./RenameDeck";
+import type { RenameProfile } from "./RenameProfile";
 import type { RenameTag } from "./RenameTag";
 import type { RenderPrint } from "./RenderPrint";
 import type { RenderedCardDto } from "./RenderedCardDto";
@@ -230,6 +259,7 @@ import type { RunList } from "./RunList";
 import type { RunOptimizer } from "./RunOptimizer";
 import type { RunPluginCommand } from "./RunPluginCommand";
 import type { RunResult } from "./RunResult";
+import type { SaveDraft } from "./SaveDraft";
 import type { SavedQueryDto } from "./SavedQueryDto";
 import type { SavedQueryList } from "./SavedQueryList";
 import type { SavedQueryRef } from "./SavedQueryRef";
@@ -247,6 +277,7 @@ import type { SetCardFlag } from "./SetCardFlag";
 import type { SetCardFlags } from "./SetCardFlags";
 import type { SetCardUserNote } from "./SetCardUserNote";
 import type { SetFlag } from "./SetFlag";
+import type { SetLock } from "./SetLock";
 import type { SetModuleEnabled } from "./SetModuleEnabled";
 import type { SetPluginEnabled } from "./SetPluginEnabled";
 import type { SetPluginPermissions } from "./SetPluginPermissions";
@@ -257,6 +288,7 @@ import type { SetSetting } from "./SetSetting";
 import type { SetShortcut } from "./SetShortcut";
 import type { SetSuspended } from "./SetSuspended";
 import type { SetTagColor } from "./SetTagColor";
+import type { SetTheme } from "./SetTheme";
 import type { SettingValueDto } from "./SettingValueDto";
 import type { SettingValues } from "./SettingValues";
 import type { SettingsSchema } from "./SettingsSchema";
@@ -265,6 +297,8 @@ import type { StartExport } from "./StartExport";
 import type { StartImport } from "./StartImport";
 import type { StartSession } from "./StartSession";
 import type { StartTimer } from "./StartTimer";
+import type { StarterDeckList } from "./StarterDeckList";
+import type { StarterInstalled } from "./StarterInstalled";
 import type { StatsBreakdown } from "./StatsBreakdown";
 import type { StatsBreakdownRequest } from "./StatsBreakdownRequest";
 import type { StatsCacheInfo } from "./StatsCacheInfo";
@@ -274,6 +308,7 @@ import type { StudyCardsChanged } from "./StudyCardsChanged";
 import type { SubmitTest } from "./SubmitTest";
 import type { SuggestLinks } from "./SuggestLinks";
 import type { SuspendCards } from "./SuspendCards";
+import type { SwitchProfile } from "./SwitchProfile";
 import type { Synthesize } from "./Synthesize";
 import type { TagChangeResult } from "./TagChangeResult";
 import type { TagDto } from "./TagDto";
@@ -281,12 +316,15 @@ import type { TagList } from "./TagList";
 import type { TestPaperDto } from "./TestPaperDto";
 import type { TestPaperRequest } from "./TestPaperRequest";
 import type { TextAnalysis } from "./TextAnalysis";
+import type { ThemeDto } from "./ThemeDto";
+import type { ThemePresetList } from "./ThemePresetList";
 import type { TrashList } from "./TrashList";
 import type { TtsProviderList } from "./TtsProviderList";
 import type { UiSession } from "./UiSession";
 import type { UndoResult } from "./UndoResult";
 import type { UndoStatus } from "./UndoStatus";
 import type { UninstallPlugin } from "./UninstallPlugin";
+import type { Unlock } from "./Unlock";
 import type { UpdateAiNote } from "./UpdateAiNote";
 import type { UpdateAiProvider } from "./UpdateAiProvider";
 import type { UpdateAttribute } from "./UpdateAttribute";
@@ -301,6 +339,7 @@ import type { UpdatePreset } from "./UpdatePreset";
 import type { UpdateReadingItem } from "./UpdateReadingItem";
 import type { UpdateRule } from "./UpdateRule";
 import type { UpdateSavedQuery } from "./UpdateSavedQuery";
+import type { UpdateStatus } from "./UpdateStatus";
 import type { VoiceList } from "./VoiceList";
 import type { WordInfo } from "./WordInfo";
 import type { WordMarksChanged } from "./WordMarksChanged";
@@ -544,6 +583,44 @@ export interface Methods {
   "local_api.clients.revoke": { kind: "command"; request: ApiClientRef; response: ApiClientDto };
   "local_api.clients.remove": { kind: "command"; request: ApiClientRef; response: ApiClientDto };
   "local_api.methods": { kind: "query"; request: Empty; response: LocalApiMethodList };
+  "maintenance.status": { kind: "query"; request: Empty; response: MaintenanceStatus };
+  "maintenance.recovery.get": { kind: "query"; request: Empty; response: RecoveryDto };
+  "maintenance.recovery.dismiss": { kind: "command"; request: Empty; response: RecoveryDto };
+  "maintenance.integrity.check": { kind: "query"; request: CheckIntegrity; response: IntegrityDto };
+  "maintenance.logs.export": { kind: "command"; request: ExportLogs; response: LogExportDto };
+  "maintenance.crash_reports.clear": { kind: "command"; request: Empty; response: ClearedCount };
+  "maintenance.drafts.save": { kind: "command"; request: SaveDraft; response: DraftDto };
+  "maintenance.drafts.get": { kind: "query"; request: DraftRef; response: DraftResult };
+  "maintenance.drafts.list": { kind: "query"; request: Empty; response: DraftList };
+  "maintenance.drafts.discard": { kind: "command"; request: DraftRef; response: DraftResult };
+  "updates.status": { kind: "query"; request: Empty; response: UpdateStatus };
+  "updates.check": { kind: "query"; request: Empty; response: UpdateStatus };
+  "updates.install": { kind: "command"; request: Empty; response: JobDto };
+  "updates.apply": { kind: "command"; request: Empty; response: UpdateStatus };
+  "onboarding.status": { kind: "query"; request: Empty; response: OnboardingState };
+  "onboarding.options": { kind: "query"; request: LocaleRequest; response: OnboardingChoices };
+  "onboarding.apply": { kind: "command"; request: ApplyOnboarding; response: OnboardingResult };
+  "onboarding.skip": { kind: "command"; request: Empty; response: OnboardingState };
+  "starter.list": { kind: "query"; request: LocaleRequest; response: StarterDeckList };
+  "starter.install": { kind: "command"; request: InstallStarter; response: StarterInstalled };
+  "profiles.list": { kind: "query"; request: Empty; response: ProfileList };
+  "profiles.create": { kind: "command"; request: CreateProfile; response: ProfileDto };
+  "profiles.rename": { kind: "command"; request: RenameProfile; response: ProfileDto };
+  "profiles.delete": { kind: "command"; request: DeleteProfile; response: Empty };
+  "profiles.switch": { kind: "command"; request: SwitchProfile; response: ProfileSwitched };
+  "lock.status": { kind: "query"; request: Empty; response: LockState };
+  "lock.set": { kind: "command"; request: SetLock; response: LockState };
+  "lock.configure": { kind: "command"; request: ConfigureLock; response: LockState };
+  "lock.clear": { kind: "command"; request: ClearLock; response: LockState };
+  "lock.unlock": { kind: "command"; request: Unlock; response: LockState };
+  "lock.recover": { kind: "command"; request: Empty; response: LockState };
+  "lock.lock": { kind: "command"; request: Empty; response: LockState };
+  "lock.activity": { kind: "command"; request: Empty; response: Empty };
+  "reminders.status": { kind: "query"; request: ReminderStatusRequest; response: ReminderStatus };
+  "reminders.test": { kind: "command"; request: Empty; response: ReminderCounts };
+  "themes.current": { kind: "query"; request: Empty; response: ThemeDto };
+  "themes.presets": { kind: "query"; request: Empty; response: ThemePresetList };
+  "themes.set": { kind: "command"; request: SetTheme; response: ThemeDto };
 }
 
 /** Unqualified method name. */
@@ -791,4 +868,42 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "local_api.clients.revoke": "command",
   "local_api.clients.remove": "command",
   "local_api.methods": "query",
+  "maintenance.status": "query",
+  "maintenance.recovery.get": "query",
+  "maintenance.recovery.dismiss": "command",
+  "maintenance.integrity.check": "query",
+  "maintenance.logs.export": "command",
+  "maintenance.crash_reports.clear": "command",
+  "maintenance.drafts.save": "command",
+  "maintenance.drafts.get": "query",
+  "maintenance.drafts.list": "query",
+  "maintenance.drafts.discard": "command",
+  "updates.status": "query",
+  "updates.check": "query",
+  "updates.install": "command",
+  "updates.apply": "command",
+  "onboarding.status": "query",
+  "onboarding.options": "query",
+  "onboarding.apply": "command",
+  "onboarding.skip": "command",
+  "starter.list": "query",
+  "starter.install": "command",
+  "profiles.list": "query",
+  "profiles.create": "command",
+  "profiles.rename": "command",
+  "profiles.delete": "command",
+  "profiles.switch": "command",
+  "lock.status": "query",
+  "lock.set": "command",
+  "lock.configure": "command",
+  "lock.clear": "command",
+  "lock.unlock": "command",
+  "lock.recover": "command",
+  "lock.lock": "command",
+  "lock.activity": "command",
+  "reminders.status": "query",
+  "reminders.test": "command",
+  "themes.current": "query",
+  "themes.presets": "query",
+  "themes.set": "command",
 };

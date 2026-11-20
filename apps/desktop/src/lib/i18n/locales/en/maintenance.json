@@ -1,0 +1,149 @@
+{
+  "nav": {
+    "app_maintenance": "Logs & updates"
+  },
+  "modules": {
+    "maintenance": {
+      "name": "Maintenance",
+      "description": "Crash recovery, database check, local logs and their export. Nothing is ever sent anywhere."
+    },
+    "updates": {
+      "name": "Updates",
+      "description": "Checks for a new signed version when you ask (or at start, if you turn that on) and installs it only after you confirm."
+    }
+  },
+  "settings": {
+    "maintenance": {
+      "log_level": {
+        "label": "Log detail",
+        "description": "How much the app writes to its local log file."
+      },
+      "log_max_kb": {
+        "label": "Log file size (KiB)",
+        "description": "The log starts a new file at this size."
+      },
+      "log_files": {
+        "label": "Old log files kept",
+        "description": "How many older log files are kept before the oldest is deleted."
+      },
+      "check_after_crash": {
+        "label": "Check the database after a crash",
+        "description": "When the app did not close normally, check the collection for damage at the next start."
+      }
+    },
+    "updates": {
+      "check_on_start": {
+        "label": "Check for updates at start",
+        "description": "Off by default: the app contacts the update server only when you ask."
+      }
+    }
+  },
+  "commands": {
+    "maintenance": {
+      "status": "Maintenance status",
+      "recovery": {
+        "dismiss": "Dismiss the recovery offer",
+        "get": "Recovery after a crash"
+      },
+      "integrity": {
+        "check": "Check the database"
+      },
+      "logs": {
+        "export": "Export logs for a bug report"
+      },
+      "crash_reports": {
+        "clear": "Delete crash reports"
+      },
+      "drafts": {
+        "save": "Save a form draft",
+        "get": "Form draft",
+        "list": "Form drafts",
+        "discard": "Discard a form draft"
+      }
+    },
+    "updates": {
+      "status": "Update status",
+      "check": "Check for updates",
+      "install": "Download the update",
+      "apply": "Install the update and restart"
+    }
+  },
+  "errors": {
+    "validation": {
+      "draft_key": "This draft name is not valid.",
+      "draft_too_large": "This draft is too large to keep."
+    },
+    "conflict": {
+      "update_not_available": "There is no update to install. Check for updates first.",
+      "update_not_ready": "The update has not been downloaded yet."
+    },
+    "provider": {
+      "update_unsupported": "This build cannot update itself.",
+      "update_network": "The update server could not be reached. Try again later.",
+      "update_signature": "The downloaded update is not signed with this app's key, so it was refused."
+    }
+  },
+  "app_maintenance": {
+    "heading": "Logs & updates",
+    "version": "Version {version}",
+    "data_dir": "Data folder",
+    "log_dir": "Log folder",
+    "no_log": "Logging to a file is off in this build.",
+    "logs": {
+      "heading": "Logs",
+      "intro": "The app keeps a local log. Export it to attach to a bug report: keys, tokens and passwords are removed first. Nothing is sent automatically.",
+      "files": "{count} file(s), {size}",
+      "export": "Export logs…",
+      "exported": "Saved {files} file(s) to {path}. {redactions} secret(s) removed.",
+      "save_prompt": "Where should the log bundle be saved?"
+    },
+    "integrity": {
+      "heading": "Database",
+      "check": "Check the database",
+      "ok": "No problems found ({ms} ms).",
+      "problems": "Problems found: {count}. Restore a backup from Import & export.",
+      "never": "Not checked during this run."
+    },
+    "crashes": {
+      "heading": "Crash reports",
+      "none": "No crash reports.",
+      "clear": "Delete crash reports",
+      "cleared": "{count} report(s) deleted."
+    },
+    "previous_run": {
+      "clean": "The last run closed normally.",
+      "unclean": "The last run did not close normally."
+    },
+    "recovery": {
+      "title_crash": "Flashcard closed unexpectedly",
+      "title_unclean": "Flashcard did not close normally",
+      "intro": "Your collection is saved after every change. Here is what can be picked up again:",
+      "integrity_ok": "Database checked: no problems.",
+      "integrity_bad": "The database check found problems. Open Maintenance for details.",
+      "session": "An unfinished study session",
+      "resume": "Resume studying",
+      "drafts": "{count} unsaved form(s), restored when you open them again",
+      "crash": "Crash report: {message}",
+      "details": "Open maintenance",
+      "dismiss": "Continue"
+    },
+    "updates": {
+      "heading": "Updates",
+      "current": "You have version {version}.",
+      "unsupported": "This build cannot update itself (development build).",
+      "check": "Check for updates",
+      "up_to_date": "You are up to date.",
+      "available": "Version {version} is available.",
+      "install": "Download",
+      "downloading": "Downloading and verifying…",
+      "ready": "Downloaded and verified. The app will close, install and start again.",
+      "apply": "Install and restart",
+      "banner": "Version {version} is available.",
+      "open": "See update"
+    },
+    "size": {
+      "kb": "{n} KB",
+      "mb": "{n} MB"
+    }
+  }
+}

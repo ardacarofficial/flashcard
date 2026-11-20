@@ -754,6 +754,8 @@ fn ordered_scan_pages_match_a_full_sort() {
         (CardSort::Created, "c.created_at"),
         (CardSort::Modified, "n.updated_at"),
         (CardSort::Lapses, "c.lapses"),
+        // v1.0: walks `cards_due_order` (migration 1070).
+        (CardSort::Due, "c.due"),
     ];
     for q in queries {
         let f = w.filter(q);
@@ -775,7 +777,8 @@ fn ordered_scan_pages_match_a_full_sort() {
                         .unwrap()
                         .map(Result::unwrap)
                         .collect();
-                for (offset, limit) in [(0u32, 50u32), (1_000, 30), (20_390, 50)] {
+                // Past the middle the index is walked backwards (v1.0).
+                for (offset, limit) in [(0u32, 50u32), (1_000, 30), (12_000, 40), (20_390, 50)] {
                     let page = w.fx.read(|r| {
                         r.search_cards(&CardSearch {
                             filter: f.clone(),
@@ -828,4 +831,33 @@ fn migration_0301_adds_covering_indexes() {
         plan.iter().all(|p| p.contains("COVERING INDEX")),
         "{plan:?}"
     );
+}
+
+/// v1.0: the due-date sort of the browser walks an index instead of sorting every match.
+#[test]
+fn migration_1070_indexes_the_due_sort() {
+    let fx = Fx::new();
+    let conn = fx.raw();
+    for ix in [
+        "cards_due_order",
+        "notes_sort_live",
+        "notes_updated_live",
+        "cards_due_load",
+    ] {
+        assert!(
+            crate::migrate::schema_object_exists(&conn, ix).unwrap(),
+            "{ix}"
+        );
+    }
+    let plan: Vec<String> = conn
+        .prepare(
+            "EXPLAIN QUERY PLAN SELECT c.id FROM cards c INDEXED BY cards_due_order
+             ORDER BY c.due, c.id LIMIT 100",
+        )
+        .unwrap()
+        .query_map([], |r| r.get::<_, String>(3))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert!(plan.iter().all(|p| !p.contains("TEMP B-TREE")), "{plan:?}");
 }

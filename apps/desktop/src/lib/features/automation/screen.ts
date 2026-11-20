@@ -1,4 +1,4 @@
-import AutomationScreen from './AutomationScreen.svelte';
+// Screens load on first open (v1.0 code splitting): each is its own chunk.
 import type { ScreenModule } from '../types';
 
-export default [{ id: 'automation', component: AutomationScreen, routes: ['/automation'] }] satisfies ScreenModule;
+export default [{ id: 'automation', load: () => import('./AutomationScreen.svelte'), routes: ['/automation'] }] satisfies ScreenModule;

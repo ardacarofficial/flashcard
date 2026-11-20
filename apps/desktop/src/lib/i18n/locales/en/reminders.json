@@ -1,0 +1,47 @@
+{
+  "nav": { "reminders": "Reminders" },
+  "modules": {
+    "reminders": {
+      "name": "Reminders and tray",
+      "description": "A daily notification when cards are waiting (never on days you already studied), and the option to keep the app in the system tray."
+    }
+  },
+  "settings": {
+    "reminders": {
+      "enabled": { "label": "Daily reminder", "description": "Show a notification when cards are waiting today." },
+      "minute_of_day": { "label": "Reminder time", "description": "Local time, minutes after midnight." },
+      "weekdays": { "label": "Reminder days", "description": "Days of the week the reminder may come." },
+      "keep_in_tray": { "label": "Keep running in the tray", "description": "Closing the window hides it; the app stays in the system tray so reminders keep coming." }
+    }
+  },
+  "reminders": {
+    "heading": "Reminders",
+    "intro": "One notification a day at the time you choose, only when cards are waiting and you have not studied yet.",
+    "enabled": "Remind me every day",
+    "time": "Time",
+    "days": "Days",
+    "day": {
+      "0": "Mon",
+      "1": "Tue",
+      "2": "Wed",
+      "3": "Thu",
+      "4": "Fri",
+      "5": "Sat",
+      "6": "Sun"
+    },
+    "keep_in_tray": "Closing the window keeps the app in the tray",
+    "today": "Today: {due} due, {new} new.",
+    "studied": "You already studied today: no reminder today.",
+    "next": "Next reminder: {when}",
+    "none": "No reminder planned.",
+    "test": "Send a test notification",
+    "sent": "Test reminder sent.",
+    "notification": "{total} cards are waiting for you today ({due} due, {new} new)."
+  },
+  "commands": {
+    "reminders": {
+      "status": "Reminder status",
+      "test": "Send a test reminder"
+    }
+  }
+}

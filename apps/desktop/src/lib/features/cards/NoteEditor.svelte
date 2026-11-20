@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { draftKeeper } from '../maintenance/drafts';
   import { api, CLASSIC_NOTETYPE_ID, type ApiError } from '$lib/api';
   import type { AttributeDefDto, LinkedNote, NoteTypeDto, RenderedSides } from '$lib/api/types';
   import AttributeField from '$lib/components/AttributeField.svelte';
@@ -74,6 +75,23 @@
     if (moduleOn('links')) {
       api.call('links.backlinks', { note_id: id }).then((r) => (backlinks = r.items), () => (backlinks = []));
     }
+  });
+
+  // v1.0: what is typed into a new note survives a crash (form draft, restored on open).
+  const draft = draftKeeper<{ notetype_id: string; fields: Record<string, string> }>('notes.add');
+  let draftRestored = $state(false);
+  $effect(() => {
+    if (noteId) return;
+    void draft.restore().then((d) => {
+      if (d && d.notetype_id === untrack(() => ntId)) values = { ...untrack(() => values), ...d.fields };
+      draftRestored = true;
+    });
+  });
+  $effect(() => {
+    if (noteId || !draftRestored) return;
+    const fields = $state.snapshot(values);
+    const id = ntId;
+    draft.save(Object.values(fields).some((v) => v.trim()) ? { notetype_id: id, fields } : null);
   });
 
   // New notes start with every field of the chosen type (defaults included).
@@ -151,6 +169,7 @@
       } else {
         await api.call('notes.create', { notetype_id: ntId, deck_id: deckId, fields, tags: [], attributes, allow_duplicate: null });
         values = {};
+        await draft.discard();
         status = t('note.added');
       }
       onsaved?.();

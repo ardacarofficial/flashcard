@@ -15,6 +15,11 @@ pub struct EnsuredTag {
 pub trait TagRead {
     /// All tags with the number of live notes carrying each.
     fn list_tags(&self) -> StorageResult<Vec<(Tag, u32)>>;
+    /// The tags of [`TagRead::list_tags`] without their counts (v1.0: the query resolver needs
+    /// only the names, and counting every note's tags cost each search tens of ms).
+    fn list_tags_uncounted(&self) -> StorageResult<Vec<Tag>> {
+        Ok(self.list_tags()?.into_iter().map(|(t, _)| t).collect())
+    }
     /// Tag by name (case-insensitive).
     fn get_tag_by_name(&self, name: &TagName) -> StorageResult<Option<Tag>>;
 }

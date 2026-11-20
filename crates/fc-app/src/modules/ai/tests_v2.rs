@@ -533,7 +533,10 @@ fn cards_from_a_web_page() {
 #[test]
 fn ai_jobs_run_on_their_own_lane() {
     let t = app();
-    assert_eq!(t.app.registry().lanes(), ["main", LANE]);
+    assert_eq!(
+        t.app.registry().lanes(),
+        ["main", LANE, crate::modules::updates::LANE]
+    );
     let (ai_kinds, only) = t.app.registry().lane_kinds(LANE);
     assert!(only);
     let mut ai_kinds = ai_kinds;
@@ -561,7 +564,7 @@ fn ai_jobs_run_on_their_own_lane() {
     });
     let app = Arc::new(t.app);
     let worker = crate::jobs::spawn_worker(app.clone()).unwrap();
-    assert_eq!(worker.lanes(), 2);
+    assert_eq!(worker.lanes(), 3); // main, ai, updates (v1.0)
     let status = |id| {
         app.call::<JobsGet>(&JobRef { id }, &Actor::User)
             .unwrap()

@@ -321,8 +321,15 @@ fn source_of(reads: &dyn Reads, actor: &Actor, via: Option<InboxVia>) -> AppResu
 
 /// A local API client may not pile up proposals without bound: its pending items (count and
 /// text) stay under the user's quota (`local_api.inbox_max_items`, `local_api.inbox_max_kib`)
-/// until some are accepted or rejected. A resend of a known `client_ref` never gets here.
-fn check_quota(reads: &dyn Reads, client: ApiClientId, req: &AddInboxItem) -> AppResult<()> {
+/// until some are accepted or rejected, and it sends at most `local_api.inbox_daily_max` per
+/// 24 hours whatever happened to them (an auto-accept inbox rule empties the pending queue at
+/// once). A resend of a known `client_ref` never gets here.
+fn check_quota(
+    reads: &dyn Reads,
+    client: ApiClientId,
+    req: &AddInboxItem,
+    now: fc_core::Timestamp,
+) -> AppResult<()> {
     let (max_items, max_bytes) = crate::modules::local_api::inbox_quota(reads)?;
     let (items, bytes) = reads.inbox_client_usage(client, "pending")?;
     let incoming = u64::try_from(to_value(req)?.to_string().len()).unwrap_or(u64::MAX);
@@ -341,6 +348,11 @@ fn check_quota(reads: &dyn Reads, client: ApiClientId, req: &AddInboxItem) -> Ap
     }
     if bytes.saturating_add(incoming) > max_bytes {
         return Err(over("bytes", max_bytes));
+    }
+    let daily = crate::modules::local_api::inbox_daily_max(reads)?;
+    let since = fc_core::Timestamp(now.0.saturating_sub(crate::modules::local_api::INBOX_DAILY_WINDOW_MS));
+    if reads.inbox_client_added_since(client, since)? >= daily {
+        return Err(over("daily", u64::from(daily)));
     }
     Ok(())
 }
@@ -372,7 +384,7 @@ fn add(req: AddInboxItem, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<
         }
     }
     if let Some(c) = client_id {
-        check_quota(ctx.reads(), c, &req)?;
+        check_quota(ctx.reads(), c, &req, ctx.now)?;
     }
     let item = AddInboxItem {
         front: trimmed(&req.front),

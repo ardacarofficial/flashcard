@@ -1,0 +1,79 @@
+{
+  "nav": {
+    "starters": "Starter decks"
+  },
+  "modules": {
+    "onboarding": {
+      "name": "First-run guide",
+      "description": "On a new collection: asks what you study and sets up a deck with the right classification (CEFR levels, YKS sections…), plus small starter decks."
+    }
+  },
+  "onboarding": {
+    "title": "Welcome to Flashcard",
+    "intro": "What do you want to learn? We will set up a deck that fits. You can change everything later.",
+    "goal": {
+      "language": "A language",
+      "exam": "An exam",
+      "school": "School lessons",
+      "general": "Something else"
+    },
+    "subject": {
+      "english": "English",
+      "japanese": "Japanese",
+      "chinese": "Chinese",
+      "other_language": "Another language",
+      "yks": "YKS (TYT / AYT / YDT)",
+      "other_exam": "Another exam",
+      "school": "School (grades 1–12)",
+      "general": "General knowledge"
+    },
+    "template": "Classification: {name}",
+    "template_none": "No classification",
+    "deck_name": "Deck name",
+    "starters": "Starter decks",
+    "starters_none": "No starter deck for this subject; the app guide is always offered.",
+    "notes": "{count} cards",
+    "back": "Back",
+    "next": "Next",
+    "apply": "Set up",
+    "skip": "Skip",
+    "done": "Ready: {count} cards added. Undo removes the whole setup.",
+    "templates": {
+      "cefr": "CEFR levels (A1–C2)",
+      "jlpt": "JLPT levels (N5–N1)",
+      "hsk": "HSK levels (1–6)",
+      "yks": "YKS sections (TYT / AYT / YDT)",
+      "school_grade": "School grade (1–12)",
+      "difficulty": "Difficulty (easy / medium / hard)"
+    },
+    "close": "Close"
+  },
+  "starters": {
+    "heading": "Starter decks",
+    "intro": "Small decks written for this app, in Turkish and English. They become ordinary decks you can change or delete.",
+    "language": "Language of the cards",
+    "install": "Add",
+    "installed": "Added “{name}” ({count} cards).",
+    "lang": {
+      "tr": "Turkish",
+      "en": "English"
+    }
+  },
+  "commands": {
+    "onboarding": {
+      "status": "First-run guide status",
+      "options": "First-run guide choices",
+      "apply": "Set up from the first-run guide",
+      "skip": "Skip the first-run guide"
+    },
+    "starter": {
+      "list": "Starter decks",
+      "install": "Add a starter deck"
+    }
+  },
+  "errors": {
+    "not_found": {
+      "starter_deck": "Starter deck not found."
+    }
+  }
+}

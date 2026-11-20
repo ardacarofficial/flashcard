@@ -1,0 +1,4 @@
+// First run and starter decks (v1.0, docs/02 §32).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// Starter deck not found (`details.id`).
+NotFoundStarterDeck => NotFound, "errors.not_found.starter_deck";

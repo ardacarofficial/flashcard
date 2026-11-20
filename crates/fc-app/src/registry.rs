@@ -451,6 +451,11 @@ impl Registry {
         self.jobs.get(kind)
     }
 
+    /// Kinds of the registered jobs (stored identifiers, `jobs.kind`).
+    pub fn job_kinds(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.jobs.keys().copied()
+    }
+
     /// Worker lanes of the registered jobs ([`crate::jobs::MAIN_LANE`] always first).
     pub fn lanes(&self) -> Vec<&'static str> {
         let mut lanes = vec![crate::jobs::MAIN_LANE];

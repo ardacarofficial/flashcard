@@ -11,10 +11,13 @@
 //! * `engine`: settings, scheduler parameters, session load/save, rendering, the session DTO.
 //! * `session`: `study.start/session/active/answer/hint/check_answer/end/summary`.
 //! * `cards`: `study.suspend/bury/postpone/restore/card_history`.
+//! * `state_diff`: how a session's queue is stored and undone (v1.0): row edits and diffs
+//!   instead of whole-queue copies.
 
 mod cards;
 mod engine;
 mod session;
+mod state_diff;
 #[cfg(test)]
 mod tests;
 
@@ -107,9 +110,26 @@ pub fn descriptor() -> ModuleDescriptor {
     }
 }
 
+/// Drops the in-memory session queue cache (v1.0: profile switch). The cache is keyed by
+/// session id and a per-process revision, so it could not serve another collection's
+/// queue anyway; clearing it keeps nothing of the old profile in memory.
+pub(crate) fn invalidate_queue_cache(reg: &Registry) {
+    if let Some(c) = reg.extension::<state_diff::QueueCache>() {
+        c.clear();
+    }
+}
+
+/// Whether the session queue cache holds a queue (tests).
+#[cfg(test)]
+pub(crate) fn queue_cache_is_empty(reg: &Registry) -> bool {
+    reg.extension::<state_diff::QueueCache>()
+        .is_none_or(|c| c.is_empty())
+}
+
 /// Registers the module and its methods.
 pub fn register(reg: &mut Registry) {
     reg.module(descriptor());
+    reg.provide(std::sync::Arc::new(state_diff::QueueCache::default()));
     reg.command::<StudyStart>(session::start);
     reg.query::<StudySession>(session::get);
     reg.query::<StudyActive>(session::active);

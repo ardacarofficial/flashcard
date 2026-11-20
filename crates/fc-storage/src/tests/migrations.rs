@@ -114,6 +114,39 @@ fn migrations_stay_in_their_release_range() {
     assert_eq!(migrate::release_of(0), None);
 }
 
+/// Inside v1.0 every migration belongs to its lane's slice (ux 1000–1049, release 1050–1069,
+/// perf 1070–1089, quality 1090–1099); the slices do not overlap and stay inside the v1.0 range.
+#[test]
+fn v1_migrations_stay_in_their_lane_range() {
+    for m in MIGRATIONS
+        .iter()
+        .filter(|m| migrate::release_of(m.version) == Some("v1.0"))
+    {
+        assert!(
+            migrate::v1_lane_of(m.version).is_some(),
+            "{}: v1.0 migration outside every lane range {:?}",
+            m.name,
+            migrate::V1_LANE_RANGES
+        );
+    }
+    let lanes = migrate::V1_LANE_RANGES;
+    for (i, (_, a)) in lanes.iter().enumerate() {
+        assert_eq!(migrate::release_of(*a.start()), Some("v1.0"));
+        assert_eq!(migrate::release_of(*a.end()), Some("v1.0"));
+        for (_, b) in &lanes[i + 1..] {
+            assert!(
+                a.end() < b.start() || b.end() < a.start(),
+                "{a:?} overlaps {b:?}"
+            );
+        }
+    }
+    assert_eq!(migrate::v1_lane_of(1000), Some("v1.0 ux"));
+    assert_eq!(migrate::v1_lane_of(1050), Some("v1.0 release"));
+    assert_eq!(migrate::v1_lane_of(1099), Some("v1.0 quality"));
+    assert_eq!(migrate::v1_lane_of(1070), Some("v1.0 perf"));
+    assert_eq!(migrate::v1_lane_of(1089), Some("v1.0 perf"));
+}
+
 /// Every `.sql` file in `migrations/` is in the list (the build script collects them all).
 #[test]
 fn every_migration_file_is_collected() {
@@ -501,4 +534,79 @@ fn fts5_is_available() {
         )
         .unwrap();
     assert_eq!(hits, 1, "diacritics removed");
+}
+
+/// v1.0 (1071): a session's queue moves from `sessions.state` into `session_queue` rows in
+/// order; the rest of the state stays. (1072: the statistics cache gets its fingerprint.)
+#[test]
+fn migration_1071_moves_session_queues_to_rows() {
+    let mut conn = Connection::open_in_memory().unwrap();
+    migrate::configure_connection(&conn).unwrap();
+    let upto = MIGRATIONS.iter().position(|m| m.version == 1071).unwrap();
+    migrate::migrate_with(&mut conn, &MIGRATIONS[..upto]).unwrap();
+    conn.execute_batch(
+        r#"INSERT INTO sessions (id, kind, config, state, started_at) VALUES
+             ('s1', 'normal', '{}', '{"queue":[
+                 {"card_id":"c2","note_id":"n2","kind":"review","due":null},
+                 {"card_id":"c1","note_id":"n1","kind":"learning","due":1234}],
+               "answered":3}', 0),
+             ('s2', 'normal', '{}', '{"queue":[],"answered":0}', 0);"#,
+    )
+    .unwrap();
+    migrate::migrate_with(&mut conn, MIGRATIONS).unwrap();
+    let rows: Vec<(String, i64, String, String, String, Option<i64>)> = conn
+        .prepare(
+            "SELECT session_id, seq, card_id, note_id, kind, due FROM session_queue
+             ORDER BY session_id, seq",
+        )
+        .unwrap()
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
+        })
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            (
+                "s1".into(),
+                1 << 20,
+                "c2".into(),
+                "n2".into(),
+                "review".into(),
+                None
+            ),
+            (
+                "s1".into(),
+                2 << 20,
+                "c1".into(),
+                "n1".into(),
+                "learning".into(),
+                Some(1234)
+            ),
+        ]
+    );
+    let state: String = conn
+        .query_row("SELECT state FROM sessions WHERE id = 's1'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    let state: serde_json::Value = serde_json::from_str(&state).unwrap();
+    assert_eq!(state, serde_json::json!({ "queue": [], "answered": 3 }));
+    assert!(migrate::schema_object_exists(&conn, "cards_new_order").unwrap());
+    // 1072: the cache's fingerprint column.
+    conn.execute(
+        "INSERT INTO stats_cache_meta (calendar, upto_seq, row_count, generation, updated_at,
+             fingerprint) VALUES ('breakdown:a:0:4', 0, 0, 0, 0, 'f')",
+        [],
+    )
+    .unwrap();
 }

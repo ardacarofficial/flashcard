@@ -97,6 +97,13 @@ pub(crate) fn collect_pack(
                     media.insert(h.to_owned());
                 }
             }
+            // Image/audio fields of built-ins hold bare `media:<h>` references (image
+            // occlusion, image quiz, audio cards).
+            for r in v.split_whitespace() {
+                if let Some(h) = hash_of(r) {
+                    media.insert(h.to_owned());
+                }
+            }
         }
         for (attr, value) in reads.get_attribute_values(EntityRef::Note(note.id))? {
             def_ids.insert(attr);

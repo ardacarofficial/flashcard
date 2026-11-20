@@ -20,12 +20,16 @@
 //! * `Evet, geliyorum.` on every line — a comma in every line reads as two columns (a
 //!   sentence list and a `word, meaning` list look the same to column statistics);
 //! * `well-being` / `up-to-date` list — `-` splits inconsistently but more often than not.
+//!
+//! **v1.0:** the detector was then tuned for exactly these misses (`~` candidate, the
+//! [`ALIGNED`] separator, prose-with-a-comma lines, chained hyphens): **70/70**, a tuned
+//! figure. The held-out check for that revision is the third set (`heldout3_tests.rs`).
 
 use super::*;
 
 /// Correct samples now (see the module docs: 63 at the first measurement). Raising it is
 /// fine; lowering it means detection got worse.
-const HELD_OUT_2_FLOOR: usize = 65;
+const HELD_OUT_2_FLOOR: usize = 70;
 
 fn r(rows: &[&[&str]]) -> Vec<Vec<String>> {
     rows.iter()

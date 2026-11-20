@@ -445,18 +445,23 @@ fn matching(filter: &Filter, now: Timestamp) -> Sql {
 const ORDERED_SCAN_MIN: usize = 20_000;
 
 /// Join that walks the index of `sort` in order (`CROSS JOIN` pins the outer table), for the
-/// sort columns that have one. The inner table is pinned to its id index too: a filter
+/// sort columns that have one (v1.0, migration 1070: indexes that also answer the liveness
+/// checks, so the walk reads no table rows). The inner table is pinned to its id index too: a filter
 /// column index (`cards_deck_due` for `deck:`) would turn every probe into a range scan.
 fn ordered_from(sort: CardSort) -> Option<&'static str> {
     match sort {
         CardSort::SortField => {
-            Some("notes n INDEXED BY notes_sort_field CROSS JOIN cards c INDEXED BY cards_note_live ON c.note_id = n.id")
+            Some("notes n INDEXED BY notes_sort_live CROSS JOIN cards c INDEXED BY cards_note_live ON c.note_id = n.id")
         }
         CardSort::Created => {
             Some("cards c INDEXED BY cards_created CROSS JOIN notes n INDEXED BY notes_id_live ON n.id = c.note_id")
         }
         CardSort::Modified => {
-            Some("notes n INDEXED BY notes_updated CROSS JOIN cards c INDEXED BY cards_note_live ON c.note_id = n.id")
+            Some("notes n INDEXED BY notes_updated_live CROSS JOIN cards c INDEXED BY cards_note_live ON c.note_id = n.id")
+        }
+        // v1.0 (migration 1070).
+        CardSort::Due => {
+            Some("cards c INDEXED BY cards_due_order CROSS JOIN notes n INDEXED BY notes_id_live ON n.id = c.note_id")
         }
         _ => None,
     }
@@ -486,18 +491,28 @@ fn card_ids(conn: &Connection, sql: &str, params: &[SqlValue]) -> StorageResult<
 /// Runs a query whose first column is a card rowid; returns the row count and the rowids as
 /// a JSON array (tens of thousands of matches are counted and handed back to SQLite without
 /// materializing ids in Rust).
-fn rowid_list(conn: &Connection, sql: &str, params: &[SqlValue]) -> StorageResult<(usize, String)> {
+///
+/// With `cap`, the list stops growing after `cap` rowids (the rest is only counted): a page
+/// of a bigger set is read off the sort index and never needs it.
+fn rowid_list(
+    conn: &Connection,
+    sql: &str,
+    params: &[SqlValue],
+    cap: Option<usize>,
+) -> StorageResult<(usize, String)> {
     let run = || -> rusqlite::Result<(usize, String)> {
         let mut stmt = conn.prepare_cached(sql)?;
         let mut rows = stmt.query(params_from_iter(params.iter()))?;
         let mut n = 0usize;
         let mut out = String::from("[");
         while let Some(r) = rows.next()? {
-            let rowid: i64 = r.get(0)?;
-            if n > 0 {
-                out.push(',');
+            if cap.is_none_or(|c| n < c) {
+                let rowid: i64 = r.get(0)?;
+                if n > 0 {
+                    out.push(',');
+                }
+                out.push_str(&rowid.to_string());
             }
-            out.push_str(&rowid.to_string());
             n += 1;
         }
         out.push(']');
@@ -579,7 +594,13 @@ impl<M: Mode> SearchRead for SqliteTx<'_, M> {
         } else {
             format!("SELECT c.rowid {}", m.text)
         };
-        let (matched, matched_json) = rowid_list(self.conn(), &ids_sql, &m.params)?;
+        let indexed = !s.notes_only && ordered_from(s.sort).is_some();
+        let (matched, matched_json) = rowid_list(
+            self.conn(),
+            &ids_sql,
+            &m.params,
+            indexed.then_some(ORDERED_SCAN_MIN),
+        )?;
         let total = u32::try_from(matched).unwrap_or(u32::MAX);
         if s.offset >= total {
             return Ok(SearchPage {
@@ -609,15 +630,27 @@ impl<M: Mode> SearchRead for SqliteTx<'_, M> {
                 )
             }
         };
-        params.push(SqlValue::Integer(i64::from(s.limit)));
-        params.push(SqlValue::Integer(i64::from(s.offset)));
+        // A page past the middle of an index walk is read from the far end, walking the index
+        // backwards (v1.0: the last page of 200 000 cards costs what the first one does).
+        let end = s.offset.saturating_add(s.limit).min(total);
+        let backwards = ordered.is_some() && s.offset > total / 2;
+        let (desc, limit, offset) = if backwards {
+            (!s.descending, end - s.offset, total - end)
+        } else {
+            (s.descending, s.limit, s.offset)
+        };
+        params.push(SqlValue::Integer(i64::from(limit)));
+        params.push(SqlValue::Integer(i64::from(offset)));
         let n = params.len();
         let sql = format!(
             "SELECT c.id {from} {} LIMIT ?{} OFFSET ?{n}",
-            order_by(s.sort, s.descending),
+            order_by(s.sort, desc),
             n - 1
         );
-        let ids = card_ids(self.conn(), &sql, &params)?;
+        let mut ids = card_ids(self.conn(), &sql, &params)?;
+        if backwards {
+            ids.reverse();
+        }
         Ok(SearchPage {
             hits: self.hits(&ids)?,
             total,

@@ -120,6 +120,10 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         | "browse.purge_trash" => Refused(UNBOUNDED),
         "palette.list" | "modules.list" | "commands.list" => Reads(MODULES),
         "shortcuts.list" | "settings.schema" | "settings.get" => Reads(SETTINGS),
+        // v1.0: the app's colour scheme, preset and accent (app settings, nothing else).
+        "themes.current" | "themes.presets" => Reads(SETTINGS),
+        // Changing the look is the user's (plugins have no theme contribution point either).
+        "themes.set" => Refused("the app's look is the user's"),
         "bulk.move_cards" | "bulk.set_suspended" | "bulk.set_buried" | "bulk.set_flag"
         | "bulk.reset_progress" | "flags.list" | "flags.update" | "cards.set_flag"
         | "cards.set_flags" | "cards.set_user_note" | "cards.meta" => Reads(CARDS),
@@ -192,6 +196,22 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         // local HTTP API clients may talk to the app.
         n if n.starts_with("automation.") => Refused("automation rules are the user's"),
         n if n.starts_with("local_api.") => Refused("local API clients are the user's decision"),
+        // v1.0: a plugin may see what the first-run guide and the starter decks offer, but
+        // setting up the collection, and when the user is reminded, are the user's.
+        "onboarding.status" | "onboarding.options" | "starter.list" => Reads(DECKS),
+        "onboarding.apply" | "onboarding.skip" | "starter.install" => {
+            Refused("the first-run setup is the user's")
+        }
+        "reminders.status" => Reads(&["reminders", "decks"]),
+        "reminders.test" => Refused("reminders are the user's"),
+        // v1.0: which collection opens and whether it is unlocked are the user's alone; so
+        // are logs, crash reports, form drafts and updates (free export paths, restarts,
+        // installing a program), reads included (a log line may quote any domain).
+        n if n.starts_with("profiles.") || n.starts_with("lock.") => {
+            Refused("profiles and the app lock are the user's")
+        }
+        n if n.starts_with("maintenance.") => Refused("logs, crash reports and drafts are the user's"),
+        n if n.starts_with("updates.") => Refused("installing updates is the user's decision"),
         _ => Refused("not available to plugins"),
     }
 }
@@ -415,6 +435,10 @@ pub(crate) fn event_domains(event: &DomainEvent) -> &'static [Domain] {
         E::AutomationChanged => &["automation"],
         E::InboxChanged { .. } => &["inbox"],
         E::LocalApiPairing { .. } | E::LocalApiClientsChanged => &["local_api"],
+        // v1.0: the user's own session (lock state, reminders) is nobody else's business.
+        E::LockChanged { .. } => &["lock"],
+        E::ProfileSwitched { .. } => &["profiles"],
+        E::ReminderDue { .. } => &["reminders"],
     }
 }
 
@@ -431,6 +455,9 @@ const GATED_EVENT_DOMAINS: &[Domain] = &[
     "reading",
     "automation",
     "local_api",
+    "lock",
+    "profiles",
+    "reminders",
 ];
 
 /// Whether an `event:` hook of a plugin holding `granted` is called for `event` at all.
@@ -903,6 +930,83 @@ mod tests {
         assert_eq!(event_domains(&e), &["local_api"]);
         assert!(!event_delivered(&grants(&["local_api:read"]), &e));
         assert!(!can_read(&grants(&["local_api:read"]), &["local_api"]));
+    }
+
+    /// Every method of `module` is refused and cannot be hooked; `areas` cannot be granted.
+    fn refused_module(module: &str, areas: &[&str]) {
+        let methods: Vec<_> =
+            fc_api::v1::methods::catalog().into_iter().filter(|d| d.module == module).collect();
+        assert!(!methods.is_empty(), "{module}");
+        for d in methods {
+            assert!(matches!(exposure(d.name), Exposure::Refused(_)), "{}", d.name);
+            assert!(fc_plugins::permission::hook_target_allowed(d.name, d.permission).is_err(), "{}", d.name);
+        }
+        for a in areas {
+            for access in ["read", "write"] {
+                assert!(!fc_plugins::permission::api_grantable(&format!("{a}:{access}")), "{a}:{access}");
+            }
+        }
+    }
+
+    #[test]
+    fn domain_profiles_and_lock() {
+        // `profiles.*` and `lock.*` (module `profiles`): the user's session, never a plugin's.
+        refused_module("profiles", &["profiles", "lock"]);
+        for e in [
+            DomainEvent::LockChanged { locked: true },
+            DomainEvent::ProfileSwitched { profile_id: "p1".into() },
+        ] {
+            assert!(!event_delivered(&grants(&["profiles:read", "lock:read"]), &e), "{e:?}");
+        }
+        assert_eq!(event_domains(&DomainEvent::LockChanged { locked: false }), &["lock"]);
+    }
+
+    #[test]
+    fn domain_maintenance() {
+        // Logs export to a free path, drafts hold unsaved form text of any domain, crash
+        // reports quote the app's state: refused, reads included, and unhookable.
+        refused_module("maintenance", &["maintenance"]);
+        assert!(matches!(exposure("maintenance.logs.export"), Exposure::Refused(_)));
+    }
+
+    #[test]
+    fn domain_updates() {
+        refused_module("updates", &["updates"]);
+    }
+
+    #[test]
+    fn domain_onboarding() {
+        // What the guide and the starter decks offer is deck data; applying them is the user's.
+        for m in ["onboarding.status", "onboarding.options", "starter.list"] {
+            assert_eq!(exposure(m), Exposure::Reads(DECKS), "{m}");
+            assert!(fc_plugins::permission::hook_target_allowed(m, "decks:read").is_err(), "{m}");
+        }
+        for m in ["onboarding.apply", "onboarding.skip", "starter.install"] {
+            assert!(matches!(exposure(m), Exposure::Refused(_)), "{m}");
+        }
+    }
+
+    #[test]
+    fn domain_themes() {
+        // v1.0 round 2 (themes): reading the scheme/preset/accent is a settings read; setting
+        // it is refused and unhookable. No new events (changes arrive as `setting_changed`).
+        for m in ["themes.current", "themes.presets"] {
+            assert_eq!(exposure(m), Exposure::Reads(SETTINGS), "{m}");
+        }
+        assert!(matches!(exposure("themes.set"), Exposure::Refused(_)));
+        let d = exposure("themes.current").domains();
+        domain_case("settings", d, json!({ "preset": "SECRET", "light": {}, "dark": {} }), "SECRET");
+    }
+
+    #[test]
+    fn domain_reminders() {
+        assert_eq!(exposure("reminders.status"), Exposure::Reads(&["reminders", "decks"]));
+        assert!(matches!(exposure("reminders.test"), Exposure::Refused(_)));
+        // The daily reminder needs `reminders:read` to arrive at all.
+        let e = DomainEvent::ReminderDue { counts: Default::default(), test: false };
+        assert_eq!(event_domains(&e), &["reminders"]);
+        assert!(!event_delivered(&grants(&["decks:read"]), &e));
+        assert!(event_delivered(&grants(&["reminders:read"]), &e));
     }
 
     #[test]

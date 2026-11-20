@@ -218,7 +218,8 @@ fn ai_lane_coexists_with_io_and_optimizer_jobs() {
         .job;
     let app = Arc::new(t.app);
     let worker = crate::jobs::spawn_worker(app.clone()).unwrap();
-    assert_eq!(worker.lanes(), 2);
+    // main, ai, updates (v1.0).
+    assert_eq!(worker.lanes(), 3);
     let (export_job, export_done) = wait_until(&app, export.id, terminal);
     let (opt_job, opt_done) = wait_until(&app, optimizer.id, terminal);
     let (ai, ai_done) = wait_until(&app, ai_job.id, terminal);

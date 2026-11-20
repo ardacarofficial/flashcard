@@ -1,0 +1,9 @@
+{
+  "oplog.summary.maintenance.recovery.dismiss": "Kurtarma önerisi kapatıldı",
+  "oplog.summary.maintenance.logs.export": "Günlükler dışa aktarıldı",
+  "oplog.summary.maintenance.crash_reports.clear": "Çökme raporları silindi",
+  "oplog.summary.maintenance.drafts.save": "Form taslağı kaydedildi",
+  "oplog.summary.maintenance.drafts.discard": "Form taslağı atıldı",
+  "oplog.summary.updates.install": "Güncelleme indirildi",
+  "oplog.summary.updates.apply": "Güncelleme kuruldu"
+}

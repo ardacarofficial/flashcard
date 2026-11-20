@@ -113,6 +113,25 @@ fn review_log_mark_tracks_appends_and_changes() {
     assert_eq!(after_first.len(), 1);
     let only_c1 = fx.read(|r| r.stats_reviews(0, Some(&[c1])).unwrap());
     assert_eq!(only_c1.len(), 1);
+    // v1.0 streaming reads see the same rows (full and lean), in the same order.
+    for cards in [None, Some(&[c1][..])] {
+        let want = fx.read(|r| r.stats_reviews(0, cards).unwrap());
+        let mut full = Vec::new();
+        let mut lean = Vec::new();
+        fx.read(|r| {
+            r.for_each_stats_review(0, cards, &mut |seq, row| full.push((seq, row.clone())))
+                .unwrap();
+            r.for_each_stats_review_row(0, cards, &mut |seq, row| lean.push((seq, *row)))
+                .unwrap();
+        });
+        assert_eq!(full, want);
+        let want_lean: Vec<_> = want
+            .iter()
+            .map(|(seq, r)| (*seq, crate::repo::StatsReviewRow::of(r)))
+            .collect();
+        assert_eq!(lean, want_lean);
+    }
+    assert!(lean_imported(&fx));
     assert_eq!(fx.read(|r| r.review_count_upto(m1.max_seq).unwrap()), 3);
     // Undo of an answer deletes its row: the cache must notice.
     fx.write(|tx| assert!(tx.delete_review_log(rid(1)).unwrap()));
@@ -161,18 +180,16 @@ fn migration_0501_keeps_review_history_after_card_purge() {
             tx.insert_review_log(&review(2, c2, 200, "normal")).unwrap();
             tx.insert_review_log(&review(3, c2, 300, "imported"))
                 .unwrap();
-            tx.put_stats_cache(&StatsCacheRecord {
-                calendar: "0:4".into(),
-                upto_seq: 3,
-                row_count: 3,
-                generation: 0,
-                days: vec![(1, json!({"day": 1}))],
-                updated_at: Timestamp(1),
-            })
-            .unwrap();
             w.commit().unwrap();
         }
         let raw = Connection::open(&path).unwrap();
+        // A 0500-era cache (written as SQL: today's code writes the 1072 schema).
+        raw.execute_batch(
+            r#"INSERT INTO stats_day_cache (calendar, day, data) VALUES ('0:4', 1, '{"day":1}');
+               INSERT INTO stats_cache_meta (calendar, upto_seq, row_count, generation, updated_at)
+               VALUES ('0:4', 3, 3, 0, 1);"#,
+        )
+        .unwrap();
         let fks: i64 = raw
             .query_row(
                 "SELECT count(*) FROM pragma_foreign_key_list('review_log')",
@@ -243,6 +260,7 @@ fn rows(conn: &Connection) -> Vec<(i64, String, String)> {
 fn cache_round_trip_and_due_times() {
     let fx = Fx::seeded();
     let rec = StatsCacheRecord {
+        fingerprint: None,
         calendar: "180:4".into(),
         upto_seq: 7,
         row_count: 5,
@@ -279,6 +297,33 @@ fn cache_round_trip_and_due_times() {
     });
     let due = fx.read(|r| r.due_times(Timestamp(0), Timestamp(5000)).unwrap());
     assert_eq!(due, vec![Timestamp(1000), Timestamp(3000)]);
+    // Per day (floor division, also for days before the epoch after the shift).
+    let day = fc_core::time::MILLIS_PER_DAY;
+    let counts = fx.read(|r| {
+        r.due_counts_by_day(Timestamp(0), Timestamp(10_000), 0)
+            .unwrap()
+    });
+    assert_eq!(counts, vec![(0, 3)]);
+    let counts = fx.read(|r| {
+        r.due_counts_by_day(Timestamp(0), Timestamp(10_000), day - 2500)
+            .unwrap()
+    });
+    assert_eq!(counts, vec![(0, 1), (1, 2)]);
+    let counts = fx.read(|r| {
+        r.due_counts_by_day(Timestamp(0), Timestamp(10_000), -2500)
+            .unwrap()
+    });
+    assert_eq!(counts, vec![(-1, 1), (0, 2)]);
+    // Cards of a trashed note are not due.
+    fx.write(|tx| {
+        tx.set_notes_deleted(&[nid(4)], Some(Timestamp(50)))
+            .unwrap();
+    });
+    let counts = fx.read(|r| {
+        r.due_counts_by_day(Timestamp(0), Timestamp(10_000), 0)
+            .unwrap()
+    });
+    assert_eq!(counts, vec![(0, 2)]);
 }
 
 /// Backups leave the statistics cache out, and a restore drops the local one and moves the
@@ -296,6 +341,7 @@ fn restore_drops_and_invalidates_the_stats_cache() {
     let mark = fx.read(|r| r.review_log_mark().unwrap());
     fx.write(|tx| {
         tx.put_stats_cache(&StatsCacheRecord {
+            fingerprint: None,
             calendar: "0:4".into(),
             upto_seq: 1,
             row_count: 1,
@@ -365,4 +411,14 @@ fn exams_and_goals_crud() {
         .execute("DELETE FROM decks WHERE id = ?1", [did(1).to_string()])
         .unwrap();
     assert!(fx.read(|r| r.get_exam(exam.id).unwrap()).is_none());
+}
+
+/// The lean row flags imported history (`mode = imported`).
+fn lean_imported(fx: &Fx) -> bool {
+    let mut imported = Vec::new();
+    fx.read(|r| {
+        r.for_each_stats_review_row(0, None, &mut |_, row| imported.push(row.imported))
+            .unwrap();
+    });
+    imported == vec![false, true]
 }

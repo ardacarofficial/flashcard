@@ -30,6 +30,38 @@ fn entries(lang: &str) -> BTreeMap<String, String> {
         .collect()
 }
 
+/// The `errors.*` texts of the desktop dictionaries of `lang`, flattened to dotted keys.
+fn error_entries(lang: &str) -> BTreeMap<String, String> {
+    fn flatten(prefix: &str, v: &serde_json::Value, out: &mut BTreeMap<String, String>) {
+        match v {
+            serde_json::Value::Object(map) => {
+                for (k, v) in map {
+                    flatten(&format!("{prefix}.{k}"), v, out);
+                }
+            }
+            serde_json::Value::String(s) => {
+                out.insert(prefix.to_owned(), s.clone());
+            }
+            _ => {}
+        }
+    }
+    let mut out = BTreeMap::new();
+    for (_, src) in DESKTOP_LOCALE_FILES.iter().filter(|(l, _)| *l == lang) {
+        let json: serde_json::Value = serde_json::from_str(src).unwrap_or_default();
+        if let Some(errors) = json.get("errors") {
+            flatten("errors", errors, &mut out);
+        }
+    }
+    out
+}
+
+/// CLI texts plus the shared error texts.
+fn catalog_entries(lang: &str) -> BTreeMap<String, String> {
+    let mut all = error_entries(lang);
+    all.extend(entries(lang));
+    all
+}
+
 /// A loaded catalog for one locale (with English fallback).
 #[derive(Debug, Clone)]
 pub struct Catalog {
@@ -41,8 +73,8 @@ impl Catalog {
     /// Catalog for `locale`.
     pub fn new(locale: Locale) -> Self {
         Self {
-            primary: entries(lang_code(locale)),
-            fallback: entries("en"),
+            primary: catalog_entries(lang_code(locale)),
+            fallback: catalog_entries("en"),
         }
     }
 
@@ -63,6 +95,17 @@ impl Catalog {
     /// Translates a backend message.
     pub fn message(&self, m: &I18nMessage) -> String {
         self.text(&m.key, &m.params)
+    }
+
+    /// An API error for people: its code, its translated `message_key` text and, when it
+    /// adds something, the diagnostic `message` (ids, paths, positions).
+    pub fn error(&self, e: &fc_api::ApiError) -> String {
+        let text = self.text(&e.message_key, &BTreeMap::new());
+        if e.message.is_empty() || e.message == text {
+            format!("{}: {text}", e.code)
+        } else {
+            format!("{}: {text} ({})", e.code, e.message)
+        }
     }
 
     /// Translates `key` with a single param.
@@ -124,6 +167,27 @@ mod tests {
                 assert!(have.contains_key(&key), "{lang}: missing {key}");
             }
         }
+    }
+
+    /// Errors reach people translated (docs/02 §30): every error code has its TR and EN text.
+    #[test]
+    fn every_error_code_has_a_tr_and_en_text() {
+        for locale in [Locale::Tr, Locale::En] {
+            let c = Catalog::new(locale);
+            for code in fc_api::ErrorCode::ALL {
+                let key = code.message_key();
+                assert_ne!(
+                    c.text(key, &BTreeMap::new()),
+                    key,
+                    "{locale:?}: no text for {key}"
+                );
+            }
+        }
+        let e = fc_api::ApiError::new(fc_api::ErrorCode::NotFoundDeck, "deck 0190 not found");
+        let tr = Catalog::new(Locale::Tr).error(&e);
+        let en = Catalog::new(Locale::En).error(&e);
+        assert!(tr.starts_with("NOT_FOUND_DECK: ") && tr.ends_with("(deck 0190 not found)"));
+        assert_ne!(tr, en);
     }
 
     #[test]

@@ -14,6 +14,8 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "invoke",
             "take_deep_links",
+            "held_deep_links",
+            "discard_held_deep_links",
             "quick_add_prefill",
         ]),
     ))

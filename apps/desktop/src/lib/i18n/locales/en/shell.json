@@ -20,6 +20,7 @@
     "delete": "Delete",
     "rename": "Rename",
     "loading": "Loading…",
+    "load_failed": "Could not load this screen. Try again.",
     "none": "—",
     "yes": "Yes",
     "no": "No"
@@ -34,6 +35,16 @@
     "pages": {
       "general": "General",
       "attributes": "Classifications"
+    },
+    "app": {
+      "locale": {
+        "label": "Language",
+        "description": "Language of the app’s menus, messages and built-in note types."
+      },
+      "theme": {
+        "label": "Theme",
+        "description": "Light, dark, or follow the system setting."
+      }
     }
   },
   "lang": {

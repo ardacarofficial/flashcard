@@ -4,7 +4,7 @@ use super::{all, exec, id, one, opt_id, ts, Mode, SqliteTx, WriteMode};
 use crate::error::{StorageError, StorageResult};
 use crate::repo::{InboxRead, InboxRecord, InboxWrite};
 use fc_core::paging::{Page, PageRequest};
-use fc_core::{ApiClientId, InboxItemId};
+use fc_core::{ApiClientId, InboxItemId, Timestamp};
 use rusqlite::params;
 
 const T: &str = "inbox";
@@ -118,6 +118,21 @@ impl<M: Mode> InboxRead for SqliteTx<'_, M> {
         )?
         .unwrap_or((0, 0));
         Ok((usage.0, u64::try_from(usage.1).unwrap_or(0)))
+    }
+
+    fn inbox_client_added_since(
+        &self,
+        client: ApiClientId,
+        since: Timestamp,
+    ) -> StorageResult<u32> {
+        Ok(one(
+            self.conn(),
+            T,
+            "SELECT count(*) FROM inbox WHERE client_id = ?1 AND created_at >= ?2",
+            params![client.to_string(), since.0],
+            |r| r.get::<_, u32>(0),
+        )?
+        .unwrap_or(0))
     }
 }
 

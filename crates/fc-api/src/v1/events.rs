@@ -233,4 +233,22 @@ pub enum DomainEvent {
     },
     /// Local API clients were approved, denied, revoked or removed (v0.9).
     LocalApiClientsChanged,
+    /// The app lock engaged (idle timeout, `lock.lock`) or was released (v1.0): show or hide
+    /// the lock screen.
+    LockChanged {
+        /// Locked now.
+        locked: bool,
+    },
+    /// Another profile was chosen (v1.0): the desktop shell restarts on its collection.
+    ProfileSwitched {
+        /// The profile that opens next.
+        profile_id: String,
+    },
+    /// Time for the daily study reminder (v1.0): show an OS notification.
+    ReminderDue {
+        /// What waits today.
+        counts: super::reminders::ReminderCounts,
+        /// Sent by `reminders.test`.
+        test: bool,
+    },
 }

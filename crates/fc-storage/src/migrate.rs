@@ -64,6 +64,23 @@ pub const RELEASE_RANGES: &[(&str, std::ops::RangeInclusive<u32>)] = &[
     ("v1.0", 1000..=1099),
 ];
 
+/// Lanes inside the v1.0 range (docs/07 §5, docs/10 §35): the v1.0 tracks ran in parallel, so
+/// each owns a slice; the second v1.0 round (perf/i18n/themes) owns `1070`–`1089`.
+pub const V1_LANE_RANGES: &[(&str, std::ops::RangeInclusive<u32>)] = &[
+    ("v1.0 ux", 1000..=1049),
+    ("v1.0 release", 1050..=1069),
+    ("v1.0 perf", 1070..=1089),
+    ("v1.0 quality", 1090..=1099),
+];
+
+/// v1.0 lane that owns migration number `version` (`None` = not in any v1.0 lane).
+pub fn v1_lane_of(version: u32) -> Option<&'static str> {
+    V1_LANE_RANGES
+        .iter()
+        .find(|(_, r)| r.contains(&version))
+        .map(|(name, _)| *name)
+}
+
 /// Release track that owns migration number `version` (`None` = outside every range).
 pub fn release_of(version: u32) -> Option<&'static str> {
     RELEASE_RANGES

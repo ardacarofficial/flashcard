@@ -70,6 +70,18 @@ impl InboxRead for MemTx<'_> {
             u64::try_from(bytes).unwrap_or(u64::MAX),
         ))
     }
+
+    fn inbox_client_added_since(&self, client: ApiClientId, since: Timestamp) -> StorageResult<u32> {
+        let n = self
+            .s()
+            .domains
+            .inbox
+            .items
+            .values()
+            .filter(|i| i.client_id == Some(client) && i.created_at >= since)
+            .count();
+        Ok(u32::try_from(n).unwrap_or(u32::MAX))
+    }
 }
 
 impl InboxWrite for MemTx<'_> {

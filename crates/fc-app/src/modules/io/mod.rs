@@ -229,3 +229,5 @@ pub(crate) fn decode_text(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 pub(crate) mod tests;
+#[cfg(test)]
+mod real_anki_tests;

@@ -587,6 +587,13 @@ impl App {
         trusted: bool,
         hooks: Hooks<'_>,
     ) -> AppResult<Value> {
+        // v1.0: while the app is locked (or switching profile) nobody but the person at the
+        // keyboard gets in — not the local HTTP API, automation rules or plugins.
+        if crate::modules::profiles::is_background_actor(actor) && self.background_blocked() {
+            return Err(AppError::Api(crate::modules::profiles::locked_error(
+                method,
+            )));
+        }
         // The outermost dispatch on this thread is one user action (hook budget, v0.7).
         let _action = self.plugins.begin_action(self);
         let name = parse_qualified_name(method).ok_or_else(|| unknown_method(method))?;

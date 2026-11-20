@@ -53,16 +53,18 @@ fn models_json(col: &AnkiCollection, now_s: i64) -> Value {
         let req: Vec<Value> = (0..nt.templates.len())
             .map(|i| json!([i, "any", [0]]))
             .collect();
-        models.insert(
-            nt.id.to_string(),
-            json!({
+        let mut model = json!({
                 "id": nt.id, "name": nt.name, "type": nt.kind, "mod": now_s, "usn": 0,
                 "sortf": nt.sort_field, "did": 1, "tmpls": tmpls, "flds": flds, "css": nt.css,
                 "latexPre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
                 "latexPost": "\\end{document}", "latexsvg": false, "req": req, "tags": [],
                 "vers": []
-            }),
-        );
+        });
+        if super::occlusion::is_occlusion(nt) {
+            // Anki recognises its image occlusion note type by this (editor, mask drawing).
+            model["originalStockKind"] = json!(super::occlusion::STOCK_KIND);
+        }
+        models.insert(nt.id.to_string(), model);
     }
     Value::Object(models)
 }

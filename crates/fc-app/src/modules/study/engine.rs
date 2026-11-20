@@ -2,6 +2,7 @@
 //! persistence, card rendering (through v0.3's card type engines), snapshots and the
 //! session DTO.
 
+use super::state_diff;
 use super::*;
 use crate::error::{AppError, AppResult};
 use crate::settings::resolve_stored;
@@ -30,6 +31,7 @@ use fc_study::session::{self as queue, SessionState, LEARN_AHEAD_MS};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
 
 // ------------------------------------------------------------------ settings
 
@@ -164,17 +166,83 @@ pub(crate) struct Session {
     pub record: SessionRecord,
     pub config: SessionConfig,
     pub state: SessionState,
+    /// What the database holds (as loaded or last saved): [`Session::save`] writes only the
+    /// difference (v1.0).
+    stored: Stored,
+    /// The app's queue cache (saves update it).
+    cache: Option<Arc<state_diff::QueueCache>>,
+}
+
+/// The persisted state of a [`Session`].
+#[derive(Debug, Clone, Default)]
+struct Stored {
+    state: SessionState,
+    /// `seq` of each queue row, parallel to `state.queue`. `None`: no rows yet (a new
+    /// session, or a pre-v1.0 queue kept inside `sessions.state`) — the next save writes them
+    /// all.
+    seqs: Option<Vec<i64>>,
 }
 
 impl Session {
-    pub fn load(reads: &dyn Reads, id: SessionId) -> AppResult<Self> {
+    /// A session that is not stored yet ([`Session::save`] writes it).
+    pub fn new(
+        registry: &Registry,
+        record: SessionRecord,
+        config: SessionConfig,
+        state: SessionState,
+    ) -> Self {
+        Self {
+            record,
+            config,
+            state,
+            stored: Stored::default(),
+            cache: registry.extension::<state_diff::QueueCache>(),
+        }
+    }
+
+    pub fn load(reads: &dyn Reads, registry: &Registry, id: SessionId) -> AppResult<Self> {
         let record = reads.get_session(id)?.ok_or_else(|| {
             err_id(ErrorCode::NotFoundSession, format!("session {id} not found"), id)
         })?;
+        let mut state: SessionState = from_json(&record.state)?;
+        let cache = registry.extension::<state_diff::QueueCache>();
+        let cached = match (&cache, record.state.get(state_diff::REV_KEY)) {
+            (Some(c), Some(Value::String(rev))) if state.queue.is_empty() => c.get(id, rev),
+            _ => None,
+        };
+        // v1.0: the queue is in `session_queue` (a non-empty queue in the JSON is from before
+        // migration 1071 and moves to rows on the next save), or still in memory from the
+        // last save.
+        let seqs = if let Some((queue, seqs)) = cached {
+            state.queue = queue;
+            Some(seqs)
+        } else if state.queue.is_empty() {
+            let rows = reads.session_queue(id)?;
+            let mut seqs = Vec::with_capacity(rows.len());
+            let mut queue = Vec::with_capacity(rows.len());
+            for r in rows {
+                seqs.push(r.seq);
+                queue.push(queue::QueueEntry {
+                    card_id: r.card_id,
+                    note_id: r.note_id,
+                    kind: state_diff::queue_kind(&r.kind)?,
+                    due: r.due,
+                });
+            }
+            state.queue = queue;
+            Some(seqs)
+        } else {
+            None
+        };
         Ok(Self {
             config: from_json(&record.config)?,
-            state: from_json(&record.state)?,
+            stored: Stored {
+                state: state.clone(),
+                seqs,
+            },
+            state,
             record,
+            cache,
         })
     }
 
@@ -189,25 +257,71 @@ impl Session {
         Ok(())
     }
 
-    /// Snapshot of the persisted state (for inverses).
-    pub fn snapshot(&self) -> SessionStateSnapshot {
-        SessionStateSnapshot {
-            id: self.record.id,
-            state: self.record.state.clone(),
+    /// Writes the session: its record once, and of the queue only the rows that changed
+    /// since it was loaded or last saved. Returns what undoes this save (for the
+    /// `study.restore` inverse): a diff back to the stored state, not a copy of the queue.
+    pub fn save(&mut self, tx: &mut dyn fc_storage::Writes) -> AppResult<state_diff::SessionUndo> {
+        let ops = state_diff::diff(&self.stored.state.queue, &self.state.queue);
+        let stored_queue = std::mem::take(&mut self.stored.state.queue);
+        let stored_rest = serde_json::to_value(&self.stored.state);
+        self.stored.state.queue = stored_queue;
+        let queue = std::mem::take(&mut self.state.queue);
+        let rest = serde_json::to_value(&self.state);
+        self.state.queue = queue;
+        let mut rest = rest.map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+        let rev = state_diff::new_rev();
+        if let Value::Object(m) = &mut rest {
+            m.insert(state_diff::REV_KEY.to_owned(), Value::String(rev.clone()));
         }
-    }
-
-    /// Writes `state` into the record (call [`Session::save`] after).
-    pub fn set_state(&mut self) -> AppResult<()> {
-        self.record.state = serde_json::to_value(&self.state)
-            .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
-        Ok(())
-    }
-
-    pub fn save(&mut self, tx: &mut dyn fc_storage::Writes) -> AppResult<()> {
-        self.set_state()?;
+        self.record.state = rest;
         tx.upsert_session(&self.record)?;
-        Ok(())
+        let planned = self
+            .stored
+            .seqs
+            .as_deref()
+            .and_then(|seqs| state_diff::plan_rows(seqs, &ops, &self.state.queue));
+        let seqs = match planned {
+            Some(plan) => {
+                if !plan.remove.is_empty() || !plan.add.is_empty() {
+                    tx.edit_session_queue(self.record.id, false, &plan.remove, &plan.add)?;
+                }
+                plan.seqs
+            }
+            None => {
+                // Every row (first save, a pre-v1.0 queue, or no room between two seqs).
+                let seqs: Vec<i64> = (1..=self.state.queue.len() as i64)
+                    .map(|i| i * state_diff::SEQ_GAP)
+                    .collect();
+                let rows: Vec<_> = self
+                    .state
+                    .queue
+                    .iter()
+                    .zip(&seqs)
+                    .map(|(e, seq)| state_diff::row(*seq, e))
+                    .collect();
+                tx.edit_session_queue(self.record.id, true, &[], &rows)?;
+                seqs
+            }
+        };
+        let undo = state_diff::SessionUndo {
+            id: self.record.id,
+            rest: stored_rest.map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?,
+            ops,
+        };
+        if let Some(cache) = &self.cache {
+            cache.put(self.record.id, rev, &self.state.queue, &seqs);
+        }
+        self.stored = Stored {
+            state: self.state.clone(),
+            seqs: Some(seqs),
+        };
+        Ok(undo)
+    }
+
+    /// The state a `study.restore` snapshot describes: a v1.0 diff applied to this
+    /// session's state, or (older undo entries) the full state.
+    pub fn restored_state(&self, snapshot: &Value) -> AppResult<SessionState> {
+        state_diff::apply(&self.state, snapshot)
     }
 
     /// The card the session shows now.
@@ -503,11 +617,12 @@ pub(super) fn requeue_at(state: &SchedulingState, day_end: Timestamp) -> Option<
 pub(crate) fn session_dto(v: View<'_>, s: &Session, now: Timestamp) -> AppResult<SessionDto> {
     let reads = v.reads;
     // Cards deleted or emptied (v0.3) since the queue was built are skipped (a query cannot
-    // rewrite the session; the next answer persists the queue without them).
-    let mut view = s.clone();
+    // rewrite the session; the next answer persists the queue without them). The session is
+    // copied only when there is one to skip.
+    let mut view: Option<Session> = None;
     let mut live = None;
     let mut empty = EmptyCards::new(v);
-    while let Some(entry) = view.current(now) {
+    while let Some(entry) = view.as_ref().unwrap_or(s).current(now) {
         let id = entry.card_id;
         match require_live_card(reads, id) {
             Ok(card) if !empty.is_empty(&card)? => {
@@ -515,11 +630,12 @@ pub(crate) fn session_dto(v: View<'_>, s: &Session, now: Timestamp) -> AppResult
                 break;
             }
             _ => {
-                queue::remove_cards(&mut view.state, &[id]);
+                let copy = view.get_or_insert_with(|| s.clone());
+                queue::remove_cards(&mut copy.state, &[id]);
             }
         }
     }
-    let s = &view;
+    let s = view.as_ref().unwrap_or(s);
     let (new, learning, review) = queue::counts(&s.state.queue);
     let shown = live.clone();
     let current = match live {

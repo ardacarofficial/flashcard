@@ -1,0 +1,47 @@
+{
+  "nav": { "reminders": "Hatırlatıcılar" },
+  "modules": {
+    "reminders": {
+      "name": "Hatırlatıcılar ve tepsi",
+      "description": "Kartlar beklerken günlük bir bildirim (o gün çalıştıysan hiç gelmez) ve uygulamayı sistem tepsisinde tutma seçeneği."
+    }
+  },
+  "settings": {
+    "reminders": {
+      "enabled": { "label": "Günlük hatırlatıcı", "description": "Bugün bekleyen kart varsa bildirim göster." },
+      "minute_of_day": { "label": "Hatırlatma saati", "description": "Yerel saat, gece yarısından sonraki dakika." },
+      "weekdays": { "label": "Hatırlatma günleri", "description": "Hatırlatıcının gelebileceği günler." },
+      "keep_in_tray": { "label": "Tepside çalışmaya devam et", "description": "Pencereyi kapatmak onu gizler; uygulama sistem tepsisinde kalır ve hatırlatıcılar gelmeye devam eder." }
+    }
+  },
+  "reminders": {
+    "heading": "Hatırlatıcılar",
+    "intro": "Seçtiğin saatte günde bir bildirim; yalnız bekleyen kart varsa ve o gün henüz çalışmadıysan.",
+    "enabled": "Her gün hatırlat",
+    "time": "Saat",
+    "days": "Günler",
+    "day": {
+      "0": "Pzt",
+      "1": "Sal",
+      "2": "Çar",
+      "3": "Per",
+      "4": "Cum",
+      "5": "Cmt",
+      "6": "Paz"
+    },
+    "keep_in_tray": "Pencereyi kapatınca uygulama tepside kalsın",
+    "today": "Bugün: {due} tekrar, {new} yeni.",
+    "studied": "Bugün zaten çalıştın: bugün hatırlatma yok.",
+    "next": "Sonraki hatırlatma: {when}",
+    "none": "Planlı hatırlatma yok.",
+    "test": "Deneme bildirimi gönder",
+    "sent": "Deneme hatırlatması gönderildi.",
+    "notification": "Bugün {total} kart seni bekliyor ({due} tekrar, {new} yeni)."
+  },
+  "commands": {
+    "reminders": {
+      "status": "Hatırlatıcı durumu",
+      "test": "Deneme hatırlatması gönder"
+    }
+  }
+}

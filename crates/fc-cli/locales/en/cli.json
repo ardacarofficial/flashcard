@@ -28,5 +28,8 @@
   "cli.plugin.perm_off": "[ ] {permission}",
   "cli.plugin.perm_sensitive": "[ ] {permission} (sensitive)",
   "cli.plugin.no_logs": "no log lines",
-  "cli.plugin.packed": "packed {id} {version} → {path}"
+  "cli.plugin.packed": "packed {id} {version} → {path}",
+  "cli.api.no_collection": "no collection at {path}",
+  "cli.api.module_off": "the local_api module is off; turn it on first: fc call modules.set_enabled '{\"id\":\"local_api\",\"enabled\":true}'",
+  "cli.api.listening": "fc api: listening on http://{addr}"
 }

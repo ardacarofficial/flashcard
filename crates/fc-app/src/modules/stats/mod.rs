@@ -15,6 +15,7 @@
 //! `facts` holds the shared machinery the other v0.6 modules (`goals`, `planning`,
 //! `optimizer`) use too.
 
+mod breakdown;
 pub(crate) mod facts;
 #[cfg(test)]
 mod tests;
@@ -24,18 +25,17 @@ use crate::handler::{CommandCtx, CommandOutcome, QueryCtx};
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::registry::Registry;
 use crate::support::decks::DeckIndex;
-use crate::support::{err_id, summary};
+use crate::support::summary;
 use facts::*;
 use fc_api::v1::methods::*;
 use fc_api::v1::stats::*;
-use fc_api::{ApiError, ErrorCode};
-use fc_core::attribute::AttributeKind;
-use fc_core::query::{AttrAlt, AttrTest, CardNum, CmpOp, Filter, Pred};
+use fc_api::ErrorCode;
+use fc_core::query::{CardNum, CmpOp, Filter, Pred};
 use fc_core::settings::{SettingDef, SettingKind, SettingScope, SettingScopeKind};
 use fc_core::stats::{
-    aggregate_days, card_stats, iso_date, report_card, review_stats, state_counts, CardFact,
+    card_stats, iso_date, review_stats, CardFact,
 };
-use fc_core::{CardId, DeckId};
+use fc_core::DeckId;
 use fc_storage::repo::{CardSearch, CardSort};
 use std::collections::{HashMap, HashSet};
 
@@ -78,7 +78,7 @@ pub fn descriptor() -> ModuleDescriptor {
 pub fn register(reg: &mut Registry) {
     reg.module(descriptor());
     reg.query::<StatsGetOverview>(overview);
-    reg.query::<StatsGetBreakdown>(breakdown);
+    reg.query::<StatsGetBreakdown>(breakdown::breakdown);
     reg.query::<StatsLeeches>(leeches);
     reg.command::<StatsApplyToLeeches>(apply_to_leeches);
     reg.query::<StatsDeckReports>(deck_reports);
@@ -151,108 +151,6 @@ pub(crate) fn target_retention(
 
 fn overview(req: StatsRequest, ctx: &QueryCtx<'_>) -> AppResult<StatsOverview> {
     overview_of(ctx, &req)
-}
-
-// ------------------------------------------------------------------ breakdown
-
-fn breakdown(req: StatsBreakdownRequest, ctx: &QueryCtx<'_>) -> AppResult<StatsBreakdown> {
-    let reads = ctx.tx;
-    let def = reads
-        .get_attribute_def(req.attr_id)?
-        .filter(|d| d.deleted_at.is_none())
-        .ok_or_else(|| {
-            err_id(
-                ErrorCode::NotFoundAttribute,
-                format!("classification {} not found", req.attr_id),
-                req.attr_id,
-            )
-        })?;
-    if !matches!(
-        def.kind,
-        AttributeKind::Enum | AttributeKind::OrderedEnum | AttributeKind::MultiEnum
-    ) {
-        return Err(AppError::Api(
-            ApiError::new(
-                ErrorCode::ValidationBreakdownAttribute,
-                "only choice classifications can be broken down",
-            )
-            .with_detail("id", req.attr_id.to_string()),
-        ));
-    }
-    let cal = calendar(reads, req.tz_offset_mins)?;
-    let today = cal.index(ctx.now);
-    let from_day = range_start(today, req.days);
-    let scope = scope_filter(reads, &req.scope, ctx.now)?;
-    // Everything of the scope once, then partitioned per option in memory.
-    let ids = match &scope {
-        Some(f) => Some(reads.search_card_ids(f, ctx.now)?),
-        None => None,
-    };
-    let cards = scope_card_rows(reads, ids.as_deref())?;
-    let facts: HashMap<CardId, CardFact> = card_facts(reads, &cards, cal, ctx.now)?
-        .into_iter()
-        .map(|f| (f.card_id, f))
-        .collect();
-    let mut reviews: HashMap<CardId, Vec<fc_core::stats::ReviewFact>> = HashMap::new();
-    for (_, r) in reads.stats_reviews(0, ids.as_deref())? {
-        reviews
-            .entry(r.card_id)
-            .or_default()
-            .push(review_fact(&r, cal));
-    }
-    let alt = |test: AttrTest| {
-        Filter::Pred(Pred::Attr(vec![AttrAlt {
-            attr_id: def.id,
-            target: def.target,
-            test,
-        }]))
-    };
-    let mut options: Vec<_> = def.options.clone();
-    options.sort_by_key(|o| o.order);
-    let mut groups: Vec<(Option<&fc_core::attribute::AttributeOption>, Vec<CardId>)> = Vec::new();
-    for o in &options {
-        let matched = matching(reads, alt(AttrTest::Options(vec![o.id])), scope.as_ref(), ctx.now)?;
-        groups.push((Some(o), matched));
-    }
-    let without = matching(
-        reads,
-        Filter::negate(alt(AttrTest::Any)),
-        scope.as_ref(),
-        ctx.now,
-    )?;
-    groups.push((None, without));
-    let rows = groups
-        .into_iter()
-        .map(|(option, ids)| {
-            let ids: Vec<CardId> = ids.into_iter().filter(|i| facts.contains_key(i)).collect();
-            let group_facts: Vec<CardFact> = ids.iter().filter_map(|i| facts.get(i).cloned()).collect();
-            let group_reviews: Vec<fc_core::stats::ReviewFact> = ids
-                .iter()
-                .filter_map(|i| reviews.get(i))
-                .flatten()
-                .cloned()
-                .collect();
-            let stats = review_stats(&aggregate_days(&group_reviews), today, from_day);
-            let forecast = card_stats(&group_facts, today, 7);
-            BreakdownRow {
-                option_id: option.map(|o| o.id),
-                label: option.map(|o| o.label.clone()),
-                color: option.and_then(|o| o.color.clone()),
-                states: state_counts(&group_facts),
-                report: report_card(&group_facts),
-                success: stats.success,
-                true_retention: stats.true_retention,
-                reviews: stats.totals.reviews,
-                due_today: forecast.forecast.first().map_or(0, |d| d.due),
-                due_week: forecast.forecast.iter().map(|d| d.due).sum(),
-            }
-        })
-        .collect();
-    Ok(StatsBreakdown {
-        attr_id: def.id,
-        name: def.name,
-        rows,
-    })
 }
 
 // ------------------------------------------------------------------ leeches
@@ -426,6 +324,7 @@ fn refresh(
 ) -> AppResult<CommandOutcome<StatsCacheInfo>> {
     let cal = calendar(ctx.reads(), req.tz_offset_mins)?;
     let (rebuilt, days, folded) = refresh_cache(ctx.tx, cal, ctx.now)?;
+    breakdown::refresh(ctx.tx, cal, ctx.now)?;
     Ok(CommandOutcome {
         response: StatsCacheInfo {
             rebuilt,

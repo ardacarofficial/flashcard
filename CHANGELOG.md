@@ -2,6 +2,56 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## [Unreleased]
+
+## [1.0.0] — v1.0 Cila ve Windows sürümü (`feat/v1.0-integration`)
+
+Workspace sürümü `1.0.0`. Elle yapılacak son adım: temiz bir Windows'ta kurulum → ilk açılış → çalışma → güncelleme betiği (docs/07 §8), henüz gerçek bir Windows'ta koşulmadı.
+
+### v1.0 entegrasyonu — tur 2 (+ iz P performans/i18n/temalar)
+- **Profiller:** oturum kuyruğu (`session_queue`), istatistik önbellekleri ve tema ayarları profilin kendi koleksiyonunda; profil geçişi bellekteki çalışma kuyruğu önbelleğini boşaltır.
+- **Kilit:** kilit ekranı ve ilk açılış profilin temasıyla çizilir (`themes.current` kilitliyken okunabilen tek ayar: renkler, şema, hazır tema kimliği); kilitliyken önbellekteki tema silinmez, açılınca yeniden okunur. Kilitliyken kabuk hiçbir ekranı (tembel parçalar dahil) bağlamaz.
+- **Çökme kurtarma × artımlı kuyruk:** gerçek bir süreç oturum ortasında öldürülür (`abort`), sonraki açılış çalıştırma işaretinden kirli kapanışı görür, oturumu sunar ve öldürülen sürecin son kaydettiği kuyrukla birebir devam eder (`maintenance::kill_tests`).
+- Tur 1 ekranları (Profiller, Başlangıç desteleri, Hatırlatıcılar, Günlükler ve güncellemeler) tembel yüklenir; i18n lint tur 1'in tüm ekranlarında (ilk açılış, profiller, kilit, hatırlatıcılar, günlükler, kurtarma penceresi) geçer.
+- Eklentiler: `themes.current`/`themes.presets` = ayar okuması, `themes.set` açıkça reddedilir (`domain_themes`); eklentilerin tema katkı noktası yok. Migration `1070`–`1072` iz P'nin `1070`–`1089` aralığında (`V1_LANE_RANGES`). docs/10 §37.
+
+### v1.0 entegrasyonu — tur 1 (iz Q + iz O + iz N)
+- Üç v1.0 izi birleşti. **Loglar, çökme raporları ve çalıştırma işareti profil başına** (etkin profilin klasöründe); profil geçişi eski çalıştırmayı temiz kapatır.
+- **Profil silme anahtar zincirini temizler:** profilin AI anahtarları ve kilit özeti silinir. `fc --db <profil>/collection.db` o profilin AI anahtarlarını kullanır.
+- **Log dışa aktarma** profile ait anahtarları ve kilit özetini (`$argon2id$…`) de maskeler.
+- **Kilit ekranı** kilitliyken gelen `flashcard://` bağlantılarını çalışmadan önce listeler; "Açılmasın" ile bırakılabilir.
+- **Gelen kutusu:** program başına günlük öneri sınırı (`local_api.inbox_daily_max`, 200); önerileri incelemeden kabul eden kurallar Otomasyon ekranında uyarıyla gösterilir.
+- Eklentiler `profiles.*`, `lock.*`, `maintenance.*`, `updates.*`'e ulaşamaz ve kanca takamaz (alan başına test). Migration alt aralıkları testle zorunlu. Kullanıcı rehberi yeni özelliklerle güncellendi. docs/10 §35.
+
+### v1.0 iz Q — içe aktarma kalitesi, gerçek Anki, kullanıcı rehberi (`feat/v1.0-quality`)
+- **Ayırıcı algılama:** `~`, ` / `, `==` ve hizalı sütunlar (boşluk/çift sekme) tanınır; cümle listeleri, tireli kelimeler, cloze satırları ve düzyazı paragraflar tek sütun kalır; `;` virgülü, `:` `=`'i geçer; tanımda tekrar eden ayırıcı tanımda kalır. Ayardan önce kör yazılmış yeni tutulmuş sette **%96,2 (100/104)**; önceki tutulmuş sette ayar öncesi %90,8 (99/109). docs/10 §34.
+- **Gerçek Anki doğrulaması:** resmî `anki` 26.09.4 ile üretilmiş küçük paketler (yeni/eski düzen `.apkg`, `.colpkg`, zamanlamasız) test fikstürü; bizim `.apkg`/`.colpkg`'miz gerçek Anki'de açılıp karşılaştırılır (CI). Düzeltmeler: Anki 2.1.50+ WAL paketleri ve `unicase` harmanlaması okunur; resim maskesi Anki'nin kendi not türüyle dışa aktarılır; "Default" destesi çoğalmaz; aralık ve `lrt` doğru yazılır; resim/ses alanı medyası pakete girer.
+- **Kullanıcı rehberi** (TR/EN): `docs/guide/`.
+
+### v1.0 Windows sürümü — iz O (`feat/v1.0-release`: kurulum, imzalı güncelleme, çökme kurtarma, loglar)
+- **Kurulum:** NSIS (kullanıcı başına, yönetici izni yok, TR/EN) + isteğe bağlı MSI; WebView2 önyükleyici; sürüm workspace'ten. Kod imzası yok (K8, SmartScreen notu docs/07 §8).
+- **İmzalı otomatik güncelleme:** `tauri-plugin-updater`, Ed25519 açık anahtarı `tauri.conf.json`'da (özel anahtar repoda değil, GitHub sırrı). Yeni `updates` modülü: `updates.status/check/install/apply`; denetim yalnız istenince (`updates.check_on_start` varsayılan kapalı), indirme iptal edilebilir iş, imzası tutmayan indirme reddedilir, kurulumdan önce çalıştırma temiz kapanır.
+- **Çökme kurtarma:** çalıştırma işareti (`run.json`), panik kancası yerel çökme raporu yazar (gönderim yok, maskeli); düzgün kapanmayan çalıştırmadan sonra açılışta SQLite hızlı bütünlük denetimi ve kurtarma penceresi (açık oturuma devam, form taslakları, rapor). Yeni `maintenance.*` metotları ve form taslakları (migration `1050_maintenance`, not ekleme formu kendiliğinden kaydeder).
+- **Loglar:** `logs/flashcard.log`, boyutla döner (ayarlanabilir), her satır yazılmadan maskelenir; "Günlükleri dışa aktar" zip'i uygulamanın tuttuğu tam anahtarlarla bir kez daha maskeler. Yeni ekran *Günlükler ve güncellemeler*.
+- **CI/yayın:** `windows-smoke` (sessiz NSIS kurulumu + `Flashcard.exe --smoke`), `release.yml` (etiket `v*` → taslak Release, imzalı `latest.json`). Elle test betiği docs/07 §8.5.
+- Eklentiler `maintenance`/`updates` alanlarına erişemez; MCP, otomasyon ve yerel API de erişemez (testli).
+### v1.0 iz N — ilk açılış, başlangıç desteleri, profiller, uygulama kilidi, hatırlatıcılar (`feat/v1.0-ux`)
+- **İlk açılış rehberi:** boş koleksiyonda "ne öğrenmek istiyorsun?" → konuya uygun sınıflandırma şablonu (CEFR, JLPT, HSK, YKS, sınıf, zorluk), not türü, ön ayar ve başlangıç desteleri; hepsi tek geri al adımı, atlanabilir. `onboarding.status/options/apply/skip`.
+- **Başlangıç desteleri:** bu uygulama için yazılmış küçük TR/EN desteler (günlük İngilizce, TYT matematik, dünya başkentleri, uygulama rehberi), notlar sınıflandırma değeriyle. `starter.list/install`.
+- **Profiller:** her profil ayrı koleksiyon (`profiles/<id>/collection.db` + medya); varsayılan profil eski `collection.db`'de kalır. Profil listesi `profiles.json`'da, koleksiyonların dışında. Geçişte uygulama yeni koleksiyonla yeniden başlar. `profiles.*`.
+- **Uygulama kilidi:** PIN/parola yalnız Argon2id özeti olarak (OS anahtar zinciri), hareketsizlikte otomatik kilit, yanlış denemede artan bekleme; kilitliyken pencere yalnız kilit ekranına erişir, **yerel HTTP API 423 döner ve durur, otomasyon zamanlayıcısı ve eklentiler çalışmaz**. Pencere kilidi, veritabanı şifrelemesi değil. `lock.*`, `lock_changed`.
+- **Kilit güvenlik incelemesi:** kilitliyken `flashcard://` bağlantıları kuyrukta bekler (sınırlı, tekil) ve kilit açılınca işlenir, `take_deep_links`/medya protokolü/hızlı ekleme ön doldurması kapalı; yanlış deneme sayacı `profiles.json`'da (yeniden başlatma sıfırlamaz), kontrol + kayıt tek kilitte; özeti kayıp kilit kapalı kalır, yeni `lock.recover` + `LockState.recovery_required` ile açık kurtarma; AI anahtarları profil başına anahtar zinciri hesaplarında (varsayılan profil eski adları korur). Tehdit modeli docs/02 §29.
+- **Hatırlatıcılar ve tepsi:** seçilen saat/günlerde günlük OS bildirimi (o gün çalışıldıysa yok), sistem tepsisi menüsü, "pencere kapanınca tepside kal". `reminders.status/test`, `reminder_due`.
+- Migration `1000_ux_state` (+ migration testi). Paylaşılan değişiklikler: `fc-http` kilit kontrolü, `outside.rs` sunucu/pano kilidi, `App::invoke` arka plan aktörü kontrolü, otomasyon `run_due`.
+
+### v1.0 iz P — performans, i18n tamlığı + lint, temalar (`feat/v1.0-perf`)
+- **Performans takımı** (`fc-app/src/perf_tests.rs`): 100k not / 200k kart / 2M tekrar kaydı (sınıflandırmalar, etiketler, her kart durumu) SQLite dosyasında kurulur, ayrı bir süreç masaüstü gibi açıp ölçer. docs/02 §34 hedefleri release'te karşılandı (8 çekirdek, %10 öğrenme kartı — kuyrukta ~19 300 kart): açılış 626 ms (< 2 sn), sıradaki kart p95 7,2 ms (< 20 ms; medyan 4,1 ms), oturum başlatma 156 ms (< 500 ms), 100k'da en yavaş arama 70 ms (< 100 ms), tarayıcıda herhangi bir sayfa 81 ms, 10 bin satır içe aktarma 1,2 sn, 2M tekrarda önbellekli özet 643 ms / sınıflandırma kırılımı 1,06 sn (< 1,5 sn) / deste kapsamı 2,6 sn, tepe bellek 301 MB; okuma modunda 10 bin kelime renklendirme 16,6 ms (< 50 ms). 1/10 ölçekli eşi her `cargo test`'te koşar. Sayılar ve ölçüm koşulları docs/10 §36.
+- **Düzeltilen darboğazlar:** kardeş gömme ve çalışma adayı okumaları dizini kullanmıyordu (`?n IS NULL OR …` → yalnız verilen koşullar); yük dengeleyici her cevapta binlerce vade zamanını okuyordu (gün başına sayım SQL'de, kapsayan dizin); kuyruktaki her kart için ayrı okuma (tek sorgu); her aramada tüm etiketlerin kullanım sayımı (sayımsız liste); sınıflandırma kırılımı ve deste kapsamlı istatistik 2M satırı belleğe alıyordu (akış halinde, yalın satır); enum sütunları satır başına JSON değeri üretiyordu. Tarayıcı: vade sıralaması dizinli, orta noktadan sonraki sayfalar dizini tersten yürür, sıralama yürüyüşü not satırlarını okumaz (migration **1070**).
+- **Kuyruktan bağımsız cevap** (migration **1071**): oturum kuyruğu `session_queue` satırları; cevap yalnız değişen satırları ve oturum kaydını bir kez yazar, son kuyruk bellekte (revizyonla doğrulanır), geri alma anlık görüntüsü tam kuyruk yerine fark (geri al yine birebir); ölü/boş kartlar yalnız sıradaki adaylarda denetlenir. `study.start` vade dizini ve `cards_new_order` ile yalnız kuyruğun alabileceğini okur (2,1 sn → 156 ms). **Sınıflandırma kırılımı önbelleği** (migration **1072**): değer başına gün sayımları, kart kümelerinin parmak iziyle doğrulanır (2,97 → 1,06 sn). i18n lint artık yalnız `#[cfg(test)]` öğesini atlar (sonrasını tarar); `abort_flag_interrupts_training` deterministik.
+- **i18n lint:** masaüstünde Svelte AST taraması (işaretleme, görünen öznitelik/prop, betik cümleleri; her anahtar TR+EN), tarayıcı eklentisinde sayfa/manifest/betik taraması, backend'de modüllerin ilan ettiği ve kodun gönderdiği her `*_key`'in TR+EN metni. CLI hataları `message_key` çevirisiyle yazar. Bulunan eksik ayar etiketleri eklendi.
+- **Temalar** (docs/02 §31): açık/koyu/sistem, sakin hazır temalar (varsayılan, kâğıt, adaçayı, arduvaz, yüksek karşıtlık) ve özel vurgu rengi; renkler `fc_core::theme`'de hesaplanır (WCAG karşıtlığı korunur), `themes` modülü kapatılabilir, ayar tek geri al adımı.
+- **Ön yüz:** çalışma ekranı dışındaki her özellik ekranı ilk açılışta yüklenir (ayrı parça); `pnpm bundle:check` ilk yük bütçesini CI'da denetler.
+
 ## [0.10.0] — Faz 4 (v0.9 + v0.10 birleşik, `feat/phase4-integration`)
 
 ### Faz 4 entegrasyonu — tur 2, son (+ v0.9 otomasyon, yerel API/gelen kutusu, tarayıcı eklentisi)

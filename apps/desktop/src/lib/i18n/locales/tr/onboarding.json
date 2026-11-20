@@ -1,0 +1,79 @@
+{
+  "nav": {
+    "starters": "Başlangıç desteleri"
+  },
+  "modules": {
+    "onboarding": {
+      "name": "İlk açılış rehberi",
+      "description": "Yeni bir koleksiyonda ne çalıştığını sorar ve uygun sınıflandırmayla (CEFR seviyeleri, YKS bölümleri…) bir deste kurar; küçük başlangıç desteleri de sunar."
+    }
+  },
+  "onboarding": {
+    "title": "Flashcard'a hoş geldin",
+    "intro": "Ne öğrenmek istiyorsun? Sana uygun bir deste kuralım. Her şeyi sonra değiştirebilirsin.",
+    "goal": {
+      "language": "Bir dil",
+      "exam": "Bir sınav",
+      "school": "Okul dersleri",
+      "general": "Başka bir şey"
+    },
+    "subject": {
+      "english": "İngilizce",
+      "japanese": "Japonca",
+      "chinese": "Çince",
+      "other_language": "Başka bir dil",
+      "yks": "YKS (TYT / AYT / YDT)",
+      "other_exam": "Başka bir sınav",
+      "school": "Okul (1–12. sınıf)",
+      "general": "Genel kültür"
+    },
+    "template": "Sınıflandırma: {name}",
+    "template_none": "Sınıflandırma yok",
+    "deck_name": "Deste adı",
+    "starters": "Başlangıç desteleri",
+    "starters_none": "Bu konu için başlangıç destesi yok; uygulama rehberi her zaman sunulur.",
+    "notes": "{count} kart",
+    "back": "Geri",
+    "next": "İleri",
+    "apply": "Kur",
+    "skip": "Geç",
+    "done": "Hazır: {count} kart eklendi. Geri al tüm kurulumu kaldırır.",
+    "templates": {
+      "cefr": "CEFR seviyeleri (A1–C2)",
+      "jlpt": "JLPT seviyeleri (N5–N1)",
+      "hsk": "HSK seviyeleri (1–6)",
+      "yks": "YKS bölümleri (TYT / AYT / YDT)",
+      "school_grade": "Sınıf (1–12)",
+      "difficulty": "Zorluk (kolay / orta / zor)"
+    },
+    "close": "Kapat"
+  },
+  "starters": {
+    "heading": "Başlangıç desteleri",
+    "intro": "Bu uygulama için yazılmış küçük desteler, Türkçe ve İngilizce. Eklenince değiştirip silebileceğin sıradan destelere dönüşür.",
+    "language": "Kartların dili",
+    "install": "Ekle",
+    "installed": "“{name}” eklendi ({count} kart).",
+    "lang": {
+      "tr": "Türkçe",
+      "en": "İngilizce"
+    }
+  },
+  "commands": {
+    "onboarding": {
+      "status": "İlk açılış rehberi durumu",
+      "options": "İlk açılış rehberi seçenekleri",
+      "apply": "İlk açılış rehberiyle kur",
+      "skip": "İlk açılış rehberini geç"
+    },
+    "starter": {
+      "list": "Başlangıç desteleri",
+      "install": "Başlangıç destesi ekle"
+    }
+  },
+  "errors": {
+    "not_found": {
+      "starter_deck": "Başlangıç destesi bulunamadı."
+    }
+  }
+}

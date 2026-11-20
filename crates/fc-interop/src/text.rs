@@ -13,6 +13,10 @@ use serde::{Deserialize, Serialize};
 pub const NEWLINE: &str = "\n";
 /// Records separated by blank lines.
 pub const BLANK_LINE: &str = "\n\n";
+/// Field separator for columns aligned with blanks (`kedi      cat`, `cat\t\tkedi`): a run of
+/// two or more spaces, or any run of spaces and tabs that holds a tab. Indentation at the
+/// start of a line and blanks at its end are not separators.
+pub const ALIGNED: &str = "  ";
 
 /// How to split text into records and fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -262,7 +266,23 @@ impl<'a> Parser<'a> {
             }
         }
         let sep = self.opts.field_separator.as_str();
+        if sep == ALIGNED {
+            return self.aligned_sep_len();
+        }
         self.rest().starts_with(sep).then_some(sep.len())
+    }
+
+    /// Length of an [`ALIGNED`] separator at the cursor.
+    fn aligned_sep_len(&self) -> Option<usize> {
+        let rest = self.rest();
+        let run = rest.len() - rest.trim_start_matches([' ', '\t']).len();
+        let after = &rest[run..];
+        let line_start = self.i == 0 || self.s[..self.i].ends_with('\n');
+        let is_sep = (run >= 2 || rest[..run].contains('\t'))
+            && !line_start
+            && !after.is_empty()
+            && !after.starts_with('\n');
+        is_sep.then_some(run)
     }
 
     fn is_blank(&self, c: char) -> bool {
@@ -418,20 +438,33 @@ const FIELD_CANDIDATES: &[(&str, f64)] = &[
     (" => ", 0.96),
     ("→", 0.96),
     ("=>", 0.95),
+    ("==", 0.95),
     ("->", 0.95),
     (">>", 0.95),
     (":", 0.93),
+    ("~", 0.92),
     ("=", 0.92),
     ("|", 0.91),
     (",", 0.9),
     (";", 0.88),
+    (" / ", 0.88),
     ("-", 0.75),
+    (ALIGNED, 0.7),
 ];
 
 /// Two-column separators: a record with more fields is unlikely to be meant this way.
 const PAIR_SEPARATORS: &[&str] = &[
-    "::", " - ", " – ", " — ", " = ", " => ", "→", "=>", "->", ">>", ":", "=", "-",
+    "::", " - ", " – ", " — ", " = ", " => ", "→", "=>", "->", ">>", "==", ":", "~", "=", "-",
 ];
+
+/// Score factor of a separator when every line also holds a stronger one.
+const OUTRANKED: f64 = 0.9;
+
+/// Sentence punctuation ending a line of prose.
+const SENTENCE_END: &[char] = &['.', '!', '?', '…'];
+
+/// A record share above which a pattern counts as "every line".
+const MOST_RECORDS: f64 = 0.75;
 
 const RECORD_CANDIDATES: &[(&str, f64)] = &[(NEWLINE, 1.0), (BLANK_LINE, 0.97), (";", 0.9)];
 
@@ -498,7 +531,13 @@ pub fn detect(text: &str) -> Detection {
             confidence: score.clamp(0.0, 1.0) as f32,
         },
         None => {
-            let options = TextOptions::new("\t", NEWLINE);
+            // One column: a paragraph per record when the text is prose split by blank lines.
+            let rs = if paragraphs(sample) {
+                BLANK_LINE
+            } else {
+                NEWLINE
+            };
+            let options = TextOptions::new("\t", rs);
             let records = Parser::new(sample, &options).run().len();
             Detection {
                 options,
@@ -523,6 +562,14 @@ fn candidate(
         // A record separator that does not separate anything (no blank line, no `;`).
         return None;
     }
+    if fs != ALIGNED && !without_cloze(sample).contains(fs.as_str()) {
+        // Only inside `{{c1::…}}`: a cloze list is one column, even for want of anything else.
+        return None;
+    }
+    if rs == BLANK_LINE && ends_lines(sample, &fs) {
+        // `Roses are red,⏎violets are blue.`: punctuation at a line end, not a separator.
+        return None;
+    }
     let clean = unmask_records(Parser::new(masked, &opts).run());
     let adjust = |records: &[Vec<String>], s: f64| {
         if rs == NEWLINE && trailing_custom_separator(records) {
@@ -534,6 +581,19 @@ fn candidate(
     };
     if real == clean {
         let (s, columns) = score(&real, &fs)?;
+        if columns == 2 && repeats_in_definition(&fs) {
+            // `Sympathy - feeling sorry - not empathy`: a term/definition separator repeated
+            // inside the definition. Keep the rest of the record in the second field.
+            let limited = TextOptions {
+                max_fields: Some(2),
+                ..opts.clone()
+            };
+            let two = Parser::new(sample, &limited).run();
+            if two != real {
+                let (s, _) = score(&two, &fs)?;
+                return Some((adjust(&two, s), limited, 2, two.len()));
+            }
+        }
         return Some((adjust(&real, s), opts, columns, real.len()));
     }
     // The candidate cuts through protected tokens. Best: the clean split, if limiting the
@@ -543,8 +603,17 @@ fn candidate(
             max_fields: Some(columns),
             ..opts.clone()
         };
-        if Parser::new(sample, &limited).run() == clean {
+        let split = Parser::new(sample, &limited).run();
+        if split == clean {
             return Some((adjust(&clean, s), limited, columns, clean.len()));
+        }
+        if columns == 2 && repeats_in_definition(&fs) {
+            // Both at once: `Saat: 13:15` and `Not: Kitap getir: sayfa 42`.
+            let clean = unmask_records(Parser::new(masked, &limited).run());
+            if split == clean {
+                let (s, _) = score(&clean, &fs)?;
+                return Some((adjust(&clean, s), limited, 2, clean.len()));
+            }
         }
     }
     // Otherwise the plain split, for want of anything better ("1,5\n2,5" is still a CSV).
@@ -607,7 +676,8 @@ fn unmask_records(records: Vec<Vec<String>>) -> Vec<Vec<String>> {
 /// * numbers: `,` `:` `-` between digits (`3,14`, `1.000,50`, `10:30`, `1919-1922`) — not
 ///   when the `,` is followed by a space (`1, 2` lists separate);
 /// * URLs: `scheme://…` up to whitespace, a quote or a `,` `;` `|` `\t` boundary (their `:`,
-///   `-`, `=` stay inside).
+///   `-`, `=` stay inside);
+/// * cloze deletions: `{{c1::Ankara}}`.
 fn mask_tokens(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut out = chars.clone();
@@ -616,6 +686,20 @@ fn mask_tokens(text: &str) -> String {
         if matches!(chars[i], ',' | ':' | '-') && digit(i - 1) && digit(i + 1) {
             out[i] = mask_char(chars[i]);
         }
+    }
+    // Cloze deletions: `{{c1::Ankara}}` (and `{{c1::Ankara::capital}}`) are one token.
+    let mut i = 0;
+    while i + 1 < chars.len() {
+        if chars[i] == '{' && chars[i + 1] == '{' {
+            if let Some(len) = chars[i..].windows(2).position(|w| w == ['}', '}']) {
+                for k in i..i + len {
+                    out[k] = mask_char(chars[k]);
+                }
+                i += len + 2;
+                continue;
+            }
+        }
+        i += 1;
     }
     let mut i = 0;
     while i + 3 <= chars.len() {
@@ -666,6 +750,28 @@ fn score(records: &[Vec<String>], fs: &str) -> Option<(f64, usize)> {
     if without as f64 > MAX_RECORDS_WITHOUT_SEPARATOR * n as f64 {
         return None;
     }
+    if fs == "-" && records.iter().any(|r| r.len() > 2) {
+        // `up-to-date`, `mother-in-law`: a bare hyphen chained inside words joins them.
+        return None;
+    }
+    if fs == "," && sentence_lines(records) {
+        // `Evet, geliyorum.` on every line: prose with a comma, not `word, meaning`.
+        return None;
+    }
+    // Lines that hold a stronger separator too: `das Kind, die Kinder; çocuk` (a `;` beats
+    // the commas of a list), `Ohm's law: V = IR` (a label colon beats a formula's `=`).
+    let weaker_than = |other: &str| {
+        let with = records
+            .iter()
+            .filter(|r| r.iter().any(|f| f.contains(other)))
+            .count();
+        with as f64 >= MOST_RECORDS * n as f64
+    };
+    let outranked = match fs {
+        "," => weaker_than(";"),
+        " = " | "=" | "==" => weaker_than(":"),
+        _ => false,
+    };
     let share = hits as f64 / n as f64;
     let consistent: Vec<&Vec<String>> = records.iter().filter(|r| r.len() == mode).collect();
     let fields = (consistent.len() * mode).max(1);
@@ -676,10 +782,94 @@ fn score(records: &[Vec<String>], fs: &str) -> Option<(f64, usize)> {
         .count() as f64
         / fields as f64;
     let mut s = share * (n as f64 / (n as f64 + 1.0)) * (1.0 - 0.5 * empty);
+    if outranked {
+        s *= OUTRANKED;
+    }
     if PAIR_SEPARATORS.contains(&fs) && mode > 2 {
         s *= 0.6;
     }
     Some((s, mode))
+}
+
+/// A term/definition separator the definition may repeat (`Sympathy - feeling sorry - not
+/// empathy`). Not a bare `-`, which also joins words.
+fn repeats_in_definition(fs: &str) -> bool {
+    fs != "-" && PAIR_SEPARATORS.contains(&fs)
+}
+
+/// `text` without its cloze deletions (`{{c1::…}}`).
+fn without_cloze(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("{{") {
+        let Some(len) = rest[start..].find("}}") else {
+            break;
+        };
+        out.push_str(&rest[..start]);
+        out.push(' ');
+        rest = &rest[start + len + 2..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Whether most occurrences of `fs` end a line.
+fn ends_lines(sample: &str, fs: &str) -> bool {
+    let total = sample.matches(fs).count();
+    let at_end = sample
+        .match_indices(fs)
+        .filter(|(i, _)| {
+            sample[i + fs.len()..]
+                .trim_start_matches([' ', '\t'])
+                .starts_with('\n')
+        })
+        .count();
+    total > 0 && at_end * 2 > total
+}
+
+/// Whether `sample` is prose in paragraphs: at least two blocks between blank lines, each of
+/// several lines, and most line breaks inside a block continue a sentence (the line before
+/// ends with `,` `;` or `:`). A word list grouped by blank lines stays one word per record.
+fn paragraphs(sample: &str) -> bool {
+    let opts = TextOptions::new("\t", BLANK_LINE);
+    let blocks: Vec<String> = Parser::new(sample, &opts)
+        .run()
+        .into_iter()
+        .filter_map(|r| r.into_iter().next())
+        .collect();
+    if blocks.len() < 2 || blocks.iter().any(|b| !b.contains('\n')) {
+        return false;
+    }
+    let (mut breaks, mut continued) = (0usize, 0usize);
+    for b in &blocks {
+        let lines: Vec<&str> = b.lines().collect();
+        for line in &lines[..lines.len() - 1] {
+            breaks += 1;
+            continued += usize::from(line.trim_end().ends_with([',', ';', ':']));
+        }
+    }
+    continued as f64 >= MOST_RECORDS * breaks as f64
+}
+
+/// Whether most records read as one sentence each: a capital letter first, sentence
+/// punctuation last, and a lower-case word right after the first separator (`Evet,
+/// geliyorum.`). A `word, meaning` pair starts its second value fresh and has no full stop.
+fn sentence_lines(records: &[Vec<String>]) -> bool {
+    let prose = records
+        .iter()
+        .filter(|r| {
+            let (Some(first), Some(last)) = (r.first(), r.last()) else {
+                return false;
+            };
+            r.len() >= 2
+                && first.chars().next().is_some_and(char::is_uppercase)
+                && last
+                    .trim_end_matches(['"', '\'', ')'])
+                    .ends_with(SENTENCE_END)
+                && r[1].chars().next().is_some_and(char::is_lowercase)
+        })
+        .count();
+    prose as f64 > MOST_RECORDS * records.len() as f64
 }
 
 /// Whether most records (all but the last) end with `;`, i.e. `;` separates records.
@@ -699,6 +889,14 @@ fn trailing_custom_separator(records: &[Vec<String>]) -> bool {
 mod encoding_tests;
 #[cfg(test)]
 mod heldout2_tests;
+#[cfg(test)]
+mod heldout3_samples;
+#[cfg(test)]
+mod heldout3_tests;
+#[cfg(test)]
+mod heldout4_samples;
+#[cfg(test)]
+mod heldout4_tests;
 #[cfg(test)]
 mod heldout_tests;
 #[cfg(test)]

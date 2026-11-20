@@ -15,7 +15,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 serde.workspace = true
 serde_json.workspace = true
 fc-app.workspace = true
@@ -36,6 +36,13 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
 fc-http = { path = "../../../crates/fc-http" }
+# v1.0: signed updates (Ed25519/minisign, public key in tauri.conf.json) and the `log`
+# facade whose backend is fc-app's rotating, redacting file log.
+tauri-plugin-updater = "2"
+log = "0.4"
+# v1.0: study reminders (OS notifications) and the local UTC offset they are timed in.
+tauri-plugin-notification = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 # Content the OS marks as private (password managers) is skipped by the clipboard watcher.
 [target.'cfg(windows)'.dependencies]

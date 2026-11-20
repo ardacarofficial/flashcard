@@ -307,3 +307,110 @@ fn study_cards_filters() {
         Vec::<u128>::new()
     );
 }
+
+/// v1.0: a due-only session reads cards in progress due before the day ends (through the due
+/// index) and only the first new cards in creation order.
+#[test]
+fn study_cards_due_before_and_first_new() {
+    use crate::repo::NewCardsFirst;
+    let fx = Fx::seeded();
+    let card_of = |n: u128| fc_core::CardId(nid(n).0);
+    fx.write(|tx| {
+        tx.insert_deck(&deck(1, None, "Eng")).unwrap();
+        for n in 1..=6 {
+            add_note(tx, &note(n, &format!("w{n}"), "x", &[], 10 + n as i64), 1);
+        }
+        // 1: review due at 500; 2: review due at 2 000; 3: learning without a due time.
+        for (n, state, due) in [
+            (1, CardState::Review, Some(500)),
+            (2, CardState::Review, Some(2_000)),
+            (3, CardState::Learning, None),
+        ] {
+            let mut c = tx.get_card(card_of(n)).unwrap().unwrap();
+            c.scheduling.state = state;
+            c.scheduling.due = due.map(Timestamp);
+            tx.update_card(&c).unwrap();
+        }
+    });
+    let ids = |f: StudyCardFilter| -> Vec<u128> {
+        fx.read(|r| r.study_cards(&f).unwrap())
+            .into_iter()
+            .map(|c| c.id.0.as_u128() - super::u(0x2000).as_u128())
+            .collect()
+    };
+    assert_eq!(ids(StudyCardFilter::default()), vec![1, 2, 3, 4, 5, 6]);
+    let due = |new_first| StudyCardFilter {
+        due_before: Some(Timestamp(1_000)),
+        new_first,
+        ..Default::default()
+    };
+    assert_eq!(ids(due(None)), vec![1, 3, 4, 5, 6]);
+    assert_eq!(
+        ids(due(Some(NewCardsFirst {
+            n: 2,
+            newest: false
+        }))),
+        vec![1, 3, 4, 5]
+    );
+    assert_eq!(
+        ids(due(Some(NewCardsFirst { n: 2, newest: true }))),
+        vec![1, 3, 5, 6]
+    );
+    assert_eq!(
+        ids(StudyCardFilter {
+            new_first: Some(NewCardsFirst {
+                n: 0,
+                newest: false
+            }),
+            ..Default::default()
+        }),
+        vec![1, 2, 3]
+    );
+}
+
+/// v1.0: a session's queue rows: inserted, deleted by seq, read in seq order, cleared.
+#[test]
+fn session_queue_rows() {
+    use crate::repo::SessionQueueRow;
+    let fx = Fx::new();
+    let row = |seq: i64, n: u128| SessionQueueRow {
+        seq,
+        card_id: cid(n),
+        note_id: nid(n),
+        kind: "review".into(),
+        due: (n == 2).then_some(Timestamp(77)),
+    };
+    fx.write(|tx| {
+        tx.upsert_session(&session(1, 10, None)).unwrap();
+        tx.upsert_session(&session(2, 10, None)).unwrap();
+        tx.edit_session_queue(sid(1), false, &[], &[row(30, 3), row(10, 1), row(20, 2)])
+            .unwrap();
+        tx.edit_session_queue(sid(2), false, &[], &[row(10, 9)])
+            .unwrap();
+    });
+    let seqs = |s: u128| -> Vec<i64> {
+        fx.read(|r| r.session_queue(sid(s)).unwrap())
+            .iter()
+            .map(|r| r.seq)
+            .collect()
+    };
+    assert_eq!(seqs(1), vec![10, 20, 30]);
+    assert_eq!(fx.read(|r| r.session_queue(sid(1)).unwrap())[1], row(20, 2));
+    fx.write(|tx| {
+        tx.edit_session_queue(sid(1), false, &[10], &[row(40, 1)])
+            .unwrap();
+    });
+    assert_eq!(seqs(1), vec![20, 30, 40]);
+    // A seq is taken once.
+    fx.write(|tx| {
+        assert!(tx
+            .edit_session_queue(sid(1), false, &[], &[row(20, 5)])
+            .is_err())
+    });
+    fx.write(|tx| {
+        tx.edit_session_queue(sid(1), true, &[], &[row(5, 4)])
+            .unwrap()
+    });
+    assert_eq!(seqs(1), vec![5]);
+    assert_eq!(seqs(2), vec![10], "other sessions untouched");
+}
