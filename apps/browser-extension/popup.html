@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-i18n="ext_name"></title>
+    <link rel="stylesheet" href="/src/ui.css" />
+  </head>
+  <body class="popup">
+    <header class="bar">
+      <h1 data-i18n="popup_title"></h1>
+      <span id="conn" class="conn" role="status"></span>
+      <button id="open-options" class="icon" type="button" data-i18n-title="open_options" data-i18n-aria="open_options">⚙</button>
+    </header>
+
+    <section id="view-offline" hidden>
+      <p data-i18n="offline_intro"></p>
+      <button id="retry" type="button" data-i18n="retry"></button>
+    </section>
+
+    <section id="view-pair" hidden>
+      <p data-i18n="pair_intro"></p>
+      <p id="pair-msg" class="msg" role="status"></p>
+      <button id="pair-start" type="button" data-i18n="pair_start"></button>
+      <p id="pair-wait" class="muted" hidden data-i18n="pair_waiting"></p>
+    </section>
+
+    <form id="view-add" hidden novalidate>
+      <label class="field">
+        <span data-i18n="field_front"></span>
+        <textarea id="front" rows="2" maxlength="20000"></textarea>
+      </label>
+      <label class="field">
+        <span data-i18n="field_back"></span>
+        <textarea id="back" rows="2" maxlength="20000" data-i18n-placeholder="field_back_hint"></textarea>
+      </label>
+      <label class="field">
+        <span data-i18n="field_deck"></span>
+        <select id="deck">
+          <option value="" data-i18n="deck_choose_later"></option>
+        </select>
+      </label>
+      <fieldset id="classes" class="classes" hidden>
+        <legend data-i18n="field_classifications"></legend>
+        <div id="class-fields"></div>
+      </fieldset>
+      <details id="ctx" class="ctx" hidden>
+        <summary data-i18n="context_title"></summary>
+        <label class="check"><input id="ctx-on" type="checkbox" checked /><span data-i18n="context_include"></span></label>
+        <blockquote id="ctx-sentence"></blockquote>
+        <p id="ctx-source" class="muted"></p>
+      </details>
+      <p id="cached-note" class="muted" hidden data-i18n="cached_note"></p>
+      <p id="add-msg" class="msg" role="status"></p>
+      <button id="save" type="submit" class="primary" data-i18n="save"></button>
+    </form>
+
+    <script type="module" src="/src/popup/main.ts"></script>
+  </body>
+</html>

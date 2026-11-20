@@ -1,0 +1,215 @@
+{
+  "ext_name": {
+    "message": "Flashcard — desteye ekle"
+  },
+  "ext_short_name": {
+    "message": "Flashcard"
+  },
+  "ext_description": {
+    "message": "Herhangi bir sayfada kelime ya da cümle seç, Flashcard uygulamasının gelen kutusuna gönder."
+  },
+  "action_title": {
+    "message": "Flashcard'a ekle"
+  },
+  "command_add_selection": {
+    "message": "Seçili metni Flashcard'a ekle"
+  },
+  "menu_add_selection": {
+    "message": "Desteye ekle"
+  },
+  "pair_client_name": {
+    "message": "Tarayıcı eklentisi"
+  },
+  "popup_title": {
+    "message": "Desteye ekle"
+  },
+  "open_options": {
+    "message": "Ayarlar"
+  },
+  "offline_intro": {
+    "message": "Flashcard uygulamasına ulaşılamıyor. Uygulamayı aç ve Ayarlar → Modüller'den Yerel API'yi aç."
+  },
+  "retry": {
+    "message": "Tekrar dene"
+  },
+  "pair_intro": {
+    "message": "Eklentiyi uygulamaya bir kez bağla. Uygulama onayını isteyecek."
+  },
+  "pair_start": {
+    "message": "Bağlan"
+  },
+  "pair_waiting": {
+    "message": "Flashcard uygulamasında onay bekleniyor…"
+  },
+  "pair_denied": {
+    "message": "Uygulama bağlantıyı reddetti."
+  },
+  "pair_expired": {
+    "message": "İsteğin süresi doldu. Yeniden bağlan."
+  },
+  "pair_revoked": {
+    "message": "Uygulama bu eklentiyi artık kabul etmiyor. Yeniden bağlan."
+  },
+  "pair_rate_limited": {
+    "message": "Çok fazla bağlantı isteği. Bir dakika bekleyip tekrar dene."
+  },
+  "field_front": {
+    "message": "Ön yüz"
+  },
+  "field_back": {
+    "message": "Arka yüz"
+  },
+  "field_back_hint": {
+    "message": "İsteğe bağlı: gelen kutusunda da doldurabilirsin"
+  },
+  "field_deck": {
+    "message": "Deste"
+  },
+  "deck_choose_later": {
+    "message": "Gelen kutusunda seç"
+  },
+  "field_classifications": {
+    "message": "Sınıflandırmalar"
+  },
+  "context_title": {
+    "message": "Bağlam"
+  },
+  "context_include": {
+    "message": "Cümleyi ve sayfa adresini kaydet"
+  },
+  "cached_note": {
+    "message": "Uygulama kapalı: bilinen son desteler gösteriliyor. Öğe uygulama açılınca gönderilecek."
+  },
+  "save": {
+    "message": "Gelen kutusuna ekle"
+  },
+  "conn_online": {
+    "message": "Bağlı"
+  },
+  "conn_offline": {
+    "message": "Uygulama kapalı"
+  },
+  "class_none": {
+    "message": "—"
+  },
+  "class_yes": {
+    "message": "Evet"
+  },
+  "class_no": {
+    "message": "Hayır"
+  },
+  "class_invalid": {
+    "message": "Şu değerleri kontrol et: $names$",
+    "placeholders": {
+      "names": {
+        "content": "$1"
+      }
+    }
+  },
+  "class_required": {
+    "message": "Zorunlu: $names$",
+    "placeholders": {
+      "names": {
+        "content": "$1"
+      }
+    }
+  },
+  "front_required": {
+    "message": "Ön yüze bir şey yaz."
+  },
+  "added_to_inbox": {
+    "message": "Gelen kutusuna eklendi."
+  },
+  "queued_offline": {
+    "message": "Uygulama kapalı. Kaydedildi; uygulama açılınca gönderilecek."
+  },
+  "queued_unpaired": {
+    "message": "Kaydedildi. Göndermek için eklentiyi yeniden bağla."
+  },
+  "queued_busy": {
+    "message": "Uygulama meşgul ya da gelen kutusu kapalı. Kaydedildi; sonra gönderilecek."
+  },
+  "queue_full": {
+    "message": "Bekleyen öğe çok fazla. Önce uygulamayı açıp gönder."
+  },
+  "error_validation": {
+    "message": "Uygulama bu öğeyi kabul etmedi. Alanları kontrol et."
+  },
+  "error_not_found": {
+    "message": "Öğenin işaret ettiği bir şey uygulamada artık yok."
+  },
+  "error_not_found_deck": {
+    "message": "Bu deste artık yok. Başka bir deste seç."
+  },
+  "error_conflict": {
+    "message": "Uygulama öğeyi şu an alamadı."
+  },
+  "error_conflict_module_disabled": {
+    "message": "Uygulamada gelen kutusu kapalı (Ayarlar → Modüller)."
+  },
+  "error_permission": {
+    "message": "Eklentinin buna izni yok. Uygulamadaki izinlerini kontrol et."
+  },
+  "error_validation_payload_too_large": {
+    "message": "Metin çok uzun."
+  },
+  "error_other": {
+    "message": "Uygulamada bir şeyler ters gitti."
+  },
+  "options_title": {
+    "message": "Flashcard eklenti ayarları"
+  },
+  "options_connection": {
+    "message": "Bağlantı"
+  },
+  "options_port": {
+    "message": "Yerel API portu"
+  },
+  "options_save_port": {
+    "message": "Kaydet"
+  },
+  "options_port_hint": {
+    "message": "Uygulamadaki Ayarlar → Yerel API → Port ile aynı olmalı. Yalnız 127.0.0.1 kullanılır."
+  },
+  "options_conn_offline": {
+    "message": "Uygulamaya bu porttan ulaşılamıyor."
+  },
+  "options_pairing": {
+    "message": "Eşleştirme"
+  },
+  "options_paired": {
+    "message": "Uygulamaya bağlı."
+  },
+  "options_unpaired": {
+    "message": "Bağlı değil. Bağlanmak için açılır pencereyi aç."
+  },
+  "options_forget": {
+    "message": "Bu bağlantıyı unut"
+  },
+  "options_outbox": {
+    "message": "Bekleyen öğeler"
+  },
+  "options_outbox_counts": {
+    "message": "$waiting$ bekliyor, $failed$ uygulama tarafından reddedildi.",
+    "placeholders": {
+      "waiting": {
+        "content": "$1"
+      },
+      "failed": {
+        "content": "$2"
+      }
+    }
+  },
+  "options_flush": {
+    "message": "Şimdi gönder"
+  },
+  "options_retry_failed": {
+    "message": "Reddedilenleri yeniden dene"
+  },
+  "options_discard_failed": {
+    "message": "Reddedilenleri sil"
+  },
+  "options_discard_confirm": {
+    "message": "Reddedilen öğeler silinsin mi? Geri alınamaz."
+  }
+}
