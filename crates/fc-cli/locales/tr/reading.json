@@ -1,0 +1,18 @@
+{
+  "oplog.summary.reading.items.create": "Metin eklendi: {title}",
+  "oplog.summary.reading.items.import": "Dosya ya da sayfa okunmaya başlandı",
+  "oplog.summary.reading.items.update": "Metin düzenlendi: {title}",
+  "oplog.summary.reading.items.set_position": "Okuma yeri kaydedildi: {title}",
+  "oplog.summary.reading.items.delete": "Metin silindi: {title}",
+  "oplog.summary.reading.items.undelete": "Metin geri getirildi: {title}",
+  "oplog.summary.reading.items.restore_state": "Metin geri getirildi: {title}",
+  "oplog.summary.reading.queue.set": "Okuma kuyruğu değişti: {title}",
+  "oplog.summary.reading.queue.read": "Bugünlük okundu: {title}",
+  "oplog.summary.reading.queue.postpone": "Ertelendi: {title}",
+  "oplog.summary.reading.extracts.create": "Özüt çıkarıldı: {title}",
+  "oplog.summary.reading.extracts.cloze": "Boşluk doldurma kartı yapıldı: {title}",
+  "oplog.summary.reading.words.mark": "{count} kelime işaretlendi",
+  "oplog.summary.reading.words.restore": "{count} kelime işareti geri alındı",
+  "oplog.summary.reading.cards.make": "Kart yapıldı: {word}",
+  "oplog.summary.reading.clips.extract": "Ses kesiti alınmaya başlandı"
+}

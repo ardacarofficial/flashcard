@@ -92,4 +92,5 @@ domains! {
     stats,
     planning,
     ai,
+    reading,
 }

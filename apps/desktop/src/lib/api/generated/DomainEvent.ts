@@ -121,7 +121,11 @@ notes: number, } } | { "type": "collection_replaced" } | { "type": "data_changed
 /**
  * Cards.
  */
-ids: Array<CardId>, } } | { "type": "saved_queries_changed" } | { "type": "presets_changed" } | { "type": "exams_changed" } | { "type": "goals_changed" } | { "type": "ai_config_changed" } | { "type": "ai_partial", "data": { 
+ids: Array<CardId>, } } | { "type": "saved_queries_changed" } | { "type": "presets_changed" } | { "type": "exams_changed" } | { "type": "goals_changed" } | { "type": "ai_config_changed" } | { "type": "reading_items_changed" } | { "type": "word_marks_changed", "data": { 
+/**
+ * Language (primary subtag).
+ */
+language: string, } } | { "type": "ai_partial", "data": { 
 /**
  * Job.
  */

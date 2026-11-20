@@ -1,0 +1,17 @@
+// Reading mode, subtitles and incremental reading (v0.10).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// Reading item not found or trashed (`details.id`).
+NotFoundReadingItem => NotFound, "errors.not_found.reading_item";
+/// A reading item needs text (`details.field`: `body`, `cues`).
+ValidationReadingText => Validation, "errors.validation.reading_text";
+/// A range is empty or outside the text (`details.field`).
+ValidationReadingRange => Validation, "errors.validation.reading_range";
+/// A reading source cannot be read (`details.reason`: `path`, `url`, `format`, `io`,
+/// `http_status`, `unreachable`, `timeout`, `blocked`…).
+ValidationReadingSource => Validation, "errors.validation.reading_source";
+/// The item has no video/audio to cut clips from, or the cue does not exist (`details.reason`).
+ValidationReadingClip => Validation, "errors.validation.reading_clip";
+/// ffmpeg is missing or failed (`details.reason`: `missing`, `failed`, `timeout`).
+ProviderFfmpeg => Provider, "errors.provider.ffmpeg";
+/// The built-in note type a reading card needs was deleted (`details.notetype`).
+ConflictReadingNoteType => Conflict, "errors.conflict.reading_notetype";

@@ -19,6 +19,7 @@ pub mod notetypes;
 pub mod oplog;
 pub mod planning;
 pub mod presets;
+pub mod reading;
 pub mod search;
 pub mod settings;
 pub mod stats;

@@ -157,6 +157,14 @@ pub enum DomainEvent {
     GoalsChanged,
     /// AI providers, routes or prices changed (refetch `ai.*` lists; v0.8). Never carries a key.
     AiConfigChanged,
+    /// Reading items or the reading queue changed (refetch `reading.items.list`; v0.10).
+    ReadingItemsChanged,
+    /// Word marks of a language changed (re-run `reading.analyze`; v0.10). Cards changing
+    /// colours arrive through the usual card/study events.
+    WordMarksChanged {
+        /// Language (primary subtag).
+        language: String,
+    },
     /// Output of a running `ai.request` job so far (streamed explanations and hints, v0.8):
     /// the whole text received until now, so a missed event loses nothing. The job's result
     /// is still the final word.

@@ -70,6 +70,8 @@ pub fn generate_into(dir: &Path) -> Result<(), GenError> {
     // Job result of the ai module (`ai.request`).
     v1::ai::AiJobResult::export_all(&cfg)?;
     v1::ai::AiSourceText::export_all(&cfg)?;
+    // Job result of `reading.clip` (v0.10; `reading.import` returns a ReadingItemDto).
+    v1::reading::ReadingClip::export_all(&cfg)?;
 
     fs::write(dir.join("methods.ts"), methods_ts(&cfg))?;
     let files = list_ts_files(dir)?;

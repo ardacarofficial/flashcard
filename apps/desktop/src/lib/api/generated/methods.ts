@@ -16,6 +16,7 @@ import type { AiProviderRef } from "./AiProviderRef";
 import type { AiRouteDto } from "./AiRouteDto";
 import type { AiRouteList } from "./AiRouteList";
 import type { AiUsageSummary } from "./AiUsageSummary";
+import type { AnalyzeText } from "./AnalyzeText";
 import type { AnswerCard } from "./AnswerCard";
 import type { AnswerCheckDto } from "./AnswerCheckDto";
 import type { ApplyToLeeches } from "./ApplyToLeeches";
@@ -48,14 +49,17 @@ import type { ChangeNoteType } from "./ChangeNoteType";
 import type { ChangeNoteTypeResult } from "./ChangeNoteTypeResult";
 import type { CheckAnswer } from "./CheckAnswer";
 import type { ClonePreset } from "./ClonePreset";
+import type { ClozeFromItem } from "./ClozeFromItem";
 import type { CreateAiProvider } from "./CreateAiProvider";
 import type { CreateBackup } from "./CreateBackup";
 import type { CreateDeck } from "./CreateDeck";
 import type { CreateExam } from "./CreateExam";
+import type { CreateExtract } from "./CreateExtract";
 import type { CreateGoal } from "./CreateGoal";
 import type { CreateNote } from "./CreateNote";
 import type { CreateNoteType } from "./CreateNoteType";
 import type { CreatePreset } from "./CreatePreset";
+import type { CreateReadingItem } from "./CreateReadingItem";
 import type { CreateSavedQuery } from "./CreateSavedQuery";
 import type { DatabaseReport } from "./DatabaseReport";
 import type { DeckDto } from "./DeckDto";
@@ -77,6 +81,7 @@ import type { ExamList } from "./ExamList";
 import type { ExamRef } from "./ExamRef";
 import type { ExecuteBatch } from "./ExecuteBatch";
 import type { ExtractAiSource } from "./ExtractAiSource";
+import type { ExtractClip } from "./ExtractClip";
 import type { FindReplace } from "./FindReplace";
 import type { FlagDto } from "./FlagDto";
 import type { FlagList } from "./FlagList";
@@ -88,6 +93,7 @@ import type { GoalRef } from "./GoalRef";
 import type { HintDto } from "./HintDto";
 import type { HintRequest } from "./HintRequest";
 import type { ImportPreview } from "./ImportPreview";
+import type { ImportReadingItem } from "./ImportReadingItem";
 import type { InspectBackup } from "./InspectBackup";
 import type { JobDto } from "./JobDto";
 import type { JobList } from "./JobList";
@@ -102,7 +108,11 @@ import type { ListExams } from "./ListExams";
 import type { ListGoals } from "./ListGoals";
 import type { ListNotes } from "./ListNotes";
 import type { ListOplog } from "./ListOplog";
+import type { ListReadingItems } from "./ListReadingItems";
 import type { ListTrash } from "./ListTrash";
+import type { LookupWord } from "./LookupWord";
+import type { MakeReadingCard } from "./MakeReadingCard";
+import type { MarkWords } from "./MarkWords";
 import type { McpServerDto } from "./McpServerDto";
 import type { McpServerList } from "./McpServerList";
 import type { McpServerRef } from "./McpServerRef";
@@ -132,6 +142,7 @@ import type { OptimizerStarted } from "./OptimizerStarted";
 import type { OptionChangeResult } from "./OptionChangeResult";
 import type { PaletteList } from "./PaletteList";
 import type { PostponeCards } from "./PostponeCards";
+import type { PostponeReading } from "./PostponeReading";
 import type { PresetDto } from "./PresetDto";
 import type { PresetForDeck } from "./PresetForDeck";
 import type { PresetList } from "./PresetList";
@@ -144,6 +155,10 @@ import type { PurgeResult } from "./PurgeResult";
 import type { PurgeTrash } from "./PurgeTrash";
 import type { QueryCheck } from "./QueryCheck";
 import type { QueryText } from "./QueryText";
+import type { ReadingItemDto } from "./ReadingItemDto";
+import type { ReadingItemList } from "./ReadingItemList";
+import type { ReadingItemRef } from "./ReadingItemRef";
+import type { ReadingSessionDone } from "./ReadingSessionDone";
 import type { RefreshStatsCache } from "./RefreshStatsCache";
 import type { RenameAttributeOption } from "./RenameAttributeOption";
 import type { RenameDeck } from "./RenameDeck";
@@ -175,6 +190,8 @@ import type { SetCardFlags } from "./SetCardFlags";
 import type { SetCardUserNote } from "./SetCardUserNote";
 import type { SetFlag } from "./SetFlag";
 import type { SetModuleEnabled } from "./SetModuleEnabled";
+import type { SetReadingPosition } from "./SetReadingPosition";
+import type { SetReadingQueue } from "./SetReadingQueue";
 import type { SetSetting } from "./SetSetting";
 import type { SetShortcut } from "./SetShortcut";
 import type { SetSuspended } from "./SetSuspended";
@@ -197,6 +214,7 @@ import type { SuspendCards } from "./SuspendCards";
 import type { TagChangeResult } from "./TagChangeResult";
 import type { TagDto } from "./TagDto";
 import type { TagList } from "./TagList";
+import type { TextAnalysis } from "./TextAnalysis";
 import type { TrashList } from "./TrashList";
 import type { UndoResult } from "./UndoResult";
 import type { UndoStatus } from "./UndoStatus";
@@ -211,7 +229,10 @@ import type { UpdateMcpServer } from "./UpdateMcpServer";
 import type { UpdateNote } from "./UpdateNote";
 import type { UpdateNoteType } from "./UpdateNoteType";
 import type { UpdatePreset } from "./UpdatePreset";
+import type { UpdateReadingItem } from "./UpdateReadingItem";
 import type { UpdateSavedQuery } from "./UpdateSavedQuery";
+import type { WordInfo } from "./WordInfo";
+import type { WordMarksChanged } from "./WordMarksChanged";
 import type { WorkloadEstimate } from "./WorkloadEstimate";
 import type { WorkloadRequest } from "./WorkloadRequest";
 
@@ -385,6 +406,23 @@ export interface Methods {
   "ai.sources.extract": { kind: "command"; request: ExtractAiSource; response: JobDto };
   "ai.notes.add": { kind: "command"; request: AddAiNotes; response: AiNotesAdded };
   "ai.notes.update": { kind: "command"; request: UpdateAiNote; response: NoteDto };
+  "reading.items.list": { kind: "query"; request: ListReadingItems; response: ReadingItemList };
+  "reading.items.get": { kind: "query"; request: ReadingItemRef; response: ReadingItemDto };
+  "reading.items.create": { kind: "command"; request: CreateReadingItem; response: ReadingItemDto };
+  "reading.items.import": { kind: "command"; request: ImportReadingItem; response: JobDto };
+  "reading.items.update": { kind: "command"; request: UpdateReadingItem; response: ReadingItemDto };
+  "reading.items.set_position": { kind: "command"; request: SetReadingPosition; response: ReadingItemDto };
+  "reading.items.delete": { kind: "command"; request: ReadingItemRef; response: ReadingItemDto };
+  "reading.queue.set": { kind: "command"; request: SetReadingQueue; response: ReadingItemDto };
+  "reading.queue.read": { kind: "command"; request: ReadingSessionDone; response: ReadingItemDto };
+  "reading.queue.postpone": { kind: "command"; request: PostponeReading; response: ReadingItemDto };
+  "reading.extracts.create": { kind: "command"; request: CreateExtract; response: ReadingItemDto };
+  "reading.extracts.cloze": { kind: "command"; request: ClozeFromItem; response: NoteDto };
+  "reading.analyze": { kind: "query"; request: AnalyzeText; response: TextAnalysis };
+  "reading.words.mark": { kind: "command"; request: MarkWords; response: WordMarksChanged };
+  "reading.words.lookup": { kind: "query"; request: LookupWord; response: WordInfo };
+  "reading.cards.make": { kind: "command"; request: MakeReadingCard; response: NoteDto };
+  "reading.clips.extract": { kind: "command"; request: ExtractClip; response: JobDto };
 }
 
 /** Unqualified method name. */
@@ -565,4 +603,21 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "ai.sources.extract": "command",
   "ai.notes.add": "command",
   "ai.notes.update": "command",
+  "reading.items.list": "query",
+  "reading.items.get": "query",
+  "reading.items.create": "command",
+  "reading.items.import": "command",
+  "reading.items.update": "command",
+  "reading.items.set_position": "command",
+  "reading.items.delete": "command",
+  "reading.queue.set": "command",
+  "reading.queue.read": "command",
+  "reading.queue.postpone": "command",
+  "reading.extracts.create": "command",
+  "reading.extracts.cloze": "command",
+  "reading.analyze": "query",
+  "reading.words.mark": "command",
+  "reading.words.lookup": "query",
+  "reading.cards.make": "command",
+  "reading.clips.extract": "command",
 };
