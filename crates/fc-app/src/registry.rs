@@ -99,6 +99,8 @@ pub struct Registry {
     modules: Vec<ModuleDescriptor>,
     card_types: BTreeMap<String, Arc<dyn CardTypeEngine>>,
     jobs: BTreeMap<&'static str, Arc<dyn JobHandler>>,
+    /// Shared services modules hand to the app (see [`Registry::provide`]).
+    extensions: Vec<Arc<dyn std::any::Any + Send + Sync>>,
     errors: Vec<String>,
 }
 
@@ -188,6 +190,25 @@ impl Registry {
     /// Handler of job `kind`.
     pub fn job_handler(&self, kind: &str) -> Option<&Arc<dyn JobHandler>> {
         self.jobs.get(kind)
+    }
+
+    /// Makes a module's shared service reachable from the app (`App` methods a transport
+    /// calls, e.g. installing the keychain the `ai` module stores keys in). One per type.
+    pub fn provide<T: std::any::Any + Send + Sync>(&mut self, service: Arc<T>) {
+        if self.extension::<T>().is_some() {
+            self.errors.push(format!(
+                "service {} provided twice",
+                std::any::type_name::<T>()
+            ));
+        }
+        self.extensions.push(service);
+    }
+
+    /// The service of type `T`, if a module provided one.
+    pub fn extension<T: std::any::Any + Send + Sync>(&self) -> Option<Arc<T>> {
+        self.extensions
+            .iter()
+            .find_map(|e| Arc::clone(e).downcast::<T>().ok())
     }
 
     /// Registers a placeholder for `M` that fails with `INTERNAL_NOT_IMPLEMENTED`. Lets the

@@ -38,4 +38,5 @@ modules! {
     browse,
     palette,
     presets,
+    ai,
 }

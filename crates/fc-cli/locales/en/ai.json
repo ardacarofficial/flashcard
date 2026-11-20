@@ -1,0 +1,16 @@
+{
+  "oplog.summary.ai.providers.create": "Added AI provider {name}",
+  "oplog.summary.ai.providers.update": "Edited AI provider {name}",
+  "oplog.summary.ai.providers.delete": "Removed AI provider {name}",
+  "oplog.summary.ai.providers.set_key": "Changed the API key of {name}",
+  "oplog.summary.ai.providers.refresh_models": "Refreshing the model list",
+  "oplog.summary.ai.providers.restore": "Restored AI provider {name}",
+  "oplog.summary.ai.providers.set_models": "Updated the model list",
+  "oplog.summary.ai.routes.set": "Changed the AI model of {feature}",
+  "oplog.summary.ai.prices.set": "Changed the price of {model}",
+  "oplog.summary.ai.prices.delete": "Removed the price of {model}",
+  "oplog.summary.ai.usage.record": "Recorded AI usage",
+  "oplog.summary.ai.run": "Sent an AI request",
+  "oplog.summary.ai.notes.add": "Added {count} AI note(s)",
+  "oplog.summary.ai.notes.update": "Applied an AI suggestion"
+}

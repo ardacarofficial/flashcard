@@ -15,6 +15,8 @@ path = "src/main.rs"
 fc-api.workspace = true
 fc-core.workspace = true
 fc-app = { path = "../fc-app" }
+# OS keychain for AI provider keys (v0.8).
+fc-ai = { workspace = true, features = ["keychain"] }
 serde.workspace = true
 serde_json.workspace = true
 clap.workspace = true

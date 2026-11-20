@@ -1078,6 +1078,7 @@ name = "fc-app"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "fc-ai",
  "fc-api",
  "fc-core",
  "fc-interop",
@@ -1097,6 +1098,7 @@ name = "fc-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "fc-ai",
  "fc-api",
  "fc-app",
  "fc-core",
@@ -1125,6 +1127,7 @@ dependencies = [
 name = "fc-desktop"
 version = "0.1.0"
 dependencies = [
+ "fc-ai",
  "fc-api",
  "fc-app",
  "fc-core",

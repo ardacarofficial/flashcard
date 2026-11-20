@@ -7,6 +7,10 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+/// Keychain service name every Flashcard shell uses (desktop app, CLI), so a key set in one is
+/// seen by the other.
+pub const SERVICE: &str = "app.flashcard";
+
 /// An API key.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Secret(String);

@@ -1220,6 +1220,9 @@ fn restoring_an_older_schema_backup_migrates_it_forward() {
         row[col] = fc_storage::repo::SqlValue::Text("{{c1::STALE}} <b>raw</b>".into());
     }
     dump.schema_versions = older.clone();
+    // Tables created by migrations after the cut cannot be in such a backup (v0.8's 0700, …).
+    const LATER_TABLES: &[&str] = &["ai_providers", "ai_routes", "ai_prices"];
+    dump.tables.retain(|t| !LATER_TABLES.contains(&t.name.as_str()));
     let mut manifest = b.manifest.clone();
     manifest.schema_versions = older;
     let w = fc_interop::fcbackup::BackupWriter::new(&manifest, &serde_json::to_vec(&dump).unwrap())

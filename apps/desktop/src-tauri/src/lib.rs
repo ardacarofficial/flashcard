@@ -66,6 +66,10 @@ fn open_collection(app: &tauri::App) -> Result<ipc::SharedApp, String> {
         let e = e.into_api();
         format!("{}\n{}: {}", path.display(), e.code, e.message)
     })?;
+    // AI provider keys live only in the OS keychain (v0.8).
+    collection.set_secret_store(Arc::new(fc_ai::secrets::OsKeychain::new(
+        fc_ai::secrets::SERVICE,
+    )));
     Ok(Arc::new(collection))
 }
 
