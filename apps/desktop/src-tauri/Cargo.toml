@@ -25,7 +25,7 @@ fc-storage.workspace = true
 # OS keychain for AI provider keys (v0.8).
 fc-ai = { workspace = true, features = ["keychain"] }
 # Native error box for startup failures (release builds on Windows have no console).
-rfd = { version = "0.15", default-features = false, features = ["gtk3"] }
+rfd = { version = "0.17", default-features = false, features = ["gtk3"] }
 # Open/save file dialogs for import, export and backups (the backend gets the chosen path).
 tauri-plugin-dialog = "2"
 # v0.9: one running instance (a second launch forwards its flashcard:// link), the URL
