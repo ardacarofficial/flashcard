@@ -219,7 +219,12 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 
 **Kabul kriterleri**
 - [ ] Performans hedefleri ([02 §34](02-ozellik-katalogu.md)) benchmark ile sağlanır.
-- [ ] Temiz bir Windows'ta kurulum → ilk açılış → çalışma → güncelleme akışı sorunsuz.
+- [ ] Temiz bir Windows'ta kurulum → ilk açılış → çalışma → güncelleme akışı sorunsuz. **İz N kısmı (ilk açılış → çalışma) ✅:** ilk açılış rehberi boş koleksiyonda ne çalışıldığını sorar ve uygun sınıflandırma şablonuyla (İngilizce → CEFR, YKS → TYT/AYT/YDT, Japonca → JLPT, Çince → HSK, okul → sınıf) deste + ön ayar + başlangıç destelerini **tek geri al adımında** kurar (`onboarding/tests.rs::english_setup_uses_cefr_and_is_one_undo_step`, `yks_setup_uses_the_exam_template`, `features/onboarding/onboarding.test.ts`); veri olan (yükseltilmiş) koleksiyonda rehber çıkmaz. Kurulum ve güncelleme iz O'da; temiz Windows'ta elle deneme yapılmadı.
+  - [x] Başlangıç desteleri: küçük, bu uygulama için yazılmış (lisans temiz), TR/EN, notlar sınıflandırma değeriyle (`fc-core ux::starter` testleri, `starter_decks_install_in_both_languages`).
+  - [x] Profiller = ayrı koleksiyonlar (ayrı veritabanı + medya klasörü; varsayılan profil eski yerinde kalır), geçiş uygulamayı yeni koleksiyonla yeniden başlatır (`profiles/tests.rs::profiles_are_separate_collections`, `switching_retires_the_session_…`).
+  - [x] Uygulama kilidi: PIN/parola yalnız Argon2id özeti olarak (OS anahtar zinciri; kalıcı değilse profil listesi), hareketsizlikte otomatik kilit, yanlış denemede artan bekleme, kilitliyken IPC yalnız kilit ekranına açık (`only_an_argon2id_hash_is_kept`, `idle_app_locks_itself`, `locked_app_lets_only_the_lock_screen_through_and_backs_off`, masaüstü `ipc_is_gated_while_locked`). Veritabanı şifrelemesi değil (docs/08 K4).
+  - [x] Kilitliyken / profil değişirken yerel HTTP API ve otomasyon zamanlayıcısı durur ya da reddeder (423 `PERMISSION_APP_LOCKED`), profil geçişinde sunucu yeni koleksiyona yeniden bağlanır (`background_callers_are_refused_while_locked`, fc-http `a_locked_app_answers_nothing_but_ping`, masaüstü `api_server_stops_while_locked_and_is_rebound_after_a_profile_switch`).
+  - [x] Hatırlatıcılar: seçilen saat/günlerde günde bir OS bildirimi, o gün çalışıldıysa ya da kart yoksa yok; sistem tepsisi (Aç/Kilitle/Çık), "pencere kapanınca tepside kal" (`reminders_tests.rs`, `fc-core ux::reminder`). Windows'ta gerçek bildirim elle denenmedi.
 - [ ] Tüm arayüz metinleri çeviri anahtarlarından gelir (sabit metin yok, lint ile).
 - [ ] İçe aktarmada ayırıcı otomatik algılama **yeni bir tutulmuş sette** ≥ %95 doğru (v0.5'ten devreden: şu an %92,9, 65/70; bkz. v0.5).
 

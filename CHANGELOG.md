@@ -2,6 +2,16 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## [Unreleased]
+
+### v1.0 iz N — ilk açılış, başlangıç desteleri, profiller, uygulama kilidi, hatırlatıcılar (`feat/v1.0-ux`)
+- **İlk açılış rehberi:** boş koleksiyonda "ne öğrenmek istiyorsun?" → konuya uygun sınıflandırma şablonu (CEFR, JLPT, HSK, YKS, sınıf, zorluk), not türü, ön ayar ve başlangıç desteleri; hepsi tek geri al adımı, atlanabilir. `onboarding.status/options/apply/skip`.
+- **Başlangıç desteleri:** bu uygulama için yazılmış küçük TR/EN desteler (günlük İngilizce, TYT matematik, dünya başkentleri, uygulama rehberi), notlar sınıflandırma değeriyle. `starter.list/install`.
+- **Profiller:** her profil ayrı koleksiyon (`profiles/<id>/collection.db` + medya); varsayılan profil eski `collection.db`'de kalır. Profil listesi `profiles.json`'da, koleksiyonların dışında. Geçişte uygulama yeni koleksiyonla yeniden başlar. `profiles.*`.
+- **Uygulama kilidi:** PIN/parola yalnız Argon2id özeti olarak (OS anahtar zinciri), hareketsizlikte otomatik kilit, yanlış denemede artan bekleme; kilitliyken pencere yalnız kilit ekranına erişir, **yerel HTTP API 423 döner ve durur, otomasyon zamanlayıcısı ve eklentiler çalışmaz**. Pencere kilidi, veritabanı şifrelemesi değil. `lock.*`, `lock_changed`.
+- **Hatırlatıcılar ve tepsi:** seçilen saat/günlerde günlük OS bildirimi (o gün çalışıldıysa yok), sistem tepsisi menüsü, "pencere kapanınca tepside kal". `reminders.status/test`, `reminder_due`.
+- Migration `1000_ux_state` (+ migration testi). Paylaşılan değişiklikler: `fc-http` kilit kontrolü, `outside.rs` sunucu/pano kilidi, `App::invoke` arka plan aktörü kontrolü, otomasyon `run_due`.
+
 ## [0.10.0] — Faz 4 (v0.9 + v0.10 birleşik, `feat/phase4-integration`)
 
 ### Faz 4 entegrasyonu — tur 2, son (+ v0.9 otomasyon, yerel API/gelen kutusu, tarayıcı eklentisi)
