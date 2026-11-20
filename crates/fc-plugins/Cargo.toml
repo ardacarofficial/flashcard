@@ -1,0 +1,29 @@
+[package]
+name = "fc-plugins"
+description = "Plugin runtime (WASM sandbox with fuel, deadlines and memory limits), manifest, permissions, packages, store sources and the model download manager."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fc-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+zip.workspace = true
+toml = { version = "0.9", default-features = false, features = ["parse", "serde", "std"] }
+wat = { version = "1", optional = true }
+wasmtime = { version = "50", default-features = false, features = ["cranelift", "runtime", "std", "wat"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[features]
+## Builds the example plugins of `plugins-sdk/` for tests (`fc_plugins::testing`).
+testing = ["dep:wat"]
+
+[lints]
+workspace = true

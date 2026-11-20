@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = ["crates/*", "apps/desktop/src-tauri"]
+# The plugin SDK and example plugins build for wasm32 with their own workspace and lock file.
+exclude = ["plugins-sdk"]
 
 [workspace.package]
 version = "0.1.0"
@@ -17,6 +19,7 @@ fc-storage = { path = "crates/fc-storage" }
 fc-providers = { path = "crates/fc-providers" }
 fc-app = { path = "crates/fc-app" }
 fc-interop = { path = "crates/fc-interop" }
+fc-plugins = { path = "crates/fc-plugins" }
 
 # external
 serde = { version = "1", features = ["derive"] }
