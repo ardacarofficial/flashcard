@@ -42,6 +42,23 @@ export default {
         last_used_at: null,
       },
     ];
+    const seed = (front: string, back: string, source: InboxSource, tags: string[]) => {
+      const t = now();
+      items.push({
+        id: id('inbox'),
+        source,
+        status: 'pending',
+        item: { front, back, fields: {}, tags, attributes: {}, via: null, client_ref: null },
+        note_ids: [],
+        created_at: t,
+        updated_at: t,
+      });
+    };
+    if (import.meta.env.MODE === 'mock') {
+    seed('serendipity', 'tesadüfen güzel bir şey bulma', { kind: 'other', actor: 'Flashcard for Chrome', id: null }, ['web']);
+    seed('ephemeral', 'kısa ömürlü', { kind: 'clipboard' }, []);
+    seed('Mitokondri nedir?', 'Hücrenin enerji santrali', { kind: 'user' }, ['yks']);
+    }
     const pending = () => items.filter((i) => i.status === 'pending').length;
     const changed = () => emit({ type: 'inbox_changed', data: { pending: pending() } });
     const find = (iid: string) => {
