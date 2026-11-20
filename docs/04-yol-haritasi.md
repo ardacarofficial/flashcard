@@ -156,7 +156,9 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [ ] Sağlayıcılar sahte (mock) sunucuya karşı test edilir; gerçek API testleri isteğe bağlı.
 - [ ] API anahtarı veritabanında veya logda asla görünmez (test).
 - [ ] AI'a gönderilecek içerik kullanıcıya önizlenir.
-- [ ] Claude Desktop/Claude Code, MCP sunucusu üzerinden deste listeleyip kart ekleyebilir.
+- [x] Claude Desktop/Claude Code, MCP sunucusu üzerinden deste listeleyip kart ekleyebilir.
+
+> **Doğrulama (MCP, iz H `feat/v0.8-mcp`):** `fc-cli/tests/mcp_stdio.rs::claude_lists_decks_and_adds_cards_over_stdio` gerçek `fc --db <dosya> mcp serve` ikilisini Claude Desktop/Code'un yaptığı gibi başlatır ve stdin/stdout'tan satır satır JSON-RPC konuşur: `initialize` (`2025-06-18`) → `notifications/initialized` → `tools/list` → `tools/call list_decks` → `list_classifications` → `add_notes` (Seviye=B1) → `search_cards seviye>=B1`; ardından ayrı `fc` süreçleri notları görür, oplog aktörü `{"kind":"mcp","id":"claude-ai"}`, `fc undo` tek adımda geri alır; `--read-only` oturum yazma araçlarını listelemez/reddeder. Aynı akış bellek içi borudan `fc-mcp/tests/stdio_protocol.rs`'te; araç anlamı (sınıflandırma, onaylı toplu atama, yazma anahtarı, izinler) `fc-app` `modules/mcp/tests.rs` × 3 depoda. İstemci iskeleti: `mcp_tools_connects_to_an_external_server` (`fc mcp tools` → kayıtlı dış sunucu = başka bir `fc mcp serve`). Kurulum: [06 §2.1](06-ai-ve-entegrasyonlar.md). *(Sağlayıcı/anahtar/önizleme kriterleri iz G'nindir.)*
 
 ## 🌉 v0.9 · Dış dünya ile bağlantı
 
