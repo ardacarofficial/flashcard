@@ -177,4 +177,5 @@ domains! {
     stats => StatsState,
     ai => AiState,
     plugins => PluginState,
+    automation => AutomationState,
 }

@@ -11,6 +11,7 @@ mod content;
 mod decks;
 mod interop;
 pub use interop::{fit_dump_to_schema, upgrade_dump, upgrade_dump_with};
+mod automation;
 mod jobs;
 mod mcp;
 mod notes;
