@@ -52,7 +52,7 @@ All wrap **Field** (label, hint, error with `aria-describedby`/`aria-invalid`). 
 
 | Component | Props | Usage |
 |---|---|---|
-| **Card** | `padding` none/sm/md(default)/lg · `elevated` · `onclick` (whole card becomes a button) · `label` · `as` div/section/article/li | `<Card padding="lg">…</Card>` |
+| **Card** | `padding` none/sm/md(default)/lg · `elevated` · `onclick` (whole card becomes a button) · `label` · `as` div/section/article/li · `testid` (`data-testid`) | `<Card padding="lg">…</Card>` |
 | **Chip** | `label` / children · `tone` · `icon` · `size` sm/md · `selected` + `onclick` (toggle, `aria-pressed`) · `onremove` (× button) | `<Chip tone="accent" label="B1" />` |
 | **Badge** | `count` (hidden when 0/null; `max` → "99+") · `tone` · `variant` solid/soft · `label` (accessible text) · children | `<Badge count={n} label={t('…', { count: n })} />` |
 | **Avatar** | `name` (initials) · `src?` · `size` · `label?` (decorative without) | `<Avatar name={profile} />` |

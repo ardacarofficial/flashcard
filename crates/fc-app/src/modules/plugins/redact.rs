@@ -155,6 +155,10 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "stats.overview" => Reads(STATS),
         "stats.breakdown" => Reads(STATS_ATTRIBUTES),
         "stats.deck_reports" => Reads(STATS_DECKS),
+        // v1.1: term rows carry card flags, mastery and classification values.
+        "notes.terms" => Reads(&["notes", "cards", "attributes"]),
+        // v1.1: per-deck progress and classification chips (what the deck report says).
+        "decks.summaries" => Reads(STATS_DECKS),
         "stats.leeches" => Reads(STATS_ROWS),
         // Which cards it changes says which cards are leeches.
         "stats.apply_to_leeches" => Oracle(STATS_CARDS),

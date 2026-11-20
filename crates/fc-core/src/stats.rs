@@ -34,6 +34,50 @@ pub const STABILITY_BUCKETS: [f64; 9] = [1.0, 3.0, 7.0, 14.0, 30.0, 60.0, 120.0,
 /// Upper bounds of the difficulty histogram (FSRS difficulty, 1–10).
 pub const DIFFICULTY_BUCKETS: [f64; 9] = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 
+// ------------------------------------------------------------------ mastery
+
+/// Where a card stands on the deck page's New / Learning / Mastered bar (docs/11 §3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub enum Mastery {
+    /// Never studied.
+    New,
+    /// In (re)learning steps, or a review card with an interval under [`MATURE_DAYS`].
+    Learning,
+    /// A review card whose interval reached [`MATURE_DAYS`] (a "mature" card).
+    Mastered,
+}
+
+/// The [`Mastery`] of a card in `state` whose current interval is `interval_days`.
+pub fn mastery(state: CardState, interval_days: Option<u32>) -> Mastery {
+    match state {
+        CardState::New => Mastery::New,
+        CardState::Review if interval_days.unwrap_or(0) >= MATURE_DAYS => Mastery::Mastered,
+        _ => Mastery::Learning,
+    }
+}
+
+/// The [`Mastery`] of a card from its scheduling state: the interval is the time between its
+/// last review and its due time, in whole days.
+pub fn card_mastery(s: &crate::card::SchedulingState) -> Mastery {
+    let interval = match (s.due, s.last_review) {
+        (Some(due), Some(last)) => {
+            u32::try_from((due.0 - last.0).max(0) / crate::time::MILLIS_PER_DAY).ok()
+        }
+        _ => None,
+    };
+    mastery(s.state, interval)
+}
+
+/// Mastered share in percent (0–100, rounded down) of `mastered` out of `total`.
+pub fn mastered_percent(mastered: u32, total: u32) -> u8 {
+    if total == 0 {
+        return 0;
+    }
+    u8::try_from(u64::from(mastered.min(total)) * 100 / u64::from(total)).unwrap_or(100)
+}
+
 // ------------------------------------------------------------------ calendar
 
 /// Study-day index of a civil date (days since 1970-01-01). A study day `i` starts at the

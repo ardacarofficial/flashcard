@@ -89,6 +89,7 @@ import type { DeckList } from "./DeckList";
 import type { DeckRef } from "./DeckRef";
 import type { DeckReports } from "./DeckReports";
 import type { DeckReportsRequest } from "./DeckReportsRequest";
+import type { DeckSummaries } from "./DeckSummaries";
 import type { DeckTree } from "./DeckTree";
 import type { DeepLinkOutcome } from "./DeepLinkOutcome";
 import type { DefineAttribute } from "./DefineAttribute";
@@ -313,6 +314,7 @@ import type { Synthesize } from "./Synthesize";
 import type { TagChangeResult } from "./TagChangeResult";
 import type { TagDto } from "./TagDto";
 import type { TagList } from "./TagList";
+import type { TermPage } from "./TermPage";
 import type { TestPaperDto } from "./TestPaperDto";
 import type { TestPaperRequest } from "./TestPaperRequest";
 import type { TextAnalysis } from "./TextAnalysis";
@@ -368,6 +370,7 @@ export interface Methods {
   "jobs.cancel": { kind: "command"; request: JobRef; response: JobDto };
   "decks.tree": { kind: "query"; request: Empty; response: DeckTree };
   "decks.list": { kind: "query"; request: Empty; response: DeckList };
+  "decks.summaries": { kind: "query"; request: Empty; response: DeckSummaries };
   "decks.get": { kind: "query"; request: DeckRef; response: DeckDto };
   "decks.create": { kind: "command"; request: CreateDeck; response: DeckDto };
   "decks.rename": { kind: "command"; request: RenameDeck; response: DeckDto };
@@ -383,6 +386,7 @@ export interface Methods {
   "notes.restore": { kind: "command"; request: NoteIds; response: AffectedCount };
   "notes.get": { kind: "query"; request: NoteRef; response: NoteDto };
   "notes.list": { kind: "query"; request: ListNotes; response: NotePage };
+  "notes.terms": { kind: "query"; request: ListNotes; response: TermPage };
   "tags.list": { kind: "query"; request: Empty; response: TagList };
   "tags.rename": { kind: "command"; request: RenameTag; response: TagChangeResult };
   "tags.merge": { kind: "command"; request: MergeTags; response: TagChangeResult };
@@ -653,6 +657,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "jobs.cancel": "command",
   "decks.tree": "query",
   "decks.list": "query",
+  "decks.summaries": "query",
   "decks.get": "query",
   "decks.create": "command",
   "decks.rename": "command",
@@ -668,6 +673,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "notes.restore": "command",
   "notes.get": "query",
   "notes.list": "query",
+  "notes.terms": "query",
   "tags.list": "query",
   "tags.rename": "command",
   "tags.merge": "command",

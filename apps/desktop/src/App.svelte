@@ -12,13 +12,12 @@
   import { buildNavigation, samePlace, type NavEntry, type SectionId } from '$lib/shell/navigation';
   import AppSidebar from '$lib/shell/AppSidebar.svelte';
   import DeckPicker from '$lib/shell/DeckPicker.svelte';
-  import HomeScreen from '$lib/shell/HomeScreen.svelte';
   import ProfileMenu from '$lib/shell/ProfileMenu.svelte';
   import SettingsLayout from '$lib/shell/SettingsLayout.svelte';
   import { Button, Spinner, Tabs, ToastHost } from '$lib/ui';
 
-  /** The shell's own first page (not a module; docs/11 §2). Bundled: it is what opens first. */
-  const HOME: ScreenDef = { id: 'home', component: HomeScreen };
+  /** The shell's own first page (not a module; docs/11 §2). Its own chunk, like every screen. */
+  const HOME: ScreenDef = { id: 'home', load: () => import('$lib/features/home/HomeScreen.svelte') };
 
   let modules = $state<ModuleDto[]>([]);
   let decks = $state<DeckTreeNode[]>([]);

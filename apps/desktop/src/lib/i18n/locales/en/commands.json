@@ -65,6 +65,12 @@
     },
     "bulk": {
       "change_notetype": "Change note type"
+    },
+    "decks": {
+      "summaries": "Deck progress"
+    },
+    "notes": {
+      "terms": "Deck term list"
     }
   },
   "shortcuts": {
