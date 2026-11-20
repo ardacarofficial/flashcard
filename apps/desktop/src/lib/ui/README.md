@@ -1,7 +1,10 @@
 # `$lib/ui` — design system (docs/11 §4)
 
 Every screen builds its UI from these components and the tokens in `src/lib/theme/tokens.css`.
-Import from the barrel: `import { Button, Select, Plus } from '$lib/ui';` — **in lazy screens**.
+Lazy screens import from the barrel: `import { Button, Select, Plus } from '$lib/ui';`.
+Code loaded before the first screen (`main.ts`, `App.svelte`, `lib/shell/`, the always-mounted
+hosts) imports file by file — `import Button from '$lib/ui/Button.svelte'`,
+`import { Plus } from '$lib/ui/icons'` — never the barrel (lint: `tests/eager-imports.test.ts`). — **in lazy screens**.
 Eagerly loaded code (App.svelte, `src/lib/shell/`, the `*Host` components) imports single files
 instead (`import Button from '$lib/ui/Button.svelte'`, icons from `$lib/ui/icons`): Rollup puts
 every module the entry reaches statically into the initial chunk, so a barrel import there would

@@ -2,7 +2,13 @@
   import type { UiNode } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import { uiText } from './texts.svelte';
-  import { Button, CircleAlert, CircleCheck, Icon, Input, ProgressBar, RadioGroup, Textarea } from '$lib/ui';
+  import Button from '$lib/ui/Button.svelte';
+  import Icon from '$lib/ui/Icon.svelte';
+  import Input from '$lib/ui/Input.svelte';
+  import ProgressBar from '$lib/ui/ProgressBar.svelte';
+  import RadioGroup from '$lib/ui/RadioGroup.svelte';
+  import Textarea from '$lib/ui/Textarea.svelte';
+  import { CircleAlert, CircleCheck } from '$lib/ui/icons';
   import PluginNode from './PluginNode.svelte';
 
   /** Draws one node of a plugin's declarative UI with the app's own components. */

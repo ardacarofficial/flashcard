@@ -18,7 +18,12 @@
   import type { LockState, ProfileDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import { defaultShell, DEEP_LINK_HELD_EVENT, type Shell } from '$lib/features/inbox/shell';
-  import { Avatar, Button, Checkbox, Icon, Input, Lock, TriangleAlert } from '$lib/ui';
+  import Avatar from '$lib/ui/Avatar.svelte';
+  import Button from '$lib/ui/Button.svelte';
+  import Checkbox from '$lib/ui/Checkbox.svelte';
+  import Icon from '$lib/ui/Icon.svelte';
+  import Input from '$lib/ui/Input.svelte';
+  import { Lock, TriangleAlert } from '$lib/ui/icons';
 
   interface Props {
     /** Called after unlocking (the shell reloads what it could not load while locked). */
