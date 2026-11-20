@@ -1,7 +1,11 @@
 # `$lib/ui` — design system (docs/11 §4)
 
 Every screen builds its UI from these components and the tokens in `src/lib/theme/tokens.css`.
-Import from the barrel: `import { Button, Select, Plus } from '$lib/ui';`
+Import from the barrel: `import { Button, Select, Plus } from '$lib/ui';` — **in lazy screens**.
+Eagerly loaded code (App.svelte, `src/lib/shell/`, the `*Host` components) imports single files
+instead (`import Button from '$lib/ui/Button.svelte'`, icons from `$lib/ui/icons`): Rollup puts
+every module the entry reaches statically into the initial chunk, so a barrel import there would
+pull every component any lazy screen uses (and its CSS) into the initial bundle.
 
 Rules for screen lanes:
 

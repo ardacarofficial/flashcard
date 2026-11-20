@@ -6,7 +6,12 @@
 <script lang="ts">
   import type { ScreenCtx } from '$lib/features';
   import { t } from '$lib/i18n/index.svelte';
-  import { Button, Card, EmptyState, GraduationCap, Library, PageHeader, ProgressBar } from '$lib/ui';
+  import Button from '$lib/ui/Button.svelte';
+  import Card from '$lib/ui/Card.svelte';
+  import EmptyState from '$lib/ui/EmptyState.svelte';
+  import PageHeader from '$lib/ui/PageHeader.svelte';
+  import ProgressBar from '$lib/ui/ProgressBar.svelte';
+  import { GraduationCap, Library } from '$lib/ui/icons';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 

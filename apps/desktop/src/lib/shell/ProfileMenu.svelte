@@ -4,7 +4,10 @@
   import { api } from '$lib/api';
   import type { LockState } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
-  import { Avatar, Lock, Menu, Users, type MenuItem } from '$lib/ui';
+  import Avatar from '$lib/ui/Avatar.svelte';
+  import Menu from '$lib/ui/Menu.svelte';
+  import { Lock, Users } from '$lib/ui/icons';
+  import type { MenuItem } from '$lib/ui/types';
 
   interface Props {
     /** Opens the Profiles page; `null` when the profiles module is off. */

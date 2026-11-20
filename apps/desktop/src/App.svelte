@@ -17,7 +17,10 @@
   import HomeScreen from '$lib/shell/HomeScreen.svelte';
   import ProfileMenu from '$lib/shell/ProfileMenu.svelte';
   import SettingsLayout from '$lib/shell/SettingsLayout.svelte';
-  import { Button, Spinner, Tabs, ToastHost } from '$lib/ui';
+  import Button from '$lib/ui/Button.svelte';
+  import Spinner from '$lib/ui/Spinner.svelte';
+  import Tabs from '$lib/ui/Tabs.svelte';
+  import ToastHost from '$lib/ui/ToastHost.svelte';
 
   /** The shell's own first page (not a module; docs/11 §2). Bundled: it is what opens first. */
   const HOME: ScreenDef = { id: 'home', component: HomeScreen };
