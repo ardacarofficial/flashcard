@@ -170,6 +170,58 @@ jobs:
       - name: Tauri uygulamasını derle (debug)
         run: cargo build --locked -p fc-desktop
 
+  windows-smoke:
+    needs: detect
+    if: needs.detect.outputs.desktop == 'true'
+    name: Windows (NSIS install + smoke)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.100.0 # = rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: smoke
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/desktop/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+      - name: Frontend dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+      # Release build of the NSIS installer only; no update signatures in CI (no secret).
+      - name: Build the NSIS installer
+        working-directory: apps/desktop
+        run: pnpm tauri build --bundles nsis --config src-tauri/tauri.unsigned.conf.json
+      - name: Silent per-user install
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          if (-not $setup) { throw "no NSIS installer found" }
+          Write-Host "installing $($setup.FullName)"
+          $p = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exited with $($p.ExitCode)" }
+          $dir = Join-Path $env:LOCALAPPDATA 'Flashcard'
+          $exe = Get-ChildItem $dir -Filter *.exe | Where-Object { $_.Name -notlike 'uninstall*' } | Select-Object -First 1
+          if (-not $exe) { throw "no installed app under $dir (per-user install expected)" }
+          "FC_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Launch the installed app with --smoke
+        shell: pwsh
+        run: |
+          $report = Join-Path $env:RUNNER_TEMP 'smoke.txt'
+          $p = Start-Process -FilePath $env:FC_EXE -ArgumentList '--smoke', "--smoke-report=$report" -Wait -PassThru
+          if (Test-Path $report) { Get-Content $report }
+          if ($p.ExitCode -ne 0) { throw "smoke run exited with $($p.ExitCode)" }
+      - name: Silent uninstall
+        if: always()
+        shell: pwsh
+        run: |
+          $u = Join-Path $env:LOCALAPPDATA 'Flashcard\uninstall.exe'
+          if (Test-Path $u) { Start-Process -FilePath $u -ArgumentList '/S' -Wait }
+
   core-purity:
     name: fc-core saflık kontrolü
     runs-on: ubuntu-latest

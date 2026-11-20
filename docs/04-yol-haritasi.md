@@ -219,9 +219,11 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 
 **Kabul kriterleri**
 - [ ] Performans hedefleri ([02 §34](02-ozellik-katalogu.md)) benchmark ile sağlanır.
-- [ ] Temiz bir Windows'ta kurulum → ilk açılış → çalışma → güncelleme akışı sorunsuz.
+- [ ] Temiz bir Windows'ta kurulum → ilk açılış → çalışma → güncelleme akışı sorunsuz. **Otomatikleşen kısmı hazır (iz O), elle deneme bekliyor:** CI `windows-smoke` NSIS'i sessiz, kullanıcı başına kurar ve kurulu uygulamayı `--smoke` ile çalıştırır (koleksiyon oluştur/migrate → çalış + geri al → bütünlük → taslak → gizli bilgisiz log dışa aktarma); güncelleme akışı sahte güncelleyiciyle testli, gerçek imzalı A → B güncellemesi ve `flashcard://` soğuk başlatma [07 §8.5](07-gelistirme-sureci.md) betiğiyle **proje sahibince** denenecek.
 - [ ] Tüm arayüz metinleri çeviri anahtarlarından gelir (sabit metin yok, lint ile).
 - [ ] İçe aktarmada ayırıcı otomatik algılama **yeni bir tutulmuş sette** ≥ %95 doğru (v0.5'ten devreden: şu an %92,9, 65/70; bkz. v0.5).
+
+> **Doğrulama (iz O, `feat/v1.0-release`: kurulum, imzalı güncelleme, çökme kurtarma, loglar):** `fc-app/src/modules/maintenance/tests.rs`, MemStore + SQLite bellek + SQLite dosya: (1) `after_an_unclean_shutdown_the_app_offers_session_drafts_crash_and_integrity` (bitmeyen çalıştırma + çökme raporu → `maintenance.recovery.get` sebep `crash`, açık oturum devam ettirilebilir, taslak geri gelir, açılışta hızlı bütünlük denetimi, rapor maskeli; kapatma geri al adımı değil). (2) `a_clean_previous_run_offers_nothing`. (3) `drafts_are_scratch_state_validated_and_bounded`. (4) `exported_logs_never_contain_keys_or_tokens` (anahtar zincirindeki şekilsiz sağlayıcı anahtarı, `sk-ant`, `ghp_`, JWT, uzun hex, parola, Bearer — paketteki hiçbir dosyada yok). (5) `updates_are_checked_downloaded_verified_and_applied_only_on_request`, (6) `a_badly_signed_update_is_refused` (`PROVIDER_UPDATE_SIGNATURE`, hiçbir şey kurulmaz). (7) `no_automated_actor_reaches_maintenance_or_updates`. Ayrıca `run.rs` (temiz/kirli çalıştırma işareti), `logging.rs` (dönen, maskeleyen log), `crash.rs`, `smoke.rs`, `fc-core::maintenance::redact`, depolama `tests/maintenance.rs` (migration 1050), masaüstü `src-tauri/src/maintenance.rs` (`--smoke`, çalıştırma işareti, imza hatası eşlemesi), `features/maintenance/maintenance.test.ts`. Kurulum: NSIS kullanıcı başına + MSI, WebView2 önyükleyici; yayın: `release.yml` (etiket `v*` → taslak Release + `latest.json`). Ayrıntı: [07 §8](07-gelistirme-sureci.md).
 
 ## 🔮 v1.0 sonrası
 
