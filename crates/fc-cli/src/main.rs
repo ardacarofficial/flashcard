@@ -11,6 +11,7 @@
 mod commands;
 mod i18n;
 mod lookup;
+mod mcp;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use fc_api::v1::methods as m;
@@ -54,6 +55,9 @@ enum Command {
     Undo,
     /// Redo the last undone operation (`oplog.redo`).
     Redo,
+    /// MCP: serve this collection to Claude Desktop / Claude Code, probe external servers.
+    #[command(subcommand)]
+    Mcp(mcp::McpCommand),
     /// Invoke any public API method with JSON params, e.g.
     /// `fc call decks.rename '{"id":"…","name":"X"}'`. Prints the JSON response.
     Call {
@@ -369,6 +373,8 @@ impl Command {
             },
             Command::Undo => m::OplogUndo::NAME,
             Command::Redo => m::OplogRedo::NAME,
+            Command::Mcp(mcp::McpCommand::Serve { .. }) => m::McpToolsList::NAME,
+            Command::Mcp(mcp::McpCommand::Tools { .. }) => m::McpServersList::NAME,
             Command::Call { method, .. } => method,
         }
     }
@@ -385,6 +391,16 @@ fn report(method: &str, e: &ApiError, json: bool) {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    if let Command::Mcp(mcp::McpCommand::Serve { read_only }) = &cli.command {
+        // stdout belongs to the protocol: errors go to stderr only.
+        return match mcp::serve(&cli.db, *read_only) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                report(cli.command.method(), &e, cli.json);
+                ExitCode::FAILURE
+            }
+        };
+    }
     let app = match App::open_sqlite(&cli.db) {
         Ok(app) => app,
         Err(e) => {
