@@ -114,6 +114,20 @@ impl CommandCtx<'_> {
         registry.execute_nested(self, request)
     }
 
+    /// Oplog slots reserved so far (pass it to [`Self::name_nested_since`]).
+    pub(crate) fn oplog_mark(&self) -> usize {
+        self.oplog.len()
+    }
+
+    /// A composite command that records nothing itself (its nested calls carry the inverses)
+    /// names the step after itself: the first entry recorded since `mark` gets `summary`,
+    /// which is what the undo UI shows when that entry starts the batch.
+    pub(crate) fn name_nested_since(&mut self, mark: usize, summary: I18nMessage) {
+        if let Some(first) = self.oplog.iter_mut().skip(mark).flatten().next() {
+            first.summary = summary;
+        }
+    }
+
     /// Whether any oplog entry has been recorded in this dispatch so far.
     pub(crate) fn has_oplog_entries(&self) -> bool {
         self.oplog.iter().any(Option::is_some)

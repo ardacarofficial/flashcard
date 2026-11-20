@@ -7,6 +7,8 @@ methods! {
     // ---- notes ----
     /// Creates a note and its cards.
     NotesCreate = "notes.create", Command, "notes", "notes:write", Public, undo: true, CreateNote => NoteDto;
+    /// Creates several notes (optionally in a new deck) as one undo step (v1.1).
+    NotesCreateMany = "notes.create_many", Command, "notes", "notes:write", Public, undo: true, CreateNotes => NotesCreated;
     /// Replaces fields/tags/attributes of a note.
     NotesUpdate = "notes.update", Command, "notes", "notes:write", Public, undo: true, UpdateNote => NoteDto;
     /// Moves notes (and their cards) to the trash.

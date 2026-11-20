@@ -203,18 +203,25 @@ fn list(req: ListAttributes, ctx: &QueryCtx<'_>) -> AppResult<AttributeDefList> 
 /// note.
 fn effective(req: EffectiveAttributes, ctx: &QueryCtx<'_>) -> AppResult<EffectiveAttributeList> {
     let index = DeckIndex::load(ctx.tx)?;
-    index.require(req.deck_id)?;
-    let defs: Vec<(AttributeDef, bool)> = effective_for_deck(ctx.tx, &index, Some(req.deck_id))?
+    if let Some(d) = req.deck_id {
+        index.require(d)?;
+    }
+    let defs: Vec<(AttributeDef, bool)> = effective_for_deck(ctx.tx, &index, req.deck_id)?
         .into_iter()
         .filter(|(d, _)| d.target == req.target)
         .collect();
-    let remember = resolve_stored(ctx.tx, &SettingScope::Deck(req.deck_id), REMEMBER_LAST)?
-        .and_then(|(v, _)| v.as_bool())
-        .unwrap_or(false);
-    let last_values = if remember && req.target == AttributeTarget::Note {
+    // "Remember last values" is a deck setting: a deck-less query has none.
+    let remember_in = match req.deck_id {
+        Some(d) => resolve_stored(ctx.tx, &SettingScope::Deck(d), REMEMBER_LAST)?
+            .and_then(|(v, _)| v.as_bool())
+            .unwrap_or(false)
+            .then_some(d),
+        None => None,
+    };
+    let last_values = if let (Some(deck), AttributeTarget::Note) = (remember_in, req.target) {
         let page = ctx.tx.list_notes(
             &NoteFilter {
-                deck_ids: Some(index.live_subtree(req.deck_id)),
+                deck_ids: Some(index.live_subtree(deck)),
                 include_deleted: false,
             },
             &PageRequest {
