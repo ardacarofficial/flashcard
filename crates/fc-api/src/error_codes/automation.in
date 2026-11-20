@@ -1,0 +1,7 @@
+// Automation rules (v0.9).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// A rule is invalid (`details.field`: `name`, `trigger`, `flags`, `every_mins`, `actions`,
+/// `ids`; for actions also `details.index` and `details.reason`: `not_allowed`, `params`).
+ValidationAutomationRule => Validation, "errors.validation.automation_rule";
+/// Automation rule not found (`details.id`).
+NotFoundAutomationRule => NotFound, "errors.not_found.automation_rule";

@@ -14,7 +14,6 @@ use crate::handler::{CommandCtx, CommandOutcome};
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::modules::study::ext::*;
 use crate::registry::Registry;
-use crate::support::summary;
 use fc_api::v1::cardtypes::CardInteraction;
 use fc_api::v1::methods::ModesLearnAnswer;
 use fc_api::v1::modes::{LearnAnswer, LearnAnswerResult, LearnDto, LearnProgressDto, LearnStage};
@@ -313,7 +312,7 @@ fn answer(req: LearnAnswer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
             session: outcome.response,
         },
         inverse: outcome.inverse,
-        summary: summary::<ModesLearnAnswer>(),
+        summary: super::answer_summary::<ModesLearnAnswer>(&outcome.summary),
         events: outcome.events,
     })
 }

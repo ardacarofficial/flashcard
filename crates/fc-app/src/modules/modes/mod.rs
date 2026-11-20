@@ -80,6 +80,18 @@ pub(crate) fn setting(
 }
 
 /// `VALIDATION_SESSION_MODE` with a reason.
+/// The oplog summary of a mode's answer: its own key, keeping the rating `answer_core`
+/// recorded (automation's `card_answered` trigger reads it — phase 4).
+pub(crate) fn answer_summary<M: fc_api::ApiMethod>(
+    answered: &fc_api::v1::common::I18nMessage,
+) -> fc_api::v1::common::I18nMessage {
+    let s = crate::support::summary::<M>();
+    match answered.params.get("rating") {
+        Some(r) => s.param("rating", r),
+        None => s,
+    }
+}
+
 pub(crate) fn session_mode(reason: &str, message: impl Into<String>) -> AppError {
     AppError::Api(
         ApiError::new(ErrorCode::ValidationSessionMode, message).with_detail("reason", reason),

@@ -96,4 +96,5 @@ domains! {
     tts,
     modes,
     reading,
+    automation,
 }

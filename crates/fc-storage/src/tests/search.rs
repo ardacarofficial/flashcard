@@ -391,6 +391,32 @@ fn every_atom_agrees_with_the_reference_evaluator() {
     );
 }
 
+/// `search_card_ids_among` = the full search restricted to the given ids (every predicate
+/// kind, correlated set probes included; unknown ids and duplicates are harmless).
+#[test]
+fn search_among_ids_agrees_with_the_full_search() {
+    let w = world(150, 7);
+    let all: Vec<CardId> = w.actual(&Filter::All);
+    let mut among: Vec<CardId> = all.iter().copied().step_by(3).collect();
+    among.push(among[0]);
+    among.push(CardId(uuid::Uuid::from_u128(0xdead)));
+    let wanted: std::collections::HashSet<CardId> = among.iter().copied().collect();
+    for q in ATOMS {
+        let f = w.filter(q);
+        let exp: Vec<CardId> = w
+            .actual(&f)
+            .into_iter()
+            .filter(|c| wanted.contains(c))
+            .collect();
+        let act =
+            w.fx.read(|r| r.search_card_ids_among(&f, NOW, &among).unwrap());
+        assert_eq!(act, exp, "query {q}");
+    }
+    let none =
+        w.fx.read(|r| r.search_card_ids_among(&Filter::All, NOW, &[]).unwrap());
+    assert!(none.is_empty());
+}
+
 #[test]
 fn random_queries_agree_with_the_reference_evaluator() {
     let w = world(120, 11);

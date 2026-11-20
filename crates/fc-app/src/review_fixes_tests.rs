@@ -172,7 +172,8 @@ fn replayable_methods_are_undoable_commands_without_side_channels() {
         assert!(!registry.descriptor(name).unwrap().replayable, "{name}");
     }
     // Every internal inverse method a handler can emit is replayable (else its undo breaks).
-    // `ai.usage.record` is a ledger row a job writes, never an inverse.
+    // `ai.usage.record` is a ledger row a job writes, never an inverse; `automation.apply` runs
+    // a rule (its nested actions are the undo step), never an inverse either (v0.9).
     for d in registry.methods() {
         if d.visibility == Visibility::Internal
             && ![
@@ -180,6 +181,7 @@ fn replayable_methods_are_undoable_commands_without_side_channels() {
                 IoImportDiscard::NAME,
                 IoBackupLoad::NAME,
                 AiUsageRecord::NAME,
+                AutomationApply::NAME,
             ]
             .contains(&d.name)
         {

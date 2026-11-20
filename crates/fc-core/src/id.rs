@@ -193,6 +193,10 @@ define_id!(
     /// Reading-mode text, subtitle or extract id (v0.10).
     ReadingItemId
 );
+define_id!(
+    /// Automation rule id (v0.9).
+    AutomationRuleId
+);
 
 #[cfg(test)]
 mod tests {

@@ -3,6 +3,7 @@
 
 pub mod ai;
 pub mod attributes;
+pub mod automation;
 pub mod browse;
 pub mod bulk;
 pub mod cardtypes;

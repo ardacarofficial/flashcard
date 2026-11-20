@@ -78,4 +78,5 @@ domains! {
     ai: AiRead, AiWrite;
     plugins: PluginRead, PluginWrite;
     reading: ReadingRead, ReadingWrite;
+    automation: AutomationRead, AutomationWrite;
 }

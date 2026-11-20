@@ -178,4 +178,5 @@ domains! {
     ai => AiState,
     plugins => PluginState,
     reading => ReadingState,
+    automation => AutomationState,
 }

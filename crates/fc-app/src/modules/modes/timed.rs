@@ -170,7 +170,7 @@ fn expire(req: ExpireCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
                 },
             )?;
             Ok(CommandOutcome {
-                summary: summary::<ModesTimedExpire>(),
+                summary: super::answer_summary::<ModesTimedExpire>(&outcome.summary),
                 ..outcome
             })
         }

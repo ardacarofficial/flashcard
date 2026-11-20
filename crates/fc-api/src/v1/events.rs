@@ -219,4 +219,6 @@ pub enum DomainEvent {
         /// Cards.
         card_ids: Vec<CardId>,
     },
+    /// Automation rules or their run log changed (refetch `automation.*` lists; v0.9).
+    AutomationChanged,
 }

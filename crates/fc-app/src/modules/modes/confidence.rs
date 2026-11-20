@@ -11,7 +11,7 @@ use crate::handler::{CommandCtx, CommandOutcome};
 use crate::module::{choice_setting, ModuleDescriptor};
 use crate::modules::study::ext::*;
 use crate::registry::Registry;
-use crate::support::{invalid, summary};
+use crate::support::invalid;
 use fc_api::v1::methods::ModesConfidenceAnswer;
 use fc_api::v1::modes::{ConfidenceAnswer, ConfidenceLevelDto, RatingScale};
 use fc_api::v1::study::{AnswerCard, IntervalPreview, SessionDto};
@@ -144,7 +144,8 @@ fn answer(req: ConfidenceAnswer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandO
         },
     )?;
     Ok(CommandOutcome {
-        summary: summary::<ModesConfidenceAnswer>().param("level", req.level),
+        summary: super::answer_summary::<ModesConfidenceAnswer>(&outcome.summary)
+            .param("level", req.level),
         ..outcome
     })
 }

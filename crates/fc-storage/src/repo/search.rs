@@ -137,6 +137,14 @@ pub trait SearchRead {
     fn search_cards(&self, search: &CardSearch) -> StorageResult<SearchPage>;
     /// Every matching card id (creation order).
     fn search_card_ids(&self, filter: &Filter, now: Timestamp) -> StorageResult<Vec<CardId>>;
+    /// The cards of `among` that match (creation order). Costs in proportion to `among`, not
+    /// to the collection (automation rules check the few cards one change touched, v0.9).
+    fn search_card_ids_among(
+        &self,
+        filter: &Filter,
+        now: Timestamp,
+        among: &[CardId],
+    ) -> StorageResult<Vec<CardId>>;
     /// Saved queries by position, then name.
     fn list_saved_queries(&self) -> StorageResult<Vec<SavedQuery>>;
     /// Saved query by id.

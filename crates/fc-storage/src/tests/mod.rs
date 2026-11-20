@@ -6,6 +6,7 @@
 
 mod ai;
 mod attributes;
+mod automation;
 mod content;
 mod decks;
 mod interop;

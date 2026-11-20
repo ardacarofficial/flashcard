@@ -48,4 +48,5 @@ modules! {
     tts,
     modes,
     reading,
+    automation,
 }

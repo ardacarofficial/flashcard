@@ -403,14 +403,16 @@ pub(crate) fn event_domains(event: &DomainEvent) -> &'static [Domain] {
         E::AiConfigChanged => AI,
         E::AiPartial { .. } => AI_NOTES,
         E::ReadingItemsChanged | E::WordMarksChanged { .. } => READING,
+        E::AutomationChanged => &["automation"],
     }
 }
 
 /// Domains whose events a plugin is not even told about without their read permissions
-/// (statistics, planning, goals, AI, MCP — phase 3; reading — phase 4): elsewhere an
+/// (statistics, planning, goals, AI, MCP — phase 3; reading — phase 4; automation): elsewhere an
 /// unreadable event still arrives cut to ids, these do not arrive at all, so a subscription
 /// alone says nothing (not even that an AI request is streaming or a goal changed).
-const GATED_EVENT_DOMAINS: &[Domain] = &["stats", "planning", "goals", "ai", "mcp", "reading"];
+const GATED_EVENT_DOMAINS: &[Domain] =
+    &["stats", "planning", "goals", "ai", "mcp", "reading", "automation"];
 
 /// Whether an `event:` hook of a plugin holding `granted` is called for `event` at all.
 pub(crate) fn event_delivered(granted: &BTreeSet<String>, event: &DomainEvent) -> bool {
