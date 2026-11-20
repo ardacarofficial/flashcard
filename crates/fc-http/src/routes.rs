@@ -106,6 +106,7 @@ fn status_of(e: &ApiError) -> StatusCode {
         ErrorCode::ValidationPayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
         ErrorCode::ConflictRateLimited => StatusCode::TOO_MANY_REQUESTS,
         ErrorCode::ConflictModuleDisabled => StatusCode::SERVICE_UNAVAILABLE,
+        ErrorCode::PermissionAppLocked => StatusCode::LOCKED,
         code => match code.category() {
             ErrorCategory::Validation => StatusCode::BAD_REQUEST,
             ErrorCategory::Permission => StatusCode::FORBIDDEN,
@@ -374,6 +375,10 @@ async fn route(
     let rest = path.strip_prefix("/v1/").ok_or_else(not_found)?;
     if !(method == Method::GET && rest == "ping") {
         csrf_guard(headers, method)?;
+        // v1.0: a locked app (or one switching profile) answers nothing but `ping`.
+        if s.app.background_blocked() {
+            return Err(fc_app::modules::profiles::locked_error(path));
+        }
     }
     match (method.as_str(), rest) {
         ("GET", "ping") => Ok(json(

@@ -114,6 +114,38 @@ fn migrations_stay_in_their_release_range() {
     assert_eq!(migrate::release_of(0), None);
 }
 
+/// Inside v1.0 every migration belongs to its lane's slice (ux 1000–1049, release 1050–1069,
+/// quality 1090–1099); the slices do not overlap and stay inside the v1.0 range.
+#[test]
+fn v1_migrations_stay_in_their_lane_range() {
+    for m in MIGRATIONS
+        .iter()
+        .filter(|m| migrate::release_of(m.version) == Some("v1.0"))
+    {
+        assert!(
+            migrate::v1_lane_of(m.version).is_some(),
+            "{}: v1.0 migration outside every lane range {:?}",
+            m.name,
+            migrate::V1_LANE_RANGES
+        );
+    }
+    let lanes = migrate::V1_LANE_RANGES;
+    for (i, (_, a)) in lanes.iter().enumerate() {
+        assert_eq!(migrate::release_of(*a.start()), Some("v1.0"));
+        assert_eq!(migrate::release_of(*a.end()), Some("v1.0"));
+        for (_, b) in &lanes[i + 1..] {
+            assert!(
+                a.end() < b.start() || b.end() < a.start(),
+                "{a:?} overlaps {b:?}"
+            );
+        }
+    }
+    assert_eq!(migrate::v1_lane_of(1000), Some("v1.0 ux"));
+    assert_eq!(migrate::v1_lane_of(1050), Some("v1.0 release"));
+    assert_eq!(migrate::v1_lane_of(1099), Some("v1.0 quality"));
+    assert_eq!(migrate::v1_lane_of(1070), None);
+}
+
 /// Every `.sql` file in `migrations/` is in the list (the build script collects them all).
 #[test]
 fn every_migration_file_is_collected() {

@@ -44,6 +44,7 @@ suite!(
     a_full_queue_evicts_the_oldest_and_a_repeat_replaces_itself,
     pending_requests_do_not_survive_a_server_start,
     a_client_cannot_flood_the_inbox,
+    a_client_has_a_daily_proposal_limit,
     local_api_writes_are_ordinary_undo_steps,
     restoring_a_backup_revokes_every_client,
     nothing_works_while_the_module_is_off,
@@ -553,4 +554,34 @@ pub(super) fn a_client_cannot_flood_the_inbox(f: Factory) {
     assert_eq!(e.code, ErrorCode::ConflictInboxQuota);
     assert_eq!(e.details["limit"], "bytes");
     add_inbox_item(&t.app, &c, big(100)).unwrap();
+}
+
+/// Integration round 1: a client sends at most `local_api.inbox_daily_max` proposals per 24
+/// hours, whatever happened to them — rejecting (or an auto-accept rule accepting) them does
+/// not make room. Per client; the user is not limited.
+pub(super) fn a_client_has_a_daily_proposal_limit(f: Factory) {
+    let clock = std::sync::Arc::new(fc_core::time::FixedClock::new(fc_core::Timestamp(1_790_000_000_000)));
+    let t = TestApp::with_clock(f(), clock.clone());
+    enable(&t);
+    let a = approved(&t, 1, &["inbox:write", "inbox:read"]);
+    let b = approved(&t, 2, &["inbox:write"]);
+    t.ok::<SettingsSet>(fc_api::v1::settings::SetSetting {
+        scope: SettingScope::App,
+        key: INBOX_DAILY_MAX.into(),
+        value: json!(2),
+    });
+    for n in 0..2 {
+        add_inbox_item(&t.app, &a, item(&format!("d{n}"))).unwrap();
+    }
+    let ids: Vec<_> = t.ok::<InboxList>(ListInbox::default()).items.iter().map(|i| i.id).collect();
+    t.ok::<InboxReject>(fc_api::v1::inbox::InboxItemIds { ids });
+    let e = add_inbox_item(&t.app, &a, item("third today")).unwrap_err();
+    assert_eq!(e.code, ErrorCode::ConflictInboxQuota);
+    assert_eq!(e.details["limit"], "daily");
+    assert_eq!(e.details["max"], 2);
+    add_inbox_item(&t.app, &b, item("other client")).unwrap();
+    t.ok::<InboxAdd>(item("mine"));
+    // A day later there is room again.
+    clock.advance(INBOX_DAILY_WINDOW_MS + 1);
+    add_inbox_item(&t.app, &a, item("tomorrow")).unwrap();
 }

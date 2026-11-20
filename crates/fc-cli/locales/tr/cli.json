@@ -28,5 +28,8 @@
   "cli.plugin.perm_off": "[ ] {permission}",
   "cli.plugin.perm_sensitive": "[ ] {permission} (hassas)",
   "cli.plugin.no_logs": "günlük satırı yok",
-  "cli.plugin.packed": "{id} {version} paketlendi → {path}"
+  "cli.plugin.packed": "{id} {version} paketlendi → {path}",
+  "cli.api.no_collection": "{path} konumunda koleksiyon yok",
+  "cli.api.module_off": "local_api modülü kapalı; önce aç: fc call modules.set_enabled '{\"id\":\"local_api\",\"enabled\":true}'",
+  "cli.api.listening": "fc api: dinlenen adres http://{addr}"
 }

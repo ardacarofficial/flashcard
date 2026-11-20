@@ -1,0 +1,31 @@
+// Profiles and app lock (v1.0, docs/02 §28–§29).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// A profile name was refused (`details.reason`: `empty`, `too_long`, `control`).
+ValidationProfileName => Validation, "errors.validation.profile_name";
+/// Profile not found (`details.id`).
+NotFoundProfile => NotFound, "errors.not_found.profile";
+/// Another profile already has this name (`details.name`).
+ConflictProfileName => Conflict, "errors.conflict.profile_name";
+/// The profile in use cannot be deleted; switch to another first (`details.id`).
+ConflictProfileActive => Conflict, "errors.conflict.profile_active";
+/// Too many profiles (`details.max`).
+ConflictProfileLimit => Conflict, "errors.conflict.profile_limit";
+/// This process has no profile registry (the CLI and MCP server open one collection).
+ConflictProfilesUnavailable => Conflict, "errors.conflict.profiles_unavailable";
+/// Reading or writing the profile registry or a profile folder failed (`details.path`).
+IoProfile => Io, "errors.io.profile";
+/// A new PIN/password was refused (`details.reason`: `too_short`, `too_long`, `not_digits`,
+/// `blank`).
+ValidationLockSecret => Validation, "errors.validation.lock_secret";
+/// The idle timeout is not one of the offered choices (`details.choices`).
+ValidationLockIdle => Validation, "errors.validation.lock_idle";
+/// The app is locked: unlock first (`details.method`).
+PermissionAppLocked => Permission, "errors.permission.app_locked";
+/// Wrong PIN/password (`details.failures`, `details.retry_after_ms`).
+PermissionLockSecret => Permission, "errors.permission.lock_secret";
+/// Too many wrong attempts: wait before the next one (`details.retry_after_ms`).
+ConflictLockRetry => Conflict, "errors.conflict.lock_retry";
+/// The lock is not in a state that allows this (`details.reason`: `not_set`, `current_required`).
+ConflictLockState => Conflict, "errors.conflict.lock_state";
+/// The OS keychain holding the lock hash failed (`details.reason`).
+ProviderLockStorage => Provider, "errors.provider.lock_storage";

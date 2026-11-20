@@ -14,6 +14,7 @@ import type { JobId } from "./JobId";
 import type { NoteId } from "./NoteId";
 import type { NoteTypeId } from "./NoteTypeId";
 import type { PluginNotice } from "./PluginNotice";
+import type { ReminderCounts } from "./ReminderCounts";
 import type { SettingScope } from "./SettingScope";
 
 /**
@@ -188,4 +189,20 @@ pending: number, } } | { "type": "local_api_pairing", "data": {
 /**
  * The pending client.
  */
-client: ApiClientDto, } } | { "type": "local_api_clients_changed" };
+client: ApiClientDto, } } | { "type": "local_api_clients_changed" } | { "type": "lock_changed", "data": { 
+/**
+ * Locked now.
+ */
+locked: boolean, } } | { "type": "profile_switched", "data": { 
+/**
+ * The profile that opens next.
+ */
+profile_id: string, } } | { "type": "reminder_due", "data": { 
+/**
+ * What waits today.
+ */
+counts: ReminderCounts, 
+/**
+ * Sent by `reminders.test`.
+ */
+test: boolean, } };

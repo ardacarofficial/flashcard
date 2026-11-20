@@ -514,7 +514,7 @@ fn main() -> ExitCode {
         };
     }
     if let Command::Api(api::ApiCommand::Serve { port }) = &cli.command {
-        return match api::serve(&cli.db, *port) {
+        return match api::serve(&cli.db, *port, cli.lang) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 report(cli.command.method(), &e, cli.json);
@@ -531,10 +531,12 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    // AI provider keys: the same OS keychain entries as the desktop app (v0.8).
-    app.set_secret_store(std::sync::Arc::new(fc_ai::secrets::OsKeychain::new(
-        fc_ai::secrets::SERVICE,
-    )));
+    // AI provider keys: the same OS keychain entries as the desktop app (v0.8), those of the
+    // profile whose collection `--db` is (v1.0: profiles do not share keys).
+    app.set_secret_store(fc_app::modules::profiles::secrets::collection_secrets(
+        std::sync::Arc::new(fc_ai::secrets::OsKeychain::new(fc_ai::secrets::SERVICE)),
+        &cli.db,
+    ));
     let ctx = commands::Ctx {
         app: &app,
         json: cli.json,

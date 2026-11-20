@@ -58,6 +58,10 @@
       "inbox_max_kib": {
         "label": "Program başına bekleyen boyut (KiB)",
         "description": "Bir programın gelen kutusunda bekletebileceği en fazla metin, kibibayt olarak."
+      },
+      "inbox_daily_max": {
+        "label": "Program başına günlük öneri",
+        "description": "Bir programın 24 saatte önerebileceği en fazla kart, akıbetleri ne olursa olsun. Bir programın (ya da önerilerini kabul eden bir kuralın) koleksiyonu doldurmasını önler."
       }
     }
   },

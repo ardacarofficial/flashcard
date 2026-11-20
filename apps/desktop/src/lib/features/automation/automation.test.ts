@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { i18n } from '$lib/i18n/index.svelte';
 import { api } from '$lib/api';
 import type { RuleTrigger } from '$lib/api/types';
@@ -62,6 +62,8 @@ describe('automation rule editor (dev mock)', () => {
     expect(options()).toEqual(['inbox.accept']);
     expect(action().value).toBe('inbox.accept');
     expect(screen.getByText(/the card the proposal would become/)).toBeTruthy();
+    // Accepting without review is called out in the editor.
+    await waitFor(() => expect(screen.getByText(/This rule accepts proposals without your review/)).toBeTruthy());
   });
 
   it('round-trips triggers and action params', () => {

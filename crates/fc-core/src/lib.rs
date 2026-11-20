@@ -33,6 +33,7 @@ pub mod shortcut;
 pub mod stats;
 pub mod tag;
 pub mod time;
+pub mod ux;
 
 pub use error::{CoreError, CoreResult};
 pub use id::{

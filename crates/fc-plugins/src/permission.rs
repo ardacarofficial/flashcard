@@ -56,6 +56,9 @@ pub const FORBIDDEN_API_AREAS: &[&str] = &[
     // v1.0: logs, crash reports, free export paths; installing updates.
     "maintenance",
     "updates",
+    // v1.0: which collection opens and whether it is unlocked belong to the user alone.
+    "profiles",
+    "lock",
 ];
 
 /// Single API permissions a plugin may never be granted (reading these areas is fine):
@@ -106,6 +109,14 @@ pub const FORBIDDEN_HOOK_PREFIXES: &[&str] = &[
     "automation.",
     // v0.9: approving and revoking local API clients is the user's decision.
     "local_api.",
+    // v1.0: profiles, the app lock and the first-run setup.
+    "profiles.",
+    "lock.",
+    "onboarding.",
+    "starter.",
+    // v1.0: logs, crash reports, form drafts and updates (integration round 1).
+    "maintenance.",
+    "updates.",
 ];
 
 /// Whether permission `p` (`<area>:<access>`) may be granted to a plugin at all.

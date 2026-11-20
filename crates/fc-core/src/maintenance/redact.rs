@@ -10,6 +10,7 @@
 //!   (`api_key`, `token`, `password`, `secret`, `authorization`, `cookie`, …),
 //! * well-known key formats (OpenAI/Anthropic `sk-…`, GitHub `ghp_…`, Slack `xox…`, AWS
 //!   `AKIA…`, Google `AIza…`, GitLab `glpat-…`, Stripe `sk_live_…`) and JWTs,
+//! * password hashes in PHC form (`$argon2id$…`: the app lock's hash),
 //! * long hex strings (≥ 32: token hashes, raw tokens) and long mixed-case alphanumeric runs
 //!   (≥ 32 with lower, upper and digits: generated keys),
 //! * email addresses and the user name in home-folder paths (`C:\Users\<name>`,
@@ -77,7 +78,7 @@ impl Default for Redactor {
 impl Redactor {
     /// The built-in rules (module docs).
     pub fn new() -> Self {
-        let specs: [(&str, RuleKind); 12] = [
+        let specs: [(&str, RuleKind); 13] = [
             (
                 r"(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
                 RuleKind::Whole,
@@ -110,6 +111,9 @@ impl Redactor {
                 r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}",
                 RuleKind::Whole,
             ),
+            // Password hashes in PHC form (the app lock's Argon2id hash, v1.0): slow and salted,
+            // but still nothing a bug report needs.
+            (r"\$argon2(?:id|i|d)\$[A-Za-z0-9+/=,$-]+", RuleKind::Whole),
             (r"\b[0-9a-fA-F]{32,}\b", RuleKind::Whole),
             (r"[A-Za-z0-9+/_-]{32,}={0,2}", RuleKind::Mixed),
             (
@@ -236,7 +240,7 @@ mod tests {
 
     #[test]
     fn every_rule_compiles() {
-        assert_eq!(Redactor::new().rule_count(), 12);
+        assert_eq!(Redactor::new().rule_count(), 13);
     }
 
     #[test]
@@ -300,6 +304,17 @@ mod tests {
         let mini = "untrusted comment: rsign encrypted secret key\nRWRTY0IyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\n";
         let out = r(mini);
         assert!(!out.contains("RWRTY0Iy"), "{out}");
+    }
+
+    #[test]
+    fn password_hashes_are_masked() {
+        let h = "$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHQ$aGFzaGhhc2hoYXNo";
+        let out = r(&format!("lock.profile.p1 = {h} done"));
+        assert!(
+            !out.contains("c2FsdHNhbHQ") && !out.contains("aGFzaGhhc2g"),
+            "{out}"
+        );
+        assert!(out.ends_with(" done"), "{out}");
     }
 
     #[test]

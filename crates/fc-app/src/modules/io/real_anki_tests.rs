@@ -303,7 +303,8 @@ fn expectation(col: &AnkiCollection) -> Value {
 /// Opens our `.apkg` and `.colpkg` in **real Anki**. Needs Python with the official `anki`
 /// package: `python3 -m venv /tmp/ankivenv && /tmp/ankivenv/bin/pip install anki`, then
 /// `FC_ANKI_PYTHON=/tmp/ankivenv/bin/python cargo test -p fc-app our_exports_open_in_real_anki
-/// -- --ignored --nocapture`. CI runs it in the `anki` job.
+/// -- --ignored --nocapture`. CI runs it as a step of the `rust` job (`anki==26.09.4` in an
+/// isolated venv).
 #[test]
 #[ignore = "needs FC_ANKI_PYTHON (Python with the official anki package)"]
 fn our_exports_open_in_real_anki() {

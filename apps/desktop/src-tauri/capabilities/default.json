@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Least privilege: the app's windows may call the generic `invoke` command, listen to events and show open/save file dialogs (the chosen path goes to the backend). The main window also takes handled flashcard:// links; the quick-add window asks for its clipboard prefill (read by the backend only when the user pressed the shortcut). Nothing else (no fs, shell, http, clipboard from the webview).",
+  "description": "Least privilege: the app's windows may call the generic `invoke` command, listen to events and show open/save file dialogs (the chosen path goes to the backend). The main window also takes handled flashcard:// links (and, on the lock screen, lists or drops the links held while locked); the quick-add window asks for its clipboard prefill (read by the backend only when the user pressed the shortcut). Nothing else (no fs, shell, http, clipboard from the webview).",
   "windows": [
     "main",
     "quick-add"
@@ -11,6 +11,8 @@
     "core:event:allow-unlisten",
     "allow-invoke",
     "allow-take-deep-links",
+    "allow-held-deep-links",
+    "allow-discard-held-deep-links",
     "allow-quick-add-prefill",
     "dialog:allow-open",
     "dialog:allow-save",

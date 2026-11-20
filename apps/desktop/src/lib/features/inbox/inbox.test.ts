@@ -39,6 +39,8 @@ function fakeShell(links: LinkResult[] = [], prefill: string | null = null) {
   const listeners = new Map<string, (p: unknown) => void>();
   const shell: Shell = {
     takeDeepLinks: async () => links.splice(0),
+    heldDeepLinks: async () => [],
+    discardHeldDeepLinks: async () => {},
     prefill: async () => prefill,
     listen: async (event, cb) => {
       listeners.set(event, cb);

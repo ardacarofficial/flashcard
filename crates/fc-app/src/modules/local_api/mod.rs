@@ -59,6 +59,14 @@ pub const DEFAULT_INBOX_MAX_ITEMS: u32 = 500;
 pub const INBOX_MAX_KIB: &str = "local_api.inbox_max_kib";
 /// Default for [`INBOX_MAX_KIB`] (4 MiB).
 pub const DEFAULT_INBOX_MAX_KIB: u64 = 4096;
+/// Setting (app): most proposals one client may send in 24 hours (any status: accepting or
+/// rejecting them does not make room). Bounds a client that floods the inbox (and, with an
+/// auto-accept inbox rule, the collection).
+pub const INBOX_DAILY_MAX: &str = "local_api.inbox_daily_max";
+/// Default for [`INBOX_DAILY_MAX`].
+pub const DEFAULT_INBOX_DAILY_MAX: u32 = 200;
+/// The window of [`INBOX_DAILY_MAX`].
+pub const INBOX_DAILY_WINDOW_MS: i64 = 24 * 60 * 60 * 1000;
 
 /// How long a pairing request waits for the user (ms). Older pending rows are hidden and
 /// cannot be approved; the server forgets their tokens.
@@ -197,6 +205,18 @@ pub fn descriptor() -> ModuleDescriptor {
                 default: json!(DEFAULT_INBOX_MAX_KIB),
                 label_key: format!("settings.{INBOX_MAX_KIB}.label"),
                 description_key: Some(format!("settings.{INBOX_MAX_KIB}.description")),
+                advanced: true,
+                scopes: vec![SettingScopeKind::App],
+            },
+            SettingDef {
+                key: INBOX_DAILY_MAX.to_owned(),
+                kind: SettingKind::Integer {
+                    min: Some(1),
+                    max: Some(100_000),
+                },
+                default: json!(DEFAULT_INBOX_DAILY_MAX),
+                label_key: format!("settings.{INBOX_DAILY_MAX}.label"),
+                description_key: Some(format!("settings.{INBOX_DAILY_MAX}.description")),
                 advanced: true,
                 scopes: vec![SettingScopeKind::App],
             },
@@ -350,6 +370,14 @@ pub(crate) fn inbox_quota(reads: &dyn Reads) -> AppResult<(u32, u64)> {
         .unwrap_or(DEFAULT_INBOX_MAX_ITEMS);
     let kib = get(INBOX_MAX_KIB)?.unwrap_or(DEFAULT_INBOX_MAX_KIB);
     Ok((items, kib.saturating_mul(1024)))
+}
+
+/// [`INBOX_DAILY_MAX`]: proposals one client may send per 24 hours.
+pub(crate) fn inbox_daily_max(reads: &dyn Reads) -> AppResult<u32> {
+    Ok(resolve_stored(reads, &SettingScope::App, INBOX_DAILY_MAX)?
+        .and_then(|(v, _)| v.as_u64())
+        .and_then(|n| u32::try_from(n).ok())
+        .unwrap_or(DEFAULT_INBOX_DAILY_MAX))
 }
 
 // ------------------------------------------------------------------ queries

@@ -17,6 +17,10 @@ export interface LinkResult {
 export interface Shell {
   /** Outcomes of links handled since the last call (cold start included). */
   takeDeepLinks(): Promise<LinkResult[]>;
+  /** Links held while the app is locked (they run after unlock); the lock screen lists them. */
+  heldDeepLinks(): Promise<string[]>;
+  /** Drops the held links unhandled. */
+  discardHeldDeepLinks(): Promise<void>;
   /** Quick-add prefill (clipboard text), if the settings allow it. */
   prefill(): Promise<string | null>;
   /** Listens to a shell event (`fc://deep-link`, `fc://clipboard`, `fc://quick-add`). */
@@ -26,6 +30,8 @@ export interface Shell {
 }
 
 export const DEEP_LINK_EVENT = 'fc://deep-link';
+/** A link arrived while locked and is held for after unlock. */
+export const DEEP_LINK_HELD_EVENT = 'fc://deep-link-held';
 export const CLIPBOARD_EVENT = 'fc://clipboard';
 export const QUICK_ADD_EVENT = 'fc://quick-add';
 
@@ -33,6 +39,14 @@ const tauriShell: Shell = {
   async takeDeepLinks() {
     const { invoke } = await import('@tauri-apps/api/core');
     return invoke<LinkResult[]>('take_deep_links');
+  },
+  async heldDeepLinks() {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<string[]>('held_deep_links');
+  },
+  async discardHeldDeepLinks() {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke<number>('discard_held_deep_links');
   },
   async prefill() {
     const { invoke } = await import('@tauri-apps/api/core');
@@ -50,6 +64,8 @@ const tauriShell: Shell = {
 
 const noShell: Shell = {
   takeDeepLinks: async () => [],
+  heldDeepLinks: async () => [],
+  discardHeldDeepLinks: async () => {},
   prefill: async () => null,
   listen: async () => () => {},
   hide: async () => {},

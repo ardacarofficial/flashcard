@@ -100,4 +100,7 @@ domains! {
     inbox,
     local_api,
     maintenance,
+    onboarding,
+    session,
+    reminders,
 }

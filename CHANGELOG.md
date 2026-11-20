@@ -4,6 +4,14 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased]
 
+### v1.0 entegrasyonu — tur 1 (iz Q + iz O + iz N)
+- Üç v1.0 izi birleşti. **Loglar, çökme raporları ve çalıştırma işareti profil başına** (etkin profilin klasöründe); profil geçişi eski çalıştırmayı temiz kapatır.
+- **Profil silme anahtar zincirini temizler:** profilin AI anahtarları ve kilit özeti silinir. `fc --db <profil>/collection.db` o profilin AI anahtarlarını kullanır.
+- **Log dışa aktarma** profile ait anahtarları ve kilit özetini (`$argon2id$…`) de maskeler.
+- **Kilit ekranı** kilitliyken gelen `flashcard://` bağlantılarını çalışmadan önce listeler; "Açılmasın" ile bırakılabilir.
+- **Gelen kutusu:** program başına günlük öneri sınırı (`local_api.inbox_daily_max`, 200); önerileri incelemeden kabul eden kurallar Otomasyon ekranında uyarıyla gösterilir.
+- Eklentiler `profiles.*`, `lock.*`, `maintenance.*`, `updates.*`'e ulaşamaz ve kanca takamaz (alan başına test). Migration alt aralıkları testle zorunlu. Kullanıcı rehberi yeni özelliklerle güncellendi. docs/10 §35.
+
 ### v1.0 iz Q — içe aktarma kalitesi, gerçek Anki, kullanıcı rehberi (`feat/v1.0-quality`)
 - **Ayırıcı algılama:** `~`, ` / `, `==` ve hizalı sütunlar (boşluk/çift sekme) tanınır; cümle listeleri, tireli kelimeler, cloze satırları ve düzyazı paragraflar tek sütun kalır; `;` virgülü, `:` `=`'i geçer; tanımda tekrar eden ayırıcı tanımda kalır. Ayardan önce kör yazılmış yeni tutulmuş sette **%96,2 (100/104)**; önceki tutulmuş sette ayar öncesi %90,8 (99/109). docs/10 §34.
 - **Gerçek Anki doğrulaması:** resmî `anki` 26.09.4 ile üretilmiş küçük paketler (yeni/eski düzen `.apkg`, `.colpkg`, zamanlamasız) test fikstürü; bizim `.apkg`/`.colpkg`'miz gerçek Anki'de açılıp karşılaştırılır (CI). Düzeltmeler: Anki 2.1.50+ WAL paketleri ve `unicase` harmanlaması okunur; resim maskesi Anki'nin kendi not türüyle dışa aktarılır; "Default" destesi çoğalmaz; aralık ve `lrt` doğru yazılır; resim/ses alanı medyası pakete girer.
@@ -16,6 +24,14 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 - **Loglar:** `logs/flashcard.log`, boyutla döner (ayarlanabilir), her satır yazılmadan maskelenir; "Günlükleri dışa aktar" zip'i uygulamanın tuttuğu tam anahtarlarla bir kez daha maskeler. Yeni ekran *Günlükler ve güncellemeler*.
 - **CI/yayın:** `windows-smoke` (sessiz NSIS kurulumu + `Flashcard.exe --smoke`), `release.yml` (etiket `v*` → taslak Release, imzalı `latest.json`). Elle test betiği docs/07 §8.5.
 - Eklentiler `maintenance`/`updates` alanlarına erişemez; MCP, otomasyon ve yerel API de erişemez (testli).
+### v1.0 iz N — ilk açılış, başlangıç desteleri, profiller, uygulama kilidi, hatırlatıcılar (`feat/v1.0-ux`)
+- **İlk açılış rehberi:** boş koleksiyonda "ne öğrenmek istiyorsun?" → konuya uygun sınıflandırma şablonu (CEFR, JLPT, HSK, YKS, sınıf, zorluk), not türü, ön ayar ve başlangıç desteleri; hepsi tek geri al adımı, atlanabilir. `onboarding.status/options/apply/skip`.
+- **Başlangıç desteleri:** bu uygulama için yazılmış küçük TR/EN desteler (günlük İngilizce, TYT matematik, dünya başkentleri, uygulama rehberi), notlar sınıflandırma değeriyle. `starter.list/install`.
+- **Profiller:** her profil ayrı koleksiyon (`profiles/<id>/collection.db` + medya); varsayılan profil eski `collection.db`'de kalır. Profil listesi `profiles.json`'da, koleksiyonların dışında. Geçişte uygulama yeni koleksiyonla yeniden başlar. `profiles.*`.
+- **Uygulama kilidi:** PIN/parola yalnız Argon2id özeti olarak (OS anahtar zinciri), hareketsizlikte otomatik kilit, yanlış denemede artan bekleme; kilitliyken pencere yalnız kilit ekranına erişir, **yerel HTTP API 423 döner ve durur, otomasyon zamanlayıcısı ve eklentiler çalışmaz**. Pencere kilidi, veritabanı şifrelemesi değil. `lock.*`, `lock_changed`.
+- **Kilit güvenlik incelemesi:** kilitliyken `flashcard://` bağlantıları kuyrukta bekler (sınırlı, tekil) ve kilit açılınca işlenir, `take_deep_links`/medya protokolü/hızlı ekleme ön doldurması kapalı; yanlış deneme sayacı `profiles.json`'da (yeniden başlatma sıfırlamaz), kontrol + kayıt tek kilitte; özeti kayıp kilit kapalı kalır, yeni `lock.recover` + `LockState.recovery_required` ile açık kurtarma; AI anahtarları profil başına anahtar zinciri hesaplarında (varsayılan profil eski adları korur). Tehdit modeli docs/02 §29.
+- **Hatırlatıcılar ve tepsi:** seçilen saat/günlerde günlük OS bildirimi (o gün çalışıldıysa yok), sistem tepsisi menüsü, "pencere kapanınca tepside kal". `reminders.status/test`, `reminder_due`.
+- Migration `1000_ux_state` (+ migration testi). Paylaşılan değişiklikler: `fc-http` kilit kontrolü, `outside.rs` sunucu/pano kilidi, `App::invoke` arka plan aktörü kontrolü, otomasyon `run_due`.
 
 ## [0.10.0] — Faz 4 (v0.9 + v0.10 birleşik, `feat/phase4-integration`)
 

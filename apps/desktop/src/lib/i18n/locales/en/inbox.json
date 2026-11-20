@@ -58,6 +58,10 @@
       "inbox_max_kib": {
         "label": "Waiting size per program (KiB)",
         "description": "Most text one program may have waiting in the inbox, in kibibytes."
+      },
+      "inbox_daily_max": {
+        "label": "Proposals per program per day",
+        "description": "Most cards one program may propose in 24 hours, whatever happened to them. Keeps a program (or a rule that accepts its proposals) from flooding the collection."
       }
     }
   },

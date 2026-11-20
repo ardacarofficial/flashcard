@@ -43,6 +43,8 @@ pub trait InboxRead {
     ) -> StorageResult<Option<InboxRecord>>;
     /// How much a client has waiting in `status`: item count and payload bytes (JSON text).
     fn inbox_client_usage(&self, client: ApiClientId, status: &str) -> StorageResult<(u32, u64)>;
+    /// How many items (any status) a client sent at or after `since` (its daily limit).
+    fn inbox_client_added_since(&self, client: ApiClientId, since: Timestamp) -> StorageResult<u32>;
 }
 
 /// Inbox writes.

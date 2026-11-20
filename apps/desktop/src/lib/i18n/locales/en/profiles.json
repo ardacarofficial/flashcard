@@ -1,0 +1,105 @@
+{
+  "nav": { "profiles": "Profiles & lock" },
+  "modules": {
+    "profiles": {
+      "name": "Profiles and app lock",
+      "description": "Separate collections for different people or purposes, and a PIN or password that locks the window."
+    }
+  },
+  "profiles": {
+    "heading": "Profiles",
+    "intro": "Each profile is a separate collection with its own decks, media and settings.",
+    "unavailable": "Profiles are only available in the desktop app.",
+    "default_name": "Main profile",
+    "active": "In use",
+    "locked": "Locked with a PIN/password",
+    "new_name": "New profile name",
+    "create": "Add profile",
+    "rename": "Rename",
+    "save": "Save",
+    "cancel": "Cancel",
+    "switch": "Open",
+    "switching": "Opening the profile — the app restarts…",
+    "delete": "Delete",
+    "confirm_delete": "Delete profile “{name}” and all its cards? This cannot be undone.",
+    "delete_secret": "PIN/password of that profile"
+  },
+  "lock": {
+    "heading": "App lock",
+    "intro": "Locks the window, not the files: anyone who can use your computer account can still copy the collection.",
+    "off": "No lock is set for this profile.",
+    "on_pin": "Locked with a PIN.",
+    "on_password": "Locked with a password.",
+    "kind": {
+      "pin": "PIN (digits)",
+      "password": "Password"
+    },
+    "new_secret": "New PIN/password",
+    "current_secret": "Current PIN/password",
+    "set": "Set lock",
+    "change": "Change",
+    "clear": "Remove lock",
+    "lock_now": "Lock now",
+    "idle": "Lock after inactivity",
+    "idle_never": "Never",
+    "idle_minutes": "{count} min",
+    "storage_secure": "Only a salted Argon2id hash is kept, in the system keychain.",
+    "storage_file": "Only a salted Argon2id hash is kept, in the profile list file (the system keychain does not keep it across restarts here).",
+    "screen_title": "Flashcard is locked",
+    "screen_profile": "Profile: {name}",
+    "enter": "Enter your PIN or password",
+    "unlock": "Unlock",
+    "wrong": "Wrong PIN or password.",
+    "wait": "Too many attempts. Try again in {seconds} s.",
+    "other_profile": "Open another profile",
+    "scope_note": "The lock keeps out casual access to this window only: the collection is not encrypted, and the command line and the MCP server are not locked.",
+    "recovery_title": "The lock's data is missing",
+    "recovery_body": "This profile is locked, but its PIN/password hash is gone (for example, the system keychain entry was removed). Flashcard stays locked instead of opening without a check. You can remove the lock and then set a new one.",
+    "recovery_confirm": "I understand: remove this profile's lock",
+    "recover": "Remove the lock",
+    "held_title": "Links waiting for unlock",
+    "held_body": "These flashcard:// links arrived while the app was locked. They run after you unlock, unless you drop them.",
+    "held_discard": "Don't open them"
+  },
+  "commands": {
+    "profiles": {
+      "list": "Profiles",
+      "create": "Add a profile",
+      "rename": "Rename a profile",
+      "delete": "Delete a profile",
+      "switch": "Open another profile"
+    },
+    "lock": {
+      "status": "App lock status",
+      "set": "Set the app lock",
+      "configure": "App lock timeout",
+      "clear": "Remove the app lock",
+      "unlock": "Unlock the app",
+      "lock": "Lock the app",
+      "activity": "Keep the app unlocked",
+      "recover": "Reset a broken app lock"
+    }
+  },
+  "errors": {
+    "validation": {
+      "profile_name": "Invalid profile name.",
+      "lock_secret": "A PIN needs 4–12 digits; a password 6–128 characters.",
+      "lock_idle": "Choose one of the offered times."
+    },
+    "not_found": { "profile": "Profile not found." },
+    "conflict": {
+      "profile_name": "A profile with this name exists.",
+      "profile_active": "The profile in use (and the main profile) cannot be deleted.",
+      "profile_limit": "Too many profiles.",
+      "profiles_unavailable": "Profiles are only available in the desktop app.",
+      "lock_retry": "Too many wrong attempts. Wait a moment.",
+      "lock_state": "The app lock is not set up for this."
+    },
+    "io": { "profile": "The profile list or folder could not be read or written." },
+    "permission": {
+      "app_locked": "The app is locked.",
+      "lock_secret": "Wrong PIN or password."
+    },
+    "provider": { "lock_storage": "The system keychain holding the lock failed." }
+  }
+}

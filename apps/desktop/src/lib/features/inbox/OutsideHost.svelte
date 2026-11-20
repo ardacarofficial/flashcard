@@ -51,7 +51,14 @@
   }
 
   async function drainLinks() {
-    for (const r of await shell.takeDeepLinks()) {
+    let links: Awaited<ReturnType<typeof shell.takeDeepLinks>>;
+    try {
+      links = await shell.takeDeepLinks();
+    } catch {
+      // Locked: the shell holds the links and announces them again after unlock.
+      return;
+    }
+    for (const r of links) {
       if (r.error || !r.ok) {
         notice = r.error ? `${t('deep_links.failed')} ${td(r.error.message_key)}` : t('deep_links.failed');
         continue;

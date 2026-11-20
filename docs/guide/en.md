@@ -18,22 +18,47 @@ Names in bold (for example **Decks**, **Study**) are the menu and button names i
 10. [AI](#ai)
 11. [MCP](#mcp)
 12. [Browser extension](#browser-extension)
-13. [Backup and restore](#backup-and-restore)
-14. [Troubleshooting](#troubleshooting)
+13. [Profiles and app lock](#profiles-and-app-lock)
+14. [Reminders and tray](#reminders-and-tray)
+15. [Crash recovery and logs](#crash-recovery-and-logs)
+16. [Data folder](#data-folder)
+17. [Backup and restore](#backup-and-restore)
+18. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Install
 
-1. Download the Windows installer from the project's releases page.
-2. Run it and follow the steps.
-3. When it finishes, open Flashcard from the Start menu.
+Windows is the first platform. macOS and Linux builds come later. The project's releases page has two installers:
 
-Windows is the first platform. macOS and Linux builds come later.
+| File | For |
+|---|---|
+| `Flashcard_<version>_x64-setup.exe` | Recommended. Installs for your user only, no admin rights, into `%LOCALAPPDATA%\Flashcard\`. Installer in Turkish or English. |
+| `Flashcard_<version>_x64_en-US.msi` | Optional, for managed installs. Per machine, asks for admin rights, installs into `C:\Program Files\Flashcard\`. |
+
+1. Download the `-setup.exe` and run it.
+2. Windows SmartScreen says "Windows protected your PC": click **More info** → **Run anyway**. The installers are not code-signed, so this warning is expected.
+3. If WebView2 is missing, the installer downloads and installs it on its own.
+4. When it finishes, open Flashcard from the Start menu.
+
+The installer contains only the desktop app. The `fc` command-line tool is not included (see [MCP](#mcp)).
+
+**Updates.** The app contacts the update server only when you ask: **Logs & updates** → **Check for updates**. If a new version is out, press **Download** ("Downloading and verifying…"), then **Install and restart**. The app closes, installs the update without questions and starts again; your data stays. Every update is signed with the project's key; a download with a wrong signature is refused and nothing is installed. Nothing is installed without your click. To check at every start, turn on the setting `updates.check_on_start` (off by default): `Ctrl+K` → **Change a setting** → `{"scope": {"kind": "app"}, "key": "updates.check_on_start", "value": true}`. A found update then shows a "Version … is available." banner with **See update**.
+
+**Uninstall:** Windows *Settings* → *Apps* → Flashcard → *Uninstall*. Your data folder (see [Data folder](#data-folder)) stays unless you tick the uninstaller's box to delete the application data; that deletes all profiles, settings and logs for good.
 
 ## First run
 
-The app opens with an empty collection. The menu is on the left, the selected screen in the middle. The menus you will use most:
+On an empty collection the app opens the first-run guide (**Welcome to Flashcard**):
+
+1. "What do you want to learn?": pick a subject (**English**, **Japanese**, **Chinese**, **Another language**, **YKS (TYT / AYT / YDT)**, **Another exam**, **School (grades 1–12)**, **General knowledge**). Each one shows the classification it sets up, for example **Classification: CEFR levels (A1–C2)**. **Next**.
+2. Check the **Deck name** and tick the **Starter decks** you want. **Set up**.
+
+The guide creates a deck with that classification, a fitting note type (**Vocabulary** for languages, **Classic** otherwise), a deck options preset for languages ("Language learning", 15 new cards a day) and exams ("Exam preparation", 30 new cards a day), and the chosen starter decks. All of it is one undo step: `Ctrl+Z` removes the whole setup. **Skip** closes the guide; it does not come back. A collection that already has cards never shows it.
+
+**Starter decks** (menu): small decks written for this app, in Turkish or English (**Language of the cards**): basic English words (A1–A2), YKS TYT math basics, world capitals and an app guide. **Add** puts one into your collection as an ordinary deck you can change or delete.
+
+The menu is on the left, the selected screen in the middle. The menus you will use most:
 
 | Menu | What it is for |
 |---|---|
@@ -44,13 +69,16 @@ The app opens with an empty collection. The menu is on the left, the selected sc
 | **Learn**, **Test** | Learn mode and practice test |
 | **Browse** | Search with the query language, bulk changes |
 | **Import / export** | Files in and out, backup, printing |
+| **Profiles & lock** | Separate collections, PIN/password lock |
+| **Reminders** | Daily notification, tray |
+| **Logs & updates** | Version, updates, logs, crash reports |
 | **Settings** | Language and theme |
 
-The menu also has **Deck options**, **Note types**, **Statistics**, **Planning**, **Goals**, **Reading**, **Inbox**, **Automation**, **AI**, **MCP**, **Plugins**, **Maintenance** and **Shortcuts**. A module that is turned off has no menu entry.
+The menu also has **Deck options**, **Note types**, **Statistics**, **Planning**, **Goals**, **Reading**, **Inbox**, **Automation**, **AI**, **MCP**, **Plugins**, **Starter decks**, **Maintenance** and **Shortcuts** (and **Local API** once that module is on). A module that is turned off has no menu entry.
 
-**Language and theme:** on the **Settings** screen choose **Language** (Türkçe / English) and **Theme** (**System**, **Light**, **Dark**).
+**Settings:** the **Settings** screen has only **Language** (Türkçe / English) and **Theme** (**System**, **Light**, **Dark**). Some modules keep their options on their own screen: **Reminders**, **Profiles & lock**, the write switch on **MCP**.
 
-**Command palette:** open it with `Ctrl+K`. Type a command or screen name and press **Run**. Some commands need values in the **Parameters (JSON)** box. In this version this is also how you turn modules on or off and change settings:
+**Command palette:** open it with `Ctrl+K`. Type a command or screen name and press **Run**. Some commands need values in the **Parameters (JSON)** box. In this version this is how you turn modules on or off and change every other setting:
 
 - **Turn a module on/off**: `{"id": "local_api", "enabled": true}`
 - **Change a setting**: `{"scope": {"kind": "app"}, "key": "timed.seconds", "value": 20}`
@@ -104,10 +132,10 @@ Built-in templates:
 
 A classification copied from a template is fully yours: add, rename, reorder and merge options. Saved queries keep working after a rename.
 
-**Defining one.** This version has no separate screen for defining classifications. There are two ways:
+**Defining one.** This version has no separate screen for defining classifications. The first-run guide sets one up for its deck. Otherwise:
 
 - Command palette (`Ctrl+K`) → **Classification from template** → `{"template_id": "cefr"}`. This defines it for the whole collection.
-- For one deck, with the `fc` command-line tool: `fc attribute apply-template cefr --deck Languages --lang en`.
+- For one deck, with the `fc` command-line tool (not included in the installer, see [MCP](#mcp)): `fc attribute apply-template cefr --deck Languages --lang en`.
 
 With `--lang tr` the names are Turkish (**Seviye**, **Sınav**), so queries like `seviye:B1` and `sınav:TYT` work. The key (`level`, `exam`) works in both languages.
 
@@ -329,7 +357,7 @@ There is no plugin store yet; you install plugins from files.
 
 The **AI** screen has three tabs: **Make cards**, **Providers**, **Usage**.
 
-**Add a provider:** **Providers** → **Add provider**. Types: **Anthropic Claude**, **OpenAI**, **OpenAI-compatible**, **Ollama (local)**. Enter the API key and press **Save key**. The key is stored only in the operating system's keychain, never in the database or a backup. With **Model per feature** you can, for example, use a strong model for making cards and a fast one for checks.
+**Add a provider:** **Providers** → **Add provider**. Types: **Anthropic Claude**, **OpenAI**, **OpenAI-compatible**, **Ollama (local)**. Enter the API key and press **Save key**. The key is stored only in the operating system's keychain, never in the database or a backup. Keys belong to the profile: each profile has its own. With **Model per feature** you can, for example, use a strong model for making cards and a fast one for checks.
 
 **Make cards:**
 
@@ -349,23 +377,23 @@ If the deck has a level classification, the cards are made for that level.
 
 MCP lets assistants such as Claude Desktop and Claude Code work with your collection. The **Use from Claude** part of the **MCP** screen shows the setup snippets to copy, the tool list and the write switch.
 
-**Setup:** the server runs through the `fc` command-line tool and opens your collection file (`collection.db`). Replace the path with your own file.
+**Setup:** the server runs through the `fc` command-line tool and opens your collection file (`collection.db`). The installer does not include `fc`. Build it from the source code with `cargo build -p fc-cli --release` (it lands in `target\release\fc.exe`) or get it separately, then use its full path. In the examples `C:\Tools\fc.exe` stands for that path; replace it and the collection path with your own.
 
 Claude Code:
 
 ```bash
-claude mcp add flashcard -- fc --db "C:\Users\<you>\AppData\Roaming\app.flashcard.desktop\collection.db" mcp serve
+claude mcp add flashcard -- "C:\Tools\fc.exe" --db "C:\Users\<you>\AppData\Roaming\app.flashcard.desktop\collection.db" mcp serve
 ```
 
 Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`; write `\` twice inside JSON):
 
 ```json
 { "mcpServers": { "flashcard": {
-    "command": "fc",
+    "command": "C:\\Tools\\fc.exe",
     "args": ["--db", "C:\\Users\\<you>\\AppData\\Roaming\\app.flashcard.desktop\\collection.db", "mcp", "serve"] } } }
 ```
 
-If `fc` is not on your PATH, use its full path.
+That path is the main profile's collection. For another profile, `--db` must point at that profile's file, `...\app.flashcard.desktop\profiles\<id>\collection.db` (see [Data folder](#data-folder)); `fc` then uses that profile's AI keys. The app lock does not apply to `fc` or the MCP server.
 
 **Tools:** **List decks**, **List note types**, **List classifications of a deck**, **Search cards**, **Read a note**, **Create a deck**, **Add notes**, **Edit a note**, **Set a classification (asks for confirmation)**. No tool deletes anything.
 
@@ -392,7 +420,71 @@ For Chromium-based browsers such as Chrome, Edge and Brave. It sends a word or s
 
 Items added while the app is closed wait in the extension and are sent when the app opens. The extension only connects to `127.0.0.1`. If you changed the port, enter the same value in **Local API port** in the extension's settings. You can see and revoke connected programs on the **Local API** screen.
 
+**Proposals per program per day** (`local_api.inbox_daily_max`, default 200): the most cards one program may propose in 24 hours. Change it with `Ctrl+K` → **Change a setting** → `{"scope": {"kind": "app"}, "key": "local_api.inbox_daily_max", "value": 100}`. An automation rule that accepts inbox proposals without your review is marked with a warning on the **Automation** screen: whatever a paired program or a plugin proposes then becomes a note right away.
+
 The inbox also receives suggestions from `flashcard://` links and the `Ctrl+Alt+N` quick-add window.
+
+## Profiles and app lock
+
+Both are on the **Profiles & lock** screen.
+
+**Profiles.** Each profile is a separate collection with its own decks, media, settings and AI keys, for example one per person on a shared computer.
+
+- **Add profile** creates one (type it in **New profile name**).
+- **Open** switches to a profile: "Opening the profile — the app restarts…". The app restarts on that profile's collection and keeps opening it until you switch again.
+- **Rename** changes the name.
+- **Delete** removes the profile for good: its folder (collection, media, backups, logs, crash reports) and its keychain entries (AI keys, lock hash). A locked profile asks for its PIN/password first. The **Main profile** and the profile **In use** cannot be deleted.
+
+**App lock.** Each profile can have its own lock:
+
+1. Under **New PIN/password** choose **PIN (digits)** (4–12 digits) or **Password** (6–128 characters) and press **Set lock**.
+2. **Lock after inactivity**: **Never**, 1, 5, 15 (default), 30 or 60 min.
+3. **Lock now** (or **Lock** in the tray menu) locks right away. **Change** and **Remove lock** need the **Current PIN/password**.
+
+When the app starts with a locked profile, or locks while open, it shows **Flashcard is locked**. Enter the PIN/password and press **Unlock**, or choose **Open another profile**. After 5 wrong attempts you have to wait before the next one, starting at 1 second and doubling up to 5 minutes; the count survives a restart.
+
+The PIN/password itself is never stored, only a salted Argon2id hash: in the system keychain, or in the profile list file (`profiles.json`) where the keychain does not keep entries across restarts. The screen tells which.
+
+While the app is locked, the Local API, automation rules, plugins, the clipboard watcher and media files are closed. `flashcard://` links that arrive are not handled; the lock screen lists them under **Links waiting for unlock**. They run after you unlock, unless you press **Don't open them**.
+
+**What the lock protects against.** The lock keeps out casual access to this window only. The collection file is not encrypted: anyone who can use your computer account can copy it. The `fc` command line and the MCP server are not locked. If the lock's hash is removed (for example the keychain entry is deleted), the app stays locked and shows **The lock's data is missing**; anyone at the keyboard can then tick "I understand: remove this profile's lock" and press **Remove the lock**. So the lock does not protect against someone with access to your operating system account.
+
+## Reminders and tray
+
+On the **Reminders** screen:
+
+- **Remind me every day** turns on one OS notification a day ("… cards are waiting for you today"), off by default.
+- **Time** (default 19:00) and **Days** (default every day).
+- There is no reminder on a day you already studied or when no cards are waiting. If the app was closed or asleep at that time, the reminder still comes up to 3 hours later.
+- **Send a test notification** shows one now.
+- **Closing the window keeps the app in the tray**: closing the window only hides it, so reminders keep coming. Reminders come only while the app runs (window or tray).
+
+The tray icon menu: **Open Flashcard**, **Lock** (locks the app if a lock is set), **Quit** (really quits). Clicking the icon also brings the window back.
+
+## Crash recovery and logs
+
+**Recovery.** The app writes a run marker (`run.json`) at start and removes it on a normal exit. If it is still there at the next start (crash, killed process, power loss), the app checks the database (setting `maintenance.check_after_crash`, on by default) and shows **Flashcard did not close normally** (or **Flashcard closed unexpectedly** after a crash). It lists what can be picked up: the database check result, an unfinished study session (**Resume studying**), unsaved forms (restored when you open them again) and the crash report. **Open maintenance** goes to **Logs & updates**, **Continue** closes the dialog. Your collection is saved after every change, so nothing else is lost.
+
+**Logs & updates** screen: version, whether the last run closed normally, updates, **Log folder** and **Data folder**, **Check the database**, crash reports and **Delete crash reports**.
+
+**Logs.** The app keeps a local log, `logs\flashcard.log`. It starts a new file at 1024 KiB and keeps 4 older files (settings `maintenance.log_max_kb`, `maintenance.log_files`; detail with `maintenance.log_level`). Crash reports go to the `crash` folder. Secrets are removed from every line before it is written.
+
+**Bug report:** **Logs & updates** → **Export logs…** → choose where to save. The `.zip` holds the logs, crash reports and a short system summary. Everything is redacted again first: API keys (including the exact keys the app holds), tokens, passwords, email addresses, the user name in home-folder paths (`C:\Users\<user>`) and the lock hash. The message says how many secrets were removed. Nothing is sent anywhere; attach the file to your report yourself.
+
+The run marker, logs and crash reports belong to the profile: they are in the active profile's folder (see [Data folder](#data-folder)).
+
+## Data folder
+
+On Windows the app data folder is `%APPDATA%\app.flashcard.desktop\` (that is `C:\Users\<you>\AppData\Roaming\app.flashcard.desktop\`). **Logs & updates** shows the active profile's **Data folder** and **Log folder**.
+
+| What | Main profile | Other profiles |
+|---|---|---|
+| Folder | `%APPDATA%\app.flashcard.desktop\` | `%APPDATA%\app.flashcard.desktop\profiles\<id>\` |
+| Collection | `collection.db` | `collection.db` |
+| Media, safety backups | `media\`, `backups\` | `media\`, `backups\` |
+| Logs, crash reports, run marker | `logs\`, `crash\`, `run.json` | `logs\`, `crash\`, `run.json` |
+
+The profile list is `profiles.json` in the app data folder. `<id>` is a long generated id; open the profile and look at **Data folder** to find it. AI keys and the lock hash are not in these folders but in the system keychain.
 
 ## Backup and restore
 
@@ -406,7 +498,8 @@ Good to know:
 - After a restore, undo history starts over; earlier steps cannot be undone.
 - A backup from a newer app version cannot be restored into an older one.
 - Programs connected to the Local API lose their permission on restore and must connect again.
-- On Windows the collection file is `%APPDATA%\app.flashcard.desktop\collection.db`. Do not copy it by hand while the app is open; use **Create backup…**.
+- Backup and restore work on the profile in use. A backup does not contain AI keys or the app lock.
+- On Windows the main profile's collection file is `%APPDATA%\app.flashcard.desktop\collection.db`, another profile's is `%APPDATA%\app.flashcard.desktop\profiles\<id>\collection.db`. Do not copy it by hand while the app is open; use **Create backup…**.
 
 ## Troubleshooting
 
@@ -439,3 +532,15 @@ Its module may be off. Check with `Ctrl+K` → **List modules** and turn it on w
 
 **I think the database has a problem.**
 **Maintenance** → **Database check** → **Check**. If it finds problems, press **Repair**; the repair can be undone too.
+
+**Windows says "Windows protected your PC".**
+That is SmartScreen; the installer is not code-signed. Click **More info** → **Run anyway**. Download the installer only from the project's releases page.
+
+**The app says it is locked and asks to remove the lock.**
+The screen **The lock's data is missing** means the profile is locked but its PIN/password hash is gone (for example the keychain entry was removed). The app stays locked instead of opening unchecked. Tick "I understand: remove this profile's lock", press **Remove the lock**, then set a new lock on **Profiles & lock**. Your cards are not affected.
+
+**The app restarted after I switched profile.**
+That is expected: **Open** on another profile restarts the app on that profile's collection. Switch back the same way.
+
+**Where are my logs? How do I send a bug report?**
+**Logs & updates** shows the **Log folder** (`logs` in the active profile's folder, see [Data folder](#data-folder)). Press **Export logs…**, save the `.zip` and attach it to your report. Secrets are removed and nothing is sent automatically.

@@ -10,7 +10,7 @@ use super::run::RunGuard;
 use super::smoke::zip_contains;
 use crate::modules::updates::{UpdateError, Updater};
 use crate::testing::{MemStore, TempSqlite, TestApp};
-use fc_ai::secrets::MemorySecrets;
+use fc_ai::secrets::{MemorySecrets, SecretStore};
 use fc_api::v1::maintenance::UpdateInfoDto;
 use fc_api::v1::oplog::Actor;
 use fc_api::ErrorCode;
@@ -46,6 +46,7 @@ suite!(
     a_clean_previous_run_offers_nothing,
     drafts_are_scratch_state_validated_and_bounded,
     exported_logs_never_contain_keys_or_tokens,
+    exported_logs_mask_the_profile_scoped_keys,
     updates_are_checked_downloaded_verified_and_applied_only_on_request,
     a_badly_signed_update_is_refused,
     no_automated_actor_reaches_maintenance_or_updates,
@@ -186,6 +187,36 @@ fn drafts_are_scratch_state_validated_and_bounded(f: Factory) {
     let gone = call(&t, "maintenance.drafts.discard", json!({"key": format!("form.{}", super::drafts::MAX_DRAFTS + 4)}));
     assert!(gone["draft"].is_object());
     assert_eq!(call(&t, "maintenance.drafts.discard", json!({"key": "nope"}))["draft"], Value::Null);
+}
+
+/// Integration round 1: in a non-default profile the AI keys live under the profile's own
+/// keychain accounts (`profile.<id>.ai.provider.<n>`); the export's exact-secret pass reads
+/// them through the profile-scoped store, so they are masked too.
+fn exported_logs_mask_the_profile_scoped_keys(f: Factory) {
+    const KEY: &str = "plainworkprofilekey";
+    let raw = Arc::new(MemorySecrets::new());
+    let t = TestApp::new(f());
+    t.app.set_secret_store(Arc::new(crate::modules::profiles::secrets::ProfileSecrets::new(
+        raw.clone(),
+        "work1",
+    )));
+    let p = call(&t, "ai.providers.create", json!({"kind": "anthropic"}));
+    call(&t, "ai.providers.set_key", json!({"provider_id": p["id"], "key": KEY}));
+    let account = format!("profile.work1.ai.provider.{}", p["id"].as_str().unwrap());
+    assert_eq!(raw.get(&account).unwrap().unwrap().expose(), KEY);
+
+    let dir = tempfile::tempdir().unwrap();
+    let (_g, start) = RunGuard::begin(dir.path(), "1.0.0", Timestamp(1_000)).unwrap();
+    let log = FileLog::open(&super::log_dir(dir.path()), Arc::new(crate::system::SystemClock)).unwrap();
+    log.write_line(Level::Error, "fc_ai", &format!("provider said: bad key {KEY}"));
+    log.write_line(Level::Info, "fc_app", "lock hash $argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA");
+    log.flush();
+    t.app.start_maintenance(dir.path(), Some(log.clone()), start);
+    let target = dir.path().join("bug-report.zip");
+    call(&t, "maintenance.logs.export", json!({"path": target.display().to_string()}));
+    assert!(!zip_contains(&target, KEY).unwrap(), "the profile's key leaked");
+    assert!(!zip_contains(&target, "c2FsdA$aGFzaA").unwrap(), "the lock hash leaked");
+    assert!(zip_contains(&target, "provider said: bad key").unwrap());
 }
 
 fn exported_logs_never_contain_keys_or_tokens(f: Factory) {

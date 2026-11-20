@@ -18,22 +18,47 @@ Rehberde tırnak içinde geçen adlar (ör. **Desteler**, **Çalış**) uygulama
 10. [Yapay zeka](#yapay-zeka)
 11. [MCP](#mcp)
 12. [Tarayıcı eklentisi](#tarayıcı-eklentisi)
-13. [Yedek ve geri yükleme](#yedek-ve-geri-yükleme)
-14. [Sorun giderme](#sorun-giderme)
+13. [Profiller ve uygulama kilidi](#profiller-ve-uygulama-kilidi)
+14. [Hatırlatıcılar ve tepsi](#hatırlatıcılar-ve-tepsi)
+15. [Çökme kurtarma ve günlükler](#çökme-kurtarma-ve-günlükler)
+16. [Veri klasörü](#veri-klasörü)
+17. [Yedek ve geri yükleme](#yedek-ve-geri-yükleme)
+18. [Sorun giderme](#sorun-giderme)
 
 ---
 
 ## Kurulum
 
-1. Projenin yayın (releases) sayfasından Windows kurulum dosyasını indir.
-2. Dosyayı çalıştır ve adımları izle.
-3. Kurulum bitince Flashcard'ı Başlat menüsünden aç.
+Şimdilik öncelikli platform Windows. macOS ve Linux sürümleri sonra gelecek. Projenin yayın (releases) sayfasında iki kurulum dosyası var:
 
-Şimdilik öncelikli platform Windows. macOS ve Linux sürümleri sonra gelecek.
+| Dosya | Ne için |
+|---|---|
+| `Flashcard_<sürüm>_x64-setup.exe` | Önerilen. Yalnız senin kullanıcın için, yönetici izni istemeden `%LOCALAPPDATA%\Flashcard\` altına kurar. Kurulum Türkçe ya da İngilizce. |
+| `Flashcard_<sürüm>_x64_en-US.msi` | İsteğe bağlı, kurumsal dağıtım için. Makine başına kurar, yönetici izni ister, `C:\Program Files\Flashcard\` altına kurar. |
+
+1. `-setup.exe` dosyasını indir ve çalıştır.
+2. Windows SmartScreen "Windows kişisel bilgisayarınızı korudu" der: **Ek bilgi** → **Yine de çalıştır**'a tıkla. Kurulum dosyaları kod imzalı olmadığı için bu uyarı beklenen bir durumdur.
+3. WebView2 yoksa kurulum onu kendisi indirip kurar.
+4. Kurulum bitince Flashcard'ı Başlat menüsünden aç.
+
+Kurulumda yalnız masaüstü uygulaması var. `fc` komut satırı aracı gelmez (bkz. [MCP](#mcp)).
+
+**Güncellemeler.** Uygulama güncelleme sunucusuna yalnız sen istediğinde bağlanır: **Günlükler ve güncellemeler** → **Güncellemeleri denetle**. Yeni sürüm çıktıysa **İndir**'e bas ("İndiriliyor ve doğrulanıyor…"), sonra **Kur ve yeniden başlat**. Uygulama kapanır, güncellemeyi soru sormadan kurar ve yeniden açılır; verin yerinde kalır. Her güncelleme projenin anahtarıyla imzalıdır; imzası tutmayan indirme reddedilir, hiçbir şey kurulmaz. Sen tıklamadan hiçbir şey kurulmaz. Her açılışta denetlemek için `updates.check_on_start` ayarını aç (varsayılan kapalı): `Ctrl+K` → **Ayar değiştir** → `{"scope": {"kind": "app"}, "key": "updates.check_on_start", "value": true}`. Bulunan güncelleme o zaman "… sürümü çıktı." şeridinde **Güncellemeye bak** düğmesiyle görünür.
+
+**Kaldırma:** Windows *Ayarlar* → *Uygulamalar* → Flashcard → *Kaldır*. Veri klasörün (bkz. [Veri klasörü](#veri-klasörü)) kalır; kaldırıcıdaki uygulama verilerini silme kutusunu işaretlersen tüm profiller, ayarlar ve günlükler kalıcı olarak silinir.
 
 ## İlk açılış
 
-Uygulama boş bir koleksiyonla açılır. Solda menü, ortada seçtiğin ekran durur. Sık kullanacağın menüler:
+Koleksiyon boşsa uygulama ilk açılış rehberiyle (**Flashcard'a hoş geldin**) açılır:
+
+1. "Ne öğrenmek istiyorsun?": bir konu seç (**İngilizce**, **Japonca**, **Çince**, **Başka bir dil**, **YKS (TYT / AYT / YDT)**, **Başka bir sınav**, **Okul (1–12. sınıf)**, **Genel kültür**). Her konunun yanında kuracağı sınıflandırma yazar, ör. **Sınıflandırma: CEFR seviyeleri (A1–C2)**. **İleri**.
+2. **Deste adı**'na bak, istediğin **Başlangıç desteleri**'ni işaretle. **Kur**.
+
+Rehber o sınıflandırmayla bir deste, uygun bir not türü (dillerde **Kelime kartı**, diğerlerinde **Klasik**), diller ("Dil öğrenme", günde 15 yeni kart) ve sınavlar ("Sınav hazırlığı", günde 30 yeni kart) için bir deste ayarı şablonu ve seçtiğin başlangıç destelerini kurar. Hepsi tek bir geri alma adımıdır: `Ctrl+Z` tüm kurulumu kaldırır. **Geç** rehberi kapatır; bir daha çıkmaz. İçinde kart olan bir koleksiyonda rehber hiç çıkmaz.
+
+**Başlangıç desteleri** (menü): bu uygulama için yazılmış küçük desteler, Türkçe ya da İngilizce (**Kartların dili**): temel İngilizce kelimeler (A1–A2), YKS TYT matematik temelleri, dünya başkentleri ve bir uygulama rehberi. **Ekle** desteyi koleksiyonuna değiştirip silebileceğin sıradan bir deste olarak ekler.
+
+Solda menü, ortada seçtiğin ekran durur. Sık kullanacağın menüler:
 
 | Menü | Ne işe yarar |
 |---|---|
@@ -44,13 +69,16 @@ Uygulama boş bir koleksiyonla açılır. Solda menü, ortada seçtiğin ekran d
 | **Öğren**, **Test** | Öğren modu ve deneme testi |
 | **Göz at** | Sorgu diliyle arama ve toplu işlemler |
 | **İçe / dışa aktar** | Dosya alıp verme, yedek, yazdırma |
+| **Profiller ve kilit** | Ayrı koleksiyonlar, PIN/parola kilidi |
+| **Hatırlatıcılar** | Günlük bildirim, tepsi |
+| **Günlükler ve güncellemeler** | Sürüm, güncellemeler, günlükler, çökme raporları |
 | **Ayarlar** | Dil ve tema |
 
-Menüde ayrıca **Deste ayarları**, **Not türleri**, **İstatistikler**, **Planlama**, **Hedefler**, **Okuma**, **Gelen kutusu**, **Otomasyon**, **Yapay zeka**, **MCP**, **Eklentiler**, **Bakım** ve **Kısayollar** var. Kapalı bir modülün menüsü görünmez.
+Menüde ayrıca **Deste ayarları**, **Not türleri**, **İstatistikler**, **Planlama**, **Hedefler**, **Okuma**, **Gelen kutusu**, **Otomasyon**, **Yapay zeka**, **MCP**, **Eklentiler**, **Başlangıç desteleri**, **Bakım** ve **Kısayollar** var (modülü açılınca **Yerel API** de). Kapalı bir modülün menüsü görünmez.
 
-**Dil ve tema:** **Ayarlar** ekranında **Dil** (Türkçe / English) ve **Tema** (**Sistem**, **Açık**, **Koyu**) seçilir.
+**Ayarlar:** **Ayarlar** ekranında yalnız **Dil** (Türkçe / English) ve **Tema** (**Sistem**, **Açık**, **Koyu**) var. Bazı modüllerin seçenekleri kendi ekranındadır: **Hatırlatıcılar**, **Profiller ve kilit**, **MCP**'deki yazma anahtarı.
 
-**Komut paleti:** `Ctrl+K` ile açılır. Bir komut ya da ekran adı yaz, **Çalıştır**'a bas. Bazı komutlar **Parametreler (JSON)** kutusuna değer ister. Bu sürümde modülleri açıp kapatmanın ve ayar değiştirmenin yolu da burası:
+**Komut paleti:** `Ctrl+K` ile açılır. Bir komut ya da ekran adı yaz, **Çalıştır**'a bas. Bazı komutlar **Parametreler (JSON)** kutusuna değer ister. Bu sürümde modülleri açıp kapatmanın ve diğer tüm ayarları değiştirmenin yolu burası:
 
 - **Modülü aç/kapat**: `{"id": "local_api", "enabled": true}`
 - **Ayar değiştir**: `{"scope": {"kind": "app"}, "key": "timed.seconds", "value": 20}`
@@ -104,10 +132,10 @@ Hazır şablonlar:
 
 Şablondan kopyalanan sınıflandırma tamamen senindir: seçenek ekleyebilir, yeniden adlandırabilir, sıralayabilir, birleştirebilirsin. Ad değişse de kayıtlı sorgular çalışmaya devam eder.
 
-**Tanımlama.** Bu sürümde sınıflandırmayı tanımlayan ayrı bir ekran yok. İki yol var:
+**Tanımlama.** Bu sürümde sınıflandırmayı tanımlayan ayrı bir ekran yok. İlk açılış rehberi kendi destesine bir tane kurar. Bunun dışında:
 
 - Komut paleti (`Ctrl+K`) → **Şablondan sınıflandırma** → `{"template_id": "cefr"}`. Bu, tüm koleksiyon için tanımlar.
-- Komut satırı aracı `fc` ile bir desteye: `fc attribute apply-template cefr --deck Dil --lang tr`.
+- Komut satırı aracı `fc` ile bir desteye (kurulumda gelmez, bkz. [MCP](#mcp)): `fc attribute apply-template cefr --deck Dil --lang tr`.
 
 **Kullanım.**
 
@@ -327,7 +355,7 @@ Eklenti mağazası henüz yok; eklentiyi dosyadan kurarsın.
 
 **Yapay zeka** ekranında üç sekme var: **Kart üret**, **Sağlayıcılar**, **Kullanım**.
 
-**Sağlayıcı ekle:** **Sağlayıcılar** → **Sağlayıcı ekle**. Türler: **Anthropic Claude**, **OpenAI**, **OpenAI uyumlu**, **Ollama (yerel)**. API anahtarını gir ve **Anahtarı kaydet**'e bas. Anahtar yalnız işletim sisteminin anahtar zincirinde saklanır, veritabanına ya da yedeğe girmez. **Özellik başına model** ile örneğin kart üretimi için güçlü, kontrol için hızlı bir model seçebilirsin.
+**Sağlayıcı ekle:** **Sağlayıcılar** → **Sağlayıcı ekle**. Türler: **Anthropic Claude**, **OpenAI**, **OpenAI uyumlu**, **Ollama (yerel)**. API anahtarını gir ve **Anahtarı kaydet**'e bas. Anahtar yalnız işletim sisteminin anahtar zincirinde saklanır, veritabanına ya da yedeğe girmez. Anahtarlar profile aittir: her profilin kendi anahtarları olur. **Özellik başına model** ile örneğin kart üretimi için güçlü, kontrol için hızlı bir model seçebilirsin.
 
 **Kart üret:**
 
@@ -347,23 +375,23 @@ Destede bir seviye sınıflandırması varsa üretim seviyeye uygun yapılır.
 
 MCP, Claude Desktop ve Claude Code gibi asistanların koleksiyonunla çalışmasını sağlar. **MCP** ekranındaki **Claude'dan kullan** bölümü kopyalayacağın kurulum parçacıklarını, araç listesini ve yazma anahtarını gösterir.
 
-**Kurulum:** Sunucu `fc` komut satırı aracıyla çalışır ve koleksiyon dosyasını (`collection.db`) açar. Yolu kendi dosyanla değiştir.
+**Kurulum:** Sunucu `fc` komut satırı aracıyla çalışır ve koleksiyon dosyasını (`collection.db`) açar. `fc` kurulumla gelmez. Kaynak koddan `cargo build -p fc-cli --release` ile derle (`target\release\fc.exe` oluşur) ya da ayrıca edin, sonra tam yolunu yaz. Örneklerde `C:\Tools\fc.exe` bu yolun yerine geçer; onu ve koleksiyon yolunu kendininkilerle değiştir.
 
 Claude Code:
 
 ```bash
-claude mcp add flashcard -- fc --db "C:\Users\<sen>\AppData\Roaming\app.flashcard.desktop\collection.db" mcp serve
+claude mcp add flashcard -- "C:\Tools\fc.exe" --db "C:\Users\<sen>\AppData\Roaming\app.flashcard.desktop\collection.db" mcp serve
 ```
 
 Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`; JSON içinde `\` iki kez yazılır):
 
 ```json
 { "mcpServers": { "flashcard": {
-    "command": "fc",
+    "command": "C:\\Tools\\fc.exe",
     "args": ["--db", "C:\\Users\\<sen>\\AppData\\Roaming\\app.flashcard.desktop\\collection.db", "mcp", "serve"] } } }
 ```
 
-`fc` PATH'te değilse tam yolunu yaz.
+Bu yol ana profilin koleksiyonudur. Başka bir profil için `--db` o profilin dosyasını göstermeli: `...\app.flashcard.desktop\profiles\<kimlik>\collection.db` (bkz. [Veri klasörü](#veri-klasörü)); `fc` o zaman o profilin yapay zeka anahtarlarını kullanır. Uygulama kilidi `fc`'yi ve MCP sunucusunu kapsamaz.
 
 **Araçlar:** **Desteleri listele**, **Not türlerini listele**, **Destenin sınıflandırmalarını listele**, **Kart ara**, **Not oku**, **Deste oluştur**, **Not ekle**, **Notu düzenle**, **Sınıflandırma ata (önce onay ister)**. Silen araç yok.
 
@@ -390,7 +418,71 @@ Chrome, Edge, Brave gibi Chromium tabanlı tarayıcılar için. Bir sayfada seç
 
 Uygulama kapalıyken eklenen öğeler eklentide bekler ve uygulama açılınca gönderilir. Eklenti yalnız `127.0.0.1`'e bağlanır. Portu değiştirdiysen eklentinin ayarlarında **Yerel API portu**'na aynı değeri yaz. Bağlı programları ve izinlerini **Yerel API** ekranında görür, kaldırabilirsin.
 
+**Program başına günlük öneri** (`local_api.inbox_daily_max`, varsayılan 200): bir programın 24 saatte önerebileceği en fazla kart. `Ctrl+K` → **Ayar değiştir** → `{"scope": {"kind": "app"}, "key": "local_api.inbox_daily_max", "value": 100}` ile değiştirirsin. Gelen kutusu önerilerini sen bakmadan kabul eden bir otomasyon kuralı **Otomasyon** ekranında uyarıyla işaretlenir: eşleştirilmiş bir programın ya da eklentinin önerdiği her şey o zaman hemen not olur.
+
 Gelen kutusuna ayrıca `flashcard://` bağlantılarından ve `Ctrl+Alt+N` hızlı ekleme penceresinden öneri düşer.
+
+## Profiller ve uygulama kilidi
+
+İkisi de **Profiller ve kilit** ekranındadır.
+
+**Profiller.** Her profil kendi desteleri, medyası, ayarları ve yapay zeka anahtarlarıyla ayrı bir koleksiyondur; ör. ortak bir bilgisayarda her kişiye bir profil.
+
+- **Profil ekle** yeni profil açar (adını **Yeni profil adı**'na yaz).
+- **Aç** profile geçer: "Profil açılıyor — uygulama yeniden başlıyor…". Uygulama o profilin koleksiyonuyla yeniden başlar ve sen yine değiştirene kadar onu açar.
+- **Yeniden adlandır** adını değiştirir.
+- **Sil** profili kalıcı olarak kaldırır: klasörünü (koleksiyon, medya, yedekler, günlükler, çökme raporları) ve anahtar zincirindeki kayıtlarını (yapay zeka anahtarları, kilit özeti). Kilitli bir profil önce kendi PIN'ini/parolasını ister. **Ana profil** ve **Kullanımda** olan profil silinemez.
+
+**Uygulama kilidi.** Her profilin kendi kilidi olabilir:
+
+1. **Yeni PIN/parola** altında **PIN (rakam)** (4–12 rakam) ya da **Parola** (6–128 karakter) seç ve **Kilidi kur**'a bas.
+2. **Hareketsizlikte kilitle**: **Hiçbir zaman**, 1, 5, 15 (varsayılan), 30 ya da 60 dk.
+3. **Şimdi kilitle** (ya da tepsi menüsündeki **Kilitle**) hemen kilitler. **Değiştir** ve **Kilidi kaldır** **Şu anki PIN/parola**'yı ister.
+
+Kilitli bir profille açılınca ya da açıkken kilitlenince uygulama **Flashcard kilitli** ekranını gösterir. PIN'ini ya da parolanı girip **Kilidi aç**'a bas ya da **Başka bir profil aç**'ı seç. 5 yanlış denemeden sonra bir sonrakini beklemen gerekir: 1 saniyeden başlar, her seferinde ikiye katlanır, en çok 5 dakika; sayaç yeniden başlatmada sıfırlanmaz.
+
+PIN/parolanın kendisi hiç saklanmaz, yalnız tuzlanmış bir Argon2id özeti: sistem anahtar zincirinde ya da anahtar zincirinin kaydı yeniden başlatmada tutmadığı sistemlerde profil listesi dosyasında (`profiles.json`). Hangisi olduğu ekranda yazar.
+
+Uygulama kilitliyken Yerel API, otomasyon kuralları, eklentiler, pano izleyici ve medya dosyaları kapalıdır. Gelen `flashcard://` bağlantıları işlenmez; kilit ekranı onları **Kilit açılınca çalışacak bağlantılar** altında listeler. Kilidi açınca çalışırlar; **Açılmasın**'a basarsan bırakılırlar.
+
+**Kilit neye karşı korur.** Kilit yalnızca bu pencereye gelişigüzel erişimi engeller. Koleksiyon dosyası şifrelenmez: bilgisayar hesabını kullanabilen biri onu kopyalayabilir. `fc` komut satırı ve MCP sunucusu kilitlenmez. Kilidin özeti silinirse (ör. anahtar zincirindeki kayıt kaldırılırsa) uygulama kilitli kalır ve **Kilit bilgisi kayıp** der; klavyedeki herkes "Anladım: bu profilin kilidini kaldır"ı işaretleyip **Kilidi kaldır**'a basarak kilidi kaldırabilir. Yani kilit, işletim sistemi hesabına erişebilen birine karşı koruma sağlamaz.
+
+## Hatırlatıcılar ve tepsi
+
+**Hatırlatıcılar** ekranında:
+
+- **Her gün hatırlat** günde bir işletim sistemi bildirimi açar ("Bugün … kart seni bekliyor"); varsayılan kapalı.
+- **Saat** (varsayılan 19:00) ve **Günler** (varsayılan her gün).
+- O gün zaten çalıştıysan ya da bekleyen kart yoksa hatırlatma gelmez. Uygulama o saatte kapalı ya da uykudaysa hatırlatma 3 saate kadar gecikmeli gelir.
+- **Deneme bildirimi gönder** hemen bir tane gösterir.
+- **Pencereyi kapatınca uygulama tepside kalsın**: pencereyi kapatmak onu yalnız gizler, hatırlatmalar gelmeye devam eder. Hatırlatma yalnız uygulama çalışırken (pencere ya da tepsi) gelir.
+
+Tepsi simgesinin menüsü: **Flashcard'ı aç**, **Kilitle** (kilit kuruluysa kilitler), **Çık** (gerçekten kapatır). Simgeye tıklamak da pencereyi geri getirir.
+
+## Çökme kurtarma ve günlükler
+
+**Kurtarma.** Uygulama açılışta bir çalışma işareti (`run.json`) yazar, normal kapanışta siler. Sonraki açılışta hâlâ duruyorsa (çökme, görevi sonlandırma, elektrik kesilmesi) veritabanını denetler (`maintenance.check_after_crash` ayarı, varsayılan açık) ve **Flashcard düzgün kapanmadı** (çökmeden sonra **Flashcard beklenmedik şekilde kapandı**) penceresini gösterir. Pencere devam edebileceklerini listeler: veritabanı denetiminin sonucu, bitmemiş bir çalışma oturumu (**Çalışmaya devam et**), kaydedilmemiş formlar (yeniden açtığında geri gelir) ve çökme raporu. **Bakım'ı aç** **Günlükler ve güncellemeler**'e götürür, **Devam et** pencereyi kapatır. Koleksiyon her değişiklikten sonra kaydedilir; başka bir şey kaybolmaz.
+
+**Günlükler ve güncellemeler** ekranı: sürüm, son çalıştırmanın düzgün kapanıp kapanmadığı, güncellemeler, **Günlük klasörü** ve **Veri klasörü**, **Veritabanını denetle**, çökme raporları ve **Çökme raporlarını sil**.
+
+**Günlükler.** Uygulama yerel bir günlük tutar: `logs\flashcard.log`. 1024 KiB'ta yeni dosyaya geçer ve 4 eski dosya saklar (`maintenance.log_max_kb`, `maintenance.log_files` ayarları; ayrıntı düzeyi `maintenance.log_level`). Çökme raporları `crash` klasörüne yazılır. Her satırdaki gizli bilgiler yazılmadan önce çıkarılır.
+
+**Hata raporu:** **Günlükler ve güncellemeler** → **Günlükleri dışa aktar…** → kaydedeceğin yeri seç. `.zip` günlükleri, çökme raporlarını ve kısa bir sistem özetini içerir. Her şey önce yeniden temizlenir: API anahtarları (uygulamanın tuttuğu anahtarların kendisi dahil), belirteçler, parolalar, e-posta adresleri, ev klasörü yollarındaki kullanıcı adı (`C:\Users\<user>`) ve kilit özeti. Mesaj kaç gizli bilginin çıkarıldığını söyler. Hiçbir şey bir yere gönderilmez; dosyayı raporuna kendin eklersin.
+
+Çalışma işareti, günlükler ve çökme raporları profile aittir: etkin profilin klasöründe dururlar (bkz. [Veri klasörü](#veri-klasörü)).
+
+## Veri klasörü
+
+Windows'ta uygulama veri klasörü `%APPDATA%\app.flashcard.desktop\` (yani `C:\Users\<sen>\AppData\Roaming\app.flashcard.desktop\`). **Günlükler ve güncellemeler** etkin profilin **Veri klasörü**'nü ve **Günlük klasörü**'nü gösterir.
+
+| Ne | Ana profil | Diğer profiller |
+|---|---|---|
+| Klasör | `%APPDATA%\app.flashcard.desktop\` | `%APPDATA%\app.flashcard.desktop\profiles\<kimlik>\` |
+| Koleksiyon | `collection.db` | `collection.db` |
+| Medya, güvenlik yedekleri | `media\`, `backups\` | `media\`, `backups\` |
+| Günlükler, çökme raporları, çalışma işareti | `logs\`, `crash\`, `run.json` | `logs\`, `crash\`, `run.json` |
+
+Profil listesi uygulama veri klasöründeki `profiles.json` dosyasıdır. `<kimlik>` uzun, üretilmiş bir kimliktir; bulmak için profili aç ve **Veri klasörü**'ne bak. Yapay zeka anahtarları ve kilit özeti bu klasörlerde değil, sistem anahtar zincirindedir.
 
 ## Yedek ve geri yükleme
 
@@ -404,7 +496,8 @@ Bilmen gerekenler:
 - Geri yüklemeden sonra geri alma geçmişi baştan başlar; önceki adımlar geri alınamaz.
 - Daha yeni bir uygulama sürümünün yedeği eski sürüme yüklenmez.
 - Yerel API'ye bağlı programların izinleri geri yüklemede kaldırılır; yeniden bağlanmaları gerekir.
-- Koleksiyon dosyası Windows'ta `%APPDATA%\app.flashcard.desktop\collection.db` konumundadır. Uygulama açıkken bu dosyayı elle kopyalama; **Yedek al…**'ı kullan.
+- Yedek alma ve geri yükleme kullanımdaki profilde çalışır. Yedekte yapay zeka anahtarları ve uygulama kilidi yoktur.
+- Windows'ta ana profilin koleksiyon dosyası `%APPDATA%\app.flashcard.desktop\collection.db`, başka bir profilinki `%APPDATA%\app.flashcard.desktop\profiles\<kimlik>\collection.db` konumundadır. Uygulama açıkken bu dosyayı elle kopyalama; **Yedek al…**'ı kullan.
 
 ## Sorun giderme
 
@@ -437,3 +530,15 @@ Modülü kapalı olabilir. `Ctrl+K` → **Modülleri listele** ile durumuna bak,
 
 **Veritabanında sorun olduğunu düşünüyorum.**
 **Bakım** → **Veritabanı denetimi** → **Denetle**. Sorun çıkarsa **Onar**; onarım da geri alınabilir.
+
+**Windows "Windows kişisel bilgisayarınızı korudu" diyor.**
+Bu SmartScreen; kurulum dosyası kod imzalı değil. **Ek bilgi** → **Yine de çalıştır**'a tıkla. Kurulum dosyasını yalnız projenin yayın sayfasından indir.
+
+**Uygulama kilitli olduğunu söylüyor ve kilidi kaldırmamı istiyor.**
+**Kilit bilgisi kayıp** ekranı, profilin kilitli olduğunu ama PIN/parola özetinin kaybolduğunu (ör. anahtar zincirindeki kayıt silinmiş) gösterir. Uygulama kontrolsüz açılmak yerine kilitli kalır. "Anladım: bu profilin kilidini kaldır"ı işaretle, **Kilidi kaldır**'a bas, sonra **Profiller ve kilit**'ten yeni bir kilit kur. Kartların etkilenmez.
+
+**Profil değiştirince uygulama yeniden başladı.**
+Bu beklenen davranış: başka bir profilde **Aç**, uygulamayı o profilin koleksiyonuyla yeniden başlatır. Geri dönmek için aynısını yap.
+
+**Günlüklerim nerede? Hata raporunu nasıl gönderirim?**
+**Günlükler ve güncellemeler** **Günlük klasörü**'nü gösterir (etkin profilin klasöründeki `logs`, bkz. [Veri klasörü](#veri-klasörü)). **Günlükleri dışa aktar…**'a bas, `.zip` dosyasını kaydet ve raporuna ekle. Gizli bilgiler çıkarılır, hiçbir şey kendiliğinden gönderilmez.

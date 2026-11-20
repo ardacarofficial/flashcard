@@ -68,7 +68,7 @@ Bağımlılık sürümleri `Cargo.lock` ve `pnpm-lock.yaml` ile sabitlenir.
 - Sonraki fazlarda her ajan **ayrı bir git worktree**'de, kendi özellik dalında çalışır.
 - Her iz (track) için net bir sınır: hangi crate'lere/klasörlere dokunabilir, hangi API'leri ekleyebilir.
 - **Ortak dosyalar** (migration listesi, kayıt defteri, `fc-api` DTO'ları) çakışma noktasıdır:
-  - Migration numaraları iz başına önceden ayrılır (ör. v0.2: 0100–0199, v0.3: 0200–0299).
+  - Migration numaraları iz başına önceden ayrılır (ör. v0.2: 0100–0199, v0.3: 0200–0299). v1.0 aralığı (`1000`–`1099`) izlere bölündü ve `fc-storage` `migrate::V1_LANE_RANGES` + `v1_migrations_stay_in_their_lane_range` testiyle zorunlu: **ux** (iz N) `1000`–`1049` (`1000_ux_state`), **release** (iz O) `1050`–`1069` (`1050_maintenance`), **tur 2** (performans/i18n/temalar) `1070`–`1089` (henüz kayıtlı değil: o iz aralığını `V1_LANE_RANGES`'e ekler), **quality** (iz Q) `1090`–`1099` (şimdilik migration yok). Tam liste docs/10 §10.
   - Kayıt defteri, modül başına ayrı dosyalardan toplanır (her modül kendi `register()` fonksiyonuna sahip).
 - Orkestratör (ana ajan) her iz bittiğinde: inceler, testleri çalıştırır, `main`'e birleştirir, sonraki izlere bildirir.
 - Her iz bir **görev tanımıyla** başlar: amaç, kapsam, kabul kriterleri ([04](04-yol-haritasi.md)), dokunulabilir dosyalar, yasaklar.

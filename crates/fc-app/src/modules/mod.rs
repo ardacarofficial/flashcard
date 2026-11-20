@@ -56,4 +56,7 @@ modules! {
     local_api,
     maintenance,
     updates,
+    onboarding,
+    reminders,
+    profiles,
 }
