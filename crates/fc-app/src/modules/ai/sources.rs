@@ -4,7 +4,7 @@
 //! ("nothing is sent that was not shown") holds unchanged.
 
 use super::context::MAX_SOURCE_CHARS;
-use super::{ID, LANE, SOURCE_JOB};
+use super::{ID, LANE, SOURCE_JOB, WEB_ALLOW_PRIVATE};
 use crate::error::{AppError, AppResult};
 use crate::handler::{CommandCtx, CommandOutcome};
 use crate::jobs::{JobContext, JobHandler};
@@ -15,6 +15,7 @@ use fc_api::v1::ai::{AiSourceInput, AiSourceText, ExtractAiSource};
 use fc_api::v1::jobs::JobDto;
 use fc_api::v1::methods::AiSourcesExtract;
 use fc_api::{ApiError, ErrorCode};
+use fc_core::settings::SettingScope;
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -104,7 +105,19 @@ impl JobHandler for SourceJob {
                 from_page,
                 to_page,
             } => sources::pdf_file(std::path::Path::new(path.trim()), *from_page, *to_page),
-            AiSourceInput::Url { url } => sources::fetch_page(url),
+            AiSourceInput::Url { url } => {
+                let allow_private_hosts = {
+                    let reads = ctx.read()?;
+                    crate::settings::resolve_stored(&*reads, &SettingScope::App, WEB_ALLOW_PRIVATE)?
+                        .and_then(|(v, _)| v.as_bool())
+                        .unwrap_or(false)
+                };
+                sources::fetch_page_with(
+                    url,
+                    sources::FetchPolicy { allow_private_hosts },
+                    &sources::SystemResolver,
+                )
+            }
         }
         .map_err(source_error)?;
         ctx.cancel.check()?;

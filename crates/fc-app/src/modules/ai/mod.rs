@@ -62,6 +62,8 @@ pub const BUDGET: &str = "ai.monthly_budget_usd";
 pub const TIMEOUT: &str = "ai.request_timeout_secs";
 /// Setting: retries of a rate-limited/unavailable request.
 pub const RETRIES: &str = "ai.max_retries";
+/// Setting: let "cards from a web page" reach local-network hosts (default off).
+pub const WEB_ALLOW_PRIVATE: &str = "ai.web.allow_private_hosts";
 
 /// Setting key of a feature's prompt template (`ai.prompt.generate_cards`, …).
 pub fn prompt_setting(feature: AiFeature) -> String {
@@ -218,6 +220,7 @@ pub fn descriptor() -> ModuleDescriptor {
             },
             serde_json::json!(2),
         ),
+        number_setting(WEB_ALLOW_PRIVATE, SettingKind::Bool, serde_json::json!(false)),
     ];
     // Prompt templates: visible and editable under "advanced" (docs/06 §1.4).
     for feature in AiFeature::ALL {

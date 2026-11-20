@@ -188,6 +188,12 @@
         "label": "AI istek zaman aşımı (saniye)",
         "description": "Cevap için ne kadar beklenir."
       },
+      "web": {
+        "allow_private_hosts": {
+          "label": "Yerel ağdaki sayfalara izin ver",
+          "description": "Varsayılan kapalı: web adresinden kart üretirken bu bilgisayardaki veya yerel ağdaki sayfalar (localhost, 192.168.x.x, …) engellenir."
+        }
+      },
       "max_retries": {
         "label": "AI yeniden deneme",
         "description": "Sınıra takılan ya da ulaşılamayan istek kaç kez yeniden denenir."

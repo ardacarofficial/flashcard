@@ -188,6 +188,12 @@
         "label": "AI request timeout (seconds)",
         "description": "How long to wait for an answer."
       },
+      "web": {
+        "allow_private_hosts": {
+          "label": "Allow fetching local-network pages",
+          "description": "Off by default: pages on this computer or your local network (localhost, 192.168.x.x, …) are blocked when making cards from a web address."
+        }
+      },
       "max_retries": {
         "label": "AI retries",
         "description": "How often a rate-limited or unavailable request is retried."

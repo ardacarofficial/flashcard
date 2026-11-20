@@ -17,6 +17,8 @@ use fc_api::v1::jobs::{JobDto, JobRef, JobStatus};
 use fc_api::v1::methods::*;
 use fc_api::v1::modules::SetModuleEnabled;
 use fc_api::v1::oplog::Actor;
+use fc_api::v1::settings::SetSetting;
+use fc_core::settings::SettingScope;
 use fc_api::ErrorCode;
 use fc_core::JobId;
 use serde_json::json;
@@ -438,6 +440,11 @@ fn cards_from_a_web_page() {
     });
     let t = app();
     let url = |p: &str| AiSourceInput::Url { url: format!("{}{p}", server.url()) };
+    // The mock lives on 127.0.0.1: refused by default, reachable once the user allows it.
+    let e = extract(&t, url("/page")).error.unwrap();
+    assert_eq!((e.code, e.details["reason"].as_str()), (ErrorCode::ValidationAiSource, Some("blocked_host")));
+    assert!(server.requests().is_empty());
+    t.ok::<SettingsSet>(SetSetting { scope: SettingScope::App, key: WEB_ALLOW_PRIVATE.into(), value: json!(true) });
     let got = text_of(&extract(&t, url("/page")));
     assert_eq!(got.title.as_deref(), Some("Plants"));
     assert_eq!(got.text, "Leaves\n\nLeaves make sugar from light.");

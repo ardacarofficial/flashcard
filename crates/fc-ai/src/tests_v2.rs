@@ -4,10 +4,14 @@
 use super::*;
 use crate::mock::{sample_pdf, MockRequest, MockResponse, MockServer};
 use crate::secrets::{MemorySecrets, NoSecrets, SecretStore};
-use crate::sources::{fetch_page, pdf_text, readable_text};
+use crate::sources::{
+    fetch_page_dialing, fetch_page_with, is_blocked_ip, pdf_text, readable_text, FetchPolicy,
+    HostResolver, SystemResolver,
+};
 use fc_providers::ai::{CompletionRequest, ContentPart, Message, Role};
 use fc_providers::ProviderErrorKind;
 use serde_json::json;
+use std::net::IpAddr;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -439,7 +443,7 @@ fn fetch_page_reads_html_without_running_scripts() {
         _ => MockResponse::text(500, "text/plain", ""),
     });
     let url = server.url();
-    let page = fetch_page(&format!("{url}/article")).unwrap();
+    let page = fetch_local(&format!("{url}/article")).unwrap();
     assert!(page.text.contains("photosynthesis"));
     assert!(!page.text.contains("not text"));
     assert_eq!(
@@ -449,19 +453,19 @@ fn fetch_page_reads_html_without_running_scripts() {
         Some(true)
     );
     assert_eq!(
-        fetch_page(&format!("{url}/plain")).unwrap().text,
+        fetch_local(&format!("{url}/plain")).unwrap().text,
         "line one\n\nline two"
     );
-    assert!(fetch_page(&format!("{url}/moved"))
+    assert!(fetch_local(&format!("{url}/moved"))
         .unwrap()
         .text
         .contains("Calvin cycle"));
     // The mock writes the String's UTF-8 bytes; a Latin-1 page is decoded byte by byte.
-    assert!(fetch_page(&format!("{url}/latin"))
+    assert!(fetch_local(&format!("{url}/latin"))
         .unwrap()
         .text
         .starts_with("caf"));
-    let reason = |path: &str| fetch_page(&format!("{url}{path}")).unwrap_err().reason;
+    let reason = |path: &str| fetch_local(&format!("{url}{path}")).unwrap_err().reason;
     assert_eq!(reason("/image"), "content_type");
     assert_eq!(reason("/missing"), "http_status");
     assert_eq!(reason("/empty"), "no_text");
@@ -473,13 +477,211 @@ fn fetch_page_reads_html_without_running_scripts() {
         "http://",
         "http://a b",
     ] {
-        assert_eq!(fetch_page(bad).unwrap_err().reason, "url", "{bad}");
+        assert_eq!(fetch_local(bad).unwrap_err().reason, "url", "{bad}");
     }
     let gone = {
         let s = MockServer::start(|_| MockResponse::json(&json!({})));
         s.url()
     };
-    assert_eq!(fetch_page(&gone).unwrap_err().reason, "unreachable");
+    assert_eq!(fetch_local(&gone).unwrap_err().reason, "unreachable");
+}
+
+fn fetch_local(url: &str) -> Result<crate::sources::Extracted, crate::sources::SourceError> {
+    fetch_page_with(
+        url,
+        FetchPolicy {
+            allow_private_hosts: true,
+        },
+        &SystemResolver,
+    )
+}
+
+/// Answers names from a fixed table.
+struct Table(Vec<(&'static str, Vec<IpAddr>)>);
+
+impl HostResolver for Table {
+    fn resolve(&self, host: &str, _port: u16) -> std::io::Result<Vec<IpAddr>> {
+        self.0
+            .iter()
+            .find(|(h, _)| *h == host)
+            .map(|(_, ips)| ips.clone())
+            .ok_or_else(|| std::io::Error::other("NXDOMAIN"))
+    }
+}
+
+fn ip(s: &str) -> IpAddr {
+    s.parse().unwrap()
+}
+
+const PUBLIC: &str = "93.184.216.34";
+
+#[test]
+fn local_network_addresses_are_blocked() {
+    for blocked in [
+        "127.0.0.1",
+        "127.8.8.8",
+        "10.0.0.5",
+        "172.16.0.1",
+        "172.31.255.255",
+        "192.168.1.1",
+        "169.254.169.254",
+        "169.254.0.1",
+        "100.64.0.1",
+        "100.127.255.254",
+        "0.0.0.0",
+        "224.0.0.1",
+        "255.255.255.255",
+        "::1",
+        "::",
+        "fc00::1",
+        "fd12:3456::1",
+        "fe80::1",
+        "ff02::1",
+        "::ffff:127.0.0.1",
+        "::ffff:10.1.2.3",
+        "64:ff9b::a00:1",
+    ] {
+        assert!(is_blocked_ip(ip(blocked)), "{blocked} must be blocked");
+    }
+    for open in [
+        PUBLIC,
+        "8.8.8.8",
+        "100.128.0.1",
+        "172.32.0.1",
+        "2606:4700::1111",
+    ] {
+        assert!(!is_blocked_ip(ip(open)), "{open} must be allowed");
+    }
+}
+
+#[test]
+fn every_blocked_class_is_refused_before_any_connection() {
+    // Names that resolve (as an attacker's DNS could) to each class, and literal addresses.
+    let table = Table(vec![
+        ("loop.test", vec![ip("127.0.0.1")]),
+        ("lan.test", vec![ip("192.168.0.10")]),
+        ("meta.test", vec![ip("169.254.169.254")]),
+        ("cgnat.test", vec![ip("100.64.1.1")]),
+        ("ula.test", vec![ip("fd00::1")]),
+        ("loop6.test", vec![ip("::1")]),
+        ("any.test", vec![ip("0.0.0.0")]),
+        ("multi.test", vec![ip("224.0.0.9")]),
+        // Mixed answer: one public, one internal → refused (rebinding-style trick).
+        ("mixed.test", vec![ip(PUBLIC), ip("10.0.0.1")]),
+    ]);
+    for url in [
+        "http://loop.test/",
+        "http://lan.test:8080/",
+        "http://meta.test/latest/meta-data/",
+        "http://cgnat.test/",
+        "http://ula.test/",
+        "http://loop6.test/",
+        "http://any.test/",
+        "http://multi.test/",
+        "http://mixed.test/",
+        "http://127.0.0.1:1/",
+        "http://[::1]:1/",
+        "http://[fc00::1]/",
+        "http://[::ffff:7f00:1]/",
+        "http://169.254.169.254/",
+        "http://10.1.1.1/",
+    ] {
+        let err = fetch_page_with(url, FetchPolicy::default(), &table).unwrap_err();
+        assert_eq!(err.reason, "blocked_host", "{url}");
+    }
+    // Unresolvable names are plain "unreachable"; other schemes stay "url".
+    assert_eq!(
+        fetch_page_with("http://nx.test/", FetchPolicy::default(), &table)
+            .unwrap_err()
+            .reason,
+        "unreachable"
+    );
+    assert_eq!(
+        fetch_page_with("http://user@loop.test/", FetchPolicy::default(), &table)
+            .unwrap_err()
+            .reason,
+        "url"
+    );
+}
+
+#[test]
+fn a_public_address_is_allowed_and_the_connection_is_pinned_to_it() {
+    let server = MockServer::start(|_| MockResponse::text(200, "text/html", PAGE));
+    let target: std::net::SocketAddr = server.url().trim_start_matches("http://").parse().unwrap();
+    let table = Table(vec![("pub.test", vec![ip(PUBLIC)])]);
+    let dialed = std::cell::RefCell::new(Vec::new());
+    let page = fetch_page_dialing(
+        "http://pub.test/article",
+        FetchPolicy::default(),
+        &table,
+        &|vetted| {
+            dialed.borrow_mut().push(vetted);
+            target
+        },
+    )
+    .unwrap();
+    assert!(page.text.contains("photosynthesis"));
+    // Exactly the vetted IP (and URL port) was handed to the connector — no second lookup.
+    assert_eq!(
+        *dialed.borrow(),
+        vec![std::net::SocketAddr::new(ip(PUBLIC), 80)]
+    );
+    assert_eq!(server.requests()[0].header("host"), Some("pub.test"));
+}
+
+#[test]
+fn every_redirect_hop_is_revalidated() {
+    let server = MockServer::start(|r: &MockRequest| match r.path.as_str() {
+        "/to-loopback" => {
+            MockResponse::text(302, "text/html", "").header("location", "http://127.0.0.1:1/secret")
+        }
+        "/to-name" => MockResponse::text(301, "text/html", "")
+            .header("location", "http://meta.test/latest/meta-data/"),
+        "/to-v6" => MockResponse::text(307, "text/html", "").header("location", "http://[::1]/"),
+        "/relative" => MockResponse::text(302, "text/html", "").header("location", "/ok"),
+        "/ok" => MockResponse::text(200, "text/html", PAGE),
+        "/loop" => MockResponse::text(302, "text/html", "").header("location", "/loop"),
+        _ => MockResponse::text(500, "text/plain", ""),
+    });
+    let target: std::net::SocketAddr = server.url().trim_start_matches("http://").parse().unwrap();
+    let table = Table(vec![
+        ("pub.test", vec![ip(PUBLIC)]),
+        ("meta.test", vec![ip("169.254.169.254")]),
+    ]);
+    let get = |path: &str| {
+        fetch_page_dialing(
+            &format!("http://pub.test{path}"),
+            FetchPolicy::default(),
+            &table,
+            &|_| target,
+        )
+    };
+    for path in ["/to-loopback", "/to-name", "/to-v6"] {
+        assert_eq!(get(path).unwrap_err().reason, "blocked_host", "{path}");
+    }
+    // A harmless relative redirect still works; a redirect loop stops after 5 hops.
+    assert!(get("/relative").unwrap().text.contains("photosynthesis"));
+    let err = get("/loop").unwrap_err();
+    assert_eq!(
+        (err.reason, err.message.as_str()),
+        ("url", "too many redirects")
+    );
+    // The secret targets were never requested.
+    assert!(server.requests().iter().all(|r| r.path != "/secret"));
+}
+
+#[test]
+fn the_user_can_allow_local_hosts_explicitly() {
+    let server = MockServer::start(|_| MockResponse::text(200, "text/html", PAGE));
+    let url = format!("{}/x", server.url());
+    assert_eq!(
+        fetch_page_with(&url, FetchPolicy::default(), &SystemResolver)
+            .unwrap_err()
+            .reason,
+        "blocked_host"
+    );
+    assert!(server.requests().is_empty());
+    assert!(fetch_local(&url).is_ok());
 }
 
 #[test]

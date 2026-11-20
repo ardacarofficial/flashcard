@@ -5,7 +5,8 @@
 //! editable source of `ai.preview`, so what is sent is still exactly what the user saw.
 
 use std::io::Read;
-use std::time::Duration;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs};
+use std::time::{Duration, Instant};
 
 /// Largest PDF read (bytes).
 pub const MAX_PDF_BYTES: u64 = 64 * 1024 * 1024;
@@ -21,7 +22,7 @@ pub const MAX_REDIRECTS: u32 = 5;
 #[error("{reason}: {message}")]
 pub struct SourceError {
     /// `not_pdf`, `encrypted`, `pages`, `no_text`, `too_large`, `url`, `content_type`,
-    /// `http_status`, `unreachable`, `timeout`, `io`.
+    /// `http_status`, `unreachable`, `blocked_host`, `timeout`, `io`.
     pub reason: &'static str,
     /// Developer-facing detail.
     pub message: String,
@@ -157,36 +158,233 @@ fn pdf_title(doc: &lopdf::Document) -> Option<String> {
 
 // ------------------------------------------------------------------ web pages
 
-/// Fetches `url` (http/https only, no scripts run, size and time limited) and returns its
-/// readable text.
-pub fn fetch_page(url: &str) -> Result<Extracted, SourceError> {
-    let url = url.trim();
+/// Name resolution for page fetches. Injectable so tests can answer without DNS.
+pub trait HostResolver: Send + Sync {
+    /// All addresses of `host`.
+    fn resolve(&self, host: &str, port: u16) -> std::io::Result<Vec<IpAddr>>;
+}
+
+/// The operating system's resolver.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemResolver;
+
+impl HostResolver for SystemResolver {
+    fn resolve(&self, host: &str, port: u16) -> std::io::Result<Vec<IpAddr>> {
+        Ok((host, port).to_socket_addrs()?.map(|a| a.ip()).collect())
+    }
+}
+
+/// Whether `ip` is an address a page fetch must never reach (loopback, private, link-local
+/// incl. cloud metadata, CGNAT, unique-local, unspecified, multicast, …). IPv4 embedded in
+/// IPv6 (mapped, NAT64) is judged by the IPv4 inside.
+pub fn is_blocked_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let o = v4.octets();
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_multicast()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                || o[0] == 0
+                || (o[0] == 100 && (o[1] & 0xC0) == 64) // 100.64.0.0/10 CGNAT
+                || (o[0] == 198 && (o[1] & 0xFE) == 18) // 198.18.0.0/15 benchmarking
+                || o[0] >= 240 // reserved
+        }
+        IpAddr::V6(v6) => {
+            let seg = v6.segments();
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_blocked_ip(IpAddr::V4(v4));
+            }
+            // 64:ff9b::/96 (NAT64) and the deprecated IPv4-compatible ::a.b.c.d.
+            if seg[..6] == [0x64, 0xff9b, 0, 0, 0, 0] || seg[..6] == [0; 6] {
+                let v4 = Ipv4Addr::new(
+                    (seg[6] >> 8) as u8,
+                    seg[6] as u8,
+                    (seg[7] >> 8) as u8,
+                    seg[7] as u8,
+                );
+                return is_blocked_ip(IpAddr::V4(v4));
+            }
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                || (seg[0] & 0xFE00) == 0xFC00 // fc00::/7 unique-local
+                || (seg[0] & 0xFFC0) == 0xFE80 // fe80::/10 link-local
+                || (seg[0] & 0xFFC0) == 0xFEC0 // fec0::/10 site-local (deprecated)
+        }
+    }
+}
+
+/// Connects only to the one address that was vetted: ureq never resolves the name again.
+#[derive(Debug)]
+struct PinnedResolver(SocketAddr);
+
+impl ureq::unversioned::resolver::Resolver for PinnedResolver {
+    fn resolve(
+        &self,
+        _uri: &ureq::http::Uri,
+        _config: &ureq::config::Config,
+        _timeout: ureq::unversioned::transport::NextTimeout,
+    ) -> Result<ureq::unversioned::resolver::ResolvedSocketAddrs, ureq::Error> {
+        let mut out = self.empty();
+        out.push(self.0);
+        Ok(out)
+    }
+}
+
+/// Splits an http(s) URL into (host without brackets, port, normalized URI).
+fn parse_target(url: &str) -> Result<(String, u16, ureq::http::Uri), SourceError> {
+    let bad = || SourceError::new("url", "only http(s) addresses can be fetched");
     let valid = (url.starts_with("https://") || url.starts_with("http://"))
         && url.len() <= 2000
         && url.split("://").nth(1).is_some_and(|rest| !rest.is_empty())
         && !url.chars().any(|c| c.is_whitespace() || c.is_control());
     if !valid {
+        return Err(bad());
+    }
+    let uri: ureq::http::Uri = url.parse().map_err(|_| bad())?;
+    let https = uri.scheme_str() == Some("https");
+    let host = uri.host().ok_or_else(bad)?;
+    let host = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_owned();
+    if host.is_empty() || uri.authority().is_some_and(|a| a.as_str().contains('@')) {
+        return Err(bad());
+    }
+    let port = uri.port_u16().unwrap_or(if https { 443 } else { 80 });
+    Ok((host, port, uri))
+}
+
+/// Resolves `host` and picks the address to connect to; refuses the hop when any answer is
+/// a blocked one (a name that also points inside is not trusted) unless `allow_private`.
+fn vet_host(
+    host: &str,
+    port: u16,
+    resolver: &dyn HostResolver,
+    allow_private: bool,
+) -> Result<SocketAddr, SourceError> {
+    let ips: Vec<IpAddr> = match host.parse::<IpAddr>() {
+        Ok(ip) => vec![ip],
+        Err(_) => resolver
+            .resolve(host, port)
+            .map_err(|e| SourceError::new("unreachable", format!("cannot resolve {host}: {e}")))?,
+    };
+    let Some(first) = ips.first().copied() else {
         return Err(SourceError::new(
-            "url",
-            "only http(s) addresses can be fetched",
+            "unreachable",
+            format!("cannot resolve {host}"),
+        ));
+    };
+    if !allow_private && ips.iter().any(|ip| is_blocked_ip(*ip)) {
+        return Err(SourceError::new(
+            "blocked_host",
+            "this address points to the local network and cannot be fetched",
         ));
     }
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(FETCH_TIMEOUT))
-        .max_redirects(MAX_REDIRECTS)
-        .http_status_as_error(false)
-        .user_agent("flashcard (reader)")
-        .build()
-        .into();
-    let response = agent
-        .get(url)
-        .header("accept", "text/html,application/xhtml+xml,text/plain;q=0.9")
-        .call()
-        .map_err(|e| match e {
-            ureq::Error::Timeout(_) => SourceError::new("timeout", "the page took too long"),
-            ureq::Error::TooManyRedirects => SourceError::new("url", "too many redirects"),
-            other => SourceError::new("unreachable", other.to_string()),
-        })?;
+    Ok(SocketAddr::new(first, port))
+}
+
+/// Joins a `Location` value onto the URL it came from.
+fn join_location(base: &ureq::http::Uri, location: &str) -> String {
+    let location = location.trim();
+    if location.contains("://") {
+        return location.to_owned();
+    }
+    let scheme = base.scheme_str().unwrap_or("http");
+    let authority = base.authority().map(|a| a.as_str()).unwrap_or("");
+    if let Some(rest) = location.strip_prefix("//") {
+        return format!("{scheme}://{rest}");
+    }
+    if location.starts_with('/') {
+        return format!("{scheme}://{authority}{location}");
+    }
+    let dir = base.path().rsplit_once('/').map_or("", |(d, _)| d);
+    format!("{scheme}://{authority}{dir}/{location}")
+}
+
+/// How a page fetch may reach the network.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FetchPolicy {
+    /// Allow loopback / private / link-local hosts (the user opted in explicitly).
+    pub allow_private_hosts: bool,
+}
+
+/// [`fetch_page_with`] with the OS resolver and the strict policy (no local hosts).
+pub fn fetch_page(url: &str) -> Result<Extracted, SourceError> {
+    fetch_page_with(url, FetchPolicy::default(), &SystemResolver)
+}
+
+/// Fetches `url` (http/https only, no scripts run, size and time limited) and returns its
+/// readable text. Every hop (including each redirect, at most [`MAX_REDIRECTS`]) is resolved
+/// here, vetted against local-network addresses, and the connection is pinned to the vetted
+/// address.
+pub fn fetch_page_with(
+    url: &str,
+    policy: FetchPolicy,
+    resolver: &dyn HostResolver,
+) -> Result<Extracted, SourceError> {
+    fetch_page_dialing(url, policy, resolver, &|addr| addr)
+}
+
+/// [`fetch_page_with`] where `dial` maps the vetted address to the one actually connected to
+/// (identity in production; tests point a "public" address at a local mock server).
+pub(crate) fn fetch_page_dialing(
+    url: &str,
+    policy: FetchPolicy,
+    resolver: &dyn HostResolver,
+    dial: &dyn Fn(SocketAddr) -> SocketAddr,
+) -> Result<Extracted, SourceError> {
+    let deadline = Instant::now() + FETCH_TIMEOUT;
+    let mut current = url.trim().to_owned();
+    let mut hops = 0;
+    let response = loop {
+        let (host, port, uri) = parse_target(&current)?;
+        let addr = vet_host(&host, port, resolver, policy.allow_private_hosts)?;
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .filter(|d| !d.is_zero())
+            .ok_or_else(|| SourceError::new("timeout", "the page took too long"))?;
+        let config = ureq::Agent::config_builder()
+            .timeout_global(Some(remaining))
+            .max_redirects(0)
+            .http_status_as_error(false)
+            .user_agent("flashcard (reader)")
+            .build();
+        let agent = ureq::Agent::with_parts(
+            config,
+            ureq::unversioned::transport::DefaultConnector::default(),
+            PinnedResolver(dial(addr)),
+        );
+        let response = agent
+            .get(uri)
+            .header("accept", "text/html,application/xhtml+xml,text/plain;q=0.9")
+            .call()
+            .map_err(|e| match e {
+                ureq::Error::Timeout(_) => SourceError::new("timeout", "the page took too long"),
+                other => SourceError::new("unreachable", other.to_string()),
+            })?;
+        if response.status().is_redirection() {
+            let location = response
+                .headers()
+                .get("location")
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_owned);
+            if let Some(location) = location {
+                hops += 1;
+                if hops > MAX_REDIRECTS {
+                    return Err(SourceError::new("url", "too many redirects"));
+                }
+                let base = parse_target(&current)?.2;
+                current = join_location(&base, &location);
+                continue;
+            }
+        }
+        break response;
+    };
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         return Err(SourceError::new("http_status", format!("HTTP {status}")));
