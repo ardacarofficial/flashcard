@@ -109,12 +109,33 @@ pub struct FileFetcher;
 
 impl Fetcher for FileFetcher {
     fn open(&self, url: &str, offset: u64) -> Result<Box<dyn Read + Send>, ModelError> {
-        let path = url
+        let rest = url
             .strip_prefix("file://")
             .ok_or_else(|| ModelError::Unsupported(url.to_owned()))?;
-        let mut f = fs::File::open(path)?;
+        let mut f = fs::File::open(file_url_path(rest))?;
         f.seek(SeekFrom::Start(offset))?;
         Ok(Box::new(f))
+    }
+}
+
+/// Turns the part after `file://` into a local path. Accepts `/home/x`,
+/// `/C:/Users/x` (RFC 8089 form on Windows) and `C:/Users/x`.
+fn file_url_path(rest: &str) -> PathBuf {
+    let b = rest.as_bytes();
+    if b.len() >= 3 && b[0] == b'/' && b[1].is_ascii_alphabetic() && b[2] == b':' {
+        PathBuf::from(&rest[1..])
+    } else {
+        PathBuf::from(rest)
+    }
+}
+
+/// Builds a `file://` URL for a local path (forward slashes, `file:///C:/…` on Windows).
+pub fn file_url(path: &std::path::Path) -> String {
+    let s = path.display().to_string().replace('\\', "/");
+    if s.starts_with('/') {
+        format!("file://{s}")
+    } else {
+        format!("file:///{s}")
     }
 }
 
@@ -263,6 +284,27 @@ impl ModelStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_urls_roundtrip_unix_and_windows_paths() {
+        assert_eq!(
+            file_url_path("/home/a/b.bin"),
+            PathBuf::from("/home/a/b.bin")
+        );
+        assert_eq!(
+            file_url_path("/C:/Users/a/b.bin"),
+            PathBuf::from("C:/Users/a/b.bin")
+        );
+        assert_eq!(
+            file_url_path("C:/Users/a/b.bin"),
+            PathBuf::from("C:/Users/a/b.bin")
+        );
+        assert_eq!(file_url(Path::new("/home/a/b.bin")), "file:///home/a/b.bin");
+        assert_eq!(
+            file_url(Path::new(r"C:\Users\RUNNER~1\b.bin")),
+            "file:///C:/Users/RUNNER~1/b.bin"
+        );
+    }
 
     fn spec_for(src: &Path, bytes: &[u8]) -> ModelSpec {
         let hex: String = Sha256::digest(bytes)

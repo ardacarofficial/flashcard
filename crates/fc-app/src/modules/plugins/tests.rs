@@ -802,9 +802,9 @@ fn model_download_manager(f: Factory) {
     let manifest = format!(
         "id = \"com.example.models\"\nname = \"Models\"\nversion = \"1.0.0\"\napi_version = \"1\"\n\
          permissions = [\"models:manage\"]\n[contributes]\n\
-         models = [{{ id = \"voice\", name = \"Voice\", size = {}, url = \"file://{}\", sha256 = \"{}\", license = \"MIT\" }}]\n",
+         models = [{{ id = \"voice\", name = \"Voice\", size = {}, url = \"{}\", sha256 = \"{}\", license = \"MIT\" }}]\n",
         bytes.len(),
-        model.display(),
+        fc_plugins::models::file_url(&model),
         fc_plugins::package::sha256_hex(&bytes)
     );
     let wasm = fc_plugins::testing::example_wasm("misbehave").unwrap();
