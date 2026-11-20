@@ -7,10 +7,6 @@
   "src/lib/features/inbox/InboxScreen.svelte": 4,
   "src/lib/features/inbox/OutsideHost.svelte": 1,
   "src/lib/features/inbox/QuickAdd.svelte": 1,
-  "src/lib/features/modes/LearnScreen.svelte": 1,
-  "src/lib/features/modes/StudyModeOptions.svelte": 3,
-  "src/lib/features/modes/TestScreen.svelte": 3,
   "src/lib/features/reading/ReadingScreen.svelte": 2,
-  "src/lib/features/reading/WordPanel.svelte": 1,
-  "src/lib/features/study/StudyScreen.svelte": 4
+  "src/lib/features/reading/WordPanel.svelte": 1
 }

@@ -7,6 +7,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import { t } from '$lib/i18n/index.svelte';
+  import { Button, Kbd } from '$lib/ui';
   import { moduleOn } from '../cards/modules.svelte';
   import { plainKey } from './modes';
 
@@ -55,14 +56,16 @@
 <svelte:window onkeydown={onKey} />
 
 {#if moduleOn('focus')}
-  <button onclick={() => (active = !active)} aria-pressed={active} data-testid="focus-toggle">
-    {active ? t('modes.focus.exit') : t('modes.focus.enter')} <kbd>{'F'}</kbd>
-  </button>
+  <Button variant="ghost" size="sm" onclick={() => (active = !active)} aria-pressed={active} data-testid="focus-toggle">
+    {active ? t('modes.focus.exit') : t('modes.focus.enter')}
+    <Kbd keys={['F']} />
+  </Button>
 {/if}
 
 <style>
   :global(html.fc-focus nav),
   :global(html.fc-focus .deck-pick),
+  :global(html.fc-focus .section-tabs),
   :global(html.fc-focus-hide-counts [data-focus-hide]) {
     display: none !important;
   }
@@ -72,10 +75,5 @@
   :global(html.fc-focus main) {
     max-width: 760px;
     margin: 0 auto;
-  }
-  kbd {
-    color: var(--fc-text-muted);
-    font-size: 0.8em;
-    margin-left: var(--fc-space-1);
   }
 </style>

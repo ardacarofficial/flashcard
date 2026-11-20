@@ -12,6 +12,7 @@ export default {
   modules: [
     module('learn', [menu('modes.learn', 'nav.learn', '/learn', 6)]),
     module('practice_test', [menu('modes.test', 'nav.test', '/test', 7)]),
+    module('match', [menu('study.match', 'nav.match', '/match', 8)]),
     module('confidence', []),
     module('timed', []),
     module('focus', []),

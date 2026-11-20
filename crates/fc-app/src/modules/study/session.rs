@@ -92,7 +92,11 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
                 .ok_or_else(|| invalid("a mistakes session needs from_session"))?;
             Some(Session::load(ctx.reads(), ctx.registry, from)?.state.again)
         }
-        StudyKind::Normal | StudyKind::Custom | StudyKind::Learn | StudyKind::Test => matching,
+        StudyKind::Normal
+        | StudyKind::Custom
+        | StudyKind::Learn
+        | StudyKind::Test
+        | StudyKind::Match => matching,
     };
     // v0.10 modes: module switches, time limit, rating scale (validated before anything is
     // written).
@@ -120,9 +124,13 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
     // Normal sessions respect the deck preset's daily limits (minus what was studied today).
     let daily = match req.kind {
         StudyKind::Normal => Some(daily_left(ctx, req.deck_id, scope_decks.as_deref(), &config)?),
-        // Hand-picked sessions (custom, mistakes, learn, test) are not limited; their
+        // Hand-picked sessions (custom, mistakes, learn, test, match) are not limited; their
         // schedule-changing answers still count towards later normal sessions (docs/10 §24).
-        StudyKind::Custom | StudyKind::Mistakes | StudyKind::Learn | StudyKind::Test => None,
+        StudyKind::Custom
+        | StudyKind::Mistakes
+        | StudyKind::Learn
+        | StudyKind::Test
+        | StudyKind::Match => None,
     };
     let new_limit = match (req.new_limit, daily) {
         (Some(n), _) => Some(n),
@@ -135,7 +143,9 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
     let bury_siblings = buries_siblings(req.kind) && preset.bury_siblings;
     let due_only = match req.kind {
         StudyKind::Normal => filter.due_only.unwrap_or(true),
-        StudyKind::Custom | StudyKind::Learn | StudyKind::Test => filter.due_only.unwrap_or(false),
+        StudyKind::Custom | StudyKind::Learn | StudyKind::Test | StudyKind::Match => {
+            filter.due_only.unwrap_or(false)
+        }
         StudyKind::Mistakes => false,
     };
     let day_end = config.day_end(ctx.now);
@@ -168,7 +178,10 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
     // cards a limit counts (reviews, new cards) — an empty one is left out and the queue
     // built again — and for every card of learn/test sessions (their stages and papers are
     // made from the queue); a learning card is skipped when it comes up.
-    let check_all = matches!(req.kind, StudyKind::Learn | StudyKind::Test);
+    let check_all = matches!(
+        req.kind,
+        StudyKind::Learn | StudyKind::Test | StudyKind::Match
+    );
     let mut empty = EmptyCards::new(View::cmd(ctx));
     let mut excluded: std::collections::HashSet<CardId> = std::collections::HashSet::new();
     let seed = id.0.as_u64_pair().1;

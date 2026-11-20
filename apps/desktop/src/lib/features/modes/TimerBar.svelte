@@ -5,6 +5,7 @@
    */
   import type { TimerDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
+  import { Icon, Timer } from '$lib/ui';
   import { secondsLeft } from './modes';
 
   let { timer, onexpire }: { timer: TimerDto; onexpire: () => void } = $props();
@@ -18,6 +19,7 @@
   });
 
   const left = $derived(timer.deadline === null ? timer.seconds : secondsLeft(timer.deadline, now));
+  const low = $derived(left <= Math.max(3, Math.ceil(timer.seconds / 5)));
 
   $effect(() => {
     const d = timer.deadline;
@@ -28,28 +30,47 @@
   });
 </script>
 
-<div class="timer" role="timer" aria-label={t('modes.timer.label')} data-testid="timer">
-  <div class="bar" style:width="{(left * 100) / timer.seconds}%"></div>
-  <span>{t('modes.timer.left', { s: left })}</span>
+<div class="timer" class:low role="timer" aria-label={t('modes.timer.label')} data-testid="timer">
+  <Icon icon={Timer} size={16} />
+  <div class="track"><div class="bar" style:width="{(left * 100) / timer.seconds}%"></div></div>
+  <span class="left">{t('modes.timer.left', { s: left })}</span>
 </div>
 
 <style>
   .timer {
-    position: relative;
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    height: 1.4em;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+  }
+  .track {
+    flex: 1;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-2);
     overflow: hidden;
   }
   .bar {
-    position: absolute;
-    inset: 0 auto 0 0;
-    background: var(--fc-selected);
+    height: 100%;
+    background: var(--accent);
     transition: width 0.2s linear;
   }
-  span {
-    position: relative;
-    padding: 0 var(--fc-space-2);
-    font-size: 0.85em;
+  .low {
+    color: var(--danger);
+  }
+  .low .bar {
+    background: var(--danger-solid);
+  }
+  .left {
+    min-width: 5ch;
+    text-align: right;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar {
+      transition: none;
+    }
   }
 </style>

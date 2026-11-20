@@ -11,6 +11,8 @@
 //!   frontend's).
 //! * `inline_cards` ([`inline_cards`]): `question :: answer` lines → notes
 //!   (`modes.inline.preview/create`), usable during study and reading.
+//! * `match` ([`matching`], v1.1): pair terms with definitions against the clock
+//!   (`study.start { kind: match }`, `modes.match.start/pick/finish`); practice only.
 //!
 //! **Building blocks** (CLAUDE.md rule 3): every mode is a session kind or session option of
 //! the v0.2 engine. Answers go through `study::ext::answer_core` (scheduler, planning, sibling
@@ -24,6 +26,7 @@ pub mod confidence;
 pub mod focus;
 pub mod inline_cards;
 pub mod learn;
+pub mod matching;
 pub mod practice_test;
 pub mod timed;
 #[cfg(test)]
@@ -48,7 +51,7 @@ use fc_study::modes::{timed::Timed, ModesConfig};
 use fc_study::session::SessionState;
 use serde_json::Value;
 
-/// Registers the six modules.
+/// Registers the seven modules.
 pub fn register(reg: &mut Registry) {
     learn::register(reg);
     practice_test::register(reg);
@@ -56,6 +59,7 @@ pub fn register(reg: &mut Registry) {
     timed::register(reg);
     focus::register(reg);
     inline_cards::register(reg);
+    matching::register(reg);
 }
 
 // ------------------------------------------------------------------ shared helpers
@@ -119,6 +123,7 @@ pub(crate) fn prepare_start(
     match req.kind {
         StudyKind::Learn => require_module(ctx, learn::ID)?,
         StudyKind::Test => require_module(ctx, practice_test::ID)?,
+        StudyKind::Match => require_module(ctx, matching::ID)?,
         StudyKind::Normal | StudyKind::Custom | StudyKind::Mistakes => {}
     }
     let card_by_card = matches!(
@@ -181,6 +186,7 @@ pub(crate) fn init_state(
     match config.kind {
         StudyKind::Learn => learn::init(v, state, rng),
         StudyKind::Test => practice_test::init(v, req, state, rng),
+        StudyKind::Match => matching::init(v, state),
         StudyKind::Normal | StudyKind::Custom | StudyKind::Mistakes => Ok(()),
     }
 }

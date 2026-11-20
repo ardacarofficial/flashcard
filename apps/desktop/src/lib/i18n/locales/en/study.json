@@ -12,9 +12,7 @@
     "heading": "Study",
     "whole_collection": "All decks",
     "start": "Study now",
-    "start_hint": "Enter",
     "resume": "Continue session",
-    "practice": "Practice mode (does not change the schedule)",
     "filter_label": "Only cards with",
     "filter_any": "Any",
     "custom_start": "Custom session",
@@ -30,7 +28,6 @@
     "practice_badge": "Practice",
     "show_answer": "Show answer",
     "type_placeholder": "Type the answer",
-    "check": "Check",
     "hint": "Hint",
     "suspend": "Suspend",
     "bury": "Bury",
@@ -58,20 +55,44 @@
     },
     "summary": {
       "heading": "Session complete",
-      "answered": "Cards studied: {n}",
       "accuracy": "Accuracy: {n}%",
-      "time": "Time: {min} min {sec} s",
-      "mistakes": "Mistakes: {n}",
       "repeat": "Repeat mistakes",
-      "back": "Done"
+      "back": "Done",
+      "accuracy_label": "Accuracy",
+      "cards": "Cards studied",
+      "mistakes_label": "Mistakes",
+      "time_label": "Time",
+      "time_value": "{min}:{sec}"
     },
-    "keys": "Space: show · 1–4: rate · 1–9: pick an option · H: hint · S: suspend · B: bury · Ctrl+1–7: flag · Z: undo · Esc: end",
-    "choices": "Options"
+    "choices": "Options",
+    "start_heading": "Today's review",
+    "start_intro": "Due cards and a few new ones.",
+    "custom_heading": "Custom session",
+    "custom_intro": "Studies the cards your filter picks.",
+    "options": "Options",
+    "practice_label": "Practice mode",
+    "practice_hint": "Answers do not change the schedule.",
+    "progress_label": "Session progress",
+    "position": "{n} / {total}",
+    "end_label": "End session",
+    "rate_label": "How did it go?",
+    "more": "More card actions",
+    "buttons": {
+      "still_learning": "Still learning",
+      "know_it": "I know it",
+      "use_four": "Show four answer buttons",
+      "use_two": "Show two answer buttons"
+    },
+    "keyhint": {
+      "flip": "Flip",
+      "rate": "Rate"
+    }
   },
   "settings": {
     "study": {
       "new_per_session": { "label": "New cards per session", "description": "How many new cards a normal session introduces (0 = none)." },
       "type_answer": { "label": "Type the answer", "description": "Show an input and check what you type." },
+      "answer_buttons": { "label": "Answer buttons", "description": "Two buttons or all four with intervals.", "two": "Two buttons", "four": "Four buttons" },
       "hint_strategy": {
         "label": "Hint style",
         "description": "How hints reveal the answer.",

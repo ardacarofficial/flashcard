@@ -14,6 +14,14 @@ describe('study keymap', () => {
     expect(keyAction('done', { key: 'R' })).toEqual({ kind: 'repeat' });
   });
 
+  it('two-button display: 1 = still learning, 2 = I know it', () => {
+    const two = { twoButtons: true };
+    expect(keyAction('answer', { key: '1' }, false, two)).toEqual({ kind: 'rate', rating: 'again' });
+    expect(keyAction('answer', { key: '2' }, false, two)).toEqual({ kind: 'rate', rating: 'good' });
+    expect(keyAction('answer', { key: '2' })).toEqual({ kind: 'rate', rating: 'hard' });
+    expect(keyAction('answer', { key: ' ' }, false, two)).toEqual({ kind: 'rate', rating: 'good' });
+  });
+
   it('card tools and undo', () => {
     expect(keyAction('question', { key: 'h' })).toEqual({ kind: 'hint' });
     expect(keyAction('answer', { key: 'h' })).toBeNull();

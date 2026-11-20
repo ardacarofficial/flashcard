@@ -297,8 +297,10 @@ describe('study screen modes', () => {
       return base(m);
     });
     render(StudyScreen, { ctx: ctx() });
-    await fireEvent.click(await screen.findByLabelText('Time limit'));
-    await fireEvent.change(screen.getByLabelText('Rating'), { target: { value: 'confidence' } });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
+    await fireEvent.click(await screen.findByRole('switch', { name: 'Time limit' }));
+    await fireEvent.click(screen.getByRole('combobox', { name: 'Rating' }));
+    await fireEvent.click(await screen.findByRole('option', { name: 'Confidence 1–5' }));
     await key('Enter');
     await screen.findByTestId('timer');
     await key(' '); // reveal
@@ -325,8 +327,10 @@ describe('study screen modes', () => {
       return base(m);
     });
     render(StudyScreen, { ctx: ctx() });
-    await fireEvent.click(await screen.findByLabelText('Time limit'));
-    await fireEvent.change(screen.getByLabelText('Rating'), { target: { value: 'confidence' } });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
+    await fireEvent.click(await screen.findByRole('switch', { name: 'Time limit' }));
+    await fireEvent.click(screen.getByRole('combobox', { name: 'Rating' }));
+    await fireEvent.click(await screen.findByRole('option', { name: 'Confidence 1–5' }));
     await key('Enter');
     await key(' ');
     await screen.findByText('How sure were you?');

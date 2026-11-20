@@ -23,11 +23,16 @@
     "inline_cards": {
       "name": "Inline cards",
       "description": "Write “question :: answer” lines to make cards on the spot."
+    },
+    "match": {
+      "name": "Match",
+      "description": "Pair terms with their definitions against the clock."
     }
   },
   "nav": {
     "learn": "Learn",
-    "test": "Test"
+    "test": "Test",
+    "match": "Match"
   },
   "settings": {
     "learn": {
@@ -117,6 +122,12 @@
         "label": "Always start in focus mode",
         "description": "Every study session opens in focus mode."
       }
+    },
+    "match": {
+      "best_ms": {
+        "label": "Best match time (ms)",
+        "description": "Fastest round in this deck (0 = none)."
+      }
     }
   },
   "errors": {
@@ -149,6 +160,11 @@
       "inline": {
         "preview": "Preview cards from text",
         "create": "Create cards from text"
+      },
+      "match": {
+        "start": "Deal a match round",
+        "pick": "Pick a match pair",
+        "finish": "Finish a match round"
       }
     }
   },
@@ -172,7 +188,16 @@
       "done": "You learned all {total} cards.",
       "again": "Learn again",
       "back": "Back",
-      "keys": "1–4 pick · Enter check/continue · Z undo · Esc end"
+      "progress_label": "Learn progress",
+      "seg_learned": "Learned",
+      "seg_written": "At the written step",
+      "end": "End learning",
+      "missed": "Missed {n}×",
+      "correct_option": "Correct answer",
+      "your_pick": "Your answer",
+      "key_pick": "Pick",
+      "key_check": "Check / continue",
+      "done_heading": "Well done"
     },
     "test": {
       "heading": "Practice test",
@@ -194,7 +219,6 @@
       "print_key": "Print answer key",
       "submit": "Submit",
       "score": "Score: {percent}%",
-      "breakdown": "{correct} right · {almost} almost · {wrong} wrong · {blank} blank",
       "verdict": {
         "correct": "Right",
         "almost": "Almost",
@@ -203,7 +227,20 @@
       },
       "key": "Answer: {text}",
       "new": "New test",
-      "number": "{n}."
+      "number": "{n}.",
+      "score_label": "Score",
+      "n_correct": "{n} right",
+      "n_almost": "{n} almost",
+      "n_wrong": "{n} wrong",
+      "n_blank": "{n} blank",
+      "misses": "To review ({n})",
+      "your": "You",
+      "correct_is": "Correct",
+      "blank_answer": "—",
+      "answered": "{n} of {total} answered",
+      "choose": "Options",
+      "is_right": "Is this answer right?",
+      "all_kinds": "None picked: all types are used."
     },
     "options": {
       "timed": "Time limit",
@@ -214,7 +251,8 @@
       "scale": "Rating",
       "scale_default": "Default",
       "scale_buttons": "Four buttons",
-      "scale_confidence": "Confidence 1–5"
+      "scale_confidence": "Confidence 1–5",
+      "timed_hint": "A time limit for every card."
     },
     "timer": {
       "left": "{s} s left",
@@ -245,6 +283,29 @@
       "close": "Close",
       "line": "Line {n}",
       "truncated": "Only the first 500 lines are used."
+    },
+    "match": {
+      "heading": "Match",
+      "start_heading": "Match terms with definitions",
+      "intro": "Pick each term and its definition to clear the board, as fast as you can.",
+      "start": "Start matching",
+      "time_label": "Time",
+      "seconds": "{s} s",
+      "pairs_left": "{n} pairs left",
+      "mistakes": "{n} wrong",
+      "best": "Best {s} s",
+      "end": "End match",
+      "board": "Match board",
+      "term": "Term: {text}",
+      "definition": "Definition: {text}",
+      "how": "Pick a term, then its definition. Esc ends.",
+      "new_best": "New best time",
+      "summary": "{pairs} pairs · {mistakes} wrong",
+      "done": "Done",
+      "again": "Play again",
+      "too_few": "Not enough cards to match",
+      "too_few_hint": "Match needs two or more cards with different answers.",
+      "back": "Back"
     }
   }
 }
