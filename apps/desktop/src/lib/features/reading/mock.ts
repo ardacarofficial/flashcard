@@ -61,6 +61,24 @@ export default {
       changed();
       return dto;
     };
+    // `pnpm dev:mock` only (tests start empty): a couple of texts so the screens look real.
+    if (import.meta.env.MODE === 'mock') {
+      const sample = add(
+        'The badger',
+        'en',
+        'The badger is a short-legged animal that lives in burrows. Badgers dig with their strong front claws and come out at night to look for worms, insects and fruit.\n\nIn the morning they return to the sett, a large network of tunnels shared by the whole family.',
+        'text',
+        true,
+        null,
+      );
+      sample.progress_pct = 40;
+      sample.position = 120;
+      for (const w of ['the', 'is', 'a', 'that', 'in', 'with', 'their', 'and', 'to', 'at', 'for', 'they', 'of', 'by', 'out', 'come', 'look', 'night', 'animal', 'lives', 'strong', 'front', 'morning', 'return', 'large', 'whole', 'family', 'shared']) marks.set(w, 'known');
+      carded.add('burrows');
+      carded.add('dig');
+      const second = add('Kurze Geschichte', 'de', 'Der Fuchs läuft durch den Wald. Er sucht etwas zu essen und findet einen Apfel.', 'text', false, null);
+      second.progress_pct = 100;
+    }
     const job = (kind: string, result: unknown): JobDto => {
       const t = now();
       return { id: id('job'), kind, status: 'succeeded', progress: 1, message: null, error: null, result: result as JsonValue, created_at: t, updated_at: t };
