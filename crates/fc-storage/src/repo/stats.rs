@@ -28,6 +28,9 @@ pub struct StatsCacheRecord {
     pub generation: i64,
     /// `(study day, aggregate JSON)`, by day.
     pub days: Vec<(i64, Value)>,
+    /// What the aggregates were built for, beyond the review log (v1.0: the card sets of a
+    /// `stats.breakdown`); `None` for the whole-collection cache.
+    pub fingerprint: Option<String>,
     /// Built at.
     pub updated_at: Timestamp,
 }

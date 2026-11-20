@@ -117,6 +117,16 @@ pub fn train(
     items: Vec<FSRSItem>,
     progress: Option<Arc<Mutex<Progress>>>,
 ) -> Result<Vec<f64>, OptimizeError> {
+    train_with(items, progress, || {})
+}
+
+/// [`train`], calling `started` once the inputs are checked and training is about to run
+/// (tests abort there, deterministically "while running").
+fn train_with(
+    items: Vec<FSRSItem>,
+    progress: Option<Arc<Mutex<Progress>>>,
+    started: impl FnOnce(),
+) -> Result<Vec<f64>, OptimizeError> {
     if items.len() < MIN_TRAINING_ITEMS {
         return Err(OptimizeError::NotEnoughData {
             items: items.len(),
@@ -130,6 +140,7 @@ pub fn train(
     if aborted(&progress) {
         return Err(OptimizeError::Interrupted);
     }
+    started();
     let result = fsrs::compute_parameters(ComputeParametersInput {
         train_set: items,
         progress: progress.clone(),
@@ -251,21 +262,20 @@ mod tests {
             train(items.clone(), Some(p)),
             Err(OptimizeError::Interrupted)
         );
-        // Aborted while running (from another thread, as the app's job does).
+        // Aborted while running (from another thread, as the app's job does): the request
+        // lands after the up-front check, so training itself has to notice it. Set from a
+        // thread joined before training starts — no race with how fast training is.
         let p = new_progress();
-        let watcher = {
-            let p = p.clone();
-            std::thread::spawn(move || loop {
-                let mut s = p.lock().unwrap();
-                if s.total() > 0 || s.finished() {
-                    s.want_abort = true;
-                    return;
-                }
-                drop(s);
-                std::thread::yield_now();
-            })
+        let aborter = p.clone();
+        let started = move || {
+            std::thread::spawn(move || aborter.lock().unwrap().want_abort = true)
+                .join()
+                .unwrap();
         };
-        assert_eq!(train(items, Some(p)), Err(OptimizeError::Interrupted));
-        watcher.join().unwrap();
+        assert_eq!(
+            train_with(items, Some(p.clone()), started),
+            Err(OptimizeError::Interrupted)
+        );
+        assert!(p.lock().unwrap().want_abort);
     }
 }

@@ -10,11 +10,12 @@
 //! | Target | Measured as | Full (`--ignored`, release) | CI (every `cargo test`) |
 //! |---|---|---|---|
 //! | Startup < 2 s | `App::open_sqlite` (migrations check, seeding, crash recovery, trash purge, plugins) + the first screen's queries | 2 000 ms | 6 000 ms |
-//! | Next card < 20 ms | `study.answer` round trip that returns the next card, 40 answers: median (the target) and p95 (tail: SQLite's WAL checkpoint lands on every ~17th answer) | 20 / 50 ms | 120 / 300 ms |
+//! | Next card < 20 ms | `study.answer` round trip that returns the next card (p95 of 40) | 20 ms | 120 ms |
+//! | Study start | `study.start` over the whole collection (normal session) | 500 ms | 3 000 ms |
 //! | Search 100k < 100 ms | slowest browser query (count + page of 100), classification queries included | 100 ms | 300 ms |
 //! | Browser scroll | one 100-row page anywhere in the full list, three sort orders | 100 ms | 300 ms |
 //! | Import 10k | 10 000-row text import job, start to finished | 10 000 ms | 20 000 ms (2 000 rows) |
-//! | Stats on 2M reviews | cached overview, breakdown by classification, deck scope | 1 000 / 3 000 / 10 000 ms | 3 000 / 10 000 / 10 000 ms |
+//! | Stats on 2M reviews | cached overview, breakdown by classification (cached day counts + appended rows), deck scope | 1 000 / 1 500 / 10 000 ms | 3 000 / 10 000 / 10 000 ms |
 //! | Memory | peak resident set of the probe process (Linux) | 400 MB | 400 MB |
 //!
 //! Full size: 100k notes / 200k cards / 2M reviews:
@@ -44,6 +45,8 @@ const DAY: i64 = 86_400_000;
 const PROBE_DB: &str = "FC_PERF_PROBE_DB";
 /// Optional directory for the built collection (default: the system temp directory).
 const PERF_DIR: &str = "FC_PERF_DIR";
+/// Optional file the freshly built collection is copied to (profiling).
+const PERF_KEEP: &str = "FC_PERF_KEEP";
 /// Import rows for the probe.
 const PROBE_IMPORT_ROWS: &str = "FC_PERF_PROBE_IMPORT_ROWS";
 /// Marker of the probe's result line on stdout.
@@ -102,8 +105,8 @@ struct Scale {
     reviews: usize,
     import_rows: usize,
     startup: f64,
-    next_card_p50: f64,
     next_card_p95: f64,
+    study_start: f64,
     search: f64,
     scroll: f64,
     import: f64,
@@ -119,13 +122,13 @@ const FULL: Scale = Scale {
     reviews: 2_000_000,
     import_rows: 10_000,
     startup: 2_000.0,
-    next_card_p50: 20.0,
-    next_card_p95: 50.0,
+    next_card_p95: 20.0,
+    study_start: 500.0,
     search: 100.0,
     scroll: 100.0,
     import: 10_000.0,
     stats_cached: 1_000.0,
-    stats_breakdown: 3_000.0,
+    stats_breakdown: 1_500.0,
     stats_deck: 10_000.0,
     peak_rss_mb: 400.0,
 };
@@ -138,8 +141,8 @@ const SCALED: Scale = Scale {
     reviews: 200_000,
     import_rows: 2_000,
     startup: 6_000.0,
-    next_card_p50: 120.0,
-    next_card_p95: 300.0,
+    next_card_p95: 120.0,
+    study_start: 3_000.0,
     search: 300.0,
     scroll: 300.0,
     import: 20_000.0,
@@ -351,13 +354,12 @@ fn build_world(path: &Path, notes: usize, reviews: usize) {
             card.created_at = note.created_at;
             card.updated_at = note.updated_at;
             let s = &mut card.scheduling;
-            match roll(1600) {
+            match roll(20) {
                 // 25 % new
-                0..=399 => {}
-                // 0.25 % (re)learning, due within the hour: 500 cards at full size. Learning
-                // steps take minutes to days, so even a heavy user has tens to a few hundred
-                // cards there (every one of them is in a normal session's queue).
-                400..=403 => {
+                0..=4 => {}
+                // 10 % (re)learning, due within the hour (all of them are in a normal
+                // session's queue: learning cards are never limited)
+                5 | 6 => {
                     s.state = if roll(2) == 0 {
                         CardState::Learning
                     } else {
@@ -370,7 +372,7 @@ fn build_world(path: &Path, notes: usize, reviews: usize) {
                     s.lapses = roll(3) as u32;
                     s.last_review = Some(Timestamp(now - DAY));
                 }
-                // 74.75 % review: ~1/12 due today or overdue
+                // 65 % review: ~1/12 due today or overdue
                 _ => {
                     s.state = CardState::Review;
                     s.due = Some(Timestamp(now + (roll(120) as i64 - 10) * DAY));
@@ -629,6 +631,17 @@ fn run_suite(scale: Scale) -> Measured {
     };
     let path = dir.path().join("collection.db");
     let (setup, ()) = time(|| build_world(&path, scale.notes, scale.reviews));
+    // `FC_PERF_KEEP=<file>`: a copy of the freshly built collection, for profiling the
+    // probe on its own (`FC_PERF_PROBE_DB=<copy> cargo test … perf_tests::probe -- --ignored`).
+    if let Some(keep) = std::env::var_os(PERF_KEEP) {
+        std::fs::copy(&path, &keep).unwrap();
+        let wal = path.with_extension("db-wal");
+        if wal.exists() {
+            let mut to = keep.clone();
+            to.push("-wal");
+            std::fs::copy(wal, to).unwrap();
+        }
+    }
     let out = std::process::Command::new(std::env::current_exe().unwrap())
         .args([
             "perf_tests::probe",
@@ -659,9 +672,9 @@ fn run_suite(scale: Scale) -> Measured {
     println!(
         "perf suite: {} notes / {} cards / {} reviews (setup {:.1} s)\n\
          | startup                | {:>8.1} ms | budget {:>6.0} ms |\n\
-         | study.start (all)      | {:>8.1} ms |                  |\n\
+         | study.start (all)      | {:>8.1} ms | budget {:>6.0} ms |\n\
          | study.start (level>=B1)| {:>8.1} ms |                  |\n\
-         | next card p50 / p95    | {:>4.1} / {:>4.1} ms | budget {:>3.0} / {:>3.0} ms |\n\
+         | next card p50 / p95    | {:>4.1} / {:>4.1} ms | budget p95 {:>2.0} ms |\n\
          | search (worst: {:?}) | {:>8.1} ms | budget {:>6.0} ms |\n\
          | browser page (worst)   | {:>8.1} ms | budget {:>6.0} ms |\n\
          | stats cached overview  | {:>8.1} ms | budget {:>6.0} ms |\n\
@@ -676,10 +689,10 @@ fn run_suite(scale: Scale) -> Measured {
         m.startup,
         scale.startup,
         m.study_start,
+        scale.study_start,
         m.custom_start,
         m.next_card_p50,
         m.next_card_p95,
-        scale.next_card_p50,
         scale.next_card_p95,
         m.search_worst_query,
         m.search_worst,
@@ -700,8 +713,8 @@ fn run_suite(scale: Scale) -> Measured {
     assert_eq!(m.imported, scale.import_rows as u64, "{m:?}");
     let checks = [
         ("startup", m.startup, scale.startup),
-        ("next card p50", m.next_card_p50, scale.next_card_p50),
         ("next card p95", m.next_card_p95, scale.next_card_p95),
+        ("study.start", m.study_start, scale.study_start),
         ("search", m.search_worst, scale.search),
         ("browser page", m.scroll_worst, scale.scroll),
         ("stats cached", m.stats_cached, scale.stats_cached),

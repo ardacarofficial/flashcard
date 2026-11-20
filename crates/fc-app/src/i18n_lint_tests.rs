@@ -111,17 +111,92 @@ fn advertised() -> (BTreeSet<String>, BTreeSet<String>) {
         for s in &m.settings {
             idents.insert(s.key.clone());
         }
+        // UI contribution ids (`local_api.screen`) name menu entries, not texts.
+        for u in &m.ui {
+            idents.insert(u.id.clone());
+        }
     }
+    // Job kinds: stored identifiers (`jobs.kind`), never shown as text.
+    idents.extend(t.app.registry().job_kinds().map(str::to_owned));
     (keys, idents)
 }
 
-/// Job kinds: stored identifiers (`jobs.kind`), never shown as text.
-const JOB_KINDS: &[&str] = &["io.import", "io.export", "io.backup", "io.restore"];
+/// End (exclusive, char index) of the item that starts at `from`: the `;` of an item without
+/// a body (`mod tests;`, `use …;`), else the brace that closes its body. Strings, char
+/// literals and comments do not count.
+fn item_end(src: &[char], from: usize) -> usize {
+    let mut depth = 0usize;
+    let mut i = from;
+    while i < src.len() {
+        match src[i] {
+            '/' if src.get(i + 1) == Some(&'/') => {
+                while i < src.len() && src[i] != '\n' {
+                    i += 1;
+                }
+                continue;
+            }
+            '/' if src.get(i + 1) == Some(&'*') => {
+                i += 2;
+                while i + 1 < src.len() && !(src[i] == '*' && src[i + 1] == '/') {
+                    i += 1;
+                }
+                i += 2;
+                continue;
+            }
+            '\'' if src.get(i + 2) == Some(&'\'') => {
+                i += 3;
+                continue;
+            }
+            '\'' if src.get(i + 1) == Some(&'\\') && src.get(i + 3) == Some(&'\'') => {
+                i += 4;
+                continue;
+            }
+            '"' => {
+                i += 1;
+                while i < src.len() && src[i] != '"' {
+                    if src[i] == '\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+            }
+            ';' if depth == 0 => return i + 1,
+            '{' => depth += 1,
+            '}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    src.len()
+}
 
-/// The string literals of a Rust source, without comments, up to its first `#[cfg(test)]`.
+/// The source without its `#[cfg(test)]` items (the test module's span; code after it is
+/// still scanned).
+fn without_test_items(src: &str) -> Vec<char> {
+    const ATTR: &str = "#[cfg(test)]";
+    let chars: Vec<char> = src.chars().collect();
+    let attr: Vec<char> = ATTR.chars().collect();
+    let mut out = Vec::with_capacity(chars.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i..].starts_with(&attr) {
+            i = item_end(&chars, i + attr.len());
+        } else {
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// The string literals of a Rust source, without comments and `#[cfg(test)]` items.
 fn literals(src: &str) -> Vec<String> {
-    let src = src.split("#[cfg(test)]").next().unwrap_or_default();
-    let bytes: Vec<char> = src.chars().collect();
+    let bytes = without_test_items(src);
     let mut out = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
@@ -206,11 +281,7 @@ fn emitted(namespaces: &BTreeSet<String>, idents: &BTreeSet<String>) -> BTreeMap
         }
         for lit in literals(&src) {
             let ns = lit.split('.').next().unwrap_or_default();
-            if is_dotted_key(&lit)
-                && namespaces.contains(ns)
-                && !idents.contains(&lit)
-                && !JOB_KINDS.contains(&lit.as_str())
-            {
+            if is_dotted_key(&lit) && namespaces.contains(ns) && !idents.contains(&lit) {
                 found.entry(lit).or_insert_with(|| f.display().to_string());
             }
         }
@@ -226,6 +297,15 @@ fn literal_scanner_skips_comments_and_chars() {
     assert!(is_dotted_key("io.progress.converting"));
     assert!(!is_dotted_key("Hello. World"));
     assert!(!is_dotted_key("v1"));
+}
+
+/// Only the `#[cfg(test)]` item is skipped: code after a test module is still scanned.
+#[test]
+fn literal_scanner_skips_only_the_test_item() {
+    let src = "let a = \"a.before\";\n#[cfg(test)]\nmod tests {\n    fn f() { let s = \"}\"; \
+               let t = '{'; /* } */ \"test.only\"; }\n}\nlet b = \"b.after\";\n\
+               #[cfg(test)]\nmod more;\nlet c = \"c.after\";";
+    assert_eq!(literals(src), vec!["a.before", "b.after", "c.after"]);
 }
 
 #[test]

@@ -11,10 +11,13 @@
 //! * `engine`: settings, scheduler parameters, session load/save, rendering, the session DTO.
 //! * `session`: `study.start/session/active/answer/hint/check_answer/end/summary`.
 //! * `cards`: `study.suspend/bury/postpone/restore/card_history`.
+//! * `state_diff`: how a session's queue is stored and undone (v1.0): row edits and diffs
+//!   instead of whole-queue copies.
 
 mod cards;
 mod engine;
 mod session;
+mod state_diff;
 #[cfg(test)]
 mod tests;
 
@@ -110,6 +113,7 @@ pub fn descriptor() -> ModuleDescriptor {
 /// Registers the module and its methods.
 pub fn register(reg: &mut Registry) {
     reg.module(descriptor());
+    reg.provide(std::sync::Arc::new(state_diff::QueueCache::default()));
     reg.command::<StudyStart>(session::start);
     reg.query::<StudySession>(session::get);
     reg.query::<StudyActive>(session::active);

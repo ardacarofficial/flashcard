@@ -156,13 +156,13 @@ impl<M: Mode> StatsRead for SqliteTx<'_, M> {
     }
 
     fn stats_cache(&self, calendar: &str) -> StorageResult<Option<StatsCacheRecord>> {
-        let Some((upto_seq, row_count, generation, updated_at)) = one(
+        let Some((upto_seq, row_count, generation, updated_at, fingerprint)) = one(
             self.conn(),
             META,
-            "SELECT upto_seq, row_count, generation, updated_at FROM stats_cache_meta
-             WHERE calendar = ?1",
+            "SELECT upto_seq, row_count, generation, updated_at, fingerprint
+             FROM stats_cache_meta WHERE calendar = ?1",
             [calendar],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, ts(r, 3)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, ts(r, 3)?, r.get(4)?)),
         )?
         else {
             return Ok(None);
@@ -181,6 +181,7 @@ impl<M: Mode> StatsRead for SqliteTx<'_, M> {
             generation,
             days,
             updated_at,
+            fingerprint,
         }))
     }
 
@@ -284,17 +285,19 @@ impl StatsWrite for SqliteTx<'_, WriteMode> {
         exec(
             self.conn(),
             META,
-            "INSERT INTO stats_cache_meta (calendar, upto_seq, row_count, generation, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO stats_cache_meta
+                 (calendar, upto_seq, row_count, generation, updated_at, fingerprint)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(calendar) DO UPDATE SET upto_seq = excluded.upto_seq,
                  row_count = excluded.row_count, generation = excluded.generation,
-                 updated_at = excluded.updated_at",
+                 updated_at = excluded.updated_at, fingerprint = excluded.fingerprint",
             params![
                 rec.calendar,
                 rec.upto_seq,
                 rec.row_count,
                 rec.generation,
-                rec.updated_at.0
+                rec.updated_at.0,
+                rec.fingerprint
             ],
         )?;
         Ok(())

@@ -180,18 +180,16 @@ fn migration_0501_keeps_review_history_after_card_purge() {
             tx.insert_review_log(&review(2, c2, 200, "normal")).unwrap();
             tx.insert_review_log(&review(3, c2, 300, "imported"))
                 .unwrap();
-            tx.put_stats_cache(&StatsCacheRecord {
-                calendar: "0:4".into(),
-                upto_seq: 3,
-                row_count: 3,
-                generation: 0,
-                days: vec![(1, json!({"day": 1}))],
-                updated_at: Timestamp(1),
-            })
-            .unwrap();
             w.commit().unwrap();
         }
         let raw = Connection::open(&path).unwrap();
+        // A 0500-era cache (written as SQL: today's code writes the 1072 schema).
+        raw.execute_batch(
+            r#"INSERT INTO stats_day_cache (calendar, day, data) VALUES ('0:4', 1, '{"day":1}');
+               INSERT INTO stats_cache_meta (calendar, upto_seq, row_count, generation, updated_at)
+               VALUES ('0:4', 3, 3, 0, 1);"#,
+        )
+        .unwrap();
         let fks: i64 = raw
             .query_row(
                 "SELECT count(*) FROM pragma_foreign_key_list('review_log')",
@@ -262,6 +260,7 @@ fn rows(conn: &Connection) -> Vec<(i64, String, String)> {
 fn cache_round_trip_and_due_times() {
     let fx = Fx::seeded();
     let rec = StatsCacheRecord {
+        fingerprint: None,
         calendar: "180:4".into(),
         upto_seq: 7,
         row_count: 5,
@@ -342,6 +341,7 @@ fn restore_drops_and_invalidates_the_stats_cache() {
     let mark = fx.read(|r| r.review_log_mark().unwrap());
     fx.write(|tx| {
         tx.put_stats_cache(&StatsCacheRecord {
+            fingerprint: None,
             calendar: "0:4".into(),
             upto_seq: 1,
             row_count: 1,

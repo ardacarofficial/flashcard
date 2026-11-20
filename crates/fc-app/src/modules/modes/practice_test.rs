@@ -246,7 +246,7 @@ fn paper_dto(s: &Session, t: &TestState, with_key: bool) -> TestPaperDto {
 }
 
 fn paper(req: TestPaperRequest, ctx: &QueryCtx<'_>) -> AppResult<TestPaperDto> {
-    let s = Session::load(ctx.tx, req.session_id)?;
+    let s = Session::load(ctx.tx, ctx.registry, req.session_id)?;
     let t = test_state(&s)?;
     Ok(paper_dto(&s, t, req.with_key.unwrap_or(false)))
 }
@@ -265,7 +265,7 @@ fn response(q: &Question, a: Option<&TestAnswerDto>) -> Response {
 }
 
 fn submit(req: SubmitTest, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<TestPaperDto>> {
-    let mut session = Session::load(ctx.reads(), req.session_id)?;
+    let mut session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
     session.require_open()?;
     let t = test_state(&session)?.clone();
     if t.graded.is_some() {
@@ -273,7 +273,6 @@ fn submit(req: SubmitTest, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
             .with_detail("id", session.record.id.to_string())
             .into());
     }
-    let before = session.snapshot();
     let responses: Vec<Response> = t
         .questions
         .iter()
@@ -337,7 +336,7 @@ fn submit(req: SubmitTest, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
             t.graded = Some(graded);
         }
     }
-    session.save(ctx.tx)?;
+    let before = session.save(ctx.tx)?.snapshot()?;
     let t = test_state(&session)?;
     Ok(CommandOutcome {
         response: paper_dto(&session, t, true),

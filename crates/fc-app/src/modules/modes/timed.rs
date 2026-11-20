@@ -130,7 +130,7 @@ pub(super) fn check_in_time(s: &Session, card: CardId, now: Timestamp) -> AppRes
 }
 
 fn expire(req: ExpireCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<SessionDto>> {
-    let mut session = Session::load(ctx.reads(), req.session_id)?;
+    let mut session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
     let timed = timed_of(&session)?;
     session.require_open()?;
     if session.current(ctx.now).map(|e| e.card_id) != Some(req.card_id) {
@@ -175,7 +175,6 @@ fn expire(req: ExpireCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
             })
         }
         TimeoutAction::Skip => {
-            let before = session.snapshot();
             queue::remove_cards(&mut session.state, &[req.card_id]);
             card_left_screen(&mut session.state, req.card_id);
             let m = session.state.modes.get_or_insert_with(Default::default);
@@ -183,7 +182,7 @@ fn expire(req: ExpireCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
             session.state.hint_card = None;
             session.state.hints = 0;
             session.state.last_event_at = Some(ctx.now);
-            session.save(ctx.tx)?;
+            let before = session.save(ctx.tx)?.snapshot()?;
             Ok(CommandOutcome {
                 response: session_dto(View::cmd(ctx), &session, ctx.now)?,
                 inverse: vec![inverse_call::<StudyRestore>(&RestoreStudy {
@@ -200,7 +199,7 @@ fn expire(req: ExpireCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
 }
 
 fn start(req: StartTimer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<SessionDto>> {
-    let mut session = Session::load(ctx.reads(), req.session_id)?;
+    let mut session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
     let timed = timed_of(&session)?;
     session.require_open()?;
     if session.current(ctx.now).map(|e| e.card_id) != Some(req.card_id) {

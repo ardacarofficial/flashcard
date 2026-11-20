@@ -13,7 +13,8 @@ use fc_core::card::{CardState, Rating};
 use fc_core::rng::SplitMix64;
 use fc_core::settings::SettingScope;
 use fc_core::{CardId, ReviewLogId, SessionId, Timestamp};
-use fc_storage::repo::{CardFilter, ReviewLogRecord, SessionRecord, StudyCardFilter};
+use fc_core::preset::NewCardOrder;
+use fc_storage::repo::{CardFilter, NewCardsFirst, ReviewLogRecord, SessionRecord, StudyCardFilter};
 use fc_api::v1::cardtypes::CardInteraction;
 use fc_providers::strategy::{CardResponse, Evaluation};
 use fc_study::answer::{check, CheckOptions, CheckerKind, Grade};
@@ -89,7 +90,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
             let from = req
                 .from_session
                 .ok_or_else(|| invalid("a mistakes session needs from_session"))?;
-            Some(Session::load(ctx.reads(), from)?.state.again)
+            Some(Session::load(ctx.reads(), ctx.registry, from)?.state.again)
         }
         StudyKind::Normal | StudyKind::Custom | StudyKind::Learn | StudyKind::Test => matching,
     };
@@ -97,26 +98,6 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
     // written).
     let modes_config = crate::modules::modes::prepare_start(ctx, &req)?;
     let scope_decks = deck_ids.clone();
-    let mut candidates = ctx.reads().study_cards(&StudyCardFilter {
-        deck_ids,
-        card_ids,
-        states: filter.states.clone(),
-        attributes: filter
-            .attributes
-            .iter()
-            .map(|c| (c.attr_id, c.values.clone()))
-            .collect(),
-        include_suspended: false,
-    })?;
-    // Empty cards (v0.3: the note no longer yields them) are never studied.
-    let mut empty = EmptyCards::new(View::cmd(ctx));
-    let mut keep = Vec::with_capacity(candidates.len());
-    for c in candidates {
-        if !empty.is_empty(&c)? {
-            keep.push(c);
-        }
-    }
-    candidates = keep;
     let scope = deck_scope(req.deck_id);
     let config = SessionConfig {
         kind: req.kind,
@@ -157,22 +138,96 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         StudyKind::Custom | StudyKind::Learn | StudyKind::Test => filter.due_only.unwrap_or(false),
         StudyKind::Mistakes => false,
     };
-    // Seeded from the session id: shuffles are reproducible from the stored session.
-    let mut rng = SplitMix64::new(id.0.as_u64_pair().1);
-    let mut queue = queue::build_queue(
-        &candidates,
-        |c| c.scheduling.clone(),
-        BuildOptions {
-            now: ctx.now,
-            day_end: config.day_end(ctx.now),
-            due_only,
-            new_limit,
-            review_limit,
-            order,
-            bury_siblings,
-            rng: &mut rng,
-        },
-    );
+    let day_end = config.day_end(ctx.now);
+    // v1.0: only what the queue can take is read — cards in progress due today (through the
+    // due index) and, when new cards come in a fixed order, the first ones up to the limit
+    // (more are read only if burying or empty cards leave the limit unfilled).
+    let newest_first = match order {
+        Order::Due | Order::HardestFirst => Some(false),
+        Order::NewestFirst => Some(true),
+        Order::Preset { new: NewCardOrder::Added, .. } => Some(false),
+        Order::Random | Order::Preset { new: NewCardOrder::Random, .. } => None,
+    };
+    let mut new_read = new_limit
+        .zip(newest_first)
+        .map(|(n, newest)| NewCardsFirst { n: n.saturating_mul(2).saturating_add(32), newest });
+    let mut card_filter = StudyCardFilter {
+        deck_ids,
+        card_ids,
+        states: filter.states.clone(),
+        attributes: filter
+            .attributes
+            .iter()
+            .map(|c| (c.attr_id, c.values.clone()))
+            .collect(),
+        include_suspended: false,
+        due_before: due_only.then_some(day_end),
+        new_first: None,
+    };
+    // Empty cards (v0.3: the note no longer yields them) are never studied. Checked for the
+    // cards a limit counts (reviews, new cards) — an empty one is left out and the queue
+    // built again — and for every card of learn/test sessions (their stages and papers are
+    // made from the queue); a learning card is skipped when it comes up.
+    let check_all = matches!(req.kind, StudyKind::Learn | StudyKind::Test);
+    let mut empty = EmptyCards::new(View::cmd(ctx));
+    let mut excluded: std::collections::HashSet<CardId> = std::collections::HashSet::new();
+    let seed = id.0.as_u64_pair().1;
+    // Bounded: every round leaves out a card or reads more new cards.
+    let (mut queue, mut rng) = loop {
+        card_filter.new_first = new_read;
+        let mut candidates = ctx.reads().study_cards(&card_filter)?;
+        let new_read_all = new_read.is_none_or(|f| {
+            (candidates
+                .iter()
+                .filter(|c| c.scheduling.state == CardState::New)
+                .count() as u64)
+                < u64::from(f.n)
+        });
+        candidates.retain(|c| !excluded.contains(&c.id));
+        // Seeded from the session id: shuffles are reproducible from the stored session.
+        let mut rng = SplitMix64::new(seed);
+        let queue = queue::build_queue(
+            &candidates,
+            |c| c.scheduling.clone(),
+            BuildOptions {
+                now: ctx.now,
+                day_end,
+                due_only,
+                new_limit,
+                review_limit,
+                order,
+                bury_siblings,
+                rng: &mut rng,
+            },
+        );
+        let by_id: std::collections::HashMap<CardId, &fc_core::card::Card> =
+            candidates.iter().map(|c| (c.id, c)).collect();
+        let mut found = false;
+        for e in &queue {
+            if e.kind == queue::QueueKind::Learning && !check_all {
+                continue;
+            }
+            if let Some(card) = by_id.get(&e.card_id) {
+                if empty.is_empty(card)? {
+                    excluded.insert(card.id);
+                    found = true;
+                }
+            }
+        }
+        if found {
+            continue;
+        }
+        let new_taken = queue.iter().filter(|e| e.kind == queue::QueueKind::New).count() as u64;
+        match (new_read, new_limit) {
+            (Some(f), Some(limit)) if !new_read_all && new_taken < u64::from(limit) => {
+                new_read = Some(NewCardsFirst {
+                    n: f.n.saturating_mul(4),
+                    ..f
+                });
+            }
+            _ => break (queue, rng),
+        }
+    };
     if let Some(limit) = filter.limit {
         queue.truncate(limit as usize);
     }
@@ -184,8 +239,9 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
     // v0.10: learn progress / test paper (no-op for other kinds).
     crate::modules::modes::init_state(View::cmd(ctx), &req, &config, &mut state, &mut rng)?;
     end_open_sessions(ctx)?;
-    let mut session = Session {
-        record: SessionRecord {
+    let mut session = Session::new(
+        ctx.registry,
+        SessionRecord {
             id,
             kind: kind_str(req.kind).to_owned(),
             query,
@@ -197,7 +253,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         },
         config,
         state,
-    };
+    );
     session.save(ctx.tx)?;
     Ok(CommandOutcome {
         response: session_dto(View::cmd(ctx), &session, ctx.now)?,
@@ -264,7 +320,7 @@ fn setting_bool_any(ctx: &CommandCtx<'_>, deck: fc_core::DeckId) -> AppResult<bo
 }
 
 pub(super) fn get(req: SessionRef, ctx: &QueryCtx<'_>) -> AppResult<SessionDto> {
-    let s = Session::load(ctx.tx, req.session_id)?;
+    let s = Session::load(ctx.tx, ctx.registry, req.session_id)?;
     session_dto(View::query(ctx), &s, ctx.now)
 }
 
@@ -272,7 +328,7 @@ pub(super) fn active(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<ActiveSession> {
     let session = match ctx.tx.latest_open_session()? {
         Some(r) => Some(session_dto(
             View::query(ctx),
-            &Session::load(ctx.tx, r.id)?,
+            &Session::load(ctx.tx, ctx.registry, r.id)?,
             ctx.now,
         )?),
         None => None,
@@ -342,17 +398,15 @@ pub(crate) fn answer_core(
     req: &AnswerCard,
     hooks: AnswerHooks<'_>,
 ) -> AppResult<CommandOutcome<SessionDto>> {
-    let mut session = Session::load(ctx.reads(), req.session_id)?;
+    let mut session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
     session.require_open()?;
     session.require_available(req.card_id, ctx.now)?;
-    let session_before = session.snapshot();
     let queue_kind = session
         .state
         .queue
         .iter()
         .find(|e| e.card_id == req.card_id)
         .map_or(queue::QueueKind::New, |e| e.kind);
-    drop_dead_cards(ctx, &mut session)?;
     let mut card = require_live_card(ctx.reads(), req.card_id)?;
     if EmptyCards::new(View::cmd(ctx)).is_empty(&card)? {
         return Err(not_available(card.id));
@@ -455,7 +509,8 @@ pub(crate) fn answer_core(
         created_at: ctx.now,
     };
     ctx.tx.insert_review_log(&review)?;
-    session.save(ctx.tx)?;
+    drop_dead_ahead(View::cmd(ctx), &mut session, ctx.now)?;
+    let undo = session.save(ctx.tx)?;
     let rating = serde_json::to_value(req.rating)
         .ok()
         .and_then(|v| v.as_str().map(str::to_owned))
@@ -464,7 +519,7 @@ pub(crate) fn answer_core(
         response: session_dto(View::cmd(ctx), &session, ctx.now)?,
         inverse: vec![inverse_call::<StudyRestore>(&RestoreStudy {
             cards: restore_cards,
-            session: Some(session_before),
+            session: Some(undo.snapshot()?),
             remove_reviews: vec![review.id],
             add_reviews: Vec::new(),
         })?],
@@ -477,17 +532,21 @@ pub(crate) fn answer_core(
     })
 }
 
-/// Removes queued cards that were deleted since the queue was built.
-fn drop_dead_cards(ctx: &CommandCtx<'_>, session: &mut Session) -> AppResult<()> {
-    // One query for the whole queue (v1.0: was a card read per queued card on every answer).
-    let queued: Vec<CardId> = session.state.queue.iter().map(|e| e.card_id).collect();
-    let live: std::collections::HashSet<CardId> = ctx
-        .reads()
-        .search_card_ids_among(&fc_core::query::Filter::All, ctx.now, &queued)?
-        .into_iter()
-        .collect();
-    let dead: Vec<CardId> = queued.into_iter().filter(|id| !live.contains(id)).collect();
-    queue::remove_cards(&mut session.state, &dead);
+/// Removes cards deleted or emptied since the queue was built from the front of the queue:
+/// the entries about to be shown, not the whole queue (v1.0 — an answer costs the same with
+/// 20 or 20 000 queued cards). The rest leave when they come up (the session DTO skips them
+/// the same way).
+fn drop_dead_ahead(v: View<'_>, session: &mut Session, now: Timestamp) -> AppResult<()> {
+    let mut empty = EmptyCards::new(v);
+    while let Some(entry) = session.current(now) {
+        let id = entry.card_id;
+        match require_live_card(v.reads, id) {
+            Ok(card) if !empty.is_empty(&card)? => break,
+            _ => {
+                queue::remove_cards(&mut session.state, &[id]);
+            }
+        }
+    }
     Ok(())
 }
 
@@ -499,7 +558,7 @@ fn expected_answer(v: View<'_>, card: CardId) -> AppResult<String> {
 }
 
 pub(super) fn hint(req: HintRequest, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<HintDto>> {
-    let mut session = Session::load(ctx.reads(), req.session_id)?;
+    let mut session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
     session.require_open()?;
     session.require_available(req.card_id, ctx.now)?;
     let used = if session.state.hint_card == Some(req.card_id) {
@@ -530,7 +589,7 @@ pub(super) fn hint(req: HintRequest, ctx: &mut CommandCtx<'_>) -> AppResult<Comm
 /// choice cards are decided by the engine; typed answers go to the configured v0.2 answer
 /// checker (`CheckText`; also for self-graded cards when `study.type_answer` is on).
 pub(super) fn check_answer(req: CheckAnswer, ctx: &QueryCtx<'_>) -> AppResult<AnswerCheckDto> {
-    let session = Session::load(ctx.tx, req.session_id)?;
+    let session = Session::load(ctx.tx, ctx.registry, req.session_id)?;
     session.require_available(req.card_id, ctx.now)?;
     let card = require_live_card(ctx.tx, req.card_id)?;
     let r = render_for_study(View::query(ctx), &card)?;
@@ -599,7 +658,7 @@ fn grade_dto(g: Grade) -> AnswerGrade {
 }
 
 pub(super) fn end(req: SessionRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<SessionSummary>> {
-    let mut session = Session::load(ctx.reads(), req.session_id)?;
+    let mut session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
     if session.record.ended_at.is_none() {
         session.record.ended_at = Some(ctx.now);
         session.save(ctx.tx)?;
@@ -613,5 +672,5 @@ pub(super) fn end(req: SessionRef, ctx: &mut CommandCtx<'_>) -> AppResult<Comman
 }
 
 pub(super) fn summary_query(req: SessionRef, ctx: &QueryCtx<'_>) -> AppResult<SessionSummary> {
-    Ok(summary_dto(&Session::load(ctx.tx, req.session_id)?))
+    Ok(summary_dto(&Session::load(ctx.tx, ctx.registry, req.session_id)?))
 }

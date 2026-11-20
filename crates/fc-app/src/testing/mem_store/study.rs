@@ -7,6 +7,8 @@ use fc_core::{ReviewLogId, SessionId};
 #[derive(Debug, Clone, Default)]
 pub struct StudyState {
     sessions: BTreeMap<SessionId, SessionRecord>,
+    /// `session_queue` rows by session and seq.
+    queues: BTreeMap<SessionId, BTreeMap<i64, SessionQueueRow>>,
     pub(super) reviews: BTreeMap<ReviewLogId, ReviewLogRecord>,
 }
 
@@ -49,9 +51,25 @@ impl StudyRead for MemTx<'_> {
             .filter(|c| f.states.as_ref().is_none_or(|st| st.contains(&c.scheduling.state)))
             .filter(|c| f.include_suspended || !c.suspended)
             .filter(|c| f.attributes.iter().all(|(a, v)| self.has_value(*a, v, c)))
+            .filter(|c| {
+                c.scheduling.state == CardState::New
+                    || f.due_before.is_none_or(|t| c.scheduling.due.is_none_or(|d| d < t))
+            })
             .cloned()
             .collect();
         out.sort_by_key(|c| (c.created_at, c.id));
+        if let Some(first) = f.new_first {
+            let mut new: Vec<&Card> = out
+                .iter()
+                .filter(|c| c.scheduling.state == CardState::New)
+                .collect();
+            if first.newest {
+                new.reverse();
+            }
+            let keep: std::collections::HashSet<CardId> =
+                new.iter().take(first.n as usize).map(|c| c.id).collect();
+            out.retain(|c| c.scheduling.state != CardState::New || keep.contains(&c.id));
+        }
         Ok(out)
     }
 
@@ -90,6 +108,22 @@ impl StudyRead for MemTx<'_> {
         out.sort_by_key(|r| (r.created_at, r.id));
         Ok(out)
     }
+
+    fn session_queue(&self, session: SessionId) -> StorageResult<Vec<SessionQueueRow>> {
+        Ok(self.queue_rows(session))
+    }
+}
+
+impl MemTx<'_> {
+    fn queue_rows(&self, session: SessionId) -> Vec<SessionQueueRow> {
+        self.s()
+            .domains
+            .study
+            .queues
+            .get(&session)
+            .map(|q| q.values().cloned().collect())
+            .unwrap_or_default()
+    }
 }
 
 impl StudyWrite for MemTx<'_> {
@@ -120,5 +154,29 @@ impl StudyWrite for MemTx<'_> {
 
     fn delete_review_log(&mut self, id: ReviewLogId) -> StorageResult<bool> {
         Ok(self.m().domains.study.reviews.remove(&id).is_some())
+    }
+
+    fn edit_session_queue(
+        &mut self,
+        session: SessionId,
+        clear: bool,
+        remove: &[i64],
+        add: &[SessionQueueRow],
+    ) -> StorageResult<()> {
+        let q = self.m().domains.study.queues.entry(session).or_default();
+        if clear {
+            q.clear();
+        }
+        for seq in remove {
+            q.remove(seq);
+        }
+        for r in add {
+            if q.insert(r.seq, r.clone()).is_some() {
+                return Err(StorageError::Constraint {
+                    constraint: "session_queue_pk".into(),
+                });
+            }
+        }
+        Ok(())
     }
 }

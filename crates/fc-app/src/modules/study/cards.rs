@@ -94,11 +94,9 @@ fn change_cards<M: fc_api::ApiMethod>(
     }
     let mut session_before = None;
     if let Some(sid) = session {
-        let mut s = Session::load(ctx.reads(), sid)?;
-        let snap = s.snapshot();
+        let mut s = Session::load(ctx.reads(), ctx.registry, sid)?;
         if queue::remove_cards(&mut s.state, ids) > 0 {
-            s.save(ctx.tx)?;
-            session_before = Some(snap);
+            session_before = Some(s.save(ctx.tx)?.snapshot()?);
         }
     }
     let n = u32::try_from(changed.len()).unwrap_or(u32::MAX);
@@ -157,7 +155,7 @@ fn today_end(
     session: Option<SessionId>,
 ) -> AppResult<Timestamp> {
     let session_cfg = match session {
-        Some(s) => Some(Session::load(ctx.reads(), s)?.config),
+        Some(s) => Some(Session::load(ctx.reads(), ctx.registry, s)?.config),
         None => None,
     };
     let tz = tz
@@ -246,14 +244,13 @@ pub(super) fn restore(
         changed.push(card.id);
     }
     if let Some(snap) = &req.session {
-        let mut s = Session::load(ctx.reads(), snap.id)?;
-        inverse.session = Some(s.snapshot());
+        let mut s = Session::load(ctx.reads(), ctx.registry, snap.id)?;
         // Only the queue state: an ended session stays ended (start/end have no undo, so a
         // session ended since the snapshot must not reopen next to the new one).
-        s.state = crate::support::from_json(&snap.state)?;
+        s.state = s.restored_state(&snap.state)?;
         // The card back on screen gets its full time again (timed mode, v0.10).
         crate::modules::modes::timed::forget_timer(&mut s.state);
-        s.save(ctx.tx)?;
+        inverse.session = Some(s.save(ctx.tx)?.snapshot()?);
     }
     for id in &req.remove_reviews {
         if let Some(r) = ctx.reads().get_review_log(*id)? {

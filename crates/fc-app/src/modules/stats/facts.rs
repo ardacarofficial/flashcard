@@ -380,6 +380,7 @@ pub(crate) fn refresh_cache(
         .collect::<AppResult<Vec<_>>>()?;
     let row_count = tx.review_count_upto(mark.max_seq)?;
     tx.put_stats_cache(&StatsCacheRecord {
+        fingerprint: None,
         calendar: calendar_key(cal),
         upto_seq: mark.max_seq,
         row_count,
