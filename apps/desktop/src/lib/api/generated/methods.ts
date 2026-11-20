@@ -257,6 +257,7 @@ import type { SetSetting } from "./SetSetting";
 import type { SetShortcut } from "./SetShortcut";
 import type { SetSuspended } from "./SetSuspended";
 import type { SetTagColor } from "./SetTagColor";
+import type { SetTheme } from "./SetTheme";
 import type { SettingValueDto } from "./SettingValueDto";
 import type { SettingValues } from "./SettingValues";
 import type { SettingsSchema } from "./SettingsSchema";
@@ -281,6 +282,8 @@ import type { TagList } from "./TagList";
 import type { TestPaperDto } from "./TestPaperDto";
 import type { TestPaperRequest } from "./TestPaperRequest";
 import type { TextAnalysis } from "./TextAnalysis";
+import type { ThemeDto } from "./ThemeDto";
+import type { ThemePresetList } from "./ThemePresetList";
 import type { TrashList } from "./TrashList";
 import type { TtsProviderList } from "./TtsProviderList";
 import type { UiSession } from "./UiSession";
@@ -544,6 +547,9 @@ export interface Methods {
   "local_api.clients.revoke": { kind: "command"; request: ApiClientRef; response: ApiClientDto };
   "local_api.clients.remove": { kind: "command"; request: ApiClientRef; response: ApiClientDto };
   "local_api.methods": { kind: "query"; request: Empty; response: LocalApiMethodList };
+  "themes.current": { kind: "query"; request: Empty; response: ThemeDto };
+  "themes.presets": { kind: "query"; request: Empty; response: ThemePresetList };
+  "themes.set": { kind: "command"; request: SetTheme; response: ThemeDto };
 }
 
 /** Unqualified method name. */
@@ -791,4 +797,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "local_api.clients.revoke": "command",
   "local_api.clients.remove": "command",
   "local_api.methods": "query",
+  "themes.current": "query",
+  "themes.presets": "query",
+  "themes.set": "command",
 };

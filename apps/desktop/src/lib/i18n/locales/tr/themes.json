@@ -1,0 +1,47 @@
+{
+  "themes": {
+    "heading": "Görünüm",
+    "mode_label": "Renk düzeni",
+    "preset_label": "Tema",
+    "accent_label": "Vurgu rengi",
+    "accent_custom": "Özel vurgu rengi kullan",
+    "accent_reset": "Temanın vurgu rengini kullan",
+    "preview_text": "Kartlar, menüler ve düğmeler bu renkleri kullanır.",
+    "preview_button": "Düğme",
+    "preset": {
+      "default": "Varsayılan",
+      "paper": "Kâğıt",
+      "sage": "Adaçayı",
+      "slate": "Arduvaz",
+      "contrast": "Yüksek kontrast"
+    }
+  },
+  "modules": {
+    "themes": {
+      "name": "Temalar",
+      "description": "Renk düzeni, hazır temalar ve vurgu rengi."
+    }
+  },
+  "settings": {
+    "themes": {
+      "preset": {
+        "label": "Tema",
+        "description": "Tüm uygulama için sakin bir renk paleti."
+      },
+      "accent": {
+        "label": "Vurgu rengi",
+        "description": "Düğmelerin, bağlantıların ve vurguların rengi (#rrggbb). Boş: temanın kendi rengi."
+      }
+    },
+    "pages": {
+      "appearance": "Görünüm"
+    }
+  },
+  "commands": {
+    "themes": {
+      "current": "Geçerli temayı göster",
+      "presets": "Hazır temaları listele",
+      "set": "Temayı değiştir"
+    }
+  }
+}

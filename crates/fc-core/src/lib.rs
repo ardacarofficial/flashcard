@@ -31,6 +31,7 @@ pub mod settings;
 pub mod shortcut;
 pub mod stats;
 pub mod tag;
+pub mod theme;
 pub mod time;
 
 pub use error::{CoreError, CoreResult};

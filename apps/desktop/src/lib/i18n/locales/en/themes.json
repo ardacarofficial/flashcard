@@ -1,0 +1,47 @@
+{
+  "themes": {
+    "heading": "Appearance",
+    "mode_label": "Colour scheme",
+    "preset_label": "Theme",
+    "accent_label": "Accent colour",
+    "accent_custom": "Use a custom accent",
+    "accent_reset": "Use the theme’s accent",
+    "preview_text": "Cards, menus and buttons use these colours.",
+    "preview_button": "Button",
+    "preset": {
+      "default": "Default",
+      "paper": "Paper",
+      "sage": "Sage",
+      "slate": "Slate",
+      "contrast": "High contrast"
+    }
+  },
+  "modules": {
+    "themes": {
+      "name": "Themes",
+      "description": "Colour scheme, theme presets and accent colour."
+    }
+  },
+  "settings": {
+    "themes": {
+      "preset": {
+        "label": "Theme",
+        "description": "A calm colour palette for the whole app."
+      },
+      "accent": {
+        "label": "Accent colour",
+        "description": "Colour of buttons, links and highlights (#rrggbb). Empty: the theme’s own."
+      }
+    },
+    "pages": {
+      "appearance": "Appearance"
+    }
+  },
+  "commands": {
+    "themes": {
+      "current": "Show the current theme",
+      "presets": "List theme presets",
+      "set": "Change the theme"
+    }
+  }
+}

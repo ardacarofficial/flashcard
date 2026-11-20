@@ -54,4 +54,5 @@ modules! {
     clipboard,
     quick_add,
     local_api,
+    themes,
 }

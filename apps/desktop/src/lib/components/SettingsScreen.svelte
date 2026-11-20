@@ -1,12 +1,6 @@
 <script lang="ts">
   import { i18n, LOCALES, t, type Locale } from '$lib/i18n/index.svelte';
-  import { theme, THEME_MODES, type ThemeMode } from '$lib/theme/theme.svelte';
-
-  const THEME_LABEL = {
-    system: 'settings.theme_system',
-    light: 'settings.theme_light',
-    dark: 'settings.theme_dark',
-  } as const satisfies Record<ThemeMode, string>;
+  import ThemeSettings from '$lib/features/themes/ThemeSettings.svelte';
 </script>
 
 <section>
@@ -20,15 +14,9 @@
         {/each}
       </select>
     </label>
-    <label>
-      {t('settings.theme')}
-      <select value={theme.mode} onchange={(e) => (theme.mode = e.currentTarget.value as ThemeMode)}>
-        {#each THEME_MODES as m (m)}
-          <option value={m}>{t(THEME_LABEL[m])}</option>
-        {/each}
-      </select>
-    </label>
   </div>
+  <h3>{t('themes.heading')}</h3>
+  <ThemeSettings />
 </section>
 
 <style>
