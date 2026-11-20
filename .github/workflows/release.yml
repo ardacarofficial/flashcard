@@ -61,6 +61,12 @@ jobs:
       - name: Frontend dependencies
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
+      # The frontend is built here, WITHOUT the signing secrets in the environment: build
+      # scripts and npm packages never see them. The bundling step below skips its own
+      # `beforeBuildCommand` (tauri.prebuilt.conf.json) and gets the secrets alone.
+      - name: Build the frontend
+        working-directory: apps/desktop
+        run: pnpm build
       - name: Signing key present?
         id: sign
         shell: bash
@@ -69,11 +75,11 @@ jobs:
         run: |
           if [ -n "$KEY" ]; then
             echo "signed=true" >> "$GITHUB_OUTPUT"
-            echo "args=" >> "$GITHUB_OUTPUT"
+            echo 'args=--config src-tauri/tauri.prebuilt.conf.json' >> "$GITHUB_OUTPUT"
           else
             echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not set: building without update signatures (no latest.json)."
             echo "signed=false" >> "$GITHUB_OUTPUT"
-            echo 'args=--config src-tauri/tauri.unsigned.conf.json' >> "$GITHUB_OUTPUT"
+            echo 'args=--config src-tauri/tauri.prebuilt.conf.json --config src-tauri/tauri.unsigned.conf.json' >> "$GITHUB_OUTPUT"
           fi
       - name: Build installers and create the draft release
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # action-v0.6.2

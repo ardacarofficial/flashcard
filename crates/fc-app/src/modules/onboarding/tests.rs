@@ -83,14 +83,15 @@ fn english_setup_uses_cefr_and_is_one_undo_step() {
         .defs;
     assert_eq!(defs.len(), 1);
     assert_eq!(defs[0].template_id.as_deref(), Some("cefr"));
-    let starter_defs = t
+    let cefr = &defs[0];
+    // The starter deck reuses the inherited definition: none of its own.
+    assert!(t
         .ok::<AttributesList>(ListAttributes {
             scope_deck_id: Some(sub.id),
             include_deleted: None,
         })
-        .defs;
-    let cefr = &starter_defs[0];
-    assert_eq!(cefr.template_id.as_deref(), Some("cefr"));
+        .defs
+        .is_empty());
 
     // Every starter note has its CEFR level.
     let notes = notes_in(&t, sub.id);
@@ -144,7 +145,7 @@ fn yks_setup_uses_the_exam_template() {
     let sub = r.starter_deck_ids[0];
     let sub_def = &t
         .ok::<AttributesList>(ListAttributes {
-            scope_deck_id: Some(sub),
+            scope_deck_id: Some(r.deck_id),
             include_deleted: None,
         })
         .defs[0];
@@ -265,4 +266,57 @@ fn options_list_every_subject_with_its_template() {
         .find(|s| s.subject == StudySubject::Yks)
         .unwrap();
     assert_eq!(yks.template_id.as_deref(), Some("yks"));
+}
+
+/// A starter deck under the onboarding deck reuses the inherited classification: no second
+/// definition, and the stats breakdown puts every starter card under its value.
+fn assert_starter_breakdown(subject: StudySubject, starter_id: &str) {
+    use fc_api::v1::stats::{StatsBreakdownRequest, StatsScope};
+    let t = TestApp::mem();
+    let r = apply(&t, subject, &[starter_id]);
+    let all = t
+        .ok::<AttributesList>(ListAttributes {
+            scope_deck_id: None,
+            include_deleted: None,
+        })
+        .defs;
+    assert_eq!(all.len(), 1, "one definition, not one per starter deck");
+    let def = &all[0];
+    assert_eq!(def.scope_deck_id, Some(r.deck_id));
+    let total = notes_in(&t, r.starter_deck_ids[0]).len() as u32;
+    assert!(total > 0);
+    let b = t.ok::<StatsGetBreakdown>(StatsBreakdownRequest {
+        scope: StatsScope {
+            deck_id: Some(r.deck_id),
+            tag: None,
+            query: None,
+        },
+        attr_id: def.id,
+        tz_offset_mins: Some(0),
+        days: None,
+    });
+    let valued: u32 = b
+        .rows
+        .iter()
+        .filter(|row| row.option_id.is_some())
+        .map(|row| row.states.total)
+        .sum();
+    assert!(valued >= total, "every starter card has a value: {b:?}");
+    let none: u32 = b
+        .rows
+        .iter()
+        .filter(|row| row.option_id.is_none())
+        .map(|row| row.states.total)
+        .sum();
+    assert_eq!(none, 0, "no card without a value: {b:?}");
+}
+
+#[test]
+fn yks_starter_cards_are_classified_in_the_stats_breakdown() {
+    assert_starter_breakdown(StudySubject::Yks, "yks_tyt_math");
+}
+
+#[test]
+fn english_starter_cards_are_classified_in_the_stats_breakdown() {
+    assert_starter_breakdown(StudySubject::English, "english_basics");
 }

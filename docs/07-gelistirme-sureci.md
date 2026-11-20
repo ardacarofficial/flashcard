@@ -178,6 +178,14 @@ NSIS kurulumunu release modda derler, `/S` ile **sessiz, kullanıcı başına** 
 22. Uygulama açıkken `Win+R` → `flashcard://add?front=merhaba&back=hello` → ✅ ikinci pencere açılmaz, mevcut pencere öne gelir, öneri *Gelen kutusu*na düşer ("Gelen kutusuna önerildi").
 23. Uygulamayı yine tamamen kapat; tarayıcı adres çubuğuna `flashcard://add?front=soğuk&back=cold` yaz → ✅ "Flashcard'ı aç?" sorusu, kabul edince uygulama açılır, öneri *Gelen kutusu*na düşer, tek pencere vardır.
 
+**6b. Uygulama kilidi, profiller, hatırlatıcılar, tepsi**
+- *Profiller ve kilit* → PIN belirle (örn. `1234`), otomatik kilit süresini 1 dk yap. ✅ Kilit açık görünür; 1 dk etkinlik olmadan bekleyince uygulama kilitlenir, doğru PIN açar.
+- Üst üste yanlış PIN gir (5 kez). ✅ Her hatada bekleme süresi uzar ("N sn sonra dene"); doğru PIN bu sürede de reddedilir.
+- Bekleme sürerken uygulamayı kapat, yeniden aç. ✅ Bekleme **sıfırlanmaz** (yeniden başlatmayla geçilemez); süre bitince doğru PIN açar, sayaç sıfırlanır.
+- *Profiller*: yeni profil oluştur ("Test2"), ona geç. ✅ Boş koleksiyon; önceki profilin desteleri görünmez. Geri geç ✅ eski veriler duruyor. "Test2"yi sil (onay kutusu). ✅ Listeden gider, `%APPDATA%\app.flashcard.desktop` altındaki klasörü silinir; etkin profil silinemez.
+- *Hatırlatıcılar*: günlük bildirimi birkaç dk sonrasına ayarla, çalışılacak kart bırak. ✅ Windows bildirimi çıkar (Türkçe/İngilizce metin); bildirime tıklamak pencereyi açar; çalışılacak kart yoksa bildirim çıkmaz. Hatırlatıcıyı kapat ✅ bildirim gelmez.
+- Tepsi: pencereyi kapat (X). ✅ Uygulama tepsi simgesinde çalışır; simge tıklanınca pencere döner; tepsi menüsünden *Çıkış* tamamen kapatır (Görev Yöneticisi'nde süreç kalmaz). Kilitliyken tepsiden açınca kilit ekranı gelir.
+
 **7. Kaldırma**
 24. *Ayarlar → Uygulamalar → Flashcard → Kaldır*. ✅ Yönetici sorulmaz, `%LOCALAPPDATA%\Flashcard` silinir. NSIS kaldırıcısındaki **"Uygulama verilerini sil"** kutusu: **işaretsizse** (varsayılan) veri klasörü `%APPDATA%\app.flashcard.desktop` kalır (yeniden kurulumda koleksiyon geri gelir); **işaretliyse** bu klasör (koleksiyon, ayarlar, loglar) kalıcı olarak silinir — geri alınamaz. Windows'un *Ayarlar → Uygulamalar* kaldırması kaldırıcıyı etkileşimli açtığı için kutu görünür; sessiz `/S` kaldırmada veri kalır.
 

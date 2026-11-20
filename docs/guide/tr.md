@@ -76,7 +76,7 @@ Solda menü, ortada seçtiğin ekran durur. Sık kullanacağın menüler:
 
 Menüde ayrıca **Deste ayarları**, **Not türleri**, **İstatistikler**, **Planlama**, **Hedefler**, **Okuma**, **Gelen kutusu**, **Otomasyon**, **Yapay zeka**, **MCP**, **Eklentiler**, **Başlangıç desteleri**, **Bakım** ve **Kısayollar** var (modülü açılınca **Yerel API** de). Kapalı bir modülün menüsü görünmez.
 
-**Ayarlar:** **Ayarlar** ekranında yalnız **Dil** (Türkçe / English) ve **Tema** (**Sistem**, **Açık**, **Koyu**) var. Bazı modüllerin seçenekleri kendi ekranındadır: **Hatırlatıcılar**, **Profiller ve kilit**, **MCP**'deki yazma anahtarı.
+**Ayarlar:** **Ayarlar** ekranında yalnız **Dil** (Türkçe / English), renk düzeni (**Sistem**, **Açık**, **Koyu**), **Tema** ön ayarı (**Varsayılan**, **Kâğıt**, **Adaçayı**, **Arduvaz**, **Yüksek kontrast**) ve isteğe bağlı özel **Vurgu rengi** var. Bazı modüllerin seçenekleri kendi ekranındadır: **Hatırlatıcılar**, **Profiller ve kilit**, **MCP**'deki yazma anahtarı.
 
 **Komut paleti:** `Ctrl+K` ile açılır. Bir komut ya da ekran adı yaz, **Çalıştır**'a bas. Bazı komutlar **Parametreler (JSON)** kutusuna değer ister. Bu sürümde modülleri açıp kapatmanın ve diğer tüm ayarları değiştirmenin yolu burası:
 
@@ -135,7 +135,7 @@ Hazır şablonlar:
 **Tanımlama.** Bu sürümde sınıflandırmayı tanımlayan ayrı bir ekran yok. İlk açılış rehberi kendi destesine bir tane kurar. Bunun dışında:
 
 - Komut paleti (`Ctrl+K`) → **Şablondan sınıflandırma** → `{"template_id": "cefr"}`. Bu, tüm koleksiyon için tanımlar.
-- Komut satırı aracı `fc` ile bir desteye (kurulumda gelmez, bkz. [MCP](#mcp)): `fc attribute apply-template cefr --deck Dil --lang tr`.
+- Komut satırı aracı `fc` ile bir desteye (kurulumda gelmez, bkz. [MCP](#mcp)): `fc attribute apply-template cefr --deck Dil --locale tr`.
 
 **Kullanım.**
 

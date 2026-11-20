@@ -14,6 +14,8 @@ use crate::error::{AppError, AppResult};
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::registry::Registry;
+use crate::support::attrs::effective_for_deck;
+use crate::support::decks::DeckIndex;
 use crate::support::{from_json, module_enabled, summary};
 use fc_api::v1::attributes::{AttributeAssignment, AttributeDefDto, DefineAttributeFromTemplate};
 use fc_api::v1::common::Empty;
@@ -29,7 +31,7 @@ use fc_core::i18n::Locale;
 use fc_core::preset::PresetConfig;
 use fc_core::ux::onboarding::{plan, StudySubject};
 use fc_core::ux::starter::{self, StarterDeck};
-use fc_core::{DeckId, NoteTypeId};
+use fc_core::{AttributeDefId, AttributeOptionId, DeckId, NoteTypeId};
 use fc_storage::repo::UX_ONBOARDING_DONE;
 use fc_storage::Reads;
 use serde_json::json;
@@ -196,6 +198,38 @@ fn define_template(
     .map(Some)
 }
 
+/// The classification a starter deck's notes are valued with: the one the parent deck already
+/// has or inherits from the same template (never a duplicate definition), else a fresh copy
+/// defined on the starter deck. Returns the definition id and its option ids in template order.
+fn starter_classification(
+    ctx: &mut CommandCtx<'_>,
+    template: Option<&str>,
+    deck: DeckId,
+    parent: Option<DeckId>,
+    locale: Locale,
+) -> AppResult<Option<(AttributeDefId, Vec<AttributeOptionId>)>> {
+    let (Some(template_id), Some(parent)) = (template, parent) else {
+        return Ok(define_template(ctx, template, deck, locale)?.map(|a| {
+            (a.id, a.options.iter().map(|o| o.id).collect())
+        }));
+    };
+    if !module_enabled(ctx.reads(), ctx.registry, crate::modules::attributes::ID)? {
+        return Ok(None);
+    }
+    let index = DeckIndex::load(ctx.reads())?;
+    let existing = effective_for_deck(ctx.reads(), &index, Some(parent))?
+        .into_iter()
+        .map(|(d, _)| d)
+        .find(|d| d.template_id.as_deref() == Some(template_id));
+    if let Some(def) = existing {
+        let mut options = def.options;
+        options.sort_by_key(|o| o.order);
+        return Ok(Some((def.id, options.iter().map(|o| o.id).collect())));
+    }
+    Ok(define_template(ctx, template, deck, locale)?
+        .map(|a| (a.id, a.options.iter().map(|o| o.id).collect())))
+}
+
 /// Installs one starter deck under `parent`: deck, classification, notes with values.
 fn install_into(
     ctx: &mut CommandCtx<'_>,
@@ -214,7 +248,7 @@ fn install_into(
             color: None,
         },
     )?;
-    let attr = define_template(ctx, d.template, deck.id, locale)?;
+    let attr = starter_classification(ctx, d.template, deck.id, parent, locale)?;
     let notetype_id = notetype_id(d.notetype)?;
     let mut created = 0u32;
     for n in d.notes {
@@ -224,12 +258,11 @@ fn install_into(
             .map(|(k, v)| (k.to_owned(), v.to_owned()))
             .collect();
         let attributes = match (&attr, n.option) {
-            (Some(a), Some(o)) => a
-                .options
+            (Some((attr_id, options)), Some(o)) => options
                 .get(o)
                 .map(|opt| AttributeAssignment {
-                    attr_id: a.id,
-                    value: Some(AttributeValue::Choice(opt.id)),
+                    attr_id: *attr_id,
+                    value: Some(AttributeValue::Choice(*opt)),
                 })
                 .into_iter()
                 .collect(),

@@ -76,7 +76,7 @@ The menu is on the left, the selected screen in the middle. The menus you will u
 
 The menu also has **Deck options**, **Note types**, **Statistics**, **Planning**, **Goals**, **Reading**, **Inbox**, **Automation**, **AI**, **MCP**, **Plugins**, **Starter decks**, **Maintenance** and **Shortcuts** (and **Local API** once that module is on). A module that is turned off has no menu entry.
 
-**Settings:** the **Settings** screen has only **Language** (Türkçe / English) and **Theme** (**System**, **Light**, **Dark**). Some modules keep their options on their own screen: **Reminders**, **Profiles & lock**, the write switch on **MCP**.
+**Settings:** the **Settings** screen has only **Language** (Türkçe / English), the colour scheme (**System**, **Light**, **Dark**), a **Theme** preset (**Default**, **Paper**, **Sage**, **Slate**, **High contrast**) and an optional custom **Accent colour**. Some modules keep their options on their own screen: **Reminders**, **Profiles & lock**, the write switch on **MCP**.
 
 **Command palette:** open it with `Ctrl+K`. Type a command or screen name and press **Run**. Some commands need values in the **Parameters (JSON)** box. In this version this is how you turn modules on or off and change every other setting:
 
@@ -135,9 +135,9 @@ A classification copied from a template is fully yours: add, rename, reorder and
 **Defining one.** This version has no separate screen for defining classifications. The first-run guide sets one up for its deck. Otherwise:
 
 - Command palette (`Ctrl+K`) → **Classification from template** → `{"template_id": "cefr"}`. This defines it for the whole collection.
-- For one deck, with the `fc` command-line tool (not included in the installer, see [MCP](#mcp)): `fc attribute apply-template cefr --deck Languages --lang en`.
+- For one deck, with the `fc` command-line tool (not included in the installer, see [MCP](#mcp)): `fc attribute apply-template cefr --deck Languages --locale en`.
 
-With `--lang tr` the names are Turkish (**Seviye**, **Sınav**), so queries like `seviye:B1` and `sınav:TYT` work. The key (`level`, `exam`) works in both languages.
+With `--locale tr` the names are Turkish (**Seviye**, **Sınav**), so queries like `seviye:B1` and `sınav:TYT` work. The key (`level`, `exam`) works in both languages.
 
 **Using them.**
 
