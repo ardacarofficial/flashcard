@@ -20,7 +20,9 @@ const appDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const BUDGETS = { js: 320_000, css: 52_000 };
 
 /** Libraries that must only ever load lazily (matched against manifest keys). */
-export const LAZY_ONLY = [/node_modules\/katex\//, /node_modules\/highlight\.js\//];
+/** Libraries and data that must only ever load lazily (matched against manifest keys); the i18n
+ * dictionaries load per language (`loadLocale`). */
+export const LAZY_ONLY = [/node_modules\/katex\//, /node_modules\/highlight\.js\//, /src\/lib\/i18n\/generated\//];
 
 /** The entry chunk's key (`index.html`) in a Vite manifest. */
 export function entryKey(manifest) {

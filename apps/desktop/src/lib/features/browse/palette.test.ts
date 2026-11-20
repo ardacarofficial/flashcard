@@ -33,7 +33,7 @@ describe('command palette', () => {
   it('has a TR and an EN palette label for exactly the public methods', () => {
     const methods = Object.keys(METHODS).sort();
     for (const lang of LOCALES) {
-      expect(flatKeys(DICTIONARIES[lang].commands).sort(), `${lang} commands.*`).toEqual(methods);
+      expect(flatKeys(DICTIONARIES[lang]!.commands).sort(), `${lang} commands.*`).toEqual(methods);
     }
   });
 
