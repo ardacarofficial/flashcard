@@ -1,0 +1,8 @@
+{
+  "oplog.summary.presets.create": "{name} şablonu oluşturuldu",
+  "oplog.summary.presets.update": "{name} şablonu düzenlendi",
+  "oplog.summary.presets.clone": "Şablon {name} olarak kopyalandı",
+  "oplog.summary.presets.delete": "{name} şablonu silindi",
+  "oplog.summary.presets.assign": "{count} destenin şablonu değişti",
+  "oplog.summary.presets.restore": "{name} şablonu geri getirildi"
+}

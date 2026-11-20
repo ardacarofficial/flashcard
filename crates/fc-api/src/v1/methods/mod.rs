@@ -19,11 +19,15 @@ use crate::method::MethodDescriptor;
 /// DecksCreate = "decks.create", Command, "decks", "decks:write", Public, undo: true,
 ///     CreateDeck => DeckDto;
 /// ```
+///
+/// An undoable command is **replayable** (undo/redo may run it as a stored inverse) unless
+/// the line says `undo: true (replay: false)` — required for commands that start jobs, write
+/// files or consume staged job data (see [`crate::ApiMethod::REPLAYABLE`]).
 macro_rules! methods {
     ($(
         $(#[$m:meta])*
         $ty:ident = $name:literal, $kind:ident, $module:literal, $perm:literal, $vis:ident,
-            undo: $undo:literal,
+            undo: $undo:literal $((replay: $replay:literal))?,
             $req:ty => $res:ty;
     )*) => {
         $(
@@ -38,6 +42,7 @@ macro_rules! methods {
                 const PERMISSION: &'static str = $perm;
                 const VISIBILITY: $crate::method::Visibility = $crate::method::Visibility::$vis;
                 const UNDOABLE: bool = $undo;
+                const REPLAYABLE: bool = $undo $(&& $replay)?;
                 type Request = $req;
                 type Response = $res;
             }
@@ -76,4 +81,11 @@ domains! {
     notes,
     tags,
     attributes,
+    study,
+    cardtypes,
+    io,
+    search,
+    bulk,
+    presets,
+    browse,
 }

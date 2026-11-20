@@ -4,6 +4,7 @@ import type { I18nMessage } from "./I18nMessage";
 import type { JobId } from "./JobId";
 import type { JobStatus } from "./JobStatus";
 import type { Timestamp } from "./Timestamp";
+import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
  * A job.
@@ -33,6 +34,10 @@ message: I18nMessage | null,
  * Error if failed.
  */
 error: ApiError | null, 
+/**
+ * Result when succeeded (shape depends on `kind`, e.g. `ImportReport`).
+ */
+result: JsonValue | null, 
 /**
  * Created.
  */

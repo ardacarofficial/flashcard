@@ -79,13 +79,20 @@ fn revert<M: ApiMethod>(
 ) -> AppResult<CommandOutcome<UndoResult>> {
     let shown = display_summary(ctx.reads(), target)?;
     let entries = ctx.reads().oplog_batch_entries(target.batch_id)?;
-    ctx.batch_kind = kind;
-    ctx.reverts_batch_id = Some(target.batch_id);
+    // The oplog is data (a restored backup brings its own): check every stored inverse
+    // against the allow-list before running any of them.
+    let mut steps: Vec<Vec<InvokeRequest>> = Vec::with_capacity(entries.len());
     for entry in entries.iter().rev() {
         let calls: Vec<InvokeRequest> = from_json(&entry.inverse)?;
         for call in &calls {
-            ctx.call(call)?;
+            ensure_replayable(ctx.registry, call)?;
         }
+        steps.push(calls);
+    }
+    ctx.batch_kind = kind;
+    ctx.reverts_batch_id = Some(target.batch_id);
+    for call in steps.iter().flatten() {
+        ctx.call(call)?;
     }
     if !ctx.has_oplog_entries() {
         // Nothing to re-execute (a no-op batch): still record the step so history advances.
@@ -118,10 +125,28 @@ fn revert<M: ApiMethod>(
     })
 }
 
+/// Undo/redo only run stored inverses whose method is replayable
+/// ([`fc_api::ApiMethod::REPLAYABLE`]): undoable commands that start no job, write no file
+/// and consume no staged job data. Anything else is refused (`PERMISSION_DENIED`).
+fn ensure_replayable(registry: &Registry, call: &InvokeRequest) -> AppResult<()> {
+    let d = parse_qualified_name(&call.method)
+        .and_then(|n| registry.descriptor(n))
+        .ok_or_else(|| unknown_method(&call.method))?;
+    if d.replayable {
+        return Ok(());
+    }
+    Err(AppError::Api(
+        ApiError::new(
+            ErrorCode::PermissionDenied,
+            format!("{} cannot run as an undo/redo step", call.method),
+        )
+        .with_detail("method", call.method.as_str())
+        .with_detail("reason", "not_replayable"),
+    ))
+}
+
 fn undo(_: Empty, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<UndoResult>> {
-    let target = scan(ctx.reads())?
-        .undo
-        .ok_or_else(|| AppError::api(ErrorCode::ConflictNothingToUndo, "nothing to undo"))?;
+    let target = scan(ctx.reads())?.undo_target()?;
     revert::<OplogUndo>(ctx, &target, OplogKind::Undo)
 }
 
@@ -477,6 +502,7 @@ fn job_dto(r: JobRecord) -> AppResult<JobDto> {
         progress: r.progress.map(|p| p as f32),
         message: None,
         error: r.error.as_ref().map(from_json).transpose()?,
+        result: r.result,
         created_at: r.created_at,
         updated_at: r.updated_at,
     })

@@ -69,4 +69,8 @@ domains! {
     settings: SettingsRead, SettingsWrite;
     modules: ModuleStateRead, ModuleStateWrite;
     jobs: JobRead, JobWrite;
+    study: StudyRead, StudyWrite;
+    content: ContentRead, ContentWrite;
+    interop: InteropRead, InteropWrite;
+    search: SearchRead, SearchWrite;
 }

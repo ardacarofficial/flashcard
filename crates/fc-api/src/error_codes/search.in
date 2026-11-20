@@ -1,0 +1,16 @@
+// Search, saved queries, bulk operations, shortcuts (v0.4).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// Query is malformed or names something unknown (`details`: `kind`, `start`, `end` in characters, plus `key`/`value`/`op`/`message`; i18n `errors.query.<kind>`).
+ValidationQuery => Validation, "errors.validation.query";
+/// Saved query name empty or too long.
+ValidationSavedQueryName => Validation, "errors.validation.saved_query_name";
+/// Malformed key combination (`details.combo`).
+ValidationShortcut => Validation, "errors.validation.shortcut";
+/// Find/replace pattern rejected (`details.reason`).
+ValidationFindReplace => Validation, "errors.validation.find_replace";
+/// Saved query not found (`details.id`).
+NotFoundSavedQuery => NotFound, "errors.not_found.saved_query";
+/// Unknown shortcut action (`details.action`).
+NotFoundShortcutAction => NotFound, "errors.not_found.shortcut_action";
+/// Combination already bound in an overlapping context (`details.combo`, `details.action`).
+ConflictShortcut => Conflict, "errors.conflict.shortcut";

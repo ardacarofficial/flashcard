@@ -25,12 +25,35 @@ pub struct JobRecord {
     pub updated_at: Timestamp,
 }
 
+/// One `unfinished_batches` row: an undo group a job writes across several transactions
+/// (migration 0401). Present from before its first part until the group reaches the oplog or
+/// is discarded; one left at startup is rolled back.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnfinishedBatchRecord {
+    /// The group's oplog batch id.
+    pub batch_id: BatchId,
+    /// Job writing it.
+    pub job_id: Option<JobId>,
+    /// `started` (nothing written yet) | `writing` (parts committed).
+    pub state: String,
+    /// Internal command call (JSON `InvokeRequest`) that removes what is committed.
+    pub rollback: Value,
+    /// Created.
+    pub created_at: Timestamp,
+    /// Updated.
+    pub updated_at: Timestamp,
+}
+
 /// Job reads.
 pub trait JobRead {
     /// Job by id.
     fn get_job(&self, id: JobId) -> StorageResult<Option<JobRecord>>;
     /// Newest first.
     fn list_jobs(&self, limit: u32) -> StorageResult<Vec<JobRecord>>;
+    /// Unfinished undo groups, oldest first.
+    fn list_unfinished_batches(&self) -> StorageResult<Vec<UnfinishedBatchRecord>>;
+    /// Inverse calls of an unfinished group's committed parts, oldest part first.
+    fn unfinished_batch_parts(&self, batch: BatchId) -> StorageResult<Vec<Value>>;
 }
 
 /// Job writes.
@@ -42,4 +65,15 @@ pub trait JobWrite: JobRead {
     /// Claims the oldest `queued` job: sets it `running` with `updated_at = now` and returns
     /// it (`None` if the queue is empty).
     fn claim_next_job(&mut self, now: Timestamp) -> StorageResult<Option<JobRecord>>;
+    /// Inserts or replaces an unfinished undo group.
+    fn upsert_unfinished_batch(&mut self, batch: &UnfinishedBatchRecord) -> StorageResult<()>;
+    /// Appends part `part` (its inverse calls) to an unfinished group.
+    fn add_unfinished_batch_part(
+        &mut self,
+        batch: BatchId,
+        part: u32,
+        inverse: &Value,
+    ) -> StorageResult<()>;
+    /// Removes one with its parts. Returns whether a row existed.
+    fn delete_unfinished_batch(&mut self, batch: BatchId) -> StorageResult<bool>;
 }

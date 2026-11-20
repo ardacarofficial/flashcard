@@ -16,6 +16,10 @@ NotFoundJob => NotFound, "errors.not_found.job";
 ConflictNothingToUndo => Conflict, "errors.conflict.nothing_to_undo";
 /// Nothing to redo.
 ConflictNothingToRedo => Conflict, "errors.conflict.nothing_to_redo";
+/// Undo reached a history barrier (`details.reason`: `restore` = the collection was replaced
+/// from a backup, `purge` = trashed items were deleted for good). Earlier history stays
+/// listed but cannot be undone.
+ConflictHistoryBarrier => Conflict, "errors.conflict.history_barrier";
 /// The method's module is disabled (`details.module`).
 ConflictModuleDisabled => Conflict, "errors.conflict.module_disabled";
 /// The module cannot be disabled (`details.module`).

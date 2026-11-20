@@ -378,6 +378,20 @@ fn nested_oplog_entries_follow_their_parent_at_any_depth() {
     assert!(decks(&t).is_empty());
 }
 
+/// Names of the internal methods registered by `modules` (sorted). Each domain asserts its own
+/// list with this (v0.3: `cards_tests.rs`); the test below checks every internal method.
+pub(crate) fn internal_methods_of(t: &TestApp, modules: &[&str]) -> Vec<&'static str> {
+    let mut v: Vec<_> = t
+        .app
+        .registry()
+        .methods()
+        .filter(|d| d.visibility == fc_api::Visibility::Internal && modules.contains(&d.module))
+        .map(|d| d.name)
+        .collect();
+    v.sort_unstable();
+    v
+}
+
 #[test]
 fn internal_methods_are_rejected_from_every_transport_path() {
     use fc_api::v1::methods::{BatchExecute, CommandsList, ModulesList};
@@ -390,9 +404,10 @@ fn internal_methods_are_rejected_from_every_transport_path() {
         .filter(|d| d.visibility == Visibility::Internal)
         .copied()
         .collect();
-    let names: Vec<_> = internal.iter().map(|d| d.name).collect();
+    // Each domain pins its own list next to its tests (`internal_methods_of`), so parallel
+    // tracks never edit a shared list; here only the v0.1 ones.
     assert_eq!(
-        names,
+        internal_methods_of(&t, &["attributes", "decks"]),
         ["attributes.option.restore", "decks.restore_affected"]
     );
     for d in &internal {
@@ -437,7 +452,7 @@ fn internal_methods_are_rejected_from_every_transport_path() {
     assert!(all
         .iter()
         .filter(|m| m.visibility == Visibility::Internal)
-        .all(|m| names.iter().any(|n| m.name.ends_with(n))));
+        .all(|m| internal.iter().any(|d| m.name == d.qualified_name())));
 }
 
 #[test]

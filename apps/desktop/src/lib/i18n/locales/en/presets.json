@@ -1,0 +1,67 @@
+{
+  "nav": {
+    "presets": "Deck options"
+  },
+  "modules": {
+    "presets": {
+      "name": "Deck options",
+      "description": "Presets of study options (daily limits, steps, desired retention) shared by decks."
+    }
+  },
+  "presets": {
+    "heading": "Deck options",
+    "intro": "A deck uses its own preset, else its parent deck's, else the defaults.",
+    "list": "Presets",
+    "none": "No presets yet: every deck uses the defaults.",
+    "new": "New preset",
+    "new_name": "Name",
+    "defaults_name": "Defaults",
+    "clone": "Copy",
+    "clone_suffix": "{name} (copy)",
+    "delete": "Delete",
+    "save": "Save",
+    "saved": "Saved.",
+    "decks": "Decks",
+    "decks_none": "Not assigned to any deck.",
+    "assign": "Use for deck",
+    "assign_pick": "Choose a deck",
+    "unassign": "Remove from “{path}”",
+    "advanced": "Advanced",
+    "field": {
+      "name": "Name",
+      "new_per_day": "New cards per day",
+      "reviews_per_day": "Maximum reviews per day",
+      "learning_steps_mins": "Learning steps (minutes)",
+      "relearning_steps_mins": "Relearning steps (minutes)",
+      "steps_hint": "Separated by spaces, e.g. 1 10",
+      "desired_retention": "Desired retention",
+      "fsrs_weights": "FSRS parameters",
+      "fsrs_hint": "Empty = defaults. Filled in by the optimizer.",
+      "maximum_interval_days": "Maximum interval (days)",
+      "bury_siblings": "Bury related cards until tomorrow",
+      "new_order": "New card order",
+      "review_order": "Review order"
+    },
+    "new_order": {
+      "added": "In order added",
+      "random": "Random"
+    },
+    "review_order": {
+      "due": "Due date",
+      "random": "Random",
+      "retrievability": "Weakest memory first"
+    }
+  },
+  "errors": {
+    "validation": {
+      "preset_name": "Give the preset a name (up to 100 characters).",
+      "preset_config": "An option is out of range."
+    },
+    "not_found": {
+      "preset": "Preset not found."
+    },
+    "conflict": {
+      "preset_name": "A preset with this name already exists."
+    }
+  }
+}

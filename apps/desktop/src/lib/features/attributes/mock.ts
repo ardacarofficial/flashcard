@@ -1,7 +1,7 @@
 import { err, menu, module, settingsPage, type MockEnv, type MockFeature } from '$lib/api/mock/env';
 
 export default {
-  modules: [],
+  modules: [module('attributes', [settingsPage('attributes.manage', 'settings.pages.attributes', '/settings/attributes', 20)])],
   handlers: ({ attrs, ancestors }: MockEnv) => ({
   'attributes.effective': ({ deck_id, target }) => {
     const chain = ancestors(deck_id);

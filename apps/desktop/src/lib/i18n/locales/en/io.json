@@ -1,0 +1,144 @@
+{
+  "nav": {
+    "io": "Import / export"
+  },
+  "modules": {
+    "io": {
+      "name": "Import / export",
+      "description": "Text, CSV, JSON, Quizlet and Anki import; exports, deck packages, backups and printing."
+    }
+  },
+  "io": {
+    "tabs": {
+      "import": "Import",
+      "export": "Export",
+      "backup": "Backup",
+      "print": "Print"
+    },
+    "pick_deck": "Choose a deck on the left first.",
+    "choose_file": "Choose file…",
+    "no_file": "No file chosen",
+    "path_prompt": "File path",
+    "import": {
+      "source": "Source",
+      "source_file": "File",
+      "source_text": "Paste text",
+      "paste_placeholder": "dog, köpek\ncat: kedi",
+      "format": "Format",
+      "format_auto": "Automatic",
+      "field_separator": "Between term and definition",
+      "record_separator": "Between cards",
+      "newline": "New line",
+      "blank_line": "Blank line",
+      "detected": "Detected automatically ({confidence}%). Change if it looks wrong.",
+      "skip_first_row": "First row is a header",
+      "preview": "Preview",
+      "rows": "{shown} of {total} rows",
+      "column": "Column {n}",
+      "ignore": "Don't import",
+      "tags": "Tags",
+      "duplicates": "If a note already exists",
+      "create_missing_options": "Create missing classification options",
+      "include_history": "Keep review history and scheduling",
+      "package": "{notes} notes, {cards} cards, {media} media files, {decks} decks",
+      "start": "Import into {deck}",
+      "start_package": "Import",
+      "done": "{added} added, {updated} updated, {skipped} skipped as duplicates.",
+      "issues": "Not imported or changed",
+      "row": "Row {row}",
+      "undo": "Undo import"
+    },
+    "formats": {
+      "text": "Text / CSV",
+      "quizlet": "Quizlet",
+      "json": "JSON",
+      "anki": "Anki (.apkg, .colpkg)",
+      "fcpack": "Deck package (.fcpack)"
+    },
+    "duplicate": {
+      "skip": "Skip it",
+      "update": "Update it",
+      "add": "Add anyway"
+    },
+    "export": {
+      "format": "Format",
+      "scope": "Exports {deck} with its sub-decks.",
+      "scope_all": "Exports the whole collection.",
+      "include_history": "Include review history and scheduling",
+      "start": "Export…",
+      "done": "Saved {notes} notes ({media} media files) to {path}."
+    },
+    "export_formats": {
+      "fcpack": "Deck package (.fcpack)",
+      "apkg": "Anki deck (.apkg)",
+      "colpkg": "Anki collection (.colpkg)",
+      "text": "Text (.txt)",
+      "json": "JSON (.json)"
+    },
+    "backup": {
+      "hint": "A backup holds the whole collection: notes, cards, history, classifications, settings and media.",
+      "create": "Create backup…",
+      "created": "Backup saved to {path}.",
+      "restore": "Restore backup…",
+      "confirm_title": "Restore this backup?",
+      "confirm_body": "Backup from {date} with {notes} notes. The current collection is backed up first, then replaced.",
+      "incompatible": "This backup comes from a newer version of the app.",
+      "restored": "Restored. The previous state was saved to {path}."
+    },
+    "print": {
+      "layout": "Layout",
+      "cards_2x4": "Cards, 2 × 4 per page",
+      "cards_3x5": "Cards, 3 × 5 per page",
+      "list": "List",
+      "render": "Prepare",
+      "print": "Print / save as PDF",
+      "count": "{count} cards",
+      "hint": "Fronts and backs are on alternating pages, mirrored for double-sided printing."
+    },
+    "job": {
+      "cancel": "Cancel",
+      "cancelled": "Cancelled. Nothing was changed.",
+      "working": "Working…"
+    },
+    "progress": {
+      "reading": "Reading the file…",
+      "parsing": "Reading the content…",
+      "converting": "Converting…",
+      "writing": "Saving…",
+      "collecting": "Collecting…",
+      "writing_file": "Writing the file…",
+      "safety_backup": "Backing up the current collection…"
+    },
+    "issue": {
+      "anki_skipped_notes": "{count} notes could not be read.",
+      "anki_skipped_cards": "{count} cards could not be read.",
+      "anki_skipped_reviews": "{count} review log entries were skipped (manual reschedules).",
+      "anki_skipped_tags": "{count} invalid tags were skipped.",
+      "anki_missing_media": "{count} media files are missing from the package.",
+      "unknown_notetype": "Unknown note type.",
+      "invalid_notetype": "A note type in the package is invalid.",
+      "notetype_no_cards": "This row makes no cards with this note type (for example a cloze row without a cloze deletion).",
+      "bad_deck": "Invalid deck name.",
+      "no_deck": "No deck given.",
+      "unknown_field": "Unknown field “{field}”.",
+      "invalid_fields": "A required field is empty.",
+      "bad_tag": "Invalid tag “{tag}”.",
+      "attribute_required": "A required classification is missing.",
+      "attributes_disabled": "Classifications are turned off: the package's classifications were not imported.",
+      "attribute_not_applicable": "This classification does not apply to the deck.",
+      "attribute_invalid": "Invalid classification value “{value}”.",
+      "attribute_unknown_option": "Unknown option “{value}” (it can be created automatically)."
+    }
+  },
+  "errors": {
+    "validation": {
+      "import_format": "The file is not in the expected format or is damaged.",
+      "text_options": "The separators are empty or overlap.",
+      "column_mapping": "A column mapping is invalid."
+    },
+    "conflict": {
+      "unsupported_version": "This file comes from a newer version of the app.",
+      "job_cancelled": "The job was cancelled."
+    }
+  }
+}

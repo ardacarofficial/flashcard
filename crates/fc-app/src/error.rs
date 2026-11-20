@@ -132,6 +132,9 @@ pub fn storage_to_api(e: StorageError) -> ApiError {
         // Client input, not a database fault.
         StorageError::InvalidCursor(_) => invalid_cursor(msg),
         StorageError::Busy => ApiError::new(ErrorCode::IoDatabase, msg).retryable(true),
+        StorageError::File { path, .. } => {
+            ApiError::new(ErrorCode::IoFile, msg).with_detail("path", path)
+        }
         StorageError::NotImplemented(op) => {
             ApiError::new(ErrorCode::InternalNotImplemented, msg).with_detail("operation", op)
         }

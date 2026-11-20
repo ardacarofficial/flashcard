@@ -3,6 +3,7 @@
   import type { NoteListItem } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import ConfirmDialog from './ConfirmDialog.svelte';
+  import NoteEditDialog from '$lib/features/cards/NoteEditDialog.svelte';
 
   interface Props {
     deckId: string;
@@ -30,6 +31,7 @@
   });
 
   let pending = $state<NoteListItem | null>(null);
+  let editing = $state<string | null>(null);
 
   async function remove(id: string) {
     pending = null;
@@ -63,6 +65,7 @@
             <td>{n.sort_field}</td>
             <td class="muted">{n.tags.length > 0 ? n.tags.join(' ') : t('common.none')}</td>
             <td>
+              <button onclick={() => (editing = n.id)}>{t('note_editor.edit')}</button>
               <button
                 class="danger"
                 aria-label={t('note.delete_aria', { name: n.sort_field })}
@@ -73,6 +76,10 @@
         {/each}
       </tbody>
     </table>
+  {/if}
+
+  {#if editing}
+    <NoteEditDialog noteId={editing} {deckId} deckName="" onclose={() => (editing = null)} />
   {/if}
 
   {#if pending}

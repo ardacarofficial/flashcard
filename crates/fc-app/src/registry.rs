@@ -7,21 +7,30 @@ use crate::error::{AppError, AppResult};
 use crate::handler::{
     CommandCtx, CommandHandler, CommandOutcome, PendingOplogEntry, QueryCtx, QueryHandler,
 };
+use crate::jobs::JobHandler;
 use crate::module::ModuleDescriptor;
 use fc_api::method::parse_qualified_name;
 use fc_api::v1::oplog::Actor;
 use fc_api::{
     ApiError, ApiMethod, ErrorCode, InvokeRequest, MethodDescriptor, MethodKind, Visibility,
 };
+use fc_providers::strategy::CardTypeEngine;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 /// Type-erased command handler.
 pub(crate) trait ErasedCommand: Send + Sync {
     fn validate(&self, params: &Value) -> AppResult<()>;
-    fn execute(&self, params: Value, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Value>>;
+    /// The outcome, plus the oplog payload if the handler replaces the request
+    /// ([`CommandHandler::recorded_payload`]).
+    fn execute(
+        &self,
+        params: Value,
+        ctx: &mut CommandCtx<'_>,
+    ) -> AppResult<(CommandOutcome<Value>, Option<Value>)>;
 }
 
 /// Type-erased query handler.
@@ -54,12 +63,17 @@ impl<M: ApiMethod, H: CommandHandler<M>> ErasedCommand for TypedCommand<M, H> {
         self.0.validate(&req)
     }
 
-    fn execute(&self, params: Value, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Value>> {
+    fn execute(
+        &self,
+        params: Value,
+        ctx: &mut CommandCtx<'_>,
+    ) -> AppResult<(CommandOutcome<Value>, Option<Value>)> {
         let req: M::Request = parse(M::NAME, params)?;
         self.0.validate(&req)?;
         let outcome = self.0.execute(req, ctx)?;
+        let recorded = self.0.recorded_payload(&outcome.response);
         let response = to_value(&outcome.response)?;
-        Ok(outcome.map(|_| response))
+        Ok((outcome.map(|_| response), recorded))
     }
 }
 
@@ -89,11 +103,13 @@ pub(crate) struct Entry {
 #[error("invalid registry: {0:?}")]
 pub struct RegistryError(pub Vec<String>);
 
-/// Methods and modules known to the app.
+/// Methods, modules and card type engines known to the app.
 #[derive(Default)]
 pub struct Registry {
     entries: BTreeMap<&'static str, Entry>,
     modules: Vec<ModuleDescriptor>,
+    card_types: BTreeMap<String, Arc<dyn CardTypeEngine>>,
+    jobs: BTreeMap<&'static str, Arc<dyn JobHandler>>,
     errors: Vec<String>,
 }
 
@@ -110,6 +126,25 @@ impl Registry {
                 .push(format!("module {} registered twice", descriptor.id));
         }
         self.modules.push(descriptor);
+    }
+
+    /// Registers a card type engine under `engine.info().id` (docs/02 §4: a new card type is
+    /// an engine registered here; templates refer to it by id).
+    pub fn card_type(&mut self, engine: Arc<dyn CardTypeEngine>) {
+        let id = engine.info().id;
+        if self.card_types.insert(id.clone(), engine).is_some() {
+            self.errors.push(format!("card type {id} registered twice"));
+        }
+    }
+
+    /// Card type engine by id.
+    pub fn card_type_engine(&self, id: &str) -> Option<&Arc<dyn CardTypeEngine>> {
+        self.card_types.get(id)
+    }
+
+    /// Registered card type engines, by id.
+    pub fn card_types(&self) -> impl Iterator<Item = &Arc<dyn CardTypeEngine>> {
+        self.card_types.values()
     }
 
     fn insert<M: ApiMethod>(&mut self, expected: MethodKind, handler: ErasedHandler) {
@@ -150,6 +185,20 @@ impl Registry {
     pub fn query<M: ApiMethod>(&mut self, handler: impl QueryHandler<M>) {
         let erased = TypedQuery::<M, _>(handler, PhantomData);
         self.insert::<M>(MethodKind::Query, ErasedHandler::Query(Box::new(erased)));
+    }
+
+    /// Registers the handler of a background job kind (docs/03 §12).
+    pub fn job(&mut self, handler: Arc<dyn JobHandler>) {
+        let kind = handler.kind();
+        if self.jobs.insert(kind, handler).is_some() {
+            self.errors
+                .push(format!("job kind {kind} registered twice"));
+        }
+    }
+
+    /// Handler of job `kind`.
+    pub fn job_handler(&self, kind: &str) -> Option<&Arc<dyn JobHandler>> {
+        self.jobs.get(kind)
     }
 
     /// Registers a placeholder for `M` that fails with `INTERNAL_NOT_IMPLEMENTED`. Lets the
@@ -201,6 +250,8 @@ impl Registry {
 
     /// See [`CommandCtx::call`]. Internal methods are allowed here (inverses, undo/redo);
     /// callers that forward client calls (`batch.execute`) check [`ensure_invocable`] first.
+    /// The module switch applies to every nested call (read inside this transaction), unless
+    /// `ctx.check_modules` is off (crash recovery).
     pub(crate) fn execute_nested(
         &self,
         ctx: &mut CommandCtx<'_>,
@@ -215,6 +266,11 @@ impl Registry {
                 format!("{} is a query; only commands can be nested", request.method),
             ));
         };
+        if ctx.check_modules
+            && !crate::support::module_enabled(ctx.reads(), self, entry.descriptor.module)?
+        {
+            return Err(module_disabled(entry.descriptor.module));
+        }
         run_recorded(
             ctx,
             &entry.descriptor,
@@ -237,11 +293,11 @@ pub(crate) fn run_recorded(
 ) -> AppResult<Value> {
     let slot = ctx.oplog.len();
     ctx.oplog.push(None);
-    let outcome = handler.execute(params.clone(), ctx)?;
+    let (outcome, recorded) = handler.execute(params.clone(), ctx)?;
     if descriptor.undoable && !outcome.inverse.is_empty() {
         ctx.oplog[slot] = Some(PendingOplogEntry {
             command: method.to_owned(),
-            payload: params,
+            payload: recorded.unwrap_or(params),
             inverse: outcome.inverse,
             summary: outcome.summary,
         });
@@ -270,15 +326,20 @@ pub(crate) fn ensure_invocable(
         ));
     }
     if !module_enabled {
-        return Err(AppError::Api(
-            ApiError::new(
-                ErrorCode::ConflictModuleDisabled,
-                format!("module {} is disabled", d.module),
-            )
-            .with_detail("module", d.module),
-        ));
+        return Err(module_disabled(d.module));
     }
     Ok(())
+}
+
+/// `CONFLICT_MODULE_DISABLED` for `module`.
+pub(crate) fn module_disabled(module: &str) -> AppError {
+    AppError::Api(
+        ApiError::new(
+            ErrorCode::ConflictModuleDisabled,
+            format!("module {module} is disabled"),
+        )
+        .with_detail("module", module),
+    )
 }
 
 /// Whether `actor` holds `permission`. v0.1 has no grant store: the user, the CLI and the app

@@ -1,0 +1,28 @@
+[package]
+name = "fc-interop"
+description = "Import/export formats: delimited text, JSON, Quizlet, Anki .apkg/.colpkg, .fcpack, .fcbackup, print. Bytes in, bytes out: no filesystem, wall clock or randomness (only a monotonic query time budget)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Synthetic Anki packages for other crates' tests (`fc_interop::anki::fixtures`).
+fixtures = []
+
+[dependencies]
+fc-core.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+thiserror.workspace = true
+uuid.workspace = true
+rusqlite = { workspace = true, features = ["serialize", "hooks"] }
+zip.workspace = true
+zstd.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+encoding_rs.workspace = true
+
+[lints]
+workspace = true

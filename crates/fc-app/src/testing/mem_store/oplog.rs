@@ -22,7 +22,13 @@ impl OplogRead for MemTx<'_> {
                     reverts_batch_id: r.reverts_batch_id,
                     summary: r.summary.clone(),
                     created_at: r.created_at,
+                    barrier: false,
                 });
+            }
+            if r.command == OPLOG_BARRIER_COMMAND {
+                if let Some(b) = batches.iter_mut().find(|b| b.batch_id == r.batch_id) {
+                    b.barrier = true;
+                }
             }
         }
         batches.reverse();
@@ -56,6 +62,11 @@ impl OplogRead for MemTx<'_> {
 impl OplogWrite for MemTx<'_> {
     fn append_oplog(&mut self, record: &OplogRecord) -> StorageResult<()> {
         self.m().oplog.push(record.clone());
+        Ok(())
+    }
+
+    fn clear_oplog(&mut self) -> StorageResult<()> {
+        self.m().oplog.clear();
         Ok(())
     }
 }

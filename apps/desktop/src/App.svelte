@@ -5,6 +5,7 @@
   import { t, td } from '$lib/i18n/index.svelte';
   import { SCREENS, type ScreenCtx, type ScreenDef } from '$lib/features';
   import { deckPaths } from '$lib/components/deck-paths';
+  import ShortcutHost from '$lib/features/browse/ShortcutHost.svelte';
 
   interface MenuItem {
     id: string;
@@ -76,8 +77,11 @@
       screen ??= menu[0]?.screen ?? null;
     }, fail);
     void loadDecks();
-    // Live updates: any deck event (or undo/redo) re-reads the tree from the backend.
-    const unsub = api.on(['deck_', 'undone', 'redone'], () => void loadDecks());
+    // Live updates: any deck/study event (or undo/redo, import, restore) re-reads the tree.
+    const unsub = api.on(
+      ['deck_', 'study_', 'undone', 'redone', 'imported', 'collection_'],
+      () => void loadDecks(),
+    );
     return () => void unsub.then((u) => u());
   });
 </script>
@@ -118,6 +122,13 @@
     {/if}
   </main>
 </div>
+
+<!-- Keyboard shortcuts + command palette (v0.4); inert when the palette module is off. -->
+<ShortcutHost
+  screens={menu.map((m) => ({ id: m.screen.id, label: td(m.label_key), open: () => (screen = m.screen) }))}
+  activeScreen={screen?.id ?? null}
+  {guarded}
+/>
 
 <style>
   .shell {

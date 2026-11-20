@@ -8,7 +8,10 @@ mod interop;
 mod scheduler;
 
 pub use answer::{AnswerChecker, AnswerVerdict, DiffSpan, DiffSpanKind};
-pub use card_type::{CardTypeEngine, RenderContext, RenderedCard};
+pub use card_type::{
+    CardInput, CardResponse, CardTypeEngine, Evaluation, Interaction, RenderContext, RenderedCard,
+    TtsRequest,
+};
 pub use hint::HintStrategy;
 pub use interop::{ExportBundle, Exporter, ImportBundle, ImportOptions, ImportedNote, Importer};
 pub use scheduler::{ReviewOutcome, Scheduler, SchedulerParams};

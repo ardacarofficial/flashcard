@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod media;
 pub mod migrate;
 pub mod repo;
 mod sqlite;
@@ -20,6 +21,7 @@ pub mod store;
 
 pub use error::{StorageError, StorageResult};
 pub use repo::{Reads, Writes};
+pub use sqlite::{upgrade_dump, upgrade_dump_with};
 pub use store::{ReadTx, SqliteStore, Store, WriteTx};
 
 #[cfg(test)]

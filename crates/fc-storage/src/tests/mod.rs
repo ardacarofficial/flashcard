@@ -5,11 +5,15 @@
 //! inspect the schema and the FTS index.
 
 mod attributes;
+mod content;
 mod decks;
+mod interop;
 mod migrations;
 mod misc;
 mod notes;
+mod search;
 mod store;
+mod study;
 mod tags;
 
 use crate::error::StorageResult;

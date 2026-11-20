@@ -3,12 +3,15 @@ import type { AffectedCount } from "./AffectedCount";
 import type { AttributeDefDto } from "./AttributeDefDto";
 import type { AttributeDefId } from "./AttributeDefId";
 import type { BatchId } from "./BatchId";
+import type { CardId } from "./CardId";
 import type { DeckDto } from "./DeckDto";
 import type { DeckId } from "./DeckId";
 import type { EntityRef } from "./EntityRef";
 import type { I18nMessage } from "./I18nMessage";
 import type { JobDto } from "./JobDto";
+import type { JobId } from "./JobId";
 import type { NoteId } from "./NoteId";
+import type { NoteTypeId } from "./NoteTypeId";
 import type { SettingScope } from "./SettingScope";
 
 /**
@@ -62,7 +65,15 @@ ids: Array<NoteId>, } } | { "type": "notes_restored", "data": {
 /**
  * Note ids.
  */
-ids: Array<NoteId>, } } | { "type": "tags_changed" } | { "type": "attribute_defined", "data": { 
+ids: Array<NoteId>, } } | { "type": "tags_changed" } | { "type": "note_type_changed", "data": { 
+/**
+ * Note type id.
+ */
+notetype_id: NoteTypeId, } } | { "type": "cards_updated", "data": { 
+/**
+ * Card ids.
+ */
+ids: Array<CardId>, } } | { "type": "flags_changed" } | { "type": "attribute_defined", "data": { 
 /**
  * Definition.
  */
@@ -98,7 +109,19 @@ enabled: boolean, } } | { "type": "job_progress", "data": {
 /**
  * Job snapshot.
  */
-job: JobDto, } } | { "type": "undone", "data": { 
+job: JobDto, } } | { "type": "imported", "data": { 
+/**
+ * Job.
+ */
+job_id: JobId, 
+/**
+ * Notes added or updated.
+ */
+notes: number, } } | { "type": "collection_replaced" } | { "type": "cards_changed", "data": { 
+/**
+ * Cards.
+ */
+ids: Array<CardId>, } } | { "type": "saved_queries_changed" } | { "type": "presets_changed" } | { "type": "undone", "data": { 
 /**
  * Batch reverted.
  */
@@ -114,4 +137,8 @@ reverted_batch_id: BatchId,
 /**
  * Summary.
  */
-summary: I18nMessage, } };
+summary: I18nMessage, } } | { "type": "study_cards_changed", "data": { 
+/**
+ * Cards.
+ */
+card_ids: Array<CardId>, } };

@@ -1,0 +1,18 @@
+// Card types & content (v0.3).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// Unsupported media type (`details.name`).
+ValidationMediaType => Validation, "errors.validation.media_type";
+/// Media file too large (`details.max_bytes`).
+ValidationMediaTooLarge => Validation, "errors.validation.media_too_large";
+/// Flag number outside 1–7 (`details.flag`).
+ValidationFlag => Validation, "errors.validation.flag";
+/// Media not found (`details.hash`).
+NotFoundMedia => NotFound, "errors.not_found.media";
+/// Card type engine not registered (`details.card_type`).
+NotFoundCardType => NotFound, "errors.not_found.card_type";
+/// Note type still has notes (`details.notes`).
+ConflictNoteTypeInUse => Conflict, "errors.conflict.note_type_in_use";
+/// Template still has cards (`details.template`, `details.cards`).
+ConflictTemplateInUse => Conflict, "errors.conflict.template_in_use";
+/// The built-in Classic note type cannot be deleted.
+ConflictNoteTypeRequired => Conflict, "errors.conflict.note_type_required";

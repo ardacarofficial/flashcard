@@ -3,16 +3,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-CORE=crates/fc-core
+fail=0
+# Saf crate'ler. fc-study (v0.2) fc-core + fc-providers arayüzlerine bağlanabilir;
+# fc-providers yalnız arayüzdür (fc-core, serde, thiserror, async-trait), o da saf kalır.
+for CORE in crates/fc-core crates/fc-study crates/fc-providers; do
 if [ ! -d "$CORE" ]; then
   echo "::notice::$CORE yok (henüz gelmedi), atlanıyor."
-  exit 0
+  continue
 fi
-
-fail=0
 
 # 1) Yasaklı bağımlılıklar ([dependencies] ve [build-dependencies]; dev-dependencies serbest)
 deny='^(rusqlite|sqlx|diesel|sea-orm|rand|rand_core|getrandom|fastrand|fs-err|fs_extra|tokio|async-std|smol|reqwest|hyper|ureq|surf|isahc|attohttpc|tauri|tauri-.*|walkdir|tempfile|notify|keyring|dirs|directories|home|mio|socket2|libsqlite3-sys|fc-storage|fc-app|fc-api|fc-providers|fc-cli)$'
+if [ "$CORE" = crates/fc-study ]; then deny=${deny/|fc-providers|/|}; fi
 deps=$(awk '
   /^\[/ {
     sec = 0
@@ -26,7 +28,7 @@ deps=$(awk '
 ' "$CORE/Cargo.toml" | sort -u)
 for d in $deps; do
   if [[ "$d" =~ $deny ]]; then
-    echo "::error file=$CORE/Cargo.toml::fc-core yasaklı bağımlılık içeriyor: $d"
+    echo "::error file=$CORE/Cargo.toml::$CORE yasaklı bağımlılık içeriyor: $d"
     fail=1
   fi
 done
@@ -79,12 +81,13 @@ if [ -d "$CORE/src" ]; then
   for p in "${patterns[@]}"; do
     if hits=$(printf '%s\n' "$stripped" | grep -E -- "$p"); then
       while IFS= read -r line; do
-        echo "::error::fc-core saf değil ('$p'): $line"
+        echo "::error::$CORE saf değil ('$p'): $line"
       done <<< "$hits"
       fail=1
     fi
   done
 fi
+done
 
 if [ "$fail" -ne 0 ]; then
   echo "fc-core saflık kontrolü BAŞARISIZ (Clock/Rng dışarıdan verilmeli)."

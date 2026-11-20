@@ -3,6 +3,7 @@
 //! history walk. Handlers compose these; none of them writes on its own.
 
 pub(crate) mod attrs;
+pub(crate) mod content;
 pub(crate) mod decks;
 pub(crate) mod dto;
 pub(crate) mod history;
@@ -56,6 +57,14 @@ pub(crate) fn from_json<T: DeserializeOwned>(v: &Value) -> AppResult<T> {
 
 /// Effective on/off state of every module: stored switch, else the module default. Modules
 /// that cannot be disabled are always on.
+/// Whether module `id` is on, as stored in this transaction (unknown module → off).
+pub(crate) fn module_enabled(reads: &dyn Reads, registry: &Registry, id: &str) -> AppResult<bool> {
+    Ok(module_states(reads, registry)?
+        .get(id)
+        .copied()
+        .unwrap_or(false))
+}
+
 pub(crate) fn module_states(
     reads: &dyn Reads,
     registry: &Registry,

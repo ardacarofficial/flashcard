@@ -1,0 +1,84 @@
+{
+  "commands": {
+    "study": {
+      "start": "Start studying",
+      "session": "Study session",
+      "active": "Open study session",
+      "answer": "Rate the card",
+      "hint": "Show a hint",
+      "check_answer": "Check an answer",
+      "end": "End the session",
+      "summary": "Session summary",
+      "suspend": "Suspend cards (study)",
+      "bury": "Bury cards (study)",
+      "postpone": "Postpone today's cards",
+      "card_history": "Card review history"
+    },
+    "notetypes": {
+      "create": "New note type",
+      "update": "Edit note type",
+      "delete": "Delete note type",
+      "restore": "Restore note type",
+      "usage": "Note type usage"
+    },
+    "cardtypes": {
+      "list": "Card types"
+    },
+    "cards": {
+      "render": "Show a card",
+      "preview": "Preview a card",
+      "set_flag": "Flag cards",
+      "set_flags": "Set card flags",
+      "set_user_note": "Card note",
+      "meta": "Card details"
+    },
+    "media": {
+      "add": "Add media",
+      "get": "Media details",
+      "list": "List media",
+      "read": "Read media"
+    },
+    "links": {
+      "backlinks": "Backlinks",
+      "suggest": "Suggest links"
+    },
+    "flags": {
+      "list": "List flags",
+      "update": "Rename / recolor a flag"
+    },
+    "io": {
+      "import": {
+        "preview": "Preview an import",
+        "start": "Import"
+      },
+      "export": {
+        "start": "Export"
+      },
+      "backup": {
+        "create": "Create a backup",
+        "inspect": "Inspect a backup",
+        "restore": "Restore a backup"
+      },
+      "print": {
+        "render": "Print cards"
+      }
+    },
+    "bulk": {
+      "change_notetype": "Change note type"
+    }
+  },
+  "shortcuts": {
+    "study": {
+      "reveal": "Show the answer",
+      "again": "Rate: again",
+      "hard": "Rate: hard",
+      "good": "Rate: good",
+      "easy": "Rate: easy",
+      "hint": "Hint",
+      "suspend": "Suspend card",
+      "bury": "Bury card",
+      "undo": "Undo last answer",
+      "end": "End session"
+    }
+  }
+}

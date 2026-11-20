@@ -260,3 +260,99 @@ fn cefr_on_parent_option_rename_undo_redo() {
     assert!(!denied.status.success());
     assert!(String::from_utf8_lossy(&denied.stderr).contains("PERMISSION_DENIED"));
 }
+
+/// Review fix: emptying the trash writes a history barrier. Undo then stops there with
+/// `CONFLICT_HISTORY_BARRIER` (not `NOT_FOUND_NOTE` on the purged note), the older history
+/// stays listed, and actions after the barrier undo normally.
+#[test]
+fn purge_writes_a_history_barrier_that_undo_stops_at() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("collection.db");
+    ok(&db, &["deck", "create", "Dil"]);
+    ok(
+        &db,
+        &[
+            "note", "add", "--deck", "Dil", "--front", "dog", "--back", "köpek",
+        ],
+    );
+    ok(
+        &db,
+        &[
+            "note", "add", "--deck", "Dil", "--front", "cat", "--back", "kedi",
+        ],
+    );
+    let dog = json(&db, &["note", "list"])["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["sort_field"] == "dog")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    ok(&db, &["note", "delete", &dog]);
+    let purged = json(
+        &db,
+        &["call", "browse.purge_trash", r#"{"older_than_days":0}"#],
+    );
+    assert_eq!(purged["notes"], 1, "{purged}");
+
+    // Undo would have restored the purged note: it stops at the barrier instead.
+    let o = fc(&db, &["--json", "undo"]);
+    assert!(!o.status.success());
+    let err: Value = serde_json::from_slice(&o.stderr).unwrap();
+    assert_eq!(err["code"], "CONFLICT_HISTORY_BARRIER", "{err}");
+    assert_eq!(err["message_key"], "errors.conflict.history_barrier");
+    assert_eq!(err["details"]["reason"], "purge");
+    let status = json(&db, &["call", "oplog.status"]);
+    assert_eq!(status["can_undo"], false, "{status}");
+
+    // History before the barrier is still listed.
+    let log = json(&db, &["call", "oplog.list"]);
+    let commands: Vec<&str> = log["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["command"].as_str().unwrap())
+        .collect();
+    assert_eq!(commands[0], "v1.oplog.barrier", "{commands:?}");
+    assert!(commands.contains(&"v1.notes.delete"), "{commands:?}");
+    assert_eq!(
+        commands.iter().filter(|c| **c == "v1.notes.create").count(),
+        2
+    );
+
+    // A new action after the barrier is an ordinary undo step; the barrier holds again.
+    ok(
+        &db,
+        &[
+            "note", "add", "--deck", "Dil", "--front", "bird", "--back", "kuş",
+        ],
+    );
+    assert!(ok(&db, &["undo"]).contains("bird"));
+    assert_eq!(note_fronts(&db), vec!["cat".to_owned()]);
+    let o = fc(&db, &["--json", "undo"]);
+    assert!(!o.status.success());
+    let err: Value = serde_json::from_slice(&o.stderr).unwrap();
+    assert_eq!(err["code"], "CONFLICT_HISTORY_BARRIER");
+    // Purging the undone "bird" (now in the trash) writes a second barrier; an empty trash
+    // purges nothing and writes none.
+    let barriers = |db: &Path| {
+        json(db, &["call", "oplog.list"])["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e["command"] == "v1.oplog.barrier")
+            .count()
+    };
+    let purge = |db: &Path| {
+        json(
+            db,
+            &["call", "browse.purge_trash", r#"{"older_than_days":0}"#],
+        )
+    };
+    assert_eq!(purge(&db)["notes"], 1);
+    assert_eq!(barriers(&db), 2);
+    assert_eq!(purge(&db)["notes"], 0);
+    assert_eq!(barriers(&db), 2);
+}

@@ -13,10 +13,12 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
-rusqlite.workspace = true
+rusqlite = { workspace = true, features = ["functions"] }
+regex = { version = "1", default-features = false, features = ["std", "unicode"] }
 
 [dev-dependencies]
 tempfile.workspace = true
+proptest = { version = "1", default-features = false, features = ["std"] }
 
 [lints]
 workspace = true
