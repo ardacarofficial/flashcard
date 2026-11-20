@@ -2,8 +2,9 @@
 import type { DeckId } from "./DeckId";
 
 /**
- * Which cards statistics look at. Empty = the whole collection (reviews of trashed cards
- * included); otherwise the live cards matching every given condition.
+ * Which cards statistics look at. Empty = the whole collection (reviews of trashed and
+ * purged cards included: review history outlives its card); otherwise the live cards
+ * matching every given condition.
  */
 export type StatsScope = { 
 /**

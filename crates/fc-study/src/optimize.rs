@@ -1,7 +1,10 @@
 //! FSRS personal optimization (docs/02 §5 "Kişisel optimizasyon", v0.6): turns review
 //! histories into `fsrs-rs` training items and fits FSRS-6 weights to them.
 //!
-//! Pure and deterministic: training uses `fsrs-rs`'s seeded shuffles, no clock or I/O.
+//! Pure and deterministic: training uses `fsrs-rs`'s seeded shuffles, no clock or I/O. One
+//! outside input exists: `fsrs-rs` turns its outlier filter off when the `FSRS_NO_OUTLIER`
+//! environment variable is set; the transports remove it at process start
+//! (`fc_app::system::pin_process_env`), so the filter is always on.
 //! Cancellation is cooperative through the shared [`Progress`] (`want_abort`); the app's
 //! background job sets it when the job is cancelled.
 

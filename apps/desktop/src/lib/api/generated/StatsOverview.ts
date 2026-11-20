@@ -27,7 +27,9 @@ reviews: ReviewStats,
  */
 cards: CardStats, 
 /**
- * Desired retention of the scope's preset (deck scope), else the default preset's.
+ * Desired retention the scope aims for: a deck scope's effective preset; otherwise the
+ * effective presets of the scope's cards (their common value, or the card-weighted mean
+ * when decks differ); the built-in default only for an empty scope.
  */
 target_retention: number, 
 /**

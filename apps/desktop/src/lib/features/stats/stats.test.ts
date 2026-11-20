@@ -34,7 +34,12 @@ describe('v0.6 screens on the dev mock', () => {
     expect(screen.getByText('88.6%')).toBeTruthy();
     expect(screen.getByText('Target 90%')).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Forecast' })).toBeTruthy();
-    expect(await screen.findByText('No leeches.')).toBeTruthy();
+    // Leech actions cover every leech of the scope: one Rust command, no ids from here.
+    expect(await screen.findByText('60 cards forgotten at least 8 times')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Suspend' }));
+    expect(await screen.findByText('60 changed, 0 already done')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Suspend' }));
+    expect(await screen.findByText('0 changed, 60 already done')).toBeTruthy();
   });
 
   it('planning: exam dates and easy days', async () => {

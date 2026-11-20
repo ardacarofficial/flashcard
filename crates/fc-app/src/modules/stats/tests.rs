@@ -157,6 +157,7 @@ impl T {
             } else {
                 Rating::Good
             };
+            let shown = c.intervals.iter().find(|p| p.rating == rating).unwrap().scheduled_days;
             self.clock.advance(5_000);
             s = self.ok::<StudyAnswer>(AnswerCard {
                 session_id: s.id,
@@ -165,6 +166,11 @@ impl T {
                 duration_ms: 3_000 + 1_000 * u32::try_from(n % 7).unwrap(),
                 reveal_ms: None,
             });
+            if mode == StudyMode::Scheduled {
+                // The button showed what the answer got (planning included).
+                let rows = self.store.read().unwrap().stats_reviews(0, Some(&[c.card_id])).unwrap();
+                assert_eq!(rows.last().unwrap().1.scheduled_days, shown, "preview = applied");
+            }
             assert!(n < 1000);
         }
         self.ok::<StudyEnd>(SessionRef { session_id: s.id });
@@ -330,16 +336,21 @@ pub fn cache_equals_recomputation(f: &Factory) {
     // (MemStore's hash covers trial rows too, so its cache is rebuilt; SQLite folds nothing.)
     assert_eq!(agree(&t, 0), t.incremental);
 
-    // Purging a trashed note removes its reviews for good: rebuilt, still equal.
+    // Purging a trashed note keeps its review history: totals unchanged, cache still valid.
+    t.refresh(0);
+    let totals = t.overview(StatsScope::default(), 0, false).reviews;
     let note = t.card(cards[1]).note_id;
     t.ok::<NotesDelete>(NoteIds { ids: vec![note] });
     t.ok::<BrowsePurgeTrash>(PurgeTrash {
         older_than_days: Some(0),
     });
-    assert!(t.total_reviews() < n);
-    assert!(!agree(&t, 0));
-    assert!(t.refresh(0).rebuilt);
+    assert_eq!(t.total_reviews(), n);
     assert!(agree(&t, 0));
+    assert!(!t.refresh(0).rebuilt, "a purge does not touch review_log");
+    let after = t.overview(StatsScope::default(), 0, false).reviews;
+    assert_eq!(after.totals, totals.totals);
+    assert_eq!(after.heatmap, totals.heatmap);
+    assert_eq!(after.streak, totals.streak);
 
     // Another calendar has its own cache.
     assert!(!agree(&t, 180));
@@ -494,6 +505,116 @@ pub fn leeches_and_report_cards(f: &Factory) {
     assert!(of(child.id).report.mean_recall.unwrap() > 0.5);
 }
 
+/// `stats.apply_to_leeches` acts on every leech of the scope (not the listed page), as one
+/// undo step; the tag action tags each note once.
+pub fn apply_to_leeches_covers_every_leech(f: &Factory) {
+    let t = T::new(f);
+    let d = t.deck("Zor");
+    let other = t.deck("Kolay");
+    let leeches: Vec<CardId> = (0..7).map(|i| t.note(d.id, &format!("l{i}"), None)).collect();
+    let calm = t.note(d.id, "calm", None);
+    let elsewhere = t.note(other.id, "e", None);
+    for c in leeches.iter().chain([&elsewhere]) {
+        t.set_card(*c, |c| c.scheduling.lapses = 9);
+    }
+    t.set_card(leeches[0], |c| c.suspended = true);
+    let scope = StatsScope {
+        deck_id: Some(d.id),
+        ..StatsScope::default()
+    };
+    let page = t.ok::<StatsLeeches>(LeechRequest {
+        scope: scope.clone(),
+        threshold: None,
+        limit: Some(2),
+    });
+    assert_eq!((page.total, page.items.len()), (7, 2));
+    let r = t.ok::<StatsApplyToLeeches>(ApplyToLeeches {
+        scope: scope.clone(),
+        threshold: None,
+        action: LeechAction::Suspend,
+        tag: None,
+    });
+    assert_eq!((r.threshold, r.cards, r.changed, r.skipped), (8, 7, 6, 1));
+    assert!(leeches.iter().all(|c| t.card(*c).suspended));
+    assert!(!t.card(calm).suspended && !t.card(elsewhere).suspended, "scope and rule");
+    t.undo();
+    assert!(leeches[1..].iter().all(|c| !t.card(*c).suspended), "one undo step");
+    assert!(t.card(leeches[0]).suspended);
+
+    let r = t.ok::<StatsApplyToLeeches>(ApplyToLeeches {
+        scope,
+        threshold: Some(9),
+        action: LeechAction::Tag,
+        tag: None,
+    });
+    assert_eq!((r.cards, r.changed), (7, 7));
+    let tagged = |t: &T, c: CardId| {
+        let note = t.card(c).note_id;
+        t.store
+            .read()
+            .unwrap()
+            .get_note(note)
+            .unwrap()
+            .unwrap()
+            .tags
+            .iter()
+            .any(|g| g.as_str() == "leech")
+    };
+    assert!(leeches.iter().all(|c| tagged(&t, *c)));
+    assert!(!tagged(&t, calm) && !tagged(&t, elsewhere));
+    t.undo();
+    assert!(!leeches.iter().any(|c| tagged(&t, *c)));
+    let bad = t.err::<StatsApplyToLeeches>(ApplyToLeeches {
+        scope: StatsScope::default(),
+        threshold: Some(0),
+        action: LeechAction::Suspend,
+        tag: None,
+    });
+    assert_eq!(bad.code, ErrorCode::ValidationInvalidParams);
+}
+
+/// The target retention comes from the user's presets, not the built-in default: a deck
+/// scope uses its deck's; the whole collection its cards' common value or card-weighted mean.
+pub fn target_retention_follows_presets(f: &Factory) {
+    let t = T::new(f);
+    let builtin = fc_core::preset::PresetConfig::default().desired_retention;
+    let all = |t: &T| t.overview(StatsScope::default(), 0, false).target_retention;
+    assert!((all(&t) - builtin).abs() < 1e-12, "empty collection: built-in");
+    let a = t.deck("A");
+    let b = t.deck("B");
+    for i in 0..3 {
+        t.note(a.id, &format!("a{i}"), None);
+    }
+    t.note(b.id, "b", None);
+    let preset = |name: &str, r: f64, decks: Vec<DeckId>| {
+        let p = t.ok::<PresetsCreate>(CreatePreset {
+            name: name.into(),
+            config: Some(fc_core::preset::PresetConfig {
+                desired_retention: r,
+                ..fc_core::preset::PresetConfig::default()
+            }),
+        });
+        t.ok::<PresetsAssign>(AssignPreset {
+            deck_ids: decks,
+            preset_id: Some(p.id),
+        });
+    };
+    preset("Ortak", 0.85, vec![a.id, b.id]);
+    assert!((all(&t) - 0.85).abs() < 1e-12, "every deck shares one preset");
+    preset("Sıkı", 0.95, vec![b.id]);
+    // 3 cards at 0.85, 1 at 0.95.
+    assert!((all(&t) - (3.0 * 0.85 + 0.95) / 4.0).abs() < 1e-12);
+    let of_b = t.overview(
+        StatsScope {
+            deck_id: Some(b.id),
+            ..StatsScope::default()
+        },
+        0,
+        false,
+    );
+    assert!((of_b.target_retention - 0.95).abs() < 1e-12);
+}
+
 // ------------------------------------------------------------------ planning
 
 /// Puts `n` review cards in the exact same memory state, all due today.
@@ -616,6 +737,16 @@ pub fn exam_mode_and_exam_commands(f: &Factory) {
     });
     assert_eq!(list.items[0].days_left, 20);
     assert_eq!(list.items[0].cards, 1);
+    // The buttons already show the exam-bounded interval.
+    let s = t.start(StudyMode::Scheduled, None);
+    let shown = s.current.as_ref().unwrap();
+    let good = shown.intervals.iter().find(|p| p.rating == Rating::Good).unwrap();
+    if shown.card_id == in_exam {
+        assert!((17..=19).contains(&good.scheduled_days), "{}", good.scheduled_days);
+    } else {
+        assert!(good.scheduled_days > 60);
+    }
+    t.ok::<StudyEnd>(SessionRef { session_id: s.id });
     t.study(StudyMode::Scheduled, None, 0);
     let due = |c: CardId| t.card(c).scheduling.due.unwrap().as_millis().div_euclid(DAY) - today;
     assert!((17..=19).contains(&due(in_exam)), "pulled before the exam: {}", due(in_exam));
@@ -960,6 +1091,8 @@ macro_rules! v06_suite {
             cache_equals_recomputation,
             breakdown_by_classification,
             leeches_and_report_cards,
+            target_retention_follows_presets,
+            apply_to_leeches_covers_every_leech,
             load_balancing_spreads_equal_cards,
             exam_mode_and_exam_commands,
             goals_progress_and_undo,
@@ -1004,5 +1137,204 @@ mod sqlite_file {
         super::optimizer_job_cancelled_while_training(&|| -> Arc<dyn Store> {
             Arc::new(TempSqlite::new())
         });
+    }
+}
+
+/// Statistics benchmark (docs/03 §17: 200k cards / 2M reviews). Builds a file SQLite
+/// collection directly through the storage layer, then times what the statistics screen does.
+/// Full size: `cargo test -p fc-app --release stats_2m -- --ignored --nocapture`; the CI
+/// variant (1/10 size) runs with every `cargo test`.
+mod bench {
+    use super::*;
+    use crate::testing::TempSqlite;
+    use fc_core::note::searchable_text;
+    use std::time::Instant;
+
+    /// Milliseconds, best of `runs`.
+    fn best<R>(runs: usize, mut f: impl FnMut() -> R) -> f64 {
+        (0..runs)
+            .map(|_| {
+                let t = Instant::now();
+                std::hint::black_box(f());
+                t.elapsed().as_secs_f64() * 1000.0
+            })
+            .fold(f64::INFINITY, f64::min)
+    }
+
+    fn review_id(n: u64) -> ReviewLogId {
+        ReviewLogId(uuid::Uuid::from_u128(0x0190_0000_0000_7000_8000_0000_0000_0000 | u128::from(n)))
+    }
+
+    /// `cards` review cards in 4 decks; `reviews` reviews spread over the last two years
+    /// (oldest first, ~10% "again", some imported).
+    fn world(cards: usize, reviews: usize) -> (T, DeckId) {
+        let f: Box<Factory> = Box::new(|| -> Arc<dyn Store> { Arc::new(TempSqlite::new()) });
+        let t = T::new(&f);
+        let decks: Vec<DeckId> = (0..4).map(|i| t.deck(&format!("Deste{i}")).id).collect();
+        let first = t.note(decks[0], "seed", None);
+        let mut rng = SplitMix64::new(2026);
+        let mut roll = |n: u64| fc_core::Rng::next_u64(&mut rng) % n;
+        let mut tx = t.store.write().unwrap();
+        let card0 = tx.get_card(first).unwrap().unwrap();
+        let note0 = tx.get_note(card0.note_id).unwrap().unwrap();
+        let nt = tx.get_notetype(note0.notetype_id).unwrap().unwrap();
+        let mut ids = vec![first];
+        for i in 1..cards as u128 {
+            let mut note = note0.clone();
+            note.id = fc_core::NoteId(uuid::Uuid::from_u128(0x0190_0000_0000_7000_8000_0001_0000_0000 | i));
+            note.fields.insert(
+                fc_core::notetype::FieldKey::new(builtin::FRONT),
+                format!("kelime {i}"),
+            );
+            note.checksum = format!("{i:016x}");
+            let mut card = card0.clone();
+            card.id = CardId(note.id.0);
+            card.note_id = note.id;
+            card.deck_id = decks[i as usize % decks.len()];
+            note.home_deck_id = card.deck_id;
+            tx.insert_note(&note, &searchable_text(&nt, &note.fields)).unwrap();
+            tx.insert_card(&card).unwrap();
+            ids.push(card.id);
+        }
+        for (k, id) in ids.iter().enumerate() {
+            let mut c = tx.get_card(*id).unwrap().unwrap();
+            let s = &mut c.scheduling;
+            s.state = CardState::Review;
+            s.stability = Some(1.0 + roll(2_000) as f64 / 10.0);
+            s.difficulty = Some(1.0 + roll(90) as f64 / 10.0);
+            s.last_review = Some(Timestamp(T0 - (1 + roll(60)) as i64 * DAY));
+            s.due = Some(Timestamp(T0 + (k % 90) as i64 * DAY - 10 * DAY));
+            s.reps = 10;
+            s.lapses = u32::try_from(roll(12)).unwrap();
+            tx.update_card(&c).unwrap();
+        }
+        let span = 730 * DAY;
+        let mut batch = Vec::with_capacity(10_000);
+        for n in 0..reviews as u64 {
+            let at = T0 - span + (i64::try_from(n).unwrap() * span) / i64::try_from(reviews).unwrap();
+            let again = roll(10) == 0;
+            batch.push(ReviewLogRecord {
+                id: review_id(n),
+                card_id: ids[(roll(ids.len() as u64)) as usize],
+                session_id: None,
+                rating: if again { Rating::Again } else { Rating::Good },
+                state_before: if n % 50 == 0 { CardState::New } else { CardState::Review },
+                state_after: CardState::Review,
+                scheduled_days: u32::try_from(1 + roll(60)).unwrap(),
+                elapsed_days: u32::try_from(roll(60)).unwrap(),
+                duration_ms: u32::try_from(2_000 + roll(15_000)).unwrap(),
+                answer_duration_ms: None,
+                hints_used: 0,
+                mode: if n % 20 == 0 { "imported" } else { "normal" }.into(),
+                stability_after: Some(10.0),
+                difficulty_after: Some(5.0),
+                created_at: Timestamp(at),
+            });
+            if batch.len() == batch.capacity() {
+                tx.insert_review_logs(&batch).unwrap();
+                batch.clear();
+            }
+        }
+        tx.insert_review_logs(&batch).unwrap();
+        tx.commit().unwrap();
+        (t, decks[1])
+    }
+
+    #[derive(Debug)]
+    struct Timings {
+        rebuild: f64,
+        cached: f64,
+        fresh: f64,
+        fold_1k: f64,
+        deck_scope: f64,
+    }
+
+    fn run(cards: usize, reviews: usize) -> Timings {
+        let setup = Instant::now();
+        let (t, deck) = world(cards, reviews);
+        let setup = setup.elapsed().as_secs_f64();
+        assert_eq!(t.total_reviews(), reviews);
+        // Cache built from nothing (the first statistics screen after an upgrade).
+        let rebuild = best(1, || {
+            let info = t.refresh(0);
+            assert!(info.rebuilt);
+        });
+        let cached = best(3, || {
+            let o = t.overview(StatsScope::default(), 0, false);
+            assert!(o.from_cache);
+            o
+        });
+        let fresh = best(1, || t.overview(StatsScope::default(), 0, true));
+        // A day of studying: 1000 appended answers folded into the cache.
+        {
+            let mut tx = t.store.write().unwrap();
+            let rows: Vec<ReviewLogRecord> = (0..1_000u64)
+                .map(|k| ReviewLogRecord {
+                    id: review_id(reviews as u64 + k),
+                    card_id: CardId(uuid::Uuid::from_u128(0x0190_0000_0000_7000_8000_0001_0000_0001)),
+                    session_id: None,
+                    rating: Rating::Good,
+                    state_before: CardState::Review,
+                    state_after: CardState::Review,
+                    scheduled_days: 5,
+                    elapsed_days: 5,
+                    duration_ms: 5_000,
+                    answer_duration_ms: None,
+                    hints_used: 0,
+                    mode: "normal".into(),
+                    stability_after: None,
+                    difficulty_after: None,
+                    created_at: Timestamp(T0 - DAY + i64::try_from(k).unwrap() * 1_000),
+                })
+                .collect();
+            tx.insert_review_logs(&rows).unwrap();
+            tx.commit().unwrap();
+        }
+        let fold_1k = best(1, || {
+            let info = t.refresh(0);
+            assert!(!info.rebuilt);
+            assert_eq!(info.folded, 1_000);
+        });
+        let deck_scope = best(3, || {
+            t.overview(
+                StatsScope {
+                    deck_id: Some(deck),
+                    ..StatsScope::default()
+                },
+                0,
+                false,
+            )
+        });
+        let tm = Timings {
+            rebuild,
+            cached,
+            fresh,
+            fold_1k,
+            deck_scope,
+        };
+        println!("stats bench: {cards} cards, {reviews} reviews (setup {setup:.1} s): {tm:?} (ms)");
+        tm
+    }
+
+    /// docs/03 §17 size. Budgets for a release build on a desktop-class machine.
+    #[test]
+    #[ignore = "benchmark: builds a 200k-card / 2M-review database"]
+    fn stats_2m_reviews() {
+        let tm = run(200_000, 2_000_000);
+        assert!(tm.cached < 1_000.0, "{tm:?}");
+        assert!(tm.fold_1k < 1_000.0, "{tm:?}");
+        assert!(tm.rebuild < 30_000.0, "{tm:?}");
+        assert!(tm.deck_scope < 10_000.0, "{tm:?}");
+    }
+
+    /// CI regression check at 1/10 size (debug build, shared runners: generous budgets).
+    #[test]
+    fn stats_200k_reviews_scaled() {
+        let tm = run(20_000, 200_000);
+        assert!(tm.cached < 3_000.0, "{tm:?}");
+        assert!(tm.fold_1k < 3_000.0, "{tm:?}");
+        assert!(tm.rebuild < 30_000.0, "{tm:?}");
+        assert!(tm.fresh < 30_000.0, "{tm:?}");
+        assert!(tm.deck_scope < 10_000.0, "{tm:?}");
     }
 }

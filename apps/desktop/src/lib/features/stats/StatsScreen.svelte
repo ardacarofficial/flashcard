@@ -5,6 +5,8 @@
     AttributeDefDto,
     DeckReports,
     DeckTreeNode,
+    LeechAction,
+    LeechActionResult,
     LeechList,
     StatsBreakdown,
     StatsOverview,
@@ -24,6 +26,7 @@
   let range = $state<(typeof RANGES)[number]>('30');
   let overview = $state<StatsOverview | null>(null);
   let leeches = $state<LeechList | null>(null);
+  let applied = $state<LeechActionResult | null>(null);
   let reports = $state<DeckReports | null>(null);
   let attrs = $state<AttributeDefDto[]>([]);
   let attrId = $state('');
@@ -73,17 +76,14 @@
     });
   }
 
-  async function suspendLeeches() {
+  // Every leech of the scope, selected in Rust (not just the listed page).
+  async function applyToLeeches(action: LeechAction) {
     if (!leeches) return;
-    const ids = leeches.items.map((c) => c.card_id);
-    await ctx.guarded(() => api.call('bulk.set_suspended', { card_ids: ids, suspended: true }));
+    const threshold = leeches.threshold;
+    await ctx.guarded(async () => {
+      applied = await api.call('stats.apply_to_leeches', { scope: scope(), threshold, action, tag: null });
+    });
     await load();
-  }
-
-  async function tagLeeches() {
-    if (!leeches) return;
-    const notes = [...new Set(leeches.items.map((c) => c.note_id))];
-    await ctx.guarded(() => api.call('bulk.add_tags', { note_ids: notes, tags: ['leech'] }));
   }
 
   const bars = <T,>(items: T[], label: (x: T) => string, value: (x: T) => number, title: (x: T) => string): Bar[] =>
@@ -248,9 +248,12 @@
         <tbody>{#each leeches.items as l (l.card_id)}<tr><td>{l.sort_field}</td><td>{l.lapses}</td></tr>{/each}</tbody>
       </table>
       <div class="row">
-        <button onclick={() => void suspendLeeches()}>{t('stats.leeches.suspend')}</button>
-        <button onclick={() => void tagLeeches()}>{t('stats.leeches.tag')}</button>
+        <button onclick={() => void applyToLeeches('suspend')}>{t('stats.leeches.suspend')}</button>
+        <button onclick={() => void applyToLeeches('tag')}>{t('stats.leeches.tag')}</button>
       </div>
+      {#if applied}
+        <p class="muted" role="status">{t('stats.leeches.applied', { changed: applied.changed, skipped: applied.skipped })}</p>
+      {/if}
     {/if}
   </section>
 {/if}

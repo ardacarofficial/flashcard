@@ -79,6 +79,7 @@ pub fn register(reg: &mut Registry) {
     reg.query::<StatsGetOverview>(overview);
     reg.query::<StatsGetBreakdown>(breakdown);
     reg.query::<StatsLeeches>(leeches);
+    reg.command::<StatsApplyToLeeches>(apply_to_leeches);
     reg.query::<StatsDeckReports>(deck_reports);
     reg.command::<StatsRefreshCache>(refresh);
 }
@@ -103,10 +104,7 @@ pub(crate) fn overview_of(ctx: &QueryCtx<'_>, req: &StatsRequest) -> AppResult<S
         .forecast_days
         .unwrap_or(DEFAULT_FORECAST_DAYS)
         .clamp(1, MAX_FORECAST_DAYS);
-    let target_retention = match req.scope.deck_id {
-        Some(d) => Presets::new(reads).of(d)?.desired_retention,
-        None => fc_core::preset::PresetConfig::default().desired_retention,
-    };
+    let target_retention = target_retention(reads, req.scope.deck_id, &cards)?;
     Ok(StatsOverview {
         today,
         today_date: iso_date(today),
@@ -116,6 +114,38 @@ pub(crate) fn overview_of(ctx: &QueryCtx<'_>, req: &StatsRequest) -> AppResult<S
         target_retention,
         from_cache: origin.from_cache,
     })
+}
+
+/// The retention the scope aims for: a deck scope's effective preset; otherwise the
+/// effective presets of the scope's cards (their one value, or the card-weighted mean when
+/// decks differ); built-in defaults only for an empty scope.
+pub(crate) fn target_retention(
+    reads: &dyn fc_storage::Reads,
+    deck: Option<fc_core::DeckId>,
+    cards: &[fc_core::card::Card],
+) -> AppResult<f64> {
+    let mut presets = Presets::new(reads);
+    if let Some(d) = deck {
+        return Ok(presets.of(d)?.desired_retention);
+    }
+    let mut per_deck: std::collections::BTreeMap<fc_core::DeckId, u64> = Default::default();
+    for c in cards {
+        *per_deck.entry(c.deck_id).or_default() += 1;
+    }
+    let mut values: Vec<(f64, u64)> = Vec::with_capacity(per_deck.len());
+    for (d, n) in per_deck {
+        values.push((presets.of(d)?.desired_retention, n));
+    }
+    let Some(&(first, _)) = values.first() else {
+        return Ok(fc_core::preset::PresetConfig::default().desired_retention);
+    };
+    if values.iter().all(|(r, _)| *r == first) {
+        return Ok(first);
+    }
+    let total: u64 = values.iter().map(|(_, n)| n).sum();
+    #[allow(clippy::cast_precision_loss)] // card counts are far below 2^52
+    let mean = values.iter().map(|(r, n)| r * *n as f64).sum::<f64>() / total as f64;
+    Ok(mean)
 }
 
 fn overview(req: StatsRequest, ctx: &QueryCtx<'_>) -> AppResult<StatsOverview> {
@@ -234,18 +264,29 @@ fn leech_threshold(reads: &dyn fc_storage::Reads) -> AppResult<u32> {
         .unwrap_or(8))
 }
 
-fn leeches(req: LeechRequest, ctx: &QueryCtx<'_>) -> AppResult<LeechList> {
-    let reads = ctx.tx;
-    let threshold = match req.threshold {
+/// The leech rule: cards of `scope` with at least `threshold` (default: the setting) lapses.
+fn leech_filter(
+    reads: &dyn fc_storage::Reads,
+    scope: &StatsScope,
+    threshold: Option<u32>,
+    now: fc_core::Timestamp,
+) -> AppResult<(u32, Filter)> {
+    let threshold = match threshold {
         Some(t) if t >= 1 => t,
         Some(_) => return Err(crate::support::invalid("threshold must be at least 1")),
         None => leech_threshold(reads)?,
     };
     let lapses = Filter::Pred(Pred::Num(CardNum::Lapses, CmpOp::Ge, f64::from(threshold)));
-    let filter = match scope_filter(reads, &req.scope, ctx.now)? {
+    let filter = match scope_filter(reads, scope, now)? {
         Some(s) => Filter::and(vec![s, lapses]),
         None => lapses,
     };
+    Ok((threshold, filter))
+}
+
+fn leeches(req: LeechRequest, ctx: &QueryCtx<'_>) -> AppResult<LeechList> {
+    let reads = ctx.tx;
+    let (threshold, filter) = leech_filter(reads, &req.scope, req.threshold, ctx.now)?;
     let page = reads.search_cards(&CardSearch {
         filter,
         now: ctx.now,
@@ -264,6 +305,69 @@ fn leeches(req: LeechRequest, ctx: &QueryCtx<'_>) -> AppResult<LeechList> {
             .into_iter()
             .map(|h| crate::modules::browse::row(&index, h, ctx.now))
             .collect(),
+    })
+}
+
+/// `stats.apply_to_leeches`: selects every leech of the scope here (not a page of ids from the
+/// client) and runs one nested `bulk.*` command on them, checked like a `batch.execute` call
+/// (permission, `browse` module switch). The nested command records the single undo step.
+fn apply_to_leeches(
+    req: ApplyToLeeches,
+    ctx: &mut CommandCtx<'_>,
+) -> AppResult<CommandOutcome<LeechActionResult>> {
+    use fc_api::v1::bulk::{NoteTags, SetSuspended};
+    use fc_api::ApiMethod;
+    let (threshold, filter) = leech_filter(ctx.reads(), &req.scope, req.threshold, ctx.now)?;
+    let card_ids = ctx.reads().search_card_ids(&filter, ctx.now)?;
+    let call = match req.action {
+        LeechAction::Suspend => crate::handler::inverse_call::<BulkSetSuspended>(&SetSuspended {
+            card_ids: card_ids.clone(),
+            suspended: true,
+        })?,
+        LeechAction::Tag => {
+            let mut seen = HashSet::new();
+            let note_ids = scope_card_rows(ctx.reads(), Some(&card_ids))?
+                .into_iter()
+                .map(|c| c.note_id)
+                .filter(|n| seen.insert(*n))
+                .collect();
+            crate::handler::inverse_call::<BulkAddTags>(&NoteTags {
+                note_ids,
+                tags: vec![req.tag.clone().unwrap_or_else(|| "leech".to_owned())],
+            })?
+        }
+    };
+    let cards = u32::try_from(card_ids.len()).unwrap_or(u32::MAX);
+    let mut response = LeechActionResult {
+        threshold,
+        cards,
+        changed: 0,
+        skipped: 0,
+    };
+    if !card_ids.is_empty() {
+        let method = match req.action {
+            LeechAction::Suspend => BulkSetSuspended::NAME,
+            LeechAction::Tag => BulkAddTags::NAME,
+        };
+        let d = *ctx
+            .registry
+            .descriptor(method)
+            .ok_or_else(|| AppError::api(ErrorCode::Internal, format!("{method} not registered")))?;
+        let enabled = crate::support::module_states(ctx.reads(), ctx.registry)?
+            .get(d.module)
+            .copied()
+            .unwrap_or(false);
+        crate::registry::ensure_invocable(&d, ctx.actor, enabled)?;
+        let r: fc_api::v1::bulk::BulkResult = serde_json::from_value(ctx.call(&call)?)
+            .map_err(|e| AppError::api(ErrorCode::Internal, format!("bulk result: {e}")))?;
+        response.changed = r.changed;
+        response.skipped = r.skipped;
+    }
+    Ok(CommandOutcome {
+        response,
+        inverse: Vec::new(),
+        summary: summary::<StatsApplyToLeeches>().param("count", cards),
+        events: Vec::new(),
     })
 }
 

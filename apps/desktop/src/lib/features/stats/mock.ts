@@ -48,6 +48,9 @@ export default {
     const exams: ExamDto[] = [];
     const goals: GoalDto[] = [];
     const settings = new Map<string, unknown>();
+    // Leeches exist only as a count here (rows come from the real search in Rust).
+    let leeches = 60;
+    let suspended = 0;
     const overview = (): StatsOverview => ({
       today: 20404,
       today_date: '2025-11-04',
@@ -68,7 +71,12 @@ export default {
       'stats.refresh_cache': () => ({ rebuilt: false, days: 3, folded: 0 }),
       'stats.overview': () => overview(),
       'stats.breakdown': ({ attr_id }) => ({ attr_id, name: 'Seviye', rows: [] }),
-      'stats.leeches': () => ({ threshold: 8, total: 0, items: [] }),
+      'stats.leeches': () => ({ threshold: 8, total: leeches, items: [] }),
+      'stats.apply_to_leeches': ({ threshold, action }) => {
+        const changed = action === 'suspend' ? leeches - suspended : leeches;
+        if (action === 'suspend') suspended = leeches;
+        return { threshold: threshold ?? 8, cards: leeches, changed, skipped: leeches - changed };
+      },
       'stats.deck_reports': () => ({ items: [] }),
       'planning.exams.list': () => ({
         items: exams.map((exam) => ({ exam, days_left: 30, cards: 0 })),

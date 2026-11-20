@@ -1,5 +1,6 @@
 {
   "oplog.summary.stats.refresh_cache": "Refreshed the statistics cache",
+  "oplog.summary.stats.apply_to_leeches": "Acted on {count} leeches",
   "oplog.summary.planning.exams.create": "Added exam {name}",
   "oplog.summary.planning.exams.update": "Edited exam {name}",
   "oplog.summary.planning.exams.delete": "Removed exam {name}",

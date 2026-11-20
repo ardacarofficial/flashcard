@@ -5,6 +5,7 @@ import type { AddMedia } from "./AddMedia";
 import type { AffectedCount } from "./AffectedCount";
 import type { AnswerCard } from "./AnswerCard";
 import type { AnswerCheckDto } from "./AnswerCheckDto";
+import type { ApplyToLeeches } from "./ApplyToLeeches";
 import type { AssignPreset } from "./AssignPreset";
 import type { AssignResult } from "./AssignResult";
 import type { AttributeDefDto } from "./AttributeDefDto";
@@ -76,6 +77,7 @@ import type { InspectBackup } from "./InspectBackup";
 import type { JobDto } from "./JobDto";
 import type { JobList } from "./JobList";
 import type { JobRef } from "./JobRef";
+import type { LeechActionResult } from "./LeechActionResult";
 import type { LeechList } from "./LeechList";
 import type { LeechRequest } from "./LeechRequest";
 import type { LinkedNoteList } from "./LinkedNoteList";
@@ -323,6 +325,7 @@ export interface Methods {
   "stats.overview": { kind: "query"; request: StatsRequest; response: StatsOverview };
   "stats.breakdown": { kind: "query"; request: StatsBreakdownRequest; response: StatsBreakdown };
   "stats.leeches": { kind: "query"; request: LeechRequest; response: LeechList };
+  "stats.apply_to_leeches": { kind: "command"; request: ApplyToLeeches; response: LeechActionResult };
   "stats.deck_reports": { kind: "query"; request: DeckReportsRequest; response: DeckReports };
   "stats.refresh_cache": { kind: "command"; request: RefreshStatsCache; response: StatsCacheInfo };
   "planning.exams.list": { kind: "query"; request: ListExams; response: ExamList };
@@ -480,6 +483,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "stats.overview": "query",
   "stats.breakdown": "query",
   "stats.leeches": "query",
+  "stats.apply_to_leeches": "command",
   "stats.deck_reports": "query",
   "stats.refresh_cache": "command",
   "planning.exams.list": "query",

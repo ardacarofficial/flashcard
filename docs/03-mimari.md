@@ -110,7 +110,7 @@ Saf "event sourcing" (durumu her seferinde olaylardan yeniden üretmek) yerine *
   - Toplu işlem = aynı `batch_id` ile birden çok kayıt → tek geri al.
   - Not düzenleme geçmişi `oplog`'dan okunur.
 - **Senkronizasyon için hazırlık:** `oplog` + UUID'ler + zaman damgaları ileride senkronizasyon altyapısının temelidir (kapsam dışı ama yolu kapatılmadı).
-- `oplog` kayıtları belirli süre sonra (ayarlanabilir) sıkıştırılabilir. `review_log` asla silinmez (kart kalıcı silinmedikçe).
+- `oplog` kayıtları belirli süre sonra (ayarlanabilir) sıkıştırılabilir. `review_log` asla silinmez — kart kalıcı silinse (çöp temizliği) bile: `card_id` düz bir sütundur, yabancı anahtar/CASCADE yoktur (migration `0501`), böylece ısı haritası, seri, toplamlar ve FSRS optimizasyon verisi korunur. Yalnızca bir cevabın geri alınması kendi satırını siler.
 
 ## 6. Komutlar ve sorgular (CQRS)
 

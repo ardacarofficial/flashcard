@@ -21,7 +21,7 @@ pub mod store;
 
 pub use error::{StorageError, StorageResult};
 pub use repo::{Reads, Writes};
-pub use sqlite::{upgrade_dump, upgrade_dump_with};
+pub use sqlite::{fit_dump_to_schema, upgrade_dump, upgrade_dump_with};
 pub use store::{ReadTx, SqliteStore, Store, WriteTx};
 
 #[cfg(test)]

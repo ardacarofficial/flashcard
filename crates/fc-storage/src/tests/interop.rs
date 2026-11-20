@@ -335,3 +335,62 @@ fn upgrade_dump_runs_later_data_migrations_on_restored_rows() {
     alien.schema_versions.push(9999);
     assert!(crate::upgrade_dump(alien).is_err());
 }
+
+/// `fit_dump_to_schema` cuts a current dump to an older schema's tables and columns
+/// generically (no per-track list), and the result restores forward to the same rows.
+#[test]
+fn fit_dump_to_schema_drops_later_tables_and_columns() {
+    let fx = Fx::seeded();
+    fx.write(|tx| {
+        ensure_home(tx);
+        tx.insert_deck(&deck(1, None, "D")).unwrap();
+        add_note(tx, &note(1, "a", "b", &["t"], 1), 1);
+        tx.insert_review_logs(&[review(1, CardId(nid(1).0), 60)])
+            .unwrap();
+    });
+    let dump = fx.read(|r| r.dump_collection().unwrap());
+    assert!(dump.tables.iter().any(|t| t.name == "exam_dates"));
+    let v05: Vec<u32> = dump
+        .schema_versions
+        .iter()
+        .copied()
+        .filter(|v| *v < 500)
+        .collect();
+    let old = crate::fit_dump_to_schema(dump.clone(), &v05).unwrap();
+    assert_eq!(old.schema_versions, v05);
+    assert!(!old.tables.iter().any(|t| t.name == "exam_dates"));
+    for t in &old.tables {
+        assert!(
+            t.rows.iter().all(|r| r.len() == t.columns.len()),
+            "{}",
+            t.name
+        );
+    }
+    // Every table the older schema has is kept (same rows).
+    let names = |d: &crate::repo::CollectionDump| -> Vec<String> {
+        d.tables.iter().map(|t| t.name.clone()).collect()
+    };
+    assert!(names(&old).iter().all(|n| names(&dump).contains(n)));
+    assert_eq!(
+        names(&old).len() + 1,
+        names(&dump).len(),
+        "only exam_dates is v0.6 data"
+    );
+    // Restoring it forward gives the current dump back.
+    assert_eq!(crate::upgrade_dump(old).unwrap(), dump);
+
+    // Columns too: a table a later migration widened loses the new columns and their values.
+    let mut widened = dump.clone();
+    let notes = widened
+        .tables
+        .iter_mut()
+        .find(|t| t.name == "notes")
+        .unwrap();
+    notes.columns.push("later_column".into());
+    for r in &mut notes.rows {
+        r.push(SqlValue::Integer(1));
+    }
+    let cut = crate::fit_dump_to_schema(widened, &dump.schema_versions).unwrap();
+    assert_eq!(cut, dump);
+    assert!(crate::fit_dump_to_schema(dump, &[1, 9_999]).is_err());
+}

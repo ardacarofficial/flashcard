@@ -87,7 +87,8 @@
       "breakdown": "Sınıflandırmaya göre istatistik",
       "leeches": "Zor kartlar",
       "deck_reports": "Deste karneleri",
-      "refresh_cache": "İstatistik önbelleğini güncelle"
+      "refresh_cache": "İstatistik önbelleğini güncelle",
+      "apply_to_leeches": "Tüm zor kartlara uygula"
     },
     "planning": {
       "exams": {
@@ -212,8 +213,9 @@
       "none": "Zor kart yok.",
       "lapses": "Unutma",
       "suspend": "Askıya al",
-      "tag": "“zor” etiketi ekle",
-      "card": "Kart"
+      "tag": "“leech” etiketi ekle",
+      "card": "Kart",
+      "applied": "{changed} değişti, {skipped} zaten öyleydi"
     },
     "report": {
       "heading": "Deste karneleri",

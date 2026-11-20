@@ -9,7 +9,7 @@ mod cards;
 mod content;
 mod decks;
 mod interop;
-pub use interop::{upgrade_dump, upgrade_dump_with};
+pub use interop::{fit_dump_to_schema, upgrade_dump, upgrade_dump_with};
 mod jobs;
 mod notes;
 mod notetypes;

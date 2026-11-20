@@ -384,6 +384,8 @@ fn report(method: &str, e: &ApiError, json: bool) {
 }
 
 fn main() -> ExitCode {
+    // Before anything else (single-threaded): no shell variable changes behavior.
+    fc_app::system::pin_process_env();
     let cli = Cli::parse();
     let app = match App::open_sqlite(&cli.db) {
         Ok(app) => app,

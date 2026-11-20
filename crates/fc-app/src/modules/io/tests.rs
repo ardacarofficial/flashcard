@@ -1219,10 +1219,9 @@ fn restoring_an_older_schema_backup_migrates_it_forward() {
     for row in &mut fts.rows {
         row[col] = fc_storage::repo::SqlValue::Text("{{c1::STALE}} <b>raw</b>".into());
     }
-    dump.schema_versions = older.clone();
-    // Tables of later migrations do not exist in that schema (v0.6, 0500: recreated empty by
-    // the migration on restore, as they are here).
-    dump.tables.retain(|t| t.name != "exam_dates");
+    // Tables and columns of later migrations do not exist in that schema (recreated empty by
+    // the migrations on restore, as they are here): cut generically, whatever track adds them.
+    let dump = fc_storage::fit_dump_to_schema(dump, &older).unwrap();
     let mut manifest = b.manifest.clone();
     manifest.schema_versions = older;
     let w = fc_interop::fcbackup::BackupWriter::new(&manifest, &serde_json::to_vec(&dump).unwrap())

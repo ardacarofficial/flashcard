@@ -87,7 +87,8 @@
       "breakdown": "Statistics by classification",
       "leeches": "Leeches",
       "deck_reports": "Deck report cards",
-      "refresh_cache": "Refresh the statistics cache"
+      "refresh_cache": "Refresh the statistics cache",
+      "apply_to_leeches": "Act on every leech"
     },
     "planning": {
       "exams": {
@@ -213,7 +214,8 @@
       "lapses": "Lapses",
       "suspend": "Suspend",
       "tag": "Tag “leech”",
-      "card": "Card"
+      "card": "Card",
+      "applied": "{changed} changed, {skipped} already done"
     },
     "report": {
       "heading": "Deck report cards",

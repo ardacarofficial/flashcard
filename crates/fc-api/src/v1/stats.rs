@@ -8,8 +8,9 @@ use fc_core::{AttributeDefId, AttributeOptionId, DeckId};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// Which cards statistics look at. Empty = the whole collection (reviews of trashed cards
-/// included); otherwise the live cards matching every given condition.
+/// Which cards statistics look at. Empty = the whole collection (reviews of trashed and
+/// purged cards included: review history outlives its card); otherwise the live cards
+/// matching every given condition.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct StatsScope {
@@ -67,7 +68,9 @@ pub struct StatsOverview {
     pub reviews: ReviewStats,
     /// Card statistics.
     pub cards: CardStats,
-    /// Desired retention of the scope's preset (deck scope), else the default preset's.
+    /// Desired retention the scope aims for: a deck scope's effective preset; otherwise the
+    /// effective presets of the scope's cards (their common value, or the card-weighted mean
+    /// when decks differ); the built-in default only for an empty scope.
     pub target_retention: f64,
     /// Review statistics came from the cache (+ rows appended since).
     pub from_cache: bool,
@@ -142,7 +145,7 @@ pub struct LeechRequest {
 }
 
 /// Response of `stats.leeches`: cards with at least `threshold` lapses, most lapses first.
-/// Actions (tag, suspend) are the `bulk.*` commands on their ids.
+/// Actions on every leech of a scope (not only the listed page) are `stats.apply_to_leeches`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct LeechList {
     /// Threshold used.
@@ -151,6 +154,47 @@ pub struct LeechList {
     pub total: u32,
     /// Leeches.
     pub items: Vec<CardRow>,
+}
+
+/// What `stats.apply_to_leeches` does to the leeches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum LeechAction {
+    /// Suspend the cards (`bulk.set_suspended`).
+    Suspend,
+    /// Tag their notes (`bulk.add_tags`).
+    Tag,
+}
+
+/// `stats.apply_to_leeches`: one action on **every** leech of a scope, selected in Rust by the
+/// same rule as `stats.leeches` (lapses ≥ threshold). One undo step.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ApplyToLeeches {
+    /// Scope.
+    #[serde(default)]
+    pub scope: StatsScope,
+    /// Lapse threshold (default: setting `stats.leech_threshold`).
+    #[serde(default)]
+    pub threshold: Option<u32>,
+    /// Action.
+    pub action: LeechAction,
+    /// Tag for [`LeechAction::Tag`] (default `leech`).
+    #[serde(default)]
+    pub tag: Option<String>,
+}
+
+/// Response of `stats.apply_to_leeches`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct LeechActionResult {
+    /// Threshold used.
+    pub threshold: u32,
+    /// Leech cards matched.
+    pub cards: u32,
+    /// Cards (suspend) or notes (tag) changed.
+    pub changed: u32,
+    /// Left alone (already suspended / tagged).
+    pub skipped: u32,
 }
 
 /// `stats.deck_reports`.

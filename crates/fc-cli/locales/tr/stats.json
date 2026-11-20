@@ -1,5 +1,6 @@
 {
   "oplog.summary.stats.refresh_cache": "İstatistik önbelleği güncellendi",
+  "oplog.summary.stats.apply_to_leeches": "{count} zor karta işlem uygulandı",
   "oplog.summary.planning.exams.create": "{name} sınavı eklendi",
   "oplog.summary.planning.exams.update": "{name} sınavı düzenlendi",
   "oplog.summary.planning.exams.delete": "{name} sınavı kaldırıldı",

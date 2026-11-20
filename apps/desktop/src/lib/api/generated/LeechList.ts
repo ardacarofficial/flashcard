@@ -3,7 +3,7 @@ import type { CardRow } from "./CardRow";
 
 /**
  * Response of `stats.leeches`: cards with at least `threshold` lapses, most lapses first.
- * Actions (tag, suspend) are the `bulk.*` commands on their ids.
+ * Actions on every leech of a scope (not only the listed page) are `stats.apply_to_leeches`.
  */
 export type LeechList = { 
 /**
