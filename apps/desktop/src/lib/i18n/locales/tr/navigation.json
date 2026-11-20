@@ -30,18 +30,5 @@
       "lock": "Şimdi kilitle"
     },
     "deck_picker": "Deste"
-  },
-  "home": {
-    "title": "Ana sayfa",
-    "start": "Çalışmaya başla",
-    "decks": "Destelerin",
-    "deck_counts": "{due} vadeli · {learning} öğreniliyor · {new} yeni",
-    "deck_total": "{total} kart",
-    "empty_title": "Henüz deste yok",
-    "empty_body": "Çalışmaya başlamak için ilk desteni oluştur.",
-    "empty_action": "İlk desteni oluştur",
-    "count_due": "Vadeli",
-    "count_learning": "Öğreniliyor",
-    "count_new": "Yeni"
   }
 }
