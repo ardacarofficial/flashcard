@@ -46,7 +46,9 @@
       "school_grade": "School grade (1–12)",
       "difficulty": "Difficulty (easy / medium / hard)"
     },
-    "close": "Close"
+    "close": "Close",
+    "step": "Step {n} of {total}",
+    "details_intro": "Name your deck and pick starter decks to begin with."
   },
   "starters": {
     "heading": "Starter decks",

@@ -1,5 +1,7 @@
 {
-  "nav": { "profiles": "Profiller ve kilit" },
+  "nav": {
+    "profiles": "Profiller ve kilit"
+  },
   "modules": {
     "profiles": {
       "name": "Profiller ve uygulama kilidi",
@@ -22,7 +24,8 @@
     "switching": "Profil açılıyor — uygulama yeniden başlıyor…",
     "delete": "Sil",
     "confirm_delete": "“{name}” profili ve tüm kartları silinsin mi? Bu geri alınamaz.",
-    "delete_secret": "O profilin PIN'i/parolası"
+    "delete_secret": "O profilin PIN'i/parolası",
+    "delete_title": "Profil silinsin mi?"
   },
   "lock": {
     "heading": "Uygulama kilidi",
@@ -59,7 +62,11 @@
     "recover": "Kilidi kaldır",
     "held_title": "Kilit açılınca çalışacak bağlantılar",
     "held_body": "Bu flashcard:// bağlantıları uygulama kilitliyken geldi. Kilidi açınca çalışırlar; istemiyorsan bırakabilirsin.",
-    "held_discard": "Açılmasın"
+    "held_discard": "Açılmasın",
+    "idle_hint": "Uygulamayı bu kadar süre kullanmadığında pencere kilitlenir.",
+    "current_hint": "Kilidi değiştirmek ya da kaldırmak için gerekir.",
+    "kind_label": "Kilit türü",
+    "kind_hint": "PIN 4–12 rakamdır; parola 6–128 karakter."
   },
   "commands": {
     "profiles": {
@@ -86,7 +93,9 @@
       "lock_secret": "PIN 4–12 rakam, parola 6–128 karakter olmalı.",
       "lock_idle": "Sunulan sürelerden birini seç."
     },
-    "not_found": { "profile": "Profil bulunamadı." },
+    "not_found": {
+      "profile": "Profil bulunamadı."
+    },
     "conflict": {
       "profile_name": "Bu adda bir profil var.",
       "profile_active": "Kullanımdaki profil (ve ana profil) silinemez.",
@@ -95,11 +104,15 @@
       "lock_retry": "Çok fazla yanlış deneme. Biraz bekle.",
       "lock_state": "Uygulama kilidi bunun için kurulu değil."
     },
-    "io": { "profile": "Profil listesi ya da klasörü okunamadı veya yazılamadı." },
+    "io": {
+      "profile": "Profil listesi ya da klasörü okunamadı veya yazılamadı."
+    },
     "permission": {
       "app_locked": "Uygulama kilitli.",
       "lock_secret": "PIN ya da parola yanlış."
     },
-    "provider": { "lock_storage": "Kilidi tutan sistem anahtar zinciri hata verdi." }
+    "provider": {
+      "lock_storage": "Kilidi tutan sistem anahtar zinciri hata verdi."
+    }
   }
 }
