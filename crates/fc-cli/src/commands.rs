@@ -168,6 +168,9 @@ pub fn run(ctx: &Ctx<'_>, command: &Command, stdin: &mut dyn Read) -> Result<Str
         Command::Mcp(crate::mcp::McpCommand::Serve { .. }) => {
             Err(invalid("fc mcp serve runs before the collection is opened"))
         }
+        Command::Api(crate::api::ApiCommand::Serve { .. }) => {
+            Err(invalid("fc api serve runs before the collection is opened"))
+        }
         Command::Call { method, params } => {
             let raw = match params.as_deref() {
                 Some("-") => {

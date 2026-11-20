@@ -16,6 +16,7 @@ fc-api.workspace = true
 fc-core.workspace = true
 fc-app = { path = "../fc-app" }
 fc-mcp = { path = "../fc-mcp" }
+fc-http = { path = "../fc-http" }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 # OS keychain for AI provider keys (v0.8).
 fc-ai = { workspace = true, features = ["keychain"] }
