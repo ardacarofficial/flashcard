@@ -1,0 +1,9 @@
+{
+  "oplog.summary.automation.rules.create": "Added automation rule {name}",
+  "oplog.summary.automation.rules.update": "Edited automation rule {name}",
+  "oplog.summary.automation.rules.delete": "Removed automation rule {name}",
+  "oplog.summary.automation.rules.reorder": "Reordered automation rules",
+  "oplog.summary.automation.rules.restore": "Restored automation rules",
+  "oplog.summary.automation.rules.run": "Ran an automation rule",
+  "oplog.summary.automation.apply": "Automation rule {name} ran"
+}

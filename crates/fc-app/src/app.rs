@@ -763,6 +763,7 @@ impl App {
         if let (Some(first), Some(s)) = (entries.first_mut(), summary) {
             first.summary = s;
         }
+        let observed = crate::modules::automation::engine::observe_group(self, &entries);
         let now = self.clock.now();
         let mut ids = self
             .ids
@@ -779,6 +780,8 @@ impl App {
         )?;
         tx.delete_unfinished_batch(group.batch_id)?;
         tx.commit()?;
+        drop(ids);
+        crate::modules::automation::engine::dispatch(self, observed);
         Ok(())
     }
 
@@ -833,6 +836,14 @@ impl App {
             .collect();
         let events = std::mem::take(&mut ctx.events);
         let (kind, reverts) = (ctx.batch_kind, ctx.reverts_batch_id);
+        // Automation rules (v0.9) look at what a written batch did; deferred chunks are
+        // observed when their group commits, discarded work never.
+        let observed = match mode {
+            OplogMode::Write => {
+                crate::modules::automation::engine::observe(self, kind, &oplog, &events)
+            }
+            _ => None,
+        };
         match mode {
             OplogMode::Write => write_oplog(
                 &mut *tx,
@@ -874,6 +885,7 @@ impl App {
         tx.commit()?;
         drop(ids);
         self.after_commit(events, now, batch_id, actor);
+        crate::modules::automation::engine::dispatch(self, observed);
         Ok(response)
     }
 

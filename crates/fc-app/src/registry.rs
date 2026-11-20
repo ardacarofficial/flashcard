@@ -353,8 +353,10 @@ impl Registry {
     /// * A plugin holds only what it was granted, only while it is active, and never an area
     ///   no plugin may hold (`io`, `mcp`, `ai_keys`, `ai:write`, `oplog`… —
     ///   `fc_plugins::permission::api_grantable`) even if a stored grant says otherwise.
-    /// * Automations and local API clients hold **nothing** until v0.9 defines their grants
-    ///   (deny by default: a new actor kind never inherits the user's authority).
+    /// * An automation rule holds `modules::automation::AUTOMATION_PERMISSIONS` — and
+    ///   [`ensure_access`] limits it to the rule action allow-list (v0.9).
+    /// * Local API clients hold **nothing** until v0.9 defines their grants (deny by default:
+    ///   a new actor kind never inherits the user's authority).
     pub fn permits(&self, actor: &Actor, permission: &str) -> bool {
         match actor {
             Actor::User | Actor::Cli | Actor::System => true,
@@ -365,7 +367,12 @@ impl Registry {
                         .get(id)
                         .is_some_and(|g| g.contains(permission))
             }
-            Actor::Automation(_) | Actor::LocalApi(_) => false,
+            // v0.9: a rule's actions — further narrowed to the action allow-list in
+            // [`ensure_access`].
+            Actor::Automation(_) => {
+                crate::modules::automation::AUTOMATION_PERMISSIONS.contains(&permission)
+            }
+            Actor::LocalApi(_) => false,
         }
     }
 
@@ -635,8 +642,12 @@ pub(crate) fn ensure_access(
             crate::modules::plugins::redact::exposure(name),
             crate::modules::plugins::redact::Exposure::Refused(_)
         );
+    // An automation rule reaches only the undo-safe action allow-list (v0.9).
+    let automation_blocked = matches!(actor, Actor::Automation(_))
+        && !crate::modules::automation::action_reachable(name);
     if visibility == Visibility::Internal
         || mcp_blocked
+        || automation_blocked
         || plugin_blocked
         || !registry.permits(actor, permission)
     {

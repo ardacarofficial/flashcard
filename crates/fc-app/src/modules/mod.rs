@@ -46,4 +46,5 @@ modules! {
     ai,
     plugins,
     tts,
+    automation,
 }

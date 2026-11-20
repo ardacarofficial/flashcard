@@ -1,0 +1,9 @@
+{
+  "oplog.summary.automation.rules.create": "{name} otomasyon kuralı eklendi",
+  "oplog.summary.automation.rules.update": "{name} otomasyon kuralı düzenlendi",
+  "oplog.summary.automation.rules.delete": "{name} otomasyon kuralı kaldırıldı",
+  "oplog.summary.automation.rules.reorder": "Otomasyon kurallarının sırası değişti",
+  "oplog.summary.automation.rules.restore": "Otomasyon kuralları geri getirildi",
+  "oplog.summary.automation.rules.run": "Bir otomasyon kuralı çalıştırıldı",
+  "oplog.summary.automation.apply": "{name} otomasyon kuralı çalıştı"
+}
