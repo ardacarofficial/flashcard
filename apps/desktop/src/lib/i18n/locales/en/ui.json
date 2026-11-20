@@ -1,0 +1,28 @@
+{
+  "ui": {
+    "close": "Close",
+    "loading": "Loading…",
+    "more": "More actions",
+    "remove": "Remove {label}",
+    "dismiss": "Dismiss",
+    "notifications": "Notifications",
+    "select": {
+      "placeholder": "Choose…",
+      "empty": "No options"
+    },
+    "table": {
+      "empty": "Nothing here yet."
+    },
+    "flashcard": {
+      "front": "Front",
+      "back": "Back",
+      "flip": "Flip card",
+      "showing_front": "Showing the front. Press Space to flip.",
+      "showing_back": "Showing the back. Press Space to flip."
+    },
+    "progress": {
+      "value": "{value} of {max}",
+      "percent": "{value}%"
+    }
+  }
+}

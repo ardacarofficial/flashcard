@@ -1,0 +1,28 @@
+{
+  "ui": {
+    "close": "Kapat",
+    "loading": "Yükleniyor…",
+    "more": "Diğer işlemler",
+    "remove": "{label} kaldır",
+    "dismiss": "Kapat",
+    "notifications": "Bildirimler",
+    "select": {
+      "placeholder": "Seç…",
+      "empty": "Seçenek yok"
+    },
+    "table": {
+      "empty": "Henüz bir şey yok."
+    },
+    "flashcard": {
+      "front": "Ön yüz",
+      "back": "Arka yüz",
+      "flip": "Kartı çevir",
+      "showing_front": "Ön yüz gösteriliyor. Çevirmek için Boşluk'a bas.",
+      "showing_back": "Arka yüz gösteriliyor. Çevirmek için Boşluk'a bas."
+    },
+    "progress": {
+      "value": "{value} / {max}",
+      "percent": "%{value}"
+    }
+  }
+}
