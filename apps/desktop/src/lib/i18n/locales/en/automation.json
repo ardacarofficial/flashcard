@@ -1,0 +1,125 @@
+{
+  "nav": {
+    "automation": "Automation"
+  },
+  "modules": {
+    "automation": {
+      "name": "Automation rules",
+      "description": "“When … if … do …” rules: tag, suspend, move or classify cards automatically."
+    }
+  },
+  "settings": {
+    "automation": {
+      "max_depth": {
+        "label": "Rule chain depth",
+        "description": "How many rules may trigger each other in a row (a rule never re-triggers itself)."
+      },
+      "max_runs_per_event": {
+        "label": "Rule runs per change",
+        "description": "At most this many rule runs follow one change."
+      }
+    }
+  },
+  "automation": {
+    "heading": "Automation rules",
+    "intro": "When something happens and the cards match the query, the actions run. Each run is one undo step.",
+    "none": "No rules yet.",
+    "new": "New rule",
+    "edit_rule": "Edit rule",
+    "edit": "Edit",
+    "delete": "Delete",
+    "run_now": "Run now",
+    "up": "Move up",
+    "down": "Move down",
+    "name": "Name",
+    "enabled": "Enabled",
+    "when": "When",
+    "if": "If",
+    "do": "Do",
+    "condition": "Cards (query)",
+    "every_label": "Every (minutes)",
+    "every_mins": "every {n} min",
+    "tags": "Tags (comma separated)",
+    "on": "On",
+    "flag": "Flag",
+    "deck": "Deck",
+    "classification": "Classification",
+    "value": "Value",
+    "clear": "(clear)",
+    "add_action": "Add action",
+    "remove_action": "Remove",
+    "save": "Save rule",
+    "preview": "Preview",
+    "cancel": "Cancel",
+    "preview_summary": "{matched} cards match, {changed} would change. Nothing has been changed.",
+    "truncated": "Only the first 5000 cards are handled in one run.",
+    "would_change": "would change",
+    "runs": "Recent runs",
+    "no_runs": "No runs yet.",
+    "matched": "{n} cards",
+    "trigger": {
+      "label": "Trigger",
+      "note_added": "A note is added",
+      "note_updated": "A note is edited",
+      "card_answered": "A card is answered",
+      "card_flagged": "A card is flagged",
+      "classification_changed": "A classification changes",
+      "imported": "An import finishes",
+      "schedule": "On a schedule",
+      "manual": "By hand"
+    },
+    "rating": {
+      "again": "Again",
+      "hard": "Hard",
+      "good": "Good",
+      "easy": "Easy"
+    },
+    "status": {
+      "applied": "applied",
+      "no_match": "no cards matched",
+      "skipped_cycle": "skipped (would trigger itself)",
+      "skipped_depth": "skipped (chain too deep)",
+      "skipped_budget": "skipped (too many runs for one change)",
+      "failed": "failed"
+    },
+    "action": {
+      "label": "Action",
+      "bulk": {
+        "add_tags": "Add tags",
+        "remove_tags": "Remove tags",
+        "set_suspended": "Suspend / unsuspend",
+        "set_buried": "Bury / unbury",
+        "set_flag": "Set / clear a flag",
+        "move_cards": "Move to deck",
+        "set_attribute": "Set a classification",
+        "reset_progress": "Forget (reset progress)"
+      }
+    },
+    "condition_example": "e.g. seviye:A1 lapses>=5"
+  },
+  "errors": {
+    "validation": {
+      "automation_rule": "Check the rule: it needs a name, a valid trigger and 1–10 allowed actions."
+    },
+    "not_found": {
+      "automation_rule": "That automation rule no longer exists."
+    }
+  },
+  "commands": {
+    "automation": {
+      "rules": {
+        "list": "Automation rules",
+        "create": "Add an automation rule",
+        "update": "Edit an automation rule",
+        "delete": "Delete an automation rule",
+        "reorder": "Reorder automation rules",
+        "run": "Run an automation rule now"
+      },
+      "preview": "Preview an automation rule",
+      "actions": "Automation actions",
+      "runs": {
+        "list": "Automation run log"
+      }
+    }
+  }
+}

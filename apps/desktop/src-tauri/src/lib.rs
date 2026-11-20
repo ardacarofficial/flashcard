@@ -64,6 +64,10 @@ pub fn run() {
                         }
                         Err(e) => fail(&e.to_string()),
                     }
+                    // Scheduled automation rules (v0.9); the thread ends with the app.
+                    if let Err(e) = fc_app::modules::automation::spawn_scheduler(&collection) {
+                        fail(&e.to_string());
+                    }
                     app.manage(collection);
                     Ok(())
                 }
