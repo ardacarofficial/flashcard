@@ -14,6 +14,7 @@ mod jobs;
 mod notes;
 mod notetypes;
 mod oplog;
+mod plugins;
 pub(crate) mod search;
 mod settings;
 mod study;

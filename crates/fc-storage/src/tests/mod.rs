@@ -11,6 +11,7 @@ mod interop;
 mod migrations;
 mod misc;
 mod notes;
+mod plugins;
 mod search;
 mod store;
 mod study;
