@@ -3,6 +3,8 @@
   import type { PrintDocument, PrintLayoutDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import type { ScreenCtx } from '../types';
+  import { Button, CircleAlert, EmptyState, FileText, Icon, Printer, Select } from '$lib/ui';
+  import { FormRow, SettingsSection } from '../core/kit';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -13,6 +15,9 @@
   };
   type LayoutKey = 'cards_2x4' | 'cards_3x5' | 'list';
   let layout = $state<LayoutKey>('cards_2x4');
+  const layouts = $derived(
+    (['cards_2x4', 'cards_3x5', 'list'] as const).map((k) => ({ value: k as LayoutKey, label: t(`io.print.${k}`) })),
+  );
   let doc = $state<PrintDocument | null>(null);
   let error = $state<string | null>(null);
   let frame = $state<HTMLIFrameElement | null>(null);
@@ -28,50 +33,69 @@
   }
 </script>
 
-<div class="panel">
+<SettingsSection title={t('io.tabs.print')} description={t('io.print.hint')} icon={Printer} body="rows">
   {#if !ctx.selectedDeck}
-    <p class="muted">{t('io.pick_deck')}</p>
+    <EmptyState size="sm" icon={FileText} title={t('io.pick_deck')} />
   {:else}
-    <p class="muted">{t('io.print.hint')}</p>
-    <div class="row">
-      <label>
-        {t('io.print.layout')}
-        <select bind:value={layout} onchange={() => (doc = null)}>
-          <option value="cards_2x4">{t('io.print.cards_2x4')}</option>
-          <option value="cards_3x5">{t('io.print.cards_3x5')}</option>
-          <option value="list">{t('io.print.list')}</option>
-        </select>
-      </label>
-      <button onclick={render}>{t('io.print.render')}</button>
+    <FormRow label={t('io.print.layout')} description={ctx.selectedPath ?? ''} labelFor="fc-print-layout">
+      <Select id="fc-print-layout" hideLabel label={t('io.print.layout')} options={layouts} bind:value={layout} onchange={() => (doc = null)} />
+    </FormRow>
+    <div class="foot">
+      <Button onclick={render}>{t('io.print.render')}</Button>
       {#if doc}
-        <span class="muted">{t('io.print.count', { count: doc.cards })}</span>
-        <button class="primary" onclick={() => frame?.contentWindow?.print()}>{t('io.print.print')}</button>
+        <span class="count">{t('io.print.count', { count: doc.cards })}</span>
+        <Button variant="primary" icon={Printer} onclick={() => frame?.contentWindow?.print()}>{t('io.print.print')}</Button>
       {/if}
     </div>
     {#if doc}
-      <!-- Text-only HTML from the backend; no scripts may run in it. -->
-      <iframe bind:this={frame} title={t('io.tabs.print')} sandbox="allow-modals allow-same-origin" srcdoc={doc.html}></iframe>
+      <div class="frame">
+        <!-- Text-only HTML from the backend; no scripts may run in it. -->
+        <iframe bind:this={frame} title={t('io.tabs.print')} sandbox="allow-modals allow-same-origin" srcdoc={doc.html}></iframe>
+      </div>
     {/if}
   {/if}
-  {#if error}<p class="error" role="alert">{error}</p>{/if}
-</div>
+  {#if error}<p class="bad" role="alert"><Icon icon={CircleAlert} size={16} /><span>{error}</span></p>{/if}
+</SettingsSection>
 
 <style>
-  .panel {
+  .foot {
     display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-2);
-    align-items: flex-start;
-  }
-  .row {
-    display: flex;
-    gap: var(--fc-space-2);
     align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    padding: var(--space-4) var(--space-6);
+    border-top: 1px solid var(--border);
+  }
+  .count {
+    color: var(--text-2);
+    font-size: var(--text-sm);
+    margin-inline-start: auto;
+  }
+  .frame {
+    padding: 0 var(--space-6) var(--space-6);
   }
   iframe {
+    display: block;
     width: 100%;
     height: 60vh;
-    border: var(--fc-border-width) solid var(--fc-border);
-    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    /* The printed page is white paper in both themes. */
+    background: var(--gray-50);
+  }
+  .bad {
+    display: flex;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0 var(--space-6) var(--space-4);
+    color: var(--danger);
+    font-size: var(--text-sm);
+  }
+  @media (max-width: 1023.98px) {
+    .foot,
+    .frame,
+    .bad {
+      padding-inline: var(--space-4);
+    }
   }
 </style>

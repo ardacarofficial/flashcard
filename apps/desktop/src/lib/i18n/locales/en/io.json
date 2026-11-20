@@ -15,7 +15,7 @@
       "backup": "Backup",
       "print": "Print"
     },
-    "pick_deck": "Choose a deck on the left first.",
+    "pick_deck": "Choose a deck above first.",
     "choose_file": "Choose file…",
     "no_file": "No file chosen",
     "path_prompt": "File path",
@@ -46,7 +46,13 @@
       "done": "{added} added, {updated} updated, {skipped} skipped as duplicates.",
       "issues": "Not imported or changed",
       "row": "Row {row}",
-      "undo": "Undo import"
+      "undo": "Undo import",
+      "source_hint": "Paste rows of text or choose a file; check the preview before importing.",
+      "source_kind": "Where from",
+      "preview_heading": "Preview",
+      "package_label": "Package contents",
+      "separators": "Separators",
+      "done_heading": "Import finished"
     },
     "formats": {
       "text": "Text / CSV",
@@ -66,7 +72,9 @@
       "scope_all": "Exports the whole collection.",
       "include_history": "Include review history and scheduling",
       "start": "Export…",
-      "done": "Saved {notes} notes ({media} media files) to {path}."
+      "done": "Saved {notes} notes ({media} media files) to {path}.",
+      "format_hint": "Deck packages keep everything; text and JSON keep only the notes.",
+      "include_history_hint": "Lets another device continue exactly where you are."
     },
     "export_formats": {
       "fcpack": "Deck package (.fcpack)",
@@ -83,7 +91,11 @@
       "confirm_title": "Restore this backup?",
       "confirm_body": "Backup from {date} with {notes} notes. The current collection is backed up first, then replaced.",
       "incompatible": "This backup comes from a newer version of the app.",
-      "restored": "Restored. The previous state was saved to {path}."
+      "restored": "Restored. The previous state was saved to {path}.",
+      "create_title": "Back up now",
+      "create_hint": "Saves one .fcbackup file you can keep anywhere.",
+      "restore_title": "Restore from a backup",
+      "restore_hint": "Replaces the current collection; it is backed up first."
     },
     "print": {
       "layout": "Layout",
@@ -128,7 +140,8 @@
       "attribute_not_applicable": "This classification does not apply to the deck.",
       "attribute_invalid": "Invalid classification value “{value}”.",
       "attribute_unknown_option": "Unknown option “{value}” (it can be created automatically)."
-    }
+    },
+    "intro": "Bring cards in, take them out, back up the whole collection or print a deck."
   },
   "errors": {
     "validation": {
