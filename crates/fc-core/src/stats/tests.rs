@@ -176,3 +176,37 @@ proptest! {
         prop_assert_eq!(review_stats(&whole, 40, None), review_stats(&merged, 40, None));
     }
 }
+
+#[test]
+fn mastery_follows_state_and_interval() {
+    assert_eq!(mastery(CardState::New, None), Mastery::New);
+    assert_eq!(mastery(CardState::Learning, None), Mastery::Learning);
+    assert_eq!(mastery(CardState::Relearning, Some(40)), Mastery::Learning);
+    assert_eq!(
+        mastery(CardState::Review, Some(MATURE_DAYS - 1)),
+        Mastery::Learning
+    );
+    assert_eq!(
+        mastery(CardState::Review, Some(MATURE_DAYS)),
+        Mastery::Mastered
+    );
+    assert_eq!(mastery(CardState::Review, None), Mastery::Learning);
+    assert_eq!(mastered_percent(0, 0), 0);
+    assert_eq!(mastered_percent(1, 3), 33);
+    assert_eq!(mastered_percent(5, 5), 100);
+}
+
+#[test]
+fn card_mastery_uses_the_scheduled_interval() {
+    use crate::card::SchedulingState;
+    use crate::time::{Timestamp, MILLIS_PER_DAY};
+    let review = |days: i64| SchedulingState {
+        state: CardState::Review,
+        due: Some(Timestamp(days * MILLIS_PER_DAY + 5)),
+        last_review: Some(Timestamp(5)),
+        ..SchedulingState::NEW
+    };
+    assert_eq!(card_mastery(&SchedulingState::NEW), Mastery::New);
+    assert_eq!(card_mastery(&review(3)), Mastery::Learning);
+    assert_eq!(card_mastery(&review(21)), Mastery::Mastered);
+}

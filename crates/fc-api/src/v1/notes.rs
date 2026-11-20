@@ -3,8 +3,9 @@
 use super::attributes::AttributeAssignment;
 use fc_core::card::CardState;
 use fc_core::paging::PageRequest;
+use fc_core::stats::Mastery;
 use fc_core::tag::TagName;
-use fc_core::{CardId, DeckId, NoteId, NoteTypeId, Timestamp};
+use fc_core::{AttributeDefId, CardId, DeckId, NoteId, NoteTypeId, Timestamp};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use ts_rs::TS;
@@ -144,6 +145,58 @@ pub struct NoteListItem {
 pub struct NotePage {
     /// Rows, newest first.
     pub items: Vec<NoteListItem>,
+    /// Cursor for the next page (`null` = end).
+    pub next_cursor: Option<String>,
+}
+
+/// One side of a term row: a note field.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct TermField {
+    /// Field key (what `notes.update` takes).
+    pub key: String,
+    /// Stored value (may hold Markdown/HTML).
+    pub value: String,
+    /// Visible text of the value (tags stripped).
+    pub text: String,
+}
+
+/// A classification value of a note (the level chip of a term row).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct TermChip {
+    /// Classification.
+    pub attr_id: AttributeDefId,
+    /// Classification name (user text).
+    pub name: String,
+    /// Value label (user text).
+    pub label: String,
+}
+
+/// A row of the deck page's term list (v1.1): a note as term | definition.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct NoteTerm {
+    /// Note.
+    pub note_id: NoteId,
+    /// Note type.
+    pub notetype_id: NoteTypeId,
+    /// Its live cards (flags apply to all of them).
+    pub card_ids: Vec<CardId>,
+    /// Flag bits set on every one of its cards.
+    pub flags: u32,
+    /// Least advanced mastery among its cards.
+    pub mastery: Mastery,
+    /// First field of the note type.
+    pub front: TermField,
+    /// Second field (`null` for a one-field note type).
+    pub back: Option<TermField>,
+    /// Its choice classification values (in classification order).
+    pub chips: Vec<TermChip>,
+}
+
+/// Response of `notes.terms`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct TermPage {
+    /// Rows, newest first (the order of `notes.list`).
+    pub items: Vec<NoteTerm>,
     /// Cursor for the next page (`null` = end).
     pub next_cursor: Option<String>,
 }

@@ -58,6 +58,7 @@ pub fn register(reg: &mut Registry) {
     reg.command::<NotesRestore>(restore);
     reg.query::<NotesGet>(get);
     reg.query::<NotesList>(list);
+    reg.query::<NotesTerms>(terms);
 }
 
 fn unique<T: PartialEq + Copy>(ids: &[T]) -> Vec<T> {
@@ -362,6 +363,88 @@ fn list(req: ListNotes, ctx: &QueryCtx<'_>) -> AppResult<NotePage> {
                 updated_at: row.note.updated_at,
             })
             .collect(),
+        next_cursor: page.next_cursor,
+    })
+}
+
+// ------------------------------------------------------------------ term list (v1.1)
+
+/// Notes of a deck as term | definition rows (the deck page's term list): the first two fields
+/// of the note type, the note's cards with their common flags and least advanced mastery, and
+/// its choice classification values. Paging and order are those of `notes.list`.
+fn terms(req: ListNotes, ctx: &QueryCtx<'_>) -> AppResult<TermPage> {
+    use fc_core::stats::{card_mastery, Mastery};
+    use std::collections::{HashMap, HashSet};
+    let reads = ctx.tx;
+    let page = list(req, ctx)?;
+    let ids: Vec<NoteId> = page.items.iter().map(|n| n.id).collect();
+    let cards = reads.list_cards(&CardFilter {
+        note_ids: Some(ids.clone()),
+        ..CardFilter::default()
+    })?;
+    let mut of_note: HashMap<NoteId, Vec<&Card>> = HashMap::new();
+    let mut card_note = HashMap::new();
+    for c in &cards {
+        of_note.entry(c.note_id).or_default().push(c);
+        card_note.insert(c.id, c.note_id);
+    }
+    let wanted: HashSet<NoteId> = ids.iter().copied().collect();
+    let choices = crate::support::attrs::note_choices(reads, &card_note, &wanted)?;
+    let mut types = HashMap::new();
+    let mut items = Vec::with_capacity(ids.len());
+    for id in ids {
+        let Some(note) = reads.get_note(id)? else {
+            continue;
+        };
+        if let std::collections::hash_map::Entry::Vacant(e) = types.entry(note.notetype_id) {
+            e.insert(require_notetype(reads, note.notetype_id)?);
+        }
+        let nt = &types[&note.notetype_id];
+        let field = |i: usize| {
+            nt.fields.get(i).map(|f| {
+                let value = note.fields.get(&f.key).cloned().unwrap_or_default();
+                TermField {
+                    key: f.key.to_string(),
+                    text: fc_core::note::strip_html(&value),
+                    value,
+                }
+            })
+        };
+        let Some(front) = field(0) else { continue };
+        let own = of_note.remove(&id).unwrap_or_default();
+        let flags = own.iter().map(|c| c.flags).reduce(|a, b| a & b).unwrap_or(0);
+        let mastery = own
+            .iter()
+            .map(|c| card_mastery(&c.scheduling))
+            .min()
+            .unwrap_or(Mastery::New);
+        let chips = choices
+            .of_note
+            .get(&id)
+            .into_iter()
+            .flatten()
+            .filter_map(|&(di, oi)| {
+                let def = choices.defs.get(di)?;
+                Some(TermChip {
+                    attr_id: def.id,
+                    name: def.name.clone(),
+                    label: def.options.get(oi)?.label.clone(),
+                })
+            })
+            .collect();
+        items.push(NoteTerm {
+            note_id: id,
+            notetype_id: note.notetype_id,
+            card_ids: own.iter().map(|c| c.id).collect(),
+            flags,
+            mastery,
+            back: field(1),
+            front,
+            chips,
+        });
+    }
+    Ok(TermPage {
+        items,
         next_cursor: page.next_cursor,
     })
 }

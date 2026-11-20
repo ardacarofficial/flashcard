@@ -9,6 +9,9 @@ methods! {
     DecksTree = "decks.tree", Query, "decks", "decks:read", Public, undo: false, Empty => DeckTree;
     /// Flat deck list.
     DecksList = "decks.list", Query, "decks", "decks:read", Public, undo: false, Empty => DeckList;
+    /// Progress of every deck (mastery, last studied, common classification values), today's
+    /// collection counts and the recently studied decks (v1.1 Home / Library).
+    DecksSummaries = "decks.summaries", Query, "decks", "decks:read", Public, undo: false, Empty => DeckSummaries;
     /// One deck.
     DecksGet = "decks.get", Query, "decks", "decks:read", Public, undo: false, DeckRef => DeckDto;
     /// Creates a deck (and missing parents) from a path.

@@ -17,4 +17,7 @@ methods! {
     NotesGet = "notes.get", Query, "notes", "notes:read", Public, undo: false, NoteRef => NoteDto;
     /// Paged note list.
     NotesList = "notes.list", Query, "notes", "notes:read", Public, undo: false, ListNotes => NotePage;
+    /// Paged term list of a deck: notes as term | definition with mastery, flags and level
+    /// chips (v1.1 deck page).
+    NotesTerms = "notes.terms", Query, "notes", "notes:read", Public, undo: false, ListNotes => TermPage;
 }
