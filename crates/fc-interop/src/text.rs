@@ -700,6 +700,10 @@ mod encoding_tests;
 #[cfg(test)]
 mod heldout2_tests;
 #[cfg(test)]
+mod heldout3_samples;
+#[cfg(test)]
+mod heldout3_tests;
+#[cfg(test)]
 mod heldout_tests;
 #[cfg(test)]
 mod tests;
