@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '$lib/i18n/index.svelte';
-  import { Download, HardDrive, Printer, Tabs, Upload } from '$lib/ui';
+  import { deckPaths } from '$lib/components/deck-paths';
+  import { Download, HardDrive, Printer, Select, Tabs, Upload } from '$lib/ui';
   import { SettingsPage } from '../core/kit';
   import type { ScreenCtx } from '../types';
   import BackupPanel from './BackupPanel.svelte';
@@ -14,10 +15,18 @@
   const TABS = ['import', 'export', 'backup', 'print'] as const;
   type Tab = (typeof TABS)[number];
   let tab = $state<Tab>('import');
+  // The deck import / export / print work on (the shell's selected deck), picked here.
+  const deckOptions = $derived([
+    { value: null as string | null, label: t('deck.select_prompt') },
+    ...deckPaths(ctx.decks).map((p) => ({ value: p.id as string | null, label: p.path })),
+  ]);
   const tabs = $derived(TABS.map((id) => ({ id, label: t(`io.tabs.${id}`), icon: ICONS[id] })));
 </script>
 
 <SettingsPage title={t('nav.io')} subtitle={t('io.intro')} width="wide">
+  {#snippet actions()}
+    <div class="deck"><Select label={t('deck.current')} options={deckOptions} value={ctx.selectedDeck} onchange={(id) => ctx.selectDeck(id)} /></div>
+  {/snippet}
   <Tabs label={t('nav.io')} {tabs} value={tab} onchange={(id) => (tab = id as Tab)}>
     {#snippet children(id)}
       <div class="panel">
@@ -36,6 +45,9 @@
 </SettingsPage>
 
 <style>
+  .deck {
+    min-width: 16rem;
+  }
   .panel {
     padding-top: var(--space-4);
     display: flex;
