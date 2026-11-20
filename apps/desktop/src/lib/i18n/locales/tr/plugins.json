@@ -19,7 +19,7 @@
     "plugins": {
       "timeout_ms": {
         "label": "Çağrı başına süre sınırı (ms)",
-        "description": "Bundan uzun çalışan eklenti durdurulur."
+        "description": "Bundan uzun süren eklenti çağrısı durdurulur (uygulamaya yaptırdığı iş de sayılır)."
       },
       "fuel_millions": {
         "label": "Çağrı başına iş sınırı (milyon adım)",
@@ -52,6 +52,18 @@
       "kv_max_mb": {
         "label": "Eklenti başına depo boyutu (MB)",
         "description": "Bir eklentinin kendi deposunun kaplayabileceği en fazla yer."
+      },
+      "max_host_calls": {
+        "label": "Eklenti çağrısı başına istek",
+        "description": "Bir eklenti çağrısının uygulamaya yapabileceği en fazla istek. Aşan eklenti durdurulur."
+      },
+      "host_mb_per_call": {
+        "label": "Eklenti çağrısı başına veri (MB)",
+        "description": "Bir eklenti çağrısının uygulamaya gönderip ondan alabileceği en fazla veri."
+      },
+      "hook_ms_per_action": {
+        "label": "İşlem başına eklenti tepki süresi (ms)",
+        "description": "Bir işleminde tüm eklenti kancalarının toplam en fazla süresi. Aşan eklenti kapatılır."
       }
     },
     "tts": {
@@ -172,7 +184,8 @@
       "plugin_manifest": "Eklentinin tanımı geçersiz ({field}).",
       "plugin_api_version": "Bu eklenti başka bir uygulama sürümü için yapılmış (eklenti API {api_version}).",
       "plugin_app_version": "Bu eklenti {required} veya daha yeni bir uygulama sürümü istiyor.",
-      "plugin_permission": "Eklenti bu izni istemedi."
+      "plugin_permission": "Eklenti bu izni istemedi.",
+      "plugin_host_limit": "Bir eklenti uygulamadan bir anda çok fazla şey istedi ({function}: {limit}, en çok {max})."
     },
     "not_found": {
       "plugin": "Eklenti kurulu değil.",

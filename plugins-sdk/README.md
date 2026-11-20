@@ -75,5 +75,10 @@ Install in the app: Plugins → Install from file (or `fc call v1.plugins.instal
 * `fc plugin pack <folder>` packs a built plugin; `fc plugin install <file> --grant …` installs it.
 * A `before:` hook may change params or reject, but cannot write. Changes made by plugins
   trigger no hooks. What an operation writes is one undo step, rolled back if the plugin fails.
+* Limits (docs/05 §12, "Host fonksiyonu sınırları"): one call — host calls included — must
+  finish within the time limit (3 s by default) and makes at most 10 000 host calls moving at
+  most 64 MiB; each host function has its own size and count limits (`host::notify` needs
+  `ui:notify`: 3 per call, 10 per minute). Host calls cost fuel. A refused host call returns
+  `VALIDATION_PLUGIN_HOST_LIMIT`; going past a call budget stops the plugin.
 * Texts: return `ui::key("…")` (your locale files) or `ui::text(data)`; never UI wording as data.
 * Native unit tests: `fc_plugin_sdk::testing::with_host(|func, args| …, || …)`.

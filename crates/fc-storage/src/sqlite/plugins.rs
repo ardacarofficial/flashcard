@@ -100,6 +100,26 @@ impl<M: Mode> PluginRead for SqliteTx<'_, M> {
         )
     }
 
+    fn list_plugin_kv_page(
+        &self,
+        plugin_id: &str,
+        prefix: &str,
+        after: Option<&str>,
+        limit: usize,
+    ) -> StorageResult<Vec<(String, Value)>> {
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+        all(
+            self.conn(),
+            "plugin_kv",
+            "SELECT key, value FROM plugin_kv
+             WHERE plugin_id = ?1 AND substr(key, 1, length(?2)) = ?2
+               AND (?3 IS NULL OR key > ?3)
+             ORDER BY key LIMIT ?4",
+            params![plugin_id, prefix, after, limit],
+            |r| Ok((r.get(0)?, json(r, 1)?)),
+        )
+    }
+
     fn plugin_kv_usage(&self, plugin_id: &str) -> StorageResult<(u64, u64)> {
         let row = one(
             self.conn(),

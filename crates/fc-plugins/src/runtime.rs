@@ -1,9 +1,16 @@
 //! The WASM sandbox (docs/05 §2, §7).
 //!
 //! * **Fuel:** every call starts with [`Limits::fuel`]; running out traps (`OUT_OF_FUEL`).
-//! * **Deadline:** wall-clock time spent *inside the plugin* is capped by
-//!   [`Limits::timeout`] (epoch interruption; time the plugin waits for a host call does not
-//!   count). An infinite loop ends either way.
+//! * **Deadline:** the whole call — WASM *and* the host calls it makes — must end within
+//!   [`Limits::timeout`] of wall-clock time. Inside WASM, epoch interruption stops it; every
+//!   host call checks the deadline on entry (before the host does anything) and on exit (the
+//!   time the host spent counts). Only time the host reports as waiting for the *user* (a
+//!   file dialog, [`HostCalls::paused`]) is added back. An infinite loop ends either way.
+//! * **Host calls:** at most [`Limits::max_host_calls`] per call, at most
+//!   [`Limits::host_bytes`] crossing the boundary (requests + replies), each host function
+//!   within its own size and count limits ([`crate::limits`]); each call costs fuel
+//!   ([`crate::limits::HOST_CALL_FUEL`], the function's own cost, and per byte), so a loop of
+//!   cheap host calls runs out like any other loop.
 //! * **Memory:** all linear memory of an instance *together* may not grow past
 //!   [`Limits::memory_bytes`]; tables together are capped at [`MAX_TABLE_ELEMENTS`]. One
 //!   memory, a few tables, one instance. Proposals a plugin does not need and that would let
@@ -23,6 +30,7 @@ use crate::abi::{
     HostReply, HostRequest, OpReply, OpRequest, WireError, IMPORT_MODULE, MAX_MESSAGE_BYTES,
     SUPPORTED_ABI,
 };
+use crate::limits::{self, HostFnSpec};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -38,15 +46,19 @@ use wasmtime::{
 /// Epoch tick.
 const TICK: Duration = Duration::from_millis(5);
 
-/// Per-call resource limits.
+/// Per-call resource limits (set by the app; a plugin cannot reach them).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
-    /// Fuel (≈ executed WASM instructions).
+    /// Fuel (≈ executed WASM instructions; host calls cost fuel too).
     pub fuel: u64,
-    /// Time inside the plugin.
+    /// Wall-clock time of the whole call, host calls included.
     pub timeout: Duration,
     /// Linear memory cap in bytes.
     pub memory_bytes: usize,
+    /// Host calls one plugin call may make.
+    pub max_host_calls: u32,
+    /// Bytes one plugin call may move across the boundary (host requests + replies).
+    pub host_bytes: usize,
 }
 
 impl Default for Limits {
@@ -55,6 +67,8 @@ impl Default for Limits {
             fuel: 2_000_000_000,
             timeout: Duration::from_secs(3),
             memory_bytes: 64 * 1024 * 1024,
+            max_host_calls: 10_000,
+            host_bytes: 64 * 1024 * 1024,
         }
     }
 }
@@ -66,6 +80,10 @@ pub enum PluginErrorKind {
     OutOfFuel,
     /// Deadline passed.
     Timeout,
+    /// A call budget of the host side ran out (host calls, bytes across the boundary).
+    HostLimit,
+    /// The host's input to the operation is too large to hand over (not the plugin's fault).
+    InputTooLarge,
     /// Tried to grow memory past the cap.
     MemoryLimit,
     /// Any other trap (panic, `unreachable`, bad memory access…).
@@ -80,14 +98,17 @@ impl PluginErrorKind {
     /// Whether this failure counts towards automatic disabling (the plugin misbehaved, as
     /// opposed to returning a domain error).
     pub fn is_fault(self) -> bool {
-        !matches!(self, Self::Plugin)
+        !matches!(self, Self::Plugin | Self::InputTooLarge)
     }
 
-    /// Stable code (`OUT_OF_FUEL`, `TIMEOUT`, `MEMORY_LIMIT`, `TRAP`, `ABI`, `PLUGIN`).
+    /// Stable code (`OUT_OF_FUEL`, `TIMEOUT`, `HOST_LIMIT`, `INPUT_TOO_LARGE`, `MEMORY_LIMIT`,
+    /// `TRAP`, `ABI`, `PLUGIN`).
     pub fn code(self) -> &'static str {
         match self {
             Self::OutOfFuel => "OUT_OF_FUEL",
             Self::Timeout => "TIMEOUT",
+            Self::HostLimit => "HOST_LIMIT",
+            Self::InputTooLarge => "INPUT_TOO_LARGE",
             Self::MemoryLimit => "MEMORY_LIMIT",
             Self::Trap => "TRAP",
             Self::Abi => "ABI",
@@ -135,6 +156,12 @@ pub type HostError = WireError;
 pub trait HostCalls {
     /// Runs host function `func` (see [`crate::abi::host_fns`]).
     fn call(&mut self, func: &str, args: Value) -> Result<Value, HostError>;
+
+    /// Time the last [`HostCalls::call`] spent waiting for the user (a file dialog); it is
+    /// not counted against the deadline. Everything else the host does is.
+    fn paused(&mut self) -> Duration {
+        Duration::ZERO
+    }
 }
 
 /// A host offering nothing but `log` (pure contexts: card type engines, TTS synthesis).
@@ -231,15 +258,27 @@ impl ResourceLimiter for Limiter {
     }
 }
 
+/// What the host thread sends back for one host call.
+enum FromHost {
+    /// The reply, the fuel the call costs and the (possibly extended) deadline.
+    Reply {
+        bytes: Vec<u8>,
+        fuel: u64,
+        deadline: Instant,
+    },
+    /// Stop the plugin (a call budget ran out).
+    Abort(PluginError),
+}
+
 /// Store data of one call.
 pub struct CallState {
     limiter: Limiter,
     to_host: Sender<Vec<u8>>,
-    from_host: Receiver<Vec<u8>>,
+    from_host: Receiver<FromHost>,
     pending: Option<Vec<u8>>,
-    budget: Duration,
-    used: Duration,
-    segment: Instant,
+    deadline: Instant,
+    /// Why the host stopped the plugin (wins over the trap that carried it out).
+    abort: Option<PluginError>,
 }
 
 /// A compiled, linked plugin module (cheap to instantiate).
@@ -310,10 +349,17 @@ fn ticks(d: Duration) -> u64 {
     (d.as_micros() / TICK.as_micros()).max(1) as u64 + 1
 }
 
+fn timeout() -> wasmtime::Error {
+    wasmtime::Error::new(Trap::Interrupt)
+}
+
 fn host_call(mut caller: Caller<'_, CallState>, ptr: i32, len: i32) -> wasmtime::Result<i32> {
+    // Entry: past the deadline, the host does nothing more for this call.
+    if Instant::now() >= caller.data().deadline {
+        return Err(timeout());
+    }
     let msg = read_guest(&mut caller, ptr, len)?;
     let state = caller.data_mut();
-    state.used += state.segment.elapsed();
     state
         .to_host
         .send(msg)
@@ -322,12 +368,32 @@ fn host_call(mut caller: Caller<'_, CallState>, ptr: i32, len: i32) -> wasmtime:
         .from_host
         .recv()
         .map_err(|_| wasmtime::Error::msg("host went away"))?;
+    let (reply, fuel, deadline) = match reply {
+        FromHost::Reply {
+            bytes,
+            fuel,
+            deadline,
+        } => (bytes, fuel, deadline),
+        FromHost::Abort(e) => {
+            state.abort = Some(e);
+            return Err(wasmtime::Error::msg("stopped by the host"));
+        }
+    };
+    state.deadline = deadline;
     let reply_len =
         i32::try_from(reply.len()).map_err(|_| wasmtime::Error::msg("reply too large"))?;
     state.pending = Some(reply);
-    state.segment = Instant::now();
-    // Time spent in the host does not count against the plugin.
-    let remaining = state.budget.saturating_sub(state.used);
+    // Exit: the host's time counts; what is left of the budget goes to the epoch deadline.
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return Err(timeout());
+    }
+    let left = caller.get_fuel()?;
+    if left < fuel {
+        caller.set_fuel(0)?;
+        return Err(wasmtime::Error::new(Trap::OutOfFuel));
+    }
+    caller.set_fuel(left - fuel)?;
     caller.as_context_mut().set_epoch_deadline(ticks(remaining));
     Ok(reply_len)
 }
@@ -347,7 +413,11 @@ fn host_reply(mut caller: Caller<'_, CallState>, ptr: i32) -> wasmtime::Result<(
         .map_err(|_| wasmtime::Error::msg("host reply out of bounds"))
 }
 
-fn map_error(e: wasmtime::Error, memory_hit: bool) -> PluginError {
+fn map_error(e: wasmtime::Error, state: &mut CallState) -> PluginError {
+    if let Some(abort) = state.abort.take() {
+        return abort;
+    }
+    let memory_hit = state.limiter.hit;
     let trap = e.downcast_ref::<Trap>().copied();
     match trap {
         Some(Trap::OutOfFuel) => PluginError::new(PluginErrorKind::OutOfFuel, "fuel exhausted"),
@@ -465,7 +535,8 @@ impl Runtime {
     }
 
     /// Runs operation `op` with `input` in a fresh instance of `plugin`, servicing its host
-    /// calls with `host` on this thread.
+    /// calls with `host` on this thread. The whole call — host calls included — ends within
+    /// `limits.timeout` (plus time the host reports as waiting for the user).
     pub fn call(
         &self,
         plugin: &CompiledPlugin,
@@ -474,29 +545,46 @@ impl Runtime {
         limits: &Limits,
         host: &mut dyn HostCalls,
     ) -> Result<Value, PluginError> {
+        let start = Instant::now();
         let request = serde_json::to_vec(&OpRequest {
             op: op.to_owned(),
             input,
         })
         .map_err(|e| PluginError::abi(e.to_string()))?;
+        if request.len() > MAX_MESSAGE_BYTES {
+            return Err(PluginError::new(
+                PluginErrorKind::InputTooLarge,
+                format!("{op}: input of {} bytes is too large", request.len()),
+            ));
+        }
         let ticker = self
             .ticker()
             .ok_or_else(|| PluginError::abi("cannot start the epoch ticker"))?;
         ticker.active.fetch_add(1, Ordering::SeqCst);
         ticker.thread.unpark();
         let (to_host, host_rx) = channel::<Vec<u8>>();
-        let (host_tx, from_host) = channel::<Vec<u8>>();
+        let (host_tx, from_host) = channel::<FromHost>();
         let engine = &self.engine;
+        let deadline = start + limits.timeout;
         let result = thread::scope(|s| {
             let worker = thread::Builder::new()
                 .name("fc-plugin".into())
                 .stack_size(8 * 1024 * 1024)
                 .spawn_scoped(s, move || {
-                    run(engine, plugin, limits, request, to_host, from_host)
+                    run(
+                        engine,
+                        plugin,
+                        op,
+                        limits,
+                        deadline,
+                        request,
+                        (to_host, from_host),
+                    )
                 })
                 .map_err(|e| PluginError::abi(format!("cannot start plugin thread: {e}")))?;
+            let mut budget = CallBudget::new(limits, deadline);
             while let Ok(msg) = host_rx.recv() {
-                if host_tx.send(service(host, &msg)).is_err() {
+                if host_tx.send(budget.service(host, msg)).is_err() {
                     break;
                 }
             }
@@ -524,38 +612,168 @@ impl Runtime {
     }
 }
 
-fn service(host: &mut dyn HostCalls, msg: &[u8]) -> Vec<u8> {
-    let reply = match serde_json::from_slice::<HostRequest>(msg) {
-        Ok(req) => match host.call(&req.func, req.args) {
-            Ok(v) => HostReply {
-                ok: Some(v),
-                err: None,
-            },
-            Err(e) => HostReply {
-                ok: None,
-                err: Some(e),
-            },
-        },
-        Err(e) => HostReply {
-            ok: None,
-            err: Some(WireError {
-                code: "VALIDATION_INVALID_PARAMS".into(),
-                message: format!("host call is not a HostRequest: {e}"),
-                details: Value::Null,
-            }),
-        },
-    };
-    serde_json::to_vec(&reply)
+/// Only the function name of a host request (the arguments are skipped, not built).
+#[derive(serde::Deserialize)]
+struct RequestHead {
+    #[serde(rename = "fn")]
+    func: String,
+}
+
+fn error_reply(e: WireError) -> HostReply {
+    HostReply {
+        ok: None,
+        err: Some(e),
+    }
+}
+
+fn encode(reply: &HostReply) -> Vec<u8> {
+    serde_json::to_vec(reply)
         .unwrap_or_else(|_| br#"{"err":{"code":"INTERNAL","message":"serialize"}}"#.to_vec())
+}
+
+fn invalid_request(e: &serde_json::Error) -> WireError {
+    WireError {
+        code: "VALIDATION_INVALID_PARAMS".into(),
+        message: format!("host call is not a HostRequest: {e}"),
+        details: Value::Null,
+    }
+}
+
+/// The host side of one plugin call: counts host calls, bytes and calls per function, keeps
+/// the deadline, prices each call in fuel.
+struct CallBudget<'l> {
+    limits: &'l Limits,
+    deadline: Instant,
+    calls: u32,
+    bytes: usize,
+    per_fn: HashMap<&'static str, u32>,
+}
+
+impl<'l> CallBudget<'l> {
+    fn new(limits: &'l Limits, deadline: Instant) -> Self {
+        Self {
+            limits,
+            deadline,
+            calls: 0,
+            bytes: 0,
+            per_fn: HashMap::new(),
+        }
+    }
+
+    fn over(what: &str, max: u64) -> FromHost {
+        FromHost::Abort(PluginError::new(
+            PluginErrorKind::HostLimit,
+            format!("{what} per plugin call exceeded (at most {max})"),
+        ))
+    }
+
+    fn timed_out() -> FromHost {
+        FromHost::Abort(PluginError::new(
+            PluginErrorKind::Timeout,
+            "deadline passed (host calls count)",
+        ))
+    }
+
+    /// Size and per-call count of one request; `Err` = refused (handed back to the plugin).
+    fn check(
+        &mut self,
+        msg: &[u8],
+    ) -> Result<&'static HostFnSpec, (&'static HostFnSpec, WireError)> {
+        let head: RequestHead =
+            serde_json::from_slice(msg).map_err(|e| (limits::host_fn("?"), invalid_request(&e)))?;
+        let spec = limits::host_fn(&head.func);
+        if msg.len() > spec.max_request_bytes {
+            return Err((
+                spec,
+                limits::limit_error(&head.func, "request_bytes", spec.max_request_bytes as u64),
+            ));
+        }
+        let n = self.per_fn.entry(spec.name).or_insert(0);
+        *n += 1;
+        if *n > spec.max_per_call {
+            return Err((
+                spec,
+                limits::limit_error(&head.func, "per_call", u64::from(spec.max_per_call)),
+            ));
+        }
+        Ok(spec)
+    }
+
+    /// Checks one host call against every limit, runs it if it fits, and prices it.
+    fn service(&mut self, host: &mut dyn HostCalls, msg: Vec<u8>) -> FromHost {
+        if Instant::now() >= self.deadline {
+            return Self::timed_out();
+        }
+        self.calls = self.calls.saturating_add(1);
+        if self.calls > self.limits.max_host_calls {
+            return Self::over("host calls", u64::from(self.limits.max_host_calls));
+        }
+        let request_len = msg.len();
+        self.bytes = self.bytes.saturating_add(request_len);
+        if self.bytes > self.limits.host_bytes {
+            return Self::over(
+                "bytes across the host boundary",
+                self.limits.host_bytes as u64,
+            );
+        }
+        let (spec, reply) = match self.check(&msg) {
+            Err((spec, e)) => (spec, encode(&error_reply(e))),
+            Ok(spec) => {
+                let parsed = serde_json::from_slice::<HostRequest>(&msg);
+                // The raw request is not needed any more while the host works.
+                drop(msg);
+                let reply = match parsed {
+                    Ok(req) => match host.call(&req.func, req.args) {
+                        Ok(v) => HostReply {
+                            ok: Some(v),
+                            err: None,
+                        },
+                        Err(e) => error_reply(e),
+                    },
+                    Err(e) => error_reply(invalid_request(&e)),
+                };
+                self.deadline += host.paused();
+                let bytes = encode(&reply);
+                drop(reply);
+                if bytes.len() > spec.max_reply_bytes {
+                    let e =
+                        limits::limit_error(spec.name, "reply_bytes", spec.max_reply_bytes as u64);
+                    (spec, encode(&error_reply(e)))
+                } else {
+                    (spec, bytes)
+                }
+            }
+        };
+        // Exit: the host's own time counts.
+        if Instant::now() >= self.deadline {
+            return Self::timed_out();
+        }
+        self.bytes = self.bytes.saturating_add(reply.len());
+        if self.bytes > self.limits.host_bytes {
+            return Self::over(
+                "bytes across the host boundary",
+                self.limits.host_bytes as u64,
+            );
+        }
+        let moved = (request_len + reply.len()) as u64;
+        FromHost::Reply {
+            fuel: limits::HOST_CALL_FUEL
+                .saturating_add(spec.fuel)
+                .saturating_add(moved.saturating_mul(limits::FUEL_PER_BYTE)),
+            bytes: reply,
+            deadline: self.deadline,
+        }
+    }
 }
 
 fn run(
     engine: &Engine,
     plugin: &CompiledPlugin,
+    op: &str,
     limits: &Limits,
+    deadline: Instant,
     input: Vec<u8>,
-    to_host: Sender<Vec<u8>>,
-    from_host: Receiver<Vec<u8>>,
+    (to_host, from_host): (Sender<Vec<u8>>, Receiver<FromHost>),
 ) -> Result<Vec<u8>, PluginError> {
     let mut store = Store::new(
         engine,
@@ -564,22 +782,21 @@ fn run(
             to_host,
             from_host,
             pending: None,
-            budget: limits.timeout,
-            used: Duration::ZERO,
-            segment: Instant::now(),
+            deadline,
+            abort: None,
         },
     );
     store.limiter(|s| &mut s.limiter);
     store
         .set_fuel(limits.fuel)
         .map_err(|e| PluginError::abi(e.to_string()))?;
-    store.set_epoch_deadline(ticks(limits.timeout));
+    store.set_epoch_deadline(ticks(deadline.saturating_duration_since(Instant::now())));
     store.epoch_deadline_trap();
     macro_rules! wasm {
         ($e:expr) => {
             match $e {
                 Ok(v) => v,
-                Err(e) => return Err(map_error(e, store.data().limiter.hit)),
+                Err(e) => return Err(map_error(e, store.data_mut())),
             }
         };
     }
@@ -613,11 +830,14 @@ fn run(
     memory
         .write(&mut store, ptr as u32 as usize, &input)
         .map_err(|_| PluginError::abi("fc_alloc returned an out-of-bounds buffer"))?;
-    store.data_mut().segment = Instant::now();
+    drop(input);
     let packed = wasm!(handle.call(&mut store, (ptr, len))) as u64;
     let (out_ptr, out_len) = ((packed >> 32) as usize, (packed & 0xffff_ffff) as usize);
-    if out_len > MAX_MESSAGE_BYTES {
-        return Err(PluginError::abi("reply too large"));
+    let max = limits::max_op_reply_bytes(op);
+    if out_len > max {
+        return Err(PluginError::abi(format!(
+            "reply of {out_len} bytes is too large for {op} (at most {max})"
+        )));
     }
     memory
         .data(&store)

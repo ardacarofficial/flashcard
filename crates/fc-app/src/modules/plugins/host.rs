@@ -24,10 +24,21 @@
 //! Changes made by plugins never trigger `after:`/`event:` hooks (no cascades): plugin
 //! writes, and the rollback of a failed plugin call, run as the plugin's actor; and nothing
 //! that happens *while* a hook runs (whatever the actor) is queued for `event:` hooks.
-//! **Hook budget:** one user action may run at most `plugins.max_hooks_per_action` hooks, and
-//! no hook may start inside another ([`Config::max_hook_depth`]). Past either, the action's
-//! remaining hooks are dropped, the plugin that would have run is switched off and the user
-//! is told (`plugins_changed` with `reason = plugins.notice.hook_budget`). A failing
+//! **Hook budget:** one user action may run at most `plugins.max_hooks_per_action` hooks, for
+//! at most `plugins.hook_ms_per_action` together, and no hook may start inside another
+//! ([`Config::max_hook_depth`]). Past any of these, the action's remaining hooks are dropped,
+//! the plugin that would have run is switched off and the user is told (`plugins_changed`
+//! with `reason = plugins.notice.hook_budget`). A plugin whose hook *faulted* runs no more
+//! hooks in that action. So a user action never waits on plugins longer than the hook time
+//! budget plus one call's deadline.
+//!
+//! **Host resources** (docs/05 §12): every host call is checked against
+//! `fc_plugins::limits` — request/reply size and count per plugin call (by the runtime),
+//! count per minute per plugin (here, [`RateWindows`]); every plugin call has a deadline that
+//! includes host time, a cap on host calls and on bytes moved (`plugins.timeout_ms`,
+//! `plugins.max_host_calls`, `plugins.host_mb_per_call`). What the host keeps for a plugin
+//! is bounded too: its log (a ring of short lines), its storage (quota), UI sessions (size and
+//! number), queued events (at most the action's hook budget). A failing
 //! plugin never stops the core operation (a failing `before:` hook = continue without it,
 //! unless `plugins.before_hook_failure = reject`); faults (trap, fuel, deadline, memory, ABI)
 //! are counted and the plugin is switched off after `plugins.max_failures` in a row.
@@ -52,6 +63,7 @@ use fc_api::v1::plugins::{
 use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest};
 use fc_core::settings::SettingDef;
 use fc_plugins::abi::{host_fns, ops, BeforeHookReply, WireError};
+use fc_plugins::limits::{RateWindows, KV_LIST_MAX_BYTES, KV_LIST_MAX_ENTRIES};
 use fc_plugins::{
     CompiledPlugin, HookPoint, HostCalls, Limits, Manifest, PluginError, Runtime,
 };
@@ -62,7 +74,7 @@ use std::thread::ThreadId;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// The native file dialog behind `fs:pick` (set by the desktop shell with
 /// [`App::set_file_picker`]). It returns the path the user chose; the host reads or writes
@@ -114,6 +126,8 @@ pub(crate) struct Config {
     /// Hooks that may be running at once on one thread (1 = a hook never starts inside
     /// another; nothing legitimate nests them).
     pub max_hook_depth: u32,
+    /// Wall-clock time all hooks of one user action may take together.
+    pub hook_time_per_action: Duration,
     /// Private storage per plugin: entries.
     pub kv_max_keys: u64,
     /// Private storage per plugin: bytes (keys + JSON values).
@@ -128,6 +142,7 @@ impl Default for Config {
             reject_on_hook_failure: false,
             max_hooks_per_action: 200,
             max_hook_depth: 1,
+            hook_time_per_action: Duration::from_secs(10),
             kv_max_keys: 10_000,
             kv_max_bytes: 16 * 1024 * 1024,
         }
@@ -144,6 +159,10 @@ struct ActionState {
     depth: u32,
     /// Hooks run so far in this action.
     invocations: u32,
+    /// Time spent in hooks so far in this action.
+    hook_time: Duration,
+    /// Plugins whose hook faulted in this action (they run no more hooks in it).
+    faulted: BTreeSet<String>,
     /// The budget was exceeded: no more hooks in this action.
     tripped: bool,
 }
@@ -157,13 +176,27 @@ impl Drop for ActionScope<'_> {
     }
 }
 
-/// A running hook (see [`PluginHost::enter_hook`]).
-pub(crate) struct HookGuard<'a>(&'a PluginHost);
+/// A running hook (see [`PluginHost::enter_hook`]); its time counts against the action.
+pub(crate) struct HookGuard<'a>(&'a PluginHost, Instant);
 
 impl Drop for HookGuard<'_> {
     fn drop(&mut self) {
-        self.0.with_action(|a| a.depth = a.depth.saturating_sub(1));
+        let spent = self.1.elapsed();
+        self.0.with_action(|a| {
+            a.depth = a.depth.saturating_sub(1);
+            a.hook_time = a.hook_time.saturating_add(spent);
+        });
     }
+}
+
+/// Whether a hook may run ([`PluginHost::enter_hook`]).
+pub(crate) enum Admission<'a> {
+    /// Run it; the guard ends it.
+    Run(HookGuard<'a>),
+    /// Not this plugin (its hook faulted earlier in this action); others may run.
+    Skip,
+    /// No more hooks in this action.
+    Stop,
 }
 
 /// An installed plugin as loaded in memory.
@@ -203,9 +236,24 @@ pub(crate) struct Core {
     pending: Mutex<Vec<RecordPluginFailure>>,
     actions: Mutex<HashMap<ThreadId, ActionState>>,
     logs: Mutex<HashMap<String, VecDeque<PluginLogEntry>>>,
+    /// Per-minute host call counters, per plugin.
+    rates: Mutex<HashMap<String, RateWindows>>,
 }
 
 const LOG_LINES: usize = 200;
+/// Longest log line kept, bytes.
+const LOG_LINE_BYTES: usize = 2000;
+
+/// `s` cut to at most `max` bytes, on a character boundary.
+fn truncate_utf8(s: &mut String, max: usize) {
+    if s.len() > max {
+        let mut end = max;
+        while !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        s.truncate(end);
+    }
+}
 
 impl Core {
     pub fn runtime(&self) -> Option<Arc<Runtime>> {
@@ -225,8 +273,16 @@ impl Core {
                 q.pop_front();
             }
             let mut message: String = message.into();
-            message.truncate(2000);
+            truncate_utf8(&mut message, LOG_LINE_BYTES);
             q.push_back(PluginLogEntry { at, level, message });
+        }
+    }
+
+    /// Counts a host call of `plugin` against its per-minute limits.
+    fn admit_rate(&self, plugin: &str, func: &str) -> Result<(), WireError> {
+        match self.rates.lock() {
+            Ok(mut r) => r.entry(plugin.to_owned()).or_default().admit(func, Instant::now()),
+            Err(_) => Ok(()),
         }
     }
 
@@ -345,7 +401,7 @@ pub struct PluginHost {
 }
 
 /// Plain-text form of a wire error code.
-fn code_str(code: ErrorCode) -> String {
+pub(crate) fn code_str(code: ErrorCode) -> String {
     serde_json::to_value(code)
         .ok()
         .and_then(|v| v.as_str().map(str::to_owned))
@@ -395,6 +451,17 @@ pub(crate) fn read_settings_config(reads: &dyn fc_storage::Reads) -> Config {
             memory_bytes: usize::try_from(int(super::SETTING_MEMORY, 64))
                 .unwrap_or(64)
                 .saturating_mul(1024 * 1024),
+            max_host_calls: u32::try_from(int(
+                super::SETTING_MAX_HOST_CALLS,
+                u64::from(d.limits.max_host_calls),
+            ))
+            .unwrap_or(d.limits.max_host_calls),
+            host_bytes: usize::try_from(int(
+                super::SETTING_HOST_MB,
+                (d.limits.host_bytes / (1024 * 1024)) as u64,
+            ))
+            .unwrap_or(64)
+            .saturating_mul(1024 * 1024),
         },
         max_failures: u32::try_from(int(super::SETTING_MAX_FAILURES, u64::from(d.max_failures)))
             .unwrap_or(d.max_failures),
@@ -406,6 +473,10 @@ pub(crate) fn read_settings_config(reads: &dyn fc_storage::Reads) -> Config {
         ))
         .unwrap_or(d.max_hooks_per_action),
         max_hook_depth: d.max_hook_depth,
+        hook_time_per_action: Duration::from_millis(int(
+            super::SETTING_HOOK_TIME,
+            d.hook_time_per_action.as_millis() as u64,
+        )),
         kv_max_keys: int(super::SETTING_KV_MAX_KEYS, d.kv_max_keys),
         kv_max_bytes: int(super::SETTING_KV_MAX_MB, d.kv_max_bytes / (1024 * 1024))
             .saturating_mul(1024 * 1024),
@@ -467,18 +538,17 @@ impl PluginHost {
     }
 
     /// Admits one hook run of `plugin` against the action's budget. Past the budget (too
-    /// many hooks in this action, or a hook inside a hook) the action runs no more hooks,
-    /// queued events are dropped and `plugin` is switched off with a notice.
-    pub(crate) fn enter_hook(
-        &self,
-        app: &App,
-        plugin: &str,
-        hook: &str,
-    ) -> Option<HookGuard<'_>> {
+    /// many hooks or too much hook time in this action, or a hook inside a hook) the action
+    /// runs no more hooks, queued events are dropped and `plugin` is switched off with a
+    /// notice. A plugin whose hook faulted earlier in the action is skipped.
+    pub(crate) fn enter_hook(&self, app: &App, plugin: &str, hook: &str) -> Admission<'_> {
         let config = self.core.config();
         let verdict = self.with_action(|a| {
             if a.tripped {
                 return Err(None);
+            }
+            if a.faulted.contains(plugin) {
+                return Ok(false);
             }
             if a.depth >= config.max_hook_depth.max(1) {
                 a.tripped = true;
@@ -488,20 +558,27 @@ impl PluginHost {
                 a.tripped = true;
                 return Err(Some("count"));
             }
+            if a.hook_time >= config.hook_time_per_action {
+                a.tripped = true;
+                return Err(Some("time"));
+            }
             a.depth += 1;
             a.invocations += 1;
-            Ok(())
-        })?;
+            Ok(true)
+        });
         match verdict {
-            Ok(()) => Some(HookGuard(self)),
-            Err(None) => None,
-            Err(Some(limit)) => {
+            None | Some(Err(None)) => Admission::Stop,
+            Some(Ok(false)) => Admission::Skip,
+            Some(Ok(true)) => Admission::Run(HookGuard(self, Instant::now())),
+            Some(Err(Some(limit))) => {
                 if let Ok(mut q) = self.events.lock() {
                     q.clear();
                 }
                 let message = format!(
-                    "HOOK_BUDGET: {hook} exceeded the hook budget of one action ({limit}: at most {} hooks, {} at a time)",
-                    config.max_hooks_per_action, config.max_hook_depth
+                    "HOOK_BUDGET: {hook} exceeded the hook budget of one action ({limit}: at most {} hooks, {} ms together, {} at a time)",
+                    config.max_hooks_per_action,
+                    config.hook_time_per_action.as_millis(),
+                    config.max_hook_depth
                 );
                 self.core.log(plugin, LogLevel::Error, &message, app.now());
                 self.core.disable(
@@ -511,7 +588,7 @@ impl PluginHost {
                         .param("hook", hook)
                         .param("max", config.max_hooks_per_action.to_string()),
                 );
-                None
+                Admission::Stop
             }
         }
     }
@@ -727,10 +804,14 @@ impl PluginHost {
             group: None,
             history: false,
             notices: Vec::new(),
+            paused: Duration::ZERO,
         };
         let r = rt.call(&compiled, op, input, &limits, &mut host);
         let notices = host.finish(r.is_ok());
         self.core.record(plugin.id(), &r);
+        if mode != Mode::Operation && r.as_ref().is_err_and(|e| e.kind.is_fault()) {
+            self.with_action(|a| a.faulted.insert(plugin.id().to_owned()));
+        }
         if let Err(e) = &r {
             self.core
                 .log(plugin.id(), LogLevel::Error, format!("{op}: {e}"), app.now());
@@ -769,8 +850,10 @@ impl PluginHost {
             else {
                 continue;
             };
-            let Some(_running) = self.enter_hook(app, &id, &hook) else {
-                break;
+            let _running = match self.enter_hook(app, &id, &hook) {
+                Admission::Run(guard) => guard,
+                Admission::Skip => continue,
+                Admission::Stop => break,
             };
             let input = json!({ "hook": hook, "method": method, "params": params.clone() });
             let (r, _) = self.run_op(app, &plugin, ops::HOOK_BEFORE, input, Mode::Hook);
@@ -830,8 +913,10 @@ impl PluginHost {
         for id in ids {
             if let Some(plugin) = self.get(&id).filter(|p| hook_allowed(app.registry(), p, method)) {
                 let hook = format!("after:{method}");
-                let Some(_running) = self.enter_hook(app, &id, &hook) else {
-                    return;
+                let _running = match self.enter_hook(app, &id, &hook) {
+                    Admission::Run(guard) => guard,
+                    Admission::Skip => continue,
+                    Admission::Stop => return,
                 };
                 let input = json!({
                     "hook": hook,
@@ -863,8 +948,13 @@ impl PluginHost {
             .cloned()
             .collect();
         drop(l);
+        // Each queued event runs at least one hook, so more than the action's hook budget
+        // can never all run (one more trips the budget, as before): the queue stays bounded
+        // whatever the action produced.
+        let cap = self.core.config().max_hooks_per_action.max(1) as usize + 1;
         if let Ok(mut q) = self.events.lock() {
-            q.extend(wanted);
+            let room = cap.saturating_sub(q.len());
+            q.extend(wanted.into_iter().take(room));
         }
     }
 
@@ -887,8 +977,10 @@ impl PluginHost {
             for id in ids {
                 if let Some(plugin) = self.get(&id) {
                     let hook = format!("event:{kind}");
-                    let Some(_running) = self.enter_hook(app, &id, &hook) else {
-                        return;
+                    let _running = match self.enter_hook(app, &id, &hook) {
+                        Admission::Run(guard) => guard,
+                        Admission::Skip => continue,
+                        Admission::Stop => return,
                     };
                     let input = json!({ "hook": hook, "event": value });
                     let _ = self.run_op(app, &plugin, ops::HOOK_EVENT, input, Mode::Reaction);
@@ -964,6 +1056,8 @@ pub(crate) struct OpHost<'a> {
     /// The group holds changes to user data (not only the plugin's own storage/settings).
     history: bool,
     notices: Vec<PluginNotice>,
+    /// Time the current host call spent in a file dialog (the user's time, not the plugin's).
+    paused: Duration,
 }
 
 #[derive(serde::Deserialize)]
@@ -1129,7 +1223,15 @@ impl OpHost<'_> {
         })
     }
 
-    fn fs_open(&self, func: &str, args: Value) -> AppResult<Value> {
+    /// Runs a file dialog; its time is the user's ([`HostCalls::paused`]).
+    fn dialog<T>(&mut self, f: impl FnOnce() -> T) -> T {
+        let started = Instant::now();
+        let out = f();
+        self.paused += started.elapsed();
+        out
+    }
+
+    fn fs_open(&mut self, func: &str, args: Value) -> AppResult<Value> {
         #[derive(serde::Deserialize)]
         struct Open {
             #[serde(default)]
@@ -1137,7 +1239,7 @@ impl OpHost<'_> {
         }
         let a: Open = Self::args(func, args)?;
         let picker = self.picker(func)?;
-        let Some(path) = picker.pick_open(&a.extensions) else {
+        let Some(path) = self.dialog(|| picker.pick_open(&a.extensions)) else {
             return Ok(Value::Null);
         };
         let io = |e: std::io::Error| AppError::api(ErrorCode::IoFile, e.to_string());
@@ -1157,7 +1259,7 @@ impl OpHost<'_> {
         }))
     }
 
-    fn fs_save(&self, func: &str, args: Value) -> AppResult<Value> {
+    fn fs_save(&mut self, func: &str, args: Value) -> AppResult<Value> {
         #[derive(serde::Deserialize)]
         struct Save {
             suggested_name: String,
@@ -1167,6 +1269,9 @@ impl OpHost<'_> {
         }
         let a: Save = Self::args(func, args)?;
         let picker = self.picker(func)?;
+        if a.data_b64.len() as u64 > MAX_PICKED_FILE_BYTES.div_ceil(3) * 4 {
+            return Err(crate::support::invalid(format!("{func}: file too large")));
+        }
         let data = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &a.data_b64)
             .map_err(|e| crate::support::invalid(format!("{func}: data_b64: {e}")))?;
         if data.len() as u64 > MAX_PICKED_FILE_BYTES {
@@ -1174,7 +1279,7 @@ impl OpHost<'_> {
         }
         // Only a bare name is suggested: a plugin cannot steer the dialog to a folder.
         let suggested = file_name(std::path::Path::new(&a.suggested_name));
-        let Some(path) = picker.pick_save(&suggested, &a.extensions) else {
+        let Some(path) = self.dialog(|| picker.pick_save(&suggested, &a.extensions)) else {
             return Ok(Value::Null);
         };
         std::fs::write(&path, data).map_err(|e| AppError::api(ErrorCode::IoFile, e.to_string()))?;
@@ -1194,14 +1299,31 @@ impl OpHost<'_> {
                 Ok(tx.get_plugin_kv(&id, &a.key)?.unwrap_or(Value::Null))
             }
             host_fns::KV_LIST => {
+                // Paged: at most `limit` (≤ KV_LIST_MAX_ENTRIES) entries and about
+                // KV_LIST_MAX_BYTES per call; the next page starts `after` the last key.
                 #[derive(serde::Deserialize)]
-                struct Prefix {
+                struct Page {
                     #[serde(default)]
                     prefix: String,
+                    #[serde(default)]
+                    after: Option<String>,
+                    #[serde(default)]
+                    limit: Option<usize>,
                 }
-                let a: Prefix = Self::args(func, args)?;
+                let a: Page = Self::args(func, args)?;
+                let limit = a.limit.unwrap_or(KV_LIST_MAX_ENTRIES).clamp(1, KV_LIST_MAX_ENTRIES);
                 let tx = self.app.store().read()?;
-                Ok(json!(tx.list_plugin_kv(&id, &a.prefix)?))
+                let rows = tx.list_plugin_kv_page(&id, &a.prefix, a.after.as_deref(), limit)?;
+                let mut bytes = 0usize;
+                let mut page = Vec::new();
+                for (key, value) in rows {
+                    bytes += key.len() + value.to_string().len();
+                    if bytes > KV_LIST_MAX_BYTES && !page.is_empty() {
+                        break;
+                    }
+                    page.push((key, value));
+                }
+                Ok(json!(page))
             }
             host_fns::KV_SET => {
                 // Writing storage needs its own permission (declared and granted); deleting
@@ -1246,6 +1368,7 @@ impl OpHost<'_> {
                 Ok(Value::Null)
             }
             host_fns::UI_NOTIFY => {
+                self.require(func, "ui:notify")?;
                 #[derive(serde::Deserialize)]
                 struct Notify {
                     text: UiText,
@@ -1338,6 +1461,12 @@ impl OpHost<'_> {
 
 impl HostCalls for OpHost<'_> {
     fn call(&mut self, func: &str, args: Value) -> Result<Value, WireError> {
+        self.paused = Duration::ZERO;
+        self.app.plugins().core.admit_rate(self.plugin.id(), func)?;
         self.dispatch(func, args).map_err(to_wire)
+    }
+
+    fn paused(&mut self) -> Duration {
+        std::mem::take(&mut self.paused)
     }
 }

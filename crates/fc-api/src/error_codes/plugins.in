@@ -23,3 +23,6 @@ ConflictPluginRejected => Conflict, "errors.conflict.plugin_rejected";
 /// The plugin failed: trap, out of fuel, deadline, memory cap, ABI violation or its own error
 /// (`details`: `plugin_id`, `kind`, `code`).
 ProviderPluginFailed => Provider, "errors.provider.plugin_failed";
+/// A host call went past a limit of the plugin sandbox: request or reply too large, too many
+/// calls of that function per plugin call or per minute (`details`: `function`, `limit`, `max`).
+ValidationPluginHostLimit => Validation, "errors.validation.plugin_host_limit";

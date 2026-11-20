@@ -70,6 +70,27 @@ impl PluginRead for MemTx<'_> {
             .collect())
     }
 
+    fn list_plugin_kv_page(
+        &self,
+        plugin_id: &str,
+        prefix: &str,
+        after: Option<&str>,
+        limit: usize,
+    ) -> StorageResult<Vec<(String, Value)>> {
+        Ok(self
+            .s()
+            .domains
+            .plugins
+            .kv
+            .iter()
+            .filter(|((p, k), _)| {
+                p == plugin_id && k.starts_with(prefix) && after.is_none_or(|a| k.as_str() > a)
+            })
+            .take(limit)
+            .map(|((_, k), v)| (k.clone(), v.clone()))
+            .collect())
+    }
+
     fn plugin_kv_usage(&self, plugin_id: &str) -> StorageResult<(u64, u64)> {
         let s = self.s();
         let mut usage = (0u64, 0u64);

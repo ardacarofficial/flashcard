@@ -24,6 +24,8 @@ pub const MAX_WASM_BYTES: u64 = 32 * 1024 * 1024;
 pub const MAX_FILE_BYTES: u64 = 1024 * 1024;
 /// Most locale files.
 pub const MAX_LOCALES: usize = 32;
+/// Most settings in a plugin's schema.
+pub const MAX_SETTINGS: usize = 100;
 
 /// A read, validated package.
 #[derive(Debug, Clone, PartialEq)]
@@ -92,6 +94,9 @@ fn utf8(name: &str, bytes: Vec<u8>) -> Result<String, PackageError> {
 
 /// Validates a settings schema of plugin-local keys; forces scope `plugin`.
 pub fn validate_settings(mut defs: Vec<SettingDef>) -> Result<Vec<SettingDef>, PackageError> {
+    if defs.len() > MAX_SETTINGS {
+        return Err(invalid(format!("settings: at most {MAX_SETTINGS} entries")));
+    }
     let mut seen = std::collections::BTreeSet::new();
     for d in &mut defs {
         let ok_key = !d.key.is_empty()

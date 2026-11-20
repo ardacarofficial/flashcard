@@ -91,3 +91,51 @@ pub fn pack_unchecked(files: &[(&str, &[u8])]) -> Result<Vec<u8>, String> {
         .map(std::io::Cursor::into_inner)
         .map_err(|e| e.to_string())
 }
+
+/// WAT of an adversarial plugin: every operation sends host request `request` (JSON)
+/// `count` times in a row, fetches each reply and returns the last one as its own reply (so
+/// a refusal shows up as the plugin's error). Replies must fit 64 KiB.
+pub fn host_loop_wat(request: &str, count: u32) -> String {
+    let escaped = request.replace('\\', "\\\\").replace('"', "\\\"");
+    let reply_at = (request.len() + 16).next_multiple_of(8);
+    let heap = reply_at + 65_536;
+    let pages = (heap + 2 * 65_536) / 65_536 + 1;
+    let len = request.len();
+    format!(
+        r#"(module
+  (import "fc" "host_call" (func $host_call (param i32 i32) (result i32)))
+  (import "fc" "host_reply" (func $host_reply (param i32)))
+  (memory (export "memory") {pages})
+  (global $heap (mut i32) (i32.const {heap}))
+  (data (i32.const 0) "{escaped}")
+  (func (export "fc_abi_version") (result i32) (i32.const 1))
+  (func (export "fc_alloc") (param $len i32) (result i32)
+    (local $p i32)
+    (local.set $p (global.get $heap))
+    (global.set $heap (i32.add (global.get $heap) (local.get $len)))
+    (local.get $p))
+  (func (export "fc_handle") (param $ptr i32) (param $len i32) (result i64)
+    (local $i i32)
+    (local $rlen i32)
+    (block $done
+      (loop $l
+        (br_if $done (i32.ge_u (local.get $i) (i32.const {count})))
+        (local.set $rlen (call $host_call (i32.const 0) (i32.const {len})))
+        (if (i32.gt_u (local.get $rlen) (i32.const 65536)) (then unreachable))
+        (call $host_reply (i32.const {reply_at}))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br $l)))
+    (i64.or
+      (i64.shl (i64.const {reply_at}) (i64.const 32))
+      (i64.extend_i32_u (local.get $rlen))))
+)"#
+    )
+}
+
+/// A `ui.notify` request with `size` bytes of literal text.
+pub fn notify_request(size: usize) -> String {
+    format!(
+        r#"{{"fn":"ui.notify","args":{{"text":{{"text":"{}"}}}}}}"#,
+        "x".repeat(size)
+    )
+}

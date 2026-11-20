@@ -19,7 +19,7 @@
     "plugins": {
       "timeout_ms": {
         "label": "Time limit per call (ms)",
-        "description": "A plugin running longer than this is stopped."
+        "description": "A plugin call running longer than this is stopped (the work it asks the app to do counts too)."
       },
       "fuel_millions": {
         "label": "Work limit per call (millions of steps)",
@@ -52,6 +52,18 @@
       "kv_max_mb": {
         "label": "Storage size per plugin (MB)",
         "description": "Most space one plugin's own storage may take."
+      },
+      "max_host_calls": {
+        "label": "Requests per plugin call",
+        "description": "Most requests one plugin call may make to the app. A plugin going past it is stopped."
+      },
+      "host_mb_per_call": {
+        "label": "Data per plugin call (MB)",
+        "description": "Most data one plugin call may send to and get from the app."
+      },
+      "hook_ms_per_action": {
+        "label": "Plugin reaction time per action (ms)",
+        "description": "Most time all plugin hooks of one action of yours may take together. A plugin going past it is switched off."
       }
     },
     "tts": {
@@ -172,7 +184,8 @@
       "plugin_manifest": "The plugin's description is invalid ({field}).",
       "plugin_api_version": "This plugin was made for a different app version (plugin API {api_version}).",
       "plugin_app_version": "This plugin needs app version {required} or newer.",
-      "plugin_permission": "The plugin did not ask for this permission."
+      "plugin_permission": "The plugin did not ask for this permission.",
+      "plugin_host_limit": "A plugin asked too much of the app at once ({function}: {limit}, at most {max})."
     },
     "not_found": {
       "plugin": "Plugin not installed.",

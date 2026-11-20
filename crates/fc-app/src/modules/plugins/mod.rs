@@ -49,7 +49,7 @@ pub const ID: &str = "plugins";
 
 /// Setting: fuel per call, in millions.
 pub const SETTING_FUEL: &str = "plugins.fuel_millions";
-/// Setting: time limit per call (ms, time inside the plugin).
+/// Setting: time limit per call (ms, wall clock, host calls included).
 pub const SETTING_TIMEOUT: &str = "plugins.timeout_ms";
 /// Setting: memory cap per instance (MiB).
 pub const SETTING_MEMORY: &str = "plugins.memory_mb";
@@ -63,6 +63,12 @@ pub const SETTING_MAX_HOOKS: &str = "plugins.max_hooks_per_action";
 pub const SETTING_KV_MAX_KEYS: &str = "plugins.kv_max_keys";
 /// Setting: private storage size per plugin (MiB).
 pub const SETTING_KV_MAX_MB: &str = "plugins.kv_max_mb";
+/// Setting: host calls one plugin call may make.
+pub const SETTING_MAX_HOST_CALLS: &str = "plugins.max_host_calls";
+/// Setting: data one plugin call may move to and from the app (MiB).
+pub const SETTING_HOST_MB: &str = "plugins.host_mb_per_call";
+/// Setting: time all hooks of one user action may take together (ms).
+pub const SETTING_HOOK_TIME: &str = "plugins.hook_ms_per_action";
 
 fn int_setting(key: &str, default: i64, min: i64, max: i64, advanced: bool) -> SettingDef {
     SettingDef {
@@ -96,6 +102,9 @@ pub fn descriptor() -> ModuleDescriptor {
             int_setting(SETTING_MAX_HOOKS, 200, 1, 10_000, true),
             int_setting(SETTING_KV_MAX_KEYS, 10_000, 1, 1_000_000, true),
             int_setting(SETTING_KV_MAX_MB, 16, 1, 1024, true),
+            int_setting(SETTING_MAX_HOST_CALLS, 10_000, 1, 1_000_000, true),
+            int_setting(SETTING_HOST_MB, 64, 1, 1024, true),
+            int_setting(SETTING_HOOK_TIME, 10_000, 100, 600_000, true),
         ],
         ui: vec![main_menu("plugins.manager", "nav.plugins", "puzzle", "/plugins", 92)],
     }

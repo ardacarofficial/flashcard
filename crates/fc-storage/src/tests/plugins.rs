@@ -69,6 +69,21 @@ fn plugins_packages_and_kv_roundtrip() {
             vec![("n".into(), json!(3))]
         );
         assert_eq!(r.list_plugin_kv("com.x.a", "").unwrap().len(), 2);
+        // Pages: by key, after a key, at most `limit`.
+        let keys = |after: Option<&str>, limit: usize| -> Vec<String> {
+            r.list_plugin_kv_page("com.x.a", "", after, limit)
+                .unwrap()
+                .into_iter()
+                .map(|(k, _)| k)
+                .collect()
+        };
+        assert_eq!(keys(None, 1), vec!["n".to_owned()]);
+        assert_eq!(keys(Some("n"), 10), vec!["other".to_owned()]);
+        assert!(keys(Some("other"), 10).is_empty());
+        assert_eq!(
+            r.list_plugin_kv_page("com.x.a", "o", None, 10).unwrap(),
+            vec![("other".into(), json!("x"))]
+        );
         // "n" + "3", "other" + "\"x\"".
         assert_eq!(r.plugin_kv_usage("com.x.a").unwrap(), (2, 2 + 5 + 3));
         assert_eq!(r.plugin_kv_usage("com.x.b").unwrap(), (0, 0));

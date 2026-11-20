@@ -71,6 +71,15 @@ pub trait PluginRead {
     fn get_plugin_kv(&self, plugin_id: &str, key: &str) -> StorageResult<Option<Value>>;
     /// Private storage entries whose key starts with `prefix`, by key.
     fn list_plugin_kv(&self, plugin_id: &str, prefix: &str) -> StorageResult<Vec<(String, Value)>>;
+    /// One page of [`PluginRead::list_plugin_kv`]: keys after `after` (exclusive), at most
+    /// `limit` entries, by key (what a plugin's `kv.list` reads; bounded host memory).
+    fn list_plugin_kv_page(
+        &self,
+        plugin_id: &str,
+        prefix: &str,
+        after: Option<&str>,
+        limit: usize,
+    ) -> StorageResult<Vec<(String, Value)>>;
     /// Size of a plugin's private storage: `(entries, bytes)`, bytes = UTF-8 key + compact
     /// JSON value, summed (what its quota counts).
     fn plugin_kv_usage(&self, plugin_id: &str) -> StorageResult<(u64, u64)>;

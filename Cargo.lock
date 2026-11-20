@@ -1257,6 +1257,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "fc-api",
+ "fc-app",
  "fc-core",
  "fc-interop",
  "fc-plugins",

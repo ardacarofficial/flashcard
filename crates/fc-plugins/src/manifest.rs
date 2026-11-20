@@ -158,6 +158,18 @@ pub enum ManifestError {
     },
 }
 
+/// Most entries of one contribution list (`commands`, `views`, `menu_items`…): what a plugin
+/// registers in the app (menus, methods, providers) is bounded.
+pub const MAX_CONTRIBUTIONS: usize = 64;
+/// Most model files.
+pub const MAX_MODELS: usize = 16;
+/// Most permissions.
+pub const MAX_PERMISSIONS: usize = 128;
+/// Most authors.
+pub const MAX_AUTHORS: usize = 16;
+/// Longest description, characters.
+pub const MAX_DESCRIPTION_CHARS: usize = 500;
+
 fn invalid(field: &str, reason: impl Into<String>) -> ManifestError {
     ManifestError::Invalid {
         field: field.to_owned(),
@@ -253,6 +265,66 @@ impl Manifest {
                 if !safe_path(p.trim_end_matches('/')) {
                     return Err(invalid(field, "a relative path inside the package"));
                 }
+            }
+        }
+        if self.description.chars().count() > MAX_DESCRIPTION_CHARS {
+            return Err(invalid(
+                "description",
+                format!("at most {MAX_DESCRIPTION_CHARS} characters"),
+            ));
+        }
+        if self.authors.len() > MAX_AUTHORS || self.authors.iter().any(|a| a.chars().count() > 80) {
+            return Err(invalid(
+                "authors",
+                format!("at most {MAX_AUTHORS}, 80 characters each"),
+            ));
+        }
+        if self.permissions.len() > MAX_PERMISSIONS {
+            return Err(invalid("permissions", format!("at most {MAX_PERMISSIONS}")));
+        }
+        for (field, n, max) in [
+            ("contributes.commands", c.commands.len(), MAX_CONTRIBUTIONS),
+            (
+                "contributes.study_modes",
+                c.study_modes.len(),
+                MAX_CONTRIBUTIONS,
+            ),
+            ("contributes.views", c.views.len(), MAX_CONTRIBUTIONS),
+            (
+                "contributes.card_types",
+                c.card_types.len(),
+                MAX_CONTRIBUTIONS,
+            ),
+            ("contributes.tts", c.tts.len(), MAX_CONTRIBUTIONS),
+            (
+                "contributes.menu_items",
+                c.menu_items.len(),
+                MAX_CONTRIBUTIONS,
+            ),
+            (
+                "contributes.sidebar_panels",
+                c.sidebar_panels.len(),
+                MAX_CONTRIBUTIONS,
+            ),
+            (
+                "contributes.card_toolbar",
+                c.card_toolbar.len(),
+                MAX_CONTRIBUTIONS,
+            ),
+            ("contributes.models", c.models.len(), MAX_MODELS),
+        ] {
+            if n > max {
+                return Err(invalid(field, format!("at most {max} entries")));
+            }
+        }
+        let icons = c
+            .menu_items
+            .iter()
+            .filter_map(|m| m.icon.as_ref())
+            .chain(c.card_toolbar.iter().filter_map(|t| t.icon.as_ref()));
+        for icon in icons {
+            if !valid_local_id(icon) {
+                return Err(invalid("contributes", format!("invalid icon {icon:?}")));
             }
         }
         let mut seen = BTreeSet::new();
@@ -436,6 +508,19 @@ mod tests {
         assert!(matches!(
             bad("\"notes:read\"", "\"plugins:write\""),
             Err(ManifestError::Parse(_))
+        ));
+        // Too many contributions.
+        let many: Vec<String> = (0..=MAX_CONTRIBUTIONS)
+            .map(|i| format!("\"m{i}\""))
+            .collect();
+        assert!(matches!(
+            bad("study_modes = [\"drill\"]", &format!("study_modes = [\"drill\", {}]", many.join(", "))),
+            Err(ManifestError::Invalid { field, .. }) if field == "contributes.study_modes"
+        ));
+        let long = format!("name = \"Demo\"\ndescription = \"{}\"", "d".repeat(501));
+        assert!(matches!(
+            bad("name = \"Demo\"", &long),
+            Err(ManifestError::Invalid { field, .. }) if field == "description"
         ));
         // Path escaping the package.
         assert!(matches!(

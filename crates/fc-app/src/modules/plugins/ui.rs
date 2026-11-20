@@ -32,6 +32,16 @@ fn sanitize(node: &mut UiNode) {
     }
 }
 
+/// Largest `state` a UI session may keep between steps (serialized).
+pub(crate) const MAX_SESSION_STATE_BYTES: usize = 1024 * 1024;
+/// Open UI sessions per plugin; opening one more closes its oldest.
+pub(crate) const MAX_SESSIONS_PER_PLUGIN: usize = 8;
+
+/// Number of session `id` (`s12` → 12), for age order.
+fn session_number(id: &str) -> u64 {
+    id.trim_start_matches('s').parse().unwrap_or(0)
+}
+
 fn session_step(
     app: &App,
     session_id: String,
@@ -59,10 +69,44 @@ fn session_step(
     if let Some(node) = reply.node.as_mut() {
         sanitize(node);
     }
+    let state_bytes = serde_json::to_vec(&reply.state).map_or(usize::MAX, |b| b.len());
+    if !reply.done && state_bytes > MAX_SESSION_STATE_BYTES {
+        if let Ok(mut s) = host.sessions.lock() {
+            s.remove(&session_id);
+        }
+        return Err(plugin_failed(
+            plugin_id,
+            &fc_plugins::PluginError::new(
+                fc_plugins::PluginErrorKind::Abi,
+                format!("UiReply: state of {state_bytes} bytes (at most {MAX_SESSION_STATE_BYTES})"),
+            ),
+        ));
+    }
     if let Ok(mut s) = host.sessions.lock() {
         if reply.done {
             s.remove(&session_id);
         } else {
+            // Bounded per plugin: the oldest other session goes.
+            loop {
+                let mine: Vec<&String> = s
+                    .iter()
+                    .filter(|(id, sess)| sess.plugin_id == plugin_id && **id != session_id)
+                    .map(|(id, _)| id)
+                    .collect();
+                if mine.len() < MAX_SESSIONS_PER_PLUGIN {
+                    break;
+                }
+                let oldest = mine
+                    .into_iter()
+                    .min_by_key(|id| session_number(id))
+                    .cloned();
+                match oldest {
+                    Some(id) => {
+                        s.remove(&id);
+                    }
+                    None => break,
+                }
+            }
             s.insert(
                 session_id.clone(),
                 Session {

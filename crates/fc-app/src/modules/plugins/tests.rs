@@ -57,6 +57,9 @@ suite!(
     failed_hook_rollback_does_not_cascade,
     hook_budget_per_action,
     plugin_storage_needs_permission_and_quota,
+    host_call_loops_are_bounded,
+    host_call_loops_in_hooks_do_not_freeze_actions,
+    ui_notify_needs_permission_and_is_rate_limited,
 );
 
 const AUTOFILL: &str = "com.example.autofill";
@@ -1211,12 +1214,41 @@ fn hooks_do_not_nest_and_their_effects_do_not_queue() {
     let t = TestApp::new(Arc::new(MemStore::new()));
     let host = t.app.plugins();
     let _action = host.begin_action();
-    let outer = host.enter_hook(&t.app, "com.test.a", "event:x").expect("first hook runs");
+    let host::Admission::Run(outer) = host.enter_hook(&t.app, "com.test.a", "event:x") else {
+        panic!("first hook runs");
+    };
     host.queue_events(&[DomainEvent::CollectionReplaced], &Actor::System);
     assert_eq!(host.queued_events(), 0, "effects of a hook are not queued");
-    assert!(host.enter_hook(&t.app, "com.test.b", "event:y").is_none(), "no nesting");
+    assert!(
+        matches!(host.enter_hook(&t.app, "com.test.b", "event:y"), host::Admission::Stop),
+        "no nesting"
+    );
     drop(outer);
-    assert!(host.enter_hook(&t.app, "com.test.a", "event:x").is_none(), "action tripped");
+    assert!(
+        matches!(host.enter_hook(&t.app, "com.test.a", "event:x"), host::Admission::Stop),
+        "action tripped"
+    );
+    assert_eq!(host.pending_disables(), vec!["com.test.b".to_owned()]);
+}
+
+/// Hook time budget: once the hooks of one action have taken `plugins.hook_ms_per_action`
+/// together, no more run and the plugin that would have run next is switched off.
+#[test]
+fn hook_time_per_action_is_bounded() {
+    let t = TestApp::new(Arc::new(MemStore::new()));
+    set_app_setting(&t, SETTING_HOOK_TIME, json!(100));
+    t.app.plugins().reload(&t.app);
+    let host = t.app.plugins();
+    let _action = host.begin_action();
+    let host::Admission::Run(first) = host.enter_hook(&t.app, "com.test.a", "event:x") else {
+        panic!("first hook runs");
+    };
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    drop(first);
+    assert!(matches!(
+        host.enter_hook(&t.app, "com.test.b", "event:x"),
+        host::Admission::Stop
+    ));
     assert_eq!(host.pending_disables(), vec!["com.test.b".to_owned()]);
 }
 
@@ -1263,4 +1295,99 @@ fn plugin_storage_needs_permission_and_quota(f: Factory) {
     // Putting back an earlier value (undo/rollback) is never refused.
     set("c", true).unwrap();
     assert_eq!(usage().0, 3);
+}
+
+// ------------------------------------------------------------------ third security review
+
+const KV_GET_REQUEST: &str = r#"{"fn":"kv.get","args":{"key":"a"}}"#;
+
+fn notices(t: &TestApp) -> usize {
+    t.take_events()
+        .iter()
+        .filter(|e| matches!(e.event, DomainEvent::PluginNotice { .. }))
+        .count()
+}
+
+/// Finding 1 (deadline bypass), the exact repro: a plugin holding only `ui:command` loops
+/// `kv.get` a million times. Host calls are capped per plugin call, cost fuel, and their time
+/// counts against the deadline: the call faults, and quickly.
+fn host_call_loops_are_bounded(f: Factory) {
+    const ID: &str = "com.test.kvloop";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let wat = fc_plugins::testing::host_loop_wat(KV_GET_REQUEST, 1_000_000);
+    install_wat(&t, &dir, ID, &wat, &["ui:command"], &["go"], &["ui:command"]);
+    set_app_setting(&t, SETTING_TIMEOUT, json!(2000));
+    // Default cap: 10 000 host calls per plugin call.
+    let start = std::time::Instant::now();
+    let kind = fault_kind(run(&t, ID, "go"));
+    assert!(["HOST_LIMIT", "OUT_OF_FUEL", "TIMEOUT"].contains(&kind.as_str()), "{kind}");
+    assert!(start.elapsed() < std::time::Duration::from_secs(4), "{:?}", start.elapsed());
+    // Without the cap (and with plenty of fuel) the deadline still holds: host time counts.
+    set_app_setting(&t, SETTING_MAX_HOST_CALLS, json!(1_000_000));
+    set_app_setting(&t, SETTING_FUEL, json!(1_000_000));
+    set_app_setting(&t, SETTING_TIMEOUT, json!(300));
+    let start = std::time::Instant::now();
+    assert_eq!(fault_kind(run(&t, ID, "go")), "TIMEOUT");
+    assert!(start.elapsed() < std::time::Duration::from_secs(2), "{:?}", start.elapsed());
+}
+
+/// The same loop as an `event:` hook: the user's action finishes in bounded time — the hook
+/// faults on its deadline, and the plugin runs no more hooks in that action.
+fn host_call_loops_in_hooks_do_not_freeze_actions(f: Factory) {
+    const ID: &str = "com.test.hookloop";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let wat = fc_plugins::testing::host_loop_wat(KV_GET_REQUEST, 1_000_000);
+    let perms = ["hooks:event:deck_created"];
+    install_wat(&t, &dir, ID, &wat, &perms, &[], &perms);
+    set_app_setting(&t, SETTING_MAX_HOST_CALLS, json!(1_000_000));
+    set_app_setting(&t, SETTING_FUEL, json!(1_000_000));
+    set_app_setting(&t, SETTING_TIMEOUT, json!(500));
+    let decks = t.ok::<DecksList>(Empty {}).decks.len();
+    // Four deck_created events in one action: one hook run (≈ 500 ms), three skipped.
+    let start = std::time::Instant::now();
+    deck(&t, "A::B::C::D");
+    let took = start.elapsed();
+    assert!(took < std::time::Duration::from_millis(1500), "{took:?}");
+    assert_eq!(plugin(&t, ID).failures, 1, "one hook ran");
+    assert_eq!(t.ok::<DecksList>(Empty {}).decks.len(), decks + 4, "the action went through");
+}
+
+/// Finding 2 (host memory): `ui.notify` needs `ui:notify`; requests over 4 KiB are refused
+/// before the host parses them (400 × 1 MiB ends on the call's byte budget, nothing kept);
+/// at most 3 notices per call and 10 per minute reach the user.
+fn ui_notify_needs_permission_and_is_rate_limited(f: Factory) {
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let small = fc_plugins::testing::notify_request(16);
+    // Not granted.
+    let wat = fc_plugins::testing::host_loop_wat(&small, 1);
+    install_wat(&t, &dir, "com.test.nonotify", &wat, &["ui:command"], &["go"], &["ui:command"]);
+    let e = run(&t, "com.test.nonotify", "go").unwrap_err();
+    assert_eq!(e.details["code"], json!("PERMISSION_DENIED"));
+    assert_eq!(notices(&t), 0);
+    // 400 × 1 MiB: refused by size; the byte budget stops the call; nothing published.
+    let perms = ["ui:command", "ui:notify"];
+    let big = fc_plugins::testing::notify_request(1024 * 1024);
+    let wat = fc_plugins::testing::host_loop_wat(&big, 400);
+    install_wat(&t, &dir, "com.test.bignotify", &wat, &perms, &["go"], &perms);
+    assert_eq!(fault_kind(run(&t, "com.test.bignotify", "go")), "HOST_LIMIT");
+    assert_eq!(notices(&t), 0);
+    // Small ones: 3 per call, then refused per call.
+    let wat = fc_plugins::testing::host_loop_wat(&small, 3);
+    install_wat(&t, &dir, "com.test.notify", &wat, &perms, &["go"], &perms);
+    for _ in 0..3 {
+        run(&t, "com.test.notify", "go").unwrap();
+    }
+    assert_eq!(notices(&t), 9);
+    // 10 per minute.
+    let e = run(&t, "com.test.notify", "go").unwrap_err();
+    assert_eq!(notices(&t), 1);
+    assert_eq!(e.details["code"], json!("VALIDATION_PLUGIN_HOST_LIMIT"));
+    assert!(e.message.contains("per_minute"), "{e:?}");
+    assert_eq!(
+        fc_plugins::limits::HOST_LIMIT_CODE,
+        host::code_str(ErrorCode::ValidationPluginHostLimit)
+    );
 }

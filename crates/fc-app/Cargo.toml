@@ -27,6 +27,8 @@ tempfile = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
+# Integration tests use `fc_app::testing`.
+fc-app = { path = ".", features = ["testing"] }
 fc-plugins = { workspace = true, features = ["testing"] }
 fc-interop = { workspace = true, features = ["fixtures"] }
 

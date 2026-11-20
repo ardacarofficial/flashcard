@@ -429,6 +429,14 @@ pub mod host {
         pub fn delete(key: &str) -> Result<()> {
             call_raw("kv.delete", json!({ "key": key })).map(|_| ())
         }
+
+        /// One page of entries whose key starts with `prefix`, by key, starting after
+        /// `after` (at most 1000 entries / about 4 MiB per page). The next page starts after
+        /// the last key returned; an empty page is the end.
+        pub fn list(prefix: &str, after: Option<&str>) -> Result<Vec<(String, Value)>> {
+            let v = call_raw("kv.list", json!({ "prefix": prefix, "after": after }))?;
+            serde_json::from_value(v).map_err(Error::json)
+        }
     }
 
     /// The plugin's settings (defaults applied).
@@ -487,7 +495,8 @@ pub mod host {
         let _ = call_raw("log", json!({ "level": level, "message": message }));
     }
 
-    /// Shows a notice to the user.
+    /// Shows a notice to the user. Needs `ui:notify`; at most 3 per call and 10 per minute,
+    /// text up to about 4 KiB.
     pub fn notify(text: UiText, level: &str) -> Result<()> {
         call_raw("ui.notify", json!({ "text": text, "level": level })).map(|_| ())
     }

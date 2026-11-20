@@ -30,6 +30,8 @@ pub const UI_POINTS: &[&str] = &[
     "card_toolbar",
     "command",
     "settings",
+    // `ui.notify`: notices shown to the user (rate limited, docs/05 §12).
+    "notify",
 ];
 
 /// API areas a plugin may never be granted, in either access:

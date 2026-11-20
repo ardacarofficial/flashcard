@@ -7,8 +7,12 @@
 //!   providers, sensitive ones).
 //! * [`package`]: `.fcplugin` packages (zip: manifest, WASM entry, settings schema, locales).
 //! * [`runtime`]: the WASM sandbox (wasmtime): **fuel** per call, a wall-clock **deadline**
-//!   (epoch interruption), a **memory** cap per instance; host calls are serviced on the
-//!   calling thread, so the host side may borrow anything (a write transaction included).
+//!   covering host calls too (epoch interruption + checks around every host call), a
+//!   **memory** cap per instance, call budgets for host calls and bytes; host calls are
+//!   serviced on the calling thread, so the host side may borrow anything (a write
+//!   transaction included).
+//! * [`limits`]: what each host function may cost the host (sizes, counts per call and per
+//!   minute, fuel).
 //! * [`abi`]: the versioned plugin ABI (exports, imports, JSON envelopes, operation names).
 //! * [`source`]: [`source::PluginRegistrySource`] (store infrastructure; built-in: install from
 //!   a local file, docs/08 K3).
@@ -20,6 +24,7 @@
 #![forbid(unsafe_code)]
 
 pub mod abi;
+pub mod limits;
 pub mod manifest;
 pub mod models;
 pub mod package;
