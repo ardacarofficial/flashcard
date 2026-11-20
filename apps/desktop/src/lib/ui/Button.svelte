@@ -139,5 +139,7 @@
   .label {
     overflow: hidden;
     text-overflow: ellipsis;
+    /* Room for Turkish capitals' dots (Ö, İ) and cedillas, which line-height 1 clips. */
+    line-height: var(--leading-tight);
   }
 </style>

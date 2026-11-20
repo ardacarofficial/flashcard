@@ -29,7 +29,7 @@
   }
 </script>
 
-<fieldset class="fc-radio {klass}" {disabled}>
+<fieldset class="fc-radio {klass}" {disabled} data-fc-ui="radio-group">
   <legend class:sr-only={hideLabel}>{label}</legend>
   {#each options as o, i (i)}
     <label class="opt" class:disabled={o.disabled}>
