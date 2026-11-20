@@ -84,9 +84,52 @@ impl SqliteStore {
     ) -> StorageResult<Self> {
         let mut conn = Connection::open(path)?;
         migrate::configure_connection(&conn)?;
+        crate::interrupt::install(&mut conn)?;
         let backup = snapshot_before_migrating(&mut conn, path, migrations)?;
         crate::media::export_legacy_blobs(&conn, path)?;
         migrate::migrate_with(&mut conn, migrations)?;
+        let readers = (0..READ_POOL_SIZE)
+            .map(|_| {
+                let mut r = Connection::open_with_flags(
+                    path,
+                    OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+                )?;
+                migrate::configure_reader(&r)?;
+                crate::interrupt::install(&mut r)?;
+                Ok(Mutex::new(r))
+            })
+            .collect::<StorageResult<Vec<_>>>()?;
+        Ok(Self {
+            writer: Mutex::new(conn),
+            readers,
+            path: Some(path.to_owned()),
+            backup,
+            timeout: Duration::from_millis(u64::from(migrate::BUSY_TIMEOUT_MS)),
+        })
+    }
+
+    /// Opens an existing database **without migrating or snapshotting it**: for secondary
+    /// processes (`fc mcp serve`) that must not rewrite a collection the app owns. Fails with
+    /// [`StorageError::NeedsMigration`] when migrations are pending and with
+    /// [`StorageError::TooNew`] when the file is ahead of this build; never creates the file.
+    pub fn open_current(path: &Path) -> StorageResult<Self> {
+        let mut conn = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        migrate::configure_connection(&conn)?;
+        let latest = migrate::latest_version();
+        let found = migrate::current_version(&conn)?;
+        if found > latest {
+            return Err(StorageError::TooNew {
+                found,
+                supported: latest,
+            });
+        }
+        // Also catches an edited migration (checksum) and gaps, without applying anything.
+        if !migrate::pending_versions(&mut conn)?.is_empty() {
+            return Err(StorageError::NeedsMigration { found, latest });
+        }
         let readers = (0..READ_POOL_SIZE)
             .map(|_| {
                 let r = Connection::open_with_flags(
@@ -101,7 +144,7 @@ impl SqliteStore {
             writer: Mutex::new(conn),
             readers,
             path: Some(path.to_owned()),
-            backup,
+            backup: None,
             timeout: Duration::from_millis(u64::from(migrate::BUSY_TIMEOUT_MS)),
         })
     }
@@ -111,6 +154,7 @@ impl SqliteStore {
     pub fn open_in_memory() -> StorageResult<Self> {
         let mut conn = Connection::open_in_memory()?;
         migrate::configure_connection(&conn)?;
+        crate::interrupt::install(&mut conn)?;
         migrate::migrate(&mut conn)?;
         Ok(Self {
             writer: Mutex::new(conn),

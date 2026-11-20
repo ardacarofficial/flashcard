@@ -1,0 +1,16 @@
+// Statistics & smart planning (v0.6).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// A date is not a valid `YYYY-MM-DD` calendar date (`details.field`).
+ValidationDate => Validation, "errors.validation.date";
+/// Statistics cannot be broken down by this classification (not a choice kind; `details.id`).
+ValidationBreakdownAttribute => Validation, "errors.validation.breakdown_attribute";
+/// A goal target is out of range for its kind (`details.kind`).
+ValidationGoalTarget => Validation, "errors.validation.goal_target";
+/// An exam needs a name.
+ValidationExamName => Validation, "errors.validation.exam_name";
+/// Exam not found (`details.id`).
+NotFoundExam => NotFound, "errors.not_found.exam";
+/// Goal not found (`details.id`).
+NotFoundGoal => NotFound, "errors.not_found.goal";
+/// Too few reviews to optimize the preset (`details.items`, `details.min`).
+ConflictNotEnoughReviews => Conflict, "errors.conflict.not_enough_reviews";

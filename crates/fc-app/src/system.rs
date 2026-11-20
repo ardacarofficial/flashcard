@@ -1,9 +1,27 @@
 //! Real-world implementations of the core's injected abstractions. This is the only place that
-//! reads the system clock or OS randomness.
+//! reads the system clock or OS randomness, and the one place that pins the process
+//! environment third-party crates read ([`pin_process_env`]).
 
 use fc_core::rng::{Rng, SplitMix64};
 use fc_core::{Clock, Timestamp};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Environment variables dependencies read at run time, removed at process start so behavior
+/// never depends on the user's shell:
+///
+/// * `FSRS_NO_OUTLIER` — `fsrs-rs` (`training.rs`) skips its outlier filter when the variable
+///   is merely **set**, whatever its value. Unset = the filter on, as in Anki: the optimizer
+///   (`optimizer.run`, `fc_study::optimize`) gives the same weights on every machine.
+pub const PINNED_ENV_VARS: &[&str] = &["FSRS_NO_OUTLIER"];
+
+/// Removes [`PINNED_ENV_VARS`] from the process environment. Transports call it first thing
+/// in `main` (CLI) / `run` (desktop), **before any thread starts**: changing the environment
+/// while other threads read it is not thread-safe.
+pub fn pin_process_env() {
+    for var in PINNED_ENV_VARS {
+        std::env::remove_var(var);
+    }
+}
 
 /// Wall clock (UTC).
 #[derive(Debug, Clone, Copy, Default)]

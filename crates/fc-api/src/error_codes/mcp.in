@@ -1,0 +1,13 @@
+// MCP server and client (v0.8).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// An external MCP server registration is invalid (`details.field`: `name`, `command`, `url`).
+ValidationMcpServer => Validation, "errors.validation.mcp_server";
+/// External MCP server not found (`details.id`).
+NotFoundMcpServer => NotFound, "errors.not_found.mcp_server";
+/// Another external MCP server already has this name (`details.name`).
+ConflictMcpServerName => Conflict, "errors.conflict.mcp_server_name";
+/// Unknown MCP tool (`details.tool`).
+NotFoundMcpTool => NotFound, "errors.not_found.mcp_tool";
+/// A write tool was called while MCP writes are off (`mcp.server.allow_writes` or
+/// `fc mcp serve --read-only`; `details.tool`).
+PermissionMcpReadOnly => Permission, "errors.permission.mcp_read_only";

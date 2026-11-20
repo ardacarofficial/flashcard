@@ -52,12 +52,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.100.0 # = rust-toolchain.toml
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown # example plugins built by the plugin tests
       - uses: Swatinem/rust-cache@v2
       - name: frontendDist klasörü (generate_context! için)
         run: mkdir -p apps/desktop/dist
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+      - name: Plugin SDK (clippy + native tests of the SDK and example plugins)
+        run: |
+          cargo clippy --manifest-path plugins-sdk/Cargo.toml --workspace --all-targets -- -D warnings
+          cargo test --manifest-path plugins-sdk/Cargo.toml --workspace
 
   types:
     needs: detect
@@ -112,6 +117,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.100.0 # = rust-toolchain.toml
+        with:
+          targets: wasm32-unknown-unknown # example plugins built by the plugin tests
       - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v4
         with:

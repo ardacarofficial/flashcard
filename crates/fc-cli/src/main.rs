@@ -2,15 +2,15 @@
 //! `fc_app::App` exactly like the desktop app (actor = `Cli`), so internal methods are refused
 //! here too. Output is a short human summary, or the raw JSON response with `--json`.
 //!
-//! * Ergonomic subcommands (`deck`, `note`, `attribute`, `undo`, `redo`) resolve paths, keys,
-//!   names and labels to ids for you.
+//! * Ergonomic subcommands (`deck`, `note`, `attribute`, `plugin`, `undo`, `redo`) resolve
+//!   paths, keys, names and labels to ids for you.
 //! * `fc call <method> [<json>|-]` invokes **any** public method with raw JSON params (`-` =
 //!   read them from stdin), so everything the app can do is reachable from the shell.
-#![allow(clippy::print_stdout)]
 
 mod commands;
 mod i18n;
 mod lookup;
+mod mcp;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use fc_api::v1::methods as m;
@@ -35,6 +35,10 @@ pub struct Cli {
     /// Output language (default: the `app.locale` setting).
     #[arg(long, global = true, value_parser = parse_locale)]
     lang: Option<Locale>,
+    /// Upgrade an older collection schema (the desktop app normally does this; refuse by
+    /// default so a CLI call never rewrites a database another process owns).
+    #[arg(long, global = true)]
+    migrate: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -50,10 +54,16 @@ enum Command {
     /// Classification (attribute) operations.
     #[command(subcommand)]
     Attribute(AttributeCommand),
+    /// Plugins: install, permissions, on/off, run, pack (docs/05).
+    #[command(subcommand)]
+    Plugin(PluginCommand),
     /// Undo the last operation (`oplog.undo`).
     Undo,
     /// Redo the last undone operation (`oplog.redo`).
     Redo,
+    /// MCP: serve this collection to Claude Desktop / Claude Code, probe external servers.
+    #[command(subcommand)]
+    Mcp(mcp::McpCommand),
     /// Invoke any public API method with JSON params, e.g.
     /// `fc call decks.rename '{"id":"…","name":"X"}'`. Prints the JSON response.
     Call {
@@ -110,6 +120,81 @@ enum DeckCommand {
     Restore {
         /// Deck id.
         id: fc_core::DeckId,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum PluginCommand {
+    /// List installed plugins (`plugins.list`).
+    List,
+    /// Show what a package is and asks for, without installing (`plugins.inspect`).
+    Inspect {
+        /// `.fcplugin` file.
+        path: PathBuf,
+    },
+    /// Install or update from a package file (`plugins.install`). Nothing is granted unless
+    /// asked: `--grant` per permission, or `--grant-all`.
+    Install {
+        /// `.fcplugin` file.
+        path: PathBuf,
+        /// Permission to grant (repeatable).
+        #[arg(long = "grant", conflicts_with = "grant_all")]
+        grant: Vec<String>,
+        /// Grant everything the plugin asks for (sensitive ones included).
+        #[arg(long)]
+        grant_all: bool,
+    },
+    /// Uninstall (`plugins.uninstall`; undoable).
+    Uninstall {
+        /// Plugin id.
+        id: String,
+        /// Also delete its storage and settings.
+        #[arg(long)]
+        delete_data: bool,
+    },
+    /// Turn a plugin on (`plugins.set_enabled`).
+    Enable {
+        /// Plugin id.
+        id: String,
+    },
+    /// Turn a plugin off (`plugins.set_enabled`).
+    Disable {
+        /// Plugin id.
+        id: String,
+    },
+    /// Set exactly which requested permissions are granted (`plugins.set_permissions`); none
+    /// listed = revoke all.
+    Grant {
+        /// Plugin id.
+        id: String,
+        /// Permissions to grant.
+        permissions: Vec<String>,
+    },
+    /// Recent log lines of a plugin (`plugins.logs`).
+    Logs {
+        /// Plugin id.
+        id: String,
+    },
+    /// Run a contributed command (`plugins.run`); prints its JSON result.
+    Run {
+        /// Plugin id.
+        id: String,
+        /// Command id.
+        command: String,
+        /// JSON params (default `null`).
+        params: Option<String>,
+    },
+    /// Pack a plugin folder (`plugin.toml`, its WASM entry, settings, locales) into a
+    /// `.fcplugin` file. Local only; checks the manifest like an install would.
+    Pack {
+        /// Plugin folder.
+        dir: PathBuf,
+        /// WASM file to use instead of the manifest's `entry`.
+        #[arg(long)]
+        wasm: Option<PathBuf>,
+        /// Output file (default `<dir>/<id>-<version>.fcplugin`).
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
 }
 
@@ -367,41 +452,92 @@ impl Command {
                     OptionCommand::Delete { .. } => m::AttributesOptionDelete::NAME,
                 },
             },
+            Command::Plugin(c) => match c {
+                PluginCommand::List => m::PluginsList::NAME,
+                PluginCommand::Inspect { .. } => m::PluginsInspect::NAME,
+                PluginCommand::Install { .. } => m::PluginsInstall::NAME,
+                PluginCommand::Uninstall { .. } => m::PluginsUninstall::NAME,
+                PluginCommand::Enable { .. } | PluginCommand::Disable { .. } => {
+                    m::PluginsSetEnabled::NAME
+                }
+                PluginCommand::Grant { .. } => m::PluginsSetPermissions::NAME,
+                PluginCommand::Logs { .. } => m::PluginsLogs::NAME,
+                PluginCommand::Run { .. } => m::PluginsRun::NAME,
+                PluginCommand::Pack { .. } => "plugin.pack",
+            },
             Command::Undo => m::OplogUndo::NAME,
             Command::Redo => m::OplogRedo::NAME,
+            Command::Mcp(mcp::McpCommand::Serve { .. }) => m::McpToolsList::NAME,
+            // A CLI-only probe (registered or ad-hoc server), not an API method — like `plugin.pack`.
+            Command::Mcp(mcp::McpCommand::Tools { .. }) => "mcp.tools",
             Command::Call { method, .. } => method,
         }
     }
 }
 
-fn report(method: &str, e: &ApiError, json: bool) {
-    if json {
-        let body = serde_json::to_string_pretty(e).unwrap_or_else(|_| e.message.clone());
-        eprintln!("{body}");
-    } else {
-        eprintln!("fc: {method}: {}: {}", e.code, e.message);
+/// Writes `text` + newline, ignoring a closed pipe (`fc … | head`): the reader is gone, which
+/// is not an error worth a panic or a message. Any other failure is returned.
+fn write_line(mut out: impl std::io::Write, text: &str) -> std::io::Result<()> {
+    match writeln!(out, "{text}").and_then(|()| out.flush()) {
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        other => other,
     }
 }
 
+fn report(method: &str, e: &ApiError, json: bool) {
+    let text = if json {
+        serde_json::to_string_pretty(e).unwrap_or_else(|_| e.message.clone())
+    } else {
+        format!("fc: {method}: {}: {}", e.code, e.message)
+    };
+    // Nowhere left to report to if stderr itself is closed.
+    let _ = write_line(std::io::stderr(), &text);
+}
+
 fn main() -> ExitCode {
+    // Before anything else (single-threaded): no shell variable changes behavior.
+    fc_app::system::pin_process_env();
     let cli = Cli::parse();
-    let app = match App::open_sqlite(&cli.db) {
+    if let Command::Mcp(mcp::McpCommand::Serve { read_only }) = &cli.command {
+        // stdout belongs to the protocol: errors go to stderr only.
+        return match mcp::serve(&cli.db, *read_only) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                report(cli.command.method(), &e, cli.json);
+                ExitCode::FAILURE
+            }
+        };
+    }
+    // Next to a running desktop app: an existing current collection is only attached (its
+    // jobs and import groups stay untouched); an old schema is refused unless `--migrate`.
+    let app = match App::open_sqlite_shared(&cli.db, cli.migrate) {
         Ok(app) => app,
         Err(e) => {
             report(cli.command.method(), &e.into_api(), cli.json);
             return ExitCode::from(2);
         }
     };
+    // AI provider keys: the same OS keychain entries as the desktop app (v0.8).
+    app.set_secret_store(std::sync::Arc::new(fc_ai::secrets::OsKeychain::new(
+        fc_ai::secrets::SERVICE,
+    )));
     let ctx = commands::Ctx {
         app: &app,
         json: cli.json,
         text: i18n::Catalog::new(cli.lang.unwrap_or_else(|| app.locale())),
     };
     match commands::run(&ctx, &cli.command, &mut std::io::stdin().lock()) {
-        Ok(text) => {
-            println!("{text}");
-            ExitCode::SUCCESS
-        }
+        Ok(text) => match write_line(std::io::stdout().lock(), &text) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                report(
+                    cli.command.method(),
+                    &ApiError::new(fc_api::ErrorCode::IoFile, e.to_string()),
+                    cli.json,
+                );
+                ExitCode::FAILURE
+            }
+        },
         Err(e) => {
             report(cli.command.method(), &e, cli.json);
             ExitCode::FAILURE

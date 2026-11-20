@@ -173,4 +173,8 @@ domains! {
     content => ContentState,
     interop,
     search => SearchState,
+    mcp => McpState,
+    stats => StatsState,
+    ai => AiState,
+    plugins => PluginState,
 }

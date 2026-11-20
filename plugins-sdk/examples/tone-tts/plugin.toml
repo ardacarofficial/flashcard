@@ -1,0 +1,12 @@
+id = "com.example.tone"
+name = "Tone voice"
+version = "1.0.0"
+api_version = "1"
+authors = ["Flashcard"]
+description = "A TTS provider that 'speaks' as a sine tone (one beep per character): shows the provider contract offline."
+min_app_version = "0.7.0"
+permissions = ["tts:provide"]
+
+[contributes]
+tts = ["tone"]
+locales = "locales"

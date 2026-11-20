@@ -391,6 +391,7 @@ fn list_card_types(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<CardTypeList> {
         card_types: ctx
             .registry
             .card_types()
+            .into_iter()
             .map(|e| {
                 let info = e.info();
                 CardTypeDto {

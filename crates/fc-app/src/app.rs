@@ -4,9 +4,10 @@ use crate::error::{AppError, AppResult};
 use crate::events::{EventBus, InMemoryEventBus};
 use crate::handler::{CommandCtx, PendingOplogEntry, QueryCtx};
 use crate::jobs::Invoker;
+use crate::modules::plugins::{Hooks, PluginHost};
 use crate::registry::{
-    ensure_invocable, run_recorded, unknown_method, ErasedCommand, ErasedHandler, Registry,
-    RegistryError,
+    ensure_access, ensure_invocable, run_recorded, unknown_method, ErasedCommand, ErasedHandler,
+    Registry, RegistryError,
 };
 use crate::settings::SettingsSchema;
 use crate::system::{OsRng, SystemClock};
@@ -18,7 +19,7 @@ use fc_api::v1::events::EventEnvelope;
 use fc_api::v1::jobs::{JobRef, JobStatus};
 use fc_api::v1::methods::JobsCancel;
 use fc_api::v1::oplog::{Actor, OplogKind};
-use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest};
+use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest, Visibility};
 use fc_core::i18n::Locale;
 use fc_core::notetype::builtin;
 use fc_core::settings::SettingScope;
@@ -72,6 +73,10 @@ pub struct App {
     writers_waiting: AtomicUsize,
     /// Folder of the collection file (`None` until known; see [`App::data_dir`]).
     data_dir: OnceLock<PathBuf>,
+    /// Oplog position this process has accounted for (see [`App::poll_external_changes`]).
+    oplog_seen: Mutex<Option<i64>>,
+    /// Plugin runtime: loaded plugins, hooks, UI sessions (v0.7).
+    plugins: PluginHost,
 }
 
 /// Where a command's oplog entries go.
@@ -135,7 +140,7 @@ fn part_inverses(entries: &[PendingOplogEntry]) -> AppResult<Value> {
 
 /// The rollback call of a marker with its parts' inverses filled in (newest first) as
 /// `params.calls`.
-fn rollback_request(rollback: &Value, parts: &[Value]) -> AppResult<InvokeRequest> {
+pub(crate) fn rollback_request(rollback: &Value, parts: &[Value]) -> AppResult<InvokeRequest> {
     let internal = |e: serde_json::Error| AppError::api(ErrorCode::Internal, e.to_string());
     let mut calls: Vec<InvokeRequest> = Vec::new();
     for part in parts.iter().rev() {
@@ -203,6 +208,8 @@ impl App {
             jobs: crate::jobs::JobRuntime::default(),
             writers_waiting: AtomicUsize::new(0),
             data_dir: OnceLock::new(),
+            oplog_seen: Mutex::new(None),
+            plugins: PluginHost::default(),
         })
     }
 
@@ -229,9 +236,13 @@ impl App {
         tx.commit()?;
         self.reload_cached_state()?;
         self.roll_back_unfinished_groups()?;
+        // Plugins load best effort: a broken plugin is reported on its row, never blocks.
+        self.plugins.reload(self);
         // Best effort: an expired-trash purge that fails must not keep the collection closed
         // (it runs again next start, and the user can run `browse.purge_trash`).
         let _ = crate::modules::browse::purge_on_startup(self);
+        // Position from which other processes' commits count as news.
+        self.poll_external_changes()?;
         Ok(())
     }
 
@@ -283,6 +294,89 @@ impl App {
         Ok(app)
     }
 
+    /// Like [`App::open_sqlite`] for an existing collection that must **not** be migrated
+    /// (secondary processes such as `fc mcp serve`): an older schema is refused with
+    /// `IO_DATABASE` ("must be migrated by the app first"), never upgraded behind the app's back.
+    /// It only [attaches](App::attach_state): the app that owns the file may be running.
+    pub fn open_sqlite_current(path: &std::path::Path) -> AppResult<Self> {
+        let store = Arc::new(fc_storage::SqliteStore::open_current(path)?);
+        let app = Self::new(AppDeps::with_store(store))
+            .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+        if let Some(dir) = path.parent() {
+            app.set_data_dir(dir.to_path_buf());
+        }
+        app.attach_state()?;
+        Ok(app)
+    }
+
+    /// Opens the collection for a process that may run next to the desktop app (the CLI): a
+    /// missing file is created (migrated, seeded: [`App::open_sqlite`]); an existing current
+    /// one is only [attached](App::attach_state), so the running app's jobs and import groups
+    /// stay untouched. An older schema is migrated only when `allow_migrate` is set —
+    /// otherwise it is refused (`IO_DATABASE`), never upgraded behind the app's back.
+    pub fn open_sqlite_shared(path: &std::path::Path, allow_migrate: bool) -> AppResult<Self> {
+        if !path.is_file() {
+            return Self::open_sqlite(path);
+        }
+        match Self::open_sqlite_current(path) {
+            Err(AppError::Storage(fc_storage::StorageError::NeedsMigration { .. }))
+                if allow_migrate =>
+            {
+                Self::open_sqlite(path)
+            }
+            other => other,
+        }
+    }
+
+    /// Startup of a **secondary** process on a collection the app owns (`fc mcp serve`): loads
+    /// module switches and the locale and records the oplog position — and writes nothing.
+    /// [`App::load_state`]'s startup work belongs to the owning app alone: in a second process
+    /// it would mark the app's running jobs interrupted, roll back an import still in progress
+    /// as if it had crashed, and purge the trash (a history barrier the user did not ask for).
+    pub fn attach_state(&self) -> AppResult<()> {
+        self.reload_cached_state()?;
+        self.poll_external_changes()?;
+        Ok(())
+    }
+
+    /// Notices commits other processes made (the CLI, `fc mcp serve`, …): when oplog entries
+    /// appeared since the last call whose actor is not this app's own (`user`/`system`), it
+    /// reloads the cached module/locale state and publishes [`DomainEvent::DataChanged`], so
+    /// open screens refetch. Returns whether it did. Cheap when nothing changed (one
+    /// `max(rowid)`): the desktop calls it on a timer and when its window gets focus. The
+    /// first call only records the position.
+    pub fn poll_external_changes(&self) -> AppResult<bool> {
+        let tx = self.store.read()?;
+        let now = tx.oplog_watermark()?;
+        let mut seen = self
+            .oplog_seen
+            .lock()
+            .map_err(|_| AppError::api(ErrorCode::Internal, "oplog watermark poisoned"))?;
+        let Some(before) = *seen else {
+            *seen = Some(now);
+            return Ok(false);
+        };
+        if now == before {
+            return Ok(false);
+        }
+        // Fewer entries than before: the log was replaced (restore) — treat as foreign.
+        let foreign = now < before
+            || tx.oplog_actors_after(before)?.iter().any(|a| {
+                !matches!(
+                    serde_json::from_value::<Actor>(a.clone()),
+                    Ok(Actor::User | Actor::System)
+                )
+            });
+        *seen = Some(now);
+        drop(seen);
+        drop(tx);
+        if foreign {
+            self.reload_cached_state()?;
+            self.publish(vec![DomainEvent::DataChanged], None);
+        }
+        Ok(foreign)
+    }
+
     /// Re-reads module switches and the locale from storage into the in-memory caches.
     pub fn reload_cached_state(&self) -> AppResult<()> {
         let tx = self.store.read()?;
@@ -301,6 +395,16 @@ impl App {
             |e| matches!(e, DomainEvent::JobProgress { job } if job.status == JobStatus::Queued),
         ) {
             self.jobs.notify();
+        }
+        let plugins = events.iter().any(|e| match e {
+            DomainEvent::PluginsChanged { .. } | DomainEvent::CollectionReplaced => true,
+            DomainEvent::SettingChanged { scope, key } => {
+                *scope == SettingScope::App && key.starts_with("plugins.")
+            }
+            _ => false,
+        });
+        if plugins {
+            self.plugins.reload(self);
         }
         let relevant = events.iter().any(|e| match e {
             DomainEvent::ModuleToggled { .. } | DomainEvent::CollectionReplaced => true,
@@ -359,6 +463,17 @@ impl App {
             };
             self.events.publish(&envelope);
         }
+    }
+
+    /// The plugin host.
+    pub(crate) fn plugins(&self) -> &PluginHost {
+        &self.plugins
+    }
+
+    /// Installs the native file dialog that serves plugins' `fs:pick` (the desktop shell
+    /// sets one; without it `fs.open`/`fs.save` report `PROVIDER_UNAVAILABLE`).
+    pub fn set_file_picker(&self, picker: Arc<dyn crate::modules::plugins::FilePicker>) {
+        self.plugins.set_file_picker(picker);
     }
 
     /// The registry (for `commands.list`, transports and tests).
@@ -448,11 +563,49 @@ impl App {
         actor: &Actor,
         trusted: bool,
     ) -> AppResult<Value> {
+        let hooks = if trusted {
+            Hooks::Off
+        } else {
+            Hooks::Run { skip: None }
+        };
+        self.invoke_hooked(method, params, actor, trusted, hooks)
+    }
+
+    /// [`App::invoke_inner`] with an explicit plugin hook policy (v0.7): client calls run
+    /// `before:`/`after:` hooks and deliver queued events to plugins; plugins' own host calls
+    /// choose their policy (see `modules::plugins`).
+    pub(crate) fn invoke_hooked(
+        &self,
+        method: &str,
+        params: Value,
+        actor: &Actor,
+        trusted: bool,
+        hooks: Hooks<'_>,
+    ) -> AppResult<Value> {
+        // The outermost dispatch on this thread is one user action (hook budget, v0.7).
+        let _action = self.plugins.begin_action(self);
         let name = parse_qualified_name(method).ok_or_else(|| unknown_method(method))?;
-        let entry = self
-            .registry
-            .entry(name)
-            .ok_or_else(|| unknown_method(method))?;
+        let Some(entry) = self.registry.entry(name) else {
+            // Methods registered at runtime (plugin commands): run outside a transaction.
+            let (m, handler) = self
+                .registry
+                .dynamic_entry(name)
+                .ok_or_else(|| unknown_method(method))?;
+            if !trusted {
+                ensure_access(
+                    &self.registry,
+                    &m.qualified_name(),
+                    Visibility::Public,
+                    &m.permission,
+                    &m.module,
+                    actor,
+                    self.is_module_enabled(&m.module),
+                )?;
+            }
+            let result = handler.invoke(params, self, actor);
+            self.plugins.after_operation(self);
+            return result;
+        };
         let d = &entry.descriptor;
         if trusted {
             if !self.is_module_enabled(d.module) {
@@ -465,7 +618,7 @@ impl App {
                 ));
             }
         } else {
-            ensure_invocable(d, actor, self.is_module_enabled(d.module))?;
+            ensure_invocable(&self.registry, d, actor, self.is_module_enabled(d.module))?;
         }
         if name == JobsCancel::NAME {
             // Signal a running job before waiting for the writer it may be holding.
@@ -485,8 +638,34 @@ impl App {
                 };
                 h.run(params, &ctx)
             }
+            ErasedHandler::Action(h) => {
+                h.validate(&params)?;
+                let result = h.run(params, self, actor);
+                self.plugins.after_operation(self);
+                result
+            }
             ErasedHandler::Command(h) => {
-                self.run_command(h.as_ref(), d, method, params, actor, OplogMode::Write, true)
+                let Hooks::Run { skip } = hooks else {
+                    return self.run_command(
+                        h.as_ref(),
+                        d,
+                        method,
+                        params,
+                        actor,
+                        OplogMode::Write,
+                        true,
+                    );
+                };
+                let params = self.plugins.before_hooks(self, name, params, actor, skip)?;
+                let kept = self.plugins.has_after_hooks(name).then(|| params.clone());
+                let response =
+                    self.run_command(h.as_ref(), d, method, params, actor, OplogMode::Write, true)?;
+                if let Some(params) = kept {
+                    self.plugins
+                        .after_hooks(self, name, &params, &response, actor);
+                }
+                self.plugins.after_operation(self);
+                Ok(response)
             }
         }
     }
@@ -702,7 +881,7 @@ impl App {
                 }
                 group.pending.extend(oplog);
                 drop(ids);
-                self.after_commit(events, now, batch_id);
+                self.after_commit(events, now, batch_id, actor);
                 return Ok(response);
             }
             OplogMode::Discard(group) => {
@@ -713,12 +892,19 @@ impl App {
         }
         tx.commit()?;
         drop(ids);
-        self.after_commit(events, now, batch_id);
+        self.after_commit(events, now, batch_id, actor);
         Ok(response)
     }
 
-    fn after_commit(&self, events: Vec<DomainEvent>, now: fc_core::Timestamp, batch_id: BatchId) {
+    fn after_commit(
+        &self,
+        events: Vec<DomainEvent>,
+        now: fc_core::Timestamp,
+        batch_id: BatchId,
+        actor: &Actor,
+    ) {
         self.apply_committed(&events);
+        self.plugins.queue_events(&events, actor);
         for event in events {
             let envelope = EventEnvelope {
                 seq: self.event_seq.fetch_add(1, Ordering::SeqCst),

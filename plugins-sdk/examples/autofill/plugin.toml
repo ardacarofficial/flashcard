@@ -1,0 +1,13 @@
+id = "com.example.autofill"
+name = "Auto fill"
+version = "1.0.0"
+api_version = "1"
+authors = ["Flashcard"]
+description = "Fills an empty field from a small glossary when a note is created (before:notes.create hook)."
+min_app_version = "0.7.0"
+permissions = ["hooks:before:notes.create", "notes:write", "notes:read", "notetypes:read", "ui:command", "storage:kv"]
+
+[contributes]
+commands = ["filled-count"]
+settings = "settings.schema.json"
+locales = "locales"

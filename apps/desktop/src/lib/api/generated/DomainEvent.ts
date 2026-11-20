@@ -12,6 +12,7 @@ import type { JobDto } from "./JobDto";
 import type { JobId } from "./JobId";
 import type { NoteId } from "./NoteId";
 import type { NoteTypeId } from "./NoteTypeId";
+import type { PluginNotice } from "./PluginNotice";
 import type { SettingScope } from "./SettingScope";
 
 /**
@@ -117,11 +118,19 @@ job_id: JobId,
 /**
  * Notes added or updated.
  */
-notes: number, } } | { "type": "collection_replaced" } | { "type": "cards_changed", "data": { 
+notes: number, } } | { "type": "collection_replaced" } | { "type": "data_changed" } | { "type": "cards_changed", "data": { 
 /**
  * Cards.
  */
-ids: Array<CardId>, } } | { "type": "saved_queries_changed" } | { "type": "presets_changed" } | { "type": "undone", "data": { 
+ids: Array<CardId>, } } | { "type": "saved_queries_changed" } | { "type": "presets_changed" } | { "type": "exams_changed" } | { "type": "goals_changed" } | { "type": "ai_config_changed" } | { "type": "ai_partial", "data": { 
+/**
+ * Job.
+ */
+job_id: JobId, 
+/**
+ * Text so far.
+ */
+text: string, } } | { "type": "undone", "data": { 
 /**
  * Batch reverted.
  */
@@ -137,7 +146,32 @@ reverted_batch_id: BatchId,
 /**
  * Summary.
  */
-summary: I18nMessage, } } | { "type": "study_cards_changed", "data": { 
+summary: I18nMessage, } } | { "type": "plugins_changed", "data": { 
+/**
+ * Plugin id.
+ */
+plugin_id: string, 
+/**
+ * Disabled by the app after repeated failures (notify the user).
+ */
+auto_disabled: boolean, 
+/**
+ * With `auto_disabled`: why, when it was not repeated failures (an i18n key;
+ * none = repeated failures).
+ */
+reason: I18nMessage | null, } } | { "type": "plugin_hooks_skipped", "data": { 
+/**
+ * Plugins whose hooks were cut short.
+ */
+plugin_ids: Array<string>, 
+/**
+ * What to tell the user (`plugins.notice.hooks_skipped`; params `max`, `ms`).
+ */
+notice: I18nMessage, } } | { "type": "plugin_notice", "data": { 
+/**
+ * The notice.
+ */
+notice: PluginNotice, } } | { "type": "study_cards_changed", "data": { 
 /**
  * Cards.
  */

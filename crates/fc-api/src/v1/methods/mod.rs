@@ -88,4 +88,10 @@ domains! {
     bulk,
     presets,
     browse,
+    mcp,
+    stats,
+    planning,
+    ai,
+    plugins,
+    tts,
 }

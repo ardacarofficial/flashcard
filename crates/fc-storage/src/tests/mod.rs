@@ -4,14 +4,18 @@
 //! pool); a few use the in-memory store. Raw `rusqlite` connections are used only to
 //! inspect the schema and the FTS index.
 
+mod ai;
 mod attributes;
 mod content;
 mod decks;
 mod interop;
+mod mcp;
 mod migrations;
 mod misc;
 mod notes;
+mod plugins;
 mod search;
+mod stats;
 mod store;
 mod study;
 mod tags;

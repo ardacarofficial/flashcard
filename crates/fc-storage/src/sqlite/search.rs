@@ -804,7 +804,8 @@ impl SearchWrite for SqliteTx<'_, WriteMode> {
                WHERE deleted_at IS NOT NULL AND deleted_at < ?1 AND fts_rowid IS NOT NULL)",
             [t],
         )?;
-        // Cards, review history, tag links and note links cascade.
+        // Cards, tag links and note links cascade; review history stays (0501: `review_log`
+        // has no foreign key, statistics and the optimizer keep it).
         let notes = exec(
             conn,
             "notes",

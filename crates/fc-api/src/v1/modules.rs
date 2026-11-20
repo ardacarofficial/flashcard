@@ -18,6 +18,11 @@ pub enum UiSlot {
     DeckAction,
     /// Context action on a note.
     NoteAction,
+    /// A panel in the sidebar (v0.7, plugins).
+    SidebarPanel,
+    /// A button under the card in study and preview (v0.7, plugins); `method` runs with
+    /// `{card_id}`.
+    CardToolbar,
 }
 
 /// One UI contribution.

@@ -139,6 +139,9 @@ pub enum DomainEvent {
     },
     /// The whole collection was replaced (backup restored): refetch everything.
     CollectionReplaced,
+    /// Another process (the CLI, an MCP client…) changed the collection while the app was
+    /// open: refetch whatever is on screen.
+    DataChanged,
     /// Scheduling/deck/flag/suspension columns of these cards changed (bulk operations).
     CardsChanged {
         /// Cards.
@@ -148,6 +151,21 @@ pub enum DomainEvent {
     SavedQueriesChanged,
     /// Presets or deck preset assignments changed (refetch `presets.list`).
     PresetsChanged,
+    /// Exam dates changed (refetch `planning.exams.list`; v0.6).
+    ExamsChanged,
+    /// Goals changed (refetch `goals.list`; v0.6).
+    GoalsChanged,
+    /// AI providers, routes or prices changed (refetch `ai.*` lists; v0.8). Never carries a key.
+    AiConfigChanged,
+    /// Output of a running `ai.request` job so far (streamed explanations and hints, v0.8):
+    /// the whole text received until now, so a missed event loses nothing. The job's result
+    /// is still the final word.
+    AiPartial {
+        /// Job.
+        job_id: JobId,
+        /// Text so far.
+        text: String,
+    },
     /// A batch was undone.
     Undone {
         /// Batch reverted.
@@ -161,6 +179,31 @@ pub enum DomainEvent {
         reverted_batch_id: BatchId,
         /// Summary.
         summary: I18nMessage,
+    },
+    /// Plugins were installed, updated, removed, switched or re-granted, or one was disabled
+    /// automatically (refetch `plugins.list`, `modules.list`, `plugins.locales`; v0.7).
+    PluginsChanged {
+        /// Plugin id.
+        plugin_id: String,
+        /// Disabled by the app after repeated failures (notify the user).
+        auto_disabled: bool,
+        /// With `auto_disabled`: why, when it was not repeated failures (an i18n key;
+        /// none = repeated failures).
+        #[serde(default)]
+        reason: Option<I18nMessage>,
+    },
+    /// Some plugins' hook budgets for one action ran out: their remaining hooks in that action
+    /// were skipped (nobody is switched off; one event per action, v0.7).
+    PluginHooksSkipped {
+        /// Plugins whose hooks were cut short.
+        plugin_ids: Vec<String>,
+        /// What to tell the user (`plugins.notice.hooks_skipped`; params `max`, `ms`).
+        notice: I18nMessage,
+    },
+    /// A plugin asked to show a notice (`host.ui.notify`, v0.7).
+    PluginNotice {
+        /// The notice.
+        notice: super::plugins::PluginNotice,
     },
     /// Study changed cards' scheduling or visibility (answer, suspend, bury, postpone and
     /// their undo): deck counts are stale.

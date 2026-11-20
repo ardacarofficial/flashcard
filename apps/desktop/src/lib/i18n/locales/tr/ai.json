@@ -1,0 +1,263 @@
+{
+  "nav": {
+    "ai": "Yapay zeka"
+  },
+  "modules": {
+    "ai": {
+      "name": "Yapay zeka",
+      "description": "Claude, OpenAI ya da yerel bir modelle metinden kart, açıklama, ipucu, cevap kontrolü ve kart iyileştirme. Her istek gönderilmeden önce gösterilir."
+    }
+  },
+  "ai": {
+    "tabs": {
+      "generate": "Kart üret",
+      "providers": "Sağlayıcılar",
+      "usage": "Kullanım"
+    },
+    "kind": {
+      "anthropic": "Anthropic Claude",
+      "openai": "OpenAI",
+      "openai_compatible": "OpenAI uyumlu",
+      "ollama": "Ollama (yerel)"
+    },
+    "feature": {
+      "generate_cards": "Kart üretme",
+      "fill_fields": "Alan doldurma",
+      "explain": "Açıklama",
+      "hint": "İpucu",
+      "check_answer": "Cevap kontrolü",
+      "improve": "Kart iyileştirme",
+      "rewrite_leech": "Zor kartı yeniden yazma",
+      "distractors": "Çeldiriciler"
+    },
+    "preview": {
+      "heading": "Göndermeden önce",
+      "summary": "{provider} · {model} · {items} öğe gönderilecek.",
+      "estimate": "Yaklaşık {tokens} girdi token'ı, en çok {max} çıktı token'ı.",
+      "cost": "En çok {cost}.",
+      "cost_unknown": "Bu modelin fiyatı yok.",
+      "local": "Bu model senin bilgisayarında çalışıyor.",
+      "missing_key": "Bu sağlayıcı API anahtarı istiyor. Sağlayıcılar sekmesinden ekle.",
+      "show": "Gönderilecek her şeyi göster",
+      "system": "Talimatlar",
+      "message": "Mesaj",
+      "images": "{count} görsel",
+      "send": "Gönder",
+      "cancel": "Vazgeç"
+    },
+    "budget": {
+      "exceeded": "Bu, {limit} aylık bütçeni aşıyor.",
+      "warning": "{limit} aylık bütçene yaklaştın.",
+      "status": "Bu ay {spent} / {limit}.",
+      "none": "Aylık bütçe yok (Ayarlar → Yapay zeka)."
+    },
+    "generate": {
+      "pick_deck": "Önce bir deste seç.",
+      "notetype": "Not türü",
+      "source": "Kaynak",
+      "source_hint": "Kart yapılacak metni yapıştır",
+      "count": "Kaç tane",
+      "instructions": "Ek talimat",
+      "instructions_hint": "ör. fiillere odaklan",
+      "preview": "Önizle",
+      "truncated": "Cevap yarıda kesildi; istenenden az not olabilir.",
+      "added": "{count} not eklendi, {skipped} atlandı.",
+      "drafts": "{count} öneri",
+      "spent": "Bu istek yaklaşık {cost} tuttu.",
+      "keep": "Ekle",
+      "add": "{count} notu ekle"
+    },
+    "providers": {
+      "heading": "Sağlayıcılar",
+      "none": "Henüz sağlayıcı yok. Claude, OpenAI ya da yerel bir model ekle.",
+      "no_keychain": "Sistem anahtar zinciri yok: API anahtarları burada saklanamaz.",
+      "default": "varsayılan",
+      "local": "yerel",
+      "base_url": "Adres",
+      "model": "Model",
+      "key": "API anahtarı",
+      "key_set": "API anahtarı sistem anahtar zincirinde.",
+      "key_missing": "Henüz API anahtarı yok.",
+      "key_saved": "Anahtar sistem anahtar zincirine kaydedildi.",
+      "save_key": "Anahtarı kaydet",
+      "remove_key": "Anahtarı kaldır",
+      "refresh": "Modelleri yenile",
+      "refreshing": "Model listesi alınıyor…",
+      "make_default": "Varsayılan yap",
+      "delete": "Kaldır",
+      "kind": "Tür",
+      "add": "Sağlayıcı ekle",
+      "session_keychain": "Bu sistemde anahtarlar yalnızca bu oturum boyunca saklanır (oturumu kapatınca silinebilir). Yeniden girmen gerekebilir.",
+      "move_key": "Yeni adres: {url}. Eski adres için kayıtlı bir API anahtarı var. Yeni adrese de gönderilsin mi?",
+      "move_remove_key": "Değiştir, anahtarı sil",
+      "move_keep_key": "Değiştir, anahtarı koru"
+    },
+    "routes": {
+      "heading": "Özellik başına model",
+      "intro": "Ör. kart üretimi için güçlü, kontrol için hızlı bir model kullan.",
+      "provider": "Sağlayıcı",
+      "default": "Varsayılan sağlayıcı",
+      "model": "Model",
+      "model_default": "Sağlayıcının modeli"
+    },
+    "prices": {
+      "heading": "Fiyatlar",
+      "intro": "Milyon token başına USD; tahminler için. Sağlayıcılar fiyat değiştirir: güncel tut.",
+      "model": "Model",
+      "input": "Girdi",
+      "output": "Çıktı",
+      "delete": "Kaldır",
+      "save": "Kaydet"
+    },
+    "usage": {
+      "month": "Bu ay",
+      "week": "Son 7 gün",
+      "line": "{requests} istek · {input} girdi / {output} çıktı token'ı · {cost}",
+      "by_feature": "Özelliğe göre (bu ay)",
+      "by_model": "Modele göre (bu ay)",
+      "empty": "Henüz AI isteği yok.",
+      "estimate_note": "Maliyetler fiyat tablosundan tahmindir."
+    },
+    "job": {
+      "connecting": "Bağlanıyor…",
+      "waiting": "Cevap bekleniyor…",
+      "repairing": "Cevap biçimi düzeltiliyor…",
+      "reading_source": "Kaynak okunuyor…"
+    },
+    "source": {
+      "from": "Kaynak",
+      "text": "Metin",
+      "pdf": "PDF",
+      "url": "Web sayfası",
+      "choose_pdf": "PDF seç…",
+      "pdf_prompt": "PDF dosyasının yolu",
+      "from_page": "Sayfa",
+      "to_page": "ile",
+      "read_pages": "Sayfaları oku",
+      "url_label": "Web sayfası adresi",
+      "fetch": "Metni al",
+      "url_note": "Yalnızca sayfanın metni okunur, betik çalıştırılmaz. Önizleyip gönderene kadar AI'ya hiçbir şey gitmez.",
+      "pages_read": "{count} sayfadan {from}–{to} arası. Aşağıdaki metni dilediğin gibi düzenle.",
+      "page_read": "“{title}” metni. Aşağıda dilediğin gibi düzenle.",
+      "truncated": "Metin uzun olduğu için kısaltıldı. Daha az sayfa ya da daha kısa bir bölüm seç.",
+      "url_placeholder": "https://…"
+    },
+    "study": {
+      "hint": "AI ipucu",
+      "explain": "Açıkla",
+      "check": "AI ile kontrol et",
+      "verdict": {
+        "correct": "Doğru",
+        "almost": "Neredeyse",
+        "wrong": "Pek değil"
+      }
+    }
+  },
+  "errors": {
+    "validation": {
+      "ai_provider": "Sağlayıcının adını, adresini ya da modelini kontrol et.",
+      "ai_key": "API anahtarı hatalı görünüyor (boş, çok uzun ya da boşluklu).",
+      "ai_task": "Bu istek bu haliyle gönderilemez.",
+      "ai_price": "Fiyatlar 0'dan büyük sayı olmalı, model adı da gerekli.",
+      "ai_source": "Bu kaynak kullanılamıyor (adresi, dosyayı ya da sayfaları kontrol et)."
+    },
+    "not_found": {
+      "ai_provider": "AI sağlayıcısı bulunamadı."
+    },
+    "conflict": {
+      "ai_no_provider": "Henüz AI sağlayıcısı yok. Yapay zeka → Sağlayıcılar'dan ekle.",
+      "ai_no_model": "Bu sağlayıcı için bir model seç.",
+      "ai_preview_stale": "Önizlemeden sonra bir şey değişti. Yeniden önizle."
+    },
+    "provider": {
+      "ai_unauthorized": "Sağlayıcı API anahtarını kabul etmedi (ya da anahtar yok).",
+      "ai_rate_limited": "İstek sınırına ulaşıldı. Biraz sonra dene.",
+      "ai_invalid_request": "Sağlayıcı isteği reddetti.",
+      "ai_invalid_output": "Cevap beklenen biçimde değildi.",
+      "ai_keychain": "Sistem anahtar zinciri kullanılamıyor.",
+      "ai_source": "Web sayfası alınamadı. Biraz sonra tekrar dene."
+    }
+  },
+  "settings": {
+    "ai": {
+      "monthly_budget_usd": {
+        "label": "Aylık AI bütçesi (USD)",
+        "description": "Bu ayın tahmini maliyeti yaklaşınca uyarır. 0 = bütçe yok."
+      },
+      "request_timeout_secs": {
+        "label": "AI istek zaman aşımı (saniye)",
+        "description": "Cevap için ne kadar beklenir."
+      },
+      "web": {
+        "allow_private_hosts": {
+          "label": "Yerel ağdaki sayfalara izin ver",
+          "description": "Varsayılan kapalı: web adresinden kart üretirken bu bilgisayardaki veya yerel ağdaki sayfalar (localhost, 192.168.x.x, …) engellenir."
+        }
+      },
+      "max_retries": {
+        "label": "AI yeniden deneme",
+        "description": "Sınıra takılan ya da ulaşılamayan istek kaç kez yeniden denenir."
+      },
+      "prompt": {
+        "description": "Bu özellik için gönderilen talimat; çift süslü parantezli kısımlar doldurulur. İstek her zaman göndermeden önce gösterilir.",
+        "generate_cards": {
+          "label": "İstem: kart üretme"
+        },
+        "fill_fields": {
+          "label": "İstem: alan doldurma"
+        },
+        "explain": {
+          "label": "İstem: açıklama"
+        },
+        "hint": {
+          "label": "İstem: ipucu"
+        },
+        "check_answer": {
+          "label": "İstem: cevap kontrolü"
+        },
+        "improve": {
+          "label": "İstem: kart iyileştirme"
+        },
+        "rewrite_leech": {
+          "label": "İstem: zor kartı yeniden yazma"
+        },
+        "distractors": {
+          "label": "İstem: çeldiriciler"
+        }
+      }
+    }
+  },
+  "commands": {
+    "ai": {
+      "providers": {
+        "list": "AI sağlayıcıları",
+        "create": "AI sağlayıcısı ekle",
+        "update": "AI sağlayıcısını düzenle",
+        "delete": "AI sağlayıcısını kaldır",
+        "set_key": "AI API anahtarını ayarla",
+        "refresh_models": "AI modellerini yenile"
+      },
+      "routes": {
+        "list": "Özellik başına AI modeli",
+        "set": "Bir özelliğin AI modelini ayarla"
+      },
+      "prices": {
+        "list": "AI fiyatları",
+        "set": "AI fiyatı ayarla",
+        "delete": "AI fiyatını kaldır"
+      },
+      "usage": {
+        "summary": "AI kullanımı"
+      },
+      "preview": "AI isteğini önizle",
+      "run": "AI isteğini gönder",
+      "notes": {
+        "add": "AI notlarını ekle",
+        "update": "AI önerisini uygula"
+      },
+      "sources": {
+        "extract": "Kart kaynağı oku (PDF, web sayfası)"
+      }
+    }
+  }
+}

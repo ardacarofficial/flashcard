@@ -18,10 +18,20 @@ const BACKUP: &str = "backup";
 /// Tables a dump never contains. `unfinished_batches(_parts)` are in-flight job state (an
 /// import's crash marker): jobs run one at a time and leftovers are rolled back at startup,
 /// so a backup never has rows there, and a restore must not touch a running group's marker.
+/// The v0.6 statistics cache (0500) is derived data: never dumped; a restore empties it and
+/// bumps the generation (`load_collection`), the app rebuilds it on the next refresh.
+/// Empties the statistics cache and invalidates any copy of its counters (restore).
+const RESET_STATS_CACHE: &str = "DELETE FROM stats_day_cache;
+     DELETE FROM stats_cache_meta;
+     UPDATE review_log_generation SET n = n + 1 WHERE id = 1;";
+
 const EXCLUDED: &[&str] = &[
     "schema_migrations",
     "unfinished_batches",
     "unfinished_batch_parts",
+    "stats_day_cache",
+    "stats_cache_meta",
+    "review_log_generation",
 ];
 
 fn corrupt(message: impl ToString) -> StorageError {
@@ -276,6 +286,18 @@ impl InteropWrite for SqliteTx<'_, WriteMode> {
         // The search index is derived: rebuild it from the loaded notes instead of trusting
         // the backup's copy (older builds indexed differently).
         conn.execute_batch(super::search::REBUILD_SEARCH_INDEX)?;
+        // The v0.6 statistics cache is derived too and never in a backup: drop the local one
+        // and move the generation, so no reader trusts it even if the restored history happens
+        // to match its counters; the next `stats.refresh_cache` rebuilds it. Older schemas
+        // (`upgrade_dump` loads into them) have no cache yet.
+        let has_cache: bool = conn.query_row(
+            "SELECT count(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'stats_cache_meta'",
+            [],
+            |r| r.get(0),
+        )?;
+        if has_cache {
+            conn.execute_batch(RESET_STATS_CACHE)?;
+        }
         Ok(())
     }
 
@@ -311,6 +333,15 @@ impl InteropWrite for SqliteTx<'_, WriteMode> {
                  (SELECT fts_rowid FROM notes WHERE id IN ({NOTES}) AND fts_rowid IS NOT NULL)"
             ),
             [&notes],
+        )?;
+        // Undoing an import removes the history it brought too (`review_log` has no cascade
+        // since 0501: a purged card's history is kept, an undone import's is not).
+        conn.execute(
+            &format!(
+                "DELETE FROM review_log WHERE card_id IN (SELECT value FROM json_each(?2))
+                 OR card_id IN (SELECT id FROM cards WHERE note_id IN ({NOTES}))"
+            ),
+            params![notes, cards],
         )?;
         conn.execute(
             &format!(
@@ -356,6 +387,54 @@ impl InteropWrite for SqliteTx<'_, WriteMode> {
 /// does not know.
 pub fn upgrade_dump(dump: CollectionDump) -> StorageResult<CollectionDump> {
     upgrade_dump_with(dump, crate::migrate::MIGRATIONS)
+}
+
+/// Cuts a dump down to what a build with only the migrations `versions` would have written:
+/// tables and columns that schema does not have are dropped, `schema_versions` is set.
+/// Generic, so fixtures of "a backup from an older build" need no per-migration edits when
+/// later tracks add tables. (Rows of tables an older schema derived differently are kept
+/// as they are.) Fails on a version this build does not know.
+pub fn fit_dump_to_schema(
+    mut dump: CollectionDump,
+    versions: &[u32],
+) -> StorageResult<CollectionDump> {
+    let at: Vec<crate::migrate::Migration> = crate::migrate::MIGRATIONS
+        .iter()
+        .filter(|m| versions.contains(&m.version))
+        .copied()
+        .collect();
+    if at.len() != versions.len() {
+        return Err(corrupt(format!("unknown schema versions {versions:?}")));
+    }
+    let mut conn = Connection::open_in_memory()?;
+    crate::migrate::configure_connection(&conn)?;
+    crate::migrate::migrate_with(&mut conn, &at)?;
+    let schema: std::collections::HashMap<String, Vec<String>> = user_tables(&conn)?
+        .into_iter()
+        .map(|t| {
+            let mut cols = t.columns;
+            if t.with_rowid {
+                cols.insert(0, "rowid".into());
+            }
+            (t.name, cols)
+        })
+        .collect();
+    dump.tables.retain(|t| schema.contains_key(&t.name));
+    for t in &mut dump.tables {
+        let known = &schema[&t.name];
+        let keep: Vec<bool> = t.columns.iter().map(|c| known.contains(c)).collect();
+        if keep.iter().all(|k| *k) {
+            continue;
+        }
+        let mut k = keep.iter();
+        t.columns.retain(|_| *k.next().unwrap_or(&true));
+        for row in &mut t.rows {
+            let mut k = keep.iter();
+            row.retain(|_| *k.next().unwrap_or(&true));
+        }
+    }
+    dump.schema_versions = versions.to_vec();
+    Ok(dump)
 }
 
 /// [`upgrade_dump`] against an explicit migration list (tests).

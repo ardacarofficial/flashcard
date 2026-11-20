@@ -14,6 +14,11 @@
 //! * the final status (`succeeded`/`failed`/`cancelled`), result and error are persisted.
 //!
 //! Jobs left `queued`/`running` when the app closed are marked `interrupted` at startup.
+//!
+//! **Lanes.** Each handler names a lane ([`JobHandler::lane`]); [`spawn_worker`] runs one
+//! thread per lane, so a long AI request (seconds to minutes of waiting on the network) never
+//! holds up an import or export, and vice versa. Jobs of one lane run one at a time, oldest
+//! first. Writes still go through the single writer.
 
 use crate::app::{App, OplogMode, UndoGroup};
 use crate::error::{AppError, AppResult};
@@ -127,6 +132,32 @@ impl JobContext<'_> {
     /// Current time from the app clock.
     pub fn now(&self) -> Timestamp {
         self.app.now()
+    }
+
+    /// Whether module `id` is (still) enabled — a job that acts for a module checks this
+    /// before doing anything outside the app (a request queued before the module was turned
+    /// off must not go out).
+    pub fn module_enabled(&self, id: &str) -> bool {
+        self.app.is_module_enabled(id)
+    }
+
+    /// `Err(CONFLICT_MODULE_DISABLED)` unless module `id` is enabled.
+    pub fn ensure_module_enabled(&self, id: &str) -> AppResult<()> {
+        if self.module_enabled(id) {
+            return Ok(());
+        }
+        Err(AppError::Api(
+            ApiError::new(
+                ErrorCode::ConflictModuleDisabled,
+                format!("module {id} is disabled"),
+            )
+            .with_detail("module", id.to_owned()),
+        ))
+    }
+
+    /// Publishes events for this job (no database write), e.g. streamed partial output.
+    pub fn publish(&self, events: Vec<DomainEvent>) {
+        self.app.publish(events, None);
     }
 
     /// Folder of the collection (see [`App::data_dir`]).
@@ -257,10 +288,17 @@ pub(crate) fn retry<T>(mut f: impl FnMut() -> AppResult<T>) -> AppResult<T> {
 /// Attempts of [`retry`].
 const RETRIES: u32 = 6;
 
+/// The lane jobs run in unless their handler names another.
+pub const MAIN_LANE: &str = "main";
+
 /// Implements one job kind. Registered by its module ([`crate::Registry::job`]).
 pub trait JobHandler: Send + Sync {
     /// Kind (`io.import`, `fsrs.optimize`, …).
     fn kind(&self) -> &'static str;
+    /// Worker lane ([`MAIN_LANE`] by default): jobs of different lanes run side by side.
+    fn lane(&self) -> &'static str {
+        MAIN_LANE
+    }
     /// Runs to completion, failure or cancellation; returns the result JSON.
     fn run(&self, payload: Value, ctx: &JobContext<'_>) -> AppResult<Value>;
 }
@@ -278,7 +316,9 @@ pub(crate) struct JobRuntime {
     running: Mutex<HashMap<JobId, CancelToken>>,
     /// Ids cancelled before their worker registered a token.
     early: Mutex<Vec<JobId>>,
-    signal: Mutex<bool>,
+    /// Bumped whenever a job is queued; each worker remembers the value it last saw, so no
+    /// lane misses a wake-up another lane consumed.
+    signal: Mutex<u64>,
     wake: Condvar,
 }
 
@@ -316,24 +356,25 @@ impl JobRuntime {
         }
     }
 
-    /// Wakes the worker (a job was queued).
+    /// Wakes the workers (a job was queued).
     pub(crate) fn notify(&self) {
         if let Ok(mut s) = self.signal.lock() {
-            *s = true;
+            *s = s.wrapping_add(1);
             self.wake.notify_all();
         }
     }
 
-    fn wait(&self, timeout: Duration) {
-        if let Ok(mut s) = self.signal.lock() {
-            if !*s {
-                if let Ok((guard, _)) = self.wake.wait_timeout(s, timeout) {
-                    s = guard;
-                } else {
-                    return;
-                }
+    /// Current wake-up generation.
+    fn generation(&self) -> u64 {
+        self.signal.lock().map(|s| *s).unwrap_or(0)
+    }
+
+    /// Waits until the generation moves past `seen` (or `timeout`).
+    fn wait(&self, seen: u64, timeout: Duration) {
+        if let Ok(s) = self.signal.lock() {
+            if *s == seen {
+                let _ = self.wake.wait_timeout(s, timeout);
             }
-            *s = false;
         }
     }
 }
@@ -405,7 +446,8 @@ impl ProgressSink for EventSink<'_> {
 }
 
 impl App {
-    /// Claims the oldest queued job and runs it on this thread. `Ok(None)` if none is queued.
+    /// Claims the oldest queued job (any lane) and runs it on this thread. `Ok(None)` if none
+    /// is queued.
     pub fn run_next_job(&self) -> AppResult<Option<JobDto>> {
         let claimed = {
             let mut tx = self.store().write()?;
@@ -413,6 +455,22 @@ impl App {
             tx.commit()?;
             job
         };
+        self.run_claimed(claimed)
+    }
+
+    /// Claims the oldest queued job of `lane` and runs it on this thread.
+    pub fn run_next_job_in(&self, lane: &str) -> AppResult<Option<JobDto>> {
+        let (kinds, only) = self.registry().lane_kinds(lane);
+        let claimed = {
+            let mut tx = self.store().write()?;
+            let job = tx.claim_next_job_in(self.now(), &kinds, only)?;
+            tx.commit()?;
+            job
+        };
+        self.run_claimed(claimed)
+    }
+
+    fn run_claimed(&self, claimed: Option<JobRecord>) -> AppResult<Option<JobDto>> {
         let Some(record) = claimed else {
             return Ok(None);
         };
@@ -489,41 +547,55 @@ impl App {
     }
 }
 
-/// A background worker thread running queued jobs. Stops (after the current job) when
-/// dropped.
+/// The background worker threads running queued jobs, one per lane. Stop (after their
+/// current job) when dropped.
 pub struct JobWorker {
     stop: Arc<AtomicBool>,
     app: Arc<App>,
-    handle: Option<JoinHandle<()>>,
+    handles: Vec<JoinHandle<()>>,
 }
 
-/// Starts the worker of `app`: it runs queued jobs one at a time (there is a single writer
-/// anyway), waking up when a job is queued and every few seconds as a fallback.
+impl JobWorker {
+    /// Lanes served, one thread each.
+    pub fn lanes(&self) -> usize {
+        self.handles.len()
+    }
+}
+
+/// Starts the workers of `app`: one thread per lane ([`JobHandler::lane`]), each running its
+/// lane's queued jobs one at a time, waking up when a job is queued and every few seconds as
+/// a fallback.
 pub fn spawn_worker(app: Arc<App>) -> std::io::Result<JobWorker> {
     let stop = Arc::new(AtomicBool::new(false));
-    let (a, s) = (app.clone(), stop.clone());
-    let handle = std::thread::Builder::new()
-        .name("fc-jobs".into())
-        .spawn(move || {
-            while !s.load(Ordering::SeqCst) {
-                match a.run_next_job() {
-                    Ok(Some(_)) => continue,
-                    Ok(None) | Err(_) => a.job_runtime().wait(Duration::from_secs(5)),
+    let mut worker = JobWorker {
+        stop: stop.clone(),
+        app: app.clone(),
+        handles: Vec::new(),
+    };
+    for lane in app.registry().lanes() {
+        let (a, s) = (app.clone(), stop.clone());
+        let handle = std::thread::Builder::new()
+            .name(format!("fc-jobs-{lane}"))
+            .spawn(move || {
+                while !s.load(Ordering::SeqCst) {
+                    let seen = a.job_runtime().generation();
+                    match a.run_next_job_in(lane) {
+                        Ok(Some(_)) => continue,
+                        Ok(None) | Err(_) => a.job_runtime().wait(seen, Duration::from_secs(5)),
+                    }
                 }
-            }
-        })?;
-    Ok(JobWorker {
-        stop,
-        app,
-        handle: Some(handle),
-    })
+            })?;
+        // On an error the threads already started stop when `worker` drops.
+        worker.handles.push(handle);
+    }
+    Ok(worker)
 }
 
 impl Drop for JobWorker {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
         self.app.job_runtime().notify();
-        if let Some(h) = self.handle.take() {
+        for h in self.handles.drain(..) {
             let _ = h.join();
         }
     }

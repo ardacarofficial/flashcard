@@ -4,18 +4,22 @@
 //! implemented for both modes, `*Write` traits only for [`WriteMode`]. Per-area SQL lives in
 //! the sibling modules; this one holds the transaction type and column helpers.
 
+mod ai;
 mod attributes;
 mod cards;
 mod content;
 mod decks;
 mod interop;
-pub use interop::{upgrade_dump, upgrade_dump_with};
+pub use interop::{fit_dump_to_schema, upgrade_dump, upgrade_dump_with};
 mod jobs;
+mod mcp;
 mod notes;
 mod notetypes;
 mod oplog;
+mod plugins;
 pub(crate) mod search;
 mod settings;
+mod stats;
 mod study;
 mod tags;
 

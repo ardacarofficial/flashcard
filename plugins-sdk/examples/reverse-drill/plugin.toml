@@ -1,0 +1,13 @@
+id = "com.example.reverse"
+name = "Reverse drill"
+version = "1.0.0"
+api_version = "1"
+authors = ["Flashcard"]
+description = "A study mode: shows the back of a card, you type the front; answers are recorded through the study API."
+min_app_version = "0.7.0"
+permissions = ["ui:study_mode", "ui:menu", "study:write", "study:read", "notes:read"]
+
+[contributes]
+study_modes = ["reverse"]
+menu_items = [{ id = "drill", view = "reverse", icon = "repeat" }]
+locales = "locales"

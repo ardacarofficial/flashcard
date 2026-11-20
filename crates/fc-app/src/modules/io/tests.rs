@@ -1218,14 +1218,16 @@ fn restoring_an_older_schema_backup_migrates_it_forward() {
     result::<ExportReport>(&finish(&t, &job));
     // Rewrite it as a backup from a build without 0302 and the v0.5 migrations (04xx; their
     // tables are not in dumps). Older cuts would need the tables later migrations add removed and
-    // derived rows (v0.3 `note_keys`, …) rebuilt — not something a dump can fake.
+    // derived rows (v0.3 `note_keys`, …) rebuilt — not something a dump can fake. Migrations of
+    // later releases (05xx+, e.g. v0.7's plugin tables) stay applied: they do not depend on
+    // 0302/04xx, and their tables are in the dump.
     let b = fc_interop::fcbackup::read(&std::fs::read(&path).unwrap()).unwrap();
     let mut dump: fc_storage::repo::CollectionDump = serde_json::from_slice(&b.collection).unwrap();
     let older: Vec<u32> = dump
         .schema_versions
         .iter()
         .copied()
-        .filter(|v| *v < 302)
+        .filter(|v| *v < 302 || *v >= 500)
         .collect();
     assert!(older.len() < dump.schema_versions.len());
     // …whose search index was written the old way (0302 and the restore rebuild it).
@@ -1235,7 +1237,9 @@ fn restoring_an_older_schema_backup_migrates_it_forward() {
     for row in &mut fts.rows {
         row[col] = fc_storage::repo::SqlValue::Text("{{c1::STALE}} <b>raw</b>".into());
     }
-    dump.schema_versions = older.clone();
+    // Tables and columns of later migrations do not exist in that schema (recreated empty by
+    // the migrations on restore, as they are here): cut generically, whatever track adds them.
+    let dump = fc_storage::fit_dump_to_schema(dump, &older).unwrap();
     let mut manifest = b.manifest.clone();
     manifest.schema_versions = older;
     let w = fc_interop::fcbackup::BackupWriter::new(&manifest, &serde_json::to_vec(&dump).unwrap())
@@ -1265,4 +1269,39 @@ fn final_job_status_is_retried() {
     });
     assert_eq!(r.unwrap(), 7);
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 3);
+}
+
+#[test]
+fn restoring_a_backup_forgets_mcp_server_approvals() {
+    use fc_api::v1::mcp::{AddMcpServer, McpTransport};
+    let dir = tempfile::tempdir().unwrap();
+    let t = sqlite();
+    t.app.set_data_dir(dir.path().join("app-data"));
+    let s = t.ok::<fc_api::v1::methods::McpServersAdd>(AddMcpServer {
+        name: "Files".into(),
+        transport: McpTransport::Stdio,
+        command: Some("npx".into()),
+        args: vec![],
+        url: None,
+        enabled: None,
+    });
+    assert!(s.approved);
+    let backup = dir.path().join("b.fcbackup");
+    let job = t.ok::<IoBackupCreate>(CreateBackup {
+        path: backup.to_string_lossy().into_owned(),
+    });
+    result::<ExportReport>(&finish(&t, &job));
+    let job = t.ok::<IoBackupRestore>(RestoreBackup {
+        path: backup.to_string_lossy().into_owned(),
+        safety_backup_path: None,
+    });
+    result::<RestoreReport>(&finish(&t, &job));
+    let servers = t.ok::<fc_api::v1::methods::McpServersList>(Empty {}).servers;
+    assert_eq!(servers.len(), 1, "the registration itself comes back");
+    assert!(!servers[0].approved, "…but must be approved again before it can launch");
+    // Nor can history bring the approval back: the restored oplog is gone behind a barrier.
+    let e = t.err::<OplogUndo>(Empty {});
+    assert_eq!(e.code, ErrorCode::ConflictHistoryBarrier, "{e:?}");
+    let servers = t.ok::<fc_api::v1::methods::McpServersList>(Empty {}).servers;
+    assert!(!servers[0].approved);
 }

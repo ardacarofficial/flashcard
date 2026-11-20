@@ -137,6 +137,33 @@ impl JobWrite for SqliteTx<'_, WriteMode> {
         self.get_job(job)
     }
 
+    fn claim_next_job_in(
+        &mut self,
+        now: Timestamp,
+        kinds: &[&str],
+        only: bool,
+    ) -> StorageResult<Option<JobRecord>> {
+        let list = serde_json::to_string(kinds).unwrap_or_else(|_| "[]".into());
+        let sql = if only {
+            "SELECT id FROM jobs WHERE status = 'queued'
+               AND kind IN (SELECT value FROM json_each(?1))
+             ORDER BY created_at, id LIMIT 1"
+        } else {
+            "SELECT id FROM jobs WHERE status = 'queued'
+               AND kind NOT IN (SELECT value FROM json_each(?1))
+             ORDER BY created_at, id LIMIT 1"
+        };
+        let next: Option<JobId> = one(self.conn(), T, sql, params![list], |r| id(r, 0))?;
+        let Some(job) = next else { return Ok(None) };
+        exec(
+            self.conn(),
+            T,
+            "UPDATE jobs SET status = 'running', updated_at = ?2 WHERE id = ?1",
+            params![job.to_string(), now.0],
+        )?;
+        self.get_job(job)
+    }
+
     fn upsert_unfinished_batch(&mut self, b: &UnfinishedBatchRecord) -> StorageResult<()> {
         exec(
             self.conn(),

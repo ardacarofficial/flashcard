@@ -73,4 +73,8 @@ domains! {
     content: ContentRead, ContentWrite;
     interop: InteropRead, InteropWrite;
     search: SearchRead, SearchWrite;
+    mcp: McpRead, McpWrite;
+    stats: StatsRead, StatsWrite;
+    ai: AiRead, AiWrite;
+    plugins: PluginRead, PluginWrite;
 }

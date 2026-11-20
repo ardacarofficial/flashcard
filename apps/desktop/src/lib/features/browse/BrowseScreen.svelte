@@ -256,7 +256,7 @@
     void loadSaved();
     void loadFlags();
     void loadNoteTypes();
-    const unsub = api.on(['saved_queries', 'flags_changed', 'undone', 'redone'], () => {
+    const unsub = api.on(['saved_queries', 'flags_changed', 'undone', 'redone', 'data_changed'], () => {
       void loadSaved();
       void loadFlags();
       void refresh();

@@ -18,6 +18,8 @@ pub const COLLECTION_FILE: &str = "collection.db";
 /// the process exits with status 1.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before Tauri starts any thread: no shell variable changes behavior (FSRS optimizer).
+    fc_app::system::pin_process_env();
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![ipc::invoke])
@@ -34,12 +36,26 @@ pub fn run() {
                 .body(body)
                 .unwrap_or_default()
         })
+        .on_window_event(|window, event| {
+            // Coming back to the window: pick up what other processes (the CLI, an MCP
+            // client such as Claude) changed meanwhile, right away instead of at the next tick.
+            if matches!(event, tauri::WindowEvent::Focused(true)) {
+                if let Some(state) = window.try_state::<ipc::SharedApp>() {
+                    let app = state.inner().clone();
+                    std::thread::spawn(move || {
+                        let _ = app.poll_external_changes();
+                    });
+                }
+            }
+        })
         .setup(|app| {
             // Handled here rather than returned: depending on the platform Tauri runs setup
             // inside the event loop and would panic on an error instead of returning it.
             match open_collection(app) {
                 Ok(collection) => {
                     ipc::forward_events(&collection, app.handle().clone());
+                    ipc::watch_external_changes(collection.clone());
+                    collection.set_file_picker(Arc::new(NativePicker));
                     // Background jobs (imports, exports, backups) run on their own thread;
                     // the worker lives as long as the app state.
                     match fc_app::jobs::spawn_worker(collection.clone()) {
@@ -60,6 +76,33 @@ pub fn run() {
     }
 }
 
+/// Native dialogs behind plugins' `fs:pick`: the user chooses, the backend reads or writes
+/// the file, the plugin only ever sees a file name and bytes.
+struct NativePicker;
+
+impl NativePicker {
+    fn dialog(extensions: &[String]) -> rfd::FileDialog {
+        let dialog = rfd::FileDialog::new();
+        if extensions.is_empty() {
+            dialog
+        } else {
+            dialog.add_filter(extensions.join(", "), extensions)
+        }
+    }
+}
+
+impl fc_app::FilePicker for NativePicker {
+    fn pick_open(&self, extensions: &[String]) -> Option<std::path::PathBuf> {
+        Self::dialog(extensions).pick_file()
+    }
+
+    fn pick_save(&self, suggested_name: &str, extensions: &[String]) -> Option<std::path::PathBuf> {
+        Self::dialog(extensions)
+            .set_file_name(suggested_name)
+            .save_file()
+    }
+}
+
 fn open_collection(app: &tauri::App) -> Result<ipc::SharedApp, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -68,6 +111,10 @@ fn open_collection(app: &tauri::App) -> Result<ipc::SharedApp, String> {
         let e = e.into_api();
         format!("{}\n{}: {}", path.display(), e.code, e.message)
     })?;
+    // AI provider keys live only in the OS keychain (v0.8).
+    collection.set_secret_store(Arc::new(fc_ai::secrets::OsKeychain::new(
+        fc_ai::secrets::SERVICE,
+    )));
     Ok(Arc::new(collection))
 }
 

@@ -173,6 +173,26 @@ impl<M: Mode> OplogRead for SqliteTx<'_, M> {
             .collect()
     }
 
+    fn oplog_watermark(&self) -> StorageResult<i64> {
+        Ok(
+            one(self.conn(), T, "SELECT max(rowid) FROM oplog", [], |r| {
+                r.get::<_, Option<i64>>(0)
+            })?
+            .flatten()
+            .unwrap_or(0),
+        )
+    }
+
+    fn oplog_actors_after(&self, after: i64) -> StorageResult<Vec<serde_json::Value>> {
+        all(
+            self.conn(),
+            T,
+            "SELECT DISTINCT actor FROM oplog WHERE rowid > ?1",
+            [after],
+            |r| json(r, 0),
+        )
+    }
+
     fn oplog_batch_entries(&self, batch: BatchId) -> StorageResult<Vec<OplogRecord>> {
         all(
             self.conn(),

@@ -20,8 +20,11 @@ pub enum Actor {
     Plugin(String),
     /// An automation rule (rule id).
     Automation(String),
-    /// Local HTTP API / MCP client (client name).
+    /// Local HTTP API client (client name).
     LocalApi(String),
+    /// An MCP client through the MCP server (client name from `initialize`, e.g.
+    /// `claude-ai`); v0.8.
+    Mcp(String),
     /// The app itself (migrations, seeding, maintenance).
     System,
 }

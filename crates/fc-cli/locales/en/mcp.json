@@ -1,0 +1,6 @@
+{
+  "oplog.summary.mcp.servers.add": "Added MCP server {name}",
+  "oplog.summary.mcp.servers.update": "Edited MCP server {name}",
+  "oplog.summary.mcp.servers.remove": "Removed MCP server {name}",
+  "oplog.summary.mcp.servers.restore": "Restored MCP server {name}"
+}

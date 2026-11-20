@@ -1,0 +1,13 @@
+id = "com.example.escape"
+name = "Escape"
+version = "1.0.0"
+api_version = "1"
+authors = ["Flashcard"]
+description = "Hostile test plugin: tries every known way out of the sandbox (hooks on plugin management, export/restore paths, app settings, its own limits, free file paths). Each attempt must be refused. The tests also repack it with manifests asking for what no plugin may get."
+min_app_version = "0.7.0"
+permissions = ["ui:command", "fs:pick", "decks:write", "hooks:before:notes.create", "notes:write", "notes:read", "storage:kv"]
+
+[contributes]
+commands = ["self-grant", "export", "restore", "raise-limits", "module-off", "undo", "own-setting", "app-setting-as-own", "kv-only", "kv-then-panic", "write-and-kv", "open", "save"]
+settings = "settings.schema.json"
+locales = "locales"

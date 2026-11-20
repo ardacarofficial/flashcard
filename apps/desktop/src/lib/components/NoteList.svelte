@@ -26,7 +26,7 @@
     const id = deckId;
     notes = null;
     void load(id);
-    const unsub = api.on(['note', 'deck_', 'undone', 'redone'], () => void load(id));
+    const unsub = api.on(['note', 'deck_', 'undone', 'redone', 'data_changed'], () => void load(id));
     return () => void unsub.then((u) => u());
   });
 

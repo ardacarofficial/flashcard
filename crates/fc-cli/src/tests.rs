@@ -87,6 +87,32 @@ fn parses_commands_to_their_methods() {
             ],
             "attributes.option.delete",
         ),
+        (&["plugin", "list"], "plugins.list"),
+        (&["plugin", "inspect", "x.fcplugin"], "plugins.inspect"),
+        (
+            &["plugin", "install", "x.fcplugin", "--grant", "ui:command"],
+            "plugins.install",
+        ),
+        (
+            &["plugin", "install", "x.fcplugin", "--grant-all"],
+            "plugins.install",
+        ),
+        (
+            &["plugin", "uninstall", "a.b", "--delete-data"],
+            "plugins.uninstall",
+        ),
+        (&["plugin", "enable", "a.b"], "plugins.set_enabled"),
+        (&["plugin", "disable", "a.b"], "plugins.set_enabled"),
+        (
+            &["plugin", "grant", "a.b", "decks:read"],
+            "plugins.set_permissions",
+        ),
+        (&["plugin", "logs", "a.b"], "plugins.logs"),
+        (&["plugin", "run", "a.b", "list", "{}"], "plugins.run"),
+        (
+            &["plugin", "pack", "dir", "--out", "x.fcplugin"],
+            "plugin.pack",
+        ),
         (&["undo"], "oplog.undo"),
         (&["--lang", "en", "redo"], "oplog.redo"),
         (&["call", "tags.list"], "tags.list"),
@@ -103,6 +129,8 @@ fn parses_commands_to_their_methods() {
         &["deck", "move", "A", "--top", "--parent", "B"],
         &["note", "delete"],
         &["--lang", "de", "undo"],
+        &["plugin", "install", "x", "--grant", "a:b", "--grant-all"],
+        &["plugin", "run", "a.b"],
     ];
     for argv in bad {
         assert!(
@@ -446,4 +474,107 @@ fn call_runs_the_jobs_it_queues() {
     assert_eq!(job["result"]["added_notes"], 2);
     let listed = exec(&t, &["note", "list", "--deck", "Kelimeler"]).unwrap();
     assert!(listed.contains("Arda"), "{listed}");
+}
+
+/// `fc plugin`: pack a folder, inspect, install with chosen grants, run, revoke, switch off,
+/// uninstall and undo — the hand-written ABI v1 fixture stands in for a plugin.
+#[test]
+fn plugin_subcommands() {
+    let t = TestApp::mem();
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("v1");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(
+        src.join("plugin.toml"),
+        "id = \"com.example.v1\"\nname = \"V1\"\nversion = \"1.0.0\"\napi_version = \"1\"\n\
+         permissions = [\"ui:command\", \"decks:read\"]\n[contributes]\ncommands = [\"list\"]\n",
+    )
+    .unwrap();
+    let wat = include_bytes!("../../fc-plugins/tests/fixtures/abi_v1.wat");
+    std::fs::write(
+        src.join("plugin.wasm"),
+        fc_plugins::testing::wat2wasm(wat).unwrap(),
+    )
+    .unwrap();
+    let src_s = src.display().to_string();
+    let pkg = src.join("com.example.v1-1.0.0.fcplugin");
+    let pkg_s = pkg.display().to_string();
+
+    assert!(exec(&t, &["plugin", "pack", &src_s])
+        .unwrap()
+        .starts_with("packed com.example.v1 1.0.0"));
+    assert!(pkg.is_file());
+    assert_eq!(
+        exec(&t, &["plugin", "list"]).unwrap(),
+        "no plugins installed"
+    );
+    let shown = exec(&t, &["plugin", "inspect", &pkg_s]).unwrap();
+    assert!(
+        shown.contains("[ ] ui:command") && shown.contains("[ ] decks:read"),
+        "{shown}"
+    );
+
+    let out = exec(&t, &["plugin", "install", &pkg_s, "--grant", "ui:command"]).unwrap();
+    assert!(
+        out.contains("[x] ui:command") && out.contains("[ ] decks:read"),
+        "{out}"
+    );
+    let e = exec(&t, &["plugin", "run", "com.example.v1", "list"]).unwrap_err();
+    assert_eq!(e.details["code"], serde_json::json!("PERMISSION_DENIED"));
+    exec(
+        &t,
+        &[
+            "plugin",
+            "grant",
+            "com.example.v1",
+            "ui:command",
+            "decks:read",
+        ],
+    )
+    .unwrap();
+    exec(&t, &["deck", "create", "Kept"]).unwrap();
+    assert!(exec(&t, &["plugin", "run", "com.example.v1", "list"])
+        .unwrap()
+        .contains("Kept"));
+    // A permission no plugin may hold cannot be granted from here either.
+    assert_eq!(
+        exec(&t, &["plugin", "grant", "com.example.v1", "io:write"])
+            .unwrap_err()
+            .code,
+        ErrorCode::ValidationPluginPermission
+    );
+    assert!(exec(&t, &["plugin", "disable", "com.example.v1"])
+        .unwrap()
+        .ends_with("disabled"));
+    assert_eq!(
+        exec(&t, &["plugin", "run", "com.example.v1", "list"])
+            .unwrap_err()
+            .code,
+        ErrorCode::ConflictPluginInactive
+    );
+    assert!(exec(&t, &["plugin", "enable", "com.example.v1"])
+        .unwrap()
+        .ends_with("active"));
+    assert!(exec(&t, &["plugin", "logs", "com.example.v1"]).is_ok());
+    assert!(exec(&t, &["plugin", "uninstall", "com.example.v1"])
+        .unwrap()
+        .starts_with("uninstalled V1"));
+    assert_eq!(
+        exec(&t, &["plugin", "list"]).unwrap(),
+        "no plugins installed"
+    );
+    exec(&t, &["undo"]).unwrap();
+    assert!(exec(&t, &["plugin", "list"])
+        .unwrap()
+        .starts_with("V1 1.0.0 (com.example.v1)"));
+    // --grant-all takes everything the package asks for.
+    let out = exec(&t, &["plugin", "install", &pkg_s, "--grant-all"]).unwrap();
+    assert!(!out.contains("[ ]"), "{out}");
+    // --json prints the response.
+    let json: serde_json::Value =
+        serde_json::from_str(&exec(&t, &["--json", "plugin", "list"]).unwrap()).unwrap();
+    assert_eq!(
+        json["plugins"][0]["id"],
+        serde_json::json!("com.example.v1")
+    );
 }

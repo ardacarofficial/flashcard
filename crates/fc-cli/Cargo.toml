@@ -15,13 +15,20 @@ path = "src/main.rs"
 fc-api.workspace = true
 fc-core.workspace = true
 fc-app = { path = "../fc-app" }
+fc-mcp = { path = "../fc-mcp" }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+# OS keychain for AI provider keys (v0.8).
+fc-ai = { workspace = true, features = ["keychain"] }
+fc-plugins.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 clap.workspace = true
 
 [dev-dependencies]
 fc-app = { path = "../fc-app", features = ["testing"] }
+fc-plugins = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
+rusqlite.workspace = true
 
 [lints]
 workspace = true

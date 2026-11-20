@@ -9,7 +9,7 @@
 use crate::error::AppResult;
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
 use crate::module::ModuleDescriptor;
-use crate::registry::{ErasedHandler, Registry};
+use crate::registry::Registry;
 use crate::support::{module_states, summary};
 use fc_api::v1::browse::*;
 use fc_api::v1::common::Empty;
@@ -283,10 +283,7 @@ fn palette_list(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<PaletteList> {
             let direct = ctx
                 .registry
                 .entry(d.name)
-                .is_some_and(|e| match &e.handler {
-                    ErasedHandler::Command(h) => h.validate(&empty).is_ok(),
-                    ErasedHandler::Query(h) => h.validate(&empty).is_ok(),
-                });
+                .is_some_and(|e| e.handler.validate(&empty).is_ok());
             PaletteEntry {
                 kind: d.kind,
                 module: d.module.to_owned(),
@@ -302,6 +299,16 @@ fn palette_list(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<PaletteList> {
             }
         })
         .collect();
+    // Plugin commands registered at runtime (v0.7), labeled from the plugin's locale files.
+    entries.extend(ctx.registry.dynamic_methods().into_iter().map(|m| PaletteEntry {
+        kind: fc_api::MethodKind::Command,
+        module: m.module.to_string(),
+        label_key: m.label_key.to_string(),
+        direct: true,
+        enabled: states.get(&*m.module).copied().unwrap_or(false),
+        shortcut: None,
+        method: m.qualified_name(),
+    }));
     entries.sort_by(|a, b| a.method.cmp(&b.method));
     Ok(PaletteList { entries })
 }

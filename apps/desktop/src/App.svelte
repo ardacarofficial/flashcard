@@ -6,33 +6,48 @@
   import { SCREENS, type ScreenCtx, type ScreenDef } from '$lib/features';
   import { deckPaths } from '$lib/components/deck-paths';
   import ShortcutHost from '$lib/features/browse/ShortcutHost.svelte';
+  import PluginPanels from '$lib/features/plugins/PluginPanels.svelte';
 
   interface MenuItem {
     id: string;
     label_key: string;
     screen: ScreenDef;
     order: number;
+    route: string | null;
   }
+
+  const routeMatches = (pattern: string, route: string) =>
+    pattern.endsWith('/*') ? route.startsWith(pattern.slice(0, -1)) : pattern === route;
 
   /** Screen for a `main_menu` route, from the registered features. */
   const screenOfRoute = (route: string | null): ScreenDef | null =>
-    SCREENS.find((s) => route !== null && s.routes?.includes(route)) ?? null;
+    SCREENS.find((s) => route !== null && s.routes?.some((p) => routeMatches(p, route))) ?? null;
 
   let modules = $state<ModuleDto[]>([]);
   let decks = $state<DeckTreeNode[]>([]);
   let screen = $state.raw<ScreenDef | null>(null);
+  /** Menu entry shown (several entries may share a screen: plugin views). */
+  let active = $state<string | null>(null);
   let selectedDeck = $state<string | null>(null);
   let error = $state<string | null>(null);
+  /** A plugin the app switched off (repeated failures), or plugins whose hooks were skipped. */
+  let pluginNotice = $state<string | null>(null);
+
+  /** A plugin's display name (its locale's `name`), else its id. */
+  function pluginName(id: string): string {
+    const label = td(`plugin.${id}.name`);
+    return label === `plugin.${id}.name` ? id : label;
+  }
 
   const menu = $derived.by((): MenuItem[] => {
     const ui = modules.filter((m) => m.enabled).flatMap((m) => m.ui);
     const items = ui.flatMap((c): MenuItem[] => {
       const s = c.slot === 'main_menu' ? screenOfRoute(c.route) : null;
-      return s ? [{ id: c.id, label_key: c.label_key, screen: s, order: c.order }] : [];
+      return s ? [{ id: c.id, label_key: c.label_key, screen: s, order: c.order, route: c.route }] : [];
     });
     for (const s of SCREENS) {
       if (s.slot && ui.some((c) => c.slot === s.slot?.name)) {
-        items.push({ id: s.id, label_key: s.slot.label_key, screen: s, order: s.slot.order });
+        items.push({ id: s.id, label_key: s.slot.label_key, screen: s, order: s.slot.order, route: null });
       }
     }
     return items.sort((a, b) => a.order - b.order);
@@ -45,7 +60,23 @@
     selectedPath,
     selectDeck: (id) => (selectedDeck = id),
     guarded: (fn) => guarded(fn),
+    route: menu.find((m) => m.id === active)?.route ?? null,
   });
+
+  function show(item: MenuItem) {
+    screen = item.screen;
+    active = item.id;
+  }
+
+  async function loadModules() {
+    try {
+      modules = (await api.modules.list()).modules;
+      const first = menu[0];
+      if (!screen && first) show(first);
+    } catch (e) {
+      fail(e);
+    }
+  }
 
   function fail(e: unknown) {
     error = td((e as ApiError).messageKey);
@@ -72,17 +103,35 @@
   }
 
   onMount(() => {
-    api.modules.list().then((m) => {
-      modules = m.modules;
-      screen ??= menu[0]?.screen ?? null;
-    }, fail);
+    void loadModules();
     void loadDecks();
+    // Plugins installed/removed/switched change the menu (v0.7).
+    const unsubModules = api.on(['plugins_changed', 'module_toggled'], () => void loadModules());
+    const unsubNotice = api.on('plugins_changed', (env) => {
+      if (env.event.type !== 'plugins_changed' || !env.event.data.auto_disabled) return;
+      const { plugin_id, reason } = env.event.data;
+      const why = reason ? td(reason.key, reason.params) : '';
+      pluginNotice = [t('plugins.notice.auto_disabled', { name: pluginName(plugin_id) }), why]
+        .filter(Boolean)
+        .join(' ');
+    });
+    // One notice per action whose plugins' hook budgets ran out (nobody is switched off).
+    const unsubSkipped = api.on('plugin_hooks_skipped', (env) => {
+      if (env.event.type !== 'plugin_hooks_skipped') return;
+      const { plugin_ids, notice } = env.event.data;
+      pluginNotice = td(notice.key, { ...notice.params, names: plugin_ids.map(pluginName).join(', ') });
+    });
     // Live updates: any deck/study event (or undo/redo, import, restore) re-reads the tree.
     const unsub = api.on(
-      ['deck_', 'study_', 'undone', 'redone', 'imported', 'collection_'],
+      ['deck_', 'study_', 'undone', 'redone', 'data_changed', 'imported', 'collection_'],
       () => void loadDecks(),
     );
-    return () => void unsub.then((u) => u());
+    return () => {
+      void unsub.then((u) => u());
+      void unsubModules.then((u) => u());
+      void unsubNotice.then((u) => u());
+      void unsubSkipped.then((u) => u());
+    };
   });
 </script>
 
@@ -92,16 +141,23 @@
     <ul>
       {#each menu as item (item.id)}
         <li>
-          <button class:active={screen?.id === item.screen.id} aria-current={screen?.id === item.screen.id ? 'page' : undefined} onclick={() => (screen = item.screen)}>
+          <button class:active={active === item.id} aria-current={active === item.id ? 'page' : undefined} onclick={() => show(item)}>
             {td(item.label_key)}
           </button>
         </li>
       {/each}
     </ul>
+    <PluginPanels {modules} />
   </nav>
 
   <main>
     {#if error}<p class="error" role="alert">{error}</p>{/if}
+    {#if pluginNotice}
+      <p class="notice" role="status">
+        {pluginNotice}
+        <button onclick={() => (pluginNotice = null)}>{t('plugins.notice.dismiss')}</button>
+      </p>
+    {/if}
 
     {#if screen}
       {#if screen.deckPicker}
@@ -116,7 +172,7 @@
         </label>
       {/if}
       {@const Screen = screen.component}
-      <Screen {ctx} />
+      {#key active}<Screen {ctx} />{/key}
     {:else}
       <p class="muted">{t('common.loading')}</p>
     {/if}
@@ -125,7 +181,7 @@
 
 <!-- Keyboard shortcuts + command palette (v0.4); inert when the palette module is off. -->
 <ShortcutHost
-  screens={menu.map((m) => ({ id: m.screen.id, label: td(m.label_key), open: () => (screen = m.screen) }))}
+  screens={menu.map((m) => ({ id: m.screen.id, label: td(m.label_key), open: () => show(m) }))}
   activeScreen={screen?.id ?? null}
   {guarded}
 />

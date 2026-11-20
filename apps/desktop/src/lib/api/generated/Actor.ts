@@ -3,4 +3,4 @@
 /**
  * Who issued a command.
  */
-export type Actor = { "kind": "user" } | { "kind": "cli" } | { "kind": "plugin", "id": string } | { "kind": "automation", "id": string } | { "kind": "local_api", "id": string } | { "kind": "system" };
+export type Actor = { "kind": "user" } | { "kind": "cli" } | { "kind": "plugin", "id": string } | { "kind": "automation", "id": string } | { "kind": "local_api", "id": string } | { "kind": "mcp", "id": string } | { "kind": "system" };

@@ -154,6 +154,10 @@ define_id!(
     OplogId
 );
 define_id!(
+    /// External MCP server registration id (v0.8).
+    McpServerId
+);
+define_id!(
     /// Groups oplog entries that are undone together.
     BatchId
 );
@@ -172,6 +176,18 @@ define_id!(
 define_id!(
     /// Saved query (named filter) id.
     SavedQueryId
+);
+define_id!(
+    /// Exam date id (v0.6 exam-date mode).
+    ExamId
+);
+define_id!(
+    /// Goal id (v0.6).
+    GoalId
+);
+define_id!(
+    /// Configured AI provider id (v0.8).
+    AiProviderId
 );
 
 #[cfg(test)]

@@ -92,6 +92,18 @@ fn compatible(versions: &[u32]) -> bool {
         .all(|v| fc_storage::migrate::MIGRATIONS.iter().any(|m| m.version == *v))
 }
 
+/// A backup is data from outside: registered MCP servers that come with it must not launch
+/// programs until the user approves them again here (re-save in the MCP screen).
+fn forget_mcp_approvals(dump: &mut CollectionDump) {
+    for t in dump.tables.iter_mut().filter(|t| t.name == "mcp_servers") {
+        if let Some(i) = t.columns.iter().position(|c| c == "approved") {
+            for row in &mut t.rows {
+                row[i] = fc_storage::repo::SqlValue::Null;
+            }
+        }
+    }
+}
+
 /// A complete backup of what `reads` sees.
 fn backup_bytes(reads: &dyn Reads, now: fc_core::Timestamp) -> AppResult<(Vec<u8>, Manifest)> {
     let dump = reads.dump_collection()?;
@@ -182,7 +194,8 @@ impl JobHandler for RestoreJob {
             .map_err(|e| interop_err(fc_interop::InteropError::invalid("fcbackup", e)))?;
         ctx.cancel.check()?;
         // Older schema: migrate the restored rows forward (outside the writer).
-        let dump = fc_storage::upgrade_dump(dump)?;
+        let mut dump = fc_storage::upgrade_dump(dump)?;
+        forget_mcp_approvals(&mut dump);
         ctx.cancel.check()?;
 
         // Safety backup of the current state first, into the app data folder.

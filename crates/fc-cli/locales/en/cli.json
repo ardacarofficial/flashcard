@@ -18,5 +18,15 @@
   "cli.attr.set": "{key} = {value}",
   "cli.attr.cleared": "{key} cleared",
   "cli.attr.none": "no classifications",
-  "cli.attr.option_deleted": "deleted option {label} of {key} ({count} values changed)"
+  "cli.attr.option_deleted": "deleted option {label} of {key} ({count} values changed)",
+  "cli.plugin.line": "{name} {version} ({id}) — {status}",
+  "cli.plugin.none": "no plugins installed",
+  "cli.plugin.package": "{name} {version} ({id}) asks for:",
+  "cli.plugin.installed": "installed {name} {version}",
+  "cli.plugin.uninstalled": "uninstalled {name}; `fc undo` brings it back",
+  "cli.plugin.perm_granted": "[x] {permission}",
+  "cli.plugin.perm_off": "[ ] {permission}",
+  "cli.plugin.perm_sensitive": "[ ] {permission} (sensitive)",
+  "cli.plugin.no_logs": "no log lines",
+  "cli.plugin.packed": "packed {id} {version} → {path}"
 }

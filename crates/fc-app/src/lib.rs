@@ -31,6 +31,7 @@ pub use error::{AppError, AppResult};
 pub use handler::{
     inverse_call, CommandCtx, CommandHandler, CommandOutcome, QueryCtx, QueryHandler,
 };
+pub use modules::plugins::FilePicker;
 pub use registry::Registry;
 
 /// Provider/strategy interfaces, re-exported for transports and modules.
@@ -46,6 +47,10 @@ mod phase2_io_tests;
 mod phase2_manage_tests;
 #[cfg(test)]
 mod phase2_tests;
+#[cfg(test)]
+mod phase3_plugins_tests;
+#[cfg(test)]
+mod phase3_stats_tests;
 #[cfg(test)]
 mod review_fixes_tests;
 #[cfg(test)]

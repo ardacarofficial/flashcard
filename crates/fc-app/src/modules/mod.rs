@@ -38,4 +38,12 @@ modules! {
     browse,
     palette,
     presets,
+    mcp,
+    stats,
+    planning,
+    goals,
+    optimizer,
+    ai,
+    plugins,
+    tts,
 }

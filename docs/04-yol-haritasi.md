@@ -134,29 +134,43 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** [02 §17](02-ozellik-katalogu.md) istatistiklerinin tamamı; FSRS kişisel optimizasyonu; hedef hatırlama oranı (+ iş yükü tahmini); yük dengeleme; kolay günler; sınav tarihi modu; hedefler; deste karnesi.
 
 **Kabul kriterleri**
-- [ ] İstatistikler `review_log`'dan yeniden üretilebilir ve önbellekle aynı sonucu verir.
-- [ ] Optimizasyon arka plan işi olarak çalışır, iptal edilebilir.
-- [ ] Yük dengeleme simülasyonda günlük yük varyansını düşürür (test).
+- [x] İstatistikler `review_log`'dan yeniden üretilebilir ve önbellekle aynı sonucu verir.
+- [x] Optimizasyon arka plan işi olarak çalışır, iptal edilebilir.
+- [x] Yük dengeleme simülasyonda günlük yük varyansını düşürür (test).
+
+> **Doğrulama (`feat/v0.6-stats`):** (1) `fc-app/src/modules/stats/tests.rs::cache_equals_recomputation` (MemStore + SQLite bellek + dosya): her adımda önbellekli `stats.overview` = `fresh` yeniden hesaplama (alanı alanına) ve sayılan tekrar = `review_log`'un deneme dışı satırları; günler boyu cevaplar (SQLite'ta önbellek + eklenen satırlar katlanır), cevabın geri alınması (satır silinir → önbellek geçersiz), yinele, içe aktarılan tekrarlar (sayılır, `imported`), deneme oturumu (sayılmaz), not çöpe + kalıcı temizlik (tekrar geçmişi kalır, toplamlar ve önbellek değişmez — 0501), ikinci takvim (UTC+3). Saf düzeyde `fc_core::stats::tests::aggregates_are_a_monoid` (proptest: parça parça toplanıp birleştirilen = tek seferde toplanan). (2) `optimizer_job_saves_weights` (iş → ağırlıklar preset'e, tek geri al), `optimizer_job_cancelled_before_it_runs`, `optimizer_job_cancelled_while_training` (gerçek arka plan çalışanı, SQLite dosyası: iş koşarken `jobs.cancel` → `cancelled`, preset değişmez); `fc_study::optimize::tests::abort_flag_interrupts_training` (eğitim başka iş parçacığından durdurulur). (3) `fc_study::planning::tests::load_balancing_lowers_daily_load_variance`: 365 gün, 120 gün boyunca günde 20 yeni kart, FSRS, olasılıkla hatırlama — 15 günlük hareketli ortalamaya göre günlük yük varyansı **29.5 → 8.4**, toplam iş ±%10 içinde, tepe yük daha düşük; `easy_days_get_fewer_reviews`, `exam_mode_maximizes_recall_on_exam_day`; uygulama düzeyinde `load_balancing_spreads_equal_cards`, `exam_mode_and_exam_commands`. Sınıflandırma kırılımı: `breakdown_by_classification`. Ayrıntı: [10 §20](10-v0.1-sozlesme.md).
 
 ## 🔌 v0.7 · Eklenti altyapısı
 
 **Kapsam:** [05-eklenti-sistemi.md](05-eklenti-sistemi.md) tamamı: WASM çalışma zamanı, manifest, izinler, host API, kancalar, sağlayıcı kayıtları, arayüz katkı noktaları, eklenti ayarları, eklenti KV deposu, model indirme yöneticisi, mağaza kaynağı arayüzü, eklenti SDK'sı ve örnek eklentiler.
 
 **Kabul kriterleri**
-- [ ] Örnek eklentiler çalışır: yeni kart türü, yeni çalışma modu, TTS sağlayıcı, kanca ile alan doldurma.
-- [ ] İzni olmayan host fonksiyonu çağrısı reddedilir (test).
-- [ ] Sonsuz döngüye giren / panik yapan eklenti uygulamayı çökertmez (yakıt/zaman sınırı testi).
-- [ ] Eklenti API'si sürümlüdür; v1 eklentisi sonraki çekirdek sürümünde çalışmaya devam eder (sözleşme testi).
+- [x] Örnek eklentiler çalışır: yeni kart türü, yeni çalışma modu, TTS sağlayıcı, kanca ile alan doldurma.
+- [x] İzni olmayan host fonksiyonu çağrısı reddedilir (test).
+- [x] Sonsuz döngüye giren / panik yapan eklenti uygulamayı çökertmez (yakıt/zaman sınırı testi).
+- [x] Eklenti API'si sürümlüdür; v1 eklentisi sonraki çekirdek sürümünde çalışmaya devam eder (sözleşme testi).
+- [x] İzin deposu `permits`'i eklenti aktörleri için gerçek yapar: eklentiye `ai:write` **hiç verilemez** (v0.7 güvenlik kararı; kayıtlı izin olsa da `PERMISSION_DENIED`, adres ve anahtar değişmez); `ai_keys:write` olmadan `keep_key: true` adres değişikliğinde anahtarı **korumaz**, izinliyse korur (test; tur 4 — bkz. [10 §25](10-v0.1-sozlesme.md)).
+
+> **Doğrulama (`feat/v0.7-plugins`):** örnek eklentiler `plugins-sdk/examples` altında Rust ile yazılır, testte `wasm32-unknown-unknown`'a derlenip `.fcplugin` olarak paketlenir ve public API ile kurulur (`fc_plugins::testing`); hepsi MemStore + SQLite bellek + SQLite dosyada (`fc-app/src/modules/plugins/tests.rs`).
+> - *Örnekler:* `example_card_type_plugin` (`scramble-card`: not türü şablonu `plugin.com.example.scramble.scramble`, kart üretimi/çizimi/yazarak cevap motordan, HTML temizlenir, izin geri alınınca tür kaybolur), `example_study_mode_plugin` (`reverse-drill`: menüden açılan bildirimsel arayüz, cevap `study.answer` ile kaydedilir, adım tek geri al), `example_tts_provider_plugin` (`tone-tts`: `tts.providers/voices/synthesize` geçerli WAV döner), `example_hook_fills_a_field` (`autofill`: `before:notes.create` boş alanı doldurur, ayarlarla yönlendirilir, izin geri alınınca durur, eklenti komutu çalışma zamanında kayıtlı metot olarak palette).
+> - *İzinsiz çağrı:* `host_calls_without_permission_are_refused` (verilmemiş `decks:write` ile `decks.create` → `PERMISSION_DENIED`, hiçbir şey yazılmaz; aynı kontrol `Actor::Plugin` ile doğrudan çağrıda; verilmemiş kanca çalışmaz; istenmemiş izin verilemez). Çalışma zamanı düzeyinde `fc-plugins` `abi_v1_contract`.
+> - *Çökmezlik:* `misbehaving_plugins_cannot_crash_the_app` (sonsuz döngü → `TIMEOUT`, yakıt az → `OUT_OF_FUEL`, panik → `TRAP`, bellek → `MEMORY_LIMIT`; çekirdek işlem kanca hatasında sürer; 3. ardışık hatada otomatik kapanır ve bildirilir; yeniden açılır), `failed_operations_roll_back` (yazdıktan sonra panikleyen eklentinin yazdığı geri sarılır, geri al adımı kalmaz); `fc-plugins` `runtime::tests` (WAT ile döngü: yakıt ve son tarih, tuzak, bellek, ABI ihlali, host çağrısında geçen süre sayılmaz).
+> - *Sürümlü API:* `plugin_api_v1_contract` (dondurulmuş, elle yazılmış ABI v1 modülü `abi_v1.wat` paketlenip kurulur ve izinler üzerinden çalışır; `api_version = "2"` → `VALIDATION_PLUGIN_API_VERSION`; eklentilere açık v1 metotlarının ad/tür/izin anlık görüntüsü `api_v1.json` yalnız büyüyebilir). Ayrıntı docs/05 §12, docs/10 §24.
+> - *Sanal alandan kaçış (bağımsız inceleme sonrası):* saldırgan `escape` eklentisiyle `hooks_cannot_reach_management_io_or_settings` (yönetim/`io`/ayar/modül/geri al/`batch` kancaları kurulumda reddedilir, saklanmış satırda olsa da çalışmaz; kanca hedef metodun iznini ister), `plugins_get_no_free_paths_or_app_settings` (`io:*`, `settings:write`… verilemez; kayıt defterine sızmış izin de işe yaramaz; kendi ayarı evet, `plugins.fuel_millions` hayır; dosya yalnız `fs:pick` penceresinden, yol görmeden), `plugin_storage_rolls_back_with_the_call` (hata olunca depo/ayar geri sarılır, kullanıcı verisiyle birlikte geri alınır). CLI: `fc-cli` `plugin_subcommands`.
 
 ## 🤖 v0.8 · Yapay zeka
 
 **Kapsam:** [06 §1-2](06-ai-ve-entegrasyonlar.md): sağlayıcılar, anahtar zinciri, kullanım takibi, AI özellikleri, MCP istemcisi ve sunucusu.
 
 **Kabul kriterleri**
-- [ ] Sağlayıcılar sahte (mock) sunucuya karşı test edilir; gerçek API testleri isteğe bağlı.
-- [ ] API anahtarı veritabanında veya logda asla görünmez (test).
-- [ ] AI'a gönderilecek içerik kullanıcıya önizlenir.
-- [ ] Claude Desktop/Claude Code, MCP sunucusu üzerinden deste listeleyip kart ekleyebilir.
+- [x] Sağlayıcılar sahte (mock) sunucuya karşı test edilir; gerçek API testleri isteğe bağlı. *(`fc_ai::mock`: Claude/OpenAI/uyumlu/Ollama tel biçimi ve hatalar `fc-ai/src/tests.rs`; uçtan uca `fc-app/src/modules/ai/tests.rs::generate_cards_end_to_end_is_level_aware`; gerçek API: `FC_AI_LIVE_*`)*
+- [x] API anahtarı veritabanında veya logda asla görünmez (test). *(`api_key_never_reaches_db_oplog_errors_events_or_jobs`: veritabanı dosyası + WAL, döküm, oplog, olaylar, işler, hatalar; `fc-ai`: `http_errors_map_to_kinds_and_never_carry_the_key`, `Secret` Debug'ı. Uygulamada log altyapısı yok; anahtar hiçbir `Debug`/hata metnine girmez)*
+- [x] AI'a gönderilecek içerik kullanıcıya önizlenir. *(`ai.preview` → `ai.run` önizleme özetiyle; `nothing_is_sent_that_was_not_previewed`; arayüz `ai.test.ts`)*
+- [x] Claude Desktop/Claude Code, MCP sunucusu üzerinden deste listeleyip kart ekleyebilir.
+
+> **Doğrulama (MCP, iz H `feat/v0.8-mcp`):** `fc-cli/tests/mcp_stdio.rs::claude_lists_decks_and_adds_cards_over_stdio` gerçek `fc --db <dosya> mcp serve` ikilisini Claude Desktop/Code'un yaptığı gibi başlatır ve stdin/stdout'tan satır satır JSON-RPC konuşur: `initialize` (`2025-06-18`) → `notifications/initialized` → `tools/list` → `tools/call list_decks` → `list_classifications` → `add_notes` (Seviye=B1) → `search_cards seviye>=B1`; ardından ayrı `fc` süreçleri notları görür, oplog aktörü `{"kind":"mcp","id":"claude-ai"}`, `fc undo` tek adımda geri alır; `--read-only` oturum yazma araçlarını listelemez/reddeder. Aynı akış bellek içi borudan `fc-mcp/tests/stdio_protocol.rs`'te; araç anlamı (sınıflandırma, onaylı toplu atama, yazma anahtarı, izinler) `fc-app` `modules/mcp/tests.rs` × 3 depoda. İstemci iskeleti: `mcp_tools_connects_to_an_external_server` (`fc mcp tools` → kayıtlı dış sunucu = başka bir `fc mcp serve`). Kurulum: [06 §2.1](06-ai-ve-entegrasyonlar.md).
+
+> **Kapsam (06 §1.4), iz G tur 2 (Faz 3 tur 3 ile birleşik):** PDF (sayfa aralığı) ve web sayfası kaynağı, açıklama/ipucu akışı ve çalışma ekranındaki açıkla/ipucu/AI kontrol düğmeleri eklendi — bkz. [10 §22](10-v0.1-sozlesme.md).
 
 ## 🌉 v0.9 · Dış dünya ile bağlantı
 
