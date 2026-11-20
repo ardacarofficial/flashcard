@@ -12,5 +12,15 @@
     "not_found": {
       "note_type": "Note type not found."
     }
+  },
+  "notetype": {
+    "intro": "What a note holds (fields) and which cards it makes (templates).",
+    "list": "Note types",
+    "empty": "No note types yet.",
+    "field_actions": "Actions",
+    "sort_field_hint": "The field shown for a note in lists and search results.",
+    "syntax_intro": "Each template makes one card per note. Insert fields with double braces.",
+    "remove_template": "Remove template “{name}”",
+    "preview_heading": "Preview"
   }
 }

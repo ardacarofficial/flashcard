@@ -40,8 +40,8 @@ describe('<PresetsScreen> on the dev mock', () => {
     expect(p.config.new_per_day).toBe(50);
     expect(p.config.learning_steps_mins).toEqual([1, 10, 60]);
 
-    const pick = screen.getByLabelText('Choose a deck') as HTMLSelectElement;
-    await fireEvent.change(pick, { target: { value: decks[0]!.deck.id } });
+    await fireEvent.click(screen.getByRole('combobox', { name: 'Choose a deck' }));
+    await fireEvent.click(await screen.findByRole('option', { name: decks[0]!.deck.path }));
     await fireEvent.click(screen.getByRole('button', { name: 'Use for deck' }));
     await screen.findByRole('button', { name: `Remove from “${decks[0]!.deck.path}”` });
     const eff = await api.call('presets.for_deck', { deck_id: decks[0]!.deck.id });

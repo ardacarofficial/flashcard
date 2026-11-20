@@ -170,7 +170,15 @@
       "suspend": "Suspend selection",
       "info": "Card info",
       "delete": "Delete selection"
-    }
+    },
+    "intro": "Click a shortcut, then press the new key combination. Esc cancels.",
+    "filter_placeholder": "Filter shortcuts",
+    "empty": "No shortcut matches the filter.",
+    "clear_filter": "Clear filter",
+    "record_for": "Press the new keys for “{action}”",
+    "change_for": "Change shortcut for “{action}”",
+    "unbind_for": "Remove shortcut for “{action}”",
+    "unbound_text": "Not set"
   },
   "errors": {
     "validation": {

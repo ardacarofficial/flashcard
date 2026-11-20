@@ -50,6 +50,16 @@
       "due": "Vade tarihi",
       "random": "Rastgele",
       "retrievability": "En zayıf hatıra önce"
+    },
+    "deck_count": "{n} deste",
+    "new_placeholder": "Yeni şablon adı",
+    "pick": "Ayarlarını düzenlemek için bir şablon seçin.",
+    "none_hint": "Bazı destelere kendi sınırlarını ve adımlarını vermek için bir şablon oluşturun.",
+    "decks_intro": "Bu şablonu kullanan desteler (alt desteler de devralır).",
+    "desc": {
+      "new_per_day": "Her gün kaç yeni kart gösterilsin.",
+      "reviews_per_day": "Tekrarlar bu sayıya ulaşınca o gün durur.",
+      "desired_retention": "Kart geri geldiğinde onu hâlâ hatırlama olasılığınız (0,70–0,99)."
     }
   },
   "errors": {
