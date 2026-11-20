@@ -89,6 +89,10 @@ pub struct SessionState {
     pub last_event_at: Option<Timestamp>,
     /// Trial sessions: simulated states of the cards answered so far.
     pub trial: Vec<TrialCard>,
+    /// v0.10 study modes (learn progress, test paper, timed-out count); absent for plain
+    /// sessions, so their persisted state is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modes: Option<crate::modes::ModesState>,
 }
 
 /// Order of reviews and new cards.
