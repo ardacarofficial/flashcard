@@ -4,7 +4,9 @@
 use super::{all, exec, id, json, one, opt_id, to_json, ts};
 use super::{Mode, SqliteTx, WriteMode};
 use crate::error::{StorageError, StorageResult};
-use crate::repo::{OplogBatch, OplogRead, OplogRecord, OplogRecordKind, OplogWrite};
+use crate::repo::{
+    OplogBatch, OplogRead, OplogRecord, OplogRecordKind, OplogWrite, OPLOG_BARRIER_COMMAND,
+};
 use fc_core::paging::{Page, PageRequest};
 use fc_core::BatchId;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
@@ -147,9 +149,11 @@ impl<M: Mode> OplogRead for SqliteTx<'_, M> {
                 one(
                     self.conn(),
                     T,
-                    "SELECT batch_id, kind, reverts_batch_id, summary, created_at FROM oplog
-                     WHERE batch_id = ?1 ORDER BY seq LIMIT 1",
-                    [b.to_string()],
+                    "SELECT batch_id, kind, reverts_batch_id, summary, created_at,
+                            EXISTS (SELECT 1 FROM oplog o WHERE o.batch_id = ?1
+                                    AND o.command = ?2)
+                     FROM oplog WHERE batch_id = ?1 ORDER BY seq LIMIT 1",
+                    params![b.to_string(), OPLOG_BARRIER_COMMAND],
                     |r| {
                         Ok(OplogBatch {
                             batch_id: id(r, 0)?,
@@ -157,6 +161,7 @@ impl<M: Mode> OplogRead for SqliteTx<'_, M> {
                             reverts_batch_id: opt_id(r, 2)?,
                             summary: json(r, 3)?,
                             created_at: ts(r, 4)?,
+                            barrier: r.get(5)?,
                         })
                     },
                 )?
@@ -201,6 +206,11 @@ impl OplogWrite for SqliteTx<'_, WriteMode> {
                 rec.created_at.0,
             ],
         )?;
+        Ok(())
+    }
+
+    fn clear_oplog(&mut self) -> StorageResult<()> {
+        exec(self.conn(), T, "DELETE FROM oplog", [])?;
         Ok(())
     }
 }

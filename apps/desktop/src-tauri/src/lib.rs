@@ -29,6 +29,8 @@ pub fn run() {
             tauri::http::Response::builder()
                 .status(status)
                 .header("Content-Type", mime)
+                // Media bytes are user content: never let the webview sniff them into HTML/JS.
+                .header("X-Content-Type-Options", "nosniff")
                 .body(body)
                 .unwrap_or_default()
         })

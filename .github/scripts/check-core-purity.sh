@@ -4,8 +4,9 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 fail=0
-# Saf crate'ler. fc-study (v0.2) fc-core + fc-providers arayüzlerine bağlanabilir.
-for CORE in crates/fc-core crates/fc-study; do
+# Saf crate'ler. fc-study (v0.2) fc-core + fc-providers arayüzlerine bağlanabilir;
+# fc-providers yalnız arayüzdür (fc-core, serde, thiserror, async-trait), o da saf kalır.
+for CORE in crates/fc-core crates/fc-study crates/fc-providers; do
 if [ ! -d "$CORE" ]; then
   echo "::notice::$CORE yok (henüz gelmedi), atlanıyor."
   continue

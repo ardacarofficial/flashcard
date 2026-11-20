@@ -438,6 +438,7 @@ fn cancelling_in_the_middle_of_a_chunk_rolls_the_chunk_back() {
         registry: &reg,
         oplog: Vec::new(),
         events: Vec::new(),
+        check_modules: true,
     };
     let e = crate::CommandHandler::<IoImportApply>::execute(&handler, StagedJob { job_id: job }, &mut ctx)
         .unwrap_err();
@@ -453,10 +454,27 @@ fn cancelling_in_the_middle_of_a_chunk_rolls_the_chunk_back() {
 
 
 /// Everything but the `jobs` table (whose row records the job itself).
+/// Every table but `jobs` (the backup/restore jobs themselves) and `oplog` (a restore starts
+/// a fresh history: see [`assert_fresh_history`]).
 fn collection(t: &TestApp) -> fc_storage::repo::CollectionDump {
     let mut d = t.store.read().unwrap().dump_collection().unwrap();
-    d.tables.retain(|t| t.name != "jobs");
+    d.tables.retain(|t| t.name != "jobs" && t.name != "oplog");
     d
+}
+
+/// After a restore the oplog holds exactly one restore barrier (the backup's history is
+/// never replayed).
+pub(crate) fn assert_fresh_history(t: &TestApp) {
+    let rows = t
+        .store
+        .read()
+        .unwrap()
+        .list_oplog(&Default::default())
+        .unwrap()
+        .items;
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].command, fc_storage::repo::OPLOG_BARRIER_COMMAND);
+    assert_eq!(rows[0].payload["reason"], "restore");
 }
 
 fn level_attribute(t: &TestApp) {
@@ -1037,11 +1055,7 @@ fn backup_delete_restore_preserves_everything() {
         scope_deck_id: Some(lang.id),
         locale: None,
     });
-    let dump = |t: &TestApp| {
-        let mut d = t.store.read().unwrap().dump_collection().unwrap();
-        d.tables.retain(|t| t.name != "jobs");
-        d
-    };
+    let dump = collection;
     let before = dump(&t);
     let media_before = t.store.read().unwrap().list_media().unwrap();
 
@@ -1071,6 +1085,7 @@ fn backup_delete_restore_preserves_everything() {
     });
     let rr: RestoreReport = result(&finish(&t, &job));
     assert_eq!(dump(&t), before, "every table is restored exactly");
+    assert_fresh_history(&t);
     let tx = t.store.read().unwrap();
     assert_eq!(tx.list_media().unwrap(), media_before);
     for m in &media_before {
@@ -1092,6 +1107,7 @@ fn backup_delete_restore_preserves_everything() {
     });
     result::<RestoreReport>(&finish(&t, &job));
     assert_eq!(dump(&t), after_delete);
+    assert_fresh_history(&t);
 }
 
 #[test]
@@ -1234,6 +1250,7 @@ fn restoring_an_older_schema_backup_migrates_it_forward() {
     let after = collection(&t);
     assert_eq!(after.schema_versions, before.schema_versions);
     assert_eq!(after, before);
+    assert_fresh_history(&t);
 }
 
 #[test]

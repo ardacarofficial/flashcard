@@ -49,7 +49,14 @@ fn suggest(
     let Some(header) = header else {
         return Ok(default_columns(&keys, columns));
     };
+    let attrs_on = crate::support::module_enabled(
+        ctx.tx,
+        ctx.registry,
+        crate::modules::attributes::ID,
+    )?;
     let defs = match deck {
+        // Module off: classifications are hidden, never suggested as a column target.
+        Some(_) if !attrs_on => Vec::new(),
         Some(d) => {
             let index = DeckIndex::load(ctx.tx)?;
             effective_for_deck(ctx.tx, &index, Some(d))?

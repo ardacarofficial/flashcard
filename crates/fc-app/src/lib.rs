@@ -47,4 +47,6 @@ mod phase2_manage_tests;
 #[cfg(test)]
 mod phase2_tests;
 #[cfg(test)]
+mod review_fixes_tests;
+#[cfg(test)]
 mod tests;

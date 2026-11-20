@@ -22,8 +22,9 @@ methods! {
     // ---- palette & shortcuts ----
     /// Every public method for the command palette.
     PaletteListMethod = "palette.list", Query, "palette", "modules:read", Public, undo: false, Empty => PaletteList;
-    /// Shortcut bindings and conflicts.
-    ShortcutsList = "shortcuts.list", Query, "palette", "settings:read", Public, undo: false, Empty => ShortcutList;
+    /// Shortcut bindings and conflicts. Owned by `core` (cannot be disabled): global keys keep
+    /// working with the `palette` module off; only the palette and the editor go away.
+    ShortcutsList = "shortcuts.list", Query, "core", "settings:read", Public, undo: false, Empty => ShortcutList;
     /// Binds / unbinds an action.
     ShortcutsSet = "shortcuts.set", Command, "palette", "settings:write", Public, undo: true, SetShortcut => ShortcutList;
     /// Restores defaults.

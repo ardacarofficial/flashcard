@@ -3,5 +3,7 @@
   "oplog.summary.modules.set_enabled": "{module} modülü açıldı/kapandı",
   "oplog.summary.settings.set": "Ayar değişti: {key}",
   "oplog.summary.settings.reset": "Ayar sıfırlandı: {key}",
-  "oplog.summary.jobs.cancel": "Bir iş iptal edildi"
+  "oplog.summary.jobs.cancel": "Bir iş iptal edildi",
+  "oplog.summary.oplog.barrier.restore": "Koleksiyon yedekten geri yüklendi",
+  "oplog.summary.oplog.barrier.purge": "Çöp kalıcı olarak boşaltıldı ({count} öğe)"
 }

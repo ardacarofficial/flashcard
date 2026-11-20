@@ -8,6 +8,7 @@
 use crate::error::AppResult;
 use crate::handler::{CommandCtx, CommandOutcome};
 use crate::jobs::{JobContext, JobHandler};
+use crate::support::history::{push_barrier, BarrierReason};
 use crate::support::summary;
 use fc_api::v1::browse::{PurgeResult, PurgeTrash};
 use fc_api::v1::methods::BrowsePurgeTrash;
@@ -60,6 +61,11 @@ pub(super) fn purge(req: PurgeTrash, ctx: &mut CommandCtx<'_>) -> AppResult<Comm
     let cutoff = if days == 0 { Timestamp(before.0 + 1) } else { before };
     let c = ctx.tx.purge_trash(cutoff)?;
     let total = c.notes + c.cards + c.decks;
+    if total > 0 {
+        // Older inverses may refer to what is gone now: undo stops here instead of failing
+        // with NOT_FOUND on every step before it.
+        push_barrier(ctx, BarrierReason::Purge { count: total });
+    }
     Ok(CommandOutcome {
         response: PurgeResult {
             notes: c.notes,

@@ -3,7 +3,7 @@ import { METHODS, type MethodName } from '$lib/api/generated/methods';
 import { createMockTransport } from '$lib/api/mock/transport';
 import { createApiClient } from '$lib/api';
 import type { PaletteEntry, ShortcutDto } from '$lib/api/types';
-import { translateDynamic } from '$lib/i18n/core';
+import { DICTIONARIES, flatKeys, LOCALES, translateDynamic } from '$lib/i18n/core';
 import { bindingMap, comboOf, filterItems, paletteItems } from './palette';
 
 const entry = (method: string, over: Partial<PaletteEntry> = {}): PaletteEntry => ({
@@ -28,11 +28,12 @@ describe('command palette', () => {
     );
   });
 
-  it('every public method has a TR and EN palette label', () => {
-    for (const m of Object.keys(METHODS)) {
-      for (const lang of ['tr', 'en'] as const) {
-        expect(translateDynamic(lang, `commands.${m}`), `${lang} commands.${m}`).not.toBe(`commands.${m}`);
-      }
+  // Against the generated registry (`METHODS` = every public method of `fc_api::v1::catalog`),
+  // not a hand-kept list; each language is read on its own, without the EN fallback.
+  it('has a TR and an EN palette label for exactly the public methods', () => {
+    const methods = Object.keys(METHODS).sort();
+    for (const lang of LOCALES) {
+      expect(flatKeys(DICTIONARIES[lang].commands).sort(), `${lang} commands.*`).toEqual(methods);
     }
   });
 

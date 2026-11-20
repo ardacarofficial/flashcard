@@ -3,7 +3,7 @@
 //! counts follow note writes. Backbone (cards show media), so it cannot be switched off.
 
 use crate::error::{AppError, AppResult};
-use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
+use crate::handler::{inverse_call, CommandCtx, CommandHandler, CommandOutcome, QueryCtx};
 use crate::module::ModuleDescriptor;
 use crate::registry::Registry;
 use crate::support::summary;
@@ -16,6 +16,7 @@ use fc_core::content::media::{detect_mime, media_hash, media_kind, MediaKind};
 use fc_core::content::refs::{is_media_hash, MEDIA_SCHEME};
 use fc_storage::repo::MediaRecord;
 use fc_storage::Reads;
+use serde_json::Value;
 
 /// Module id.
 pub const ID: &str = "media";
@@ -39,7 +40,7 @@ pub fn descriptor() -> ModuleDescriptor {
 /// Registers the module and its methods.
 pub fn register(reg: &mut Registry) {
     reg.module(descriptor());
-    reg.command::<MediaAdd>(add);
+    reg.command::<MediaAdd>(AddHandler);
     reg.command::<MediaForget>(forget);
     reg.command::<MediaReinstate>(reinstate);
     reg.query::<MediaGet>(get);
@@ -71,6 +72,29 @@ fn to_dto(m: MediaRecord, created: bool) -> MediaDto {
         original_name: m.original_name,
         ref_count: m.ref_count,
         created,
+    }
+}
+
+/// `media.add`. The oplog records `{hash, name, mime, size}`, not the file: undo
+/// (`media.forget`) and redo (`media.reinstate`) work through the media store.
+struct AddHandler;
+
+impl CommandHandler<MediaAdd> for AddHandler {
+    fn execute(
+        &self,
+        req: AddMedia,
+        ctx: &mut CommandCtx<'_>,
+    ) -> AppResult<CommandOutcome<MediaDto>> {
+        add(req, ctx)
+    }
+
+    fn recorded_payload(&self, response: &MediaDto) -> Option<Value> {
+        Some(serde_json::json!({
+            "hash": response.hash,
+            "name": response.original_name,
+            "mime": response.mime,
+            "size": response.size,
+        }))
     }
 }
 

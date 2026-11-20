@@ -1,8 +1,8 @@
 //! Small helpers over the `zip` crate (all packages are zip files).
 //!
 //! **Decompression budget** (zip/zstd bombs): every [`ZipIn`] has a total budget of
-//! decompressed bytes, charged with the bytes *actually produced* (headers can lie), plus a
-//! per-entry cap. Zstd payloads inside the archive are decoded through [`ZipIn::zstd`] and
+//! decompressed bytes (input × 200, clamped to 64 MiB–1 GiB), charged with the bytes
+//! *actually produced* (headers can lie), plus a per-entry cap. Zstd payloads inside the archive are decoded through [`ZipIn::zstd`] and
 //! charged to the same budget. Buffers are never pre-allocated from a claimed size beyond
 //! [`MAX_PREALLOC`].
 
@@ -11,12 +11,14 @@ use std::io::{Cursor, Read, Write};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
-/// Largest single entry we inflate.
-const MAX_ENTRY: u64 = 4 * 1024 * 1024 * 1024;
+/// Largest single entry we inflate (never more than the total budget anyway).
+const MAX_ENTRY: u64 = MAX_BUDGET;
 /// Total budget: `input length × MAX_RATIO`, clamped to `[MIN_BUDGET, MAX_BUDGET]`.
 const MAX_RATIO: u64 = 200;
+/// Floor of the total budget (small archives still get room for their collection).
 const MIN_BUDGET: u64 = 64 * 1024 * 1024;
-const MAX_BUDGET: u64 = 4 * 1024 * 1024 * 1024;
+/// Ceiling of the total budget: 1 GiB of decompressed data per archive, whatever its size.
+const MAX_BUDGET: u64 = 1024 * 1024 * 1024;
 /// Largest up-front allocation taken from a size the archive claims.
 const MAX_PREALLOC: u64 = 16 * 1024 * 1024;
 /// Largest zstd window we accept (2^27 = 128 MiB, zstd's default decoder limit).

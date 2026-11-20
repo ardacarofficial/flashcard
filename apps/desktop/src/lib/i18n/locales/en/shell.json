@@ -54,6 +54,7 @@
     "conflict": {
       "nothing_to_undo": "Nothing to undo.",
       "nothing_to_redo": "Nothing to redo.",
+      "history_barrier": "Undo stops here: the collection was replaced from a backup or the trash was emptied for good. Earlier history can't be undone.",
       "module_disabled": "This module is turned off.",
       "module_required": "This module can't be turned off.",
       "deleted": "This item is in the trash."

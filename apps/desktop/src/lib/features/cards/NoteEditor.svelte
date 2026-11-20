@@ -8,7 +8,7 @@
   import CardMetaPanel from './CardMetaPanel.svelte';
   import CardPreview from './CardPreview.svelte';
   import FieldInput from './FieldInput.svelte';
-  import { moduleOn, trackModules } from './modules.svelte';
+  import { moduleKnownOn, moduleOn, trackModules } from './modules.svelte';
 
   interface Props {
     deckId: string;
@@ -87,10 +87,16 @@
     });
   });
 
-  // Classifications that apply to the deck appear next to the fields.
+  // Classifications that apply to the deck appear next to the fields (none while the
+  // `attributes` module is off: then nothing is sent and stored values stay untouched).
   $effect(() => {
     const id = effectiveDeck;
     const from = noteAttrs;
+    if (!moduleKnownOn('attributes')) {
+      defs = [];
+      attrs = {};
+      return;
+    }
     let cancelled = false;
     api.attribute.effective(id).then((list) => {
       if (cancelled) return;

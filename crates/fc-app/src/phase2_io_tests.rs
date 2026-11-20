@@ -113,8 +113,9 @@ fn all_attributes() -> fc_api::v1::attributes::ListAttributes {
 
 fn dump(t: &TestApp) -> CollectionDump {
     let mut d = t.store.read().unwrap().dump_collection().unwrap();
-    // Job rows record the backup/restore jobs themselves.
-    d.tables.retain(|t| t.name != "jobs");
+    // Job rows record the backup/restore jobs themselves; a restore starts a fresh oplog
+    // (checked separately).
+    d.tables.retain(|t| t.name != "jobs" && t.name != "oplog");
     d
 }
 
@@ -439,6 +440,7 @@ fn anki_import_study_backup_wipe_restore_is_identical() {
     });
     result::<RestoreReport>(&finish(&fresh, &job));
     assert_eq!(dump(&fresh), before, "every table is restored exactly");
+    crate::modules::io::tests::assert_fresh_history(&fresh);
     assert_eq!(
         media_files(&db),
         files_before,

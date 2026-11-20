@@ -1,4 +1,10 @@
 //! Reading Anki packages (all layouts; see the module table in `anki`).
+//!
+//! **Hostile collections.** The collection is an SQLite database from an untrusted file, so
+//! every name we query must be a real table (a `VIEW` called `notes` with an endless
+//! recursive CTE would otherwise hang the worker) without generated columns, and every query
+//! runs under a progress handler that aborts it when the caller cancels or
+//! [`QUERY_TIME_BUDGET`] runs out.
 
 use super::proto::{self, bytes_field, string_field, varint_field};
 use super::schema::DECK_SEPARATOR_18;
@@ -7,9 +13,20 @@ use crate::error::{InteropError, InteropResult};
 use crate::zipio::ZipIn;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value;
+use std::time::{Duration, Instant};
 
 const FORMAT: &str = "apkg";
 const ZSTD_MAGIC: [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
+
+/// Wall-time budget for all queries against one collection; a query still running after it
+/// is aborted (the package is then reported invalid).
+pub const QUERY_TIME_BUDGET: Duration = Duration::from_secs(120);
+/// SQLite VM instructions between two abort checks.
+const PROGRESS_EVERY: std::os::raw::c_int = 10_000;
+/// Tables every layout reads.
+const BASE_TABLES: [&str; 4] = ["col", "notes", "cards", "revlog"];
+/// Extra tables of the latest (schema 18) layout.
+const LATEST_TABLES: [&str; 4] = ["notetypes", "fields", "templates", "decks"];
 
 fn sql(e: rusqlite::Error) -> InteropError {
     InteropError::invalid(FORMAT, format!("collection: {e}"))
@@ -23,8 +40,34 @@ pub(super) fn open_db(bytes: &[u8]) -> InteropResult<Connection> {
     Ok(conn)
 }
 
-/// Reads an `.apkg` / `.colpkg`.
+/// [`open_db`] with the query guard installed: every statement is interrupted once
+/// `should_abort` returns `true` or `budget` has passed since opening.
+fn open_guarded(
+    bytes: &[u8],
+    should_abort: impl Fn() -> bool + Send + 'static,
+    budget: Duration,
+) -> InteropResult<Connection> {
+    let mut conn = open_db(bytes)?;
+    let deadline = Instant::now().checked_add(budget);
+    conn.progress_handler(
+        PROGRESS_EVERY,
+        Some(move || should_abort() || deadline.is_some_and(|d| Instant::now() >= d)),
+    )
+    .map_err(sql)?;
+    Ok(conn)
+}
+
+/// Reads an `.apkg` / `.colpkg` (queries limited to [`QUERY_TIME_BUDGET`]).
 pub fn read_package(bytes: &[u8]) -> InteropResult<AnkiCollection> {
+    read_package_with_abort(bytes, || false)
+}
+
+/// [`read_package`] that also stops (with an error) as soon as `should_abort` returns `true`;
+/// it is polled while SQLite runs, so a cancelled import does not wait for a slow query.
+pub fn read_package_with_abort(
+    bytes: &[u8],
+    should_abort: impl Fn() -> bool + Send + 'static,
+) -> InteropResult<AnkiCollection> {
     let mut zip = ZipIn::open(bytes, FORMAT)?;
     let (layout, db) = if let Some(b) = zip.read("collection.anki21b")? {
         (AnkiLayout::Latest, zip.zstd(&b)?)
@@ -35,13 +78,15 @@ pub fn read_package(bytes: &[u8]) -> InteropResult<AnkiCollection> {
     } else {
         return Err(InteropError::invalid(FORMAT, "no collection inside"));
     };
-    let conn = open_db(&db)?;
+    let conn = open_guarded(&db, should_abort, QUERY_TIME_BUDGET)?;
+    require_tables(&conn, &BASE_TABLES)?;
     let crt: i64 = conn
         .query_row("SELECT crt FROM col LIMIT 1", [], |r| r.get(0))
         .optional()
         .map_err(sql)?
         .unwrap_or(0);
-    let (notetypes, decks) = if table_exists(&conn, "notetypes")? {
+    let (notetypes, decks) = if is_plain_table(&conn, "notetypes")? {
+        require_tables(&conn, &LATEST_TABLES)?;
         (latest_notetypes(&conn)?, latest_decks(&conn)?)
     } else {
         legacy_meta(&conn)?
@@ -58,14 +103,35 @@ pub fn read_package(bytes: &[u8]) -> InteropResult<AnkiCollection> {
     })
 }
 
-fn table_exists(conn: &Connection, name: &str) -> InteropResult<bool> {
-    conn.query_row(
-        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
-        [name],
-        |r| r.get::<_, i64>(0),
+/// Whether `name` is an ordinary table: `type = 'table'` in `sqlite_master` *and* in the
+/// parsed schema (`pragma_table_list`, which a hand-edited `sqlite_master` row whose SQL
+/// says `CREATE VIEW` or `CREATE VIRTUAL TABLE` cannot fake), with no generated columns.
+fn is_plain_table(conn: &Connection, name: &str) -> InteropResult<bool> {
+    let count = |q: &str| {
+        conn.query_row(q, [name], |r| r.get::<_, i64>(0))
+            .map_err(sql)
+    };
+    Ok(
+        count("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1")? > 0
+            && count(
+                "SELECT count(*) FROM pragma_table_list WHERE schema = 'main' AND type = 'table' \
+                 AND name = ?1",
+            )? > 0
+            && count("SELECT count(*) FROM pragma_table_xinfo(?1) WHERE hidden <> 0")? == 0,
     )
-    .map(|n| n > 0)
-    .map_err(sql)
+}
+
+/// Fails unless every name in `names` is a plain table (see [`is_plain_table`]).
+fn require_tables(conn: &Connection, names: &[&str]) -> InteropResult<()> {
+    for name in names {
+        if !is_plain_table(conn, name)? {
+            return Err(InteropError::invalid(
+                FORMAT,
+                format!("collection: {name} is not a plain table"),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn notes(conn: &Connection) -> InteropResult<Vec<AnkiNote>> {
@@ -331,3 +397,6 @@ fn media(zip: &mut ZipIn<'_>, layout: AnkiLayout) -> InteropResult<Vec<(String, 
     }
     Ok(files)
 }
+
+#[cfg(test)]
+mod tests;

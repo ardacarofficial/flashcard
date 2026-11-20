@@ -6,7 +6,7 @@
   import type { ScreenCtx } from '../types';
   import CardPreview from './CardPreview.svelte';
   import { move, newField, sampleFields, toInput } from './content';
-  import { trackModules } from './modules.svelte';
+  import { moduleKnownOn, trackModules } from './modules.svelte';
 
   let { ctx: _ctx }: { ctx: ScreenCtx } = $props();
 
@@ -43,12 +43,18 @@
     trackModules();
     void load();
     api.call('cardtypes.list', {}).then((r) => (engines = r.card_types), fail);
+    const unsub = api.on(['note_type_changed', 'undone', 'redone'], () => void load());
+    return () => void unsub.then((u) => u());
+  });
+
+  // Global note classifications (none while the `attributes` module is off).
+  $effect(() => {
+    classifications = [];
+    if (!moduleKnownOn('attributes')) return;
     api.call('attributes.list', { scope_deck_id: null, include_deleted: false }).then(
       (r) => (classifications = r.defs.filter((d) => d.target === 'note' && d.scope_deck_id === null)),
       () => (classifications = []),
     );
-    const unsub = api.on(['note_type_changed', 'undone', 'redone'], () => void load());
-    return () => void unsub.then((u) => u());
   });
 
   // Selecting a note type starts a fresh draft.

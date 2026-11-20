@@ -24,7 +24,13 @@ use std::sync::Arc;
 /// Type-erased command handler.
 pub(crate) trait ErasedCommand: Send + Sync {
     fn validate(&self, params: &Value) -> AppResult<()>;
-    fn execute(&self, params: Value, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Value>>;
+    /// The outcome, plus the oplog payload if the handler replaces the request
+    /// ([`CommandHandler::recorded_payload`]).
+    fn execute(
+        &self,
+        params: Value,
+        ctx: &mut CommandCtx<'_>,
+    ) -> AppResult<(CommandOutcome<Value>, Option<Value>)>;
 }
 
 /// Type-erased query handler.
@@ -57,12 +63,17 @@ impl<M: ApiMethod, H: CommandHandler<M>> ErasedCommand for TypedCommand<M, H> {
         self.0.validate(&req)
     }
 
-    fn execute(&self, params: Value, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Value>> {
+    fn execute(
+        &self,
+        params: Value,
+        ctx: &mut CommandCtx<'_>,
+    ) -> AppResult<(CommandOutcome<Value>, Option<Value>)> {
         let req: M::Request = parse(M::NAME, params)?;
         self.0.validate(&req)?;
         let outcome = self.0.execute(req, ctx)?;
+        let recorded = self.0.recorded_payload(&outcome.response);
         let response = to_value(&outcome.response)?;
-        Ok(outcome.map(|_| response))
+        Ok((outcome.map(|_| response), recorded))
     }
 }
 
@@ -239,6 +250,8 @@ impl Registry {
 
     /// See [`CommandCtx::call`]. Internal methods are allowed here (inverses, undo/redo);
     /// callers that forward client calls (`batch.execute`) check [`ensure_invocable`] first.
+    /// The module switch applies to every nested call (read inside this transaction), unless
+    /// `ctx.check_modules` is off (crash recovery).
     pub(crate) fn execute_nested(
         &self,
         ctx: &mut CommandCtx<'_>,
@@ -253,6 +266,11 @@ impl Registry {
                 format!("{} is a query; only commands can be nested", request.method),
             ));
         };
+        if ctx.check_modules
+            && !crate::support::module_enabled(ctx.reads(), self, entry.descriptor.module)?
+        {
+            return Err(module_disabled(entry.descriptor.module));
+        }
         run_recorded(
             ctx,
             &entry.descriptor,
@@ -275,11 +293,11 @@ pub(crate) fn run_recorded(
 ) -> AppResult<Value> {
     let slot = ctx.oplog.len();
     ctx.oplog.push(None);
-    let outcome = handler.execute(params.clone(), ctx)?;
+    let (outcome, recorded) = handler.execute(params.clone(), ctx)?;
     if descriptor.undoable && !outcome.inverse.is_empty() {
         ctx.oplog[slot] = Some(PendingOplogEntry {
             command: method.to_owned(),
-            payload: params,
+            payload: recorded.unwrap_or(params),
             inverse: outcome.inverse,
             summary: outcome.summary,
         });
@@ -308,15 +326,20 @@ pub(crate) fn ensure_invocable(
         ));
     }
     if !module_enabled {
-        return Err(AppError::Api(
-            ApiError::new(
-                ErrorCode::ConflictModuleDisabled,
-                format!("module {} is disabled", d.module),
-            )
-            .with_detail("module", d.module),
-        ));
+        return Err(module_disabled(d.module));
     }
     Ok(())
+}
+
+/// `CONFLICT_MODULE_DISABLED` for `module`.
+pub(crate) fn module_disabled(module: &str) -> AppError {
+    AppError::Api(
+        ApiError::new(
+            ErrorCode::ConflictModuleDisabled,
+            format!("module {module} is disabled"),
+        )
+        .with_detail("module", module),
+    )
 }
 
 /// Whether `actor` holds `permission`. v0.1 has no grant store: the user, the CLI and the app

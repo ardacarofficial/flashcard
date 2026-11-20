@@ -98,6 +98,10 @@ pub struct CommandCtx<'a> {
     /// before the nested calls it makes; slots of commands that record nothing stay `None`.
     pub(crate) oplog: Vec<Option<PendingOplogEntry>>,
     pub(crate) events: Vec<DomainEvent>,
+    /// Nested calls ([`CommandCtx::call`]) fail with `CONFLICT_MODULE_DISABLED` when their
+    /// module is off (as read in this transaction). `false` only for crash recovery, which
+    /// must not depend on module switches.
+    pub(crate) check_modules: bool,
 }
 
 impl CommandCtx<'_> {
@@ -145,6 +149,14 @@ pub trait CommandHandler<M: ApiMethod>: Send + Sync + 'static {
         req: M::Request,
         ctx: &mut CommandCtx<'_>,
     ) -> AppResult<CommandOutcome<M::Response>>;
+
+    /// What the oplog records as this call's `payload` (audit only: undo/redo run the
+    /// inverse, never the payload). `None` (default) = the request as sent. Override for
+    /// requests carrying bulk data, e.g. `media.add`'s file bytes (the oplog — and every
+    /// backup — would hold a copy of each file).
+    fn recorded_payload(&self, _response: &M::Response) -> Option<Value> {
+        None
+    }
 }
 
 impl<M, F> CommandHandler<M> for F

@@ -3,5 +3,7 @@
   "oplog.summary.modules.set_enabled": "Module {module} switched",
   "oplog.summary.settings.set": "Changed setting {key}",
   "oplog.summary.settings.reset": "Reset setting {key}",
-  "oplog.summary.jobs.cancel": "Cancelled a job"
+  "oplog.summary.jobs.cancel": "Cancelled a job",
+  "oplog.summary.oplog.barrier.restore": "Collection restored from a backup",
+  "oplog.summary.oplog.barrier.purge": "Trash emptied for good ({count} items)"
 }

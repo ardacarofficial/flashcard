@@ -6,6 +6,7 @@ use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::registry::Registry;
 use crate::support::attrs::apply_assignments;
+use fc_api::v1::attributes::AttributeAssignment;
 use crate::support::content::{add_missing_cards, card_specs, deck_for_new_cards};
 use crate::support::decks::DeckIndex;
 use crate::support::notes::{
@@ -114,12 +115,18 @@ fn create(req: CreateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
     let ancestry = index.ancestry(req.deck_id)?;
     let defs = ctx.reads().list_attribute_defs(false)?;
     let effective = effective_attribute_defs(&ancestry, &defs);
-    let provided: Vec<_> = req
-        .attributes
-        .iter()
-        .map(|a| (a.attr_id, a.value.clone()))
-        .collect();
-    let values = prepare_attribute_values(&effective, AttributeTarget::Note, &provided)?;
+    let values = if attributes_enabled(ctx)? {
+        let provided: Vec<_> = req
+            .attributes
+            .iter()
+            .map(|a| (a.attr_id, a.value.clone()))
+            .collect();
+        prepare_attribute_values(&effective, AttributeTarget::Note, &provided)?
+    } else {
+        // Module off: classifications are hidden, so nothing is asked of the caller —
+        // given values are ignored, defaults still apply, `required` is not enforced.
+        default_attribute_values(&effective, AttributeTarget::Note)
+    };
 
     insert_note(ctx, &nt, &note)?;
     for spec in specs {
@@ -149,6 +156,30 @@ fn create(req: CreateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
     })
 }
 
+/// Whether the `attributes` module is on (in this transaction).
+pub(crate) fn attributes_enabled(ctx: &CommandCtx<'_>) -> AppResult<bool> {
+    crate::support::module_enabled(ctx.reads(), ctx.registry, crate::modules::attributes::ID)
+}
+
+/// Values a new entity gets when classifications are hidden (module off): each applicable
+/// definition's valid default, nothing else.
+pub(crate) fn default_attribute_values(
+    effective: &[fc_core::attribute::EffectiveAttribute<'_>],
+    target: AttributeTarget,
+) -> Vec<(fc_core::AttributeDefId, fc_core::attribute::AttributeValue)> {
+    effective
+        .iter()
+        .map(|e| e.def)
+        .filter(|d| d.target == target)
+        .filter_map(|d| {
+            let v = d.default_value.as_ref()?;
+            fc_core::attribute::validate_attribute_value(d, v)
+                .ok()
+                .map(|v| (d.id, v))
+        })
+        .collect()
+}
+
 /// Replaces fields and tags; optionally moves the home deck (cards stay put); then sets/clears
 /// the listed attributes (others are untouched), resolved against the new home deck.
 fn update(req: UpdateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<NoteDto>> {
@@ -174,7 +205,14 @@ fn update(req: UpdateNote, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
     // existing cards are never removed (v0.3).
     let deck = deck_for_new_cards(ctx.reads(), &note)?;
     let new_cards = add_missing_cards(ctx, &nt, &note, deck)?;
-    let previous = apply_assignments(ctx.tx, strict, EntityRef::Note(note.id), &req.attributes)?;
+    // With the module off, a new edit leaves classifications alone (they are hidden);
+    // undo/redo still restore them exactly.
+    let assignments: &[AttributeAssignment] = if strict && !attributes_enabled(ctx)? {
+        &[]
+    } else {
+        &req.attributes
+    };
+    let previous = apply_assignments(ctx.tx, strict, EntityRef::Note(note.id), assignments)?;
     let inverse = UpdateNote {
         id: note.id,
         fields: old

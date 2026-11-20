@@ -8,12 +8,18 @@
 //! * the **undo target** is the newest non-cancelled `do` or `redo` batch;
 //! * the **redo target** is the newest non-cancelled `undo` batch, provided no non-cancelled
 //!   `do` batch comes after it (a new action clears the redo stack).
+//! * a **history barrier** batch (a `do` batch holding an [`OPLOG_BARRIER_COMMAND`] entry,
+//!   written by a restore from backup or a trash purge) ends the undo walk: if it is reached
+//!   before an undo target, undo fails with `CONFLICT_HISTORY_BARRIER`. Older batches stay
+//!   listed (`oplog.list`) but are never undone. Like any `do` batch it also clears redo.
 
 use super::from_json;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
+use crate::handler::{CommandCtx, PendingOplogEntry};
 use fc_api::v1::common::I18nMessage;
+use fc_api::{ApiError, ErrorCode};
 use fc_core::BatchId;
-use fc_storage::repo::{OplogBatch, OplogRecordKind};
+use fc_storage::repo::{OplogBatch, OplogRecordKind, OPLOG_BARRIER_COMMAND};
 use fc_storage::Reads;
 use std::collections::HashSet;
 
@@ -26,6 +32,76 @@ pub(crate) struct History {
     pub undo: Option<OplogBatch>,
     /// Batch `oplog.redo` reverts (an undo batch).
     pub redo: Option<OplogBatch>,
+    /// The history barrier that stopped the undo walk (then `undo` is `None`).
+    pub barrier: Option<OplogBatch>,
+}
+
+impl History {
+    /// The undo target, or the error explaining why there is none.
+    pub(crate) fn undo_target(self) -> AppResult<OplogBatch> {
+        if let Some(b) = self.undo {
+            return Ok(b);
+        }
+        match self.barrier {
+            Some(barrier) => {
+                let reason = barrier_reason(&barrier);
+                Err(AppError::Api(
+                    ApiError::new(
+                        ErrorCode::ConflictHistoryBarrier,
+                        "undo cannot go past this point in history",
+                    )
+                    .with_detail("reason", reason)
+                    .with_detail("batch_id", barrier.batch_id.to_string()),
+                ))
+            }
+            None => Err(AppError::api(
+                ErrorCode::ConflictNothingToUndo,
+                "nothing to undo",
+            )),
+        }
+    }
+}
+
+/// Reason of a barrier batch (`restore` / `purge`), from its summary key.
+fn barrier_reason(b: &OplogBatch) -> String {
+    b.summary
+        .get("key")
+        .and_then(|k| k.as_str())
+        .and_then(|k| k.strip_prefix(BARRIER_SUMMARY_PREFIX))
+        .unwrap_or("unknown")
+        .to_owned()
+}
+
+const BARRIER_SUMMARY_PREFIX: &str = "oplog.summary.oplog.barrier.";
+
+/// Why a history barrier is written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BarrierReason {
+    /// The collection was replaced from a backup (the oplog starts afresh).
+    Restore,
+    /// Trashed items were deleted for good (`count` of them).
+    Purge {
+        /// Purged items.
+        count: u32,
+    },
+}
+
+/// Records a history barrier in this dispatch's batch (see the module docs).
+pub(crate) fn push_barrier(ctx: &mut CommandCtx<'_>, reason: BarrierReason) {
+    let (name, summary) = match reason {
+        BarrierReason::Restore => ("restore", None),
+        BarrierReason::Purge { count } => ("purge", Some(count)),
+    };
+    let mut message = I18nMessage::key(format!("{BARRIER_SUMMARY_PREFIX}{name}"));
+    if let Some(count) = summary {
+        message = message.param("count", count);
+    }
+    ctx.oplog.push(Some(PendingOplogEntry {
+        command: OPLOG_BARRIER_COMMAND.to_owned(),
+        payload: serde_json::json!({ "reason": name }),
+        inverse: Vec::new(),
+        summary: message,
+    }));
 }
 
 /// Scans the oplog (see module docs).
@@ -33,6 +109,7 @@ pub(crate) fn scan(reads: &dyn Reads) -> AppResult<History> {
     let mut out = History::default();
     let mut cancelled: HashSet<BatchId> = HashSet::new();
     let mut redo_blocked = false;
+    let mut undo_done = false;
     let mut before: Option<BatchId> = None;
     loop {
         let page = reads.list_oplog_batches(before, PAGE)?;
@@ -57,10 +134,15 @@ pub(crate) fn scan(reads: &dyn Reads) -> AppResult<History> {
                     cancelled.insert(r);
                 }
             }
-            if out.undo.is_none() && matches!(b.kind, OplogRecordKind::Do | OplogRecordKind::Redo) {
-                out.undo = Some(b);
+            if !undo_done && matches!(b.kind, OplogRecordKind::Do | OplogRecordKind::Redo) {
+                undo_done = true;
+                if b.barrier {
+                    out.barrier = Some(b);
+                } else {
+                    out.undo = Some(b);
+                }
             }
-            if out.undo.is_some() && (out.redo.is_some() || redo_blocked) {
+            if undo_done && (out.redo.is_some() || redo_blocked) {
                 return Ok(out);
             }
         }

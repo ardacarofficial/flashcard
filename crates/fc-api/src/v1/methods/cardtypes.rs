@@ -34,8 +34,9 @@ methods! {
     CardsPreview = "cards.preview", Query, "cardtypes", "cards:read", Public, undo: false, PreviewCards => CardPreviewList;
 
     // ---- media ----
-    /// Stores a media file (deduplicated by content).
-    MediaAdd = "media.add", Command, "media", "media:write", Public, undo: true, AddMedia => MediaDto;
+    /// Stores a media file (deduplicated by content). Not replayable: it writes a file (its
+    /// redo is `media.reinstate`, which only re-registers a file already in the store).
+    MediaAdd = "media.add", Command, "media", "media:write", Public, undo: true (replay: false), AddMedia => MediaDto;
     /// Inverse of `media.add`: drops an unreferenced media entry.
     MediaForget = "media.forget", Command, "media", "media:write", Internal, undo: true, MediaRef => AffectedCount;
     /// Inverse of `media.forget`.

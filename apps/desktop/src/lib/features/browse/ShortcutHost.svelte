@@ -3,12 +3,14 @@
    * Shell-level keyboard handling and the command palette (Ctrl+K by default). Bindings come
    * from `shortcuts.list`, entries from `palette.list` (every public backend method); this
    * component only maps keys to them. Screen-specific actions (`browse.*`) are forwarded as a
-   * `fc:shortcut` window event to the active screen.
+   * `fc:shortcut` window event to the active screen. The two lists load independently: with
+   * the `palette` module off only the palette goes away, the keys keep working.
    */
   import { onMount, tick } from 'svelte';
   import { api } from '$lib/api';
   import type { PaletteEntry, ShortcutDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
+  import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
   import { bindingMap, comboOf, filterItems, paletteItems, typingTarget, type PaletteItem } from './palette';
 
   interface ScreenLink {
@@ -46,19 +48,27 @@
   const contexts = $derived(activeScreen === 'browse' ? ['browse'] : []);
   const bindings = $derived(bindingMap(shortcuts, contexts));
 
-  async function load() {
+  const paletteOn = $derived(moduleKnownOn('palette'));
+
+  async function loadEntries(on: boolean) {
     try {
-      entries = (await api.call('palette.list', {})).entries;
+      entries = on ? (await api.call('palette.list', {})).entries : [];
+    } catch {
+      entries = [];
+    }
+  }
+
+  async function loadShortcuts() {
+    try {
       shortcuts = (await api.call('shortcuts.list', {})).items;
     } catch {
-      // Module turned off: no palette, no custom bindings.
-      entries = [];
       shortcuts = [];
     }
   }
 
   async function show() {
-    await load();
+    if (!paletteOn) return;
+    await loadEntries(true);
     open = true;
     query = '';
     cursor = 0;
@@ -155,16 +165,27 @@
     }
   }
 
+  // The palette (and its entries) only while the `palette` module is on.
+  $effect(() => {
+    const on = paletteOn;
+    if (!on) close();
+    void loadEntries(on);
+  });
+
   onMount(() => {
-    void load();
-    const unsub = api.on(['setting_changed', 'module_toggled', 'undone', 'redone'], () => void load());
+    trackModules();
+    void loadShortcuts();
+    const unsub = api.on(['setting_changed', 'module_toggled', 'undone', 'redone'], () => {
+      void loadShortcuts();
+      void loadEntries(paletteOn);
+    });
     return () => void unsub.then((u) => u());
   });
 </script>
 
 <svelte:window onkeydown={onKey} />
 
-{#if open}
+{#if open && paletteOn}
   <div class="backdrop" role="presentation" onclick={close}></div>
   <div class="palette" role="dialog" aria-modal="true" aria-label={t('palette.title')}>
     {#if pending}

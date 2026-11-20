@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { api, type ApiError } from '$lib/api';
   import type {
     AttributeDefDto,
@@ -15,6 +15,7 @@
   import { i18n, t, td } from '$lib/i18n/index.svelte';
   import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
   import { deckPaths } from '$lib/components/deck-paths';
+  import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
   import type { ScreenCtx } from '../types';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -240,12 +241,21 @@
     else if (action === 'browse.delete' && cards.length) confirmDelete = true;
   }
 
+  // Bulk classification: only while the `attributes` module is on (otherwise hidden).
+  $effect(() => {
+    trackModules();
+    if (!moduleKnownOn('attributes')) {
+      attrs = [];
+      return;
+    }
+    untrack(() => void ctx.guarded(async () => (attrs = (await api.call('attributes.list', {})).defs)));
+  });
+
   onMount(() => {
     void run();
     void loadSaved();
     void loadFlags();
     void loadNoteTypes();
-    void ctx.guarded(async () => (attrs = (await api.call('attributes.list', {})).defs));
     const unsub = api.on(['saved_queries', 'flags_changed', 'undone', 'redone'], () => {
       void loadSaved();
       void loadFlags();

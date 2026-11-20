@@ -34,7 +34,12 @@ const DIRECT = new Set<MethodName>(['oplog.undo', 'oplog.redo', 'decks.tree', 'b
 export default {
   modules: [
     module('browse', [menu('browse.cards', 'nav.browse', '/browse', 35), menu('browse.maintenance', 'nav.maintenance', '/maintenance', 90)]),
-    module('palette', [menu('palette.shortcuts', 'nav.shortcuts', '/shortcuts', 95)]),
+    // As in Rust: `shortcuts.list` belongs to `core`, so global keys survive with the
+    // palette module off (see ShortcutHost); the palette and the editor go away.
+    {
+      ...module('palette', [menu('palette.shortcuts', 'nav.shortcuts', '/shortcuts', 95)]),
+      methods: ['palette.list', 'shortcuts.set', 'shortcuts.reset'],
+    },
   ],
   handlers: ({ now, id, emit, notes, decks, attrs, pathOf }: MockEnv) => {
     const saved: SavedQueryDto[] = [];

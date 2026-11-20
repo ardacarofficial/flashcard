@@ -63,6 +63,8 @@ pub(super) fn start(req: StartImport, ctx: &mut CommandCtx<'_>) -> AppResult<Com
     if nt.deleted_at.is_some() {
         return Err(deleted("notetype", nt.id));
     }
+    // Module off: classification columns are ignored by the import (not an error).
+    let attrs_on = crate::modules::notes::attributes_enabled(ctx)?;
     for (i, c) in req.columns.iter().flatten().enumerate() {
         let bad = |reason: &str| {
             AppError::Api(
@@ -77,13 +79,13 @@ pub(super) fn start(req: StartImport, ctx: &mut CommandCtx<'_>) -> AppResult<Com
                     return Err(bad("unknown field"));
                 }
             }
-            ColumnTarget::Attribute { attr_id } => {
+            ColumnTarget::Attribute { attr_id } if attrs_on => {
                 let def = ctx.reads().get_attribute_def(*attr_id)?;
                 if def.is_none_or(|d| d.deleted_at.is_some()) {
                     return Err(bad("unknown classification"));
                 }
             }
-            ColumnTarget::Ignore | ColumnTarget::Tags => {}
+            ColumnTarget::Attribute { .. } | ColumnTarget::Ignore | ColumnTarget::Tags => {}
         }
     }
     let payload = serde_json::to_value(&req)
@@ -127,7 +129,10 @@ impl ImportJob {
                 Staged::Rows(rows::from_json(req, &decode_text(&bytes), notetype_id)?)
             }
             ImportFormat::Anki => {
-                let col = anki::read_package(&bytes).map_err(interop_err)?;
+                let cancel = ctx.cancel.clone();
+                let col = anki::read_package_with_abort(&bytes, move || cancel.is_cancelled());
+                ctx.cancel.check()?;
+                let col = col.map_err(interop_err)?;
                 ctx.report(Some(0.5), "io.progress.converting");
                 ctx.cancel.check()?;
                 let (pack, report) = anki::to_pack(&col, ctx.now());

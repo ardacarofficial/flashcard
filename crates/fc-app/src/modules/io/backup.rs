@@ -18,6 +18,7 @@ use super::{file_err, interop_err, read_file, write_file, Staging, JOB_BACKUP, J
 use crate::error::{AppError, AppResult};
 use crate::handler::{CommandCtx, CommandHandler, CommandOutcome, QueryCtx};
 use crate::jobs::{enqueue, JobContext, JobHandler};
+use crate::support::history::{push_barrier, BarrierReason};
 use crate::support::{invalid, summary};
 use fc_api::v1::common::Empty;
 use fc_api::v1::events::DomainEvent;
@@ -235,7 +236,8 @@ impl JobHandler for RestoreJob {
     }
 }
 
-/// Handler of `io.backup.load`: replaces every table and the media.
+/// Handler of `io.backup.load`: replaces every table and the media, then starts a fresh
+/// history (empty oplog + a restore barrier).
 pub(crate) struct LoadHandler(pub Arc<Staging>);
 
 impl CommandHandler<IoBackupLoad> for LoadHandler {
@@ -256,6 +258,10 @@ impl CommandHandler<IoBackupLoad> for LoadHandler {
         }
         // Jobs that were running when the backup was taken have no worker now.
         ctx.tx.mark_unfinished_jobs_interrupted(ctx.now)?;
+        // History starts afresh: the backup's oplog is never replayed (its inverses are
+        // untrusted data and may refer to rows that are gone), and undo stops at a barrier.
+        ctx.tx.clear_oplog()?;
+        push_barrier(ctx, BarrierReason::Restore);
         Ok(CommandOutcome {
             response: Empty {},
             inverse: Vec::new(),

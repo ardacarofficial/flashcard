@@ -13,6 +13,12 @@ pub enum OplogRecordKind {
     Redo,
 }
 
+/// `oplog.command` of a **history barrier** entry: a `do` batch that undo cannot cross
+/// (written when the collection is replaced from a backup or trashed items are purged for
+/// good — older inverses may refer to rows that no longer exist). It has no inverse and is
+/// not a method of the catalog.
+pub const OPLOG_BARRIER_COMMAND: &str = "v1.oplog.barrier";
+
 /// One `oplog` row. JSON columns are opaque to storage (the app owns their shape:
 /// `inverse` = `[InvokeRequest]`, `actor` = `Actor`, `summary` = `I18nMessage`).
 #[derive(Debug, Clone, PartialEq)]
@@ -52,6 +58,8 @@ pub struct OplogBatch {
     pub reverts_batch_id: Option<BatchId>,
     /// Summary of the first entry.
     pub summary: Value,
+    /// The batch contains a history barrier entry ([`OPLOG_BARRIER_COMMAND`]).
+    pub barrier: bool,
     /// Time of the first entry.
     pub created_at: Timestamp,
 }
@@ -74,4 +82,6 @@ pub trait OplogRead {
 pub trait OplogWrite: OplogRead {
     /// Appends an entry.
     fn append_oplog(&mut self, record: &OplogRecord) -> StorageResult<()>;
+    /// Deletes every entry (a restored collection starts a fresh history).
+    fn clear_oplog(&mut self) -> StorageResult<()>;
 }

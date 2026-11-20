@@ -42,6 +42,12 @@ pub trait ApiMethod: 'static {
     /// instead (`batch.execute`, `oplog.undo`, `oplog.redo`) or are not undoable
     /// (`jobs.cancel`).
     const UNDOABLE: bool;
+    /// Whether undo/redo may execute this method as a **stored inverse** read back from the
+    /// oplog. The oplog is data (it can come from a restored backup), so `oplog.undo/redo`
+    /// only run inverse calls whose method is replayable. True for undoable commands, except
+    /// those that start jobs, write files or consume staged job data (`replay: false` in the
+    /// catalog); never true for queries or non-undoable commands.
+    const REPLAYABLE: bool;
     /// Request params.
     type Request: Serialize + DeserializeOwned + TS + Send + 'static;
     /// Successful response.
@@ -64,6 +70,8 @@ pub struct MethodDescriptor {
     pub visibility: Visibility,
     /// See [`ApiMethod::UNDOABLE`].
     pub undoable: bool,
+    /// See [`ApiMethod::REPLAYABLE`].
+    pub replayable: bool,
     /// TS name of the request type.
     pub request_ts: fn(&ts_rs::Config) -> String,
     /// TS name of the response type.
@@ -86,6 +94,7 @@ impl MethodDescriptor {
             permission: M::PERMISSION,
             visibility: M::VISIBILITY,
             undoable: M::UNDOABLE,
+            replayable: M::REPLAYABLE && matches!(M::KIND, MethodKind::Command),
             request_ts: <M::Request as TS>::name,
             response_ts: <M::Response as TS>::name,
             export_ts: export::<M>,
@@ -107,6 +116,7 @@ impl std::fmt::Debug for MethodDescriptor {
             .field("permission", &self.permission)
             .field("visibility", &self.visibility)
             .field("undoable", &self.undoable)
+            .field("replayable", &self.replayable)
             .finish()
     }
 }

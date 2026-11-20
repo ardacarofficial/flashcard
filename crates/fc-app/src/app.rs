@@ -486,7 +486,7 @@ impl App {
                 h.run(params, &ctx)
             }
             ErasedHandler::Command(h) => {
-                self.run_command(h.as_ref(), d, method, params, actor, OplogMode::Write)
+                self.run_command(h.as_ref(), d, method, params, actor, OplogMode::Write, true)
             }
         }
     }
@@ -532,7 +532,15 @@ impl App {
                 format!("{method} is a query"),
             ));
         };
-        self.run_command(h.as_ref(), d, method, request.params.clone(), actor, mode)
+        self.run_command(
+            h.as_ref(),
+            d,
+            method,
+            request.params.clone(),
+            actor,
+            mode,
+            check_module,
+        )
     }
 
     /// A new, empty [`UndoGroup`] of `job`, with its durable marker written. `rollback` is
@@ -616,6 +624,9 @@ impl App {
 
     /// Commands: write tx → handler (nested calls share tx and batch) → oplog entries (per
     /// `mode`) → commit → publish events.
+    // One flag per dispatch concern (oplog mode, module switches); a struct would only wrap
+    // the two call sites.
+    #[allow(clippy::too_many_arguments)]
     fn run_command(
         &self,
         h: &dyn ErasedCommand,
@@ -624,6 +635,7 @@ impl App {
         params: Value,
         actor: &Actor,
         mode: OplogMode<'_>,
+        check_modules: bool,
     ) -> AppResult<Value> {
         h.validate(&params)?;
         let now = self.clock.now();
@@ -652,6 +664,7 @@ impl App {
             registry: &self.registry,
             oplog: Vec::new(),
             events: Vec::new(),
+            check_modules,
         };
         let response = run_recorded(&mut ctx, d, h, method, params)?;
         let oplog: Vec<PendingOplogEntry> = std::mem::take(&mut ctx.oplog)

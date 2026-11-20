@@ -54,6 +54,7 @@
     "conflict": {
       "nothing_to_undo": "Geri alınacak bir şey yok.",
       "nothing_to_redo": "Yinelenecek bir şey yok.",
+      "history_barrier": "Geri alma burada durur: koleksiyon bir yedekten geri yüklendi ya da çöp kalıcı olarak boşaltıldı. Daha önceki geçmiş geri alınamaz.",
       "module_disabled": "Bu modül kapalı.",
       "module_required": "Bu modül kapatılamaz.",
       "deleted": "Bu öğe çöp kutusunda."

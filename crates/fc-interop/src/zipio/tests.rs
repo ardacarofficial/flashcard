@@ -158,6 +158,12 @@ fn budget_scales_with_input_and_is_clamped() {
     assert_eq!(default_budget(0), MIN_BUDGET);
     assert_eq!(default_budget(MIB), 200 * MIB as u64);
     assert_eq!(default_budget(usize::MAX), MAX_BUDGET);
+    // The ceiling is 1 GiB (docs/10 §14), reached from ~5 MiB of input on; no entry may
+    // exceed it either.
+    assert_eq!(MAX_BUDGET, 1024 * 1024 * 1024);
+    assert_eq!(default_budget(64 * MIB), MAX_BUDGET);
+    assert_eq!(default_budget(1024 * MIB), MAX_BUDGET);
+    assert_eq!(MAX_ENTRY, MAX_BUDGET);
     // Legitimate packages are untouched.
     let col = anki::fixtures::sample();
     for bytes in [

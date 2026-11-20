@@ -26,3 +26,12 @@ export function trackModules(): void {
 export function moduleOn(id: string): boolean {
   return state.enabled[id] ?? !state.loaded;
 }
+
+/**
+ * Whether module `id` is enabled according to a loaded `modules.list` (`false` until then).
+ * Gate calls into a module's methods with this, so a switched-off module is never called;
+ * reactive readers re-run once the list arrives.
+ */
+export function moduleKnownOn(id: string): boolean {
+  return state.loaded && state.enabled[id] === true;
+}

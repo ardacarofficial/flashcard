@@ -124,6 +124,7 @@
       "invalid_fields": "Zorunlu bir alan boş.",
       "bad_tag": "Geçersiz etiket “{tag}”.",
       "attribute_required": "Zorunlu bir sınıflandırma eksik.",
+      "attributes_disabled": "Sınıflandırmalar kapalı: paketteki sınıflandırmalar içe aktarılmadı.",
       "attribute_not_applicable": "Bu sınıflandırma bu destede geçerli değil.",
       "attribute_invalid": "Geçersiz sınıflandırma değeri “{value}”.",
       "attribute_unknown_option": "Bilinmeyen seçenek “{value}” (otomatik oluşturulabilir)."

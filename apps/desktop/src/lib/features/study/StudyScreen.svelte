@@ -14,7 +14,7 @@
   import { t, td } from '$lib/i18n/index.svelte';
   import CardView from '../cards/CardView.svelte';
   import { defaultFlagKey, flagColor, hasFlag } from '../cards/flags';
-  import { moduleOn, trackModules } from '../cards/modules.svelte';
+  import { moduleKnownOn, moduleOn, trackModules } from '../cards/modules.svelte';
   import type { ScreenCtx } from '../types';
   import { intervalLabel, tzOffsetMins } from './format';
   import { keyAction, RATINGS, studyBindings, type StudyAction, type StudyPhase } from './keys';
@@ -46,12 +46,16 @@
   let flagDefs = $state<FlagDto[]>([]);
   /** Picked option of a choice card. */
   let picked = $state<number | null>(null);
-  /** Study keys from the shortcut editor (`palette` module); `undefined` = built-in defaults. */
+  /**
+   * Study keys from `shortcuts.list`; `undefined` = built-in defaults. Loaded the same way as
+   * the shell's `ShortcutHost` (not gated by the palette UI) so both agree on who handles
+   * Ctrl+Z.
+   */
   let bindings = $state<Map<string, string> | undefined>(undefined);
 
   async function loadBindings() {
     try {
-      bindings = moduleOn('palette') ? studyBindings((await api.call('shortcuts.list', {})).items) : undefined;
+      bindings = studyBindings((await api.call('shortcuts.list', {})).items);
     } catch {
       bindings = undefined;
     }
@@ -117,7 +121,7 @@
     filterAttr = '';
     filterValue = '';
     attrs = [];
-    if (!deck) return;
+    if (!deck || !moduleKnownOn('attributes')) return;
     void api.call('attributes.effective', { deck_id: deck, target: 'note' }).then(
       (r) => {
         if (ctx.selectedDeck === deck) {

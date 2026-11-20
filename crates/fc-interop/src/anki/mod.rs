@@ -24,7 +24,7 @@ pub mod template;
 mod write;
 
 pub use convert::{from_pack, to_pack, AnkiImportReport};
-pub use read::read_package;
+pub use read::{read_package, read_package_with_abort, QUERY_TIME_BUDGET};
 pub use write::write_package;
 
 /// Which package layout a file used.

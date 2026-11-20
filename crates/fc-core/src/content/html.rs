@@ -11,8 +11,10 @@
 //!   of layout/typography properties, and every event handler, script, frame, form and
 //!   `style`/`link` element is dropped.
 //! * [`sanitize_css`]: note type CSS minus anything that loads or executes (`@import`,
-//!   `url(…)`, `expression(…)`, `javascript:`, `</style`), with escapes normalised and
-//!   brackets balanced so it cannot break out of the frontend's scope block.
+//!   `url(…)`, `expression(…)`, `javascript:`, `</style`), with escapes normalised,
+//!   brackets balanced and rules that could select outside the frontend's scope block
+//!   (`:root`, `:has`, `html`, `body`, `:not(&)`, `@scope`, …) dropped, so it cannot break
+//!   out of that block.
 
 use pulldown_cmark::{html, Options, Parser};
 use std::borrow::Cow;
@@ -271,13 +273,19 @@ pub fn sanitize_html(input: &str) -> String {
 /// 3. Comments are dropped, unterminated strings closed, and `{}`/`()`/`[]` balanced: a stray
 ///    closer is dropped and missing closers are appended ([`balance_css`]). A single `}` in a
 ///    note type's CSS therefore can never close the frontend's scope block.
+/// 4. Every rule whose selector could match outside the scope block is dropped whole, selector
+///    and block ([`drop_escaping_rules`]): `:root`, `:has`, `:host`, `:scope`, a standalone
+///    `html`/`body`, `&` inside a function (`:not(&)`), `+`/`~` next to the scope (`& + p`,
+///    `+ p`), and any at-rule but `@media`/`@supports`/`@layer`/`@keyframes`/`@font-face`/
+///    `@starting-style` (`@scope`, `@container`, …). Leftover `:root`/`:has`/`:host`/`:scope`
+///    outside selectors (declarations, strings) are blanked.
 pub fn sanitize_css(css: &str) -> String {
     let mut current = normalize_css_escapes(css);
     // Removing a token (or dropping a stray closer in `balance_css`) can glue its neighbours
     // into a new forbidden token (`ur)l(`), so repeat until nothing changes. Never-stable
     // input (should be impossible) yields nothing rather than something unfiltered.
     for _ in 0..MAX_CSS_PASSES {
-        let next = balance_css(&filter_css(&current));
+        let next = blank_scope_pseudos(&drop_escaping_rules(&balance_css(&filter_css(&current))));
         if next == current {
             return next;
         }
@@ -462,6 +470,225 @@ fn balance_css(css: &str) -> String {
     out
 }
 
+/// Pseudo-classes that select (or test) something outside the scope block. Matched as
+/// prefixes, so `:host-context(` and `:has(` are covered.
+const SCOPE_PSEUDOS: [&str; 4] = [":root", ":has", ":host", ":scope"];
+
+/// At-rules allowed in note type CSS. Everything else (`@scope`, `@container`, `@page`,
+/// `@namespace`, `@property`, `@document`, …) is dropped with its block.
+const ALLOWED_AT_RULES: [&str; 7] = [
+    "media",
+    "supports",
+    "layer",
+    "keyframes",
+    "-webkit-keyframes",
+    "font-face",
+    "starting-style",
+];
+
+/// Drops every rule (prelude + block) that could match outside the frontend's
+/// `.card.<scope> { … }` block (see [`rule_escapes`]). Expects the output of [`balance_css`]:
+/// comment-free, strings closed, brackets balanced; the output stays balanced because only
+/// whole balanced segments are removed.
+fn drop_escaping_rules(css: &str) -> String {
+    let mut out = String::with_capacity(css.len());
+    // One entry per open block: whether it sits inside a style rule (where `&` is no longer
+    // the scope element itself).
+    let mut blocks: Vec<bool> = Vec::new();
+    let mut buf = String::new();
+    let mut depth = 0usize;
+    let mut quote: Option<char> = None;
+    let mut chars = css.chars();
+    while let Some(c) = chars.next() {
+        let in_style_rule = blocks.last().copied().unwrap_or(false);
+        if let Some(q) = quote {
+            buf.push(c);
+            if c == q || matches!(c, '\n' | '\r' | '\u{c}') {
+                quote = None;
+            }
+            continue;
+        }
+        match c {
+            '"' | '\'' => {
+                quote = Some(c);
+                buf.push(c);
+            }
+            '(' | '[' => {
+                depth += 1;
+                buf.push(c);
+            }
+            ')' | ']' => {
+                depth = depth.saturating_sub(1);
+                buf.push(c);
+            }
+            '{' if depth > 0 => {
+                depth += 1;
+                buf.push(c);
+            }
+            '}' if depth > 0 => {
+                depth -= 1;
+                buf.push(c);
+            }
+            '{' => {
+                if rule_escapes(&buf, in_style_rule) {
+                    skip_block(&mut chars);
+                } else {
+                    let style = in_style_rule || !buf.trim_start().starts_with('@');
+                    out.push_str(&buf);
+                    out.push('{');
+                    blocks.push(style);
+                }
+                buf.clear();
+            }
+            ';' => {
+                flush_css_segment(&mut out, &mut buf, in_style_rule);
+                out.push(';');
+            }
+            '}' => {
+                flush_css_segment(&mut out, &mut buf, in_style_rule);
+                if blocks.pop().is_some() {
+                    out.push('}');
+                }
+            }
+            _ => buf.push(c),
+        }
+    }
+    let in_style_rule = blocks.last().copied().unwrap_or(false);
+    flush_css_segment(&mut out, &mut buf, in_style_rule);
+    for _ in blocks {
+        out.push('}');
+    }
+    out
+}
+
+/// Emits a segment that did not open a block (a declaration or trailing text). One that
+/// carries a block of its own inside brackets (`a(b{…})`) is judged like a rule.
+fn flush_css_segment(out: &mut String, buf: &mut String, in_style_rule: bool) {
+    if !(buf.contains('{') && rule_escapes(buf, in_style_rule)) {
+        out.push_str(buf);
+    }
+    buf.clear();
+}
+
+/// Consumes the rest of a block whose `{` was just read, up to its matching `}`.
+fn skip_block(chars: &mut std::str::Chars<'_>) {
+    let mut depth = 1usize;
+    let mut quote: Option<char> = None;
+    for c in chars.by_ref() {
+        if let Some(q) = quote {
+            if c == q || matches!(c, '\n' | '\r' | '\u{c}') {
+                quote = None;
+            }
+            continue;
+        }
+        match c {
+            '"' | '\'' => quote = Some(c),
+            '{' | '(' | '[' => depth += 1,
+            '}' | ')' | ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Whether a rule with this prelude (selector list or at-rule head) could match outside the
+/// scope block. `in_style_rule`: the rule is nested in another style rule of the note type,
+/// so `&` stands for an element inside the scope rather than the scope element itself.
+fn rule_escapes(prelude: &str, in_style_rule: bool) -> bool {
+    let lower = prelude.to_ascii_lowercase();
+    if let Some(at) = lower.trim_start().strip_prefix('@') {
+        let name_len = at
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+            .unwrap_or(at.len());
+        if !ALLOWED_AT_RULES.contains(&&at[..name_len]) {
+            return true;
+        }
+    }
+    if SCOPE_PSEUDOS.iter().any(|p| lower.contains(p))
+        || has_standalone_word(&lower, "html")
+        || has_standalone_word(&lower, "body")
+    {
+        return true;
+    }
+    // `&` inside a function (`:not(&)`, `:is(& …)`) escapes at any depth. Directly under the
+    // scope, `&` next to a sibling combinator (`& + p`, `p ~ &`) and a relative selector that
+    // starts with one (`+ p` = `& + p`) select the scope's siblings.
+    let mut depth = 0usize;
+    let mut quote: Option<char> = None;
+    let mut at_part_start = true;
+    let mut relative = false;
+    let mut amp = false;
+    let mut sibling = false;
+    let part_escapes =
+        |relative: bool, amp: bool, sibling: bool| !in_style_rule && (relative || (amp && sibling));
+    for c in lower.chars() {
+        if let Some(q) = quote {
+            if c == q {
+                quote = None;
+            }
+            continue;
+        }
+        match c {
+            '"' | '\'' => quote = Some(c),
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            '&' if depth > 0 => return true,
+            '&' => amp = true,
+            '+' | '~' if depth == 0 => {
+                relative |= at_part_start;
+                sibling = true;
+            }
+            ',' if depth == 0 => {
+                if part_escapes(relative, amp, sibling) {
+                    return true;
+                }
+                (relative, amp, sibling) = (false, false, false);
+                at_part_start = true;
+                continue;
+            }
+            _ => {}
+        }
+        if !c.is_whitespace() {
+            at_part_start = false;
+        }
+    }
+    part_escapes(relative, amp, sibling)
+}
+
+/// Whether `word` occurs in `s` as a whole identifier that is not a class or id name
+/// (`html`, `:is(html)`, `*|body` count; `.html`, `#body`, `html-x` do not).
+fn has_standalone_word(s: &str, word: &str) -> bool {
+    let ident = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_' || !c.is_ascii();
+    s.match_indices(word).any(|(i, _)| {
+        let before = s[..i].chars().next_back();
+        let after = s[i + word.len()..].chars().next();
+        !before.is_some_and(|b| ident(b) || b == '.' || b == '#') && !after.is_some_and(ident)
+    })
+}
+
+/// Blanks [`SCOPE_PSEUDOS`] left outside selectors (in declarations or strings), so the
+/// output never carries them at all.
+fn blank_scope_pseudos(css: &str) -> String {
+    let lower = css.to_ascii_lowercase();
+    let mut out = String::with_capacity(css.len());
+    let mut i = 0;
+    while i < css.len() {
+        if let Some(p) = SCOPE_PSEUDOS.iter().find(|p| lower[i..].starts_with(*p)) {
+            i += p.len();
+            out.push(' ');
+            continue;
+        }
+        let ch_len = css[i..].chars().next().map_or(1, char::len_utf8);
+        out.push_str(&css[i..i + ch_len]);
+        i += ch_len;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -608,10 +835,7 @@ mod tests {
     #[test]
     fn css_braces_cannot_escape_scope() {
         // A stray closer is dropped; an unclosed block is closed.
-        assert_eq!(
-            sanitize_css("} body { color: red }"),
-            " body { color: red }"
-        );
+        assert_eq!(sanitize_css("} .b { color: red }"), " .b { color: red }");
         assert_eq!(sanitize_css(".a { color: red"), ".a { color: red}");
         assert_eq!(
             sanitize_css(".a { b: rgb( } .c {}"),
@@ -665,6 +889,75 @@ mod tests {
         );
         // `<` cannot be smuggled in as an escape.
         assert!(!sanitize_css("a { content: \"\\3c /style>\" }").contains('<'));
+    }
+
+    #[test]
+    fn css_rules_selecting_outside_the_scope_are_dropped() {
+        for evil in [
+            ":root:has(&) { EVIL: 1 }",
+            ":ROOT { EVIL: 1 }",
+            ":r\\6f ot { EVIL: 1 }",
+            ":root .a, .b { EVIL: 1 }",
+            "html { EVIL: 1 }",
+            "HTML .a { EVIL: 1 }",
+            "b\\6f dy { EVIL: 1 }",
+            ".a, body > * { EVIL: 1 }",
+            "*|html { EVIL: 1 }",
+            ":is(:root .x) { EVIL: 1 }",
+            ":where(html) .a { EVIL: 1 }",
+            "a:has(b) { EVIL: 1 }",
+            "a:H\\61s(b) { EVIL: 1 }",
+            ":host { EVIL: 1 }",
+            ":host-context(x) p { EVIL: 1 }",
+            ":scope p { EVIL: 1 }",
+            ":not(&) { EVIL: 1 }",
+            ":is(&) p { EVIL: 1 }",
+            "& + p { EVIL: 1 }",
+            "&~p { EVIL: 1 }",
+            "p ~ & { EVIL: 1 }",
+            "+ p { EVIL: 1 }",
+            ".a, ~ p { EVIL: 1 }",
+            "@scope (html) { p { EVIL: 1 } }",
+            "@scope (.x) to (&) { p { EVIL: 1 } }",
+            "@container x (min-width: 1px) { p { EVIL: 1 } }",
+            "@page { EVIL: 1 }",
+            "@media print { :root { EVIL: 1 } }",
+            "@media print { + p { EVIL: 1 } }",
+            ".a { :not(&) { EVIL: 1 } }",
+            ".a { body & { EVIL: 1 } }",
+            "a(b; html{ EVIL: 1 });",
+        ] {
+            let out = sanitize_css(&format!("{evil} .ok {{ color: red }}"));
+            assert!(!out.contains("EVIL"), "{evil:?} -> {out:?}");
+            assert!(out.contains(".ok { color: red }"), "{evil:?} -> {out:?}");
+            assert_eq!(balance_css(&out), out, "{evil:?} -> {out:?}");
+        }
+    }
+
+    #[test]
+    fn css_rules_inside_the_scope_are_kept() {
+        for ok in [
+            ".html { color: red }",
+            "#body { color: red }",
+            ".html-body, html-x { color: red }",
+            ".a > .b, .a + .b, .a ~ .b, > p { color: red }",
+            "& > p, &.big, &:hover { color: red }",
+            ".a { & + .b { color: red } }",
+            ".a { + .b { color: red } }",
+            "@media (min-width: 10px) { .a { color: red } }",
+            "@supports (display: grid) { .a { color: red } }",
+            "@layer base { .a { color: red } }",
+            "@keyframes spin { from { opacity: 0 } to { opacity: 1 } }",
+            ".a { color: red; .b { color: blue } }",
+            "color: red;",
+        ] {
+            assert_eq!(sanitize_css(ok), ok);
+        }
+        // Outside selectors the pseudo-classes are blanked; the rule itself stays.
+        assert_eq!(
+            sanitize_css(".a::after { content: \":root:has(x)\" }"),
+            ".a::after { content: \"  (x)\" }"
+        );
     }
 
     fn assert_css_clean(out: &str) {
@@ -748,6 +1041,112 @@ mod tests {
                     input = input.to_ascii_uppercase();
                 }
                 assert_css_clean(&sanitize_css(&input));
+            }
+        }
+
+        fn scope_fragment() -> impl Strategy<Value = String> {
+            prop_oneof![
+                prop::sample::select(vec![
+                    ":root",
+                    ":ROOT",
+                    ":r",
+                    "oot",
+                    ":has(",
+                    ":HAS(",
+                    ":ha",
+                    "s(",
+                    ":host",
+                    ":scope",
+                    "html",
+                    "HTML",
+                    "ht",
+                    "ml",
+                    "body",
+                    "bo",
+                    "dy",
+                    "\\68 tml",
+                    "\\62 ody",
+                    "\\3a root",
+                    ":\\72 oot",
+                    "&",
+                    "+",
+                    "~",
+                    ">",
+                    ",",
+                    ".",
+                    "#",
+                    "*|",
+                    ":is(",
+                    ":where(",
+                    ":not(",
+                    "@scope",
+                    "@container",
+                    "@media",
+                    "@import",
+                    "@import x;",
+                    "url(",
+                    "u",
+                    "rl(",
+                    "{",
+                    "}",
+                    "(",
+                    ")",
+                    "[",
+                    "]",
+                    ";",
+                    "/*",
+                    "*/",
+                    "\\",
+                    " ",
+                    "a",
+                    "p",
+                    "-",
+                    "color: red",
+                ])
+                .prop_map(String::from),
+                "[a-zA-Z(){};:@&+~,.#/*\\\\ -]{0,6}",
+            ]
+        }
+
+        /// Selector preludes of `css`: each run between `{`, `}` or `;` that opens a block.
+        fn preludes(css: &str) -> Vec<&str> {
+            let mut out = Vec::new();
+            let mut start = 0;
+            for (i, c) in css.char_indices() {
+                match c {
+                    '{' => {
+                        out.push(&css[start..i]);
+                        start = i + 1;
+                    }
+                    '}' | ';' => start = i + 1,
+                    _ => {}
+                }
+            }
+            out
+        }
+
+        proptest! {
+            #[test]
+            fn sanitized_css_never_selects_outside_the_scope(
+                parts in prop::collection::vec(scope_fragment(), 0..24),
+            ) {
+                let input = parts.concat();
+                let out = sanitize_css(&input);
+                let norm = normalize_css_escapes(&out).to_ascii_lowercase();
+                for bad in [":root", ":has(", "@import", "url("] {
+                    prop_assert!(!norm.contains(bad), "{bad} in {out:?} from {input:?}");
+                }
+                for p in preludes(&norm) {
+                    for word in ["html", "body"] {
+                        prop_assert!(
+                            !has_standalone_word(p, word),
+                            "{word} selector {p:?} in {out:?} from {input:?}"
+                        );
+                    }
+                }
+                prop_assert_eq!(balance_css(&out), out.clone());
+                let wrapped = format!(".s {{{out}}}");
+                prop_assert_eq!(balance_css(&wrapped), wrapped);
             }
         }
     }

@@ -26,6 +26,7 @@ use crate::support::decks::DeckIndex;
 use crate::support::content::card_specs;
 use crate::support::notes::{derive, insert_note, require_notetype};
 use crate::support::summary;
+use crate::modules::notes::{attributes_enabled, default_attribute_values};
 use fc_api::v1::attributes::{AddAttributeOption, AttributeAssignment};
 use fc_api::v1::common::{AffectedCount, Empty, I18nMessage};
 use fc_api::v1::events::DomainEvent;
@@ -468,8 +469,14 @@ impl Writer {
         }
         let tags = dedup_tags(tags);
 
-        // Classifications applicable to the deck (note level).
-        let provided = self.row_attributes(ctx, report, imp, deck, row)?;
+        // Classifications applicable to the deck (note level). With the module off they are
+        // hidden: mapped values are ignored and only defaults apply (as in `notes.create`).
+        let attrs_on = attributes_enabled(ctx)?;
+        let provided = if attrs_on {
+            self.row_attributes(ctx, report, imp, deck, row)?
+        } else {
+            Vec::new()
+        };
 
         let mut note = Note {
             id: NoteId::generate(ctx.ids),
@@ -513,8 +520,12 @@ impl Writer {
         let ancestry = index.ancestry(deck)?;
         let defs = ctx.reads().list_attribute_defs(false)?;
         let effective = effective_attribute_defs(&ancestry, &defs);
-        let values = match prepare_attribute_values(&effective, AttributeTarget::Note, &provided)
-        {
+        let prepared = if attrs_on {
+            prepare_attribute_values(&effective, AttributeTarget::Note, &provided)
+        } else {
+            Ok(default_attribute_values(&effective, AttributeTarget::Note))
+        };
+        let values = match prepared {
             Ok(v) => v,
             Err(_) => {
                 report
@@ -710,7 +721,15 @@ impl Writer {
                 }
             }
         }
-        self.pack_attributes(ctx, st, p)?;
+        if attributes_enabled(ctx)? {
+            self.pack_attributes(ctx, st, p)?;
+        } else if !p.pack.attribute_defs.is_empty() {
+            // Module off: the package's classifications are left out (no definition is
+            // mapped, so their values are skipped too); the report says so.
+            st.report
+                .issues
+                .push(issue(0, "io.issue.attributes_disabled"));
+        }
         for c in &pack.cards {
             if let Some(d) = st.deck_map.get(&c.deck_id) {
                 st.first_card_deck.entry(c.note_id).or_insert(*d);

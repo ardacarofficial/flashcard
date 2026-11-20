@@ -124,6 +124,7 @@
       "invalid_fields": "A required field is empty.",
       "bad_tag": "Invalid tag “{tag}”.",
       "attribute_required": "A required classification is missing.",
+      "attributes_disabled": "Classifications are turned off: the package's classifications were not imported.",
       "attribute_not_applicable": "This classification does not apply to the deck.",
       "attribute_invalid": "Invalid classification value “{value}”.",
       "attribute_unknown_option": "Unknown option “{value}” (it can be created automatically)."

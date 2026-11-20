@@ -13,6 +13,7 @@
     TextOptionsDto,
   } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
+  import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
   import type { ScreenCtx } from '../types';
   import { pickFile } from './files';
   import { followJob, resultOf } from './job';
@@ -64,10 +65,14 @@
     error = td((e as ApiError).messageKey ?? 'errors.internal.unexpected');
   }
 
+  const attributesOn = $derived(moduleKnownOn('attributes'));
+
+  // Classification columns: only while the `attributes` module is on.
   $effect(() => {
+    trackModules();
     const deck = ctx.selectedDeck;
     attributes = [];
-    if (deck) void api.attribute.effective(deck).then((r) => (attributes = r.attributes), fail);
+    if (deck && attributesOn) void api.attribute.effective(deck).then((r) => (attributes = r.attributes), fail);
   });
 
   async function runPreview(keepOptions: boolean) {
@@ -261,7 +266,7 @@
       {#if preview.format !== 'json'}
         <label><input type="checkbox" bind:checked={skipFirst} /> {t('io.import.skip_first_row')}</label>
       {/if}
-      {#if hasAttributeColumn || preview.format === 'json'}
+      {#if attributesOn && (hasAttributeColumn || preview.format === 'json')}
         <label><input type="checkbox" bind:checked={createMissing} /> {t('io.import.create_missing_options')}</label>
       {/if}
     {/if}
