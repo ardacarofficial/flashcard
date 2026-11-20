@@ -9,7 +9,7 @@ use fc_api::v1::events::DomainEvent;
 use fc_api::v1::methods::*;
 use fc_api::v1::reading::*;
 use fc_api::{ApiError, ErrorCode};
-use fc_core::reading::{next_reading_interval, ReadingPriority};
+use fc_core::reading::{next_reading_interval, reading_queue_key, ReadingPriority};
 use fc_core::time::MILLIS_PER_DAY;
 use fc_core::{ReadingItemId, Timestamp};
 use fc_storage::repo::ReadingItemRecord;
@@ -184,12 +184,11 @@ fn list(req: ListReadingItems, ctx: &QueryCtx<'_>) -> AppResult<ReadingItemList>
         .count();
     if req.queued_only {
         rows.retain(|r| r.queued);
-        let rank = |r: &ReadingItemRecord| match priority_of(&r.priority) {
-            ReadingPriority::High => 0,
-            ReadingPriority::Normal => 1,
-            ReadingPriority::Low => 2,
-        };
-        rows.sort_by_key(|r| (r.due.unwrap_or(Timestamp(i64::MAX)), rank(r), r.created_at));
+        // Due texts first, by priority, then oldest due (fc_core::reading::reading_queue_key).
+        rows.sort_by_key(|r| {
+            let key = reading_queue_key(r.due.map(|d| d.0), priority_of(&r.priority), ctx.now.0);
+            (key, r.created_at)
+        });
     }
     Ok(ReadingItemList {
         items: rows

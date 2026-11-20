@@ -5,7 +5,7 @@
  */
 export type ListReadingItems = { 
 /**
- * Only the reading queue, due first (by due time, then priority); otherwise every item,
- * newest first.
+ * Only the reading queue: due items first — by priority, then longest due — then the
+ * rest by due time; otherwise every item, newest first.
  */
 queued_only: boolean, };

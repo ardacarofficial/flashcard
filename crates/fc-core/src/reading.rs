@@ -10,7 +10,8 @@
 //! * **Text summary** ([`summarize`]): running-word counts per status and the "you know 87% of
 //!   this text" share.
 //! * **Sentences** ([`sentence_spans`], [`sentence_at`]): the context a card is made with.
-//! * **Incremental reading** ([`next_reading_interval`]): the reading queue's own spacing.
+//! * **Incremental reading** ([`next_reading_interval`], [`reading_queue_key`]): the reading
+//!   queue's own spacing and order.
 //! * **Cards from text** ([`cloze_from_spans`], [`emphasize`], [`format_timestamp`]).
 
 use crate::card::CardState;
@@ -381,6 +382,32 @@ pub fn next_reading_interval(previous_days: Option<u32>, priority: ReadingPriori
         }
     };
     days.min(MAX_READING_INTERVAL_DAYS)
+}
+
+/// Rank of a priority in the queue (high first).
+const fn priority_rank(p: ReadingPriority) -> i64 {
+    match p {
+        ReadingPriority::High => 0,
+        ReadingPriority::Normal => 1,
+        ReadingPriority::Low => 2,
+    }
+}
+
+/// Sort key of a queued text (ascending = read first): every **due** text (due ≤ `now`)
+/// comes before any text not due yet, ordered by **priority** (high, normal, low) and then
+/// by how long it has been due; texts not due yet follow by due time (priority breaking
+/// ties); texts without a due time come last.
+pub fn reading_queue_key(
+    due_ms: Option<i64>,
+    priority: ReadingPriority,
+    now_ms: i64,
+) -> (u8, i64, i64) {
+    let rank = priority_rank(priority);
+    match due_ms {
+        Some(due) if due <= now_ms => (0, rank, due),
+        Some(due) => (1, due, rank),
+        None => (2, rank, 0),
+    }
 }
 
 // ------------------------------------------------------------------ cards from text

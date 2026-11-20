@@ -200,3 +200,37 @@ fn emphasis_and_timestamps() {
     assert_eq!(format_timestamp(62_345), "1:02");
     assert_eq!(format_timestamp(3_723_000), "1:02:03");
 }
+
+#[test]
+fn due_texts_are_read_by_priority_first() {
+    use ReadingPriority::*;
+    let now = 1_000_000;
+    let day = 86_400_000;
+    let mut items = vec![
+        ("normal, due long ago", Some(now - 30 * day), Normal),
+        ("low, due longest", Some(now - 60 * day), Low),
+        ("high, due a minute ago", Some(now - 60_000), High),
+        ("high, due now", Some(now), High),
+        ("normal, due yesterday", Some(now - day), Normal),
+        ("high, tomorrow", Some(now + day), High),
+        ("low, in an hour", Some(now + 3_600_000), Low),
+        ("normal, in an hour", Some(now + 3_600_000), Normal),
+        ("no due", None, High),
+    ];
+    items.sort_by_key(|(_, due, p)| reading_queue_key(*due, *p, now));
+    let order: Vec<&str> = items.iter().map(|(n, _, _)| *n).collect();
+    assert_eq!(
+        order,
+        [
+            "high, due a minute ago",
+            "high, due now",
+            "normal, due long ago",
+            "normal, due yesterday",
+            "low, due longest",
+            "normal, in an hour",
+            "low, in an hour",
+            "high, tomorrow",
+            "no due",
+        ]
+    );
+}

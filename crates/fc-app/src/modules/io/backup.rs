@@ -104,6 +104,20 @@ fn forget_mcp_approvals(dump: &mut CollectionDump) {
     }
 }
 
+/// …nor may settings that name a program the app runs (`crate::settings::EXEC_SETTINGS`,
+/// e.g. `reading.ffmpeg_path`): a backup could otherwise point them at any program. They go
+/// back to their defaults; the user sets them again.
+fn forget_exec_settings(dump: &mut CollectionDump) {
+    for t in dump.tables.iter_mut().filter(|t| t.name == "settings") {
+        if let Some(i) = t.columns.iter().position(|c| c == "key") {
+            t.rows.retain(|row| {
+                !matches!(&row[i], fc_storage::repo::SqlValue::Text(k)
+                    if crate::settings::is_exec_setting(k))
+            });
+        }
+    }
+}
+
 /// A complete backup of what `reads` sees.
 fn backup_bytes(reads: &dyn Reads, now: fc_core::Timestamp) -> AppResult<(Vec<u8>, Manifest)> {
     let dump = reads.dump_collection()?;
@@ -196,6 +210,7 @@ impl JobHandler for RestoreJob {
         // Older schema: migrate the restored rows forward (outside the writer).
         let mut dump = fc_storage::upgrade_dump(dump)?;
         forget_mcp_approvals(&mut dump);
+        forget_exec_settings(&mut dump);
         ctx.cancel.check()?;
 
         // Safety backup of the current state first, into the app data folder.

@@ -399,15 +399,22 @@ pub(crate) fn module_disabled(module: &str) -> AppError {
     )
 }
 
+/// Permissions only the user, the CLI and the app itself hold: both let the holder choose a
+/// program the app will launch.
+pub(crate) const USER_ONLY_PERMISSIONS: &[&str] = &["mcp:write", crate::settings::EXEC_PERMISSION];
+
 /// Whether `actor` holds `permission`. v0.1 has no grant store: the user, the CLI and the app
 /// itself hold every permission, and so do the other actors until plugin/local-API grants land
 /// (v0.7) — at which point this is the single place that enforces them. The one exception
-/// already: `mcp:write` (registering programs the app will launch) belongs to the user and
-/// the CLI alone — never to a plugin, automation or local-API client.
+/// already: `mcp:write` (registering programs the app will launch) and `settings:exec`
+/// (settings naming a program the app runs, [`crate::settings::EXEC_SETTINGS`]) belong to
+/// the user and the CLI alone — never to a plugin, automation, local-API or MCP client.
 pub(crate) fn permits(actor: &Actor, permission: &str) -> bool {
     match actor {
         Actor::User | Actor::Cli | Actor::System => true,
-        Actor::Plugin(_) | Actor::Automation(_) | Actor::LocalApi(_) => permission != "mcp:write",
+        Actor::Plugin(_) | Actor::Automation(_) | Actor::LocalApi(_) => {
+            !USER_ONLY_PERMISSIONS.contains(&permission)
+        }
         // v0.8: MCP clients hold a fixed, curated set (docs/06 §2.1).
         Actor::Mcp(_) => crate::modules::mcp::MCP_PERMISSIONS.contains(&permission),
     }

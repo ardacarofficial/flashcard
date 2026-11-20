@@ -70,6 +70,31 @@ fn set_interval(t: &TestApp, note: &NoteDto, days: i64) {
     tx.commit().unwrap();
 }
 
+/// How many of `note`'s cards the **statistics module** counts as mature: its own card facts
+/// (`stats::facts::card_fact` → `CardFact::is_mature`) and `stats.overview`'s state counts,
+/// which must agree with each other.
+fn stats_mature(t: &TestApp, note: &NoteDto) -> u32 {
+    use crate::modules::stats::facts::{calendar, card_fact, Presets};
+    let from_facts = {
+        let reads = t.store.read().unwrap();
+        let cal = calendar(&*reads, Some(0)).unwrap();
+        let mut presets = Presets::new(&*reads);
+        let now = Timestamp(1_767_225_600_000);
+        note.cards
+            .iter()
+            .map(|c| reads.get_card(c.id).unwrap().unwrap())
+            .filter(|card| card_fact(card, cal, now, &mut presets).unwrap().is_mature())
+            .count()
+    };
+    let overview = t.ok::<StatsGetOverview>(fc_api::v1::stats::StatsRequest {
+        tz_offset_mins: Some(0),
+        fresh: Some(true),
+        ..Default::default()
+    });
+    assert_eq!(overview.cards.states.mature as usize, from_facts);
+    from_facts as u32
+}
+
 fn analyze(t: &TestApp, text: &str, lang: &str) -> TextAnalysis {
     t.ok::<ReadingAnalyze>(AnalyzeText {
         item_id: None,
@@ -165,8 +190,21 @@ fn word_colours_follow_fsrs_maturity(f: &Factory) {
         assert_eq!(status_of(&a, w), WordStatus::Learning, "{w}");
     }
     // Interval 20 days: still learning; 21 (= MATURE_DAYS, the statistics' "mature"): known.
-    set_interval(&t, &run, i64::from(MATURE_DAYS) - 1);
-    assert_eq!(status_of(&analyze(&t, text, "en"), "ran"), WordStatus::Learning);
+    // At each step the v0.6 statistics are asked directly (their own `card_fact` →
+    // `CardFact::is_mature`, and `stats.overview`'s mature count): the colour must agree.
+    assert_eq!(stats_mature(&t, &run), 0);
+    for (days, want) in [
+        (1, WordStatus::Learning),
+        (i64::from(MATURE_DAYS) - 1, WordStatus::Learning),
+        (i64::from(MATURE_DAYS), WordStatus::Known),
+        (i64::from(MATURE_DAYS) + 100, WordStatus::Known),
+    ] {
+        set_interval(&t, &run, days);
+        let mature = stats_mature(&t, &run);
+        let status = status_of(&analyze(&t, text, "en"), "ran");
+        assert_eq!(status, want, "{days} days");
+        assert_eq!(status == WordStatus::Known, mature > 0, "{days} days: stats say {mature}");
+    }
     set_interval(&t, &run, i64::from(MATURE_DAYS));
     let a = analyze(&t, text, "en");
     assert_eq!(status_of(&a, "running"), WordStatus::Known);
@@ -217,12 +255,12 @@ fn word_colours_follow_fsrs_maturity(f: &Factory) {
 fn turkish_words_and_marks_undo(f: &Factory) {
     let t = TestApp::new(f());
     let d = deck(&t, "Türkçe");
-    let text = "Evlerimizden çıktık. Kitapları masaya koyduk.";
+    let text = "Kalemlerimizden birini aldık. Kitapları masaya koyduk.";
     let a = analyze(&t, text, "tr-TR");
     assert_eq!(a.lemmatizer, "builtin.tr");
-    word_card(&t, d, "ev", "house");
+    word_card(&t, d, "kalem", "pen");
     let a = analyze(&t, text, "tr-TR");
-    assert_eq!(status_of(&a, "Evlerimizden"), WordStatus::Learning);
+    assert_eq!(status_of(&a, "Kalemlerimizden"), WordStatus::Learning);
     assert_eq!(status_of(&a, "Kitapları"), WordStatus::New);
 
     // Marks are keyed by the primary subtag; undo/redo restore them.
@@ -750,12 +788,22 @@ fn subtitle_file_to_sentence_card_with_clip(f: &Factory) {
     let e = failed.error.unwrap();
     assert_eq!(e.code, ErrorCode::ProviderFfmpeg);
     assert_eq!(e.details["reason"], "failed");
-    // Missing program.
-    t.ok::<SettingsSet>(SetSetting {
+    // A missing program cannot even be set…
+    let e = t.err::<SettingsSet>(SetSetting {
         scope: SettingScope::App,
         key: super::FFMPEG_PATH.into(),
         value: serde_json::json!(dir.path().join("nope").display().to_string()),
     });
+    assert_eq!(e.code, ErrorCode::ValidationSettingValue);
+    // …and one written behind the commands' back (a hand edit) does not run either.
+    {
+        let mut tx = t.store.write().unwrap();
+        let nope = dir.path().join("nope").display().to_string();
+        let v = serde_json::json!(nope);
+        tx.set_setting(&SettingScope::App, super::FFMPEG_PATH, &v, Timestamp(1))
+            .unwrap();
+        tx.commit().unwrap();
+    }
     let missing = job(
         &t,
         &t.ok::<ReadingClipsExtract>(ExtractClip {
@@ -764,7 +812,9 @@ fn subtitle_file_to_sentence_card_with_clip(f: &Factory) {
             image: false,
         }),
     );
-    assert_eq!(missing.error.unwrap().details["reason"], "missing");
+    let e = missing.error.unwrap();
+    assert_eq!(e.code, ErrorCode::ProviderFfmpeg);
+    assert_eq!(e.details["reason"], "path");
     // Out-of-range cue.
     assert_eq!(
         t.err::<ReadingClipsExtract>(ExtractClip {
@@ -775,6 +825,198 @@ fn subtitle_file_to_sentence_card_with_clip(f: &Factory) {
         .code,
         ErrorCode::ValidationReadingClip
     );
+}
+
+/// Due texts come in priority order, however long each has been due.
+fn queue_orders_due_texts_by_priority(f: &Factory) {
+    let t = TestApp::new(f());
+    let mut ids = vec![];
+    // Queued low first, so it has been due longest.
+    for p in [ReadingPriority::Low, ReadingPriority::Normal, ReadingPriority::High] {
+        let item = create_text(&t, p.as_str(), "Some text.", false);
+        let q = t.ok::<ReadingQueueSet>(SetReadingQueue {
+            id: item.id,
+            queued: true,
+            priority: Some(p),
+        });
+        assert!(q.is_due);
+        ids.push(q.id);
+    }
+    // One not due yet, high priority: after every due one.
+    let later = create_text(&t, "later", "Later.", false);
+    t.ok::<ReadingQueueSet>(SetReadingQueue {
+        id: later.id,
+        queued: true,
+        priority: Some(ReadingPriority::High),
+    });
+    t.ok::<ReadingQueuePostpone>(PostponeReading {
+        id: later.id,
+        days: 3,
+    });
+    let queue = t.ok::<ReadingItemsList>(ListReadingItems { queued_only: true });
+    let order: Vec<_> = queue.items.iter().map(|i| i.id).collect();
+    assert_eq!(order, [ids[2], ids[1], ids[0], later.id]);
+    assert_eq!(queue.due_count, 3);
+}
+
+// ------------------------------------------------------------------ executable settings
+
+/// `reading.ffmpeg_path` names a program the app runs: only the user, the CLI and the app
+/// hold `settings:exec`; plugins, automations, local-API and MCP clients cannot set or reset
+/// it — directly or wrapped in `batch.execute` — while ordinary settings stay open to them.
+#[cfg(unix)]
+fn exec_settings_are_user_only(f: &Factory) {
+    use fc_api::v1::oplog::Actor;
+    use serde_json::json;
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    let good = fake_ffmpeg(dir.path(), false).display().to_string();
+    let set = |v: &str| json!({ "scope": { "kind": "app" }, "key": super::FFMPEG_PATH, "value": v });
+    let reset = json!({ "scope": { "kind": "app" }, "key": super::FFMPEG_PATH });
+    let stored = |t: &TestApp| {
+        t.store
+            .read()
+            .unwrap()
+            .get_setting(&SettingScope::App, super::FFMPEG_PATH)
+            .unwrap()
+    };
+    let outsiders = [
+        Actor::Plugin("p".into()),
+        Actor::Automation("a".into()),
+        Actor::LocalApi("l".into()),
+        Actor::Mcp("m".into()),
+    ];
+    for actor in &outsiders {
+        for (method, params) in [("v1.settings.set", set(&good)), ("v1.settings.reset", reset.clone())] {
+            let e = t.app.invoke(method, params.clone(), actor).unwrap_err();
+            assert_eq!(e.code, ErrorCode::PermissionDenied, "{method} {actor:?}");
+            // A batch does not launder it.
+            let batch = json!({ "calls": [{ "method": method, "params": params }] });
+            let e = t.app.invoke("v1.batch.execute", batch, actor).unwrap_err();
+            assert_eq!(e.code, ErrorCode::PermissionDenied, "batch {method} {actor:?}");
+        }
+        assert_eq!(stored(&t), None);
+    }
+    // Other settings stay writable for plugins/automations/local API.
+    for actor in &outsiders[..3] {
+        let v = json!({ "scope": { "kind": "app" }, "key": super::VOCABULARY_QUERY, "value": "deck:X" });
+        t.app.invoke("v1.settings.set", v, actor).unwrap();
+    }
+    // The user and the CLI may — with a real executable only.
+    for actor in [Actor::User, Actor::Cli] {
+        t.app.invoke("v1.settings.set", set(&good), &actor).unwrap();
+        assert_eq!(stored(&t), Some(json!(good)));
+        t.app.invoke("v1.settings.reset", reset.clone(), &actor).unwrap();
+        assert_eq!(stored(&t), None);
+    }
+    let plain = dir.path().join("plain.txt");
+    std::fs::write(&plain, "x").unwrap();
+    let bad = [
+        "ffmpeg".to_owned(),                         // not absolute
+        "relative/ffmpeg".to_owned(),                // not absolute
+        dir.path().join("nope").display().to_string(), // missing
+        dir.path().display().to_string(),            // a folder
+        plain.display().to_string(),                 // not executable
+        format!(" {good}"),                          // padded
+    ];
+    for v in &bad {
+        let e = t.app.invoke("v1.settings.set", set(v), &Actor::User).unwrap_err();
+        assert_eq!(e.code, ErrorCode::ValidationSettingValue, "{v:?}");
+    }
+    // Empty = the default (`ffmpeg` on PATH).
+    t.app.invoke("v1.settings.set", set(""), &Actor::User).unwrap();
+    assert_eq!(super::jobs::ffmpeg_program(Some("")).unwrap(), "ffmpeg");
+    assert_eq!(super::jobs::ffmpeg_program(None).unwrap(), "ffmpeg");
+    assert_eq!(super::jobs::ffmpeg_program(Some(&good)).unwrap(), good);
+    let e = super::jobs::ffmpeg_program(Some("/bin/../nope/sh")).unwrap_err();
+    assert_eq!(fc_api::ApiError::from(e).details["reason"], "path");
+    // Undoing the user's change as a plugin is refused too (the inverse is checked).
+    t.app.invoke("v1.settings.set", set(&good), &Actor::User).unwrap();
+    let e = t
+        .app
+        .invoke("v1.oplog.undo", json!({}), &Actor::Plugin("p".into()))
+        .unwrap_err();
+    assert_eq!(e.code, ErrorCode::PermissionDenied);
+    assert_eq!(stored(&t), Some(json!(good)));
+}
+
+/// A backup is data from outside: a restored `reading.ffmpeg_path` is dropped (back to the
+/// default) and must be set again by the user.
+#[cfg(unix)]
+#[test]
+fn restoring_a_backup_clears_exec_settings() {
+    use fc_api::v1::io::{CreateBackup, ExportReport, RestoreBackup, RestoreReport};
+    let dir = tempfile::tempdir().unwrap();
+    let t = TestApp::new(Arc::new(crate::testing::TempSqlite::new()));
+    t.app.set_data_dir(dir.path().join("app-data"));
+    let ffmpeg = fake_ffmpeg(dir.path(), false).display().to_string();
+    for (key, value) in [(super::FFMPEG_PATH, ffmpeg.as_str()), (super::VOCABULARY_QUERY, "deck:X")] {
+        t.ok::<SettingsSet>(SetSetting {
+            scope: SettingScope::App,
+            key: key.into(),
+            value: serde_json::json!(value),
+        });
+    }
+    let backup = dir.path().join("b.fcbackup").display().to_string();
+    let j = job(&t, &t.ok::<IoBackupCreate>(CreateBackup { path: backup.clone() }));
+    let _: ExportReport = serde_json::from_value(j.result.unwrap()).unwrap();
+    let j = job(
+        &t,
+        &t.ok::<IoBackupRestore>(RestoreBackup {
+            path: backup,
+            safety_backup_path: None,
+        }),
+    );
+    assert_eq!(j.status, JobStatus::Succeeded, "{:?}", j.error);
+    let _: RestoreReport = serde_json::from_value(j.result.unwrap()).unwrap();
+    let reads = t.store.read().unwrap();
+    assert_eq!(reads.get_setting(&SettingScope::App, super::FFMPEG_PATH).unwrap(), None);
+    assert_eq!(
+        reads.get_setting(&SettingScope::App, super::VOCABULARY_QUERY).unwrap(),
+        Some(serde_json::json!("deck:X")),
+        "ordinary settings come back"
+    );
+}
+
+/// A process that writes far more to stderr than a pipe holds still finishes (stderr is
+/// drained while it runs); timeouts and cancellation kill it; a missing program is reported.
+#[cfg(unix)]
+#[test]
+fn ffmpeg_process_handling() {
+    use super::jobs::run_process;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, Instant};
+    let dir = tempfile::tempdir().unwrap();
+    let script = |name: &str, body: &str| {
+        let p = dir.path().join(name);
+        std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        p.display().to_string()
+    };
+    // ~1 MiB of stderr (a pipe holds 64 KiB), then success.
+    let chatty = script("chatty", "head -c 1048576 /dev/zero | tr '\\0' x >&2\nexit 0");
+    let t0 = Instant::now();
+    run_process(&chatty, &[], Duration::from_secs(20), &|| false).unwrap();
+    assert!(t0.elapsed() < Duration::from_secs(10));
+    // Chatty and failing: the error carries the tail of stderr, not all of it.
+    let noisy = script("noisy", "head -c 1048576 /dev/zero | tr '\\0' x >&2\necho LAST >&2\nexit 3");
+    let e = run_process(&noisy, &[], Duration::from_secs(20), &|| false).map_err(fc_api::ApiError::from).unwrap_err();
+    assert_eq!(e.details["reason"], "failed");
+    assert!(e.message.contains("LAST") && e.message.len() < 1000, "{}", e.message.len());
+    // Hangs → timeout / stop.
+    let slow = script("slow", "exec sleep 30");
+    let t0 = Instant::now();
+    let e = run_process(&slow, &[], Duration::from_millis(200), &|| false).map_err(fc_api::ApiError::from).unwrap_err();
+    assert_eq!(e.details["reason"], "timeout");
+    let e = run_process(&slow, &[], Duration::from_secs(60), &|| t0.elapsed() > Duration::from_millis(400))
+        .map_err(fc_api::ApiError::from)
+        .unwrap_err();
+    assert_eq!(e.details["reason"], "cancelled");
+    assert!(t0.elapsed() < Duration::from_secs(10));
+    let e = run_process("/nonexistent/ffmpeg", &[], Duration::from_secs(1), &|| false)
+        .map_err(fc_api::ApiError::from)
+        .unwrap_err();
+    assert_eq!(e.details["reason"], "missing");
 }
 
 fn module_switch(f: &Factory) {
@@ -807,6 +1049,97 @@ fn ffmpeg_arguments() {
         std::path::Path::new("/t/f.jpg"),
     );
     assert!(i.join(" ").contains("-ss 0.005 -i /v/film.mp4 -frames:v 1"));
+}
+
+/// A Windows path (drive letter, backslashes, spaces, non-ASCII) is passed to ffmpeg as one
+/// argument, untouched: no shell, no quoting.
+#[test]
+fn ffmpeg_arguments_windows_paths() {
+    let input = std::path::Path::new(r"C:\Users\Ayşe Yılmaz\Videos\Film (2024).mkv");
+    let out = std::path::Path::new(r"C:\Users\AYE~1\AppData\Local\Temp\fc-clip-x1\clip.mp3");
+    let a = super::jobs::audio_args(input, 1_000, 2_000, out);
+    let i = a.iter().position(|x| x == "-i").unwrap();
+    assert_eq!(a[i + 1], input.display().to_string());
+    assert_eq!(a.last().unwrap(), &out.display().to_string());
+    let img = super::jobs::image_args(input, 1_500, out);
+    assert!(img.iter().any(|x| x == r"C:\Users\Ayşe Yılmaz\Videos\Film (2024).mkv"));
+    let cmd = super::jobs::ffmpeg_command(r"C:\Program Files\ffmpeg\bin\ffmpeg.exe", &a);
+    assert_eq!(cmd.get_program(), r"C:\Program Files\ffmpeg\bin\ffmpeg.exe");
+    let args: Vec<_> = cmd.get_args().map(|x| x.to_string_lossy().into_owned()).collect();
+    assert_eq!(args, a);
+}
+
+// ------------------------------------------------------------------ colouring benchmark
+
+/// A collection with word cards for `cards` distinct words (some mature, some marked) and a
+/// `words`-word text drawn from 4 000 distinct ones (English inflections included).
+fn colour_world(words: usize, cards: usize) -> (TestApp, String) {
+    let t = TestApp::new(Arc::new(crate::testing::TempSqlite::new()));
+    let d = deck(&t, "Bench");
+    let syl = ["ka", "lo", "mi", "ner", "tas", "vu", "pel", "dor", "sin", "bra"];
+    let vocab: Vec<String> = (0..4000usize)
+        .map(|i| format!("{}{}{}", syl[i % 10], syl[(i / 10) % 10], syl[(i / 100) % 10]) + &"x".repeat(i / 1000))
+        .collect();
+    for (i, w) in vocab.iter().take(cards).enumerate() {
+        let note = word_card(&t, d, w, "m");
+        if i % 3 == 0 {
+            set_interval(&t, &note, i64::from(MATURE_DAYS));
+        }
+    }
+    let marked: Vec<&str> = vocab[cards..cards + 200].iter().map(String::as_str).collect();
+    mark(&t, "en", &marked, Some(WordMark::Known));
+    let mut seed = 0x2545_f491_4f6c_dd1du64;
+    let mut text = String::with_capacity(words * 9);
+    for n in 0..words {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        let w = &vocab[(seed % 4000) as usize];
+        text.push_str(w);
+        text.push_str(match seed % 4 {
+            0 => "s",
+            1 => "ing",
+            _ => "",
+        });
+        text.push_str(if n % 12 == 11 { ". " } else { " " });
+    }
+    (t, text)
+}
+
+/// Best of `runs` `reading.analyze` calls over the whole text, in µs.
+fn bench_colouring(t: &TestApp, text: &str, runs: usize) -> u128 {
+    let mut best = u128::MAX;
+    for _ in 0..runs {
+        let start = std::time::Instant::now();
+        let a = analyze(t, text, "en");
+        best = best.min(start.elapsed().as_micros());
+        assert_eq!(a.summary.running.total() as usize, text.split_whitespace().count());
+        assert!(a.summary.running.known > 0 && a.summary.running.learning > 0);
+    }
+    println!("colouring {} words: {:.2} ms", text.split_whitespace().count(), best as f64 / 1000.0);
+    best
+}
+
+/// docs/04 v0.10 performance: colouring a 10 000-word text (tokenize, lemmatize, look up
+/// 1 000 word cards and 200 marks, statuses, summary) in < 50 ms. Run with
+/// `cargo test -p fc-app --release -- --ignored --nocapture bench_colouring_10k`.
+#[test]
+#[ignore = "benchmark: run in release"]
+fn bench_colouring_10k() {
+    let (t, text) = colour_world(10_000, 1_000);
+    let best = bench_colouring(&t, &text, 5);
+    assert!(best < 50_000, "colouring took {best} µs (budget 50 ms)");
+}
+
+/// The CI-sized variant (runs with every `cargo test`): the same 10 000 words and 300 cards.
+/// Debug builds are ~10× slower than release and CI runners are noisy, so the budget is
+/// 50 ms × 10 × 2 in debug and 50 ms × 2 in release.
+#[test]
+fn bench_colouring_10k_scaled() {
+    let (t, text) = colour_world(10_000, 300);
+    let budget_us: u128 = if cfg!(debug_assertions) { 1_000_000 } else { 100_000 };
+    let best = bench_colouring(&t, &text, 3);
+    assert!(best < budget_us, "colouring took {best} µs (budget {budget_us} µs)");
 }
 
 #[test]
@@ -852,6 +1185,15 @@ macro_rules! reading_suite {
         #[test]
         fn subtitle_file_to_sentence_card_with_clip() {
             super::subtitle_file_to_sentence_card_with_clip(&$factory);
+        }
+        #[cfg(unix)]
+        #[test]
+        fn exec_settings_are_user_only() {
+            super::exec_settings_are_user_only(&$factory);
+        }
+        #[test]
+        fn queue_orders_due_texts_by_priority() {
+            super::queue_orders_due_texts_by_priority(&$factory);
         }
         #[test]
         fn module_switch() {

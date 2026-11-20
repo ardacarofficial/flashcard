@@ -106,8 +106,8 @@ pub struct ReadingItemDto {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ListReadingItems {
-    /// Only the reading queue, due first (by due time, then priority); otherwise every item,
-    /// newest first.
+    /// Only the reading queue: due items first — by priority, then longest due — then the
+    /// rest by due time; otherwise every item, newest first.
     #[serde(default)]
     pub queued_only: bool,
 }

@@ -21,18 +21,17 @@ thiserror.workspace = true
 getrandom.workspace = true
 uuid.workspace = true
 base64.workspace = true
-
-tempfile = { workspace = true, optional = true }
+# Unpredictable temporary folders for ffmpeg output (reading clips); also the test SQLite.
+tempfile.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 fc-interop = { workspace = true, features = ["fixtures"] }
 fc-ai = { workspace = true, features = ["mock"] }
 
 [features]
 ## In-memory store, a temp-file SQLite store and the storage-agnostic service test suite
 ## (`fc_app::testing`).
-testing = ["dep:tempfile"]
+testing = []
 
 [lints]
 workspace = true

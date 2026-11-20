@@ -180,7 +180,7 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 **Kapsam:** Okuma modu + kelime renklendirme + lemmatizasyon; altyazıdan kart + cümle madenciliği; artımlı okuma; Quizlet tarzı öğren modu; test oluşturucu; güven bazlı puanlama; zamanlı mod; odak modu; satır içi kart oluşturma.
 
 **Kabul kriterleri**
-- [x] Bilinen kelime durumu FSRS verisiyle tutarlı. *(okuma izi: olgun kart = istatistikteki "olgun" — `modules::reading::tests::{mem,sqlite}::word_colours_follow_fsrs_maturity`; docs/10 §24)*
+- [x] Bilinen kelime durumu FSRS verisiyle tutarlı. *(okuma izi: olgun kart = istatistikteki "olgun" — `modules::reading::tests::{mem,sqlite}::word_colours_follow_fsrs_maturity`, test istatistik modülünün kendi `card_fact`/`stats.overview` olgun sayımıyla karşılaştırır; 10 bin kelime renklendirme < 50 ms: `bench_colouring_10k`; docs/10 §24)*
 - [x] .srt dosyasından cümle kartı, video varsa ses kesitiyle. *(okuma izi: `subtitle_file_to_sentence_card`, `subtitle_file_to_sentence_card_with_clip` — sahte ffmpeg ile; docs/10 §24)*
 
 *Okuma izi (`feat/v0.10-reading`) kapsamı: okuma modu + kelime renklendirme + lemmatizasyon, altyazıdan kart + cümle madenciliği, artımlı okuma. Öğren modu, test oluşturucu, güven bazlı puanlama, zamanlı/odak modu ve satır içi kart oluşturma diğer v0.10 izinde.*

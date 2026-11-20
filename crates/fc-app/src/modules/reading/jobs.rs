@@ -4,7 +4,8 @@
 //!   text in any encoding) or fetches a web page (the AI module's SSRF-safe fetcher and its
 //!   `ai.web.allow_private_hosts` switch), then creates the item through
 //!   `reading.items.create` — so the item is validated and undoable like a pasted one.
-//! * `reading.clip` (`reading.clips.extract`): runs **ffmpeg** (`reading.ffmpeg_path`) to cut
+//! * `reading.clip` (`reading.clips.extract`): runs **ffmpeg** (`reading.ffmpeg_path`, a
+//!   user-only `settings:exec` setting re-validated before each run) to cut
 //!   a subtitle cue's audio (mp3, ±[`CLIP_PAD_MS`]) and optionally a screenshot (jpeg, middle
 //!   of the cue) from the item's video, and stores them through `media.add`. The process is
 //!   killed when the job is cancelled or after [`FFMPEG_TIMEOUT`].
@@ -339,49 +340,117 @@ fn ffmpeg_error(reason: &'static str, message: impl Into<String>) -> AppError {
     )
 }
 
-/// Runs `program args`, killing it on cancellation or timeout.
-fn run_ffmpeg(program: &str, args: &[String], ctx: &JobContext<'_>) -> AppResult<()> {
-    let mut child = Command::new(program)
-        .args(args)
+/// Most stderr kept for an error message.
+const STDERR_TAIL: usize = 4096;
+
+/// Drains `r` to its end on a thread (a full pipe would block ffmpeg), keeping the last
+/// [`STDERR_TAIL`] bytes.
+fn drain_tail(mut r: impl std::io::Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut tail = Vec::new();
+        let mut buf = [0u8; 4096];
+        loop {
+            match r.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    tail.extend_from_slice(&buf[..n]);
+                    if tail.len() > 2 * STDERR_TAIL {
+                        tail.drain(..tail.len() - STDERR_TAIL);
+                    }
+                }
+            }
+        }
+        if tail.len() > STDERR_TAIL {
+            tail.drain(..tail.len() - STDERR_TAIL);
+        }
+        tail
+    })
+}
+
+/// The command for `program args`: no stdin/stdout, piped stderr, and on Windows no console
+/// window flashing up for every clip.
+pub(crate) fn ffmpeg_command(program: &str, args: &[String]) -> Command {
+    let mut cmd = Command::new(program);
+    cmd.args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
+/// Runs `program args`, killing it when `stop()` turns true or after `timeout`. stderr is
+/// read while it runs, so a chatty ffmpeg cannot fill the pipe and hang.
+pub(crate) fn run_process(
+    program: &str,
+    args: &[String],
+    timeout: Duration,
+    stop: &dyn Fn() -> bool,
+) -> AppResult<()> {
+    let mut child = ffmpeg_command(program, args)
         .spawn()
         .map_err(|e| ffmpeg_error("missing", format!("cannot start {program}: {e}")))?;
+    let stderr = child.stderr.take().map(drain_tail);
     let started = Instant::now();
-    loop {
+    let status = loop {
         match child.try_wait() {
-            Ok(Some(status)) => {
-                if status.success() {
-                    return Ok(());
-                }
-                let mut err = String::new();
-                if let Some(mut s) = child.stderr.take() {
-                    use std::io::Read as _;
-                    let _ = s.read_to_string(&mut err);
-                }
-                let tail: String = err.chars().rev().take(500).collect::<Vec<_>>().into_iter().rev().collect();
-                return Err(ffmpeg_error("failed", format!("ffmpeg failed ({status}): {tail}")));
-            }
+            Ok(Some(status)) => break Ok(status),
             Ok(None) => {}
-            Err(e) => return Err(ffmpeg_error("failed", e.to_string())),
+            Err(e) => break Err(ffmpeg_error("failed", e.to_string())),
         }
-        if ctx.is_cancelled() || started.elapsed() > FFMPEG_TIMEOUT {
-            let _ = child.kill();
-            let _ = child.wait();
-            ctx.cancel.check()?;
-            return Err(ffmpeg_error("timeout", "ffmpeg took too long"));
+        if stop() {
+            break Err(ffmpeg_error("cancelled", "ffmpeg was stopped"));
+        }
+        if started.elapsed() > timeout {
+            break Err(ffmpeg_error("timeout", "ffmpeg took too long"));
         }
         std::thread::sleep(Duration::from_millis(25));
+    };
+    if status.is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    let tail = stderr
+        .and_then(|h| h.join().ok())
+        .map(|b| String::from_utf8_lossy(&b).trim().to_owned())
+        .unwrap_or_default();
+    let status = status?;
+    if status.success() {
+        Ok(())
+    } else {
+        let tail: String = {
+            let chars: Vec<char> = tail.chars().collect();
+            chars[chars.len().saturating_sub(500)..].iter().collect()
+        };
+        Err(ffmpeg_error("failed", format!("ffmpeg failed ({status}): {tail}")))
     }
 }
 
-/// A temporary folder removed on drop.
-struct TempDir(PathBuf);
+/// Runs ffmpeg for a job: stopped on cancellation or after [`FFMPEG_TIMEOUT`].
+fn run_ffmpeg(program: &str, args: &[String], ctx: &JobContext<'_>) -> AppResult<()> {
+    match run_process(program, args, FFMPEG_TIMEOUT, &|| ctx.is_cancelled()) {
+        Err(e) if ctx.is_cancelled() => {
+            ctx.cancel.check()?;
+            Err(e)
+        }
+        r => r,
+    }
+}
 
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+/// The ffmpeg program: the stored `reading.ffmpeg_path` — validated again here (a value
+/// written behind the commands' back must not run) — or `ffmpeg` on `PATH` when unset/empty.
+pub(crate) fn ffmpeg_program(stored: Option<&str>) -> AppResult<String> {
+    match stored {
+        None | Some("") => Ok("ffmpeg".to_owned()),
+        Some(path) => match crate::settings::executable_problem(path) {
+            None => Ok(path.to_owned()),
+            Some(reason) => Err(ffmpeg_error("path", format!("{FFMPEG_PATH}: {reason}"))),
+        },
     }
 }
 
@@ -407,29 +476,28 @@ impl JobHandler for ClipJob {
     fn run(&self, payload: Value, ctx: &JobContext<'_>) -> AppResult<Value> {
         let req: ExtractClip = crate::support::from_json(&payload)?;
         ctx.ensure_module_enabled(ID)?;
-        let (item, program) = {
+        let (item, stored) = {
             let reads = ctx.read()?;
-            (
-                require_item(&*reads, req.item_id)?,
-                super::setting_text(&*reads, FFMPEG_PATH, "ffmpeg")?,
-            )
+            let stored =
+                crate::settings::resolve_stored(&*reads, &SettingScope::App, FFMPEG_PATH)?
+                    .map(|(v, _)| v.as_str().map(str::to_owned).unwrap_or_default());
+            (require_item(&*reads, req.item_id)?, stored)
         };
+        let program = ffmpeg_program(stored.as_deref())?;
         let (input, start, end) = clip_window(&item, req.cue_index)?;
         if !input.is_file() {
             return Err(clip_invalid("no_media", "the video or audio file is missing"));
         }
-        let program = if program.trim().is_empty() {
-            "ffmpeg".to_owned()
-        } else {
-            program.trim().to_owned()
-        };
-        let dir = TempDir(std::env::temp_dir().join(format!("fc-clip-{}", ctx.job_id)));
-        std::fs::create_dir_all(&dir.0).map_err(|e| ffmpeg_error("failed", e.to_string()))?;
+        // Unpredictable name, created 0700, removed on drop.
+        let dir = tempfile::Builder::new()
+            .prefix("fc-clip-")
+            .tempdir()
+            .map_err(|e| ffmpeg_error("failed", e.to_string()))?;
         ctx.cancel.check()?;
         ctx.report(Some(0.1), "reading.job.cutting_audio");
-        let audio_out = dir.0.join("clip.mp3");
+        let audio_out = dir.path().join("clip.mp3");
         run_ffmpeg(&program, &audio_args(&input, start, end, &audio_out), ctx)?;
-        let image_out = dir.0.join("frame.jpg");
+        let image_out = dir.path().join("frame.jpg");
         if req.image {
             ctx.report(Some(0.6), "reading.job.taking_screenshot");
             run_ffmpeg(&program, &image_args(&input, (start + end) / 2, &image_out), ctx)?;

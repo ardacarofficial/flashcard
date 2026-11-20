@@ -7,8 +7,11 @@
 //!   `make`, `dancing` → `dance`). Possessive `'s` is dropped.
 //! * [`SimpleTurkish`] (`builtin.tr`): Turkish-aware lowercasing (`I` → `ı`, `İ` → `i`),
 //!   proper-noun apostrophes (`Ankara'da` → `ankara`) and iterative stripping of common
-//!   inflectional suffixes (plural, case, possessive, tense, person) while a root of at least
-//!   two letters with a vowel remains (`evlerimizden` → `ev`, `kitapları` → `kitap`).
+//!   inflectional suffixes (plural, case, possessive, tense, person) written as
+//!   vowel-harmony templates, with safeguards: a stem keeps at least [`TR_MIN_STEM`] letters
+//!   ([`TR_MIN_STEM_SHORT`] for two-letter suffixes) and a vowel, buffer consonants only
+//!   after vowels (`kalemlerimizden` → `kalem`, `kitapları` → `kitap`, but `ayna`, `hasta`,
+//!   `anne`, `kedi` stay whole). Two-letter roots therefore keep their suffixes (`evde`).
 //! * [`Plain`] (`builtin.plain`): any language, lowercase only (Turkic-aware).
 //!
 //! They are deliberately simple (no lexicon): what matters for reading mode is that a text
@@ -23,8 +26,9 @@ use std::sync::Arc;
 /// Language capability every language-agnostic lemmatizer declares.
 pub const ANY_LANGUAGE: &str = "*";
 
-/// Byte spans of the words of `text`: runs of letters (and combining marks), an inner
-/// apostrophe (`'` or `’`) followed by a letter continues the word (`don't`, `Ankara'da`).
+/// Byte spans of the words of `text`: runs of letters (and combining marks); an inner
+/// apostrophe (`'` or `’`) or hyphen (`-`, `‐`) followed by a letter continues the word
+/// (`don't`, `Ankara'da`, `well-known`, `e-mail`).
 /// Digits, punctuation and symbols are not words.
 pub fn word_spans(text: &str) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
@@ -38,8 +42,8 @@ pub fn word_spans(text: &str) -> Vec<(usize, usize)> {
             continue;
         }
         if let Some(s) = start {
-            let apostrophe = c == '\'' || c == '\u{2019}';
-            if apostrophe && chars.peek().is_some_and(|&(_, n)| n.is_alphabetic()) {
+            let joiner = matches!(c, '\'' | '\u{2019}' | '-' | '\u{2010}');
+            if joiner && chars.peek().is_some_and(|&(_, n)| n.is_alphabetic()) {
                 continue;
             }
             out.push((s, i));
@@ -273,7 +277,6 @@ const EN_IRREGULAR: &[(&str, &str)] = &[
     ("shaken", "shake"),
     ("hid", "hide"),
     ("hidden", "hide"),
-    ("bit", "bite"),
     ("bitten", "bite"),
     ("rode", "ride"),
     ("ridden", "ride"),
@@ -299,7 +302,6 @@ const EN_IRREGULAR: &[(&str, &str)] = &[
     ("fled", "flee"),
     ("forgave", "forgive"),
     ("forgiven", "forgive"),
-    ("ground", "grind"),
     ("laid", "lay"),
     ("lain", "lie"),
     ("lying", "lie"),
@@ -320,7 +322,6 @@ const EN_IRREGULAR: &[(&str, &str)] = &[
     ("torn", "tear"),
     ("wept", "weep"),
     ("withdrew", "withdraw"),
-    ("wound", "wind"),
     ("children", "child"),
     ("men", "man"),
     ("women", "woman"),
@@ -350,10 +351,6 @@ const EN_IRREGULAR: &[(&str, &str)] = &[
     ("less", "little"),
     ("least", "little"),
     ("an", "a"),
-    ("me", "i"),
-    ("us", "we"),
-    ("him", "he"),
-    ("them", "they"),
 ];
 
 /// Words ending in `s` that are not plurals / third persons.
@@ -477,13 +474,38 @@ fn has_vowel(s: &str) -> bool {
     s.chars().any(|c| is_vowel(c) || c == 'y')
 }
 
-/// Lemma of one English word (any case).
+/// Contracted negations whose base is not the part before `n't`.
+const EN_NEGATIONS: &[(&str, &str)] = &[
+    ("can't", "can"),
+    ("won't", "will"),
+    ("shan't", "shall"),
+    ("ain't", "be"),
+];
+
+/// Clitics dropped from the end of a word (`don't` → `do`, `I'm` → `i`, `they've` → `they`,
+/// `John's` → `john`).
+const EN_CLITICS: &[&str] = &["n't", "'s", "'m", "'re", "'ve", "'ll", "'d", "'"];
+
+/// Lemma of one English word (any case). Contractions lose their clitic (`don't` → `do`,
+/// `isn't` → `be`, `can't` → `can`, `won't` → `will`); a hyphenated word keeps its first
+/// parts and lemmatizes its last (`e-mails` → `e-mail`).
 pub fn english_lemma(word: &str) -> String {
     let lower = word.to_lowercase().replace('\u{2019}', "'");
-    let w = lower
-        .strip_suffix("'s")
-        .or_else(|| lower.strip_suffix('\''))
-        .unwrap_or(&lower);
+    if let Some((_, base)) = EN_NEGATIONS.iter().find(|(f, _)| *f == lower) {
+        return (*base).to_owned();
+    }
+    if let Some(i) = lower.rfind('-') {
+        let (head, last) = lower.split_at(i + 1);
+        return format!("{head}{}", english_lemma(last));
+    }
+    if let Some(base) = EN_CLITICS
+        .iter()
+        .find_map(|c| lower.strip_suffix(c))
+        .filter(|b| !b.is_empty() && !b.contains('\''))
+    {
+        return english_lemma(base);
+    }
+    let w = lower.as_str();
     if let Some((_, lemma)) = EN_IRREGULAR.iter().find(|(f, _)| *f == w) {
         return (*lemma).to_owned();
     }
@@ -578,46 +600,164 @@ impl Lemmatizer for SimpleTurkish {
     }
 }
 
-/// Turkish inflectional suffixes, longest first within each group; stripped repeatedly from
-/// the end (first match in this order) while the remainder is a plausible root.
-const TR_SUFFIXES: &[&str] = &[
-    // person / copula
-    "sınız", "siniz", "sunuz", "sünüz", "dır", "dir", "dur", "dür", "tır", "tir", "tur", "tür",
-    "sın", "sin", "sun", "sün", "ız", "iz", "uz", "üz", "ım", "im", "um", "üm",
-    // tense / mood
-    "acak", "ecek", "yacak", "yecek", "ıyor", "iyor", "uyor", "üyor", "yor", "mış", "miş", "muş",
-    "müş", "dı", "di", "du", "dü", "tı", "ti", "tu", "tü", "mak", "mek", // case
-    "ndan", "nden", "ndaki", "ndeki", "daki", "deki", "taki", "teki", "dan", "den", "tan", "ten",
-    "nda", "nde", "da", "de", "ta", "te", "nın", "nin", "nun", "nün", "yla", "yle", "la", "le",
-    "ya", "ye", "yı", "yi", "yu", "yü", "na", "ne", // possessive
-    "ımız", "imiz", "umuz", "ümüz", "ınız", "iniz", "unuz", "ünüz", "ları", "leri", "sı", "si",
-    "su", "sü", // plural
-    "lar", "ler",
-];
-
-const TR_VOWELS: &[char] = &['a', 'e', 'ı', 'i', 'o', 'ö', 'u', 'ü'];
-
-/// Lemma (approximate root) of one Turkish word (any case).
-pub fn turkish_lemma(word: &str) -> String {
-    let lower = lowercase(word, "tr");
-    let root = strip_apostrophe_tail(&lower);
-    if root.len() != lower.len() {
-        // Proper noun + suffixes ("Ankara'da"): the part before the apostrophe is the root.
-        return root.to_owned();
-    }
-    let mut w: &str = &lower;
-    while let Some(next) = TR_SUFFIXES
-        .iter()
-        .filter_map(|s| w.strip_suffix(s))
-        .find(|rest| plausible_root(rest))
-    {
-        w = next;
-    }
-    w.to_owned()
+/// What a suffix may follow: its buffer consonant (`y`, `n`, `s`) only comes after a vowel,
+/// a vowel-initial suffix only after a consonant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum After {
+    Vowel,
+    Consonant,
+    Any,
 }
 
-fn plausible_root(rest: &str) -> bool {
-    rest.chars().count() >= 2 && rest.chars().any(|c| TR_VOWELS.contains(&c))
+/// Turkish inflectional suffixes as **harmony templates**, longest first: `A` = `a/e`
+/// (two-way vowel harmony), `I` = `ı/i/u/ü` (four-way), `D` = `d/t` (`t` after a voiceless
+/// consonant); other letters are literal (`yor`, `ki`). A template matches only in the form
+/// harmony gives it after the stem (`evler` yes, `evlar` no; `kitapta` yes, `kitapda` no).
+/// Deliberately conservative — no single-letter suffixes (accusative/dative `ı/a`,
+/// possessive `m`), no copula `-Iz` (`temiz`, `deniz`), no negative `-mA` — because without a
+/// lexicon they mostly cut real roots.
+const TR_SUFFIXES: &[(&str, After)] = &[
+    // 5
+    ("nDAki", After::Vowel),
+    ("sInIz", After::Any),
+    // 4
+    ("yAcAk", After::Vowel),
+    ("nDAn", After::Vowel),
+    ("DAki", After::Any),
+    ("AcAk", After::Consonant),
+    ("Iyor", After::Consonant),
+    ("ImIz", After::Consonant),
+    ("InIz", After::Consonant),
+    ("lArI", After::Any),
+    // 3
+    ("DAn", After::Any),
+    ("nDA", After::Vowel),
+    ("nIn", After::Vowel),
+    ("ylA", After::Vowel),
+    ("yIm", After::Vowel),
+    ("yIz", After::Vowel),
+    ("DIr", After::Any),
+    ("sIn", After::Any),
+    ("mIş", After::Any),
+    ("mAk", After::Any),
+    ("yor", After::Vowel),
+    ("lAr", After::Any),
+    // 2 (the stem must keep at least TR_MIN_STEM_SHORT letters)
+    ("DA", After::Any),
+    ("DI", After::Any),
+    ("lA", After::Any),
+    ("yA", After::Vowel),
+    ("yI", After::Vowel),
+    ("nA", After::Vowel),
+    ("nI", After::Vowel),
+    ("sI", After::Vowel),
+    ("Im", After::Consonant),
+    ("In", After::Consonant),
+];
+
+/// A suffix is never stripped when fewer letters than this would remain (`ayna` ↛ `ay`,
+/// `anne` ↛ `an`, `kedi` ↛ `ke`).
+pub const TR_MIN_STEM: usize = 3;
+/// …nor, for a two-letter suffix, fewer than this (`hasta` ↛ `has`, `şimdi` ↛ `şim`,
+/// `resim` ↛ `res`, `altın` ↛ `alt`).
+pub const TR_MIN_STEM_SHORT: usize = 4;
+
+fn tr_vowel(c: char) -> bool {
+    matches!(
+        c,
+        'a' | 'e' | 'ı' | 'i' | 'o' | 'ö' | 'u' | 'ü' | 'â' | 'î' | 'û'
+    )
+}
+
+fn tr_back(v: char) -> bool {
+    matches!(v, 'a' | 'ı' | 'o' | 'u' | 'â' | 'û')
+}
+
+fn tr_voiceless(c: char) -> bool {
+    matches!(c, 'ç' | 'f' | 'h' | 'k' | 'p' | 's' | 'ş' | 't')
+}
+
+/// The form `template` takes after `stem` (vowel and consonant harmony), `None` when the
+/// stem has no vowel to harmonize with.
+fn tr_surface(stem: &[char], template: &str) -> Option<Vec<char>> {
+    let mut vowel = stem.iter().rev().copied().find(|&c| tr_vowel(c))?;
+    let mut prev = *stem.last()?;
+    let mut out = Vec::with_capacity(template.len());
+    for t in template.chars() {
+        let c = match t {
+            'A' if tr_back(vowel) => 'a',
+            'A' => 'e',
+            'I' => match vowel {
+                'a' | 'ı' | 'â' => 'ı',
+                'e' | 'i' | 'î' => 'i',
+                'o' | 'u' | 'û' => 'u',
+                _ => 'ü',
+            },
+            'D' if tr_voiceless(prev) => 't',
+            'D' => 'd',
+            c => c,
+        };
+        if tr_vowel(c) {
+            vowel = c;
+        }
+        prev = c;
+        out.push(c);
+    }
+    Some(out)
+}
+
+/// Strips [`TR_SUFFIXES`] from the end of a lowercase word, repeatedly, while the
+/// safeguards hold; a stem softened before a vowel gets its consonant back
+/// (`çocuğ-um` → `çocuk`, `kitab-ın` → `kitap`, `ağac-ın` → `ağaç`).
+fn tr_strip(word: &str) -> String {
+    let mut w: Vec<char> = word.chars().collect();
+    'strip: loop {
+        for &(template, after) in TR_SUFFIXES {
+            let n = template.chars().count();
+            let min = if n <= 2 {
+                TR_MIN_STEM_SHORT
+            } else {
+                TR_MIN_STEM
+            };
+            if w.len() < n + min {
+                continue;
+            }
+            let (stem, tail) = w.split_at(w.len() - n);
+            let ends_in_vowel = stem.last().is_some_and(|&c| tr_vowel(c));
+            let context_ok = match after {
+                After::Vowel => ends_in_vowel,
+                After::Consonant => !ends_in_vowel,
+                After::Any => true,
+            };
+            if !context_ok || tr_surface(stem, template).as_deref() != Some(tail) {
+                continue;
+            }
+            let vowel_initial = tail.first().is_some_and(|&c| tr_vowel(c));
+            let mut stem = stem.to_vec();
+            if vowel_initial {
+                if let Some(last) = stem.last_mut() {
+                    *last = match *last {
+                        'ğ' => 'k',
+                        'b' => 'p',
+                        'c' => 'ç',
+                        c => c,
+                    };
+                }
+            }
+            w = stem;
+            continue 'strip;
+        }
+        break;
+    }
+    w.into_iter().collect()
+}
+
+/// Lemma (approximate root) of one Turkish word (any case). A proper noun's suffixes come
+/// after an apostrophe (`Ankara'da`); the part before it goes through the same stripping as
+/// any other word, so `Türkiye'de` and `Türkiye` always share a key.
+pub fn turkish_lemma(word: &str) -> String {
+    let lower = lowercase(word, "tr");
+    tr_strip(strip_apostrophe_tail(&lower))
 }
 
 #[cfg(test)]
@@ -634,7 +774,7 @@ mod tests {
 
     #[test]
     fn spans_cover_words_with_inner_apostrophes_only() {
-        let text = "Don't stop—Ankara'da 3 kedi; ‘quoted’ rock'n'roll.";
+        let text = "Don't stop—Ankara'da 3 kedi; ‘quoted’ rock'n'roll well-known -x y- e‐mail.";
         let words: Vec<&str> = word_spans(text).iter().map(|&(s, e)| &text[s..e]).collect();
         assert_eq!(
             words,
@@ -644,7 +784,11 @@ mod tests {
                 "Ankara'da",
                 "kedi",
                 "quoted",
-                "rock'n'roll"
+                "rock'n'roll",
+                "well-known",
+                "x",
+                "y",
+                "e‐mail"
             ]
         );
     }
@@ -684,6 +828,35 @@ mod tests {
             ("wanted", "want"),
             ("agreed", "agree"),
             ("died", "die"),
+            // contractions
+            ("don't", "do"),
+            ("Don’t", "do"),
+            ("doesn't", "do"),
+            ("didn't", "do"),
+            ("can't", "can"),
+            ("won't", "will"),
+            ("isn't", "be"),
+            ("wasn't", "be"),
+            ("haven't", "have"),
+            ("couldn't", "could"),
+            ("I'm", "i"),
+            ("you're", "you"),
+            ("they've", "they"),
+            ("we'll", "we"),
+            ("he'd", "he"),
+            ("let's", "let"),
+            ("o'clock", "o'clock"),
+            // forms that are words of their own stay
+            ("bit", "bit"),
+            ("US", "us"),
+            ("us", "us"),
+            ("ground", "ground"),
+            ("wound", "wound"),
+            ("them", "them"),
+            // hyphenated words: one word, last part lemmatized
+            ("e-mails", "e-mail"),
+            ("mothers-in-law", "mothers-in-law"),
+            ("self-made", "self-make"),
         ];
         for (word, lemma) in cases {
             assert_eq!(english_lemma(word), lemma, "{word}");
@@ -695,20 +868,96 @@ mod tests {
         let cases = [
             ("kitaplar", "kitap"),
             ("kitapları", "kitap"),
-            ("evlerimizden", "ev"),
-            ("evde", "ev"),
+            ("kalemlerimizden", "kalem"),
             ("geliyorum", "gel"),
             ("okulda", "okul"),
             ("Ankara'da", "ankara"),
             ("İstanbul'u", "istanbul"),
+            ("Ali'ye", "ali"),
+            ("Ayşe'nin", "ayşe"),
             ("IŞIK", "ışık"),
-            ("ev", "ev"),
             ("masaya", "masa"),
+            ("masalar", "masa"),
             ("arkadaşlarımızla", "arkadaş"),
+            // softened stems get their consonant back
+            ("çocuğum", "çocuk"),
+            ("çocuklar", "çocuk"),
+            ("kitabın", "kitap"),
+            ("ağacın", "ağaç"),
+            // tense, person, case
+            ("gelmiş", "gel"),
+            ("gelecek", "gel"),
+            ("gelmek", "gel"),
+            ("okuyacak", "oku"),
+            ("okuyor", "oku"),
+            ("hastayım", "hasta"),
+            ("arabanın", "araba"),
+            ("annenin", "anne"),
+            ("arabasını", "araba"),
+            ("arabasına", "araba"),
+            ("kalemle", "kalem"),
+            ("yollar", "yol"),
+            ("yoldan", "yol"),
+            ("kitapta", "kitap"),
+            ("gözlükler", "gözlük"),
+            ("öğrencilerin", "öğrenci"),
+            ("üzümler", "üzüm"),
+            ("güller", "gül"),
+            ("sözlükte", "sözlük"),
         ];
         for (word, lemma) in cases {
             assert_eq!(turkish_lemma(word), lemma, "{word}");
         }
+    }
+
+    /// Lexicon-free safeguards: common words that merely *end* like a suffix stay whole.
+    #[test]
+    fn turkish_roots_are_not_overstripped() {
+        let whole = "ayna hasta anne kedi araba masa kapı pencere kalem defter okul öğretmen \
+            bilgisayar telefon doktor deniz temiz güzel büyük küçük sabah akşam gece insan \
+            zaman kadın erkek çocuk baba kardeş arkadaş kitap köpek elma armut ekmek peynir su \
+            çay kahve şeker dünya hava yağmur kar güneş altın resim durum sonra önce şimdi \
+            bugün yarın dün mavi beyaz siyah yeşil kırmızı sarı meydan vatan beden maden dolar \
+            orta bana sana yeni eski iyi kötü yemek çiçek bebek kulak toprak ırmak kendi hindi \
+            nokta bile şelale sauna kuzen saat liman tavan çoban kaplan aslan bütün derin kumaş";
+        let words: Vec<&str> = whole.split_whitespace().collect();
+        assert!(words.len() >= 95, "{}", words.len());
+        for w in words {
+            assert_eq!(turkish_lemma(w), w, "{w}");
+        }
+        // Never a stem shorter than TR_MIN_STEM: two-letter roots keep their suffixes rather
+        // than risk `ayna` → `ay`.
+        assert_eq!(turkish_lemma("evde"), "evde");
+        assert_eq!(turkish_lemma("evlerimizden"), "evler");
+        // Harmony: a suffix only matches in the form the stem's last vowel gives it.
+        assert_eq!(turkish_lemma("kitapler"), "kitapler");
+        assert_eq!(turkish_lemma("kitapda"), "kitapda");
+        // A buffer consonant only after a vowel.
+        assert_eq!(turkish_lemma("kalemya"), "kalemya");
+    }
+
+    /// The part before an apostrophe is stripped like any word: one key per word, with or
+    /// without the proper-noun apostrophe.
+    #[test]
+    fn turkish_apostrophe_forms_share_the_bare_words_key() {
+        let key = turkish_lemma("Türkiye");
+        for w in ["Türkiye'de", "Türkiye’nin", "Türkiye'ye", "TÜRKİYE'DEN"] {
+            assert_eq!(turkish_lemma(w), key, "{w}");
+        }
+        for (bare, with) in [
+            ("Ankara", "Ankara'ya"),
+            ("Ayşe", "Ayşe'nin"),
+            ("Kemal", "Kemal'in"),
+        ] {
+            assert_eq!(turkish_lemma(bare), turkish_lemma(with), "{with}");
+        }
+    }
+
+    #[test]
+    fn turkish_suffix_table_is_longest_first() {
+        let lens: Vec<usize> = TR_SUFFIXES.iter().map(|(t, _)| t.chars().count()).collect();
+        assert!(lens.windows(2).all(|w| w[0] >= w[1]), "{lens:?}");
+        assert!(lens.iter().all(|&n| n >= 2), "no single-letter suffixes");
     }
 
     #[test]

@@ -44,42 +44,74 @@ pub fn parse_subtitles(bytes: &[u8]) -> InteropResult<(SubtitleFormat, Vec<Cue>)
     } else {
         SubtitleFormat::Srt
     };
+    // Line by line rather than by blank-line blocks: real files run cues together without
+    // the blank line, and a timing line always starts a new cue.
+    let lines: Vec<&str> = text.lines().map(str::trim).collect();
+    let is_timing = |l: &str| l.contains("-->") && parse_timing(l).is_some();
     let mut cues = Vec::new();
-    for block in text.split("\n\n") {
-        let lines: Vec<&str> = block.lines().filter(|l| !l.trim().is_empty()).collect();
-        let Some(timing_at) = lines.iter().position(|l| l.contains("-->")) else {
-            continue;
-        };
-        if lines
-            .first()
-            .is_some_and(|l| l.starts_with("NOTE") || l.starts_with("STYLE"))
-            && timing_at > 0
-        {
+    let mut current: Option<(u64, u64, Vec<String>)> = None;
+    let mut block_start = true;
+    let mut skipping = false;
+    let mut flush = |current: &mut Option<(u64, u64, Vec<String>)>| -> InteropResult<()> {
+        if let Some((start_ms, end_ms, body)) = current.take() {
+            if !body.is_empty() {
+                cues.push(Cue {
+                    start_ms,
+                    end_ms: end_ms.max(start_ms),
+                    text: body.join(" "),
+                });
+                if cues.len() > MAX_CUES {
+                    return Err(InteropError::invalid(
+                        FORMAT,
+                        format!("more than {MAX_CUES} cues"),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    };
+    for (i, &line) in lines.iter().enumerate() {
+        if line.is_empty() {
+            flush(&mut current)?;
+            block_start = true;
+            skipping = false;
             continue;
         }
-        let Some((start_ms, end_ms)) = parse_timing(lines[timing_at]) else {
-            continue;
-        };
-        let body: Vec<String> = lines[timing_at + 1..]
-            .iter()
-            .map(|l| clean_line(l))
-            .filter(|l| !l.is_empty())
-            .collect();
-        if body.is_empty() {
+        if is_timing(line) {
+            flush(&mut current)?;
+            if let Some((start_ms, end_ms)) = parse_timing(line) {
+                current = Some((start_ms, end_ms, Vec::new()));
+            }
+            block_start = false;
+            skipping = false;
             continue;
         }
-        cues.push(Cue {
-            start_ms,
-            end_ms: end_ms.max(start_ms),
-            text: body.join(" "),
-        });
-        if cues.len() > MAX_CUES {
-            return Err(InteropError::invalid(
-                FORMAT,
-                format!("more than {MAX_CUES} cues"),
-            ));
+        if skipping {
+            continue;
+        }
+        let first_word = line.split_whitespace().next().unwrap_or("");
+        if block_start && matches!(first_word, "WEBVTT" | "NOTE" | "STYLE" | "REGION") {
+            // Header and NOTE/STYLE/REGION blocks: up to the next blank line.
+            flush(&mut current)?;
+            skipping = true;
+            continue;
+        }
+        let before_timing = lines.get(i + 1).is_some_and(|n| is_timing(n));
+        if before_timing && (block_start || line.bytes().all(|b| b.is_ascii_digit())) {
+            // A cue number / identifier: ends the previous cue even without a blank line.
+            flush(&mut current)?;
+            block_start = false;
+            continue;
+        }
+        block_start = false;
+        if let Some((_, _, body)) = current.as_mut() {
+            let clean = clean_line(line);
+            if !clean.is_empty() {
+                body.push(clean);
+            }
         }
     }
+    flush(&mut current)?;
     if cues.is_empty() {
         return Err(InteropError::invalid(FORMAT, "no subtitle cues found"));
     }
@@ -120,19 +152,39 @@ fn parse_time(s: &str) -> Option<u64> {
     Some(((h * 60 + m) * 60 + sec) * 1000 + ms)
 }
 
-/// Removes `<…>` tags and `{…}` override blocks, decodes common entities, collapses spaces.
+/// Whether `inner` (what is between `<` and `>`) is markup: a tag (`i`, `/i`, `c.red`,
+/// `v Roger`, `font color="red"`) or a VTT timestamp (`00:01:03.000`).
+fn is_tag(inner: &str) -> bool {
+    let mut chars = inner.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '/' => !inner.contains('<'),
+        Some(c) if c.is_ascii_digit() => inner
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == ':' || c == '.'),
+        _ => false,
+    }
+}
+
+/// Removes `<…>` tags and ASS `{\…}` override blocks, decodes common entities, collapses
+/// spaces. A `<` or `{` that does not open markup is text (`a < b`, `I <3 you`, `{sic}`).
 fn clean_line(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
-    let mut depth_angle = false;
-    let mut depth_brace = false;
-    for c in line.chars() {
-        match c {
-            '<' if !depth_brace => depth_angle = true,
-            '>' if depth_angle => depth_angle = false,
-            '{' if !depth_angle => depth_brace = true,
-            '}' if depth_brace => depth_brace = false,
-            _ if depth_angle || depth_brace => {}
-            _ => out.push(c),
+    let mut rest = line;
+    while let Some(c) = rest.chars().next() {
+        let markup_end = match c {
+            '<' => rest[1..]
+                .find('>')
+                .filter(|&j| is_tag(&rest[1..1 + j]))
+                .map(|j| j + 2),
+            '{' if rest[1..].starts_with('\\') => rest.find('}').map(|j| j + 1),
+            _ => None,
+        };
+        match markup_end {
+            Some(n) => rest = &rest[n..],
+            None => {
+                out.push(c);
+                rest = &rest[c.len_utf8()..];
+            }
         }
     }
     let out = out
@@ -198,5 +250,42 @@ mod tests {
         assert_eq!(parse_time("00:00:01,5"), Some(1_500));
         assert_eq!(parse_time("00:00:01,5000"), None);
         assert_eq!(parse_time("aa:00"), None);
+    }
+
+    #[test]
+    fn cues_without_blank_lines_stay_apart() {
+        let srt = "1\n00:00:01,000 --> 00:00:02,000\nFirst line\nsecond line\n2\n00:00:03,000 --> 00:00:04,000\nNext cue\n00:00:05,000 --> 00:00:06,000\nNo number either\n\n\n4\n00:00:07,000 --> 00:00:08,000\n42\n";
+        let (_, cues) = parse_subtitles(srt.as_bytes()).unwrap();
+        let texts: Vec<&str> = cues.iter().map(|c| c.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            [
+                "First line second line",
+                "Next cue",
+                "No number either",
+                "42"
+            ]
+        );
+        assert_eq!(cues[1].start_ms, 3_000);
+        // A VTT header directly followed by a cue.
+        let vtt = "WEBVTT\n00:00:01.000 --> 00:00:02.000\nHi\nNOTE not a note: inside a cue\n";
+        let (_, cues) = parse_subtitles(vtt.as_bytes()).unwrap();
+        assert_eq!(cues.len(), 1);
+        assert_eq!(cues[0].text, "Hi NOTE not a note: inside a cue");
+    }
+
+    #[test]
+    fn a_lone_angle_bracket_is_text() {
+        assert_eq!(clean_line("if a < b then <i>c</i>"), "if a < b then c");
+        assert_eq!(clean_line("I <3 you"), "I <3 you");
+        assert_eq!(clean_line("x <- y > z"), "x <- y > z");
+        assert_eq!(clean_line("5 < 6 and 7 > 3"), "5 < 6 and 7 > 3");
+        assert_eq!(clean_line("<"), "<");
+        assert_eq!(clean_line("{sic} {\\an8}top"), "{sic} top");
+        assert_eq!(
+            clean_line("<00:01:03.000>Hızlı! <c.red>kırmızı</c>"),
+            "Hızlı! kırmızı"
+        );
+        assert_eq!(clean_line("<font color=\"red\">R</font> &lt;3"), "R <3");
     }
 }
