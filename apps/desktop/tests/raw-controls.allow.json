@@ -12,8 +12,5 @@
   "src/lib/features/modes/TestScreen.svelte": 3,
   "src/lib/features/reading/ReadingScreen.svelte": 2,
   "src/lib/features/reading/WordPanel.svelte": 1,
-  "src/lib/features/stats/GoalsScreen.svelte": 1,
-  "src/lib/features/stats/PlanningScreen.svelte": 5,
-  "src/lib/features/stats/StatsScreen.svelte": 4,
   "src/lib/features/study/StudyScreen.svelte": 4
 }

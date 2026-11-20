@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { i18n } from '$lib/i18n/index.svelte';
 import { api } from '$lib/api';
 import type { ScreenCtx } from '../types';
@@ -32,7 +32,7 @@ describe('v0.6 screens on the dev mock', () => {
     expect(await screen.findByText('4 days')).toBeTruthy();
     expect(screen.getByText('Longest: 12 days')).toBeTruthy();
     expect(screen.getByText('88.6%')).toBeTruthy();
-    expect(screen.getByText('Target 90%')).toBeTruthy();
+    expect(screen.getAllByText('Target 90%').length).toBeGreaterThan(0);
     expect(screen.getByRole('img', { name: 'Forecast' })).toBeTruthy();
     // Leech actions cover every leech of the scope: one Rust command, no ids from here.
     expect(await screen.findByText('60 cards forgotten at least 8 times')).toBeTruthy();
@@ -52,7 +52,8 @@ describe('v0.6 screens on the dev mock', () => {
     expect(await screen.findByText('YKS')).toBeTruthy();
     expect((await api.call('planning.exams.list', { tz_offset_mins: 0 })).items[0]!.exam.query).toBe('exam:TYT');
     // Easy days are settings of the planning module.
-    await fireEvent.change(screen.getByLabelText('Sunday'), { target: { value: 'minimum' } });
+    const sunday = screen.getByRole('radiogroup', { name: 'Sunday' });
+    await fireEvent.click(within(sunday).getByRole('radio', { name: 'Minimum' }));
     const s = await api.call('settings.get', { scope: { kind: 'app' }, keys: ['planning.easy_days.sun'] });
     expect(s.values[0]!.value).toBe('minimum');
     // Optimizer and workload (optimizer module on in the mock).
