@@ -247,3 +247,19 @@ const BY_KEY: Record<string, IconNode> = {
 export function iconFor(key: string | null | undefined, fallback: IconNode = FileText): IconNode {
   return (key && BY_KEY[key]) || fallback;
 }
+
+// v1.1 Create / Search / Inbox / Reading screens (kept as one block to merge cleanly).
+export {
+  ArrowDown,
+  ArrowUp,
+  CircleHelp,
+  CirclePause,
+  ClipboardPaste,
+  Columns3,
+  Eye,
+  FolderInput,
+  Globe,
+  ImagePlus,
+  Tag,
+  Undo2,
+} from 'lucide';

@@ -84,7 +84,9 @@
     "drop_hint": "Drop or paste a file here.",
     "bold_short": "B",
     "italic_short": "I",
-    "code_short": "</>"
+    "code_short": "</>",
+    "choose_file": "Choose file",
+    "media_short": "Media"
   },
   "masks": {
     "need_image": "Add the image first.",

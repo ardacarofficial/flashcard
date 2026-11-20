@@ -147,7 +147,9 @@
       "local_api": "{name}",
       "other": "{actor}"
     },
-    "badge": "{count} bekliyor"
+    "badge": "{count} bekliyor",
+    "empty_other": "Burada henüz bir şey yok.",
+    "empty_hint": "Tarayıcı eklentisinin ya da başka programların önerdiği kartlar burada seni bekler."
   },
   "local_api": {
     "heading": "Yerel API",

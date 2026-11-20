@@ -200,3 +200,69 @@ pub struct TermPage {
     /// Cursor for the next page (`null` = end).
     pub next_cursor: Option<String>,
 }
+
+/// Where `notes.create_many` puts the notes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum NotesTarget {
+    /// An existing deck.
+    Deck {
+        /// Deck id.
+        id: DeckId,
+    },
+    /// A deck created in the same step (as `decks.create`).
+    NewDeck {
+        /// Name, or `A::B` path relative to `parent_id`.
+        path: String,
+        /// Parent deck (`null` = top level).
+        #[serde(default)]
+        parent_id: Option<DeckId>,
+        /// Description (Markdown).
+        #[serde(default)]
+        description: Option<String>,
+    },
+}
+
+/// One note of `notes.create_many`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct NoteFieldsDraft {
+    /// Field values keyed by field key (missing = default/empty).
+    pub fields: BTreeMap<String, String>,
+}
+
+/// `notes.create_many` (v1.1): creates several notes of one note type — optionally in a new
+/// deck — as ONE command and one undo step (the Create screen's "Save"). Each note runs
+/// `notes.create` nested, so validation, cards and classifications are exactly its own.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct CreateNotes {
+    /// Note type of every note.
+    pub notetype_id: NoteTypeId,
+    /// Existing or new deck.
+    pub target: NotesTarget,
+    /// The notes in order (1–1000; rows whose fields are all blank are skipped).
+    pub notes: Vec<NoteFieldsDraft>,
+    /// Tags of every note.
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Classification values of every note.
+    #[serde(default)]
+    pub attributes: Vec<AttributeAssignment>,
+    /// Create duplicates too (default `false`: a duplicate row is skipped and reported).
+    pub allow_duplicate: Option<bool>,
+}
+
+/// Response of `notes.create_many`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct NotesCreated {
+    /// Deck the notes went to (the new one for `new_deck`).
+    pub deck_id: DeckId,
+    /// Created notes, in row order.
+    pub note_ids: Vec<NoteId>,
+    /// Indexes (0-based) of rows skipped because all their fields were blank.
+    pub empty_rows: Vec<u32>,
+    /// Indexes (0-based) of rows skipped because an equal note exists.
+    pub duplicate_rows: Vec<u32>,
+}

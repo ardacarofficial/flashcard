@@ -82,8 +82,9 @@ describe('<InboxScreen>', () => {
     expect((await api.call('inbox.count', {})).pending).toBe(2);
 
     // Pick the deck, edit the back, accept.
-    const badgerDeck = screen.getAllByLabelText(/Deck/)[1] as HTMLSelectElement;
-    await fireEvent.change(badgerDeck, { target: { value: node.deck.id } });
+    // v1.1: the deck is the design-system Select (combobox + listbox).
+    await fireEvent.click(screen.getAllByRole('combobox', { name: 'Deck' })[1]!);
+    await fireEvent.click(await screen.findByRole('option', { name: 'Inbox deck' }));
     await fireEvent.input(screen.getByDisplayValue('porsuk'), { target: { value: 'porsuk (hayvan)' } });
     const spy = vi.spyOn(api, 'call');
     await fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[1]!);

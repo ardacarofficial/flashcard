@@ -130,7 +130,8 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "bulk.add_tags" | "bulk.remove_tags" | "bulk.change_notetype" | "notes.create"
         | "notes.update" | "notes.delete" | "notes.restore" | "notes.get" | "notes.list"
         | "links.backlinks" | "links.suggest" => Reads(NOTES),
-        "bulk.find_replace" => Oracle(NOTES),
+        // Which rows were skipped as duplicates says which notes exist already.
+        "bulk.find_replace" | "notes.create_many" => Oracle(NOTES),
         "notetypes.create" | "notetypes.update" | "notetypes.delete" | "notetypes.restore"
         | "notetypes.usage" | "notetypes.list" | "notetypes.get" | "cardtypes.list" => {
             Reads(NOTETYPES)

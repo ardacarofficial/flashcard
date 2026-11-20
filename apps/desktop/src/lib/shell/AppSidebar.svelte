@@ -5,7 +5,9 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { t } from '$lib/i18n/index.svelte';
-  import { NavItem, Settings, Sidebar, iconFor, Inbox } from '$lib/ui';
+  import NavItem from '$lib/ui/NavItem.svelte';
+  import Sidebar from '$lib/ui/Sidebar.svelte';
+  import { Settings, iconFor, Inbox } from '$lib/ui/icons';
   import type { Navigation, SectionId } from './navigation';
 
   interface Props {

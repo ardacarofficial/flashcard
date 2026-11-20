@@ -2,7 +2,7 @@
 <script lang="ts">
   import type { DeckPath } from '$lib/components/deck-paths';
   import { t } from '$lib/i18n/index.svelte';
-  import { Select } from '$lib/ui';
+  import Select from '$lib/ui/Select.svelte';
 
   interface Props {
     paths: DeckPath[];

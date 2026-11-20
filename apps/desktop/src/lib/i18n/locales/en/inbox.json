@@ -147,7 +147,9 @@
       "local_api": "{name}",
       "other": "{actor}"
     },
-    "badge": "{count} waiting"
+    "badge": "{count} waiting",
+    "empty_other": "Nothing here yet.",
+    "empty_hint": "Cards proposed by the browser extension or other programs wait here for you."
   },
   "local_api": {
     "heading": "Local API",

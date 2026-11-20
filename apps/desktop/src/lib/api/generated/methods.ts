@@ -78,6 +78,7 @@ import type { CreateGoal } from "./CreateGoal";
 import type { CreateInlineCards } from "./CreateInlineCards";
 import type { CreateNote } from "./CreateNote";
 import type { CreateNoteType } from "./CreateNoteType";
+import type { CreateNotes } from "./CreateNotes";
 import type { CreatePreset } from "./CreatePreset";
 import type { CreateProfile } from "./CreateProfile";
 import type { CreateReadingItem } from "./CreateReadingItem";
@@ -200,6 +201,7 @@ import type { NoteTypeDto } from "./NoteTypeDto";
 import type { NoteTypeList } from "./NoteTypeList";
 import type { NoteTypeRef } from "./NoteTypeRef";
 import type { NoteTypeUsage } from "./NoteTypeUsage";
+import type { NotesCreated } from "./NotesCreated";
 import type { OnboardingChoices } from "./OnboardingChoices";
 import type { OnboardingResult } from "./OnboardingResult";
 import type { OnboardingState } from "./OnboardingState";
@@ -386,6 +388,7 @@ export interface Methods {
   "notetypes.list": { kind: "query"; request: Empty; response: NoteTypeList };
   "notetypes.get": { kind: "query"; request: NoteTypeRef; response: NoteTypeDto };
   "notes.create": { kind: "command"; request: CreateNote; response: NoteDto };
+  "notes.create_many": { kind: "command"; request: CreateNotes; response: NotesCreated };
   "notes.update": { kind: "command"; request: UpdateNote; response: NoteDto };
   "notes.delete": { kind: "command"; request: NoteIds; response: AffectedCount };
   "notes.restore": { kind: "command"; request: NoteIds; response: AffectedCount };
@@ -676,6 +679,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "notetypes.list": "query",
   "notetypes.get": "query",
   "notes.create": "command",
+  "notes.create_many": "command",
   "notes.update": "command",
   "notes.delete": "command",
   "notes.restore": "command",

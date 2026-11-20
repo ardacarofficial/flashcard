@@ -14,7 +14,10 @@
   import DeckPicker from '$lib/shell/DeckPicker.svelte';
   import ProfileMenu from '$lib/shell/ProfileMenu.svelte';
   import SettingsLayout from '$lib/shell/SettingsLayout.svelte';
-  import { Button, Spinner, Tabs, ToastHost } from '$lib/ui';
+  import Button from '$lib/ui/Button.svelte';
+  import Spinner from '$lib/ui/Spinner.svelte';
+  import Tabs from '$lib/ui/Tabs.svelte';
+  import ToastHost from '$lib/ui/ToastHost.svelte';
 
   /** The shell's own first page (not a module; docs/11 §2). Its own chunk, like every screen. */
   const HOME: ScreenDef = { id: 'home', load: () => import('$lib/features/home/HomeScreen.svelte') };

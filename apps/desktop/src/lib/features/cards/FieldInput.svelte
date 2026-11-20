@@ -4,6 +4,7 @@
   import MediaField from './MediaField.svelte';
   import MaskEditor from './MaskEditor.svelte';
   import { uploadMedia } from './media';
+  import { Input, Textarea } from '$lib/ui';
 
   interface Props {
     field: FieldDef;
@@ -31,26 +32,9 @@
 {:else if field.kind === 'image' || field.kind === 'audio' || field.kind === 'video'}
   <MediaField bind:value {label} {id} kind={field.kind} {upload} />
 {:else if field.kind === 'number'}
-  <label>
-    {label}
-    <input {id} type="text" inputmode="decimal" bind:value />
-  </label>
+  <Input {id} {label} inputmode="decimal" bind:value />
 {:else if field.kind === 'text' && field.key === 'distractors'}
-  <label>
-    {label}
-    <textarea {id} rows="3" bind:value></textarea>
-  </label>
+  <Textarea {id} {label} rows={3} autoGrow bind:value />
 {:else}
-  <label>
-    {label}
-    <input {id} type="text" bind:value />
-  </label>
+  <Input {id} {label} bind:value />
 {/if}
-
-<style>
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-1);
-  }
-</style>

@@ -655,7 +655,7 @@ impl Cx<'_> {
     fn note_defs(&self, deck: DeckId) -> Result<Vec<AttributeDefDto>, ApiError> {
         Ok(self
             .call::<m::AttributesEffective>(&EffectiveAttributes {
-                deck_id: deck,
+                deck_id: Some(deck),
                 target: AttributeTarget::Note,
             })?
             .attributes
@@ -757,7 +757,7 @@ impl Cx<'_> {
         for target in [AttributeTarget::Note, AttributeTarget::Card] {
             let defs = self
                 .call::<m::AttributesEffective>(&EffectiveAttributes {
-                    deck_id: deck.id,
+                    deck_id: Some(deck.id),
                     target,
                 })?
                 .attributes;

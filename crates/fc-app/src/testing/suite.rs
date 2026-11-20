@@ -806,20 +806,20 @@ pub fn attribute_level_acceptance(f: &StoreFactory) {
     assert_eq!(level.template_id.as_deref(), Some("cefr"));
 
     let eff = t.ok::<AttributesEffective>(EffectiveAttributes {
-        deck_id: verbs.id,
+        deck_id: Some(verbs.id),
         target: AttributeTarget::Note,
     });
     assert_eq!(eff.attributes.len(), 1);
     assert!(eff.attributes[0].inherited);
     assert_eq!(eff.attributes[0].def.id, level.id);
     let own = t.ok::<AttributesEffective>(EffectiveAttributes {
-        deck_id: en.id,
+        deck_id: Some(en.id),
         target: AttributeTarget::Note,
     });
     assert!(!own.attributes[0].inherited);
     assert!(t
         .ok::<AttributesEffective>(EffectiveAttributes {
-            deck_id: other.id,
+            deck_id: Some(other.id),
             target: AttributeTarget::Note,
         })
         .attributes
@@ -876,7 +876,7 @@ pub fn attribute_level_acceptance(f: &StoreFactory) {
         value: json!(true),
     });
     let eff = t.ok::<AttributesEffective>(EffectiveAttributes {
-        deck_id: verbs.id,
+        deck_id: Some(verbs.id),
         target: AttributeTarget::Note,
     });
     assert_eq!(
@@ -911,7 +911,7 @@ pub fn attribute_define_validates(f: &StoreFactory) {
     // Same key on a deck is allowed (it shadows the collection one there).
     let shadow = define(&t, Some(d.id), "Sınav Türü", AttributeKind::Enum, &["LGS"]);
     let eff = t.ok::<AttributesEffective>(EffectiveAttributes {
-        deck_id: d.id,
+        deck_id: Some(d.id),
         target: AttributeTarget::Note,
     });
     assert_eq!(eff.attributes.len(), 1);
