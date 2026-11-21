@@ -7,6 +7,7 @@
   import { api } from '$lib/api';
   import type { InlineCardDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
+  import { Button, Textarea } from '$lib/ui';
 
   let {
     deckId,
@@ -74,35 +75,33 @@
   }
 </script>
 
-<div class="composer" role="dialog" aria-label={t('modes.inline.heading')}>
-  <h3>{t('modes.inline.heading')}</h3>
-  <p class="muted">{t('modes.inline.hint')}</p>
-  <textarea
-    bind:this={area}
-    bind:value={text}
-    rows="4"
-    placeholder={t('modes.inline.placeholder')}
-    aria-label={t('modes.inline.heading')}
-    onkeydown={onKey}
-  ></textarea>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div class="composer" role="dialog" aria-label={t('modes.inline.heading')} tabindex="-1" onkeydown={onKey}>
+  <div class="head">
+    <h3>{t('modes.inline.heading')}</h3>
+    <span class="hint">{t('modes.inline.hint')}</span>
+  </div>
+  <Textarea bind:element={area} bind:value={text} rows={3} autoGrow maxRows={10} label={t('modes.inline.heading')} hideLabel placeholder={t('modes.inline.placeholder')} class="area" />
   {#if cards.length > 0}
-    <ul data-testid="inline-preview">
+    <ul class="preview" data-testid="inline-preview">
       {#each cards as c (c.line)}
         <li class:duplicate={c.duplicate}>
-          <span class="muted">{t('modes.inline.line', { n: c.line })}</span>
-          <strong>{c.front}</strong> → {c.back}
-          {#if c.duplicate}<em class="muted">({t('modes.inline.duplicate')})</em>{/if}
+          <span class="line num">{c.line}</span>
+          <span class="front">{c.front}</span>
+          <span class="back">{c.back}</span>
+          {#if c.duplicate}<span class="dup">{t('modes.inline.duplicate')}</span>{/if}
         </li>
       {/each}
     </ul>
   {/if}
   {#if truncated}<p class="muted">{t('modes.inline.truncated')}</p>{/if}
-  {#if notice}<p class="muted" role="status">{notice}</p>{/if}
   <div class="row">
-    <button class="primary" disabled={fresh === 0} onclick={() => void create()}>
-      {t('modes.inline.create', { count: fresh })} <kbd>{'Ctrl+Enter'}</kbd>
-    </button>
-    <button onclick={onclose}>{t('modes.inline.close')} <kbd>{'Esc'}</kbd></button>
+    {#if notice}<p class="ok" role="status">{notice}</p>{/if}
+    <span class="grow"></span>
+    <Button variant="ghost" size="sm" kbd="Esc" onclick={onclose}>{t('modes.inline.close')}</Button>
+    <Button variant="primary" size="sm" kbd="Mod+Enter" disabled={fresh === 0} onclick={() => void create()}>
+      {t('modes.inline.create', { count: fresh })}
+    </Button>
   </div>
 </div>
 
@@ -110,30 +109,87 @@
   .composer {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-2);
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    padding: var(--fc-space-3);
-    margin-top: var(--fc-space-3);
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
   }
-  h3,
-  p {
+  .composer:focus {
+    outline: none;
+  }
+  .head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  h3 {
     margin: 0;
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
   }
-  ul {
+  .hint,
+  .muted {
     margin: 0;
-    padding-left: var(--fc-space-4);
+    font-size: var(--text-xs);
+    color: var(--text-2);
   }
-  .duplicate {
-    opacity: 0.6;
+  .composer :global(.area textarea) {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+  .preview {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    font-size: var(--text-sm);
+  }
+  .preview li {
+    display: grid;
+    grid-template-columns: 3ch minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: var(--space-3);
+    align-items: center;
+    min-height: 30px;
+    padding: 0 var(--space-3);
+  }
+  .preview li + li {
+    border-top: 1px solid var(--border);
+  }
+  .line {
+    font-size: var(--text-2xs);
+    color: var(--text-2);
+  }
+  .front {
+    font-weight: var(--weight-medium);
+    overflow-wrap: anywhere;
+  }
+  .back {
+    color: var(--text-2);
+    overflow-wrap: anywhere;
+  }
+  .duplicate .front,
+  .duplicate .back {
+    text-decoration: line-through;
+  }
+  .dup {
+    font-size: var(--text-2xs);
+    color: var(--warning);
   }
   .row {
     display: flex;
-    gap: var(--fc-space-2);
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
   }
-  kbd {
-    color: var(--fc-text-muted);
-    font-size: 0.8em;
-    margin-left: var(--fc-space-1);
+  .grow {
+    flex: 1;
+  }
+  .ok {
+    margin: 0;
+    font-size: var(--text-xs);
+    color: var(--success);
   }
 </style>

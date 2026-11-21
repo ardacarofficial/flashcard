@@ -252,3 +252,6 @@ export {
   ImagePlus,
   Tag,
 } from 'lucide';
+
+// v1.2 study session bar (its own block to merge cleanly).
+export { PanelLeft } from 'lucide';

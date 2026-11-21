@@ -31,9 +31,9 @@
 </script>
 
 <div class="timer" class:low role="timer" aria-label={t('modes.timer.label')} data-testid="timer">
-  <Icon icon={Timer} size={16} />
+  <Icon icon={Timer} size={14} />
   <div class="track"><div class="bar" style:width="{(left * 100) / timer.seconds}%"></div></div>
-  <span class="left">{t('modes.timer.left', { s: left })}</span>
+  <span class="left num">{t('modes.timer.left', { s: left })}</span>
 </div>
 
 <style>
@@ -43,12 +43,11 @@
     gap: var(--space-2);
     width: 100%;
     color: var(--text-2);
-    font-size: var(--text-sm);
-    font-variant-numeric: tabular-nums;
+    font-size: var(--text-xs);
   }
   .track {
     flex: 1;
-    height: 4px;
+    height: 3px;
     border-radius: var(--radius-pill);
     background: var(--surface-2);
     overflow: hidden;
@@ -65,7 +64,7 @@
     background: var(--danger-solid);
   }
   .left {
-    min-width: 5ch;
+    min-width: 8ch;
     text-align: right;
   }
   @media (prefers-reduced-motion: reduce) {

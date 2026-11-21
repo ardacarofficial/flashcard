@@ -171,6 +171,10 @@
     "subtitle": "Read texts and subtitles; tap a word to look it up or make a card.",
     "progress": "Read so far",
     "delete_named": "Delete “{name}”",
-    "selection": "Selected text"
+    "selection": "Selected text",
+    "col": {
+      "title": "Text",
+      "queue": "Queue"
+    }
   }
 }

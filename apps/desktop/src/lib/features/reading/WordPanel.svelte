@@ -113,25 +113,29 @@
     }
   }
 </script>
-
 <aside class="panel" aria-label={t('reading.word.heading')}>
   <header>
-    <div>
+    <div class="word">
       <h3>{surface}</h3>
       {#if lemma !== surface}<span class="lemma">{lemma}</span>{/if}
     </div>
+    {#if info}
+      <Chip size="sm" tone={info.status === 'new' ? 'accent' : info.status === 'learning' ? 'warning' : 'neutral'} label={t(`reading.status.${info.status}`)} />
+      <span class="sr" role="status">{t(`reading.status.${info.status}`)}</span>
+    {/if}
     {#if onclose}<IconButton size="sm" icon={X} label={t('ui.close')} onclick={onclose} />{/if}
   </header>
   {#if info}
-    <div class="status">
-      <Chip size="sm" tone={info.status === 'new' ? 'accent' : info.status === 'learning' ? 'warning' : 'neutral'} label={t(`reading.status.${info.status}`)} />
-      <span class="sr" role="status">{t(`reading.status.${info.status}`)}</span>
-    </div>
-    {#each info.cards as c (c.card_id)}
-      <p class="card">{c.word}{#if c.meaning}: {c.meaning}{/if}
-        <span class="muted">{c.mature ? t('reading.word.mature') : t('reading.word.not_mature')}</span></p>
-    {/each}
-    {#if info.cards.length === 0}
+    {#if info.cards.length > 0}
+      <ul class="cards">
+        {#each info.cards as c (c.card_id)}
+          <li>
+            <span class="c-word">{c.word}{#if c.meaning}<span class="c-meaning">: {c.meaning}</span>{/if}</span>
+            <span class="muted">{c.mature ? t('reading.word.mature') : t('reading.word.not_mature')}</span>
+          </li>
+        {/each}
+      </ul>
+    {:else}
       <div class="row">
         <Button size="sm" icon={Check} onclick={() => setMark('known')} disabled={info.mark === 'known'}>{t('reading.word.know')}</Button>
         <Button size="sm" variant="ghost" onclick={() => setMark('ignored')} disabled={info.mark === 'ignored'}>{t('reading.word.ignore')}</Button>
@@ -153,10 +157,10 @@
       ]}
       bind:value={kind}
     />
-    <Input label={t('reading.card.word')} bind:value={word} />
-    <Input label={t('reading.card.meaning')} bind:value={meaning} />
+    <Input size="sm" label={t('reading.card.word')} bind:value={word} />
+    <Input size="sm" label={t('reading.card.meaning')} bind:value={meaning} />
     {#if kind === 'sentence'}
-      <Input label={t('reading.card.translation')} bind:value={translation} />
+      <Input size="sm" label={t('reading.card.translation')} bind:value={translation} />
     {/if}
     {#if item?.media_path && cueIndex !== null}
       <Button size="sm" onclick={cutClip} loading={clipping} disabled={clipping}>
@@ -176,66 +180,89 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-    padding: var(--space-4);
+    padding: var(--space-3);
     background: var(--surface-1);
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
-    box-shadow: var(--shadow-2);
+    font-size: var(--text-sm);
   }
   header {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: var(--space-2);
+  }
+  .word {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    flex-wrap: wrap;
   }
   h3 {
     margin: 0;
-    font-size: var(--text-xl);
-    font-weight: var(--weight-bold);
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
     overflow-wrap: anywhere;
   }
   .lemma {
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
   h4 {
-    margin: var(--space-2) 0 0;
-    font-size: var(--text-sm);
+    margin: 0;
+    font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
     color: var(--text-2);
   }
-  form,
-  .row {
+  .cards {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-1);
   }
-  .row {
-    flex-direction: row;
-    flex-wrap: wrap;
+  .cards li {
+    display: flex;
+    justify-content: space-between;
     gap: var(--space-2);
   }
+  .c-word {
+    font-weight: var(--weight-medium);
+    overflow-wrap: anywhere;
+  }
+  .c-meaning {
+    font-weight: var(--weight-regular);
+    color: var(--text-2);
+  }
   form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-top: var(--space-3);
     border-top: 1px solid var(--border);
-    padding-top: var(--space-2);
+  }
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
   }
   blockquote {
     margin: 0;
-    padding: var(--space-2) var(--space-3);
-    border-left: 3px solid var(--accent);
-    background: var(--surface-2);
-    border-radius: 0 var(--radius-control) var(--radius-control) 0;
-    font-style: italic;
+    padding: var(--space-1) var(--space-2);
+    border-left: 2px solid var(--accent-text);
+    color: var(--text-1);
     font-size: var(--text-sm);
-  }
-  .card {
-    margin: 0;
-    font-size: var(--text-sm);
+    line-height: var(--leading);
   }
   .muted {
     color: var(--text-2);
     margin: 0;
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
+  }
+  .cards .muted {
+    white-space: nowrap;
   }
   .ok {
     color: var(--success);

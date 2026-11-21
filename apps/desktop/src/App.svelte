@@ -275,7 +275,9 @@
   {/if}
 {/snippet}
 
-<div class="shell">
+<!-- A running session (v1.2) owns the window: no sidebar, no top bar (the session bar can bring the sidebar back). -->
+<div class="shell" class:session={focusOn && !locked}>
+  <div class="side">
   <AppSidebar {nav} current={where} {inboxCount} {openSection} {openInbox} {openSettings}>
     {#snippet profile()}
       <ProfileMenu
@@ -285,6 +287,7 @@
     {/snippet}
     {#snippet panels()}<PluginPanels {modules} />{/snippet}
   </AppSidebar>
+  </div>
 
   <div class="column">
   {#if !(focusOn && !locked)}
@@ -396,14 +399,32 @@
   .page.wide {
     max-width: calc(var(--content-max-wide) + 2 * var(--content-pad-x));
   }
-  /* A running session (v1.2): no top bar, picker or tabs; the card centred (max ~720). */
-  .page.focus {
-    max-width: 800px;
-    margin: 0 auto;
-    padding-top: var(--space-4);
+  /*
+   * A running session (v1.2): no sidebar, no top bar, picker or tabs. The page spans the
+   * window; the session screen draws its own bar and centres its column (modes/SessionFrame).
+   * The session bar's menu button (`html.fc-session-nav`) brings the sidebar back.
+   */
+  .side {
+    display: contents;
   }
-  .page.focus > :global(*) {
-    margin-inline: auto;
+  .shell.session {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shell.session .side {
+    display: none;
+  }
+  :global(html.fc-session-nav) .shell.session {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  :global(html.fc-session-nav) .shell.session .side {
+    display: contents;
+  }
+  .page.focus {
+    max-width: none;
+    padding: 0;
+  }
+  .page.focus > .banner {
+    margin: var(--space-3) var(--content-pad-x) 0;
   }
   .banner {
     display: flex;

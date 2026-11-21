@@ -10,23 +10,11 @@
   import { onDestroy, onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { MatchResultDto, MatchRoundDto, MatchTileDto } from '$lib/api/types';
-  import { i18n, t } from '$lib/i18n/index.svelte';
-  import {
-    Button,
-    Card,
-    Chip,
-    EmptyState,
-    Icon,
-    IconButton,
-    Input,
-    Kbd,
-    PageHeader,
-    Shuffle,
-    Skeleton,
-    Timer,
-    Trophy,
-    X,
-  } from '$lib/ui';
+  import { t } from '$lib/i18n/index.svelte';
+  import { Button, Chip, EmptyState, Icon, Input, PageHeader, Shuffle, Skeleton, Timer, Trophy } from '$lib/ui';
+  import OptRow from './OptRow.svelte';
+  import SessionFrame from './SessionFrame.svelte';
+  import SetupPanel from './SetupPanel.svelte';
   import { moduleOn, trackModules } from '../cards/modules.svelte';
   import { tzOffsetMins } from '../study/format';
   import type { ScreenCtx } from '../types';
@@ -76,8 +64,8 @@
   }
 
   const playing = $derived(round !== null && round.tiles.length > 0 && result === null);
-  // A running round switches the shell to the focus layout (no picker, no tabs).
-  $effect(() => ctx.setFocus?.(playing || result !== null));
+  // A running round owns the window (v1.2); the result is a normal page again.
+  $effect(() => ctx.setFocus?.(playing));
   const elapsed = $derived(playing ? Math.max(0, now - shownAt) : (result?.time_ms ?? 0));
 
   const secs = (ms: number) => formatDecimal(Math.floor(ms / 100) / 10, 1);
@@ -178,25 +166,35 @@
     }
   }
 </script>
-
 <svelte:window onkeydown={onKey} />
 
-<section class="match">
-  {#if playing && round}
-    <div class="bar">
-      <div class="clock" role="timer" aria-label={t('modes.match.time_label')}>
-        <Icon icon={Timer} size={20} />
-        <span class="secs" data-testid="match-clock">{t('modes.match.seconds', { s: secs(elapsed) })}</span>
-      </div>
-      <div class="facts">
-        <span>{t('modes.match.pairs_left', { n: round.pairs - round.matched })}</span>
-        {#if round.mistakes > 0}<Chip size="sm" tone="warning" label={t('modes.match.mistakes', { n: round.mistakes })} />{/if}
-        {#if round.best_ms !== null}
-          <span class="best"><Icon icon={Trophy} size={16} />{t('modes.match.best', { s: secs(round.best_ms) })}</span>
-        {/if}
-      </div>
-      <IconButton icon={X} label={t('modes.match.end')} onclick={() => void run(end)} />
-    </div>
+{#if playing && round}
+  <SessionFrame
+    title={t('modes.match.heading')}
+    subtitle={ctx.selectedPath ?? t('study.whole_collection')}
+    progressLabel={t('modes.match.progress_label')}
+    value={round.matched}
+    max={round.pairs}
+    count={t('study.position', { n: round.matched, total: round.pairs })}
+    exitLabel={t('modes.match.end')}
+    exitText={t('study.end')}
+    onexit={() => void run(end)}
+    width={960}
+  >
+    {#snippet meta()}
+      <span>{t('modes.match.pairs_left', { n: round!.pairs - round!.matched })}</span>
+      {#if round!.mistakes > 0}<span class="miss">{t('modes.match.mistakes', { n: round!.mistakes })}</span>{/if}
+    {/snippet}
+    {#snippet extra()}
+      {#if round!.best_ms !== null}
+        <span class="best"><Icon icon={Trophy} size={14} /><span class="num">{t('modes.match.best', { s: secs(round!.best_ms) })}</span></span>
+      {/if}
+      <span class="clock" role="timer" aria-label={t('modes.match.time_label')}>
+        <Icon icon={Timer} size={16} />
+        <span class="secs num" data-testid="match-clock">{t('modes.match.seconds', { s: secs(elapsed) })}</span>
+      </span>
+    {/snippet}
+
     <div class="board" role="group" aria-label={t('modes.match.board')} data-testid="match-board">
       {#each round.tiles as tile (tile.id)}
         <button
@@ -217,178 +215,127 @@
         </button>
       {/each}
     </div>
-    <p class="keys">{t('modes.match.how')}</p>
-  {:else if result && round}
-    <div class="done">
-      <Card padding="lg" elevated>
-        <div class="result" role="status" data-testid="match-result">
-          <span class="trophy" class:best={result.new_best}><Icon icon={Trophy} size={24} /></span>
-          <p class="time">{t('modes.match.seconds', { s: secs(result.time_ms) })}</p>
-          {#if result.new_best}
-            <Chip tone="success" label={t('modes.match.new_best')} />
-          {:else if round.best_ms !== null}
-            <p class="sub">{t('modes.match.best', { s: secs(round.best_ms) })}</p>
-          {/if}
-          <p class="sub">
-            {t('modes.match.summary', { pairs: result.pairs, mistakes: result.mistakes })}
-          </p>
-          <div class="actions">
-            <Button onclick={() => void run(end)}>{t('modes.match.done')}</Button>
-            <Button variant="primary" icon={Shuffle} onclick={() => void run(again)}>
-              {t('modes.match.again')} <Kbd keys={['Enter']} class="on-accent" />
-            </Button>
-          </div>
-        </div>
-      </Card>
+    <p class="how">{t('modes.match.how')}</p>
+  </SessionFrame>
+{:else if result && round}
+  <section class="done" role="status" data-testid="match-result">
+    <header class="done-head">
+      <span class="trophy" class:best={result.new_best}><Icon icon={Trophy} size={20} /></span>
+      <div>
+        <p class="time num">{t('modes.match.seconds', { s: secs(result.time_ms) })}</p>
+        <p class="sub">{t('modes.match.summary', { pairs: result.pairs, mistakes: result.mistakes })}</p>
+      </div>
+      {#if result.new_best}
+        <Chip tone="success" icon={Trophy} label={t('modes.match.new_best')} />
+      {:else if round.best_ms !== null}
+        <span class="best-line num">{t('modes.match.best', { s: secs(round.best_ms) })}</span>
+      {/if}
+    </header>
+    <div class="done-actions">
+      <Button variant="primary" icon={Shuffle} kbd="Enter" aria-keyshortcuts="Enter" onclick={() => void run(again)}>
+        {t('modes.match.again')}
+      </Button>
+      <Button onclick={() => void run(end)}>{t('modes.match.done')}</Button>
     </div>
-  {:else if tooFew}
+  </section>
+{:else if tooFew}
+  <section class="match">
     <PageHeader title={t('modes.match.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
-    <Card padding="lg">
+    <div class="empty">
       <EmptyState
+        size="sm"
         icon={Shuffle}
         title={t('modes.match.too_few')}
         description={t('modes.match.too_few_hint')}
         action={{ label: t('modes.match.back'), onclick: () => void run(end) }}
       />
-    </Card>
-  {:else}
+    </div>
+  </section>
+{:else}
+  <section class="match">
     <PageHeader title={t('modes.match.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
     {#if loading}
-      <Skeleton shape="card" height="200px" />
+      <Skeleton shape="card" height="120px" />
     {:else}
-      <Card padding="lg" class="start-card">
-        <div class="start">
-          <div class="preview" aria-hidden="true">
-            {#each [0, 1, 2, 3, 4, 5] as i (i)}<span class="mini" class:alt={i % 3 === 1}></span>{/each}
-          </div>
-          <div class="start-text">
-            <h2>{t('modes.match.start_heading')}</h2>
-            <p>{t('modes.match.intro')}</p>
-          </div>
-        </div>
-        {#if moduleOn('browse')}
-          <div class="query">
-            <Input label={t('study.query_label')} bind:value={query} placeholder={t('study.query_placeholder')} spellcheck="false" />
-          </div>
-        {/if}
-        <div class="actions">
+      <SetupPanel title={t('modes.match.start_heading')}>
+        {#snippet meta()}<span>{t('modes.match.intro')}</span>{/snippet}
+        {#snippet actions()}
           {#if resumable}
             <Button onclick={() => resumable && void run(() => resume(resumable!))}>{t('study.resume')}</Button>
           {/if}
-          <Button variant="primary" size="lg" icon={Shuffle} data-testid="study-start" onclick={() => void run(start)}>
-            {t('modes.match.start')} <Kbd keys={['Enter']} class="on-accent" />
+          <Button variant="primary" icon={Shuffle} kbd="Enter" aria-keyshortcuts="Enter" data-testid="study-start" onclick={() => void run(start)}>
+            {t('modes.match.start')}
           </Button>
-        </div>
-      </Card>
+        {/snippet}
+        {#if moduleOn('browse')}
+          <OptRow label={t('study.query_label')} labelFor="match-query">
+            <Input
+              id="match-query"
+              class="query"
+              size="sm"
+              label={t('study.query_label')}
+              hideLabel
+              bind:value={query}
+              placeholder={t('study.query_placeholder')}
+              spellcheck="false"
+            />
+          </OptRow>
+        {/if}
+      </SetupPanel>
     {/if}
-  {/if}
-</section>
+  </section>
+{/if}
 
 <style>
   .match {
-    max-width: 960px;
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
   }
-  :global(.start-card) {
-    max-width: 720px;
+  .match :global(.query) {
+    width: 240px;
   }
-  .start {
-    display: flex;
-    align-items: center;
-    gap: var(--space-6);
-  }
-  .preview {
-    flex: none;
-    display: grid;
-    grid-template-columns: repeat(3, 28px);
-    gap: 6px;
-  }
-  .mini {
-    height: 20px;
-    border-radius: 6px;
-    background: var(--surface-2);
+  .empty {
+    max-width: 760px;
     border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
   }
-  .mini.alt {
-    background: var(--accent-soft);
-    border-color: var(--accent-text);
-  }
-  .start-text h2 {
-    margin: 0 0 var(--space-1);
-    font-size: var(--text-xl);
-    font-weight: var(--weight-semibold);
-  }
-  .start-text p {
-    margin: 0;
-    color: var(--text-2);
-    font-size: var(--text-sm);
-    max-width: 48ch;
-  }
-  .query {
-    margin-top: var(--space-6);
-    max-width: 420px;
-  }
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-    margin-top: var(--space-6);
-    flex-wrap: wrap;
-  }
-  :global(.on-accent kbd) {
-    background: transparent;
-    border-color: color-mix(in srgb, var(--accent-fg) 45%, transparent);
-    color: var(--accent-fg);
-  }
-  /* Board. */
-  .bar {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-  }
-  .clock {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    color: var(--text-1);
-  }
-  .secs {
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-bold);
-    font-variant-numeric: tabular-nums;
-    min-width: 6ch;
-  }
-  .facts {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    font-size: var(--text-sm);
-    color: var(--text-2);
+  /* Session bar extras. */
+  .miss {
+    color: var(--warning);
   }
   .best {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
   }
+  .clock {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-1);
+  }
+  .secs {
+    min-width: 7ch;
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
+  }
+  /* Board. */
   .board {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--space-3);
+    gap: var(--space-2);
   }
   .tile {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 120px;
-    padding: var(--space-4);
-    border: 1px solid var(--border);
+    min-height: 104px;
+    padding: var(--space-3);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-card);
     background: var(--surface-1);
-    box-shadow: var(--shadow-1);
     color: var(--text-1);
     font: inherit;
     font-size: var(--text-md);
@@ -405,8 +352,12 @@
   .tile.term .text {
     font-weight: var(--weight-semibold);
   }
+  .tile.definition {
+    color: var(--text-1);
+    background: var(--surface-0);
+  }
   .tile:hover:not(:disabled) {
-    border-color: var(--accent-text);
+    background: var(--surface-2);
   }
   .tile:focus-visible {
     outline: 2px solid var(--focus-ring);
@@ -419,23 +370,23 @@
   }
   .tile.wrong {
     border-color: var(--danger);
-    background: var(--danger-soft);
-    animation: shake 0.36s var(--ease);
+    box-shadow: inset 0 0 0 1px var(--danger);
+    animation: shake 0.3s var(--ease);
   }
   .tile.gone {
     opacity: 0;
-    transform: scale(0.94);
+    transform: scale(0.96);
     pointer-events: none;
     cursor: default;
   }
   @keyframes shake {
     20%,
     60% {
-      transform: translateX(-6px);
+      transform: translateX(-4px);
     }
     40%,
     80% {
-      transform: translateX(6px);
+      transform: translateX(4px);
     }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -444,62 +395,67 @@
     }
     .tile.wrong {
       animation: none;
+      background: var(--danger-soft);
     }
     .tile.gone {
       transform: none;
     }
   }
-  .keys {
+  .how {
     margin: 0;
-    text-align: center;
     font-size: var(--text-xs);
     color: var(--text-2);
   }
-  /* Result. */
+  /* Result: a normal page again. */
   .done {
-    max-width: 480px;
-    width: 100%;
-    /* The end screen sits centred in the focus column. */
-    margin: var(--space-12) auto 0;
-  }
-  .result {
     display: flex;
     flex-direction: column;
+    gap: var(--space-4);
+    max-width: 760px;
+  }
+  .done-head {
+    display: flex;
     align-items: center;
-    gap: var(--space-2);
-    text-align: center;
+    gap: var(--space-4);
+    flex-wrap: wrap;
   }
   .trophy {
     display: inline-flex;
-    padding: var(--space-3);
-    border-radius: 50%;
-    background: var(--surface-2);
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
     color: var(--text-2);
   }
   .trophy.best {
-    background: var(--success-soft);
     color: var(--success);
+    border-color: color-mix(in srgb, var(--success) 45%, var(--border));
   }
   .time {
-    margin: var(--space-2) 0 0;
+    margin: 0;
     font-size: var(--text-3xl);
-    font-weight: var(--weight-bold);
-    font-variant-numeric: tabular-nums;
+    font-weight: var(--weight-semibold);
+    line-height: 1.1;
   }
   .sub {
-    margin: 0;
+    margin: 2px 0 0;
     color: var(--text-2);
     font-size: var(--text-sm);
   }
-  .result .actions {
-    justify-content: center;
+  .best-line {
+    font-size: var(--text-sm);
+    color: var(--text-2);
+  }
+  .done-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
   }
   @media (max-width: 1000px) {
     .board {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
     .tile {
-      min-height: 96px;
+      min-height: 88px;
     }
   }
 </style>

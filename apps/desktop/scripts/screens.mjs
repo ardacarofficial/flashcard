@@ -387,6 +387,18 @@ async function main() {
             }
           }
 
+          /** A running session hides the shell (v1.2): leave it with Esc, else reload. */
+          const leaveSession = async () => {
+            const shown = () => page.locator(NAV).first().isVisible().catch(() => false);
+            if (await shown()) return;
+            await page.keyboard.press('Escape');
+            await settle(page);
+            if (await shown()) return;
+            await page.reload();
+            await page.waitForSelector(NAV, { timeout: 20000 });
+            await settle(page);
+          };
+
           /** The end of a running mode: the summary / result / finished board. */
           const finish = async (mode) => {
             if (mode === 'cards') {
@@ -444,6 +456,7 @@ async function main() {
 
           /** States outside the deck page: Library tree, Search info sheet and bulk bar, scenarios. */
           const extraStates = async () => {
+            await leaveSession();
             // Library as a tree (the toggle must switch the layout)
             await page.locator(NAV).nth(0).click();
             await settle(page);
@@ -493,6 +506,7 @@ async function main() {
           // key states: deck page, then each study mode from its tile (idle, running, flipped)
           if (count > 0) {
             const openDeck = async () => {
+              await leaveSession();
               // via Home, so the Library screen mounts afresh (its deck list, not the last deck page)
               await page.locator(NAV).nth(0).click();
               await settle(page);

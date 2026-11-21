@@ -11,8 +11,6 @@
   import {
     BookOpen,
     Button,
-    Card,
-    Chip,
     Dialog,
     EmptyState,
     FileText,
@@ -151,34 +149,42 @@
     <Tabs label={t('reading.heading')} {tabs} value={tab} onchange={switchTab} />
 
     {#if !list}
-      <div class="items" aria-busy="true">
-        {#each [0, 1, 2] as i (i)}<Skeleton shape="card" height="88px" />{/each}
+      <div class="list" aria-busy="true">
+        {#each [0, 1, 2] as i (i)}<div class="sk"><Skeleton height="16px" /></div>{/each}
       </div>
     {:else if list.items.length === 0}
-      <Card padding="lg">
+      <div class="list">
         <EmptyState
+          size="sm"
           icon={BookOpen}
           title={tab === 'queue' ? t('reading.queue.empty') : t('reading.empty')}
           action={tab === 'queue' ? undefined : { label: t('reading.add.first'), onclick: () => (adding = true) }}
         />
-      </Card>
+      </div>
     {:else}
-      <ul class="items">
+      <ul class="list">
+        <li class="item head" aria-hidden="true">
+          <span>{t('reading.col.title')}</span>
+          <span>{t('reading.col.queue')}</span>
+          <span>{t('reading.progress')}</span>
+          <span></span>
+        </li>
         {#each list.items as item (item.id)}
           <li class="item">
             <div class="main">
               <button class="title" onclick={() => (open = item)}>{item.title}</button>
-              <div class="meta">
-                <Chip size="sm" label={t(`reading.kind.${item.kind}`)} />
-                {#if item.language}<Chip size="sm" label={item.language} />{/if}
-                {#if item.queued}
-                  <Chip size="sm" tone={item.is_due ? 'accent' : 'neutral'} label={item.is_due ? t('reading.queue.due_now') : t('reading.queue.in_days', { n: item.interval_days })} />
-                {/if}
-              </div>
+              <span class="meta">{t(`reading.kind.${item.kind}`)}{#if item.language}<span class="sep" aria-hidden="true">·</span><span class="lang">{item.language}</span>{/if}</span>
+            </div>
+            <div class="qcell">
+              {#if item.queued}
+                <span class="due" class:now={item.is_due}>{item.is_due ? t('reading.queue.due_now') : t('reading.queue.in_days', { n: item.interval_days })}</span>
+              {:else}
+                <span class="off" aria-hidden="true">—</span>
+              {/if}
             </div>
             <div class="progress">
               <ProgressBar label={t('reading.progress')} value={item.progress_pct} max={100} size="sm" />
-              <span class="pct">{pct100(item.progress_pct)}</span>
+              <span class="pct num">{pct100(item.progress_pct)}</span>
             </div>
             <div class="actions">
               <Button size="sm" variant="ghost" onclick={() => toggleQueue(item)}>{item.queued ? t('reading.queue.remove') : t('reading.queue.add')}</Button>
@@ -235,41 +241,52 @@
   .reading {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
   }
   .reading :global(.fc-page-header) {
     margin-bottom: 0;
   }
-  .items {
+  .list {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+  }
+  .sk {
+    padding: var(--space-3) var(--space-4);
+  }
+  .sk + .sk {
+    border-top: 1px solid var(--border);
   }
   .item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 200px 150px;
-    gap: var(--space-6);
+    grid-template-columns: minmax(0, 1fr) 140px 180px 150px;
+    gap: var(--space-4);
     align-items: center;
-    padding: var(--space-4) var(--space-4) var(--space-4) var(--space-6);
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    box-shadow: var(--shadow-1);
+    min-height: 44px;
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+  }
+  .item + .item {
+    border-top: 1px solid var(--border);
+  }
+  .item.head {
+    min-height: 30px;
+    font-size: var(--text-xs);
+    color: var(--text-2);
   }
   .main {
     min-width: 0;
     display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    align-items: flex-start;
+    align-items: baseline;
+    gap: var(--space-3);
   }
   .title {
     all: unset;
     cursor: pointer;
-    font-weight: var(--weight-semibold);
+    min-width: 0;
+    font-weight: var(--weight-medium);
     font-size: var(--text-md);
     overflow-wrap: anywhere;
   }
@@ -281,16 +298,26 @@
     outline-offset: 2px;
     border-radius: 4px;
   }
-  .actions {
-    justify-content: flex-end;
+  .meta {
+    flex: none;
+    display: inline-flex;
+    gap: var(--space-1);
+    font-size: var(--text-xs);
+    color: var(--text-2);
   }
-  .meta,
-  .actions,
-  .row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    align-items: center;
+  .lang {
+    font-family: var(--font-mono);
+  }
+  .qcell {
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .due.now {
+    color: var(--accent-text);
+    font-weight: var(--weight-medium);
+  }
+  .off {
+    color: var(--text-2);
   }
   .progress {
     display: flex;
@@ -301,11 +328,22 @@
     flex: 1;
   }
   .pct {
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     color: var(--text-2);
-    font-variant-numeric: tabular-nums;
-    min-width: 3ch;
+    min-width: 4ch;
     text-align: end;
+  }
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
   }
   .add {
     display: flex;
