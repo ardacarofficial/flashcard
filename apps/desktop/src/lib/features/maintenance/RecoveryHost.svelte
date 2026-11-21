@@ -147,7 +147,7 @@
   }
   .icon {
     display: inline-flex;
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .text {
     flex: 1 1 auto;

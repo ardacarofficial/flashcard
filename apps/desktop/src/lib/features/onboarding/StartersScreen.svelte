@@ -120,7 +120,7 @@
     height: 40px;
     border-radius: var(--radius-control);
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .count {
     font-size: var(--text-xs);

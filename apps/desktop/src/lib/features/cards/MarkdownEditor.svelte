@@ -155,12 +155,12 @@
     transition: border-color var(--motion-fast) var(--ease);
   }
   .md:focus-within {
-    border-color: var(--accent);
+    border-color: var(--accent-text);
     box-shadow: 0 0 0 3px var(--accent-soft);
   }
   .md.dragging {
     border-style: dashed;
-    border-color: var(--accent);
+    border-color: var(--accent-text);
   }
   .toolbar {
     display: flex;

@@ -135,8 +135,8 @@
     border-color: var(--border-strong);
   }
   .preset.chosen {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent);
+    border-color: var(--accent-text);
+    box-shadow: 0 0 0 1px var(--accent-text);
   }
   .preset:focus-visible {
     outline: 2px solid var(--focus-ring);

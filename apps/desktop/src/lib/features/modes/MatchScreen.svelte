@@ -313,7 +313,7 @@
   }
   .mini.alt {
     background: var(--accent-soft);
-    border-color: var(--accent);
+    border-color: var(--accent-text);
   }
   .start-text h2 {
     margin: 0 0 var(--space-1);
@@ -406,16 +406,16 @@
     font-weight: var(--weight-semibold);
   }
   .tile:hover:not(:disabled) {
-    border-color: var(--accent);
+    border-color: var(--accent-text);
   }
   .tile:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
   .tile.selected {
-    border-color: var(--accent);
+    border-color: var(--accent-text);
     background: var(--accent-soft);
-    box-shadow: inset 0 0 0 1px var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent-text);
   }
   .tile.wrong {
     border-color: var(--danger);

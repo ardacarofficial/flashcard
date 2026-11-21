@@ -323,7 +323,7 @@
     padding: var(--space-3);
     border-radius: var(--radius-card);
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .intro {
     margin: 0;

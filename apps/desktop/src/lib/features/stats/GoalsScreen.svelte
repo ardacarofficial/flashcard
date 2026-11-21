@@ -177,7 +177,7 @@
     height: 40px;
     border-radius: var(--radius-control);
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .titles {
     flex: 1;

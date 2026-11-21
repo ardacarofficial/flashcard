@@ -244,8 +244,8 @@
     border-color: var(--border-strong);
   }
   .choice.chosen {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent);
+    border-color: var(--accent-text);
+    box-shadow: 0 0 0 1px var(--accent-text);
     background: var(--accent-soft);
   }
   /* Focus is a neutral outer ring; selection is the accent fill + border + tick. */

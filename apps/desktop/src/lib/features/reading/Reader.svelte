@@ -223,7 +223,7 @@
   }
   .known {
     font-weight: var(--weight-semibold);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .legend {
     display: flex;
@@ -301,7 +301,7 @@
     background: var(--surface-2);
   }
   .w.picked {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-text);
   }
   button.w:focus-visible {
     outline: 2px solid var(--focus-ring);

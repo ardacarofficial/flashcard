@@ -590,8 +590,8 @@
     box-shadow: none;
   }
   .body :global(.add-row:hover) {
-    color: var(--accent);
-    border-color: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent-text);
     background: var(--accent-soft);
   }
   .hint {

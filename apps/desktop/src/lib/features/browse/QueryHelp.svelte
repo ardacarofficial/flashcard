@@ -67,7 +67,7 @@
   .q {
     font-family: var(--font-mono);
     font-size: var(--text-sm);
-    color: var(--accent);
+    color: var(--accent-text);
     background: var(--accent-soft);
     border: none;
     border-radius: var(--radius-control);

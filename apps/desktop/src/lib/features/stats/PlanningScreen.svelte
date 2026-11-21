@@ -420,7 +420,7 @@
     font-weight: var(--weight-semibold);
   }
   tr.current .ret {
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .num {
     text-align: end;

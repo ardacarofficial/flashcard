@@ -22,17 +22,18 @@ const tokens = (bg: string, text: string, accent: string): Record<string, string
 });
 
 const PRESETS: ThemePresetDto[] = [
-  // Mirrors fc_core::theme's default preset (v1.1, docs/11 §4) so mock screenshots match the app.
+  // The default preset as tokens.css declares it (the v1.2 design). The shell paints tokens.css
+  // for this preset whatever the backend sends (theme.svelte.ts), so fc_core may lag behind.
   {
     id: 'default',
     name_key: 'themes.preset.default',
     light: {
-      bg: '#f6f6f8', 'bg-subtle': '#eeeef2', surface: '#ffffff', text: '#18181b', 'text-muted': '#5f5f6b', border: '#e4e4e9',
-      accent: '#5b47e0', 'accent-text': '#ffffff', danger: '#c03636', success: '#157a53', focus: '#5b47e0', selected: '#e0def5',
+      bg: '#fafaf8', 'bg-subtle': '#f3f3f0', surface: '#ffffff', text: '#1a1a1c', 'text-muted': '#5c5c63', border: '#e2e2dc',
+      accent: '#f5b544', 'accent-text': '#17130a', danger: '#c8323b', success: '#147a4b', focus: '#9a5b00', selected: '#fef5e5',
     },
     dark: {
-      bg: '#121214', 'bg-subtle': '#18181c', surface: '#1e1e23', text: '#ededf0', 'text-muted': '#a1a1aa', border: '#2e2e35',
-      accent: '#8b7cf6', 'accent-text': '#000000', danger: '#ef6f62', success: '#3ec28f', focus: '#8b7cf6', selected: '#343053',
+      bg: '#0e0e10', 'bg-subtle': '#1c1c20', surface: '#151518', text: '#ededef', 'text-muted': '#a3a3ae', border: '#2a2a31',
+      accent: '#f5b544', 'accent-text': '#17130a', danger: '#ff6369', success: '#3dd68c', focus: '#f5b544', selected: '#342b1e',
     },
   },
   { id: 'sage', name_key: 'themes.preset.sage', light: tokens('#f7f9f6', '#1d241f', '#3f7a5a'), dark: tokens('#141916', '#e3ebe5', '#7cc19a') },

@@ -274,7 +274,7 @@
     overflow-wrap: anywhere;
   }
   .title:hover {
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .title:focus-visible {
     outline: 2px solid var(--focus-ring);

@@ -1085,12 +1085,12 @@
     gap: 2px;
   }
   .rating:hover {
-    border-color: var(--accent);
+    border-color: var(--accent-text);
     background: var(--accent-soft);
   }
   .rating.suggested {
-    border-color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--accent);
+    border-color: var(--accent-text);
+    box-shadow: inset 0 0 0 1px var(--accent-text);
   }
   .r-meta {
     display: inline-flex;

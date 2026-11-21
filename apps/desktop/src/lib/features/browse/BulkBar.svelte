@@ -217,7 +217,7 @@
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
     background: var(--accent-soft);
-    border: 1px solid var(--accent);
+    border: 1px solid var(--accent-text);
     border-radius: var(--radius-card);
   }
   .count {

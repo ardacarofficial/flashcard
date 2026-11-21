@@ -388,7 +388,7 @@
     flex: none;
     border-radius: var(--radius-control);
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .titles {
     flex: 1 1 14rem;

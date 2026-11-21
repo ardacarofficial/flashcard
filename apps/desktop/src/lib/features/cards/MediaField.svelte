@@ -115,7 +115,7 @@
     background: var(--surface-1);
   }
   .dragging .drop {
-    border-color: var(--accent);
+    border-color: var(--accent-text);
     background: var(--accent-soft);
   }
   .thumb :global(img) {

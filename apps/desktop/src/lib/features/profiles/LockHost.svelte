@@ -256,7 +256,7 @@
     height: 56px;
     border-radius: var(--radius-pill);
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .badge.warn {
     background: var(--warning-soft);

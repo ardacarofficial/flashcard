@@ -78,7 +78,7 @@
   summary {
     cursor: pointer;
     font-size: var(--text-sm);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   pre {
     white-space: pre-wrap;

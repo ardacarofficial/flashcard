@@ -57,7 +57,7 @@
     transition: border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
   }
   .level:hover {
-    border-color: var(--accent);
+    border-color: var(--accent-text);
     background: var(--accent-soft);
   }
   .level:focus-visible {

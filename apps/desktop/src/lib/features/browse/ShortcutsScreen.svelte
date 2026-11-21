@@ -182,7 +182,7 @@
     border-color: var(--border-strong);
   }
   .rec {
-    border-color: var(--accent);
+    border-color: var(--accent-text);
     background: var(--accent-soft);
     color: var(--text-1);
   }

@@ -137,7 +137,7 @@
     flex: none;
     border-radius: var(--radius-pill);
     background: var(--surface-1);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .today p {
     margin: 0;

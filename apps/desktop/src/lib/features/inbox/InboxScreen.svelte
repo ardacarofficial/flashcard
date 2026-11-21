@@ -256,7 +256,7 @@
     box-shadow: var(--shadow-1);
   }
   .item.picked {
-    border-color: var(--accent);
+    border-color: var(--accent-text);
   }
   .meta,
   .foot {

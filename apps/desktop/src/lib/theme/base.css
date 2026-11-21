@@ -7,16 +7,26 @@ html,
 body {
   margin: 0;
   height: 100%;
-  background: var(--fc-bg);
-  color: var(--fc-text);
-  font-family: var(--fc-font);
-  font-size: var(--fc-font-size);
+  background: var(--surface-0);
+  color: var(--text-1);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
   line-height: var(--leading);
+  font-feature-settings: 'cv11', 'ss01';
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 #app {
   height: 100%;
+}
+::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--text-1);
+}
+/* Quiet scrollbars (thin thumb on the surface steps). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 button,
 input,
@@ -25,20 +35,21 @@ textarea {
   font: inherit;
   color: inherit;
 }
+/* v1.0 raw controls still used by a few screens: drawn like the design system's. */
 button {
-  background: var(--fc-surface);
-  border: var(--fc-border-width) solid var(--fc-border);
-  border-radius: var(--fc-radius);
-  padding: var(--fc-space-1) var(--fc-space-3);
+  background: var(--surface-2);
+  border: var(--fc-border-width) solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-1) var(--space-3);
   cursor: pointer;
 }
 button.primary {
-  background: var(--fc-accent);
-  border-color: var(--fc-accent);
-  color: var(--fc-accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
 }
 button.danger {
-  color: var(--fc-danger);
+  color: var(--danger);
 }
 button:disabled {
   opacity: 0.5;
@@ -47,27 +58,53 @@ button:disabled {
 input,
 select,
 textarea {
-  background: var(--fc-surface);
-  border: var(--fc-border-width) solid var(--fc-border);
-  border-radius: var(--fc-radius);
-  padding: var(--fc-space-1) var(--fc-space-2);
+  background: var(--surface-2);
+  border: var(--fc-border-width) solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-1) var(--space-2);
 }
 :focus-visible {
-  outline: 2px solid var(--fc-focus);
-  outline-offset: 1px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 h1,
 h2,
 h3 {
-  font-weight: 600;
-  margin: 0 0 var(--fc-space-3);
+  font-weight: var(--weight-semibold);
+  margin: 0 0 var(--space-3);
+  line-height: var(--leading-tight);
+}
+h1 {
+  font-size: var(--text-xl);
 }
 h2 {
-  font-size: 1.15rem;
+  font-size: var(--text-md);
+}
+h3 {
+  font-size: var(--text-sm);
+}
+kbd,
+code,
+samp {
+  font-family: var(--font-mono);
+}
+/* Numbers, counts, durations: mono with tabular figures (`<span class="num">`). */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 .muted {
-  color: var(--fc-text-muted);
+  color: var(--text-2);
 }
 .error {
-  color: var(--fc-danger);
+  color: var(--danger);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }

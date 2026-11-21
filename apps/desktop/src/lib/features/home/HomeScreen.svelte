@@ -244,7 +244,7 @@
   .eyebrow {
     font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .big {
     display: flex;
