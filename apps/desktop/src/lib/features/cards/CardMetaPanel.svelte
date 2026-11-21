@@ -73,7 +73,7 @@
                   title={flagName(f)}
                   onclick={() => void toggle(card, f.flag)}
                 >
-                  <span class="dot"></span><span class="sr">{flagName(f)}</span>
+                  <span class="dot"></span><span class="sr-only">{flagName(f)}</span>
                 </button>
               {/each}
             </span>
@@ -190,13 +190,6 @@
     background: var(--flag);
     flex: none;
   }
-  .sr {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-  }
   .note {
     display: flex;
     flex-direction: column;
@@ -232,11 +225,31 @@
   .names input::placeholder {
     color: var(--text-3);
   }
+  /* A quiet chevron instead of the browser's ▶ marker. */
   details summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    list-style: none;
     cursor: pointer;
     color: var(--text-2);
     font-size: var(--text-xs);
     padding: 2px 0;
+  }
+  details summary::-webkit-details-marker {
+    display: none;
+  }
+  details summary::before {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform var(--motion-fast) var(--ease);
+  }
+  details[open] summary::before {
+    transform: rotate(45deg);
   }
   details summary:hover {
     color: var(--text-1);

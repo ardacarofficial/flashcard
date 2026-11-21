@@ -25,8 +25,10 @@
     bare?: boolean;
     /** v1.2: tighter fields (sm inputs, 2-row text areas), e.g. inside a small dialog. */
     compact?: boolean;
+    /** Put the caret in the first field once the note type is known (edit dialog). */
+    autofocus?: boolean;
   }
-  let { deckId, deckName, noteId = null, onsaved, onopennote, fixedType = null, bare = false, compact = false }: Props = $props();
+  let { deckId, deckName, noteId = null, onsaved, onopennote, fixedType = null, bare = false, compact = false, autofocus = false }: Props = $props();
 
   let form = $state<HTMLFormElement | null>(null);
 
@@ -61,6 +63,14 @@
     if (fixedType) ntId = fixedType;
   });
   const nt = $derived(notetypes.find((n) => n.id === ntId) ?? null);
+
+  // Keyboard flow (v1.2): the edit dialog opens with the caret in the first field, once.
+  let focused = false;
+  $effect(() => {
+    if (!autofocus || focused || !nt || !form) return;
+    focused = true;
+    queueMicrotask(() => form?.querySelector<HTMLElement>('textarea:not([disabled]), input:not([disabled]):not([type=hidden]), [contenteditable=true]')?.focus());
+  });
   const typeOptions = $derived(notetypes.map((n) => ({ value: n.id, label: n.name })));
   const engines = $derived(nt ? nt.templates.map((x) => x.card_type) : []);
 

@@ -167,7 +167,7 @@
         {clipping ? t('reading.card.clipping') : clip ? t('reading.card.clip_ready') : t('reading.card.clip')}</Button>
     {/if}
     {#if !ctx.selectedDeck}<p class="muted">{t('reading.card.pick_deck')}</p>{/if}
-    <Button variant="primary" type="submit" disabled={!ctx.selectedDeck || !word.trim()}>{t('reading.card.make')}</Button>
+    <Button variant="primary" type="submit" kbd="Enter" disabled={!ctx.selectedDeck || !word.trim()}>{t('reading.card.make')}</Button>
     {#if notice}<p class="ok" role="status">{notice}</p>{/if}
     {#if error}<p class="error" role="alert">{error}</p>{/if}
   </form>

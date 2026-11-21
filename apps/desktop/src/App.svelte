@@ -142,6 +142,15 @@
     if (openQuickAdd()) e.preventDefault();
   }
 
+  /** Where an entry lives, for the palette ("Desteler · Kütüphane", "Kısayollar · Ayarlar"). */
+  function placeHint(e: NavEntry): string | null {
+    const p = e.place;
+    if (p.kind === 'settings') return t('shell.settings');
+    if (p.kind !== 'section') return null;
+    const s = nav.sections.find((x) => x.id === p.id);
+    return s ? t(s.label_key) : null;
+  }
+
   const placeKey = (e: NavEntry) => (e.place.kind === 'section' ? `section.${e.place.id}` : e.place.kind);
 
   function show(entry: NavEntry) {
@@ -368,7 +377,7 @@
 
 <!-- Keyboard shortcuts + command palette (v0.4); inert when the palette module is off. -->
 <ShortcutHost
-  screens={nav.all.map((m) => ({ id: m.screen.id, label: td(m.label_key), open: () => show(m) }))}
+  screens={nav.all.map((m) => ({ id: m.screen.id, label: td(m.label_key), hint: placeHint(m), open: () => show(m) }))}
   activeScreen={screen?.id ?? null}
   {guarded}
 />

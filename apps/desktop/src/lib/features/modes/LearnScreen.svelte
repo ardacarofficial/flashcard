@@ -346,6 +346,8 @@
   .learn {
     display: flex;
     flex-direction: column;
+    /* The start page is one column: the header (deck picker) lines up with the panel. */
+    max-width: 760px;
   }
   .learn :global(.query) {
     width: 240px;

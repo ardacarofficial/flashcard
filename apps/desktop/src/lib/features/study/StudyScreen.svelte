@@ -63,6 +63,7 @@
   import TimerBar from '../modes/TimerBar.svelte';
   import { plainKey } from '../modes/modes';
   import { keyAction, RATINGS, studyBindings, type StudyAction, type StudyPhase } from './keys';
+  import { takeStudyNow } from './intent';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -158,13 +159,18 @@
 
   onMount(() => {
     trackModules();
+    // Opened by "Start studying" (Home, deck page): start at once, no start panel first.
+    const now = takeStudyNow();
     void ctx
       .guarded(async () => {
         const open = (await api.call('study.active', {})).session;
         // Learn, test and match sessions resume on their own screens.
         resumable = open && !['learn', 'test', 'match'].includes(open.kind) ? open : null;
       })
-      .finally(() => (loading = false));
+      .finally(() => {
+        loading = false;
+        if (now) void run({ kind: 'start' });
+      });
     void loadSaved();
     const unsub = api.on(['saved_queries', 'module_toggled'], () => void loadSaved());
     return () => void unsub.then((u) => u());
@@ -437,8 +443,15 @@
             await api.call('oplog.undo', {});
             return reload();
           case 'end':
-            if (s) await finish(s);
-            return;
+            if (!s) return;
+            // Nothing answered yet: no "0 of 0" summary, straight back to the start panel.
+            if (s.answered === 0) {
+              await api.call('study.end', { session_id: s.id });
+              session = null;
+              resumable = null;
+              return;
+            }
+            return finish(s);
           case 'repeat':
             if (summary && summary.mistakes > 0) {
               const r = await api.call('study.start', {
@@ -853,9 +866,9 @@
         <FocusToggle />
         <Menu items={toolItems} label={t('study.more')} placement="top" align="start" />
       </div>
-      <!-- Only keys no button on screen shows already. -->
-      {#if revealed}
-        <p class="legend" data-focus-hide><kbd>Space</kbd> {t('study.keyhint.flip')}</p>
+      <!-- Only keys no button on screen shows already: on the answer Space (and Enter) answer "good". -->
+      {#if revealed && !confidence}
+        <p class="legend" data-focus-hide><kbd>Space</kbd> {twoButtons ? t('study.buttons.know_it') : t('study.rating.good')}</p>
       {/if}
     </div>
 
@@ -870,6 +883,8 @@
   .study {
     display: flex;
     flex-direction: column;
+    /* The start page is one column: the header (deck picker) lines up with the panel. */
+    max-width: 760px;
   }
   .cnt {
     display: inline-flex;

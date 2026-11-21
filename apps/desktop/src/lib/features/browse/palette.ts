@@ -8,7 +8,7 @@ import type { PaletteEntry, ShortcutDto } from '$lib/api/types';
 /** One palette row: a shell action (add a card, undo…), a screen of the menu or a backend method. */
 export type PaletteItem =
   | { kind: 'action'; id: string; label: string; action: string; keys?: string | null }
-  | { kind: 'screen'; id: string; label: string; screenId: string; keys?: string | null }
+  | { kind: 'screen'; id: string; label: string; screenId: string; keys?: string | null; hint?: string | null }
   | { kind: 'method'; id: string; label: string; entry: PaletteEntry };
 
 /** A shell action offered at the top of the palette (`ui.new_note` → "Add card"). */
@@ -24,7 +24,8 @@ export interface PaletteAction {
  */
 export function paletteItems(
   entries: readonly PaletteEntry[],
-  screens: readonly { id: string; label: string; keys?: string | null }[],
+  /** `hint`: where the screen lives (sidebar section, "Settings"): shown muted and searched too. */
+  screens: readonly { id: string; label: string; keys?: string | null; hint?: string | null }[],
   translate: (key: string) => string,
   actions: readonly PaletteAction[] = [],
 ): PaletteItem[] {
@@ -36,7 +37,8 @@ export function paletteItems(
     keys: a.keys ?? null,
   }));
   for (const s of screens) {
-    items.push({ kind: 'screen', id: `screen:${s.id}`, label: s.label, screenId: s.id, keys: s.keys ?? null });
+    const hint = s.hint && s.hint !== s.label ? s.hint : null;
+    items.push({ kind: 'screen', id: `screen:${s.id}`, label: s.label, screenId: s.id, keys: s.keys ?? null, hint });
   }
   for (const entry of entries) {
     if (!entry.enabled) continue;
@@ -90,12 +92,15 @@ const fold = (s: string) =>
     .replace(/[̀-ͯ]/g, '')
     .replace(/ı/g, 'i');
 
-/** Items whose label or id contains every word of `query` (accent/case-insensitive). */
+/**
+ * Items whose label, id or (screens) place contains every word of `query`
+ * (accent/case-insensitive): "Library" finds the Library's pages, "Settings" every settings page.
+ */
 export function filterItems(items: readonly PaletteItem[], query: string): PaletteItem[] {
   const words = fold(query).split(/\s+/).filter(Boolean);
   if (words.length === 0) return [...items];
   return items.filter((i) => {
-    const hay = fold(`${i.label} ${i.id}`);
+    const hay = fold(`${i.label} ${i.id} ${i.kind === 'screen' ? (i.hint ?? '') : ''}`);
     return words.every((w) => hay.includes(w));
   });
 }
