@@ -205,6 +205,10 @@ define_id!(
     /// Local HTTP API client id (v0.9).
     ApiClientId
 );
+define_id!(
+    /// Subtitle extension access key id (v1.2).
+    SubtitleKeyId
+);
 
 #[cfg(test)]
 mod tests {

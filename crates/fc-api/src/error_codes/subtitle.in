@@ -1,0 +1,15 @@
+// Subtitle extension integration (v1.2).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// A capture does not match the contract's schema 1 (`details.field`). HTTP 422.
+ValidationSubtitleCapture => Validation, "errors.validation.subtitle_capture";
+/// An upload is not a JPEG screenshot or a WAV clip, or its headers are missing
+/// (`details.field`). HTTP 415/422.
+ValidationSubtitleMedia => Validation, "errors.validation.subtitle_media";
+/// An access key name is empty, too long or has control characters.
+ValidationSubtitleKey => Validation, "errors.validation.subtitle_key";
+/// Access key not found (`details.id`).
+NotFoundSubtitleKey => NotFound, "errors.not_found.subtitle_key";
+/// The access key is already revoked.
+ConflictSubtitleKeyState => Conflict, "errors.conflict.subtitle_key_state";
+/// The built-in Subtitle card note type is missing or in the trash.
+ConflictSubtitleNoteType => Conflict, "errors.conflict.subtitle_note_type";

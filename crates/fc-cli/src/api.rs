@@ -1,7 +1,8 @@
 //! `fc api serve`: the local HTTP API (docs/06 §3) without the desktop app — for scripts,
 //! tests and the browser extension's end-to-end tests. Same server, same rules: loopback only,
-//! the `local_api` module must be on, clients pair and are approved in the app (or with
-//! `fc call local_api.clients.approve`).
+//! the `local_api` module (`/v1/*`, clients pair and are approved in the app or with
+//! `fc call local_api.clients.approve`) or the `subtitle` module (`/subtitle/v1/*`, v1.2:
+//! access keys from `fc call subtitle.keys.create`) must be on.
 
 use crate::i18n::Catalog;
 use clap::Subcommand;
@@ -35,10 +36,13 @@ pub fn serve(db: &Path, port: Option<u16>, lang: Option<Locale>) -> Result<(), A
     }
     let app = Arc::new(App::open_sqlite_current(db).map_err(fc_app::AppError::into_api)?);
     let text = Catalog::new(lang.unwrap_or_else(|| app.locale()));
-    fc_app::modules::local_api::ensure_enabled(&app).map_err(|e| ApiError {
-        message: text.text("cli.api.module_off", &Default::default()),
-        ..e
-    })?;
+    // Either module keeps the server up; each answers only its own routes.
+    fc_app::modules::local_api::ensure_enabled(&app)
+        .or_else(|_| fc_app::modules::subtitle::ensure_enabled(&app))
+        .map_err(|e| ApiError {
+            message: text.text("cli.api.module_off", &Default::default()),
+            ..e
+        })?;
     let port = match port {
         Some(p) => p,
         None => fc_app::modules::local_api::port(&app)?,

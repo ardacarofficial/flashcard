@@ -25,6 +25,8 @@ pub enum Actor {
     /// An MCP client through the MCP server (client name from `initialize`, e.g.
     /// `claude-ai`); v0.8.
     Mcp(String),
+    /// The Subtitle browser extension through the local HTTP server (access key id; v1.2).
+    Subtitle(String),
     /// The app itself (migrations, seeding, maintenance).
     System,
 }

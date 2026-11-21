@@ -189,7 +189,7 @@ pending: number, } } | { "type": "local_api_pairing", "data": {
 /**
  * The pending client.
  */
-client: ApiClientDto, } } | { "type": "local_api_clients_changed" } | { "type": "lock_changed", "data": { 
+client: ApiClientDto, } } | { "type": "local_api_clients_changed" } | { "type": "subtitle_changed" } | { "type": "lock_changed", "data": { 
 /**
  * Locked now.
  */

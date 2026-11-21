@@ -1,0 +1,88 @@
+{
+  "nav": {
+    "subtitle": "Subtitle"
+  },
+  "modules": {
+    "subtitle": {
+      "name": "Subtitle eklentisi",
+      "description": "Varsayılan kapalı. Video altyazılarında + ile eklediğin kelimeler (Subtitle tarayıcı eklentisi) bir destede kart olur: cümlesi, çevirisi, ekran görüntüsü ve sesiyle. Yalnız bu bilgisayar, burada oluşturduğun bir erişim anahtarıyla bağlanabilir."
+    }
+  },
+  "settings": {
+    "subtitle": {
+      "default_deck": {
+        "label": "Subtitle kartlarının destesi",
+        "description": "Eklenti deste söylemezse kelimelerin gideceği destenin kimliği. Boş: ilk kullanımda oluşturulan Subtitle destesi. Subtitle sayfasından seçmek daha kolay."
+      }
+    }
+  },
+  "commands": {
+    "subtitle": {
+      "keys": {
+        "list": "Subtitle erişim anahtarları",
+        "create": "Subtitle erişim anahtarı oluştur",
+        "revoke": "Subtitle erişim anahtarını iptal et"
+      },
+      "status": "Subtitle bağlantısı",
+      "default_deck": {
+        "set": "Subtitle kartlarının destesini seç"
+      }
+    }
+  },
+  "errors": {
+    "validation": {
+      "subtitle_capture": "Subtitle eklentisinden gelen bu kelime geçerli değil.",
+      "subtitle_media": "Yalnız JPEG ekran görüntüsü ve WAV ses kaydı yüklenebilir.",
+      "subtitle_key": "Anahtar adı 1–60 karakter olmalı."
+    },
+    "not_found": {
+      "subtitle_key": "Erişim anahtarı bulunamadı."
+    },
+    "conflict": {
+      "subtitle_key_state": "Bu erişim anahtarı zaten iptal edilmiş.",
+      "subtitle_note_type": "Altyazı kartı not türü yok ya da çöpte. Yeniden kelime almak için onu geri yükle."
+    }
+  },
+  "subtitle": {
+    "heading": "Subtitle",
+    "intro": "Video altyazılarında + ile eklediğin kelimeler (Subtitle tarayıcı eklentisi) burada kart olur: cümlesi, çevirisi, ekran görüntüsü ve sesiyle.",
+    "connect": {
+      "title": "Eklentiyi bağla",
+      "description": "Bu uygulama açıkken çalışır. Yalnız bu bilgisayar bağlanabilir.",
+      "address": "Sunucu adresi",
+      "address_hint": "Eklentide sunucu adresi olarak bunu yapıştır.",
+      "copy": "Kopyala",
+      "copied": "Kopyalandı",
+      "step1": "Aşağıdan bir erişim anahtarı oluştur ve kopyala.",
+      "step2": "Eklentide Ayarlar → Öğrenme servisi'ni aç, Subtitle Kartları'nı seç; sunucu adresini ve anahtarı yapıştır.",
+      "step3": "Bağlantıyı test et'e tıkla. Artık + ile eklediğin her kelime buraya gelir."
+    },
+    "keys": {
+      "title": "Erişim anahtarları",
+      "description": "Her tarayıcı için bir anahtar. Artık kullanmadığın anahtarı iptal et: hemen çalışmaz olur.",
+      "none": "Henüz anahtar yok.",
+      "name": "Anahtar adı",
+      "name_placeholder": "ör. Evdeki Chrome",
+      "create": "Anahtar oluştur",
+      "created": "Oluşturuldu: {time}",
+      "last_used": "Son kullanım: {time}",
+      "never_used": "Henüz kullanılmadı",
+      "revoke": "İptal et",
+      "revoked": "İptal edildi",
+      "active": "Etkin",
+      "new_title": "Yeni erişim anahtarın",
+      "new_body": "Şimdi kopyala ve eklentiye yapıştır. Yalnız bu sefer gösterilir: uygulama ondan yalnızca bir parmak izi saklar.",
+      "done": "Tamam"
+    },
+    "deck": {
+      "title": "Kartlar nereye gider",
+      "description": "Kelimeler eklentide seçilen desteye gider; seçilmediyse buraya.",
+      "label": "Deste",
+      "fallback": "{name} (ilk kullanımda oluşturulur)",
+      "received": {
+        "none": "Henüz kelime gelmedi.",
+        "some": "{count, plural, one {# kelime} other {# kelime}} geldi, sonuncusu {time}."
+      }
+    }
+  }
+}

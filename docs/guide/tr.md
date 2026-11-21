@@ -422,6 +422,16 @@ Uygulama kapalıyken eklenen öğeler eklentide bekler ve uygulama açılınca g
 
 Gelen kutusuna ayrıca `flashcard://` bağlantılarından ve `Ctrl+Alt+N` hızlı ekleme penceresinden öneri düşer.
 
+### Subtitle (video altyazıları)
+
+**Subtitle** tarayıcı eklentisi video altyazılarında **+** ile eklediğin kelimeyi doğrudan bir destede karta çevirir (gelen kutusuna düşmez): kelime ve anlamı, geçtiği cümle (kelime kalın), çevirisi, ekran görüntüsü, ses kaydı ve videonun o ana bağlantısı.
+
+1. Uygulamada **Subtitle** modülünü aç (varsayılan kapalı): `Ctrl+K` → **Modülü aç/kapat** → `{"id": "subtitle", "enabled": true}`. **Ayarlar → Bağlantılar** altında **Subtitle** belirir.
+2. **Subtitle** ekranında bir ad yazıp **Anahtar oluştur**'a bas ve anahtarı kopyala. Anahtar **yalnız bir kez** gösterilir.
+3. Eklentide **Ayarlar → Öğrenme servisi → Subtitle Kartları**'nı seç; **Sunucu adresi**'ne ekrandaki adresi (`http://127.0.0.1:28735/subtitle`) ve **Erişim anahtarı**'na anahtarı yapıştır, **Bağlantıyı test et**'e bas.
+
+Kelimeler eklentide seçtiğin desteye, seçmediysen ekrandaki **Deste**'ye, o da yoksa ilk kelimede oluşturulan **Subtitle** destesine gider. Aynı kelime aynı cümleden iki kez gelirse tek kart olur; başka bir cümleden gelirse yeni kart. Her kelime tek geri al adımıdır. Uygulama kapalıyken eklenti kelimeleri kuyrukta tutar, uygulama açılınca gönderir. Bir anahtarı **İptal et** ile hemen geçersiz kılarsın.
+
 ## Profiller ve uygulama kilidi
 
 İkisi de **Profiller ve kilit** ekranındadır.

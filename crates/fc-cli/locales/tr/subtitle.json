@@ -1,0 +1,10 @@
+{
+  "oplog.summary.subtitle.keys.create": "Subtitle erişim anahtarı oluşturuldu: {name}",
+  "oplog.summary.subtitle.keys.revoke": "Subtitle erişim anahtarı iptal edildi: {name}",
+  "oplog.summary.subtitle.keys.touch": "Bir Subtitle erişim anahtarı kullanıldı",
+  "oplog.summary.subtitle.default_deck.set": "Subtitle kartlarının destesi seçildi",
+  "oplog.summary.subtitle.captures.create": "Subtitle: {word} eklendi",
+  "oplog.summary.subtitle.captures.forget": "Subtitle kayıtları unutuldu",
+  "oplog.summary.subtitle.captures.restore": "Subtitle kayıtları geri getirildi",
+  "oplog.summary.subtitle.media.upload": "Subtitle: bir resim ya da ses geldi"
+}

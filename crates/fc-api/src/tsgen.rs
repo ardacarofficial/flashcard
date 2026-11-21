@@ -74,6 +74,8 @@ pub fn generate_into(dir: &Path) -> Result<(), GenError> {
     v1::reading::ReadingClip::export_all(&cfg)?;
     // Local HTTP API transport DTOs (v0.9, for the browser extension).
     v1::local_api::export_http_types(&cfg)?;
+    // Subtitle extension contract (v1.2, `/subtitle/v1/*`).
+    v1::subtitle::export_http_types(&cfg)?;
 
     fs::write(dir.join("methods.ts"), methods_ts(&cfg))?;
     let files = list_ts_files(dir)?;

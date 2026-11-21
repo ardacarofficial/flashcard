@@ -1,0 +1,10 @@
+{
+  "oplog.summary.subtitle.keys.create": "Created the Subtitle access key {name}",
+  "oplog.summary.subtitle.keys.revoke": "Revoked the Subtitle access key {name}",
+  "oplog.summary.subtitle.keys.touch": "A Subtitle access key was used",
+  "oplog.summary.subtitle.default_deck.set": "Chose the deck for Subtitle cards",
+  "oplog.summary.subtitle.captures.create": "Subtitle: added {word}",
+  "oplog.summary.subtitle.captures.forget": "Forgot Subtitle captures",
+  "oplog.summary.subtitle.captures.restore": "Restored Subtitle captures",
+  "oplog.summary.subtitle.media.upload": "Subtitle: received a picture or a sound"
+}

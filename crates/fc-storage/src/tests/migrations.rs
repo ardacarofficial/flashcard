@@ -31,6 +31,9 @@ const TABLES: &[&str] = &[
     "goals",
     "ai_usage",
     "api_clients",
+    "subtitle_keys",
+    "subtitle_captures",
+    "subtitle_uploads",
     "notes_fts",
     "schema_migrations",
 ];
@@ -60,6 +63,9 @@ const INDICES: &[&str] = &[
     "inbox_status_created",
     "inbox_client_ref",
     "api_clients_token",
+    "subtitle_keys_token",
+    "subtitle_captures_dedup",
+    "subtitle_uploads_capture",
 ];
 
 fn fresh() -> Connection {
@@ -111,6 +117,7 @@ fn migrations_stay_in_their_release_range() {
     assert_eq!(migrate::release_of(299), Some("v0.3"));
     assert_eq!(migrate::release_of(350), Some("v0.4"));
     assert_eq!(migrate::release_of(400), Some("v0.5"));
+    assert_eq!(migrate::release_of(1200), Some("v1.2"));
     assert_eq!(migrate::release_of(0), None);
 }
 

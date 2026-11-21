@@ -31,6 +31,7 @@ pub mod rng;
 pub mod settings;
 pub mod shortcut;
 pub mod stats;
+pub mod subtitle;
 pub mod tag;
 pub mod theme;
 pub mod time;
@@ -49,6 +50,7 @@ pub use id::ReadingItemId;
 // v0.9 automation rules.
 pub use id::AutomationRuleId;
 // v0.9 local API + inbox (own line).
+pub use id::SubtitleKeyId;
 pub use id::{ApiClientId, InboxItemId};
 pub use rng::Rng;
 pub use time::{Clock, Timestamp};

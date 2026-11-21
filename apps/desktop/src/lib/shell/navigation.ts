@@ -79,6 +79,7 @@ export const PLACEMENTS: readonly { route: string; place: Place; also?: Place[];
   { route: '/mode-settings', place: settings('reading') },
   { route: '/mcp', place: settings('connections') },
   { route: '/local-api', place: settings('connections') },
+  { route: '/subtitle', place: settings('connections') },
   { route: '/automation', place: settings('connections') },
   { route: '/plugins', place: settings('plugins') },
   { route: '/io', place: settings('data'), also: [section('create')] },

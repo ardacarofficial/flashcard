@@ -26,6 +26,7 @@ pub(crate) mod search;
 mod settings;
 mod stats;
 mod study;
+mod subtitle;
 mod tags;
 mod ux;
 

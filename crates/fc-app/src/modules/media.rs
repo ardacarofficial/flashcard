@@ -125,22 +125,8 @@ fn add(req: AddMedia, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Medi
                 .with_detail("name", name.clone().unwrap_or_default()),
         )
     })?;
-    let hash = media_hash(&bytes);
-    // Content-addressed: writing an existing file is a no-op (and repairs a missing one).
-    ctx.tx.write_media_file(&hash, &bytes)?;
-    let existing = ctx.reads().get_media(&hash)?;
-    let created = existing.is_none();
-    if created {
-        ctx.tx.insert_media(&MediaRecord {
-            hash: hash.clone(),
-            mime: mime.to_owned(),
-            size: bytes.len() as u64,
-            original_name: name,
-            ref_count: 0,
-            created_at: ctx.now,
-        })?;
-    }
-    let record = require(ctx.reads(), &hash)?;
+    let (record, created) = store(ctx, &bytes, mime, name)?;
+    let hash = record.hash.clone();
     let inverse = if created {
         vec![inverse_call::<MediaForget>(&MediaRef { hash: hash.clone() })?]
     } else {
@@ -155,6 +141,31 @@ fn add(req: AddMedia, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Medi
         inverse,
         events: Vec::new(),
     })
+}
+
+/// Writes `bytes` to the media store (content-addressed: an existing file is kept, a missing
+/// one repaired) and makes sure it has a `media` row. Returns the row and whether it is new.
+/// Shared by `media.add` and the Subtitle extension's uploads.
+pub(crate) fn store(
+    ctx: &mut CommandCtx<'_>,
+    bytes: &[u8],
+    mime: &str,
+    name: Option<String>,
+) -> AppResult<(MediaRecord, bool)> {
+    let hash = media_hash(bytes);
+    ctx.tx.write_media_file(&hash, bytes)?;
+    let created = ctx.reads().get_media(&hash)?.is_none();
+    if created {
+        ctx.tx.insert_media(&MediaRecord {
+            hash: hash.clone(),
+            mime: mime.to_owned(),
+            size: bytes.len() as u64,
+            original_name: name,
+            ref_count: 0,
+            created_at: ctx.now,
+        })?;
+    }
+    Ok((require(ctx.reads(), &hash)?, created))
 }
 
 fn forget(req: MediaRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<AffectedCount>> {

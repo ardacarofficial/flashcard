@@ -186,6 +186,12 @@ fn replayable_methods_are_undoable_commands_without_side_channels() {
                 LocalApiPair::NAME,
                 LocalApiTouch::NAME,
                 LocalApiExpirePending::NAME,
+                // v1.2: what the HTTP server does for the Subtitle extension: a capture is
+                // a do step (its inverses are `subtitle.captures.forget` and the nested
+                // ones), uploads and key notes never enter the oplog.
+                SubtitleCapturesCreate::NAME,
+                SubtitleMediaUpload::NAME,
+                SubtitleKeysTouch::NAME,
             ]
             .contains(&d.name)
         {

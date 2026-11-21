@@ -233,6 +233,8 @@ pub enum DomainEvent {
     },
     /// Local API clients were approved, denied, revoked or removed (v0.9).
     LocalApiClientsChanged,
+    /// Subtitle access keys changed, or a capture arrived (v1.2): refetch `subtitle.*`.
+    SubtitleChanged,
     /// The app lock engaged (idle timeout, `lock.lock`) or was released (v1.0): show or hide
     /// the lock screen.
     LockChanged {

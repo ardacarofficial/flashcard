@@ -17,9 +17,9 @@ use fc_api::v1::local_api::{
     PairStatusResponse, PingResponse,
 };
 use fc_api::{ApiError, ErrorCategory, ErrorCode};
-use fc_app::modules::local_api;
+use fc_app::modules::{local_api, subtitle};
 use fc_app::App;
-use fc_core::{ApiClientId, Timestamp};
+use fc_core::{ApiClientId, SubtitleKeyId, Timestamp};
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -36,13 +36,13 @@ struct Pairing {
     expires: Instant,
 }
 
-struct Bucket {
+pub(crate) struct Bucket {
     tokens: f64,
     last: Instant,
 }
 
 impl Bucket {
-    fn full(burst: f64) -> Self {
+    pub(crate) fn full(burst: f64) -> Self {
         Self {
             tokens: burst,
             last: Instant::now(),
@@ -50,7 +50,7 @@ impl Bucket {
     }
 
     /// Takes one token, or the seconds until one is back.
-    fn take(&mut self, per_sec: f64, burst: f64) -> Result<(), u64> {
+    pub(crate) fn take(&mut self, per_sec: f64, burst: f64) -> Result<(), u64> {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last).as_secs_f64();
         self.tokens = (self.tokens + elapsed * per_sec).min(burst);
@@ -67,8 +67,8 @@ impl Bucket {
     }
 }
 
-struct Shared {
-    app: Arc<App>,
+pub(crate) struct Shared {
+    pub(crate) app: Arc<App>,
     port: u16,
     pairings: Mutex<HashMap<String, Pairing>>,
     buckets: Mutex<HashMap<ApiClientId, Bucket>>,
@@ -76,9 +76,12 @@ struct Shared {
     /// Pairing allowance per `origin|client name`.
     pair_names: Mutex<HashMap<String, Bucket>>,
     touched: Mutex<HashMap<ApiClientId, Instant>>,
+    /// v1.2: rate limits and last-use notes of Subtitle access keys.
+    pub(crate) key_buckets: Mutex<HashMap<SubtitleKeyId, Bucket>>,
+    pub(crate) key_touched: Mutex<HashMap<SubtitleKeyId, Instant>>,
 }
 
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
@@ -91,6 +94,8 @@ pub(crate) fn router(app: Arc<App>, port: u16) -> Router {
         pair_bucket: Mutex::new(Bucket::full(PAIR_PER_MINUTE)),
         pair_names: Mutex::new(HashMap::new()),
         touched: Mutex::new(HashMap::new()),
+        key_buckets: Mutex::new(HashMap::new()),
+        key_touched: Mutex::new(HashMap::new()),
     });
     // Tokens handed out by an earlier run lived in its memory only: nothing can finish those
     // pairings, so they must not wait to be approved. (Failing to tidy up is not fatal.)
@@ -117,7 +122,7 @@ fn status_of(e: &ApiError) -> StatusCode {
     }
 }
 
-fn json<T: Serialize>(status: StatusCode, body: &T) -> Response {
+pub(crate) fn json<T: Serialize>(status: StatusCode, body: &T) -> Response {
     let bytes = serde_json::to_vec(body).unwrap_or_else(|_| b"{}".to_vec());
     let mut r = Response::new(Body::from(bytes));
     *r.status_mut() = status;
@@ -148,7 +153,7 @@ fn api(code: ErrorCode, message: &str) -> ApiError {
     ApiError::new(code, message)
 }
 
-fn rate_limited(secs: u64) -> ApiError {
+pub(crate) fn rate_limited(secs: u64) -> ApiError {
     api(ErrorCode::ConflictRateLimited, "too many requests").with_detail("retry_after_secs", secs)
 }
 
@@ -157,7 +162,7 @@ fn internal(e: impl std::fmt::Display) -> ApiError {
 }
 
 /// Runs a blocking app call on the blocking pool.
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, ApiError> + Send + 'static,
 ) -> Result<T, ApiError> {
     tokio::task::spawn_blocking(f)
@@ -199,7 +204,7 @@ fn origin(headers: &HeaderMap) -> Result<Option<String>, ApiError> {
     }
 }
 
-fn cors(mut r: Response, origin: Option<&str>, preflight: bool) -> Response {
+fn cors(mut r: Response, origin: Option<&str>, preflight: bool, subtitle: bool) -> Response {
     let Some(o) = origin.and_then(|o| HeaderValue::from_str(o).ok()) else {
         return r;
     };
@@ -213,7 +218,11 @@ fn cors(mut r: Response, origin: Option<&str>, preflight: bool) -> Response {
         );
         h.insert(
             header::ACCESS_CONTROL_ALLOW_HEADERS,
-            HeaderValue::from_static("authorization, content-type, x-flashcard-client"),
+            HeaderValue::from_static(if subtitle {
+                crate::subtitle::ALLOW_HEADERS
+            } else {
+                "authorization, content-type, x-flashcard-client"
+            }),
         );
         h.insert(
             header::ACCESS_CONTROL_MAX_AGE,
@@ -237,7 +246,7 @@ pub(crate) fn token_hash(token: &str) -> String {
         .collect()
 }
 
-fn bearer(headers: &HeaderMap) -> Result<String, ApiError> {
+pub(crate) fn bearer(headers: &HeaderMap) -> Result<String, ApiError> {
     let missing = || {
         api(
             ErrorCode::PermissionUnauthenticated,
@@ -330,31 +339,51 @@ fn parse<T: serde::de::DeserializeOwned>(v: Value) -> Result<T, ApiError> {
 
 // ------------------------------------------------------------------ handler
 
+/// Whether `path` belongs to the Subtitle extension's contract (`/subtitle/…`).
+fn is_subtitle(path: &str) -> bool {
+    path == subtitle::PATH_PREFIX
+        || path
+            .strip_prefix(subtitle::PATH_PREFIX)
+            .is_some_and(|p| p.starts_with('/'))
+}
+
 async fn handle(State(s): State<Arc<Shared>>, req: Request) -> Response {
     let headers = req.headers().clone();
+    let path = req.uri().path().to_owned();
+    let query = req.uri().query().map(str::to_owned);
+    let sub = is_subtitle(&path);
+    // Errors in the shape the caller understands: the extension's contract or ApiError.
+    let fail = |e: &ApiError| {
+        if sub {
+            crate::subtitle::error(e)
+        } else {
+            error(e)
+        }
+    };
     if !host_ok(&headers, s.port) {
-        return error(&api(
+        return fail(&api(
             ErrorCode::PermissionOriginNotAllowed,
             "the Host header must name the loopback address",
         ));
     }
     let origin = match origin(&headers) {
         Ok(o) => o,
-        Err(e) => return error(&e),
+        Err(e) => return fail(&e),
     };
     let method = req.method().clone();
     if method == Method::OPTIONS {
         let mut r = Response::new(Body::empty());
         *r.status_mut() = StatusCode::NO_CONTENT;
-        return cors(r, origin.as_deref(), true);
+        return cors(r, origin.as_deref(), true, sub);
     }
-    let path = req.uri().path().to_owned();
     let body = req.into_body();
-    let response = match route(&s, &method, &path, &headers, origin.as_deref(), body).await {
-        Ok(r) => r,
-        Err(e) => error(&e),
+    let response = if sub {
+        crate::subtitle::route(&s, &method, &path, query.as_deref(), &headers, body).await
+    } else {
+        route(&s, &method, &path, &headers, origin.as_deref(), body).await
     };
-    cors(response, origin.as_deref(), false)
+    let response = response.unwrap_or_else(|e| fail(&e));
+    cors(response, origin.as_deref(), false, sub)
 }
 
 async fn route(
@@ -373,6 +402,9 @@ async fn route(
         .with_detail("method", path)
     };
     let rest = path.strip_prefix("/v1/").ok_or_else(not_found)?;
+    // v1.2: the server also runs for the `subtitle` module alone; then nothing of the local
+    // API answers, `ping` included.
+    local_api::ensure_enabled(&s.app)?;
     if !(method == Method::GET && rest == "ping") {
         csrf_guard(headers, method)?;
         // v1.0: a locked app (or one switching profile) answers nothing but `ping`.

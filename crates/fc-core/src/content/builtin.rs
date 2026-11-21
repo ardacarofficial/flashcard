@@ -151,7 +151,19 @@ pub const ALL: &[BuiltinNoteType] = &[
         },
         build: sentence,
     },
+    BuiltinNoteType {
+        key: SUBTITLE,
+        id: id(12),
+        name: LocalizedText {
+            en: "Subtitle card",
+            tr: "Altyazı kartı",
+        },
+        build: subtitle,
+    },
 ];
+
+/// `builtin` marker of the Subtitle card (v1.2): captures of the Subtitle browser extension.
+pub const SUBTITLE: &str = "subtitle";
 
 /// Built-in by marker.
 pub fn find(key: &str) -> Option<&'static BuiltinNoteType> {
@@ -550,6 +562,42 @@ pub fn sentence(now: Timestamp, locale: Locale) -> NoteType {
     )
 }
 
+/// Subtitle card (v1.2, docs/06 §5.1): a word picked in a video subtitle by the Subtitle
+/// browser extension. The front shows the word in its line (the term in bold); the back adds
+/// the meaning, part of speech, the line's translation, the screenshot, the audio clip and
+/// where it came from (title · time, a link to that moment). No field is unique: the same
+/// word from another line is another card (the extension's own dedup key decides).
+pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
+    make(
+        now,
+        locale,
+        SUBTITLE,
+        NoteTypeKind::Standard,
+        &[
+            f("word", "Word", "Kelime", FieldKind::RichText).req(),
+            f("surface", "As it appeared", "Geçtiği hâli", FieldKind::Text),
+            f("pos", "Part of speech", "Sözcük türü", FieldKind::Text),
+            f("meaning", "Meaning", "Anlam", FieldKind::RichText),
+            f("sentence", "Sentence", "Cümle", FieldKind::RichText),
+            f("translation", "Translation", "Çeviri", FieldKind::RichText),
+            f("image", "Screenshot", "Ekran görüntüsü", FieldKind::Image),
+            f("audio", "Audio", "Ses", FieldKind::Audio),
+            f("source", "Source", "Kaynak", FieldKind::RichText),
+        ],
+        &[T {
+            key: "recognition",
+            name: LocalizedText {
+                en: "Recognition",
+                tr: "Tanıma",
+            },
+            front: "<div class=\"fc-word\">{{word}}</div>{{#sentence}}<div class=\"fc-example\">{{sentence}}</div>{{/sentence}}",
+            back: "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{meaning}}{{#pos}}<div class=\"fc-pron\">{{pos}}</div>{{/pos}}{{#translation}}<div class=\"fc-example\">{{translation}}</div>{{/translation}}{{#image}}<div>{{image}}</div>{{/image}}{{#audio}}<div>{{audio}}</div>{{/audio}}{{#source}}<div class=\"fc-source\">{{source}}</div>{{/source}}",
+            engine: engine::CLASSIC,
+        }],
+        "",
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -571,7 +619,11 @@ mod tests {
             }
             assert!(ids.insert(b.id), "duplicate id {}", b.key);
         }
-        assert_eq!(ALL.len(), 11);
+        assert_eq!(ALL.len(), 12);
+        assert!(subtitle(Timestamp(1), Locale::En)
+            .fields
+            .iter()
+            .all(|f| !f.unique));
         assert_eq!(find("cloze").map(|b| b.id), Some(id(5)));
         assert_eq!(classic(Timestamp(1), Locale::Tr).name, "Klasik");
     }

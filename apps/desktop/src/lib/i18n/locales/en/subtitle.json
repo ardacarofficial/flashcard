@@ -1,0 +1,88 @@
+{
+  "nav": {
+    "subtitle": "Subtitle"
+  },
+  "modules": {
+    "subtitle": {
+      "name": "Subtitle extension",
+      "description": "Off by default. Words you add with + in video subtitles (Subtitle browser extension) become cards in a deck, with the line, its translation, a screenshot and the audio. Only this computer can connect, with an access key you create here."
+    }
+  },
+  "settings": {
+    "subtitle": {
+      "default_deck": {
+        "label": "Deck for Subtitle cards",
+        "description": "Deck id that captures go to when the extension names none. Empty: a deck called Subtitle, made on first use. Easier to choose on the Subtitle page."
+      }
+    }
+  },
+  "commands": {
+    "subtitle": {
+      "keys": {
+        "list": "Subtitle access keys",
+        "create": "Create a Subtitle access key",
+        "revoke": "Revoke a Subtitle access key"
+      },
+      "status": "Subtitle connection",
+      "default_deck": {
+        "set": "Choose the deck for Subtitle cards"
+      }
+    }
+  },
+  "errors": {
+    "validation": {
+      "subtitle_capture": "This word from the Subtitle extension is not valid.",
+      "subtitle_media": "Only JPEG screenshots and WAV audio clips can be uploaded.",
+      "subtitle_key": "A key name needs 1–60 characters."
+    },
+    "not_found": {
+      "subtitle_key": "Access key not found."
+    },
+    "conflict": {
+      "subtitle_key_state": "This access key is already revoked.",
+      "subtitle_note_type": "The Subtitle card note type is missing or in the trash. Restore it to receive words again."
+    }
+  },
+  "subtitle": {
+    "heading": "Subtitle",
+    "intro": "Words you add with + in video subtitles (Subtitle browser extension) become cards here, with the line, its translation, a screenshot and the audio.",
+    "connect": {
+      "title": "Connect the extension",
+      "description": "Works while this app is open. Only this computer can connect.",
+      "address": "Server address",
+      "address_hint": "Paste this as the server address in the extension.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "step1": "Create an access key below and copy it.",
+      "step2": "In the extension open Ayarlar → Öğrenme servisi (Settings → Learning service), pick Subtitle Kartları and paste the server address and the key.",
+      "step3": "Click Bağlantıyı test et (Test connection). From then on every word you add with + arrives here."
+    },
+    "keys": {
+      "title": "Access keys",
+      "description": "One key per browser. Revoke a key when you no longer use it: it stops working at once.",
+      "none": "No keys yet.",
+      "name": "Key name",
+      "name_placeholder": "e.g. Chrome at home",
+      "create": "Create key",
+      "created": "Created {time}",
+      "last_used": "Last used {time}",
+      "never_used": "Not used yet",
+      "revoke": "Revoke",
+      "revoked": "Revoked",
+      "active": "Active",
+      "new_title": "Your new access key",
+      "new_body": "Copy it now and paste it into the extension. It is shown only this once: the app keeps only a fingerprint of it.",
+      "done": "Done"
+    },
+    "deck": {
+      "title": "Where cards go",
+      "description": "Captures go to the deck chosen in the extension; otherwise here.",
+      "label": "Deck",
+      "fallback": "{name} (made on first use)",
+      "received": {
+        "none": "No words received yet.",
+        "some": "{count, plural, one {# word} other {# words}} received, last {time}."
+      }
+    }
+  }
+}
