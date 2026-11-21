@@ -80,7 +80,7 @@
             <span class="half" style:background={p.dark['bg']}><span class="dot" style:background={p.dark['accent']}></span></span>
           </span>
           <span class="name">{td(p.name_key)}</span>
-          {#if chosen}<span class="tick" aria-hidden="true"><Icon icon={Check} size={16} /></span>{/if}
+          {#if chosen}<span class="tick" aria-hidden="true"><Icon icon={Check} size={14} /></span>{/if}
         </button>
       {/each}
     </div>
@@ -110,33 +110,33 @@
 <style>
   .presets {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
-    gap: var(--space-3);
+    grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+    gap: var(--space-2);
     width: 100%;
   }
   .preset {
-    position: relative;
     display: flex;
-    flex-direction: column;
-    align-items: stretch;
+    align-items: center;
     gap: var(--space-2);
-    padding: var(--space-2);
+    height: var(--control-h-lg);
+    padding: 0 var(--space-2) 0 6px;
     border: 1px solid var(--border);
-    border-radius: var(--radius-card);
+    border-radius: var(--radius-control);
     background: var(--surface-1);
     color: var(--text-1);
     font: inherit;
     font-size: var(--text-sm);
     text-align: start;
     cursor: pointer;
-    transition: border-color var(--motion-fast) var(--ease);
+    transition: border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
   }
   .preset:hover {
     border-color: var(--border-strong);
+    background: var(--surface-2);
   }
   .preset.chosen {
     border-color: var(--accent-text);
-    box-shadow: 0 0 0 1px var(--accent-text);
+    background: var(--accent-soft);
   }
   .preset:focus-visible {
     outline: 2px solid var(--focus-ring);
@@ -145,8 +145,10 @@
   .swatch {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    height: 44px;
-    border-radius: var(--radius-control);
+    flex: none;
+    width: 40px;
+    height: 22px;
+    border-radius: 4px;
     overflow: hidden;
     border: 1px solid var(--border);
   }
@@ -156,26 +158,22 @@
     justify-content: center;
   }
   .dot {
-    width: 16px;
-    height: 16px;
+    width: 10px;
+    height: 10px;
     border-radius: var(--radius-pill);
   }
   .name {
-    padding: 0 var(--space-1);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: var(--weight-medium);
   }
   .tick {
-    position: absolute;
-    right: var(--space-2);
-    bottom: var(--space-2);
     display: inline-flex;
-    width: 20px;
-    height: 20px;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-pill);
-    background: var(--accent);
-    color: var(--accent-fg);
+    flex: none;
+    color: var(--accent-text);
   }
   .accent {
     display: flex;
@@ -188,7 +186,7 @@
   }
   .error {
     margin: 0;
-    padding: 0 var(--space-6) var(--space-4);
+    padding: var(--space-2) 0;
     color: var(--danger);
     font-size: var(--text-sm);
   }

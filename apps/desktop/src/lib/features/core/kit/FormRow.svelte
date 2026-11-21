@@ -1,6 +1,7 @@
 <!--
-  One settings row inside a `SettingsSection body="rows"`: label + description on the left,
-  the control on the right (stacked below 640 px or with `stack`). Rows are divided by a hairline.
+  One settings row inside a `SettingsSection body="rows"` (v1.2): label + one-line description
+  on the left, the control on the right, ~44 px high, a 1px line below. `stack` puts wide
+  controls (lists, text areas, swatches) under the text; below 640 px every row stacks.
   Pass `labelFor` when the control is a plain lib/ui control with `hideLabel` and its own id,
   so clicking the label focuses it; Switch / Checkbox carry their own label (`ariaLabel`).
 -->
@@ -39,13 +40,13 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, auto);
     align-items: center;
     gap: var(--space-2) var(--space-6);
-    padding: var(--space-4) var(--space-6);
-  }
-  .fc-form-row + :global(.fc-form-row) {
-    border-top: 1px solid var(--border);
+    min-height: 44px;
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
   }
   .stack {
     grid-template-columns: minmax(0, 1fr);
+    padding-bottom: var(--space-3);
   }
   .text {
     min-width: 0;
@@ -54,11 +55,12 @@
     display: block;
     font-size: var(--text-sm);
     font-weight: var(--weight-medium);
+    line-height: var(--leading-tight);
     color: var(--text-1);
   }
   .desc {
-    margin: 2px 0 0;
-    font-size: var(--text-sm);
+    margin: 3px 0 0;
+    font-size: var(--text-xs);
     color: var(--text-2);
     line-height: var(--leading);
   }
@@ -78,11 +80,6 @@
   }
   .stack .control :global(.fc-field) {
     flex: 1 1 100%;
-  }
-  @media (max-width: 1023.98px) {
-    .fc-form-row {
-      padding-inline: var(--space-4);
-    }
   }
   @media (max-width: 639.98px) {
     .fc-form-row {

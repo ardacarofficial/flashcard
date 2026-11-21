@@ -66,7 +66,9 @@
     "idle_hint": "Locks the window when you have not used the app for this long.",
     "current_hint": "Needed to change or remove the lock.",
     "kind_label": "Lock type",
-    "kind_hint": "A PIN is 4–12 digits; a password 6–128 characters."
+    "kind_hint": "A PIN is 4–12 digits; a password 6–128 characters.",
+    "danger_heading": "Remove the app lock",
+    "clear_desc": "The window opens without a PIN or password again. Enter the current one to confirm."
   },
   "commands": {
     "profiles": {

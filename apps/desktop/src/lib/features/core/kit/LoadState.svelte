@@ -30,7 +30,7 @@
   </div>
 {:else}
   <div class="fc-load error" role="alert">
-    <Icon icon={CircleAlert} size={20} />
+    <Icon icon={CircleAlert} size={16} />
     <span>{message ?? t('common.load_failed')}</span>
     {#if retry}<Button size="sm" icon={RefreshCw} onclick={retry}>{t('kit.retry')}</Button>{/if}
   </div>

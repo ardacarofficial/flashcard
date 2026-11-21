@@ -58,8 +58,8 @@
 <style>
   .settings {
     display: grid;
-    grid-template-columns: 200px minmax(0, 1fr);
-    gap: var(--space-6);
+    grid-template-columns: 204px minmax(0, 1fr);
+    gap: var(--space-8);
     align-items: start;
   }
   .subnav {
@@ -67,13 +67,18 @@
     top: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-4);
+    max-height: calc(100vh - 44px - var(--space-12));
+    overflow-y: auto;
+    margin-inline-start: -8px;
+    padding-inline-end: var(--space-2);
   }
   .group-title {
-    margin: 0 0 2px;
-    padding: 0 10px;
+    margin: 0 0 4px;
+    padding: 0 8px;
     font-size: var(--text-2xs);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.02em;
     color: var(--text-2);
   }
   ul {
@@ -87,7 +92,7 @@
   button {
     width: 100%;
     height: 28px;
-    padding: 0 10px;
+    padding: 0 8px;
     border: none;
     border-radius: var(--radius-control);
     background: transparent;
@@ -108,6 +113,7 @@
     background: var(--surface-3);
     color: var(--text-1);
     font-weight: var(--weight-medium);
+    box-shadow: inset 2px 0 0 var(--accent);
   }
   button:focus-visible {
     outline: 2px solid var(--focus-ring);

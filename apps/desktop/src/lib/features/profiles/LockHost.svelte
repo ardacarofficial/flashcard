@@ -155,7 +155,12 @@
     <div class="panel">
       <form class="card" onsubmit={lock.recovery_required ? recover : unlock}>
         <span class="badge" class:warn={lock.recovery_required} aria-hidden="true">
-          <Icon icon={lock.recovery_required ? TriangleAlert : Lock} size={24} />
+          {#if lock.recovery_required}
+            <Icon icon={TriangleAlert} size={20} />
+          {:else}
+            <img class="mark" src="/favicon.svg" alt="" />
+            <span class="lock-dot"><Icon icon={Lock} size={12} /></span>
+          {/if}
         </span>
         <h1 id="lock-title">{t('lock.screen_title')}</h1>
         <p class="who">
@@ -181,7 +186,7 @@
             bind:value={secret}
             bind:element={field}
           />
-          <Button variant="primary" size="lg" type="submit" fullWidth disabled={secret === ''}>{t('lock.unlock')}</Button>
+          <Button variant="primary" size="lg" type="submit" kbd="Enter" fullWidth disabled={secret === ''}>{t('lock.unlock')}</Button>
         {/if}
       </form>
       {#if held.length > 0}
@@ -230,47 +235,64 @@
   .panel {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
-    width: min(400px, 100%);
+    gap: var(--space-6);
+    width: min(340px, 100%);
   }
   .card {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
-    padding: var(--space-8) var(--space-6) var(--space-6);
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-1);
+    gap: var(--space-3);
   }
   form.card {
     align-items: stretch;
     text-align: center;
   }
   .badge {
+    position: relative;
     align-self: center;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 56px;
-    height: 56px;
-    border-radius: var(--radius-pill);
-    background: var(--accent-soft);
+    width: 52px;
+    height: 52px;
+    margin-bottom: var(--space-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-1);
     color: var(--accent-text);
   }
   .badge.warn {
+    border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
     background: var(--warning-soft);
     color: var(--warning);
+  }
+  .mark {
+    width: 34px;
+    height: 34px;
+  }
+  .lock-dot {
+    position: absolute;
+    right: -6px;
+    bottom: -6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--surface-0);
+    border-radius: var(--radius-pill);
+    background: var(--surface-3);
+    color: var(--text-1);
   }
   h1 {
     margin: 0;
     font-size: var(--text-xl);
-    font-weight: var(--weight-bold);
+    font-weight: var(--weight-semibold);
     line-height: var(--leading-tight);
   }
   h2 {
     margin: 0;
-    font-size: var(--text-md);
+    font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
   }
   .who {
@@ -278,7 +300,7 @@
     align-items: center;
     justify-content: center;
     gap: var(--space-2);
-    margin: calc(-1 * var(--space-2)) 0 var(--space-2);
+    margin: 0 0 var(--space-3);
     color: var(--text-2);
     font-size: var(--text-sm);
   }
@@ -288,13 +310,17 @@
   .recovery {
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
     text-align: start;
   }
   .recovery p {
     margin: 0;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     line-height: var(--leading);
   }
   .error {
@@ -304,13 +330,17 @@
   }
   .held {
     gap: var(--space-2);
-    padding: var(--space-4) var(--space-6);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
     align-items: flex-start;
   }
   .muted {
     margin: 0;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
+    line-height: var(--leading);
   }
   .held ul {
     list-style: none;
@@ -329,10 +359,11 @@
     font-size: var(--text-xs);
   }
   .others {
-    text-align: center;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
   }
   .others h2 {
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     font-weight: var(--weight-medium);
     color: var(--text-2);
     margin-bottom: var(--space-2);
@@ -342,28 +373,30 @@
     margin: 0;
     padding: 0;
     display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-2);
+    flex-direction: column;
+    gap: 2px;
   }
   .other {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: var(--space-2);
-    padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-pill);
-    background: var(--surface-1);
+    width: 100%;
+    height: var(--row-h);
+    padding: 0 var(--space-2);
+    border: none;
+    border-radius: var(--radius-control);
+    background: transparent;
     color: var(--text-1);
     font: inherit;
     font-size: var(--text-sm);
+    text-align: start;
     cursor: pointer;
   }
   .other:hover {
-    border-color: var(--border-strong);
+    background: var(--surface-2);
   }
   .other:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline-offset: -2px;
   }
 </style>

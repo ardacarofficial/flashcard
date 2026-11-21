@@ -69,13 +69,13 @@
     <ul class="items">
       {#if o.integrity}
         <li class={o.integrity.ok ? 'ok' : 'bad'}>
-          <Icon icon={o.integrity.ok ? CircleCheck : CircleAlert} size={20} />
+          <Icon icon={o.integrity.ok ? CircleCheck : CircleAlert} size={16} />
           <span>{o.integrity.ok ? t('app_maintenance.recovery.integrity_ok') : t('app_maintenance.recovery.integrity_bad')}</span>
         </li>
       {/if}
-      {#if o.session}<li><Icon icon={GraduationCap} size={20} /><span>{t('app_maintenance.recovery.session')}</span></li>{/if}
-      {#if o.drafts.length > 0}<li><Icon icon={FileText} size={20} /><span>{t('app_maintenance.recovery.drafts', { count: o.drafts.length })}</span></li>{/if}
-      {#if o.crash}<li class="muted"><Icon icon={TriangleAlert} size={20} /><span>{t('app_maintenance.recovery.crash', { message: o.crash.message })}</span></li>{/if}
+      {#if o.session}<li><Icon icon={GraduationCap} size={16} /><span>{t('app_maintenance.recovery.session')}</span></li>{/if}
+      {#if o.drafts.length > 0}<li><Icon icon={FileText} size={16} /><span>{t('app_maintenance.recovery.drafts', { count: o.drafts.length })}</span></li>{/if}
+      {#if o.crash}<li class="muted"><Icon icon={TriangleAlert} size={16} /><span>{t('app_maintenance.recovery.crash', { message: o.crash.message })}</span></li>{/if}
     </ul>
     {#snippet footer()}
       <Button variant="ghost" onclick={() => go('/app-maintenance')}>{t('app_maintenance.recovery.details')}</Button>
@@ -91,7 +91,7 @@
 
 {#if available && !offer?.reason}
   <div class="update" role="status">
-    <span class="icon" aria-hidden="true"><Icon icon={RefreshCw} size={20} /></span>
+    <span class="icon" aria-hidden="true"><Icon icon={RefreshCw} size={16} /></span>
     <span class="text">{t('app_maintenance.updates.banner', { version: available.version })}</span>
     <Button size="sm" variant="primary" data-testid="update-open" onclick={() => { available = null; open('/app-maintenance'); }}>{t('app_maintenance.updates.open')}</Button>
     <IconButton size="sm" icon={X} label={t('app_maintenance.updates.later')} onclick={() => (available = null)} />
@@ -105,17 +105,19 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-2);
   }
   .items li {
     display: flex;
     align-items: flex-start;
-    gap: var(--space-3);
+    gap: var(--space-2);
+    line-height: var(--leading);
     font-size: var(--text-sm);
     color: var(--text-1);
   }
   .items :global(svg) {
     flex: none;
+    margin-top: 2px;
     color: var(--text-2);
   }
   .items .ok,
@@ -136,13 +138,13 @@
     z-index: 40;
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    max-width: min(28rem, calc(100vw - 2 * var(--space-4)));
-    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-    background: var(--surface-1);
-    border: 1px solid var(--border);
+    gap: var(--space-2);
+    max-width: min(30rem, calc(100vw - 2 * var(--space-4)));
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-card);
-    box-shadow: var(--shadow-2);
+    box-shadow: var(--shadow-float);
     font-size: var(--text-sm);
   }
   .icon {
@@ -151,5 +153,6 @@
   }
   .text {
     flex: 1 1 auto;
+    color: var(--text-1);
   }
 </style>
