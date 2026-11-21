@@ -323,7 +323,7 @@
   .side-title {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: var(--space-2);
     margin: 0;
     padding: 0 var(--space-2) var(--space-2);
     font-size: var(--text-xs);
@@ -532,7 +532,8 @@
   .syntax code {
     font-variant-ligatures: none;
   }
-  @media (max-width: 1023.98px) {
+  /* The field table needs the width: the type list goes on top until the window is wide. */
+  @media (max-width: 1399.98px) {
     .layout {
       grid-template-columns: minmax(0, 1fr);
     }
