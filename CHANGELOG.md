@@ -4,6 +4,30 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased]
 
+## [1.2.0] — v1.2 arayüz yeniden tasarımı + Subtitle bağlantısı
+
+Workspace sürümü `1.2.0`. v1.1 arayüzü (ferah, büyük yuvarlak kartlar, açık gri + mor, ağır kart ekleme formu) proje sahibince rahatsız edici bulunup reddedildi; arayüz akışlardan başlayarak yeniden tasarlandı (docs/11). **Hiçbir özellik kaldırılmadı**, Rust davranışı ve API değişmedi.
+
+### Tasarım sistemi ve kabuk
+- Token'lar: koyu öncelikli, sıcak nötrler, **tek vurgu kehribar** `#F5B544` (açık temada metin olarak `#9A5B00`); doğru/yanlış/uyarı yalnız anlam taşıdığında. Gövde 13 px, kontroller 28/32/36, satırlar 34, köşe 6/8 (12 yalnız çalışma kartı), gölge yerine 1 px kenarlık, 100–150 ms hareket, 2 px odak halkası. Varsayılan hazır tema (`fc_core::theme`) ve uygulama simgesi yeni tasarıma geçti.
+- **JetBrains Mono** (OFL) paketlendi: sayılar, sayımlar, süreler, kısayol ipuçları, tablo sayıları.
+- `$lib/ui` sık sisteme uyarlandı; yeni **ListRow** (34 px liste/ağaç-tablo satırı), **StatTile** (büyük mono sayı), Button `kbd` ipucu.
+- Kabuk: 216 px kenar çubuğu (Oluştur artık vurgulu blok değil), oturum dışında her zaman görünen **44 px üst çubuk**: iz, "Ara ya da komut çalıştır" (`Ctrl+K`), birincil **"Kart ekle"** (`N`). Giriş noktaları `shell/commands.svelte.ts` (`openQuickAdd`, `openPalette`). Palet önce Eylemler (Kart ekle, Ara, Geri al, Yinele).
+
+### Akışlar ve ekranlar
+- **Hızlı Ekle** penceresi: `N` / `Ctrl+N` / üst çubuk; deste ve not türü hatırlanır, `Ctrl+Enter` ekler ve pencere açık kalır, alanlar temizlenir, "Eklendi · n" + Geri al.
+- **Oluştur** tablo benzeri ızgara: tek kurulum satırı ("Diğer" altında açıklama/sınıflandırma), numaralı terim | tanım satırları; kaydet yine tek `notes.create_many` geri al adımı.
+- **Ana sayfa** "Bugün · N kart" + mono kırılım + `Enter` ile başla, işi olan desteler sık tablo, kompakt seri/hedef şeridi, tek satır gelen kutusu.
+- **Çalışma oturumu pencerenin tamamını alır:** kenar çubuğu ve üst çubuk gizlenir, `SessionFrame` ince üst satırı (ilerleme, mono "12 / 40", kalan, `Esc`); kart en çok 720 px, cevap düğmeleri kart genişliğinde (2'li ve 4'lü). Öğren, Test, Eşleştir, Okuma aynı dilde.
+- **Kütüphane** ağaç-tablo varsayılan (ızgara ikincil), **deste sayfası** "Çalış" ve mod düğmeleri ilk ekranda, terim listesi satır içi düzenlemeli tablo. **Ara** sorgu öncelikli, sık sanal tablo, yan panelde kart bilgisi, klavyeyle seçim.
+- **İstatistik** kompakt mono kutucuklar, 12 px ısı haritası (klavye + ipucu), mono eksenli grafikler; Planlama, Hedefler, Gelen kutusu (J/K/A/E/R/X), not düzenleyici, not türleri, eklentiler, AI ile üret, başlangıç desteleri, ilk açılış ve kilit ekranı da yeni sistemde. Ayarlar kutusuz kit (`features/core/kit`: 44 px satırlar, yıkıcı bölüm en sonda).
+
+### Subtitle tarayıcı eklentisi bağlantısı
+- Yeni `subtitle` modülü (varsayılan kapalı): yerel HTTP sunucusunda `/subtitle/v1` altında eklentinin "Subtitle Kartları API v1" sözleşmesi (me, decks, media, captures, captures:batch, known-words). Kişisel erişim anahtarları (bir kez gösterilir, yalnız SHA-256), migration `1200_subtitle`, kendi izni olmayan `Actor::Subtitle`; yakalama doğrudan destede not olur, tek geri al adımı. Ayarlar → Bağlantılar → Subtitle. Ayrıntı: docs/06 §5.1, kullanıcı rehberi.
+
+### Araçlar
+- `pnpm screens` her koşuda rastgele bir port seçer (`--port N` ile sabitlenir): farklı worktree'lerdeki paralel koşular aynı geliştirme sunucusunu paylaşmaz. Çalışan bir oturumdan başka ekrana geçmeden önce çıkar.
+
 ## [1.1.0] — v1.1 arayüz tasarımı (`feat/v1.1-design`)
 
 Workspace sürümü `1.1.0`. Arayüz baştan tasarlandı (docs/11); davranış ve iş mantığı Rust'ta kaldı.
