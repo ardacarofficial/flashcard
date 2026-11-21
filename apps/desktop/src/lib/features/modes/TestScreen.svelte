@@ -515,6 +515,9 @@
   .misses {
     max-width: 760px;
   }
+  .misses + .paper {
+    margin-top: var(--space-4);
+  }
   .misses h2 {
     margin: 0 0 var(--space-2);
     font-size: var(--text-md);

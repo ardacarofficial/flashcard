@@ -36,7 +36,7 @@ const langs = opt('langs', quick ? 'en' : 'tr,en').split(',');
 const themes = opt('themes', quick ? 'light' : 'light,dark').split(',');
 const widths = opt('widths', quick ? '1280' : '1280,900').split(',').map(Number);
 const outDir = join(root, opt('out', 'screens'));
-const PORT = 1431;
+const PORT = Number(opt('port', 0)) || 20000 + Math.floor(Math.random() * 20000);
 const baseUrl = opt('url', `http://127.0.0.1:${PORT}`);
 
 const slug = (s) =>
