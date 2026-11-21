@@ -32,7 +32,7 @@
   {#snippet header()}
     <!-- First tab stop: jumps past the sidebar and top bar to the page (App.svelte `#fc-main`). -->
     <a
-      class="skip"
+      class="skip sr-only"
       href="#fc-main"
       onclick={(e) => {
         e.preventDefault();
@@ -72,12 +72,16 @@
 </Sidebar>
 
 <style>
-  /* Hidden until focused, then a small floating chip over the brand row. */
-  .skip {
+  /* Screen-reader only (global `.sr-only`) until focused, then a small floating chip over the brand row. */
+  .skip:focus {
     position: fixed;
     top: 8px;
     left: 8px;
     z-index: 100;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
     padding: 6px 10px;
     border-radius: var(--radius-control);
     background: var(--accent);
@@ -86,10 +90,6 @@
     font-weight: var(--weight-semibold);
     text-decoration: none;
     box-shadow: var(--shadow-float);
-    transform: translateY(-200%);
-  }
-  .skip:focus {
-    transform: none;
   }
   .skip:focus-visible {
     outline: 2px solid var(--focus-ring);
