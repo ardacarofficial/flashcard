@@ -53,7 +53,7 @@
     "notification": "Bugün {total} kart seni bekliyor ({due} tekrar, {new} yeni).",
     "daily": "Günlük hatırlatıcı",
     "time_hint": "Bildirimin yerel saati.",
-    "test_hint": "Bildirimlerin size ulaştığını deneyin.",
+    "test_hint": "Bildirimlerin sana ulaştığını dene.",
     "tray": "Sistem tepsisi",
     "test_row": "Deneme bildirimi"
   },

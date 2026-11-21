@@ -132,15 +132,15 @@
 
 <SettingsPage title={t('nav.profiles')} subtitle={t('profiles.intro')}>
   {#if list === null}
-    <SettingsSection title={t('profiles.heading')}>
+    <SettingsSection title={t('profiles.heading')} icon={Users}>
       <LoadState state={failed ? 'error' : 'loading'} retry={() => void load()} />
     </SettingsSection>
   {:else if !list.available}
-    <SettingsSection title={t('profiles.heading')}>
+    <SettingsSection title={t('profiles.heading')} icon={Users}>
       <EmptyState size="sm" icon={Users} title={t('profiles.unavailable')} />
     </SettingsSection>
   {:else}
-    <SettingsSection title={t('profiles.heading')} body="rows">
+    <SettingsSection title={t('profiles.heading')} icon={Users} body="rows">
       {#if switching}<p class="status" role="status">{t('profiles.switching')}</p>{/if}
       <ul class="profiles">
         {#each list.profiles as p (p.id)}
@@ -188,7 +188,7 @@
   {/if}
 
   {#if lock?.available}
-    <SettingsSection title={t('lock.heading')} description={t('lock.intro')} body="rows">
+    <SettingsSection title={t('lock.heading')} icon={Lock} description={t('lock.intro')} body="rows">
       <div class="lock-status" class:on={lock.enabled}>
         <span class="lock-icon" aria-hidden="true">
           <Icon icon={lock.enabled ? Lock : LockOpen} size={16} />

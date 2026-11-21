@@ -284,10 +284,13 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-    max-width: 880px;
   }
+  /* The header (title + Statistics tabs) spans the page like on Overview; the forms stay 880. */
   .planning > :global(.fc-page-header) {
     margin-bottom: var(--space-1);
+  }
+  .planning > :global(:not(.fc-page-header)) {
+    max-width: 880px;
   }
   .pad {
     padding: var(--space-3) var(--space-4);
@@ -368,6 +371,7 @@
     align-items: end;
     gap: var(--space-2);
     padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--border);
     background: var(--surface-0);
     border-radius: 0 0 var(--radius-card) var(--radius-card);
   }

@@ -53,8 +53,8 @@
     },
     "deck_count": "{n} deste",
     "new_placeholder": "Yeni şablon adı",
-    "pick": "Ayarlarını düzenlemek için bir şablon seçin.",
-    "none_hint": "Bazı destelere kendi sınırlarını ve adımlarını vermek için bir şablon oluşturun.",
+    "pick": "Ayarlarını düzenlemek için bir şablon seç.",
+    "none_hint": "Bazı destelere kendi sınırlarını ve adımlarını vermek için bir şablon oluştur.",
     "decks_intro": "Bu şablonu kullanan desteler (alt desteler de devralır).",
     "desc": {
       "new_per_day": "Her gün kaç yeni kart gösterilsin.",

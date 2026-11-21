@@ -30,6 +30,15 @@
 
 <Sidebar label={t('shell.nav_label')}>
   {#snippet header()}
+    <!-- First tab stop: jumps past the sidebar and top bar to the page (App.svelte `#fc-main`). -->
+    <a
+      class="skip"
+      href="#fc-main"
+      onclick={(e) => {
+        e.preventDefault();
+        document.getElementById('fc-main')?.focus();
+      }}>{t('shell.skip_to_content')}</a
+    >
     <div class="brand">
       <img class="mark" src="/favicon.svg" alt="" aria-hidden="true" />
       <span class="name">{t('app.title')}</span>
@@ -63,6 +72,29 @@
 </Sidebar>
 
 <style>
+  /* Hidden until focused, then a small floating chip over the brand row. */
+  .skip {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 100;
+    padding: 6px 10px;
+    border-radius: var(--radius-control);
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+    text-decoration: none;
+    box-shadow: var(--shadow-float);
+    transform: translateY(-200%);
+  }
+  .skip:focus {
+    transform: none;
+  }
+  .skip:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
   .brand {
     display: flex;
     align-items: center;

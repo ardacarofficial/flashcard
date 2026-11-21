@@ -206,7 +206,7 @@
 
 {#snippet headerActions()}
   {#if !editing}
-    <Button size="sm" variant="primary" icon={Plus} onclick={() => open(null)}>{t('automation.new')}</Button>
+    <Button variant="primary" icon={Plus} onclick={() => open(null)}>{t('automation.new')}</Button>
   {/if}
 {/snippet}
 

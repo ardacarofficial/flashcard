@@ -105,6 +105,28 @@ describe('<InboxScreen>', () => {
     await fireEvent.click(screen.getByRole('tab', { name: 'Accepted' }));
     expect(await screen.findByText('badger')).toBeTruthy();
   });
+
+  it('J from a plain button outside the list (the sidebar item) enters the list; R keeps the focus in it', async () => {
+    await api.call('inbox.add', { front: 'kestrel', fields: {}, tags: [], attributes: {} });
+    await api.call('inbox.add', { front: 'heron', fields: {}, tags: [], attributes: {} });
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    render(InboxScreen, { ctx: ctxWith([]) });
+    expect(await screen.findByText('kestrel')).toBeTruthy();
+    outside.focus();
+    await fireEvent.keyDown(outside, { key: 'j' });
+    const first = await waitFor(() => {
+      const row = document.activeElement as HTMLElement;
+      expect(row.getAttribute('data-row')).toBe('0');
+      return row;
+    });
+    const [gone, kept] = first.textContent?.includes('kestrel') ? ['kestrel', 'heron'] : ['heron', 'kestrel'];
+    await fireEvent.keyDown(first, { key: 'r' });
+    await waitFor(() => expect(screen.queryByText(gone)).toBeNull());
+    await waitFor(() => expect((document.activeElement as HTMLElement).getAttribute('data-row')).toBe('0'));
+    expect(document.activeElement?.textContent).toContain(kept);
+    outside.remove();
+  });
 });
 
 describe('<LocalApiScreen>', () => {
@@ -258,6 +280,12 @@ describe('<QuickAdd>', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Add' }));
     expect(await screen.findByText('Card added')).toBeTruthy();
     expect(spy).toHaveBeenCalledWith(node.deck.id, 'porsuk', 'badger', []);
+    // Ctrl+Enter adds from a field too, and the front field is ready for the next card.
+    const front = screen.getByLabelText('Front');
+    await fireEvent.input(front, { target: { value: 'tilki' } });
+    await fireEvent.keyDown(screen.getByLabelText('Back'), { key: 'Enter', ctrlKey: true });
+    await vi.waitFor(() => expect(spy).toHaveBeenCalledWith(node.deck.id, 'tilki', '', []));
+    await vi.waitFor(() => expect(document.activeElement).toBe(front));
     await fireEvent.keyDown(window, { key: 'Escape' });
     expect(shell.hide).toHaveBeenCalled();
     spy.mockRestore();

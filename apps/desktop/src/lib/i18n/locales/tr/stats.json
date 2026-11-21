@@ -293,7 +293,7 @@
       "heading": "FSRS optimizasyonu",
       "intro": "Bir şablonu kullanan destelerin tekrar geçmişinden parametre öğrenir.",
       "preset": "Şablon",
-      "none": "Önce Deste ayarları'nda bir şablon oluşturun.",
+      "none": "Önce Deste ayarları'nda bir şablon oluştur.",
       "run": "Optimize et",
       "done": "{n} parametre şablona kaydedildi (geri alınabilir).",
       "cancelled": "Optimizasyon iptal edildi.",
@@ -351,7 +351,7 @@
   },
   "errors": {
     "validation": {
-      "date": "Geçerli bir tarih girin (YYYY-AA-GG).",
+      "date": "Geçerli bir tarih gir (YYYY-AA-GG).",
       "breakdown_attribute": "Yalnızca seçimli sınıflandırmalar kırılabilir.",
       "goal_target": "Hedef değer bu hedef için aralık dışında.",
       "exam_name": "Sınava bir ad verin (en çok 100 karakter)."

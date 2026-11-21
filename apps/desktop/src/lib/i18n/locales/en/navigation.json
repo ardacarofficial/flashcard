@@ -1,6 +1,7 @@
 {
   "shell": {
     "nav_label": "Main navigation",
+    "skip_to_content": "Skip to content",
     "section": {
       "home": "Home",
       "library": "Library",

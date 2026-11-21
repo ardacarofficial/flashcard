@@ -113,6 +113,13 @@ export function formatShortDate(date: string, locale?: Locale): string {
   return d.toLocaleDateString(localeTag(locale ?? i18n.locale), { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
+/** The month of a backend `YYYY-MM-DD` day as `Kas` / `Nov` (chart axis labels). */
+export function formatShortMonth(date: string, locale?: Locale): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return date;
+  return d.toLocaleDateString(localeTag(locale ?? i18n.locale), { month: 'short', timeZone: 'UTC' });
+}
+
 const STEPS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['second', 60],
   ['minute', 60],

@@ -17,7 +17,13 @@
 
   let { groups, active, open, children }: Props = $props();
   const entries = $derived(groups.flatMap((g) => g.entries.map((e) => ({ e, group: t(g.label_key) }))));
-  const options = $derived(entries.map(({ e, group }) => ({ value: e.id, label: td(e.label_key), description: group })));
+  // The group under each page name, unless it only repeats it ("Plugins" in "Plugins").
+  const options = $derived(
+    entries.map(({ e, group }) => {
+      const label = td(e.label_key);
+      return { value: e.id, label, description: label === group ? undefined : group };
+    }),
+  );
 </script>
 
 <div class="settings">

@@ -2,7 +2,7 @@
  * Display formatting of numbers the backend computed (rates, durations). Presentation only:
  * no statistic is derived here. Thin names over `$lib/format` (the one locale-aware helper).
  */
-import { formatDecimal, formatNumber, formatPercent, formatPercent100, formatShortDate } from '$lib/format';
+import { formatDecimal, formatNumber, formatPercent, formatPercent100, formatShortDate, formatShortMonth } from '$lib/format';
 
 /** `0.873` → `87%` (`–` when there is no rate). */
 export function pct(rate: number | null | undefined, digits = 0): string {
@@ -45,6 +45,11 @@ export interface Bar {
 /** `2025-11-04` → `4 Nov` / `4 Kas` (display only; the date comes from the backend). */
 export function shortDate(date: string, locale: string): string {
   return formatShortDate(date, locale as 'tr' | 'en');
+}
+
+/** `2025-11-04` → `Nov` / `Kas` (heatmap month labels). */
+export function shortMonth(date: string, locale: string): string {
+  return formatShortMonth(date, locale as 'tr' | 'en');
 }
 
 /** Weekday of a `YYYY-MM-DD` date, Monday = 0 (heatmap rows). */

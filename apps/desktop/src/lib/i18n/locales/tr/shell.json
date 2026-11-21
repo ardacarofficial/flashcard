@@ -38,7 +38,7 @@
     },
     "app": {
       "locale": {
-        "label": "Dil",
+        "label": "Uygulama dili",
         "description": "Menülerin, mesajların ve hazır not türlerinin dili."
       },
       "theme": {

@@ -152,7 +152,7 @@
 </script>
 
 <div class="stats">
-  <PageHeader title={t('stats.heading')} />
+  <PageHeader title={t('stats.heading')} subtitle={t('stats.subtitle')} />
 
   <form
     class="filters"

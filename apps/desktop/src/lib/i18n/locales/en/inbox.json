@@ -149,6 +149,8 @@
     },
     "badge": "{count} waiting",
     "empty_other": "Nothing here yet.",
+    "empty_accepted_hint": "Proposals you accept are listed here.",
+    "empty_rejected_hint": "Proposals you reject are listed here.",
     "empty_hint": "Cards proposed by the browser extension or other programs wait here for you.",
     "edited": "Edited",
     "done": "Done editing",

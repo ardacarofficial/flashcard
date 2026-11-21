@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
   import { i18n, t } from '$lib/i18n/index.svelte';
-  import { level, shortDate, weekdayMon0 } from './format';
+  import { level, shortDate, shortMonth, weekdayMon0 } from './format';
 
   interface Props {
     days: { date: string; reviews: number }[];
@@ -40,7 +40,7 @@
       const col = c.row === 0 || i === 0 ? c.col : c.col + 1;
       if (out.length && col - out[out.length - 1]!.col < 3) return;
       if (col * STEP > w - 20) return;
-      out.push({ col, text: shortDate(c.date, i18n.locale).replace(/^\d+\.?\s*/, '') });
+      out.push({ col, text: shortMonth(c.date, i18n.locale) });
     });
     return out;
   });
@@ -134,7 +134,8 @@
 
 <style>
   .heatmap {
-    --hm-0: var(--surface-2);
+    /* Empty days stay visible on the panel (surface-1): one step above surface-2. */
+    --hm-0: var(--surface-3);
     --hm-4: light-dark(color-mix(in srgb, var(--accent) 40%, var(--accent-text)), var(--accent));
     display: flex;
     flex-direction: column;

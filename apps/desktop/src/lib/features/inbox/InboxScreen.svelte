@@ -98,6 +98,7 @@
   async function accept(chosen: InboxItemDto[]) {
     if (chosen.length === 0) return;
     notice = null;
+    const keep = listHasFocus();
     const ok = await ctx.guarded(async () => {
       const r = await api.call('inbox.accept', {
         items: chosen.map((i) => ({
@@ -113,24 +114,29 @@
       });
       notice = t('inbox.accepted', { count: r.accepted.length });
     });
-    if (ok) await reloadKeepingFocus();
+    if (ok) await reloadKeepingFocus(keep);
   }
 
   async function reject(chosen: InboxItemDto[]) {
     if (chosen.length === 0) return;
     notice = null;
+    const keep = listHasFocus();
     const ok = await ctx.guarded(async () => {
       const r = await api.call('inbox.reject', { ids: chosen.map((i) => i.id) });
       notice = t('inbox.rejected', { count: r.changed });
     });
-    if (ok) await reloadKeepingFocus();
+    if (ok) await reloadKeepingFocus(keep);
   }
 
-  /** After a row went away, the next one takes the keyboard focus (if the list had it). */
-  async function reloadKeepingFocus() {
-    const hadFocus = !!list && list.contains(document.activeElement);
+  const listHasFocus = () => !!list && list.contains(document.activeElement);
+
+  /**
+   * After a row went away, the next one takes the keyboard focus if the list had it when the
+   * action started (the `inbox_changed` reload may already have dropped the focused row).
+   */
+  async function reloadKeepingFocus(hadFocus: boolean) {
     await load();
-    if (hadFocus) await focusRow(active);
+    if (hadFocus || document.activeElement === document.body) await focusRow(active);
   }
 
   function show(s: string) {
@@ -201,11 +207,17 @@
     }
   }
 
-  /** From nowhere in particular (page focus): J / ↓ enters the list, Ctrl+Enter accepts the selection. */
+  /** Controls that own ↓ / letters themselves (fields, menus, lists, dialogs). */
+  const OWNS_KEYS = 'input, textarea, select, [contenteditable="true"], [role="combobox"], [role="listbox"], [role="menu"], [role="menuitem"], [role="option"], [role="radiogroup"], [role="radio"], [role="slider"], [role="tablist"], [role="tab"], [role="dialog"]';
+
+  /**
+   * From outside the list (page focus, or a plain button such as the sidebar item that opened
+   * the Inbox): J / ↓ enters the list, Ctrl+Enter accepts the selection.
+   */
   function onWindowKey(e: KeyboardEvent) {
     if (e.defaultPrevented || !loaded || items.length === 0) return;
     const target = e.target as HTMLElement | null;
-    if (target && target !== document.body && !target.classList.contains('fc-inbox')) return;
+    if (target && target !== document.body && (list?.contains(target) || target.closest(OWNS_KEYS))) return;
     if (pending && (e.ctrlKey || e.metaKey) && e.key === 'Enter' && picked.length > 0) {
       e.preventDefault();
       void accept(picked);
@@ -248,7 +260,7 @@
         size="sm"
         icon={pending ? Check : undefined}
         title={pending ? t('inbox.empty') : t('inbox.empty_other')}
-        description={pending ? t('inbox.empty_hint') : undefined}
+        description={pending ? t('inbox.empty_hint') : tab === 'accepted' ? t('inbox.empty_accepted_hint') : t('inbox.empty_rejected_hint')}
       />
     </div>
   {:else}
@@ -341,13 +353,16 @@
                     <IconButton size="sm" icon={Pencil} label={t('inbox.edit')} aria-keyshortcuts="E" onclick={() => void startEdit(i)} />
                   {/if}
                   <IconButton size="sm" icon={X} label={t('inbox.reject')} aria-keyshortcuts="R" onclick={() => reject([item])} />
-                  <Button
-                    size="sm"
-                    variant={i === active ? 'primary' : 'secondary'}
-                    kbd={i === active ? 'A' : undefined}
-                    aria-keyshortcuts="A"
-                    onclick={() => accept([item])}>{t('inbox.accept')}</Button
-                  >
+                  <!-- Fixed slot: the active row's `A` hint does not shift edit / reject. -->
+                  <span class="accept">
+                    <Button
+                      size="sm"
+                      variant={i === active ? 'primary' : 'secondary'}
+                      kbd={i === active ? 'A' : undefined}
+                      aria-keyshortcuts="A"
+                      onclick={() => accept([item])}>{t('inbox.accept')}</Button
+                    >
+                  </span>
                 </div>
               </div>
             {/if}
@@ -495,8 +510,9 @@
     font-size: var(--text-xs);
     color: var(--text-2);
   }
+  /* Where it came from: metadata, so neutral (the accent marks the active row and actions). */
   .source {
-    color: var(--accent-text);
+    color: var(--text-2);
     font-weight: var(--weight-medium);
   }
   .from {
@@ -529,7 +545,13 @@
     align-items: center;
     justify-content: flex-end;
     gap: 2px;
-    width: 11rem;
+    width: 12rem;
+  }
+  .accept {
+    display: flex;
+    justify-content: flex-end;
+    min-width: 7rem;
+    margin-inline-start: var(--space-1);
   }
   .keys {
     display: flex;

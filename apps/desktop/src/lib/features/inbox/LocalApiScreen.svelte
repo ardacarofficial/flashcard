@@ -11,7 +11,7 @@
   import type { ApiClientDto, ApiClientList } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import type { ScreenCtx } from '../types';
-  import { Button, Checkbox, Chip, EmptyState, Plug, Skeleton } from '$lib/ui';
+  import { Button, Checkbox, Chip, Clock, EmptyState, Plug, Skeleton } from '$lib/ui';
   import type { Tone } from '$lib/ui';
   import { SettingsPage, SettingsSection } from '../core/kit';
 
@@ -59,7 +59,7 @@
 
 <SettingsPage title={t('local_api.heading')} subtitle={list ? t('local_api.intro', { port: list.port }) : undefined}>
   {#if waiting.length > 0}
-    <SettingsSection title={t('local_api.waiting')} body="rows">
+    <SettingsSection title={t('local_api.waiting')} icon={Clock} body="rows">
       {#each waiting as c (c.id)}
         <div class="row pending">
           <div class="text">
@@ -84,7 +84,7 @@
     </SettingsSection>
   {/if}
 
-  <SettingsSection title={t('local_api.clients')} body="rows">
+  <SettingsSection title={t('local_api.clients')} icon={Plug} body="rows">
     {#if !list}
       <div class="pad"><Skeleton lines={3} /></div>
     {:else if list.clients.length === 0}
@@ -124,12 +124,12 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--space-2) var(--space-6);
-    padding: var(--space-3) var(--space-6);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
   }
-  .row + .row {
-    border-top: 1px solid var(--border);
-  }
+  /* A request waiting for a decision: marked by a warning bar, text indented past it. */
   .row.pending {
+    padding-inline-start: var(--space-3);
     box-shadow: inset 2px 0 0 var(--warning-solid);
   }
   .text {
@@ -159,7 +159,8 @@
   }
   .pad {
     margin: 0;
-    padding: var(--space-3) var(--space-6);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
   }
   fieldset {
     grid-column: 1 / -1;
@@ -184,11 +185,5 @@
     display: flex;
     justify-content: flex-end;
     gap: var(--space-2);
-  }
-  @media (max-width: 1023.98px) {
-    .row,
-    .pad {
-      padding-inline: var(--space-4);
-    }
   }
 </style>

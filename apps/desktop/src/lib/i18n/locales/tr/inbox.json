@@ -149,6 +149,8 @@
     },
     "badge": "{count} bekliyor",
     "empty_other": "Burada henüz bir şey yok.",
+    "empty_accepted_hint": "Kabul ettiğin öneriler burada listelenir.",
+    "empty_rejected_hint": "Reddettiğin öneriler burada listelenir.",
     "empty_hint": "Tarayıcı eklentisinin ya da başka programların önerdiği kartlar burada seni bekler.",
     "edited": "Düzenlendi",
     "done": "Düzenlemeyi bitir",
