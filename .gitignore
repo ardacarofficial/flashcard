@@ -2,3 +2,6 @@
 /plugins-sdk/target
 **/*.rs.bk
 node_modules/
+
+# agent worktrees
+.claude/worktrees/
