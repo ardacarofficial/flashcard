@@ -28,6 +28,8 @@
       "minutes": "{n} dk",
       "hours": "{n} sa",
       "megabytes": "{n} MB"
-    }
+    },
+    "expand": "Genişlet",
+    "collapse": "Daralt"
   }
 }

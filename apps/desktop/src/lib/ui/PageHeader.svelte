@@ -2,7 +2,8 @@
   Page header: the page's one `<h1>`, an optional subtitle and back link, chips (`meta`) and
   actions on the right. Section sub-navigation (Tabs) goes in `tabs`. The shell's own header
   parts (deck picker, section tabs — `page-chrome.ts`) are drawn here too unless
-  `chrome={false}`, so every page starts with its title.
+  `chrome={false}`, so every page starts with its title. With `back` (a sub-page) the title is
+  also appended to the top bar's trail.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -26,6 +27,13 @@
   const shell = getPageChrome();
   const shellActions = $derived(chrome ? (shell?.actions ?? null) : null);
   const shellTabs = $derived(chrome ? (shell?.tabs ?? null) : null);
+
+  // A sub-page (with a back link) puts its title in the top bar's trail; the page crumb links back.
+  $effect(() => {
+    if (!back || !shell) return;
+    shell.setTrail([{ label: title }], back.onclick);
+    return () => shell.setTrail(null);
+  });
 </script>
 
 <header class="fc-page-header {klass}">
@@ -52,19 +60,20 @@
   .fc-page-header {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
-    margin-bottom: var(--space-6);
+    gap: var(--space-1);
+    margin-bottom: var(--space-5);
   }
   .fc-page-header :global(.back) {
     align-self: flex-start;
-    margin-inline-start: calc(-1 * var(--space-3));
+    margin-inline-start: -10px;
   }
   .row {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: var(--space-4);
+    gap: var(--space-3) var(--space-4);
     flex-wrap: wrap;
+    min-height: var(--control-h-md);
   }
   .titles {
     min-width: 0;
@@ -72,20 +81,20 @@
   h1 {
     margin: 0;
     font-size: var(--text-xl);
-    font-weight: var(--weight-bold);
+    font-weight: var(--weight-semibold);
     line-height: var(--leading-tight);
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
     overflow-wrap: anywhere;
   }
   .subtitle {
-    margin: var(--space-1) 0 0;
+    margin: 2px 0 0;
     color: var(--text-2);
     font-size: var(--text-sm);
   }
   .meta {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2);
+    gap: var(--space-1);
     margin-top: var(--space-2);
   }
   .actions {
@@ -95,6 +104,6 @@
     flex-wrap: wrap;
   }
   .tabs {
-    margin-top: var(--space-3);
+    margin-top: var(--space-2);
   }
 </style>

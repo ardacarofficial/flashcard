@@ -1,4 +1,10 @@
-# `$lib/ui` — design system (docs/11 §4)
+# `$lib/ui` — design system (docs/11 §4, v1.2 brief `.orchestra/DESIGN-BRIEF.md`)
+
+v1.2 look: dark-first, dense, 1px borders and surface steps instead of shadows, one amber
+accent. Body 13 px (`--text-sm`), controls 28/32/36 (`--control-h-sm|md|lg`), rows 34
+(`--row-h`), radius 6 controls / 8 panels / 12 only the study flashcard, focus = 2 px ring
+with 2 px offset. Numbers, counts, durations and key hints use JetBrains Mono
+(`--font-mono`, bundled; `<span class="num">` = mono + tabular figures).
 
 Every screen builds its UI from these components and the tokens in `src/lib/theme/tokens.css`.
 Lazy screens import from the barrel: `import { Button, Select, Plus } from '$lib/ui';`.
@@ -14,11 +20,15 @@ Rules for screen lanes:
 
 - **No raw controls**: no `<select>`, `<input type="checkbox|radio">` outside this folder
   (lint: `tests/raw-controls.test.ts`, no allow-list — zero exceptions since v1.1).
-- **No raw colours / sizes**: use tokens (`--surface-0/1/2`, `--text-1/2/3`, `--accent`,
-  `--accent-fg`, `--accent-soft`, `--success|warning|danger` (+ `-solid`, `-solid-fg`, `-soft`),
-  `--border`, `--border-strong`, `--space-1…16`, `--radius-control|card|lg|pill`,
-  `--shadow-1|2`, `--text-xs…3xl`, `--motion-fast|motion|motion-slow`). The `--fc-*`
-  variables are the backend theme layer — don't use them in new code.
+- **No raw colours / sizes**: use tokens (`--surface-0/1/2/3` (app bg, panels, raised/hover,
+  selected), `--text-1/2/3` (3 = placeholders and decorative icons only), `--border`,
+  `--border-strong`; accent: `--accent` (fill) + `--accent-fg` (text on it), `--accent-text`
+  (the accent as text or icon on a surface: AA, darker in light — never `color: var(--accent)`),
+  `--accent-soft` (14% tint); `--success|warning|danger` (+ `-solid`, `-solid-fg`, `-soft`);
+  `--space-1…16`, `--radius-control|card|lg|flashcard|pill`, `--shadow-float` (floating layers
+  only; `--shadow-1` is a no-op), `--backdrop`, `--text-2xs…3xl`, `--font-mono`,
+  `--control-h-*`, `--row-h`, `--motion-fast|motion|motion-slow`). The `--fc-*` variables are
+  the backend theme layer — don't use them in new code.
 - **All text is i18n**: components take translated strings (`label={t('…')}`); their own
   built-in texts are under `ui.*` (`locales/*/ui.json`).
 - **Icons**: only via `icons.ts` (Lucide subset). Need a new one? Add it to `icons.ts`.
@@ -43,7 +53,7 @@ Common props: most components accept `class`; sizes are `'sm' | 'md' | 'lg'`; to
 
 | Component | Props | Usage |
 |---|---|---|
-| **Button** | `variant` primary/secondary(default)/ghost/danger · `size` · `loading` · `icon` · `iconEnd` · `fullWidth` · `disabled` · `type` · `bind:element` · any `<button>` attr · children | `<Button variant="primary" icon={Plus} onclick={add}>{t('deck.new')}</Button>` |
+| **Button** | `variant` primary/secondary(default)/ghost/danger · `size` · `loading` · `icon` · `iconEnd` · `kbd` (key hint after the label, e.g. `"N"`, `"Mod+Enter"`; also set `aria-keyshortcuts`) · `fullWidth` · `disabled` · `type` · `bind:element` · any `<button>` attr · children | `<Button variant="primary" icon={Plus} kbd="N" onclick={add}>{t('deck.new')}</Button>` |
 | **IconButton** | `icon` · `label` (required: accessible name + hover hint) · `variant` ghost(default)/secondary/primary/danger · `size` · `pressed` (toggle) · `loading` | `<IconButton icon={Pencil} label={t('common.rename')} onclick={edit} />` |
 | **Menu** | `items: MenuItem[]` (`{id,label,icon?,keys?,danger?,disabled?,onselect}` or `{id,separator:true}`) · `label` (trigger name, default "More actions") · `icon` · `trigger` snippet (custom content) · `align` start/end · `placement` bottom/top | `<Menu items={[{ id: 'del', label: t('common.delete'), danger: true, onselect: del }]} />` |
 | **Tile** | `icon` · `title` · `description?` · `meta?` · `disabled` · `onclick` · `testid` (`data-testid`) | `<Tile icon={Repeat} title={t('…')} description={t('…')} onclick={learn} />` |
@@ -73,14 +83,16 @@ All wrap **Field** (label, hint, error with `aria-describedby`/`aria-invalid`). 
 | **Chip** | `label` / children · `tone` · `icon` · `size` sm/md · `selected` + `onclick` (toggle, `aria-pressed`) · `onremove` (× button) | `<Chip tone="accent" label="B1" />` |
 | **Badge** | `count` (hidden when 0/null; `max` → "99+") · `tone` · `variant` solid/soft · `label` (accessible text) · children | `<Badge count={n} label={t('…', { count: n })} />` |
 | **Avatar** | `name` (initials) · `src?` · `size` · `label?` (decorative without) | `<Avatar name={profile} />` |
-| **Kbd** | `keys: string[] \| 'Mod+K'` — `Mod` = ⌘ on macOS, Ctrl elsewhere | `<Kbd keys={['Mod', 'K']} />` |
+| **Kbd** | `keys: string[] \| 'Mod+K'` — `Mod` = ⌘ on macOS, Ctrl elsewhere · `size` sm (18 px, in buttons/fields)/md — mono | `<Kbd keys={['Mod', 'K']} />` |
+| **StatTile** | `label` · `value` (formatted) · `unit?` · `hint?` · `icon?` · `tone` · `size` sm/md · children (sparkline…) · `testid` — big mono figure | `<StatTile label={t('…')} value={formatCount(n)} hint={t('…')} />` |
 | **Icon** | `icon` (from `icons.ts`) · `size` (16/20/24) · `strokeWidth` · `label?` (decorative without) | `<Icon icon={Search} size={20} />` |
 | **ProgressBar** | `label` (required) · `value` · `max` · or `segments: {value,label,tone}[]` (stacked, labels in the accessible name) · `tone` · `size` · `showValue` | `<ProgressBar label={t('…')} segments={[{ value: 3, label: t('…'), tone: 'success' }]} />` |
 | **ProgressRing** | `label` · `value` · `max` · `size` px · `stroke` · `tone` · children (centre content, default %) | `<ProgressRing label={t('…')} value={score} />` |
 | **EmptyState** | `title` · `description?` · `icon?` · `action?: {label,onclick,icon?}` (one action) · `size` sm/md | `<EmptyState title={t('…')} action={{ label: t('…'), onclick: create }} />` |
 | **Skeleton** | `width` · `height` · `shape` text/control/card/circle · `lines` | `<Skeleton shape="card" />` |
 | **Spinner** | `size` (decorative; announce loading in text) | `<Spinner />` |
-| **Table** | `rows` · `columns: TableColumn<T>[]` (`{id,header,width?,align?,value?}`) · `rowKey` · `label` · `rowHeight` (fixed, 44) · `height` (CSS) · `bind:activeKey` · `selectedKeys` · `onrowclick` · `cell` snippet `(row, column)` · `empty` snippet — virtualised grid; ↑/↓ PgUp/PgDn Home/End, Enter | `<Table rows={cards} {columns} rowKey={(c) => c.id} label={t('…')} onrowclick={open} />` |
+| **ListRow** | `label` · `sub?` · `onclick` (row button) · `buttonLabel?` · `depth` · `expanded?` + `ontoggle` (tree chevron) · `active` · `selected` · `header` · `cellColumns` (grid tracks of `cells`) · `leading` / children / `cells` / `actions` snippets (actions show on hover/focus) · `testid` — one dense 34 px row of a list or tree-table, inside a `<ul>` | `<ListRow label={d.name} onclick={open} cellColumns="56px 56px" depth={1}>{#snippet cells()}<span class="num">{due}</span>{/snippet}</ListRow>` |
+| **Table** | `rows` · `columns: TableColumn<T>[]` (`{id,header,width?,align?,numeric?,value?}`; `numeric` = mono tabular cell) · `rowKey` · `label` · `rowHeight` (fixed, 34) · `height` (CSS) · `bind:activeKey` · `selectedKeys` · `onrowclick` · `cell` snippet `(row, column)` · `empty` snippet — virtualised grid; ↑/↓ PgUp/PgDn Home/End, Enter | `<Table rows={cards} {columns} rowKey={(c) => c.id} label={t('…')} onrowclick={open} />` |
 | **NumberedRow** | `n` · `invalid` · `error` · `actions` snippet · children (the row's fields) — one numbered card of an editable list (Create's rows), inside an `<ol>` | `<NumberedRow n={i + 1}>…{#snippet actions()}…{/snippet}</NumberedRow>` |
 | **Flashcard** | `front` / `back` snippets · `bind:flipped` · `onflip(flipped)` · `disabled` · `instant` · `fit` (shrink long text, default on) · `size` md/lg — Space/Enter/click flip; 3D flip off under `prefers-reduced-motion` | `<Flashcard bind:flipped>{#snippet front()}…{/snippet}{#snippet back()}…{/snippet}</Flashcard>` |
 
@@ -96,12 +108,21 @@ All wrap **Field** (label, hint, error with `aria-describedby`/`aria-invalid`). 
 
 | Component | Props | Usage |
 |---|---|---|
-| **PageHeader** | `title` (the page's `<h1>`) · `subtitle?` · `back?: {label,onclick}` · `meta` snippet (chips) · `actions` snippet · `tabs` snippet · `chrome` (default true: also draws the shell's deck picker among the actions and the section tabs under the title — `page-chrome.ts`; `false` on sub-pages like the deck page) | `<PageHeader title={deck.name}>{#snippet actions()}<Menu …/>{/snippet}</PageHeader>` |
+| **PageHeader** | `title` (the page's `<h1>`) · `subtitle?` · `back?: {label,onclick}` (a sub-page: the title also goes into the top bar's trail, whose page crumb then links back) · `meta` snippet (chips) · `actions` snippet · `tabs` snippet · `chrome` (default true: also draws the shell's deck picker among the actions and the section tabs under the title — `page-chrome.ts`; `false` on sub-pages like the deck page) | `<PageHeader title={deck.name}>{#snippet actions()}<Menu …/>{/snippet}</PageHeader>` |
 | **Tabs** | `tabs: TabItem[]` (`{id,label,icon?,badge?,disabled?}`) · `bind:value` · `label` · `variant` line/pill · `onchange(id)` · children snippet `(id)` (panel) | `<Tabs label={t('…')} {tabs} bind:value={tab} />` |
 | **Sidebar** | `label` · `collapsed` · `header` / children (NavItems) / `footer` snippets — icon-only below 1024 px | (app shell) |
-| **NavItem** | `label` · `icon` · `active` · `accent` · `badge` · `badgeLabel` · `collapsed` · `onclick` · `leading` snippet | (app shell) |
+| **NavItem** | `label` · `icon` · `active` · `accent` (accent-coloured icon) · `badge` (mono count) · `badgeLabel` · `collapsed` · `onclick` · `leading` snippet — 30 px rows | (app shell) |
 
 ## Shell (`src/lib/shell/`)
+
+- Layout (v1.2): 216 px sidebar (`AppSidebar`) | a column with the 44 px **top bar**
+  (`TopBar.svelte`) over `main .page`. The top bar shows the trail (section › page, plus what
+  the screen appends with `getPageChrome()?.setTrail(crumbs, up)` — `PageHeader` with `back`
+  does it for you), the search-or-command field (opens the palette; the Search page when the
+  palette module is off) and **Kart ekle** (`N`).
+- `commands.svelte.ts` — shell entry points: `openQuickAdd()` (top bar button, `N`, `Ctrl+N`;
+  the shell's fallback opens the Create page until the Quick Add dialog calls
+  `setQuickAddHandler`), `openPalette()` (ShortcutHost registers it), `shellCommands`.
 
 - `navigation.ts` — the only place mapping module routes to the 5 sections, the Inbox or a
   Settings group (`PLACEMENTS`). A new module screen: add its route there. Order within a
@@ -110,8 +131,8 @@ All wrap **Field** (label, hint, error with `aria-describedby`/`aria-invalid`). 
   `PLACEMENTS` keeps a page out of the tabs — the study modes, opened from the deck page tiles
   and Home); Settings shows a grouped sub-navigation. Home is `features/home/HomeScreen.svelte`.
 - A study screen calls `ctx.setFocus(true)` while a session runs (and on its end screen): the
-  shell hides the deck picker and the tabs and centres the column (focus layout); it resets on
-  every page change.
+  shell hides the top bar, the deck picker and the tabs and centres the column (focus layout);
+  it resets on every page change. Focus mode (`F`, FocusToggle) also hides the sidebar.
 - The deck picker (`deckPicker: true`) and the section tabs are not drawn above the screen: the
   shell hands them to the screen's `PageHeader` (`setPageChrome`), so the title comes first.
 - Settings below 1024 px: the grouped sub-navigation collapses into one Select on top.

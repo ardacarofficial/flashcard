@@ -133,7 +133,7 @@
     onclick={() => (open ? hide() : void show())}
     onkeydown={ontriggerkey}
   >
-    {#if trigger}{@render trigger()}{:else}<Icon {icon} size={20} />{/if}
+    {#if trigger}{@render trigger()}{:else}<Icon {icon} size={16} />{/if}
   </button>
   {#if open}
     <div id={menuId} role="menu" tabindex="-1" class="list {align} {placement}" aria-label={label ?? t('ui.more')} onkeydown={onmenukey}>
@@ -149,9 +149,9 @@
             aria-disabled={item.disabled || undefined}
             onclick={() => run(item)}
           >
-            {#if item.icon}<Icon icon={item.icon} size={16} />{/if}
+            {#if item.icon}<span class="ico"><Icon icon={item.icon} size={14} /></span>{/if}
             <span class="label">{item.label}</span>
-            {#if item.keys}<Kbd keys={item.keys} />{/if}
+            {#if item.keys}<Kbd keys={item.keys} size="sm" />{/if}
           </button>
         {:else}
           <div role="separator" class="sep"></div>
@@ -199,9 +199,16 @@
     min-width: 200px;
     padding: var(--space-1);
     background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-control);
-    box-shadow: var(--shadow-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-float);
+    animation: fc-menu-in var(--motion-fast) var(--ease);
+  }
+  @keyframes fc-menu-in {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
   }
   .bottom {
     top: calc(100% + var(--space-1));
@@ -220,20 +227,29 @@
     align-items: center;
     gap: var(--space-2);
     width: 100%;
-    padding: var(--space-2) var(--space-3);
+    min-height: 28px;
+    padding: 4px var(--space-2);
     border: none;
-    border-radius: 6px;
+    border-radius: 4px;
     background: transparent;
     color: var(--text-1);
     font: inherit;
     font-size: var(--text-sm);
     text-align: start;
+    white-space: nowrap;
     cursor: pointer;
   }
   .item:hover,
   .item:focus {
-    background: var(--surface-2);
+    background: var(--surface-3);
     outline: none;
+  }
+  .ico {
+    display: inline-flex;
+    color: var(--text-2);
+  }
+  .danger .ico {
+    color: inherit;
   }
   .item:focus-visible {
     outline: 2px solid var(--focus-ring);

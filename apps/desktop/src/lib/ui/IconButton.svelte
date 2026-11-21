@@ -30,7 +30,7 @@
     ...rest
   }: Props = $props();
 
-  const iconSize = $derived(size === 'sm' ? 16 : 20);
+  const iconSize = $derived(size === 'sm' ? 14 : size === 'lg' ? 18 : 16);
 </script>
 
 <button
@@ -71,8 +71,8 @@
     outline-offset: 2px;
   }
   .fc-iconbtn[aria-pressed='true'] {
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--surface-3);
+    color: var(--accent-text);
   }
   .sm {
     width: var(--control-h-sm);
@@ -83,9 +83,13 @@
     height: var(--control-h-lg);
   }
   .secondary {
-    background: var(--surface-1);
-    border-color: var(--border-strong);
+    background: var(--surface-2);
+    border-color: var(--border);
     color: var(--text-1);
+  }
+  .secondary:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--border-strong);
   }
   .primary {
     background: var(--accent);
@@ -96,6 +100,10 @@
     color: var(--accent-fg);
   }
   .danger {
+    color: var(--danger);
+  }
+  .danger:hover:not(:disabled) {
+    background: var(--danger-soft);
     color: var(--danger);
   }
   .fc-iconbtn:disabled {

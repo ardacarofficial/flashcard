@@ -48,7 +48,7 @@
   .fc-chip {
     display: inline-flex;
     align-items: center;
-    height: 24px;
+    height: 22px;
     border-radius: var(--radius-pill);
     font-size: var(--text-xs);
     font-weight: var(--weight-medium);
@@ -58,14 +58,14 @@
     max-width: 100%;
   }
   .md {
-    height: 28px;
+    height: 24px;
   }
   .main {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
     height: 100%;
-    padding: 0 var(--space-3);
+    padding: 0 10px;
     border: none;
     background: none;
     color: inherit;
@@ -103,12 +103,14 @@
   }
   .neutral {
     background: var(--surface-2);
-    color: var(--text-1);
+    color: var(--text-2);
     border-color: var(--border);
   }
   .accent {
-    background: var(--accent-soft);
-    color: var(--text-1);
+    /* Opaque tint: stays AA on selected (tinted) rows too. */
+    background: color-mix(in srgb, var(--accent) 14%, var(--surface-1));
+    color: var(--accent-text);
+    border-color: color-mix(in srgb, var(--accent) 28%, transparent);
   }
   .success {
     background: var(--success-soft);
@@ -126,8 +128,8 @@
     border-color: var(--border-strong);
   }
   .selected {
-    background: var(--accent);
-    color: var(--accent-fg);
-    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, var(--surface-1));
+    color: var(--accent-text);
+    border-color: var(--accent-text);
   }
 </style>

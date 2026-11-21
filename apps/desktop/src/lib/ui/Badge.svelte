@@ -33,11 +33,12 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 20px;
-    height: 20px;
-    padding: 0 6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
     border-radius: var(--radius-pill);
-    font-size: var(--text-xs);
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
     font-weight: var(--weight-semibold);
     line-height: 1;
     font-variant-numeric: tabular-nums;
@@ -63,8 +64,8 @@
     color: var(--danger-solid-fg);
   }
   .soft.accent {
-    background: var(--accent-soft);
-    color: var(--text-1);
+    background: color-mix(in srgb, var(--accent) 14%, var(--surface-1));
+    color: var(--accent-text);
   }
   .soft.neutral {
     background: var(--surface-2);

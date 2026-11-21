@@ -15,8 +15,8 @@
   .fc-toasts {
     position: fixed;
     z-index: 200;
-    bottom: var(--space-6);
-    right: var(--space-6);
+    bottom: var(--space-4);
+    right: var(--space-4);
     display: flex;
     flex-direction: column;
     align-items: flex-end;

@@ -67,10 +67,12 @@
   .tip {
     position: absolute;
     z-index: 60;
-    padding: var(--space-1) var(--space-2);
-    border-radius: 6px;
-    background: var(--text-1);
-    color: var(--surface-1);
+    padding: 3px var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: var(--surface-3);
+    color: var(--text-1);
+    box-shadow: var(--shadow-float);
     font-size: var(--text-xs);
     font-weight: var(--weight-medium);
     line-height: var(--leading-tight);

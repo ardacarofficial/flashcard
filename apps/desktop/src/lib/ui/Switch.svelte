@@ -62,8 +62,9 @@
   button {
     position: relative;
     flex: none;
-    width: 36px;
-    height: 20px;
+    width: 30px;
+    height: 18px;
+    margin-top: 1px;
     padding: 0;
     border: none;
     border-radius: var(--radius-pill);
@@ -85,15 +86,17 @@
     position: absolute;
     top: 2px;
     left: 2px;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    background: #ffffff;
-    box-shadow: var(--shadow-1);
-    transition: transform var(--motion) var(--ease);
+    background: var(--text-1);
+    transition:
+      transform var(--motion) var(--ease),
+      background-color var(--motion) var(--ease);
   }
   button[aria-checked='true'] .thumb {
-    transform: translateX(16px);
+    transform: translateX(12px);
+    background: var(--accent-fg);
   }
   .text {
     display: flex;

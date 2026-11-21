@@ -20,12 +20,12 @@
 </script>
 
 <div class="fc-empty {size} {klass}">
-  {#if icon}<span class="icon"><Icon {icon} size={size === 'sm' ? 20 : 28} /></span>{/if}
+  {#if icon}<span class="icon"><Icon {icon} size={size === 'sm' ? 16 : 20} /></span>{/if}
   <p class="title">{title}</p>
   {#if description}<p class="desc">{description}</p>{/if}
   {#if children}{@render children()}{/if}
   {#if action}
-    <Button variant="primary" icon={action.icon} onclick={action.onclick}>{action.label}</Button>
+    <Button variant="primary" size="sm" icon={action.icon} onclick={action.onclick}>{action.label}</Button>
   {/if}
 </div>
 
@@ -35,27 +35,28 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-2);
-    padding: var(--space-12) var(--space-6);
+    padding: var(--space-8) var(--space-6);
     text-align: center;
     color: var(--text-1);
   }
   .sm {
-    padding: var(--space-6) var(--space-4);
+    padding: var(--space-4) var(--space-4);
   }
   .icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 56px;
-    height: 56px;
-    margin-bottom: var(--space-2);
-    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    margin-bottom: var(--space-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
     background: var(--surface-2);
     color: var(--text-2);
   }
   .sm .icon {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
   }
   .title {
     margin: 0;

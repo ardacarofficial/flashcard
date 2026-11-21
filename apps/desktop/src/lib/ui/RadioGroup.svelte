@@ -63,9 +63,9 @@
   legend {
     padding: 0;
     margin-bottom: var(--space-1);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     font-weight: var(--weight-medium);
-    color: var(--text-1);
+    color: var(--text-2);
   }
   .opt {
     position: relative;
@@ -83,24 +83,27 @@
   }
   input {
     position: absolute;
-    width: 18px;
-    height: 18px;
-    margin: 1px 0 0;
+    width: 16px;
+    height: 16px;
+    margin: 2px 0 0;
     opacity: 0;
     cursor: inherit;
   }
   .dot {
     flex: none;
-    width: 18px;
-    height: 18px;
-    margin-top: 1px;
-    border: 1.5px solid var(--text-2);
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    border: 1px solid var(--text-3);
     border-radius: 50%;
-    background: var(--surface-1);
+    background: var(--surface-2);
+  }
+  .opt:hover .dot {
+    border-color: var(--text-2);
   }
   input:checked + .dot {
-    border-color: var(--accent);
-    background: radial-gradient(circle, var(--accent) 0 4px, var(--surface-1) 5px);
+    border: 5px solid var(--accent);
+    background: var(--accent-fg);
   }
   input:focus-visible + .dot {
     outline: 2px solid var(--focus-ring);

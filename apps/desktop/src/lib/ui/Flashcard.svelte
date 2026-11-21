@@ -1,7 +1,7 @@
 <!--
   Flashcard: a large card that flips between `front` and `back` on click, Space or Enter.
   3D flip of `--motion-slow`; with `prefers-reduced-motion` (or `instant`) the faces swap
-  without animation. Text is large (32 px) and shrinks to fit long content (down to 16 px).
+  without animation. Text is large (36 px) and shrinks to fit long content (down to 16 px).
   `bind:flipped`; `onflip(flipped)` after each user flip. Answer buttons live outside.
 -->
 <script lang="ts">
@@ -60,7 +60,7 @@
     if (!el || !fit) return;
     const inner = el.firstElementChild as HTMLElement | null;
     if (!inner) return;
-    let px = size === 'lg' ? 32 : 24;
+    let px = size === 'lg' ? 36 : 24;
     inner.style.fontSize = `${px}px`;
     while (px > 16 && inner.scrollHeight > el.clientHeight && el.clientHeight > 0) {
       px -= 2;
@@ -111,7 +111,7 @@
     margin-inline: auto;
     perspective: 1600px;
     cursor: pointer;
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-flashcard);
   }
   .md {
     max-width: 560px;
@@ -119,7 +119,7 @@
   }
   .fc-flashcard:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 4px;
+    outline-offset: 2px;
   }
   .disabled {
     cursor: default;
@@ -142,9 +142,8 @@
     padding: var(--space-8);
     overflow: hidden;
     background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-flashcard);
     backface-visibility: hidden;
     color: var(--text-1);
   }
@@ -154,7 +153,7 @@
   .content {
     max-width: 100%;
     max-height: 100%;
-    font-size: 32px;
+    font-size: 36px;
     line-height: var(--leading-tight);
     text-align: center;
     overflow-wrap: anywhere;

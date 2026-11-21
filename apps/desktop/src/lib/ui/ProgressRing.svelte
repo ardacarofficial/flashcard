@@ -66,7 +66,7 @@
     inset: 0;
   }
   .bg {
-    stroke: var(--surface-2);
+    stroke: var(--surface-3);
   }
   .fg {
     transition: stroke-dashoffset var(--motion-slow) var(--ease);
@@ -88,8 +88,10 @@
   }
   .center {
     position: relative;
+    font-family: var(--font-mono);
     font-weight: var(--weight-semibold);
     color: var(--text-1);
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
   }
 </style>

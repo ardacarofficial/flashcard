@@ -32,7 +32,8 @@
     flex: none;
     overflow: hidden;
     border-radius: 50%;
-    background: var(--accent-soft);
+    background: var(--surface-3);
+    border: 1px solid var(--border-strong);
     color: var(--text-1);
     font-weight: var(--weight-semibold);
     line-height: 1;
@@ -44,13 +45,13 @@
     font-size: 10px;
   }
   .md {
-    width: 32px;
-    height: 32px;
-    font-size: var(--text-xs);
+    width: 28px;
+    height: 28px;
+    font-size: var(--text-2xs);
   }
   .lg {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     font-size: var(--text-md);
   }
   img {

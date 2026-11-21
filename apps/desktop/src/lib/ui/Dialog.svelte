@@ -126,7 +126,7 @@
   .backdrop {
     position: absolute;
     inset: 0;
-    background: rgb(0 0 0 / 0.4);
+    background: var(--backdrop);
     animation: fc-fade var(--motion) var(--ease);
   }
   .panel {
@@ -137,8 +137,8 @@
     max-height: 100%;
     background: var(--surface-1);
     color: var(--text-1);
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow-2);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-float);
     outline: none;
   }
   .panel.dialog {
@@ -172,11 +172,12 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-4);
-    padding: var(--space-6) var(--space-6) var(--space-4);
+    padding: var(--space-4) var(--space-4) var(--space-3) var(--space-5);
   }
   h2 {
     margin: 0;
-    font-size: var(--text-lg);
+    padding-top: 3px;
+    font-size: var(--text-md);
     font-weight: var(--weight-semibold);
     line-height: var(--leading-tight);
   }
@@ -186,15 +187,21 @@
     font-size: var(--text-sm);
   }
   .body {
-    padding: 0 var(--space-6) var(--space-6);
+    padding: 0 var(--space-5) var(--space-5);
     overflow: auto;
   }
   footer {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     gap: var(--space-2);
-    padding: var(--space-4) var(--space-6);
+    padding: var(--space-3) var(--space-4);
     border-top: 1px solid var(--border);
+    background: var(--surface-0);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  }
+  .sheet footer {
+    border-radius: 0;
   }
   .sheet .body {
     flex: 1;
@@ -207,12 +214,12 @@
   @keyframes fc-pop {
     from {
       opacity: 0;
-      transform: translateY(8px) scale(0.98);
+      transform: translateY(4px) scale(0.99);
     }
   }
   @keyframes fc-slide {
     from {
-      transform: translateX(24px);
+      transform: translateX(16px);
       opacity: 0;
     }
   }

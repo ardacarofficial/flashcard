@@ -79,7 +79,7 @@
   .fc-seg {
     display: inline-flex;
     gap: 2px;
-    padding: 3px;
+    padding: 2px;
     border-radius: var(--radius-control);
     background: var(--surface-2);
     border: 1px solid var(--border);
@@ -95,20 +95,20 @@
     align-items: center;
     justify-content: center;
     gap: var(--space-1);
-    height: calc(var(--control-h-md) - 8px);
-    padding: 0 var(--space-3);
-    border: none;
-    border-radius: 6px;
+    height: calc(var(--control-h-md) - 6px);
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: 4px;
     background: transparent;
     color: var(--text-2);
     font: inherit;
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     font-weight: var(--weight-medium);
     cursor: pointer;
     transition: background-color var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
   }
   .sm button {
-    height: calc(var(--control-h-sm) - 8px);
+    height: calc(var(--control-h-sm) - 6px);
     font-size: var(--text-xs);
     padding: 0 var(--space-2);
   }
@@ -116,9 +116,9 @@
     color: var(--text-1);
   }
   button[aria-checked='true'] {
-    background: var(--surface-1);
+    background: var(--surface-3);
+    border-color: var(--border-strong);
     color: var(--text-1);
-    box-shadow: var(--shadow-1);
   }
   button:focus-visible {
     outline: 2px solid var(--focus-ring);

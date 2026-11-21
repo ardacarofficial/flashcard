@@ -54,9 +54,9 @@
     min-width: 0;
   }
   label {
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     font-weight: var(--weight-medium);
-    color: var(--text-1);
+    color: var(--text-2);
   }
   .req {
     color: var(--danger);

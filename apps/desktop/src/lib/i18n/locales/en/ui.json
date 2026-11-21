@@ -28,6 +28,8 @@
       "minutes": "{n} min",
       "hours": "{n} h",
       "megabytes": "{n} MB"
-    }
+    },
+    "expand": "Expand",
+    "collapse": "Collapse"
   }
 }

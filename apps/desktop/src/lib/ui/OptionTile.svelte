@@ -74,8 +74,8 @@
     align-items: center;
     gap: var(--space-3);
     width: 100%;
-    min-height: 64px;
-    padding: var(--space-3) var(--space-4);
+    min-height: 48px;
+    padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
     background: var(--surface-1);
@@ -102,26 +102,26 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     border: 1px solid var(--border-strong);
-    border-radius: 6px;
+    border-radius: 4px;
     color: var(--text-2);
-    font-size: var(--text-xs);
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
     font-weight: var(--weight-semibold);
   }
   .fc-option:hover:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    border-color: var(--border-strong);
+    background: var(--surface-2);
   }
   .fc-option:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
   .fc-option.checked {
-    border-color: var(--accent);
+    border-color: var(--accent-text);
     background: var(--accent-soft);
-    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .fc-option.checked .letter {
     border-color: var(--accent);

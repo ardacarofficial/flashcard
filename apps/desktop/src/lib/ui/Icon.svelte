@@ -7,7 +7,7 @@
 
   interface Props {
     icon: IconNode;
-    /** Pixel size (16 inline, 20 controls, 24 navigation). */
+    /** Pixel size (14 small controls, 16 inline and navigation, 20 large). */
     size?: number;
     strokeWidth?: number;
     /** Accessible name; omit for decorative icons. */
@@ -15,7 +15,7 @@
     class?: string;
   }
 
-  let { icon, size = 16, strokeWidth = 2, label, class: klass = '' }: Props = $props();
+  let { icon, size = 16, strokeWidth = 1.75, label, class: klass = '' }: Props = $props();
 
   type Child = readonly [string, Record<string, string | number>];
   const esc = (v: string | number) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');

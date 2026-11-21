@@ -34,8 +34,8 @@
     align-items: flex-start;
     gap: var(--space-1);
     width: 100%;
-    min-height: 120px;
-    padding: var(--space-4);
+    min-height: 0;
+    padding: var(--space-3);
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
     background: var(--surface-1);
@@ -43,11 +43,11 @@
     font: inherit;
     text-align: start;
     cursor: pointer;
-    transition: border-color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease);
+    transition: border-color var(--motion-fast) var(--ease), background-color var(--motion-fast) var(--ease);
   }
   .fc-tile:hover:not(:disabled) {
-    border-color: var(--accent);
-    box-shadow: var(--shadow-1);
+    border-color: var(--border-strong);
+    background: var(--surface-2);
   }
   .fc-tile:focus-visible {
     outline: 2px solid var(--focus-ring);
@@ -61,27 +61,29 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    margin-bottom: var(--space-2);
+    width: 28px;
+    height: 28px;
+    margin-bottom: var(--space-1);
+    border: 1px solid var(--border);
     border-radius: var(--radius-control);
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--surface-2);
+    color: var(--accent-text);
   }
   .title {
-    font-size: var(--text-md);
+    font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
   }
   .desc {
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     color: var(--text-2);
     line-height: var(--leading-tight);
   }
   .meta {
     position: absolute;
-    top: var(--space-4);
-    inset-inline-end: var(--space-4);
-    font-size: var(--text-xs);
+    top: var(--space-3);
+    inset-inline-end: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
     color: var(--text-2);
   }
 </style>

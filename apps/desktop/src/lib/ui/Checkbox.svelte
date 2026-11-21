@@ -58,7 +58,7 @@
       onchange={() => onchange?.(checked)}
     />
     <span class="box" aria-hidden="true">
-      {#if indeterminate}<Icon icon={Minus} size={14} strokeWidth={3} />{:else if checked}<Icon icon={Check} size={14} strokeWidth={3} />{/if}
+      {#if indeterminate}<Icon icon={Minus} size={12} strokeWidth={3} />{:else if checked}<Icon icon={Check} size={12} strokeWidth={3} />{/if}
     </span>
   </span>
   {#if label || children || description}
@@ -79,6 +79,9 @@
     font-size: var(--text-sm);
     line-height: 20px;
   }
+  .fc-check:hover .box {
+    border-color: var(--text-2);
+  }
   .disabled {
     opacity: 0.55;
     cursor: default;
@@ -87,9 +90,9 @@
     position: relative;
     display: inline-flex;
     flex: none;
-    width: 18px;
-    height: 18px;
-    margin-top: 1px;
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
   }
   input {
     position: absolute;
@@ -102,11 +105,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
-    border: 1.5px solid var(--text-2);
-    border-radius: 5px;
-    background: var(--surface-1);
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--text-3);
+    border-radius: 4px;
+    background: var(--surface-2);
     color: var(--accent-fg);
     transition: background-color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease);
   }

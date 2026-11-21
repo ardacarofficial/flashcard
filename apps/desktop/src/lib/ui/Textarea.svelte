@@ -60,10 +60,10 @@
 <style>
   textarea {
     width: 100%;
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--border-strong);
+    padding: 6px 10px;
+    border: 1px solid var(--border);
     border-radius: var(--radius-control);
-    background: var(--surface-1);
+    background: var(--surface-2);
     color: var(--text-1);
     font: inherit;
     font-size: var(--text-sm);
@@ -71,17 +71,24 @@
     resize: vertical;
   }
   textarea::placeholder {
-    color: var(--text-2);
+    color: var(--text-3);
+  }
+  textarea:hover:not(:disabled) {
+    border-color: var(--border-strong);
   }
   textarea:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-    border-color: var(--accent);
+    outline-offset: 2px;
+  }
+  textarea:focus {
+    border-color: var(--border-strong);
+    background: var(--surface-1);
   }
   textarea.invalid {
     border-color: var(--danger);
   }
   textarea:disabled {
-    opacity: 0.55;
+    background: var(--disabled-bg);
+    color: var(--disabled-fg);
   }
 </style>

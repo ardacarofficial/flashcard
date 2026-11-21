@@ -37,7 +37,7 @@
 <Field {label} {hint} {error} {hideLabel} required={!!required} id={id ?? undefined} class={String(klass ?? "")}>
   {#snippet control({ id: cid, describedBy, invalid })}
     <div class="fc-input {size}" class:invalid class:has-icon={!!icon}>
-      {#if icon}<span class="lead"><Icon {icon} size={16} /></span>{/if}
+      {#if icon}<span class="lead"><Icon {icon} size={14} /></span>{/if}
       <input
         bind:this={element}
         bind:value
@@ -61,46 +61,65 @@
   input {
     width: 100%;
     height: var(--control-h-md);
-    padding: 0 var(--space-3);
-    border: 1px solid var(--border-strong);
+    padding: 0 10px;
+    border: 1px solid var(--border);
     border-radius: var(--radius-control);
-    background: var(--surface-1);
+    background: var(--surface-2);
     color: var(--text-1);
     font: inherit;
     font-size: var(--text-sm);
-    transition: border-color var(--motion-fast) var(--ease);
+    transition:
+      border-color var(--motion-fast) var(--ease),
+      background-color var(--motion-fast) var(--ease);
   }
   input::placeholder {
-    color: var(--text-2);
+    color: var(--text-3);
   }
   input:hover:not(:disabled) {
-    border-color: var(--text-2);
+    border-color: var(--border-strong);
   }
   input:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-    border-color: var(--accent);
+    outline-offset: 2px;
+  }
+  input:focus {
+    border-color: var(--border-strong);
+    background: var(--surface-1);
   }
   input:disabled {
-    opacity: 0.55;
+    background: var(--disabled-bg);
+    color: var(--disabled-fg);
+    cursor: not-allowed;
+  }
+  input[type='number'],
+  input[type='date'],
+  input[type='time'] {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  input[type='color'] {
+    width: var(--control-h-md);
+    padding: 3px;
+    cursor: pointer;
   }
   .sm input {
     height: var(--control-h-sm);
     font-size: var(--text-xs);
+    padding: 0 var(--space-2);
   }
   .lg input {
     height: var(--control-h-lg);
     font-size: var(--text-md);
-    padding: 0 var(--space-4);
+    padding: 0 var(--space-3);
   }
   .has-icon input {
-    padding-inline-start: calc(var(--space-3) + 16px + var(--space-2));
+    padding-inline-start: calc(10px + 14px + var(--space-2));
   }
   .lead {
     position: absolute;
-    inset-inline-start: var(--space-3);
+    inset-inline-start: 10px;
     display: inline-flex;
-    color: var(--text-2);
+    color: var(--text-3);
     pointer-events: none;
   }
   .invalid input {

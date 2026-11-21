@@ -59,23 +59,23 @@
   .fc-progress {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2);
     width: 100%;
   }
   .track {
     flex: 1;
     display: flex;
-    height: 8px;
+    height: 6px;
     overflow: hidden;
     border-radius: var(--radius-pill);
-    background: var(--surface-2);
+    background: var(--surface-3);
     gap: 2px;
   }
   .sm .track {
     height: 4px;
   }
   .lg .track {
-    height: 12px;
+    height: 8px;
   }
   .fill {
     height: 100%;
@@ -95,10 +95,11 @@
     background: var(--danger-solid);
   }
   .neutral {
-    background: var(--gray-400);
+    background: var(--text-3);
   }
   .value {
-    font-size: var(--text-xs);
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
     color: var(--text-2);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;

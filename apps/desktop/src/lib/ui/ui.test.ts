@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createRawSnippet } from 'svelte';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { i18n } from '$lib/i18n/index.svelte';
-import { Checkbox, Dialog, Flashcard, Menu, NumberedRow, OptionTile, Select, Switch, Table, Tabs } from './index';
+import { Button, Checkbox, Dialog, Flashcard, ListRow, Menu, NumberedRow, OptionTile, Select, StatTile, Switch, Table, Tabs } from './index';
 
 i18n.locale = 'en';
 
@@ -312,5 +312,36 @@ describe('NumberedRow', () => {
     expect(row.textContent).toContain('fields');
     expect(screen.getByRole('alert').textContent).toBe('Already in the deck');
     expect(row.classList.contains('invalid')).toBe(false);
+  });
+});
+
+describe('v1.2 dense parts', () => {
+  it('Button shows a key hint after its label without changing its name', () => {
+    render(Button, { variant: 'primary', kbd: 'N', 'aria-keyshortcuts': 'N', children: html('<span>Add card</span>') });
+    const b = screen.getByRole('button', { name: 'Add card' });
+    expect(b.querySelector('kbd')?.textContent).toBe('N');
+    expect(b.getAttribute('aria-keyshortcuts')).toBe('N');
+  });
+
+  it('ListRow: the label is the row button, cells line up, the tree chevron toggles', async () => {
+    const onclick = vi.fn();
+    const ontoggle = vi.fn();
+    render(ListRow, { label: 'İspanyolca', sub: 'A1', depth: 1, expanded: false, ontoggle, onclick, cellColumns: '48px 48px', cells: html('<span class="num">12</span>'), testid: 'deck-row' });
+    const row = screen.getByTestId('deck-row');
+    expect(row.style.getPropertyValue('--depth')).toBe('1');
+    expect((row.querySelector('.cells') as HTMLElement).style.gridTemplateColumns).toBe('48px 48px');
+    await fireEvent.click(screen.getByRole('button', { name: /İspanyolca/ }));
+    expect(onclick).toHaveBeenCalledOnce();
+    const toggle = screen.getByRole('button', { name: 'Expand' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    await fireEvent.click(toggle);
+    expect(ontoggle).toHaveBeenCalledOnce();
+  });
+
+  it('StatTile shows a label, a mono value and a hint', () => {
+    render(StatTile, { label: 'Streak', value: '12', unit: 'days', hint: 'Best 30', tone: 'success' });
+    expect(document.querySelector('.fc-stat .num')?.textContent).toBe('12');
+    expect(document.querySelector('.fc-stat')?.textContent).toContain('Streak');
+    expect(document.querySelector('.fc-stat')?.textContent).toContain('Best 30');
   });
 });

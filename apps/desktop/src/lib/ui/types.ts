@@ -45,6 +45,14 @@ export interface TableColumn<T> {
   /** CSS grid track (`'1fr'`, `'120px'`, `'minmax(80px, 1fr)'`). Default `1fr`. */
   width?: string;
   align?: 'start' | 'end' | 'center';
+  /** Numbers (counts, dates, durations): mono, tabular figures. */
+  numeric?: boolean;
   /** Plain-text cell (when no `cell` snippet is given to the table). */
   value?: (row: T) => string | number | null;
+}
+
+/** One step of the top bar's trail (`PageChrome.setTrail`). With `onclick` it links back. */
+export interface Crumb {
+  label: string;
+  onclick?: () => void;
 }

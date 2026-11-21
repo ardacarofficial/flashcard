@@ -12,7 +12,7 @@
 </script>
 
 <div class="fc-toast {item.tone}" role={item.tone === 'danger' ? 'alert' : 'status'}>
-  <span class="icon"><Icon icon={ICONS[item.tone]} size={18} /></span>
+  <span class="icon"><Icon icon={ICONS[item.tone]} size={16} /></span>
   <span class="msg">{item.message}</span>
   {#if item.action}
     <button
@@ -31,15 +31,16 @@
   .fc-toast {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    min-width: 280px;
-    max-width: 440px;
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
-    border: 1px solid var(--border);
+    gap: var(--space-2);
+    min-width: 260px;
+    max-width: 420px;
+    min-height: 40px;
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-card);
-    background: var(--surface-1);
+    background: var(--surface-2);
     color: var(--text-1);
-    box-shadow: var(--shadow-2);
+    box-shadow: var(--shadow-float);
     font-size: var(--text-sm);
     animation: fc-toast-in var(--motion) var(--ease);
   }
@@ -63,8 +64,8 @@
     border: none;
     background: none;
     padding: var(--space-1) var(--space-2);
-    border-radius: 6px;
-    color: var(--accent);
+    border-radius: 4px;
+    color: var(--accent-text);
     font: inherit;
     font-weight: var(--weight-semibold);
     cursor: pointer;
@@ -74,11 +75,12 @@
   }
   .action:focus-visible {
     outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
   }
   @keyframes fc-toast-in {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(4px);
     }
   }
   @media (prefers-reduced-motion: reduce) {

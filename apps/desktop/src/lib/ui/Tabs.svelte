@@ -75,7 +75,7 @@
         onclick={() => pick(i)}
         onkeydown={(e) => onkeydown(e, i)}
       >
-        {#if tab.icon}<Icon icon={tab.icon} size={16} />{/if}
+        {#if tab.icon}<Icon icon={tab.icon} size={14} />{/if}
         <span>{tab.label}</span>
         <Badge count={tab.badge} tone="neutral" variant="soft" />
       </button>
@@ -99,13 +99,16 @@
     border-bottom: 1px solid var(--border);
     gap: var(--space-4);
   }
+  .pill .list {
+    gap: 2px;
+  }
   button {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: 6px;
     flex: none;
-    height: 40px;
-    padding: 0 var(--space-1);
+    height: 34px;
+    padding: 0 2px;
     border: none;
     background: transparent;
     color: var(--text-2);
@@ -125,12 +128,15 @@
     border-bottom-color: var(--accent);
   }
   .pill button {
-    height: 32px;
-    padding: 0 var(--space-3);
-    border-radius: var(--radius-pill);
+    height: var(--control-h-sm);
+    padding: 0 10px;
+    border-radius: var(--radius-control);
+  }
+  .pill button:hover:not(:disabled) {
+    background: var(--surface-2);
   }
   .pill button[aria-selected='true'] {
-    background: var(--accent-soft);
+    background: var(--surface-3);
     color: var(--text-1);
   }
   button:hover:not(:disabled) {
@@ -139,7 +145,7 @@
   button:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: -2px;
-    border-radius: 6px;
+    border-radius: 4px;
   }
   button:disabled {
     opacity: 0.5;

@@ -30,17 +30,16 @@
   .fc-numbered-row {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
-    column-gap: var(--space-4);
+    column-gap: var(--space-3);
     align-items: start;
-    padding: var(--space-4);
+    padding: var(--space-2) var(--space-3);
     background: var(--surface-1);
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
-    transition: border-color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease);
+    transition: border-color var(--motion-fast) var(--ease);
   }
   .fc-numbered-row:focus-within {
-    border-color: var(--accent);
-    box-shadow: var(--shadow-1);
+    border-color: var(--border-strong);
   }
   .fc-numbered-row.invalid {
     border-color: var(--danger);
@@ -49,20 +48,17 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
-    height: 28px;
-    margin-top: 26px;
+    min-width: 24px;
+    height: var(--control-h-md);
+    margin-top: 20px;
     padding: 0 var(--space-1);
-    border-radius: var(--radius-pill);
-    background: var(--surface-2);
     color: var(--text-2);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
     font-variant-numeric: tabular-nums;
   }
   .fc-numbered-row:focus-within .num {
-    background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .body {
     min-width: 0;
@@ -70,7 +66,7 @@
   .actions {
     display: flex;
     gap: var(--space-1);
-    margin-top: 24px;
+    margin-top: 20px;
   }
   .error {
     grid-column: 2 / -1;

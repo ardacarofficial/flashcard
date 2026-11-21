@@ -7,7 +7,7 @@
 
   interface Props {
     padding?: 'none' | 'sm' | 'md' | 'lg';
-    /** Light shadow (default: border only). */
+    /** Raised one surface step (default: the panel surface; v1.2 has no shadows). */
     elevated?: boolean;
     onclick?: () => void;
     /** Accessible name of a clickable card (default: its text). */
@@ -43,7 +43,7 @@
     min-width: 0;
   }
   .elevated {
-    box-shadow: var(--shadow-1);
+    background: var(--surface-2);
   }
   .pad-none {
     padding: 0;
@@ -55,18 +55,18 @@
     padding: var(--space-4);
   }
   .pad-lg {
-    padding: var(--space-6);
+    padding: var(--space-5);
   }
   button.fc-card {
     width: 100%;
     font: inherit;
     text-align: start;
     cursor: pointer;
-    transition: border-color var(--motion-fast) var(--ease), box-shadow var(--motion-fast) var(--ease);
+    transition: border-color var(--motion-fast) var(--ease), background-color var(--motion-fast) var(--ease);
   }
   .interactive:hover {
     border-color: var(--border-strong);
-    box-shadow: var(--shadow-1);
+    background: var(--surface-2);
   }
   .interactive:focus-visible {
     outline: 2px solid var(--focus-ring);

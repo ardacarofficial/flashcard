@@ -35,7 +35,7 @@
     columns,
     rowKey,
     label,
-    rowHeight = 44,
+    rowHeight = 34,
     height = '480px',
     overscan = 6,
     activeKey = $bindable(null),
@@ -126,7 +126,7 @@
   >
     <div class="row head" role="row" aria-rowindex={1} style:grid-template-columns={template} style:height="{rowHeight}px">
       {#each columns as c (c.id)}
-        <div class="cell {c.align ?? 'start'}" role="columnheader">{c.header}</div>
+        <div class="cell {c.align ?? 'start'}" class:num={c.numeric} role="columnheader">{c.header}</div>
       {/each}
     </div>
     {#if rows.length === 0}
@@ -155,7 +155,7 @@
             }}
           >
             {#each columns as c (c.id)}
-              <div class="cell {c.align ?? 'start'}" role="gridcell">
+              <div class="cell {c.align ?? 'start'}" class:num={c.numeric} role="gridcell">
                 {#if cell}{@render cell(r.row, c)}{:else}{text(r.row, c)}{/if}
               </div>
             {/each}
@@ -184,8 +184,8 @@
   .row {
     display: grid;
     align-items: center;
-    column-gap: var(--space-4);
-    padding: 0 var(--space-4);
+    column-gap: var(--space-3);
+    padding: 0 var(--space-3);
     border-bottom: 1px solid var(--border);
     font-size: var(--text-sm);
     color: var(--text-1);
@@ -194,12 +194,10 @@
     position: sticky;
     top: 0;
     z-index: 1;
-    background: var(--surface-2);
+    background: var(--surface-1);
     color: var(--text-2);
     font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    font-weight: var(--weight-medium);
   }
   .body {
     position: relative;
@@ -214,14 +212,22 @@
     cursor: pointer;
   }
   .body .row:hover {
-    background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+    background: var(--surface-2);
   }
   .row[aria-selected='true'] {
     background: var(--accent-soft);
   }
   .row.active {
-    box-shadow: inset 3px 0 0 var(--accent);
-    background: var(--surface-2);
+    box-shadow: inset 2px 0 0 var(--accent);
+    background: var(--surface-3);
+  }
+  .num {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+  }
+  .head .num {
+    font-family: inherit;
   }
   .cell {
     min-width: 0;

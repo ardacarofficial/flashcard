@@ -179,7 +179,7 @@
         {onkeydown}
       >
         <span class="value" class:placeholder={!current}>{current?.label ?? placeholder ?? t('ui.select.placeholder')}</span>
-        <Icon icon={ChevronDown} size={16} />
+        <span class="chev"><Icon icon={ChevronDown} size={14} /></span>
       </button>
       {#if open}
         <ul id={listId} role="listbox" class="list" tabindex="-1" aria-labelledby={cid}>
@@ -200,7 +200,7 @@
                 <span>{o.label}</span>
                 {#if o.description}<span class="desc">{o.description}</span>{/if}
               </span>
-              {#if i === selectedIndex}<Icon icon={Check} size={16} />{/if}
+              {#if i === selectedIndex}<span class="tick"><Icon icon={Check} size={14} /></span>{/if}
             </li>
           {:else}
             <li class="empty" role="presentation">{t('ui.select.empty')}</li>
@@ -222,30 +222,38 @@
     gap: var(--space-2);
     width: 100%;
     height: var(--control-h-md);
-    padding: 0 var(--space-3);
-    border: 1px solid var(--border-strong);
+    padding: 0 var(--space-2) 0 10px;
+    border: 1px solid var(--border);
     border-radius: var(--radius-control);
-    background: var(--surface-1);
+    background: var(--surface-2);
     color: var(--text-1);
     font: inherit;
     font-size: var(--text-sm);
     text-align: start;
     cursor: pointer;
+    transition: border-color var(--motion-fast) var(--ease);
   }
-  .trigger:hover:not(:disabled) {
-    border-color: var(--text-2);
+  .trigger:hover:not(:disabled),
+  .trigger[aria-expanded='true'] {
+    border-color: var(--border-strong);
   }
   .trigger:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
+    outline-offset: 2px;
   }
   .trigger:disabled {
-    opacity: 0.55;
-    cursor: default;
+    background: var(--disabled-bg);
+    color: var(--disabled-fg);
+    cursor: not-allowed;
+  }
+  .chev {
+    display: inline-flex;
+    color: var(--text-3);
   }
   .sm .trigger {
     height: var(--control-h-sm);
     font-size: var(--text-xs);
+    padding-inline-start: var(--space-2);
   }
   .lg .trigger {
     height: var(--control-h-lg);
@@ -267,32 +275,40 @@
     z-index: 40;
     inset-inline: 0;
     top: calc(100% + var(--space-1));
-    max-height: 280px;
+    min-width: 180px;
+    max-height: 296px;
     overflow: auto;
     margin: 0;
     padding: var(--space-1);
     list-style: none;
     background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-control);
-    box-shadow: var(--shadow-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-float);
+    animation: fc-select-in var(--motion-fast) var(--ease);
   }
   li[role='option'] {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-radius: 6px;
+    min-height: 28px;
+    padding: 4px var(--space-2);
+    border-radius: 4px;
     cursor: pointer;
     color: var(--text-1);
+    font-size: var(--text-sm);
   }
   li.active {
-    background: var(--surface-2);
+    background: var(--surface-3);
   }
   li[aria-selected='true'] {
-    color: var(--accent);
     font-weight: var(--weight-medium);
+  }
+  .tick {
+    display: inline-flex;
+    flex: none;
+    color: var(--accent-text);
   }
   li[aria-disabled='true'] {
     opacity: 0.5;
@@ -309,7 +325,13 @@
     font-weight: var(--weight-regular);
   }
   .empty {
-    padding: var(--space-2) var(--space-3);
+    padding: var(--space-2);
     color: var(--text-2);
+  }
+  @keyframes fc-select-in {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
   }
 </style>
