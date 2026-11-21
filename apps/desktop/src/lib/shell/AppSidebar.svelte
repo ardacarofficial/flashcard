@@ -1,6 +1,7 @@
 <!--
-  The app sidebar (docs/11 §2): the 5 sections (Create highlighted), then Inbox (count badge
-  when items wait), Settings and the profile menu. Narrow (< 1024 px): icons only.
+  The app sidebar (docs/11 §2, v1.2 brief "Shell"): 216 px, the sections as compact rows
+  (Create is an ordinary item: adding a card is the top bar's "Add card"), then Inbox (mono
+  count when items wait), Settings and the profile menu. Narrow (< 1024 px): icons only.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -39,7 +40,6 @@
       label={t(s.label_key)}
       icon={iconFor(s.icon)}
       active={current === s.id}
-      accent={s.id === 'create'}
       onclick={() => openSection(s.id)}
     />
   {/each}
@@ -67,14 +67,20 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    font-size: var(--text-md);
-    font-weight: var(--weight-bold);
+    min-width: 0;
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
     letter-spacing: -0.01em;
   }
   .mark {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     flex: none;
+  }
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .panels {
     margin-top: var(--space-4);

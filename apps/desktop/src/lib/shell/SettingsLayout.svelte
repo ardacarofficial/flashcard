@@ -58,8 +58,8 @@
 <style>
   .settings {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: var(--space-8);
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: var(--space-6);
     align-items: start;
   }
   .subnav {
@@ -67,16 +67,14 @@
     top: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
   }
   .group-title {
-    margin: 0 0 var(--space-1);
-    padding: 0 var(--space-3);
-    font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
+    margin: 0 0 2px;
+    padding: 0 10px;
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-medium);
     color: var(--text-2);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
   ul {
     margin: 0;
@@ -88,22 +86,28 @@
   }
   button {
     width: 100%;
-    padding: var(--space-2) var(--space-3);
+    height: 28px;
+    padding: 0 10px;
     border: none;
     border-radius: var(--radius-control);
     background: transparent;
-    color: var(--text-1);
+    color: var(--text-2);
     font: inherit;
     font-size: var(--text-sm);
     text-align: start;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     cursor: pointer;
   }
   button:hover {
     background: var(--surface-2);
+    color: var(--text-1);
   }
   button.active {
-    background: var(--accent-soft);
-    font-weight: var(--weight-semibold);
+    background: var(--surface-3);
+    color: var(--text-1);
+    font-weight: var(--weight-medium);
   }
   button:focus-visible {
     outline: 2px solid var(--focus-ring);
@@ -119,7 +123,7 @@
   @media (max-width: 1023.98px) {
     .settings {
       grid-template-columns: minmax(0, 1fr);
-      gap: var(--space-6);
+      gap: var(--space-4);
     }
     .subnav {
       display: none;

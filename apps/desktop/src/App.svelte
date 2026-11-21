@@ -11,6 +11,9 @@
   import LockHost from '$lib/features/profiles/LockHost.svelte';
   import { buildNavigation, samePlace, type NavEntry, type SectionId } from '$lib/shell/navigation';
   import AppSidebar from '$lib/shell/AppSidebar.svelte';
+  import { openPalette, openQuickAdd, setQuickAddFallback, shellCommands } from '$lib/shell/commands.svelte';
+  import TopBar from '$lib/shell/TopBar.svelte';
+  import { typingTarget } from '$lib/features/browse/palette';
   import DeckPicker from '$lib/shell/DeckPicker.svelte';
   import ProfileMenu from '$lib/shell/ProfileMenu.svelte';
   import SettingsLayout from '$lib/shell/SettingsLayout.svelte';
@@ -19,6 +22,7 @@
   import Tabs from '$lib/ui/Tabs.svelte';
   import ToastHost from '$lib/ui/ToastHost.svelte';
   import { setPageChrome } from '$lib/ui/page-chrome';
+  import type { Crumb } from '$lib/ui/types';
 
   /** The shell's own first page (not a module; docs/11 §2). Its own chunk, like every screen. */
   const HOME: ScreenDef = { id: 'home', load: () => import('$lib/features/home/HomeScreen.svelte') };
@@ -36,6 +40,10 @@
   let inboxCount = $state(0);
   /** A study session is running on the current screen (`ctx.setFocus`): focus layout. */
   let focusOn = $state(false);
+  /** Crumbs the current screen appended to the top bar's trail (`PageChrome.setTrail`). */
+  let screenTrail = $state<Crumb[] | null>(null);
+  /** Back from the screen's sub-page: makes the page crumb a link. */
+  let screenUp = $state<(() => void) | null>(null);
   /** Last page opened in each section / in Settings (the sidebar returns to it). */
   const lastIn = new Map<string, string>();
 
@@ -86,12 +94,62 @@
     get tabs() {
       return showTabs ? sectionTabsChrome : null;
     },
+    // Write-only (called from screens' effects: reading the state here would loop them).
+    setTrail: (crumbs, up) => {
+      const some = !!crumbs && crumbs.length > 0;
+      screenTrail = some ? crumbs : null;
+      screenUp = some && up ? up : null;
+    },
   });
+
+  /** Top bar trail: the place (section › page, Settings › page, Inbox), then the screen's crumbs. */
+  const trail = $derived.by((): Crumb[] => {
+    const out: Crumb[] = [];
+    const p = current?.place;
+    if (p?.kind === 'section') {
+      const s = nav.sections.find((x) => x.id === p.id);
+      const label = s ? t(s.label_key) : td(current!.label_key);
+      out.push({ label, onclick: s ? () => openSection(s.id) : undefined });
+      const page = td(current!.label_key);
+      if (current!.id !== 'home' && page !== label) out.push({ label: page, onclick: screenUp ?? undefined });
+      else if (screenUp) out[0] = { label, onclick: screenUp };
+    } else if (p?.kind === 'settings') {
+      out.push({ label: t('shell.settings'), onclick: openSettings }, { label: td(current!.label_key), onclick: screenUp ?? undefined });
+    } else if (p?.kind === 'inbox') {
+      out.push({ label: t('shell.inbox'), onclick: screenUp ?? undefined });
+    }
+    return [...out, ...(screenTrail ?? [])];
+  });
+
+  /** "Add card" until the Quick Add dialog registers itself: the Create page's Add tab. */
+  const addEntry = $derived(nav.all.find((e) => e.screen.id === 'add_note') ?? null);
+  $effect(() => {
+    const entry = addEntry;
+    return setQuickAddFallback(entry ? () => show(entry) : null);
+  });
+  const searchEntry = $derived(nav.all.find((e) => e.screen.id === 'browse') ?? null);
+  /** The top bar's search field: the command palette, or the Search page when it is off. */
+  const onsearch = $derived(
+    shellCommands.canPalette ? () => void openPalette() : searchEntry ? () => show(searchEntry) : null,
+  );
+
+  /** `N` anywhere (not while typing, not over a dialog, not in a running session) adds a card. */
+  function onGlobalKey(e: KeyboardEvent) {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    if (e.key !== 'n' && e.key !== 'N') return;
+    if (locked || focusOn || typingTarget(e.target)) return;
+    if (document.querySelector('[aria-modal="true"]')) return;
+    if (openQuickAdd()) e.preventDefault();
+  }
 
   const placeKey = (e: NavEntry) => (e.place.kind === 'section' ? `section.${e.place.id}` : e.place.kind);
 
   function show(entry: NavEntry) {
-    if (active !== entry.id) focusOn = false;
+    if (active !== entry.id) {
+      focusOn = false;
+      screenTrail = null;
+      screenUp = null;
+    }
     active = entry.id;
     if (entry.tab) lastIn.set(placeKey(entry), entry.id);
   }
@@ -228,6 +286,10 @@
     {#snippet panels()}<PluginPanels {modules} />{/snippet}
   </AppSidebar>
 
+  <div class="column">
+  {#if !(focusOn && !locked)}
+    <TopBar {trail} {onsearch} searchKeys={shellCommands.paletteKeys} onadd={shellCommands.canQuickAdd && !locked ? () => void openQuickAdd() : null} />
+  {/if}
   <main>
     <div class="page" class:focus={focusOn && !locked} class:wide={screen?.width === 'wide' && where !== 'settings'}>
       {#if error}<p class="banner error" role="alert">{error}</p>{/if}
@@ -264,7 +326,10 @@
       {/if}
     </div>
   </main>
+  </div>
 </div>
+
+<svelte:window onkeydown={onGlobalKey} />
 
 <ToastHost />
 
@@ -304,9 +369,19 @@
   .shell {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    height: 100%;
+    background: var(--surface-0);
+  }
+  .column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
     height: 100%;
   }
   main {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
     background: var(--surface-0);
   }
@@ -316,16 +391,16 @@
    */
   .page {
     max-width: calc(var(--content-max) + 2 * var(--content-pad-x));
-    padding: var(--space-8) var(--content-pad-x) var(--space-12);
+    padding: var(--space-6) var(--content-pad-x) var(--space-12);
   }
   .page.wide {
     max-width: calc(var(--content-max-wide) + 2 * var(--content-pad-x));
   }
-  /* A running session (docs/11 §3): no picker or tabs, the card centred in a narrower column. */
+  /* A running session (v1.2): no top bar, picker or tabs; the card centred (max ~720). */
   .page.focus {
-    max-width: 880px;
+    max-width: 800px;
     margin: 0 auto;
-    padding-top: var(--space-6);
+    padding-top: var(--space-4);
   }
   .page.focus > :global(*) {
     margin-inline: auto;
@@ -336,16 +411,19 @@
     justify-content: space-between;
     gap: var(--space-3);
     margin: 0 0 var(--space-4);
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
     border-radius: var(--radius-control);
     font-size: var(--text-sm);
   }
   .banner.error {
     background: var(--danger-soft);
+    border-color: color-mix(in srgb, var(--danger) 35%, transparent);
     color: var(--danger);
   }
   .banner.notice {
     background: var(--warning-soft);
+    border-color: color-mix(in srgb, var(--warning) 35%, transparent);
     color: var(--text-1);
   }
   .loading {
@@ -356,7 +434,7 @@
   }
   @media (max-width: 1023.98px) {
     .page {
-      padding-top: var(--space-6);
+      padding-top: var(--space-4);
       padding-bottom: var(--space-8);
     }
   }

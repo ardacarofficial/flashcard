@@ -10,6 +10,13 @@
   import { api } from '$lib/api';
   import type { PaletteEntry, ShortcutDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
+  import { openQuickAdd, setPaletteHandler, setPaletteKeys } from '$lib/shell/commands.svelte';
+  // Eager (App.svelte mounts it): lib/ui file by file, never the barrel.
+  import Button from '$lib/ui/Button.svelte';
+  import Icon from '$lib/ui/Icon.svelte';
+  import Kbd from '$lib/ui/Kbd.svelte';
+  import Textarea from '$lib/ui/Textarea.svelte';
+  import { LayoutGrid, Search, Terminal } from '$lib/ui/icons';
   import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
   import { bindingMap, comboOf, filterItems, paletteItems, typingTarget, type PaletteItem } from './palette';
 
@@ -38,6 +45,7 @@
   let params = $state('{}');
   let paramsError = $state(false);
   let input = $state<HTMLInputElement | null>(null);
+  let list = $state<HTMLUListElement | null>(null);
 
   const items = $derived(
     filterItems(
@@ -124,7 +132,8 @@
       case 'ui.search':
         return screen('browse');
       case 'ui.new_note':
-        return screen('add_note');
+        // Quick Add (v1.2; the shell falls back to the Create page).
+        return void (openQuickAdd() || screen('add_note'));
       case 'ui.undo':
         return void guarded(() => api.oplog.undo());
       case 'ui.redo':
@@ -172,6 +181,16 @@
     void loadEntries(on);
   });
 
+  // The top bar's search field opens the palette too, and shows its (rebindable) keys.
+  $effect(() => (paletteOn ? setPaletteHandler(() => void show()) : undefined));
+  $effect(() => setPaletteKeys(shortcuts.find((s) => s.action === 'ui.palette')?.combo ?? null));
+
+  // Keep the highlighted row in view while moving with the arrow keys.
+  $effect(() => {
+    const i = cursor;
+    list?.querySelector<HTMLElement>(`[data-index="${i}"]`)?.scrollIntoView?.({ block: 'nearest' });
+  });
+
   onMount(() => {
     trackModules();
     void loadShortcuts();
@@ -191,44 +210,57 @@
     {#if pending}
       <form onsubmit={(e) => (e.preventDefault(), void runPending())}>
         <p class="name">{td(pending.label_key) === pending.label_key ? pending.method : td(pending.label_key)}</p>
-        <label>
-          {t('palette.params')}
-          <textarea rows="6" bind:value={params} spellcheck="false"></textarea>
-        </label>
-        {#if paramsError}<p class="error" role="alert">{t('palette.invalid_json')}</p>{/if}
+        <p class="method">{pending.method}</p>
+        <Textarea class="params" label={t('palette.params')} rows={6} bind:value={params} spellcheck="false" error={paramsError ? t('palette.invalid_json') : null} />
         <div class="row">
-          <button type="button" onclick={() => (pending = null)}>{t('common.cancel')}</button>
-          <button type="submit">{t('palette.run')}</button>
+          <Button size="sm" variant="ghost" onclick={() => (pending = null)}>{t('palette.back')}</Button>
+          <Button size="sm" variant="primary" type="submit" kbd="Enter">{t('palette.run')}</Button>
         </div>
       </form>
     {:else}
-      <input
-        bind:this={input}
-        bind:value={query}
-        oninput={() => (cursor = 0)}
-        onkeydown={onListKey}
-        placeholder={t('palette.placeholder')}
-        aria-label={t('palette.title')}
-        role="combobox"
-        aria-expanded="true"
-        aria-controls="palette-list"
-      />
-      <ul id="palette-list" role="listbox">
+      <div class="field">
+        <Icon icon={Search} size={16} />
+        <input
+          bind:this={input}
+          bind:value={query}
+          oninput={() => (cursor = 0)}
+          onkeydown={onListKey}
+          placeholder={t('palette.placeholder')}
+          aria-label={t('palette.title')}
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="palette-list"
+          aria-activedescendant={items[cursor] ? `palette-opt-${cursor}` : undefined}
+          spellcheck="false"
+          autocomplete="off"
+        />
+        <Kbd keys={['Esc']} size="sm" />
+      </div>
+      <ul id="palette-list" role="listbox" bind:this={list} aria-label={t('palette.title')}>
         {#each items as item, i (item.id)}
-          <li role="option" aria-selected={i === cursor}>
-            <button class:active={i === cursor} onclick={() => void choose(item)}>
-              <span>{item.label}</span>
+          {#if i === 0 || items[i - 1]!.kind !== item.kind}
+            <li class="group" role="presentation">{item.kind === 'screen' ? t('palette.group_screens') : t('palette.group_commands')}</li>
+          {/if}
+          <li id="palette-opt-{i}" role="option" aria-selected={i === cursor} data-index={i}>
+            <button type="button" tabindex="-1" class:active={i === cursor} onclick={() => void choose(item)} onpointermove={() => (cursor = i)}>
+              <span class="ico"><Icon icon={item.kind === 'screen' ? LayoutGrid : Terminal} size={14} /></span>
+              <span class="label">{item.label}</span>
               {#if item.kind === 'screen'}
-                <small>{t('palette.screen')}</small>
+                <span class="sr-only">{t('palette.screen')}</span>
               {:else if item.entry.shortcut}
-                <kbd>{item.entry.shortcut}</kbd>
+                <Kbd keys={item.entry.shortcut} size="sm" />
               {/if}
             </button>
           </li>
         {:else}
-          <li class="muted">{t('palette.no_match')}</li>
+          <li class="none">{t('palette.no_match')}</li>
         {/each}
       </ul>
+      <footer class="hints" aria-hidden="true">
+        <span><Kbd keys={['ArrowUp']} size="sm" /><Kbd keys={['ArrowDown']} size="sm" /> {t('palette.hint_move')}</span>
+        <span><Kbd keys={['Enter']} size="sm" /> {t('palette.hint_open')}</span>
+        <span><Kbd keys={['Esc']} size="sm" /> {t('palette.hint_close')}</span>
+      </footer>
     {/if}
   </div>
 {/if}
@@ -237,51 +269,160 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgb(0 0 0 / 0.25);
+    z-index: 150;
+    background: var(--backdrop);
+    animation: fc-palette-fade var(--motion-fast) var(--ease);
   }
   .palette {
     position: fixed;
+    z-index: 151;
     top: 12vh;
     left: 50%;
     transform: translateX(-50%);
-    width: min(560px, 90vw);
-    background: var(--fc-bg);
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    padding: var(--fc-space-3);
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-2);
+    width: min(600px, calc(100vw - 32px));
+    max-height: 70vh;
+    overflow: hidden;
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-float);
+    color: var(--text-1);
+    animation: fc-palette-in var(--motion) var(--ease);
+  }
+  .field {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: none;
+    height: 44px;
+    padding: 0 var(--space-3);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-3);
+  }
+  .field input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-1);
+    font-size: var(--text-md);
+    outline: none;
+  }
+  .field input::placeholder {
+    color: var(--text-3);
   }
   ul {
-    list-style: none;
+    flex: 1;
+    min-height: 0;
     margin: 0;
-    padding: 0;
-    max-height: 50vh;
+    padding: var(--space-1);
     overflow: auto;
+    list-style: none;
+  }
+  .group {
+    padding: var(--space-2) var(--space-2) var(--space-1);
+    color: var(--text-2);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-medium);
   }
   li button {
-    width: 100%;
     display: flex;
-    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    height: 32px;
+    padding: 0 var(--space-2);
     border: none;
+    border-radius: 4px;
     background: transparent;
-    text-align: left;
+    color: var(--text-1);
+    font-size: var(--text-sm);
+    text-align: start;
+    cursor: pointer;
   }
   li button.active {
-    background: var(--fc-selected);
+    background: var(--surface-3);
+  }
+  .ico {
+    display: inline-flex;
+    color: var(--text-3);
+  }
+  li button.active .ico {
+    color: var(--accent-text);
+  }
+  .label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .none {
+    padding: var(--space-6) var(--space-3);
+    color: var(--text-2);
+    text-align: center;
+  }
+  .hints {
+    display: flex;
+    gap: var(--space-4);
+    flex: none;
+    padding: var(--space-2) var(--space-3);
+    border-top: 1px solid var(--border);
+    background: var(--surface-0);
+    color: var(--text-2);
+    font-size: var(--text-2xs);
+  }
+  .hints span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
+  .name {
+    margin: 0;
+    font-size: var(--text-md);
+    font-weight: var(--weight-semibold);
+  }
+  .method {
+    margin: -8px 0 0;
+    color: var(--text-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+  }
+  form :global(.params textarea) {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
   }
   .row {
     display: flex;
     justify-content: flex-end;
-    gap: var(--fc-space-2);
+    gap: var(--space-2);
   }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--fc-space-1);
+  @keyframes fc-palette-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -4px);
+    }
   }
-  textarea {
-    font-family: monospace;
+  @keyframes fc-palette-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .palette,
+    .backdrop {
+      animation: none;
+    }
   }
 </style>

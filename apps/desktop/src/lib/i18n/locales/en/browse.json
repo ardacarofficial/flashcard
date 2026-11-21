@@ -198,7 +198,13 @@
     "run": "Run",
     "invalid_json": "Parameters must be a JSON object.",
     "screen": "Screen",
-    "done": "Done."
+    "done": "Done.",
+    "group_screens": "Screens",
+    "group_commands": "Commands",
+    "hint_move": "Move",
+    "hint_open": "Open",
+    "hint_close": "Close",
+    "back": "Back"
   },
   "shortcuts": {
     "heading": "Keyboard shortcuts",

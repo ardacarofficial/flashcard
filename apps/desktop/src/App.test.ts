@@ -76,6 +76,9 @@ describe('<App> on the dev mock transport', () => {
     const rows = await screen.findAllByTestId('deck-row');
     await fireEvent.click(rows.find((r) => r.textContent?.includes('Focus'))!);
     expect(await screen.findByTestId('deck-mode-cards')).toBeTruthy();
+    // v1.2: the deck page (a sub-page with a back link) puts its title in the top bar's trail.
+    const bar = screen.getByTestId('top-bar');
+    await waitFor(() => expect(Array.from(bar.querySelectorAll('nav li'), (l) => l.textContent?.trim())).toEqual(['Library', 'Decks', 'Focus']));
     // Match has its tile next to the other modes.
     expect(await screen.findByTestId('deck-mode-match')).toBeTruthy();
     await fireEvent.click(await screen.findByTestId('deck-mode-test'));
@@ -111,5 +114,37 @@ describe('<App> on the dev mock transport', () => {
     await api.call('lock.unlock', { secret: '4821' });
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Flashcard is locked' })).toBeNull());
     await waitFor(() => expect(document.querySelector('main')?.textContent?.trim()).not.toBe(''));
+  });
+
+  it('v1.2 top bar: trail, search opens the palette, "Add card" and N open Quick Add (fallback: Create)', async () => {
+    render(App);
+    const bar = await screen.findByTestId('top-bar');
+    const trail = () => Array.from(bar.querySelectorAll('nav li'), (l) => l.textContent?.trim());
+    await waitFor(() => expect(trail()).toEqual(['Home']));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Statistics' }));
+    await waitFor(() => expect(trail()).toEqual(['Statistics']));
+
+    // The search field opens the command palette.
+    await fireEvent.click(await screen.findByTestId('top-search'));
+    expect(await screen.findByRole('dialog', { name: 'Command palette' })).toBeTruthy();
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull());
+
+    // "Add card" (until the Quick Add dialog registers itself: the Create page).
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add card' }));
+    const nav = screen.getByRole('navigation', { name: 'Main navigation' });
+    await waitFor(() => expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Create'));
+    await waitFor(() => expect(trail()).toEqual(['Create', 'Add']));
+
+    // `N` does the same from anywhere — but not while typing in a field.
+    await fireEvent.click(screen.getByRole('button', { name: 'Library' }));
+    await waitFor(() => expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Library'));
+    const field = document.createElement('input');
+    document.body.append(field);
+    await fireEvent.keyDown(field, { key: 'n' });
+    expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Library');
+    field.remove();
+    await fireEvent.keyDown(document.body, { key: 'n' });
+    await waitFor(() => expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Create'));
   });
 });

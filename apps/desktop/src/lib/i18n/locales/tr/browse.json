@@ -198,7 +198,13 @@
     "run": "Çalıştır",
     "invalid_json": "Parametreler bir JSON nesnesi olmalı.",
     "screen": "Ekran",
-    "done": "Tamam."
+    "done": "Tamam.",
+    "group_screens": "Ekranlar",
+    "group_commands": "Komutlar",
+    "hint_move": "Gez",
+    "hint_open": "Aç",
+    "hint_close": "Kapat",
+    "back": "Geri"
   },
   "shortcuts": {
     "heading": "Klavye kısayolları",

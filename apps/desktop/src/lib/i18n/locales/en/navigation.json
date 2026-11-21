@@ -29,6 +29,13 @@
       "switch": "Switch profile",
       "lock": "Lock now"
     },
-    "deck_picker": "Deck"
+    "deck_picker": "Deck",
+    "topbar": {
+      "label": "Page tools",
+      "trail": "You are here",
+      "search": "Search or run a command",
+      "add_card": "Add card",
+      "add_card_hint": "Add a card (N)"
+    }
   }
 }
