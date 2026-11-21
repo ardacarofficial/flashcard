@@ -424,6 +424,16 @@ Items added while the app is closed wait in the extension and are sent when the 
 
 The inbox also receives suggestions from `flashcard://` links and the `Ctrl+Alt+N` quick-add window.
 
+### Subtitle (video subtitles)
+
+The **Subtitle** browser extension turns a word you add with **+** in a video's subtitles straight into a card in a deck (not the inbox): the word and its meaning, the line it came from (the word in bold), its translation, a screenshot, the audio clip and a link to that moment of the video.
+
+1. Turn on the **Subtitle** module in the app (off by default): `Ctrl+K` → **Turn a module on/off** → `{"id": "subtitle", "enabled": true}`. **Subtitle** appears under **Settings → Connections**.
+2. On the **Subtitle** screen type a name, press **Create key** and copy the key. It is shown **only once**.
+3. In the extension pick **Ayarlar → Öğrenme servisi → Subtitle Kartları** (Settings → Learning service); paste the address from the screen (`http://127.0.0.1:28735/subtitle`) as the server address and the key as the access key, then press **Bağlantıyı test et** (Test connection).
+
+Words go to the deck picked in the extension, else the screen's **Deck**, else a **Subtitle** deck made with the first word. The same word from the same line twice is one card; from another line it is a new card. Each word is one undo step. While the app is closed the extension keeps words in its queue and sends them once the app is open. **Revoke** makes a key stop working at once.
+
 ## Profiles and app lock
 
 Both are on the **Profiles & lock** screen.

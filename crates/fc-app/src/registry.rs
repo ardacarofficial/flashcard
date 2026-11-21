@@ -387,6 +387,10 @@ impl Registry {
                 !USER_ONLY_PERMISSIONS.contains(&permission)
                     && crate::modules::local_api::permits(self, id, permission)
             }
+            // v1.2: the Subtitle extension holds nothing: its requests reach only the
+            // `subtitle` module's internal commands, invoked by the module's own transport
+            // services after the key was checked.
+            Actor::Subtitle(_) => false,
         }
     }
 

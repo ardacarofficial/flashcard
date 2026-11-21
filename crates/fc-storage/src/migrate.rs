@@ -62,6 +62,9 @@ pub const RELEASE_RANGES: &[(&str, std::ops::RangeInclusive<u32>)] = &[
     ("v0.9", 800..=899),
     ("v0.10", 900..=999),
     ("v1.0", 1000..=1099),
+    // v1.1 (the interface redesign) has no migration.
+    ("v1.1", 1100..=1199),
+    ("v1.2", 1200..=1299),
 ];
 
 /// Lanes inside the v1.0 range (docs/07 §5, docs/10 §35): the v1.0 tracks ran in parallel, so

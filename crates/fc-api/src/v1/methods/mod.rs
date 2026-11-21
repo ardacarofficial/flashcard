@@ -99,6 +99,7 @@ domains! {
     automation,
     inbox,
     local_api,
+    subtitle,
     maintenance,
     onboarding,
     session,

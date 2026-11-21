@@ -22,6 +22,7 @@ mod search;
 mod stats;
 mod store;
 mod study;
+mod subtitle;
 mod tags;
 mod ux;
 

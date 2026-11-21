@@ -353,7 +353,7 @@ fn checked_scopes(scopes: &[String]) -> AppResult<Vec<String>> {
     Ok(out.into_iter().collect())
 }
 
-fn port_of(reads: &dyn Reads) -> AppResult<u16> {
+pub(crate) fn port_of(reads: &dyn Reads) -> AppResult<u16> {
     Ok(resolve_stored(reads, &SettingScope::App, PORT)?
         .and_then(|(v, _)| v.as_u64())
         .and_then(|p| u16::try_from(p).ok())

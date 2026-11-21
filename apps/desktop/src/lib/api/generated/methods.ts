@@ -84,6 +84,8 @@ import type { CreateProfile } from "./CreateProfile";
 import type { CreateReadingItem } from "./CreateReadingItem";
 import type { CreateRule } from "./CreateRule";
 import type { CreateSavedQuery } from "./CreateSavedQuery";
+import type { CreateSubtitleKey } from "./CreateSubtitleKey";
+import type { CreatedSubtitleKey } from "./CreatedSubtitleKey";
 import type { DatabaseReport } from "./DatabaseReport";
 import type { DeckDto } from "./DeckDto";
 import type { DeckList } from "./DeckList";
@@ -294,6 +296,7 @@ import type { SetReadingPosition } from "./SetReadingPosition";
 import type { SetReadingQueue } from "./SetReadingQueue";
 import type { SetSetting } from "./SetSetting";
 import type { SetShortcut } from "./SetShortcut";
+import type { SetSubtitleDefaultDeck } from "./SetSubtitleDefaultDeck";
 import type { SetSuspended } from "./SetSuspended";
 import type { SetTagColor } from "./SetTagColor";
 import type { SetTheme } from "./SetTheme";
@@ -314,6 +317,10 @@ import type { StatsOverview } from "./StatsOverview";
 import type { StatsRequest } from "./StatsRequest";
 import type { StudyCardsChanged } from "./StudyCardsChanged";
 import type { SubmitTest } from "./SubmitTest";
+import type { SubtitleKeyDto } from "./SubtitleKeyDto";
+import type { SubtitleKeyList } from "./SubtitleKeyList";
+import type { SubtitleKeyRef } from "./SubtitleKeyRef";
+import type { SubtitleStatus } from "./SubtitleStatus";
 import type { SuggestLinks } from "./SuggestLinks";
 import type { SuspendCards } from "./SuspendCards";
 import type { SwitchProfile } from "./SwitchProfile";
@@ -598,6 +605,11 @@ export interface Methods {
   "local_api.clients.revoke": { kind: "command"; request: ApiClientRef; response: ApiClientDto };
   "local_api.clients.remove": { kind: "command"; request: ApiClientRef; response: ApiClientDto };
   "local_api.methods": { kind: "query"; request: Empty; response: LocalApiMethodList };
+  "subtitle.keys.list": { kind: "query"; request: Empty; response: SubtitleKeyList };
+  "subtitle.keys.create": { kind: "command"; request: CreateSubtitleKey; response: CreatedSubtitleKey };
+  "subtitle.keys.revoke": { kind: "command"; request: SubtitleKeyRef; response: SubtitleKeyDto };
+  "subtitle.status": { kind: "query"; request: Empty; response: SubtitleStatus };
+  "subtitle.default_deck.set": { kind: "command"; request: SetSubtitleDefaultDeck; response: SubtitleStatus };
   "maintenance.status": { kind: "query"; request: Empty; response: MaintenanceStatus };
   "maintenance.recovery.get": { kind: "query"; request: Empty; response: RecoveryDto };
   "maintenance.recovery.dismiss": { kind: "command"; request: Empty; response: RecoveryDto };
@@ -889,6 +901,11 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "local_api.clients.revoke": "command",
   "local_api.clients.remove": "command",
   "local_api.methods": "query",
+  "subtitle.keys.list": "query",
+  "subtitle.keys.create": "command",
+  "subtitle.keys.revoke": "command",
+  "subtitle.status": "query",
+  "subtitle.default_deck.set": "command",
   "maintenance.status": "query",
   "maintenance.recovery.get": "query",
   "maintenance.recovery.dismiss": "command",

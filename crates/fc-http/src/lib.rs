@@ -19,9 +19,15 @@
 //!   minute and [`PAIR_PER_NAME`] per client name per [`PAIR_NAME_WINDOW_SECS`] (`429` +
 //!   `Retry-After`).
 //!
+//! The same server also answers the Subtitle browser extension's contract under
+//! `/subtitle/v1/*` (v1.2, module `subtitle`, see `subtitle.rs`): it runs while either module
+//! is on, and `/v1/*` answers only while `local_api` is on (`503 CONFLICT_MODULE_DISABLED`
+//! otherwise, `ping` included), `/subtitle/*` only while `subtitle` is on (`404`).
+//!
 //! App calls are blocking (SQLite), so they run on tokio's blocking pool.
 
 mod routes;
+mod subtitle;
 
 use fc_app::App;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};

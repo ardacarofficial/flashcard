@@ -407,13 +407,16 @@ impl ApiServerSlot {
     }
 }
 
-/// Starts, stops or restarts the server to match the `local_api` module switch and port.
-/// Returns an error text when it could not start (e.g. the port is taken).
+/// Starts, stops or restarts the server to match the `local_api` / `subtitle` module switches
+/// and the port. Returns an error text when it could not start (e.g. the port is taken).
 pub fn sync_api_server(app: &Arc<App>, slot: &ApiServerSlot) -> Result<(), String> {
-    use fc_app::modules::local_api;
+    use fc_app::modules::{local_api, subtitle};
     // v1.0: not while the app is locked or switching profile (the requests would be refused
     // anyway); a restart on another profile binds a new server to that collection.
-    let want = (app.is_module_enabled(local_api::ID) && !app.background_blocked())
+    // v1.2: either module keeps it up; the server answers only the routes of the modules
+    // that are on (`/v1/*` local API, `/subtitle/v1/*` Subtitle extension).
+    let wanted = app.is_module_enabled(local_api::ID) || app.is_module_enabled(subtitle::ID);
+    let want = (wanted && !app.background_blocked())
         .then(|| local_api::port(app).unwrap_or(local_api::DEFAULT_PORT));
     let mut guard = slot.0.lock().map_err(|e| e.to_string())?;
     let running = guard.as_ref().map(|(_, p)| *p);
@@ -814,6 +817,21 @@ mod tests {
         sync_api_server(&app, &slot).unwrap();
         assert!(slot.addr().is_none());
         assert!(std::net::TcpStream::connect(addr).is_err());
+        // v1.2: the Subtitle extension's module alone keeps the server up too.
+        t.ok::<m::ModulesSetEnabled>(SetModuleEnabled {
+            id: "subtitle".into(),
+            enabled: true,
+        });
+        app.reload_cached_state().unwrap();
+        sync_api_server(&app, &slot).unwrap();
+        assert!(slot.addr().is_some());
+        t.ok::<m::ModulesSetEnabled>(SetModuleEnabled {
+            id: "subtitle".into(),
+            enabled: false,
+        });
+        app.reload_cached_state().unwrap();
+        sync_api_server(&app, &slot).unwrap();
+        assert!(slot.addr().is_none());
     }
 
     fn free_port() -> u16 {

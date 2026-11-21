@@ -181,6 +181,7 @@ domains! {
     automation => AutomationState,
     inbox => InboxState,
     local_api => LocalApiState,
+    subtitle => SubtitleState,
     maintenance => MaintenanceState,
     ux => UxState,
 }

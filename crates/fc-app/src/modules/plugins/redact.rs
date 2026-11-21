@@ -205,6 +205,8 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         // local HTTP API clients may talk to the app.
         n if n.starts_with("automation.") => Refused("automation rules are the user's"),
         n if n.starts_with("local_api.") => Refused("local API clients are the user's decision"),
+        // v1.2: Subtitle access keys and what the extension sends are the user's.
+        n if n.starts_with("subtitle.") => Refused("Subtitle access keys are the user's"),
         // v1.0: a plugin may see what the first-run guide and the starter decks offer, but
         // setting up the collection, and when the user is reminded, are the user's.
         "onboarding.status" | "onboarding.options" | "starter.list" => Reads(DECKS),
@@ -444,6 +446,7 @@ pub(crate) fn event_domains(event: &DomainEvent) -> &'static [Domain] {
         E::AutomationChanged => &["automation"],
         E::InboxChanged { .. } => &["inbox"],
         E::LocalApiPairing { .. } | E::LocalApiClientsChanged => &["local_api"],
+        E::SubtitleChanged => &["subtitle"],
         // v1.0: the user's own session (lock state, reminders) is nobody else's business.
         E::LockChanged { .. } => &["lock"],
         E::ProfileSwitched { .. } => &["profiles"],
@@ -464,6 +467,7 @@ const GATED_EVENT_DOMAINS: &[Domain] = &[
     "reading",
     "automation",
     "local_api",
+    "subtitle",
     "lock",
     "profiles",
     "reminders",

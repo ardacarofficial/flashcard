@@ -54,6 +54,7 @@ modules! {
     clipboard,
     quick_add,
     local_api,
+    subtitle,
     maintenance,
     updates,
     onboarding,

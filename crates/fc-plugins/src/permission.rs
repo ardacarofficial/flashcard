@@ -53,6 +53,8 @@ pub const FORBIDDEN_API_AREAS: &[&str] = &[
     // that authority.
     "automation",
     "local_api",
+    // v1.2: Subtitle extension access keys are the user's decision too.
+    "subtitle",
     // v1.0: logs, crash reports, free export paths; installing updates.
     "maintenance",
     "updates",
@@ -109,6 +111,8 @@ pub const FORBIDDEN_HOOK_PREFIXES: &[&str] = &[
     "automation.",
     // v0.9: approving and revoking local API clients is the user's decision.
     "local_api.",
+    // v1.2: so are Subtitle access keys.
+    "subtitle.",
     // v1.0: profiles, the app lock and the first-run setup.
     "profiles.",
     "lock.",

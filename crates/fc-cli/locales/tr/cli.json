@@ -30,6 +30,6 @@
   "cli.plugin.no_logs": "günlük satırı yok",
   "cli.plugin.packed": "{id} {version} paketlendi → {path}",
   "cli.api.no_collection": "{path} konumunda koleksiyon yok",
-  "cli.api.module_off": "local_api modülü kapalı; önce aç: fc call modules.set_enabled '{\"id\":\"local_api\",\"enabled\":true}'",
+  "cli.api.module_off": "local_api ve subtitle modülleri kapalı; önce birini aç: fc call modules.set_enabled '{\"id\":\"local_api\",\"enabled\":true}'",
   "cli.api.listening": "fc api: dinlenen adres http://{addr}"
 }

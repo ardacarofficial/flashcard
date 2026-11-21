@@ -122,7 +122,7 @@ pub fn locked_error(method: &str) -> ApiError {
 pub fn is_background_actor(actor: &Actor) -> bool {
     matches!(
         actor,
-        Actor::LocalApi(_) | Actor::Automation(_) | Actor::Plugin(_)
+        Actor::LocalApi(_) | Actor::Subtitle(_) | Actor::Automation(_) | Actor::Plugin(_)
     )
 }
 
