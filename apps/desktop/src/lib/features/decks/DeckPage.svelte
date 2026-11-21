@@ -1,44 +1,45 @@
 <!--
-  Deck page (v1.1, docs/11 §3): header with chips and the ⋯ menu, a flippable preview card
-  (←/→ to move, Space to flip), study-mode tiles, the New / Learning / Mastered bar and the
-  term list. Modes open their own pages through `ctx.navigate` with this deck selected; a
-  mode whose module is off has no tile (rule 7). Progress numbers come from `decks.summaries`.
+  Deck page (v1.2, flow 3). Above the fold: the title with counts and chips and the ⋯ menu;
+  one action bar — primary "Study" (`Enter`) and the study modes as compact buttons (a mode
+  whose module is off has none, rule 7); then a smaller flippable preview (←/→ move, Space
+  flips) beside the New / Learning / Mastered progress, today's counts and the sub-decks.
+  Below: the term list as a dense table with inline edit. Progress numbers come from
+  `decks.summaries`, counts from `decks.tree`.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { DeckSummary, DeckTreeNode, FlagDto, ModuleDto, NoteTerm } from '$lib/api/types';
+  import { formatCount, formatPercent100 } from '$lib/format';
   import { t } from '$lib/i18n/index.svelte';
   import {
     BookOpen,
     Button,
-    Card,
     ChevronLeft,
     ChevronRight,
-    Chip,
     ClipboardCheck,
-    Download,
-    Dialog,
+    Chip,
     Flashcard,
     IconButton,
     Layers,
+    ListRow,
     Menu,
     PageHeader,
-    Pencil,
+    Play,
     Plus,
     ProgressBar,
     Repeat,
     Shuffle,
-    SlidersHorizontal,
     Skeleton,
-    Tile,
-    Trash2,
-    type MenuItem,
+    Tooltip,
   } from '$lib/ui';
   import type { ScreenCtx } from '../types';
-  import NameDialog from './NameDialog.svelte';
+  import DeckDialogs from './DeckDialogs.svelte';
+  import MasteryBar from './MasteryBar.svelte';
   import TermList from './TermList.svelte';
-  import { menuRoute, moduleOn } from './library';
+  import { addCardAction, deckMenu, goWithDeck, type DeckRequest } from './deck-menu';
+  import { pageEnter } from './keys';
+  import { menuRoute, moduleOn, summariesById } from './library';
 
   interface Props {
     ctx: ScreenCtx;
@@ -57,13 +58,11 @@
   let termsState = $state<'loading' | 'ready' | 'failed'>('loading');
   let loadingMore = $state(false);
   let flags = $state<FlagDto[]>([]);
+  let childSummaries = $state<Map<string, DeckSummary>>(new Map());
 
   let index = $state(0);
   let flipped = $state(false);
-
-  let renaming = $state(false);
-  let addingSub = $state(false);
-  let deleting = $state(false);
+  let request = $state<DeckRequest | null>(null);
 
   const current = $derived(terms[Math.min(index, Math.max(0, terms.length - 1))] ?? null);
   const due = $derived(node.counts.due + node.counts.learning);
@@ -96,6 +95,16 @@
     }
   }
 
+  /** Sub-deck progress for the sub-deck rows (the Library hands only this deck's summary). */
+  async function loadChildren() {
+    if (!node.children.length) return;
+    try {
+      childSummaries = summariesById(await api.call('decks.summaries', {}));
+    } catch {
+      /* rows show without bars */
+    }
+  }
+
   onMount(() => {
     if (moduleOn(modules, 'flags') || modules.length === 0) {
       void api.call('flags.list', {}).then(
@@ -114,6 +123,7 @@
     index = 0;
     flipped = false;
     void loadTerms();
+    void loadChildren();
   });
 
   function step(by: number) {
@@ -132,66 +142,89 @@
     }
   }
 
-  function go(route: string | null) {
-    if (!route) return;
-    ctx.selectDeck(deck.id);
-    ctx.navigate?.(route);
-  }
+  const go = (route: string | null) => goWithDeck(ctx, node, route);
 
-  /** Study modes whose module is on (docs/11 §3; Match: the `study.match` page). */
+  /** Study modes whose module is on (Match: the `study.match` page). */
   const modes = $derived(
     [
-      { id: 'cards', icon: Layers, route: menuRoute(modules, { route: '/study' }), title: t('deck_page.mode_cards'), desc: t('deck_page.mode_cards_desc'), meta: due > 0 ? t('deck_page.due_meta', { count: due }) : undefined },
-      { id: 'learn', icon: Repeat, route: menuRoute(modules, { route: '/learn' }), title: t('deck_page.mode_learn'), desc: t('deck_page.mode_learn_desc'), meta: undefined },
-      { id: 'test', icon: ClipboardCheck, route: menuRoute(modules, { route: '/test' }), title: t('deck_page.mode_test'), desc: t('deck_page.mode_test_desc'), meta: undefined },
-      { id: 'match', icon: Shuffle, route: menuRoute(modules, { id: 'study.match' }), title: t('deck_page.mode_match'), desc: t('deck_page.mode_match_desc'), meta: undefined },
-      { id: 'reading', icon: BookOpen, route: menuRoute(modules, { route: '/reading' }), title: t('deck_page.mode_reading'), desc: t('deck_page.mode_reading_desc'), meta: undefined },
+      { id: 'cards', icon: Layers, route: menuRoute(modules, { route: '/study' }), title: t('deck_page.mode_cards'), desc: t('deck_page.mode_cards_desc') },
+      { id: 'learn', icon: Repeat, route: menuRoute(modules, { route: '/learn' }), title: t('deck_page.mode_learn'), desc: t('deck_page.mode_learn_desc') },
+      { id: 'test', icon: ClipboardCheck, route: menuRoute(modules, { route: '/test' }), title: t('deck_page.mode_test'), desc: t('deck_page.mode_test_desc') },
+      { id: 'match', icon: Shuffle, route: menuRoute(modules, { id: 'study.match' }), title: t('deck_page.mode_match'), desc: t('deck_page.mode_match_desc') },
+      { id: 'reading', icon: BookOpen, route: menuRoute(modules, { route: '/reading' }), title: t('deck_page.mode_reading'), desc: t('deck_page.mode_reading_desc') },
     ].filter((m) => m.route !== null),
   );
+  const studyRoute = $derived(modes.find((m) => m.id === 'cards')?.route ?? null);
+  const addCard = $derived(addCardAction(ctx, modules));
 
-  const presetsRoute = $derived(menuRoute(modules, { route: '/presets' }));
-  const ioRoute = $derived(menuRoute(modules, { route: '/io' }));
-  const addRoute = $derived(menuRoute(modules, { route: '/notes/new' }));
-
-  const menu = $derived<MenuItem[]>([
-    { id: 'rename', label: t('deck_page.rename'), icon: Pencil, onselect: () => (renaming = true) },
-    { id: 'sub', label: t('deck_page.new_sub'), icon: Plus, onselect: () => (addingSub = true) },
-    ...(presetsRoute ? [{ id: 'options', label: t('deck_page.settings'), icon: SlidersHorizontal, onselect: () => go(presetsRoute) }] : []),
-    ...(ioRoute ? [{ id: 'export', label: t('deck_page.export'), icon: Download, onselect: () => go(ioRoute) }] : []),
-    { id: 'sep', separator: true },
-    { id: 'delete', label: t('deck_page.delete'), icon: Trash2, danger: true, onselect: () => (deleting = true) },
-  ]);
-
-  async function remove() {
-    if (await ctx.guarded(() => api.deck.remove(deck.id))) {
-      deleting = false;
-      onback();
+  function onWindowKey(e: KeyboardEvent) {
+    if (studyRoute && pageEnter(e)) {
+      e.preventDefault();
+      go(studyRoute);
     }
   }
 
   const total = $derived(summary ? summary.new + summary.learning + summary.mastered : 0);
+  const legend = $derived(
+    summary
+      ? [
+          { id: 'mastered', label: t('deck_page.mastered'), value: summary.mastered },
+          { id: 'learning', label: t('deck_page.learning'), value: summary.learning },
+          { id: 'new', label: t('deck_page.new'), value: summary.new },
+        ]
+      : [],
+  );
+  const today = $derived([
+    { id: 'due', label: t('deck_page.today_due'), value: node.counts.due },
+    { id: 'learning', label: t('deck_page.learning'), value: node.counts.learning },
+    { id: 'new', label: t('deck_page.new'), value: node.counts.new },
+  ]);
 </script>
 
-<PageHeader chrome={false}
-  title={deck.name}
-  subtitle={deck.parent_id ? deck.path : t('deck_page.cards', { count: node.counts.total })}
-  back={{ label: t('deck_page.back'), onclick: onback }}
->
+<svelte:window onkeydown={onWindowKey} />
+
+<PageHeader chrome={false} title={deck.name} subtitle={deck.parent_id ? deck.path : undefined} back={{ label: t('deck_page.back'), onclick: onback }}>
   {#snippet meta()}
-    {#if deck.parent_id}<Chip size="sm" label={t('deck_page.cards', { count: node.counts.total })} />{/if}
+    <span class="facts">
+      <span>{t('deck_page.cards', { count: node.counts.total })}</span>
+      {#if node.children.length}<span aria-hidden="true">·</span><span>{t('library.subdecks', { count: node.children.length })}</span>{/if}
+    </span>
     {#each summary?.chips ?? [] as chip (chip.attr_id + chip.label)}
-      <Chip size="sm" tone="accent" label={chip.label} />
+      <Chip size="sm" label={chip.label} />
     {/each}
   {/snippet}
   {#snippet actions()}
-    <Menu items={menu} label={t('deck_page.more')} align="end" />
+    <Menu items={deckMenu(ctx, modules, node, (r) => (request = r))} label={t('deck_page.more')} align="end" />
   {/snippet}
 </PageHeader>
 
-<div class="layout">
+{#if modes.length}
+  <div class="actionbar">
+    {#if studyRoute}
+      <Button variant="primary" icon={Play} kbd="Enter" aria-keyshortcuts="Enter" onclick={() => go(studyRoute)}>
+        {t('deck_page.study')}
+      </Button>
+      <span class="divider" aria-hidden="true"></span>
+    {/if}
+    <div class="modes" role="group" aria-label={t('deck_page.modes')}>
+      {#each modes as m (m.id)}
+        <Tooltip text={m.desc} placement="bottom">
+          <Button icon={m.icon} class="mode" data-testid="deck-mode-{m.id}" onclick={() => go(m.route)}>
+            {m.title}
+            {#if m.id === 'cards' && due > 0}
+              <span class="due-badge num" aria-label={t('deck_page.due_meta', { count: due })}>{formatCount(due)}</span>
+            {/if}
+          </Button>
+        </Tooltip>
+      {/each}
+    </div>
+  </div>
+{/if}
+
+<div class="overview">
   <section class="preview" aria-label={t('deck_page.preview')}>
     {#if termsState === 'loading'}
-      <Skeleton shape="card" height="320px" />
+      <Skeleton shape="card" height="260px" />
     {:else if current}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="card-wrap" onkeydown={onPreviewKey}>
@@ -201,33 +234,25 @@
         </Flashcard>
       </div>
       <div class="nav">
-        <IconButton icon={ChevronLeft} label={t('deck_page.prev')} variant="secondary" onclick={() => step(-1)} disabled={terms.length < 2} />
-        <span class="position" aria-live="polite">{t('deck_page.position', { index: index + 1, total: terms.length })}</span>
-        <IconButton icon={ChevronRight} label={t('deck_page.next')} variant="secondary" onclick={() => step(1)} disabled={terms.length < 2} />
+        <IconButton size="sm" icon={ChevronLeft} label={t('deck_page.prev')} onclick={() => step(-1)} disabled={terms.length < 2} />
+        <span class="position num" aria-live="polite">{t('deck_page.position', { index: formatCount(index + 1), total: formatCount(terms.length) })}</span>
+        <IconButton size="sm" icon={ChevronRight} label={t('deck_page.next')} onclick={() => step(1)} disabled={terms.length < 2} />
+        <span class="hint">{t('deck_page.flip_hint')}</span>
       </div>
-      <p class="hint">{t('deck_page.flip_hint')}</p>
     {:else}
-      <Card padding="lg" class="preview-empty">
+      <div class="preview-empty">
         <p>{t('deck_page.preview_empty')}</p>
-        {#if addRoute}<Button icon={Plus} onclick={() => go(addRoute)}>{t('deck_page.add_card')}</Button>{/if}
-      </Card>
+        {#if addCard}<Button size="sm" icon={Plus} onclick={() => addCard(node)}>{t('deck_page.add_card')}</Button>{/if}
+      </div>
     {/if}
   </section>
 
-  {#if modes.length}
-    <section aria-labelledby="deck-modes">
-      <h2 id="deck-modes" class="section-title">{t('deck_page.modes')}</h2>
-      <ul class="modes">
-        {#each modes as m (m.id)}
-          <li><Tile icon={m.icon} title={m.title} description={m.desc} meta={m.meta} testid="deck-mode-{m.id}" onclick={() => go(m.route)} /></li>
-        {/each}
-      </ul>
-    </section>
-  {/if}
-
-  <section aria-labelledby="deck-progress">
-    <h2 id="deck-progress" class="section-title">{t('deck_page.progress')}</h2>
-    <Card padding="lg">
+  <div class="side">
+    <section class="block" aria-labelledby="deck-progress">
+      <div class="block-head">
+        <h2 id="deck-progress" class="block-title">{t('deck_page.progress')}</h2>
+        {#if summary}<span class="aside">{t('library.mastered', { pct: formatPercent100(summary.mastered_pct) })}</span>{/if}
+      </div>
       {#if summary}
         <ProgressBar
           size="lg"
@@ -240,64 +265,124 @@
           ]}
         />
         <dl class="legend">
-          <div><dt><span class="dot mastered" aria-hidden="true"></span>{t('deck_page.mastered')}</dt><dd>{summary.mastered}</dd></div>
-          <div><dt><span class="dot learning" aria-hidden="true"></span>{t('deck_page.learning')}</dt><dd>{summary.learning}</dd></div>
-          <div><dt><span class="dot new" aria-hidden="true"></span>{t('deck_page.new')}</dt><dd>{summary.new}</dd></div>
+          {#each legend as l (l.id)}
+            <div><dt><span class="dot {l.id}" aria-hidden="true"></span>{l.label}</dt><dd class="num">{formatCount(l.value)}</dd></div>
+          {/each}
         </dl>
       {:else}
         <Skeleton shape="text" lines={2} />
       {/if}
-    </Card>
-  </section>
+    </section>
 
-  <TermList
-    {terms}
-    status={termsState}
-    {flags}
-    flagsOn={moduleOn(modules, 'flags')}
-    hasMore={cursor !== null}
-    {loadingMore}
-    guarded={ctx.guarded}
-    onmore={() => void loadMore()}
-    onretry={() => void loadTerms()}
-    onadd={addRoute ? () => go(addRoute) : null}
-    onchange={(row) => (terms = terms.map((r) => (r.note_id === row.note_id ? row : r)))}
-  />
+    <section class="block" aria-labelledby="deck-today">
+      <h2 id="deck-today" class="block-title">{t('deck_page.today')}</h2>
+      <dl class="legend">
+        {#each today as l (l.id)}
+          <div><dt>{l.label}</dt><dd class="num" class:zero={l.value === 0}>{formatCount(l.value)}</dd></div>
+        {/each}
+      </dl>
+    </section>
+
+    {#if node.children.length}
+      <section class="block subdecks" aria-labelledby="deck-subs">
+        <h2 id="deck-subs" class="block-title">{t('deck_page.subdecks')}</h2>
+        <ul class="sub-list">
+          {#each node.children as child (child.deck.id)}
+            {@const childDue = child.counts.due + child.counts.learning}
+            <ListRow onclick={() => ctx.selectDeck(child.deck.id)} buttonLabel={t('library.open', { name: child.deck.name })} cellColumns="48px 96px">
+              <span class="sub-name">
+                <span class="swatch" style:background={child.deck.color ?? 'var(--accent)'} aria-hidden="true"></span>
+                <span class="sub-label">{child.deck.name}</span>
+              </span>
+              {#snippet cells()}
+                <span class="num sub-due" class:zero={childDue === 0} title={t('library.due', { count: childDue })}>{formatCount(childDue)}</span>
+                <MasteryBar summary={childSummaries.get(child.deck.id) ?? null} name={child.deck.name} />
+              {/snippet}
+            </ListRow>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+  </div>
 </div>
 
-<NameDialog bind:open={renaming} title={t('deck_page.rename_title')} initial={deck.name} onsubmit={(name) => ctx.guarded(() => api.deck.rename(deck.id, name))} />
-<NameDialog
-  bind:open={addingSub}
-  title={t('deck_page.sub_title', { name: deck.name })}
-  onsubmit={(name) => ctx.guarded(() => api.deck.create(name, deck.id))}
+<TermList
+  {terms}
+  status={termsState}
+  {flags}
+  flagsOn={moduleOn(modules, 'flags')}
+  hasMore={cursor !== null}
+  {loadingMore}
+  guarded={ctx.guarded}
+  onmore={() => void loadMore()}
+  onretry={() => void loadTerms()}
+  onadd={addCard ? () => addCard(node) : null}
+  onchange={(row) => (terms = terms.map((r) => (r.note_id === row.note_id ? row : r)))}
 />
-<Dialog bind:open={deleting} role="alertdialog" size="sm" title={t('deck_page.delete_title', { name: deck.name })} description={t('deck_page.delete_body')}>
-  {#snippet footer()}
-    <Button variant="ghost" onclick={() => (deleting = false)}>{t('common.cancel')}</Button>
-    <Button variant="danger" icon={Trash2} onclick={() => void remove()}>{t('deck_page.delete')}</Button>
-  {/snippet}
-</Dialog>
+
+<DeckDialogs bind:request guarded={ctx.guarded} ondeleted={(n) => n.deck.id === deck.id && onback()} />
 
 <style>
-  .layout {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-8);
+  .facts {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-inline-end: var(--space-1);
+    color: var(--text-2);
+    font-size: var(--text-xs);
   }
-  .section-title {
-    margin: 0 0 var(--space-3);
-    font-size: var(--text-lg);
-    font-weight: var(--weight-semibold);
+  .actionbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  .divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+  }
+  .modes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+  .modes :global(.mode svg) {
+    color: var(--text-2);
+  }
+  .modes :global(.mode:hover svg) {
+    color: var(--accent-text);
+  }
+  .due-badge {
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    font-size: var(--text-2xs);
+    line-height: 18px;
+  }
+  .overview {
+    container-type: inline-size;
+    display: grid;
+    grid-template-columns: minmax(0, 460px) minmax(0, 1fr);
+    gap: var(--space-4);
+    align-items: start;
+    margin-bottom: var(--space-6);
+  }
+  @container (max-width: 720px) {
+    .overview > * {
+      grid-column: 1 / -1;
+    }
   }
   .preview {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2);
+    min-width: 0;
   }
   .card-wrap {
     width: 100%;
-    max-width: 720px;
   }
   .face {
     overflow-wrap: anywhere;
@@ -305,70 +390,97 @@
   .nav {
     display: flex;
     align-items: center;
-    gap: var(--space-4);
+    gap: var(--space-2);
   }
   .position {
-    min-width: 72px;
-    text-align: center;
-    font-size: var(--text-sm);
-    font-variant-numeric: tabular-nums;
+    min-width: 56px;
     color: var(--text-2);
+    font-size: var(--text-xs);
+    text-align: center;
   }
   .hint {
-    margin: 0;
-    font-size: var(--text-xs);
+    margin-inline-start: auto;
     color: var(--text-2);
+    font-size: var(--text-xs);
   }
-  :global(.preview-empty.fc-card) {
+  .preview-empty {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: var(--space-3);
-    width: 100%;
-    max-width: 720px;
+    min-height: 200px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-flashcard);
     color: var(--text-2);
   }
-  :global(.preview-empty.fc-card) p {
+  .preview-empty p {
     margin: 0;
   }
-  .modes {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
-    gap: var(--space-4);
-    margin: 0;
-    padding: 0;
-    list-style: none;
+  .side {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
   }
-  .modes :global(.fc-tile) {
-    height: 100%;
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+  }
+  .block + .block {
+    border-top: 1px solid var(--border);
+  }
+  .block-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  .block-title {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+  }
+  .aside {
+    color: var(--text-2);
+    font-size: var(--text-xs);
   }
   .legend {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-8);
-    margin: var(--space-4) 0 0;
+    gap: var(--space-2) var(--space-6);
+    margin: 0;
   }
   .legend div {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 2px;
   }
   .legend dt {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-sm);
+    gap: 6px;
     color: var(--text-2);
+    font-size: var(--text-xs);
   }
   .legend dd {
     margin: 0;
-    font-size: var(--text-xl);
+    color: var(--text-1);
+    font-size: var(--text-lg);
     font-weight: var(--weight-semibold);
-    font-variant-numeric: tabular-nums;
+  }
+  .legend dd.zero,
+  .sub-due.zero {
+    color: var(--text-2);
   }
   .dot {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: var(--radius-pill);
   }
   .dot.new {
@@ -379,5 +491,33 @@
   }
   .dot.mastered {
     background: var(--success-solid);
+  }
+  .subdecks {
+    padding-bottom: var(--space-1);
+  }
+  .sub-list {
+    margin: 0 calc(-1 * var(--space-2));
+    padding: 0;
+    list-style: none;
+  }
+  .sub-name {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+  .sub-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .swatch {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+  }
+  .sub-due {
+    color: var(--accent-text);
   }
 </style>

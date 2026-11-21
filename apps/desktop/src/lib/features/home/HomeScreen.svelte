@@ -1,44 +1,53 @@
 <!--
-  Home (v1.1, docs/11 §3): today's due / learning / new counts with one big "Start studying",
-  the inbox notice (when something waits), streak and goal, and the recently studied decks.
-  Plain wording, no greetings. Every number is the backend's: `decks.summaries` (today and
-  recent decks), `stats.overview` (streak), `goals.list`, `inbox.count`; parts whose module is
-  off are left out (rule 7).
+  Home (v1.2, flow 2) answers "what do I do now": the first line is today's total with its
+  Due · Learning · New breakdown and "Start studying" (`Enter` when the focus is not in a
+  field); then the decks with work as dense rows (due / learning / new in mono, mastery bar,
+  per-row "Study"; the row opens the deck page); a compact stat strip (streak, goal, today's
+  answers); the inbox as one slim row when something waits. Every number is the backend's:
+  `decks.summaries`, `stats.overview`, `goals.list`, `inbox.count`; parts whose module is off
+  are left out (rule 7).
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
-  import type { DeckSummaries, GoalItem, ModuleDto, Streak } from '$lib/api/types';
+  import type { DeckSummaries, DeckTreeNode, GoalItem, ModuleDto, ReviewTotals, Streak } from '$lib/api/types';
   import type { ScreenCtx } from '$lib/features';
+  import { formatCount, formatDuration } from '$lib/format';
   import { t, td } from '$lib/i18n/index.svelte';
   import {
     Button,
-    Card,
+    ChevronRight,
     CircleCheck,
     EmptyState,
     Flame,
-    GraduationCap,
+    Icon,
     Inbox,
     Library,
+    ListRow,
     PageHeader,
+    Play,
     Plus,
     ProgressBar,
     Skeleton,
+    StatTile,
     Target,
-    Icon,
+    Timer,
   } from '$lib/ui';
-  import DeckCard from '../decks/DeckCard.svelte';
+  import MasteryBar from '../decks/MasteryBar.svelte';
+  import { studyDeck } from '../decks/deck-menu';
+  import { pageEnter } from '../decks/keys';
   import { moduleOn, nodesById, summariesById } from '../decks/library';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
-  /** Decks shown under "Recent" (and the fallback when nothing was studied yet). */
+  /** Decks listed when nothing is due (recently studied first). */
   const RECENT = 6;
 
   let summaries = $state<DeckSummaries | null>(null);
   let failed = $state(false);
   let modules = $state<ModuleDto[]>([]);
   let streak = $state<Streak | null>(null);
+  let totals = $state<ReviewTotals | null>(null);
   let goal = $state<GoalItem | null>(null);
   let goalsLoaded = $state(false);
   let inbox = $state(0);
@@ -47,9 +56,28 @@
   const byId = $derived(summariesById(summaries));
   const today = $derived(summaries?.today ?? null);
   const todayCount = $derived(today ? today.due + today.learning + today.new : 0);
-  const recentIds = $derived(summaries?.recent.length ? summaries.recent : ctx.decks.map((n) => n.deck.id));
-  const recent = $derived(recentIds.flatMap((id) => nodes.get(id) ?? []).slice(0, RECENT));
-  const studied = $derived((summaries?.recent.length ?? 0) > 0);
+  const work = (n: DeckTreeNode) => n.counts.due + n.counts.learning + n.counts.new;
+
+  type Row = { node: DeckTreeNode; depth: number };
+  /** Decks with work today in tree order (sub-decks indented under their parent). */
+  const workRows = $derived.by(() => {
+    const out: Row[] = [];
+    const walk = (list: DeckTreeNode[], depth: number) => {
+      for (const node of list) {
+        if (work(node) === 0) continue;
+        out.push({ node, depth });
+        walk(node.children, depth + 1);
+      }
+    };
+    walk(ctx.decks, 0);
+    return out;
+  });
+  /** Nothing due: the recently studied decks (or the first ones), so Home still leads somewhere. */
+  const recentRows = $derived.by(() => {
+    const ids = summaries?.recent.length ? summaries.recent : ctx.decks.map((n) => n.deck.id);
+    return ids.flatMap((id) => nodes.get(id) ?? []).slice(0, RECENT).map((node) => ({ node, depth: 0 }));
+  });
+  const rows = $derived(workRows.length ? workRows : recentRows);
 
   const statsOn = $derived(moduleOn(modules, 'stats'));
   const goalsOn = $derived(moduleOn(modules, 'goals'));
@@ -57,6 +85,7 @@
   const open = (route: string) => ctx.navigate?.(route);
 
   function study() {
+    if (todayCount === 0) return;
     ctx.selectDeck(null);
     open('/study');
   }
@@ -64,6 +93,13 @@
   function openDeck(id: string) {
     ctx.selectDeck(id);
     open('/decks');
+  }
+
+  function onWindowKey(e: KeyboardEvent) {
+    if (todayCount > 0 && pageEnter(e)) {
+      e.preventDefault();
+      study();
+    }
   }
 
   async function loadSummary() {
@@ -79,7 +115,10 @@
     const tz = -new Date().getTimezoneOffset();
     if (moduleOn(list, 'stats')) {
       api.call('stats.overview', { scope: { deck_id: null, tag: null, query: null }, tz_offset_mins: tz, days: 1, forecast_days: 1, fresh: null }).then(
-        (o) => (streak = o.reviews.streak),
+        (o) => {
+          streak = o.reviews.streak;
+          totals = o.reviews.totals;
+        },
         () => (streak = null),
       );
     }
@@ -117,76 +156,96 @@
   });
 </script>
 
-<PageHeader title={t('home.title')} />
+<svelte:window onkeydown={onWindowKey} />
+
+<!-- The top bar already names the page: the title stays for screen readers and the outline. -->
+<PageHeader title={t('home.title')} class="sr-only" />
 
 {#if failed}
-  <Card class="home-failed">
-    <p role="alert">{t('home.load_failed')}</p>
-    <Button size="sm" onclick={() => void loadAll()}>{t('home.retry')}</Button>
-  </Card>
+  <div class="notice error" role="alert">
+    <span>{t('home.load_failed')}</span>
+    <Button size="sm" variant="ghost" onclick={() => void loadAll()}>{t('home.retry')}</Button>
+  </div>
 {:else if !summaries}
   <div class="stack" aria-busy="true" aria-label={t('common.loading')}>
-    <Skeleton shape="card" height="168px" />
-    <div class="stats"><Skeleton shape="card" height="112px" /><Skeleton shape="card" height="112px" /></div>
+    <Skeleton shape="card" height="88px" />
+    <Skeleton shape="card" height="200px" />
   </div>
 {:else if ctx.decks.length === 0}
-  <Card padding="lg">
+  <div class="panel empty">
     <EmptyState
       icon={Library}
       title={t('home.empty_title')}
       description={t('home.empty_body')}
       action={{ label: t('home.empty_action'), icon: Plus, onclick: () => open('/decks') }}
     />
-  </Card>
+  </div>
 {:else}
   <div class="stack">
-    <Card padding="lg" elevated class="today">
+    <section class="today" aria-labelledby="home-today">
       <div class="today-text">
-        <span class="eyebrow">{t('home.today')}</span>
+        <h2 id="home-today" class="eyebrow">{t('home.today')}</h2>
         {#if todayCount > 0}
-          <p class="big"><span class="num">{todayCount}</span> <span class="unit">{t('home.today_label')}</span></p>
+          <p class="total"><span class="big num">{formatCount(todayCount)}</span> <span class="unit">{t('home.today_label')}</span></p>
         {:else}
-          <p class="big caught"><Icon icon={CircleCheck} size={24} /> {t('home.caught_up')}</p>
+          <p class="total caught"><Icon icon={CircleCheck} size={20} /> {t('home.caught_up')}</p>
+        {/if}
+        {#if today && todayCount > 0}
+          <ul class="counts">
+            <li><span class="dot due" aria-hidden="true"></span>{t('home.count_due')} <strong class="num">{formatCount(today.due)}</strong></li>
+            <li><span class="dot learning" aria-hidden="true"></span>{t('home.count_learning')} <strong class="num">{formatCount(today.learning)}</strong></li>
+            <li><span class="dot new" aria-hidden="true"></span>{t('home.count_new')} <strong class="num">{formatCount(today.new)}</strong></li>
+          </ul>
+        {:else}
           <p class="sub">{t('home.caught_up_body')}</p>
         {/if}
-        {#if today}
-          <ul class="counts">
-            <li><span class="dot due" aria-hidden="true"></span>{t('home.count_due')} <strong>{today.due}</strong></li>
-            <li><span class="dot learning" aria-hidden="true"></span>{t('home.count_learning')} <strong>{today.learning}</strong></li>
-            <li><span class="dot new" aria-hidden="true"></span>{t('home.count_new')} <strong>{today.new}</strong></li>
-          </ul>
-        {/if}
       </div>
-      <Button variant="primary" size="lg" icon={GraduationCap} disabled={todayCount === 0} onclick={study}>{t('home.start')}</Button>
-    </Card>
+      <Button variant="primary" size="lg" icon={Play} kbd="Enter" aria-keyshortcuts="Enter" disabled={todayCount === 0} onclick={study}>{t('home.start')}</Button>
+    </section>
 
     {#if inbox > 0}
-      <Card padding="md" class="inbox">
-        <span class="inbox-text"><Icon icon={Inbox} size={20} /> {t('home.inbox_notice', { count: inbox })}</span>
-        <Button size="sm" variant="secondary" onclick={() => open('/inbox')}>{t('home.inbox_open')}</Button>
-      </Card>
+      <button type="button" class="inbox-row" onclick={() => open('/inbox')}>
+        <Icon icon={Inbox} size={16} />
+        <span class="inbox-text">{t('home.inbox_notice', { count: inbox })}</span>
+        <span class="inbox-open">{t('home.inbox_open')}<Icon icon={ChevronRight} size={14} /></span>
+      </button>
     {/if}
 
     {#if statsOn || goalsOn}
-      <div class="stats">
+      <div class="strip">
         {#if statsOn}
-          <Card padding="md" class="stat">
-            <span class="stat-label"><Icon icon={Flame} size={16} /> {t('home.streak')}</span>
-            {#if streak}
-              <span class="stat-value">{t('home.streak_days', { count: streak.current })}</span>
-              <span class="stat-sub">
-                {streak.studied_today ? t('home.streak_today') : t('home.streak_not_today')} · {t('home.streak_best', { count: streak.longest })}
-              </span>
-            {:else}
-              <Skeleton shape="text" lines={2} />
-            {/if}
-          </Card>
+          {#if streak}
+            <StatTile
+              size="sm"
+              icon={Flame}
+              label={t('home.streak')}
+              value={formatCount(streak.current)}
+              unit={t('home.streak_unit', { count: streak.current })}
+              hint={`${streak.studied_today ? t('home.streak_today') : t('home.streak_not_today')} · ${t('home.streak_best', { count: streak.longest })}`}
+              tone={streak.studied_today ? 'neutral' : 'warning'}
+            />
+            <StatTile
+              size="sm"
+              icon={Timer}
+              label={t('home.answered')}
+              value={formatCount(totals?.reviews ?? 0)}
+              unit={t('home.answered_unit', { count: totals?.reviews ?? 0 })}
+              hint={totals && totals.time_ms > 0 ? t('home.answered_time', { time: formatDuration(totals.time_ms) }) : t('home.answered_none')}
+            />
+          {:else}
+            <Skeleton shape="card" height="76px" />
+          {/if}
         {/if}
         {#if goalsOn}
-          <Card padding="md" class="stat">
-            <span class="stat-label"><Icon icon={Target} size={16} /> {t('home.goal')}</span>
-            {#if goal}
-              <span class="stat-value small">{td(`goals.kind.${goal.goal.kind}`)}</span>
+          {#if goal}
+            <StatTile
+              size="sm"
+              icon={Target}
+              label={`${t('home.goal')} · ${td(`goals.kind.${goal.goal.kind}`)}`}
+              value={`${formatCount(goal.progress.current)} / ${formatCount(goal.progress.target)}`}
+              tone={goal.progress.done ? 'success' : 'neutral'}
+              hint={goal.progress.done ? t('home.goal_done') : undefined}
+            >
               <ProgressBar
                 size="sm"
                 label={td(`goals.kind.${goal.goal.kind}`)}
@@ -194,30 +253,58 @@
                 max={Math.max(1, goal.progress.target)}
                 tone={goal.progress.done ? 'success' : 'accent'}
               />
-              <span class="stat-sub">
-                {goal.progress.done ? t('home.goal_done') : t('home.goal_progress', { current: goal.progress.current, target: goal.progress.target })}
-              </span>
-            {:else if goalsLoaded}
-              <span class="stat-sub">{t('home.goal_none')}</span>
+            </StatTile>
+          {:else if goalsLoaded}
+            <div class="goal-empty">
+              <span class="goal-label"><Icon icon={Target} size={14} />{t('home.goal')}</span>
+              <span class="goal-none">{t('home.goal_none')}</span>
               <Button size="sm" variant="ghost" icon={Plus} onclick={() => open('/goals')}>{t('home.goal_set')}</Button>
-            {:else}
-              <Skeleton shape="text" lines={2} />
-            {/if}
-          </Card>
+            </div>
+          {:else}
+            <Skeleton shape="card" height="76px" />
+          {/if}
         {/if}
       </div>
     {/if}
 
     <section aria-labelledby="home-decks">
       <div class="section-head">
-        <h2 id="home-decks" class="section-title">{studied ? t('home.recent') : t('home.decks')}</h2>
-        <Button size="sm" variant="ghost" onclick={() => open('/decks')}>{t('home.all_decks')}</Button>
+        <h2 id="home-decks" class="section-title">{workRows.length ? t('home.decks_due') : t('home.recent')}</h2>
+        <Button size="sm" variant="ghost" iconEnd={ChevronRight} onclick={() => open('/decks')}>{t('home.all_decks')}</Button>
       </div>
-      <ul class="grid">
-        {#each recent as node (node.deck.id)}
-          <li><DeckCard {node} summary={byId.get(node.deck.id) ?? null} chips={false} onopen={() => openDeck(node.deck.id)} /></li>
-        {/each}
-      </ul>
+      <div class="panel">
+        <ul class="deck-list" aria-labelledby="home-decks">
+          <ListRow header cellColumns="var(--home-cols)">
+            <span class="col-name">{t('home.col_deck')}</span>
+            {#snippet cells()}
+              <span>{t('home.count_due')}</span>
+              <span>{t('home.count_learning')}</span>
+              <span>{t('home.count_new')}</span>
+              <span class="start">{t('home.col_mastery')}</span>
+            {/snippet}
+            {#snippet actions()}<span class="actions-space"></span>{/snippet}
+          </ListRow>
+          {#each rows as { node, depth } (node.deck.id)}
+            <ListRow depth={depth} onclick={() => openDeck(node.deck.id)} buttonLabel={t('home.deck_open', { name: node.deck.name })} cellColumns="var(--home-cols)">
+              <span class="name" data-testid="home-deck">
+                <span class="swatch" style:background={node.deck.color ?? 'var(--accent)'} aria-hidden="true"></span>
+                <span class="label">{node.deck.name}</span>
+              </span>
+              {#snippet cells()}
+                <span class="num n due" class:zero={node.counts.due === 0}>{formatCount(node.counts.due)}</span>
+                <span class="num n" class:zero={node.counts.learning === 0}>{formatCount(node.counts.learning)}</span>
+                <span class="num n" class:zero={node.counts.new === 0}>{formatCount(node.counts.new)}</span>
+                <MasteryBar summary={byId.get(node.deck.id) ?? null} name={node.deck.name} />
+              {/snippet}
+              {#snippet actions()}
+                <Button size="sm" variant="ghost" icon={Play} disabled={work(node) === 0} aria-label={t('home.study_deck', { name: node.deck.name })} onclick={() => studyDeck(ctx, modules, node)}>
+                  {t('home.study')}
+                </Button>
+              {/snippet}
+            </ListRow>
+          {/each}
+        </ul>
+      </div>
     </section>
   </div>
 {/if}
@@ -226,48 +313,51 @@
   .stack {
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    gap: var(--space-5);
   }
-  :global(.today.fc-card) {
+  .today {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-6);
+    gap: var(--space-4) var(--space-6);
     flex-wrap: wrap;
+    padding-bottom: var(--space-5);
+    border-bottom: 1px solid var(--border);
   }
   .today-text {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: var(--space-1);
     min-width: 0;
   }
   .eyebrow {
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
+    margin: 0;
     color: var(--accent-text);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
   }
-  .big {
+  .total {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
     gap: var(--space-2);
     margin: 0;
   }
-  .num {
-    font-size: var(--text-3xl);
-    font-weight: var(--weight-bold);
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
+  .big {
+    font-size: 40px;
+    font-weight: var(--weight-semibold);
+    letter-spacing: -0.03em;
+    line-height: 1.05;
   }
   .unit {
-    font-size: var(--text-lg);
     color: var(--text-2);
+    font-size: var(--text-lg);
   }
-  .big.caught {
+  .total.caught {
     align-items: center;
+    color: var(--success);
     font-size: var(--text-xl);
     font-weight: var(--weight-semibold);
-    color: var(--success);
   }
   .sub {
     margin: 0;
@@ -276,21 +366,21 @@
   .counts {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-6);
-    margin: var(--space-2) 0 0;
+    gap: var(--space-1) var(--space-5);
+    margin: var(--space-1) 0 0;
     padding: 0;
-    list-style: none;
-    font-size: var(--text-sm);
     color: var(--text-2);
+    font-size: var(--text-sm);
+    list-style: none;
   }
   .counts li {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: 6px;
   }
   .counts strong {
     color: var(--text-1);
-    font-variant-numeric: tabular-nums;
+    font-weight: var(--weight-semibold);
   }
   .dot {
     width: 8px;
@@ -306,82 +396,169 @@
   .dot.new {
     background: var(--border-strong);
   }
-  :global(.inbox.fc-card) {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    background: var(--accent-soft);
-    border-color: transparent;
-  }
-  .inbox-text {
+  .inbox-row {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    font-weight: var(--weight-medium);
+    width: 100%;
+    min-height: var(--row-h);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-sm);
+    text-align: start;
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--ease);
   }
-  .stats {
+  .inbox-row :global(svg) {
+    flex: none;
+    color: var(--accent-text);
+  }
+  .inbox-row:hover {
+    background: var(--surface-2);
+  }
+  .inbox-row:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .inbox-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .inbox-open {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    color: var(--text-2);
+    font-size: var(--text-xs);
+  }
+  .inbox-open :global(svg) {
+    color: var(--text-2);
+  }
+  .strip {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-3);
   }
-  :global(.stat.fc-card) {
+  .strip :global(.fc-progress) {
+    margin-top: var(--space-1);
+  }
+  .goal-empty {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--space-2);
+    gap: 2px;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
   }
-  :global(.stat.fc-card) :global(.fc-progress) {
-    width: 100%;
-  }
-  .stat-label {
-    display: flex;
+  .goal-label {
+    display: inline-flex;
     align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
+    gap: 6px;
     color: var(--text-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
   }
-  .stat-value {
-    font-size: var(--text-xl);
-    font-weight: var(--weight-bold);
-    font-variant-numeric: tabular-nums;
+  .goal-label :global(svg) {
+    color: var(--text-3);
   }
-  .stat-value.small {
-    font-size: var(--text-md);
-    font-weight: var(--weight-semibold);
-  }
-  .stat-sub {
-    font-size: var(--text-sm);
+  .goal-none {
     color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .goal-empty :global(.fc-btn) {
+    margin-inline-start: -8px;
   }
   .section-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: var(--space-3);
+    margin-bottom: var(--space-2);
   }
   .section-title {
     margin: 0;
-    font-size: var(--text-lg);
+    font-size: var(--text-md);
     font-weight: var(--weight-semibold);
   }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: var(--space-4);
+  .panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+  }
+  .panel :global(.fc-list-row:last-child) {
+    border-radius: 0 0 calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px);
+  }
+  .panel.empty {
+    padding: var(--space-8) var(--space-4);
+  }
+  .deck-list {
+    --home-cols: 64px 88px 56px 132px;
     margin: 0;
     padding: 0;
     list-style: none;
   }
-  :global(.home-failed.fc-card) {
+  .start {
+    text-align: start;
+  }
+  .name {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+  .label {
+    overflow: hidden;
+    font-weight: var(--weight-medium);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .swatch {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+  }
+  .n {
+    color: var(--text-1);
+  }
+  .due:not(.zero) {
+    color: var(--accent-text);
+    font-weight: var(--weight-medium);
+  }
+  .zero {
+    color: var(--text-2);
+  }
+  .actions-space {
+    display: block;
+    width: 72px;
+  }
+  .deck-list :global(.fc-list-row .actions) {
+    min-width: 72px;
+    justify-content: flex-end;
+  }
+  .notice {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
+    min-height: var(--row-h);
+    padding: 0 var(--space-2) 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    font-size: var(--text-sm);
   }
-  :global(.home-failed.fc-card) p {
-    margin: 0;
+  .notice.error {
+    background: var(--danger-soft);
     color: var(--danger);
+  }
+  @media (max-width: 1023.98px) {
+    .deck-list {
+      --home-cols: 48px 80px 48px 96px;
+    }
   }
 </style>
