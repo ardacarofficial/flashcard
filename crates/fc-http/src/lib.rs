@@ -22,7 +22,7 @@
 //! The same server also answers the Subtitle browser extension's contract under
 //! `/subtitle/v1/*` (v1.2, module `subtitle`, see `subtitle.rs`): it runs while either module
 //! is on, and `/v1/*` answers only while `local_api` is on (`503 CONFLICT_MODULE_DISABLED`
-//! otherwise, `ping` included), `/subtitle/*` only while `subtitle` is on (`404`).
+//! otherwise, `ping` included), `/subtitle/*` only while `subtitle` is on (`503` + `Retry-After` otherwise).
 //!
 //! App calls are blocking (SQLite), so they run on tokio's blocking pool.
 

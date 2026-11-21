@@ -3,9 +3,13 @@
 //! the extension; every path below is relative to it. Every decision is the `subtitle`
 //! module's ([`fc_app::modules::subtitle`]); this file speaks the contract's HTTP:
 //!
-//! * the module off → `404` for every route (before anything else is looked at);
+//! * the module off → `503` + `Retry-After` for every route, before anything else is looked
+//!   at (no key check, no data: only "unavailable"). Not `404`: the extension takes a `404` on
+//!   `/v1/media` for "this server has no media" and stops sending pictures and sounds for
+//!   good, and any other `4xx` as a permanent failure; a `503` makes its outbox wait;
 //! * `Authorization: Bearer <access key>` on every request (`401` without a working one), then
-//!   a per-key rate limit (`429` + `Retry-After`);
+//!   a per-key rate limit ([`KEY_BURST`] at once, [`KEY_RATE_PER_SEC`] sustained; `429` +
+//!   `Retry-After`) sized so that flushing a backlog never hits it;
 //! * errors as `{ "error": { "code", "message" } }`, statuses as the contract lists them
 //!   (`422` invalid, `413` too large, `415` wrong media type, `503` + `Retry-After` while the
 //!   app is locked, so the extension retries instead of giving up).
@@ -18,7 +22,7 @@
 //! collection carries a key only the extension has.
 
 use crate::routes::{bearer, blocking, json, lock, token_hash, Bucket, Shared};
-use crate::{CLIENT_BURST, CLIENT_RATE_PER_SEC, MAX_BODY_BYTES};
+use crate::MAX_BODY_BYTES;
 use axum::body::Body;
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::Response;
@@ -35,6 +39,16 @@ pub(crate) const ALLOW_HEADERS: &str =
 
 /// Seconds the extension is told to wait while the app is locked.
 const LOCKED_RETRY_SECS: u64 = 30;
+/// Seconds the extension is told to wait while the `subtitle` module is off.
+pub(crate) const MODULE_OFF_RETRY_SECS: u64 = 300;
+
+/// Requests one access key may make at once. The extension's outbox flushes a backlog in
+/// batches of 20 captures, each after up to two media uploads (~41 requests a round, one
+/// round after another until the queue is empty): a few hundred queued words fit without a
+/// `429`. A runaway client is still bounded by [`KEY_RATE_PER_SEC`].
+pub const KEY_BURST: f64 = 1_000.0;
+/// Sustained requests per second per access key.
+pub const KEY_RATE_PER_SEC: f64 = 100.0;
 
 fn api(code: ErrorCode, message: &str) -> ApiError {
     ApiError::new(code, message)
@@ -43,7 +57,8 @@ fn api(code: ErrorCode, message: &str) -> ApiError {
 /// Status of an error on `/subtitle/v1/*`.
 fn status_of(e: &ApiError) -> StatusCode {
     match e.code {
-        ErrorCode::ConflictModuleDisabled | ErrorCode::NotFoundMethod => StatusCode::NOT_FOUND,
+        ErrorCode::NotFoundMethod => StatusCode::NOT_FOUND,
+        ErrorCode::ConflictModuleDisabled => StatusCode::SERVICE_UNAVAILABLE,
         ErrorCode::PermissionUnauthenticated => StatusCode::UNAUTHORIZED,
         ErrorCode::ValidationPayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
         ErrorCode::ConflictRateLimited => StatusCode::TOO_MANY_REQUESTS,
@@ -71,6 +86,7 @@ pub(crate) fn error(e: &ApiError) -> Response {
     let mut r = json(status, &SubtitleError { error: body });
     let retry = match e.code {
         ErrorCode::PermissionAppLocked => Some(LOCKED_RETRY_SECS),
+        ErrorCode::ConflictModuleDisabled => Some(MODULE_OFF_RETRY_SECS),
         _ => e.details.get("retry_after_secs").and_then(Value::as_u64),
     };
     if let Some(secs) = retry {
@@ -83,6 +99,14 @@ pub(crate) fn error(e: &ApiError) -> Response {
         HeaderValue::from_static("retry-after"),
     );
     r
+}
+
+/// The module is off: the same answer for everyone, key or not.
+fn module_off() -> ApiError {
+    api(
+        ErrorCode::ConflictModuleDisabled,
+        "the Subtitle connection is turned off in the app",
+    )
 }
 
 fn not_found(method: &Method, path: &str) -> ApiError {
@@ -188,8 +212,8 @@ async fn authenticate(
     let key = blocking(move || subtitle::authenticate(&app, &hash)).await?;
     lock(&s.key_buckets)
         .entry(key.id)
-        .or_insert_with(|| Bucket::full(CLIENT_BURST))
-        .take(CLIENT_RATE_PER_SEC, CLIENT_BURST)
+        .or_insert_with(|| Bucket::full(KEY_BURST))
+        .take(KEY_RATE_PER_SEC, KEY_BURST)
         .map_err(crate::routes::rate_limited)?;
     let due = {
         let mut t = lock(&s.key_touched);
@@ -220,8 +244,8 @@ pub(crate) async fn route(
     headers: &HeaderMap,
     body: Body,
 ) -> Result<Response, ApiError> {
-    // Off: nothing here exists.
-    subtitle::ensure_enabled(&s.app).map_err(|_| not_found(method, path))?;
+    // Off: unavailable for now (the extension waits and retries); nothing else is told.
+    subtitle::ensure_enabled(&s.app).map_err(|_| module_off())?;
     let rest = path
         .strip_prefix(subtitle::PATH_PREFIX)
         .and_then(|p| p.strip_prefix("/v1/"))
@@ -319,7 +343,18 @@ mod tests {
     #[test]
     fn statuses_follow_the_contract() {
         let s = |c| status_of(&ApiError::new(c, ""));
-        assert_eq!(s(ErrorCode::ConflictModuleDisabled), StatusCode::NOT_FOUND);
+        assert_eq!(
+            s(ErrorCode::ConflictModuleDisabled),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(s(ErrorCode::NotFoundMethod), StatusCode::NOT_FOUND);
+        // Off is "try again later" with a wait, never a 4xx the extension gives up on.
+        let off = error(&module_off());
+        assert_eq!(off.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            off.headers().get(header::RETRY_AFTER).unwrap(),
+            &MODULE_OFF_RETRY_SECS.to_string()
+        );
         assert_eq!(
             s(ErrorCode::PermissionUnauthenticated),
             StatusCode::UNAUTHORIZED
@@ -351,6 +386,20 @@ mod tests {
             ),
             StatusCode::UNSUPPORTED_MEDIA_TYPE
         );
+    }
+
+    #[test]
+    fn a_backlog_flush_fits_the_key_rate_limit_and_a_runaway_client_does_not() {
+        // A few hundred queued words: 300 captures × (2 uploads + their share of a batch).
+        let backlog = 300.0 * 2.0 + 300.0 / 20.0;
+        assert!(KEY_BURST >= backlog, "{KEY_BURST} < {backlog}");
+        let mut b = Bucket::full(KEY_BURST);
+        for i in 0..615 {
+            assert!(b.take(KEY_RATE_PER_SEC, KEY_BURST).is_ok(), "request {i}");
+        }
+        // Still bounded: thousands at once run out (refilling 100/s cannot keep up).
+        let refused = (0..10_000).any(|_| b.take(KEY_RATE_PER_SEC, KEY_BURST).is_err());
+        assert!(refused);
     }
 
     #[test]
