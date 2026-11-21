@@ -162,24 +162,26 @@
     flex-direction: column;
     gap: var(--space-1);
   }
+  /* The binding is the control: a key-cap field, right-aligned, same width in every row. */
   .combo,
   .rec {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-width: 7rem;
-    height: var(--control-h-sm, 32px);
-    padding: 0 var(--space-3);
+    justify-content: flex-end;
+    min-width: 8rem;
+    height: var(--control-h-sm);
+    padding: 0 var(--space-2);
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
-    background: var(--surface-1);
+    background: var(--surface-2);
     color: var(--text-1);
     font: inherit;
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     cursor: pointer;
   }
   .combo:hover {
     border-color: var(--border-strong);
+    background: var(--surface-3);
   }
   .rec {
     border-color: var(--accent-text);
@@ -193,5 +195,8 @@
   }
   .unbound {
     color: var(--text-2);
+  }
+  .rec {
+    justify-content: center;
   }
 </style>

@@ -160,7 +160,13 @@
       "phrase_q": "\"exact phrase\"",
       "phrase_d": "Quotes keep words together"
     },
-    "saved_short": "Saved"
+    "saved_short": "Saved",
+    "keys": {
+      "move": "move",
+      "select": "select",
+      "edit": "edit",
+      "search": "search"
+    }
   },
   "maintenance": {
     "heading": "Maintenance",
@@ -204,7 +210,9 @@
     "hint_move": "Move",
     "hint_open": "Open",
     "hint_close": "Close",
-    "back": "Back"
+    "back": "Back",
+    "group_actions": "Actions",
+    "action_add_card": "Add card"
   },
   "shortcuts": {
     "heading": "Keyboard shortcuts",
@@ -226,7 +234,7 @@
     "ui": {
       "palette": "Open command palette",
       "search": "Search cards",
-      "new_note": "New note",
+      "new_note": "Add card",
       "undo": "Undo",
       "redo": "Redo"
     },

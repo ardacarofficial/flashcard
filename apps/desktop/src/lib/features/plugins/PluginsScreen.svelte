@@ -211,9 +211,9 @@
     <ul class="plugins" aria-label={t('plugins.installed')}>
       {#each plugins as p (p.id)}
         {@const expanded = open === p.id}
-        <Card as="li" padding="none" class="plugin">
+        <li class="plugin" class:open={expanded}>
           <div class="head">
-            <span class="badge" aria-hidden="true"><Icon icon={Puzzle} size={20} /></span>
+            <span class="badge" aria-hidden="true"><Icon icon={Puzzle} size={16} /></span>
             <div class="titles">
               <button class="name" aria-expanded={expanded} aria-controls={`plugin-${p.id}`} onclick={() => toggleOpen(p)}>
                 <span>{nameOf(p)}</span>
@@ -309,7 +309,7 @@
               </div>
             </div>
           {/if}
-        </Card>
+        </li>
       {/each}
     </ul>
   {/if}
@@ -364,30 +364,36 @@
 {/if}
 
 <style>
+  /* One bordered list, one dense row per plugin; details open under the row. */
   .plugins {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    overflow: hidden;
+  }
+  .plugin + .plugin {
+    border-top: 1px solid var(--border);
   }
   .head {
     display: flex;
     align-items: center;
-    gap: var(--space-4);
-    padding: var(--space-4) var(--space-6);
+    gap: var(--space-3);
+    min-height: 52px;
+    padding: var(--space-2) var(--space-4);
     flex-wrap: wrap;
   }
   .badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 28px;
+    height: 28px;
     flex: none;
     border-radius: var(--radius-control);
-    background: var(--accent-soft);
+    background: var(--surface-3);
     color: var(--accent-text);
   }
   .titles {
@@ -403,7 +409,7 @@
     background: none;
     color: var(--text-1);
     font: inherit;
-    font-size: var(--text-md);
+    font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
     cursor: pointer;
     border-radius: var(--radius-control);
@@ -419,9 +425,9 @@
     outline-offset: 2px;
   }
   .sub {
-    margin: 2px 0 0;
+    margin: 1px 0 0;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     display: flex;
     flex-wrap: wrap;
     gap: 0 var(--space-1);
@@ -433,33 +439,33 @@
   }
   .error {
     margin: 0;
-    padding: 0 var(--space-6) var(--space-4);
+    padding: 0 var(--space-4) var(--space-3) calc(var(--space-4) + 28px + var(--space-3));
     color: var(--danger);
     font-size: var(--text-sm);
   }
   .details {
     border-top: 1px solid var(--border);
-    padding: var(--space-2) 0;
+    padding: var(--space-1) 0 var(--space-2);
+    background: var(--surface-0);
   }
   .block {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    padding: var(--space-3) var(--space-6);
+    padding: var(--space-3) var(--space-4) var(--space-2) calc(var(--space-4) + 28px + var(--space-3));
   }
+  /* Setting rows bring their own side padding: line their labels up with the blocks. */
   .block.flush {
-    padding-inline: 0;
+    padding-inline: calc(28px + var(--space-1)) 0;
   }
   .block.flush h3 {
-    padding-inline: var(--space-6);
+    padding-inline: var(--space-6) var(--space-4);
   }
   .block h3 {
     margin: 0;
     font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     color: var(--text-2);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
   .block.footer {
     align-items: flex-start;
@@ -493,7 +499,7 @@
     font-size: var(--text-sm);
   }
   .notice {
-    margin: var(--space-2) var(--space-6) 0;
+    margin: var(--space-2) var(--space-4) 0 calc(var(--space-4) + 28px + var(--space-3));
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-control);
     background: var(--success-soft);
@@ -512,12 +518,18 @@
     color: var(--text-1);
   }
   @media (max-width: 1023.98px) {
-    .head,
-    .block {
+    .block,
+    .error {
       padding-inline: var(--space-4);
+    }
+    .block.flush {
+      padding-inline: 0;
     }
     .block.flush h3 {
       padding-inline: var(--space-4);
+    }
+    .notice {
+      margin-inline: var(--space-4);
     }
   }
 </style>

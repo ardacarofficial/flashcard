@@ -4,7 +4,7 @@ import { createMockTransport } from '$lib/api/mock/transport';
 import { createApiClient } from '$lib/api';
 import type { PaletteEntry, ShortcutDto } from '$lib/api/types';
 import { DICTIONARIES, flatKeys, LOCALES, translateDynamic } from '$lib/i18n/core';
-import { bindingMap, comboOf, filterItems, paletteItems } from './palette';
+import { bindingMap, comboOf, filterItems, groupItems, paletteItems } from './palette';
 
 const entry = (method: string, over: Partial<PaletteEntry> = {}): PaletteEntry => ({
   method,
@@ -44,6 +44,33 @@ describe('command palette', () => {
       (k) => (k === 'commands.decks.create' ? 'New deck' : k),
     );
     expect(items.map((i) => i.label)).toEqual(['Browse', 'New deck', 'v1.x.y']);
+  });
+
+  it('puts shell actions before screens, with their key hints', () => {
+    const items = paletteItems([entry('v1.decks.create')], [{ id: 'browse', label: 'Search', keys: 'Ctrl+F' }], (k) => k, [
+      { action: 'ui.new_note', label: 'Add card', keys: 'N' },
+    ]);
+    expect(items.map((i) => i.kind)).toEqual(['action', 'screen', 'method']);
+    expect(items[0]).toMatchObject({ id: 'action:ui.new_note', label: 'Add card', keys: 'N' });
+    expect(items[1]).toMatchObject({ keys: 'Ctrl+F' });
+  });
+
+  it('groups methods by module name in first-seen order; nameless modules share a block', () => {
+    const items = paletteItems(
+      [entry('v1.a.x', { module: 'decks' }), entry('v1.b.y', { module: 'zz' }), entry('v1.c.z', { module: 'decks' }), entry('v1.d.w', { module: 'yy' })],
+      [{ id: 's', label: 'S' }],
+      (k) => k,
+      [{ action: 'ui.undo', label: 'Undo' }],
+    );
+    const names: Record<string, string> = { decks: 'Decks' };
+    const { groups, flat } = groupItems(items, { actions: 'Actions', screens: 'Screens', groupTitle: (m) => names[m] ?? 'Commands' });
+    expect(groups.map((g) => [g.title, g.start, g.items.length])).toEqual([
+      ['Actions', 0, 1],
+      ['Screens', 1, 1],
+      ['Decks', 2, 2],
+      ['Commands', 4, 2],
+    ]);
+    expect(flat.map((i) => i.id)).toEqual(['action:ui.undo', 'screen:s', 'v1.a.x', 'v1.c.z', 'v1.b.y', 'v1.d.w']);
   });
 
   it('filters accent- and case-insensitively on every word', () => {

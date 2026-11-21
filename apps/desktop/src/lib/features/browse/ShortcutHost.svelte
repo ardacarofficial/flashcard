@@ -10,15 +10,15 @@
   import { api } from '$lib/api';
   import type { PaletteEntry, ShortcutDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
-  import { openQuickAdd, setPaletteHandler, setPaletteKeys } from '$lib/shell/commands.svelte';
+  import { openQuickAdd, setPaletteHandler, setPaletteKeys, shellCommands } from '$lib/shell/commands.svelte';
   // Eager (App.svelte mounts it): lib/ui file by file, never the barrel.
   import Button from '$lib/ui/Button.svelte';
   import Icon from '$lib/ui/Icon.svelte';
   import Kbd from '$lib/ui/Kbd.svelte';
   import Textarea from '$lib/ui/Textarea.svelte';
-  import { LayoutGrid, Search, Terminal } from '$lib/ui/icons';
+  import { LayoutGrid, Plus, Search, Terminal, Undo2 } from '$lib/ui/icons';
   import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
-  import { bindingMap, comboOf, filterItems, paletteItems, typingTarget, type PaletteItem } from './palette';
+  import { bindingMap, comboOf, filterItems, groupItems, paletteItems, typingTarget, type PaletteAction, type PaletteItem } from './palette';
 
   interface ScreenLink {
     id: string;
@@ -47,12 +47,39 @@
   let input = $state<HTMLInputElement | null>(null);
   let list = $state<HTMLUListElement | null>(null);
 
-  const items = $derived(
-    filterItems(
-      paletteItems(entries, screens.map((s) => ({ id: s.id, label: s.label })), (k) => td(k)),
-      query,
+  const comboFor = (action: string) => shortcuts.find((s) => s.action === action)?.combo ?? null;
+  /** Shell actions on top: "Add card" (N) first, then search, undo, redo. */
+  const actions = $derived<PaletteAction[]>([
+    ...(shellCommands.canQuickAdd ? [{ action: 'ui.new_note', label: t('palette.action_add_card'), keys: 'N' }] : []),
+    { action: 'ui.search', label: t('shortcuts.ui.search'), keys: comboFor('ui.search') },
+    { action: 'ui.undo', label: t('shortcuts.ui.undo'), keys: comboFor('ui.undo') },
+    { action: 'ui.redo', label: t('shortcuts.ui.redo'), keys: comboFor('ui.redo') },
+  ]);
+  /** Screens show the key that opens them (Search: `ui.search`). */
+  const SCREEN_KEYS: Record<string, string> = { browse: 'ui.search' };
+  const grouped = $derived(
+    groupItems(
+      filterItems(
+        paletteItems(
+          entries,
+          screens.map((s) => ({ id: s.id, label: s.label, keys: SCREEN_KEYS[s.id] ? comboFor(SCREEN_KEYS[s.id]!) : null })),
+          (k) => td(k),
+          actions,
+        ),
+        query,
+      ),
+      {
+        actions: t('palette.group_actions'),
+        screens: t('palette.group_screens'),
+        groupTitle: (m) => {
+          const name = td(`modules.${m}.name`);
+          return name === `modules.${m}.name` ? t('palette.group_commands') : name;
+        },
+      },
     ),
   );
+  /** Rows in display order (arrow keys walk this). */
+  const items = $derived(grouped.flat);
   const contexts = $derived(activeScreen === 'browse' ? ['browse'] : []);
   const bindings = $derived(bindingMap(shortcuts, contexts));
 
@@ -100,6 +127,9 @@
     if (item.kind === 'screen') {
       screens.find((s) => s.id === item.screenId)?.open();
       close();
+    } else if (item.kind === 'action') {
+      close();
+      await act(item.action);
     } else if (item.entry.direct) {
       await runMethod(item.entry, {});
     } else {
@@ -237,21 +267,25 @@
         <Kbd keys={['Esc']} size="sm" />
       </div>
       <ul id="palette-list" role="listbox" bind:this={list} aria-label={t('palette.title')}>
-        {#each items as item, i (item.id)}
-          {#if i === 0 || items[i - 1]!.kind !== item.kind}
-            <li class="group" role="presentation">{item.kind === 'screen' ? t('palette.group_screens') : t('palette.group_commands')}</li>
-          {/if}
-          <li id="palette-opt-{i}" role="option" aria-selected={i === cursor} data-index={i}>
-            <button type="button" tabindex="-1" class:active={i === cursor} onclick={() => void choose(item)} onpointermove={() => (cursor = i)}>
-              <span class="ico"><Icon icon={item.kind === 'screen' ? LayoutGrid : Terminal} size={14} /></span>
-              <span class="label">{item.label}</span>
-              {#if item.kind === 'screen'}
-                <span class="sr-only">{t('palette.screen')}</span>
-              {:else if item.entry.shortcut}
-                <Kbd keys={item.entry.shortcut} size="sm" />
-              {/if}
-            </button>
-          </li>
+        {#each grouped.groups as g (g.title)}
+          <li class="group" role="presentation"><span>{g.title}</span></li>
+          {#each g.items as item, j (item.id)}
+            {@const i = g.start + j}
+            {@const keys = item.kind === 'method' ? item.entry.shortcut : item.keys}
+            <li id="palette-opt-{i}" role="option" aria-selected={i === cursor} data-index={i}>
+              <button type="button" tabindex="-1" class:active={i === cursor} onclick={() => void choose(item)} onpointermove={() => (cursor = i)}>
+                <span class="ico" class:flip={item.kind === 'action' && item.action === 'ui.redo'}>
+                  <Icon
+                    icon={item.kind === 'screen' ? LayoutGrid : item.kind === 'method' ? Terminal : item.action === 'ui.new_note' ? Plus : item.action === 'ui.search' ? Search : Undo2}
+                    size={14}
+                  />
+                </span>
+                <span class="label">{item.label}</span>
+                {#if item.kind === 'screen'}<span class="sr-only">{t('palette.screen')}</span>{/if}
+                {#if keys}<span class="keys"><Kbd {keys} size="sm" /></span>{/if}
+              </button>
+            </li>
+          {/each}
         {:else}
           <li class="none">{t('palette.no_match')}</li>
         {/each}
@@ -325,10 +359,17 @@
     list-style: none;
   }
   .group {
-    padding: var(--space-2) var(--space-2) var(--space-1);
+    display: flex;
+    align-items: center;
+    height: 26px;
+    padding: var(--space-2) var(--space-2) 0;
     color: var(--text-2);
     font-size: var(--text-2xs);
     font-weight: var(--weight-medium);
+  }
+  .group:not(:first-child) {
+    margin-top: var(--space-1);
+    border-top: 1px solid var(--border);
   }
   li button {
     display: flex;
@@ -354,6 +395,15 @@
   }
   li button.active .ico {
     color: var(--accent-text);
+  }
+  .ico.flip {
+    transform: scaleX(-1);
+  }
+  .keys {
+    flex: none;
+    display: inline-flex;
+    margin-inline-start: auto;
+    color: var(--text-2);
   }
   .label {
     flex: 1;

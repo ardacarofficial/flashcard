@@ -109,38 +109,86 @@
 </section>
 
 <style>
+  .cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  h3 {
+    margin: 0;
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    color: var(--text-2);
+  }
+  .error {
+    margin: 0;
+    color: var(--danger);
+    font-size: var(--text-xs);
+  }
   ul {
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+  li {
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
   }
   .row {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2);
+    gap: var(--space-1) var(--space-2);
     align-items: center;
+    min-height: 24px;
+    font-size: var(--text-sm);
+  }
+  .row strong {
+    font-weight: var(--weight-medium);
+  }
+  .muted {
+    color: var(--text-2);
+    font-size: var(--text-xs);
   }
   .flags {
     display: flex;
     gap: 2px;
+    margin-inline-start: auto;
   }
   .flag {
-    padding: 2px 4px;
-    opacity: 0.45;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    opacity: 0.4;
+    cursor: pointer;
+  }
+  .flag:hover {
+    opacity: 0.8;
+    background: var(--surface-2);
   }
   .flag.on {
     opacity: 1;
     border-color: var(--flag);
   }
+  .flag:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+  }
   .dot {
     display: inline-block;
-    width: 0.8em;
-    height: 0.8em;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: var(--flag);
+    flex: none;
   }
   .sr {
     position: absolute;
@@ -152,18 +200,56 @@
   .note {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 2px;
     margin-top: var(--space-1);
+  }
+  textarea,
+  .names input {
+    box-sizing: border-box;
+    width: 100%;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-sm);
+  }
+  textarea {
+    padding: var(--space-1) var(--space-2);
+    resize: vertical;
+  }
+  .names input {
+    height: var(--control-h-sm);
+    padding: 0 var(--space-2);
+  }
+  textarea:focus-visible,
+  .names input:focus-visible {
+    outline: none;
+    border-color: var(--accent-text);
+    box-shadow: 0 0 0 1px var(--accent-text);
+  }
+  textarea::placeholder,
+  .names input::placeholder {
+    color: var(--text-3);
+  }
+  details summary {
+    cursor: pointer;
+    color: var(--text-2);
+    font-size: var(--text-xs);
+    padding: 2px 0;
+  }
+  details summary:hover {
+    color: var(--text-1);
   }
   .names {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: var(--space-2);
     margin-top: var(--space-2);
   }
   .names label {
     display: flex;
-    gap: var(--space-1);
+    gap: var(--space-2);
     align-items: center;
   }
 </style>

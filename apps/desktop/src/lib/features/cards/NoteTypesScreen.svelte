@@ -9,7 +9,6 @@
   import { t, td } from '$lib/i18n/index.svelte';
   import {
     Button,
-    Card,
     Checkbox,
     ChevronDown,
     ChevronUp,
@@ -176,20 +175,18 @@
     </SettingsSection>
   {:else}
     <div class="layout">
-      <nav aria-label={t('notetype.list')}>
-        <Card padding="none">
-          <h2 class="side-title">{t('notetype.list')}</h2>
-          <ul class="types">
-            {#each list as n (n.id)}
-              <li>
-                <button type="button" class="type" class:active={n.id === selected} aria-current={n.id === selected ? 'true' : undefined} onclick={() => (selected = n.id)}>
-                  <span class="tname">{n.name}</span>
-                  {#if n.builtin}<Chip size="sm" label={t('notetype.builtin')} />{/if}
-                </button>
-              </li>
-            {/each}
-          </ul>
-        </Card>
+      <nav aria-labelledby="nt-list-title">
+        <h2 class="side-title" id="nt-list-title">{t('notetype.list')} <span class="num">{list.length}</span></h2>
+        <ul class="types">
+          {#each list as n (n.id)}
+            <li>
+              <button type="button" class="type" class:active={n.id === selected} aria-current={n.id === selected ? 'true' : undefined} onclick={() => (selected = n.id)}>
+                <span class="tname">{n.name}</span>
+                {#if n.builtin}<span class="tag">{t('notetype.builtin')}</span>{/if}
+              </button>
+            </li>
+          {/each}
+        </ul>
       </nav>
 
       {#if draft && current}
@@ -210,26 +207,35 @@
             {#snippet actions()}
               <Button size="sm" icon={Plus} onclick={() => draft && (draft.fields = [...draft.fields, newField(t('notetype.new_field'))])}>{t('notetype.add_field')}</Button>
             {/snippet}
-            <ol class="fields" aria-label={t('notetype.fields')}>
-              {#each draft.fields as f, i (i)}
-                <li class="fitem">
-                  <div class="fline">
+            <!-- One dense row per field: name, kind, the three switches under column heads, order. -->
+            <div class="ftable" role="group" aria-label={t('notetype.fields')}>
+              <div class="frow fhead" aria-hidden="true">
+                <span class="n">#</span>
+                <span>{t('notetype.field_name')}</span>
+                <span>{t('notetype.field_kind')}</span>
+                <span class="c">{t('notetype.required')}</span>
+                <span class="c">{t('notetype.unique')}</span>
+                <span class="c">{t('notetype.searchable')}</span>
+                <span></span>
+              </div>
+              <ol class="fields">
+                {#each draft.fields as f, i (i)}
+                  <li class="frow">
+                    <span class="n num">{i + 1}</span>
                     <Input size="sm" bind:value={f.name} label={t('notetype.field_name')} hideLabel />
                     <Select size="sm" options={kindOptions} bind:value={f.kind} label={t('notetype.field_kind')} hideLabel />
+                    <span class="c"><Checkbox bind:checked={f.required} ariaLabel={`${t('notetype.required')}: ${f.name}`} /></span>
+                    <span class="c"><Checkbox bind:checked={f.unique} ariaLabel={`${t('notetype.unique')}: ${f.name}`} /></span>
+                    <span class="c"><Checkbox bind:checked={f.searchable} ariaLabel={`${t('notetype.searchable')}: ${f.name}`} /></span>
                     <span class="acts">
                       <IconButton size="sm" icon={ChevronUp} label={t('notetype.move_up')} disabled={i === 0} onclick={() => draft && (draft.fields = move(draft.fields, i, -1))} />
                       <IconButton size="sm" icon={ChevronDown} label={t('notetype.move_down')} disabled={i === draft.fields.length - 1} onclick={() => draft && (draft.fields = move(draft.fields, i, 1))} />
                       <IconButton size="sm" icon={X} label={t('notetype.remove')} onclick={() => draft && (draft.fields = draft.fields.filter((_, j) => j !== i))} />
                     </span>
-                  </div>
-                  <div class="flags">
-                    <Checkbox bind:checked={f.required} label={t('notetype.required')} />
-                    <Checkbox bind:checked={f.unique} label={t('notetype.unique')} />
-                    <Checkbox bind:checked={f.searchable} label={t('notetype.searchable')} />
-                  </div>
-                </li>
-              {/each}
-            </ol>
+                  </li>
+                {/each}
+              </ol>
+            </div>
             {#if classifications.length > 0}
               <div class="classes">
                 <strong>{t('notetype.classifications')}</strong>
@@ -276,7 +282,7 @@
 
           <SettingsSection title={t('notetype.preview_heading')}>
             {#if previewError}<p class="banner" role="alert">{previewError}</p>{/if}
-            <CardPreview cards={preview} />
+            <CardPreview cards={preview} hideTitle />
           </SettingsSection>
 
           <SettingsSection title={t('notetype.css')}>
@@ -306,7 +312,7 @@
 <style>
   .layout {
     display: grid;
-    grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+    grid-template-columns: minmax(10rem, 13rem) minmax(0, 1fr);
     gap: var(--space-6);
     align-items: start;
   }
@@ -315,18 +321,23 @@
     top: 0;
   }
   .side-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     margin: 0;
-    padding: var(--space-4) var(--space-4) var(--space-2);
+    padding: 0 var(--space-2) var(--space-2);
     font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     color: var(--text-2);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+  }
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
   .types {
     list-style: none;
     margin: 0;
-    padding: 0 var(--space-2) var(--space-2);
+    padding: 0;
     display: flex;
     flex-direction: column;
     gap: 1px;
@@ -337,11 +348,12 @@
     justify-content: space-between;
     gap: var(--space-2);
     width: 100%;
-    padding: var(--space-2) var(--space-3);
+    height: 30px;
+    padding: 0 var(--space-2);
     border: none;
     border-radius: var(--radius-control);
     background: transparent;
-    color: var(--text-1);
+    color: var(--text-2);
     font: inherit;
     font-size: var(--text-sm);
     text-align: start;
@@ -349,10 +361,13 @@
   }
   .type:hover {
     background: var(--surface-2);
+    color: var(--text-1);
   }
   .type.active {
-    background: var(--accent-soft);
-    font-weight: var(--weight-semibold);
+    background: var(--surface-3);
+    color: var(--text-1);
+    font-weight: var(--weight-medium);
+    box-shadow: inset 2px 0 0 var(--accent);
   }
   .type:focus-visible {
     outline: 2px solid var(--focus-ring);
@@ -360,7 +375,14 @@
   }
   .tname {
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tag {
+    flex: none;
+    font-size: var(--text-2xs);
+    color: var(--text-2);
   }
   .editor {
     display: flex;
@@ -368,36 +390,48 @@
     gap: var(--space-6);
     min-width: 0;
   }
+  .ftable {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    overflow: hidden;
+  }
   .fields {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
   }
-  .fitem {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-control);
-  }
-  .fline {
+  .frow {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+    grid-template-columns: 1.5rem minmax(7rem, 1.4fr) minmax(7rem, 1fr) repeat(3, 4.5rem) 88px;
     gap: var(--space-2);
     align-items: center;
+    min-height: var(--row-h);
+    padding: 3px var(--space-2);
+    border-top: 1px solid var(--border);
   }
-  .fline :global(.fc-field) {
+  .frow :global(.fc-field) {
     min-width: 0;
   }
-  .flags {
+  .fhead {
+    min-height: 28px;
+    border-top: none;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-medium);
+  }
+  .n {
+    color: var(--text-2);
+    font-size: var(--text-xs);
+    text-align: end;
+  }
+  .c {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2) var(--space-6);
-    font-size: var(--text-sm);
+    justify-content: center;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .acts {
     display: flex;
@@ -443,7 +477,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-    padding: var(--space-4);
+    padding: var(--space-3);
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
   }
@@ -482,7 +516,6 @@
     padding: var(--space-3) 0 var(--space-4);
     border-top: 1px solid var(--border);
     background: var(--surface-0);
-    box-shadow: 0 -8px 16px -12px rgb(0 0 0 / 0.25);
   }
   .ok {
     color: var(--success);
@@ -496,12 +529,23 @@
     color: var(--danger);
     font-size: var(--text-sm);
   }
-  @media (max-width: 1023.98px) {
+  .syntax code {
+    font-variant-ligatures: none;
+  }
+  /* The field table needs the width: the type list goes on top until the window is wide. */
+  @media (max-width: 1399.98px) {
     .layout {
       grid-template-columns: minmax(0, 1fr);
     }
     nav {
       position: static;
+    }
+    .types {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    .type {
+      width: auto;
     }
   }
 </style>

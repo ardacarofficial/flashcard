@@ -1,9 +1,12 @@
-<!-- Query syntax cheat sheet of the Search screen; clicking an example runs it. -->
+<!--
+  Query syntax cheat sheet of the Search screen: a compact panel under the query field, one
+  line per operator (mono example → what it does). Clicking an example runs it; Esc closes.
+-->
 <script lang="ts">
   import { t, type MessageKey } from '$lib/i18n/index.svelte';
-  import { Card } from '$lib/ui';
+  import { IconButton, X } from '$lib/ui';
 
-  let { onpick }: { onpick: (query: string) => void } = $props();
+  let { onpick, onclose }: { onpick: (query: string) => void; onclose?: () => void } = $props();
 
   const EXAMPLES: { q: MessageKey; d: MessageKey }[] = [
     { q: 'browse.syntax.text_q', d: 'browse.syntax.text_d' },
@@ -19,63 +22,100 @@
   ];
 </script>
 
-<Card padding="md">
-  <section class="help" aria-label={t('browse.syntax.heading')}>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<section
+  class="help"
+  aria-label={t('browse.syntax.heading')}
+  data-testid="query-help"
+  onkeydown={(e) => {
+    if (e.key === 'Escape' && onclose) {
+      e.stopPropagation();
+      onclose();
+    }
+  }}
+>
+  <header>
     <h2>{t('browse.syntax.heading')}</h2>
     <p class="intro">{t('browse.help')}</p>
-    <dl>
-      {#each EXAMPLES as ex (ex.q)}
-        <div class="ex">
-          <dt><button type="button" class="q" onclick={() => onpick(t(ex.q))}>{t(ex.q)}</button></dt>
-          <dd>{t(ex.d)}</dd>
-        </div>
-      {/each}
-    </dl>
-  </section>
-</Card>
+    {#if onclose}<IconButton size="sm" icon={X} label={t('browse.info.close')} onclick={onclose} />{/if}
+  </header>
+  <dl>
+    {#each EXAMPLES as ex (ex.q)}
+      <div class="ex">
+        <dt><button type="button" class="q" onclick={() => onpick(t(ex.q))}>{t(ex.q)}</button></dt>
+        <dd>{t(ex.d)}</dd>
+      </div>
+    {/each}
+  </dl>
+</section>
 
 <style>
+  .help {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: var(--control-h-sm);
+    margin-bottom: var(--space-1);
+  }
   h2 {
     margin: 0;
+    flex: none;
     font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
   }
   .intro {
-    margin: var(--space-1) 0 var(--space-3);
+    flex: 1;
+    min-width: 0;
+    margin: 0;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
   dl {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: var(--space-2) var(--space-6);
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 0 var(--space-6);
     margin: 0;
   }
   .ex {
-    display: flex;
+    display: grid;
+    grid-template-columns: 9.5rem minmax(0, 1fr);
     gap: var(--space-3);
-    align-items: baseline;
+    align-items: center;
+    min-height: 28px;
+    border-bottom: 1px solid var(--border);
   }
   dt {
-    flex: none;
+    min-width: 0;
   }
   dd {
     margin: 0;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
   .q {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-family: var(--font-mono);
-    font-size: var(--text-sm);
+    font-variant-ligatures: none;
+    font-size: var(--text-xs);
     color: var(--accent-text);
-    background: var(--accent-soft);
+    background: transparent;
     border: none;
-    border-radius: var(--radius-control);
-    padding: 2px var(--space-2);
+    border-radius: 4px;
+    padding: 2px 4px;
+    margin-inline-start: -4px;
     cursor: pointer;
   }
   .q:hover {
-    text-decoration: underline;
+    background: var(--accent-soft);
   }
   .q:focus-visible {
     outline: 2px solid var(--focus-ring);

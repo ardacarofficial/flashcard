@@ -23,8 +23,21 @@
     fixedType?: string | null;
     /** Inside a titled dialog: no heading of its own. */
     bare?: boolean;
+    /** v1.2: tighter fields (sm inputs, 2-row text areas), e.g. inside a small dialog. */
+    compact?: boolean;
   }
-  let { deckId, deckName, noteId = null, onsaved, onopennote, fixedType = null, bare = false }: Props = $props();
+  let { deckId, deckName, noteId = null, onsaved, onopennote, fixedType = null, bare = false, compact = false }: Props = $props();
+
+  let form = $state<HTMLFormElement | null>(null);
+
+  /** Ctrl/⌘+Enter saves from any field (the page's own Ctrl+Enter does not also fire). */
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !busy) {
+      e.preventDefault();
+      e.stopPropagation();
+      form?.requestSubmit();
+    }
+  }
 
   const LAST_TYPE = 'fc.cards.last_notetype';
 
@@ -190,45 +203,46 @@
   }
 </script>
 
-<section class="editor">
+<section class="editor" class:compact>
   <div class="form-col">
     {#if !fixedType && !bare}
       <header class="head">
         <h2>{noteId ? t('note_editor.edit_heading') : t('note.add_heading')}</h2>
-        {#if !noteId}<p class="muted">{t('deck.current')}: {deckName}</p>{/if}
+        {#if !noteId}<p class="muted">{t('deck.current')}: <span class="deck">{deckName}</span></p>{/if}
       </header>
     {/if}
 
-    <form onsubmit={submit} novalidate>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions (Ctrl+Enter from any field) -->
+    <form bind:this={form} onsubmit={submit} {onkeydown} novalidate>
       {#if !fixedType}
-        <Select label={t('notetype.type')} options={typeOptions} value={ntId} disabled={!!noteId} onchange={chooseType} />
+        <Select size="sm" label={t('notetype.type')} options={typeOptions} value={ntId} disabled={!!noteId} onchange={chooseType} />
       {/if}
 
       {#if nt}
         {#each nt.fields as field (field.key)}
-          <FieldInput {field} bind:value={values[field.key]!} {values} {engines} />
+          <FieldInput {field} bind:value={values[field.key]!} {values} {engines} {compact} />
         {/each}
       {:else}
         <Skeleton lines={3} />
       {/if}
 
       {#if defs.length > 0}
-        <fieldset>
-          <legend>{t('note.classifications')}</legend>
+        <section class="attrs-block" aria-labelledby="note-attrs-title">
+          <h3 id="note-attrs-title">{t('note.classifications')}</h3>
           <div class="attrs">
             {#each defs as def (def.id)}
               <AttributeField {def} bind:value={attrs[def.id]!} />
             {/each}
           </div>
-        </fieldset>
+        </section>
       {/if}
 
       <div class="actions">
-        <Button variant="primary" type="submit" loading={busy} disabled={busy || !nt}>
+        <Button variant="primary" type="submit" kbd="Mod+Enter" loading={busy} disabled={busy || !nt}>
           {noteId ? t('note_editor.save') : t('note.add')}
         </Button>
-        {#if status}<span class="ok" role="status"><Icon icon={CircleCheck} size={16} /> {status}</span>{/if}
-        {#if error}<span class="error" role="alert"><Icon icon={CircleAlert} size={16} /> {error}</span>{/if}
+        {#if status}<span class="ok" role="status"><Icon icon={CircleCheck} size={14} /> {status}</span>{/if}
+        {#if error}<span class="error" role="alert"><Icon icon={CircleAlert} size={14} /> {error}</span>{/if}
       </div>
     </form>
   </div>
@@ -238,7 +252,7 @@
     {#if noteId}
       <CardMetaPanel {noteId} />
       {#if moduleOn('links')}
-        <section>
+        <section class="links-block">
           <h3>{t('cards.backlinks')}</h3>
           {#if backlinks.length === 0}
             <p class="muted">{t('cards.no_backlinks')}</p>
@@ -258,68 +272,67 @@
 <style>
   .editor {
     display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(240px, 2fr);
-    gap: var(--space-8);
+    grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr);
+    gap: var(--space-6);
     align-items: start;
   }
   .head {
-    margin-bottom: var(--space-4);
+    margin-bottom: var(--space-3);
   }
   h2 {
     margin: 0;
-    font-size: var(--text-lg);
+    font-size: var(--text-md);
     font-weight: var(--weight-semibold);
   }
   h3 {
     margin: 0 0 var(--space-2);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
     color: var(--text-2);
   }
   .muted {
-    margin: var(--space-1) 0 0;
+    margin: 2px 0 0;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
+  }
+  .deck {
+    color: var(--text-1);
   }
   form,
   .side-col {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
   }
   .side-col {
     position: sticky;
-    top: var(--space-4);
+    top: 0;
+    gap: var(--space-4);
+    padding-inline-start: var(--space-6);
+    border-inline-start: 1px solid var(--border);
   }
-  fieldset {
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    padding: var(--space-3) var(--space-4) var(--space-4);
-    margin: 0;
-  }
-  legend {
-    color: var(--text-2);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
-    padding: 0 var(--space-1);
+  .attrs-block {
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
   }
   .attrs {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: var(--space-3);
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--space-2) var(--space-3);
   }
   .actions {
     display: flex;
     gap: var(--space-3);
     align-items: center;
     flex-wrap: wrap;
+    padding-top: var(--space-1);
   }
   .ok,
   .error {
     display: inline-flex;
     gap: var(--space-1);
     align-items: center;
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
   .ok {
     color: var(--success);
@@ -335,12 +348,19 @@
     flex-wrap: wrap;
     gap: var(--space-1);
   }
+  .compact form {
+    gap: var(--space-2);
+  }
   @media (max-width: 900px) {
     .editor {
       grid-template-columns: minmax(0, 1fr);
     }
     .side-col {
       position: static;
+      padding-inline-start: 0;
+      border-inline-start: none;
+      padding-top: var(--space-4);
+      border-top: 1px solid var(--border);
     }
   }
 </style>

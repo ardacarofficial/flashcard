@@ -160,7 +160,13 @@
       "phrase_q": "\"tam ifade\"",
       "phrase_d": "Tırnak kelimeleri bir arada tutar"
     },
-    "saved_short": "Kayıtlı"
+    "saved_short": "Kayıtlı",
+    "keys": {
+      "move": "gez",
+      "select": "seç",
+      "edit": "düzenle",
+      "search": "ara"
+    }
   },
   "maintenance": {
     "heading": "Bakım",
@@ -204,7 +210,9 @@
     "hint_move": "Gez",
     "hint_open": "Aç",
     "hint_close": "Kapat",
-    "back": "Geri"
+    "back": "Geri",
+    "group_actions": "Eylemler",
+    "action_add_card": "Kart ekle"
   },
   "shortcuts": {
     "heading": "Klavye kısayolları",
@@ -226,7 +234,7 @@
     "ui": {
       "palette": "Komut paletini aç",
       "search": "Kart ara",
-      "new_note": "Yeni not",
+      "new_note": "Kart ekle",
       "undo": "Geri al",
       "redo": "Yinele"
     },

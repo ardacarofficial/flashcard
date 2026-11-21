@@ -32,7 +32,35 @@
 
 <style>
   .panel {
-    margin-top: var(--fc-space-4);
-    font-size: 0.9em;
+    margin-top: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    font-size: var(--text-sm);
+  }
+  .panel summary {
+    display: flex;
+    align-items: center;
+    min-height: var(--row-h);
+    padding: 0 var(--space-3);
+    color: var(--text-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    cursor: pointer;
+    list-style-position: inside;
+  }
+  .panel summary:hover {
+    color: var(--text-1);
+  }
+  .panel summary:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
+    border-radius: var(--radius-card);
+  }
+  .panel[open] summary {
+    border-bottom: 1px solid var(--border);
+  }
+  .panel :global(.plugin-view) {
+    padding: var(--space-3);
   }
 </style>

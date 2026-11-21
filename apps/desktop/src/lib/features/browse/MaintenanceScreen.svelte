@@ -122,7 +122,7 @@
             {#each group.items as item (item.id)}
               <li>
                 <span class="label">{item.label}</span>
-                <span class="when">{fmt(item.at)}</span>
+                <span class="when num">{fmt(item.at)}</span>
                 <Button size="sm" variant="ghost" icon={RotateCcw} onclick={() => void item.restore()}>{t('maintenance.restore')}</Button>
               </li>
             {/each}
@@ -143,7 +143,7 @@
         {:else}
           <ul class="list">
             {#each dups as g (g.note_ids[0])}
-              <li><span class="label">{g.sort_field}</span><span class="when">× {g.note_ids.length}</span></li>
+              <li><span class="label">{g.sort_field}</span><span class="when num">× {g.note_ids.length}</span></li>
             {/each}
           </ul>
         {/if}
@@ -189,10 +189,8 @@
   .sub {
     margin: var(--space-3) 0 var(--space-1);
     font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     color: var(--text-2);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
   .sub:first-of-type {
     margin-top: 0;
@@ -207,8 +205,8 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    min-height: 40px;
-    padding: var(--space-1) 0;
+    min-height: var(--row-h);
+    padding: 2px 0;
     border-bottom: 1px solid var(--border);
     font-size: var(--text-sm);
   }
@@ -223,6 +221,11 @@
   .when {
     color: var(--text-2);
     white-space: nowrap;
+  }
+  .num {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
   }
   .ok,
   .problems li {
