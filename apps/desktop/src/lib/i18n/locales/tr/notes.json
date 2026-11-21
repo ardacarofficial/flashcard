@@ -46,7 +46,7 @@
     "description": "Açıklama",
     "description_placeholder": "İsteğe bağlı: bu set ne hakkında?",
     "parent": "Üst deste",
-    "top_level": "En üst düzey (üst deste yok)",
+    "top_level": "Yok (en üst düzey)",
     "deck": "Deste",
     "choose_deck": "Bir deste seç",
     "notetype": "Not türü",

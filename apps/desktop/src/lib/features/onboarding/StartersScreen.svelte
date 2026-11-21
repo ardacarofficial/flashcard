@@ -1,10 +1,13 @@
 <script lang="ts">
-  /** Built-in starter decks (v1.0): add one as an ordinary deck (one undo step). */
+  /**
+   * Built-in starter decks (v1.0): add one as an ordinary deck (one undo step). v1.2: a dense
+   * list (name and what it is, card count, Add) instead of a grid of big cards.
+   */
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { Locale, StarterDeckDto } from '$lib/api/types';
   import { i18n, t } from '$lib/i18n/index.svelte';
-  import { BookOpen, Button, Card, Check, CircleCheck, EmptyState, Icon, Layers, Plus, SegmentedControl, Skeleton } from '$lib/ui';
+  import { BookOpen, Button, Check, CircleCheck, EmptyState, Icon, Layers, Plus, SegmentedControl, Skeleton } from '$lib/ui';
   import { LoadState, SettingsPage } from '../core/kit';
   import type { ScreenCtx } from '../types';
 
@@ -48,7 +51,7 @@
 
 <SettingsPage title={t('starters.heading')} subtitle={t('starters.intro')} width="wide">
   {#snippet actions()}
-    <SegmentedControl label={t('starters.language')} options={languages} bind:value={locale} onchange={() => void load()} />
+    <SegmentedControl size="sm" label={t('starters.language')} options={languages} bind:value={locale} onchange={() => void load()} />
   {/snippet}
 
   {#if notice}
@@ -58,100 +61,100 @@
   {#if failed}
     <LoadState state="error" retry={() => void load()} />
   {:else if starters === null}
-    <ul class="grid" aria-hidden="true">
+    <ul class="list" aria-hidden="true">
       {#each { length: 4 } as _, i (i)}
-        <li><Skeleton shape="card" height="168px" /></li>
+        <li class="row"><Skeleton lines={2} /></li>
       {/each}
     </ul>
   {:else if starters.length === 0}
-    <Card padding="lg"><EmptyState icon={Layers} title={t('starters.none')} /></Card>
+    <EmptyState icon={Layers} title={t('starters.none')} />
   {:else}
-    <ul class="grid">
+    <ul class="list">
       {#each starters as d (d.id)}
         {@const done = added.includes(d.id)}
-        <Card as="li" padding="lg" class="starter">
-          <div class="top">
-            <span class="ic" aria-hidden="true"><Icon icon={BookOpen} size={20} /></span>
-            <span class="count">{t('onboarding.notes', { count: d.note_count })}</span>
+        <li class="row">
+          <span class="ic" aria-hidden="true"><Icon icon={BookOpen} size={16} /></span>
+          <div class="text">
+            <h2 class="name">{d.name}</h2>
+            {#if d.description}<p class="desc">{d.description}</p>{/if}
           </div>
-          <h2 class="name">{d.name}</h2>
-          {#if d.description}<p class="desc">{d.description}</p>{/if}
-          <div class="act">
-            <Button
-              variant={done ? 'ghost' : 'secondary'}
-              icon={done ? Check : Plus}
-              loading={busy === d.id}
-              disabled={busy !== null}
-              onclick={() => void install(d)}
-            >{done ? t('starters.added') : t('starters.install')}</Button>
-          </div>
-        </Card>
+          <span class="count num">{t('onboarding.notes', { count: d.note_count })}</span>
+          <Button
+            size="sm"
+            variant={done ? 'ghost' : 'secondary'}
+            icon={done ? Check : Plus}
+            loading={busy === d.id}
+            disabled={busy !== null}
+            onclick={() => void install(d)}
+          >{done ? t('starters.added') : t('starters.install')}</Button>
+        </li>
       {/each}
     </ul>
   {/if}
 </SettingsPage>
 
 <style>
-  .grid {
+  .list {
     list-style: none;
     margin: 0;
     padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    overflow: hidden;
+  }
+  .row {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-    gap: var(--space-4);
-  }
-  .grid :global(.starter) {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .top {
-    display: flex;
+    grid-template-columns: 28px minmax(0, 1fr) auto 96px;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    margin-bottom: var(--space-1);
+    gap: var(--space-3);
+    min-height: 52px;
+    padding: var(--space-2) var(--space-3);
+  }
+  .row + .row {
+    border-top: 1px solid var(--border);
+  }
+  .row:hover {
+    background: var(--surface-2);
+  }
+  .row :global(.fc-btn) {
+    justify-self: end;
   }
   .ic {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 28px;
+    height: 28px;
     border-radius: var(--radius-control);
     background: var(--accent-soft);
     color: var(--accent-text);
   }
-  .count {
-    font-size: var(--text-xs);
-    font-weight: var(--weight-medium);
-    color: var(--text-2);
-    padding: 2px var(--space-2);
-    border-radius: var(--radius-pill);
-    background: var(--surface-2);
+  .text {
+    min-width: 0;
   }
   .name {
     margin: 0;
-    font-size: var(--text-md);
+    font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
     color: var(--text-1);
   }
   .desc {
-    margin: 0;
-    font-size: var(--text-sm);
+    margin: 2px 0 0;
+    font-size: var(--text-xs);
     color: var(--text-2);
-    line-height: var(--leading);
-    flex: 1;
   }
-  .act {
-    margin-top: var(--space-2);
+  .count {
+    font-size: var(--text-xs);
+    color: var(--text-2);
+    white-space: nowrap;
   }
   .notice {
     display: flex;
     gap: var(--space-2);
     align-items: center;
     margin: 0;
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-control);
     background: var(--success-soft);
     color: var(--success);

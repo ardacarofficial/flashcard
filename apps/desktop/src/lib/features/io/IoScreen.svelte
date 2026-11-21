@@ -25,9 +25,9 @@
 
 <SettingsPage title={t('nav.io')} subtitle={t('io.intro')} width="wide">
   {#snippet actions()}
-    <div class="deck"><Select label={t('deck.current')} options={deckOptions} value={ctx.selectedDeck} onchange={(id) => ctx.selectDeck(id)} /></div>
+    <div class="deck"><Select label={t('deck.current')} hideLabel options={deckOptions} value={ctx.selectedDeck} onchange={(id) => ctx.selectDeck(id)} /></div>
   {/snippet}
-  <Tabs label={t('nav.io')} {tabs} value={tab} onchange={(id) => (tab = id as Tab)}>
+  <Tabs variant="pill" label={t('nav.io')} {tabs} value={tab} onchange={(id) => (tab = id as Tab)}>
     {#snippet children(id)}
       <div class="panel">
         {#if id === 'import'}

@@ -565,14 +565,14 @@
     color: var(--text-2);
   }
   .setup :global(.title) {
-    flex: 2 1 220px;
+    flex: 2 1 160px;
   }
   .setup :global(.deck) {
-    flex: 1 1 180px;
+    flex: 1 1 150px;
   }
   .setup :global(.type) {
-    flex: 0 1 180px;
-    min-width: 140px;
+    flex: 0 1 170px;
+    min-width: 120px;
   }
   .setup :global(.more-btn) {
     /* Lines up with the controls under their labels (label line + gap). */
@@ -621,7 +621,7 @@
     grid-template-columns: var(--grid);
   }
   .sheet-head {
-    height: 30px;
+    min-height: 30px;
     align-items: center;
     background: var(--surface-2);
     border-bottom: 1px solid var(--border);
@@ -632,9 +632,6 @@
   .sheet-head .col {
     padding: 0 var(--space-3);
     border-left: 1px solid var(--border);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     line-height: 30px;
   }
   .rows {
@@ -656,7 +653,7 @@
     padding: 9px var(--space-3) 0 0;
     text-align: right;
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .row:focus-within .n {
     color: var(--accent-text);
@@ -771,7 +768,7 @@
   }
   .hint {
     margin-right: auto;
-    color: var(--text-3);
+    color: var(--text-2);
     font-size: var(--text-xs);
   }
   .count {

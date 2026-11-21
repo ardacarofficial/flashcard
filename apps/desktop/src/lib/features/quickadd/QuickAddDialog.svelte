@@ -481,7 +481,7 @@
     outline-offset: 2px;
   }
   .more-hint {
-    color: var(--text-3);
+    color: var(--text-2);
     font-weight: var(--weight-regular);
     margin-left: var(--space-1);
   }
@@ -524,7 +524,7 @@
   }
   .keys {
     margin: 0;
-    color: var(--text-3);
+    color: var(--text-2);
     font-size: var(--text-xs);
   }
   .no-deck {

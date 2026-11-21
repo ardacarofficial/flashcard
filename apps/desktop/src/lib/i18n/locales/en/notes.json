@@ -46,7 +46,7 @@
     "description": "Description",
     "description_placeholder": "Optional: what is this set about?",
     "parent": "Inside",
-    "top_level": "Top level (no parent)",
+    "top_level": "None (top level)",
     "deck": "Deck",
     "choose_deck": "Choose a deck",
     "notetype": "Note type",

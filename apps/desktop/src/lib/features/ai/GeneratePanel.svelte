@@ -13,7 +13,7 @@
   import AttributeField from '$lib/components/AttributeField.svelte';
   import { initialValue, toAssignments, type FieldValue } from '$lib/components/attribute-field';
   import { t, td } from '$lib/i18n/index.svelte';
-  import { Button, Card, Checkbox, EmptyState, FileText, Input, Library, SegmentedControl, Select, Sparkles, Textarea } from '$lib/ui';
+  import { Button, Checkbox, EmptyState, FileText, Input, Library, SegmentedControl, Select, Sparkles, Textarea } from '$lib/ui';
   import type { ScreenCtx } from '../types';
   import JobProgress from '../io/JobProgress.svelte';
   import { pickFile } from '../io/files';
@@ -168,6 +168,17 @@
     }
   }
 
+  /** Field columns of the drafts sheet (the first draft's keys: every draft has the same). */
+  const draftKeys = $derived(drafts[0] ? Object.keys(drafts[0].draft.fields) : []);
+  const canPreview = $derived(!busy && !!source.trim());
+
+  function onSourceKey(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && canPreview) {
+      e.preventDefault();
+      void runPreview();
+    }
+  }
+
   async function add() {
     const deck = ctx.selectedDeck;
     if (!deck) return;
@@ -190,18 +201,15 @@
   {#if !ctx.selectedDeck}
     <EmptyState icon={Library} title={t('ai.generate.pick_deck')} />
   {:else}
-    <Card padding="lg">
-      <div class="form">
-        <div class="grid">
-          <Select label={t('ai.generate.notetype')} options={notetypeOptions} bind:value={notetypeId} />
-          {#each defs as a (a.def.id)}
-            <AttributeField def={a.def} bind:value={attrs[a.def.id]!} />
-          {/each}
+    <div class="compose">
+      <div class="source">
+        <div class="source-head">
+          <SegmentedControl label={t('ai.source.from')} options={sourceOptions} bind:value={from} size="sm" />
+          {#if sourceInfo}<p class="muted" role="status">{sourceInfo}</p>{/if}
         </div>
-        <SegmentedControl label={t('ai.source.from')} options={sourceOptions} bind:value={from} size="sm" />
         {#if from === 'pdf'}
           <div class="row">
-            <Button icon={FileText} disabled={busy} onclick={() => void choosePdf()}>{t('ai.source.choose_pdf')}</Button>
+            <Button size="sm" icon={FileText} disabled={busy} onclick={() => void choosePdf()}>{t('ai.source.choose_pdf')}</Button>
             {#if pageCount !== null}
               <Input
                 class="page-no"
@@ -223,7 +231,7 @@
                 value={String(toPage)}
                 oninput={(e) => (toPage = num(e.currentTarget.value, toPage))}
               />
-              <Button disabled={busy || fromPage < 1 || toPage < fromPage} onclick={() => void readPages()}>
+              <Button size="sm" disabled={busy || fromPage < 1 || toPage < fromPage} onclick={() => void readPages()}>
                 {t('ai.source.read_pages')}
               </Button>
             {/if}
@@ -232,6 +240,7 @@
           <div class="row">
             <Input
               class="grow"
+              size="sm"
               type="url"
               bind:value={url}
               label={t('ai.source.url_label')}
@@ -240,29 +249,39 @@
               hint={t('ai.source.url_note')}
               onkeydown={(e) => e.key === 'Enter' && void readUrl()}
             />
-            <Button disabled={busy || !url.trim()} onclick={() => void readUrl()}>{t('ai.source.fetch')}</Button>
+            <Button size="sm" disabled={busy || !url.trim()} onclick={() => void readUrl()}>{t('ai.source.fetch')}</Button>
           </div>
         {/if}
-        {#if sourceInfo}<p class="muted" role="status">{sourceInfo}</p>{/if}
-        <Textarea label={t('ai.generate.source')} rows={8} bind:value={source} placeholder={t('ai.generate.source_hint')} />
-        <div class="grid">
-          <Input
-            type="number"
-            min="1"
-            max="50"
-            label={t('ai.generate.count')}
-            value={String(count)}
-            oninput={(e) => (count = num(e.currentTarget.value, count))}
-          />
-          <Input label={t('ai.generate.instructions')} bind:value={instructions} placeholder={t('ai.generate.instructions_hint')} />
-        </div>
-        <div class="actions">
-          <Button variant="primary" icon={Sparkles} disabled={busy || !source.trim()} onclick={() => void runPreview()}>
-            {t('ai.generate.preview')}
-          </Button>
-        </div>
+        <Textarea
+          class="source-text"
+          label={t('ai.generate.source')}
+          rows={12}
+          bind:value={source}
+          placeholder={t('ai.generate.source_hint')}
+          onkeydown={onSourceKey}
+        />
       </div>
-    </Card>
+
+      <aside class="options" aria-label={t('ai.tabs.generate')}>
+        <Select size="sm" label={t('ai.generate.notetype')} options={notetypeOptions} bind:value={notetypeId} />
+        {#each defs as a (a.def.id)}
+          <AttributeField def={a.def} bind:value={attrs[a.def.id]!} />
+        {/each}
+        <Input
+          size="sm"
+          type="number"
+          min="1"
+          max="50"
+          label={t('ai.generate.count')}
+          value={String(count)}
+          oninput={(e) => (count = num(e.currentTarget.value, count))}
+        />
+        <Input size="sm" label={t('ai.generate.instructions')} bind:value={instructions} placeholder={t('ai.generate.instructions_hint')} />
+        <Button variant="primary" icon={Sparkles} kbd="Mod+Enter" fullWidth disabled={!canPreview} onclick={() => void runPreview()}>
+          {t('ai.generate.preview')}
+        </Button>
+      </aside>
+    </div>
   {/if}
 
   {#if error}
@@ -282,24 +301,26 @@
   {#if drafts.length > 0}
     <div class="drafts-head">
       <h3>{t('ai.generate.drafts', { count: drafts.length })}</h3>
-      {#if spent}<span class="muted">{t('ai.generate.spent', { cost: spent })}</span>{/if}
+      {#if spent}<span class="muted num">{t('ai.generate.spent', { cost: spent })}</span>{/if}
     </div>
-    <ol class="drafts">
-      {#each drafts as d, i (i)}
-        <li>
-          <Card padding="md">
-            <div class="draft">
-              <Checkbox label={t('ai.generate.keep')} bind:checked={d.keep} />
-              <div class="grid">
-                {#each Object.keys(d.draft.fields) as key (key)}
-                  <Textarea label={fieldName(key)} rows={2} autoGrow bind:value={d.draft.fields[key]!} />
-                {/each}
+    <div class="sheet" style:--cols={Math.max(draftKeys.length, 1)}>
+      <div class="sheet-head" aria-hidden="true">
+        <span></span>
+        {#each draftKeys as key (key)}<span class="col">{fieldName(key)}</span>{/each}
+      </div>
+      <ol class="drafts">
+        {#each drafts as d, i (i)}
+          <li class="draft" class:off={!d.keep}>
+            <span class="keep"><Checkbox ariaLabel={`${t('ai.generate.keep')} ${i + 1}`} bind:checked={d.keep} /></span>
+            {#each Object.keys(d.draft.fields) as key (key)}
+              <div class="cell">
+                <Textarea label={`${fieldName(key)} ${i + 1}`} hideLabel rows={1} autoGrow maxRows={8} bind:value={d.draft.fields[key]!} />
               </div>
-            </div>
-          </Card>
-        </li>
-      {/each}
-    </ol>
+            {/each}
+          </li>
+        {/each}
+      </ol>
+    </div>
     <div class="actions">
       <Button variant="primary" disabled={kept === 0} onclick={() => void add()}>
         {t('ai.generate.add', { count: kept })}
@@ -313,37 +334,56 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
-    max-width: 880px;
   }
-  .form,
-  .draft {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-  .grid {
+  /* Source on the left (what you paste), the few options and the action on the right. */
+  .compose {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: minmax(0, 1fr) 232px;
     gap: var(--space-4);
     align-items: start;
   }
+  .source {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+  .source-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .source :global(.source-text textarea) {
+    min-height: 240px;
+  }
+  .options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+  }
   .row {
     display: flex;
-    gap: var(--space-3);
+    gap: var(--space-2);
     align-items: flex-end;
     flex-wrap: wrap;
   }
   .row :global(.grow) {
     flex: 1;
-    min-width: 240px;
+    min-width: 220px;
   }
   .row :global(.page-no) {
-    width: 120px;
+    width: 96px;
   }
   .actions {
     display: flex;
     justify-content: flex-end;
-    gap: var(--space-2);
+    align-items: center;
+    gap: var(--space-3);
   }
   .muted {
     margin: 0;
@@ -352,8 +392,9 @@
   }
   .banner {
     margin: 0;
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-control);
+    border: 1px solid var(--border);
     background: var(--surface-2);
     color: var(--text-1);
     font-size: var(--text-sm);
@@ -369,15 +410,77 @@
   }
   .drafts-head h3 {
     margin: 0;
-    font-size: var(--text-lg);
+    font-size: var(--text-md);
     font-weight: var(--weight-semibold);
   }
+  /* Drafts as a sheet: keep | field | field, like the Create editor. */
+  .sheet {
+    --grid: 40px repeat(var(--cols), minmax(0, 1fr));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    overflow: hidden;
+  }
+  .sheet-head,
+  .draft {
+    display: grid;
+    grid-template-columns: var(--grid);
+  }
+  .sheet-head {
+    min-height: 30px;
+    align-items: center;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    color: var(--text-2);
+  }
+  .sheet-head .col {
+    padding: 0 var(--space-3);
+    border-left: 1px solid var(--border);
+  }
   .drafts {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+  .draft + .draft {
+    border-top: 1px solid var(--border);
+  }
+  .draft.off .cell {
+    opacity: 0.55;
+  }
+  .keep {
+    display: flex;
+    justify-content: center;
+    padding-top: 9px;
+  }
+  .cell {
+    border-left: 1px solid var(--border);
+    min-width: 0;
+  }
+  .cell :global(textarea) {
+    display: block;
+    min-height: 36px;
+    padding: 8px var(--space-3);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    resize: none;
+  }
+  .cell :global(textarea:focus-visible) {
+    background: var(--surface-0);
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
+  }
+  @media (max-width: 760px) {
+    .compose {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .options {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      align-items: end;
+    }
   }
 </style>
