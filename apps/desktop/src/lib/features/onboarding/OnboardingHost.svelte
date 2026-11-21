@@ -218,18 +218,17 @@
     display: flex;
     flex-direction: column;
   }
-  /* One row per goal: its label on the left, the subjects beside it. */
   .goal {
-    display: grid;
-    grid-template-columns: 120px minmax(0, 1fr);
-    gap: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
     padding: var(--space-3) 0;
+  }
+  .goal:first-child {
+    padding-top: 0;
   }
   .goal + .goal {
     border-top: 1px solid var(--border);
-  }
-  .goal h3 {
-    padding-top: var(--space-2);
   }
   .details h3 {
     margin-bottom: var(--space-2);
@@ -244,7 +243,7 @@
   }
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
     gap: var(--space-2);
   }
   .choice {
@@ -304,15 +303,7 @@
     flex-direction: column;
     gap: var(--space-2);
   }
-  @media (max-width: 640px) {
-    .goal {
-      grid-template-columns: minmax(0, 1fr);
-      gap: var(--space-2);
-    }
-    .goal h3 {
-      padding-top: 0;
-    }
-  }
+
   .muted {
     margin: 0;
     color: var(--text-2);
