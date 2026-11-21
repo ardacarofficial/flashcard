@@ -70,7 +70,8 @@ describe('<InboxScreen>', () => {
     });
     await api.call('inbox.add', { front: 'otter', fields: {}, tags: [], attributes: {} });
     render(InboxScreen, { ctx: ctxWith([node]) });
-    expect(await screen.findByDisplayValue('badger')).toBeTruthy();
+    // v1.2: rows show a preview; Edit (or E on the row) opens the fields.
+    expect(await screen.findByText('badger')).toBeTruthy();
     expect(screen.getByText('Seviye: B1')).toBeTruthy();
     expect(screen.getByText('#web')).toBeTruthy();
     expect(screen.getByText('Sentence: “The badger dug.”')).toBeTruthy();
@@ -85,7 +86,8 @@ describe('<InboxScreen>', () => {
     // v1.1: the deck is the design-system Select (combobox + listbox).
     await fireEvent.click(screen.getAllByRole('combobox', { name: 'Deck' })[1]!);
     await fireEvent.click(await screen.findByRole('option', { name: 'Inbox deck' }));
-    await fireEvent.input(screen.getByDisplayValue('porsuk'), { target: { value: 'porsuk (hayvan)' } });
+    await fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1]!);
+    await fireEvent.input(await screen.findByDisplayValue('porsuk'), { target: { value: 'porsuk (hayvan)' } });
     const spy = vi.spyOn(api, 'call');
     await fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[1]!);
     expect(await screen.findByText('1 card added')).toBeTruthy();
@@ -95,7 +97,7 @@ describe('<InboxScreen>', () => {
     spy.mockRestore();
 
     // Reject the other one; it moves to the Rejected tab.
-    await waitFor(() => expect(screen.queryByDisplayValue('badger')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('badger')).toBeNull());
     await fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
     expect(await screen.findByText('Nothing waiting.')).toBeTruthy();
     await fireEvent.click(screen.getByRole('tab', { name: 'Rejected' }));

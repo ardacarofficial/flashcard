@@ -149,7 +149,18 @@
     },
     "badge": "{count} bekliyor",
     "empty_other": "Burada henüz bir şey yok.",
-    "empty_hint": "Tarayıcı eklentisinin ya da başka programların önerdiği kartlar burada seni bekler."
+    "empty_hint": "Tarayıcı eklentisinin ya da başka programların önerdiği kartlar burada seni bekler.",
+    "edited": "Düzenlendi",
+    "done": "Düzenlemeyi bitir",
+    "keys": {
+      "label": "Klavye kısayolları",
+      "move": "gez",
+      "accept": "kabul et",
+      "edit": "düzenle",
+      "reject": "reddet",
+      "select": "seç",
+      "accept_selected": "seçilenleri kabul et"
+    }
   },
   "local_api": {
     "heading": "Yerel API",
@@ -192,7 +203,9 @@
       "browser_extension": "Tarayıcı eklentisi",
       "app": "Program",
       "script": "Betik"
-    }
+    },
+    "waiting": "Onay bekleyenler",
+    "none_allowed": "Henüz izin verilen program yok."
   },
   "clipboard": {
     "suggest": "“{text}” kart olarak eklensin mi?",

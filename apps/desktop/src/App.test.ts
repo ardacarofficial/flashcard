@@ -60,7 +60,7 @@ describe('<App> on the dev mock transport', () => {
     // Library: Decks | Notes only; the study modes open from the deck page's tiles and Home.
     expect(await tabsOf('Library')).toEqual(['Decks', 'Notes']);
     expect(await tabsOf('Search')).toEqual([]);
-    expect(await tabsOf('Statistics')).toEqual(['Statistics', 'Planning', 'Goals']);
+    expect(await tabsOf('Statistics')).toEqual(['Overview', 'Planning', 'Goals']);
   });
 
   it('study modes open from the deck page; a running session gets the focus layout', async () => {
@@ -124,7 +124,7 @@ describe('<App> on the dev mock transport', () => {
     const trail = () => Array.from(bar.querySelectorAll('nav li'), (l) => l.textContent?.trim());
     await waitFor(() => expect(trail()).toEqual(['Home']));
     await fireEvent.click(await screen.findByRole('button', { name: 'Statistics' }));
-    await waitFor(() => expect(trail()).toEqual(['Statistics']));
+    await waitFor(() => expect(trail()).toEqual(['Statistics', 'Overview']));
 
     // The search field opens the command palette.
     await fireEvent.click(await screen.findByTestId('top-search'));

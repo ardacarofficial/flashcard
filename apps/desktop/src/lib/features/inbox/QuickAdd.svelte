@@ -66,46 +66,66 @@
 <svelte:window {onkeydown} />
 
 <form class="quick-add" onsubmit={add}>
-  <h1>{t('quick_add.title')}</h1>
-  {#if paths.length === 0}
-    <p class="muted">{t('quick_add.no_deck')}</p>
-  {:else}
-    <Select label={t('inbox.deck')} options={deckOptions} bind:value={deck} />
-  {/if}
+  <header>
+    <h1>{t('quick_add.title')}</h1>
+    {#if paths.length === 0}
+      <p class="muted">{t('quick_add.no_deck')}</p>
+    {:else}
+      <Select class="deck" size="sm" label={t('inbox.deck')} hideLabel options={deckOptions} bind:value={deck} />
+    {/if}
+  </header>
   <!-- svelte-ignore a11y_autofocus -->
-  <Textarea label={t('inbox.front')} bind:value={front} rows={2} autoGrow autofocus />
-  <Textarea label={t('inbox.back')} bind:value={back} rows={2} autoGrow />
-  <div class="actions">
-    <Button variant="ghost" onclick={() => void shell.hide()}>{t('quick_add.close')}</Button>
-    <Button variant="primary" type="submit" disabled={!deck || !front.trim()}>{t('quick_add.add')}</Button>
-  </div>
-  {#if status}<p class="status" role="status">{status}</p>{/if}
+  <Textarea label={t('inbox.front')} bind:value={front} rows={2} autoGrow maxRows={6} autofocus />
+  <Textarea label={t('inbox.back')} bind:value={back} rows={2} autoGrow maxRows={6} />
+  <footer>
+    {#if status}<p class="status" role="status">{status}</p>{/if}
+    <span class="grow"></span>
+    <Button size="sm" variant="ghost" kbd="Esc" aria-keyshortcuts="Escape" onclick={() => void shell.hide()}>{t('quick_add.close')}</Button>
+    <Button size="sm" variant="primary" type="submit" disabled={!deck || !front.trim()}>{t('quick_add.add')}</Button>
+  </footer>
 </form>
 
 <style>
   .quick-add {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
     min-height: 100vh;
-    padding: var(--space-6);
+    padding: var(--space-3) var(--space-4);
     background: var(--surface-1);
     color: var(--text-1);
+    font-size: var(--text-sm);
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    min-height: 32px;
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border);
   }
   h1 {
     margin: 0;
-    font-size: var(--text-lg);
+    font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
   }
-  .actions {
+  header :global(.deck) {
+    width: min(240px, 60vw);
+  }
+  footer {
     display: flex;
+    align-items: center;
     gap: var(--space-2);
-    justify-content: flex-end;
+    margin-top: auto;
+  }
+  .grow {
+    flex: 1;
   }
   .muted,
   .status {
     margin: 0;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
 </style>
