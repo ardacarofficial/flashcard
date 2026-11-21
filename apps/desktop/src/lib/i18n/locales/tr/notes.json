@@ -18,7 +18,8 @@
     "confirm_delete": "Bu not silinsin mi?",
     "undo_hint": "Sonradan geri alabilirsin.",
     "delete_aria": "“{name}” notunu sil",
-    "tags": "Etiketler"
+    "tags": "Etiketler",
+    "add_card": "Kart ekle"
   },
   "errors": {
     "validation": {
@@ -45,7 +46,7 @@
     "description": "Açıklama",
     "description_placeholder": "İsteğe bağlı: bu set ne hakkında?",
     "parent": "Üst deste",
-    "top_level": "En üst düzey (üst deste yok)",
+    "top_level": "Yok (en üst düzey)",
     "deck": "Deste",
     "choose_deck": "Bir deste seç",
     "notetype": "Not türü",
@@ -53,7 +54,7 @@
     "count": "{count} kart",
     "term": "Terim",
     "definition": "Tanım",
-    "add_row": "Kart ekle",
+    "add_row": "Satır ekle",
     "add_image": "{n}. karta görsel ekle",
     "remove_row": "{n}. kartı kaldır",
     "remove_image": "{n}. kartın görselini kaldır",
@@ -95,6 +96,8 @@
       "too_many": "Editöre yalnız ilk {max} satır sığar. Daha uzun listeler için İçe aktar'ı kullan.",
       "add": "{count} kart ekle",
       "added": "Listeye {count} kart eklendi."
-    }
+    },
+    "more": "Diğer",
+    "more_hint": "Açıklama ve sınıflandırma"
   }
 }

@@ -84,6 +84,12 @@
 
   /** Arrow keys move the choice through every subject (one radio group, one tab stop). */
   function onkey(e: KeyboardEvent, i: number) {
+    // Enter on the chosen subject goes on (keyboard-first: arrows, then Enter).
+    if (e.key === 'Enter' && subject?.subject === all[i]?.subject) {
+      e.preventDefault();
+      next();
+      return;
+    }
     const dir = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
     if (!dir || all.length === 0) return;
     e.preventDefault();
@@ -191,7 +197,7 @@
     grid-template-columns: 1fr 1fr auto;
     align-items: center;
     gap: var(--space-2);
-    margin-bottom: var(--space-6);
+    margin-bottom: var(--space-4);
   }
   .bar {
     height: 4px;
@@ -204,16 +210,31 @@
   .step-text {
     margin-inline-start: var(--space-2);
     color: var(--text-2);
+    font-family: var(--font-mono);
     font-size: var(--text-xs);
-    font-weight: var(--weight-medium);
+    font-variant-numeric: tabular-nums;
   }
   .goals {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+  }
+  .goal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
+  }
+  .goal:first-child {
+    padding-top: 0;
+  }
+  .goal + .goal {
+    border-top: 1px solid var(--border);
+  }
+  .details h3 {
+    margin-bottom: var(--space-2);
   }
   h3 {
-    margin: 0 0 var(--space-2);
+    margin: 0;
     font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
     color: var(--text-2);
@@ -222,7 +243,7 @@
   }
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
     gap: var(--space-2);
   }
   .choice {
@@ -230,9 +251,10 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    padding-inline-end: var(--space-6);
     border: 1px solid var(--border);
-    border-radius: var(--radius-card);
+    border-radius: var(--radius-control);
     background: var(--surface-1);
     color: var(--text-1);
     font: inherit;
@@ -274,13 +296,14 @@
   .details {
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    gap: var(--space-4);
   }
   .starters {
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-2);
   }
+
   .muted {
     margin: 0;
     color: var(--text-2);

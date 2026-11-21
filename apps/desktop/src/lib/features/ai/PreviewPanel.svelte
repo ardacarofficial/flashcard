@@ -16,7 +16,7 @@
   const limit = $derived(usd(preview.budget.limit_usd) ?? '');
 </script>
 
-<Card padding="lg" as="section" label={t('ai.preview.heading')} class="ai-preview">
+<Card padding="md" as="section" label={t('ai.preview.heading')} class="ai-preview">
   <h3>{t('ai.preview.heading')}</h3>
   <p>
     {t('ai.preview.summary', {
@@ -63,7 +63,7 @@
 <style>
   h3 {
     margin: 0 0 var(--space-2);
-    font-size: var(--text-lg);
+    font-size: var(--text-md);
     font-weight: var(--weight-semibold);
   }
   h4 {
@@ -100,6 +100,6 @@
     display: flex;
     justify-content: flex-end;
     gap: var(--space-2);
-    margin-top: var(--space-4);
+    margin-top: var(--space-3);
   }
 </style>

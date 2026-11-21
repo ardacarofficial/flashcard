@@ -1,0 +1,28 @@
+{
+  "quickadd": {
+    "title": "Add card",
+    "deck": "Deck",
+    "notetype": "Note type",
+    "tags": "Tags",
+    "tags_placeholder": "separate with commas or spaces",
+    "more": "More",
+    "more_hint": "Classification and preview",
+    "preview": "Preview",
+    "add": "Add",
+    "close": "Close",
+    "bulk": "Add in bulk",
+    "added": "Added · {count}",
+    "added_status": "Card added. {count} cards added in this window.",
+    "undo": "Undo",
+    "undone": "Last card undone.",
+    "add_anyway": "Add anyway",
+    "empty": "Fill in a field first.",
+    "no_deck": "No decks yet. Create a deck for your cards first.",
+    "new_deck": "Create a deck",
+    "discard": "What you typed will be lost. Press Esc again to close.",
+    "discard_confirm": "Discard and close",
+    "keep_editing": "Keep editing",
+    "keys_hint": "Enter moves to the next field and adds on the last one · Shift+Enter new line",
+    "loading": "Loading"
+  }
+}

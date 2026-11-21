@@ -22,7 +22,7 @@
 
 <div class="ai">
   <PageHeader title={t('nav.ai')} subtitle={t('ai.subtitle')} />
-  <Tabs label={t('nav.ai')} {tabs} bind:value={tab}>
+  <Tabs variant="pill" label={t('nav.ai')} {tabs} bind:value={tab}>
     {#snippet children(id)}
       <div class="panel">
         {#if id === 'generate'}
@@ -38,7 +38,11 @@
 </div>
 
 <style>
+  .ai {
+    display: flex;
+    flex-direction: column;
+  }
   .panel {
-    padding-top: var(--space-2);
+    padding-top: var(--space-4);
   }
 </style>

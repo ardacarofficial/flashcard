@@ -3,7 +3,7 @@
   import type { AiUsageGroup, AiUsageSummary, AiUsageTotals } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import { usd } from './ai';
-  import { Activity, EmptyState, Icon, Info, ProgressBar, Skeleton, TriangleAlert } from '$lib/ui';
+  import { Activity, EmptyState, Icon, Info, ProgressBar, Skeleton, StatTile, TriangleAlert } from '$lib/ui';
   import { SettingsSection } from '../core/kit';
 
   let summary = $state<AiUsageSummary | null>(null);
@@ -42,16 +42,12 @@
   {/if}
   {#if !summary}
     {#if !error}
-      <div class="tiles"><Skeleton shape="card" height="112px" /><Skeleton shape="card" height="112px" /></div>
+      <div class="tiles"><Skeleton shape="card" height="88px" /><Skeleton shape="card" height="88px" /></div>
     {/if}
   {:else}
     <div class="tiles">
       {#each [{ label: t('ai.usage.month'), x: summary.month }, { label: t('ai.usage.week'), x: summary.week }] as tile (tile.label)}
-        <div class="tile">
-          <h3>{tile.label}</h3>
-          <p class="big">{usd(tile.x.cost_usd) ?? '$0'}</p>
-          <p class="sub">{t('ai.usage.requests', { n: tile.x.requests })} · {tokens(tile.x)}</p>
-        </div>
+        <StatTile label={tile.label} value={usd(tile.x.cost_usd) ?? '$0'} hint={`${t('ai.usage.requests', { n: tile.x.requests })} · ${tokens(tile.x)}`} />
       {/each}
     </div>
 
@@ -109,33 +105,13 @@
   .panel {
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    gap: var(--space-4);
   }
   .tiles {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
     gap: var(--space-4);
   }
-  .tile {
-    padding: var(--space-4) var(--space-6);
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-  }
-  .tile h3 {
-    margin: 0;
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-    color: var(--text-2);
-  }
-  .big {
-    margin: var(--space-1) 0;
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-bold);
-    font-variant-numeric: tabular-nums;
-    line-height: var(--leading-tight);
-  }
-  .sub,
   .muted {
     margin: 0;
     color: var(--text-2);

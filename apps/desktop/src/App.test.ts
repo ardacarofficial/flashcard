@@ -30,6 +30,8 @@ describe('<App> on the dev mock transport', () => {
     await fireEvent.click(await screen.findByRole('radio', { name: 'Existing deck' }));
     await fireEvent.click(await screen.findByRole('combobox', { name: 'Deck' }));
     await fireEvent.click(await screen.findByRole('option', { name: 'İngilizce::Fiiller' }));
+    // v1.2: classifications sit under "More" in the bulk editor's one setup row.
+    await fireEvent.click(await screen.findByRole('button', { name: 'More' }));
     await fireEvent.click(await screen.findByRole('combobox', { name: 'Seviye' }));
     expect(screen.getAllByRole('option').map((o) => o.textContent?.trim())).toEqual([
       'Not set', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2',
@@ -116,7 +118,7 @@ describe('<App> on the dev mock transport', () => {
     await waitFor(() => expect(document.querySelector('main')?.textContent?.trim()).not.toBe(''));
   });
 
-  it('v1.2 top bar: trail, search opens the palette, "Add card" and N open Quick Add (fallback: Create)', async () => {
+  it('v1.2 top bar: trail, search opens the palette, "Add card" and N open the Quick Add dialog', async () => {
     render(App);
     const bar = await screen.findByTestId('top-bar');
     const trail = () => Array.from(bar.querySelectorAll('nav li'), (l) => l.textContent?.trim());
@@ -130,11 +132,13 @@ describe('<App> on the dev mock transport', () => {
     await fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull());
 
-    // "Add card" (until the Quick Add dialog registers itself: the Create page).
-    await fireEvent.click(await screen.findByRole('button', { name: 'Add card' }));
+    // "Add card" opens the Quick Add dialog (v1.2; the page stays where it was).
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
-    await waitFor(() => expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Create'));
-    await waitFor(() => expect(trail()).toEqual(['Create', 'Add']));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add card' }));
+    expect(await screen.findByRole('dialog', { name: 'Add card' }, { timeout: 3000 })).toBeTruthy();
+    expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Statistics');
+    await fireEvent.keyDown(document.activeElement ?? window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add card' })).toBeNull());
 
     // `N` does the same from anywhere — but not while typing in a field.
     await fireEvent.click(screen.getByRole('button', { name: 'Library' }));
@@ -142,9 +146,10 @@ describe('<App> on the dev mock transport', () => {
     const field = document.createElement('input');
     document.body.append(field);
     await fireEvent.keyDown(field, { key: 'n' });
-    expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Library');
+    expect(screen.queryByRole('dialog', { name: 'Add card' })).toBeNull();
     field.remove();
     await fireEvent.keyDown(document.body, { key: 'n' });
-    await waitFor(() => expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Create'));
+    expect(await screen.findByRole('dialog', { name: 'Add card' })).toBeTruthy();
+    expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Library');
   });
 });

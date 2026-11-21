@@ -18,7 +18,8 @@
     "confirm_delete": "Delete this note?",
     "undo_hint": "You can undo this afterwards.",
     "delete_aria": "Delete note “{name}”",
-    "tags": "Tags"
+    "tags": "Tags",
+    "add_card": "Add card"
   },
   "errors": {
     "validation": {
@@ -45,7 +46,7 @@
     "description": "Description",
     "description_placeholder": "Optional: what is this set about?",
     "parent": "Inside",
-    "top_level": "Top level (no parent)",
+    "top_level": "None (top level)",
     "deck": "Deck",
     "choose_deck": "Choose a deck",
     "notetype": "Note type",
@@ -53,7 +54,7 @@
     "count": "{count, plural, one {# card} other {# cards}}",
     "term": "Term",
     "definition": "Definition",
-    "add_row": "Add card",
+    "add_row": "Add row",
     "add_image": "Add an image to card {n}",
     "remove_row": "Remove card {n}",
     "remove_image": "Remove the image of card {n}",
@@ -95,6 +96,8 @@
       "too_many": "Only the first {max, plural, one {# row} other {# rows}} fit in the editor. Use Import for longer lists.",
       "add": "Add {count, plural, one {# card} other {# cards}}",
       "added": "Added {count, plural, one {# card} other {# cards}} to the list."
-    }
+    },
+    "more": "More",
+    "more_hint": "Description and classification"
   }
 }
