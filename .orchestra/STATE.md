@@ -10,11 +10,10 @@ Models: workers/reviewers `opus`; effort high for design + Rust, medium for rout
 
 | # | Piece | Where | Status |
 |---|---|---|---|
-| 0a | Design foundation: tokens, fonts, lib/ui, shell, top bar | main checkout | running |
+| 0a | Design foundation: tokens, fonts, lib/ui, shell, top bar | main checkout | done (7f2cf32, 2ac48b2, 6c508de) |
 | 0b | Subtitle Rust module + settings page | worktree | running |
 | 0c | Frontend map for rollout split | read-only scout | done |
-| 1 | Prototype screens: Home · Quick Add + bulk editor · Study session · Library + Deck page | worktrees | pending |
-| 2 | Rollout: Search/Browse · Stats · Settings pages · modes (Learn/Test/Match/Reading) · Inbox/onboarding/lock/etc | worktrees | pending |
+| 1+2 | Screen workers A–F (see workstreams below), all in worktrees, launched together | worktrees | running |
 | 3 | Visual review + polish rounds | reviewers | pending |
 | 4 | Integrate, full tests, docs/11 rewrite, version, push | orchestrator | pending |
 
@@ -40,3 +39,11 @@ study-end, test-submit, option-*, match-tile(+data-side), term-list, .view-toggl
 settings-select, update-open, open-dialog-*, plus unit-test hooks (test-score, match-board, match-result,
 match-clock, learn-progress, learn-feedback, summary-*, study-count, timer, hint, flag, focus-toggle,
 mode-options, inline-preview, ai-text, question-N).
+
+## Running agents (ids for SendMessage)
+- 0b Subtitle Rust: a85b92b23cf6b6c91 (worktree .claude/worktrees/agent-a85b92b23cf6b6c91)
+- A a5f16d3d6d66cfa11 · B a9efc71eb1ab30a1e · C addeb21297ec3e065 · D aea6420ce7596aa38 · E a3d2490ffcda62ac1 · F a78fbd01aaf515efd
+Common brief: .orchestra/SCREEN-WORKER.md. Foundation hooks: openQuickAdd()/setQuickAddHandler() in
+src/lib/shell/commands.svelte.ts; breadcrumbs via getPageChrome()?.setTrail().
+Open after merge: Subtitle settings page polish; docs/11 rewrite; sidebar mark colour (F reports); screens --strict
+all configs; independent visual review; version bump + CHANGELOG.
