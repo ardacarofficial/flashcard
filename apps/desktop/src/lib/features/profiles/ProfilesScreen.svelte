@@ -22,7 +22,6 @@
     Plus,
     SegmentedControl,
     Select,
-    Shield,
     Trash2,
     Users,
   } from '$lib/ui';
@@ -45,6 +44,7 @@
   let kind = $state<LockKind>('pin');
   let secret = $state('');
   let current = $state('');
+  let clearSecret = $state('');
   let idle = $state(15);
 
   const nameOf = (p: ProfileDto) => p.name ?? t('profiles.default_name');
@@ -123,7 +123,7 @@
   }
 
   async function clear() {
-    if (await ctx.guarded(() => api.call('lock.clear', { current }))) current = '';
+    if (await ctx.guarded(() => api.call('lock.clear', { current: clearSecret }))) clearSecret = '';
     await load();
   }
 
@@ -132,20 +132,20 @@
 
 <SettingsPage title={t('nav.profiles')} subtitle={t('profiles.intro')}>
   {#if list === null}
-    <SettingsSection title={t('profiles.heading')} icon={Users}>
+    <SettingsSection title={t('profiles.heading')}>
       <LoadState state={failed ? 'error' : 'loading'} retry={() => void load()} />
     </SettingsSection>
   {:else if !list.available}
-    <SettingsSection title={t('profiles.heading')} icon={Users}>
+    <SettingsSection title={t('profiles.heading')}>
       <EmptyState size="sm" icon={Users} title={t('profiles.unavailable')} />
     </SettingsSection>
   {:else}
-    <SettingsSection title={t('profiles.heading')} icon={Users} body="rows">
+    <SettingsSection title={t('profiles.heading')} body="rows">
       {#if switching}<p class="status" role="status">{t('profiles.switching')}</p>{/if}
       <ul class="profiles">
         {#each list.profiles as p (p.id)}
-          <li class="profile">
-            <Avatar name={nameOf(p)} />
+          <li class="profile" class:current={p.active}>
+            <Avatar size="sm" name={nameOf(p)} />
             {#if editing === p.id}
               <form
                 class="rename"
@@ -160,14 +160,11 @@
               </form>
             {:else}
               <div class="who">
-                <strong class="name">{nameOf(p)}</strong>
-                <span class="chips">
-                  {#if p.active}<Chip size="sm" tone="accent" label={t('profiles.active')} />{/if}
-                  {#if p.locked}<Chip size="sm" icon={Lock} label={t('profiles.locked')} />{/if}
-                </span>
+                <span class="name">{nameOf(p)}</span>
+                {#if p.active}<Chip size="sm" tone="accent" label={t('profiles.active')} />{/if}
+                {#if p.locked}<Chip size="sm" icon={Lock} label={t('profiles.locked')} />{/if}
               </div>
               <div class="actions">
-                {#if !p.active}<Button size="sm" onclick={() => void open(p)}>{t('profiles.switch')}</Button>{/if}
                 <IconButton
                   icon={Pencil}
                   size="sm"
@@ -175,32 +172,37 @@
                   onclick={() => ((editing = p.id), (editName = nameOf(p)))}
                 />
                 {#if !p.active && p.id !== 'default'}
-                  <IconButton icon={Trash2} size="sm" variant="danger" label={t('profiles.delete')} onclick={() => askDelete(p)} />
+                  <IconButton icon={Trash2} size="sm" label={t('profiles.delete')} onclick={() => askDelete(p)} />
                 {/if}
+                {#if !p.active}<Button size="sm" onclick={() => void open(p)}>{t('profiles.switch')}</Button>{/if}
               </div>
             {/if}
           </li>
         {/each}
       </ul>
       <form class="add" onsubmit={create}>
-        <Input label={t('profiles.new_name')} hideLabel placeholder={t('profiles.new_name')} bind:value={newName} />
-        <Button type="submit" icon={Plus} disabled={newName.trim() === ''}>{t('profiles.create')}</Button>
+        <Input size="sm" icon={Plus} label={t('profiles.new_name')} hideLabel placeholder={t('profiles.new_name')} bind:value={newName} />
+        <Button size="sm" type="submit" disabled={newName.trim() === ''}>{t('profiles.create')}</Button>
       </form>
     </SettingsSection>
   {/if}
 
   {#if lock?.available}
-    <SettingsSection title={t('lock.heading')} description={t('lock.intro')} icon={Shield} body="rows">
+    <SettingsSection title={t('lock.heading')} description={t('lock.intro')} body="rows">
       <div class="lock-status" class:on={lock.enabled}>
         <span class="lock-icon" aria-hidden="true">
-          <Icon icon={lock.enabled ? Lock : LockOpen} size={20} />
+          <Icon icon={lock.enabled ? Lock : LockOpen} size={16} />
         </span>
         <p>
           {#if !lock.enabled}{t('lock.off')}{:else if lock.kind === 'pin'}{t('lock.on_pin')}{:else}{t('lock.on_password')}{/if}
         </p>
+        {#if lock.enabled}
+          <Button size="sm" icon={Lock} onclick={() => void ctx.guarded(() => api.call('lock.lock', {}))}>{t('lock.lock_now')}</Button>
+        {/if}
       </div>
       <FormRow label={t('lock.idle')} description={t('lock.idle_hint')}>
         <Select
+          size="sm"
           label={t('lock.idle')}
           hideLabel
           options={idleOptions}
@@ -209,16 +211,17 @@
         />
       </FormRow>
       <form onsubmit={setLock}>
+        <FormRow label={t('lock.kind_label')} description={t('lock.kind_hint')}>
+          <SegmentedControl size="sm" label={t('lock.kind_label')} options={kinds} bind:value={kind} />
+        </FormRow>
         {#if lock.enabled}
           <FormRow label={t('lock.current_secret')} description={t('lock.current_hint')}>
-            <Input type="password" autocomplete="current-password" label={t('lock.current_secret')} hideLabel bind:value={current} />
+            <Input size="sm" type="password" autocomplete="current-password" label={t('lock.current_secret')} hideLabel bind:value={current} />
           </FormRow>
         {/if}
-        <FormRow label={t('lock.kind_label')} description={t('lock.kind_hint')}>
-          <SegmentedControl label={t('lock.kind_label')} options={kinds} bind:value={kind} />
-        </FormRow>
         <FormRow label={t('lock.new_secret')}>
           <Input
+            size="sm"
             type="password"
             autocomplete="new-password"
             inputmode={kind === 'pin' ? 'numeric' : 'text'}
@@ -228,11 +231,7 @@
           />
         </FormRow>
         <div class="lock-actions">
-          {#if lock.enabled}
-            <Button variant="danger" disabled={current === ''} onclick={() => void clear()}>{t('lock.clear')}</Button>
-            <Button icon={Lock} onclick={() => void ctx.guarded(() => api.call('lock.lock', {}))}>{t('lock.lock_now')}</Button>
-          {/if}
-          <Button type="submit" variant="primary" disabled={secret === ''}>{lock.enabled ? t('lock.change') : t('lock.set')}</Button>
+          <Button size="sm" type="submit" variant="primary" disabled={secret === ''}>{lock.enabled ? t('lock.change') : t('lock.set')}</Button>
         </div>
       </form>
       {#if lock.enabled}
@@ -242,6 +241,15 @@
         </div>
       {/if}
     </SettingsSection>
+
+    {#if lock.enabled}
+      <SettingsSection title={t('lock.danger_heading')} tone="danger" body="rows">
+        <FormRow label={t('lock.clear')} description={t('lock.clear_desc')}>
+          <Input size="sm" type="password" autocomplete="current-password" label={t('lock.current_secret')} hideLabel placeholder={t('lock.current_secret')} bind:value={clearSecret} />
+          <Button size="sm" variant="danger" disabled={clearSecret === ''} onclick={() => void clear()}>{t('lock.clear')}</Button>
+        </FormRow>
+      </SettingsSection>
+    {/if}
   {/if}
 </SettingsPage>
 
@@ -267,7 +275,8 @@
 <style>
   .status {
     margin: 0;
-    padding: var(--space-2) var(--space-6);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
     color: var(--text-2);
     font-size: var(--text-sm);
   }
@@ -280,11 +289,9 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-3) var(--space-6);
-    min-height: 56px;
-  }
-  .profile + .profile {
-    border-top: 1px solid var(--border);
+    min-height: 44px;
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--border);
   }
   .who {
     flex: 1;
@@ -296,19 +303,18 @@
   }
   .name {
     font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
+    color: var(--text-1);
     overflow-wrap: anywhere;
-  }
-  .chips {
-    display: inline-flex;
-    gap: var(--space-1);
-    flex-wrap: wrap;
   }
   .actions,
   .rename {
     display: flex;
     align-items: center;
     gap: var(--space-1);
+  }
+  .actions {
+    flex: none;
   }
   .rename {
     flex: 1;
@@ -320,73 +326,49 @@
   .add {
     display: flex;
     gap: var(--space-2);
-    align-items: flex-start;
-    padding: var(--space-4) var(--space-6);
-    border-top: 1px solid var(--border);
-    background: var(--surface-2);
-    border-radius: 0 0 var(--radius-card) var(--radius-card);
-    margin-bottom: calc(-1 * var(--space-2));
+    align-items: center;
+    padding-top: var(--space-3);
   }
   .add :global(.fc-field) {
     flex: 1;
+    max-width: 22rem;
   }
   .lock-status {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    margin: var(--space-2) var(--space-6) var(--space-2);
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-control);
-    background: var(--surface-2);
+    gap: var(--space-2);
+    min-height: 44px;
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--border);
     color: var(--text-2);
     font-size: var(--text-sm);
   }
-  .lock-status.on {
-    background: var(--success-soft);
+  .lock-status.on .lock-icon {
     color: var(--success);
   }
   .lock-status p {
+    flex: 1;
     margin: 0;
     color: var(--text-1);
+    font-weight: var(--weight-medium);
   }
   .lock-icon {
     display: inline-flex;
-  }
-  form > :global(.fc-form-row:first-child) {
-    border-top: 1px solid var(--border);
   }
   .lock-actions {
     display: flex;
     justify-content: flex-end;
     gap: var(--space-2);
     flex-wrap: wrap;
-    padding: var(--space-4) var(--space-6);
-    border-top: 1px solid var(--border);
+    padding-top: var(--space-3);
   }
   .notes {
-    padding: 0 var(--space-6) var(--space-4);
+    padding-top: var(--space-3);
     color: var(--text-2);
     font-size: var(--text-xs);
     line-height: var(--leading);
   }
   .notes p {
     margin: 0 0 var(--space-1);
-  }
-  @media (max-width: 1023.98px) {
-    .profile,
-    .add,
-    form > :global(.fc-form-row:first-child) {
-    border-top: 1px solid var(--border);
-  }
-  .lock-actions {
-      padding-inline: var(--space-4);
-    }
-    .lock-status {
-      margin-inline: var(--space-4);
-    }
-    .notes,
-    .status {
-      padding-inline: var(--space-4);
-    }
   }
 </style>

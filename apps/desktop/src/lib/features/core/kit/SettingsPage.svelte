@@ -1,6 +1,8 @@
 <!--
-  Frame of one Settings (or Statistics) page: the page's PageHeader and a vertical stack of
-  sections. Every v1.1 S4 screen starts with it so titles, widths and gaps match.
+  Frame of one Settings (or Statistics) page (v1.2): the PageHeader (title + one-line
+  description) and the page's sections stacked with even gaps — no boxes. Every settings
+  screen starts with it so titles, widths, row heights and gaps match. Destructive sections
+  (`SettingsSection tone="danger"`) go last.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -26,11 +28,11 @@
 
 <style>
   .fc-settings-page.narrow {
-    max-width: 760px;
+    max-width: 720px;
   }
   .stack {
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    gap: var(--space-8);
   }
 </style>

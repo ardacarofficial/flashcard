@@ -60,7 +60,9 @@
       "new_per_day": "How many new cards to introduce each day.",
       "reviews_per_day": "Reviews stop for the day at this number.",
       "desired_retention": "Chance you still remember a card when it comes back (0.70–0.99)."
-    }
+    },
+    "danger": "Delete preset",
+    "delete_desc": "Decks using it fall back to their parent deck or the defaults. Undo is available."
   },
   "errors": {
     "validation": {

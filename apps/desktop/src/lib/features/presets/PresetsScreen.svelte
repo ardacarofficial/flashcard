@@ -6,11 +6,10 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { DeckTreeNode, PresetConfig, PresetDto, PresetList } from '$lib/api/types';
+  import { formatCount } from '$lib/format';
   import { t } from '$lib/i18n/index.svelte';
   import {
-    Badge,
     Button,
-    Card,
     ChevronDown,
     ChevronUp,
     Copy,
@@ -146,8 +145,8 @@
 
 {#snippet newForm()}
   <form class="new" onsubmit={(e) => { e.preventDefault(); void create(); }}>
-    <Input bind:value={newName} label={t('presets.new_name')} hideLabel placeholder={t('presets.new_placeholder')} />
-    <Button type="submit" icon={Plus} disabled={!newName.trim()}>{t('presets.new')}</Button>
+    <Input size="sm" bind:value={newName} label={t('presets.new_name')} hideLabel placeholder={t('presets.new_placeholder')} />
+    <Button size="sm" type="submit" icon={Plus} disabled={!newName.trim()}>{t('presets.new')}</Button>
   </form>
 {/snippet}
 
@@ -165,20 +164,21 @@
   {:else}
   <div class="layout">
     <aside aria-label={t('presets.list')}>
-      <Card padding="none">
-        <h2 class="side-title">{t('presets.list')}</h2>
-          <ul class="presets">
-            {#each list.items as p (p.id)}
-              <li>
-                <button type="button" class="preset" class:active={p.id === selected} aria-pressed={p.id === selected} onclick={() => edit(p)}>
-                  <span class="pname">{p.name}</span>
-                  <Badge count={p.deck_ids.length} label={t('presets.deck_count', { n: p.deck_ids.length })} />
-                </button>
-              </li>
-            {/each}
-          </ul>
-        <div class="new-side">{@render newForm()}</div>
-      </Card>
+      <h2 class="side-title">{t('presets.list')}</h2>
+      <ul class="presets">
+        {#each list.items as p (p.id)}
+          <li>
+            <button type="button" class="preset" class:active={p.id === selected} aria-pressed={p.id === selected} onclick={() => edit(p)}>
+              <span class="pname">{p.name}</span>
+              <span class="count num" title={t('presets.deck_count', { n: p.deck_ids.length })}>
+                <span class="sr-only">{t('presets.deck_count', { n: p.deck_ids.length })}</span>
+                <span aria-hidden="true">{formatCount(p.deck_ids.length)}</span>
+              </span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+      <div class="new-side">{@render newForm()}</div>
     </aside>
 
     <div class="editor">
@@ -187,25 +187,24 @@
           <SettingsSection title={current.name} body="rows">
             {#snippet actions()}
               <Button variant="ghost" size="sm" icon={Copy} onclick={() => void copy()}>{t('presets.clone')}</Button>
-              <Button variant="ghost" size="sm" icon={Trash2} onclick={() => void remove()}>{t('presets.delete')}</Button>
             {/snippet}
             <FormRow label={t('presets.field.name')}>
-              <Input class="txt" bind:value={name} label={t('presets.field.name')} hideLabel />
+              <Input size="sm" class="txt" bind:value={name} label={t('presets.field.name')} hideLabel />
             </FormRow>
             <FormRow label={t('presets.field.new_per_day')} description={t('presets.desc.new_per_day')}>
-              <Input class="num" type="number" min="0" bind:value={cfg.new_per_day} label={t('presets.field.new_per_day')} hideLabel />
+              <Input size="sm" class="num-in" type="number" min="0" bind:value={cfg.new_per_day} label={t('presets.field.new_per_day')} hideLabel />
             </FormRow>
             <FormRow label={t('presets.field.reviews_per_day')} description={t('presets.desc.reviews_per_day')}>
-              <Input class="num" type="number" min="0" bind:value={cfg.reviews_per_day} label={t('presets.field.reviews_per_day')} hideLabel />
+              <Input size="sm" class="num-in" type="number" min="0" bind:value={cfg.reviews_per_day} label={t('presets.field.reviews_per_day')} hideLabel />
             </FormRow>
             <FormRow label={t('presets.field.desired_retention')} description={t('presets.desc.desired_retention')}>
-              <Input class="num" type="number" min="0.7" max="0.99" step="0.01" bind:value={cfg.desired_retention} label={t('presets.field.desired_retention')} hideLabel />
+              <Input size="sm" class="num-in" type="number" min="0.7" max="0.99" step="0.01" bind:value={cfg.desired_retention} label={t('presets.field.desired_retention')} hideLabel />
             </FormRow>
             <FormRow label={t('presets.field.learning_steps_mins')} description={t('presets.field.steps_hint')}>
-              <Input class="txt" bind:value={learning} label={t('presets.field.learning_steps_mins')} hideLabel placeholder="1 10" />
+              <Input size="sm" class="txt" bind:value={learning} label={t('presets.field.learning_steps_mins')} hideLabel placeholder="1 10" />
             </FormRow>
             <FormRow label={t('presets.field.relearning_steps_mins')} description={t('presets.field.steps_hint')}>
-              <Input class="txt" bind:value={relearning} label={t('presets.field.relearning_steps_mins')} hideLabel placeholder="10" />
+              <Input size="sm" class="txt" bind:value={relearning} label={t('presets.field.relearning_steps_mins')} hideLabel placeholder="10" />
             </FormRow>
             <div class="adv-toggle">
               <Button variant="ghost" size="sm" iconEnd={advanced ? ChevronUp : ChevronDown} aria-expanded={advanced} aria-controls="fc-preset-advanced" onclick={() => (advanced = !advanced)}>
@@ -213,18 +212,18 @@
               </Button>
             </div>
             {#if advanced}
-              <div id="fc-preset-advanced">
+              <div id="fc-preset-advanced" class="advanced">
                 <FormRow label={t('presets.field.bury_siblings')}>
                   <Switch bind:checked={cfg.bury_siblings} ariaLabel={t('presets.field.bury_siblings')} />
                 </FormRow>
                 <FormRow label={t('presets.field.maximum_interval_days')}>
-                  <Input class="num" type="number" min="1" max="36500" bind:value={cfg.maximum_interval_days} label={t('presets.field.maximum_interval_days')} hideLabel />
+                  <Input size="sm" class="num-in" type="number" min="1" max="36500" bind:value={cfg.maximum_interval_days} label={t('presets.field.maximum_interval_days')} hideLabel />
                 </FormRow>
                 <FormRow label={t('presets.field.new_order')}>
-                  <Select options={newOrders} bind:value={cfg.new_order} label={t('presets.field.new_order')} hideLabel />
+                  <Select size="sm" options={newOrders} bind:value={cfg.new_order} label={t('presets.field.new_order')} hideLabel />
                 </FormRow>
                 <FormRow label={t('presets.field.review_order')}>
-                  <Select options={reviewOrders} bind:value={cfg.review_order} label={t('presets.field.review_order')} hideLabel />
+                  <Select size="sm" options={reviewOrders} bind:value={cfg.review_order} label={t('presets.field.review_order')} hideLabel />
                 </FormRow>
                 <FormRow label={t('presets.field.fsrs_weights')} description={t('presets.field.fsrs_hint')} stack>
                   <Textarea rows={2} bind:value={weights} label={t('presets.field.fsrs_weights')} hideLabel />
@@ -233,28 +232,34 @@
             {/if}
             <div class="save">
               {#if saved}<span role="status" class="saved">{t('presets.saved')}</span>{/if}
-              <Button type="submit" variant="primary" icon={Save}>{t('presets.save')}</Button>
+              <Button type="submit" variant="primary" size="sm" icon={Save}>{t('presets.save')}</Button>
             </div>
           </SettingsSection>
         </form>
 
-        <SettingsSection title={t('presets.decks')} description={t('presets.decks_intro')}>
+        <SettingsSection title={t('presets.decks')} description={t('presets.decks_intro')} body="rows">
           {#if current.deck_ids.length === 0}
             <p class="muted">{t('presets.decks_none')}</p>
           {:else}
             <ul class="decks">
               {#each current.deck_ids as d (d)}
                 <li>
-                  <span>{pathOf(d)}</span>
+                  <span class="path">{pathOf(d)}</span>
                   <IconButton size="sm" icon={X} label={t('presets.unassign', { path: pathOf(d) })} onclick={() => void assign([d], null)} />
                 </li>
               {/each}
             </ul>
           {/if}
           <div class="assign">
-            <Select options={assignable} bind:value={deckToAssign} label={t('presets.assign_pick')} hideLabel placeholder={t('presets.assign_pick')} disabled={assignable.length === 0} />
-            <Button icon={Plus} disabled={!deckToAssign} onclick={() => deckToAssign && void assign([deckToAssign], current.id)}>{t('presets.assign')}</Button>
+            <Select size="sm" options={assignable} bind:value={deckToAssign} label={t('presets.assign_pick')} hideLabel placeholder={t('presets.assign_pick')} disabled={assignable.length === 0} />
+            <Button size="sm" icon={Plus} disabled={!deckToAssign} onclick={() => deckToAssign && void assign([deckToAssign], current.id)}>{t('presets.assign')}</Button>
           </div>
+        </SettingsSection>
+
+        <SettingsSection title={t('presets.danger')} tone="danger" body="rows">
+          <FormRow label={current.name} description={t('presets.delete_desc')}>
+            <Button variant="danger" size="sm" icon={Trash2} onclick={() => void remove()}>{t('presets.delete')}</Button>
+          </FormRow>
         </SettingsSection>
       {:else}
         <SettingsSection>
@@ -269,26 +274,28 @@
 <style>
   .layout {
     display: grid;
-    grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
-    gap: var(--space-6);
+    grid-template-columns: 13.5rem minmax(0, 1fr);
+    gap: var(--space-8);
     align-items: start;
   }
+  aside {
+    position: sticky;
+    top: 0;
+  }
   .side-title {
-    margin: 0;
-    padding: var(--space-4) var(--space-4) var(--space-2);
-    font-size: var(--text-xs);
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
-    color: var(--text-2);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    color: var(--text-1);
   }
   .presets {
     list-style: none;
     margin: 0;
-    padding: 0 var(--space-2);
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
+    padding: 0;
+    border-top: 1px solid var(--border);
+  }
+  .presets li {
+    border-bottom: 1px solid var(--border);
   }
   .preset {
     display: flex;
@@ -296,9 +303,9 @@
     justify-content: space-between;
     gap: var(--space-2);
     width: 100%;
-    padding: var(--space-2) var(--space-3);
+    height: var(--row-h);
+    padding: 0 var(--space-2);
     border: none;
-    border-radius: var(--radius-control);
     background: transparent;
     color: var(--text-1);
     font: inherit;
@@ -310,8 +317,9 @@
     background: var(--surface-2);
   }
   .preset.active {
-    background: var(--accent-soft);
-    font-weight: var(--weight-semibold);
+    background: var(--surface-3);
+    font-weight: var(--weight-medium);
+    box-shadow: inset 2px 0 0 var(--accent);
   }
   .preset:focus-visible {
     outline: 2px solid var(--focus-ring);
@@ -319,7 +327,14 @@
   }
   .pname {
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .count {
+    flex: none;
+    color: var(--text-2);
+    font-size: var(--text-xs);
   }
   .new {
     display: flex;
@@ -332,16 +347,16 @@
     min-width: 0;
   }
   .new-side {
-    padding: var(--space-3) var(--space-3) var(--space-3);
-    margin-top: var(--space-2);
-    border-top: 1px solid var(--border);
+    margin-top: var(--space-3);
   }
-  .new-side .new {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .new-side .new :global(.fc-field) {
-    flex: none;
+  @media (min-width: 1024px) {
+    .new-side .new {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .new-side .new :global(.fc-field) {
+      flex: none;
+    }
   }
   .new-empty {
     width: min(100%, 26rem);
@@ -351,74 +366,82 @@
   .stack {
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    gap: var(--space-8);
     min-width: 0;
+    max-width: 720px;
   }
-  .editor :global(.num) {
+  .editor :global(.num-in) {
     min-width: 0;
-    width: 8rem;
+    width: 7rem;
   }
   .editor :global(.txt) {
     min-width: 0;
     width: 12rem;
   }
   .adv-toggle {
-    padding: var(--space-3);
-    border-top: 1px solid var(--border);
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--border);
   }
-  #fc-preset-advanced {
-    border-top: 1px solid var(--border);
+  .adv-toggle :global(.fc-btn) {
+    margin-inline-start: -8px;
   }
   .save {
     display: flex;
     justify-content: flex-end;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-4) var(--space-6);
-    border-top: 1px solid var(--border);
+    padding-top: var(--space-3);
   }
   .saved {
     color: var(--success);
     font-size: var(--text-sm);
   }
   .muted {
-    margin: 0 0 var(--space-3);
+    margin: 0;
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
     color: var(--text-2);
     font-size: var(--text-sm);
   }
   .decks {
     list-style: none;
-    margin: 0 0 var(--space-3);
+    margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
   }
   .decks li {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
-    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
-    border-radius: var(--radius-control);
-    background: var(--surface-2);
+    height: var(--row-h);
+    border-bottom: 1px solid var(--border);
     font-size: var(--text-sm);
+  }
+  .path {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .assign {
     display: flex;
     gap: var(--space-2);
-    align-items: flex-start;
+    align-items: center;
     flex-wrap: wrap;
+    padding-top: var(--space-3);
   }
   .assign :global(.fc-field) {
     flex: 1 1 14rem;
+    min-width: 0;
   }
   @media (max-width: 1023.98px) {
     .layout {
       grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-6);
     }
-    .save {
-      padding-inline: var(--space-4);
+    aside {
+      position: static;
+      max-width: 720px;
     }
   }
 </style>

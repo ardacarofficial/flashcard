@@ -115,6 +115,8 @@ struct Base {
     text_muted: &'static str,
     border: &'static str,
     accent: &'static str,
+    /// Focus ring colour when the accent fill itself is below 3:1 on `bg` (`None` = the accent).
+    focus: Option<&'static str>,
     danger: &'static str,
     success: &'static str,
 }
@@ -136,30 +138,35 @@ const DARK_SUCCESS: &str = "#6cc28d";
 /// The built-in presets: calm, low-saturation palettes (docs/01: no decoration for its own
 /// sake) and one high-contrast palette.
 pub const PRESETS: &[Preset] = &[
-    // v1.1 design system (docs/11 §4): cool neutrals and an indigo accent (#5B47E0).
+    // v1.2 design system (docs/11 §4, apps/desktop/src/lib/theme/tokens.css): warm neutrals,
+    // dark-first, one amber accent (#F5B544) as the fill in both schemes. On the light
+    // background the fill is paired with a darker amber for focus rings (`focus`), which
+    // carries the 3:1 non-text contrast; text on the fill stays dark.
     Preset {
         id: DEFAULT_PRESET,
         light: Base {
-            bg: "#f6f6f8",
-            bg_subtle: "#eeeef2",
+            bg: "#fafaf8",
+            bg_subtle: "#f3f3f0",
             surface: "#ffffff",
-            text: "#18181b",
-            text_muted: "#5f5f6b",
-            border: "#e4e4e9",
-            accent: "#5b47e0",
-            danger: "#c03636",
-            success: "#157a53",
+            text: "#1a1a1c",
+            text_muted: "#5c5c63",
+            border: "#e2e2dc",
+            accent: "#f5b544",
+            focus: Some("#9a5b00"),
+            danger: "#c8323b",
+            success: "#147a4b",
         },
         dark: Base {
-            bg: "#121214",
-            bg_subtle: "#18181c",
-            surface: "#1e1e23",
-            text: "#ededf0",
-            text_muted: "#a1a1aa",
-            border: "#2e2e35",
-            accent: "#8b7cf6",
-            danger: "#ef6f62",
-            success: "#3ec28f",
+            bg: "#0e0e10",
+            bg_subtle: "#1c1c20",
+            surface: "#151518",
+            text: "#ededef",
+            text_muted: "#a3a3ae",
+            border: "#2a2a31",
+            accent: "#f5b544",
+            focus: None,
+            danger: "#ff6369",
+            success: "#3dd68c",
         },
     },
     Preset {
@@ -172,6 +179,7 @@ pub const PRESETS: &[Preset] = &[
             text_muted: "#6b6155",
             border: "#e4dacb",
             accent: "#9a5b2e",
+            focus: None,
             danger: LIGHT_DANGER,
             success: LIGHT_SUCCESS,
         },
@@ -183,6 +191,7 @@ pub const PRESETS: &[Preset] = &[
             text_muted: "#a89d8c",
             border: "#3a342b",
             accent: "#d9a066",
+            focus: None,
             danger: DARK_DANGER,
             success: DARK_SUCCESS,
         },
@@ -197,6 +206,7 @@ pub const PRESETS: &[Preset] = &[
             text_muted: "#5b675e",
             border: "#dbe3d8",
             accent: "#3f7a5a",
+            focus: None,
             danger: LIGHT_DANGER,
             success: LIGHT_SUCCESS,
         },
@@ -208,6 +218,7 @@ pub const PRESETS: &[Preset] = &[
             text_muted: "#9aa89e",
             border: "#2e3a32",
             accent: "#7cc19a",
+            focus: None,
             danger: DARK_DANGER,
             success: DARK_SUCCESS,
         },
@@ -222,6 +233,7 @@ pub const PRESETS: &[Preset] = &[
             text_muted: "#56636f",
             border: "#d9e0e8",
             accent: "#3b6ea8",
+            focus: None,
             danger: LIGHT_DANGER,
             success: LIGHT_SUCCESS,
         },
@@ -233,6 +245,7 @@ pub const PRESETS: &[Preset] = &[
             text_muted: "#94a1b0",
             border: "#2c3540",
             accent: "#7fa8d9",
+            focus: None,
             danger: DARK_DANGER,
             success: DARK_SUCCESS,
         },
@@ -247,6 +260,7 @@ pub const PRESETS: &[Preset] = &[
             text_muted: "#333333",
             border: "#595959",
             accent: "#0047b3",
+            focus: None,
             danger: "#a30000",
             success: "#006b2e",
         },
@@ -258,6 +272,7 @@ pub const PRESETS: &[Preset] = &[
             text_muted: "#dddddd",
             border: "#a6a6a6",
             accent: "#8ab4ff",
+            focus: None,
             danger: "#ff8a80",
             success: "#7ee2a8",
         },
@@ -310,9 +325,12 @@ pub fn tokens(preset: &Preset, scheme: Scheme, accent: Option<Rgb>) -> BTreeMap<
         Scheme::Dark => preset.dark,
     };
     let bg = color(base.bg);
-    let accent = match accent {
-        Some(custom) => readable_accent(custom, bg, scheme),
-        None => color(base.accent),
+    let (accent, focus) = match accent {
+        Some(custom) => {
+            let a = readable_accent(custom, bg, scheme);
+            (a, a)
+        }
+        None => (color(base.accent), color(base.focus.unwrap_or(base.accent))),
     };
     let selected = accent.mix(
         bg,
@@ -332,7 +350,7 @@ pub fn tokens(preset: &Preset, scheme: Scheme, accent: Option<Rgb>) -> BTreeMap<
         ("accent-text", text_on(accent)),
         ("danger", color(base.danger)),
         ("success", color(base.success)),
-        ("focus", accent),
+        ("focus", focus),
         ("selected", selected),
     ];
     values
@@ -415,7 +433,16 @@ mod tests {
                 };
                 check("text", 7.0);
                 check("text-muted", 4.5);
-                check("accent", 3.0);
+                // The focus ring carries the non-text contrast; the accent fill does too unless
+                // the preset pairs it with a separate, darker focus colour.
+                check("focus", 3.0);
+                let base = match scheme {
+                    Scheme::Light => p.light,
+                    Scheme::Dark => p.dark,
+                };
+                if base.focus.is_none() {
+                    check("accent", 3.0);
+                }
                 check("danger", 3.0);
                 check("success", 3.0);
                 let on = contrast(rgb(&t, "accent-text"), rgb(&t, "accent"));
@@ -436,9 +463,14 @@ mod tests {
         // apps/desktop/src/lib/theme/tokens.css declares the same values (shown before the
         // backend answers and when the themes module is off).
         let t = resolve("default", None);
-        assert_eq!(t.light["accent"], "#5b47e0");
-        assert_eq!(t.dark["bg"], "#121214");
-        assert_eq!(t.light["accent-text"], "#ffffff");
+        assert_eq!(t.light["accent"], "#f5b544");
+        assert_eq!(t.dark["accent"], "#f5b544");
+        assert_eq!(t.light["bg"], "#fafaf8");
+        assert_eq!(t.dark["bg"], "#0e0e10");
+        assert_eq!(t.light["focus"], "#9a5b00");
+        assert_eq!(t.dark["focus"], "#f5b544");
+        // Dark text on the amber fill (tokens.css: #17130a).
+        assert_eq!(t.light["accent-text"], "#000000");
     }
 
     #[test]

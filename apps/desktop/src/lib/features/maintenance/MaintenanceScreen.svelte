@@ -6,6 +6,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { IntegrityDto, MaintenanceStatus, ModuleDto, UpdateStatus } from '$lib/api/types';
+  import { formatDateTime } from '$lib/format';
   import { t, td } from '$lib/i18n/index.svelte';
   import { pickSavePath } from '../io/files';
   import type { ScreenCtx } from '../types';
@@ -25,6 +26,11 @@
   let failed = $state(false);
   let checkingUpdate = $state(false);
 
+  /** Crash time (RFC 3339 from the backend) in the user's locale; the raw text if unparsable. */
+  const when = (iso: string) => {
+    const ms = Date.parse(iso);
+    return Number.isNaN(ms) ? iso : formatDateTime(ms);
+  };
   const logBytes = $derived(status ? status.logs.reduce((n, f) => n + f.bytes, 0) : 0);
 
   async function load() {
@@ -113,7 +119,7 @@
         <FormRow label={t('app_maintenance.updates.current', { version: update.current_version })}
           description={!update.supported ? t('app_maintenance.updates.unsupported') : upToDate && !update.available ? t('app_maintenance.updates.up_to_date') : undefined}>
           {#if update.supported && !update.available}
-            <Button icon={RefreshCw} loading={checkingUpdate} onclick={checkUpdate}>{t('app_maintenance.updates.check')}</Button>
+            <Button size="sm" icon={RefreshCw} loading={checkingUpdate} onclick={checkUpdate}>{t('app_maintenance.updates.check')}</Button>
           {/if}
         </FormRow>
         {#if update.supported && update.last_error}
@@ -123,11 +129,11 @@
           <FormRow label={t('app_maintenance.updates.available', { version: update.available.version })}
             description={update.phase === 'downloading' ? t('app_maintenance.updates.downloading') : update.phase === 'idle' ? undefined : t('app_maintenance.updates.ready')}>
             {#if update.phase === 'idle'}
-              <Button variant="primary" icon={Download} onclick={download}>{t('app_maintenance.updates.install')}</Button>
+              <Button size="sm" variant="primary" icon={Download} onclick={download}>{t('app_maintenance.updates.install')}</Button>
             {:else if update.phase === 'downloading'}
-              <Button variant="primary" loading disabled>{t('app_maintenance.updates.install')}</Button>
+              <Button size="sm" variant="primary" loading disabled>{t('app_maintenance.updates.install')}</Button>
             {:else}
-              <Button variant="primary" onclick={apply}>{t('app_maintenance.updates.apply')}</Button>
+              <Button size="sm" variant="primary" onclick={apply}>{t('app_maintenance.updates.apply')}</Button>
             {/if}
           </FormRow>
           {#if update.available.notes}
@@ -148,7 +154,7 @@
         <FormRow label={t('app_maintenance.no_log')} />
       {/if}
       <FormRow label={t('app_maintenance.logs.bundle')}>
-        <Button icon={Download} onclick={exportLogs}>{t('app_maintenance.logs.export')}</Button>
+        <Button size="sm" icon={Download} onclick={exportLogs}>{t('app_maintenance.logs.export')}</Button>
       </FormRow>
     </SettingsSection>
 
@@ -158,7 +164,7 @@
       {/if}
       <FormRow label={t('app_maintenance.integrity.status')}
         description={!integrity ? t('app_maintenance.integrity.never') : undefined}>
-        <Button loading={checking} onclick={checkDb}>{t('app_maintenance.integrity.check')}</Button>
+        <Button size="sm" loading={checking} onclick={checkDb}>{t('app_maintenance.integrity.check')}</Button>
       </FormRow>
       {#if integrity}
         <FormRow label={t('maintenance.results')} stack>
@@ -174,7 +180,7 @@
       {/if}
     </SettingsSection>
 
-    <SettingsSection title={t('app_maintenance.crashes.heading')} icon={TriangleAlert}>
+    <SettingsSection title={t('app_maintenance.crashes.heading')} icon={TriangleAlert} body="rows">
       {#snippet actions()}
         {#if status && status.crash_reports.length > 0}
           <Button size="sm" variant="danger" icon={Trash2} onclick={clearCrashes}>{t('app_maintenance.crashes.clear')}</Button>
@@ -187,7 +193,7 @@
           {#each status.crash_reports as c (c.file)}
             <li>
               <span class="msg">{c.message}</span>
-              <span class="meta"><code>{c.time}</code> · {c.version}</span>
+              <span class="meta num" title={c.time}>{when(c.time)} · {c.version}</span>
             </li>
           {/each}
         </ul>
@@ -202,7 +208,8 @@
     align-items: flex-start;
     gap: var(--space-2);
     margin: 0;
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border));
     border-radius: var(--radius-control);
     background: var(--success-soft);
     color: var(--success);
@@ -216,14 +223,13 @@
   }
   .path {
     display: inline-block;
-    max-width: 22rem;
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-control);
-    background: var(--surface-2);
+    max-width: 24rem;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
-    color: var(--text-1);
+    color: var(--text-2);
     overflow-wrap: anywhere;
+    text-align: end;
+    user-select: all;
   }
   .notes {
     margin: 0;
@@ -249,10 +255,13 @@
   .mono {
     margin: var(--space-2) 0 0;
     padding-left: var(--space-6);
+    font-family: var(--font-mono);
     font-size: var(--text-xs);
   }
   .muted {
     margin: 0;
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
     color: var(--text-2);
     font-size: var(--text-sm);
   }
@@ -263,23 +272,29 @@
   }
   .crashes li {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-height: var(--row-h);
     padding: var(--space-2) 0;
     border-bottom: 1px solid var(--border);
     font-size: var(--text-sm);
   }
-  .crashes li:last-child {
-    border-bottom: none;
-  }
   .msg {
+    min-width: 0;
     overflow-wrap: anywhere;
   }
   .meta {
+    flex: none;
     color: var(--text-2);
     font-size: var(--text-xs);
   }
   :global(.row-error) :global(.label) {
     color: var(--danger);
+  }
+  @media (max-width: 639.98px) {
+    .path {
+      text-align: start;
+    }
   }
 </style>

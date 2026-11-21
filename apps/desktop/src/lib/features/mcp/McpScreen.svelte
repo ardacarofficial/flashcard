@@ -11,7 +11,6 @@
     ChevronUp,
     Chip,
     Dialog,
-    EmptyState,
     Icon,
     Input,
     Plus,
@@ -182,18 +181,17 @@
     {/if}
   </SettingsSection>
 
-  <SettingsSection title={t('mcp.client.heading')} description={t('mcp.client.intro')} icon={Server}>
+  <SettingsSection title={t('mcp.client.heading')} description={t('mcp.client.intro')} icon={Server} body="rows">
     {#if servers === null}
-      <Skeleton lines={2} />
+      <div class="pad"><Skeleton lines={2} /></div>
     {:else if servers.length === 0}
-      <EmptyState size="sm" icon={Server} title={t('mcp.client.none')} />
+      <p class="empty"><Icon icon={Server} size={16} /><span>{t('mcp.client.none')}</span></p>
     {:else}
       <ul class="servers">
         {#each servers as s (s.id)}
           <li>
-            <Switch ariaLabel={s.name} checked={s.enabled} disabled={!s.approved} onchange={() => void toggle(s)} />
             <div class="server-text">
-              <strong>{s.name}</strong>
+              <span class="server-name">{s.name}</span>
               <code>{launches(s)}</code>
             </div>
             <div class="server-actions">
@@ -202,6 +200,7 @@
                 <Button size="sm" onclick={() => (pending = { server: s })}>{t('mcp.client.approve')}</Button>
               {/if}
               <Button size="sm" variant="ghost" onclick={() => void remove(s)}>{t('mcp.client.remove')}</Button>
+              <Switch ariaLabel={s.name} checked={s.enabled} disabled={!s.approved} onchange={() => void toggle(s)} />
             </div>
           </li>
         {/each}
@@ -217,20 +216,20 @@
     >
       <h3>{t('mcp.client.add_heading')}</h3>
       <div class="grid">
-        <Input label={t('mcp.client.name')} bind:value={name} />
+        <Input size="sm" label={t('mcp.client.name')} bind:value={name} />
         <div class="transport">
           <span class="label" aria-hidden="true">{t('mcp.client.transport')}</span>
-          <SegmentedControl label={t('mcp.client.transport')} options={transports} bind:value={transport} />
+          <SegmentedControl size="sm" label={t('mcp.client.transport')} options={transports} bind:value={transport} />
         </div>
       </div>
       {#if transport === 'stdio'}
-        <Input label={t('mcp.client.command')} icon={Terminal} bind:value={command} />
-        <Textarea label={t('mcp.client.args')} rows={3} bind:value={args} />
+        <Input size="sm" label={t('mcp.client.command')} icon={Terminal} bind:value={command} />
+        <Textarea label={t('mcp.client.args')} rows={2} autoGrow bind:value={args} />
       {:else}
-        <Input type="url" label={t('mcp.client.url')} bind:value={url} />
+        <Input size="sm" type="url" label={t('mcp.client.url')} bind:value={url} />
       {/if}
       <div class="row-end">
-        <Button type="submit" variant="primary" icon={Plus} disabled={!name.trim()}>{t('mcp.client.add')}</Button>
+        <Button size="sm" type="submit" variant="primary" icon={Plus} disabled={!name.trim()}>{t('mcp.client.add')}</Button>
       </div>
     </form>
   </SettingsSection>
@@ -262,19 +261,20 @@
 
 <style>
   .pad {
-    padding: var(--space-4) var(--space-6);
+    padding: var(--space-3) 0;
   }
   .setup {
     width: 100%;
   }
   .sub {
     margin: var(--space-3) 0 var(--space-1);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     font-weight: var(--weight-medium);
+    color: var(--text-2);
   }
   pre {
     margin: 0;
-    padding: var(--space-3);
+    padding: var(--space-2) var(--space-3);
     overflow-x: auto;
     background: var(--surface-2);
     border: 1px solid var(--border);
@@ -285,7 +285,7 @@
   .muted {
     margin: var(--space-2) 0 0;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
   .tools {
     list-style: none;
@@ -294,46 +294,59 @@
     width: 100%;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-    gap: var(--space-1) var(--space-6);
+    gap: 0 var(--space-6);
   }
   .tools li {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
-    padding: var(--space-2) 0;
+    min-height: 32px;
     font-size: var(--text-sm);
     border-bottom: 1px solid var(--border);
   }
   .tools li.off {
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .tags {
     display: flex;
     gap: var(--space-1);
     flex: none;
   }
+  .empty {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    min-height: 44px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
   .servers {
     list-style: none;
-    margin: 0 0 var(--space-6);
+    margin: 0;
     padding: 0;
   }
   .servers li {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-3) 0;
+    min-height: 44px;
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
-  }
-  .servers li + li {
-    border-top: 1px solid var(--border);
   }
   .server-text {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
     min-width: 0;
     flex: 1 1 12rem;
+  }
+  .server-name {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
   }
   .server-text code {
     font-family: var(--font-mono);
@@ -351,14 +364,13 @@
     align-items: center;
     gap: var(--space-1);
     color: var(--warning);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
   .add {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-    padding-top: var(--space-4);
-    border-top: 1px solid var(--border);
+    margin-top: var(--space-4);
   }
   .add h3 {
     margin: 0;
@@ -367,7 +379,7 @@
   }
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-3);
     align-items: end;
   }
@@ -378,8 +390,9 @@
     gap: var(--space-1);
   }
   .label {
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     font-weight: var(--weight-medium);
+    color: var(--text-2);
   }
   .row-end {
     display: flex;
@@ -388,5 +401,10 @@
   .confirm {
     margin: 0;
     overflow-wrap: anywhere;
+  }
+  @media (max-width: 639.98px) {
+    .grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 </style>

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { ActionInfo, AttributeDefDto, DeckTreeNode, Rating, RuleDto, RulePreview, RunDto } from '$lib/api/types';
+  import { formatCount } from '$lib/format';
   import { t, td } from '$lib/i18n/index.svelte';
   import type { ScreenCtx } from '../types';
   import {
@@ -19,6 +20,7 @@
     Button,
     Checkbox,
     ChevronDown,
+    ChevronRight,
     ChevronUp,
     Chip,
     EmptyState,
@@ -204,7 +206,7 @@
 
 {#snippet headerActions()}
   {#if !editing}
-    <Button variant="primary" icon={Plus} onclick={() => open(null)}>{t('automation.new')}</Button>
+    <Button size="sm" variant="primary" icon={Plus} onclick={() => open(null)}>{t('automation.new')}</Button>
   {/if}
 {/snippet}
 
@@ -321,38 +323,39 @@
         {/if}
 
         <div class="buttons">
-          <Button variant="ghost" onclick={() => (editing = null)}>{t('automation.cancel')}</Button>
-          <Button onclick={runPreview}>{t('automation.preview')}</Button>
-          <Button type="submit" variant="primary">{t('automation.save')}</Button>
+          <Button size="sm" variant="ghost" onclick={() => (editing = null)}>{t('automation.cancel')}</Button>
+          <Button size="sm" onclick={runPreview}>{t('automation.preview')}</Button>
+          <Button size="sm" type="submit" variant="primary">{t('automation.save')}</Button>
         </div>
       </form>
     </SettingsSection>
   {/if}
 
-  <SettingsSection title={t('automation.rules')} icon={Zap}>
+  <SettingsSection title={t('automation.rules')} icon={Zap} body="rows">
     {#if !loaded}
-      <Skeleton lines={3} />
+      <div class="pad"><Skeleton lines={3} /></div>
     {:else if rules.length === 0}
-      <EmptyState size="sm" icon={Zap} title={t('automation.none')} description={t('automation.none_hint')} />
+      <div class="empty-rows"><EmptyState size="sm" icon={Zap} title={t('automation.none')} description={t('automation.none_hint')} /></div>
     {:else}
       <ol class="rules">
         {#each rules as rule, i (rule.id)}
-          <li>
-            <Switch ariaLabel={rule.name} checked={rule.enabled} onchange={() => toggle(rule)} />
+          <li class:off={!rule.enabled}>
+            <span class="idx num" aria-hidden="true">{formatCount(i + 1)}</span>
             <div class="rule-text">
-              <strong>{rule.name}</strong>
-              <span class="muted">{triggerText(rule)}</span>
+              <span class="rule-name">{rule.name}</span>
               <span class="detail">
+                <span>{triggerText(rule)}</span>
                 {#if rule.condition}<code>{rule.condition}</code>{/if}
-                <span class="muted">{rule.actions.map((a) => td(`automation.action.${a.method}`)).join(' · ')}</span>
+                <span class="acts"><Icon icon={ChevronRight} size={12} />{rule.actions.map((a) => td(`automation.action.${a.method}`)).join(' · ')}</span>
               </span>
             </div>
             <div class="rule-actions">
               <IconButton size="sm" icon={ChevronUp} label={t('automation.up')} disabled={i === 0} onclick={() => move(i, -1)} />
               <IconButton size="sm" icon={ChevronDown} label={t('automation.down')} disabled={i === rules.length - 1} onclick={() => move(i, 1)} />
-              <Button size="sm" variant="ghost" icon={Pencil} onclick={() => open(rule)}>{t('automation.edit')}</Button>
-              <Button size="sm" variant="ghost" icon={Play} onclick={() => runNow(rule)}>{t('automation.run_now')}</Button>
-              <IconButton size="sm" icon={Trash2} variant="ghost" label={t('automation.delete')} onclick={() => remove(rule)} />
+              <IconButton size="sm" icon={Play} label={t('automation.run_now')} onclick={() => runNow(rule)} />
+              <IconButton size="sm" icon={Pencil} label={t('automation.edit')} onclick={() => open(rule)} />
+              <IconButton size="sm" icon={Trash2} label={t('automation.delete')} onclick={() => remove(rule)} />
+              <Switch ariaLabel={rule.name} checked={rule.enabled} onchange={() => toggle(rule)} />
             </div>
           </li>
         {/each}
@@ -360,11 +363,11 @@
     {/if}
   </SettingsSection>
 
-  <SettingsSection title={t('automation.runs')} icon={History}>
+  <SettingsSection title={t('automation.runs')} icon={History} body="rows">
     {#if !loaded}
-      <Skeleton lines={2} />
+      <div class="pad"><Skeleton lines={2} /></div>
     {:else if runs.length === 0}
-      <p class="muted">{t('automation.no_runs')}</p>
+      <p class="muted row">{t('automation.no_runs')}</p>
     {:else}
       <ul class="runs">
         {#each runs as r (r.seq)}
@@ -388,7 +391,8 @@
     align-items: flex-start;
     gap: var(--space-2);
     margin: 0;
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border));
     border-radius: var(--radius-control);
     background: var(--warning-soft);
     color: var(--text-1);
@@ -404,6 +408,18 @@
     color: var(--text-2);
     font-size: var(--text-sm);
   }
+  .muted.row {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pad {
+    padding: var(--space-3) 0;
+  }
+  .empty-rows {
+    border-bottom: 1px solid var(--border);
+  }
   .editor {
     display: flex;
     flex-direction: column;
@@ -416,17 +432,17 @@
     align-items: end;
   }
   .name-row :global(.fc-switch) {
-    padding-bottom: var(--space-2);
+    padding-bottom: var(--space-1);
   }
   .step {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
     margin: 0;
-    padding: var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    background: var(--surface-0);
+    padding: var(--space-3) 0 0 28px;
+    border: none;
+    border-top: 1px solid var(--border);
+    min-width: 0;
   }
   .step legend {
     float: left;
@@ -434,6 +450,7 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    margin-inline-start: -28px;
     padding: 0;
     font-size: var(--text-sm);
     font-weight: var(--weight-semibold);
@@ -441,16 +458,16 @@
   .step legend + :global(*) {
     clear: both;
   }
-  .num {
+  .step .num {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 20px;
     height: 20px;
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-pill);
-    background: var(--accent-soft);
-    color: var(--text-1);
-    font-size: var(--text-xs);
+    color: var(--accent-text);
+    font-size: var(--text-2xs);
   }
   .checks {
     display: flex;
@@ -472,11 +489,14 @@
     justify-content: flex-end;
     gap: var(--space-2);
     flex-wrap: wrap;
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
   }
   .preview {
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
     border-radius: var(--radius-control);
-    background: var(--surface-2);
+    background: var(--surface-1);
   }
   .summary {
     margin: 0 0 var(--space-2);
@@ -494,8 +514,11 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    padding: var(--space-1) 0;
+    min-height: 28px;
     font-size: var(--text-sm);
+  }
+  .preview li + li {
+    border-top: 1px solid var(--border);
   }
   .preview li.changes .text {
     font-weight: var(--weight-semibold);
@@ -510,12 +533,19 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-3) 0;
-    flex-wrap: wrap;
+    min-height: 48px;
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--border);
   }
-  .rules li + li,
-  .runs li + li {
-    border-top: 1px solid var(--border);
+  .rules li.off .rule-name {
+    color: var(--text-2);
+  }
+  .idx {
+    flex: none;
+    width: 1.25rem;
+    color: var(--text-2);
+    font-size: var(--text-xs);
+    text-align: end;
   }
   .rule-text {
     display: flex;
@@ -524,30 +554,48 @@
     flex: 1 1 14rem;
     min-width: 0;
   }
+  .rule-name {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    color: var(--text-1);
+  }
   .detail {
     display: flex;
     gap: var(--space-2);
     align-items: baseline;
     flex-wrap: wrap;
+    color: var(--text-2);
+    font-size: var(--text-xs);
+  }
+  .acts {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
   }
   code {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
-    padding: 1px var(--space-1);
-    border-radius: var(--radius-control);
+    padding: 0 var(--space-1);
+    border-radius: 4px;
     background: var(--surface-2);
+    color: var(--text-1);
   }
   .rule-actions {
     display: flex;
     align-items: center;
-    gap: var(--space-1);
-    flex-wrap: wrap;
+    gap: 2px;
+    flex: none;
+  }
+  .rule-actions :global(.fc-switch) {
+    margin-inline-start: var(--space-2);
   }
   .runs li {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-2) 0;
+    min-height: var(--row-h);
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
     font-size: var(--text-sm);
   }
@@ -573,5 +621,12 @@
   }
   .err {
     flex-basis: 100%;
+    padding-inline-start: calc(8px + var(--space-3));
+    font-size: var(--text-xs);
+  }
+  @media (max-width: 639.98px) {
+    .rules li {
+      flex-wrap: wrap;
+    }
   }
 </style>
