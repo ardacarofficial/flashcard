@@ -47,3 +47,13 @@ Common brief: .orchestra/SCREEN-WORKER.md. Foundation hooks: openQuickAdd()/setQ
 src/lib/shell/commands.svelte.ts; breadcrumbs via getPageChrome()?.setTrail().
 Open after merge: Subtitle settings page polish; docs/11 rewrite; sidebar mark colour (F reports); screens --strict
 all configs; independent visual review; version bump + CHANGELOG.
+
+## Progress log
+- Merged into branch: foundation, A (home/library/deck), F (settings/themes/icons), Subtitle module (844c225),
+  B (quick add/create), C (study/modes/reading), D (browse/cards/palette/plugins). Merged tree: check clean, 356 tests.
+- screens.mjs now picks a random port (parallel runs were sharing a server on 1431).
+- Still running: E (stats/inbox) a3d2490ffcda62ac1; Subtitle reviewer a5e2bb6c1b5a1b1d2.
+- Polish list for the final round: "Öğreniyor" → "Öğreniliyor" on Home/Deck page; disabled "Oluştur" button shows a
+  garbled kbd hint on Create; `state-cards-flipped` screenshot missing after C (75 → 73 PNGs, check hooks);
+  Subtitle settings page polish; ModeSettingsScreen/IO panels/shortcuts untouched by workers (kit-driven, verify);
+  mock: Cards start-panel counts ≠ session counts; mock has no undo for notes; docs/11 rewrite; CHANGELOG + version.
