@@ -438,15 +438,21 @@
     gap: 2px;
     justify-content: flex-end;
   }
+  /* One quiet line under the field table (no box in a box). */
   .classes {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin-top: var(--space-4);
-    padding: var(--space-3) var(--space-4);
-    background: var(--surface-2);
-    border-radius: var(--radius-control);
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-3);
+    margin-top: var(--space-3);
     font-size: var(--text-sm);
+  }
+  .classes strong {
+    font-weight: var(--weight-medium);
+  }
+  .classes .muted {
+    flex-basis: 100%;
+    font-size: var(--text-xs);
   }
   .chips {
     display: flex;

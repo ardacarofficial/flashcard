@@ -83,6 +83,22 @@ describe('command palette', () => {
     expect(filterItems(items, 'kart bayrak').map((i) => i.id)).toEqual(['v1.bulk.set_flag']);
     expect(filterItems(items, '  ')).toHaveLength(2);
   });
+
+  it('finds a screen by where it lives (sidebar section, Settings)', () => {
+    const items = paletteItems(
+      [],
+      [
+        { id: 'decks', label: 'Desteler', hint: 'Kütüphane' },
+        { id: 'home', label: 'Ana sayfa', hint: 'Ana sayfa' },
+        { id: 'shortcuts', label: 'Kısayollar', hint: 'Ayarlar' },
+      ],
+      (k) => k,
+    );
+    expect(filterItems(items, 'kütüp').map((i) => i.id)).toEqual(['screen:decks']);
+    expect(filterItems(items, 'ayarlar').map((i) => i.id)).toEqual(['screen:shortcuts']);
+    // The same name as the label is not repeated as a hint.
+    expect(items.find((i) => i.id === 'screen:home')).toMatchObject({ hint: null });
+  });
 });
 
 describe('shortcuts', () => {

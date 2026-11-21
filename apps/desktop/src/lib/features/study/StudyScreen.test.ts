@@ -138,8 +138,33 @@ describe('study screen', () => {
     await key('Enter');
     await screen.findByText('one');
     await key('Escape');
+    // v1.2: nothing answered → no empty summary, back on the start panel, session closed.
+    await screen.findByRole('button', { name: /Study now/ });
+    expect(screen.queryByText('Session complete')).toBeNull();
+    expect((await api.call('study.active', {})).session).toBeNull();
+  });
+
+  it('Escape after answering shows the summary', async () => {
+    const deck = await api.call('decks.create', { path: 'Özet', parent_id: null });
+    for (const [front, back] of [['three', 'üç'], ['four', 'dört']] as const) {
+      await api.call('notes.create', {
+        notetype_id: CLASSIC_NOTETYPE_ID,
+        deck_id: deck.id,
+        fields: { front, back },
+        tags: [],
+        attributes: [],
+      });
+    }
+    render(StudyScreen, { ctx: ctx(deck.id) });
+    await screen.findByRole('button', { name: /Study now/ });
+    await key('Enter');
+    await screen.findByText('three');
+    await key(' ');
+    await key('2');
+    await screen.findByText('four');
+    await key('Escape');
     await screen.findByText('Session complete');
-    expect(screen.getByTestId('summary-answered').textContent).toBe('0');
+    expect(screen.getByTestId('summary-answered').textContent).toBe('1');
   });
 
   it('shows two answer buttons by default: 1 = Still learning, 2 = I know it', async () => {

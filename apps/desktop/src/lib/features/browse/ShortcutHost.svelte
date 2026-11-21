@@ -23,6 +23,8 @@
   interface ScreenLink {
     id: string;
     label: string;
+    /** Where it lives (sidebar section, Settings): muted next to the label, also searched. */
+    hint?: string | null;
     open: () => void;
   }
 
@@ -62,7 +64,7 @@
       filterItems(
         paletteItems(
           entries,
-          screens.map((s) => ({ id: s.id, label: s.label, keys: SCREEN_KEYS[s.id] ? comboFor(SCREEN_KEYS[s.id]!) : null })),
+          screens.map((s) => ({ id: s.id, label: s.label, hint: s.hint, keys: SCREEN_KEYS[s.id] ? comboFor(SCREEN_KEYS[s.id]!) : null })),
           (k) => td(k),
           actions,
         ),
@@ -280,7 +282,7 @@
                     size={14}
                   />
                 </span>
-                <span class="label">{item.label}</span>
+                <span class="label">{item.label}{#if item.kind === 'screen' && item.hint}<span class="where">{item.hint}</span>{/if}</span>
                 {#if item.kind === 'screen'}<span class="sr-only">{t('palette.screen')}</span>{/if}
                 {#if keys}<span class="keys"><Kbd {keys} size="sm" /></span>{/if}
               </button>
@@ -411,6 +413,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .where {
+    margin-inline-start: var(--space-2);
+    color: var(--text-2);
+    font-size: var(--text-xs);
   }
   .none {
     padding: var(--space-6) var(--space-3);

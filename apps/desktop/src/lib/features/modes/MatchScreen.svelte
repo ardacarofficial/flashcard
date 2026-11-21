@@ -235,7 +235,7 @@
       <Button variant="primary" icon={Shuffle} kbd="Enter" aria-keyshortcuts="Enter" onclick={() => void run(again)}>
         {t('modes.match.again')}
       </Button>
-      <Button onclick={() => void run(end)}>{t('modes.match.done')}</Button>
+      <Button kbd="Esc" aria-keyshortcuts="Escape" onclick={() => void run(end)}>{t('modes.match.done')}</Button>
     </div>
   </section>
 {:else if tooFew}
@@ -290,6 +290,8 @@
   .match {
     display: flex;
     flex-direction: column;
+    /* The start page is one column: the header (deck picker) lines up with the panel. */
+    max-width: 760px;
   }
   .match :global(.query) {
     width: 240px;

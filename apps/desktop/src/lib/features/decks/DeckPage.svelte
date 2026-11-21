@@ -39,6 +39,7 @@
   import TermList from './TermList.svelte';
   import { addCardAction, deckMenu, goWithDeck, type DeckRequest } from './deck-menu';
   import { pageEnter } from './keys';
+  import { studyNow } from '../study/intent';
   import { menuRoute, moduleOn, summariesById } from './library';
 
   interface Props {
@@ -155,12 +156,17 @@
     ].filter((m) => m.route !== null),
   );
   const studyRoute = $derived(modes.find((m) => m.id === 'cards')?.route ?? null);
+  /** "Study" starts the session at once; the Cards mode button opens its start panel. */
+  function study() {
+    studyNow();
+    go(studyRoute);
+  }
   const addCard = $derived(addCardAction(ctx, modules));
 
   function onWindowKey(e: KeyboardEvent) {
     if (studyRoute && pageEnter(e)) {
       e.preventDefault();
-      go(studyRoute);
+      study();
     }
   }
 
@@ -201,7 +207,7 @@
 {#if modes.length}
   <div class="actionbar">
     {#if studyRoute}
-      <Button variant="primary" icon={Play} kbd="Enter" aria-keyshortcuts="Enter" onclick={() => go(studyRoute)}>
+      <Button variant="primary" icon={Play} kbd="Enter" aria-keyshortcuts="Enter" onclick={study}>
         {t('deck_page.study')}
       </Button>
       <span class="divider" aria-hidden="true"></span>

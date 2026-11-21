@@ -12,7 +12,8 @@
  * (`[data-testid="subnav-item"]`, `[role=tab]`, `[data-testid^="settings-group"]`).
  * State hooks (all optional, see docs/11 §5): `deck-row`, `study-start`, `flip`, `study-end`,
  * `test-submit`, `match-tile` (+ `data-side`), `term-list`, `.view-toggle`, `browse-row`,
- * `browse-select`, `settings-select`, `update-open`, `open-dialog-*`; mock scenarios
+ * `browse-select`, `settings-select`, `update-open`, `open-dialog-*`; the shell keys `N`
+ * (Quick Add) and `Ctrl+K` (palette) and Enter on the Search grid (note editor); mock scenarios
  * `?mock=fresh|update|locked`. Without them the script falls back to the v1.0 markup.
  * Exit code is non-zero only with `--strict` and findings.
  */
@@ -270,6 +271,9 @@ async function settle(page) {
     .waitForFunction(() => !document.querySelector('p.loading[role=status]'), null, { timeout: 15000 })
     .catch(() => {});
   await page.waitForTimeout(250);
+  // A lazy screen (its own chunk) may still be loading on a cold dev server: wait for the
+  // shell's placeholder to go, else the state hooks below find nothing and are skipped.
+  await page.waitForSelector('main .page > p.loading', { state: 'detached', timeout: 10000 }).catch(() => {});
 }
 
 async function newPage(browser, { lang, theme, width }, query = '') {
@@ -512,6 +516,41 @@ async function main() {
               }
               await settle(page);
               if ((await checks.count()) > 0) await snap('state-search-bulk');
+              // The note editor: Enter on the grid's active row (keyboard path of flow 3)
+              await page.keyboard.press('Escape');
+              await settle(page);
+              const grid = page.locator('main [role=grid]').first();
+              if (await grid.count()) {
+                await grid.focus().catch(() => {});
+                await page.keyboard.press('Enter');
+                await settle(page);
+                if (await page.locator('[role=dialog]').count()) {
+                  await snap('state-search-edit');
+                  await page.keyboard.press('Escape');
+                  await settle(page);
+                }
+              }
+            }
+            // Shell layers on Home: Quick Add (`N`) and the command palette (`Ctrl+K`, "kart" / "card")
+            await page.locator(NAV).nth(0).click();
+            await settle(page);
+            await page.locator('body').click({ position: { x: 1, y: 1 } }).catch(() => {});
+            await page.keyboard.press('n');
+            await settle(page);
+            if (await page.locator('[role=dialog]').count()) {
+              await snap('state-quick-add');
+              await page.keyboard.press('Escape');
+              await settle(page);
+            }
+            await page.keyboard.press('Control+k');
+            await settle(page);
+            if (await page.locator('[role=dialog]').count()) {
+              await snap('state-palette');
+              await page.keyboard.type(lang === 'tr' ? 'kart' : 'card');
+              await settle(page);
+              await snap('state-palette-query');
+              await page.keyboard.press('Escape');
+              await settle(page);
             }
           };
 

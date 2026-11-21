@@ -58,11 +58,14 @@ export function stateLabel(r: Pick<CardRow, 'suspended' | 'buried' | 'state'>): 
   return td(`browse.state.${r.state}`);
 }
 
+/** Same colours as Home and the deck page: new grey, learning orange, review green. */
 export function stateTone(r: Pick<CardRow, 'suspended' | 'buried' | 'state'>): Tone {
-  if (r.suspended || r.buried) return 'warning';
+  if (r.suspended) return 'danger';
+  if (r.buried) return 'neutral';
   switch (r.state) {
-    case 'new':
-      return 'accent';
+    case 'learning':
+    case 'relearning':
+      return 'warning';
     case 'review':
       return 'success';
     default:

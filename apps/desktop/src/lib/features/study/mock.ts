@@ -4,7 +4,7 @@
  * `study` module; this only lets the screen run in a browser and in component tests.
  */
 import { err, menu, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
-import type { SettingDef } from '$lib/api/types';
+import type { DeckCounts, DeckTreeNode, SettingDef } from '$lib/api/types';
 import type {
   MatchRoundDto,
   NoteDto,
@@ -24,6 +24,8 @@ const INTERVALS = [60_000, 6 * 60_000, 10 * 60_000, 4 * DAY];
 interface MockCard {
   card_id: string;
   note: NoteDto;
+  /** Queue bucket of a Cards session (default `new`). */
+  state?: 'new' | 'learning' | 'review';
 }
 
 /** Learn: stage per card (`learned` once right at both stages). */
@@ -95,7 +97,7 @@ const MODE_SETTINGS = [
 
 export default {
   modules: [module('study', [menu('study.session', 'nav.study', '/study', 5), menu('study.mode_settings', 'nav.mode_settings', '/mode-settings', 90)])],
-  handlers: ({ id, now, notes, ancestors, cardFlags }: MockEnv) => {
+  handlers: ({ id, now, notes, ancestors, cardFlags, tree }: MockEnv) => {
     const sessions = new Map<string, MockSession>();
     const undo: Array<{ id: string; snapshot: string }> = [];
 
@@ -111,7 +113,7 @@ export default {
         card_id: c.card_id,
         note_id: c.note.id,
         deck_id: c.note.home_deck_id,
-        state: 'new',
+        state: c.state ?? 'new',
         sides: {
           template_key: 'forward',
           template_name: '1',
@@ -163,7 +165,11 @@ export default {
     };
     const view = (s: MockSession): SessionDto => ({
       ...s.dto,
-      counts: { new: s.queue.length, learning: 0, review: 0 },
+      counts: {
+        new: s.queue.filter((c) => (c.state ?? 'new') === 'new').length,
+        learning: s.queue.filter((c) => c.state === 'learning').length,
+        review: s.queue.filter((c) => c.state === 'review').length,
+      },
       mistakes: s.again.length,
       current: s.test || s.match ? null : current(s),
       modes: modes(s),
@@ -235,6 +241,35 @@ export default {
         throw err('CONFLICT_NOT_CURRENT_CARD', 'errors.conflict.not_current_card', cardId);
       }
     };
+    /** Today's counts of a deck (or all decks) as the deck tree shows them (demo seed). */
+    const todayOf = (deckId: string | null): Pick<DeckCounts, 'due' | 'learning' | 'new'> => {
+      const find = (ns: DeckTreeNode[]): DeckTreeNode | null => {
+        for (const n of ns) {
+          if (n.deck.id === deckId) return n;
+          const hit = find(n.children);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const top = tree(null);
+      const nodes = deckId ? [find(top)].filter((n): n is DeckTreeNode => n !== null) : top;
+      return nodes.reduce((a, n) => ({ due: a.due + n.counts.due, learning: a.learning + n.counts.learning, new: a.new + n.counts.new }), { due: 0, learning: 0, new: 0 });
+    };
+    /**
+     * A Cards session over the demo collection: the few mock notes repeat until the queue
+     * matches the deck tree's numbers (due, then learning, then new), so the start panel,
+     * the session bar and the summary agree. Without demo counts (tests): every card once, new.
+     */
+    const cardsQueue = (base: MockCard[], deckId: string | null): MockCard[] => {
+      const c = todayOf(deckId);
+      if (base.length === 0 || c.due + c.learning + c.new === 0) return base;
+      const states = [
+        ...Array<'review'>(c.due).fill('review'),
+        ...Array<'learning'>(c.learning).fill('learning'),
+        ...Array<'new'>(c.new).fill('new'),
+      ];
+      return states.map((state, i) => ({ ...base[i % base.length]!, state }));
+    };
     const remember = (s: MockSession) => undo.push({ id: s.dto.id, snapshot: JSON.stringify(s) });
 
     return {
@@ -267,7 +302,9 @@ export default {
           time: 0,
           hints: 0,
         };
-        if (req.kind === 'learn') {
+        if (req.kind === 'normal' && !from) {
+          s.queue = cardsQueue(queue, req.deck_id ?? null);
+        } else if (req.kind === 'learn') {
           s.queue = queue.slice(0, 30);
           s.learn = { stage: Object.fromEntries(s.queue.map((c) => [c.card_id, 'choice' as const])), mistakes: {}, total: s.queue.length };
         } else if (req.kind === 'test') {
@@ -383,7 +420,7 @@ export default {
         remember(s);
         const card = s.queue.shift()!;
         if (rating === 'again') {
-          s.queue.push(card);
+          s.queue.push({ ...card, state: 'learning' });
           if (!s.again.includes(card_id)) s.again.push(card_id);
         } else {
           s.dto.correct++;

@@ -36,6 +36,7 @@
   import MasteryBar from '../decks/MasteryBar.svelte';
   import { studyDeck } from '../decks/deck-menu';
   import { pageEnter } from '../decks/keys';
+  import { studyNow } from '../study/intent';
   import { moduleOn, nodesById, summariesById } from '../decks/library';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -87,6 +88,7 @@
   function study() {
     if (todayCount === 0) return;
     ctx.selectDeck(null);
+    studyNow();
     open('/study');
   }
 

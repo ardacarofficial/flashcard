@@ -36,7 +36,7 @@
   import { moduleOn, trackModules } from '../cards/modules.svelte';
   import { tzOffsetMins } from '../study/format';
   import type { ScreenCtx } from '../types';
-  import { emptyInput, testAnswers, type PaperInput } from './modes';
+  import { emptyInput, plainKey, testAnswers, type PaperInput } from './modes';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -144,8 +144,16 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    if (e.defaultPrevented || !paper || result || confirmOpen) return;
+    if (e.defaultPrevented || confirmOpen) return;
     if (document.querySelector('[aria-modal="true"]')) return;
+    // Setup and result pages: Enter makes a paper / goes back to a new one (like Learn, Match).
+    if ((!paper || result) && e.key === 'Enter' && plainKey(e) && !loading) {
+      if ((e.target as HTMLElement | null)?.tagName === 'BUTTON') return;
+      e.preventDefault();
+      void ctx.guarded(paper ? newTest : start);
+      return;
+    }
+    if (!paper || result) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       requestExit();
@@ -276,7 +284,7 @@
         {#snippet actions()}
           <Button variant="ghost" icon={Printer} onclick={() => window.print()}>{t('modes.test.print')}</Button>
           <Button variant="ghost" onclick={() => void ctx.guarded(printKey)}>{t('modes.test.print_key')}</Button>
-          <Button variant="primary" onclick={() => void ctx.guarded(newTest)}>{t('modes.test.new')}</Button>
+          <Button variant="primary" kbd="Enter" aria-keyshortcuts="Enter" onclick={() => void ctx.guarded(newTest)}>{t('modes.test.new')}</Button>
         {/snippet}
       </PageHeader>
     </div>
@@ -333,7 +341,9 @@
       <SetupPanel title={t('modes.test.start_heading')} {notice}>
         {#snippet meta()}<span>{t('modes.test.intro')}</span>{/snippet}
         {#snippet actions()}
-          <Button variant="primary" icon={ClipboardCheck} data-testid="study-start" onclick={() => void ctx.guarded(start)}>{t('modes.test.start')}</Button>
+          <Button variant="primary" icon={ClipboardCheck} kbd="Enter" aria-keyshortcuts="Enter" data-testid="study-start" onclick={() => void ctx.guarded(start)}>
+            {t('modes.test.start')}
+          </Button>
         {/snippet}
         {#if moduleOn('browse')}
           <OptRow label={t('study.query_label')} labelFor="test-query">
@@ -376,10 +386,14 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+    /* Header actions line up with the score, the review table and the paper. */
+    max-width: 760px;
   }
   .setup-page {
     display: flex;
     flex-direction: column;
+    /* The start page is one column: the header (deck picker) lines up with the panel. */
+    max-width: 760px;
   }
   .setup-page :global(.query) {
     width: 240px;

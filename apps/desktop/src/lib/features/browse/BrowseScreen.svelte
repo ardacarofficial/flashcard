@@ -816,6 +816,9 @@
   .tone-warning .dot {
     background: var(--warning);
   }
+  .tone-danger .dot {
+    background: var(--danger);
+  }
   .foot {
     display: flex;
     align-items: center;
