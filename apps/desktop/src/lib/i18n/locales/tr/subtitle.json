@@ -46,6 +46,8 @@
   "subtitle": {
     "heading": "Subtitle",
     "intro": "Video altyazılarında + ile eklediğin kelimeler (Subtitle tarayıcı eklentisi) burada kart olur: cümlesi, çevirisi, ekran görüntüsü ve sesiyle.",
+    "load_failed": "Subtitle ayarları yüklenemedi.",
+    "retry": "Tekrar dene",
     "connect": {
       "title": "Eklentiyi bağla",
       "description": "Bu uygulama açıkken çalışır. Yalnız bu bilgisayar bağlanabilir.",

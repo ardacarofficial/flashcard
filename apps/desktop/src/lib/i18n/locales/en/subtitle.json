@@ -46,6 +46,8 @@
   "subtitle": {
     "heading": "Subtitle",
     "intro": "Words you add with + in video subtitles (Subtitle browser extension) become cards here, with the line, its translation, a screenshot and the audio.",
+    "load_failed": "Could not load the Subtitle settings.",
+    "retry": "Try again",
     "connect": {
       "title": "Connect the extension",
       "description": "Works while this app is open. Only this computer can connect.",

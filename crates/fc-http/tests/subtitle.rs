@@ -438,6 +438,29 @@ fn batches_answer_each_capture() {
     assert_eq!(results[2]["error"]["code"], "invalid_capture");
     assert_eq!(results[2]["error"]["retryable"], false);
     assert!(results[0].get("error").is_none());
+    // Review fix: a full batch of long (valid) captures is larger than one request body may
+    // be; it is still taken (a 413 would fail all of them for good).
+    let long: Vec<Value> = (0..20)
+        .map(|n| {
+            let mut c = with_id(
+                base.clone(),
+                200 + n,
+                &format!("word{n}"),
+                &"ş".repeat(4_000),
+            );
+            c["context"]["translation"] = json!("ğ".repeat(4_000));
+            c
+        })
+        .collect();
+    let body = json!({ "captures": long });
+    assert!(body.to_string().len() > fc_http::MAX_BODY_BYTES);
+    let r = fx.post_json("/subtitle/v1/captures:batch", &body);
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert!(r.body["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|x| x["status"] == "created"));
     let many: Vec<Value> = (0..51)
         .map(|n| with_id(base.clone(), 100 + n, "w", "x"))
         .collect();
