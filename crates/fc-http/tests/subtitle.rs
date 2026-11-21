@@ -608,8 +608,75 @@ fn each_module_answers_only_its_own_routes() {
         drop(server);
         r
     };
+    // Off: "unavailable, try later" on every route, with or without a key, and nothing else
+    // (a 404 on /v1/media would make the extension drop media for good; other 4xx fail
+    // the queued words).
+    let served_as = |method: &str, path: &str, auth: Option<&str>| {
+        let app = Arc::new(TestApp::new(fx.t.store.clone()).app);
+        let server = Server::start(app, ServerConfig::localhost(0)).unwrap();
+        let mut h = vec![("Content-Type", "application/json")];
+        if let Some(a) = auth {
+            h.push(("Authorization", a));
+        }
+        let r = send(server.local_addr(), method, path, &h, b"{}");
+        drop(server);
+        r
+    };
+    for (method, path) in [
+        ("GET", "/subtitle/v1/me"),
+        ("GET", "/subtitle/v1/decks"),
+        ("GET", "/subtitle/v1/known-words?lang=en"),
+        ("POST", "/subtitle/v1/media"),
+        ("POST", "/subtitle/v1/captures"),
+        ("POST", "/subtitle/v1/captures:batch"),
+        ("GET", "/subtitle/v1/nothing"),
+    ] {
+        for auth in [Some(fx.auth.as_str()), Some("Bearer sk_fc_wrong"), None] {
+            let r = served_as(method, path, auth);
+            assert_eq!(r.status, 503, "{method} {path} {auth:?}");
+            assert_eq!(r.error(), "module_disabled");
+            assert_eq!(r.header("retry-after"), Some("300"));
+            // The error and nothing else: no data, no hint whether the key is good.
+            assert_eq!(r.body.as_object().unwrap().len(), 1, "{}", r.body);
+            assert_eq!(r.body["error"].as_object().unwrap().len(), 2, "{}", r.body);
+        }
+    }
     let r = served("/subtitle/v1/me");
-    assert_eq!(r.status, 404);
-    assert_eq!(r.error(), "not_found");
+    assert_eq!(r.status, 503);
     assert_eq!(served("/v1/ping").status, 200);
+}
+
+/// A backlog flush as the extension's outbox does it (each capture's two uploads, then the
+/// batch of 20), several rounds in a row: never a 429.
+#[test]
+fn flushing_a_backlog_is_never_rate_limited() {
+    let fx = Fx::new();
+    let base = example("up_x", "up_y");
+    for round in 0..5u32 {
+        let mut captures = Vec::new();
+        for i in 0..20u32 {
+            let n = 1_000 + round * 20 + i;
+            let mut c = with_id(base.clone(), n, &format!("w{n}"), "A line.");
+            let id = c["capture_id"].as_str().unwrap().to_owned();
+            let shot = fx.upload(&id, "screenshot", "image/jpeg", JPEG);
+            assert_eq!(shot.status, 201, "round {round} #{i}: {}", shot.body);
+            let clip = fx.upload(&id, "audio", "audio/wav", WAV);
+            assert_eq!(clip.status, 201, "round {round} #{i}: {}", clip.body);
+            c["media"] = json!({
+                "screenshot": {"upload_id": shot.body["upload_id"], "mime": "image/jpeg"},
+                "audio": {"upload_id": clip.body["upload_id"], "mime": "audio/wav"},
+            });
+            captures.push(c);
+        }
+        let r = fx.post_json(
+            "/subtitle/v1/captures:batch",
+            &json!({ "captures": captures }),
+        );
+        assert_eq!(r.status, 200, "round {round}: {}", r.body);
+        assert!(r.body["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|x| x["status"] == "created"));
+    }
 }

@@ -2,7 +2,8 @@
 //! user picks in video subtitles ("captures") to the app, which serves the extension's
 //! contract ("Subtitle Kartları API v1") on the local HTTP server under `/subtitle/v1/*`.
 //!
-//! **Off by default**, like `local_api`: while it is off its routes answer `404`. The HTTP
+//! **Off by default**, like `local_api`: while it is off its routes answer `503` +
+//! `Retry-After` (the extension waits; a `404` would stop its media for good). The HTTP
 //! server runs while either module is on; the pairing-based `/v1/*` API still needs
 //! `local_api`.
 //!
@@ -730,7 +731,8 @@ fn media_upload(
 // What `fc-http` calls for `/subtitle/v1/*`. The key never reaches the app: the server
 // hashes it.
 
-/// `CONFLICT_MODULE_DISABLED` unless the module is on (the server answers `404`).
+/// `CONFLICT_MODULE_DISABLED` unless the module is on (the server answers `503` +
+/// `Retry-After`, so the extension waits instead of giving up).
 pub fn ensure_enabled(app: &App) -> Result<(), ApiError> {
     if app.is_module_enabled(ID) {
         Ok(())
@@ -936,7 +938,8 @@ pub fn error_code(e: &ApiError) -> &'static str {
         ErrorCode::ValidationSubtitleMedia => "invalid_media",
         ErrorCode::ValidationPayloadTooLarge => "too_large",
         ErrorCode::ConflictRateLimited => "rate_limited",
-        ErrorCode::ConflictModuleDisabled | ErrorCode::NotFoundMethod => "not_found",
+        ErrorCode::ConflictModuleDisabled => "module_disabled",
+        ErrorCode::NotFoundMethod => "not_found",
         c if c.category() == fc_api::ErrorCategory::Validation => "invalid_request",
         _ => "server_error",
     }
