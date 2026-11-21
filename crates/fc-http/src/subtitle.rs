@@ -119,7 +119,11 @@ async fn read_body(body: Body, headers: &HeaderMap, max: usize) -> Result<Vec<u8
         .map_err(|_| too_large())
 }
 
-async fn read_json(body: Body, headers: &HeaderMap) -> Result<Value, ApiError> {
+/// Largest `captures:batch` body: every capture of a full batch may be as large as a capture
+/// sent on its own (a `413` would fail every capture of the batch for good).
+pub(crate) const MAX_BATCH_BODY_BYTES: usize = subtitle::MAX_BATCH * MAX_BODY_BYTES;
+
+async fn read_json(body: Body, headers: &HeaderMap, max: usize) -> Result<Value, ApiError> {
     let is_json = header_text(headers, header::CONTENT_TYPE.as_str())
         .and_then(|v| v.split(';').next())
         .is_some_and(|m| m.trim().eq_ignore_ascii_case("application/json"));
@@ -130,7 +134,7 @@ async fn read_json(body: Body, headers: &HeaderMap) -> Result<Value, ApiError> {
         )
         .with_detail("field", "content-type"));
     }
-    let bytes = read_body(body, headers, MAX_BODY_BYTES).await?;
+    let bytes = read_body(body, headers, max).await?;
     serde_json::from_slice(&bytes).map_err(|e| {
         api(
             ErrorCode::ValidationSubtitleCapture,
@@ -256,7 +260,7 @@ pub(crate) async fn route(
             Ok(json(StatusCode::OK, &words))
         }
         "captures" => {
-            let value = read_json(body, headers).await?;
+            let value = read_json(body, headers, MAX_BODY_BYTES).await?;
             let o = blocking(move || subtitle::capture(&app, &key, &value)).await?;
             let status = match o.status {
                 SubtitleCaptureStatus::Created => StatusCode::CREATED,
@@ -271,7 +275,7 @@ pub(crate) async fn route(
             ))
         }
         "captures:batch" => {
-            let value = read_json(body, headers).await?;
+            let value = read_json(body, headers, MAX_BATCH_BODY_BYTES).await?;
             let r = blocking(move || subtitle::batch(&app, &key, &value)).await?;
             Ok(json(StatusCode::OK, &r))
         }

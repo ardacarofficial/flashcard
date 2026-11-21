@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { i18n } from '$lib/i18n/index.svelte';
 import { api } from '$lib/api';
@@ -35,6 +35,25 @@ describe('<SubtitleScreen> on the dev mock', () => {
     expect(screen.getByText(/Bağlantıyı test et/)).toBeTruthy();
     expect(screen.getByText('No keys yet.')).toBeTruthy();
     expect(screen.getByTestId('subtitle-received').textContent).toContain('No words received yet.');
+  });
+
+  it('says so when it cannot load, and loads on retry', async () => {
+    const real = api.call.bind(api);
+    let fail = true;
+    const spy = vi.spyOn(api, 'call').mockImplementation(((method: string, params: unknown) =>
+      fail && method === 'subtitle.status'
+        ? Promise.reject(new Error('down'))
+        : (real as (m: string, p: unknown) => Promise<unknown>)(method, params)) as typeof api.call);
+    try {
+      render(SubtitleScreen, { ctx });
+      expect(await screen.findByText('Could not load the Subtitle settings.')).toBeTruthy();
+      fail = false;
+      await fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      expect((await screen.findByTestId('subtitle-address')).textContent).toContain('/subtitle');
+      expect(screen.queryByText('Could not load the Subtitle settings.')).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('creates a key, shows it once, and revokes it', async () => {

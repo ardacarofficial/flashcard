@@ -436,6 +436,11 @@ fn notetype(ctx: &CommandCtx<'_>) -> AppResult<fc_core::NoteTypeId> {
     }
 }
 
+/// Whether a mapped note is still there (not deleted, not in the trash).
+fn note_is_live(reads: &dyn Reads, id: NoteId) -> AppResult<bool> {
+    Ok(reads.get_note(id)?.is_some_and(|n| n.deleted_at.is_none()))
+}
+
 fn captures_create(
     req: RecordSubtitleCapture,
     ctx: &mut CommandCtx<'_>,
@@ -447,12 +452,26 @@ fn captures_create(
         summary: summary::<SubtitleCapturesCreate>(),
         events: vec![],
     };
-    if let Some(r) = ctx.reads().get_subtitle_capture(&c.capture_id)? {
-        return Ok(none(&r));
-    }
     let key = dedup_key(&c.lang.target, &c.term.lemma, c.context.sentence.as_deref());
-    if let Some(r) = ctx.reads().subtitle_capture_by_dedup_key(&key)? {
-        return Ok(none(&r));
+    // A mapping whose note the user deleted is stale: the word comes back as a new card
+    // (the mapping is replaced; undo puts the old one back).
+    let mut stale: Vec<SubtitleCaptureRecord> = Vec::new();
+    for r in [
+        ctx.reads().get_subtitle_capture(&c.capture_id)?,
+        ctx.reads().subtitle_capture_by_dedup_key(&key)?,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if note_is_live(ctx.reads(), r.note_id)? {
+            return Ok(none(&r));
+        }
+        if !stale.iter().any(|s| s.capture_id == r.capture_id) {
+            stale.push(r);
+        }
+    }
+    for r in &stale {
+        ctx.tx.delete_subtitle_capture(&r.capture_id)?;
     }
     let notetype_id = notetype(ctx)?;
     let deck_id = target_deck(ctx, c.deck_id.as_deref())?;
@@ -504,11 +523,17 @@ fn captures_create(
         created_at: ctx.now,
     };
     ctx.tx.insert_subtitle_capture(&row)?;
+    let mut inverse = vec![inverse_call::<SubtitleCapturesForget>(&SubtitleCaptureIds {
+        capture_ids: vec![row.capture_id.clone()],
+    })?];
+    if !stale.is_empty() {
+        inverse.push(inverse_call::<SubtitleCapturesRestore>(&SubtitleCaptureRows {
+            rows: stale.into_iter().map(row_dto).collect(),
+        })?);
+    }
     Ok(CommandOutcome {
         response: outcome_of(SubtitleCaptureStatus::Created, &row),
-        inverse: vec![inverse_call::<SubtitleCapturesForget>(&SubtitleCaptureIds {
-            capture_ids: vec![row.capture_id.clone()],
-        })?],
+        inverse,
         summary: summary::<SubtitleCapturesCreate>().param("word", c.term.lemma.trim().to_owned()),
         events: vec![DomainEvent::SubtitleChanged],
     })

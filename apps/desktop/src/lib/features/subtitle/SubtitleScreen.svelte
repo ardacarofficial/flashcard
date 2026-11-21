@@ -22,14 +22,17 @@
   /** The key just made: shown once, then gone. */
   let created = $state<CreatedSubtitleKey | null>(null);
   let deck = $state<string>('');
+  /** The first load failed: an error with a retry instead of a skeleton forever. */
+  let loadFailed = $state(false);
 
   async function load() {
-    await ctx.guarded(async () => {
+    const ok = await ctx.guarded(async () => {
       const [s, k] = await Promise.all([api.call('subtitle.status', {}), api.call('subtitle.keys.list', {})]);
       status = s;
       keys = k.keys;
       deck = s.default_deck_id ?? '';
     });
+    loadFailed = !ok && status === null;
   }
 
   async function copy(text: string) {
@@ -77,7 +80,9 @@
 
 <SettingsPage title={t('subtitle.heading')} subtitle={t('subtitle.intro')}>
   <SettingsSection title={t('subtitle.connect.title')} description={t('subtitle.connect.description')} icon={Link} body="rows">
-    {#if !status}
+    {#if !status && loadFailed}
+      <EmptyState size="sm" title={t('subtitle.load_failed')} action={{ label: t('subtitle.retry'), onclick: () => void load() }} />
+    {:else if !status}
       <div class="pad"><Skeleton lines={2} /></div>
     {:else}
       <FormRow label={t('subtitle.connect.address')} description={t('subtitle.connect.address_hint')}>
@@ -96,7 +101,7 @@
 
   <SettingsSection title={t('subtitle.keys.title')} description={t('subtitle.keys.description')} icon={KeyRound}>
     {#if keys === null}
-      <Skeleton lines={2} />
+      {#if !loadFailed}<Skeleton lines={2} />{/if}
     {:else if keys.length === 0}
       <EmptyState size="sm" icon={KeyRound} title={t('subtitle.keys.none')} />
     {:else}

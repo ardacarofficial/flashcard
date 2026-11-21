@@ -46,6 +46,7 @@ suite!(
     batches_judge_each_capture_on_its_own,
     known_words_follow_the_cards_intervals,
     a_capture_is_one_undo_step,
+    a_word_whose_card_was_deleted_comes_back,
     restoring_a_backup_revokes_every_key,
 );
 
@@ -549,6 +550,49 @@ pub(super) fn a_capture_is_one_undo_step(f: Factory) {
     t.ok::<OplogUndo>(Empty {});
     let resent = capture(&t.app, &key, &example(1, "key", LINE)).unwrap();
     assert_eq!(resent.status, SubtitleCaptureStatus::Created);
+}
+
+/// Review fix: a mapping whose note the user deleted is no duplicate any more; the word
+/// comes back as a new card, and undoing that puts the old mapping back.
+pub(super) fn a_word_whose_card_was_deleted_comes_back(f: Factory) {
+    let (t, key) = setup(f);
+    let first = capture(&t.app, &key, &example(1, "key", LINE)).unwrap();
+    t.ok::<NotesDelete>(fc_api::v1::notes::NoteIds {
+        ids: vec![first.note_id],
+    });
+    // Another capture of the same word from the same line (re-added after the delete).
+    let again = capture(&t.app, &key, &example(2, "key", LINE)).unwrap();
+    assert_eq!(again.status, SubtitleCaptureStatus::Created);
+    assert_ne!(again.note_id, first.note_id);
+    assert!(note_is_live(&*t.store.read().unwrap(), again.note_id).unwrap());
+    assert_eq!(rows(&t), 1, "the stale mapping was replaced");
+    let mapped = |id: &str| t.store.read().unwrap().get_subtitle_capture(id).unwrap();
+    assert!(mapped(&example_id(1)).is_none());
+    // Now it is a duplicate of the new card, by either id.
+    for n in [1, 2] {
+        let d = capture(&t.app, &key, &example(n, "key", LINE)).unwrap();
+        assert_eq!(d.status, SubtitleCaptureStatus::Duplicate, "{n}");
+        assert_eq!(d.card_id, again.card_id);
+    }
+    // Undo: the new card and its mapping go, the old mapping is back as it was.
+    t.ok::<OplogUndo>(Empty {});
+    assert!(mapped(&example_id(2)).is_none());
+    assert_eq!(mapped(&example_id(1)).unwrap().note_id, first.note_id);
+    // Redo: the new card is back, mapped, and the stale one is gone again.
+    t.ok::<OplogRedo>(Empty {});
+    assert_eq!(mapped(&example_id(2)).unwrap().note_id, again.note_id);
+    assert!(mapped(&example_id(1)).is_none());
+    // A resend of the very first capture (same id) after its card was deleted comes back too.
+    t.ok::<NotesDelete>(fc_api::v1::notes::NoteIds {
+        ids: vec![again.note_id],
+    });
+    let resent = capture(&t.app, &key, &example(2, "key", LINE)).unwrap();
+    assert_eq!(resent.status, SubtitleCaptureStatus::Created);
+    assert_eq!(rows(&t), 1);
+}
+
+fn example_id(n: u32) -> String {
+    example(n, "key", LINE)["capture_id"].as_str().unwrap().to_owned()
 }
 
 pub(super) fn restoring_a_backup_revokes_every_key(f: Factory) {
