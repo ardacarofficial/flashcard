@@ -13,6 +13,8 @@
     "empty": "No decks yet.",
     "confirm_delete": "Delete “{name}” and its subdecks?",
     "select_prompt": "Select a deck first.",
+    "pick": "Choose a deck",
+    "all": "All decks",
     "expand": "Expand",
     "collapse": "Collapse",
     "current": "Deck"

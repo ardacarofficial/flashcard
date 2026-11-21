@@ -25,6 +25,17 @@ Workspace sürümü `1.2.0`. v1.1 arayüzü (ferah, büyük yuvarlak kartlar, a�
 ### Subtitle tarayıcı eklentisi bağlantısı
 - Yeni `subtitle` modülü (varsayılan kapalı): yerel HTTP sunucusunda `/subtitle/v1` altında eklentinin "Subtitle Kartları API v1" sözleşmesi (me, decks, media, captures, captures:batch, known-words). Kişisel erişim anahtarları (bir kez gösterilir, yalnız SHA-256), migration `1200_subtitle`, kendi izni olmayan `Actor::Subtitle`; yakalama doğrudan destede not olur, tek geri al adımı. Ayarlar → Bağlantılar → Subtitle. Ayrıntı: docs/06 §5.1, kullanıcı rehberi.
 
+### Son cila
+- **Subtitle ayarları sayfası** diğer bağlantı sayfalarıyla aynı düzende: mono sunucu adresi + Kopyala, kısa numaralı kurulum adımları, anahtarlar sık satırlar (ad, mono önek, oluşturulma / son kullanım, kırmızı tonlu İptal et), yeni anahtar bir kez mono gösterilir ve "bir daha göremezsin" notu taşır; deste seçici, gelen kelime sayısı ve son zamanı; yükleniyor / hata / modül kapalı (buradan açılabilir) durumları.
+- Pasif düğmeler okunur: etiket ortada, kısayol ipucu soluk ama okunaklı (kilit ekranı "Kilidi aç", Oluştur).
+- Anahtar (Switch) kapalıyken her iki temada sakin nötr; açıkken vurgu rengi.
+- Ara tablosunda seçili satırlar, fare üstündeyken ya da klavye imleci üzerindeyken de seçili görünür.
+- Deste seçici, seçimsiz durumun anlamını söyler: çalışma ekranlarında ve Dışa aktar'da "Tüm desteler", diğerlerinde "Deste seç".
+- Deste sayfası: ⋯ menüsü başlık satırıyla hizalı; alt destede üst çubuktaki iz üst desteleri de gösterir (tıklanabilir). Başlığın altında açıklama ya da çip olan her sayfada eylemler başlık satırına hizalanır.
+- Not türleri sayfası diğer ayar sayfalarıyla aynı genişlikte.
+- Türkçe metinlerde kalan resmî hitaplar ("tıklayın", "basın", "ekleyin"…) "sen" diline çevrildi.
+- Gelen kutusunda destesiz bir öneri kabul edilince belirsiz "geçerli değil" yerine o satırın deste seçicisi "Önce bir deste seç." der ve odaklanır.
+
 ### Araçlar
 - `pnpm screens` her koşuda rastgele bir port seçer (`--port N` ile sabitlenir): farklı worktree'lerdeki paralel koşular aynı geliştirme sunucusunu paylaşmaz. Çalışan bir oturumdan başka ekrana geçmeden önce çıkar.
 

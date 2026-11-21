@@ -13,6 +13,8 @@
     "empty": "Henüz deste yok.",
     "confirm_delete": "“{name}” ve alt desteleri silinsin mi?",
     "select_prompt": "Önce bir deste seç.",
+    "pick": "Deste seç",
+    "all": "Tüm desteler",
     "expand": "Aç",
     "collapse": "Kapat",
     "current": "Deste"

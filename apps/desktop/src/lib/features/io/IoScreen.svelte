@@ -15,9 +15,10 @@
   const TABS = ['import', 'export', 'backup', 'print'] as const;
   type Tab = (typeof TABS)[number];
   let tab = $state<Tab>('import');
-  // The deck import / export / print work on (the shell's selected deck), picked here.
+  // The deck import / export / print work on (the shell's selected deck), picked here. No deck
+  // means the whole collection on Export, "choose one" elsewhere.
   const deckOptions = $derived([
-    { value: null as string | null, label: t('deck.select_prompt') },
+    { value: null as string | null, label: t(tab === 'export' ? 'deck.all' : 'deck.pick') },
     ...deckPaths(ctx.decks).map((p) => ({ value: p.id as string | null, label: p.path })),
   ]);
   const tabs = $derived(TABS.map((id) => ({ id, label: t(`io.tabs.${id}`), icon: ICONS[id] })));

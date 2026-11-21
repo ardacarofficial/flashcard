@@ -7,7 +7,7 @@
 <script lang="ts">
   import { formatDate } from '$lib/format';
   import { onMount, tick } from 'svelte';
-  import { api } from '$lib/api';
+  import { api, toApiError } from '$lib/api';
   import type { DeckId, InboxItemDto, InboxSource, InboxStatus } from '$lib/api/types';
   import { deckPaths } from '$lib/components/deck-paths';
   import { t } from '$lib/i18n/index.svelte';
@@ -48,6 +48,8 @@
   let active = $state(0);
   let allowDuplicates = $state(false);
   let notice = $state<string | null>(null);
+  /** Item the backend refused to accept for want of a deck: its deck picker says so. */
+  let needsDeck = $state<string | null>(null);
   let loaded = $state(false);
   let pendingCount = $state<number | null>(null);
   let list = $state<HTMLUListElement | null>(null);
@@ -98,7 +100,9 @@
   async function accept(chosen: InboxItemDto[]) {
     if (chosen.length === 0) return;
     notice = null;
+    needsDeck = null;
     const keep = listHasFocus();
+    let noDeck: InboxItemDto | null = null;
     const ok = await ctx.guarded(async () => {
       const r = await api.call('inbox.accept', {
         items: chosen.map((i) => ({
@@ -111,9 +115,23 @@
           attributes: null,
         })),
         allow_duplicates: allowDuplicates,
+      }).catch((e: unknown) => {
+        // The backend names the item and the field: "no deck" gets its own message on that
+        // row's deck picker instead of the generic "not a valid card proposal".
+        const err = toApiError(e);
+        if (err.code !== 'VALIDATION_INBOX_ITEM' || err.details.field !== 'deck') throw e;
+        noDeck = chosen[Number(err.details.item_index ?? 0)] ?? chosen[0]!;
+        return null;
       });
-      notice = t('inbox.accepted', { count: r.accepted.length });
+      if (r) notice = t('inbox.accepted', { count: r.accepted.length });
     });
+    const missing = noDeck as InboxItemDto | null;
+    if (missing) {
+      needsDeck = missing.id;
+      await tick();
+      document.getElementById(`inbox-deck-${missing.id}`)?.focus();
+      return;
+    }
     if (ok) await reloadKeepingFocus(keep);
   }
 
@@ -345,7 +363,17 @@
 
             {#if pending && d}
               <div class="side">
-                <Select size="sm" label={t('inbox.deck')} hideLabel options={deckOptions} bind:value={d.deck} placeholder={t('inbox.choose_deck')} class="deck" />
+                <Select
+                  size="sm"
+                  id="inbox-deck-{item.id}"
+                  label={t('inbox.deck')}
+                  hideLabel
+                  options={deckOptions}
+                  bind:value={d.deck}
+                  placeholder={t('inbox.choose_deck')}
+                  error={needsDeck === item.id && !d.deck ? t('inbox.needs_deck') : undefined}
+                  class="deck"
+                />
                 <div class="acts">
                   {#if isEditing}
                     <IconButton size="sm" icon={Check} label={t('inbox.done')} onclick={() => void stopEdit(i)} />

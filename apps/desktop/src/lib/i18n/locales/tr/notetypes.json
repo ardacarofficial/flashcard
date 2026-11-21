@@ -19,7 +19,7 @@
     "empty": "Henüz not türü yok.",
     "field_actions": "İşlemler",
     "sort_field_hint": "Listelerde ve arama sonuçlarında not için gösterilen alan.",
-    "syntax_intro": "Her şablon not başına bir kart üretir. Alanları çift süslü parantezle ekleyin.",
+    "syntax_intro": "Her şablon not başına bir kart üretir. Alanları çift süslü parantezle ekle.",
     "remove_template": "“{name}” şablonunu kaldır",
     "preview_heading": "Önizleme"
   }

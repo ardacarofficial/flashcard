@@ -108,7 +108,7 @@
   },
   "errors": {
     "validation": {
-      "automation_rule": "Kuralı kontrol edin: bir adı, geçerli bir tetikleyicisi ve 1–10 izinli eylemi olmalı."
+      "automation_rule": "Kuralı kontrol et: bir adı, geçerli bir tetikleyicisi ve 1–10 izinli eylemi olmalı."
     },
     "not_found": {
       "automation_rule": "Bu otomasyon kuralı artık yok."

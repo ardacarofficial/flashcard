@@ -214,12 +214,18 @@
   .body .row:hover {
     background: var(--surface-2);
   }
-  .row[aria-selected='true'] {
-    background: var(--accent-soft);
-  }
   .row.active {
     box-shadow: inset 2px 0 0 var(--accent);
     background: var(--surface-3);
+  }
+  /* Selected wins over hover and the active (cursor) row, so a multi-selection reads as one
+     even band: hover / cursor only deepen the tint, the cursor keeps its accent bar. */
+  .body .row[aria-selected='true'] {
+    background: var(--accent-soft);
+  }
+  .body .row[aria-selected='true']:hover,
+  .body .row[aria-selected='true'].active {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
   }
   .num {
     font-family: var(--font-mono);

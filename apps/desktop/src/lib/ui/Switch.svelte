@@ -68,15 +68,21 @@
     padding: 0;
     border: none;
     border-radius: var(--radius-pill);
-    background: var(--border-strong);
+    /* Off: a quiet neutral track with a 1px edge, the thumb in secondary text (≥ 3:1 on the
+       track in both themes). On: the accent track, the thumb in accent-fg. */
+    background: var(--surface-3);
+    box-shadow: inset 0 0 0 1px var(--border-strong);
     cursor: pointer;
-    transition: background-color var(--motion) var(--ease);
+    transition:
+      background-color var(--motion) var(--ease),
+      box-shadow var(--motion) var(--ease);
   }
   button:disabled {
     cursor: default;
   }
   button[aria-checked='true'] {
     background: var(--accent);
+    box-shadow: none;
   }
   button:focus-visible {
     outline: 2px solid var(--focus-ring);
@@ -89,7 +95,7 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: var(--text-1);
+    background: var(--text-2);
     transition:
       transform var(--motion) var(--ease),
       background-color var(--motion) var(--ease);

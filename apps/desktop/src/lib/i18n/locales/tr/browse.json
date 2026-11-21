@@ -244,11 +244,11 @@
       "info": "Kart bilgisi",
       "delete": "Seçimi sil"
     },
-    "intro": "Bir kısayola tıklayın, sonra yeni tuş birleşimine basın. Esc vazgeçer.",
+    "intro": "Bir kısayola tıkla, sonra yeni tuş birleşimine bas. Esc vazgeçer.",
     "filter_placeholder": "Kısayollarda ara",
     "empty": "Filtreyle eşleşen kısayol yok.",
     "clear_filter": "Filtreyi temizle",
-    "record_for": "“{action}” için yeni tuşlara basın",
+    "record_for": "“{action}” için yeni tuşlara bas",
     "change_for": "“{action}” kısayolunu değiştir",
     "unbind_for": "“{action}” kısayolunu kaldır",
     "unbound_text": "Atanmamış"

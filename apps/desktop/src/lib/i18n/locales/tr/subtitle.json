@@ -57,7 +57,8 @@
       "copied": "Kopyalandı",
       "step1": "Aşağıdan bir erişim anahtarı oluştur ve kopyala.",
       "step2": "Eklentide Ayarlar → Öğrenme servisi'ni aç, Subtitle Kartları'nı seç; sunucu adresini ve anahtarı yapıştır.",
-      "step3": "Bağlantıyı test et'e tıkla. Artık + ile eklediğin her kelime buraya gelir."
+      "step3": "Bağlantıyı test et'e tıkla. Artık + ile eklediğin her kelime buraya gelir.",
+      "steps": "Kurulum"
     },
     "keys": {
       "title": "Erişim anahtarları",
@@ -73,8 +74,11 @@
       "revoked": "İptal edildi",
       "active": "Etkin",
       "new_title": "Yeni erişim anahtarın",
-      "new_body": "Şimdi kopyala ve eklentiye yapıştır. Yalnız bu sefer gösterilir: uygulama ondan yalnızca bir parmak izi saklar.",
-      "done": "Tamam"
+      "new_body": "Şimdi kopyala ve eklentiye yapıştır.",
+      "done": "Tamam",
+      "revoke_named": "“{name}” anahtarını iptal et",
+      "revoked_at": "İptal: {time}",
+      "once": "Bu pencereyi kapatınca anahtarı bir daha göremezsin. Kaybedersen yenisini oluştur."
     },
     "deck": {
       "title": "Kartlar nereye gider",
@@ -83,8 +87,15 @@
       "fallback": "{name} (ilk kullanımda oluşturulur)",
       "received": {
         "none": "Henüz kelime gelmedi.",
-        "some": "{count, plural, one {# kelime} other {# kelime}} geldi, sonuncusu {time}."
+        "some": "{count, plural, one {# kelime} other {# kelime}} geldi, sonuncusu {time}.",
+        "label": "Gelen kelimeler",
+        "last": "Sonuncusu {time}"
       }
+    },
+    "off": {
+      "title": "Subtitle eklentisi kapalı",
+      "body": "Açınca eklenti bu bilgisayardaki uygulamaya bağlanabilir. Ayarlar → Modüller’den de kapatıp açabilirsin.",
+      "enable": "Aç"
     }
   }
 }

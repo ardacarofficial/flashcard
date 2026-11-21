@@ -157,7 +157,7 @@
   }
 </script>
 
-<SettingsPage title={t('notetype.heading')} subtitle={t('notetype.intro')} width="wide">
+<SettingsPage title={t('notetype.heading')} subtitle={t('notetype.intro')}>
   {#snippet actions()}
     {#if current}<Button icon={Copy} onclick={() => void create(current.id)}>{t('notetype.copy')}</Button>{/if}
     <Button variant="primary" icon={Plus} onclick={() => void create(null)}>{t('notetype.new')}</Button>
@@ -310,15 +310,13 @@
 {/if}
 
 <style>
+  /* Same 720 px column as every settings page: the type list sits on top as a row of
+     choices, the editor (and its field table) gets the full width below it. */
   .layout {
     display: grid;
-    grid-template-columns: minmax(10rem, 13rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-6);
     align-items: start;
-  }
-  nav {
-    position: sticky;
-    top: 0;
   }
   .side-title {
     display: flex;
@@ -339,7 +337,7 @@
     margin: 0;
     padding: 0;
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 1px;
   }
   .type {
@@ -347,7 +345,6 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
-    width: 100%;
     height: 30px;
     padding: 0 var(--space-2);
     border: none;
@@ -537,21 +534,5 @@
   }
   .syntax code {
     font-variant-ligatures: none;
-  }
-  /* The field table needs the width: the type list goes on top until the window is wide. */
-  @media (max-width: 1399.98px) {
-    .layout {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    nav {
-      position: static;
-    }
-    .types {
-      flex-direction: row;
-      flex-wrap: wrap;
-    }
-    .type {
-      width: auto;
-    }
   }
 </style>

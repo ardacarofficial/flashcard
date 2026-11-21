@@ -1,6 +1,8 @@
 /**
  * Dev-only mock of the `subtitle` module (see `api/mock/transport.ts`). Validation is minimal:
- * the real rules live in fc-app `modules/subtitle/` (keys hashed, captures as notes).
+ * the real rules live in fc-app `modules/subtitle/` (keys hashed, captures as notes). Unlike
+ * the real module (off by default) it starts on, with one used key, one revoked key and a few
+ * captures, so the screenshot run shows the settings page with every kind of row.
  */
 import { menu, module, err, type MockEnv, type MockFeature } from '$lib/api/mock/env';
 import type { SubtitleKeyDto, SubtitleStatus } from '$lib/api/types';
@@ -8,10 +10,16 @@ import type { SubtitleKeyDto, SubtitleStatus } from '$lib/api/types';
 const PORT = 28735;
 
 export default {
-  modules: [{ ...module('subtitle', [menu('subtitle.screen', 'nav.subtitle', '/subtitle', 83)]), enabled: false }],
+  modules: [module('subtitle', [menu('subtitle.screen', 'nav.subtitle', '/subtitle', 83)])],
   handlers: ({ now, id, emit, decks }: MockEnv) => {
-    const keys: SubtitleKeyDto[] = [];
+    const t0 = now();
+    const keys: SubtitleKeyDto[] = [
+      { id: id('subkey'), name: 'Firefox (laptop)', prefix: 'sk_fc_7q2m', created_at: t0 - 20 * 86_400_000, last_used_at: null, revoked_at: t0 - 6 * 86_400_000 },
+      { id: id('subkey'), name: 'Chrome · ev', prefix: 'sk_fc_k3vd', created_at: t0 - 5 * 86_400_000, last_used_at: t0 - 3_600_000, revoked_at: null },
+    ];
     let defaultDeck: string | null = null;
+    const captures = 12;
+    const lastCapture = t0 - 3_600_000;
     const status = (): SubtitleStatus => {
       const deck = decks.find((d) => d.id === defaultDeck) ?? null;
       return {
@@ -20,8 +28,8 @@ export default {
         default_deck_id: deck?.id ?? null,
         default_deck_path: deck?.path ?? null,
         fallback_deck: 'Subtitle',
-        captures: 0,
-        last_capture_at: null,
+        captures,
+        last_capture_at: lastCapture,
         active_keys: keys.filter((k) => k.revoked_at === null).length,
       };
     };
