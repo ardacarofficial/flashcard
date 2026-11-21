@@ -111,11 +111,10 @@
     if (await ctx.guarded(() => api.call('reading.queue.postpone', { id: item.id, days }))) onclose();
   }
 </script>
-
 <section class="reader">
   <header class="head">
-    <Button variant="ghost" size="sm" icon={ChevronLeft} onclick={onclose} class="back">{t('reading.back')}</Button>
     <div class="title-row">
+      <Button variant="ghost" size="sm" icon={ChevronLeft} onclick={onclose} class="back">{t('reading.back')}</Button>
       <h1>{item.title}</h1>
       {#if analysis}
         <span class="known" role="status">{t('reading.known_pct', { pct: pct100(analysis.summary.known_pct) })}</span>
@@ -136,21 +135,48 @@
     <Skeleton lines={8} />
   {:else}
     <div class="body" class:with-panel={!!picked}>
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <article class="text" lang={analysis.language} onmouseup={() => (selection = selectedRange())}>
-        {#each rows as row, i (row.start)}
-          <p>
-            {#if isSubtitle}<span class="cue">{clock(analysis.cues[i]?.start_ms ?? 0)}</span>{/if}
-            {#each segments(analysis.text, analysis.tokens, row.start, row.end) as seg (seg.start)}
-              {#if seg.token}
-                {@const tok = seg.token}
-                <button class="w {tok.status}" class:picked={picked === tok} data-start={seg.start}
-                  onclick={() => (picked = tok)}>{seg.text}</button>
-              {:else}<span data-start={seg.start}>{seg.text}</span>{/if}
-            {/each}
-          </p>
-        {/each}
-      </article>
+      <div class="col">
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <article class="text" class:subs={isSubtitle} lang={analysis.language} onmouseup={() => (selection = selectedRange())}>
+          {#each rows as row, i (row.start)}
+            <p>
+              {#if isSubtitle}<span class="cue num">{clock(analysis.cues[i]?.start_ms ?? 0)}</span>{/if}
+              {#each segments(analysis.text, analysis.tokens, row.start, row.end) as seg (seg.start)}
+                {#if seg.token}
+                  {@const tok = seg.token}
+                  <button class="w {tok.status}" class:picked={picked === tok} data-start={seg.start}
+                    onclick={() => (picked = tok)}>{seg.text}</button>
+                {:else}<span data-start={seg.start}>{seg.text}</span>{/if}
+              {/each}
+            </p>
+          {/each}
+        </article>
+
+        {#if selection}
+          <div class="selection" role="toolbar" aria-label={t('reading.selection')}>
+            <span class="sel-label">{t('reading.selection')}</span>
+            <Button size="sm" onclick={extract}>{t('reading.extract.make')}</Button>
+            <Button size="sm" onclick={cloze} disabled={!ctx.selectedDeck}>{t('reading.cloze.make')}</Button>
+          </div>
+        {/if}
+        {#if notice}<p class="notice" role="status">{notice}</p>{/if}
+
+        <footer class="foot">
+          <Button variant="primary" icon={Check} onclick={done}>{t('reading.queue.done')}</Button>
+          <div class="postpone">
+            <Input size="sm" type="number" min="1" max="365" label={t('reading.queue.postpone_days')} hideLabel bind:value={postponeDays} class="days" />
+            <span class="unit">{t('reading.queue.postpone_days')}</span>
+            <Button size="sm" onclick={postpone}>{t('reading.queue.postpone')}</Button>
+          </div>
+          <span class="grow"></span>
+          {#if moduleKnownOn('inline_cards')}
+            <Button size="sm" variant="ghost" onclick={() => (composing = true)} disabled={!ctx.selectedDeck}>{t('modes.inline.open')}</Button>
+          {/if}
+        </footer>
+        {#if composing && ctx.selectedDeck}
+          <InlineComposer deckId={ctx.selectedDeck} guarded={ctx.guarded} onclose={() => (composing = false)} />
+        {/if}
+      </div>
       {#if picked}
         {@const s = sentence}
         <WordPanel
@@ -167,29 +193,6 @@
         />
       {/if}
     </div>
-
-    {#if selection}
-      <div class="selection" role="toolbar" aria-label={t('reading.selection')}>
-        <Button size="sm" onclick={extract}>{t('reading.extract.make')}</Button>
-        <Button size="sm" onclick={cloze} disabled={!ctx.selectedDeck}>{t('reading.cloze.make')}</Button>
-      </div>
-    {/if}
-    {#if notice}<p class="notice" role="status">{notice}</p>{/if}
-
-    <footer class="foot">
-      <Button variant="primary" icon={Check} onclick={done}>{t('reading.queue.done')}</Button>
-      <div class="postpone">
-        <Input size="sm" type="number" min="1" max="365" label={t('reading.queue.postpone_days')} bind:value={postponeDays} class="days" />
-        <Button size="sm" onclick={postpone}>{t('reading.queue.postpone')}</Button>
-      </div>
-      <span class="grow"></span>
-      {#if moduleKnownOn('inline_cards')}
-        <Button size="sm" variant="ghost" onclick={() => (composing = true)} disabled={!ctx.selectedDeck}>{t('modes.inline.open')}</Button>
-      {/if}
-    </footer>
-    {#if composing && ctx.selectedDeck}
-      <InlineComposer deckId={ctx.selectedDeck} guarded={ctx.guarded} onclose={() => (composing = false)} />
-    {/if}
   {/if}
 </section>
 
@@ -203,45 +206,49 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-  }
-  .head :global(.back) {
-    align-self: flex-start;
-    margin-inline-start: calc(-1 * var(--space-3));
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border);
   }
   .title-row {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-4);
-    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+  .title-row :global(.back) {
+    margin-inline-start: calc(-1 * var(--space-2));
   }
   h1 {
+    flex: 1;
+    min-width: 0;
     margin: 0;
     font-size: var(--text-xl);
-    font-weight: var(--weight-bold);
+    font-weight: var(--weight-semibold);
     overflow-wrap: anywhere;
   }
   .known {
-    font-weight: var(--weight-semibold);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
     color: var(--accent-text);
+    white-space: nowrap;
   }
   .legend {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-4);
-    font-size: var(--text-sm);
+    gap: var(--space-1) var(--space-4);
+    font-size: var(--text-xs);
     color: var(--text-2);
   }
   .key {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: 6px;
   }
   .swatch {
-    width: 12px;
-    height: 12px;
-    border-radius: 3px;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
     border: 1px solid var(--border-strong);
   }
   .grow {
@@ -250,32 +257,41 @@
   .body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-6);
+    gap: var(--space-8);
     align-items: start;
   }
   .body.with-panel {
-    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-columns: minmax(0, 1fr) 300px;
   }
+  .col {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  /* The one place for large type: a comfortable reading column. */
   .text {
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: var(--space-8);
-    font-size: var(--text-lg);
-    line-height: 1.8;
-    max-width: 46rem;
+    max-width: 68ch;
+    font-size: 18px;
+    line-height: 1.75;
+    text-align: start;
+    color: var(--text-1);
   }
   .text p {
-    margin: 0 0 var(--space-4);
+    margin: 0 0 1em;
   }
   .text p:last-child {
     margin-bottom: 0;
   }
+  .text.subs p {
+    margin-bottom: var(--space-2);
+  }
   .cue {
+    display: inline-block;
+    min-width: 5ch;
     margin-right: var(--space-2);
-    font-variant-numeric: tabular-nums;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
   button.w {
     all: unset;
@@ -300,27 +316,52 @@
   .swatch.ignored {
     background: var(--surface-2);
   }
+  button.w:hover {
+    box-shadow: inset 0 -1px 0 var(--text-2);
+  }
   .w.picked {
     outline: 2px solid var(--accent-text);
   }
   button.w:focus-visible {
     outline: 2px solid var(--focus-ring);
   }
-  .selection,
+  .selection {
+    position: sticky;
+    bottom: var(--space-3);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    align-self: flex-start;
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-card);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-float);
+  }
+  .sel-label {
+    font-size: var(--text-xs);
+    color: var(--text-2);
+    margin-right: var(--space-1);
+  }
   .foot,
   .postpone {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    align-items: flex-end;
+    align-items: center;
   }
   .foot {
+    max-width: 68ch;
     gap: var(--space-4);
     padding-top: var(--space-4);
     border-top: 1px solid var(--border);
   }
   .postpone :global(.days) {
-    width: 96px;
+    width: 64px;
+  }
+  .unit {
+    font-size: var(--text-xs);
+    color: var(--text-2);
   }
   .notice {
     margin: 0;

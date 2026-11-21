@@ -18,8 +18,9 @@ export interface ScreenCtx {
    */
   navigate?: (route: string) => void;
   /**
-   * v1.1: a study screen says a session is running (or over). The shell then switches to the
-   * focus layout — no deck picker, no section tabs, a centred column. Reset on every page change.
+   * A study screen says a session is running. The shell then switches to the focus layout —
+   * v1.2: no sidebar, no top bar, no deck picker or tabs; the screen draws its own session bar
+   * (`modes/SessionFrame`). Reset on every page change.
    */
   setFocus?: (on: boolean) => void;
 }

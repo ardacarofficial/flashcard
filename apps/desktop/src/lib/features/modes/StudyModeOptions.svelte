@@ -5,6 +5,7 @@
   import type { RatingScale, StartModes, TimeoutAction } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import { Input, Select, Switch } from '$lib/ui';
+  import OptRow from './OptRow.svelte';
   import { moduleOn } from '../cards/modules.svelte';
   import { startModes } from './modes';
 
@@ -49,36 +50,38 @@
 {#if moduleOn('timed') || moduleOn('confidence')}
   <div class="opts" data-testid="mode-options">
     {#if moduleOn('timed')}
-      <Switch label={t('modes.options.timed')} description={t('modes.options.timed_hint')} bind:checked={timed} />
-      {#if timed}
-        <div class="row">
-          <Input class="secs" type="number" min="3" max="600" label={t('modes.options.seconds')} bind:value={seconds} />
-          <Select label={t('modes.options.on_timeout')} options={timeouts} bind:value={onTimeout} />
-        </div>
-      {/if}
+      <OptRow label={t('modes.options.timed')} description={t('modes.options.timed_hint')}>
+        {#if timed}
+          <Input id="mode-opt-secs" class="secs" size="sm" type="number" min="3" max="600" label={t('modes.options.seconds')} hideLabel bind:value={seconds} />
+          <span class="unit">{t('modes.options.seconds_unit')}</span>
+          <Select class="timeout" size="sm" label={t('modes.options.on_timeout')} hideLabel options={timeouts} bind:value={onTimeout} />
+        {/if}
+        <Switch ariaLabel={t('modes.options.timed')} bind:checked={timed} />
+      </OptRow>
     {/if}
     {#if moduleOn('confidence')}
-      <div class="scale"><Select label={t('modes.options.scale')} options={scales} bind:value={scale} /></div>
+      <OptRow label={t('modes.options.scale')} labelFor="mode-opt-scale">
+        <Select id="mode-opt-scale" class="scale" size="sm" label={t('modes.options.scale')} hideLabel options={scales} bind:value={scale} />
+      </OptRow>
     {/if}
   </div>
 {/if}
 
 <style>
   .opts {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
+    display: contents;
   }
-  .row {
-    display: flex;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-    align-items: flex-end;
+  .unit {
+    font-size: var(--text-xs);
+    color: var(--text-2);
   }
-  .scale {
-    max-width: 260px;
+  .opts :global(.secs) {
+    width: 72px;
   }
-  .row :global(.secs) {
-    width: 120px;
+  .opts :global(.timeout) {
+    min-width: 170px;
+  }
+  .opts :global(.scale) {
+    min-width: 200px;
   }
 </style>

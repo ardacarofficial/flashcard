@@ -88,13 +88,30 @@
     "keyhint": {
       "flip": "Flip",
       "rate": "Rate"
-    }
+    },
+    "count": {
+      "due": "Due",
+      "learning": "Learning",
+      "new": "New"
+    },
+    "flag_menu": "Flag"
   },
   "settings": {
     "study": {
-      "new_per_session": { "label": "New cards per session", "description": "How many new cards a normal session introduces (0 = none)." },
-      "type_answer": { "label": "Type the answer", "description": "Show an input and check what you type." },
-      "answer_buttons": { "label": "Answer buttons", "description": "Two buttons or all four with intervals.", "two": "Two buttons", "four": "Four buttons" },
+      "new_per_session": {
+        "label": "New cards per session",
+        "description": "How many new cards a normal session introduces (0 = none)."
+      },
+      "type_answer": {
+        "label": "Type the answer",
+        "description": "Show an input and check what you type."
+      },
+      "answer_buttons": {
+        "label": "Answer buttons",
+        "description": "Two buttons or all four with intervals.",
+        "two": "Two buttons",
+        "four": "Four buttons"
+      },
       "hint_strategy": {
         "label": "Hint style",
         "description": "How hints reveal the answer.",
@@ -116,9 +133,18 @@
         "tolerant": "Allow typos",
         "multi": "Several answers, allow typos"
       },
-      "fold_turkish": { "label": "Treat ı/i, ş/s… as equal", "description": "When checking typed answers." },
-      "auto_grade": { "label": "Rate automatically", "description": "Use the checker's suggestion as the rating." },
-      "day_start_hour": { "label": "Next day starts at", "description": "Local hour when a new study day begins." }
+      "fold_turkish": {
+        "label": "Treat ı/i, ş/s… as equal",
+        "description": "When checking typed answers."
+      },
+      "auto_grade": {
+        "label": "Rate automatically",
+        "description": "Use the checker's suggestion as the rating."
+      },
+      "day_start_hour": {
+        "label": "Next day starts at",
+        "description": "Local hour when a new study day begins."
+      }
     }
   },
   "errors": {

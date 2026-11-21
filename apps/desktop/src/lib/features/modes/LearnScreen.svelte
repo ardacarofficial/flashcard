@@ -2,33 +2,33 @@
   /**
    * Learn mode (docs/02 §6.1, Quizlet style). The backend picks the cards (deck, query such as
    * `level:A2`), asks each at its stage (multiple choice, then written), judges the answer and
-   * schedules the card; this screen only shows and reports. Keys: 1–4 pick, Enter
-   * check/continue, Z undo, Esc end.
+   * schedules the card; this screen only shows and reports. v1.2: a dense start panel; the
+   * running session owns the window (`SessionFrame`). Keys: 1–4 pick, Enter check/continue
+   * (and on the end screen: learn again), Z undo, Esc end.
    */
+  import { formatCount } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { LearnAnswerResult, SessionDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import {
     Button,
-    Card,
-    Chip,
+    ChevronRight,
     CircleAlert,
     CircleCheck,
     GraduationCap,
     Icon,
-    IconButton,
     Input,
-    Kbd,
     PageHeader,
     OptionTile,
-    ProgressBar,
     Repeat,
     Skeleton,
     Switch,
     TriangleAlert,
-    X,
   } from '$lib/ui';
+  import OptRow from './OptRow.svelte';
+  import SessionFrame from './SessionFrame.svelte';
+  import SetupPanel from './SetupPanel.svelte';
   import CardView from '../cards/CardView.svelte';
   import { moduleOn, trackModules } from '../cards/modules.svelte';
   import { tzOffsetMins } from '../study/format';
@@ -64,8 +64,8 @@
 
   const card = $derived(session?.current ?? null);
   const learn = $derived(session?.modes?.learn ?? null);
-  // A running session switches the shell to the focus layout (no picker, no tabs).
-  $effect(() => ctx.setFocus?.((session !== null && card !== null && learn !== null) || finished !== null));
+  // A running session owns the window (v1.2); the end screen is a normal page again.
+  $effect(() => ctx.setFocus?.(session !== null && card !== null && learn !== null));
   const progress = $derived((feedback?.session ?? session ?? finished)?.modes?.learn?.progress ?? null);
 
   function show(s: SessionDto) {
@@ -149,7 +149,7 @@
     const tag = (e.target as HTMLElement | null)?.tagName ?? '';
     if (tag === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
     if (!session) {
-      if (e.key === 'Enter' && plainKey(e) && !finished) {
+      if (e.key === 'Enter' && plainKey(e)) {
         e.preventDefault();
         void run(start);
       }
@@ -187,38 +187,46 @@
 
   const toneOf = (g: string) => (g === 'correct' ? 'success' : g === 'almost' ? 'warning' : 'danger');
 </script>
-
 <svelte:window onkeydown={onKey} />
 
-<section class="learn">
-  {#if session && card && learn}
-    <div class="topbar">
+{#if session && card && learn}
+  <SessionFrame
+    title={t('modes.learn.heading')}
+    subtitle={ctx.selectedPath ?? t('study.whole_collection')}
+    progressLabel={t('modes.learn.progress_label')}
+    max={progress?.total ?? 1}
+    segments={progress
+      ? [
+          { value: progress.learned, label: t('modes.learn.seg_learned'), tone: 'success' },
+          { value: progress.written, label: t('modes.learn.seg_written'), tone: 'accent' },
+        ]
+      : undefined}
+    count={progress ? t('study.position', { n: progress.learned, total: progress.total }) : null}
+    countTestid="learn-progress"
+    exitLabel={t('modes.learn.end')}
+    exitText={t('study.end')}
+    onexit={() => void run(end)}
+  >
+    {#snippet meta()}
       {#if progress}
-        <div class="progress" data-focus-hide>
-          <ProgressBar
-            label={t('modes.learn.progress_label')}
-            max={progress.total}
-            size="sm"
-            segments={[
-              { value: progress.learned, label: t('modes.learn.seg_learned'), tone: 'success' },
-              { value: progress.written, label: t('modes.learn.seg_written'), tone: 'accent' },
-            ]}
-          />
-          <span class="count" data-testid="learn-progress">{t('modes.learn.progress', { learned: progress.learned, total: progress.total })}</span>
-        </div>
+        <span class="cnt"><span class="k">{t('modes.learn.seg_learned')}</span><span class="num v">{formatCount(progress.learned)}</span></span>
+        <span class="cnt"><span class="k">{t('modes.learn.count_written')}</span><span class="num v">{formatCount(progress.written)}</span></span>
+        <span class="cnt"><span class="k">{t('modes.learn.count_choice')}</span><span class="num v">{formatCount(progress.choice)}</span></span>
       {/if}
-      <IconButton icon={X} label={t('modes.learn.end')} onclick={() => void run(end)} />
-    </div>
+    {/snippet}
 
-    <Card padding="lg" elevated class="question-card">
-      <div class="stage-row">
-        <Chip size="sm" tone={learn.stage === 'choice' ? 'neutral' : 'accent'} label={learn.stage === 'choice' ? t('modes.learn.stage_choice') : t('modes.learn.stage_written')} />
+    <div class="question">
+      <div class="q-top">
+        <span class="stage" class:written={learn.stage !== 'choice'}>
+          <span class="step num" aria-hidden="true">{learn.stage === 'choice' ? 1 : 2}</span>
+          {learn.stage === 'choice' ? t('modes.learn.stage_choice') : t('modes.learn.stage_written')}
+        </span>
         {#if learn.mistakes > 0}<span class="again">{t('modes.learn.missed', { n: learn.mistakes })}</span>{/if}
       </div>
       <div class="prompt">
         <CardView sides={card.sides} showAnswer={false} interactive={false} testid="question" />
       </div>
-    </Card>
+    </div>
 
     {#if learn.stage === 'choice'}
       <div class="choices" role="group" aria-label={t('modes.learn.stage_choice')}>
@@ -246,8 +254,10 @@
           label={t('modes.learn.type_placeholder')}
           hideLabel
           placeholder={t('modes.learn.type_placeholder')}
+          spellcheck="false"
+          autocomplete="off"
         />
-        <Button size="lg" variant="primary" disabled={feedback !== null} onclick={() => void run(() => answer(null))}>
+        <Button size="lg" variant="primary" kbd="Enter" disabled={feedback !== null} onclick={() => void run(() => answer(null))}>
           {t('modes.learn.check')}
         </Button>
       </div>
@@ -255,180 +265,162 @@
 
     {#if feedback}
       <div class="feedback {toneOf(feedback.grade)}" role="status" data-testid="learn-feedback">
-        <Icon icon={feedback.grade === 'correct' ? CircleCheck : feedback.grade === 'almost' ? TriangleAlert : CircleAlert} size={24} />
+        <Icon icon={feedback.grade === 'correct' ? CircleCheck : feedback.grade === 'almost' ? TriangleAlert : CircleAlert} size={20} />
         <div class="fb-text">
           <strong>{t(`modes.learn.${feedback.grade}`)}</strong>
           {#if feedback.learned}<span class="learned">{t('modes.learn.learned_card')}</span>{/if}
           {#if feedback.grade !== 'correct'}<span class="exp">{t('modes.learn.expected', { text: feedback.expected })}</span>{/if}
         </div>
-        <Button variant="primary" bind:element={continueBtn} onclick={() => void run(next)}>
-          {t('modes.learn.continue')} <Kbd keys={['Enter']} class="on-accent" />
+        <Button variant="primary" kbd="Enter" bind:element={continueBtn} onclick={() => void run(next)}>
+          {t('modes.learn.continue')}
         </Button>
       </div>
     {/if}
-    <p class="keys">
-      <span><Kbd keys={['1']} />–<Kbd keys={['4']} /> {t('modes.learn.key_pick')}</span>
-      <span><Kbd keys={['Enter']} /> {t('modes.learn.key_check')}</span>
-      <span><Kbd keys={['Z']} /> {t('study.undo')}</span>
-      <span><Kbd keys={['Esc']} /> {t('study.end')}</span>
+    <p class="keys" data-focus-hide>
+      {#if learn.stage === 'choice' && !feedback}<span><kbd>1–{learn.options.length}</kbd> {t('modes.learn.key_pick')}</span>{/if}
+      <span><kbd>↵</kbd> {t('modes.learn.key_check')}</span>
+      <span><kbd>Z</kbd> {t('study.undo')}</span>
     </p>
-  {:else if finished}
-    <div class="done" role="status">
-      <Card padding="lg" elevated>
-        <div class="done-body">
-          <span class="badge"><Icon icon={GraduationCap} size={24} /></span>
-          <h2>{t('modes.learn.done_heading')}</h2>
-          <p>{t('modes.learn.done', { total: finished.modes?.learn?.progress.total ?? 0 })}</p>
-          <div class="actions">
-            <Button onclick={() => (finished = null)}>{t('modes.learn.back')}</Button>
-            <Button variant="primary" icon={Repeat} onclick={() => void run(start)}>{t('modes.learn.again')}</Button>
-          </div>
-        </div>
-      </Card>
+  </SessionFrame>
+{:else if finished}
+  <section class="done" role="status">
+    <header class="done-head">
+      <span class="badge"><Icon icon={GraduationCap} size={20} /></span>
+      <div>
+        <h1>{t('modes.learn.done_heading')}</h1>
+        <p>{t('modes.learn.done', { total: finished.modes?.learn?.progress.total ?? 0 })}</p>
+      </div>
+    </header>
+    <div class="done-actions">
+      <Button variant="primary" icon={Repeat} kbd="Enter" onclick={() => void run(start)}>{t('modes.learn.again')}</Button>
+      <Button onclick={() => (finished = null)}>{t('modes.learn.back')}</Button>
     </div>
-  {:else}
+  </section>
+{:else}
+  <section class="learn">
     <PageHeader title={t('modes.learn.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
     {#if loading}
-      <Skeleton shape="card" height="200px" />
+      <Skeleton shape="card" height="120px" />
     {:else}
-      <Card padding="lg" class="start-card">
-        <div class="steps" aria-hidden="true">
-          <span class="step"><span class="n">1</span>{t('modes.learn.stage_choice')}</span>
-          <span class="line"></span>
-          <span class="step"><span class="n">2</span>{t('modes.learn.stage_written')}</span>
-          <span class="line"></span>
-          <span class="step"><Icon icon={CircleCheck} size={16} />{t('modes.learn.learned_card')}</span>
-        </div>
-        <p class="intro">{t('modes.learn.intro')}</p>
-        <div class="form">
-          <Switch label={t('study.practice_label')} description={t('study.practice_hint')} bind:checked={practice} />
-          {#if moduleOn('browse')}
-            <Input label={t('study.query_label')} bind:value={query} placeholder={t('study.query_placeholder')} spellcheck="false" />
-          {/if}
-        </div>
-        {#if notice}<p class="notice" role="status">{notice}</p>{/if}
-        <div class="actions">
+      <SetupPanel title={t('modes.learn.start_heading')} {notice}>
+        {#snippet meta()}
+          <span class="steps">
+            <span class="st"><span class="step num" aria-hidden="true">1</span>{t('modes.learn.stage_choice')}</span>
+            <span class="arrow" aria-hidden="true"><Icon icon={ChevronRight} size={14} /></span>
+            <span class="st"><span class="step num" aria-hidden="true">2</span>{t('modes.learn.stage_written')}</span>
+            <span class="arrow" aria-hidden="true"><Icon icon={ChevronRight} size={14} /></span>
+            <span class="st ok"><Icon icon={CircleCheck} size={14} />{t('modes.learn.learned_card')}</span>
+          </span>
+        {/snippet}
+        {#snippet actions()}
           {#if resumable}
             <Button onclick={() => resumable && void run(() => settle(resumable!))}>{t('study.resume')}</Button>
           {/if}
-          <Button variant="primary" size="lg" data-testid="study-start" onclick={() => void run(start)}>
-            {t('modes.learn.start')} <Kbd keys={['Enter']} class="on-accent" />
+          <Button variant="primary" kbd="Enter" aria-keyshortcuts="Enter" data-testid="study-start" onclick={() => void run(start)}>
+            {t('modes.learn.start')}
           </Button>
-        </div>
-      </Card>
+        {/snippet}
+        <OptRow label={t('study.practice_label')} description={t('study.practice_hint')}>
+          <Switch ariaLabel={t('study.practice_label')} bind:checked={practice} />
+        </OptRow>
+        {#if moduleOn('browse')}
+          <OptRow label={t('study.query_label')} labelFor="learn-query">
+            <Input
+              id="learn-query"
+              class="query"
+              size="sm"
+              label={t('study.query_label')}
+              hideLabel
+              bind:value={query}
+              placeholder={t('study.query_placeholder')}
+              spellcheck="false"
+            />
+          </OptRow>
+        {/if}
+      </SetupPanel>
     {/if}
-  {/if}
-</section>
+  </section>
+{/if}
 
 <style>
   .learn {
-    max-width: 760px;
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
   }
-  :global(.start-card) {
-    max-width: 720px;
+  .learn :global(.query) {
+    width: 240px;
   }
   .steps {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: var(--space-2);
     flex-wrap: wrap;
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-    color: var(--text-2);
+  }
+  .st {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .st.ok {
+    color: var(--success);
+  }
+  .arrow {
+    display: inline-flex;
+    color: var(--text-3);
   }
   .step {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-2);
-  }
-  .n {
-    display: inline-flex;
-    align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--border-strong);
     border-radius: 50%;
-    background: var(--accent-soft);
+    font-size: var(--text-2xs);
     color: var(--text-1);
-    font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
   }
-  .line {
-    width: 24px;
-    height: 1px;
-    background: var(--border-strong);
+  .cnt {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
   }
-  .intro {
-    margin: var(--space-4) 0 0;
-    color: var(--text-2);
-    font-size: var(--text-sm);
-    max-width: 56ch;
+  .cnt .v {
+    color: var(--text-1);
+    font-weight: var(--weight-medium);
   }
-  .form {
+  /* Session. */
+  .question {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
-    margin-top: var(--space-6);
-    max-width: 420px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-flashcard);
+    background: var(--surface-1);
+    padding: var(--space-3) var(--space-4) var(--space-6);
   }
-  .notice {
-    margin: var(--space-4) 0 0;
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-control);
-    background: var(--surface-2);
-    color: var(--text-2);
-    font-size: var(--text-sm);
-  }
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-    margin-top: var(--space-6);
-    flex-wrap: wrap;
-  }
-  :global(.on-accent kbd) {
-    background: transparent;
-    border-color: color-mix(in srgb, var(--accent-fg) 45%, transparent);
-    color: var(--accent-fg);
-  }
-  .topbar {
+  .q-top {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--space-3);
-  }
-  .progress {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .progress :global(.fc-progress) {
-    flex: 1;
-  }
-  .count {
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-    color: var(--text-2);
-    white-space: nowrap;
-  }
-  .stage-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .again {
     font-size: var(--text-xs);
     color: var(--text-2);
   }
+  .stage {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: var(--weight-medium);
+  }
+  .stage.written .step {
+    border-color: var(--accent-text);
+    color: var(--accent-text);
+  }
   .prompt {
-    min-height: 140px;
+    min-height: 160px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: var(--space-6) 0 var(--space-2);
+    padding: var(--space-4) var(--space-4) 0;
     text-align: center;
   }
   .prompt :global(.card) {
@@ -436,13 +428,17 @@
     border: none;
     padding: 0;
     min-height: 0;
-    font-size: var(--text-2xl);
+    font-size: var(--text-card);
     line-height: var(--leading-tight);
   }
   .choices {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-3);
+    gap: var(--space-2);
+  }
+  .choices :global(.fc-option) {
+    min-height: 52px;
+    font-size: var(--text-md);
   }
   .written {
     display: flex;
@@ -456,36 +452,32 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-4);
-    border-radius: var(--radius-card);
+    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
     border: 1px solid var(--border);
+    border-left: 3px solid var(--fb);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
   }
   .feedback.success {
-    background: var(--success-soft);
-    border-color: color-mix(in srgb, var(--success) 35%, transparent);
-  }
-  .feedback.success > :global(svg) {
-    color: var(--success);
+    --fb: var(--success);
   }
   .feedback.warning {
-    background: var(--warning-soft);
-    border-color: color-mix(in srgb, var(--warning) 35%, transparent);
-  }
-  .feedback.warning > :global(svg) {
-    color: var(--warning);
+    --fb: var(--warning);
   }
   .feedback.danger {
-    background: var(--danger-soft);
-    border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+    --fb: var(--danger);
   }
-  .feedback.danger > :global(svg) {
-    color: var(--danger);
+  .feedback > :global(svg),
+  .feedback strong {
+    color: var(--fb);
   }
   .fb-text {
     flex: 1;
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px var(--space-3);
+    min-width: 0;
   }
   .learned {
     font-size: var(--text-sm);
@@ -494,53 +486,57 @@
   }
   .exp {
     font-size: var(--text-sm);
-    color: var(--text-2);
+    color: var(--text-1);
+  }
+  .again {
+    color: var(--warning);
   }
   .keys {
     display: flex;
-    justify-content: center;
     flex-wrap: wrap;
     gap: var(--space-4);
     margin: 0;
     font-size: var(--text-xs);
     color: var(--text-2);
   }
-  .keys span {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
+  .keys kbd {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    color: var(--text-2);
+    margin-right: 2px;
   }
+  /* End: a normal page again. */
   .done {
-    max-width: 480px;
-    width: 100%;
-    /* The end screen sits centred in the focus column. */
-    margin: var(--space-12) auto 0;
-  }
-  .done-body {
     display: flex;
     flex-direction: column;
+    gap: var(--space-4);
+  }
+  .done-head {
+    display: flex;
     align-items: center;
-    text-align: center;
-    gap: var(--space-2);
+    gap: var(--space-3);
   }
-  .done-body h2 {
-    margin: var(--space-2) 0 0;
-    font-size: var(--text-2xl);
-    font-weight: var(--weight-bold);
-  }
-  .done-body p {
+  .done-head h1 {
     margin: 0;
+    font-size: var(--text-xl);
+    font-weight: var(--weight-semibold);
+  }
+  .done-head p {
+    margin: 2px 0 0;
     color: var(--text-2);
+    font-size: var(--text-sm);
   }
   .badge {
     display: inline-flex;
-    padding: var(--space-3);
-    border-radius: 50%;
-    background: var(--success-soft);
+    padding: var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
     color: var(--success);
   }
-  .done-body .actions {
-    justify-content: center;
+  .done-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
   }
   @media (max-width: 720px) {
     .choices {

@@ -88,13 +88,30 @@
     "keyhint": {
       "flip": "Çevir",
       "rate": "Puanla"
-    }
+    },
+    "count": {
+      "due": "Vadeli",
+      "learning": "Öğreniliyor",
+      "new": "Yeni"
+    },
+    "flag_menu": "Bayrak"
   },
   "settings": {
     "study": {
-      "new_per_session": { "label": "Oturum başına yeni kart", "description": "Normal oturumun tanıttığı yeni kart sayısı (0 = hiç)." },
-      "type_answer": { "label": "Cevabı yazarak ver", "description": "Bir giriş kutusu gösterir ve yazılanı kontrol eder." },
-      "answer_buttons": { "label": "Cevap düğmeleri", "description": "İki düğme ya da aralıklarıyla dört düğme.", "two": "İki düğme", "four": "Dört düğme" },
+      "new_per_session": {
+        "label": "Oturum başına yeni kart",
+        "description": "Normal oturumun tanıttığı yeni kart sayısı (0 = hiç)."
+      },
+      "type_answer": {
+        "label": "Cevabı yazarak ver",
+        "description": "Bir giriş kutusu gösterir ve yazılanı kontrol eder."
+      },
+      "answer_buttons": {
+        "label": "Cevap düğmeleri",
+        "description": "İki düğme ya da aralıklarıyla dört düğme.",
+        "two": "İki düğme",
+        "four": "Dört düğme"
+      },
       "hint_strategy": {
         "label": "İpucu türü",
         "description": "İpuçlarının cevabı nasıl açtığı.",
@@ -116,9 +133,18 @@
         "tolerant": "Yazım hatalarına izin ver",
         "multi": "Birden çok cevap, yazım hatasına izin ver"
       },
-      "fold_turkish": { "label": "ı/i, ş/s… eşit sayılsın", "description": "Yazılan cevaplar kontrol edilirken." },
-      "auto_grade": { "label": "Otomatik puanla", "description": "Kontrolcünün önerisi puan olarak kullanılsın." },
-      "day_start_hour": { "label": "Yeni gün şu saatte başlar", "description": "Yeni çalışma gününün başladığı yerel saat." }
+      "fold_turkish": {
+        "label": "ı/i, ş/s… eşit sayılsın",
+        "description": "Yazılan cevaplar kontrol edilirken."
+      },
+      "auto_grade": {
+        "label": "Otomatik puanla",
+        "description": "Kontrolcünün önerisi puan olarak kullanılsın."
+      },
+      "day_start_hour": {
+        "label": "Yeni gün şu saatte başlar",
+        "description": "Yeni çalışma gününün başladığı yerel saat."
+      }
     }
   },
   "errors": {

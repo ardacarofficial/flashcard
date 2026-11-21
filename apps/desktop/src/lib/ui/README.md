@@ -130,9 +130,12 @@ All wrap **Field** (label, hint, error with `aria-describedby`/`aria-invalid`). 
 - Sections with more than one tab page show them as tabs above the screen (`tab: false` in
   `PLACEMENTS` keeps a page out of the tabs — the study modes, opened from the deck page tiles
   and Home); Settings shows a grouped sub-navigation. Home is `features/home/HomeScreen.svelte`.
-- A study screen calls `ctx.setFocus(true)` while a session runs (and on its end screen): the
-  shell hides the top bar, the deck picker and the tabs and centres the column (focus layout);
-  it resets on every page change. Focus mode (`F`, FocusToggle) also hides the sidebar.
+- A study screen calls `ctx.setFocus(true)` while a session runs (not on its end screen): the
+  shell hides the sidebar, the top bar, the deck picker and the tabs and the page spans the
+  window; the screen draws `features/modes/SessionFrame` (slim bar: progress, "12 / 40", Esc
+  exit, a menu button that brings the sidebar back via `html.fc-session-nav`) and centres its
+  column. It resets on every page change. Focus mode (`F`, FocusToggle) adds full screen and
+  hidden counters (by setting).
 - The deck picker (`deckPicker: true`) and the section tabs are not drawn above the screen: the
   shell hands them to the screen's `PageHeader` (`setPageChrome`), so the title comes first.
 - Settings below 1024 px: the grouped sub-navigation collapses into one Select on top.

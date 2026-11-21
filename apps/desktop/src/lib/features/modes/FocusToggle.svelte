@@ -1,13 +1,14 @@
 <script lang="ts">
   /**
-   * Focus mode (docs/02 §6.2): hides the app's navigation and deck picker (and, by setting,
-   * the counters), optionally full screen. Presentation only; the switch is the `focus`
-   * module, the options its settings. Key: F.
+   * Focus mode (docs/02 §6.2): full screen and the counters hidden (both by setting). Since
+   * v1.2 a running session hides the shell on its own; focus mode also hides the sidebar the
+   * session bar may have brought back. Presentation only; the switch is the `focus` module,
+   * the options its settings. Key: F.
    */
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import { t } from '$lib/i18n/index.svelte';
-  import { Button, Kbd } from '$lib/ui';
+  import { Button } from '$lib/ui';
   import { moduleOn } from '../cards/modules.svelte';
   import { plainKey } from './modes';
 
@@ -56,9 +57,8 @@
 <svelte:window onkeydown={onKey} />
 
 {#if moduleOn('focus')}
-  <Button variant="ghost" size="sm" onclick={() => (active = !active)} aria-pressed={active} data-testid="focus-toggle">
+  <Button variant="ghost" size="sm" kbd="F" aria-keyshortcuts="F" onclick={() => (active = !active)} aria-pressed={active} data-testid="focus-toggle">
     {active ? t('modes.focus.exit') : t('modes.focus.enter')}
-    <Kbd keys={['F']} />
   </Button>
 {/if}
 
@@ -71,9 +71,5 @@
   }
   :global(html.fc-focus .shell) {
     grid-template-columns: 1fr !important;
-  }
-  :global(html.fc-focus main) {
-    max-width: 760px;
-    margin: 0 auto;
   }
 </style>

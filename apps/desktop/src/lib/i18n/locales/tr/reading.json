@@ -171,6 +171,10 @@
     "subtitle": "Metin ve altyazı oku; bir kelimeye dokunup anlamına bak ya da kart yap.",
     "progress": "Okunan kısım",
     "delete_named": "“{name}” sil",
-    "selection": "Seçili metin"
+    "selection": "Seçili metin",
+    "col": {
+      "title": "Metin",
+      "queue": "Kuyruk"
+    }
   }
 }

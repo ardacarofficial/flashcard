@@ -197,7 +197,10 @@
       "your_pick": "Your answer",
       "key_pick": "Pick",
       "key_check": "Check / continue",
-      "done_heading": "Well done"
+      "done_heading": "Well done",
+      "count_written": "Written",
+      "count_choice": "Choice",
+      "start_heading": "Every card in two steps"
     },
     "test": {
       "heading": "Practice test",
@@ -240,7 +243,18 @@
       "answered": "{n} of {total} answered",
       "choose": "Options",
       "is_right": "Is this answer right?",
-      "all_kinds": "None picked: all types are used."
+      "all_kinds": "None picked: all types are used.",
+      "progress_label": "Answered questions",
+      "exit": "Exit",
+      "exit_label": "Leave the test",
+      "answered_short": "answered",
+      "start_heading": "New practice test",
+      "verdict_col": "Result",
+      "question_col": "Question",
+      "discard_title": "Leave this test?",
+      "discard_body": "Your {n, plural, one {# answer} other {# answers}} will be lost; the test is not graded.",
+      "discard_keep": "Back to the test",
+      "discard": "Leave test"
     },
     "options": {
       "timed": "Time limit",
@@ -252,7 +266,8 @@
       "scale_default": "Default",
       "scale_buttons": "Four buttons",
       "scale_confidence": "Confidence 1–5",
-      "timed_hint": "A time limit for every card."
+      "timed_hint": "A time limit for every card.",
+      "seconds_unit": "s"
     },
     "timer": {
       "left": "{s} s left",
@@ -305,7 +320,12 @@
       "again": "Play again",
       "too_few": "Not enough cards to match",
       "too_few_hint": "Match needs two or more cards with different answers.",
-      "back": "Back"
+      "back": "Back",
+      "progress_label": "Matched pairs"
+    },
+    "session": {
+      "show_nav": "Show menu",
+      "hide_nav": "Hide menu"
     }
   }
 }
