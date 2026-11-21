@@ -1,0 +1,28 @@
+{
+  "quickadd": {
+    "title": "Kart ekle",
+    "deck": "Deste",
+    "notetype": "Not türü",
+    "tags": "Etiketler",
+    "tags_placeholder": "virgülle ya da boşlukla ayır",
+    "more": "Diğer",
+    "more_hint": "Sınıflandırma ve önizleme",
+    "preview": "Önizleme",
+    "add": "Ekle",
+    "close": "Kapat",
+    "bulk": "Toplu ekle",
+    "added": "Eklendi · {count}",
+    "added_status": "Kart eklendi. Bu pencerede {count} kart eklendi.",
+    "undo": "Geri al",
+    "undone": "Son kart geri alındı.",
+    "add_anyway": "Yine de ekle",
+    "empty": "Önce bir alanı doldur.",
+    "no_deck": "Henüz deste yok. Kartlar için önce bir deste oluştur.",
+    "new_deck": "Deste oluştur",
+    "discard": "Yazdıkların silinecek. Kapatmak için yeniden Esc'ye bas.",
+    "discard_confirm": "Sil ve kapat",
+    "keep_editing": "Devam et",
+    "keys_hint": "Enter sonraki alana geçer, son alanda ekler · Shift+Enter yeni satır",
+    "loading": "Yükleniyor"
+  }
+}

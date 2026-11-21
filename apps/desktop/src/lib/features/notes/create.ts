@@ -2,6 +2,7 @@
  * View model of the Create screen's term rows. Only shaping for display and for the
  * `notes.create_many` request: validation, duplicates and cards are decided in Rust.
  */
+import { CLASSIC_NOTETYPE_ID } from '$lib/api';
 import type { FieldDef, ImportPreview, NoteFieldsDraft, NoteTypeDto } from '$lib/api/types';
 
 export interface Row {
@@ -34,7 +35,21 @@ export function imageField(nt: NoteTypeDto | null): FieldDef | null {
   return nt?.fields.find((f) => f.kind === 'image') ?? null;
 }
 
-export const isBlank = (r: Row) => !r.image && Object.values(r.fields).every((v) => !v.trim());
+/**
+ * Classic's first two text fields are captioned Term / Definition (Create, Quick Add); other
+ * note types use the field's own name (`null`).
+ */
+export function classicColumn(nt: NoteTypeDto | null, i: number): 'term' | 'definition' | null {
+  if (!nt || (nt.id !== CLASSIC_NOTETYPE_ID && nt.builtin !== 'classic')) return null;
+  return i === 0 ? 'term' : i === 1 ? 'definition' : null;
+}
+
+/** Tags typed into one field, split on commas and spaces (normalized server-side). */
+export function splitTags(text: string): string[] {
+  return text.split(/[\s,]+/).filter(Boolean);
+}
+
+export const isBlank =(r: Row) => !r.image && Object.values(r.fields).every((v) => !v.trim());
 
 /**
  * The request rows. The image goes into the type's image field, else (Classic) it is

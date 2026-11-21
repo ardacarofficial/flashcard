@@ -339,6 +339,11 @@
   <OnboardingHost ondone={() => void loadDecks()} />
 {/await}
 
+<!-- Quick Add dialog (v1.2): the shell's "add a card"; its dialog chunk loads on first open. -->
+{#await import('$lib/features/quickadd/QuickAddHost.svelte') then { default: QuickAddHost }}
+  <QuickAddHost {ctx} enabled={!!addEntry} />
+{/await}
+
 <!-- App lock screen (v1.0); drawn above everything while locked. -->
 <LockHost
   onlockchange={(l) => (locked = l)}

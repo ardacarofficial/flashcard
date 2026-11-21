@@ -1,8 +1,10 @@
 <!--
-  Create (docs/11 §3): set details (title, description, deck, note type, classifications) and
-  numbered term | definition rows. Tab moves field to field across rows, Enter on the last
-  field of the last row adds a row. "Save" is ONE `notes.create_many` command — one undo
-  step, a new deck included. Paste to import uses the v0.5 separator detection.
+  Create — the bulk editor (v1.2, design brief flow 1): one compact setup row (new/existing
+  deck, title or deck, parent, note type; description and classifications under "More") and
+  then a spreadsheet of numbered term | definition rows. Tab moves field to field across rows,
+  Enter on the last field of the last row adds a row, Ctrl+Enter saves. "Save" is ONE
+  `notes.create_many` command — one undo step, a new deck included. Paste to import uses the
+  v0.5 separator detection; single cards go through Quick Add (`N`).
 -->
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
@@ -14,13 +16,13 @@
   import { t, td } from '$lib/i18n/index.svelte';
   import {
     Button,
-    Card,
+    ChevronDown,
     ClipboardPaste,
     EmptyState,
+    Icon,
     IconButton,
     ImagePlus,
     Input,
-    NumberedRow,
     PageHeader,
     Plus,
     SegmentedControl,
@@ -32,12 +34,13 @@
     Trash2,
     X,
   } from '$lib/ui';
+  import { formatCount } from '$lib/format';
   import { mediaSnippet } from '../cards/content';
   import { resolveMedia, uploadMedia } from '../cards/media';
   import { moduleKnownOn, moduleOn, trackModules } from '../cards/modules.svelte';
   import { draftKeeper } from '../maintenance/drafts';
   import type { ScreenCtx } from '../types';
-  import { appendRows, blankRow, blankRows, editableFields, isBlank, toDrafts, type Row } from './create';
+  import { appendRows, blankRow, blankRows, classicColumn, editableFields, isBlank, toDrafts, type Row } from './create';
   import NoteEditor from '../cards/NoteEditor.svelte';
   import PastePanel from './PastePanel.svelte';
 
@@ -65,6 +68,8 @@
   let pasteOpen = $state(false);
   let thumbs = $state<Record<number, string>>({});
   let uploading = $state<number | null>(null);
+  /** "More": description and classifications (opens by itself when one is required). */
+  let moreOpen = $state(false);
 
   const nt = $derived(notetypes?.find((n) => n.id === ntId) ?? null);
   const fields = $derived(editableFields(nt));
@@ -101,11 +106,8 @@
 
   /** Caption of a field column: Term / Definition for Classic, else the field's own name. */
   function caption(i: number, name: string): string {
-    if (nt?.id === CLASSIC_NOTETYPE_ID || nt?.builtin === 'classic') {
-      if (i === 0) return t('create.term');
-      if (i === 1) return t('create.definition');
-    }
-    return name;
+    const col = classicColumn(nt, i);
+    return col ? t(`create.${col}`) : name;
   }
 
   async function loadTypes() {
@@ -143,6 +145,7 @@
         if (cancelled) return;
         const d = list.attributes.map((a) => a.def).sort((a, b) => a.position - b.position);
         defs = d;
+        if (d.some((def) => def.required)) moreOpen = true;
         untrack(() => {
           attrs = Object.fromEntries(d.map((def) => [def.id, attrs[def.id] ?? initialValue(def)]));
         });
@@ -331,6 +334,8 @@
   }
 
   function onGlobalKey(e: KeyboardEvent) {
+    // Not for a dialog above the page (Quick Add, paste): Ctrl+Enter is theirs there.
+    if (e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && canSave) {
       e.preventDefault();
       void save();
@@ -341,7 +346,7 @@
 <svelte:window onkeydown={onGlobalKey} />
 
 <div class="create">
-  <PageHeader title={t('create.heading')} subtitle={t('create.subtitle')}>
+  <PageHeader title={t('create.heading')}>
     {#snippet actions()}
       {#if aiOn}
         <Button variant="ghost" icon={Sparkles} onclick={() => ctx.navigate?.('/ai')}>{t('create.ai')}</Button>
@@ -350,20 +355,16 @@
         <Button icon={ClipboardPaste} onclick={() => (pasteOpen = true)} data-testid="open-dialog-paste" disabled={!nt}>
           {t('create.paste.open')}
         </Button>
-        <Button variant="primary" onclick={() => void save()} loading={busy} disabled={!canSave}>{t('create.save')}</Button>
       {/if}
     {/snippet}
   </PageHeader>
 
   {#if loadError}
-    <Card padding="lg">
-      <EmptyState title={t('create.load_failed')} description={loadError} action={{ label: t('create.retry'), onclick: () => void loadTypes() }} />
-    </Card>
+    <EmptyState title={t('create.load_failed')} description={loadError} action={{ label: t('create.retry'), onclick: () => void loadTypes() }} />
   {:else if !notetypes}
     <div class="skeleton" aria-busy="true" aria-label={t('create.loading')}>
+      <Skeleton shape="control" height="52px" />
       <Skeleton shape="card" height="180px" />
-      <Skeleton shape="card" height="96px" />
-      <Skeleton shape="card" height="96px" />
     </div>
   {:else}
     <form
@@ -374,9 +375,11 @@
         void save();
       }}
     >
-      <Card padding="lg" class="details">
-        <div class="where">
+      <div class="setup">
+        <div class="mode">
+          <span class="lbl" aria-hidden="true">{t('create.where')}</span>
           <SegmentedControl
+            size="sm"
             label={t('create.where')}
             options={[
               { value: 'new', label: t('create.mode_new'), disabled: rich },
@@ -385,104 +388,131 @@
             bind:value={mode}
           />
         </div>
-
         {#if mode === 'new'}
           <Input
+            class="title"
+            size="sm"
             label={t('create.title')}
             bind:value={title}
-            size="lg"
             placeholder={t('create.title_placeholder')}
             error={titleError}
             required
             oninput={() => (titleError = null)}
           />
-          <Textarea label={t('create.description')} bind:value={description} rows={2} autoGrow maxRows={6} placeholder={t('create.description_placeholder')} />
+          <Select class="deck" size="sm" label={t('create.parent')} options={parentOptions} bind:value={parent} />
+        {:else}
+          <Select class="title" size="sm" label={t('create.deck')} options={deckOptions} bind:value={deckId} placeholder={t('create.choose_deck')} />
         {/if}
+        <Select class="type" size="sm" label={t('create.notetype')} options={typeOptions} value={ntId} onchange={chooseType} />
+        {#if mode === 'new' || defs.length > 0}
+          <Button
+            size="sm"
+            variant="ghost"
+            class="more-btn"
+            aria-expanded={moreOpen}
+            aria-controls="create-more"
+            title={t('create.more_hint')}
+            onclick={() => (moreOpen = !moreOpen)}
+          >
+            {t('create.more')}
+            <span class="chev" class:open={moreOpen}><Icon icon={ChevronDown} size={14} /></span>
+          </Button>
+        {/if}
+      </div>
 
-        <div class="grid">
+      {#if moreOpen && (mode === 'new' || defs.length > 0)}
+        <div class="more" id="create-more">
           {#if mode === 'new'}
-            <Select label={t('create.parent')} options={parentOptions} bind:value={parent} />
-          {:else}
-            <Select label={t('create.deck')} options={deckOptions} bind:value={deckId} placeholder={t('create.choose_deck')} />
+            <Textarea
+              class="desc"
+              label={t('create.description')}
+              bind:value={description}
+              rows={1}
+              autoGrow
+              maxRows={6}
+              placeholder={t('create.description_placeholder')}
+            />
           {/if}
-          <Select label={t('create.notetype')} options={typeOptions} value={ntId} onchange={chooseType} />
           {#each defs as def (def.id)}
             <AttributeField {def} bind:value={attrs[def.id]!} />
           {/each}
-        </div>
-      </Card>
-
-      {#if !rich}
-        <div class="rows-head">
-          <h2>{t('create.cards_heading')}</h2>
-          <span class="count">{t('create.count', { count: filled })}</span>
         </div>
       {/if}
 
       {#if rich}
         {#if deckId}
           {@const path = paths.find((p) => p.id === deckId)?.path ?? ''}
-          <Card padding="lg">
+          <div class="panel">
             <NoteEditor {deckId} deckName={path} fixedType={ntId} onsaved={() => ctx.selectDeck(deckId)} />
-          </Card>
+          </div>
         {:else}
-          <Card padding="lg"><EmptyState size="sm" title={t('create.choose_deck')} /></Card>
+          <EmptyState size="sm" title={t('create.choose_deck')} />
         {/if}
       {:else if fields.length === 0}
-        <Card padding="lg">
-          <EmptyState size="sm" title={t('create.no_fields')} description={t('create.no_fields_hint')} />
-        </Card>
+        <EmptyState size="sm" title={t('create.no_fields')} description={t('create.no_fields_hint')} />
       {:else}
-        <ol class="rows" bind:this={list} aria-label={t('create.cards_heading')}>
-          {#each rows as row, i (row.key)}
-            <NumberedRow n={i + 1} invalid={!!rowErrors[i]} error={rowErrors[i] ?? null}>
-              <div class="cells" class:has-image={!!row.image} style:--cols={Math.min(fields.length, 3)}>
+        <div class="sheet" style:--cols={fields.length}>
+          <div class="sheet-head" aria-hidden="true">
+            <span></span>
+            {#each fields as f, c (f.key)}<span class="col">{caption(c, f.name)}</span>{/each}
+            <span></span>
+          </div>
+          <ol class="rows" bind:this={list} aria-label={t('create.cards_heading')}>
+            {#each rows as row, i (row.key)}
+              <li class="row" class:invalid={!!rowErrors[i]}>
+                <span class="n num" aria-hidden="true">{i + 1}</span>
                 {#each fields as f, c (f.key)}
-                  <Textarea
-                    label={caption(c, f.name)}
-                    rows={1}
-                    autoGrow
-                    maxRows={8}
-                    value={row.fields[f.key] ?? ''}
-                    oninput={(e) => {
-                      row.fields[f.key] = e.currentTarget.value;
-                      if (rowErrors[i]) rowErrors = {};
-                    }}
-                    onkeydown={(e) => onCellKey(e, i, c)}
-                    data-cell="{i}:{c}"
-                    aria-label={`${caption(c, f.name)} ${i + 1}`}
-                    class="cell-input"
-                  />
-                {/each}
-                {#if row.image}
-                  <div class="thumb">
-                    {#if thumbs[row.key]}<img src={thumbs[row.key]} alt={t('create.image_alt', { n: i + 1 })} />{/if}
-                    <IconButton size="sm" variant="secondary" icon={X} label={t('create.remove_image', { n: i + 1 })} onclick={() => (row.image = null)} />
+                  <div class="cell">
+                    <Textarea
+                      label={`${caption(c, f.name)} ${i + 1}`}
+                      hideLabel
+                      rows={1}
+                      autoGrow
+                      maxRows={8}
+                      value={row.fields[f.key] ?? ''}
+                      oninput={(e) => {
+                        row.fields[f.key] = e.currentTarget.value;
+                        if (rowErrors[i]) rowErrors = {};
+                      }}
+                      onkeydown={(e) => onCellKey(e, i, c)}
+                      data-cell="{i}:{c}"
+                      aria-invalid={rowErrors[i] ? true : undefined}
+                    />
                   </div>
-                {/if}
-              </div>
-              {#snippet actions()}
-                <IconButton
-                  size="sm"
-                  icon={ImagePlus}
-                  label={t('create.add_image', { n: i + 1 })}
-                  loading={uploading === row.key}
-                  onclick={() => pickImage(i)}
-                />
-                <IconButton size="sm" icon={Trash2} label={t('create.remove_row', { n: i + 1 })} onclick={() => removeRow(i)} />
-              {/snippet}
-            </NumberedRow>
-          {/each}
-        </ol>
-        <Button size="lg" fullWidth icon={Plus} class="add-row" onclick={() => addRow()}>{t('create.add_row')}</Button>
-        <p class="hint">{t('create.keys_hint')}</p>
+                {/each}
+                <div class="acts">
+                  {#if row.image}
+                    <span class="thumb">
+                      {#if thumbs[row.key]}<img src={thumbs[row.key]} alt={t('create.image_alt', { n: i + 1 })} />{/if}
+                      <IconButton size="sm" variant="secondary" icon={X} label={t('create.remove_image', { n: i + 1 })} onclick={() => (row.image = null)} />
+                    </span>
+                  {/if}
+                  <IconButton
+                    size="sm"
+                    icon={ImagePlus}
+                    label={t('create.add_image', { n: i + 1 })}
+                    loading={uploading === row.key}
+                    onclick={() => pickImage(i)}
+                  />
+                  <IconButton size="sm" icon={Trash2} label={t('create.remove_row', { n: i + 1 })} onclick={() => removeRow(i)} />
+                </div>
+                {#if rowErrors[i]}<p class="row-error" role="alert">{rowErrors[i]}</p>{/if}
+              </li>
+            {/each}
+          </ol>
+          <button type="button" class="add-row" onclick={() => addRow()}>
+            <Icon icon={Plus} size={14} />
+            <span>{t('create.add_row')}</span>
+          </button>
+        </div>
       {/if}
 
-      {#if error}<p class="form-error" role="alert">{error}</p>{/if}
-
       {#if !rich}
-        <div class="footer">
-          <Button variant="primary" size="lg" type="submit" loading={busy} disabled={!canSave}>{t('create.save')}</Button>
+        <div class="savebar">
+          <span class="hint">{t('create.keys_hint')}</span>
+          {#if error}<p class="form-error" role="alert">{error}</p>{/if}
+          <span class="count num" aria-live="polite">{t('create.count', { count: filled })}</span>
+          <Button variant="primary" type="submit" kbd="Mod+Enter" loading={busy} disabled={!canSave}>{t('create.save')}</Button>
         </div>
       {/if}
     </form>
@@ -505,116 +535,272 @@
   .create {
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    gap: var(--space-4);
+  }
+  .create :global(.fc-page-header) {
+    margin-bottom: 0;
   }
   .skeleton,
   .body {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
   }
-  .body :global(.details) {
+
+  /* ---- the one setup row ---- */
+  .setup {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-2) var(--space-3);
+  }
+  .mode {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-1);
   }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: var(--space-4);
-    align-items: start;
-  }
-  .rows-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin-top: var(--space-2);
-  }
-  h2 {
-    margin: 0;
-    font-size: var(--text-lg);
-    font-weight: var(--weight-semibold);
-  }
-  .count {
+  .lbl {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
     color: var(--text-2);
-    font-size: var(--text-sm);
+  }
+  .setup :global(.title) {
+    flex: 2 1 220px;
+  }
+  .setup :global(.deck) {
+    flex: 1 1 180px;
+  }
+  .setup :global(.type) {
+    flex: 0 1 180px;
+    min-width: 140px;
+  }
+  .setup :global(.more-btn) {
+    /* Lines up with the controls under their labels (label line + gap). */
+    margin-top: calc(var(--text-xs) * 1.45 + var(--space-1));
+  }
+  .chev {
+    display: inline-flex;
+    transition: transform var(--motion-fast) var(--ease);
+  }
+  .chev.open {
+    transform: rotate(180deg);
+  }
+  .more {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+  }
+  .more :global(.desc) {
+    grid-column: 1 / -1;
+  }
+  .more :global(textarea) {
+    resize: none;
+  }
+  .panel {
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+  }
+
+  /* ---- the sheet: numbered rows, one column per field ---- */
+  .sheet {
+    --grid: 40px repeat(var(--cols), minmax(0, 1fr)) 96px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    overflow: hidden;
+  }
+  .sheet-head,
+  .row {
+    display: grid;
+    grid-template-columns: var(--grid);
+  }
+  .sheet-head {
+    height: 30px;
+    align-items: center;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    color: var(--text-2);
+  }
+  .sheet-head .col {
+    padding: 0 var(--space-3);
+    border-left: 1px solid var(--border);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 30px;
   }
   .rows {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
   }
-  .cells {
-    display: grid;
-    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
-    gap: var(--space-4);
-    align-items: start;
+  .row {
+    align-items: stretch;
+    border-bottom: 1px solid var(--border);
   }
-  .cells.has-image {
-    grid-template-columns: repeat(var(--cols), minmax(0, 1fr)) auto;
+  .row:focus-within {
+    background: var(--surface-2);
   }
-  .create :global(.fc-page-header) {
-    margin-bottom: 0;
+  .row.invalid {
+    background: var(--danger-soft);
   }
-  .cells :global(textarea) {
+  .n {
+    padding: 9px var(--space-3) 0 0;
+    text-align: right;
+    font-size: var(--text-xs);
+    color: var(--text-3);
+  }
+  .row:focus-within .n {
+    color: var(--accent-text);
+  }
+  .row.invalid .n {
+    color: var(--danger);
+  }
+  .cell {
+    border-left: 1px solid var(--border);
+    min-width: 0;
+  }
+  .cell :global(textarea) {
+    display: block;
+    min-height: 36px;
+    padding: 8px var(--space-3);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     resize: none;
+  }
+  .cell :global(textarea:hover:not(:disabled)) {
+    background: var(--surface-2);
+  }
+  .cell :global(textarea:focus-visible) {
+    background: var(--surface-0);
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
+  }
+  .acts {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 2px;
+    padding: 4px var(--space-2) 0 0;
+    border-left: 1px solid var(--border);
+  }
+  .acts :global(.fc-iconbtn) {
+    color: var(--text-3);
+  }
+  .acts :global(.fc-iconbtn:hover),
+  .acts :global(.fc-iconbtn:focus-visible) {
+    color: var(--text-1);
   }
   .thumb {
     position: relative;
-    margin-top: 26px;
-    width: 96px;
-    height: 72px;
+    width: 28px;
+    height: 28px;
     border-radius: var(--radius-control);
     overflow: hidden;
     border: 1px solid var(--border);
     background: var(--surface-2);
+    flex: none;
   }
   .thumb img {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
-  .thumb :global(button) {
+  .thumb :global(.fc-iconbtn) {
     position: absolute;
-    top: var(--space-1);
-    right: var(--space-1);
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
   }
-  .body :global(.add-row) {
-    min-height: 64px;
-    border: 2px dashed var(--border-strong);
+  .thumb:hover :global(.fc-iconbtn),
+  .thumb :global(.fc-iconbtn:focus-visible) {
+    opacity: 1;
+  }
+  .row-error {
+    grid-column: 2 / -1;
+    margin: 0;
+    padding: 0 var(--space-3) var(--space-2);
+    color: var(--danger);
+    font-size: var(--text-xs);
+  }
+  .add-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    height: 36px;
+    padding: 0 var(--space-3) 0 26px;
+    border: 0;
     background: transparent;
     color: var(--text-2);
-    box-shadow: none;
+    font: inherit;
+    font-size: var(--text-sm);
+    cursor: pointer;
+    text-align: left;
   }
-  .body :global(.add-row:hover) {
-    color: var(--accent-text);
-    border-color: var(--accent-text);
-    background: var(--accent-soft);
+  .add-row:hover {
+    background: var(--surface-2);
+    color: var(--text-1);
+  }
+  .add-row:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: -2px;
+  }
+
+  /* ---- save bar: sticks to the bottom while the rows scroll ---- */
+  .savebar {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--border);
+    background: var(--surface-0);
   }
   .hint {
-    margin: 0;
-    color: var(--text-2);
+    margin-right: auto;
+    color: var(--text-3);
     font-size: var(--text-xs);
-    text-align: center;
+  }
+  .count {
+    color: var(--text-2);
+    font-size: var(--text-sm);
+    white-space: nowrap;
   }
   .form-error {
     margin: 0;
     color: var(--danger);
-  }
-  .footer {
-    display: flex;
-    justify-content: flex-end;
+    font-size: var(--text-sm);
   }
   .file {
     display: none;
   }
   @media (max-width: 720px) {
-    .cells {
-      grid-template-columns: minmax(0, 1fr);
-      gap: var(--space-3);
+    .sheet {
+      --grid: 32px repeat(var(--cols), minmax(0, 1fr)) 64px;
+    }
+    .hint {
+      display: none;
+    }
+    .savebar {
+      justify-content: flex-end;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .chev {
+      transition: none;
     }
   }
 </style>
