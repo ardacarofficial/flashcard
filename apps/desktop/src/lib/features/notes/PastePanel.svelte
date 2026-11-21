@@ -113,8 +113,10 @@
     if (v !== undefined) setOption('record_separator', v);
   }
 
+  const canAdd = $derived(!!preview && preview.rows.length > 0);
+
   function add() {
-    if (!preview) return;
+    if (!preview || !canAdd) return;
     onadd(rowsFromPreview(preview));
     text = '';
     preview = null;
@@ -127,6 +129,16 @@
     columns.map((c) => preview?.suggested_columns.findIndex((s) => s.kind === 'field' && s.key === c.key) ?? -1),
   );
 </script>
+
+<svelte:window
+  onkeydown={(e) => {
+    // Ctrl+Enter adds the rows, as everywhere else on the Create page.
+    if (open && (e.ctrlKey || e.metaKey) && e.key === 'Enter' && !e.defaultPrevented && canAdd) {
+      e.preventDefault();
+      add();
+    }
+  }}
+/>
 
 <Dialog bind:open title={t('create.paste.title')} description={t('create.paste.description')} size="lg">
   <div class="paste">
@@ -207,7 +219,7 @@
 
   {#snippet footer()}
     <Button variant="ghost" onclick={() => (open = false)}>{t('common.cancel')}</Button>
-    <Button variant="primary" disabled={!preview || preview.rows.length === 0} onclick={add}>
+    <Button variant="primary" kbd="Mod+Enter" aria-keyshortcuts="Control+Enter" disabled={!canAdd} onclick={add}>
       {t('create.paste.add', { count: preview?.rows.length ?? 0 })}
     </Button>
   {/snippet}
@@ -246,19 +258,20 @@
   .pairs li {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    align-items: center;
     gap: var(--space-4);
-    padding: var(--space-2) var(--space-3);
+    min-height: var(--row-h);
+    padding: 0 var(--space-3);
     font-size: var(--text-sm);
     background: var(--surface-1);
   }
+  /* Same header as the editor's sheet: 30 px, sentence case. */
   .pairs li.cols {
+    min-height: 30px;
     background: var(--surface-2);
     font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    font-weight: var(--weight-medium);
     color: var(--text-2);
-    padding-block: var(--space-1);
   }
   .sep-label {
     font-size: var(--text-xs);

@@ -412,18 +412,23 @@
     grid-template-columns: minmax(8rem, 2fr) minmax(5rem, 1fr) minmax(5rem, 1fr) minmax(5.5rem, auto);
     gap: var(--space-3);
     align-items: center;
-    padding: var(--space-2) 0;
+    min-height: var(--row-h);
+    padding: 2px 0;
     font-size: var(--text-sm);
   }
   .price-row + .price-row {
     border-top: 1px solid var(--border);
   }
+  /* The app's table header: 30 px, 12 px, sentence case. */
   .price-row.head {
+    min-height: 30px;
+    padding: 0;
     color: var(--text-2);
     font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    font-weight: var(--weight-medium);
+  }
+  .price-row.new {
+    padding: var(--space-2) 0;
   }
   .model {
     font-family: var(--font-mono);

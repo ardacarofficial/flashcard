@@ -132,6 +132,13 @@
     else if (rich) mode = 'existing';
   });
 
+  // "Existing deck" without a choice yet: the selected deck (the shell's picker, the last save).
+  $effect(() => {
+    if (mode === 'existing' && !deckId && ctx.selectedDeck && paths.some((p) => p.id === ctx.selectedDeck)) {
+      deckId = ctx.selectedDeck;
+    }
+  });
+
   // Classifications of the target deck (a new deck gets its parent's, or the collection's).
   $effect(() => {
     const deck = targetDeck;
@@ -228,7 +235,8 @@
       e.preventDefault();
       if (row === rows.length - 1) addRow();
       else void focusCell(row + 1, 0);
-    } else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    } else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // (Ctrl+Enter is not a cell move: it bubbles to the page and saves.)
       e.preventDefault();
       if (!lastCol) void focusCell(row, col + 1);
       else if (row === rows.length - 1) addRow();
@@ -312,6 +320,8 @@
         rowErrors = Object.fromEntries(kept.map((_, i) => [i, t('create.duplicate_row')]));
       }
       ctx.selectDeck(r.deck_id);
+      // "Existing deck" now offers the deck just filled.
+      deckId = r.deck_id;
       toast.show(message, {
         tone: dupes ? 'warning' : 'success',
         action: { label: t('create.undo'), run: () => void ctx.guarded(() => api.call('oplog.undo', {})) },
@@ -336,9 +346,15 @@
   function onGlobalKey(e: KeyboardEvent) {
     // Not for a dialog above the page (Quick Add, paste): Ctrl+Enter is theirs there.
     if (e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && canSave) {
+    if (!(e.ctrlKey || e.metaKey) || e.key !== 'Enter' || rich) return;
+    if (canSave) {
       e.preventDefault();
       void save();
+    } else if (nt && !busy && filled > 0 && mode === 'new' && !title.trim()) {
+      // Rows typed but no title: say so and put the cursor there instead of doing nothing.
+      e.preventDefault();
+      titleError = t('create.title_required');
+      document.querySelector<HTMLInputElement>('.create .setup .title input')?.focus();
     }
   }
 </script>
@@ -434,7 +450,7 @@
             />
           {/if}
           {#each defs as def (def.id)}
-            <AttributeField {def} bind:value={attrs[def.id]!} />
+            <AttributeField size="sm" {def} bind:value={attrs[def.id]!} />
           {/each}
         </div>
       {/if}

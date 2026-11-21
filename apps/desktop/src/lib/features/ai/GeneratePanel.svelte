@@ -265,7 +265,7 @@
       <aside class="options" aria-label={t('ai.tabs.generate')}>
         <Select size="sm" label={t('ai.generate.notetype')} options={notetypeOptions} bind:value={notetypeId} />
         {#each defs as a (a.def.id)}
-          <AttributeField def={a.def} bind:value={attrs[a.def.id]!} />
+          <AttributeField size="sm" def={a.def} bind:value={attrs[a.def.id]!} />
         {/each}
         <Input
           size="sm"

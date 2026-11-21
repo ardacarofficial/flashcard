@@ -6,8 +6,8 @@
   import { pickFile, pickSavePath } from './files';
   import { followJob, resultOf } from './job';
   import JobProgress from './JobProgress.svelte';
-  import { Button, CircleAlert, CircleCheck, Dialog, HardDrive, History, Icon, RotateCcw, Save } from '$lib/ui';
-  import { SettingsSection } from '../core/kit';
+  import { Button, CircleAlert, CircleCheck, Dialog, HardDrive, Icon, RotateCcw, Save } from '$lib/ui';
+  import { FormRow, SettingsSection } from '../core/kit';
 
   const FILTER = [{ name: 'Flashcard', extensions: ['fcbackup'] }];
 
@@ -71,33 +71,19 @@
   }
 </script>
 
-<SettingsSection title={t('io.tabs.backup')} description={t('io.backup.hint')} icon={HardDrive}>
-  <div class="body">
-    {#if job}
-      <JobProgress {job} />
-    {:else}
-      <div class="choices">
-        <div class="choice">
-          <span class="ic" aria-hidden="true"><Icon icon={Save} size={20} /></span>
-          <div class="txt">
-            <p class="ct">{t('io.backup.create_title')}</p>
-            <p class="cd">{t('io.backup.create_hint')}</p>
-          </div>
-          <Button variant="primary" onclick={create}>{t('io.backup.create')}</Button>
-        </div>
-        <div class="choice">
-          <span class="ic" aria-hidden="true"><Icon icon={History} size={20} /></span>
-          <div class="txt">
-            <p class="ct">{t('io.backup.restore_title')}</p>
-            <p class="cd">{t('io.backup.restore_hint')}</p>
-          </div>
-          <Button icon={RotateCcw} onclick={chooseRestore}>{t('io.backup.restore')}</Button>
-        </div>
-      </div>
-    {/if}
-    {#if message}<p class="note ok" role="status"><Icon icon={CircleCheck} size={16} /><span>{message}</span></p>{/if}
-    {#if error}<p class="note bad" role="alert"><Icon icon={CircleAlert} size={16} /><span>{error}</span></p>{/if}
-  </div>
+<SettingsSection title={t('io.tabs.backup')} description={t('io.backup.hint')} icon={HardDrive} body="rows">
+  {#if job}
+    <div class="job"><JobProgress {job} /></div>
+  {:else}
+    <FormRow label={t('io.backup.create_title')} description={t('io.backup.create_hint')}>
+      <Button variant="primary" icon={Save} onclick={create}>{t('io.backup.create')}</Button>
+    </FormRow>
+    <FormRow label={t('io.backup.restore_title')} description={t('io.backup.restore_hint')}>
+      <Button icon={RotateCcw} onclick={chooseRestore}>{t('io.backup.restore')}</Button>
+    </FormRow>
+  {/if}
+  {#if message}<p class="note ok" role="status"><Icon icon={CircleCheck} size={16} /><span>{message}</span></p>{/if}
+  {#if error}<p class="note bad" role="alert"><Icon icon={CircleAlert} size={16} /><span>{error}</span></p>{/if}
 </SettingsSection>
 
 <Dialog
@@ -120,57 +106,16 @@
 </Dialog>
 
 <style>
-  .body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  .choices {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-  .choice {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    flex-wrap: wrap;
-    padding: var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-control);
-    background: var(--surface-0);
-  }
-  .ic {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    flex: none;
-    border-radius: var(--radius-control);
-    background: var(--accent-soft);
-    color: var(--accent-text);
-  }
-  .txt {
-    flex: 1 1 14rem;
-    min-width: 0;
-  }
-  .ct {
-    margin: 0;
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
-    color: var(--text-1);
-  }
-  .cd {
-    margin: 2px 0 0;
-    font-size: var(--text-sm);
-    color: var(--text-2);
+  .job {
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
   }
   .note {
     display: flex;
     gap: var(--space-2);
     align-items: flex-start;
     margin: 0;
+    padding-top: var(--space-3);
     font-size: var(--text-sm);
     overflow-wrap: anywhere;
   }

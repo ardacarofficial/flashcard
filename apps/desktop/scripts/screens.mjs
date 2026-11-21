@@ -263,6 +263,12 @@ const SUB = '[data-testid="subnav-item"], [data-testid^="settings-group"], main 
 
 async function settle(page) {
   await page.waitForLoadState('networkidle').catch(() => {});
+  // A lazy screen's first load on a cold dev server can outlast "network idle": wait (bounded)
+  // until the shell's loading line is gone, or the first config shoots "Loading…" and its
+  // sub-navigation is never discovered.
+  await page
+    .waitForFunction(() => !document.querySelector('p.loading[role=status]'), null, { timeout: 15000 })
+    .catch(() => {});
   await page.waitForTimeout(250);
 }
 
@@ -473,12 +479,17 @@ async function main() {
               await back.click().catch(() => {});
               await settle(page);
             }
-            const tree = page.locator('.view-toggle [role=radio]').nth(1);
-            if (await tree.count()) {
-              await tree.click();
+            // The Library's secondary view (v1.2: the tree is the default, the card grid the
+            // toggle): switch to whichever view is not shown, name the shot after what it
+            // shows (`state-library-grid` or `state-library-tree`), then switch back.
+            const other = page.locator('.view-toggle [role=radio][aria-checked="false"]').first();
+            if (await other.count()) {
+              const shown = page.locator('.view-toggle [role=radio][aria-checked="true"]').first();
+              await other.click();
               await settle(page);
-              await snap('state-library-tree');
-              await page.locator('.view-toggle [role=radio]').nth(0).click();
+              const grid = (await page.locator('main ul.grid, main [data-view="grid"]').count()) > 0;
+              await snap(grid ? 'state-library-grid' : 'state-library-tree');
+              await shown.click().catch(() => {});
               await settle(page);
             }
             // Search: card info sheet, then the bulk bar

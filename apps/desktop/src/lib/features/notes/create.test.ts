@@ -101,6 +101,22 @@ describe('<CreateScreen> on the dev mock', () => {
     const notes = await api.note.list(animals.deck.id);
     expect(notes.items.map((n) => n.sort_field).sort()).toEqual(['cat', 'dog']);
   });
+
+  it('Ctrl+Enter in a cell saves (it is not a cell move); without a title it says so', async () => {
+    const decks = (await api.deck.tree()).roots;
+    const selectDeck = vi.fn();
+    render(CreateScreen, { ctx: ctxWith({ decks, selectDeck }) });
+    const terms = await screen.findAllByLabelText(/^Term \d/);
+    await fireEvent.input(terms[0]!, { target: { value: 'owl' } });
+    await fireEvent.keyDown(terms[0]!, { key: 'Enter', ctrlKey: true });
+    expect(await screen.findByText('Give the new deck a title.')).toBeTruthy();
+
+    await fireEvent.input(screen.getByLabelText(/^Title/), { target: { value: 'Birds' } });
+    const spy = vi.spyOn(api, 'call');
+    await fireEvent.keyDown(screen.getByLabelText('Term 1'), { key: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(spy.mock.calls.some(([m]) => m === 'notes.create_many')).toBe(true));
+    spy.mockRestore();
+  });
 });
 
 describe('paste to import', () => {

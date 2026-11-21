@@ -125,6 +125,7 @@
       depth={depth}
       expanded={node.children.length ? open : undefined}
       ontoggle={() => toggle(node.deck.id, !open)}
+      toggleTabbable={false}
       onclick={() => onopen(node.deck.id)}
       buttonLabel={t('library.open', { name: node.deck.name })}
       cellColumns="var(--deck-cols)"

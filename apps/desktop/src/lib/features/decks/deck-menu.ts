@@ -26,15 +26,15 @@ export function studyDeck(ctx: ScreenCtx, modules: ModuleDto[], node: DeckTreeNo
 }
 
 /**
- * Adds a card to `node`'s deck: selects it, then Quick Add (top bar / `N`); without it, the
- * Create page. `null` when nothing can add cards (the notes module is off).
+ * Adds a card to `node`'s deck: Quick Add opened on that deck (the page behind stays where it
+ * is); without Quick Add, the Create page with the deck selected. `null` when nothing can add
+ * cards (the notes module is off).
  */
 export function addCardAction(ctx: ScreenCtx, modules: ModuleDto[]): ((node: DeckTreeNode) => void) | null {
   const route = menuRoute(modules, { route: '/notes/new' });
   if (!route && modules.length > 0) return null;
   return (node) => {
-    ctx.selectDeck(node.deck.id);
-    if (!openQuickAdd()) goWithDeck(ctx, node, route);
+    if (!openQuickAdd({ deckId: node.deck.id })) goWithDeck(ctx, node, route);
   };
 }
 

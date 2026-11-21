@@ -11,8 +11,11 @@
  */
 
 type Handler = () => void;
+/** What Quick Add opens with: `deckId` preselects that deck (a Library row's "Add card"). */
+export type QuickAddOptions = { deckId?: string | null };
+type QuickAddHandler = (options?: QuickAddOptions) => void;
 
-const state = $state<{ quickAdd: Handler | null; fallback: Handler | null; palette: Handler | null; paletteKeys: string }>({
+const state = $state<{ quickAdd: QuickAddHandler | null; fallback: Handler | null; palette: Handler | null; paletteKeys: string }>({
   quickAdd: null,
   fallback: null,
   palette: null,
@@ -44,18 +47,24 @@ export function setQuickAddFallback(fn: Handler | null): () => void {
 }
 
 /** Registers what "add a card" does (the Quick Add dialog); returns the unregister function. */
-export function setQuickAddHandler(fn: Handler | null): () => void {
+export function setQuickAddHandler(fn: QuickAddHandler | null): () => void {
   state.quickAdd = fn;
   return () => {
     if (state.quickAdd === fn) state.quickAdd = null;
   };
 }
 
-/** Opens Quick Add (the top bar's "Add card", `N`, `Ctrl+N`). `false` when nothing can add cards. */
-export function openQuickAdd(): boolean {
-  const fn = state.quickAdd ?? state.fallback;
-  if (!fn) return false;
-  fn();
+/**
+ * Opens Quick Add (the top bar's "Add card", `N`, `Ctrl+N`), on `options.deckId` when given.
+ * `false` when nothing can add cards.
+ */
+export function openQuickAdd(options?: QuickAddOptions): boolean {
+  if (state.quickAdd) {
+    state.quickAdd(options);
+    return true;
+  }
+  if (!state.fallback) return false;
+  state.fallback();
   return true;
 }
 

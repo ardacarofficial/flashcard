@@ -177,7 +177,7 @@
       icon={Library}
       title={t('home.empty_title')}
       description={t('home.empty_body')}
-      action={{ label: t('home.empty_action'), icon: Plus, onclick: () => open('/decks') }}
+      action={{ label: t('home.empty_action'), icon: Plus, onclick: () => open(moduleOn(modules, 'notes') ? '/notes/new' : '/decks') }}
     />
   </div>
 {:else}

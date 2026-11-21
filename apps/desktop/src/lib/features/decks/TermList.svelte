@@ -150,7 +150,7 @@
                 <div class="edit-actions">
                   <span class="edit-hint">{t('deck_page.edit_hint')}</span>
                   <Button variant="ghost" size="sm" onclick={() => (editing = null)}>{t('common.cancel')}</Button>
-                  <Button variant="primary" size="sm" loading={saving} onclick={() => void save(row)}>{t('common.save')}</Button>
+                  <Button variant="primary" size="sm" kbd="Mod+Enter" loading={saving} onclick={() => void save(row)}>{t('common.save')}</Button>
                 </div>
               </div>
             </li>
@@ -237,7 +237,7 @@
     align-items: center;
     gap: var(--space-4);
     min-height: var(--row-h);
-    padding: 5px var(--space-2) 5px var(--space-3);
+    padding: 2px var(--space-2) 2px var(--space-3);
     border-bottom: 1px solid var(--border);
     font-size: var(--text-sm);
   }
