@@ -120,7 +120,7 @@
   <Button size="sm" variant="ghost" icon={FolderInput} onclick={() => show('move')} data-testid="open-dialog-move">{t('browse.bulk.move_short')}</Button>
   <Button size="sm" variant="ghost" icon={Tag} onclick={() => show('tags')}>{t('browse.bulk.tags')}</Button>
   <Menu items={flagItems} label={t('browse.bulk.flag')} triggerClass="bar-trigger" align="start">
-    {#snippet trigger()}<span class="trig"><Icon icon={Flag} size={16} />{t('browse.bulk.flag')}</span>{/snippet}
+    {#snippet trigger()}<span class="trig"><Icon icon={Flag} size={14} />{t('browse.bulk.flag')}</span>{/snippet}
   </Menu>
   <Menu items={moreItems} label={t('browse.bulk.more')} align="start" />
   <span class="grow"></span>
@@ -239,16 +239,16 @@
     background: var(--border-strong);
     margin-inline: var(--space-1);
   }
-  .bar :global(button.bar-trigger) {
+  .bar :global(.fc-menu button.trigger.bar-trigger) {
     height: var(--control-h-sm);
-    padding: 0 var(--space-2);
+    padding: 0 10px;
     border: 1px solid transparent;
     border-radius: var(--radius-control);
     background: transparent;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
-  .bar :global(button.bar-trigger:hover) {
+  .bar :global(.fc-menu button.trigger.bar-trigger:hover) {
     background: var(--surface-3);
     color: var(--text-1);
   }
@@ -258,7 +258,7 @@
   .trig {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-1);
+    gap: 6px;
     font-weight: var(--weight-medium);
   }
   .grow {

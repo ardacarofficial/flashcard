@@ -454,11 +454,12 @@
     gap: var(--space-2);
     padding: var(--space-3) var(--space-4) var(--space-2) calc(var(--space-4) + 28px + var(--space-3));
   }
+  /* Setting rows bring their own side padding: line their labels up with the blocks. */
   .block.flush {
-    padding-inline: 0;
+    padding-inline: calc(28px + var(--space-1)) 0;
   }
   .block.flush h3 {
-    padding-inline: calc(var(--space-4) + 28px + var(--space-3)) var(--space-4);
+    padding-inline: var(--space-6) var(--space-4);
   }
   .block h3 {
     margin: 0;
@@ -520,6 +521,9 @@
     .block,
     .error {
       padding-inline: var(--space-4);
+    }
+    .block.flush {
+      padding-inline: 0;
     }
     .block.flush h3 {
       padding-inline: var(--space-4);
