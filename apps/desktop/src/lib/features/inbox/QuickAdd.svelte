@@ -44,13 +44,22 @@
       await api.note.createClassic(deck, front, back, []);
       front = back = '';
       status = t('quick_add.added');
+      // Ready for the next card.
+      form?.querySelector('textarea')?.focus();
     } catch (err) {
       status = td((err as { messageKey?: string }).messageKey ?? 'errors.internal.unexpected');
     }
   }
 
+  let form = $state<HTMLFormElement | null>(null);
+
+  // Esc hides the window; Ctrl/Cmd+Enter adds from any field (as in the app's Quick Add).
   function onkeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') void shell.hide();
+    else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      form?.requestSubmit();
+    }
   }
 
   onMount(() => {
@@ -65,7 +74,7 @@
 
 <svelte:window {onkeydown} />
 
-<form class="quick-add" onsubmit={add}>
+<form class="quick-add" bind:this={form} onsubmit={add}>
   <header>
     <h1>{t('quick_add.title')}</h1>
     {#if paths.length === 0}
@@ -81,7 +90,7 @@
     {#if status}<p class="status" role="status">{status}</p>{/if}
     <span class="grow"></span>
     <Button size="sm" variant="ghost" kbd="Esc" aria-keyshortcuts="Escape" onclick={() => void shell.hide()}>{t('quick_add.close')}</Button>
-    <Button size="sm" variant="primary" type="submit" disabled={!deck || !front.trim()}>{t('quick_add.add')}</Button>
+    <Button size="sm" variant="primary" type="submit" kbd="Mod+Enter" aria-keyshortcuts="Control+Enter" disabled={!deck || !front.trim()}>{t('quick_add.add')}</Button>
   </footer>
 </form>
 

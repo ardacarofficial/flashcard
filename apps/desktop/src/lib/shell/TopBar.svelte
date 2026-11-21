@@ -33,9 +33,9 @@
         <li class:last>
           {#if i > 0}<span class="sep" aria-hidden="true"><Icon icon={ChevronRight} size={14} /></span>{/if}
           {#if c.onclick && !last}
-            <button type="button" class="crumb link" onclick={c.onclick}>{c.label}</button>
+            <button type="button" class="crumb link" title={c.label} onclick={c.onclick}>{c.label}</button>
           {:else}
-            <span class="crumb" aria-current={last ? 'page' : undefined}>{c.label}</span>
+            <span class="crumb" title={c.label} aria-current={last ? 'page' : undefined}>{c.label}</span>
           {/if}
         </li>
       {/each}
@@ -80,14 +80,18 @@
     padding: 0;
     list-style: none;
   }
+  /* Every crumb but the section may shrink: long deck names end in "…", the section stays. */
   li {
     display: flex;
     align-items: center;
     min-width: 0;
+    flex: 0 1 auto;
+  }
+  li:first-child {
     flex: none;
   }
-  li.last {
-    flex: 0 1 auto;
+  li:not(:first-child):not(.last) {
+    max-width: 16rem;
   }
   .sep {
     display: inline-flex;
@@ -95,6 +99,8 @@
     color: var(--text-3);
   }
   .crumb {
+    display: block;
+    min-width: 0;
     overflow: hidden;
     color: var(--text-2);
     font-size: var(--text-sm);

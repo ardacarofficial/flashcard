@@ -1,6 +1,7 @@
 {
   "shell": {
     "nav_label": "Ana gezinme",
+    "skip_to_content": "İçeriğe geç",
     "section": {
       "home": "Ana sayfa",
       "library": "Kütüphane",

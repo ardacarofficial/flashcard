@@ -303,7 +303,8 @@
     gap: var(--space-2);
     min-height: 32px;
     font-size: var(--text-sm);
-    border-bottom: 1px solid var(--border);
+    /* Lines between tools; the row's own bottom line closes the list (no double line). */
+    border-top: 1px solid var(--border);
   }
   .tools li.off {
     color: var(--text-2);

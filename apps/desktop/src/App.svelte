@@ -302,7 +302,7 @@
   {#if !(focusOn && !locked)}
     <TopBar {trail} {onsearch} searchKeys={shellCommands.paletteKeys} onadd={shellCommands.canQuickAdd && !locked ? () => void openQuickAdd() : null} />
   {/if}
-  <main>
+  <main id="fc-main" tabindex="-1">
     <div class="page" class:focus={focusOn && !locked} class:wide={screen?.width === 'wide' && where !== 'settings'}>
       {#if error}<p class="banner error" role="alert">{error}</p>{/if}
       {#if pluginNotice}
@@ -401,6 +401,10 @@
     min-height: 0;
     overflow: auto;
     background: var(--surface-0);
+  }
+  /* Focused only by the sidebar's "Skip to content" (a landmark, not a control: no ring). */
+  main:focus {
+    outline: none;
   }
   /*
    * One content container for every page (docs/11 §4 `--content-*`): same left offset and

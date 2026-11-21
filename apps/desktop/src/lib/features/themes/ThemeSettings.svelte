@@ -180,9 +180,10 @@
     align-items: center;
     gap: var(--space-2);
   }
-  .accent :global(.fc-field) {
+  /* Only the swatch: it lines up with the other rows' controls on the right edge. */
+  .accent > :global(.fc-field) {
     min-width: 0;
-    width: 64px;
+    width: auto;
   }
   .error {
     margin: 0;

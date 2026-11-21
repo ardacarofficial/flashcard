@@ -166,10 +166,13 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-    max-width: 880px;
   }
+  /* The header (title + Statistics tabs) spans the page like on Overview; the forms stay 880. */
   .goals-page > :global(.fc-page-header) {
     margin-bottom: var(--space-1);
+  }
+  .goals-page > :global(:not(.fc-page-header)) {
+    max-width: 880px;
   }
   .pad {
     padding: var(--space-3) var(--space-4);

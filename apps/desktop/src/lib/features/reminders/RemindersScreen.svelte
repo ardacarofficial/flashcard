@@ -9,7 +9,7 @@
   import { api } from '$lib/api';
   import type { ReminderStatus } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
-  import { Bell, Button, Chip, Clock, Icon, Switch, TimeField } from '$lib/ui';
+  import { Bell, Button, Chip, Clock, Icon, Monitor, Switch, TimeField } from '$lib/ui';
   import { FormRow, LoadState, SettingsPage, SettingsSection } from '../core/kit';
   import type { ScreenCtx } from '../types';
 
@@ -109,7 +109,7 @@
       </FormRow>
     </SettingsSection>
 
-    <SettingsSection title={t('reminders.tray')} body="rows">
+    <SettingsSection title={t('reminders.tray')} icon={Monitor} body="rows">
       <FormRow label={t('reminders.keep_in_tray')} description={t('settings.reminders.keep_in_tray.description')}>
         <Switch checked={status.keep_in_tray} ariaLabel={t('reminders.keep_in_tray')} onchange={(v) => void toggle('keep_in_tray', v)} />
       </FormRow>

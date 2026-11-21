@@ -38,7 +38,7 @@
     },
     "app": {
       "locale": {
-        "label": "Language",
+        "label": "App language",
         "description": "Language of the app’s menus, messages and built-in note types."
       },
       "theme": {
