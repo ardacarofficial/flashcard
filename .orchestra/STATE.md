@@ -64,3 +64,15 @@ all configs; independent visual review; version bump + CHANGELOG.
   Subtitle reviewer a5e2bb6c1b5a1b1d2. Common brief: .orchestra/POLISH-REVIEWER.md.
 - After they merge: Subtitle settings page visual polish (small), full `screens --strict` matrix, cargo fmt/clippy/test
   (exclude fc-desktop; fc-ai needs NO_PROXY=127.0.0.1,localhost), final report to user.
+
+## FINAL (53804e9)
+All pieces merged on `claude/festive-einstein-8y0kld` and pushed: foundation, screen workers A–F, Subtitle module +
+independent review + follow-ups (503 when off, rate limit), docs/version 1.2.0, polish P1–P3, closing pass.
+Verified on the merged tree by the orchestrator: `pnpm check` 0/0; `pnpm test` 365/365; build + bundle (initial JS
+177.1 kB / 320, CSS 50.0 kB / 52); `screens --strict` full matrix 656 PNGs, 0 findings; `cargo fmt --check`,
+`cargo clippy --workspace --exclude fc-desktop -D warnings`, `cargo test --workspace --exclude fc-desktop` 1438 passed
+(run at e84402e; no Rust changed after it; fc-ai tests need NO_PROXY to include `.test` in this container).
+Not verified here: `fc-desktop` (Tauri shell) cannot compile in this container (no gtk/webkit); real Windows window;
+Subtitle extension in a real browser.
+Known leftovers: initial CSS 2 kB under budget; Stats Planning/Goals use boxed panels; Presets and AI settings pages
+are wider than other settings pages; mock has no undo for notes.
