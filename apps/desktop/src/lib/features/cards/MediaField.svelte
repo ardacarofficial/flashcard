@@ -12,8 +12,11 @@
     kind: FieldKind;
     /** Uploads a file and returns its `media:<hash>` reference. */
     upload: (file: File) => Promise<string>;
+    /** Tighter variant (one row: preview, buttons, hint). */
+    compact?: boolean;
+    required?: boolean;
   }
-  let { value = $bindable(), label, id, kind, upload }: Props = $props();
+  let { value = $bindable(), label, id, kind, upload, compact = false, required = false }: Props = $props();
 
   let busy = $state(false);
   let error = $state<string | null>(null);
@@ -57,6 +60,7 @@
 
 <div
   class="media"
+  class:compact
   class:dragging
   role="group"
   aria-labelledby={`${id}-label`}
@@ -77,7 +81,7 @@
     }
   }}
 >
-  <span class="label" id={`${id}-label`}>{label}</span>
+  <span class="label" id={`${id}-label`}>{label}{#if required}<span class="req" aria-hidden="true">*</span>{/if}</span>
   <div class="drop">
     {#if previewHtml}
       <div class="thumb">{@html previewHtml}</div>
@@ -88,8 +92,8 @@
         <Button size="sm" variant="ghost" icon={Trash2} onclick={() => (value = '')}>{t('editor.remove_media')}</Button>
       {/if}
       <input bind:this={input} {id} class="file" type="file" {accept} onchange={(e) => void take(e.currentTarget.files)} disabled={busy} />
+      <span class="hint">{t('editor.drop_hint')}</span>
     </div>
-    <span class="hint">{t('editor.drop_hint')}</span>
   </div>
   {#if error}<span class="error" role="alert">{error}</span>{/if}
 </div>
@@ -101,32 +105,52 @@
     gap: var(--space-1);
   }
   .label {
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     font-weight: var(--weight-medium);
-    color: var(--text-1);
+    color: var(--text-2);
+  }
+  .req {
+    color: var(--danger);
+    margin-inline-start: 2px;
   }
   .drop {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    padding: var(--space-3);
+    padding: var(--space-2);
     border: 1px dashed var(--border-strong);
     border-radius: var(--radius-control);
-    background: var(--surface-1);
+    background: var(--surface-2);
+    transition: border-color var(--motion-fast) var(--ease);
+  }
+  .compact .drop {
+    flex-direction: row;
+    align-items: center;
+    padding: var(--space-1) var(--space-2);
   }
   .dragging .drop {
     border-color: var(--accent-text);
     background: var(--accent-soft);
   }
   .thumb :global(img) {
+    display: block;
     max-width: 240px;
     max-height: 160px;
-    border-radius: var(--radius-control);
+    border-radius: 4px;
+  }
+  .compact .thumb :global(img) {
+    max-width: 64px;
+    max-height: 40px;
+  }
+  .thumb :global(audio) {
+    height: 32px;
   }
   .row {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--space-2);
     align-items: center;
+    min-width: 0;
   }
   .file {
     display: none;
@@ -137,6 +161,6 @@
   }
   .error {
     color: var(--danger);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
 </style>

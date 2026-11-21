@@ -10,8 +10,9 @@
     /** The image field's value (`media:<hash>`). */
     image: string;
     label: string;
+    required?: boolean;
   }
-  let { value = $bindable(), image, label }: Props = $props();
+  let { value = $bindable(), image, label, required = false }: Props = $props();
 
   const masks = $derived<Masks>(parseMasks(value));
   let src = $state('');
@@ -78,9 +79,12 @@
 </script>
 
 <div class="masks">
-  <span>{label}</span>
+  <div class="head">
+    <span class="label">{label}{#if required}<span class="req" aria-hidden="true">*</span>{/if}</span>
+    {#if src}<span class="muted num">{t('masks.count', { n: masks.masks.length })}</span>{/if}
+  </div>
   {#if !src}
-    <p class="muted">{t('masks.need_image')}</p>
+    <p class="muted empty">{t('masks.need_image')}</p>
   {:else}
     <SegmentedControl
       size="sm"
@@ -121,7 +125,7 @@
         <div class="draft" style:left={pct(draft.x)} style:top={pct(draft.y)} style:width={pct(draft.w)} style:height={pct(draft.h)}></div>
       {/if}
     </div>
-    <span class="muted hint">{t('masks.draw_hint')} · {t('masks.count', { n: masks.masks.length })}</span>
+    <span class="muted">{t('masks.draw_hint')}</span>
   {/if}
 </div>
 
@@ -129,12 +133,46 @@
   .masks {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
     gap: var(--space-1);
+  }
+  .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    align-self: stretch;
+  }
+  .label {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    color: var(--text-2);
+  }
+  .req {
+    color: var(--danger);
+    margin-inline-start: 2px;
+  }
+  .muted {
+    margin: 0;
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .num {
+    font-family: var(--font-mono);
+  }
+  .empty {
+    align-self: stretch;
+    padding: var(--space-3);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-control);
   }
   .canvas {
     position: relative;
     display: inline-block;
     max-width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    overflow: hidden;
     cursor: crosshair;
     user-select: none;
     touch-action: none;
@@ -149,18 +187,25 @@
     border-radius: 2px;
   }
   .mask {
-    background: var(--fc-accent);
-    color: var(--fc-accent-text);
-    opacity: 0.85;
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    opacity: 0.9;
     padding: 0;
     min-height: 0;
     border: none;
     cursor: pointer;
   }
-  .draft {
-    outline: 2px dashed var(--fc-accent);
+  .mask:hover {
+    background: var(--danger-solid);
+    color: var(--danger-solid-fg);
   }
-  .hint {
-    font-size: 0.85em;
+  .mask:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .draft {
+    outline: 2px dashed var(--accent);
   }
 </style>

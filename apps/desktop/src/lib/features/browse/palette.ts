@@ -5,23 +5,39 @@
  */
 import type { PaletteEntry, ShortcutDto } from '$lib/api/types';
 
-/** One palette row: a screen of the menu or a backend method. */
+/** One palette row: a shell action (add a card, undo…), a screen of the menu or a backend method. */
 export type PaletteItem =
-  | { kind: 'screen'; id: string; label: string; screenId: string }
+  | { kind: 'action'; id: string; label: string; action: string; keys?: string | null }
+  | { kind: 'screen'; id: string; label: string; screenId: string; keys?: string | null }
   | { kind: 'method'; id: string; label: string; entry: PaletteEntry };
 
-/** Menu screens first, then every enabled method (label falls back to the method name). */
+/** A shell action offered at the top of the palette (`ui.new_note` → "Add card"). */
+export interface PaletteAction {
+  action: string;
+  label: string;
+  keys?: string | null;
+}
+
+/**
+ * Shell actions first, then menu screens, then every enabled method (label falls back to the
+ * method name). Order within each kind is the order given (the backend's for methods).
+ */
 export function paletteItems(
   entries: readonly PaletteEntry[],
-  screens: readonly { id: string; label: string }[],
+  screens: readonly { id: string; label: string; keys?: string | null }[],
   translate: (key: string) => string,
+  actions: readonly PaletteAction[] = [],
 ): PaletteItem[] {
-  const items: PaletteItem[] = screens.map((s) => ({
-    kind: 'screen',
-    id: `screen:${s.id}`,
-    label: s.label,
-    screenId: s.id,
+  const items: PaletteItem[] = actions.map((a) => ({
+    kind: 'action',
+    id: `action:${a.action}`,
+    label: a.label,
+    action: a.action,
+    keys: a.keys ?? null,
   }));
+  for (const s of screens) {
+    items.push({ kind: 'screen', id: `screen:${s.id}`, label: s.label, screenId: s.id, keys: s.keys ?? null });
+  }
   for (const entry of entries) {
     if (!entry.enabled) continue;
     const label = translate(entry.label_key);
@@ -33,6 +49,38 @@ export function paletteItems(
     });
   }
   return items;
+}
+
+/** One titled block of palette rows; `start` is the index of its first row in the flat list. */
+export interface PaletteGroup {
+  title: string;
+  start: number;
+  items: PaletteItem[];
+}
+
+/**
+ * Display grouping (no ranking): actions, screens, then methods under their module's name
+ * (`groupTitle(module)`), modules in first-seen order. Modules without a name share one block.
+ * Returns the groups and the rows flattened in display order (for arrow-key navigation).
+ */
+export function groupItems(
+  items: readonly PaletteItem[],
+  titles: { actions: string; screens: string; groupTitle: (module: string) => string },
+): { groups: PaletteGroup[]; flat: PaletteItem[] } {
+  const byTitle = new Map<string, PaletteItem[]>();
+  for (const i of items) {
+    const title = i.kind === 'action' ? titles.actions : i.kind === 'screen' ? titles.screens : titles.groupTitle(i.entry.module);
+    const list = byTitle.get(title);
+    if (list) list.push(i);
+    else byTitle.set(title, [i]);
+  }
+  const groups: PaletteGroup[] = [];
+  const flat: PaletteItem[] = [];
+  for (const [title, list] of byTitle) {
+    groups.push({ title, start: flat.length, items: list });
+    flat.push(...list);
+  }
+  return { groups, flat };
 }
 
 const fold = (s: string) =>

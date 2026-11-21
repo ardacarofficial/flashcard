@@ -61,3 +61,39 @@
     <p class="muted">{t('common.loading')}</p>
   {/if}
 </section>
+
+<style>
+  .plugin-view {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+  h2 {
+    margin: 0;
+    font-size: var(--text-xl);
+    font-weight: var(--weight-semibold);
+    line-height: var(--leading-tight);
+  }
+  p {
+    margin: 0;
+  }
+  .notice {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-1);
+    font-size: var(--text-sm);
+  }
+  .error {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-size: var(--text-sm);
+  }
+  .muted {
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+</style>

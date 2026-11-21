@@ -29,7 +29,7 @@
 
 {#if buttons.length}
   <div class="toolbar">
-    {#each buttons as b (b.id)}<button onclick={() => run(b)}>{td(b.label_key)}</button>{/each}
+    {#each buttons as b (b.id)}<button type="button" class="tb" onclick={() => run(b)}>{td(b.label_key)}</button>{/each}
     {#if message}<span class="muted" role="status">{message}</span>{/if}
   </div>
 {/if}
@@ -37,8 +37,33 @@
 <style>
   .toolbar {
     display: flex;
-    gap: var(--fc-space-2);
+    flex-wrap: wrap;
+    gap: var(--space-1);
     align-items: center;
-    margin-top: var(--fc-space-2);
+    justify-content: center;
+    margin-top: var(--space-2);
+  }
+  .tb {
+    height: var(--control-h-sm);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-1);
+    color: var(--text-2);
+    font: inherit;
+    font-size: var(--text-xs);
+    cursor: pointer;
+  }
+  .tb:hover {
+    background: var(--surface-2);
+    color: var(--text-1);
+  }
+  .tb:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .muted {
+    color: var(--text-2);
+    font-size: var(--text-xs);
   }
 </style>

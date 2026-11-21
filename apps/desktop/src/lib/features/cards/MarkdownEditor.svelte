@@ -5,15 +5,16 @@
   import { completeLink, insertAt, linkQueryAt, mediaSnippet, wrapSelection, type Edit } from './content';
   import { uploadMedia } from './media';
   import { moduleOn } from './modules.svelte';
-  import { Button, Chip, Field, ImagePlus } from '$lib/ui';
+  import { Chip, Field, Icon, ImagePlus, Spinner } from '$lib/ui';
 
   interface Props {
     value: string;
     label: string;
     id: string;
     rows?: number;
+    required?: boolean;
   }
-  let { value = $bindable(), label, id, rows = 3 }: Props = $props();
+  let { value = $bindable(), label, id, rows = 3, required = false }: Props = $props();
 
   let area = $state<HTMLTextAreaElement | null>(null);
   let busy = $state(false);
@@ -89,34 +90,26 @@
     }
   }
 
+  /** Ctrl/⌘+B and +I format the selection (the tool strip is skipped by Tab: field to field). */
+  function onkey(e: KeyboardEvent) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+    const k = e.key.toLowerCase();
+    if (k !== 'b' && k !== 'i') return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (k === 'b') wrap('**', '**');
+    else wrap('*', '*');
+  }
+
   function pick(n: LinkedNote) {
     apply(completeLink(value, sel()[0], n.title));
     suggestions = [];
   }
 </script>
 
-<Field {label} {id}>
+<Field {label} {id} {required}>
   {#snippet control(f)}
     <div class="md" class:dragging>
-      <div class="toolbar" role="toolbar" aria-label={t('editor.toolbar')}>
-        <Button variant="ghost" size="sm" aria-label={t('editor.bold')} title={t('editor.bold')} onclick={() => wrap('**', '**')}><b>{t('editor.bold_short')}</b></Button>
-        <Button variant="ghost" size="sm" aria-label={t('editor.italic')} title={t('editor.italic')} onclick={() => wrap('*', '*')}><i>{t('editor.italic_short')}</i></Button>
-        <Button variant="ghost" size="sm" aria-label={t('editor.code')} title={t('editor.code')} onclick={() => wrap('`', '`')}><code>{t('editor.code_short')}</code></Button>
-        <Button variant="ghost" size="sm" aria-label={t('editor.math')} title={t('editor.math')} onclick={() => wrap('$', '$')}>∑</Button>
-        {#if moduleOn('links')}
-          <Button variant="ghost" size="sm" aria-label={t('editor.link')} title={t('editor.link')} onclick={() => wrap('[[', ']]')}>[[ ]]</Button>
-        {/if}
-        <span class="spacer"></span>
-        <Button variant="ghost" size="sm" icon={ImagePlus} loading={busy} aria-label={t('editor.media')} title={t('editor.media')} onclick={() => fileInput?.click()}>{t('editor.media_short')}</Button>
-        <input
-          bind:this={fileInput}
-          type="file"
-          accept="image/*,audio/*,video/*"
-          multiple
-          hidden
-          onchange={(e) => void addFiles([...(e.currentTarget.files ?? [])])}
-        />
-      </div>
       <textarea
         id={f.id}
         aria-describedby={f.describedBy}
@@ -126,6 +119,7 @@
         {onpaste}
         {ondrop}
         oninput={() => void oninput()}
+        onkeydown={onkey}
         ondragover={(e) => {
           e.preventDefault();
           dragging = true;
@@ -133,6 +127,28 @@
         ondragleave={() => (dragging = false)}
         placeholder={t('editor.placeholder')}
       ></textarea>
+      <div class="toolbar" role="toolbar" aria-label={t('editor.toolbar')}>
+        <button type="button" tabindex="-1" class="tool" aria-label={t('editor.bold')} title={t('editor.bold')} onclick={() => wrap('**', '**')}><b>{t('editor.bold_short')}</b></button>
+        <button type="button" tabindex="-1" class="tool" aria-label={t('editor.italic')} title={t('editor.italic')} onclick={() => wrap('*', '*')}><i>{t('editor.italic_short')}</i></button>
+        <button type="button" tabindex="-1" class="tool mono" aria-label={t('editor.code')} title={t('editor.code')} onclick={() => wrap('`', '`')}>{t('editor.code_short')}</button>
+        <button type="button" tabindex="-1" class="tool" aria-label={t('editor.math')} title={t('editor.math')} onclick={() => wrap('$', '$')}>∑</button>
+        {#if moduleOn('links')}
+          <button type="button" tabindex="-1" class="tool mono" aria-label={t('editor.link')} title={t('editor.link')} onclick={() => wrap('[[', ']]')}>[[ ]]</button>
+        {/if}
+        <span class="spacer"></span>
+        <button type="button" tabindex="-1" class="tool media" aria-label={t('editor.media')} title={t('editor.media')} disabled={busy} onclick={() => fileInput?.click()}>
+          {#if busy}<Spinner size={14} />{:else}<Icon icon={ImagePlus} size={14} />{/if}
+          <span>{t('editor.media_short')}</span>
+        </button>
+        <input
+          bind:this={fileInput}
+          type="file"
+          accept="image/*,audio/*,video/*"
+          multiple
+          hidden
+          onchange={(e) => void addFiles([...(e.currentTarget.files ?? [])])}
+        />
+      </div>
     </div>
     {#if suggestions.length > 0}
       <ul class="suggest" role="listbox" aria-label={t('editor.link_suggestions')}>
@@ -148,29 +164,25 @@
 </Field>
 
 <style>
+  /* Text first, the formatting tools as a quiet strip under it (Tab goes field to field;
+     the tools are reachable with the mouse or Shift+Tab). */
   .md {
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-control);
-    background: var(--surface-1);
+    background: var(--surface-2);
     transition: border-color var(--motion-fast) var(--ease);
+  }
+  .md:hover {
+    border-color: var(--text-3);
   }
   .md:focus-within {
     border-color: var(--accent-text);
-    box-shadow: 0 0 0 3px var(--accent-soft);
+    box-shadow: 0 0 0 1px var(--accent-text);
   }
   .md.dragging {
     border-style: dashed;
     border-color: var(--accent-text);
-  }
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding: var(--space-1);
-    border-bottom: 1px solid var(--border);
-  }
-  .spacer {
-    flex: 1;
+    background: var(--accent-soft);
   }
   textarea {
     display: block;
@@ -182,16 +194,58 @@
     font: inherit;
     font-size: var(--text-md);
     line-height: var(--leading);
-    padding: var(--space-3);
+    padding: var(--space-2) var(--space-3) var(--space-1);
     resize: vertical;
     outline: none;
   }
   textarea::placeholder {
     color: var(--text-3);
   }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px var(--space-1) var(--space-1);
+  }
+  .tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    min-width: 24px;
+    height: 22px;
+    padding: 0 var(--space-1);
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-2);
+    font: inherit;
+    font-size: var(--text-xs);
+    line-height: 1;
+    cursor: pointer;
+  }
+  .tool.mono {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+  }
+  .tool:hover {
+    background: var(--surface-3);
+    color: var(--text-1);
+  }
+  .tool:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+  }
+  .tool:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+  .spacer {
+    flex: 1;
+  }
   .suggest {
     list-style: none;
-    margin: var(--space-2) 0 0;
+    margin: var(--space-1) 0 0;
     padding: 0;
     display: flex;
     flex-wrap: wrap;
@@ -199,6 +253,6 @@
   }
   .error {
     color: var(--danger);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
 </style>

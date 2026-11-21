@@ -7,6 +7,7 @@
   import { moduleOn } from './modules.svelte';
   import { enhance } from './rich';
   import { speak } from './speech';
+  import { Icon, Play } from '$lib/ui';
 
   interface Props {
     sides: RenderedSides;
@@ -73,6 +74,7 @@
   <div class="choices">
     {#each sides.interaction.options as option, i (i)}
       <button
+        type="button"
         class:right={picked !== null && i === sides.interaction.correct}
         class:wrong={picked === i && i !== sides.interaction.correct}
         onclick={() => (picked = i)}
@@ -92,31 +94,61 @@
 {#if sides.tts.length > 0}
   <div class="tts">
     {#each sides.tts as item, i (i)}
-      <button class="small" onclick={() => void speak(item.text, item.lang)} aria-label={t('cards.speak')}>🔊 {item.text}</button>
+      <button type="button" class="speak" onclick={() => void speak(item.text, item.lang)} aria-label={`${t('cards.speak')}: ${item.text}`}>
+        <Icon icon={Play} size={12} /><span>{item.text}</span>
+      </button>
     {/each}
   </div>
 {/if}
 
 <style>
+  /* The rendered card (v1.2): calm reading typography on the app's surfaces. Hosts size it
+     (the study card sets 24–40 px and shrinks long text); the note type's own CSS is scoped
+     to `.card.<scope>` and wins over these defaults. */
   .card {
-    background: var(--fc-surface);
-    border: var(--fc-border-width) solid var(--fc-border);
-    border-radius: var(--fc-radius);
-    padding: var(--fc-space-4);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: var(--space-4);
     min-height: 4rem;
+    color: var(--text-1);
+    font-size: var(--text-lg);
+    line-height: var(--leading);
     overflow-wrap: anywhere;
+  }
+  .card :global(p) {
+    margin: 0 0 0.5em;
+  }
+  .card :global(p:last-child) {
+    margin-bottom: 0;
+  }
+  .card :global(hr) {
+    height: 0;
+    margin: 0.75em 0;
+    border: none;
+    border-top: 1px solid var(--border-strong);
+  }
+  .card :global(ul),
+  .card :global(ol) {
+    margin: 0.25em 0;
+    padding-inline-start: 1.25em;
+    text-align: start;
   }
   .card :global(img),
   .card :global(video) {
     max-width: 100%;
+    border-radius: 4px;
+  }
+  .card :global(a) {
+    color: var(--accent-text);
   }
   .card :global(.cloze) {
     font-weight: 600;
-    color: var(--fc-accent);
+    color: var(--accent-text);
   }
   .card :global(.fc-link-missing) {
     text-decoration: underline dotted;
-    color: var(--fc-text-muted);
+    color: var(--text-2);
   }
   .card :global(.fc-io) {
     position: relative;
@@ -127,48 +159,129 @@
   }
   .card :global(.fc-io-mask) {
     position: absolute;
-    background: var(--fc-accent);
-    opacity: 0.85;
+    background: var(--accent);
+    opacity: 0.9;
     border-radius: 2px;
   }
   .card :global(.fc-io-active) {
-    background: var(--fc-danger);
+    background: var(--danger-solid);
   }
   .card :global(.fc-io-revealed) {
     background: transparent;
-    outline: 2px solid var(--fc-danger);
+    outline: 2px solid var(--danger-solid);
+  }
+  .card :global(code) {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    padding: 0.1em 0.3em;
+    border-radius: 4px;
+    background: var(--surface-2);
   }
   .card :global(pre) {
-    background: var(--fc-bg-subtle);
-    padding: var(--fc-space-2);
-    border-radius: var(--fc-radius);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
     overflow-x: auto;
+    font-size: var(--text-sm);
+    text-align: start;
+  }
+  .card :global(pre code) {
+    padding: 0;
+    background: transparent;
+  }
+  .card :global(.fc-hint summary) {
+    cursor: pointer;
+    color: var(--text-2);
+    font-size: var(--text-sm);
   }
   .choices {
     display: flex;
     flex-direction: column;
-    gap: var(--fc-space-2);
-    margin-top: var(--fc-space-3);
+    gap: var(--space-2);
+    margin-top: var(--space-3);
   }
   .choices button {
-    text-align: left;
+    min-height: var(--control-h-lg);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-md);
+    text-align: start;
+    cursor: pointer;
+  }
+  .choices button:hover {
+    background: var(--surface-3);
+  }
+  .choices button:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
   }
   .choices .right {
-    border-color: var(--fc-success);
+    border-color: var(--success);
+    box-shadow: inset 2px 0 0 var(--success);
   }
   .choices .wrong {
-    border-color: var(--fc-danger);
+    border-color: var(--danger);
+    box-shadow: inset 2px 0 0 var(--danger);
   }
   .type-box {
-    margin-top: var(--fc-space-3);
+    box-sizing: border-box;
+    margin-top: var(--space-3);
     width: 100%;
+    height: var(--control-h-lg);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-md);
+  }
+  .type-box:focus-visible {
+    outline: none;
+    border-color: var(--accent-text);
+    box-shadow: 0 0 0 1px var(--accent-text);
+  }
+  .type-box::placeholder {
+    color: var(--text-3);
   }
   .expected {
-    margin-top: var(--fc-space-3);
+    margin: var(--space-3) 0 0;
+    font-size: var(--text-md);
+  }
+  .muted {
+    color: var(--text-2);
   }
   .tts {
     display: flex;
-    gap: var(--fc-space-2);
-    margin-top: var(--fc-space-2);
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin-top: var(--space-2);
+  }
+  .speak {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    height: var(--control-h-sm);
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-2);
+    color: var(--text-2);
+    font: inherit;
+    font-size: var(--text-xs);
+    cursor: pointer;
+  }
+  .speak:hover {
+    color: var(--text-1);
+    background: var(--surface-3);
+  }
+  .speak:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
   }
 </style>

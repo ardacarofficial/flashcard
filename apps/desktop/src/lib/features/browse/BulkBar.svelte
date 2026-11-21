@@ -13,6 +13,7 @@
     Flag,
     FolderInput,
     Icon,
+    IconButton,
     Input,
     Menu,
     Select,
@@ -112,18 +113,18 @@
   );
 </script>
 
-<div class="bar" role="toolbar" aria-label={t('browse.bulk.heading')}>
+<div class="bar" role="toolbar" aria-label={t('browse.bulk.heading')} data-testid="bulk-bar">
+  <IconButton size="sm" icon={X} label={t('browse.clear_selection')} onclick={onclear} />
   <span class="count" aria-live="polite">{t('browse.selected', { count })}</span>
-  <Button variant="ghost" size="sm" icon={X} onclick={onclear}>{t('browse.clear_selection')}</Button>
   <span class="sep" aria-hidden="true"></span>
-  <Button size="sm" icon={FolderInput} onclick={() => show('move')} data-testid="open-dialog-move">{t('browse.bulk.move_short')}</Button>
-  <Button size="sm" icon={Tag} onclick={() => show('tags')}>{t('browse.bulk.tags')}</Button>
-  <Menu items={flagItems} label={t('browse.bulk.flag')} triggerClass="bar-trigger">
+  <Button size="sm" variant="ghost" icon={FolderInput} onclick={() => show('move')} data-testid="open-dialog-move">{t('browse.bulk.move_short')}</Button>
+  <Button size="sm" variant="ghost" icon={Tag} onclick={() => show('tags')}>{t('browse.bulk.tags')}</Button>
+  <Menu items={flagItems} label={t('browse.bulk.flag')} triggerClass="bar-trigger" align="start">
     {#snippet trigger()}<span class="trig"><Icon icon={Flag} size={16} />{t('browse.bulk.flag')}</span>{/snippet}
   </Menu>
-  <Menu items={moreItems} label={t('browse.bulk.more')} />
+  <Menu items={moreItems} label={t('browse.bulk.more')} align="start" />
   <span class="grow"></span>
-  <Button size="sm" variant="danger" icon={Trash2} onclick={() => (deleting = true)}>{t('browse.bulk.delete')}</Button>
+  <Button size="sm" variant="ghost" icon={Trash2} class="del" onclick={() => (deleting = true)}>{t('browse.bulk.delete')}</Button>
 </div>
 
 <Dialog bind:open {title} size="sm">
@@ -211,34 +212,48 @@
 
 <style>
   .bar {
+    position: sticky;
+    top: 0;
+    z-index: 4;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    background: var(--accent-soft);
-    border: 1px solid var(--accent-text);
+    gap: 2px var(--space-1);
+    min-height: 36px;
+    padding: 2px var(--space-2) 2px 2px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-card);
+    box-shadow: inset 2px 0 0 var(--accent);
   }
   .count {
-    font-weight: var(--weight-semibold);
     font-size: var(--text-sm);
-    padding-inline: var(--space-1);
+    font-weight: var(--weight-semibold);
+    color: var(--accent-text);
+    font-variant-numeric: tabular-nums;
+    padding-inline-end: var(--space-1);
   }
   .sep {
     width: 1px;
-    align-self: stretch;
+    height: 18px;
     background: var(--border-strong);
     margin-inline: var(--space-1);
   }
   .bar :global(button.bar-trigger) {
     height: var(--control-h-sm);
-    padding: 0 var(--space-3);
-    border: 1px solid var(--border-strong);
+    padding: 0 var(--space-2);
+    border: 1px solid transparent;
     border-radius: var(--radius-control);
-    background: var(--surface-1);
+    background: transparent;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .bar :global(button.bar-trigger:hover) {
+    background: var(--surface-3);
     color: var(--text-1);
-    font-size: var(--text-xs);
+  }
+  .bar :global(.del) {
+    color: var(--danger);
   }
   .trig {
     display: inline-flex;
