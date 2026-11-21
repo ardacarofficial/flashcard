@@ -59,7 +59,7 @@
     "desc": {
       "new_per_day": "Her gün kaç yeni kart gösterilsin.",
       "reviews_per_day": "Tekrarlar bu sayıya ulaşınca o gün durur.",
-      "desired_retention": "Kart geri geldiğinde onu hâlâ hatırlama olasılığınız (0,70–0,99)."
+      "desired_retention": "Kart geri geldiğinde onu hâlâ hatırlama olasılığın (0,70–0,99)."
     },
     "danger": "Şablonu sil",
     "delete_desc": "Onu kullanan desteler üst destenin ayarlarına ya da varsayılanlara döner. Geri alınabilir."

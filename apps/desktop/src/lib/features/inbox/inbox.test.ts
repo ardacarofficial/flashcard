@@ -77,9 +77,12 @@ describe('<InboxScreen>', () => {
     expect(screen.getByText('Sentence: “The badger dug.”')).toBeTruthy();
     expect(screen.getByText('From: Badgers')).toBeTruthy();
 
-    // No deck yet: accepting is refused by the backend, nothing changes.
+    // No deck yet: accepting is refused by the backend, nothing changes; the row's deck
+    // picker says why (from the error's `field: "deck"`) and takes the focus.
     const accept = screen.getAllByRole('button', { name: 'Accept' });
     await fireEvent.click(accept[0]!);
+    expect(await screen.findByText('Choose a deck first.')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('combobox', { name: 'Deck' })[0]));
     expect((await api.call('inbox.count', {})).pending).toBe(2);
 
     // Pick the deck, edit the back, accept.

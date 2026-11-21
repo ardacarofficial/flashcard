@@ -2,4 +2,4 @@
 // shell opens on its own Home page, so study is lazy too.
 import type { ScreenModule } from '../types';
 
-export default [{ id: 'study', load: () => import('./StudyScreen.svelte'), routes: ['/study'], deckPicker: true }] satisfies ScreenModule;
+export default [{ id: 'study', load: () => import('./StudyScreen.svelte'), routes: ['/study'], deckPicker: 'all' }] satisfies ScreenModule;

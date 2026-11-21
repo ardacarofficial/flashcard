@@ -40,7 +40,7 @@
   import { addCardAction, deckMenu, goWithDeck, type DeckRequest } from './deck-menu';
   import { pageEnter } from './keys';
   import { studyNow } from '../study/intent';
-  import { menuRoute, moduleOn, summariesById } from './library';
+  import { menuRoute, moduleOn, nodesById, summariesById } from './library';
 
   interface Props {
     ctx: ScreenCtx;
@@ -64,6 +64,17 @@
   let index = $state(0);
   let flipped = $state(false);
   let request = $state<DeckRequest | null>(null);
+
+  /** The parents of a sub-deck, outermost first: crumbs before its name in the top bar. */
+  const parents = $derived.by(() => {
+    const byId = nodesById(ctx.decks);
+    const out: { label: string; onclick: () => void }[] = [];
+    for (let p = deck.parent_id ? byId.get(deck.parent_id) : undefined; p; p = p.deck.parent_id ? byId.get(p.deck.parent_id) : undefined) {
+      const id = p.deck.id;
+      out.unshift({ label: p.deck.name, onclick: () => ctx.selectDeck(id) });
+    }
+    return out;
+  });
 
   const current = $derived(terms[Math.min(index, Math.max(0, terms.length - 1))] ?? null);
   const due = $derived(node.counts.due + node.counts.learning);
@@ -189,7 +200,7 @@
 
 <svelte:window onkeydown={onWindowKey} />
 
-<PageHeader chrome={false} title={deck.name} subtitle={deck.parent_id ? deck.path : undefined} back={{ label: t('deck_page.back'), onclick: onback }}>
+<PageHeader chrome={false} title={deck.name} subtitle={deck.parent_id ? deck.path : undefined} {parents} back={{ label: t('deck_page.back'), onclick: onback }}>
   {#snippet meta()}
     <span class="facts">
       <span>{t('deck_page.cards', { count: node.counts.total })}</span>

@@ -57,7 +57,8 @@
       "copied": "Copied",
       "step1": "Create an access key below and copy it.",
       "step2": "In the extension open Ayarlar → Öğrenme servisi (Settings → Learning service), pick Subtitle Kartları and paste the server address and the key.",
-      "step3": "Click Bağlantıyı test et (Test connection). From then on every word you add with + arrives here."
+      "step3": "Click Bağlantıyı test et (Test connection). From then on every word you add with + arrives here.",
+      "steps": "Setup"
     },
     "keys": {
       "title": "Access keys",
@@ -73,8 +74,11 @@
       "revoked": "Revoked",
       "active": "Active",
       "new_title": "Your new access key",
-      "new_body": "Copy it now and paste it into the extension. It is shown only this once: the app keeps only a fingerprint of it.",
-      "done": "Done"
+      "new_body": "Copy it now and paste it into the extension.",
+      "done": "Done",
+      "revoke_named": "Revoke “{name}”",
+      "revoked_at": "Revoked {time}",
+      "once": "You won’t see this key again once you close this window. If you lose it, create a new one."
     },
     "deck": {
       "title": "Where cards go",
@@ -83,8 +87,15 @@
       "fallback": "{name} (made on first use)",
       "received": {
         "none": "No words received yet.",
-        "some": "{count, plural, one {# word} other {# words}} received, last {time}."
+        "some": "{count, plural, one {# word} other {# words}} received, last {time}.",
+        "label": "Words received",
+        "last": "Last {time}"
       }
+    },
+    "off": {
+      "title": "The Subtitle extension is off",
+      "body": "Turn it on and the extension can connect to the app on this computer. You can also switch it in Settings → Modules.",
+      "enable": "Turn on"
     }
   }
 }

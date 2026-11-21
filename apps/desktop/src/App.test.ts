@@ -45,7 +45,8 @@ describe('<App> on the dev mock transport', () => {
     const groups = Array.from(sub.querySelectorAll('h2'), (h) => h.textContent?.trim());
     expect(groups).toEqual(['General', 'Study', 'Reading and modes', 'Connections', 'Plugins', 'Data', 'Profiles and lock']);
     const pages = Array.from(sub.querySelectorAll('button'), (b) => b.textContent?.trim());
-    expect(pages).toEqual(['General', 'Shortcuts', 'Reminders', 'Deck options', 'Note types', 'Modes and reading', 'AI', 'MCP', 'Automation', 'Plugins', 'Import / export', 'Starter decks', 'Maintenance', 'Logs & updates', 'Profiles & lock']);
+    // Subtitle: off by default in the app, on in the dev mock (its settings page gets screenshots).
+    expect(pages).toEqual(['General', 'Shortcuts', 'Reminders', 'Deck options', 'Note types', 'Modes and reading', 'AI', 'MCP', 'Subtitle', 'Automation', 'Plugins', 'Import / export', 'Starter decks', 'Maintenance', 'Logs & updates', 'Profiles & lock']);
     await fireEvent.click(screen.getByRole('button', { name: 'Reminders' }));
     expect(sub.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Reminders');
 

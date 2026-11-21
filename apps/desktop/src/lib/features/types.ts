@@ -39,8 +39,11 @@ interface ScreenBase {
   routes?: string[];
   /** Slot whose mere presence adds one menu entry for this screen (e.g. `settings_page`). */
   slot?: { name: string; label_key: string; order: number };
-  /** Shell adds the deck picker to the screen's header (PageHeader actions). */
-  deckPicker?: boolean;
+  /**
+   * Shell adds the deck picker to the screen's header (PageHeader actions). `'all'`: no
+   * selection means every deck (study sessions), so the empty choice reads "All decks".
+   */
+  deckPicker?: boolean | 'all';
   /** `wide`: the page uses `--content-max-wide` (tables, charts) instead of `--content-max`. */
   width?: 'wide';
 }

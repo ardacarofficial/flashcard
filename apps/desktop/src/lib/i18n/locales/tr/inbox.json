@@ -126,6 +126,7 @@
     "select_all": "Tümünü seç",
     "deck": "Deste",
     "choose_deck": "Deste seç",
+    "needs_deck": "Önce bir deste seç.",
     "accept": "Kabul et",
     "accept_selected": "Seçilenleri kabul et ({count})",
     "reject": "Reddet",

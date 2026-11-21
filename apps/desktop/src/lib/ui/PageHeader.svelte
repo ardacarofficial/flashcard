@@ -10,6 +10,7 @@
   import Button from './Button.svelte';
   import { ChevronLeft } from './icons';
   import { getPageChrome } from './page-chrome';
+  import type { Crumb } from './types';
 
   interface Props {
     title: string;
@@ -20,10 +21,12 @@
     tabs?: Snippet;
     /** Draw the shell's deck picker and section tabs (default). `false` on sub-pages. */
     chrome?: boolean;
+    /** Crumbs before the title in the top bar's trail (with `back`), e.g. a sub-deck's parents. */
+    parents?: Crumb[];
     class?: string;
   }
 
-  let { title, subtitle, back, meta, actions, tabs, chrome = true, class: klass = '' }: Props = $props();
+  let { title, subtitle, back, meta, actions, tabs, chrome = true, parents, class: klass = '' }: Props = $props();
   const shell = getPageChrome();
   const shellActions = $derived(chrome ? (shell?.actions ?? null) : null);
   const shellTabs = $derived(chrome ? (shell?.tabs ?? null) : null);
@@ -31,7 +34,7 @@
   // A sub-page (with a back link) puts its title in the top bar's trail; the page crumb links back.
   $effect(() => {
     if (!back || !shell) return;
-    shell.setTrail([{ label: title }], back.onclick);
+    shell.setTrail([...(parents ?? []), { label: title }], back.onclick);
     return () => shell.setTrail(null);
   });
 </script>
@@ -40,7 +43,7 @@
   {#if back}
     <Button variant="ghost" size="sm" icon={ChevronLeft} class="back" onclick={back.onclick}>{back.label}</Button>
   {/if}
-  <div class="row">
+  <div class="row" class:stacked={!!subtitle || !!meta}>
     <div class="titles">
       <h1>{title}</h1>
       {#if subtitle}<p class="subtitle">{subtitle}</p>{/if}
@@ -75,7 +78,18 @@
     flex-wrap: wrap;
     min-height: var(--control-h-md);
   }
+  /* With a subtitle or chips under the title, the actions line up with the title line (not
+     with the middle of the whole block): a 32 px control centred on the 26 px title line. */
+  .row.stacked {
+    align-items: flex-start;
+  }
+  .row.stacked .actions {
+    margin-top: calc((var(--text-xl) * 1.3 - var(--control-h-md)) / 2);
+  }
+  /* The titles take the room left of the actions (a long subtitle wraps there instead of
+     pushing the actions onto their own line). */
   .titles {
+    flex: 1 1 16rem;
     min-width: 0;
   }
   h1 {

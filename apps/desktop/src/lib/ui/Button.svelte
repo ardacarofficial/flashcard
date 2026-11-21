@@ -52,6 +52,7 @@
   {type}
   class="fc-btn {variant} {size} {klass}"
   class:full={fullWidth}
+  class:has-hint={!!kbd}
   class:loading
   disabled={disabled || loading}
   aria-busy={loading || undefined}
@@ -140,18 +141,21 @@
   .danger:hover:not(:disabled) {
     border-color: var(--danger);
   }
+  /* The colours below already mute a disabled button: no extra fade (base.css halves every
+     disabled button's opacity, which made the label and its key hint unreadable). */
   .fc-btn:disabled {
     cursor: not-allowed;
+    opacity: 1;
   }
   .primary:disabled,
   .danger:disabled {
     background: var(--disabled-bg);
     border-color: var(--disabled-border);
-    color: var(--disabled-fg);
+    color: var(--text-3);
   }
   .secondary:disabled,
   .ghost:disabled {
-    color: var(--disabled-fg);
+    color: var(--text-3);
     border-color: var(--disabled-border);
   }
   .ghost:disabled {
@@ -171,6 +175,18 @@
     display: inline-flex;
     margin-inline-start: 2px;
   }
+  /* Full width: the label stays centred, the key hint sits at the end. */
+  .full.has-hint {
+    position: relative;
+    padding-inline: 64px;
+  }
+  .full .hint {
+    position: absolute;
+    inset-inline-end: var(--space-3);
+    top: 50%;
+    transform: translateY(-50%);
+    margin: 0;
+  }
   /* On the accent fill the hint is a darker tint of it, not a grey key. */
   .primary:not(:disabled) .hint :global(kbd) {
     background: color-mix(in srgb, var(--accent-fg) 12%, transparent);
@@ -180,7 +196,7 @@
   /* Disabled: the key stays legible, in the same muted tone as the label. */
   .fc-btn:disabled .hint :global(kbd) {
     background: transparent;
-    border-color: var(--disabled-border);
-    color: var(--disabled-fg);
+    border-color: var(--border-strong);
+    color: var(--text-3);
   }
 </style>

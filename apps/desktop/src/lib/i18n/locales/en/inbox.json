@@ -126,6 +126,7 @@
     "select_all": "Select all",
     "deck": "Deck",
     "choose_deck": "Choose a deck",
+    "needs_deck": "Choose a deck first.",
     "accept": "Accept",
     "accept_selected": "Accept selected ({count})",
     "reject": "Reject",

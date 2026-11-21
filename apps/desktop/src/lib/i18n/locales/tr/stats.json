@@ -354,7 +354,7 @@
       "date": "Geçerli bir tarih gir (YYYY-AA-GG).",
       "breakdown_attribute": "Yalnızca seçimli sınıflandırmalar kırılabilir.",
       "goal_target": "Hedef değer bu hedef için aralık dışında.",
-      "exam_name": "Sınava bir ad verin (en çok 100 karakter)."
+      "exam_name": "Sınava bir ad ver (en çok 100 karakter)."
     },
     "not_found": {
       "exam": "Sınav tarihi bulunamadı.",

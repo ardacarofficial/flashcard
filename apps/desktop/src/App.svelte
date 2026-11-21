@@ -265,7 +265,7 @@
 </script>
 
 {#snippet deckPickerChrome()}
-  <DeckPicker {paths} value={selectedDeck} onchange={(id) => (selectedDeck = id)} />
+  <DeckPicker {paths} all={screen?.deckPicker === 'all'} value={selectedDeck} onchange={(id) => (selectedDeck = id)} />
 {/snippet}
 
 {#snippet sectionTabsChrome()}

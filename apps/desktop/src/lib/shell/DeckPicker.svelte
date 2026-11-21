@@ -1,6 +1,8 @@
 <!--
-  The deck picker of screens that work on one deck (`deckPicker: true`). The shell hands it to
-  the screen's PageHeader (page-chrome.ts): a compact select among the header actions.
+  The deck picker of screens that work on one deck (`deckPicker: true`, empty choice "Choose a
+  deck") or on one deck or all of them (`deckPicker: 'all'`, empty choice "All decks"). The
+  shell hands it to the screen's PageHeader (page-chrome.ts): a compact select among the
+  header actions.
 -->
 <script lang="ts">
   import type { DeckPath } from '$lib/components/deck-paths';
@@ -11,10 +13,15 @@
     paths: DeckPath[];
     value: string | null;
     onchange: (id: string | null) => void;
+    /** No selection means every deck (study sessions). */
+    all?: boolean;
   }
 
-  let { paths, value, onchange }: Props = $props();
-  const options = $derived([{ value: null as string | null, label: t('deck.select_prompt') }, ...paths.map((p) => ({ value: p.id as string | null, label: p.path }))]);
+  let { paths, value, onchange, all = false }: Props = $props();
+  const options = $derived([
+    { value: null as string | null, label: t(all ? 'deck.all' : 'deck.pick') },
+    ...paths.map((p) => ({ value: p.id as string | null, label: p.path })),
+  ]);
 </script>
 
 <div class="deck-pick" data-testid="deck-picker">
