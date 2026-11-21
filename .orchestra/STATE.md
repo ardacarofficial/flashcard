@@ -57,3 +57,10 @@ all configs; independent visual review; version bump + CHANGELOG.
   garbled kbd hint on Create; `state-cards-flipped` screenshot missing after C (75 → 73 PNGs, check hooks);
   Subtitle settings page polish; ModeSettingsScreen/IO panels/shortcuts untouched by workers (kit-driven, verify);
   mock: Cards start-panel counts ≠ session counts; mock has no undo for notes; docs/11 rewrite; CHANGELOG + version.
+- All six screen workers merged (939f2ae): check clean, 358 tests.
+- Final round running (worktrees): P1 a9811c29dbab40ed0 (home/decks/notes/quickadd/ai/io/onboarding + shared UI),
+  P2 aed0478fb462e1f91 (study/modes/reading/browse/cards/plugins + screens.mjs + App focus), P3 acb0714005492fd0e
+  (stats/inbox/settings pages/shell), Docs ac60ffe91d58afc36 (docs/11, CHANGELOG, version 1.2.0),
+  Subtitle reviewer a5e2bb6c1b5a1b1d2. Common brief: .orchestra/POLISH-REVIEWER.md.
+- After they merge: Subtitle settings page visual polish (small), full `screens --strict` matrix, cargo fmt/clippy/test
+  (exclude fc-desktop; fc-ai needs NO_PROXY=127.0.0.1,localhost), final report to user.
