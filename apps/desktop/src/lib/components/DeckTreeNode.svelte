@@ -1,6 +1,8 @@
+<!-- One row of `DeckTree` (v1.2 dense restyle): expand, select, and inline add / rename / delete. -->
 <script lang="ts">
   import type { DeckTreeNode as DeckNode } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
+  import { Button, ChevronDown, ChevronRight, IconButton, Input, Pencil, Plus, Trash2 } from '$lib/ui';
   import DeckTreeNode from './DeckTreeNode.svelte';
 
   interface Props {
@@ -36,49 +38,48 @@
   }
 </script>
 
+{#snippet nameForm()}
+  <form onsubmit={submit} class="inline">
+    <Input size="sm" label={t('deck.name')} hideLabel placeholder={t('deck.name')} bind:value={draft} />
+    <Button size="sm" variant="primary" type="submit">{t('common.save')}</Button>
+    <Button size="sm" variant="ghost" onclick={() => (mode = 'idle')}>{t('common.cancel')}</Button>
+  </form>
+{/snippet}
+
 <li>
-  <div class="row" class:selected={selectedId === node.deck.id} style:padding-left="calc({depth} * var(--fc-space-4))">
+  <div class="row" class:selected={selectedId === node.deck.id} style:--depth={depth}>
     {#if node.children.length > 0}
-      <button
-        class="toggle"
+      <IconButton
+        size="sm"
+        icon={expanded ? ChevronDown : ChevronRight}
+        label={expanded ? t('deck.collapse') : t('deck.expand')}
         aria-expanded={expanded}
-        aria-label={expanded ? t('deck.collapse') : t('deck.expand')}
-        onclick={() => (expanded = !expanded)}>{expanded ? '▾' : '▸'}</button
-      >
+        onclick={() => (expanded = !expanded)}
+      />
     {:else}
-      <span class="toggle-spacer"></span>
+      <span class="spacer" aria-hidden="true"></span>
     {/if}
 
     {#if mode === 'rename'}
-      <form onsubmit={submit} class="inline">
-        <!-- svelte-ignore a11y_autofocus -->
-        <input bind:value={draft} aria-label={t('deck.name')} autofocus />
-        <button type="submit" class="primary">{t('common.save')}</button>
-        <button type="button" onclick={() => (mode = 'idle')}>{t('common.cancel')}</button>
-      </form>
+      {@render nameForm()}
     {:else}
-      <button class="name" onclick={() => onselect(node.deck.id)}>{node.deck.name}</button>
+      <button type="button" class="name" onclick={() => onselect(node.deck.id)}>{node.deck.name}</button>
       <span class="actions">
-        <button title={t('deck.new_sub')} aria-label={t('deck.new_sub')} onclick={() => start('add')}>+</button>
-        <button onclick={() => start('rename')}>{t('common.rename')}</button>
-        <button class="danger" onclick={() => start('confirm')}>{t('common.delete')}</button>
+        <IconButton size="sm" icon={Plus} label={t('deck.new_sub')} onclick={() => start('add')} />
+        <IconButton size="sm" icon={Pencil} label={t('common.rename')} onclick={() => start('rename')} />
+        <IconButton size="sm" icon={Trash2} variant="danger" label={t('common.delete')} onclick={() => start('confirm')} />
       </span>
     {/if}
   </div>
 
   {#if mode === 'confirm'}
-    <div class="inline confirm" style:padding-left="calc({depth + 1} * var(--fc-space-4))">
+    <div class="inline confirm" style:--depth={depth + 1}>
       <span>{t('deck.confirm_delete', { name: node.deck.name })}</span>
-      <button class="danger" onclick={confirmDelete}>{t('common.delete')}</button>
-      <button onclick={() => (mode = 'idle')}>{t('common.cancel')}</button>
+      <Button size="sm" variant="danger" onclick={confirmDelete}>{t('common.delete')}</Button>
+      <Button size="sm" variant="ghost" onclick={() => (mode = 'idle')}>{t('common.cancel')}</Button>
     </div>
   {:else if mode === 'add'}
-    <form onsubmit={submit} class="inline" style:padding-left="calc({depth + 1} * var(--fc-space-4))">
-      <!-- svelte-ignore a11y_autofocus -->
-      <input bind:value={draft} placeholder={t('deck.name')} aria-label={t('deck.name')} autofocus />
-      <button type="submit" class="primary">{t('common.save')}</button>
-      <button type="button" onclick={() => (mode = 'idle')}>{t('common.cancel')}</button>
-    </form>
+    <div class="nested" style:--depth={depth + 1}>{@render nameForm()}</div>
   {/if}
 
   {#if expanded && node.children.length > 0}
@@ -92,45 +93,69 @@
 
 <style>
   ul {
-    list-style: none;
     margin: 0;
     padding: 0;
+    list-style: none;
+  }
+  .row,
+  .confirm,
+  .nested {
+    padding-inline-start: calc(var(--depth, 0) * 16px);
   }
   .row {
     display: flex;
     align-items: center;
-    gap: var(--fc-space-1);
-    border-radius: var(--fc-radius);
+    gap: var(--space-1);
+    min-height: var(--row-h);
+    border-radius: var(--radius-control);
+  }
+  .row:hover,
+  .row:focus-within {
+    background: var(--surface-2);
   }
   .row.selected {
-    background: var(--fc-selected);
+    background: var(--surface-3);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .spacer {
+    flex: none;
+    width: var(--control-h-sm);
   }
   .name {
     flex: 1;
-    text-align: left;
-    border: none;
-    background: transparent;
-  }
-  .toggle,
-  .toggle-spacer {
-    width: 1.5em;
-    flex: none;
-    border: none;
-    background: transparent;
+    min-width: 0;
     padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-sm);
+    text-align: start;
+    cursor: pointer;
+  }
+  .name:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
   .actions {
-    display: none;
-    gap: var(--fc-space-1);
+    display: flex;
+    gap: 2px;
+    opacity: 0;
   }
   .row:hover .actions,
   .row:focus-within .actions {
-    display: flex;
+    opacity: 1;
   }
   .inline {
     display: flex;
-    gap: var(--fc-space-1);
+    flex: 1;
     align-items: center;
-    padding: var(--fc-space-1) 0;
+    gap: var(--space-1);
+    padding-block: var(--space-1);
+    font-size: var(--text-sm);
+  }
+  .inline :global(.fc-field) {
+    flex: 1;
   }
 </style>

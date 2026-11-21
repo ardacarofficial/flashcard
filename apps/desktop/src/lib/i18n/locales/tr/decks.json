@@ -40,7 +40,6 @@
   "library": {
     "title": "Kütüphane",
     "subtitle": "{count} deste",
-    "subtitle_total": "{count} deste · {total} toplam",
     "new_deck": "Yeni deste",
     "view": "Görünüm",
     "view_grid": "Kartlar",
@@ -58,7 +57,20 @@
     "mastered": "{pct} ustalaşıldı",
     "load_failed": "Deste ilerlemesi yüklenemedi.",
     "retry": "Tekrar dene",
-    "open": "{name} destesini aç"
+    "open": "{name} destesini aç",
+    "subtitle_tree": "{count} deste ({top} ana, {sub} alt deste)",
+    "subtitle_today": "bugün {count} kart çalışılacak",
+    "due_short": "vadeli",
+    "new_count": "{count} yeni",
+    "col_name": "Deste",
+    "col_cards": "Kart",
+    "col_due": "Vadeli",
+    "col_new": "Yeni",
+    "col_mastery": "Ustalık",
+    "col_class": "Sınıflandırma",
+    "study": "{name} destesini çalış",
+    "add_card": "{name} destesine kart ekle",
+    "keys_hint": "↑ ↓ satırlar arasında gezinir, → ← alt desteleri açıp kapatır, Enter desteyi açar."
   },
   "deck_page": {
     "back": "Kütüphane",
@@ -118,6 +130,12 @@
     "terms_failed": "Kartlar yüklenemedi.",
     "retry": "Tekrar dene",
     "saved": "Kaydedildi",
-    "not_found": "Bu deste artık yok."
+    "not_found": "Bu deste artık yok.",
+    "study": "Çalış",
+    "today": "Bugün",
+    "today_due": "Vadeli",
+    "subdecks": "Alt desteler",
+    "state": "Durum",
+    "edit_hint": "Ctrl+Enter kaydeder · Esc vazgeçer"
   }
 }

@@ -2,7 +2,7 @@
   import { api, type ApiError } from '$lib/api';
   import type { NoteListItem } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
-  import { Card, Chip, EmptyState, FileText, IconButton, Pencil, Skeleton, Trash2 } from '$lib/ui';
+  import { Chip, EmptyState, FileText, IconButton, Pencil, Skeleton, Trash2 } from '$lib/ui';
   import ConfirmDialog from './ConfirmDialog.svelte';
   import NoteEditDialog from '$lib/features/cards/NoteEditDialog.svelte';
 
@@ -51,7 +51,7 @@
   {:else if notes.length === 0}
     <EmptyState icon={FileText} title={t('note.empty')} />
   {:else}
-    <Card padding="none">
+    <div class="panel">
       <ul>
         {#each notes as n (n.id)}
           <li>
@@ -60,13 +60,13 @@
               {#each n.tags as tag (tag)}<Chip size="sm" label={tag} />{/each}
             </span>
             <span class="actions">
-              <IconButton icon={Pencil} label={t('note_editor.edit')} onclick={() => (editing = n.id)} />
-              <IconButton icon={Trash2} variant="danger" label={t('note.delete_aria', { name: n.sort_field })} onclick={() => (pending = n)} />
+              <IconButton size="sm" icon={Pencil} label={t('note_editor.edit')} onclick={() => (editing = n.id)} />
+              <IconButton size="sm" icon={Trash2} variant="danger" label={t('note.delete_aria', { name: n.sort_field })} onclick={() => (pending = n)} />
             </span>
           </li>
         {/each}
       </ul>
-    </Card>
+    </div>
   {/if}
 
   {#if editing}
@@ -85,6 +85,11 @@
 </section>
 
 <style>
+  .panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+  }
   ul {
     margin: 0;
     padding: 0;
@@ -95,11 +100,25 @@
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
     gap: var(--space-3);
-    min-height: 52px;
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    min-height: var(--row-h);
+    padding: 3px var(--space-2) 3px var(--space-3);
+    font-size: var(--text-sm);
   }
   li + li {
     border-top: 1px solid var(--border);
+  }
+  li:hover,
+  li:focus-within {
+    background: var(--surface-2);
+  }
+  li:last-child {
+    border-radius: 0 0 calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px);
+  }
+  li:first-child {
+    border-radius: calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px) 0 0;
+  }
+  li:only-child {
+    border-radius: calc(var(--radius-card) - 1px);
   }
   .front {
     min-width: 0;
@@ -116,11 +135,22 @@
   }
   .actions {
     display: flex;
-    gap: var(--space-1);
+    gap: 2px;
+    opacity: 0;
+    transition: opacity var(--motion-fast) var(--ease);
+  }
+  li:hover .actions,
+  li:focus-within .actions {
+    opacity: 1;
+  }
+  @media (hover: none) {
+    .actions {
+      opacity: 1;
+    }
   }
   .error {
     margin: 0 0 var(--space-3);
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-control);
     background: var(--danger-soft);
     color: var(--danger);

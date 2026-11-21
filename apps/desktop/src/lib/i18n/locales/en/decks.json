@@ -40,7 +40,6 @@
   "library": {
     "title": "Library",
     "subtitle": "{count, plural, one {# deck} other {# decks}}",
-    "subtitle_total": "{count, plural, one {# deck} other {# decks}} · {total} total",
     "new_deck": "New deck",
     "view": "View",
     "view_grid": "Cards",
@@ -58,7 +57,20 @@
     "mastered": "{pct} mastered",
     "load_failed": "Couldn't load deck progress.",
     "retry": "Try again",
-    "open": "Open {name}"
+    "open": "Open {name}",
+    "subtitle_tree": "{count, plural, one {# deck} other {# decks}} ({top} top-level, {sub, plural, one {# sub-deck} other {# sub-decks}})",
+    "subtitle_today": "{count, plural, one {# card} other {# cards}} to study today",
+    "due_short": "due",
+    "new_count": "{count} new",
+    "col_name": "Deck",
+    "col_cards": "Cards",
+    "col_due": "Due",
+    "col_new": "New",
+    "col_mastery": "Mastery",
+    "col_class": "Classification",
+    "study": "Study {name}",
+    "add_card": "Add a card to {name}",
+    "keys_hint": "↑ ↓ move between rows, → ← expand and collapse sub-decks, Enter opens the deck."
   },
   "deck_page": {
     "back": "Library",
@@ -118,6 +130,12 @@
     "terms_failed": "Couldn't load the cards.",
     "retry": "Try again",
     "saved": "Saved",
-    "not_found": "This deck no longer exists."
+    "not_found": "This deck no longer exists.",
+    "study": "Study",
+    "today": "Today",
+    "today_due": "Due",
+    "subdecks": "Sub-decks",
+    "state": "Status",
+    "edit_hint": "Ctrl+Enter saves · Esc cancels"
   }
 }

@@ -1,13 +1,17 @@
 <!--
-  The deck page's term list (v1.1, docs/11 §3): term | definition in two columns, mastery and
-  level chips, flags (⚑ menu), inline edit (Enter on the pencil; Ctrl+Enter saves, Esc
-  cancels) and "Add card". Rows come from `notes.terms`; an edit is a `notes.update`.
+  The deck page's term list (v1.2): a dense table — term | definition, classification (level)
+  chips, mastery, flags — with row actions on hover/focus (⚑ flag menu, edit). Inline edit:
+  the pencil or a double-click turns the row into two fields; Ctrl+Enter saves, Esc cancels.
+  "Add card" opens Quick Add on this deck. Rows come from `notes.terms`; an edit is a
+  `notes.update`, a flag `cards.set_flag`.
 -->
 <script lang="ts">
+  import { tick } from 'svelte';
   import { api } from '$lib/api';
   import type { FlagDto, NoteTerm } from '$lib/api/types';
+  import { formatCount } from '$lib/format';
   import { t, td } from '$lib/i18n/index.svelte';
-  import { Button, Card, Check, Chip, EmptyState, Flag, IconButton, List, Menu, Pencil, Plus, Skeleton, Textarea, type MenuItem } from '$lib/ui';
+  import { Button, Check, Chip, EmptyState, Flag, IconButton, List, Menu, Pencil, Plus, Skeleton, Textarea, type MenuItem } from '$lib/ui';
   import { defaultFlagKey, flagBit, hasFlag } from '../cards/flags';
   import { masteryTone } from './library';
 
@@ -30,15 +34,18 @@
   let front = $state('');
   let back = $state('');
   let saving = $state(false);
+  let editRow = $state<HTMLElement | null>(null);
 
   const flagName = (f: FlagDto) => f.name ?? td(defaultFlagKey(f.flag));
   const MASTERY = { new: 'deck_page.mastery_new', learning: 'deck_page.mastery_learning', mastered: 'deck_page.mastery_mastered' } as const;
   const masteryLabel = (row: NoteTerm) => t(MASTERY[row.mastery]);
 
-  function edit(row: NoteTerm) {
+  async function edit(row: NoteTerm) {
     editing = row.note_id;
     front = row.front.value;
     back = row.back?.value ?? '';
+    await tick();
+    editRow?.querySelector('textarea')?.focus();
   }
 
   async function save(row: NoteTerm) {
@@ -63,6 +70,7 @@
   function onEditKey(e: KeyboardEvent, row: NoteTerm) {
     if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       editing = null;
     } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
@@ -88,111 +96,135 @@
   }
 </script>
 
-<section aria-labelledby="deck-terms" data-testid="term-list">
+<section class="terms" aria-labelledby="deck-terms" data-testid="term-list">
   <div class="head">
-    <h2 id="deck-terms" class="section-title">
+    <h2 id="deck-terms" class="title">
       {t('deck_page.terms')}
-      {#if status === 'ready'}<span class="count">{terms.length}{hasMore ? '+' : ''}</span>{/if}
+      {#if status === 'ready'}<span class="count num">{formatCount(terms.length)}{hasMore ? '+' : ''}</span>{/if}
     </h2>
     {#if onadd && status === 'ready' && terms.length > 0}
-      <Button icon={Plus} onclick={onadd}>{t('deck_page.add_card')}</Button>
+      <Button size="sm" icon={Plus} kbd="N" onclick={onadd}>{t('deck_page.add_card')}</Button>
     {/if}
   </div>
 
   {#if status === 'loading'}
-    <Card padding="none">
+    <div class="table">
       {#each [0, 1, 2, 3] as i (i)}
         <div class="row skeleton"><Skeleton shape="text" /><Skeleton shape="text" /></div>
       {/each}
-    </Card>
+    </div>
   {:else if status === 'failed'}
-    <Card padding="md" class="failed">
-      <p role="alert">{t('deck_page.terms_failed')}</p>
-      <Button size="sm" onclick={onretry}>{t('deck_page.retry')}</Button>
-    </Card>
+    <div class="failed" role="alert">
+      <span>{t('deck_page.terms_failed')}</span>
+      <Button size="sm" variant="ghost" onclick={onretry}>{t('deck_page.retry')}</Button>
+    </div>
   {:else if terms.length === 0}
-    <Card padding="lg">
+    <div class="table empty">
       <EmptyState
         size="sm"
         icon={List}
         title={t('deck_page.terms_empty')}
         action={onadd ? { label: t('deck_page.terms_empty_action'), icon: Plus, onclick: onadd } : undefined}
       />
-    </Card>
+    </div>
   {:else}
-    <Card padding="none">
+    <div class="table">
       <div class="row header" aria-hidden="true">
         <span>{t('deck_page.term')}</span>
-        <span class="back">{t('deck_page.definition')}</span>
+        <span>{t('deck_page.definition')}</span>
+        <span class="end">{t('deck_page.state')}</span>
+        <span></span>
       </div>
       <ul class="list">
         {#each terms as row (row.note_id)}
-          <li class="row" class:editing={editing === row.note_id}>
-            {#if editing === row.note_id}
+          {#if editing === row.note_id}
+            <li class="row editing" bind:this={editRow}>
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div class="edit" onkeydown={(e) => onEditKey(e, row)}>
-                <Textarea label={t('deck_page.edit_front')} bind:value={front} autoGrow rows={1} maxRows={6} />
+                <Textarea label={t('deck_page.edit_front')} hideLabel bind:value={front} autoGrow rows={1} maxRows={6} />
                 {#if row.back}
-                  <Textarea label={t('deck_page.edit_back')} bind:value={back} autoGrow rows={1} maxRows={6} />
+                  <Textarea label={t('deck_page.edit_back')} hideLabel bind:value={back} autoGrow rows={1} maxRows={6} />
+                {:else}
+                  <span></span>
                 {/if}
                 <div class="edit-actions">
+                  <span class="edit-hint">{t('deck_page.edit_hint')}</span>
                   <Button variant="ghost" size="sm" onclick={() => (editing = null)}>{t('common.cancel')}</Button>
                   <Button variant="primary" size="sm" loading={saving} onclick={() => void save(row)}>{t('common.save')}</Button>
                 </div>
               </div>
-            {:else}
+            </li>
+          {:else}
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+            <li class="row" ondblclick={() => void edit(row)}>
               <span class="front">{row.front.text}</span>
               <span class="back">{row.back?.text ?? ''}</span>
               <span class="tags">
-                {#each row.chips as chip (chip.attr_id + chip.label)}
-                  <Chip size="sm" label={chip.label} />
-                {/each}
-                <Chip size="sm" tone={masteryTone[row.mastery]} label={masteryLabel(row)} />
                 {#if flagsOn}
                   {#each flags.filter((f) => hasFlag(row.flags, f.flag)) as f (f.flag)}
                     <span class="flag" style:--flag={f.color}><Chip size="sm" icon={Flag} label={flagName(f)} /></span>
                   {/each}
                 {/if}
+                {#each row.chips as chip (chip.attr_id + chip.label)}
+                  <Chip size="sm" label={chip.label} />
+                {/each}
+                <Chip size="sm" tone={masteryTone[row.mastery]} label={masteryLabel(row)} />
               </span>
               <span class="actions">
                 {#if flagsOn && flags.length}
-                  <Menu items={flagItems(row)} label={t('deck_page.flags')} icon={Flag} align="end" />
+                  <Menu items={flagItems(row)} label={t('deck_page.flags')} icon={Flag} align="end" triggerClass="term-menu" />
                 {/if}
-                <IconButton icon={Pencil} label={t('deck_page.edit', { term: row.front.text })} onclick={() => edit(row)} />
+                <IconButton size="sm" icon={Pencil} label={t('deck_page.edit', { term: row.front.text })} onclick={() => void edit(row)} />
               </span>
-            {/if}
-          </li>
+            </li>
+          {/if}
         {/each}
       </ul>
-    </Card>
+    </div>
     {#if hasMore}
       <div class="foot">
-        <Button variant="secondary" loading={loadingMore} onclick={onmore}>{t('deck_page.load_more')}</Button>
+        <Button size="sm" variant="ghost" loading={loadingMore} onclick={onmore}>{t('deck_page.load_more')}</Button>
       </div>
     {/if}
   {/if}
 </section>
 
 <style>
+  .terms {
+    scroll-margin-top: var(--space-4);
+  }
   .head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
-    margin-bottom: var(--space-3);
+    margin-bottom: var(--space-2);
   }
-  .section-title {
+  .title {
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
     margin: 0;
-    font-size: var(--text-lg);
+    font-size: var(--text-md);
     font-weight: var(--weight-semibold);
   }
   .count {
-    font-size: var(--text-sm);
-    font-weight: var(--weight-regular);
     color: var(--text-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-regular);
+  }
+  .table {
+    container-type: inline-size;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+  }
+  /* No overflow clipping (the flag menu opens past the table): round the last row instead. */
+  .list .row:last-child {
+    border-radius: 0 0 calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px);
+  }
+  .table.empty {
+    padding: var(--space-6) var(--space-4);
   }
   .list {
     margin: 0;
@@ -201,30 +233,39 @@
   }
   .row {
     display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 208px 72px;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 216px 64px;
     align-items: center;
     gap: var(--space-4);
-    padding: var(--space-3) var(--space-4);
+    min-height: var(--row-h);
+    padding: 5px var(--space-2) 5px var(--space-3);
     border-bottom: 1px solid var(--border);
+    font-size: var(--text-sm);
   }
   .list .row:last-child {
     border-bottom: 0;
   }
-  .row.header {
-    padding-block: var(--space-2);
-    font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-2);
+  .list .row:not(.editing):hover,
+  .list .row:focus-within {
     background: var(--surface-2);
+  }
+  .row.header {
+    min-height: 30px;
+    padding-block: 0;
+    color: var(--text-2);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+  }
+  .end {
+    text-align: end;
   }
   .row.skeleton {
     grid-template-columns: 1fr 1fr;
   }
   .row.editing {
     display: block;
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
     background: var(--surface-2);
+    box-shadow: inset 2px 0 0 var(--accent);
   }
   .front {
     font-weight: var(--weight-medium);
@@ -233,8 +274,6 @@
   .back {
     color: var(--text-1);
     overflow-wrap: anywhere;
-    padding-inline-start: var(--space-4);
-    border-inline-start: 1px solid var(--border);
   }
   .tags {
     display: flex;
@@ -248,44 +287,69 @@
   .actions {
     display: flex;
     justify-content: flex-end;
-    gap: var(--space-1);
+    gap: 2px;
+    opacity: 0;
+    transition: opacity var(--motion-fast) var(--ease);
   }
-  .row.header .back {
-    border-color: transparent;
+  .row:hover .actions,
+  .row:focus-within .actions {
+    opacity: 1;
+  }
+  @media (hover: none) {
+    .actions {
+      opacity: 1;
+    }
+  }
+  .actions :global(.term-menu) {
+    width: var(--control-h-sm);
+    height: var(--control-h-sm);
   }
   .edit {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-3);
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: var(--space-2) var(--space-4);
   }
   .edit-actions {
     grid-column: 1 / -1;
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     gap: var(--space-2);
+  }
+  .edit-hint {
+    margin-inline-end: auto;
+    color: var(--text-2);
+    font-size: var(--text-xs);
   }
   .foot {
     display: flex;
     justify-content: center;
-    gap: var(--space-3);
-    margin-top: var(--space-4);
+    margin-top: var(--space-2);
   }
-  :global(.failed.fc-card) {
+  .failed {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
-  }
-  :global(.failed.fc-card) p {
-    margin: 0;
+    min-height: var(--row-h);
+    padding: 0 var(--space-2) 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--danger-soft);
     color: var(--danger);
   }
-  @media (max-width: 1023.98px) {
+  /* Narrow tables: the chips go on a second line under term | definition. */
+  @container (max-width: 640px) {
     .row {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 72px;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 64px;
+      row-gap: var(--space-1);
+    }
+    .row.header > :nth-child(3) {
+      display: none;
     }
     .tags {
       grid-column: 1 / 3;
+      grid-row: 2;
       justify-content: flex-start;
     }
     .actions {

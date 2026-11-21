@@ -33,6 +33,16 @@
     "empty_body": "Create your first deck to start studying.",
     "empty_action": "Create your first deck",
     "load_failed": "Couldn't load today's summary.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "streak_unit": "{count, plural, one {day} other {days}}",
+    "answered": "Answered today",
+    "answered_unit": "{count, plural, one {card} other {cards}}",
+    "answered_time": "{time} studied",
+    "answered_none": "No cards answered today yet",
+    "decks_due": "Decks to study today",
+    "col_deck": "Deck",
+    "col_mastery": "Mastery",
+    "study": "Study",
+    "study_deck": "Study {name}"
   }
 }

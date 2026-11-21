@@ -1,19 +1,21 @@
 <!--
-  A deck as a card (Library grid, Home's recent decks): name, card and sub-deck counts, due
-  count, classification chips and the New / Learning / Mastered bar. Every number comes from
-  the backend (`decks.tree` counts, `decks.summaries`); `summary` is null while it loads.
+  A deck as a compact card (the Library's secondary grid view): name with its due count, card
+  and sub-deck counts, classification chips and the New / Learning / Mastered bar. Every
+  number comes from the backend (`decks.tree` counts, `decks.summaries`); `summary` is null
+  while it loads.
 -->
 <script lang="ts">
-  import { formatPercent100 } from '$lib/format';
+  import { formatCount } from '$lib/format';
   import type { DeckSummary, DeckTreeNode } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
-  import { Badge, Card, Chip, ProgressBar, Skeleton } from '$lib/ui';
+  import { Card, Chip } from '$lib/ui';
+  import MasteryBar from './MasteryBar.svelte';
 
   interface Props {
     node: DeckTreeNode;
     summary: DeckSummary | null;
     onopen: () => void;
-    /** Show the classification chips (off on Home: fewer things per card). */
+    /** Show the classification chips. */
     chips?: boolean;
   }
   let { node, summary, onopen, chips = true }: Props = $props();
@@ -21,18 +23,21 @@
   const due = $derived(node.counts.due + node.counts.learning);
 </script>
 
-<Card onclick={onopen} label={t('library.open', { name: node.deck.name })} testid="deck-row" padding="md" class="deck-card">
+<Card onclick={onopen} label={t('library.open', { name: node.deck.name })} testid="deck-row" padding="sm" class="deck-card">
   <span class="top">
-    <span class="swatch" style:background={node.deck.color ?? 'var(--accent)'} aria-hidden="true"></span>
+    <span class="dot" style:background={node.deck.color ?? 'var(--accent)'} aria-hidden="true"></span>
     <span class="name">{node.deck.name}</span>
     {#if due > 0}
-      <Badge tone="accent" variant="soft">{t('library.due', { count: due })}</Badge>
+      <span class="due"><span class="num">{formatCount(due)}</span> {t('library.due_short')}</span>
     {/if}
   </span>
   <span class="meta">
     {t('library.cards', { count: node.counts.total })}
     {#if node.children.length > 0}
       <span aria-hidden="true">·</span> {t('library.subdecks', { count: node.children.length })}
+    {/if}
+    {#if node.counts.new > 0}
+      <span aria-hidden="true">·</span> {t('library.new_count', { count: node.counts.new })}
     {/if}
   </span>
   {#if chips && summary && summary.chips.length > 0}
@@ -42,30 +47,14 @@
       {/each}
     </span>
   {/if}
-  <span class="progress">
-    {#if summary}
-      <ProgressBar
-        size="sm"
-        label={t('library.mastery', { name: node.deck.name })}
-        max={Math.max(1, summary.new + summary.learning + summary.mastered)}
-        segments={[
-          { value: summary.mastered, label: t('deck_page.mastered'), tone: 'success' },
-          { value: summary.learning, label: t('deck_page.learning'), tone: 'warning' },
-          { value: summary.new, label: t('deck_page.new'), tone: 'neutral' },
-        ]}
-      />
-      <span class="pct">{t('library.mastered', { pct: formatPercent100(summary.mastered_pct) })}</span>
-    {:else}
-      <Skeleton shape="text" width="100%" />
-    {/if}
-  </span>
+  <span class="progress"><MasteryBar {summary} name={node.deck.name} long /></span>
 </Card>
 
 <style>
   :global(.deck-card.fc-card) {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: 6px;
     height: 100%;
   }
   .top {
@@ -74,10 +63,10 @@
     gap: var(--space-2);
     min-width: 0;
   }
-  .swatch {
+  .dot {
     flex: none;
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: var(--radius-pill);
   }
   .name {
@@ -88,9 +77,15 @@
     line-height: var(--leading-tight);
     overflow-wrap: anywhere;
   }
+  .due {
+    flex: none;
+    color: var(--accent-text);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+  }
   .meta {
-    font-size: var(--text-sm);
     color: var(--text-2);
+    font-size: var(--text-xs);
   }
   .chips {
     display: flex;
@@ -98,14 +93,7 @@
     gap: var(--space-1);
   }
   .progress {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
     margin-top: auto;
-    padding-top: var(--space-2);
-  }
-  .pct {
-    font-size: var(--text-xs);
-    color: var(--text-2);
+    padding-top: var(--space-1);
   }
 </style>

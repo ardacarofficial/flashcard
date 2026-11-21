@@ -33,6 +33,16 @@
     "empty_body": "Çalışmaya başlamak için ilk desteni oluştur.",
     "empty_action": "İlk desteni oluştur",
     "load_failed": "Bugünün özeti yüklenemedi.",
-    "retry": "Tekrar dene"
+    "retry": "Tekrar dene",
+    "streak_unit": "gün",
+    "answered": "Bugün yanıtlanan",
+    "answered_unit": "kart",
+    "answered_time": "{time} çalışıldı",
+    "answered_none": "Bugün henüz kart yanıtlanmadı",
+    "decks_due": "Bugün çalışılacak desteler",
+    "col_deck": "Deste",
+    "col_mastery": "Ustalık",
+    "study": "Çalış",
+    "study_deck": "{name} destesini çalış"
   }
 }
