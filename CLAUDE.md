@@ -6,7 +6,7 @@ Bu dosya, bu repoda çalışan AI ajanları için başlangıç bağlamıdır.
 
 Rust + Tauri 2 ile masaüstü flash kart uygulaması. Tüm plan `docs/` klasöründedir. **Bir işe başlamadan önce `docs/README.md` ve ilgili dokümanları oku.**
 
-- Durum: **v1.1.0 arayüz tasarımı tamamlandı** (`feat/v1.1-design`: tasarım sistemi + 4 ekran izi birleşti; push/inceleme bekliyor) — bkz. `docs/11-tasarim.md`. v1.0.0 `main`'de yayınlı (elle Windows koşusu bekliyor).
+- Durum: **v1.2.0: arayüz yeniden tasarlandı + Subtitle bağlantısı** — bkz. `docs/11-tasarim.md`, `docs/06-ai-ve-entegrasyonlar.md` §5.1. Bekleyen: Windows'ta elle koşu ve Subtitle eklentisinin gerçek bir tarayıcıda denenmesi.
 - Öncelikli platform: **Windows** (macOS/Linux sonra).
 
 ## İletişim

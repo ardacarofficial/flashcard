@@ -233,6 +233,21 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 
 > **Doğrulama (iz O, `feat/v1.0-release`: kurulum, imzalı güncelleme, çökme kurtarma, loglar):** `fc-app/src/modules/maintenance/tests.rs`, MemStore + SQLite bellek + SQLite dosya: (1) `after_an_unclean_shutdown_the_app_offers_session_drafts_crash_and_integrity` (bitmeyen çalıştırma + çökme raporu → `maintenance.recovery.get` sebep `crash`, açık oturum devam ettirilebilir, taslak geri gelir, açılışta hızlı bütünlük denetimi, rapor maskeli; kapatma geri al adımı değil). (2) `a_clean_previous_run_offers_nothing`. (3) `drafts_are_scratch_state_validated_and_bounded`. (4) `exported_logs_never_contain_keys_or_tokens` (anahtar zincirindeki şekilsiz sağlayıcı anahtarı, `sk-ant`, `ghp_`, JWT, uzun hex, parola, Bearer — paketteki hiçbir dosyada yok). (5) `updates_are_checked_downloaded_verified_and_applied_only_on_request`, (6) `a_badly_signed_update_is_refused` (`PROVIDER_UPDATE_SIGNATURE`, hiçbir şey kurulmaz). (7) `no_automated_actor_reaches_maintenance_or_updates`. Ayrıca `run.rs` (temiz/kirli çalıştırma işareti), `logging.rs` (dönen, maskeleyen log), `crash.rs`, `smoke.rs`, `fc-core::maintenance::redact`, depolama `tests/maintenance.rs` (migration 1050), masaüstü `src-tauri/src/maintenance.rs` (`--smoke`, çalıştırma işareti, imza hatası eşlemesi), `features/maintenance/maintenance.test.ts`. Kurulum: NSIS kullanıcı başına + MSI, WebView2 önyükleyici; yayın: `release.yml` (etiket `v*` → taslak Release + `latest.json`). Ayrıntı: [07 §8](07-gelistirme-sureci.md).
 
+## 🎨 v1.2 · Arayüz yeniden tasarımı ve Subtitle bağlantısı
+
+*v1.1 ilk arayüz tasarımıydı (Quizlet esinli, ferah; docs/10 §38). Proje sahibi kullanırken rahat edemedi, özellikle kart eklemeyi ağır buldu; v1.2 arayüzü akışlardan başlayarak yeniden kurar.*
+
+**Kapsam:** Koyu öncelikli, sık, klavye öncelikli tasarım sistemi (tek kehribar vurgu, JetBrains Mono sayılar); her zaman görünen üst çubuk (arama/komut `Ctrl+K`, "Kart ekle" `N`); Hızlı Ekle penceresi; tablo benzeri toplu ekleme ızgarası; Ana sayfa → oturum (oturumda kabuk kaybolur); Kütüphane ağaç-tablosu → deste sayfası; İstatistik; tüm diğer ekranlar ve Ayarlar aynı sistemde. Ayrıca Subtitle tarayıcı eklentisinin sözleşmesini karşılayan `subtitle` modülü ve `/subtitle/v1` HTTP API'si. Davranış ve Rust API'si değişmez; hiçbir özellik kaldırılmaz.
+
+**Kabul kriterleri** (tam liste: [11 §6](11-tasarim.md))
+- [x] Hiçbir özellik, ekran, ayar, kısayol ya da modül anahtarı kaldırılmadı; taşınan her şey paletten bulunur (`navigation.test.ts`, `module-switches.test.ts`).
+- [x] Kart eklemek tek tuş: `N` → alanlar → `Ctrl+Enter`, pencere açık kalır, Geri al (`quickadd.test.ts`).
+- [x] Çalışma oturumu pencerenin tamamını alır; 2'li ve 4'lü cevap düzeni korunur.
+- [x] Lint tarzı testler (ham kontrol, kontrast, sabit metin, sayı biçimi, ilk yükleme, paket bütçesi) yeşil; ilk JS 175,8 kB ≤ 320 kB.
+- [x] Subtitle: eklentinin sözleşmesi değiştirilmeden karşılanır, migration `1200` testli, yakalama tek geri al adımı; sözleşme denetimi eklentinin kendi istemcisiyle (`tools/subtitle-contract/check.mjs`). Ayrıntı: [06 §5.1](06-ai-ve-entegrasyonlar.md).
+- [ ] Gerçek Tauri penceresinde (Windows) elle gezinti.
+- [ ] Subtitle eklentisi gerçek bir tarayıcıda denenecek.
+
 ## 🔮 v1.0 sonrası
 
 macOS · Linux · senkronizasyon · mobil · erişilebilirlik · oyunlaştırma · eklenti mağazası kaynağının işletilmesi · isteğe bağlı veritabanı şifreleme.

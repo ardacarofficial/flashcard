@@ -2,7 +2,7 @@
 
 Bu klasör, uygulamanın **tam planını** içerir. Geliştirme boyunca pusulamız budur. Bir şey burada yazmıyorsa ya henüz karar verilmemiştir ya da kapsam dışıdır.
 
-> **Durum:** v0.1 tamamlandı (`v0.1.0`); Faz 2 (v0.2–v0.5) `main`'de (`v0.5.0`); Faz 3 (v0.6–v0.8) `main`'de (`0.8.0`); Faz 4 (v0.10 modlar + okuma) `feat/phase4-integration`'da birleşiyor (tur 1). Ayrıntı: [04](04-yol-haritasi.md), [10 §19–§29](10-v0.1-sozlesme.md).
+> **Durum:** **v1.2.0** — arayüz akışlardan başlayarak yeniden tasarlandı ([11](11-tasarim.md)) ve Subtitle tarayıcı eklentisi bağlantısı eklendi ([06 §5.1](06-ai-ve-entegrasyonlar.md)). v1.0 (Windows sürümü) ve v1.1 (ilk arayüz tasarımı) tamam; bekleyen: Windows'ta elle koşu ([07 §8](07-gelistirme-sureci.md)) ve Subtitle eklentisinin gerçek bir tarayıcıda denenmesi. Ayrıntı: [04](04-yol-haritasi.md), [CHANGELOG](../CHANGELOG.md), kullanıcı rehberi [guide/](guide/README.md).
 
 ## 🗂️ Dokümanlar
 
@@ -17,6 +17,8 @@ Bu klasör, uygulamanın **tam planını** içerir. Geliştirme boyunca pusulam�
 | 07 | [Geliştirme Süreci](07-gelistirme-sureci.md) | Teknoloji yığını, klasör yapısı, test, paralel ajan çalışması, VDS |
 | 08 | [Açık Kararlar](08-acik-kararlar.md) | Henüz karar verilmemiş konular |
 | 09 | [Rakip Analizi](09-rakip-analizi.md) | Anki ve diğer uygulamalarla karşılaştırma, alınan fikirler |
+| 10 | [Sözleşme ve sürüm kayıtları](10-v0.1-sozlesme.md) | v0.1 sözleşmesi ve sonraki sürümlerin uygulama/doğrulama kayıtları |
+| 11 | [Tasarım (v1.2)](11-tasarim.md) | Akışlar, bilgi mimarisi, tasarım sistemi (token'lar, bileşenler), görsel doğrulama |
 
 ## ⚡ Tek cümlede
 
