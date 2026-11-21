@@ -5,7 +5,7 @@
    * time. The backend decides what each subject sets up (`onboarding.options`) and does it
    * in one undo step (`onboarding.apply`).
    */
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { api } from '$lib/api';
   import type { OnboardingChoices, OnboardingSubjectDto, StudyGoal } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
@@ -43,11 +43,25 @@
     }
   }
 
+  let body = $state<HTMLDivElement | null>(null);
+
+  /** Keeps the keyboard in the dialog when a step replaces its content. */
+  async function focusIn(selector: string) {
+    await tick();
+    body?.querySelector<HTMLElement>(selector)?.focus();
+  }
+
   function next() {
     if (!subject) return;
     deckName = subject.deck_name;
     picked = Object.fromEntries(subject.starters.map((id) => [id, true]));
     step = 'details';
+    void focusIn('.details input');
+  }
+
+  function back() {
+    step = 'subject';
+    void focusIn('.choice[tabindex="0"]');
   }
 
   async function apply() {
@@ -62,6 +76,9 @@
       });
       created = r.notes_created;
       step = 'done';
+      await tick();
+      // The step's only action (in the footer, outside `body`).
+      body?.closest('[role=dialog]')?.querySelector<HTMLElement>('footer button')?.focus();
       ondone?.();
     } catch (e) {
       error = td((e as { messageKey?: string }).messageKey ?? 'errors.internal.unexpected');
@@ -109,6 +126,7 @@
     title={t('onboarding.title')}
     description={step === 'subject' ? t('onboarding.intro') : step === 'details' ? t('onboarding.details_intro') : undefined}
   >
+    <div class="ob" bind:this={body}>
     {#if step !== 'done'}
       <div class="steps" aria-label={t('onboarding.step', { n: stepNo, total: 2 })} role="img">
         <span class="bar" class:on={stepNo >= 1}></span>
@@ -155,7 +173,13 @@
         {/each}
       </div>
     {:else if step === 'details'}
-      <div class="details">
+      <form
+        class="details"
+        onsubmit={(e) => {
+          e.preventDefault();
+          void apply();
+        }}
+      >
         <Input label={t('onboarding.deck_name')} bind:value={deckName} />
         <div class="starters">
           <h3>{t('onboarding.starters')}</h3>
@@ -167,23 +191,24 @@
           {/each}
         </div>
         {#if error}<p class="error" role="alert">{error}</p>{/if}
-      </div>
+      </form>
     {:else}
       <div class="done">
         <span class="done-icon" aria-hidden="true"><Icon icon={CircleCheck} size={24} /></span>
         <p role="status">{t('onboarding.done', { count: created })}</p>
       </div>
     {/if}
+    </div>
     {#snippet footer()}
       {#if step === 'subject'}
         <Button variant="ghost" onclick={() => void skip()}>{t('onboarding.skip')}</Button>
         <span class="spacer"></span>
-        <Button variant="primary" disabled={!subject} onclick={next}>{t('onboarding.next')}</Button>
+        <Button variant="primary" kbd="Enter" disabled={!subject} onclick={next}>{t('onboarding.next')}</Button>
       {:else if step === 'details'}
         <Button variant="ghost" onclick={() => void skip()}>{t('onboarding.skip')}</Button>
         <span class="spacer"></span>
-        <Button onclick={() => (step = 'subject')}>{t('onboarding.back')}</Button>
-        <Button variant="primary" onclick={() => void apply()}>{t('onboarding.apply')}</Button>
+        <Button onclick={back}>{t('onboarding.back')}</Button>
+        <Button variant="primary" kbd="Enter" onclick={() => void apply()}>{t('onboarding.apply')}</Button>
       {:else}
         <Button variant="primary" onclick={() => (open = false)}>{t('onboarding.close')}</Button>
       {/if}
@@ -238,8 +263,6 @@
     font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
     color: var(--text-2);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
   .grid {
     display: grid;
@@ -270,10 +293,10 @@
     box-shadow: 0 0 0 1px var(--accent-text);
     background: var(--accent-soft);
   }
-  /* Focus is a neutral outer ring; selection is the accent fill + border + tick. */
+  /* Focus is the app's ring (outside the border); selection is the fill + border + tick. */
   .choice:focus-visible {
-    outline: 2px solid var(--text-1);
-    outline-offset: 3px;
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
   }
   .tick {
     position: absolute;

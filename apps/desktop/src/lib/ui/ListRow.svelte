@@ -27,6 +27,11 @@
     /** Tree rows: `true`/`false` draws the expand chevron; `undefined` = leaf. */
     expanded?: boolean;
     ontoggle?: () => void;
+    /**
+     * The chevron is a Tab stop (default). `false` when the list moves with the arrow keys
+     * (→ expands, ← collapses): the chevron is then for the mouse only.
+     */
+    toggleTabbable?: boolean;
     active?: boolean;
     selected?: boolean;
     header?: boolean;
@@ -48,6 +53,7 @@
     depth = 0,
     expanded,
     ontoggle,
+    toggleTabbable = true,
     active = false,
     selected = false,
     header = false,
@@ -81,7 +87,11 @@
 >
   <span class="indent" aria-hidden={expanded === undefined ? 'true' : undefined}>
     {#if expanded !== undefined}
-      <button type="button" class="toggle" aria-expanded={expanded} aria-label={expanded ? t('ui.collapse') : t('ui.expand')} onclick={ontoggle}>
+      <button
+        type="button"
+        class="toggle"
+        tabindex={toggleTabbable ? undefined : -1}
+        aria-expanded={expanded} aria-label={expanded ? t('ui.collapse') : t('ui.expand')} onclick={ontoggle}>
         <Icon icon={expanded ? ChevronDown : ChevronRight} size={14} />
       </button>
     {/if}

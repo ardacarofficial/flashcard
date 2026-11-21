@@ -63,8 +63,8 @@
     align-items: center;
     gap: var(--space-3);
     flex-wrap: wrap;
-    padding: var(--space-4) var(--space-6);
-    border-top: 1px solid var(--border);
+    padding: var(--space-3) 0;
+    /* The rows above end with their own border. */
   }
   .count {
     color: var(--text-2);
@@ -72,7 +72,7 @@
     margin-inline-start: auto;
   }
   .frame {
-    padding: 0 var(--space-6) var(--space-6);
+    padding: 0 0 var(--space-2);
   }
   iframe {
     display: block;
@@ -87,15 +87,8 @@
     display: flex;
     gap: var(--space-2);
     margin: 0;
-    padding: 0 var(--space-6) var(--space-4);
+    padding: 0 0 var(--space-3);
     color: var(--danger);
     font-size: var(--text-sm);
-  }
-  @media (max-width: 1023.98px) {
-    .foot,
-    .frame,
-    .bad {
-      padding-inline: var(--space-4);
-    }
   }
 </style>

@@ -172,9 +172,15 @@
     margin-inline-start: 2px;
   }
   /* On the accent fill the hint is a darker tint of it, not a grey key. */
-  .primary .hint :global(kbd) {
+  .primary:not(:disabled) .hint :global(kbd) {
     background: color-mix(in srgb, var(--accent-fg) 12%, transparent);
     border-color: color-mix(in srgb, var(--accent-fg) 22%, transparent);
     color: var(--accent-fg);
+  }
+  /* Disabled: the key stays legible, in the same muted tone as the label. */
+  .fc-btn:disabled .hint :global(kbd) {
+    background: transparent;
+    border-color: var(--disabled-border);
+    color: var(--disabled-fg);
   }
 </style>

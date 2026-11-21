@@ -91,7 +91,7 @@ All wrap **Field** (label, hint, error with `aria-describedby`/`aria-invalid`). 
 | **EmptyState** | `title` · `description?` · `icon?` · `action?: {label,onclick,icon?}` (one action) · `size` sm/md | `<EmptyState title={t('…')} action={{ label: t('…'), onclick: create }} />` |
 | **Skeleton** | `width` · `height` · `shape` text/control/card/circle · `lines` | `<Skeleton shape="card" />` |
 | **Spinner** | `size` (decorative; announce loading in text) | `<Spinner />` |
-| **ListRow** | `label` · `sub?` · `onclick` (row button) · `buttonLabel?` · `depth` · `expanded?` + `ontoggle` (tree chevron) · `active` · `selected` · `header` · `cellColumns` (grid tracks of `cells`) · `leading` / children / `cells` / `actions` snippets (actions show on hover/focus) · `testid` — one dense 34 px row of a list or tree-table, inside a `<ul>` | `<ListRow label={d.name} onclick={open} cellColumns="56px 56px" depth={1}>{#snippet cells()}<span class="num">{due}</span>{/snippet}</ListRow>` |
+| **ListRow** | `label` · `sub?` · `onclick` (row button) · `buttonLabel?` · `depth` · `expanded?` + `ontoggle` (tree chevron; `toggleTabbable={false}` when the list expands/collapses with →/←) · `active` · `selected` · `header` · `cellColumns` (grid tracks of `cells`) · `leading` / children / `cells` / `actions` snippets (actions show on hover/focus) · `testid` — one dense 34 px row of a list or tree-table, inside a `<ul>` | `<ListRow label={d.name} onclick={open} cellColumns="56px 56px" depth={1}>{#snippet cells()}<span class="num">{due}</span>{/snippet}</ListRow>` |
 | **Table** | `rows` · `columns: TableColumn<T>[]` (`{id,header,width?,align?,numeric?,value?}`; `numeric` = mono tabular cell) · `rowKey` · `label` · `rowHeight` (fixed, 34) · `height` (CSS) · `bind:activeKey` · `selectedKeys` · `onrowclick` · `cell` snippet `(row, column)` · `empty` snippet — virtualised grid; ↑/↓ PgUp/PgDn Home/End, Enter | `<Table rows={cards} {columns} rowKey={(c) => c.id} label={t('…')} onrowclick={open} />` |
 | **NumberedRow** | `n` · `invalid` · `error` · `actions` snippet · children (the row's fields) — one numbered card of an editable list (Create's rows), inside an `<ol>` | `<NumberedRow n={i + 1}>…{#snippet actions()}…{/snippet}</NumberedRow>` |
 | **Flashcard** | `front` / `back` snippets · `bind:flipped` · `onflip(flipped)` · `disabled` · `instant` · `fit` (shrink long text, default on) · `size` md/lg — Space/Enter/click flip; 3D flip off under `prefers-reduced-motion` | `<Flashcard bind:flipped>{#snippet front()}…{/snippet}{#snippet back()}…{/snippet}</Flashcard>` |
@@ -120,7 +120,8 @@ All wrap **Field** (label, hint, error with `aria-describedby`/`aria-invalid`). 
   the screen appends with `getPageChrome()?.setTrail(crumbs, up)` — `PageHeader` with `back`
   does it for you), the search-or-command field (opens the palette; the Search page when the
   palette module is off) and **Kart ekle** (`N`).
-- `commands.svelte.ts` — shell entry points: `openQuickAdd()` (top bar button, `N`, `Ctrl+N`;
+- `commands.svelte.ts` — shell entry points: `openQuickAdd({ deckId? })` (top bar button, `N`, `Ctrl+N`;
+  `deckId` preselects a deck, e.g. a Library row's "add card";
   the shell's fallback opens the Create page until the Quick Add dialog calls
   `setQuickAddHandler`), `openPalette()` (ShortcutHost registers it), `shellCommands`.
 

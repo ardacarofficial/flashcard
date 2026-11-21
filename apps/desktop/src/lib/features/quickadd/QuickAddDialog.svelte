@@ -25,8 +25,10 @@
   interface Props {
     open: boolean;
     ctx: ScreenCtx;
+    /** Preselected deck (the opener's, e.g. a Library row's "Add card"). */
+    deck?: string | null;
   }
-  let { open = $bindable(), ctx }: Props = $props();
+  let { open = $bindable(), ctx, deck = null }: Props = $props();
 
   const LAST_TYPE = 'fc.cards.last_notetype';
   const LAST_DECK = 'fc.quickadd.last_deck';
@@ -110,7 +112,7 @@
   trackModules();
   void loadTypes();
 
-  // Every open: a fresh count, and the deck — the page's deck, else the last one used.
+  // Every open: a fresh count, and the deck — the opener's, the page's, else the last one used.
   $effect(() => {
     if (!open) return;
     untrack(() => {
@@ -121,7 +123,7 @@
       confirming = false;
       const ok = (id: string | null | undefined) => (id && paths.some((p) => p.id === id) ? id : null);
       const onDeckPage = ctx.route && DECK_ROUTES.includes(ctx.route) ? ok(ctx.selectedDeck) : null;
-      deckId = onDeckPage ?? ok(read(LAST_DECK)) ?? ok(deckId) ?? ok(ctx.selectedDeck) ?? paths[0]?.id ?? null;
+      deckId = ok(deck) ?? onDeckPage ?? ok(read(LAST_DECK)) ?? ok(deckId) ?? ok(ctx.selectedDeck) ?? paths[0]?.id ?? null;
       void focusFirst();
     });
   });
@@ -359,7 +361,13 @@
                   onkeydown={(e) => onFieldKey(e, f.key)}
                 />
               {:else}
-                <FieldInput field={f} bind:value={values[f.key]!} {values} {engines} />
+                <!-- A getter, not `values[key]!`: right after a note type switch the new key is not in `values` yet. -->
+                <FieldInput
+                  field={f}
+                  bind:value={() => values[f.key] ?? '', (v) => (values[f.key] = v)}
+                  {values}
+                  {engines}
+                />
                 {#if fieldErrors[f.key]}<p class="error small" role="alert">{fieldErrors[f.key]}</p>{/if}
               {/if}
             </div>
@@ -381,7 +389,7 @@
               {#if defs.length > 0}
                 <div class="attrs">
                   {#each defs as def (def.id)}
-                    <AttributeField {def} bind:value={attrs[def.id]!} />
+                    <AttributeField size="sm" {def} bind:value={attrs[def.id]!} />
                   {/each}
                 </div>
               {/if}
@@ -415,7 +423,7 @@
             {#if canUndo}
               <Button size="sm" variant="ghost" icon={Undo2} onclick={() => void undo()}>{t('quickadd.undo')}</Button>
             {/if}
-          {:else if ctx.navigate}
+          {:else if ctx.navigate && paths.length > 0}
             <Button size="sm" variant="ghost" onclick={bulk}>{t('quickadd.bulk')}</Button>
           {/if}
         </div>
@@ -423,9 +431,11 @@
           <Button size="sm" variant="ghost" onclick={bulk}>{t('quickadd.bulk')}</Button>
         {/if}
         <Button size="sm" variant="ghost" kbd="Esc" onclick={() => close()}>{t('quickadd.close')}</Button>
-        <Button size="sm" variant="primary" kbd="Mod+Enter" loading={busy} disabled={!canAdd} onclick={() => void add(duplicate)}>
-          {t('quickadd.add')}
-        </Button>
+        {#if paths.length > 0}
+          <Button size="sm" variant="primary" kbd="Mod+Enter" loading={busy} disabled={!canAdd} onclick={() => void add(duplicate)}>
+            {t('quickadd.add')}
+          </Button>
+        {/if}
       {/if}
     </div>
   {/snippet}

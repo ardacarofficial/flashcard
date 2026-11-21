@@ -15,6 +15,8 @@
   let { ctx, enabled }: Props = $props();
 
   let open = $state(false);
+  /** The deck asked for by the opener (a Library row), else the dialog picks one. */
+  let deck = $state<string | null>(null);
   /** Opened at least once: the dialog's chunk is loaded and stays mounted. */
   let used = $state(false);
 
@@ -23,7 +25,8 @@
       open = false;
       return;
     }
-    return setQuickAddHandler(() => {
+    return setQuickAddHandler((options) => {
+      deck = options?.deckId ?? null;
       used = true;
       open = true;
     });
@@ -32,6 +35,6 @@
 
 {#if used && enabled}
   {#await import('./QuickAddDialog.svelte') then { default: QuickAddDialog }}
-    <QuickAddDialog bind:open {ctx} />
+    <QuickAddDialog bind:open {ctx} {deck} />
   {/await}
 {/if}

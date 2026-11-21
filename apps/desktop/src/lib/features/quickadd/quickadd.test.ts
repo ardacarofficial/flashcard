@@ -97,4 +97,23 @@ describe('<QuickAddHost>', () => {
     unmount();
     expect(openQuickAdd()).toBe(false);
   });
+
+  it('opens on the deck the caller names (a Library row "Add card") without selecting it', async () => {
+    const selectDeck = vi.fn();
+    const ctx = await ctxWith({ selectDeck });
+    const target = ctx.decks[ctx.decks.length - 1]!;
+    const spy = vi.spyOn(api, 'call');
+    const { unmount } = render(QuickAddHost, { ctx, enabled: true });
+    expect(openQuickAdd({ deckId: target.deck.id })).toBe(true);
+    const term = (await screen.findByLabelText(/^Term/, {}, { timeout: 3000 })) as HTMLTextAreaElement;
+    await fireEvent.input(term, { target: { value: 'preselected-deck' } });
+    await fireEvent.keyDown(term, { key: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(spy.mock.calls.some(([m]) => m === 'notes.create')).toBe(true));
+    const sent = spy.mock.calls.find(([m]) => m === 'notes.create')!;
+    expect(sent[1]).toMatchObject({ deck_id: target.deck.id });
+    // The page behind stays where it was (no deck page opened).
+    expect(selectDeck).not.toHaveBeenCalled();
+    spy.mockRestore();
+    unmount();
+  });
 });

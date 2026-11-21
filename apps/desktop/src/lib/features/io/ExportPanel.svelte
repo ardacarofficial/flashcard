@@ -88,8 +88,8 @@
     flex-direction: column;
     align-items: flex-start;
     gap: var(--space-3);
-    padding: var(--space-4) var(--space-6) var(--space-4);
-    border-top: 1px solid var(--border);
+    padding: var(--space-3) 0 0;
+    /* The rows above end with their own border. */
   }
   .note {
     display: flex;
@@ -108,10 +108,5 @@
   }
   .bad {
     color: var(--danger);
-  }
-  @media (max-width: 1023.98px) {
-    .foot {
-      padding-inline: var(--space-4);
-    }
   }
 </style>

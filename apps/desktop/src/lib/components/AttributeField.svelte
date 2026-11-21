@@ -18,8 +18,10 @@
   interface Props {
     def: AttributeDefDto;
     value: FieldValue;
+    /** Control height: `sm` beside other small controls (Quick Add, Create, AI). */
+    size?: 'sm' | 'md';
   }
-  let { def, value = $bindable() }: Props = $props();
+  let { def, value = $bindable(), size = 'md' }: Props = $props();
 
   const control = $derived(controlFor(def.kind));
   const options = $derived(displayOptions(def));
@@ -44,9 +46,9 @@
   }
 </script>
 
-<div class="attr" data-kind={def.kind}>
+<div class="attr" data-kind={def.kind} data-size={size}>
   {#if control === 'select' || control === 'tristate'}
-    <Select id={inputId} {label} options={selectOptions} value={raw} onchange={(v) => (value = fromInput(def.kind, v))} />
+    <Select id={inputId} {size} {label} options={selectOptions} value={raw} onchange={(v) => (value = fromInput(def.kind, v))} />
   {:else if control === 'multiselect'}
     <Field {label} id={inputId}>
       {#snippet control(f)}
@@ -60,6 +62,7 @@
   {:else}
     <Input
       id={inputId}
+      {size}
       {label}
       type={control === 'number' ? 'number' : control === 'date' ? 'date' : 'text'}
       value={raw}
@@ -74,6 +77,9 @@
     flex-wrap: wrap;
     gap: var(--space-2);
     min-height: var(--control-h-md);
+  }
+  [data-size='sm'] .chips {
+    min-height: var(--control-h-sm);
     align-items: center;
   }
 </style>

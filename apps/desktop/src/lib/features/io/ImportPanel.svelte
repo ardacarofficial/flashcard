@@ -358,7 +358,7 @@
 
 <style>
   .source {
-    padding: var(--space-2) var(--space-6) var(--space-4);
+    padding: var(--space-2) 0 var(--space-3);
     border-bottom: 1px solid var(--border);
   }
   .file {
@@ -394,15 +394,15 @@
     align-items: center;
     gap: var(--space-3);
     flex-wrap: wrap;
-    padding: var(--space-4) var(--space-6);
-    border-top: 1px solid var(--border);
+    padding: var(--space-3) 0 0;
+    /* The rows above end with their own border. */
   }
   .hint {
     color: var(--text-2);
     font-size: var(--text-sm);
   }
   .table-wrap {
-    margin: var(--space-2) var(--space-6) var(--space-4);
+    margin: var(--space-2) 0 var(--space-3);
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
     overflow: auto;
@@ -476,16 +476,5 @@
   details ul {
     margin: var(--space-2) 0 0;
     padding-inline-start: var(--space-6);
-  }
-  @media (max-width: 1023.98px) {
-    .foot {
-      padding-inline: var(--space-4);
-    }
-    .table-wrap {
-      margin-inline: var(--space-4);
-    }
-    .source {
-      padding-inline: var(--space-4);
-    }
   }
 </style>
