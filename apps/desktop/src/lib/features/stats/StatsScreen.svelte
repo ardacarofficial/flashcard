@@ -1,5 +1,10 @@
+<!--
+  Statistics → Overview (v1.2): one slim filter row, four compact figures, then dense panels
+  (activity heatmap + forecast, memory states + success rates, progress + habits, deck report
+  cards, classification breakdown, leeches). Every number comes from the backend.
+-->
 <script lang="ts">
-  import { formatPercent100 } from '$lib/format';
+  import { formatCount, formatPercent100 } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type {
@@ -15,35 +20,31 @@
   } from '$lib/api/types';
   import { i18n, t } from '$lib/i18n/index.svelte';
   import {
-    Activity,
-    BarChart3,
     Button,
-    Card,
     Chip,
     Clock,
     EmptyState,
-    Flag,
     Flame,
     GraduationCap,
     Input,
     Layers,
+    PageHeader,
     ProgressBar,
-    ProgressRing,
     Search,
     SegmentedControl,
     Select,
     Skeleton,
+    StatTile,
     Tabs,
     Target,
-    TrendingUp,
     TriangleAlert,
     type Tone,
   } from '$lib/ui';
   import type { ScreenCtx } from '../types';
-  import { LoadState, SettingsPage, SettingsSection } from '../core/kit';
+  import { LoadState } from '../core/kit';
   import BarChart from './BarChart.svelte';
   import Heatmap from './Heatmap.svelte';
-  import StatTile from './StatTile.svelte';
+  import Panel from './Panel.svelte';
   import { minutes, num, pct, pct100, seconds, shortDate, tzOffset, type Bar } from './format';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -140,6 +141,8 @@
     b.up_to_ms === null ? t('stats.times.over', { s: 60 }) : t('stats.times.up_to', { s: b.up_to_ms / 1000 });
   const rateTone = (rate: number | null | undefined, target: number): Tone =>
     rate === null || rate === undefined ? 'neutral' : rate >= target ? 'success' : rate >= target - 0.1 ? 'accent' : 'warning';
+  /** CSS length of a 0–1 rate (bar width / target tick position). */
+  const w = (rate: number | null | undefined) => `calc(${Math.max(0, Math.min(1, rate ?? 0))} * 100%)`;
 
   onMount(() => {
     void load();
@@ -148,223 +151,268 @@
   });
 </script>
 
-<SettingsPage title={t('stats.heading')} subtitle={t('stats.subtitle')} width="wide">
-  <Card padding="md" class="filters">
-    <form
-      class="filter-row"
-      aria-label={t('stats.scope.label')}
-      onsubmit={(e) => {
-        e.preventDefault();
-        void load();
-      }}
-    >
-      <Select
-        class="f-deck"
-        label={t('stats.scope.deck')}
-        options={deckOptions}
-        bind:value={deckId}
-        onchange={() => void load()}
-      />
-      <div class="f-range">
-        <span class="f-label" aria-hidden="true">{t('stats.scope.range')}</span>
-        <SegmentedControl label={t('stats.scope.range')} options={rangeOptions} bind:value={range} onchange={() => void load()} />
-      </div>
-      <Input class="f-query" label={t('stats.scope.query')} icon={Search} bind:value={query} placeholder={t('stats.scope.query_hint')} />
-      <Button type="submit" class="f-apply">{t('stats.scope.apply')}</Button>
-    </form>
-  </Card>
+<div class="stats">
+  <PageHeader title={t('stats.heading')} />
+
+  <form
+    class="filters"
+    aria-label={t('stats.scope.label')}
+    onsubmit={(e) => {
+      e.preventDefault();
+      void load();
+    }}
+  >
+    <Select class="f-deck" size="sm" hideLabel label={t('stats.scope.deck')} options={deckOptions} bind:value={deckId} onchange={() => void load()} />
+    <SegmentedControl size="sm" label={t('stats.scope.range')} options={rangeOptions} bind:value={range} onchange={() => void load()} />
+    <Input
+      class="f-query"
+      size="sm"
+      hideLabel
+      label={t('stats.scope.query')}
+      icon={Search}
+      bind:value={query}
+      placeholder={t('stats.scope.query_hint')}
+    />
+    <Button type="submit" size="sm">{t('stats.scope.apply')}</Button>
+  </form>
 
   {#if status === 'loading' && !overview}
     <div class="tiles">
-      {#each { length: 4 } as _, i (i)}<Skeleton shape="card" height="118px" />{/each}
+      {#each { length: 4 } as _, i (i)}<Skeleton shape="card" height="84px" />{/each}
     </div>
     <LoadState state="loading" shape="block" />
   {:else if status === 'error' && !overview}
-    <Card padding="lg"><LoadState state="error" retry={() => void load()} /></Card>
+    <div class="error-box"><LoadState state="error" retry={() => void load()} /></div>
   {:else if overview}
     {@const r = overview.reviews}
     {@const c = overview.cards}
+    {@const target = overview.target_retention}
     <section class="tiles" aria-label={t('stats.overview')}>
-      <StatTile icon={Flame} label={t('stats.streak.label')} value={t('stats.streak.days', { n: r.streak.current })} detail={t('stats.streak.longest', { n: r.streak.longest })} />
+      <StatTile
+        testid="stat-streak"
+        icon={Flame}
+        label={t('stats.streak.label')}
+        value={formatCount(r.streak.current)}
+        unit={t('stats.streak.unit', { n: r.streak.current })}
+        hint={t('stats.streak.longest', { n: r.streak.longest })}
+      />
       <StatTile
         icon={Layers}
         label={t('stats.reviews.label')}
-        value={String(r.totals.reviews)}
-        detail={[t('stats.reviews.detail', { days: r.totals.days_studied, total: r.totals.days_in_range }), r.totals.imported > 0 ? t('stats.imported', { n: r.totals.imported }) : '']
+        value={formatCount(r.totals.reviews)}
+        hint={[t('stats.reviews.detail', { days: r.totals.days_studied, total: r.totals.days_in_range }), r.totals.imported > 0 ? t('stats.imported', { n: r.totals.imported }) : '']
           .filter(Boolean)
           .join(' · ')}
       />
-      <StatTile icon={Clock} label={t('stats.time.label')} value={t('stats.time.minutes', { n: minutes(r.totals.time_ms) })} detail={t('stats.times.mean', { s: seconds(r.answer_times.mean_ms) })} />
+      <StatTile
+        icon={Clock}
+        label={t('stats.time.label')}
+        value={formatCount(minutes(r.totals.time_ms))}
+        unit={t('stats.time.unit')}
+        hint={t('stats.times.mean', { s: seconds(r.answer_times.mean_ms) })}
+      />
       <StatTile
         icon={Target}
         label={t('stats.retention.label')}
-        value={r.true_retention === null ? t('stats.retention.none') : pct(r.true_retention, 1)}
-        detail={t('stats.retention.target', { target: pct(overview.target_retention) })}
+        value={r.true_retention === null ? '–' : pct(r.true_retention, 1)}
+        hint={r.true_retention === null ? t('stats.retention.none') : t('stats.retention.target', { target: pct(target) })}
       >
-        {#snippet aside()}
-          {#if r.true_retention !== null}
-            <ProgressRing
-              label={t('stats.retention.label')}
-              value={Math.round(r.true_retention * 100)}
-              size={52}
-              stroke={5}
-              tone={rateTone(r.true_retention, overview!.target_retention)}
-            />
-          {/if}
-        {/snippet}
+        {#if r.true_retention !== null}
+          <span class="meter {rateTone(r.true_retention, target)}" aria-hidden="true">
+            <span class="fill" style:width={w(r.true_retention)}></span>
+            <span class="tick" style:left={w(target)}></span>
+          </span>
+        {/if}
       </StatTile>
     </section>
 
     {#if r.totals.reviews === 0}
-      <Card padding="lg">
-        <EmptyState
-          icon={BarChart3}
-          title={t('stats.empty')}
-          description={t('stats.empty_hint')}
-          action={ctx.navigate ? { label: t('stats.start'), icon: GraduationCap, onclick: () => ctx.navigate?.('/study') } : undefined}
-        />
-      </Card>
+      <div class="empty-row">
+        <span>{t('stats.empty')} <span class="muted">{t('stats.empty_hint')}</span></span>
+        {#if ctx.navigate}
+          <Button size="sm" variant="primary" icon={GraduationCap} onclick={() => ctx.navigate?.('/study')}>{t('stats.start')}</Button>
+        {/if}
+      </div>
     {/if}
 
-    <SettingsSection title={t('stats.heatmap.heading')} icon={Activity} description={t('stats.heatmap.intro')}>
-      {#if r.heatmap.length === 0}
-        <EmptyState size="sm" title={t('stats.empty')} />
-      {:else}
-        <Heatmap days={r.heatmap} label={t('stats.heatmap.heading')} />
-      {/if}
-    </SettingsSection>
+    <div class="wrap-row">
+      <Panel class="p-activity" title={t('stats.heatmap.heading')} description={t('stats.heatmap.intro')}>
+        {#if r.heatmap.length === 0}
+          <p class="muted">{t('stats.empty')}</p>
+        {:else}
+          <Heatmap days={r.heatmap} label={t('stats.heatmap.heading')} />
+        {/if}
+      </Panel>
+      <Panel class="p-forecast" title={t('stats.forecast.heading')} description={t('stats.forecast.intro')}>
+        {#snippet actions()}
+          {#if c.overdue > 0}<Chip size="sm" tone="warning" icon={TriangleAlert} label={t('stats.forecast.overdue', { n: c.overdue })} />{/if}
+        {/snippet}
+        <BarChart
+          label={t('stats.forecast.heading')}
+          highlight={0}
+          height={104}
+          bars={bars(c.forecast, (f) => d(f.date), (f) => f.due, (f) => t('stats.forecast.day', { date: d(f.date), n: f.due }))}
+        />
+      </Panel>
+    </div>
 
-    <SettingsSection title={t('stats.forecast.heading')} icon={TrendingUp} description={t('stats.forecast.intro')}>
-      {#snippet actions()}
-        {#if c.overdue > 0}<Chip tone="warning" icon={TriangleAlert} label={t('stats.forecast.overdue', { n: c.overdue })} />{/if}
-      {/snippet}
-      <BarChart
-        label={t('stats.forecast.heading')}
-        highlight={0}
-        bars={bars(c.forecast, (f) => d(f.date), (f) => f.due, (f) => t('stats.forecast.day', { date: d(f.date), n: f.due }))}
-      />
-    </SettingsSection>
-
-    <div class="cols">
-      <SettingsSection title={t('stats.states.heading')} icon={Layers}>
+    <div class="grid2">
+      <Panel title={t('stats.states.heading')}>
         <ProgressBar
-          size="lg"
+          size="sm"
           label={t('stats.states.heading')}
           segments={STATES.map(([k, tone]) => ({ value: c.states[k], label: t(`stats.states.${k}`), tone }))}
         />
-        <dl class="legend">
+        <dl class="rows legend">
           {#each STATES as [k, tone] (k)}
-            <div class="lg-row">
+            <div class="row">
               <dt><span class="dot {tone}" aria-hidden="true"></span>{t(`stats.states.${k}`)}</dt>
-              <dd>{c.states[k]}</dd>
+              <dd class="num">{formatCount(c.states[k])}</dd>
             </div>
           {/each}
           {#each ['suspended', 'buried'] as const as k (k)}
-            <div class="lg-row quiet">
+            <div class="row quiet">
               <dt><span class="dot hollow" aria-hidden="true"></span>{t(`stats.states.${k}`)}</dt>
-              <dd>{c.states[k]}</dd>
+              <dd class="num">{formatCount(c.states[k])}</dd>
             </div>
           {/each}
-          <div class="lg-row total">
+          <div class="row total">
             <dt>{t('stats.states.total')}</dt>
-            <dd>{c.states.total}</dd>
+            <dd class="num">{formatCount(c.states.total)}</dd>
           </div>
         </dl>
-      </SettingsSection>
+      </Panel>
 
-      <SettingsSection title={t('stats.success.heading')} icon={Target} description={t('stats.retention.target', { target: pct(overview.target_retention) })}>
-        <ul class="rates">
+      <Panel title={t('stats.success.heading')} description={t('stats.retention.target', { target: pct(target) })}>
+        <ul class="rows rates">
           {#each ['learn', 'young', 'mature', 'relearn', 'all'] as const as k (k)}
             {@const s = r.success[k]}
-            <li class:all={k === 'all'}>
-              <div class="rate-head">
-                <span class="rate-name">{t(`stats.success.${k}`)}</span>
-                <span class="rate-val">{pct(s.rate)}</span>
-              </div>
-              <ProgressBar
-                size="sm"
-                label={`${t(`stats.success.${k}`)}: ${pct(s.rate)}`}
-                value={Math.round((s.rate ?? 0) * 100)}
-                tone={rateTone(s.rate, overview.target_retention)}
-              />
+            <li class="row" class:total={k === 'all'}>
+              <span class="rate-name">{t(`stats.success.${k}`)}</span>
+              <span class="meter {rateTone(s.rate, target)}" role="img" aria-label={`${t(`stats.success.${k}`)}: ${pct(s.rate)}`}>
+                <span class="fill" style:width={w(s.rate)}></span>
+                <span class="tick" style:left={w(target)}></span>
+              </span>
+              <span class="num rate-val">{pct(s.rate)}</span>
               <span class="rate-count">{t('stats.success.answers_n', { n: s.count })}</span>
             </li>
           {/each}
         </ul>
-      </SettingsSection>
+      </Panel>
     </div>
 
-    <SettingsSection title={t('stats.trend.heading')} icon={BarChart3}>
-      {#snippet actions()}
-        <SegmentedControl
-          size="sm"
-          label={t('stats.trend.heading')}
-          options={[
-            { value: 'weekly', label: t('stats.trend.weekly') },
-            { value: 'monthly', label: t('stats.trend.monthly') },
-          ]}
-          bind:value={trend}
-        />
-      {/snippet}
-      <BarChart
-        label={t('stats.trend.heading')}
-        bars={bars(r[trend], (p) => d(p.start_date), (p) => p.reviews, (p) => `${d(p.start_date)}: ${p.reviews} · ${pct(p.rate)}`)}
-      />
-    </SettingsSection>
-
-    <SettingsSection title={t('stats.more.heading')} icon={Clock}>
-      <Tabs
-        label={t('stats.more.heading')}
-        tabs={[
-          { id: 'hours', label: t('stats.hours.heading') },
-          { id: 'times', label: t('stats.times.heading') },
-          { id: 'memory', label: t('stats.memory.heading') },
-        ]}
-        bind:value={more}
-      >
-        {#snippet children(id)}
-          <div class="tab-panel">
-            {#if id === 'hours'}
-              <p class="muted">{t('stats.hours.intro')}</p>
-              <BarChart
-                label={t('stats.hours.heading')}
-                formatMax={(n) => formatPercent100(Math.round(n))}
-                bars={bars(r.hours, (h) => `${h.hour}:00`, (h) => (h.stat.rate ?? 0) * 100, (h) => `${h.hour}:00 · ${h.stat.count} · ${pct(h.stat.rate)}`)}
-              />
-            {:else if id === 'times'}
-              <p class="muted">{t('stats.times.mean', { s: seconds(r.answer_times.mean_ms) })}</p>
-              <BarChart
-                label={t('stats.times.heading')}
-                bars={bars(r.answer_times.buckets, timeLabel, (b) => b.count, (b) => `${timeLabel(b)}: ${b.count}`)}
-              />
-              {#if r.answer_times.slowest.length > 0}
-                <h3 class="sub">{t('stats.times.slowest')}</h3>
-                <ul class="slowest">
-                  {#each r.answer_times.slowest as s (s.card_id)}
-                    <li><code>{s.card_id.slice(-8)}</code><span>{t('stats.times.seconds', { s: seconds(s.duration_ms) })}</span></li>
-                  {/each}
-                </ul>
-              {/if}
-            {:else}
-              <div class="cols tight">
-                <div>
-                  <h3 class="sub">{t('stats.memory.stability')}</h3>
-                  <BarChart label={t('stats.memory.stability')} height={110} bars={bars(c.stability, bucket, (b) => b.count, (b) => `${bucket(b)}: ${b.count}`)} />
-                </div>
-                <div>
-                  <h3 class="sub">{t('stats.memory.difficulty')}</h3>
-                  <BarChart label={t('stats.memory.difficulty')} height={110} bars={bars(c.difficulty, bucket, (b) => b.count, (b) => `${bucket(b)}: ${b.count}`)} />
-                </div>
-              </div>
-            {/if}
-          </div>
+    <div class="grid2">
+      <Panel title={t('stats.trend.heading')}>
+        {#snippet actions()}
+          <SegmentedControl
+            size="sm"
+            label={t('stats.trend.heading')}
+            options={[
+              { value: 'weekly', label: t('stats.trend.weekly') },
+              { value: 'monthly', label: t('stats.trend.monthly') },
+            ]}
+            bind:value={trend}
+          />
         {/snippet}
-      </Tabs>
-    </SettingsSection>
+        <BarChart
+          label={t('stats.trend.heading')}
+          height={196}
+          bars={bars(r[trend], (p) => d(p.start_date), (p) => p.reviews, (p) => `${d(p.start_date)}: ${p.reviews} · ${pct(p.rate)}`)}
+        />
+      </Panel>
+
+      <Panel title={t('stats.more.heading')}>
+        <Tabs
+          label={t('stats.more.heading')}
+          tabs={[
+            { id: 'hours', label: t('stats.hours.heading') },
+            { id: 'times', label: t('stats.times.heading') },
+            { id: 'memory', label: t('stats.memory.heading') },
+          ]}
+          bind:value={more}
+        >
+          {#snippet children(id)}
+            <div class="tab-panel">
+              {#if id === 'hours'}
+                <p class="muted">{t('stats.hours.intro')}</p>
+                <BarChart
+                  label={t('stats.hours.heading')}
+                  height={112}
+                  formatMax={(n) => formatPercent100(Math.round(n))}
+                  bars={bars(r.hours, (h) => `${h.hour}:00`, (h) => (h.stat.rate ?? 0) * 100, (h) => `${h.hour}:00 · ${h.stat.count} · ${pct(h.stat.rate)}`)}
+                />
+              {:else if id === 'times'}
+                <p class="muted">{t('stats.times.mean', { s: seconds(r.answer_times.mean_ms) })}</p>
+                <BarChart
+                  label={t('stats.times.heading')}
+                  height={112}
+                  bars={bars(r.answer_times.buckets, timeLabel, (b) => b.count, (b) => `${timeLabel(b)}: ${b.count}`)}
+                />
+                {#if r.answer_times.slowest.length > 0}
+                  <h3 class="sub">{t('stats.times.slowest')}</h3>
+                  <ul class="rows">
+                    {#each r.answer_times.slowest as s (s.card_id)}
+                      <li class="row"><code>{s.card_id.slice(-8)}</code><span class="num">{t('stats.times.seconds', { s: seconds(s.duration_ms) })}</span></li>
+                    {/each}
+                  </ul>
+                {/if}
+              {:else}
+                <div class="pair">
+                  <div>
+                    <h3 class="sub">{t('stats.memory.stability')}</h3>
+                    <BarChart label={t('stats.memory.stability')} height={96} bars={bars(c.stability, bucket, (b) => b.count, (b) => `${bucket(b)}: ${b.count}`)} />
+                  </div>
+                  <div>
+                    <h3 class="sub">{t('stats.memory.difficulty')}</h3>
+                    <BarChart label={t('stats.memory.difficulty')} height={96} bars={bars(c.difficulty, bucket, (b) => b.count, (b) => `${bucket(b)}: ${b.count}`)} />
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {/snippet}
+        </Tabs>
+      </Panel>
+    </div>
+  {/if}
+
+  {#if reports && reports.items.length > 0}
+    <Panel title={t('stats.report.heading')} description={t('stats.report.intro')} body="rows">
+      <div class="table-wrap">
+        <table class="dt">
+          <thead>
+            <tr>
+              <th scope="col">{t('stats.report.deck')}</th>
+              <th scope="col" class="bar-col">{t('stats.report.settled')}</th>
+              <th scope="col" class="n">{t('stats.report.studied')}</th>
+              <th scope="col" class="n">{t('stats.report.recall')}</th>
+              <th scope="col" class="n">{t('stats.report.due')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each reports.items as dr (dr.deck_id)}
+              <tr>
+                <th scope="row" class="deck">{dr.path}</th>
+                <td class="bar-col">
+                  <span class="inline-bar">
+                    <span class="meter success" role="img" aria-label={`${dr.path}: ${pct100(dr.report.settled_pct)}`}>
+                      <span class="fill" style:width="{dr.report.settled_pct}%"></span>
+                    </span>
+                    <span class="num">{pct100(dr.report.settled_pct)}</span>
+                  </span>
+                </td>
+                <td class="n num">{pct100(dr.report.studied_pct)}</td>
+                <td class="n num">{dr.report.mean_recall === null ? '–' : pct(dr.report.mean_recall)}</td>
+                <td class="n num">{num(dr.due_today, 0)}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
   {/if}
 
   {#if overview && attrs.length > 0}
-    <SettingsSection title={t('stats.breakdown.heading')} icon={Flag} description={t('stats.breakdown.intro')}>
+    <Panel title={t('stats.breakdown.heading')} description={t('stats.breakdown.intro')} body="rows">
       {#snippet actions()}
         <Select
           size="sm"
@@ -376,20 +424,20 @@
         />
       {/snippet}
       {#if !breakdown}
-        <LoadState state="loading" />
+        <div class="pad"><LoadState state="loading" /></div>
       {:else if breakdown.rows.length === 0}
-        <EmptyState size="sm" title={t('stats.breakdown.empty')} />
+        <p class="muted pad">{t('stats.breakdown.empty')}</p>
       {:else}
         <div class="table-wrap">
-          <table>
+          <table class="dt">
             <thead>
               <tr>
                 <th scope="col">{t('stats.breakdown.value')}</th>
-                <th scope="col" class="num">{t('stats.breakdown.cards')}</th>
+                <th scope="col" class="n">{t('stats.breakdown.cards')}</th>
                 <th scope="col" class="bar-col">{t('stats.breakdown.settled')}</th>
-                <th scope="col" class="num">{t('stats.breakdown.retention')}</th>
-                <th scope="col" class="num">{t('stats.breakdown.due_today')}</th>
-                <th scope="col" class="num">{t('stats.breakdown.due_week')}</th>
+                <th scope="col" class="n">{t('stats.breakdown.retention')}</th>
+                <th scope="col" class="n">{t('stats.breakdown.due_today')}</th>
+                <th scope="col" class="n">{t('stats.breakdown.due_week')}</th>
               </tr>
             </thead>
             <tbody>
@@ -398,27 +446,29 @@
                   <th scope="row">
                     {#if row.label}<Chip size="sm" tone="accent" label={row.label} />{:else}<span class="muted">{t('stats.breakdown.none_value')}</span>{/if}
                   </th>
-                  <td class="num">{row.states.total}</td>
+                  <td class="n num">{formatCount(row.states.total)}</td>
                   <td class="bar-col">
-                    <div class="inline-bar">
-                      <ProgressBar size="sm" tone="success" label={`${t('stats.breakdown.settled')}: ${pct100(row.report.settled_pct)}`} value={row.report.settled_pct} />
-                      <span>{pct100(row.report.settled_pct)}</span>
-                    </div>
+                    <span class="inline-bar">
+                      <span class="meter success" role="img" aria-label={`${t('stats.breakdown.settled')}: ${pct100(row.report.settled_pct)}`}>
+                        <span class="fill" style:width="{row.report.settled_pct}%"></span>
+                      </span>
+                      <span class="num">{pct100(row.report.settled_pct)}</span>
+                    </span>
                   </td>
-                  <td class="num">{pct(row.true_retention)}</td>
-                  <td class="num">{row.due_today}</td>
-                  <td class="num">{row.due_week}</td>
+                  <td class="n num">{pct(row.true_retention)}</td>
+                  <td class="n num">{formatCount(row.due_today)}</td>
+                  <td class="n num">{formatCount(row.due_week)}</td>
                 </tr>
               {/each}
             </tbody>
           </table>
         </div>
       {/if}
-    </SettingsSection>
+    </Panel>
   {/if}
 
   {#if leeches}
-    <SettingsSection title={t('stats.leeches.heading')} icon={TriangleAlert} description={t('stats.leeches.intro')}>
+    <Panel title={t('stats.leeches.heading')} description={t('stats.leeches.intro')} body="rows">
       {#snippet actions()}
         {#if leeches && leeches.total > 0}
           <Button size="sm" onclick={() => void applyToLeeches('suspend')}>{t('stats.leeches.suspend')}</Button>
@@ -426,126 +476,154 @@
         {/if}
       {/snippet}
       {#if leeches.total === 0}
-        <EmptyState size="sm" icon={TriangleAlert} title={t('stats.leeches.none')} />
+        <div class="pad"><EmptyState size="sm" icon={TriangleAlert} title={t('stats.leeches.none')} /></div>
       {:else}
         <p class="lead">{t('stats.leeches.count', { n: leeches.total, threshold: leeches.threshold })}</p>
-        <ul class="leeches">
+        <ul class="rows leeches">
           {#each leeches.items.slice(0, 8) as l (l.card_id)}
-            <li><span class="leech-text">{l.sort_field}</span><Chip size="sm" tone="danger" label={t('stats.leeches.lapses_n', { n: l.lapses })} /></li>
+            <li class="row"><span class="leech-text">{l.sort_field}</span><span class="num lapses">{t('stats.leeches.lapses_n', { n: l.lapses })}</span></li>
           {/each}
         </ul>
-        {#if leeches.items.length > 8}<p class="muted">{t('stats.leeches.more', { n: leeches.total - 8 })}</p>{/if}
+        {#if leeches.items.length > 8}<p class="muted pad">{t('stats.leeches.more', { n: leeches.total - 8 })}</p>{/if}
       {/if}
       {#if applied}
-        <p class="muted status" role="status">{t('stats.leeches.applied', { changed: applied.changed, skipped: applied.skipped })}</p>
+        <p class="muted pad status" role="status">{t('stats.leeches.applied', { changed: applied.changed, skipped: applied.skipped })}</p>
       {/if}
-    </SettingsSection>
+    </Panel>
   {/if}
-
-  {#if reports && reports.items.length > 0}
-    <SettingsSection title={t('stats.report.heading')} icon={GraduationCap} description={t('stats.report.intro')}>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">{t('stats.report.deck')}</th>
-              <th scope="col" class="bar-col">{t('stats.report.settled')}</th>
-              <th scope="col" class="num">{t('stats.report.studied')}</th>
-              <th scope="col" class="num">{t('stats.report.recall')}</th>
-              <th scope="col" class="num">{t('stats.report.due')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each reports.items as dr (dr.deck_id)}
-              <tr>
-                <th scope="row" class="deck">{dr.path}</th>
-                <td class="bar-col">
-                  <div class="inline-bar">
-                    <ProgressBar size="sm" tone="success" label={`${dr.path}: ${pct100(dr.report.settled_pct)}`} value={dr.report.settled_pct} />
-                    <span>{pct100(dr.report.settled_pct)}</span>
-                  </div>
-                </td>
-                <td class="num">{pct100(dr.report.studied_pct)}</td>
-                <td class="num">{dr.report.mean_recall === null ? '–' : pct(dr.report.mean_recall)}</td>
-                <td class="num">{num(dr.due_today, 0)}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </SettingsSection>
-  {/if}
-</SettingsPage>
+</div>
 
 <style>
-  :global(.filters) {
-    position: relative;
-  }
-  .filter-row {
-    display: grid;
-    grid-template-columns: minmax(10rem, 1fr) auto minmax(12rem, 1.3fr) auto;
-    gap: var(--space-4);
-    align-items: end;
-  }
-  .f-range {
+  .stats {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: var(--space-3);
   }
-  .f-label {
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-    color: var(--text-1);
+  .stats > :global(.fc-page-header) {
+    margin-bottom: var(--space-1);
   }
+  /* --- filter row --- */
+  .filters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .filters :global(.f-deck) {
+    width: 13rem;
+    flex: none;
+  }
+  .filters :global(.f-query) {
+    flex: 1 1 12rem;
+    min-width: 10rem;
+  }
+  /* --- tiles --- */
   .tiles {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--space-4);
+    gap: var(--space-2);
   }
-  .cols {
+  .meter {
+    position: relative;
+    display: block;
+    height: 4px;
+    margin: 6px 0 2px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-3);
+  }
+  .meter .fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+  }
+  .meter.success .fill {
+    background: var(--success-solid);
+  }
+  .meter.warning .fill {
+    background: var(--warning-solid);
+  }
+  .meter.neutral .fill {
+    background: var(--text-3);
+  }
+  .meter .tick {
+    position: absolute;
+    top: -3px;
+    width: 2px;
+    height: 10px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: var(--text-1);
+  }
+  .empty-row,
+  .error-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    font-size: var(--text-sm);
+  }
+  /* --- panel layout --- */
+  .wrap-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .wrap-row > :global(.p-activity) {
+    flex: 0 1 auto;
+    max-width: 100%;
+  }
+  .wrap-row > :global(.p-forecast) {
+    flex: 1 1 22rem;
+  }
+  .grid2 {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-6);
+    gap: var(--space-3);
   }
-  .cols > :global(.fc-settings-section > .fc-card) {
-    height: 100%;
+  /* --- dense rows --- */
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
   }
-  .cols.tight {
-    gap: var(--space-6);
-  }
-  .legend {
-    margin: var(--space-4) 0 0;
+  .row {
     display: flex;
-    flex-direction: column;
-  }
-  .lg-row {
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: var(--space-2) 0;
+    justify-content: space-between;
+    gap: var(--space-3);
+    min-height: 28px;
     font-size: var(--text-sm);
     border-bottom: 1px solid var(--border);
   }
-  .lg-row dt {
+  .row:last-child {
+    border-bottom: none;
+  }
+  .legend {
+    margin-top: var(--space-3);
+  }
+  .legend dt {
     display: flex;
     align-items: center;
     gap: var(--space-2);
   }
-  .lg-row dd {
+  .legend dd {
     margin: 0;
-    font-variant-numeric: tabular-nums;
-    font-weight: var(--weight-medium);
   }
-  .lg-row.quiet {
+  .row.quiet {
     color: var(--text-2);
   }
-  .lg-row.total {
-    border-bottom: none;
+  .row.total {
     font-weight: var(--weight-semibold);
   }
   .dot {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: var(--radius-pill);
     flex: none;
   }
@@ -568,169 +646,155 @@
     border: 1.5px solid var(--text-3);
   }
   .rates {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-  .rates li {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--space-1) var(--space-3);
+    grid-template-columns: max-content minmax(3rem, 1fr) 3.5rem 5.5rem;
+    column-gap: var(--space-3);
   }
-  .rates li :global(.fc-progress) {
+  .rates .row {
+    display: grid;
     grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    min-height: 32px;
   }
-  .rate-head {
-    display: contents;
+  .rates .meter {
+    margin: 0;
   }
   .rate-name {
-    font-size: var(--text-sm);
+    white-space: nowrap;
   }
   .rate-val {
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
-    font-variant-numeric: tabular-nums;
     text-align: end;
   }
   .rate-count {
-    grid-column: 1 / -1;
-    font-size: var(--text-xs);
+    text-align: end;
     color: var(--text-2);
-  }
-  .rates li.all {
-    padding-top: var(--space-3);
-    border-top: 1px solid var(--border);
-  }
-  .rates li.all .rate-name {
-    font-weight: var(--weight-semibold);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-regular);
   }
   .tab-panel {
-    padding-top: var(--space-4);
+    padding-top: var(--space-3);
     display: flex;
     flex-direction: column;
+    gap: var(--space-2);
+  }
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-4);
   }
   .sub {
-    margin: 0 0 var(--space-3);
-    font-size: var(--text-sm);
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
+    color: var(--text-2);
   }
   .muted {
     margin: 0;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
+  }
+  .pad {
+    padding: var(--space-3) var(--space-4);
   }
   .lead {
-    margin: 0 0 var(--space-3);
-    font-size: var(--text-sm);
-  }
-  .status {
-    margin-top: var(--space-3);
-  }
-  .slowest,
-  .leeches {
-    list-style: none;
     margin: 0;
-    padding: 0;
-  }
-  .slowest li,
-  .leeches li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) 0;
-    border-bottom: 1px solid var(--border);
+    padding: var(--space-2) var(--space-4);
     font-size: var(--text-sm);
+    border-bottom: 1px solid var(--border);
   }
-  .leeches li:last-child,
-  .slowest li:last-child {
-    border-bottom: none;
+  .leeches .row {
+    padding: 0 var(--space-4);
   }
   .leech-text {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+  }
+  .lapses {
+    flex: none;
+    color: var(--danger);
+    font-size: var(--text-xs);
   }
   code {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     color: var(--text-2);
   }
+  /* --- dense tables --- */
   .table-wrap {
     overflow-x: auto;
   }
-  table {
+  .dt {
     width: 100%;
     border-collapse: collapse;
     font-size: var(--text-sm);
   }
-  th,
-  td {
+  .dt th,
+  .dt td {
+    height: 32px;
+    padding: 0 var(--space-3);
     text-align: start;
-    padding: var(--space-3) var(--space-3);
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
-  th:first-child,
-  td:first-child {
-    padding-inline-start: 0;
+  .dt th:first-child,
+  .dt td:first-child {
+    padding-inline-start: var(--space-4);
   }
-  th:last-child,
-  td:last-child {
-    padding-inline-end: 0;
+  .dt th:last-child,
+  .dt td:last-child {
+    padding-inline-end: var(--space-4);
   }
-  thead th {
+  .dt thead th {
+    height: 28px;
     font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     color: var(--text-2);
-    padding-top: 0;
   }
-  tbody tr:last-child th,
-  tbody tr:last-child td {
+  .dt tbody tr:last-child > * {
     border-bottom: none;
   }
-  tbody th {
+  .dt tbody tr:hover > * {
+    background: var(--surface-2);
+  }
+  .dt tbody th {
     font-weight: var(--weight-medium);
   }
   .deck {
     white-space: normal;
     overflow-wrap: anywhere;
   }
-  .num {
-    text-align: end;
-    font-variant-numeric: tabular-nums;
+  .n {
+    text-align: end !important;
   }
   .bar-col {
-    width: 32%;
+    width: 30%;
     min-width: 9rem;
   }
   .inline-bar {
     display: grid;
-    grid-template-columns: minmax(4rem, 1fr) 3rem;
+    grid-template-columns: minmax(3rem, 1fr) 3rem;
     align-items: center;
     gap: var(--space-2);
-    font-variant-numeric: tabular-nums;
   }
-  .inline-bar span {
+  .inline-bar .meter {
+    margin: 0;
+  }
+  .inline-bar .num {
     text-align: end;
     color: var(--text-2);
+    font-size: var(--text-xs);
   }
   @media (max-width: 1100px) {
-    .tiles {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .filter-row {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    .rates {
+      grid-template-columns: max-content minmax(2rem, 1fr) 3.25rem 4.75rem;
     }
   }
   @media (max-width: 899.98px) {
-    .cols {
+    .grid2 {
       grid-template-columns: minmax(0, 1fr);
+    }
+    .tiles {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

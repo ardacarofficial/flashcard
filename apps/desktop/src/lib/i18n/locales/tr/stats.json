@@ -1,6 +1,6 @@
 {
   "nav": {
-    "stats": "İstatistikler",
+    "stats": "Genel bakış",
     "planning": "Planlama",
     "goals": "Hedefler"
   },
@@ -110,7 +110,7 @@
     }
   },
   "stats": {
-    "heading": "İstatistikler",
+    "heading": "Genel bakış",
     "scope": {
       "deck": "Deste",
       "all_decks": "Tüm desteler",
@@ -129,7 +129,8 @@
     "streak": {
       "label": "Seri",
       "days": "{n} gün",
-      "longest": "En uzun: {n} gün"
+      "longest": "En uzun: {n} gün",
+      "unit": "gün"
     },
     "reviews": {
       "label": "Tekrar",
@@ -137,7 +138,8 @@
     },
     "time": {
       "label": "Çalışma süresi",
-      "minutes": "{n} dk"
+      "minutes": "{n} dk",
+      "unit": "dk"
     },
     "retention": {
       "label": "Gerçek hatırlama",

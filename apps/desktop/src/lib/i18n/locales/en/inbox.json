@@ -149,7 +149,18 @@
     },
     "badge": "{count} waiting",
     "empty_other": "Nothing here yet.",
-    "empty_hint": "Cards proposed by the browser extension or other programs wait here for you."
+    "empty_hint": "Cards proposed by the browser extension or other programs wait here for you.",
+    "edited": "Edited",
+    "done": "Done editing",
+    "keys": {
+      "label": "Keyboard shortcuts",
+      "move": "move",
+      "accept": "accept",
+      "edit": "edit",
+      "reject": "reject",
+      "select": "select",
+      "accept_selected": "accept selected"
+    }
   },
   "local_api": {
     "heading": "Local API",
@@ -192,7 +203,9 @@
       "browser_extension": "Browser extension",
       "app": "Program",
       "script": "Script"
-    }
+    },
+    "waiting": "Waiting for approval",
+    "none_allowed": "No program has been allowed yet."
   },
   "clipboard": {
     "suggest": "Add “{text}” as a card?",

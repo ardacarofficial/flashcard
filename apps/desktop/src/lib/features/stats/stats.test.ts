@@ -29,7 +29,8 @@ describe('v0.6 screens on the dev mock', () => {
   it('statistics show the numbers the backend computed', async () => {
     render(StatsScreen, { ctx });
     // Streak, true retention and its target come straight from `stats.overview`.
-    expect(await screen.findByText('4 days')).toBeTruthy();
+    // v1.2: the figure and its unit are separate (big mono number, small unit).
+    expect((await screen.findByTestId('stat-streak')).textContent).toMatch(/4\s*days/);
     expect(screen.getByText('Longest: 12 days')).toBeTruthy();
     expect(screen.getByText('88.6%')).toBeTruthy();
     expect(screen.getAllByText('Target 90%').length).toBeGreaterThan(0);

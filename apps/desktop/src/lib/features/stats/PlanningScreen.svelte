@@ -4,14 +4,12 @@
   import type { DeckTreeNode, ExamList, JobDto, ModuleDto, OptimizerResult, PresetDto, WorkloadEstimate } from '$lib/api/types';
   import { i18n, t } from '$lib/i18n/index.svelte';
   import {
-    Brain,
     Button,
     Calendar,
-    CalendarDays,
     Chip,
-    EmptyState,
-    Gauge,
+    Icon,
     IconButton,
+    PageHeader,
     Input,
     Plus,
     SegmentedControl,
@@ -23,7 +21,8 @@
   import type { ScreenCtx } from '../types';
   import JobProgress from '../io/JobProgress.svelte';
   import { followJob } from '../io/job';
-  import { FormRow, LoadState, SettingsPage, SettingsSection } from '../core/kit';
+  import { FormRow, LoadState } from '../core/kit';
+  import Panel from './Panel.svelte';
   import { num, pct, shortDate, tzOffset } from './format';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -151,8 +150,11 @@
   });
 </script>
 
-<SettingsPage title={t('planning.heading')} subtitle={t('planning.subtitle')}>
-  <SettingsSection title={t('planning.balance.heading')} icon={CalendarDays} body="rows">
+
+<div class="planning">
+  <PageHeader title={t('planning.heading')} subtitle={t('planning.subtitle')} />
+
+  <Panel title={t('planning.balance.heading')} body="rows">
     <FormRow label={t('settings.planning.load_balance.label')} description={t('settings.planning.load_balance.description')}>
       <Switch ariaLabel={t('planning.balance.toggle')} bind:checked={balance} onchange={() => void set('planning.load_balance', balance)} />
     </FormRow>
@@ -172,31 +174,30 @@
         {/each}
       </ul>
     </FormRow>
-  </SettingsSection>
+  </Panel>
 
-  <SettingsSection title={t('planning.exams.heading')} icon={Calendar} description={t('planning.exams.intro')}>
+  <Panel title={t('planning.exams.heading')} description={t('planning.exams.intro')} body="rows">
     {#if examsFailed}
-      <LoadState state="error" retry={() => void loadExams()} />
+      <div class="pad"><LoadState state="error" retry={() => void loadExams()} /></div>
     {:else if !exams}
-      <LoadState state="loading" lines={2} />
+      <div class="pad"><LoadState state="loading" lines={2} /></div>
     {:else if exams.items.length === 0}
-      <EmptyState size="sm" icon={Calendar} title={t('planning.exams.none')} description={t('planning.exams.none_hint')} />
+      <p class="pad empty"><Icon icon={Calendar} size={14} /><strong>{t('planning.exams.none')}</strong> <span>{t('planning.exams.none_hint')}</span></p>
     {:else}
       <ul class="exams">
         {#each exams.items as e (e.exam.id)}
           <li>
-            <div class="date" aria-hidden="true">
-              <span class="d">{shortDate(e.exam.date, i18n.locale)}</span>
-            </div>
-            <div class="exam-text">
+            <span class="date num" aria-hidden="true">{shortDate(e.exam.date, i18n.locale)}</span>
+            <span class="exam-text">
               <strong>{e.exam.name}</strong>
               <span class="meta">
-                {e.exam.date} · {t('planning.exams.cards', { n: e.cards })}
+                <span class="num">{e.exam.date}</span> · {t('planning.exams.cards', { n: e.cards })}
                 {#if e.exam.query}· <code>{e.exam.query}</code>{/if}
               </span>
-            </div>
+            </span>
             <Chip size="sm" tone={whenTone(e.days_left)} label={when(e.days_left)} />
             <IconButton
+              size="sm"
               icon={Trash2}
               label={t('planning.exams.delete_named', { name: e.exam.name })}
               onclick={() => ctx.guarded(() => api.call('planning.exams.delete', { id: e.exam.id }))}
@@ -214,27 +215,22 @@
         void addExam();
       }}
     >
-      <h3 class="sub">{t('planning.exams.new')}</h3>
-      <div class="grid">
-        <Input label={t('planning.exams.name')} bind:value={name} />
-        <Input label={t('planning.exams.date')} type="date" bind:value={date} />
-        <Select label={t('planning.exams.deck')} options={examDeckOptions} bind:value={examDeck} />
-        <Input label={t('planning.exams.query')} bind:value={examQuery} placeholder={t('planning.exams.query_hint')} />
-      </div>
-      <div class="end">
-        <Button type="submit" variant="primary" icon={Plus} disabled={!name.trim() || !date}>{t('planning.exams.add')}</Button>
-      </div>
+      <Input size="sm" label={t('planning.exams.name')} bind:value={name} />
+      <Input size="sm" label={t('planning.exams.date')} type="date" bind:value={date} />
+      <Select size="sm" label={t('planning.exams.deck')} options={examDeckOptions} bind:value={examDeck} />
+      <Input size="sm" label={t('planning.exams.query')} bind:value={examQuery} placeholder={t('planning.exams.query_hint')} />
+      <Button type="submit" size="sm" variant="primary" icon={Plus} disabled={!name.trim() || !date}>{t('planning.exams.add')}</Button>
     </form>
-  </SettingsSection>
+  </Panel>
 
   {#if optimizerOn}
-    <SettingsSection title={t('planning.optimizer.heading')} icon={Brain} description={t('planning.optimizer.intro')} body="rows">
+    <Panel title={t('planning.optimizer.heading')} description={t('planning.optimizer.intro')} body="rows">
       {#if presets.length === 0}
         <FormRow label={t('planning.optimizer.preset')} description={t('planning.optimizer.none')} />
       {:else}
         <FormRow label={t('planning.optimizer.preset')} description={t('planning.optimizer.preset_hint')}>
-          <Select hideLabel label={t('planning.optimizer.preset')} options={presets.map((p) => ({ value: p.id, label: p.name }))} bind:value={presetId} />
-          <Button variant="primary" loading={job !== null} disabled={!presetId || job !== null} onclick={() => void optimize()}>{t('planning.optimizer.run')}</Button>
+          <Select size="sm" hideLabel label={t('planning.optimizer.preset')} options={presets.map((p) => ({ value: p.id, label: p.name }))} bind:value={presetId} />
+          <Button size="sm" variant="primary" loading={job !== null} disabled={!presetId || job !== null} onclick={() => void optimize()}>{t('planning.optimizer.run')}</Button>
         </FormRow>
       {/if}
       {#if job || outcome}
@@ -243,135 +239,140 @@
           {#if outcome}<p class="outcome {outcome.tone}" role="status">{outcome.text}</p>{/if}
         </div>
       {/if}
-    </SettingsSection>
+    </Panel>
 
-    <SettingsSection title={t('planning.workload.heading')} icon={Gauge} description={t('planning.workload.intro')}>
+    <Panel title={t('planning.workload.heading')} description={t('planning.workload.intro')} body="rows">
       {#snippet actions()}
         <Select size="sm" hideLabel label={t('planning.workload.deck')} options={workloadDeckOptions} bind:value={workloadDeck} onchange={() => void loadWorkload()} />
       {/snippet}
       {#if !workload}
-        <LoadState state="loading" />
+        <div class="pad"><LoadState state="loading" /></div>
       {:else}
-        <table>
+        <table class="dt">
           <thead>
             <tr>
               <th scope="col">{t('planning.workload.retention')}</th>
               <th scope="col" class="bar-col">{t('planning.workload.per_day')}</th>
-              <th scope="col" class="num">{t('planning.workload.relative')}</th>
+              <th scope="col" class="n">{t('planning.workload.relative')}</th>
             </tr>
           </thead>
           <tbody>
             {#each workload.points as p (p.retention)}
               <tr class:current={isCurrent(p.retention)}>
                 <th scope="row">
-                  <span class="ret">{pct(p.retention)}{isCurrent(p.retention) ? ` (${t('planning.workload.current')})` : ''}</span>
+                  <span class="ret num">{pct(p.retention)}{isCurrent(p.retention) ? ` (${t('planning.workload.current')})` : ''}</span>
                 </th>
                 <td class="bar-col">
-                  <div class="inline-bar">
+                  <span class="inline-bar">
                     <span class="track" aria-hidden="true"><span class="fill" style:width="{(p.reviews_per_day / maxPerDay) * 100}%"></span></span>
-                    <span class="v">{num(p.reviews_per_day)}</span>
-                  </div>
+                    <span class="num v">{num(p.reviews_per_day)}</span>
+                  </span>
                 </td>
-                <td class="num">×{num(p.relative, 2)}</td>
+                <td class="n num">×{num(p.relative, 2)}</td>
               </tr>
             {/each}
           </tbody>
         </table>
-        <p class="muted">{t('planning.workload.basis', { n: workload.review_cards, new: workload.new_per_day })}</p>
+        <p class="basis">{t('planning.workload.basis', { n: workload.review_cards, new: workload.new_per_day })}</p>
       {/if}
-    </SettingsSection>
+    </Panel>
   {/if}
-</SettingsPage>
+</div>
 
 <style>
+  .planning {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    max-width: 880px;
+  }
+  .planning > :global(.fc-page-header) {
+    margin-bottom: var(--space-1);
+  }
+  .pad {
+    padding: var(--space-3) var(--space-4);
+  }
+  .empty {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-2);
+  }
+  .empty strong {
+    font-weight: var(--weight-medium);
+    color: var(--text-1);
+  }
   .days {
     list-style: none;
     margin: 0;
     padding: 0;
     width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(23rem, 1fr));
+    gap: var(--space-1) var(--space-6);
   }
   .days li {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
-    flex-wrap: wrap;
+    min-height: 32px;
   }
   .day {
     font-size: var(--text-sm);
-    min-width: 7rem;
+    color: var(--text-2);
   }
   .exams {
     list-style: none;
-    margin: 0 0 var(--space-4);
+    margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
   }
   .exams li {
-    display: flex;
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr) auto auto;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    background: var(--surface-1);
+    min-height: 44px;
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+    border-bottom: 1px solid var(--border);
   }
   .date {
-    flex: none;
-    width: 56px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    border-radius: var(--radius-control);
-    background: var(--accent-soft);
-    color: var(--text-1);
     font-size: var(--text-xs);
     font-weight: var(--weight-semibold);
-    line-height: 1.2;
+    color: var(--accent-text);
   }
   .exam-text {
-    flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    font-size: var(--text-sm);
+  }
+  .exam-text strong {
+    font-weight: var(--weight-medium);
   }
   .meta {
     font-size: var(--text-xs);
     color: var(--text-2);
+    overflow-wrap: anywhere;
   }
   code {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
   }
   .add {
-    padding-top: var(--space-4);
-    border-top: 1px solid var(--border);
-  }
-  .sub {
-    margin: 0 0 var(--space-3);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
-  }
-  .grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-3) var(--space-4);
-  }
-  .end {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: var(--space-4);
+    grid-template-columns: minmax(8rem, 1.2fr) 9.5rem minmax(8rem, 1fr) minmax(8rem, 1fr) auto;
+    align-items: end;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-0);
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
   }
   .job {
-    padding: var(--space-2) var(--space-6) var(--space-4);
+    padding: var(--space-2) var(--space-4) var(--space-3);
   }
   .outcome {
     margin: var(--space-2) 0 0;
@@ -383,51 +384,58 @@
   .outcome.danger {
     color: var(--danger);
   }
-  .muted {
-    margin: var(--space-3) 0 0;
+  .basis {
+    margin: 0;
+    padding: var(--space-2) var(--space-4);
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
+    border-top: 1px solid var(--border);
   }
-  table {
+  .dt {
     width: 100%;
     border-collapse: collapse;
     font-size: var(--text-sm);
   }
-  th,
-  td {
+  .dt th,
+  .dt td {
+    height: 32px;
+    padding: 0 var(--space-3);
     text-align: start;
-    padding: var(--space-2) var(--space-3);
     border-bottom: 1px solid var(--border);
   }
-  th:first-child {
-    padding-inline-start: 0;
+  .dt th:first-child {
+    padding-inline-start: var(--space-4);
   }
-  td:last-child,
-  th:last-child {
-    padding-inline-end: 0;
+  .dt td:last-child,
+  .dt th:last-child {
+    padding-inline-end: var(--space-4);
   }
-  thead th {
+  .dt thead th {
+    height: 28px;
     font-size: var(--text-xs);
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     color: var(--text-2);
   }
-  tbody th {
+  .dt tbody th {
     font-weight: var(--weight-regular);
     white-space: nowrap;
+  }
+  .dt tbody tr:last-child > * {
+    border-bottom: none;
   }
   tr.current th,
   tr.current td {
     font-weight: var(--weight-semibold);
+    background: var(--accent-soft);
   }
   tr.current .ret {
     color: var(--accent-text);
   }
-  .num {
-    text-align: end;
-    font-variant-numeric: tabular-nums;
+  .n {
+    text-align: end !important;
   }
   .bar-col {
-    width: 50%;
+    width: 55%;
   }
   .inline-bar {
     display: grid;
@@ -436,27 +444,29 @@
     gap: var(--space-2);
   }
   .track {
-    height: 8px;
+    height: 4px;
     border-radius: var(--radius-pill);
-    background: var(--surface-2);
+    background: var(--surface-3);
     overflow: hidden;
   }
   .fill {
     display: block;
     height: 100%;
     border-radius: var(--radius-pill);
-    background: color-mix(in srgb, var(--accent) 70%, var(--surface-1));
+    background: light-dark(color-mix(in srgb, var(--accent) 40%, var(--accent-text)), color-mix(in srgb, var(--accent) 78%, var(--surface-1)));
   }
   tr.current .fill {
-    background: var(--accent);
+    background: light-dark(var(--accent-text), var(--accent));
   }
   .v {
     text-align: end;
-    font-variant-numeric: tabular-nums;
   }
-  @media (max-width: 639.98px) {
-    .grid {
-      grid-template-columns: minmax(0, 1fr);
+  .add > :global(.fc-btn) {
+    justify-self: start;
+  }
+  @media (max-width: 1023.98px) {
+    .add {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

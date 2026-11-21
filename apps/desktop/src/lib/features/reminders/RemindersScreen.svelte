@@ -74,13 +74,11 @@
     </SettingsSection>
   {:else}
     <div class="today" role="status">
-      <span class="ic"><Icon icon={Bell} size={20} /></span>
-      <div>
-        <p class="strong">{t('reminders.today', { due: status.counts.due, new: status.counts.new })}</p>
-        <p class="muted">
-          {#if status.studied_today}{t('reminders.studied')}{:else}{next ? t('reminders.next', { when: next }) : t('reminders.none')}{/if}
-        </p>
-      </div>
+      <span class="ic"><Icon icon={Bell} size={16} /></span>
+      <p class="strong">{t('reminders.today', { due: status.counts.due, new: status.counts.new })}</p>
+      <p class="muted">
+        {#if status.studied_today}{t('reminders.studied')}{:else}{next ? t('reminders.next', { when: next }) : t('reminders.none')}{/if}
+      </p>
     </div>
 
     <SettingsSection title={t('reminders.daily')} icon={Clock} body="rows">
@@ -88,7 +86,7 @@
         <Switch checked={status.enabled} ariaLabel={t('reminders.enabled')} onchange={(v) => void toggle('enabled', v)} />
       </FormRow>
       <FormRow label={t('reminders.time')} description={t('reminders.time_hint')}>
-        <div>
+        <div class="time">
           <TimeField value={time} label={t('reminders.time')} onchange={(v) => void setTime(v)} />
         </div>
       </FormRow>
@@ -123,37 +121,39 @@
   .today {
     display: flex;
     align-items: center;
-    gap: var(--space-4);
-    padding: var(--space-4) var(--space-6);
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    min-height: 40px;
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--border);
     border-radius: var(--radius-card);
-    background: var(--accent-soft);
+    background: var(--surface-1);
+    font-size: var(--text-sm);
   }
   .ic {
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
     flex: none;
-    border-radius: var(--radius-pill);
-    background: var(--surface-1);
     color: var(--accent-text);
   }
   .today p {
     margin: 0;
   }
   .strong {
-    font-weight: var(--weight-semibold);
+    font-weight: var(--weight-medium);
     color: var(--text-1);
   }
   .muted {
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
   .days {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2);
+    gap: var(--space-1);
+  }
+  .time :global(.fc-field) {
+    min-width: 0;
+    width: 6rem;
   }
   .ok {
     color: var(--success);

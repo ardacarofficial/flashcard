@@ -1,6 +1,6 @@
 {
   "nav": {
-    "stats": "Statistics",
+    "stats": "Overview",
     "planning": "Planning",
     "goals": "Goals"
   },
@@ -110,7 +110,7 @@
     }
   },
   "stats": {
-    "heading": "Statistics",
+    "heading": "Overview",
     "scope": {
       "deck": "Deck",
       "all_decks": "All decks",
@@ -129,7 +129,8 @@
     "streak": {
       "label": "Streak",
       "days": "{n, plural, one {# day} other {# days}}",
-      "longest": "Longest: {n, plural, one {# day} other {# days}}"
+      "longest": "Longest: {n, plural, one {# day} other {# days}}",
+      "unit": "{n, plural, one {day} other {days}}"
     },
     "reviews": {
       "label": "Reviews",
@@ -137,7 +138,8 @@
     },
     "time": {
       "label": "Study time",
-      "minutes": "{n} min"
+      "minutes": "{n} min",
+      "unit": "min"
     },
     "retention": {
       "label": "True retention",
