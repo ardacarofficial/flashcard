@@ -14,5 +14,12 @@
   "oplog.summary.ai.run": "AI isteği gönderildi",
   "oplog.summary.ai.notes.add": "{count} AI notu eklendi",
   "oplog.summary.ai.notes.update": "AI önerisi uygulandı",
-  "oplog.summary.ai.sources.extract": "Kart kaynağı okundu"
+  "oplog.summary.ai.sources.extract": "Kart kaynağı okundu",
+  "oplog.summary.ai.meaning.apply": "\"{meaning}\" anlamı uygulandı",
+  "oplog.summary.ai.meaning.suggest": "Anlam önerisi istendi",
+  "oplog.summary.ai.meaning.restore": "Anlam geri yüklendi",
+  "oplog.summary.ai.meaning.store_suggestion": "Anlam önerisi saklandı",
+  "oplog.summary.accepted_answers.add": "{count} kabul edilen cevap eklendi",
+  "oplog.summary.accepted_answers.remove": "{count} kabul edilen cevap kaldırıldı",
+  "oplog.summary.accepted_answers.restore": "Kabul edilen cevaplar geri yüklendi"
 }

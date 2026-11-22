@@ -63,4 +63,5 @@ modules! {
     themes,
     words,
     word_data,
+    accepted_answers,
 }

@@ -27,6 +27,7 @@
 //! on the generated notes.
 
 mod context;
+mod meaning;
 mod notes;
 mod prompts;
 mod providers;
@@ -42,6 +43,11 @@ mod tests_v2;
 mod tests_phase3;
 #[cfg(test)]
 mod tests_presets;
+#[cfg(test)]
+mod tests_meaning;
+
+pub(crate) use context::meaning_field as context_meaning_field;
+pub use meaning::suggest_after_capture;
 
 use crate::app::App;
 use crate::module::{main_menu, ModuleDescriptor};
@@ -78,6 +84,9 @@ pub const TIMEOUT: &str = "ai.request_timeout_secs";
 pub const RETRIES: &str = "ai.max_retries";
 /// Setting: let "cards from a web page" reach local-network hosts (default off).
 pub const WEB_ALLOW_PRIVATE: &str = "ai.web.allow_private_hosts";
+/// Setting (v1.4): ask for a captured word's meaning in its sentence WITHOUT a preview and
+/// keep the answer as a suggestion (default off: nothing is sent unless the user opts in).
+pub const AUTO_SUGGEST: &str = "ai.meaning.auto_suggest";
 
 /// Setting key of a feature's prompt template (`ai.prompt.generate_cards`, …).
 pub fn prompt_setting(feature: AiFeature) -> String {
@@ -96,6 +105,8 @@ pub struct AiServices {
     keychain: AtomicBool,
     /// First retry pause in ms (doubles each retry); tests set 0.
     retry_base_ms: AtomicU64,
+    /// Request timeout in ms instead of the setting (0 = the setting; tests only).
+    timeout_override_ms: AtomicU64,
     /// Last connection test per provider, with the setup it tested ([`test_fingerprint`]).
     /// Memory only: a status for this app run, not data (nothing to undo or sync).
     tests: Mutex<HashMap<AiProviderId, (String, AiConnectionTest)>>,
@@ -107,6 +118,7 @@ impl Default for AiServices {
             secrets: RwLock::new(Arc::new(NoSecrets)),
             keychain: AtomicBool::new(false),
             retry_base_ms: AtomicU64::new(1000),
+            timeout_override_ms: AtomicU64::new(0),
             tests: Mutex::new(HashMap::new()),
         }
     }
@@ -178,6 +190,19 @@ impl AiServices {
     #[cfg(test)]
     pub(crate) fn set_retry_base_ms(&self, ms: u64) {
         self.retry_base_ms.store(ms, Ordering::SeqCst);
+    }
+
+    /// The request timeout (the setting's, unless a test shortened it).
+    pub(crate) fn timeout(&self, setting_secs: u64) -> Duration {
+        match self.timeout_override_ms.load(Ordering::SeqCst) {
+            0 => Duration::from_secs(setting_secs),
+            ms => Duration::from_millis(ms),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_timeout_ms(&self, ms: u64) {
+        self.timeout_override_ms.store(ms, Ordering::SeqCst);
     }
 }
 
@@ -264,6 +289,7 @@ pub fn descriptor() -> ModuleDescriptor {
             serde_json::json!(2),
         ),
         number_setting(WEB_ALLOW_PRIVATE, SettingKind::Bool, serde_json::json!(false)),
+        number_setting(AUTO_SUGGEST, SettingKind::Bool, serde_json::json!(false)),
     ];
     // Prompt templates: visible and editable under "advanced" (docs/06 §1.4).
     for feature in AiFeature::ALL {
@@ -301,4 +327,5 @@ pub fn register(reg: &mut Registry) {
     run::register(reg, &services);
     sources::register(reg);
     notes::register(reg);
+    meaning::register(reg, &services);
 }

@@ -186,6 +186,14 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "ai.preview" => Reads(AI_NOTES),
         // AI drafts are applied by the user (a plugin writes notes with `notes.*` directly).
         "ai.notes.add" | "ai.notes.update" => Refused(AI_WRITES),
+        // v1.4 meaning in context: the stored meaning and accepted answers are note content;
+        // applying (or asking without a preview) is the user's, like AI drafts.
+        "ai.meaning.get" => Reads(AI_NOTES),
+        "ai.meaning.apply" | "ai.meaning.suggest" => Refused(AI_WRITES),
+        // v1.4 accepted answers: per-note lists (note content).
+        "accepted_answers.list" | "accepted_answers.add" | "accepted_answers.remove" => {
+            Reads(NOTES)
+        }
         // Phase 4, v0.10 study modes: results are study sessions and cards (like `study.*`).
         "modes.confidence.answer" | "modes.timed.start" | "modes.timed.expire"
         | "modes.test.paper" | "modes.test.save_draft" => Reads(STUDY_CARDS),

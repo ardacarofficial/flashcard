@@ -172,6 +172,48 @@ struct RequestPayload {
     request: CompletionRequest,
     spec: OutputSpec,
     target: Target,
+    /// Started without a preview (`ai.meaning.suggest`, opt-in): the budget is enforced
+    /// before every send and a meaning is stored as a suggestion.
+    #[serde(default)]
+    auto: bool,
+}
+
+/// Fails when the monthly budget is spent (automatic requests only: a previewed request
+/// shows the budget and the user decides).
+pub(super) fn ensure_budget(reads: &dyn Reads, now: fc_core::Timestamp) -> AppResult<()> {
+    let b = budget(reads, now, 0.0)?;
+    if b.limit_usd.is_some_and(|l| b.month_spent_usd >= l) {
+        return Err(AppError::Api(
+            ApiError::new(ErrorCode::ConflictAiBudgetExceeded, "the monthly AI budget is spent")
+                .with_detail("limit_usd", b.limit_usd.unwrap_or_default().to_string())
+                .with_detail("spent_usd", b.month_spent_usd.to_string()),
+        ));
+    }
+    Ok(())
+}
+
+/// Queues `built` without a preview (the caller checked the opt-in and the budget).
+pub(super) fn enqueue_auto(services: &AiServices, built: Built, ctx: &mut CommandCtx<'_>) -> AppResult<JobDto> {
+    if needs_key(&built.provider)? && !has_key(services, built.provider.id) {
+        return Err(AppError::Api(
+            ApiError::new(ErrorCode::ProviderAiUnauthorized, "no API key is set for this provider")
+                .with_detail("provider", built.provider.name.clone()),
+        ));
+    }
+    let payload = RequestPayload {
+        provider_id: built.provider.id,
+        kind: built.provider.kind.clone(),
+        base_url: built.provider.base_url.clone(),
+        model: built.model,
+        feature: built.feature,
+        request: built.request,
+        spec: built.spec,
+        target: built.target,
+        auto: true,
+    };
+    let payload =
+        serde_json::to_value(&payload).map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+    crate::jobs::enqueue(ctx, REQUEST_JOB, payload)
 }
 
 fn run(services: &AiServices, req: RunAi, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<JobDto>> {
@@ -199,6 +241,7 @@ fn run(services: &AiServices, req: RunAi, ctx: &mut CommandCtx<'_>) -> AppResult
         request: built.request,
         spec: built.spec,
         target: built.target,
+        auto: false,
     };
     let payload =
         serde_json::to_value(&payload).map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
@@ -297,7 +340,7 @@ fn connect(
         kind,
         base_url: record.base_url.clone(),
         api_key: key.clone(),
-        timeout: Duration::from_secs(timeout),
+        timeout: services.timeout(timeout),
         media: Some(Arc::new(Images(media))),
     };
     let provider = fc_ai::build(config.clone());
@@ -466,6 +509,17 @@ fn output(parsed: Parsed, payload: &RequestPayload) -> AppResult<AiOutput> {
             items,
             field: t.field.clone(),
         },
+        (AiFeature::MeaningInContext, Parsed::Meaning(m)) => AiOutput::MeaningInContext {
+            note_id: t.note_id,
+            field: t.field.clone(),
+            meaning: m.meaning,
+            phrase: m.phrase,
+            expression: m.expression,
+            also_correct: m.also_correct,
+            not_this: m.not_this,
+            confidence: m.confidence,
+            original: t.original.clone(),
+        },
         _ => return Err(AppError::api(ErrorCode::Internal, "output does not match the feature")),
     })
 }
@@ -511,6 +565,9 @@ impl JobHandler for RequestJob {
         let mut input_tokens = 0u32;
         let mut output_tokens = 0u32;
         ctx.report(None, "ai.job.waiting");
+        if payload.auto {
+            ensure_budget(&*ctx.read()?, ctx.now())?;
+        }
         let first = send(
             &self.0,
             ctx,
@@ -546,6 +603,9 @@ impl JobHandler for RequestJob {
                         text: repair_message(&problem),
                     }],
                 });
+                if payload.auto {
+                    ensure_budget(&*ctx.read()?, ctx.now())?;
+                }
                 let second = send(&self.0, ctx, &conn, payload.feature, &repair, &mut attempts, None)?;
                 input_tokens += second.usage.input_tokens;
                 output_tokens += second.usage.output_tokens;
@@ -561,8 +621,12 @@ impl JobHandler for RequestJob {
             }
         };
         let prices = ctx.read()?.list_ai_prices()?;
+        let output = output(parsed, &payload)?;
+        if payload.auto {
+            super::meaning::store_suggestion(ctx, &output, &model)?;
+        }
         let result = AiJobResult {
-            output: output(parsed, &payload)?,
+            output,
             provider_id: conn.id,
             cost_usd: cost(&prices, &model, u64::from(input_tokens), u64::from(output_tokens)),
             model,

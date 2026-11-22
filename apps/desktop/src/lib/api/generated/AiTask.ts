@@ -88,4 +88,33 @@ note_id: NoteId,
 /**
  * How many (1–10).
  */
-count: number, };
+count: number, } | { "feature": "meaning_in_context", 
+/**
+ * The note the meaning is for.
+ */
+note_id: NoteId | null, 
+/**
+ * The sentence (`null` = the note's example field).
+ */
+sentence: string | null, 
+/**
+ * Dictionary form ("pick up"; `null` = the note's term field).
+ */
+lemma: string | null, 
+/**
+ * The form as it is in the sentence ("picked up"; `null` = the note's surface field,
+ * else the lemma).
+ */
+surface: string | null, 
+/**
+ * Character offset of `surface` in `sentence` (tells two equal words apart).
+ */
+position: number | null, 
+/**
+ * Language of the answer (`tr`, `en`, …; `null` = the app's language).
+ */
+target_language: string | null, 
+/**
+ * Meanings a dictionary or the capture offered (the note's own meaning is added).
+ */
+candidates: Array<string>, };

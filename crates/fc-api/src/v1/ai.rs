@@ -48,11 +48,13 @@ pub enum AiFeature {
     RewriteLeech,
     /// Plausible wrong options for multiple choice.
     Distractors,
+    /// The meaning of a word in one sentence (v1.4): "pick up the kids" → "almak (okuldan)".
+    MeaningInContext,
 }
 
 impl AiFeature {
     /// Every feature, in menu order.
-    pub const ALL: [AiFeature; 8] = [
+    pub const ALL: [AiFeature; 9] = [
         AiFeature::GenerateCards,
         AiFeature::FillFields,
         AiFeature::Explain,
@@ -61,6 +63,7 @@ impl AiFeature {
         AiFeature::Improve,
         AiFeature::RewriteLeech,
         AiFeature::Distractors,
+        AiFeature::MeaningInContext,
     ];
 
     /// Snake-case id (`generate_cards`).
@@ -74,6 +77,7 @@ impl AiFeature {
             Self::Improve => "improve",
             Self::RewriteLeech => "rewrite_leech",
             Self::Distractors => "distractors",
+            Self::MeaningInContext => "meaning_in_context",
         }
     }
 }
@@ -571,6 +575,35 @@ pub enum AiTask {
         /// How many (1–10).
         count: u32,
     },
+    /// Which meaning of a word fits THIS sentence (v1.4). With `note_id` the note's fields by
+    /// role fill what is not given (term → `lemma`, surface → `surface`, example →
+    /// `sentence`, its meaning → a candidate) and the result can be applied to that note
+    /// (`ai.meaning.apply`). Without it everything must be given (reading mode, a capture
+    /// not yet saved).
+    MeaningInContext {
+        /// The note the meaning is for.
+        #[serde(default)]
+        note_id: Option<NoteId>,
+        /// The sentence (`null` = the note's example field).
+        #[serde(default)]
+        sentence: Option<String>,
+        /// Dictionary form ("pick up"; `null` = the note's term field).
+        #[serde(default)]
+        lemma: Option<String>,
+        /// The form as it is in the sentence ("picked up"; `null` = the note's surface field,
+        /// else the lemma).
+        #[serde(default)]
+        surface: Option<String>,
+        /// Character offset of `surface` in `sentence` (tells two equal words apart).
+        #[serde(default)]
+        position: Option<u32>,
+        /// Language of the answer (`tr`, `en`, …; `null` = the app's language).
+        #[serde(default)]
+        target_language: Option<String>,
+        /// Meanings a dictionary or the capture offered (the note's own meaning is added).
+        #[serde(default)]
+        candidates: Vec<String>,
+    },
 }
 
 /// `ai.preview`.
@@ -757,6 +790,30 @@ pub enum AiOutput {
         /// multiple-choice type); `null` = the note type has none.
         field: Option<String>,
     },
+    /// The meaning in this sentence. Nothing is written: `ai.meaning.apply` applies it (the
+    /// user may edit it first).
+    MeaningInContext {
+        /// Note it can be applied to (`null` = the task named none).
+        note_id: Option<NoteId>,
+        /// The note's meaning field (`null` = no note, or its type has no meaning field).
+        field: Option<String>,
+        /// The meaning that fits this sentence.
+        meaning: String,
+        /// The words of the sentence it rests on ("pick up the kids").
+        phrase: String,
+        /// The phrase is an expression / phrasal verb, not the word alone.
+        expression: bool,
+        /// Other correct translations of the same meaning (they become accepted answers
+        /// when applied).
+        also_correct: Vec<String>,
+        /// Up to 3 other meanings of the word that do NOT fit this sentence.
+        not_this: Vec<String>,
+        /// The model's confidence, 0–1.
+        confidence: f32,
+        /// The meaning the note (the source: dictionary, capture, the user) has now — kept
+        /// as it is; `""` = none.
+        original: String,
+    },
 }
 
 /// Result of an `ai.request` job (`JobDto.result`).
@@ -816,6 +873,124 @@ pub struct UpdateAiNote {
     pub note_id: NoteId,
     /// Field key → new value.
     pub fields: BTreeMap<String, String>,
+}
+
+// ------------------------------------------------------------------ meaning in context
+
+/// Where a note's stored meaning-in-context came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum AiMeaningStatus {
+    /// Asked automatically after a capture (opt-in `ai.meaning.auto_suggest`), not applied:
+    /// the note is unchanged.
+    Suggested,
+    /// Applied by the user (`ai.meaning.apply`).
+    Applied,
+}
+
+/// A note's meaning in its sentence, stored apart from the note's fields (the source's
+/// meaning is never overwritten silently: `original` keeps it).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct AiNoteMeaning {
+    /// Note.
+    pub note_id: NoteId,
+    /// The note's meaning field it is about.
+    pub field: String,
+    /// Suggested or applied.
+    pub status: AiMeaningStatus,
+    /// The meaning (as the model gave it, or as the user edited it).
+    pub meaning: String,
+    /// The words of the sentence it rests on.
+    pub phrase: String,
+    /// An expression / phrasal verb.
+    pub expression: bool,
+    /// Other correct translations the model offered.
+    pub also_correct: Vec<String>,
+    /// Meanings that do not fit this sentence.
+    pub not_this: Vec<String>,
+    /// The model's confidence (`null` = typed by the user).
+    pub confidence: Option<f32>,
+    /// The user changed the model's wording before applying.
+    pub edited: bool,
+    /// The meaning field's value before the first apply (the source's definition).
+    pub original: String,
+    /// Model that answered (`""` = none).
+    pub model: String,
+    /// First stored.
+    pub created_at: Timestamp,
+    /// Last changed.
+    pub updated_at: Timestamp,
+}
+
+/// Response of `ai.meaning.get`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct AiNoteMeaningState {
+    /// Note.
+    pub note_id: NoteId,
+    /// The stored meaning (`null` = none yet).
+    pub meaning: Option<AiNoteMeaning>,
+    /// The note's accepted answers (what the offline written-answer check also accepts).
+    pub accepted: Vec<super::accepted_answers::AcceptedAnswers>,
+}
+
+/// A note by id (`ai.meaning.get`, `ai.meaning.suggest`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct AiMeaningRef {
+    /// Note.
+    pub note_id: NoteId,
+}
+
+/// `ai.meaning.apply`: the user accepts (maybe edited) a meaning for a note — one undo step.
+/// The meaning is stored apart from the fields; with `replace_field` it also becomes the
+/// meaning field's value (the previous value stays in `original`). `accepted` answers are
+/// added to the note's accepted answers.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct ApplyAiMeaning {
+    /// Note.
+    pub note_id: NoteId,
+    /// The meaning as accepted or edited.
+    pub meaning: String,
+    /// The phrase of the sentence it rests on.
+    #[serde(default)]
+    pub phrase: String,
+    /// An expression / phrasal verb.
+    #[serde(default)]
+    pub expression: bool,
+    /// Other correct translations offered (kept for display).
+    #[serde(default)]
+    pub also_correct: Vec<String>,
+    /// Meanings that do not fit this sentence.
+    #[serde(default)]
+    pub not_this: Vec<String>,
+    /// The model's confidence (`null` = typed by the user).
+    #[serde(default)]
+    pub confidence: Option<f32>,
+    /// Model that answered.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// The user changed the model's wording.
+    #[serde(default)]
+    pub edited: bool,
+    /// Answers the written check should also accept (`vazgeçmek`, `bırakmak`).
+    #[serde(default)]
+    pub accepted: Vec<String>,
+    /// Also write `meaning` into the note's meaning field.
+    #[serde(default)]
+    pub replace_field: bool,
+}
+
+/// Internal `ai.meaning.restore` (inverse of `ai.meaning.apply`) and the write of an
+/// automatic suggestion: the note's stored meaning exactly (`null` = none).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RestoreAiMeaning {
+    /// Note.
+    pub note_id: NoteId,
+    /// The row (`null` = removed).
+    pub meaning: Option<AiNoteMeaning>,
 }
 
 // ------------------------------------------------------------------ sources

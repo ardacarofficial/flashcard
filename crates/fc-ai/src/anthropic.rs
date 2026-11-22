@@ -142,19 +142,26 @@ impl Anthropic {
             .get("content")
             .and_then(Value::as_array)
             .ok_or_else(|| self.http.failed("response without content"))?;
-        let text = if request.json_schema.is_some() {
-            let input = blocks
-                .iter()
-                .find(|b| b.get("type").and_then(Value::as_str) == Some("tool_use"))
-                .and_then(|b| b.get("input"))
-                .ok_or_else(|| {
-                    ProviderError::new(
-                        ProviderErrorKind::Failed,
-                        "the model did not return structured output",
-                    )
-                })?;
+        let tool_input = blocks
+            .iter()
+            .find(|b| b.get("type").and_then(Value::as_str) == Some("tool_use"))
+            .and_then(|b| b.get("input"));
+        let text = if let (true, Some(input)) = (request.json_schema.is_some(), tool_input) {
             serde_json::to_string(input).map_err(|e| self.http.failed(e.to_string()))?
+        } else if request.json_schema.is_some()
+            && v.get("stop_reason").and_then(Value::as_str) != Some("refusal")
+            && !blocks
+                .iter()
+                .any(|b| b.get("type").and_then(Value::as_str) == Some("text"))
+        {
+            return Err(ProviderError::new(
+                ProviderErrorKind::Failed,
+                "the model did not return structured output",
+            ));
         } else {
+            // v1.4: a refusal or a plain-text answer instead of the forced tool comes back as
+            // text, so the app's validation explains it, asks once more and records the
+            // tokens it cost (it used to fail before usage was recorded).
             blocks
                 .iter()
                 .filter(|b| b.get("type").and_then(Value::as_str) == Some("text"))

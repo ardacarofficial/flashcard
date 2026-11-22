@@ -14,5 +14,12 @@
   "oplog.summary.ai.run": "Sent an AI request",
   "oplog.summary.ai.notes.add": "Added {count} AI note(s)",
   "oplog.summary.ai.notes.update": "Applied an AI suggestion",
-  "oplog.summary.ai.sources.extract": "Read a card source"
+  "oplog.summary.ai.sources.extract": "Read a card source",
+  "oplog.summary.ai.meaning.apply": "Applied the meaning \"{meaning}\"",
+  "oplog.summary.ai.meaning.suggest": "Asked for a meaning suggestion",
+  "oplog.summary.ai.meaning.restore": "Restored a meaning",
+  "oplog.summary.ai.meaning.store_suggestion": "Kept a meaning suggestion",
+  "oplog.summary.accepted_answers.add": "Added {count} accepted answer(s)",
+  "oplog.summary.accepted_answers.remove": "Removed {count} accepted answer(s)",
+  "oplog.summary.accepted_answers.restore": "Restored accepted answers"
 }

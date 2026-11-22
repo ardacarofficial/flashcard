@@ -14,6 +14,7 @@ mod inbox;
 mod interop;
 mod maintenance;
 mod mcp;
+mod meanings;
 mod migrations;
 mod misc;
 mod notes;

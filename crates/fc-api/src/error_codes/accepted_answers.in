@@ -1,0 +1,4 @@
+// Accepted answers (v1.4).
+// Entries of the `error_codes!` macro in `../error.rs` (see there). Never rename or reuse a code.
+/// An accepted answer or its field is invalid (`details.reason`: `field`, `too_long`, `too_many`).
+ValidationAcceptedAnswer => Validation, "errors.validation.accepted_answer";

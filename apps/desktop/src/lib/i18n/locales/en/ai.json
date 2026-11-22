@@ -6,6 +6,10 @@
     "ai": {
       "name": "AI",
       "description": "Cards from text, explanations, hints, answer checks and rewrites with Claude, OpenAI or a local model. Every request is shown before it is sent."
+    },
+    "accepted_answers": {
+      "name": "Accepted answers",
+      "description": "Other answers the written check also accepts for a card (\"bırakmak\" next to \"vazgeçmek\"). Checked on this computer, no AI involved."
     }
   },
   "ai": {
@@ -28,7 +32,8 @@
       "check_answer": "Check answer",
       "improve": "Improve card",
       "rewrite_leech": "Rewrite hard card",
-      "distractors": "Wrong options"
+      "distractors": "Wrong options",
+      "meaning_in_context": "Meaning in this sentence"
     },
     "preview": {
       "heading": "Before sending",
@@ -286,7 +291,8 @@
       "ai_key": "The API key looks wrong (empty, too long or with spaces).",
       "ai_task": "This request cannot be sent as it is.",
       "ai_price": "Prices must be numbers from 0, with a model name.",
-      "ai_source": "This source cannot be used (check the address, file or pages)."
+      "ai_source": "This source cannot be used (check the address, file or pages).",
+      "accepted_answer": "This accepted answer cannot be saved (check the field, its length or how many there are)."
     },
     "not_found": {
       "ai_provider": "AI provider not found."
@@ -294,7 +300,9 @@
     "conflict": {
       "ai_no_provider": "No AI provider yet. Add one under AI → Providers.",
       "ai_no_model": "Choose a model for this provider.",
-      "ai_preview_stale": "Something changed since the preview. Preview again."
+      "ai_preview_stale": "Something changed since the preview. Preview again.",
+      "ai_budget_exceeded": "This month's AI budget is spent, so nothing is sent automatically.",
+      "ai_auto_off": "Asking without a preview is off. Turn on \"Suggest meanings for captured words\" in the AI settings."
     },
     "provider": {
       "ai_unauthorized": "The provider rejected the API key (or none is set).",
@@ -350,6 +358,15 @@
         },
         "distractors": {
           "label": "Prompt: wrong options"
+        },
+        "meaning_in_context": {
+          "label": "Prompt: meaning in this sentence"
+        }
+      },
+      "meaning": {
+        "auto_suggest": {
+          "label": "Suggest meanings for captured words",
+          "description": "Off by default. When on, a captured word's sentence is sent to your AI provider without a preview and the answer is kept as a suggestion; your card changes only when you apply it. Stops when the monthly budget is spent."
         }
       }
     }
@@ -385,7 +402,17 @@
       },
       "sources": {
         "extract": "Read a card source (PDF, web page)"
+      },
+      "meaning": {
+        "get": "Meaning in this sentence",
+        "apply": "Apply meaning",
+        "suggest": "Suggest meaning"
       }
+    },
+    "accepted_answers": {
+      "list": "Accepted answers",
+      "add": "Add accepted answers",
+      "remove": "Remove accepted answers"
     }
   }
 }

@@ -15,7 +15,7 @@ use fc_core::{CardId, ReviewLogId, SessionId, Timestamp};
 use fc_storage::repo::{CardFilter, ReviewLogRecord, SessionRecord};
 use fc_api::v1::cardtypes::CardInteraction;
 use fc_providers::strategy::{CardResponse, Evaluation};
-use fc_study::answer::{check, CheckOptions, CheckerKind, Grade};
+use fc_study::answer::{check_accepting, CheckOptions, CheckerKind, Grade};
 use fc_study::text::html_to_text;
 use fc_study::day::MAX_TZ_OFFSET_MINS;
 use fc_study::hint::HintKind;
@@ -452,7 +452,9 @@ pub(super) fn check_answer(req: CheckAnswer, ctx: &QueryCtx<'_>) -> AppResult<An
         fold_turkish: setting_bool(ctx.tx, &SettingScope::App, FOLD_TURKISH)?,
         ..CheckOptions::default()
     };
-    let c = check(kind, &expected, &given, &opts);
+    // v1.4: the note's accepted answers for this field pass too (offline, no model).
+    let also = crate::modules::accepted_answers::alternatives_for(ctx.tx, ctx.registry, card.note_id, &expected)?;
+    let c = check_accepting(kind, &expected, &also, &given, &opts);
     Ok(AnswerCheckDto {
         grade: grade_dto(c.grade),
         score: c.score,

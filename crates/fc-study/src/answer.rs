@@ -135,6 +135,30 @@ pub fn check(kind: CheckerKind, expected: &str, given: &str, opts: &CheckOptions
     }
 }
 
+/// [`check`] that also accepts `also` (v1.4 accepted answers: other correct translations the
+/// user kept for this note, e.g. `bırakmak` next to `vazgeçmek`). Each is checked with the
+/// same checker; the best result wins (grade first, then score), so an accepted answer typed
+/// exactly is `correct` even under the exact checker. No model is asked: this is offline.
+pub fn check_accepting(
+    kind: CheckerKind,
+    expected: &str,
+    also: &[String],
+    given: &str,
+    opts: &CheckOptions,
+) -> Checked {
+    let mut best = check(kind, expected, given, opts);
+    for alt in also.iter().map(|a| a.trim()).filter(|a| !a.is_empty()) {
+        if best.grade == Grade::Correct && best.score >= 1.0 {
+            break;
+        }
+        let c = check(kind, alt, given, opts);
+        if rank(c.grade) > rank(best.grade) || (c.grade == best.grade && c.score > best.score) {
+            best = c;
+        }
+    }
+    best
+}
+
 const fn rank(g: Grade) -> u8 {
     match g {
         Grade::Correct => 2,
@@ -424,5 +448,38 @@ mod tests {
             .is_err());
         assert_eq!(CheckerKind::parse("multi"), Some(CheckerKind::Multi));
         assert_eq!(CheckerKind::parse("x"), None);
+    }
+
+    #[test]
+    fn accepted_answers_pass_offline_with_every_checker() {
+        let also = vec!["bırakmak".to_owned(), "  ".to_owned()];
+        let opts = CheckOptions::default();
+        for kind in CheckerKind::ALL {
+            // The card's own answer still passes.
+            assert_eq!(
+                check_accepting(kind, "vazgeçmek", &also, "vazgeçmek", &opts).grade,
+                Grade::Correct
+            );
+            // An accepted alternative passes, and is what it was compared with.
+            let c = check_accepting(kind, "vazgeçmek", &also, "bırakmak", &opts);
+            assert_eq!(
+                (c.grade, c.matched.as_str()),
+                (Grade::Correct, "bırakmak"),
+                "{kind:?}"
+            );
+            // Something else is still wrong.
+            assert_eq!(
+                check_accepting(kind, "vazgeçmek", &also, "almak", &opts).grade,
+                Grade::Wrong
+            );
+        }
+        // Tolerant: a typo of an alternative is "almost".
+        let c = check_accepting(CheckerKind::Tolerant, "vazgeçmek", &also, "bırakmk", &opts);
+        assert_eq!(c.grade, Grade::Almost);
+        // No alternatives = the plain check.
+        assert_eq!(
+            check_accepting(CheckerKind::Multi, "a; b", &[], "b", &opts),
+            check(CheckerKind::Multi, "a; b", "b", &opts)
+        );
     }
 }

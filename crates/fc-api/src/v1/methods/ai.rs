@@ -56,4 +56,22 @@ methods! {
     AiNotesAdd = "ai.notes.add", Command, "ai", "notes:write", Public, undo: true, AddAiNotes => AiNotesAdded;
     /// Applies a suggestion to a note: sets the listed fields, keeps the rest — one undo step.
     AiNotesUpdate = "ai.notes.update", Command, "ai", "notes:write", Public, undo: true, UpdateAiNote => crate::v1::notes::NoteDto;
+
+    // ---- ai: meaning in context (v1.4) ----
+    /// A note's stored meaning-in-context (suggested or applied) and its accepted answers.
+    AiMeaningGet = "ai.meaning.get", Query, "ai", "notes:read", Public, undo: false, AiMeaningRef => AiNoteMeaningState;
+    /// Applies a meaning (as accepted or edited) to a note: stored apart from the fields, the
+    /// meaning field replaced only on request (its old value kept), accepted answers added —
+    /// one undo step.
+    AiMeaningApply = "ai.meaning.apply", Command, "ai", "notes:write", Public, undo: true, ApplyAiMeaning => AiNoteMeaningState;
+    /// Asks for a note's meaning in its sentence WITHOUT a preview — only when the user opted in
+    /// (`ai.meaning.auto_suggest`) and the monthly budget is not exceeded. Starts an
+    /// `ai.request` job whose result is stored as a suggestion (the note is not changed).
+    AiMeaningSuggest = "ai.meaning.suggest", Command, "ai", "ai_requests:write", Public, undo: false, AiMeaningRef => JobDto;
+    /// Internal: writes a note's stored meaning exactly (inverse of `ai.meaning.apply`).
+    AiMeaningRestore = "ai.meaning.restore", Command, "ai", "notes:write", Internal, undo: true, RestoreAiMeaning => Empty;
+    /// Internal: stores an automatic suggestion (`ai.meaning.suggest`'s job). The note is not
+    /// changed and an applied meaning is never replaced; like a model list it returns no
+    /// inverse, so it is no undo step.
+    AiMeaningStoreSuggestion = "ai.meaning.store_suggestion", Command, "ai", "notes:write", Internal, undo: true (replay: false), RestoreAiMeaning => Empty;
 }

@@ -36,6 +36,7 @@ const FEATURES: AiFeature[] = [
   'improve',
   'rewrite_leech',
   'distractors',
+  'meaning_in_context',
 ];
 
 const KINDS = [
@@ -170,6 +171,19 @@ function output(task: AiTask): AiOutput {
       return { feature: 'rewrite_leech', note_id: task.note_id, changes: [], mnemonic: 'A mnemonic.' };
     case 'distractors':
       return { feature: 'distractors', note_id: task.note_id, items: ['wrong 1', 'wrong 2'], field: null };
+    case 'meaning_in_context':
+      return {
+        feature: 'meaning_in_context',
+        note_id: task.note_id,
+        field: task.note_id === null ? null : 'meaning',
+        meaning: 'almak (okuldan)',
+        phrase: 'pick up the kids',
+        expression: true,
+        also_correct: ['okuldan almak'],
+        not_this: ['kaldırmak'],
+        confidence: 0.9,
+        original: '',
+      };
   }
 }
 
