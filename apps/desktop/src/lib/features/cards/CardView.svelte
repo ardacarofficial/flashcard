@@ -146,6 +146,65 @@
     font-weight: 600;
     color: var(--accent-text);
   }
+  /* Labelled answer parts of the built-in vocabulary backs (v1.3, fc_core `PARTS_CSS`): the
+     meaning largest, the example set apart by a rule (sentence, then its translation), the
+     source smallest; labels are filled by `enhance` (cards.part.*). Colours are tokens so both
+     themes read; muting is opacity on full-contrast text, the same values the built-in CSS
+     uses, so the two never compound. `:where` keeps these below the note type's own CSS and
+     the host's (the study card sizes them). */
+  .card :global(:where(.fc-part)) {
+    margin-top: 0.75em;
+  }
+  .card :global(:where(.fc-part-meaning, .fc-part-answer)) {
+    font-size: 1.3em;
+    font-weight: var(--weight-semibold);
+    line-height: var(--leading-tight);
+    color: var(--text-1);
+  }
+  .card :global(:where(.fc-part-label)) {
+    display: block;
+    margin-bottom: 0.15em;
+    font-size: 0.7em;
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-1);
+    opacity: 0.65;
+  }
+  .card :global(:where(.fc-part-label:empty)) {
+    display: none;
+  }
+  .card :global(:where(.fc-part-example)) {
+    padding-left: 0.75em;
+    border-left: 2px solid var(--border-strong);
+    text-align: start;
+  }
+  .card :global(:where(.fc-example-translation)) {
+    margin-top: 0.25em;
+    color: var(--text-1);
+    opacity: 0.7;
+  }
+  .card :global(:where(.fc-part-source)) {
+    font-size: 0.8em;
+    color: var(--text-1);
+    opacity: 0.7;
+  }
+  .card :global(:where(.fc-part-source .fc-part-label)) {
+    display: inline;
+    margin-right: 0.4em;
+  }
+  /* The source is already muted: its label must not fade twice (0.7 × 0.65 is unreadable in
+     the light theme). Deliberately above the note type's CSS. */
+  .card :global(.fc-part-source .fc-part-label) {
+    opacity: 1;
+  }
+  /* A context hint's blank (`span.fc-blank`), wherever hint HTML is shown in a card. */
+  .card :global(:where(.fc-blank)) {
+    display: inline-block;
+    min-width: 3em;
+    border-bottom: 2px solid var(--accent-text);
+    color: transparent;
+  }
   .card :global(.fc-link-missing) {
     text-decoration: underline dotted;
     color: var(--text-2);

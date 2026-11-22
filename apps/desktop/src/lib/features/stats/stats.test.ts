@@ -38,7 +38,8 @@ describe('v0.6 screens on the dev mock', () => {
     // v1.3: the forecast is the "what's ahead?" chart (7 days by default).
     expect(screen.getByRole('img', { name: 'Reviews in the next 7 days' })).toBeTruthy();
     // Leech actions cover every leech of the scope: one Rust command, no ids from here.
-    expect(await screen.findByText('60 cards forgotten at least 8 times')).toBeTruthy();
+    // v1.3 (deliberate wording change): plain words, as in the study launcher.
+    expect(await screen.findByText('60 cards you got wrong at least 8 times')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Suspend' }));
     expect(await screen.findByText('60 changed, 0 already done')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Suspend' }));

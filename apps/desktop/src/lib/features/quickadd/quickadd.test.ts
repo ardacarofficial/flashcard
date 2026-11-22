@@ -140,10 +140,11 @@ describe('<QuickAddHost>', () => {
       name: 'Vocabulary',
       kind: 'standard',
       fields: [
-        { key: 'word', name: 'Word', kind: 'rich_text', required: false, unique: true, searchable: true, default_value: null },
-        { key: 'meaning', name: 'Meaning', kind: 'rich_text', required: true, unique: false, searchable: true, default_value: null },
+        { key: 'word', name: 'Word', kind: 'rich_text', required: false, unique: true, searchable: true, default_value: null, role: 'term' },
+        { key: 'meaning', name: 'Meaning', kind: 'rich_text', required: true, unique: false, searchable: true, default_value: null, role: 'meaning' },
         { key: 'pronunciation', name: 'Pronunciation', kind: 'text', required: false, unique: false, searchable: true, default_value: null },
-        { key: 'example', name: 'Example sentence', kind: 'rich_text', required: false, unique: false, searchable: true, default_value: null },
+        // Roles as the backend sends them: the example field is picked by its role, not its key.
+        { key: 'example', name: 'Example sentence', kind: 'rich_text', required: false, unique: false, searchable: true, default_value: null, role: 'example' },
       ],
       templates: [],
       css: '',

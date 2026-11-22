@@ -13,6 +13,7 @@ import LocalApiScreen from './LocalApiScreen.svelte';
 import OutsideHost from './OutsideHost.svelte';
 import QuickAdd from './QuickAdd.svelte';
 import { linkTarget, type LinkResult, type Shell } from './shell';
+import { inboxNoteType, shorthandKeys } from './notetype';
 import type { ScreenCtx } from '../types';
 
 i18n.locale = 'en';
@@ -57,6 +58,23 @@ async function deckNode(name: string): Promise<DeckTreeNode> {
   return tree.roots.find((n) => n.deck.name === name)!;
 }
 
+describe('inbox card type (as the backend decides it)', () => {
+  it('own type; a captured sentence without fields → Subtitle; else Classic; shorthand goes to term / meaning', async () => {
+    const types = (await api.call('notetypes.list', {})).notetypes;
+    const subtitle = types.find((n) => n.builtin === 'subtitle')!;
+    const vocab = types.find((n) => n.builtin === 'vocabulary')!;
+    const item = (extra: object) => ({ fields: {}, tags: [], attributes: {}, front: 'go', ...extra });
+    expect(inboxNoteType(item({ context: { sentence: 'I go.' } }), types)).toEqual({ type: subtitle, bySentence: true });
+    expect(inboxNoteType(item({ context: { sentence: '  ' } }), types).type?.builtin).toBe('classic');
+    expect(inboxNoteType(item({ context: { sentence: 'I go.' }, fields: { front: 'go' } }), types).type?.builtin).toBe('classic');
+    expect(inboxNoteType(item({ notetype_id: vocab.id, context: { sentence: 'I go.' } }), types)).toEqual({ type: vocab, bySentence: false });
+    // Subtitle gone: Classic.
+    expect(inboxNoteType(item({ context: { sentence: 'I go.' } }), types.filter((n) => n !== subtitle)).type?.builtin).toBe('classic');
+    expect(shorthandKeys(subtitle)).toEqual(['word', 'meaning']);
+    expect(shorthandKeys(null)).toEqual(['front', 'back']);
+  });
+});
+
 describe('<InboxScreen>', () => {
   it('reviews proposals: edit, choose a deck, accept; reject; tabs', async () => {
     const node = await deckNode('Inbox deck');
@@ -76,6 +94,10 @@ describe('<InboxScreen>', () => {
     expect(screen.getByText('#web')).toBeTruthy();
     expect(screen.getByText('Sentence: “The badger dug.”')).toBeTruthy();
     expect(screen.getByText('From: Badgers')).toBeTruthy();
+    // v1.3: each row says which card type it becomes; the one with a sentence becomes a
+    // Subtitle card (as the backend decides), the other one Classic.
+    expect(await screen.findByText('Card type: Altyazı kartı (it came with a sentence, which stays on the card)')).toBeTruthy();
+    expect(screen.getByText('Card type: Klasik')).toBeTruthy();
 
     // No deck yet: nothing is sent (v1.3: the row asks first instead of failing); the row's
     // deck picker says why and takes the focus.
@@ -97,9 +119,14 @@ describe('<InboxScreen>', () => {
     const spy = vi.spyOn(api, 'call');
     await fireEvent.click(screen.getAllByRole('button', { name: 'Accept' })[1]!);
     expect(await screen.findByText('1 card added')).toBeTruthy();
-    const req = spy.mock.calls.find(([m]) => m === 'inbox.accept')![1] as { items: { deck_id: string; fields: unknown }[] };
+    const req = spy.mock.calls.find(([m]) => m === 'inbox.accept')![1] as { items: { deck_id: string; notetype_id: string | null; fields: unknown }[] };
     expect(req.items[0]!.deck_id).toBe(node.deck.id);
-    expect(req.items[0]!.fields).toEqual({ front: 'badger', back: 'porsuk (hayvan)' });
+    // v1.3 (deliberate change): the edit keeps the Subtitle type the row showed (field values
+    // without a type would make it Classic and drop the sentence), so the edited word / meaning
+    // go to that type's term / meaning fields.
+    const subtitle = (await api.call('notetypes.list', {})).notetypes.find((n) => n.builtin === 'subtitle')!;
+    expect(req.items[0]!.notetype_id).toBe(subtitle.id);
+    expect(req.items[0]!.fields).toEqual({ word: 'badger', meaning: 'porsuk (hayvan)' });
     spy.mockRestore();
 
     // Reject the other one; it moves to the Rejected tab.

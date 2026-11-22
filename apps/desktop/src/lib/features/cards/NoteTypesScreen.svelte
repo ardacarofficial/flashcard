@@ -1,10 +1,12 @@
 <!--
   Settings → Note types (v1.3): written for a learner first. Pick a type; its fields (name,
   what they contain, required, order) sit next to a live preview of its cards. "New note
-  type" starts from ready-made starting points. The template HTML / CSS and the technical
-  field flags are under "Advanced: template code". Changes that lose data say what they do
-  to existing notes and cards (from `notetypes.usage`) before they happen. The backend
-  validates, renders and stores.
+  type" starts from ready-made starting points. Each text field says what it contains (its
+  role: the word, its meaning, an example sentence…) and each card what it asks for (its answer
+  field), so study, hints, imports and the term list need not guess. The template HTML / CSS
+  and the technical field flags are under "Advanced: template code". Changes that lose data
+  say what they do to existing notes and cards (from `notetypes.usage`) before they happen.
+  The backend validates, renders and stores.
 -->
 <script lang="ts">
   import { api, type ApiError } from '$lib/api';
@@ -13,7 +15,9 @@
     AttributeDefDto,
     CardTypeDto,
     CreateNoteType,
+    FieldDef,
     FieldKind,
+    FieldRole,
     NoteTypeDto,
     NoteTypeInput,
     NoteTypeUsage,
@@ -30,6 +34,7 @@
   import NewTypeDialog from './notetypes/NewTypeDialog.svelte';
   import NoteTypePreview from './notetypes/NoteTypePreview.svelte';
   import TemplateCode from './notetypes/TemplateCode.svelte';
+  import { FIELD_ROLES, asksForField, takesRole, withAnswerField, withRole, withoutField } from './notetypes/roles';
   import { templatesUsing } from './notetypes/starters';
 
   let { ctx: _ctx }: { ctx: ScreenCtx } = $props();
@@ -66,6 +71,33 @@
   const builtins = $derived((list ?? []).filter((n) => n.builtin));
   const engineOptions = $derived(engines.map((e) => ({ value: e.id, label: td(e.name_key) })));
   const kindOptions = $derived(KINDS.map((k) => ({ value: k, label: t(`notetype.contains.${k}`) })));
+  const fieldLabel = (f: FieldDef, i: number) => f.name.trim() || t('notetype.field_n', { n: i + 1 });
+
+  /** "What does this field contain?": nothing special, or a role no other field holds. */
+  function roleOptions(i: number) {
+    const fields = draft?.fields ?? [];
+    return [
+      { value: '', label: t('notetype.role.none'), description: t('notetype.role.none_desc') },
+      ...FIELD_ROLES.map((r) => {
+        const j = fields.findIndex((f, k) => k !== i && f.role === r);
+        return {
+          value: r as string,
+          label: t(`notetype.role.${r}`),
+          disabled: j >= 0,
+          description: j >= 0 ? t('notetype.role.taken', { name: fieldLabel(fields[j]!, j) }) : undefined,
+        };
+      }),
+    ];
+  }
+
+  /** "What does this card ask for?": its whole answer side, or one saved field. */
+  const answerOptions = $derived([
+    { value: '', label: t('notetype.asks.whole') },
+    ...(draft?.fields ?? [])
+      .filter((f) => f.key && takesRole(f))
+      .map((f) => ({ value: f.key, label: f.role ? `${f.name} · ${t(`notetype.role.${f.role}`)}` : f.name })),
+  ]);
+  const askingTemplates = $derived(draft && draft.kind === 'standard' ? draft.templates.map((tpl, i) => ({ tpl, i })).filter((x) => asksForField(x.tpl)) : []);
   const notes = $derived(usage?.notes ?? 0);
   const dirty = $derived(draft !== null && JSON.stringify($state.snapshot(draft)) !== pristine);
 
@@ -227,7 +259,12 @@
         return;
       }
     }
-    draft.fields = draft.fields.filter((_, j) => j !== i);
+    dropField(i);
+  }
+
+  /** Removes field `i` (a card that asked for it asks for its whole back again). */
+  function dropField(i: number) {
+    if (draft) Object.assign(draft, withoutField($state.snapshot(draft), i));
   }
 
   function askRemoveTemplate(i: number) {
@@ -243,7 +280,7 @@
     const a = ask;
     ask = null;
     if (!a || !draft) return;
-    if (a.kind === 'remove_field') draft.fields = draft.fields.filter((_, j) => j !== a.index);
+    if (a.kind === 'remove_field') dropField(a.index);
     else if (a.kind === 'remove_template') draft.templates = draft.templates.filter((_, j) => j !== a.index);
     else if (a.kind === 'switch') selected = a.to;
   }
@@ -341,6 +378,16 @@
                 onremove={() => askRemoveField(i)}
               >
                 {#snippet contains()}
+                  {#if takesRole(f)}
+                    <Select
+                      size="sm"
+                      options={roleOptions(i)}
+                      value={f.role ?? ''}
+                      onchange={(v) => draft && (draft.fields = withRole(draft.fields, i, (v || null) as FieldRole | null))}
+                      label={t('notetype.role.pick', { name: fieldLabel(f, i) })}
+                      hideLabel
+                    />
+                  {/if}
                   {#if f.key}
                     <span class="ctext">{t(`notetype.contains.${f.kind}`)}</span>
                   {:else}
@@ -350,6 +397,7 @@
               </FieldRow>
             {/each}
           </ol>
+          <p class="muted role-hint">{t('notetype.role.hint')}</p>
           {#if classifications.length > 0}
             <div class="classes">
               <strong>{t('notetype.classifications')}</strong>
@@ -363,6 +411,22 @@
           <NoteTypePreview cards={preview ?? []} loading={preview === null && !previewError} error={previewError} />
         </SettingsSection>
       </div>
+
+      {#if askingTemplates.length > 0}
+        <SettingsSection title={t('notetype.asks.title')} description={t('notetype.asks.desc')} body="rows">
+          {#each askingTemplates as { tpl, i } (i)}
+            <FormRow label={tpl.name || t('notetype.asks.card_n', { n: i + 1 })}>
+              <Select
+                options={answerOptions}
+                value={tpl.answer_field ?? ''}
+                onchange={(v) => draft && (draft.templates = withAnswerField(draft.templates, i, v || null))}
+                label={t('notetype.asks.pick', { name: tpl.name })}
+                hideLabel
+              />
+            </FormRow>
+          {/each}
+        </SettingsSection>
+      {/if}
 
       <SettingsAdvanced id="notetypes.code" title={t('notetype.code.title')} summary={t('notetype.code.summary')}>
         <TemplateCode bind:draft {engineOptions} {notes} onremovetemplate={askRemoveTemplate} />
@@ -542,6 +606,11 @@
   }
   .ctext {
     color: var(--text-2);
+  }
+  .role-hint {
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-sm);
+    line-height: var(--leading);
   }
   .classes {
     display: flex;

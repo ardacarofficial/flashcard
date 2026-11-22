@@ -140,6 +140,8 @@
     "classifications": "Classifications",
     "from_page": "From",
     "sentence": "Sentence",
+    "card_type": "Card type: {name}",
+    "card_type_sentence": "Card type: {name} (it came with a sentence, which stays on the card)",
     "allow_duplicates": "Add even if a similar card exists",
     "source": {
       "user": "Added by you",

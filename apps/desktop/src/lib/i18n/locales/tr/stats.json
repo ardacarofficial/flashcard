@@ -7,7 +7,7 @@
   "modules": {
     "stats": {
       "name": "İstatistikler",
-      "description": "Seri, başarı oranları, ısı haritası, tahmin, zor kartlar ve karneler — deste, etiket, sorgu veya sınıflandırma bazında."
+      "description": "Seri, başarı oranları, ısı haritası, tahmin, sürekli zorlandığın kartlar ve karneler — deste, etiket, sorgu veya sınıflandırma bazında."
     },
     "planning": {
       "name": "Akıllı planlama",
@@ -25,8 +25,8 @@
   "settings": {
     "stats": {
       "leech_threshold": {
-        "label": "Zor kart eşiği",
-        "description": "Bu kadar kez unutulan kart zor kart sayılır."
+        "label": "“Sürekli zorlandığın” sınırı",
+        "description": "Bu kadar kez yanlış bildiğin kart, sürekli zorlandığın kartlardan sayılır."
       }
     },
     "planning": {
@@ -85,12 +85,12 @@
     "stats": {
       "overview": "İstatistikler",
       "breakdown": "Sınıflandırmaya göre istatistik",
-      "leeches": "Zor kartlar",
+      "leeches": "Sürekli zorlandığım kartlar",
       "deck_reports": "Deste karneleri",
       "refresh_cache": "İstatistik önbelleğini güncelle",
-      "apply_to_leeches": "Tüm zor kartlara uygula",
+      "apply_to_leeches": "Sürekli zorlandığım tüm kartlara uygula",
       "today": "Bugün nasılım?",
-      "struggles": "Neyi unutuyorum?"
+      "struggles": "Nelerde zorlanıyorum?"
     },
     "planning": {
       "exams": {
@@ -231,16 +231,16 @@
       "empty": "Bu sınıflandırmada henüz kart yok."
     },
     "leeches": {
-      "heading": "Zor kartlar",
-      "count": "En az {threshold} kez unutulan {n} kart",
-      "none": "Zor kart yok.",
-      "lapses": "Unutma",
+      "heading": "Sürekli zorlandıkların",
+      "count": "En az {threshold} kez yanlış bildiğin {n} kart",
+      "none": "Sürekli zorlandığın kart yok.",
+      "lapses": "Yanlış",
       "suspend": "Askıya al",
       "tag": "“leech” etiketi ekle",
       "card": "Kart",
       "applied": "{changed} değişti, {skipped} zaten öyleydi",
-      "intro": "Sürekli unuttuğun kartlar; yeniden yaz ya da kenara koy.",
-      "lapses_n": "{n} unutma",
+      "intro": "Defalarca yanlış bildiğin kartlar; yeniden yaz ya da kenara koy.",
+      "lapses_n": "{n} kez yanlış",
       "more": "ve {n} kart daha"
     },
     "report": {
@@ -313,7 +313,7 @@
       "plan": "Temponu planla"
     },
     "struggles": {
-      "heading": "Neyi unutuyorum?",
+      "heading": "Nelerde zorlanıyorum?",
       "intro": "Yakın zamanda yanlış cevapladığın kelimeler; en çok yanlış yapılan üstte. Pratik, testler dahil.",
       "window": "Dönem",
       "w1": "Bugün",

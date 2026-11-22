@@ -37,7 +37,7 @@
   import { pickFile } from './files';
   import { followJob, resultOf } from './job';
   import JobProgress from './JobProgress.svelte';
-  import { decodeColumn, encodeColumn, loadMapping, prefillMapping, saveMapping, type MappingOrigin } from './mapping';
+  import { decodeColumn, encodeColumn, loadMapping, prefillMapping, resolveColumn, saveMapping, type MappingOrigin } from './mapping';
   import Separators from './Separators.svelte';
 
   /** Where the cards go, resolved by the page's shared destination picker. */
@@ -192,7 +192,7 @@
     const attrs = attributes.map((a) => ({ id: a.def.id, key: a.def.key, name: a.def.name }));
     const m = prefillMapping(p.rows, p.columns, nt, loadMapping(nt.id), attrs);
     // Classification / tag columns the backend recognised in a header it also matched.
-    columns = m.columns.map((c, i) => (c.kind === 'ignore' && m.header && p.suggested_columns[i]?.kind !== 'field' ? (p.suggested_columns[i] ?? c) : c));
+    columns = m.columns.map((c, i) => resolveColumn(c.kind === 'ignore' && m.header && p.suggested_columns[i]?.kind !== 'field' ? (p.suggested_columns[i] ?? c) : c, nt));
     header = m.header;
     origin = m.origin;
   }
@@ -403,7 +403,7 @@
 
   function onkey(e: KeyboardEvent) {
     // Ctrl+Enter adds, as everywhere on the add page.
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !e.defaultPrevented && canStart) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !e.defaultPrevented && !e.repeat && canStart) {
       e.preventDefault();
       void start();
     }

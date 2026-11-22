@@ -5,13 +5,14 @@
   X or Space select, Ctrl+Enter accept the selection). The toolbar keeps bulk accept / reject.
   v1.3: the captured sentence is shown with its source (it is kept on accept — the backend puts
   it in the note type's example field); a row without a deck asks for one before anything is
-  sent, instead of failing.
+  sent, instead of failing. Each row says which card type it becomes (an item that came with a
+  sentence becomes a Subtitle card), and an edited row keeps that type.
 -->
 <script lang="ts">
   import { formatDate } from '$lib/format';
   import { onMount, tick } from 'svelte';
   import { api, toApiError } from '$lib/api';
-  import type { DeckId, InboxItemDto, InboxSource, InboxStatus } from '$lib/api/types';
+  import type { DeckId, InboxItemDto, InboxSource, InboxStatus, NoteTypeDto } from '$lib/api/types';
   import { deckPaths } from '$lib/components/deck-paths';
   import { t } from '$lib/i18n/index.svelte';
   import {
@@ -34,6 +35,7 @@
     X,
   } from '$lib/ui';
   import type { ScreenCtx } from '../types';
+  import { inboxNoteType, shorthandKeys } from './notetype';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -56,6 +58,8 @@
   let loaded = $state(false);
   let pendingCount = $state<number | null>(null);
   let list = $state<HTMLUListElement | null>(null);
+  /** Note types (for "Card type: …"); empty until loaded or when the list is unavailable. */
+  let types = $state<NoteTypeDto[]>([]);
 
   const paths = $derived(deckPaths(ctx.decks));
   const picked = $derived(items.filter((i) => selected[i.id]));
@@ -80,6 +84,8 @@
   /** Rows the user tried to accept without a deck (their pickers say so). */
   let askDeck = $state<Record<string, boolean>>({});
   const deckOf = (i: InboxItemDto) => drafts[i.id]?.deck ?? i.item.deck_id ?? null;
+  /** The card type the item becomes (shown on the row; an edited accept names it). */
+  const typeOf = (i: InboxItemDto) => inboxNoteType(i.item, types);
 
   async function load() {
     await ctx.guarded(async () => {
@@ -127,7 +133,9 @@
         items: chosen.map((i) => ({
           id: i.id,
           deck_id: drafts[i.id]?.deck ?? null,
-          notetype_id: null,
+          // The type the row shows: an edit must not turn a sentence's Subtitle card into Classic
+          // (field values given without a type would). Unknown list: the backend decides.
+          notetype_id: typeOf(i).type?.id ?? null,
           // Edited text replaces the proposal's front/back; its other fields stay. (The captured
           // sentence is the item's context: the backend keeps it either way.)
           fields: edited(i) ? editedFields(i) : null,
@@ -160,7 +168,9 @@
     const d = drafts[i.id]!;
     const fields = { ...(i.item.fields ?? {}) };
     if (i.item.front != null || i.item.back != null || Object.keys(fields).length === 0) {
-      return { ...fields, front: d.front, back: d.back };
+      // The shorthand lands in the type's term / meaning fields (Classic: front / back).
+      const [term, meaning] = shorthandKeys(typeOf(i).type);
+      return { ...fields, [term]: d.front, [meaning]: d.back };
     }
     const [first, second] = Object.keys(fields);
     if (first) fields[first] = d.front;
@@ -228,7 +238,7 @@
     if (mod && e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
-      void accept(picked.length > 0 && onRow ? picked : [item]);
+      if (!e.repeat) void accept(picked.length > 0 && onRow ? picked : [item]);
       return;
     }
     if (!onRow) {
@@ -247,6 +257,8 @@
     else if (key === 'Home') void focusRow(0);
     else if (key === 'End') void focusRow(items.length - 1);
     else if (!pending) handled = false;
+    // A held key accepts / rejects / toggles one row (v1.3); only moving repeats.
+    else if (e.repeat) handled = ['a', 'r', 'Delete', 'e', 'Enter', 'x', ' '].includes(key);
     else if (key === 'a') void accept([item]);
     else if (key === 'r' || key === 'Delete') void reject([item]);
     else if (key === 'e' || key === 'Enter') void startEdit(i);
@@ -271,7 +283,7 @@
     if (target && target !== document.body && (list?.contains(target) || target.closest(OWNS_KEYS))) return;
     if (pending && (e.ctrlKey || e.metaKey) && e.key === 'Enter' && picked.length > 0) {
       e.preventDefault();
-      void accept(picked);
+      if (!e.repeat) void accept(picked);
     } else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'j' || e.key === 'ArrowDown')) {
       e.preventDefault();
       void focusRow(active);
@@ -287,6 +299,10 @@
 
   onMount(() => {
     void load();
+    void api.call('notetypes.list', {}).then(
+      (r) => (types = r.notetypes),
+      () => {},
+    );
     const unsub = api.on(['inbox_changed', 'undone', 'redone', 'data_changed'], () => void load());
     return () => void unsub.then((u) => u());
   });
@@ -383,6 +399,14 @@
               <div class="meta">
                 <span class="source">{sourceLabel(item.source)}</span>
                 {#if pending && edited(item)}<Chip size="sm" tone="accent" label={t('inbox.edited')} />{/if}
+                {#if pending}
+                  {@const kind = typeOf(item)}
+                  {#if kind.type}
+                    <span class="type" data-testid="inbox-type"
+                      >{kind.bySentence ? t('inbox.card_type_sentence', { name: kind.type.name }) : t('inbox.card_type', { name: kind.type.name })}</span
+                    >
+                  {/if}
+                {/if}
                 {#if item.item.context?.url}
                   <span class="from"><Icon icon={Globe} size={12} />{t('inbox.from_page')}: {item.item.context.title || item.item.context.url}</span>
                 {/if}
@@ -578,6 +602,10 @@
   .source {
     color: var(--text-2);
     font-weight: var(--weight-medium);
+  }
+  .type {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
   .from {
     display: inline-flex;

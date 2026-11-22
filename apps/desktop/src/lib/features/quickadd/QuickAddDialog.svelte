@@ -347,7 +347,8 @@
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
-      void add(duplicate);
+      // A held Ctrl+Enter adds one card (v1.3).
+      if (!e.repeat) void add(duplicate);
     } else if (e.key === 'Escape' && !e.defaultPrevented) {
       e.preventDefault();
       e.stopPropagation();

@@ -58,7 +58,8 @@
     if (e.key === 'Escape') void shell.hide();
     else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      form?.requestSubmit();
+      // A held Ctrl+Enter adds one card (v1.3).
+      if (!e.repeat) form?.requestSubmit();
     }
   }
 

@@ -3,7 +3,7 @@
  * language, no sanitizing — the real rendering lives in Rust (fc-core::content).
  */
 import { err, menu, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
-import type { CardMetaDto, FlagDto, MediaDto, NoteTypeDto, RenderedSides } from '$lib/api/types';
+import type { CardMetaDto, FieldRole, FlagDto, MediaDto, NoteTypeDto, NoteTypeInput, RenderedSides } from '$lib/api/types';
 import { CLASSIC_NOTETYPE_ID } from '$lib/api/client';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -14,10 +14,10 @@ function classic(): NoteTypeDto {
     name: 'Klasik',
     kind: 'standard',
     fields: [
-      { key: 'front', name: 'Ön', kind: 'rich_text', required: true, unique: true, searchable: true, default_value: null },
-      { key: 'back', name: 'Arka', kind: 'rich_text', required: false, unique: false, searchable: true, default_value: null },
+      { key: 'front', name: 'Ön', kind: 'rich_text', required: true, unique: true, searchable: true, default_value: null, role: 'term' },
+      { key: 'back', name: 'Arka', kind: 'rich_text', required: false, unique: false, searchable: true, default_value: null, role: 'meaning' },
     ],
-    templates: [{ key: 'forward', name: '1', front: '{{front}}', back: '{{FrontSide}}<hr>{{back}}', card_type: 'classic' }],
+    templates: [{ key: 'forward', name: '1', front: '{{front}}', back: '{{FrontSide}}<hr>{{back}}', card_type: 'classic', answer_field: 'back' }],
     css: '',
     sort_field: 'front',
     version: 1,
@@ -28,8 +28,24 @@ function classic(): NoteTypeDto {
 
 /** Well-known id of a built-in note type (`fc_core::content::builtin`, `id(n)`). */
 const builtinId = (n: number) => `01900000-0000-7000-8000-${n.toString(16).padStart(12, '0')}`;
-type MockField = [key: string, name: string, kind: NoteTypeDto['fields'][number]['kind'], required?: boolean, unique?: boolean];
+type MockField = [key: string, name: string, kind: NoteTypeDto['fields'][number]['kind'], required?: boolean, unique?: boolean, role?: FieldRole];
 const ANSWER = '{{FrontSide}}\n<hr class="fc-answer">\n';
+/** The labelled example part of the built-in vocabulary backs (fc_core `example_part!`). */
+const examplePart = (field: string, translation?: string) =>
+  `{{#${field}}}<div class="fc-part fc-part-example"><span class="fc-part-label" data-fc-part="example"></span><div class="fc-example-text">{{${field}}}</div>` +
+  (translation ? `{{#${translation}}}<div class="fc-example-translation">{{${translation}}}</div>{{/${translation}}}` : '') +
+  `</div>{{/${field}}}`;
+/** fc_core `PARTS_CSS`: the built-in vocabulary types ship it as their note type CSS. */
+const PARTS_CSS = `.fc-part { margin-top: 0.75em; }
+.fc-part-meaning, .fc-part-answer { font-size: 1.3em; font-weight: 600; line-height: 1.35; }
+.fc-part-label { display: block; margin-bottom: 0.15em; font-size: 0.7em; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.65; }
+.fc-part-label:empty { display: none; }
+.fc-part-example { padding-left: 0.75em; border-left: 2px solid rgba(128, 128, 128, 0.45); }
+.fc-example-translation { margin-top: 0.25em; opacity: 0.7; }
+.fc-part-source { font-size: 0.8em; opacity: 0.7; }
+.fc-part-source .fc-part-label { display: inline; margin-right: 0.4em; }
+`;
+const SOURCE_PART = '{{#source}}<div class="fc-part fc-part-source"><span class="fc-part-label" data-fc-part="source"></span>{{source}}</div>{{/source}}';
 
 /** A few more built-ins (TR names, as the app seeds them) so the note type screen has choices. */
 function builtins(): NoteTypeDto[] {
@@ -40,11 +56,12 @@ function builtins(): NoteTypeDto[] {
     kind: NoteTypeDto['kind'],
     fields: MockField[],
     templates: NoteTypeDto['templates'],
+    css = '',
   ): NoteTypeDto => ({
     id: builtinId(n),
     name,
     kind,
-    fields: fields.map(([key, name, kind, required = false, unique = false]) => ({
+    fields: fields.map(([key, name, kind, required = false, unique = false, role]) => ({
       key,
       name,
       kind,
@@ -52,20 +69,21 @@ function builtins(): NoteTypeDto[] {
       unique,
       searchable: kind === 'text' || kind === 'rich_text',
       default_value: null,
+      ...(role ? { role } : {}),
     })),
     templates,
-    css: '',
+    css,
     sort_field: fields[0]![0],
     version: 1,
     builtin,
     updated_at: 0,
   });
   return [
-    make(2, 'classic_reverse', 'Klasik + ters', 'standard', [['front', 'Ön', 'rich_text', true, true], ['back', 'Arka', 'rich_text', true]], [
-      { key: 'forward', name: 'İleri', front: '{{front}}', back: `${ANSWER}{{back}}`, card_type: 'classic' },
-      { key: 'reverse', name: 'Ters', front: '{{back}}', back: `${ANSWER}{{front}}`, card_type: 'classic' },
+    make(2, 'classic_reverse', 'Klasik + ters', 'standard', [['front', 'Ön', 'rich_text', true, true, 'term'], ['back', 'Arka', 'rich_text', true, false, 'meaning']], [
+      { key: 'forward', name: 'İleri', front: '{{front}}', back: `${ANSWER}{{back}}`, card_type: 'classic', answer_field: 'back' },
+      { key: 'reverse', name: 'Ters', front: '{{back}}', back: `${ANSWER}{{front}}`, card_type: 'classic', answer_field: 'front' },
     ]),
-    make(5, 'cloze', 'Boşluk doldurma', 'cloze', [['text', 'Metin', 'rich_text', true, true], ['extra', 'Ek bilgi', 'rich_text']], [
+    make(5, 'cloze', 'Boşluk doldurma', 'cloze', [['text', 'Metin', 'rich_text', true, true], ['extra', 'Ek bilgi', 'rich_text', false, false, 'note']], [
       { key: 'cloze', name: 'Cloze', front: '{{cloze:text}}', back: '{{cloze:text}}{{#extra}}\n<hr class="fc-answer">\n{{extra}}{{/extra}}', card_type: 'cloze' },
     ]),
     make(
@@ -74,17 +92,32 @@ function builtins(): NoteTypeDto[] {
       'Kelime kartı',
       'standard',
       [
-        ['word', 'Kelime', 'rich_text', true, true],
-        ['meaning', 'Anlam', 'rich_text', true],
+        ['word', 'Kelime', 'rich_text', true, true, 'term'],
+        ['meaning', 'Anlam', 'rich_text', true, false, 'meaning'],
         ['pronunciation', 'Telaffuz', 'text'],
-        ['example', 'Örnek cümle', 'rich_text'],
+        ['example', 'Örnek cümle', 'rich_text', false, false, 'example'],
         ['audio', 'Ses', 'audio'],
         ['image', 'Resim', 'image'],
       ],
       [
-        { key: 'recognition', name: 'Tanıma', front: '{{word}}', back: `${ANSWER}{{meaning}}{{#example}}<div class="fc-example">{{example}}</div>{{/example}}`, card_type: 'classic' },
-        { key: 'production', name: 'Üretme', front: '{{meaning}}', back: `${ANSWER}{{word}}{{#example}}<div class="fc-example">{{example}}</div>{{/example}}`, card_type: 'classic' },
+        {
+          key: 'recognition',
+          name: 'Tanıma',
+          front: '{{word}}',
+          back: `${ANSWER}<div class="fc-part fc-part-meaning">{{meaning}}</div>${examplePart('example')}`,
+          card_type: 'classic',
+          answer_field: 'meaning',
+        },
+        {
+          key: 'production',
+          name: 'Üretme',
+          front: '{{meaning}}',
+          back: `${ANSWER}<div class="fc-part fc-part-answer">{{word}}</div>${examplePart('example')}`,
+          card_type: 'classic',
+          answer_field: 'word',
+        },
       ],
+      PARTS_CSS,
     ),
     make(
       12,
@@ -92,34 +125,58 @@ function builtins(): NoteTypeDto[] {
       'Altyazı kartı',
       'standard',
       [
-        ['word', 'Kelime', 'rich_text', true],
-        ['surface', 'Geçtiği hâli', 'text'],
+        ['word', 'Kelime', 'rich_text', true, false, 'term'],
+        ['surface', 'Geçtiği hâli', 'text', false, false, 'surface'],
         ['pos', 'Sözcük türü', 'text'],
-        ['meaning', 'Anlam', 'rich_text'],
-        ['sentence', 'Cümle', 'rich_text'],
-        ['translation', 'Çeviri', 'rich_text'],
+        ['meaning', 'Anlam', 'rich_text', false, false, 'meaning'],
+        ['sentence', 'Cümle', 'rich_text', false, false, 'example'],
+        ['translation', 'Çeviri', 'rich_text', false, false, 'example_translation'],
         ['image', 'Ekran görüntüsü', 'image'],
         ['audio', 'Ses', 'audio'],
-        ['source', 'Kaynak', 'rich_text'],
+        ['source', 'Kaynak', 'rich_text', false, false, 'source'],
       ],
       [
         {
           key: 'recognition',
           name: 'Tanıma',
           front: '<div class="fc-word">{{word}}</div>{{#sentence}}<div class="fc-example">{{sentence}}</div>{{/sentence}}',
-          back: `${ANSWER}{{meaning}}{{#translation}}<div class="fc-example">{{translation}}</div>{{/translation}}{{#source}}<div class="fc-source">{{source}}</div>{{/source}}`,
+          back:
+            '<div class="fc-word">{{word}}</div>\n<hr class="fc-answer">\n<div class="fc-part fc-part-meaning">{{meaning}}</div>{{#pos}}<div class="fc-pron">{{pos}}</div>{{/pos}}' +
+            examplePart('sentence', 'translation') +
+            SOURCE_PART,
           card_type: 'classic',
+          answer_field: 'meaning',
         },
       ],
+      PARTS_CSS,
     ),
   ];
 }
 
+/**
+ * A definition with keys for new fields / templates, as the backend stores it. Roles and
+ * answer fields are kept (an answer field whose field is gone is cleared, as in Rust).
+ */
+function keyed(def: NoteTypeInput): Pick<NoteTypeDto, 'fields' | 'templates'> {
+  const fields = def.fields.map((f, i) => ({ ...f, key: f.key || `field_${i + 1}` }));
+  const keys = new Set(fields.map((f) => f.key));
+  const templates = def.templates.map(({ answer_field, ...t }, i) => ({
+    ...t,
+    key: t.key || `template_${i + 1}`,
+    ...(answer_field && keys.has(answer_field) ? { answer_field } : {}),
+  }));
+  return { fields, templates };
+}
+
 /** Just enough of the template language for a believable preview (the real one is fc-core). */
 function renderSide(src: string, fields: Record<string, string>, front = ''): string {
-  return src
-    .replace(/\{\{FrontSide\}\}/g, front)
-    .replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_m, k: string, inner: string) => (fields[k]?.trim() ? inner : ''))
+  // Sections may nest (`{{#sentence}}…{{#translation}}…{{/translation}}…{{/sentence}}`).
+  let out = src.replace(/\{\{FrontSide\}\}/g, front);
+  for (let prev = ''; prev !== out; ) {
+    prev = out;
+    out = out.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_m, k: string, inner: string) => (fields[k]?.trim() ? inner : ''));
+  }
+  return out
     .replace(/\{\{(?:[\w-]+:)*(\w+)\}\}/g, (_m, k: string) => esc(fields[k] ?? '').replace(/\{\{c\d+::([^}]*)\}\}/g, '<b>[…]</b>'));
 }
 
@@ -190,9 +247,9 @@ export default {
         const base: NoteTypeDto = src ? structuredClone(src) : definition ? { ...classic(), ...structuredClone(definition) } : classic();
         const nt: NoteTypeDto = {
           ...base,
+          ...keyed(base),
           id: `nt-${types.length + 1}`,
           name: name ?? (src ? `${src.name} (2)` : 'Note type'),
-          fields: base.fields.map((f, i) => ({ ...f, key: f.key || `field_${i + 1}` })),
           version: 1,
           builtin: null,
         };
@@ -202,10 +259,7 @@ export default {
       },
       'notetypes.update': ({ id, definition }) => {
         const nt = requireType(id);
-        Object.assign(nt, definition, {
-          fields: definition.fields.map((f, i) => ({ ...f, key: f.key || `field_${i + 1}` })),
-          version: nt.version + 1,
-        });
+        Object.assign(nt, keyed(definition), { version: nt.version + 1 });
         emit({ type: 'note_type_changed', data: { notetype_id: id } });
         return nt;
       },
@@ -227,7 +281,7 @@ export default {
         if (!definition) return { cards: Object.values(fields).some((v) => v.trim()) ? [side(fields)] : [] };
         const cards = definition.templates.map((t): RenderedSides => {
           const question = renderSide(t.front, fields);
-          return { ...side(fields), template_key: t.key, template_name: t.name, card_type: t.card_type, question, answer: renderSide(t.back, fields, question) };
+          return { ...side(fields), template_key: t.key, template_name: t.name, card_type: t.card_type, question, answer: renderSide(t.back, fields, question), css: definition.css };
         });
         return { cards: cards.filter((c) => c.question.trim()) };
       },

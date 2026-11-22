@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FieldDef, NoteTypeDto } from '$lib/api/types';
-import { prefillMapping } from './mapping';
+import { decodeColumn, encodeColumn, prefillMapping, resolveColumn } from './mapping';
 import { fieldRole, fillOrder, primaryFields } from '../notes/roles';
 
 const f = (key: string, name: string, extra: Partial<FieldDef> = {}): FieldDef => ({
@@ -26,21 +26,22 @@ const type = (builtin: string | null, fields: FieldDef[]): NoteTypeDto => ({
   updated_at: 0,
 });
 
-const classic = type('classic', [f('front', 'Front', { required: true, unique: true }), f('back', 'Back')]);
+// Roles as the backend sends them for the built-ins (v1.3 migration).
+const classic = type('classic', [f('front', 'Front', { required: true, unique: true, role: 'term' }), f('back', 'Back', { role: 'meaning' })]);
 const vocabulary = type('vocabulary', [
-  f('word', 'Word', { unique: true }),
-  f('meaning', 'Meaning', { required: true }),
+  f('word', 'Word', { unique: true, role: 'term' }),
+  f('meaning', 'Meaning', { required: true, role: 'meaning' }),
   f('pronunciation', 'Pronunciation', { kind: 'text' }),
-  f('example', 'Example sentence'),
+  f('example', 'Example sentence', { role: 'example' }),
   f('audio', 'Audio', { kind: 'audio' }),
 ]);
 const subtitle = type('subtitle', [
-  f('word', 'Word', { required: true }),
-  f('surface', 'As it appeared', { kind: 'text' }),
+  f('word', 'Word', { required: true, role: 'term' }),
+  f('surface', 'As it appeared', { kind: 'text', role: 'surface' }),
   f('pos', 'Part of speech', { kind: 'text' }),
-  f('meaning', 'Meaning'),
-  f('sentence', 'Sentence'),
-  f('translation', 'Translation'),
+  f('meaning', 'Meaning', { role: 'meaning' }),
+  f('sentence', 'Sentence', { role: 'example' }),
+  f('translation', 'Translation', { role: 'example_translation' }),
   f('image', 'Screenshot', { kind: 'image' }),
 ]);
 const custom = type(null, [f('q', 'Question'), f('a', 'Answer'), f('hint', 'Hint')]);
@@ -48,12 +49,16 @@ const custom = type(null, [f('q', 'Question'), f('a', 'Answer'), f('hint', 'Hint
 const keys = (cols: { kind: string; key?: string }[]) => cols.map((c) => (c.kind === 'field' ? c.key : c.kind));
 
 describe('field roles (display only; the backend owns them)', () => {
-  it('reads roles of known built-ins by stable key, never by label', () => {
+  it("reads the backend's roles, never guessing from keys or labels", () => {
     expect(vocabulary.fields.map((x) => fieldRole(vocabulary, x))).toEqual(['term', 'meaning', null, 'example', null]);
     expect(fieldRole(subtitle, subtitle.fields[4]!)).toBe('example');
     expect(custom.fields.map((x) => fieldRole(custom, x))).toEqual([null, null, null]);
     // A user type that merely calls a field "Meaning" gets no role from its label.
     expect(fieldRole(type(null, [f('x', 'Meaning')]), f('x', 'Meaning'))).toBeNull();
+    // v1.3 (deliberate change): a built-in whose role the user cleared has none — the stable
+    // key `sentence` no longer stands in for the role.
+    const cleared = type('subtitle', [f('word', 'Word', { role: 'term' }), f('sentence', 'Sentence')]);
+    expect(fieldRole(cleared, cleared.fields[1]!)).toBeNull();
   });
 
   it("prefers the backend's role when the field carries one (v1.3 API)", () => {
@@ -74,6 +79,22 @@ describe('field roles (display only; the backend owns them)', () => {
     expect(primaryFields(subtitle).map((x) => x.key)).toEqual(['word', 'meaning', 'sentence']);
     expect(primaryFields(classic).map((x) => x.key)).toEqual(['front', 'back']);
     expect(primaryFields(custom)).toEqual(custom.fields);
+  });
+});
+
+describe('role column targets (io.import accepts role names)', () => {
+  it('round-trip through the picker value and resolve to the field holding the role', () => {
+    expect(decodeColumn(encodeColumn({ kind: 'role', role: 'example' }))).toEqual({ kind: 'role', role: 'example' });
+    expect(decodeColumn('role:nonsense')).toEqual({ kind: 'ignore' });
+    expect(resolveColumn({ kind: 'role', role: 'example' }, subtitle)).toEqual({ kind: 'field', key: 'sentence' });
+    expect(resolveColumn({ kind: 'role', role: 'example' }, classic)).toEqual({ kind: 'ignore' });
+    expect(resolveColumn({ kind: 'tags' }, classic)).toEqual({ kind: 'tags' });
+  });
+
+  it('a field keyed "example" without the role is not the example column', () => {
+    const plain = type(null, [f('word', 'Word', { role: 'term' }), f('example', 'Example'), f('ctx', 'Context', { role: 'example' })]);
+    expect(fillOrder(plain).map((x) => x.key)).toEqual(['word', 'ctx', 'example']);
+    expect(resolveColumn({ kind: 'role', role: 'example' }, plain)).toEqual({ kind: 'field', key: 'ctx' });
   });
 });
 

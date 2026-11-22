@@ -140,6 +140,8 @@
     "classifications": "Sınıflandırmalar",
     "from_page": "Kaynak",
     "sentence": "Cümle",
+    "card_type": "Kart türü: {name}",
+    "card_type_sentence": "Kart türü: {name} (cümleyle geldiği için; cümle kartta kalır)",
     "allow_duplicates": "Benzer kart olsa da ekle",
     "source": {
       "user": "Senin eklediğin",

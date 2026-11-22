@@ -7,7 +7,7 @@
   "modules": {
     "stats": {
       "name": "Statistics",
-      "description": "Streak, success rates, heatmap, forecast, leeches and report cards — by deck, tag, query or classification."
+      "description": "Streak, success rates, heatmap, forecast, cards you keep struggling with and report cards — by deck, tag, query or classification."
     },
     "planning": {
       "name": "Smart planning",
@@ -25,8 +25,8 @@
   "settings": {
     "stats": {
       "leech_threshold": {
-        "label": "Leech threshold",
-        "description": "A card forgotten this many times counts as a leech."
+        "label": "“Keep struggling” threshold",
+        "description": "A card you got wrong this many times counts as one you keep struggling with."
       }
     },
     "planning": {
@@ -85,12 +85,12 @@
     "stats": {
       "overview": "Statistics",
       "breakdown": "Statistics by classification",
-      "leeches": "Leeches",
+      "leeches": "Cards I keep struggling with",
       "deck_reports": "Deck report cards",
       "refresh_cache": "Refresh the statistics cache",
-      "apply_to_leeches": "Act on every leech",
+      "apply_to_leeches": "Act on every card I keep struggling with",
       "today": "How am I doing today?",
-      "struggles": "What am I forgetting?"
+      "struggles": "What am I struggling with?"
     },
     "planning": {
       "exams": {
@@ -231,16 +231,16 @@
       "empty": "No cards with this classification yet."
     },
     "leeches": {
-      "heading": "Leeches",
-      "count": "{n, plural, one {# card} other {# cards}} forgotten at least {threshold, plural, one {# time} other {# times}}",
-      "none": "No leeches.",
-      "lapses": "Lapses",
+      "heading": "Cards you keep struggling with",
+      "count": "{n, plural, one {# card} other {# cards}} you got wrong at least {threshold, plural, one {# time} other {# times}}",
+      "none": "No cards you keep struggling with.",
+      "lapses": "Wrong",
       "suspend": "Suspend",
       "tag": "Tag “leech”",
       "card": "Card",
       "applied": "{changed} changed, {skipped} already done",
-      "intro": "Cards you keep forgetting; rewrite or set them aside.",
-      "lapses_n": "{n, plural, one {# lapse} other {# lapses}}",
+      "intro": "Cards you got wrong again and again; rewrite or set them aside.",
+      "lapses_n": "{n, plural, one {wrong once} other {wrong # times}}",
       "more": "and {n} more"
     },
     "report": {
@@ -313,7 +313,7 @@
       "plan": "Plan your pace"
     },
     "struggles": {
-      "heading": "What am I forgetting?",
+      "heading": "What am I struggling with?",
       "intro": "Words you got wrong recently, most misses first. Practice and tests included.",
       "window": "Window",
       "w1": "Today",

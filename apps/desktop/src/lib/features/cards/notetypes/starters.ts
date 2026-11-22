@@ -4,7 +4,7 @@
  * sent as the request's `definition`. This is request data only: the backend validates,
  * assigns keys and stores the note type.
  */
-import type { CardTemplate, CreateNoteType, FieldDef, NoteTypeDto, NoteTypeInput } from '$lib/api/types';
+import type { CardTemplate, CreateNoteType, FieldDef, FieldRole, NoteTypeDto, NoteTypeInput } from '$lib/api/types';
 import type { MessageKey } from '$lib/i18n/index.svelte';
 
 export type StarterKey = 'word' | 'word_example' | 'reverse' | 'cloze' | 'subtitle' | 'blank';
@@ -24,18 +24,20 @@ type Translate = (key: MessageKey) => string;
 
 const ANSWER = '{{FrontSide}}\n<hr class="fc-answer">\n';
 
-function field(key: string, name: string, required: boolean, unique = false): FieldDef {
-  return { key, name, kind: 'rich_text', required: required || unique, unique, searchable: true, default_value: null };
+/** A rich text field holding `role` (v1.3: what it contains, as the built-ins say it). */
+function field(key: string, name: string, required: boolean, role: FieldRole, unique = false): FieldDef {
+  return { key, name, kind: 'rich_text', required: required || unique, unique, searchable: true, default_value: null, role };
 }
 
+/** The word on the front; the card asks for its meaning. */
 function recognition(tr: Translate, back: string): CardTemplate {
-  return { key: 'recognition', name: tr('notetype.start.template.recognition'), front: '{{word}}', back: ANSWER + back, card_type: 'classic' };
+  return { key: 'recognition', name: tr('notetype.start.template.recognition'), front: '{{word}}', back: ANSWER + back, card_type: 'classic', answer_field: 'meaning' };
 }
 
 /** The definition a starting point sends, or `null` when it copies a built-in. */
 export function starterDefinition(key: StarterKey, name: string, tr: Translate): NoteTypeInput | null {
-  const word = field('word', tr('notetype.start.field.word'), true, true);
-  const meaning = field('meaning', tr('notetype.start.field.meaning'), true);
+  const word = field('word', tr('notetype.start.field.word'), true, 'term', true);
+  const meaning = field('meaning', tr('notetype.start.field.meaning'), true, 'meaning');
   switch (key) {
     case 'word':
       return { name, kind: 'standard', fields: [word, meaning], templates: [recognition(tr, '{{meaning}}')], css: '', sort_field: 'word' };
@@ -43,7 +45,7 @@ export function starterDefinition(key: StarterKey, name: string, tr: Translate):
       return {
         name,
         kind: 'standard',
-        fields: [word, meaning, field('example', tr('notetype.start.field.example'), false)],
+        fields: [word, meaning, field('example', tr('notetype.start.field.example'), false, 'example')],
         templates: [recognition(tr, '{{meaning}}{{#example}}<div class="fc-example">{{example}}</div>{{/example}}')],
         css: '',
         sort_field: 'word',

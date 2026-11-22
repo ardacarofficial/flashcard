@@ -34,7 +34,28 @@
     "fields_desc": "Not eklerken doldurduğun kutular, bu sırayla. Zorunlu bir alan boşken not kaydedilmez.",
     "field_n": "{n}. alan",
     "field_name_n": "{n}. alanın adı",
-    "contains_label": "İçerik:",
+    "contains_label": "Ne içeriyor?",
+    "role": {
+      "pick": "“{name}” alanı ne içeriyor?",
+      "none": "Başka bir şey",
+      "none_desc": "Uygulama bu alana özel bir anlam yüklemez.",
+      "term": "Kelime (sözlükteki hâli)",
+      "surface": "Geçtiği hâli (ör. “went”)",
+      "meaning": "Anlamı",
+      "example": "Örnek cümle",
+      "example_translation": "Örnek cümlenin çevirisi",
+      "source": "Nereden geldiği",
+      "note": "Not, açıklama",
+      "taken": "“{name}” alanında seçili",
+      "hint": "Alanların ne içerdiğini seçersen uygulama hangisinin kelime, hangisinin anlam ya da örnek cümle olduğunu tahmin etmek zorunda kalmaz: ipuçları, içe aktarma, gelen kutusu ve kelime listesi buna göre çalışır."
+    },
+    "asks": {
+      "title": "Kartlar neyi soruyor?",
+      "desc": "Cevabını yazdığında ya da test çözdüğünde cevabın bu alanla karşılaştırılır. Ör. “Anlam” seçiliyse arka yüzdeki örnek cümleyi ve kaynağı yazman beklenmez.",
+      "pick": "“{name}” kartı neyi soruyor?",
+      "card_n": "{n}. kart",
+      "whole": "Arka yüzün tamamı"
+    },
     "contains": {
       "rich_text": "Biçimli metin (kalın, liste, resim)",
       "text": "Düz metin",

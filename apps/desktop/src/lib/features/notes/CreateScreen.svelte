@@ -436,6 +436,8 @@
     // Not for a dialog above the page (Quick Add, paste): Ctrl+Enter is theirs there.
     if (e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
     if (!(e.ctrlKey || e.metaKey) || e.key !== 'Enter' || rich || way !== 'bulk') return;
+    // A held Ctrl+Enter saves once (v1.3).
+    if (e.repeat) return void e.preventDefault();
     if (canSave) {
       e.preventDefault();
       void save();

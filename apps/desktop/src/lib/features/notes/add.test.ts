@@ -50,7 +50,12 @@ const vocabulary: NoteTypeDto = {
   id: '01900000-0000-7000-8000-00000000000b',
   name: 'Vocabulary',
   kind: 'standard',
-  fields: [f('word', 'Word', { unique: true }), f('meaning', 'Meaning', { required: true }), f('pronunciation', 'Pronunciation', { kind: 'text' }), f('example', 'Example sentence')],
+  fields: [
+    f('word', 'Word', { unique: true, role: 'term' }),
+    f('meaning', 'Meaning', { required: true, role: 'meaning' }),
+    f('pronunciation', 'Pronunciation', { kind: 'text' }),
+    f('example', 'Example sentence', { role: 'example' }),
+  ],
   templates: [],
   css: '',
   sort_field: 'word',

@@ -1,35 +1,21 @@
 /**
  * What a note type's fields CONTAIN (v1.3, CONTRACT §2): `term`, `surface`, `meaning`,
- * `example`, `example_translation`, `source`, `note`. The backend owns roles (`FieldDef.role`);
+ * `example`, `example_translation`, `source`, `note`. The backend owns roles (`FieldDef.role`;
+ * the built-ins get theirs from a migration, the user sets them in the note type editor);
  * this file only reads them for display — captions, which fields Quick Add shows first, which
- * column of a pasted list goes where.
- *
- * Until a backend without roles is gone, the stable field keys of the known built-in note
- * types stand in (never translated labels: a user may call any field anything).
+ * column of a pasted list goes where. Never guessed from field keys or labels: a field
+ * without a role has none (a user may call any field anything, or clear a built-in's role).
  */
 import type { FieldDef, NoteTypeDto } from '$lib/api/types';
 
 export const ROLES = ['term', 'surface', 'meaning', 'example', 'example_translation', 'source', 'note'] as const;
 export type Role = (typeof ROLES)[number];
 
-/** Built-in note types (`NoteTypeDto.builtin`) → field key → role. */
-const BUILTIN: Record<string, Record<string, Role>> = {
-  classic: { front: 'term', back: 'meaning' },
-  classic_reverse: { front: 'term', back: 'meaning' },
-  optional_reverse: { front: 'term', back: 'meaning' },
-  typing: { front: 'term', back: 'meaning' },
-  vocabulary: { word: 'term', meaning: 'meaning', example: 'example' },
-  subtitle: { word: 'term', surface: 'surface', meaning: 'meaning', sentence: 'example', translation: 'example_translation', source: 'source' },
-};
-
 const isRole = (v: unknown): v is Role => typeof v === 'string' && (ROLES as readonly string[]).includes(v);
 
-/** Role of `field` in `nt`: the backend's when it sends one, else the built-in table's. */
-export function fieldRole(nt: NoteTypeDto | null, field: FieldDef): Role | null {
-  // Capability check: `role` arrives with the v1.3 API (generated types may not have it yet).
-  const sent = (field as FieldDef & { role?: unknown }).role;
-  if (sent !== undefined) return isRole(sent) ? sent : null;
-  return (nt?.builtin && BUILTIN[nt.builtin]?.[field.key]) || null;
+/** Role of `field` (of note type `nt`): the one the backend sends, else none. */
+export function fieldRole(_nt: NoteTypeDto | null, field: FieldDef): Role | null {
+  return isRole(field.role) ? field.role : null;
 }
 
 /** The field holding `role` in `nt`, if any. */

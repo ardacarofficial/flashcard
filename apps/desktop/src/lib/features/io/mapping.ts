@@ -1,5 +1,5 @@
 import type { ColumnTarget, NoteTypeDto } from '$lib/api/types';
-import { fieldRole, fillOrder, isTextField, type Role } from '../notes/roles';
+import { fieldRole, fieldWithRole, fillOrder, isTextField, ROLES, type Role } from '../notes/roles';
 
 /** `<select>` value of a column target. */
 export function encodeColumn(c: ColumnTarget): string {
@@ -8,6 +8,8 @@ export function encodeColumn(c: ColumnTarget): string {
       return `field:${c.key}`;
     case 'attribute':
       return `attr:${c.attr_id}`;
+    case 'role':
+      return `role:${c.role}`;
     default:
       return c.kind;
   }
@@ -17,8 +19,20 @@ export function encodeColumn(c: ColumnTarget): string {
 export function decodeColumn(v: string): ColumnTarget {
   if (v.startsWith('field:')) return { kind: 'field', key: v.slice(6) };
   if (v.startsWith('attr:')) return { kind: 'attribute', attr_id: v.slice(5) };
+  const role = v.startsWith('role:') ? v.slice(5) : '';
+  if ((ROLES as readonly string[]).includes(role)) return { kind: 'role', role: role as Role };
   if (v === 'tags') return { kind: 'tags' };
   return { kind: 'ignore' };
+}
+
+/**
+ * A column target as the column picker shows it: a role target (the API's `{ kind: 'role' }`,
+ * "the field that holds this role") becomes that field of `nt`; without one, not imported.
+ */
+export function resolveColumn(c: ColumnTarget, nt: NoteTypeDto | null): ColumnTarget {
+  if (c.kind !== 'role') return c;
+  const f = fieldWithRole(nt, c.role);
+  return f ? { kind: 'field', key: f.key } : { kind: 'ignore' };
 }
 
 /** Separator as typed in an input: a tab is written `\t`. */

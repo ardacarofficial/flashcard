@@ -34,7 +34,28 @@
     "fields_desc": "The boxes you fill in when adding a note, in this order. A note isn't saved while a required field is empty.",
     "field_n": "Field {n}",
     "field_name_n": "Name of field {n}",
-    "contains_label": "Holds:",
+    "contains_label": "Contains:",
+    "role": {
+      "pick": "What does “{name}” contain?",
+      "none": "Something else",
+      "none_desc": "The app gives this field no special meaning.",
+      "term": "The word (dictionary form)",
+      "surface": "As it appeared (e.g. “went”)",
+      "meaning": "Its meaning",
+      "example": "An example sentence",
+      "example_translation": "The example sentence's translation",
+      "source": "Where it came from",
+      "note": "A note or explanation",
+      "taken": "Already set on “{name}”",
+      "hint": "When you say what each field contains, the app doesn't have to guess which one is the word, the meaning or the example sentence: hints, imports, the inbox and the word list follow it."
+    },
+    "asks": {
+      "title": "What does each card ask for?",
+      "desc": "When you type an answer or take a test, your answer is compared with this field. E.g. with “Meaning”, you aren't expected to type the example sentence and source shown on the back.",
+      "pick": "What the “{name}” card asks for",
+      "card_n": "Card {n}",
+      "whole": "The whole back side"
+    },
     "contains": {
       "rich_text": "Formatted text (bold, lists, pictures)",
       "text": "Plain text",
