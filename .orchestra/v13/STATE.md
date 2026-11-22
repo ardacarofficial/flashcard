@@ -27,3 +27,11 @@ independent review + polish, design consistency pass (bounded), docs/CHANGELOG/v
 via `.github/workflows/windows-build.yml`, try Windows WebDriver pilot (tauri-driver) as a non-gating job.
 
 Note: first runs of r1/r2/b0/s2/s4 hit the 7000 s wall-clock (machine load 30); all resumed with `followup-timeout.md` (logs `<name>-HHMMSS.jsonl`). Free disk by deleting `target/` of merged, clean worktrees.
+
+## Integration (2026-11-22, main checkout, branch claude/festive-einstein-8y0kld)
+All eight workers merged (s2 last: b73b98a). Integration commits after it: study launcher bound to the
+generated types (contract.ts re-exports, mock = r1 semantics, test drafts), Study now / Study these open the
+launcher, keyboard safety (`$lib/keyboard`, J7 green), plugin redaction + reminder queue counts, field roles
+in the UI, stats term/meaning by role, Esc = pause (Continue resumes the same session), launcher reason
+"today's card limit", journeys S1–S6 (+ S7–S12 by a journeys sub-agent), screens.mjs `state-missing`.
+Known: the core's 20-min learn-ahead means a 1 m learning step returns at once (S6 uses a 25 m step).
