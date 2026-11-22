@@ -5,20 +5,31 @@
 // media upload (and its retry), a capture (and its resend), a batch, known words, a wrong key.
 //
 //   cargo build -p fc-cli
-//   FC_BIN=target/debug/fc SUBTITLE_REPO=/path/to/subtitle \
-//     node --experimental-transform-types tools/subtitle-contract/check.mjs
+//   [FC_BIN=target/debug/fc] [SUBTITLE_REPO=/path/to/subtitle] node tools/subtitle-contract/check.mjs
 //
-// Exits non-zero on the first broken expectation. Needs Node ≥ 22.7 (TypeScript is loaded
-// with type stripping; `api.ts` imports only types).
-import { execFileSync, spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+// Exits non-zero on the first broken expectation. Needs Node ≥ 22.7: `api.ts` is loaded with
+// `--experimental-transform-types` (it uses TypeScript parameter properties, which plain type
+// stripping rejects); the script re-runs itself with that flag when it was not given.
+// `FC_BIN` defaults to the repository's `target/debug/fc` when it exists, else `fc` on PATH.
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 
-const FC = process.env.FC_BIN ?? 'fc';
+if (!process.execArgv.includes('--experimental-transform-types')) {
+  const r = spawnSync(
+    process.execPath,
+    ['--experimental-transform-types', '--no-warnings=ExperimentalWarning', ...process.execArgv, fileURLToPath(import.meta.url), ...process.argv.slice(2)],
+    { stdio: 'inherit' },
+  );
+  process.exit(r.status ?? 1);
+}
+
+const localFc = resolve(dirname(fileURLToPath(import.meta.url)), '../../target/debug', process.platform === 'win32' ? 'fc.exe' : 'fc');
+const FC = process.env.FC_BIN ?? (existsSync(localFc) ? localFc : 'fc');
 const REPO = process.env.SUBTITLE_REPO ?? '/home/user/subtitle';
 const { FlashcardsApi, FlashcardsApiError } = await import(pathToFileURL(join(REPO, 'src/flashcards/api.ts')).href);
 

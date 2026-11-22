@@ -251,7 +251,7 @@ fn end_to_end_against_the_app() {
     );
     assert!(exec(&t, &["--lang", "tr", "deck", "list"])
         .unwrap()
-        .contains("[yeni 0 · öğrenme 0"));
+        .contains("[yeni 0 · öğreniliyor 0 · sırası gelen 0"));
     let e = exec(&t, &["note", "add", "--deck", "Yok", "--front", "x"]).unwrap_err();
     assert_eq!(e.code, ErrorCode::NotFoundDeck);
     exec(
