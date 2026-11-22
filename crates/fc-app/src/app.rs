@@ -238,6 +238,8 @@ impl App {
         crate::support::content::seed_builtin_notetypes(&mut *tx, locale, now)?;
         tx.mark_unfinished_jobs_interrupted(now)?;
         tx.delete_orphan_media_files()?;
+        // The word index (v1.4): builds what a migration or another writer queued.
+        crate::modules::words::index::drain(&mut *tx)?;
         tx.commit()?;
         self.reload_cached_state()?;
         self.roll_back_unfinished_groups()?;
@@ -873,6 +875,8 @@ impl App {
             .collect();
         let events = std::mem::take(&mut ctx.events);
         let (kind, reverts) = (ctx.batch_kind, ctx.reverts_batch_id);
+        // Derived data in the same transaction: the word index follows every change (v1.4).
+        crate::modules::words::index::drain(&mut *tx)?;
         // Automation rules (v0.9) look at what a written batch did; deferred chunks are
         // observed when their group commits, discarded work never.
         let observed = match mode {

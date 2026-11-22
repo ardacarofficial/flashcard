@@ -61,4 +61,5 @@ modules! {
     reminders,
     profiles,
     themes,
+    words,
 }

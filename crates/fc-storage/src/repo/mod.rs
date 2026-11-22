@@ -84,4 +84,5 @@ domains! {
     subtitle: SubtitleRead, SubtitleWrite;
     maintenance: MaintenanceRead, MaintenanceWrite;
     ux: UxStateRead, UxStateWrite;
+    words: WordIndexRead, WordIndexWrite;
 }

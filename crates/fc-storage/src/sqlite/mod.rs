@@ -29,6 +29,7 @@ mod study;
 mod subtitle;
 mod tags;
 mod ux;
+mod words;
 
 use crate::error::{in_table, StorageError, StorageResult};
 use crate::store::{ReadTx, WriteTx};

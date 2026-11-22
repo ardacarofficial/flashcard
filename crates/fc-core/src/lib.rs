@@ -36,6 +36,7 @@ pub mod tag;
 pub mod theme;
 pub mod time;
 pub mod ux;
+pub mod words;
 
 pub use error::{CoreError, CoreResult};
 pub use id::{

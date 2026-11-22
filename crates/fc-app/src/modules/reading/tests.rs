@@ -67,6 +67,8 @@ fn set_interval(t: &TestApp, note: &NoteDto, days: i64) {
         card.scheduling.stability = Some(days as f64);
         tx.update_card(&card).unwrap();
     }
+    // A raw write outside the dispatcher: bring the word index along, as every command does.
+    crate::modules::words::index::drain(&mut *tx).unwrap();
     tx.commit().unwrap();
 }
 
@@ -239,6 +241,7 @@ fn word_colours_follow_fsrs_maturity(f: &Factory) {
             card.scheduling.state = CardState::Relearning;
             tx.update_card(&card).unwrap();
         }
+        crate::modules::words::index::drain(&mut *tx).unwrap();
         tx.commit().unwrap();
     }
     assert_eq!(status_of(&analyze(&t, text, "en"), "ran"), WordStatus::Learning);

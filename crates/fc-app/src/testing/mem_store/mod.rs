@@ -184,4 +184,5 @@ domains! {
     subtitle => SubtitleState,
     maintenance => MaintenanceState,
     ux => UxState,
+    words => WordsState,
 }
