@@ -54,7 +54,11 @@
     "user_note": "Kart notu",
     "user_note_placeholder": "Yalnızca bu kart için…",
     "backlinks": "Buraya bağlananlar",
-    "no_backlinks": "Bu nota bağlanan başka not yok."
+    "no_backlinks": "Bu nota bağlanan başka not yok.",
+    "part": {
+      "example": "Örnek",
+      "source": "Kaynak"
+    }
   },
   "flags": {
     "heading": "Bayraklar",

@@ -240,6 +240,7 @@ fn import_notetype(a: &AnkiNotetype, now: Timestamp) -> ImportedNotetype {
             unique: i == 0,
             searchable: true,
             default_value: None,
+            role: None,
         });
     }
     let to_keys = |t: &str| map_field_refs(t, |n| names.get(n).cloned());
@@ -264,6 +265,7 @@ fn import_notetype(a: &AnkiNotetype, now: Timestamp) -> ImportedNotetype {
                 builtins::engine::CLASSIC
             }
             .into(),
+            answer_field: None,
         })
         .collect();
     let created = ms(a.id, now);

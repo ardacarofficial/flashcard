@@ -57,6 +57,63 @@ pub enum FieldKind {
     Link,
 }
 
+/// What a field **contains** (v1.3, docs/03 §5.1): optional metadata that lets study, the term
+/// list, hints and imports treat vocabulary notes as vocabulary without guessing from field
+/// names. A field has at most one role and a role belongs to at most one field of a note type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub enum FieldRole {
+    /// The dictionary form ("go").
+    Term,
+    /// The form as it was seen ("went").
+    Surface,
+    /// What the term means ("gitmek").
+    Meaning,
+    /// A sentence containing the term ("I went home.").
+    Example,
+    /// The example sentence in the learner's language.
+    ExampleTranslation,
+    /// Where it came from (title, link, time).
+    Source,
+    /// Anything else worth keeping (explanation, extra).
+    Note,
+}
+
+impl FieldRole {
+    /// Every role, in the order a term is read (and columns are mapped).
+    pub const ALL: [FieldRole; 7] = [
+        Self::Term,
+        Self::Meaning,
+        Self::Example,
+        Self::ExampleTranslation,
+        Self::Surface,
+        Self::Source,
+        Self::Note,
+    ];
+
+    /// Stable id (the serialized form).
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Term => "term",
+            Self::Surface => "surface",
+            Self::Meaning => "meaning",
+            Self::Example => "example",
+            Self::ExampleTranslation => "example_translation",
+            Self::Source => "source",
+            Self::Note => "note",
+        }
+    }
+
+    /// Parses an id (case-insensitive, surrounding spaces ignored).
+    pub fn parse(id: &str) -> Option<Self> {
+        let id = id.trim();
+        Self::ALL
+            .into_iter()
+            .find(|r| r.id().eq_ignore_ascii_case(id))
+    }
+}
+
 /// One field in a note type schema.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -75,6 +132,10 @@ pub struct FieldDef {
     pub searchable: bool,
     /// Pre-filled value for new notes.
     pub default_value: Option<String>,
+    /// What the field contains (v1.3; absent in older records = no role).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional = nullable))]
+    pub role: Option<FieldRole>,
 }
 
 /// Whether a note type produces one card per template or one card per cloze deletion.
@@ -102,6 +163,12 @@ pub struct CardTemplate {
     pub back: String,
     /// Card type engine id (`classic`, `typing`, …) used to render/check this card.
     pub card_type: String,
+    /// The field this card asks for (v1.3): typed answers, tests and hints compare with its
+    /// text instead of the whole answer side. Choice, cloze and typing engines keep their own
+    /// expected answer. Absent in older records = the text of the answer side.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional = nullable))]
+    pub answer_field: Option<FieldKey>,
 }
 
 /// A note type.
@@ -138,6 +205,16 @@ impl NoteType {
     pub fn field(&self, key: &FieldKey) -> Option<&FieldDef> {
         self.fields.iter().find(|f| &f.key == key)
     }
+
+    /// The field with `role`, if any.
+    pub fn field_with_role(&self, role: FieldRole) -> Option<&FieldDef> {
+        self.fields.iter().find(|f| f.role == Some(role))
+    }
+
+    /// Whether any field has a role.
+    pub fn has_roles(&self) -> bool {
+        self.fields.iter().any(|f| f.role.is_some())
+    }
 }
 
 /// Validates a note type's internal consistency.
@@ -154,12 +231,18 @@ pub fn validate_notetype(nt: &NoteType) -> CoreResult<()> {
         return bad("no fields");
     }
     let mut keys = HashSet::new();
+    let mut roles = HashSet::new();
     for f in &nt.fields {
         if f.key.0.trim().is_empty() || f.name.trim().is_empty() {
             return bad("empty field key or name");
         }
         if !keys.insert(&f.key) {
             return bad("duplicate field key");
+        }
+        if let Some(r) = f.role {
+            if !roles.insert(r) {
+                return bad("two fields have the same role");
+            }
         }
     }
     if nt.field(&nt.sort_field).is_none() {
@@ -172,6 +255,12 @@ pub fn validate_notetype(nt: &NoteType) -> CoreResult<()> {
     for t in &nt.templates {
         if t.key.trim().is_empty() || !tkeys.insert(&t.key) {
             return bad("empty or duplicate template key");
+        }
+        if t.answer_field
+            .as_ref()
+            .is_some_and(|k| nt.field(k).is_none())
+        {
+            return bad("answer field does not exist");
         }
     }
     Ok(())
@@ -199,7 +288,7 @@ pub mod builtin {
     /// Classic (Front/Back) note type. `name`s are the localized display names chosen at
     /// seeding time (the core has no i18n catalog; see `docs/03` §7 message keys).
     pub fn classic(now: Timestamp, name: &str, front_name: &str, back_name: &str) -> NoteType {
-        let field = |key: &str, display: &str, required: bool, unique: bool| FieldDef {
+        let field = |key: &str, display: &str, required: bool, unique: bool, role| FieldDef {
             key: FieldKey::new(key),
             name: display.to_owned(),
             kind: FieldKind::RichText,
@@ -207,14 +296,15 @@ pub mod builtin {
             unique,
             searchable: true,
             default_value: None,
+            role: Some(role),
         };
         NoteType {
             id: CLASSIC_ID,
             name: name.to_owned(),
             kind: NoteTypeKind::Standard,
             fields: vec![
-                field(FRONT, front_name, true, true),
-                field(BACK, back_name, false, false),
+                field(FRONT, front_name, true, true, FieldRole::Term),
+                field(BACK, back_name, false, false, FieldRole::Meaning),
             ],
             templates: vec![CardTemplate {
                 key: FORWARD.to_owned(),
@@ -222,6 +312,7 @@ pub mod builtin {
                 front: "{{front}}".to_owned(),
                 back: "{{front}}\n<hr id=\"answer\">\n{{back}}".to_owned(),
                 card_type: "classic".to_owned(),
+                answer_field: Some(FieldKey::new(BACK)),
             }],
             css: String::new(),
             sort_field: FieldKey::new(FRONT),
@@ -268,5 +359,78 @@ mod tests {
         let mut no_fields = base;
         no_fields.fields.clear();
         assert!(validate_notetype(&no_fields).is_err());
+    }
+
+    #[test]
+    fn roles_and_answer_fields_are_optional_metadata() {
+        // A v1.2 record (no `role`, no `answer_field`) loads unchanged.
+        let old_field = r#"{"key":"front","name":"Front","kind":"rich_text","required":true,
+            "unique":true,"searchable":true,"default_value":null}"#;
+        let f: FieldDef = serde_json::from_str(old_field).unwrap();
+        assert_eq!(f.role, None);
+        // ...and writes back without the new keys.
+        assert!(!serde_json::to_string(&f).unwrap().contains("role"));
+        let old_tpl = r#"{"key":"forward","name":"1","front":"{{front}}","back":"{{back}}",
+            "card_type":"classic"}"#;
+        let t: CardTemplate = serde_json::from_str(old_tpl).unwrap();
+        assert_eq!(t.answer_field, None);
+        assert!(!serde_json::to_string(&t).unwrap().contains("answer_field"));
+
+        // New records round-trip.
+        let nt = builtin::classic(Timestamp(1), "Classic", "Front", "Back");
+        assert_eq!(nt.fields[0].role, Some(FieldRole::Term));
+        assert_eq!(nt.fields[1].role, Some(FieldRole::Meaning));
+        let json = serde_json::to_string(&nt.fields).unwrap();
+        assert!(json.contains("\"role\":\"term\""));
+        assert_eq!(
+            serde_json::from_str::<Vec<FieldDef>>(&json).unwrap(),
+            nt.fields
+        );
+        let json = serde_json::to_string(&nt.templates).unwrap();
+        assert!(json.contains("\"answer_field\":\"back\""));
+        assert_eq!(
+            serde_json::from_str::<Vec<CardTemplate>>(&json).unwrap(),
+            nt.templates
+        );
+        assert_eq!(
+            nt.field_with_role(FieldRole::Meaning)
+                .map(|f| f.key.as_str()),
+            Some("back")
+        );
+        assert_eq!(nt.field_with_role(FieldRole::Example), None);
+        assert!(nt.has_roles());
+    }
+
+    #[test]
+    fn role_ids_parse() {
+        for r in FieldRole::ALL {
+            assert_eq!(FieldRole::parse(r.id()), Some(r));
+            assert_eq!(
+                serde_json::to_string(&r).unwrap(),
+                format!("\"{}\"", r.id())
+            );
+        }
+        assert_eq!(
+            FieldRole::parse(" Example_Translation "),
+            Some(FieldRole::ExampleTranslation)
+        );
+        assert_eq!(FieldRole::parse("definition"), None);
+    }
+
+    #[test]
+    fn roles_and_answer_fields_are_validated() {
+        let base = builtin::classic(Timestamp(1), "Classic", "Front", "Back");
+        let mut twice = base.clone();
+        twice.fields[1].role = Some(FieldRole::Term);
+        assert!(validate_notetype(&twice).is_err());
+
+        let mut missing = base.clone();
+        missing.templates[0].answer_field = Some(FieldKey::new("nope"));
+        assert!(validate_notetype(&missing).is_err());
+
+        let mut none = base;
+        none.fields[0].role = None;
+        none.templates[0].answer_field = None;
+        validate_notetype(&none).unwrap();
     }
 }

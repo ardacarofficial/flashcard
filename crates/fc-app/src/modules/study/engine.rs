@@ -18,13 +18,16 @@ use fc_core::preset::PresetConfig;
 use fc_core::settings::SettingScope;
 use fc_core::time::MILLIS_PER_DAY;
 use fc_core::i18n::Locale;
-use fc_core::notetype::NoteType;
+use fc_core::content::render::render_field;
+use fc_core::note::Note;
+use fc_core::notetype::{FieldKey, FieldRole, NoteType};
 use fc_core::{CardId, DeckId, NoteId, NoteTypeId, SessionId, Timestamp};
 use fc_providers::strategy::{
     Interaction, ReviewOutcome, Scheduler, SchedulerParams, StrategyError,
 };
 use fc_storage::repo::SessionRecord;
 use fc_storage::Reads;
+use fc_study::hint::{ContextSource, HintKind, HintShape, LeveledHint, MaskedSentence};
 use fc_study::text::html_to_text;
 use fc_study::scheduler::{self, RATINGS};
 use fc_study::session::{self as queue, SessionState, LEARN_AHEAD_MS};
@@ -513,13 +516,109 @@ pub(crate) fn render_for_study(v: View<'_>, card: &Card) -> AppResult<StudyRende
     )?;
     let (expected, types) = match &r.raw.interaction {
         Interaction::Type { expected } => (expected.clone(), true),
-        Interaction::SelfGrade | Interaction::Choice { .. } => (answer_text(&r.sides.answer), false),
+        Interaction::Choice { .. } => (answer_text(&r.sides.answer), false),
+        // v1.3: the field the template asks for (a vocabulary card owes its meaning, not the
+        // example and source printed under it), else the answer part of the back.
+        Interaction::SelfGrade => (
+            answer_field_text(&nt, &note, &card.template_key)
+                .unwrap_or_else(|| answer_text(&r.sides.answer)),
+            false,
+        ),
     };
     Ok(StudyRender {
         card: r,
         expected,
         types,
     })
+}
+
+/// Plain text of `key`'s value in `note`, rendered as its field kind renders it (Markdown
+/// and all); `None` when the field does not exist or shows no text.
+fn field_text(nt: &NoteType, note: &Note, key: &FieldKey) -> Option<String> {
+    let def = nt.field(key)?;
+    let raw = note.fields.get(key)?;
+    let text = html_to_text(&render_field(def.kind, raw, None, &|_| None));
+    (!text.trim().is_empty()).then_some(text)
+}
+
+/// Rendered HTML of the field with `role` in `note` (`None` when absent or empty).
+fn role_html(nt: &NoteType, note: &Note, role: FieldRole) -> Option<String> {
+    let def = nt.field_with_role(role)?;
+    let raw = note.fields.get(&def.key)?;
+    let html = render_field(def.kind, raw, None, &|_| None);
+    (!html_to_text(&html).trim().is_empty()).then_some(html)
+}
+
+/// Text of the field the card's template asks for (`CardTemplate::answer_field`, v1.3).
+fn answer_field_text(nt: &NoteType, note: &Note, template_key: &str) -> Option<String> {
+    let key = content::template_for(nt, template_key)?.answer_field.as_ref()?;
+    field_text(nt, note, key)
+}
+
+/// The v1.3 context hint of a rendered card: the note's example sentence with the term
+/// blanked, unless the question already shows that sentence (the hint would show nothing
+/// new) or the blanked sentence would still contain the answer, the term or the surface form.
+fn context_of(nt: &NoteType, note: &Note, r: &StudyRender) -> Option<MaskedSentence> {
+    let example = role_html(nt, note, FieldRole::Example)?;
+    let norm = |t: &str| t.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    let sentence = norm(&html_to_text(&example));
+    if sentence.is_empty() || norm(&html_to_text(&r.card.sides.question)).contains(&sentence) {
+        return None;
+    }
+    let text = |role| role_html(nt, note, role).map(|h| html_to_text(&h));
+    let candidates: Vec<String> = [text(FieldRole::Surface), text(FieldRole::Term)]
+        .into_iter()
+        .flatten()
+        .collect();
+    let mut forbidden = candidates.clone();
+    forbidden.push(r.expected.clone());
+    fc_study::hint::context_hint(&ContextSource {
+        example_html: &example,
+        candidates: &candidates,
+        forbidden: &forbidden,
+    })
+}
+
+/// `study.hint` for `card` at `level` (1 = smallest): the context sentence first when the
+/// note has a usable one, then letters of the expected answer by the hint strategy `kind`.
+pub(crate) fn study_hint(
+    v: View<'_>,
+    card: CardId,
+    kind: HintKind,
+    level: u32,
+) -> AppResult<Option<LeveledHint>> {
+    let card = require_live_card(v.reads, card)?;
+    let r = render_for_study(v, &card)?;
+    let note = require_note(v.reads, card.note_id)?;
+    let nt = require_notetype(v.reads, note.notetype_id)?;
+    let context = context_of(&nt, &note, &r);
+    Ok(fc_study::hint::leveled_hint(
+        kind,
+        &r.expected,
+        context.as_ref(),
+        level,
+    ))
+}
+
+/// The `study.hint` response for `hint` at `level`.
+pub(crate) fn hint_dto(level: u32, hint: Option<LeveledHint>) -> HintDto {
+    match hint {
+        Some(h) => HintDto {
+            level,
+            kind: match h.shape {
+                HintShape::Context => fc_api::v1::study::HintKind::Context,
+                HintShape::Letters => fc_api::v1::study::HintKind::Letters,
+            },
+            text: Some(h.text),
+            html: Some(h.html),
+        },
+        None => HintDto {
+            level,
+            text: None,
+            kind: fc_api::v1::study::HintKind::Letters,
+            html: None,
+        },
+    }
 }
 
 /// Text of the answer part of (sanitized) answer HTML: what follows the rule that separates

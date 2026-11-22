@@ -450,8 +450,88 @@ fn require_pending(reads: &dyn Reads, id: InboxItemId) -> AppResult<InboxRecord>
     Ok(r)
 }
 
+/// Note type an item becomes when neither the item nor the acceptance names one: Classic,
+/// except that an item carrying a captured sentence (and no explicit field values, which
+/// would be Classic's) becomes the built-in Subtitle card (v1.3) — a word in its sentence
+/// with a source — so the sentence is kept instead of dropped. Classic when that note type is
+/// gone.
+pub(crate) fn default_notetype(
+    reads: &dyn Reads,
+    item: &AddInboxItem,
+    fields_given: bool,
+) -> AppResult<NoteTypeId> {
+    let has_sentence = item
+        .context
+        .as_ref()
+        .and_then(|c| c.sentence.as_deref())
+        .is_some_and(|s| !s.trim().is_empty());
+    if has_sentence && !fields_given && item.fields.is_empty() {
+        if let Some(b) = fc_core::content::builtin::find(fc_core::content::builtin::SUBTITLE) {
+            if reads
+                .get_notetype(b.id)?
+                .is_some_and(|nt| nt.deleted_at.is_none())
+            {
+                return Ok(b.id);
+            }
+        }
+    }
+    Ok(CLASSIC_ID)
+}
+
+/// Keeps the item's captured context (v1.3): the sentence goes into the note type's `example`
+/// field (the term in bold when it is found there) and the page into its `source` field —
+/// only where those fields exist and were left empty.
+pub(crate) fn add_context(
+    nt: &NoteType,
+    fields: &mut BTreeMap<String, String>,
+    context: Option<&InboxContext>,
+    term: Option<&str>,
+) {
+    use fc_core::notetype::{FieldKind, FieldRole};
+    use fc_core::subtitle::{collapse_spaces, highlight, source_html};
+    let Some(c) = context else { return };
+    let mut put = |role: FieldRole, value: Option<String>| {
+        let (Some(f), Some(v)) = (nt.field_with_role(role), value) else {
+            return;
+        };
+        if v.trim().is_empty() {
+            return;
+        }
+        let slot = fields.entry(f.key.0.clone()).or_default();
+        if slot.trim().is_empty() {
+            *slot = v;
+        }
+    };
+    let rich = |role: FieldRole| {
+        nt.field_with_role(role)
+            .is_some_and(|f| f.kind == FieldKind::RichText)
+    };
+    let sentence = c.sentence.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    put(
+        FieldRole::Example,
+        sentence.map(|s| {
+            if rich(FieldRole::Example) {
+                highlight(s, None, term.unwrap_or_default())
+            } else {
+                collapse_spaces(s)
+            }
+        }),
+    );
+    let title = c.title.as_deref().map(str::trim).filter(|t| !t.is_empty());
+    let url = c.url.as_deref().map(str::trim).filter(|u| !u.is_empty());
+    put(
+        FieldRole::Source,
+        if rich(FieldRole::Source) {
+            (title.is_some() || url.is_some()).then(|| source_html(title, "", url, None))
+        } else {
+            title.or(url).map(collapse_spaces)
+        },
+    );
+}
+
 /// Field values keyed by the note type's keys: explicit `fields` (by key or name), then the
-/// Classic shorthand (`front` → first field, `back` → second) where not given.
+/// shorthand where not given: `front` → the `term` field, `back` → the `meaning` field (v1.3;
+/// a note type without both roles: the first and second fields, as Classic).
 pub(crate) fn note_fields(
     nt: &NoteType,
     front: Option<&str>,
@@ -478,8 +558,12 @@ pub(crate) fn note_fields(
             })?;
         out.insert(f.key.0.clone(), v.clone());
     }
-    for (i, v) in [front, back].into_iter().enumerate() {
-        if let (Some(v), Some(f)) = (v, nt.fields.get(i)) {
+    let (term, meaning) = match crate::modules::notes::term_columns(nt) {
+        Some((t, m)) => (Some(t), Some(m)),
+        None => (nt.fields.first(), nt.fields.get(1)),
+    };
+    for (v, f) in [(front, term), (back, meaning)] {
+        if let (Some(v), Some(f)) = (v, f) {
             out.entry(f.key.0.clone()).or_insert_with(|| v.to_owned());
         }
     }
@@ -539,9 +623,12 @@ fn accept(
             .or(item.deck_id)
             .ok_or_else(|| bad("deck", "choose a deck for this item"))
             .map_err(at)?;
-        let nt_id: NoteTypeId = a.notetype_id.or(item.notetype_id).unwrap_or(CLASSIC_ID);
+        let nt_id: NoteTypeId = match a.notetype_id.or(item.notetype_id) {
+            Some(id) => id,
+            None => default_notetype(ctx.reads(), item, a.fields.is_some()).map_err(at)?,
+        };
         let nt = crate::support::notes::require_notetype(ctx.reads(), nt_id).map_err(at)?;
-        let fields = match &a.fields {
+        let mut fields = match &a.fields {
             Some(f) => {
                 validate_fields(f).map_err(at)?;
                 note_fields(&nt, None, None, f)
@@ -549,6 +636,8 @@ fn accept(
             None => note_fields(&nt, item.front.as_deref(), item.back.as_deref(), &item.fields),
         }
         .map_err(at)?;
+        // v1.3: the captured sentence and page are kept where the note type has room.
+        add_context(&nt, &mut fields, item.context.as_ref(), item.front.as_deref());
         let tags = match &a.tags {
             Some(t) => {
                 validate_tags(t).map_err(at)?;

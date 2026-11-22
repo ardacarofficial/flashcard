@@ -1,0 +1,1350 @@
+{
+  "en": [
+    {
+      "builtin": "classic",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "front",
+          "kind": "rich_text",
+          "name": "Front",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "back",
+          "kind": "rich_text",
+          "name": "Back",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000001",
+      "kind": "standard",
+      "name": "Classic",
+      "sort_field": "front",
+      "templates": [
+        {
+          "back": "{{front}}\n<hr id=\"answer\">\n{{back}}",
+          "card_type": "classic",
+          "front": "{{front}}",
+          "key": "forward",
+          "name": "1"
+        }
+      ]
+    },
+    {
+      "builtin": "classic_reverse",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "front",
+          "kind": "rich_text",
+          "name": "Front",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "back",
+          "kind": "rich_text",
+          "name": "Back",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000002",
+      "kind": "standard",
+      "name": "Classic + reverse",
+      "sort_field": "front",
+      "templates": [
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{back}}",
+          "card_type": "classic",
+          "front": "{{front}}",
+          "key": "forward",
+          "name": "Forward"
+        },
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{front}}",
+          "card_type": "classic",
+          "front": "{{back}}",
+          "key": "reverse",
+          "name": "Reverse"
+        }
+      ]
+    },
+    {
+      "builtin": "optional_reverse",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "front",
+          "kind": "rich_text",
+          "name": "Front",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "back",
+          "kind": "rich_text",
+          "name": "Back",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "add_reverse",
+          "kind": "text",
+          "name": "Add reverse (any text)",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000003",
+      "kind": "standard",
+      "name": "Optional reverse",
+      "sort_field": "front",
+      "templates": [
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{back}}",
+          "card_type": "classic",
+          "front": "{{front}}",
+          "key": "forward",
+          "name": "Forward"
+        },
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{front}}",
+          "card_type": "classic",
+          "front": "{{#add_reverse}}{{back}}{{/add_reverse}}",
+          "key": "reverse",
+          "name": "Reverse"
+        }
+      ]
+    },
+    {
+      "builtin": "typing",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "front",
+          "kind": "rich_text",
+          "name": "Front",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "back",
+          "kind": "rich_text",
+          "name": "Back",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000004",
+      "kind": "standard",
+      "name": "Type the answer",
+      "sort_field": "front",
+      "templates": [
+        {
+          "back": "{{front}}\n<hr class=\"fc-answer\">\n{{type:back}}",
+          "card_type": "typing",
+          "front": "{{front}}\n\n{{type:back}}",
+          "key": "forward",
+          "name": "Forward"
+        }
+      ]
+    },
+    {
+      "builtin": "cloze",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "text",
+          "kind": "rich_text",
+          "name": "Text",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "extra",
+          "kind": "rich_text",
+          "name": "Extra",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000005",
+      "kind": "cloze",
+      "name": "Cloze",
+      "sort_field": "text",
+      "templates": [
+        {
+          "back": "{{cloze:text}}{{#extra}}\n<hr class=\"fc-answer\">\n{{extra}}{{/extra}}",
+          "card_type": "cloze",
+          "front": "{{cloze:text}}",
+          "key": "cloze",
+          "name": "Cloze"
+        }
+      ]
+    },
+    {
+      "builtin": "multiple_choice",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "question",
+          "kind": "rich_text",
+          "name": "Question",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "answer",
+          "kind": "text",
+          "name": "Correct answer",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "distractors",
+          "kind": "text",
+          "name": "Wrong answers (one per line)",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "extra",
+          "kind": "rich_text",
+          "name": "Explanation",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000006",
+      "kind": "standard",
+      "name": "Multiple choice",
+      "sort_field": "question",
+      "templates": [
+        {
+          "back": "{{question}}\n<hr class=\"fc-answer\">\n{{answer}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
+          "card_type": "multiple_choice",
+          "front": "{{question}}",
+          "key": "choice",
+          "name": "Choice"
+        }
+      ]
+    },
+    {
+      "builtin": "image_occlusion",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "header",
+          "kind": "rich_text",
+          "name": "Title",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "image",
+          "kind": "image",
+          "name": "Image",
+          "required": true,
+          "searchable": false,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "masks",
+          "kind": "text",
+          "name": "Masks",
+          "required": true,
+          "searchable": false,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "extra",
+          "kind": "rich_text",
+          "name": "Extra",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000007",
+      "kind": "standard",
+      "name": "Image occlusion",
+      "sort_field": "image",
+      "templates": [
+        {
+          "back": "{{header}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
+          "card_type": "image_occlusion",
+          "front": "{{header}}",
+          "key": "occlusion",
+          "name": "Mask"
+        }
+      ]
+    },
+    {
+      "builtin": "image_quiz",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "image",
+          "kind": "image",
+          "name": "Image",
+          "required": true,
+          "searchable": false,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "answer",
+          "kind": "text",
+          "name": "Answer",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "extra",
+          "kind": "rich_text",
+          "name": "Extra",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000008",
+      "kind": "standard",
+      "name": "Image quiz",
+      "sort_field": "image",
+      "templates": [
+        {
+          "back": "{{image}}\n<hr class=\"fc-answer\">\n{{type:answer}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
+          "card_type": "typing",
+          "front": "{{image}}\n\n{{type:answer}}",
+          "key": "forward",
+          "name": "Forward"
+        }
+      ]
+    },
+    {
+      "builtin": "audio",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "audio",
+          "kind": "audio",
+          "name": "Audio",
+          "required": true,
+          "searchable": false,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "answer",
+          "kind": "text",
+          "name": "Transcript",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "extra",
+          "kind": "rich_text",
+          "name": "Extra",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000009",
+      "kind": "standard",
+      "name": "Listening card",
+      "sort_field": "audio",
+      "templates": [
+        {
+          "back": "{{audio}}\n<hr class=\"fc-answer\">\n{{type:answer}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
+          "card_type": "typing",
+          "front": "{{audio}}\n\n{{type:answer}}",
+          "key": "forward",
+          "name": "Forward"
+        }
+      ]
+    },
+    {
+      "builtin": "vocabulary",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "word",
+          "kind": "rich_text",
+          "name": "Word",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "meaning",
+          "kind": "rich_text",
+          "name": "Meaning",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "pronunciation",
+          "kind": "text",
+          "name": "Pronunciation",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "example",
+          "kind": "rich_text",
+          "name": "Example sentence",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "audio",
+          "kind": "audio",
+          "name": "Audio",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "image",
+          "kind": "image",
+          "name": "Image",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-00000000000a",
+      "kind": "standard",
+      "name": "Vocabulary",
+      "sort_field": "word",
+      "templates": [
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{meaning}}{{#image}}<div>{{image}}</div>{{/image}}{{#example}}<div class=\"fc-example\">{{example}}</div>{{/example}}",
+          "card_type": "classic",
+          "front": "{{word}}{{#pronunciation}}<div class=\"fc-pron\">{{pronunciation}}</div>{{/pronunciation}}{{#audio}}<div>{{audio}}</div>{{/audio}}",
+          "key": "recognition",
+          "name": "Recognition"
+        },
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{word}}{{#pronunciation}}<div class=\"fc-pron\">{{pronunciation}}</div>{{/pronunciation}}{{#audio}}<div>{{audio}}</div>{{/audio}}{{#example}}<div class=\"fc-example\">{{example}}</div>{{/example}}",
+          "card_type": "classic",
+          "front": "{{meaning}}{{#image}}<div>{{image}}</div>{{/image}}",
+          "key": "production",
+          "name": "Production"
+        }
+      ]
+    },
+    {
+      "builtin": "sentence",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "sentence",
+          "kind": "rich_text",
+          "name": "Sentence",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "translation",
+          "kind": "rich_text",
+          "name": "Translation",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "word",
+          "kind": "rich_text",
+          "name": "Word",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "meaning",
+          "kind": "rich_text",
+          "name": "Meaning",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "source",
+          "kind": "text",
+          "name": "Source",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "audio",
+          "kind": "audio",
+          "name": "Audio",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "image",
+          "kind": "image",
+          "name": "Image",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-00000000000b",
+      "kind": "standard",
+      "name": "Sentence card",
+      "sort_field": "sentence",
+      "templates": [
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{translation}}{{#word}}<div class=\"fc-example\"><b>{{word}}</b>{{#meaning}}: {{meaning}}{{/meaning}}</div>{{/word}}{{#source}}<div class=\"fc-source\">{{source}}</div>{{/source}}",
+          "card_type": "classic",
+          "front": "{{#image}}<div>{{image}}</div>{{/image}}{{sentence}}{{#audio}}<div>{{audio}}</div>{{/audio}}",
+          "key": "forward",
+          "name": "Forward"
+        }
+      ]
+    },
+    {
+      "builtin": "subtitle",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "word",
+          "kind": "rich_text",
+          "name": "Word",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "surface",
+          "kind": "text",
+          "name": "As it appeared",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "pos",
+          "kind": "text",
+          "name": "Part of speech",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "meaning",
+          "kind": "rich_text",
+          "name": "Meaning",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "sentence",
+          "kind": "rich_text",
+          "name": "Sentence",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "translation",
+          "kind": "rich_text",
+          "name": "Translation",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "image",
+          "kind": "image",
+          "name": "Screenshot",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "audio",
+          "kind": "audio",
+          "name": "Audio",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "source",
+          "kind": "rich_text",
+          "name": "Source",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-00000000000c",
+      "kind": "standard",
+      "name": "Subtitle card",
+      "sort_field": "word",
+      "templates": [
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{meaning}}{{#pos}}<div class=\"fc-pron\">{{pos}}</div>{{/pos}}{{#translation}}<div class=\"fc-example\">{{translation}}</div>{{/translation}}{{#image}}<div>{{image}}</div>{{/image}}{{#audio}}<div>{{audio}}</div>{{/audio}}{{#source}}<div class=\"fc-source\">{{source}}</div>{{/source}}",
+          "card_type": "classic",
+          "front": "<div class=\"fc-word\">{{word}}</div>{{#sentence}}<div class=\"fc-example\">{{sentence}}</div>{{/sentence}}",
+          "key": "recognition",
+          "name": "Recognition"
+        }
+      ]
+    }
+  ],
+  "tr": [
+    {
+      "builtin": "classic",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "front",
+          "kind": "rich_text",
+          "name": "Ön",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "back",
+          "kind": "rich_text",
+          "name": "Arka",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000001",
+      "kind": "standard",
+      "name": "Klasik",
+      "sort_field": "front",
+      "templates": [
+        {
+          "back": "{{front}}\n<hr id=\"answer\">\n{{back}}",
+          "card_type": "classic",
+          "front": "{{front}}",
+          "key": "forward",
+          "name": "1"
+        }
+      ]
+    },
+    {
+      "builtin": "classic_reverse",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "front",
+          "kind": "rich_text",
+          "name": "Ön",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "back",
+          "kind": "rich_text",
+          "name": "Arka",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000002",
+      "kind": "standard",
+      "name": "Klasik + ters",
+      "sort_field": "front",
+      "templates": [
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{back}}",
+          "card_type": "classic",
+          "front": "{{front}}",
+          "key": "forward",
+          "name": "İleri"
+        },
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{front}}",
+          "card_type": "classic",
+          "front": "{{back}}",
+          "key": "reverse",
+          "name": "Ters"
+        }
+      ]
+    },
+    {
+      "builtin": "optional_reverse",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "front",
+          "kind": "rich_text",
+          "name": "Ön",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "back",
+          "kind": "rich_text",
+          "name": "Arka",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "add_reverse",
+          "kind": "text",
+          "name": "Ters kart ekle (herhangi bir metin)",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000003",
+      "kind": "standard",
+      "name": "İsteğe bağlı ters",
+      "sort_field": "front",
+      "templates": [
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{back}}",
+          "card_type": "classic",
+          "front": "{{front}}",
+          "key": "forward",
+          "name": "İleri"
+        },
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{front}}",
+          "card_type": "classic",
+          "front": "{{#add_reverse}}{{back}}{{/add_reverse}}",
+          "key": "reverse",
+          "name": "Ters"
+        }
+      ]
+    },
+    {
+      "builtin": "typing",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "front",
+          "kind": "rich_text",
+          "name": "Ön",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "back",
+          "kind": "rich_text",
+          "name": "Arka",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000004",
+      "kind": "standard",
+      "name": "Yazarak cevaplama",
+      "sort_field": "front",
+      "templates": [
+        {
+          "back": "{{front}}\n<hr class=\"fc-answer\">\n{{type:back}}",
+          "card_type": "typing",
+          "front": "{{front}}\n\n{{type:back}}",
+          "key": "forward",
+          "name": "İleri"
+        }
+      ]
+    },
+    {
+      "builtin": "cloze",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "text",
+          "kind": "rich_text",
+          "name": "Metin",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "extra",
+          "kind": "rich_text",
+          "name": "Ek bilgi",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000005",
+      "kind": "cloze",
+      "name": "Boşluk doldurma",
+      "sort_field": "text",
+      "templates": [
+        {
+          "back": "{{cloze:text}}{{#extra}}\n<hr class=\"fc-answer\">\n{{extra}}{{/extra}}",
+          "card_type": "cloze",
+          "front": "{{cloze:text}}",
+          "key": "cloze",
+          "name": "Cloze"
+        }
+      ]
+    },
+    {
+      "builtin": "multiple_choice",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "question",
+          "kind": "rich_text",
+          "name": "Soru",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "answer",
+          "kind": "text",
+          "name": "Doğru cevap",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "distractors",
+          "kind": "text",
+          "name": "Yanlış cevaplar (her satıra bir)",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "extra",
+          "kind": "rich_text",
+          "name": "Açıklama",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000006",
+      "kind": "standard",
+      "name": "Çoktan seçmeli",
+      "sort_field": "question",
+      "templates": [
+        {
+          "back": "{{question}}\n<hr class=\"fc-answer\">\n{{answer}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
+          "card_type": "multiple_choice",
+          "front": "{{question}}",
+          "key": "choice",
+          "name": "Seçim"
+        }
+      ]
+    },
+    {
+      "builtin": "image_occlusion",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "header",
+          "kind": "rich_text",
+          "name": "Başlık",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "image",
+          "kind": "image",
+          "name": "Resim",
+          "required": true,
+          "searchable": false,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "masks",
+          "kind": "text",
+          "name": "Maskeler",
+          "required": true,
+          "searchable": false,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "extra",
+          "kind": "rich_text",
+          "name": "Ek bilgi",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000007",
+      "kind": "standard",
+      "name": "Resim üzerinde gizleme",
+      "sort_field": "image",
+      "templates": [
+        {
+          "back": "{{header}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
+          "card_type": "image_occlusion",
+          "front": "{{header}}",
+          "key": "occlusion",
+          "name": "Maske"
+        }
+      ]
+    },
+    {
+      "builtin": "image_quiz",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "image",
+          "kind": "image",
+          "name": "Resim",
+          "required": true,
+          "searchable": false,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "answer",
+          "kind": "text",
+          "name": "Cevap",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "extra",
+          "kind": "rich_text",
+          "name": "Ek bilgi",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000008",
+      "kind": "standard",
+      "name": "Resimli quiz",
+      "sort_field": "image",
+      "templates": [
+        {
+          "back": "{{image}}\n<hr class=\"fc-answer\">\n{{type:answer}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
+          "card_type": "typing",
+          "front": "{{image}}\n\n{{type:answer}}",
+          "key": "forward",
+          "name": "İleri"
+        }
+      ]
+    },
+    {
+      "builtin": "audio",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "audio",
+          "kind": "audio",
+          "name": "Ses",
+          "required": true,
+          "searchable": false,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "answer",
+          "kind": "text",
+          "name": "Duyulan metin",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "extra",
+          "kind": "rich_text",
+          "name": "Ek bilgi",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-000000000009",
+      "kind": "standard",
+      "name": "Sesli kart",
+      "sort_field": "audio",
+      "templates": [
+        {
+          "back": "{{audio}}\n<hr class=\"fc-answer\">\n{{type:answer}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
+          "card_type": "typing",
+          "front": "{{audio}}\n\n{{type:answer}}",
+          "key": "forward",
+          "name": "İleri"
+        }
+      ]
+    },
+    {
+      "builtin": "vocabulary",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "word",
+          "kind": "rich_text",
+          "name": "Kelime",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "meaning",
+          "kind": "rich_text",
+          "name": "Anlam",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "pronunciation",
+          "kind": "text",
+          "name": "Telaffuz",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "example",
+          "kind": "rich_text",
+          "name": "Örnek cümle",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "audio",
+          "kind": "audio",
+          "name": "Ses",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "image",
+          "kind": "image",
+          "name": "Resim",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-00000000000a",
+      "kind": "standard",
+      "name": "Kelime kartı",
+      "sort_field": "word",
+      "templates": [
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{meaning}}{{#image}}<div>{{image}}</div>{{/image}}{{#example}}<div class=\"fc-example\">{{example}}</div>{{/example}}",
+          "card_type": "classic",
+          "front": "{{word}}{{#pronunciation}}<div class=\"fc-pron\">{{pronunciation}}</div>{{/pronunciation}}{{#audio}}<div>{{audio}}</div>{{/audio}}",
+          "key": "recognition",
+          "name": "Tanıma"
+        },
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{word}}{{#pronunciation}}<div class=\"fc-pron\">{{pronunciation}}</div>{{/pronunciation}}{{#audio}}<div>{{audio}}</div>{{/audio}}{{#example}}<div class=\"fc-example\">{{example}}</div>{{/example}}",
+          "card_type": "classic",
+          "front": "{{meaning}}{{#image}}<div>{{image}}</div>{{/image}}",
+          "key": "production",
+          "name": "Üretme"
+        }
+      ]
+    },
+    {
+      "builtin": "sentence",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "sentence",
+          "kind": "rich_text",
+          "name": "Cümle",
+          "required": true,
+          "searchable": true,
+          "unique": true
+        },
+        {
+          "default_value": null,
+          "key": "translation",
+          "kind": "rich_text",
+          "name": "Çeviri",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "word",
+          "kind": "rich_text",
+          "name": "Kelime",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "meaning",
+          "kind": "rich_text",
+          "name": "Anlam",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "source",
+          "kind": "text",
+          "name": "Kaynak",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "audio",
+          "kind": "audio",
+          "name": "Ses",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "image",
+          "kind": "image",
+          "name": "Resim",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-00000000000b",
+      "kind": "standard",
+      "name": "Cümle kartı",
+      "sort_field": "sentence",
+      "templates": [
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{translation}}{{#word}}<div class=\"fc-example\"><b>{{word}}</b>{{#meaning}}: {{meaning}}{{/meaning}}</div>{{/word}}{{#source}}<div class=\"fc-source\">{{source}}</div>{{/source}}",
+          "card_type": "classic",
+          "front": "{{#image}}<div>{{image}}</div>{{/image}}{{sentence}}{{#audio}}<div>{{audio}}</div>{{/audio}}",
+          "key": "forward",
+          "name": "İleri"
+        }
+      ]
+    },
+    {
+      "builtin": "subtitle",
+      "css": "",
+      "fields": [
+        {
+          "default_value": null,
+          "key": "word",
+          "kind": "rich_text",
+          "name": "Kelime",
+          "required": true,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "surface",
+          "kind": "text",
+          "name": "Geçtiği hâli",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "pos",
+          "kind": "text",
+          "name": "Sözcük türü",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "meaning",
+          "kind": "rich_text",
+          "name": "Anlam",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "sentence",
+          "kind": "rich_text",
+          "name": "Cümle",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "translation",
+          "kind": "rich_text",
+          "name": "Çeviri",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "image",
+          "kind": "image",
+          "name": "Ekran görüntüsü",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "audio",
+          "kind": "audio",
+          "name": "Ses",
+          "required": false,
+          "searchable": false,
+          "unique": false
+        },
+        {
+          "default_value": null,
+          "key": "source",
+          "kind": "rich_text",
+          "name": "Kaynak",
+          "required": false,
+          "searchable": true,
+          "unique": false
+        }
+      ],
+      "id": "01900000-0000-7000-8000-00000000000c",
+      "kind": "standard",
+      "name": "Altyazı kartı",
+      "sort_field": "word",
+      "templates": [
+        {
+          "back": "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{meaning}}{{#pos}}<div class=\"fc-pron\">{{pos}}</div>{{/pos}}{{#translation}}<div class=\"fc-example\">{{translation}}</div>{{/translation}}{{#image}}<div>{{image}}</div>{{/image}}{{#audio}}<div>{{audio}}</div>{{/audio}}{{#source}}<div class=\"fc-source\">{{source}}</div>{{/source}}",
+          "card_type": "classic",
+          "front": "<div class=\"fc-word\">{{word}}</div>{{#sentence}}<div class=\"fc-example\">{{sentence}}</div>{{/sentence}}",
+          "key": "recognition",
+          "name": "Tanıma"
+        }
+      ]
+    }
+  ]
+}

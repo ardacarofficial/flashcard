@@ -121,6 +121,7 @@ fn field(name: &str, kind: FieldKind) -> FieldDef {
         unique: false,
         searchable: true,
         default_value: None,
+        role: None,
     }
 }
 
@@ -224,6 +225,13 @@ pub fn notetype_field_add_remove_keeps_cards_and_history(f: &Factory) {
     });
     let after_remove = t.ok::<NotesGet>(NoteRef { id: note.id });
     assert!(!after_remove.fields.contains_key("back"));
+    // v1.3: the forward card asked for `back`; with the field gone it asks for its answer side.
+    let nt3 = t.ok::<NotetypesGet>(NoteTypeRef { id: nt.id });
+    assert_eq!(nt3.templates[0].answer_field, None);
+    assert_eq!(
+        nt3.templates[1].answer_field.as_ref().map(|k| k.as_str()),
+        Some("front")
+    );
     // Same cards (ids, keys, states) and the same scheduling history.
     assert_eq!(after_remove.cards, cards_before);
     let sched_after = t.store.read().unwrap().get_card(card_id).unwrap().unwrap();
@@ -290,6 +298,7 @@ pub fn notetype_template_rules(f: &Factory) {
             front: "{{back}}".into(),
             back: "{{FrontSide}}<hr>{{front}}".into(),
             card_type: "classic".into(),
+            answer_field: None,
         });
         t.ok::<NotetypesUpdate>(UpdateNoteType {
             id: nt.id,
@@ -383,6 +392,7 @@ pub fn notetype_create_delete_restore(f: &Factory) {
                 front: "{{country}}".into(),
                 back: "{{FrontSide}}<hr>{{capital}}".into(),
                 card_type: "classic".into(),
+                answer_field: None,
             }],
             css: ".card { color: red }".into(),
             sort_field: FieldKey::new(""),
@@ -750,6 +760,7 @@ pub fn rendering_is_sanitized(f: &Factory) {
                         .into(),
                 back: "{{FrontSide}}<img src=x onerror=alert(4)>{{back}}".into(),
                 card_type: "classic".into(),
+                answer_field: None,
             }],
             css: "@import url(https://evil/x.css); .card { background: url(https://evil/p.png) }"
                 .into(),
@@ -1094,6 +1105,7 @@ pub fn a_new_card_type_is_just_an_engine(f: &Factory) {
             front: "{{a}}".into(),
             back: "{{b}}".into(),
             card_type: "reverse_words".into(),
+            answer_field: None,
         }],
         css: String::new(),
         sort_field: FieldKey::new(""),

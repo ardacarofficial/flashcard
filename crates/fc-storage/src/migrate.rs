@@ -65,6 +65,8 @@ pub const RELEASE_RANGES: &[(&str, std::ops::RangeInclusive<u32>)] = &[
     // v1.1 (the interface redesign) has no migration.
     ("v1.1", 1100..=1199),
     ("v1.2", 1200..=1299),
+    // v1.3 ("usable"): 1300–1329 vocabulary field roles (R2); the rest by worker brief.
+    ("v1.3", 1300..=1399),
 ];
 
 /// Lanes inside the v1.0 range (docs/07 §5, docs/10 §35): the v1.0 tracks ran in parallel, so

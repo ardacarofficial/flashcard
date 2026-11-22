@@ -107,6 +107,15 @@ fn from_input(input: NoteTypeInput, base: &NoteType) -> NoteType {
         f.name = f.name.trim().to_owned();
     }
     assign_missing_keys(&mut nt);
+    // v1.3: a template whose answer field was removed asks for its whole answer side again
+    // (the field's role went with it).
+    let keys: std::collections::BTreeSet<FieldKey> =
+        nt.fields.iter().map(|f| f.key.clone()).collect();
+    for t in &mut nt.templates {
+        if t.answer_field.as_ref().is_some_and(|k| !keys.contains(k)) {
+            t.answer_field = None;
+        }
+    }
     if nt.sort_field.0.trim().is_empty() || nt.field(&nt.sort_field).is_none() {
         if let Some(first) = nt.fields.first() {
             nt.sort_field = first.key.clone();

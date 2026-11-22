@@ -6,7 +6,8 @@
 use crate::i18n::{Locale, LocalizedText};
 use crate::id::NoteTypeId;
 use crate::notetype::{
-    builtin as classic_builtin, CardTemplate, FieldDef, FieldKey, FieldKind, NoteType, NoteTypeKind,
+    builtin as classic_builtin, CardTemplate, FieldDef, FieldKey, FieldKind, FieldRole, NoteType,
+    NoteTypeKind,
 };
 use crate::time::Timestamp;
 use uuid::Uuid;
@@ -176,6 +177,7 @@ struct F {
     kind: FieldKind,
     required: bool,
     unique: bool,
+    role: Option<FieldRole>,
 }
 
 const fn f(key: &'static str, en: &'static str, tr: &'static str, kind: FieldKind) -> F {
@@ -185,6 +187,7 @@ const fn f(key: &'static str, en: &'static str, tr: &'static str, kind: FieldKin
         kind,
         required: false,
         unique: false,
+        role: None,
     }
 }
 
@@ -198,6 +201,10 @@ impl F {
         self.required = true;
         self
     }
+    const fn role(mut self, role: FieldRole) -> Self {
+        self.role = Some(role);
+        self
+    }
 }
 
 struct T {
@@ -206,7 +213,23 @@ struct T {
     front: &'static str,
     back: &'static str,
     engine: &'static str,
+    /// Key of the field the card asks for ([`CardTemplate::answer_field`]).
+    answer: Option<&'static str>,
 }
+
+/// CSS of the labelled answer parts (v1.3) of the vocabulary built-ins: the meaning largest,
+/// the example set apart with its translation under it, the source smallest. Labels are
+/// empty `span.fc-part-label[data-fc-part]` elements the app fills with the localized label
+/// (`cards.part.<part>`); without the app they stay hidden.
+pub const PARTS_CSS: &str = ".fc-part { margin-top: 0.75em; }
+.fc-part-meaning, .fc-part-answer { font-size: 1.3em; font-weight: 600; line-height: 1.35; }
+.fc-part-label { display: block; margin-bottom: 0.15em; font-size: 0.7em; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.65; }
+.fc-part-label:empty { display: none; }
+.fc-part-example { padding-left: 0.75em; border-left: 2px solid rgba(128, 128, 128, 0.45); }
+.fc-example-translation { margin-top: 0.25em; opacity: 0.7; }
+.fc-part-source { font-size: 0.8em; opacity: 0.7; }
+.fc-part-source .fc-part-label { display: inline; margin-right: 0.4em; }
+";
 
 #[allow(clippy::too_many_arguments)]
 fn make(
@@ -236,6 +259,7 @@ fn make(
                     FieldKind::Image | FieldKind::Audio | FieldKind::Video
                 ),
                 default_value: None,
+                role: x.role,
             })
             .collect(),
         templates: templates
@@ -246,6 +270,7 @@ fn make(
                 front: t.front.to_owned(),
                 back: t.back.to_owned(),
                 card_type: t.engine.to_owned(),
+                answer_field: t.answer.map(FieldKey::new),
             })
             .collect(),
         css: css.to_owned(),
@@ -258,8 +283,10 @@ fn make(
     }
 }
 
-const FRONT: F = f("front", "Front", "Ön", FieldKind::RichText).uniq();
-const BACK: F = f("back", "Back", "Arka", FieldKind::RichText);
+const FRONT: F = f("front", "Front", "Ön", FieldKind::RichText)
+    .uniq()
+    .role(FieldRole::Term);
+const BACK: F = f("back", "Back", "Arka", FieldKind::RichText).role(FieldRole::Meaning);
 const FORWARD: T = T {
     key: "forward",
     name: LocalizedText {
@@ -269,6 +296,7 @@ const FORWARD: T = T {
     front: "{{front}}",
     back: "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{back}}",
     engine: engine::CLASSIC,
+    answer: Some("back"),
 };
 
 /// Classic (front/back). Same as [`classic_builtin::classic`] with localized names.
@@ -299,6 +327,7 @@ pub fn classic_reverse(now: Timestamp, locale: Locale) -> NoteType {
                 front: "{{back}}",
                 back: "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{front}}",
                 engine: engine::CLASSIC,
+                answer: Some("front"),
             },
         ],
         "",
@@ -333,6 +362,7 @@ pub fn optional_reverse(now: Timestamp, locale: Locale) -> NoteType {
                 front: "{{#add_reverse}}{{back}}{{/add_reverse}}",
                 back: "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{front}}",
                 engine: engine::CLASSIC,
+                answer: Some("front"),
             },
         ],
         "",
@@ -353,6 +383,7 @@ pub fn typing(now: Timestamp, locale: Locale) -> NoteType {
             front: "{{front}}\n\n{{type:back}}",
             back: "{{front}}\n<hr class=\"fc-answer\">\n{{type:back}}",
             engine: engine::TYPING,
+            answer: Some("back"),
         }],
         "",
     )
@@ -367,7 +398,7 @@ pub fn cloze(now: Timestamp, locale: Locale) -> NoteType {
         NoteTypeKind::Cloze,
         &[
             f("text", "Text", "Metin", FieldKind::RichText).uniq(),
-            f("extra", "Extra", "Ek bilgi", FieldKind::RichText),
+            f("extra", "Extra", "Ek bilgi", FieldKind::RichText).role(FieldRole::Note),
         ],
         &[T {
             key: "cloze",
@@ -375,6 +406,7 @@ pub fn cloze(now: Timestamp, locale: Locale) -> NoteType {
             front: "{{cloze:text}}",
             back: "{{cloze:text}}{{#extra}}\n<hr class=\"fc-answer\">\n{{extra}}{{/extra}}",
             engine: engine::CLOZE,
+            answer: None,
         }],
         "",
     )
@@ -389,15 +421,19 @@ pub fn multiple_choice(now: Timestamp, locale: Locale) -> NoteType {
         "multiple_choice",
         NoteTypeKind::Standard,
         &[
-            f("question", "Question", "Soru", FieldKind::RichText).uniq(),
-            f("answer", "Correct answer", "Doğru cevap", FieldKind::Text).req(),
+            f("question", "Question", "Soru", FieldKind::RichText)
+                .uniq()
+                .role(FieldRole::Term),
+            f("answer", "Correct answer", "Doğru cevap", FieldKind::Text)
+                .req()
+                .role(FieldRole::Meaning),
             f(
                 "distractors",
                 "Wrong answers (one per line)",
                 "Yanlış cevaplar (her satıra bir)",
                 FieldKind::Text,
             ),
-            f("extra", "Explanation", "Açıklama", FieldKind::RichText),
+            f("extra", "Explanation", "Açıklama", FieldKind::RichText).role(FieldRole::Note),
         ],
         &[T {
             key: "choice",
@@ -408,6 +444,7 @@ pub fn multiple_choice(now: Timestamp, locale: Locale) -> NoteType {
             front: "{{question}}",
             back: "{{question}}\n<hr class=\"fc-answer\">\n{{answer}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
             engine: engine::MULTIPLE_CHOICE,
+            answer: None,
         }],
         "",
     )
@@ -425,7 +462,7 @@ pub fn image_occlusion(now: Timestamp, locale: Locale) -> NoteType {
             f("header", "Title", "Başlık", FieldKind::RichText),
             f("image", "Image", "Resim", FieldKind::Image).req(),
             f("masks", "Masks", "Maskeler", FieldKind::Text).req(),
-            f("extra", "Extra", "Ek bilgi", FieldKind::RichText),
+            f("extra", "Extra", "Ek bilgi", FieldKind::RichText).role(FieldRole::Note),
         ],
         &[T {
             key: "occlusion",
@@ -436,6 +473,7 @@ pub fn image_occlusion(now: Timestamp, locale: Locale) -> NoteType {
             front: "{{header}}",
             back: "{{header}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
             engine: engine::IMAGE_OCCLUSION,
+            answer: None,
         }],
         "",
     );
@@ -454,8 +492,10 @@ pub fn image_quiz(now: Timestamp, locale: Locale) -> NoteType {
         NoteTypeKind::Standard,
         &[
             f("image", "Image", "Resim", FieldKind::Image).uniq(),
-            f("answer", "Answer", "Cevap", FieldKind::Text).req(),
-            f("extra", "Extra", "Ek bilgi", FieldKind::RichText),
+            f("answer", "Answer", "Cevap", FieldKind::Text)
+                .req()
+                .role(FieldRole::Term),
+            f("extra", "Extra", "Ek bilgi", FieldKind::RichText).role(FieldRole::Note),
         ],
         &[T {
             key: "forward",
@@ -463,6 +503,7 @@ pub fn image_quiz(now: Timestamp, locale: Locale) -> NoteType {
             front: "{{image}}\n\n{{type:answer}}",
             back: "{{image}}\n<hr class=\"fc-answer\">\n{{type:answer}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
             engine: engine::TYPING,
+            answer: Some("answer"),
         }],
         "",
     )
@@ -477,8 +518,10 @@ pub fn audio(now: Timestamp, locale: Locale) -> NoteType {
         NoteTypeKind::Standard,
         &[
             f("audio", "Audio", "Ses", FieldKind::Audio).uniq(),
-            f("answer", "Transcript", "Duyulan metin", FieldKind::Text).req(),
-            f("extra", "Extra", "Ek bilgi", FieldKind::RichText),
+            f("answer", "Transcript", "Duyulan metin", FieldKind::Text)
+                .req()
+                .role(FieldRole::Term),
+            f("extra", "Extra", "Ek bilgi", FieldKind::RichText).role(FieldRole::Note),
         ],
         &[T {
             key: "forward",
@@ -486,13 +529,60 @@ pub fn audio(now: Timestamp, locale: Locale) -> NoteType {
             front: "{{audio}}\n\n{{type:answer}}",
             back: "{{audio}}\n<hr class=\"fc-answer\">\n{{type:answer}}{{#extra}}<div class=\"fc-extra\">{{extra}}</div>{{/extra}}",
             engine: engine::TYPING,
+            answer: Some("answer"),
         }],
         "",
     )
 }
 
+/// The labelled example part of a back (v1.3): `field` (a sentence containing the term),
+/// with `translation` under it when given.
+macro_rules! example_part {
+    ($field:literal) => {
+        concat!(
+            "{{#",
+            $field,
+            "}}<div class=\"fc-part fc-part-example\">",
+            "<span class=\"fc-part-label\" data-fc-part=\"example\"></span>",
+            "<div class=\"fc-example-text\">{{",
+            $field,
+            "}}</div></div>{{/",
+            $field,
+            "}}"
+        )
+    };
+    ($field:literal, $translation:literal) => {
+        concat!(
+            "{{#",
+            $field,
+            "}}<div class=\"fc-part fc-part-example\">",
+            "<span class=\"fc-part-label\" data-fc-part=\"example\"></span>",
+            "<div class=\"fc-example-text\">{{",
+            $field,
+            "}}</div>",
+            "{{#",
+            $translation,
+            "}}<div class=\"fc-example-translation\">{{",
+            $translation,
+            "}}</div>{{/",
+            $translation,
+            "}}</div>{{/",
+            $field,
+            "}}"
+        )
+    };
+}
+
+/// The labelled source part of a back (v1.3), smallest: the `source` field.
+macro_rules! source_part {
+    () => {
+        "{{#source}}<div class=\"fc-part fc-part-source\"><span class=\"fc-part-label\" data-fc-part=\"source\"></span>{{source}}</div>{{/source}}"
+    };
+}
+
 /// Vocabulary card: word, meaning, pronunciation, example sentence, audio, image; a
 /// recognition and a production card. Pairs well with a "level" classification (CEFR).
+/// Backs (v1.3): the answer largest, then the labelled example.
 pub fn vocabulary(now: Timestamp, locale: Locale) -> NoteType {
     make(
         now,
@@ -500,10 +590,15 @@ pub fn vocabulary(now: Timestamp, locale: Locale) -> NoteType {
         "vocabulary",
         NoteTypeKind::Standard,
         &[
-            f("word", "Word", "Kelime", FieldKind::RichText).uniq(),
-            f("meaning", "Meaning", "Anlam", FieldKind::RichText).req(),
+            f("word", "Word", "Kelime", FieldKind::RichText)
+                .uniq()
+                .role(FieldRole::Term),
+            f("meaning", "Meaning", "Anlam", FieldKind::RichText)
+                .req()
+                .role(FieldRole::Meaning),
             f("pronunciation", "Pronunciation", "Telaffuz", FieldKind::Text),
-            f("example", "Example sentence", "Örnek cümle", FieldKind::RichText),
+            f("example", "Example sentence", "Örnek cümle", FieldKind::RichText)
+                .role(FieldRole::Example),
             f("audio", "Audio", "Ses", FieldKind::Audio),
             f("image", "Image", "Resim", FieldKind::Image),
         ],
@@ -515,8 +610,14 @@ pub fn vocabulary(now: Timestamp, locale: Locale) -> NoteType {
                     tr: "Tanıma",
                 },
                 front: "{{word}}{{#pronunciation}}<div class=\"fc-pron\">{{pronunciation}}</div>{{/pronunciation}}{{#audio}}<div>{{audio}}</div>{{/audio}}",
-                back: "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{meaning}}{{#image}}<div>{{image}}</div>{{/image}}{{#example}}<div class=\"fc-example\">{{example}}</div>{{/example}}",
+                back: concat!(
+                    "{{FrontSide}}\n<hr class=\"fc-answer\">\n",
+                    "<div class=\"fc-part fc-part-meaning\">{{meaning}}</div>",
+                    "{{#image}}<div class=\"fc-media\">{{image}}</div>{{/image}}",
+                    example_part!("example")
+                ),
                 engine: engine::CLASSIC,
+                answer: Some("meaning"),
             },
             T {
                 key: "production",
@@ -525,17 +626,25 @@ pub fn vocabulary(now: Timestamp, locale: Locale) -> NoteType {
                     tr: "Üretme",
                 },
                 front: "{{meaning}}{{#image}}<div>{{image}}</div>{{/image}}",
-                back: "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{word}}{{#pronunciation}}<div class=\"fc-pron\">{{pronunciation}}</div>{{/pronunciation}}{{#audio}}<div>{{audio}}</div>{{/audio}}{{#example}}<div class=\"fc-example\">{{example}}</div>{{/example}}",
+                back: concat!(
+                    "{{FrontSide}}\n<hr class=\"fc-answer\">\n",
+                    "<div class=\"fc-part fc-part-answer\">{{word}}</div>",
+                    "{{#pronunciation}}<div class=\"fc-pron\">{{pronunciation}}</div>{{/pronunciation}}",
+                    "{{#audio}}<div class=\"fc-media\">{{audio}}</div>{{/audio}}",
+                    example_part!("example")
+                ),
                 engine: engine::CLASSIC,
+                answer: Some("word"),
             },
         ],
-        "",
+        PARTS_CSS,
     )
 }
 
 /// Sentence card (v0.10 sentence mining, docs/02 §25): a sentence from a text or subtitle
 /// with its target word in bold, the translation, the word and its meaning, where it came
-/// from (title + timestamp) and, from a video, the audio clip and a screenshot.
+/// from (title + timestamp) and, from a video, the audio clip and a screenshot. The card asks
+/// for the sentence's translation.
 pub fn sentence(now: Timestamp, locale: Locale) -> NoteType {
     make(
         now,
@@ -543,11 +652,14 @@ pub fn sentence(now: Timestamp, locale: Locale) -> NoteType {
         "sentence",
         NoteTypeKind::Standard,
         &[
-            f("sentence", "Sentence", "Cümle", FieldKind::RichText).uniq(),
-            f("translation", "Translation", "Çeviri", FieldKind::RichText),
-            f("word", "Word", "Kelime", FieldKind::RichText),
-            f("meaning", "Meaning", "Anlam", FieldKind::RichText),
-            f("source", "Source", "Kaynak", FieldKind::Text),
+            f("sentence", "Sentence", "Cümle", FieldKind::RichText)
+                .uniq()
+                .role(FieldRole::Example),
+            f("translation", "Translation", "Çeviri", FieldKind::RichText)
+                .role(FieldRole::ExampleTranslation),
+            f("word", "Word", "Kelime", FieldKind::RichText).role(FieldRole::Term),
+            f("meaning", "Meaning", "Anlam", FieldKind::RichText).role(FieldRole::Meaning),
+            f("source", "Source", "Kaynak", FieldKind::Text).role(FieldRole::Source),
             f("audio", "Audio", "Ses", FieldKind::Audio),
             f("image", "Image", "Resim", FieldKind::Image),
         ],
@@ -555,18 +667,25 @@ pub fn sentence(now: Timestamp, locale: Locale) -> NoteType {
             key: "forward",
             name: FORWARD.name,
             front: "{{#image}}<div>{{image}}</div>{{/image}}{{sentence}}{{#audio}}<div>{{audio}}</div>{{/audio}}",
-            back: "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{translation}}{{#word}}<div class=\"fc-example\"><b>{{word}}</b>{{#meaning}}: {{meaning}}{{/meaning}}</div>{{/word}}{{#source}}<div class=\"fc-source\">{{source}}</div>{{/source}}",
+            back: concat!(
+                "{{FrontSide}}\n<hr class=\"fc-answer\">\n",
+                "{{#translation}}<div class=\"fc-part fc-part-meaning\">{{translation}}</div>{{/translation}}",
+                "{{#word}}<div class=\"fc-part fc-part-word\"><b>{{word}}</b>{{#meaning}}: {{meaning}}{{/meaning}}</div>{{/word}}",
+                source_part!()
+            ),
             engine: engine::CLASSIC,
+            answer: Some("translation"),
         }],
-        "",
+        PARTS_CSS,
     )
 }
 
 /// Subtitle card (v1.2, docs/06 §5.1): a word picked in a video subtitle by the Subtitle
-/// browser extension. The front shows the word in its line (the term in bold); the back adds
-/// the meaning, part of speech, the line's translation, the screenshot, the audio clip and
-/// where it came from (title · time, a link to that moment). No field is unique: the same
-/// word from another line is another card (the extension's own dedup key decides).
+/// browser extension. The front shows the word in its line (the term in bold); the back
+/// (v1.3) shows the word, then three labelled parts: the meaning (with the part of speech),
+/// the example — the line and its translation — and where it came from (title · time, a link
+/// to that moment), with the screenshot and the audio clip between. No field is unique: the
+/// same word from another line is another card (the extension's own dedup key decides).
 pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
     make(
         now,
@@ -574,15 +693,18 @@ pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
         SUBTITLE,
         NoteTypeKind::Standard,
         &[
-            f("word", "Word", "Kelime", FieldKind::RichText).req(),
-            f("surface", "As it appeared", "Geçtiği hâli", FieldKind::Text),
+            f("word", "Word", "Kelime", FieldKind::RichText)
+                .req()
+                .role(FieldRole::Term),
+            f("surface", "As it appeared", "Geçtiği hâli", FieldKind::Text).role(FieldRole::Surface),
             f("pos", "Part of speech", "Sözcük türü", FieldKind::Text),
-            f("meaning", "Meaning", "Anlam", FieldKind::RichText),
-            f("sentence", "Sentence", "Cümle", FieldKind::RichText),
-            f("translation", "Translation", "Çeviri", FieldKind::RichText),
+            f("meaning", "Meaning", "Anlam", FieldKind::RichText).role(FieldRole::Meaning),
+            f("sentence", "Sentence", "Cümle", FieldKind::RichText).role(FieldRole::Example),
+            f("translation", "Translation", "Çeviri", FieldKind::RichText)
+                .role(FieldRole::ExampleTranslation),
             f("image", "Screenshot", "Ekran görüntüsü", FieldKind::Image),
             f("audio", "Audio", "Ses", FieldKind::Audio),
-            f("source", "Source", "Kaynak", FieldKind::RichText),
+            f("source", "Source", "Kaynak", FieldKind::RichText).role(FieldRole::Source),
         ],
         &[T {
             key: "recognition",
@@ -591,10 +713,19 @@ pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
                 tr: "Tanıma",
             },
             front: "<div class=\"fc-word\">{{word}}</div>{{#sentence}}<div class=\"fc-example\">{{sentence}}</div>{{/sentence}}",
-            back: "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{meaning}}{{#pos}}<div class=\"fc-pron\">{{pos}}</div>{{/pos}}{{#translation}}<div class=\"fc-example\">{{translation}}</div>{{/translation}}{{#image}}<div>{{image}}</div>{{/image}}{{#audio}}<div>{{audio}}</div>{{/audio}}{{#source}}<div class=\"fc-source\">{{source}}</div>{{/source}}",
+            back: concat!(
+                "<div class=\"fc-word\">{{word}}</div>\n<hr class=\"fc-answer\">\n",
+                "<div class=\"fc-part fc-part-meaning\">{{meaning}}</div>",
+                "{{#pos}}<div class=\"fc-pron\">{{pos}}</div>{{/pos}}",
+                example_part!("sentence", "translation"),
+                "{{#image}}<div class=\"fc-media\">{{image}}</div>{{/image}}",
+                "{{#audio}}<div class=\"fc-media\">{{audio}}</div>{{/audio}}",
+                source_part!()
+            ),
             engine: engine::CLASSIC,
+            answer: Some("meaning"),
         }],
-        "",
+        PARTS_CSS,
     )
 }
 
@@ -626,5 +757,62 @@ mod tests {
             .all(|f| !f.unique));
         assert_eq!(find("cloze").map(|b| b.id), Some(id(5)));
         assert_eq!(classic(Timestamp(1), Locale::Tr).name, "Klasik");
+    }
+
+    #[test]
+    fn vocabulary_builtins_have_roles_answer_fields_and_labelled_parts() {
+        let st = subtitle(Timestamp(1), Locale::Tr);
+        let role = |nt: &NoteType, r| nt.field_with_role(r).map(|f| f.key.as_str().to_owned());
+        assert_eq!(role(&st, FieldRole::Term).as_deref(), Some("word"));
+        assert_eq!(role(&st, FieldRole::Surface).as_deref(), Some("surface"));
+        assert_eq!(role(&st, FieldRole::Meaning).as_deref(), Some("meaning"));
+        assert_eq!(role(&st, FieldRole::Example).as_deref(), Some("sentence"));
+        assert_eq!(
+            role(&st, FieldRole::ExampleTranslation).as_deref(),
+            Some("translation")
+        );
+        assert_eq!(role(&st, FieldRole::Source).as_deref(), Some("source"));
+        assert_eq!(
+            st.templates[0].answer_field.as_ref().map(FieldKey::as_str),
+            Some("meaning")
+        );
+        // Meaning, then the example (line + translation), then the source.
+        let back = &st.templates[0].back;
+        let at = |needle: &str| back.find(needle).unwrap_or_else(|| panic!("{needle}"));
+        assert!(at("fc-part-meaning") < at("fc-part-example"));
+        assert!(at("fc-part-example") < at("fc-example-translation"));
+        assert!(at("fc-example-translation") < at("fc-part-source"));
+        assert!(back.contains("data-fc-part=\"example\""));
+        assert!(back.contains("data-fc-part=\"source\""));
+        // The line is on the front already; the back does not repeat the whole front.
+        assert!(!back.contains("{{FrontSide}}"));
+        assert!(st.css.contains(".fc-part-example"));
+
+        let v = vocabulary(Timestamp(1), Locale::En);
+        let keys: Vec<_> = v
+            .templates
+            .iter()
+            .map(|t| t.answer_field.as_ref().map(|k| k.as_str().to_owned()))
+            .collect();
+        assert_eq!(keys, [Some("meaning".to_owned()), Some("word".to_owned())]);
+        assert!(v.templates[0].back.contains("fc-part-meaning"));
+        assert!(v.templates[1].back.contains("fc-part-answer"));
+
+        // Reverse cards ask for the term; cloze / choice / occlusion engines decide alone.
+        let r = classic_reverse(Timestamp(1), Locale::En);
+        assert_eq!(r.templates[1].answer_field, Some(FieldKey::new("front")));
+        for key in ["cloze", "multiple_choice", "image_occlusion"] {
+            let nt = find(key).unwrap().build(Timestamp(1), Locale::En);
+            assert!(
+                nt.templates.iter().all(|t| t.answer_field.is_none()),
+                "{key}"
+            );
+        }
+        // Every built-in names an existing answer field (validate_notetype checks it) and no
+        // role twice; classic is the same in both constructors.
+        assert_eq!(
+            classic(Timestamp(1), Locale::En).templates[0].answer_field,
+            Some(FieldKey::new("back"))
+        );
     }
 }

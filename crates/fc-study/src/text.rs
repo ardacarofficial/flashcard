@@ -42,7 +42,12 @@ pub fn html_to_text(html: &str) -> String {
 /// Decodes one entity at the start of `s` (which starts with `&`). Returns the text and the
 /// bytes consumed; an unknown entity is kept literally.
 fn decode_entity(s: &str) -> (String, usize) {
-    let Some(end) = s[..s.len().min(12)].find(';') else {
+    // Look at most 12 bytes ahead, cut on a character boundary ("& çok" must not panic).
+    let mut cut = s.len().min(12);
+    while !s.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    let Some(end) = s[..cut].find(';') else {
         return ("&".to_owned(), 1);
     };
     let body = &s[1..end];
@@ -82,6 +87,14 @@ fn tidy(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A bare `&` followed by multi-byte letters within the entity look-ahead (v1.3 fix: it
+    /// panicked on a byte slice inside a character).
+    #[test]
+    fn a_bare_ampersand_before_turkish_letters_is_text() {
+        assert_eq!(html_to_text("Tom & ğğğğğğ"), "Tom & ğğğğğğ");
+        assert_eq!(html_to_text("a&\u{E000}b"), "a&\u{E000}b");
+    }
 
     #[test]
     fn html_becomes_text() {

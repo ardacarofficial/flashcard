@@ -183,6 +183,7 @@ mod tests {
             unique: false,
             searchable: true,
             default_value: None,
+            role: None,
         });
         nt.templates.push(nt.templates[0].clone());
         nt.templates[1].key = String::new();

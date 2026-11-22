@@ -430,7 +430,7 @@ impl Writer {
                 return Ok(());
             }
         };
-        // Fields by key or (case-insensitive) name.
+        // Fields by key, (case-insensitive) name or role.
         let mut values = FieldValues::new();
         for (k, v) in &row.fields {
             let wanted = k.to_lowercase();
@@ -440,6 +440,10 @@ impl Writer {
                     nt.fields.iter().find(|f| {
                         f.key.0.to_lowercase() == wanted || f.name.to_lowercase() == wanted
                     })
+                })
+                // v1.3: a role name (`example`, `meaning`…) names the field with that role.
+                .or_else(|| {
+                    fc_core::notetype::FieldRole::parse(k).and_then(|r| nt.field_with_role(r))
                 })
                 .map(|f| f.key.clone());
             match resolved {

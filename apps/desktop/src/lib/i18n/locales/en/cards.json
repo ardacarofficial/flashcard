@@ -54,7 +54,11 @@
     "user_note": "Card note",
     "user_note_placeholder": "Only for this card…",
     "backlinks": "Linked from",
-    "no_backlinks": "No other note links here."
+    "no_backlinks": "No other note links here.",
+    "part": {
+      "example": "Example",
+      "source": "Source"
+    }
   },
   "flags": {
     "heading": "Flags",

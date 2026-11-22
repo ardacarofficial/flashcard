@@ -79,6 +79,11 @@ pub(super) fn start(req: StartImport, ctx: &mut CommandCtx<'_>) -> AppResult<Com
                     return Err(bad("unknown field"));
                 }
             }
+            ColumnTarget::Role { role } => {
+                if nt.field_with_role(*role).is_none() {
+                    return Err(bad("unknown field role"));
+                }
+            }
             ColumnTarget::Attribute { attr_id } if attrs_on => {
                 let def = ctx.reads().get_attribute_def(*attr_id)?;
                 if def.is_none_or(|d| d.deleted_at.is_some()) {
@@ -114,16 +119,12 @@ impl ImportJob {
         let notetype_id = req.notetype_id.unwrap_or(CLASSIC_ID);
         Ok(match format {
             ImportFormat::Text | ImportFormat::Quizlet => {
-                let keys: Vec<String> = {
+                let nt = {
                     let tx = ctx.read()?;
                     require_notetype(&*tx, notetype_id)?
-                        .fields
-                        .iter()
-                        .map(|f| f.key.0.clone())
-                        .collect()
                 };
                 let text = decode_text(&bytes);
-                Staged::Rows(rows::from_text(req, &text, format, notetype_id, &keys)?)
+                Staged::Rows(rows::from_text(req, &text, format, &nt)?)
             }
             ImportFormat::Json => {
                 Staged::Rows(rows::from_json(req, &decode_text(&bytes), notetype_id)?)
