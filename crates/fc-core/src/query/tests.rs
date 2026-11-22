@@ -539,6 +539,12 @@ fn scheduling_predicates() {
         ("is:due", [false, true]),
         ("is:suspended", [true, false]),
         ("is:buried", [true, false]),
+        // v1.3 aliases in the app's words (set aside / leave for tomorrow).
+        ("is:aside", [true, false]),
+        ("is:kenarda", [true, false]),
+        ("is:tomorrow", [true, false]),
+        ("is:yarına", [true, false]),
+        ("is:YARINA", [true, false]),
         ("is:flagged", [false, true]),
         ("flag:orange", [false, true]),
         ("flag:turuncu", [false, true]),

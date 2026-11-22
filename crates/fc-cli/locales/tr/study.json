@@ -3,8 +3,8 @@
   "oplog.summary.study.answer": "Kart puanlandı: {rating}",
   "oplog.summary.study.hint": "İpucu gösterildi",
   "oplog.summary.study.end": "Çalışma oturumu bitirildi",
-  "oplog.summary.study.suspend": "{count} kart askıya alındı/açıldı",
-  "oplog.summary.study.bury": "{count} kart gömüldü/çıkarıldı",
+  "oplog.summary.study.suspend": "{count} kart kenara kondu / geri getirildi",
+  "oplog.summary.study.bury": "{count} kart yarına bırakıldı / geri getirildi",
   "oplog.summary.study.postpone": "{count} kart ertelendi",
   "oplog.summary.study.restore": "{count} kartın çalışma durumu geri yüklendi"
 }

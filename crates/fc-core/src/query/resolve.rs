@@ -303,8 +303,9 @@ impl<'a> Resolver<'a> {
                     "review" => Pred::State(CardState::Review),
                     "relearn" | "relearning" => Pred::State(CardState::Relearning),
                     "due" => Pred::DueNow,
-                    "suspended" => Pred::Suspended,
-                    "buried" => Pred::Buried,
+                    // v1.3: the app's words for them work too (folded: `yarına` → `yarina`).
+                    "suspended" | "aside" | "kenarda" => Pred::Suspended,
+                    "buried" | "tomorrow" | "yarina" => Pred::Buried,
                     "flagged" => Pred::Flagged,
                     _ => {
                         return Err(err(

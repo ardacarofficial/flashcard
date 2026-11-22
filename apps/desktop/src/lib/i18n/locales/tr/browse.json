@@ -146,7 +146,7 @@
       "tag_q": "tag:fiil",
       "tag_d": "Etiketli kartlar",
       "is_q": "is:due",
-      "is_d": "Bugün sırası gelenler; ayrıca is:new, is:suspended, is:flagged",
+      "is_d": "Bugün sırası gelenler; ayrıca is:new, is:kenarda (kenara konanlar), is:yarına (yarına bırakılanlar), is:flagged",
       "level_q": "level>=B1",
       "level_d": "Bir sınıflandırma değeri ve üstü",
       "added_q": "added:7",

@@ -284,7 +284,7 @@
         "add_tags": "Etiket ekle",
         "remove_tags": "Etiket kaldır",
         "set_suspended": "Kenara koy / kenardan çıkar",
-        "set_buried": "Göm / çıkar",
+        "set_buried": "Yarına bırak / geri getir",
         "set_flag": "Bayrak koy / kaldır",
         "move_cards": "Desteye taşı",
         "set_attribute": "Sınıflandırma ata",

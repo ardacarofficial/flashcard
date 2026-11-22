@@ -146,7 +146,7 @@
       "tag_q": "tag:verb",
       "tag_d": "Cards with a tag",
       "is_q": "is:due",
-      "is_d": "Due today; also is:new, is:suspended, is:flagged",
+      "is_d": "Due today; also is:new, is:aside (set aside), is:tomorrow (left for tomorrow), is:flagged",
       "level_q": "level>=B1",
       "level_d": "A classification at or above a value",
       "added_q": "added:7",
