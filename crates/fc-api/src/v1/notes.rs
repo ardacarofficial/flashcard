@@ -184,10 +184,18 @@ pub struct NoteTerm {
     pub flags: u32,
     /// Least advanced mastery among its cards.
     pub mastery: Mastery,
-    /// First field of the note type.
+    /// The term column: the field with the `term` role (v1.3), else the first field.
     pub front: TermField,
-    /// Second field (`null` for a one-field note type).
+    /// The definition column: the field with the `meaning` role (v1.3), else the second field
+    /// (`null` for a one-field note type).
     pub back: Option<TermField>,
+    /// Key of the field shown (and edited) as the term (`front.key`).
+    pub term_field: String,
+    /// Key of the field shown (and edited) as the definition (`back.key`; `null` without one).
+    pub definition_field: Option<String>,
+    /// The note type has no `term` + `meaning` roles, so the two columns are only its first
+    /// two fields: a guess. The UI opens the full note editor instead of editing inline.
+    pub ambiguous: bool,
     /// Its choice classification values (in classification order).
     pub chips: Vec<TermChip>,
 }

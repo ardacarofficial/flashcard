@@ -563,13 +563,6 @@ fn drop_dead_ahead(v: View<'_>, session: &mut Session, now: Timestamp) -> AppRes
     Ok(())
 }
 
-/// Text a hint is computed from: the card type's expected typed answer, else the text of
-/// the answer part.
-fn expected_answer(v: View<'_>, card: CardId) -> AppResult<String> {
-    let card = require_live_card(v.reads, card)?;
-    Ok(render_for_study(v, &card)?.expected)
-}
-
 pub(super) fn hint(req: HintRequest, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<HintDto>> {
     let mut session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
     session.require_open()?;
@@ -581,8 +574,9 @@ pub(super) fn hint(req: HintRequest, ctx: &mut CommandCtx<'_>) -> AppResult<Comm
     };
     let kind = HintKind::parse(&setting_str(ctx.reads(), &SettingScope::App, HINT_STRATEGY)?)
         .unwrap_or(HintKind::FirstLetters);
-    let text = fc_study::hint::hint(kind, &expected_answer(View::cmd(ctx), req.card_id)?, used + 1);
-    let level = if text.is_some() {
+    // v1.3: the context sentence first when the note has one (engine::study_hint).
+    let hint = super::engine::study_hint(View::cmd(ctx), req.card_id, kind, used + 1)?;
+    let level = if hint.is_some() {
         session.state.hint_card = Some(req.card_id);
         session.state.hints = used + 1;
         session.save(ctx.tx)?;
@@ -591,7 +585,7 @@ pub(super) fn hint(req: HintRequest, ctx: &mut CommandCtx<'_>) -> AppResult<Comm
         used
     };
     Ok(CommandOutcome {
-        response: HintDto { level, text },
+        response: super::engine::hint_dto(level, hint),
         inverse: Vec::new(),
         summary: summary::<StudyHint>(),
         events: Vec::new(),

@@ -264,6 +264,17 @@ pub struct HintRequest {
     pub card_id: CardId,
 }
 
+/// What a hint shows (v1.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum HintKind {
+    /// The note's example sentence with the term blanked (`I ___ home.`): the first level
+    /// when the note has a usable example that the question does not show already.
+    Context,
+    /// Letters of the expected answer (the configured hint strategy).
+    Letters,
+}
+
 /// Response of `study.hint`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct HintDto {
@@ -271,6 +282,11 @@ pub struct HintDto {
     pub level: u32,
     /// Hint text (`null` = no further hint; the counter does not move).
     pub text: Option<String>,
+    /// What this hint shows (v1.3; `letters` when there is no further hint).
+    pub kind: HintKind,
+    /// The hint as safe HTML (the blank of a context hint is `<span class="fc-blank">`);
+    /// `null` with `text`.
+    pub html: Option<String>,
 }
 
 /// `study.check_answer`.

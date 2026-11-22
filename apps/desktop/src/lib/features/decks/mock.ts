@@ -68,6 +68,9 @@ export default {
       mastery: LEVELS[(start + i) % LEVELS.length]!,
       front: { key: 'front', value: n.fields.front ?? '', text: n.fields.front ?? '' },
       back: { key: 'back', value: n.fields.back ?? '', text: n.fields.back ?? '' },
+      term_field: 'front',
+      definition_field: 'back',
+      ambiguous: false,
       chips: n.attributes.flatMap((a) => {
         const def = attrs.find((d) => d.id === a.attr_id);
         const v = a.value;

@@ -174,8 +174,12 @@ pub(super) fn classified_items_are_accepted_as_one_undo_step(f: Factory) {
     let note = t.ok::<NotesGet>(NoteRef {
         id: r.accepted[0].note_id,
     });
-    assert_eq!(note.fields["front"], "badger");
-    assert_eq!(note.fields["back"], "badger (tr)");
+    // v1.3 (deliberate change): an item with a captured sentence and no note type becomes a
+    // Subtitle card, which keeps the sentence (Classic dropped it).
+    assert_eq!(note.notetype_id, fc_core::content::builtin::find("subtitle").unwrap().id);
+    assert_eq!(note.fields["word"], "badger");
+    assert_eq!(note.fields["meaning"], "badger (tr)");
+    assert_eq!(note.fields["sentence"], "The <b>badger</b> dug a hole.");
     assert_eq!(note.home_deck_id, verbs);
     assert_eq!(total(&t, "seviye:B1"), 1);
     assert_eq!(total(&t, "seviye:A2"), 1);

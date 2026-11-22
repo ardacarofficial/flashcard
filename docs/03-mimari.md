@@ -100,6 +100,26 @@ Tüm kimlikler **UUIDv7** (zamana göre sıralanabilir). Tüm tablolarda `create
 | `ai_usage` | id, provider, model, feature, input_tokens, output_tokens, cost_estimate, created_at | Harcama takibi |
 | `notes_fts` | FTS5 sanal tablo | Tam metin arama |
 
+### 4.1 Alan rolleri ve cevap alanı (v1.3)
+
+Kelime kartı gibi davranması gereken notlar için not tipinde iki **isteğe bağlı** üst veri vardır (JSON'da yoksa eski kayıt aynen yüklenir; `fc-core::notetype`):
+
+- **`FieldDef.role`** — alanın *ne içerdiği*: `term` (sözlük hâli: *go*), `surface` (görüldüğü hâli: *went*), `meaning`, `example` (terimi içeren cümle), `example_translation`, `source`, `note`. Bir rol bir not tipinde en fazla bir alanda olur; alan adından **asla** tahmin edilmez.
+- **`CardTemplate.answer_field`** — bu kartın *neyi sorduğu* (alan anahtarı). İleri kelime kartı `meaning`, ters kart `term` sorar.
+
+Kullananlar (hepsi Rust'ta):
+
+| Yapı taşı | Davranış |
+|---|---|
+| Yazılı cevap, Test, Öğren, Eşleştir (`study::engine::render_for_study`) | Kendi kendine notlanan kartta beklenen cevap `answer_field` alanının metnidir; yoksa arka yüzün cevap kısmı (eski davranış). Yazma, boşluk doldurma ve çoktan seçmeli motorlar kendi cevaplarını belirlemeye devam eder. |
+| İpucu (`fc-study::hint`) | Notun `example` alanında terim geçiyorsa 1. seviye, o geçişin `___` ile gizlendiği cümledir (`HintDto.kind = context`); sonraki seviyeler harf ipuçlarıdır. Geçiş: önce kalın işaretli kısım (yakalamanın UTF-16 konumundan), yoksa `surface` sonra `term` için tam kelime, büyük/küçük harf duyarsız eşleşme. Cümle soru yüzünde zaten görünüyorsa ya da gizlenmiş cümlede cevap/terim başka yerde de geçiyorsa bağlam ipucu verilmez. |
+| Deste sayfası terim listesi (`notes.terms`) | Sütunlar `term` ve `meaning` alanlarıdır; satırda `term_field` / `definition_field` döner ve satır içi düzenleme bunlara yazar. İkisi birden olmayan tiplerde ilk iki alan gösterilir ve `ambiguous: true` gelir: arayüz tahmin etmek yerine tam editörü açar. |
+| Gelen kutusu kabulü (`inbox.accept`) | `front`/`back` kısayolu `term`/`meaning` alanlarına gider; yakalanan cümle `example`, sayfa `source` alanına yazılır (boşsa). Not tipi seçilmemiş ve cümle taşıyan öğe, cümleyi tutabilen yerleşik Altyazı kartı olur. |
+| İçe aktarma (`io.import.*`) | Sütun hedefi `{kind: "role", role}` olabilir; rolü olan tiplerde varsayılan sıra term, meaning, example… olur; başlıklar ("sentence", "örnek", "definition"…) role göre eşlenir; JSON alan adı olarak rol adı kabul edilir. |
+| Yerleşik arka yüzler | Kelime/Cümle/Altyazı kartlarında üç etiketli parça: anlam (`.fc-part-meaning`, en büyük), örnek + çevirisi (`.fc-part-example`), kaynak (`.fc-part-source`, en küçük). Etiketler `span.fc-part-label[data-fc-part]` boş gelir, arayüz `cards.part.*` ile doldurur. Kullanıcı şablonları değiştirilmez. |
+
+Var olan koleksiyonlar **migration 1300** ile güncellenir: yerleşik bir not tipinin alanı, yerleşik anahtar ve türünü koruyorsa rolünü alır; şablon ön/arka/kart türü v1.2'de gönderildiği gibiyse yeni arka yüzü ve `answer_field`'ı alır; CSS hâlâ boşsa parça CSS'i eklenir. Düzenlenmiş her şey (şablon metni, alan türü, CSS) olduğu gibi kalır; adlar karşılaştırılmaz. Tekrar çalıştırmak hiçbir şeyi değiştirmez.
+
 ## 5. Olay kaydı ve geri al (hibrit yaklaşım)
 
 Saf "event sourcing" (durumu her seferinde olaylardan yeniden üretmek) yerine **hibrit** bir model kullanılır: güncel durum normal tablolarda tutulur, her değişiklik **aynı transaction** içinde değişmez kayıtlara yazılır. Bu hem hızlı okuma hem tam geçmiş sağlar.

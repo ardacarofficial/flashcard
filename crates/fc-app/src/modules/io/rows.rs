@@ -5,6 +5,7 @@ use super::{interop_err, text_options};
 use crate::error::AppResult;
 use fc_api::v1::io::{ColumnTarget, DuplicatePolicy, ImportFormat, StartImport};
 use fc_core::attribute::{AttributeDef, AttributeKind, AttributeValue};
+use fc_core::notetype::{FieldRole, NoteType};
 use fc_core::{AttributeDefId, DeckId, NoteTypeId};
 use fc_interop::json;
 use fc_interop::text::{detect, parse_delimited, TextOptions};
@@ -69,6 +70,35 @@ pub(crate) fn effective_options(
     }
 }
 
+/// Field keys in the order columns map to them by default: a note type with a `term` field
+/// (v1.3) maps by role — term, meaning, example, its translation, surface, source, note —
+/// then its other fields in order (`word<TAB>meaning<TAB>sentence` lands in the right
+/// fields); any other note type maps its fields in order.
+pub(crate) fn mapping_order(nt: &NoteType) -> Vec<String> {
+    let keys = nt.fields.iter().map(|f| f.key.0.clone());
+    if nt.field_with_role(FieldRole::Term).is_none() {
+        return keys.collect();
+    }
+    let mut out: Vec<String> = FieldRole::ALL
+        .iter()
+        .filter_map(|r| nt.field_with_role(*r).map(|f| f.key.0.clone()))
+        .collect();
+    for k in keys {
+        if !out.contains(&k) {
+            out.push(k);
+        }
+    }
+    out
+}
+
+/// What a row field names for a [`ColumnTarget::Role`] column: the key of the note type's
+/// field with that role, else the role id (`io.import.start` refuses such a mapping; a row
+/// would report it as an unknown field).
+pub(crate) fn role_target(nt: &NoteType, role: FieldRole) -> String {
+    nt.field_with_role(role)
+        .map_or_else(|| role.id().to_owned(), |f| f.key.0.clone())
+}
+
 /// Default mapping: the note type's fields in order, then nothing.
 pub(crate) fn default_columns(field_keys: &[String], columns: usize) -> Vec<ColumnTarget> {
     (0..columns)
@@ -90,9 +120,9 @@ pub(crate) fn from_text(
     req: &StartImport,
     text: &str,
     format: ImportFormat,
-    notetype_id: NoteTypeId,
-    field_keys: &[String],
+    nt: &NoteType,
 ) -> AppResult<RowsImport> {
+    let field_keys = mapping_order(nt);
     let given = req.text_options.as_ref().map(text_options);
     let (opts, _) = effective_options(given, text, format);
     let mut records = parse_delimited(text, &opts).map_err(interop_err)?;
@@ -105,7 +135,7 @@ pub(crate) fn from_text(
     let width = records.iter().map(Vec::len).max().unwrap_or(0);
     let columns = match &req.columns {
         Some(c) if !c.is_empty() => c.clone(),
-        _ => default_columns(field_keys, width),
+        _ => default_columns(&field_keys, width),
     };
     let rows = records
         .into_iter()
@@ -123,6 +153,7 @@ pub(crate) fn from_text(
                 match target {
                     ColumnTarget::Ignore => {}
                     ColumnTarget::Field { key } => row.fields.push((key.clone(), value)),
+                    ColumnTarget::Role { role } => row.fields.push((role_target(nt, *role), value)),
                     ColumnTarget::Tags => row.tags.extend(split_tags(&value)),
                     ColumnTarget::Attribute { attr_id } => {
                         row.attrs.push((AttrRef::Id(*attr_id), value));
@@ -135,7 +166,7 @@ pub(crate) fn from_text(
     Ok(RowsImport {
         rows,
         deck_id: req.deck_id,
-        notetype_id,
+        notetype_id: nt.id,
         duplicates: req.duplicates.unwrap_or_default(),
         create_missing_options: req.create_missing_options.unwrap_or(false),
     })

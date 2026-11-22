@@ -179,6 +179,7 @@ fn example_card_type_plugin(f: Factory) {
         unique: false,
         searchable: true,
         default_value: None,
+        role: None,
     };
     let nt = t.ok::<NotetypesCreate>(CreateNoteType {
         name: None,
@@ -193,6 +194,7 @@ fn example_card_type_plugin(f: Factory) {
                 front: "{{front}}".into(),
                 back: "{{back}}".into(),
                 card_type: engine_id.clone(),
+                answer_field: None,
             }],
             css: String::new(),
             sort_field: FieldKey::new(""),
@@ -1858,6 +1860,7 @@ fn plugin_tts_speaks_study_cards(f: Factory) {
         unique: false,
         searchable: true,
         default_value: None,
+        role: None,
     };
     let nt = t.ok::<NotetypesCreate>(CreateNoteType {
         name: None,
@@ -1872,6 +1875,7 @@ fn plugin_tts_speaks_study_cards(f: Factory) {
                 front: "{{front}} {{tts:tr:front}}".into(),
                 back: "{{back}}".into(),
                 card_type: "classic".into(),
+                answer_field: None,
             }],
             css: String::new(),
             sort_field: FieldKey::new(""),

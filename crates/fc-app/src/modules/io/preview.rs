@@ -1,7 +1,7 @@
 //! `io.import.preview`: separators (detected or given), first rows, suggested column mapping,
 //! package contents.
 
-use super::rows::{default_columns, effective_options};
+use super::rows::{default_columns, effective_options, mapping_order};
 use super::{format_of, interop_err, read_file, text_options, text_options_dto, decode_text};
 use crate::error::AppResult;
 use crate::handler::QueryCtx;
@@ -11,7 +11,7 @@ use crate::support::notes::require_notetype;
 use fc_api::v1::io::*;
 use fc_core::attribute::AttributeTarget;
 use fc_core::notetype::builtin::CLASSIC_ID;
-use fc_core::notetype::NoteType;
+use fc_core::notetype::{FieldRole, NoteType};
 use fc_interop::pack::Pack;
 use fc_interop::text::parse_delimited;
 use fc_interop::{anki, fcpack, json};
@@ -45,7 +45,7 @@ fn suggest(
     header: Option<&Vec<String>>,
     columns: usize,
 ) -> AppResult<Vec<ColumnTarget>> {
-    let keys: Vec<String> = nt.fields.iter().map(|f| f.key.0.clone()).collect();
+    let keys = mapping_order(nt);
     let Some(header) = header else {
         return Ok(default_columns(&keys, columns));
     };
@@ -73,6 +73,9 @@ fn suggest(
             .find(|f| f.key.0.to_lowercase() == c || f.name.to_lowercase() == c)
         {
             Some(ColumnTarget::Field { key: f.key.0.clone() })
+        } else if let Some(f) = role_of_header(&c).and_then(|r| nt.field_with_role(r)) {
+            // v1.3: "sentence", "örnek", "definition"… find the field by what it holds.
+            Some(ColumnTarget::Field { key: f.key.0.clone() })
         } else if ["tags", "tag", "etiketler", "etiket"].contains(&c.as_str()) {
             Some(ColumnTarget::Tags)
         } else {
@@ -92,6 +95,40 @@ fn suggest(
     }
     out.resize(columns, ColumnTarget::Ignore);
     Ok(out)
+}
+
+/// The field role a column header names (lowercase header): a role id or a common TR/EN
+/// word for it.
+fn role_of_header(header: &str) -> Option<FieldRole> {
+    const WORDS: &[(FieldRole, &[&str])] = &[
+        (FieldRole::Term, &["term", "word", "kelime", "terim", "sözcük", "lemma"]),
+        (
+            FieldRole::Meaning,
+            &["meaning", "definition", "anlam", "tanım", "anlamı", "translation", "çeviri"],
+        ),
+        (
+            FieldRole::Example,
+            &["example", "sentence", "context", "örnek", "cümle", "örnek cümle", "bağlam"],
+        ),
+        (
+            FieldRole::ExampleTranslation,
+            &[
+                "example translation",
+                "sentence translation",
+                "cümle çevirisi",
+                "örnek çevirisi",
+            ],
+        ),
+        (FieldRole::Surface, &["surface", "form", "geçtiği hâli", "geçtiği hali"]),
+        (FieldRole::Source, &["source", "kaynak", "url"]),
+        (FieldRole::Note, &["note", "notes", "not", "notlar", "extra"]),
+    ];
+    FieldRole::parse(header).or_else(|| {
+        WORDS
+            .iter()
+            .find(|(_, words)| words.contains(&header))
+            .map(|(r, _)| *r)
+    })
 }
 
 /// See the module docs.

@@ -3,7 +3,10 @@
   chips, mastery, flags — with row actions on hover/focus (⚑ flag menu, edit). Inline edit:
   the pencil or a double-click turns the row into two fields; Ctrl+Enter saves, Esc cancels.
   "Add card" opens Quick Add on this deck. Rows come from `notes.terms`; an edit is a
-  `notes.update`, a flag `cards.set_flag`.
+  `notes.update` of the row's `term_field` / `definition_field` (v1.3: chosen by field role,
+  so "Definition" is the meaning, never the surface form), a flag `cards.set_flag`. A row of
+  a note type without roles is `ambiguous`: editing it opens the full note editor instead of
+  guessing which fields the two columns are.
 -->
 <script lang="ts">
   import { tick } from 'svelte';
@@ -14,6 +17,7 @@
   import { Button, Check, Chip, EmptyState, Flag, IconButton, List, Menu, Pencil, Plus, Skeleton, Textarea, type MenuItem } from '$lib/ui';
   import { defaultFlagKey, flagBit, hasFlag } from '../cards/flags';
   import { masteryTone } from './library';
+  import NoteEditDialog from '../cards/NoteEditDialog.svelte';
 
   interface Props {
     terms: NoteTerm[];
@@ -35,12 +39,21 @@
   let back = $state('');
   let saving = $state(false);
   let editRow = $state<HTMLElement | null>(null);
+  /** The note open in the full editor (ambiguous rows) and the deck it is shown with. */
+  let fullEdit = $state<{ row: NoteTerm; deckId: string } | null>(null);
 
   const flagName = (f: FlagDto) => f.name ?? td(defaultFlagKey(f.flag));
   const MASTERY = { new: 'deck_page.mastery_new', learning: 'deck_page.mastery_learning', mastered: 'deck_page.mastery_mastered' } as const;
   const masteryLabel = (row: NoteTerm) => t(MASTERY[row.mastery]);
 
   async function edit(row: NoteTerm) {
+    if (row.ambiguous) {
+      await guarded(async () => {
+        const note = await api.call('notes.get', { id: row.note_id });
+        fullEdit = { row, deckId: note.home_deck_id };
+      });
+      return;
+    }
     editing = row.note_id;
     front = row.front.value;
     back = row.back?.value ?? '';
@@ -53,8 +66,8 @@
     saving = true;
     const ok = await guarded(async () => {
       const note = await api.call('notes.get', { id: row.note_id });
-      const fields = { ...note.fields, [row.front.key]: front };
-      if (row.back) fields[row.back.key] = back;
+      const fields = { ...note.fields, [row.term_field]: front };
+      if (row.definition_field) fields[row.definition_field] = back;
       await api.call('notes.update', { id: row.note_id, fields, tags: note.tags, attributes: note.attributes });
     });
     saving = false;
@@ -65,6 +78,28 @@
       back: row.back ? { ...row.back, value: back, text: back } : null,
     });
     editing = null;
+  }
+
+  /** After the full editor closes: the row shows what is stored now. */
+  async function closeFullEdit() {
+    const row = fullEdit?.row;
+    fullEdit = null;
+    if (!row) return;
+    await guarded(async () => {
+      const note = await api.call('notes.get', { id: row.note_id });
+      const cell = (f: { key: string } | null) => {
+        if (!f) return null;
+        const value = note.fields[f.key] ?? '';
+        return { key: f.key, value, text: plain(value) };
+      };
+      onchange({ ...row, front: cell(row.front)!, back: cell(row.back) });
+    });
+  }
+
+  /** Visible text of a stored value (tags stripped), as `notes.terms` sends it. Parsed in an
+   * inert document: nothing in the value loads or runs. */
+  function plain(value: string): string {
+    return new DOMParser().parseFromString(value, 'text/html').body.textContent ?? '';
   }
 
   function onEditKey(e: KeyboardEvent, row: NoteTerm) {
@@ -95,6 +130,10 @@
     }));
   }
 </script>
+
+{#if fullEdit}
+  <NoteEditDialog noteId={fullEdit.row.note_id} deckId={fullEdit.deckId} deckName="" onclose={() => void closeFullEdit()} />
+{/if}
 
 <section class="terms" aria-labelledby="deck-terms" data-testid="term-list">
   <div class="head">

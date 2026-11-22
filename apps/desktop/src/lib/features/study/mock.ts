@@ -434,9 +434,10 @@ export default {
         const s = require(session_id);
         requireCurrent(s, card_id);
         const answer = s.queue[0]!.note.fields.back ?? '';
-        if (s.hints + 1 >= answer.length) return { level: s.hints, text: null };
+        if (s.hints + 1 >= answer.length) return { level: s.hints, text: null, kind: 'letters', html: null };
         s.hints++;
-        return { level: s.hints, text: answer.slice(0, s.hints) + '_'.repeat(answer.length - s.hints) };
+        const text = answer.slice(0, s.hints) + '_'.repeat(answer.length - s.hints);
+        return { level: s.hints, text, kind: 'letters', html: text };
       },
       'study.check_answer': ({ session_id, card_id, given }) => {
         const s = require(session_id);

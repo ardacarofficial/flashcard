@@ -461,8 +461,8 @@ fn list(req: ListNotes, ctx: &QueryCtx<'_>) -> AppResult<NotePage> {
 
 // ------------------------------------------------------------------ term list (v1.1)
 
-/// Notes of a deck as term | definition rows (the deck page's term list): the first two fields
-/// of the note type, the note's cards with their common flags and least advanced mastery, and
+/// Notes of a deck as term | definition rows (the deck page's term list): the `term` and
+/// `meaning` fields of the note type (v1.3; else its first two fields, flagged `ambiguous`), the note's cards with their common flags and least advanced mastery, and
 /// its choice classification values. Paging and order are those of `notes.list`.
 fn terms(req: ListNotes, ctx: &QueryCtx<'_>) -> AppResult<TermPage> {
     use fc_core::stats::{card_mastery, Mastery};
@@ -492,17 +492,22 @@ fn terms(req: ListNotes, ctx: &QueryCtx<'_>) -> AppResult<TermPage> {
             e.insert(require_notetype(reads, note.notetype_id)?);
         }
         let nt = &types[&note.notetype_id];
-        let field = |i: usize| {
-            nt.fields.get(i).map(|f| {
-                let value = note.fields.get(&f.key).cloned().unwrap_or_default();
-                TermField {
-                    key: f.key.to_string(),
-                    text: fc_core::note::strip_html(&value),
-                    value,
-                }
-            })
+        let field = |f: &fc_core::notetype::FieldDef| {
+            let value = note.fields.get(&f.key).cloned().unwrap_or_default();
+            TermField {
+                key: f.key.to_string(),
+                text: fc_core::note::strip_html(&value),
+                value,
+            }
         };
-        let Some(front) = field(0) else { continue };
+        // v1.3: the columns are the `term` and `meaning` fields; a note type without both
+        // roles shows its first two fields and says the choice is a guess.
+        let (term, definition, ambiguous) = match term_columns(nt) {
+            Some((t, d)) => (Some(t), Some(d), false),
+            None => (nt.fields.first(), nt.fields.get(1), true),
+        };
+        let Some(front) = term.map(field) else { continue };
+        let back = definition.map(field);
         let own = of_note.remove(&id).unwrap_or_default();
         let flags = own.iter().map(|c| c.flags).reduce(|a, b| a & b).unwrap_or(0);
         let mastery = own
@@ -530,7 +535,10 @@ fn terms(req: ListNotes, ctx: &QueryCtx<'_>) -> AppResult<TermPage> {
             card_ids: own.iter().map(|c| c.id).collect(),
             flags,
             mastery,
-            back: field(1),
+            term_field: front.key.clone(),
+            definition_field: back.as_ref().map(|b| b.key.clone()),
+            ambiguous,
+            back,
             front,
             chips,
         });
@@ -541,6 +549,22 @@ fn terms(req: ListNotes, ctx: &QueryCtx<'_>) -> AppResult<TermPage> {
     })
 }
 
+/// The term list's columns of `nt` by role (v1.3): its `term` and `meaning` fields, when it
+/// has both.
+pub(crate) fn term_columns(
+    nt: &fc_core::notetype::NoteType,
+) -> Option<(&fc_core::notetype::FieldDef, &fc_core::notetype::FieldDef)> {
+    use fc_core::notetype::FieldRole;
+    Some((
+        nt.field_with_role(FieldRole::Term)?,
+        nt.field_with_role(FieldRole::Meaning)?,
+    ))
+}
+
 #[cfg(test)]
 #[path = "notes_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "vocab_tests.rs"]
+mod vocab_tests;

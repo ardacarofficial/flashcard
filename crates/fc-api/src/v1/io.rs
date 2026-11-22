@@ -89,6 +89,13 @@ pub enum ColumnTarget {
         /// Field key.
         key: String,
     },
+    /// The note type's field with this role (v1.3: `example` keeps a sentence column with
+    /// the word, whatever the field is called). A role the note type lacks is refused like an
+    /// unknown field (`VALIDATION_COLUMN_MAPPING`).
+    Role {
+        /// Field role.
+        role: fc_core::notetype::FieldRole,
+    },
     /// Space/comma separated tags.
     Tags,
     /// A classification (option label, number, `true/false`, text or date; multi-choice

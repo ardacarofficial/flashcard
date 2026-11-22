@@ -25,6 +25,7 @@ mod study;
 mod subtitle;
 mod tags;
 mod ux;
+mod vocab_roles;
 
 use crate::error::StorageResult;
 use crate::repo::Writes;

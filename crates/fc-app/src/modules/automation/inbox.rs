@@ -12,7 +12,6 @@ use fc_api::v1::inbox::{InboxItemDto, InboxStatus};
 use fc_core::attribute::AttributeTarget;
 use fc_core::card::{standard_card_specs, Card, CardSpec};
 use fc_core::note::{searchable_text, Note};
-use fc_core::notetype::builtin::CLASSIC_ID;
 use fc_core::notetype::FieldKey;
 use fc_core::paging::PageRequest;
 use fc_core::query::eval::{matches, AttrFact, CardFacts};
@@ -81,7 +80,11 @@ fn item_matches(
         return Ok(true);
     }
     let p = &item.item;
-    let nt_id = p.notetype_id.unwrap_or(CLASSIC_ID);
+    // The note type acceptance would use (v1.3: a captured sentence picks the Subtitle card).
+    let nt_id = match p.notetype_id {
+        Some(id) => id,
+        None => inbox::default_notetype(reads, p, false)?,
+    };
     let Some(nt) = reads.get_notetype(nt_id)?.filter(|n| n.deleted_at.is_none()) else {
         return Ok(false);
     };

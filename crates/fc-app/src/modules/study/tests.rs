@@ -193,6 +193,7 @@ fn two_way(t: &T) -> NoteTypeId {
         front: "{{back}}".into(),
         back: "{{FrontSide}}\n<hr class=\"fc-answer\">\n{{front}}".into(),
         card_type: "classic".into(),
+        answer_field: None,
     });
     let mut tx = t.store.write().unwrap();
     tx.upsert_notetype(&nt).unwrap();
