@@ -614,7 +614,7 @@
     color: var(--accent-text);
   }
   .r-count.zero {
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .rules,
   .runs {
@@ -649,7 +649,7 @@
   }
   .rules li.off .rule-name,
   .rules li.off .rule-sentence {
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .rule-sentence {
     font-size: var(--text-sm);
@@ -687,7 +687,7 @@
     font-variant-numeric: tabular-nums;
   }
   .via {
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .err {
     color: var(--danger);

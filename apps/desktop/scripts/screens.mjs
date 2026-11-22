@@ -261,6 +261,37 @@ function staticRawControls() {
 }
 
 const NAV = '[data-testid="nav-item"], nav ul button';
+/** Key states every full run must reach (the hooks below); missing ones are findings. */
+const EXPECTED_STATES = [
+  'state-deck-page',
+  'state-deck-terms',
+  'state-cards',
+  'state-cards-active',
+  'state-cards-flipped',
+  'state-cards-paused',
+  'state-cards-summary',
+  'state-learn',
+  'state-learn-active',
+  'state-test',
+  'state-test-active',
+  'state-test-result',
+  'state-match',
+  'state-match-active',
+  'state-match-finished',
+  'state-search-card-info',
+  'state-search-bulk',
+  'state-search-edit',
+  'state-quick-add',
+  'state-palette',
+  'state-palette-query',
+  'state-onboarding',
+  'state-lock',
+  'state-update',
+  'state-update-screen',
+  'state-home-waiting',
+  'state-launcher',
+  'state-cards-waiting',
+];
 const SUB = '[data-testid="subnav-item"], [data-testid^="settings-group"], main [role=tab]';
 
 async function settle(page) {
@@ -327,7 +358,11 @@ async function main() {
           const dir = join(outDir, cfg);
           mkdirSync(dir, { recursive: true });
           const { ctx, page, errors } = await newPage(browser, { lang, theme, width });
+          // Every key state the hooks below must reach (v1.3: a state that moved is reported as
+          // `state-missing`, never silently skipped).
+          const snapped = new Set();
           const snap = async (name) => {
+            snapped.add(name);
             const checks = await page.evaluate(pageChecks);
             for (const c of checks) report.findings.push({ config: cfg, screen: name, ...c });
             await page.screenshot({ path: join(dir, `${name}.png`), fullPage: false });
@@ -421,11 +456,31 @@ async function main() {
                 await page.keyboard.press('2');
                 await page.waitForTimeout(120);
               }
+              // v1.3: the exit (Esc) pauses — what was done so far, the session stays open;
+              // the waiting screen's / launcher's "Finish" ends it.
               const end = page.locator('[data-testid="study-end"]').first();
               if (await end.count()) {
                 await end.click().catch(() => {});
                 await settle(page);
-                await snap('state-cards-summary');
+                await snap('state-cards-paused');
+                const cont = page.locator('[data-testid="study-continue"]').first();
+                if (await cont.count()) {
+                  await cont.click().catch(() => {});
+                  await settle(page);
+                }
+                // answer the rest: the queue runs out and the session ends with its summary
+                for (let k = 0; k < 40 && (await page.locator('[data-testid="study-end"]').count()); k++) {
+                  if (await page.locator('[data-testid="study-finish"]').count()) {
+                    await page.locator('[data-testid="study-finish"]').first().click().catch(() => {});
+                    break;
+                  }
+                  await page.keyboard.press('Space');
+                  await page.waitForTimeout(60);
+                  await page.keyboard.press('2');
+                  await page.waitForTimeout(120);
+                }
+                await settle(page);
+                if (await page.locator('[data-testid="summary-answered"]').count()) await snap('state-cards-summary');
               }
             } else if (mode === 'test') {
               // pick the first option of every question, type the written ones, submit
@@ -624,6 +679,7 @@ async function main() {
             await settle(sp.page);
             await sp.page.waitForTimeout(400);
             const take = async (n) => {
+              snapped.add(n);
               const checks = await sp.page.evaluate(pageChecks);
               for (const c of checks) report.findings.push({ config: cfg, screen: n, ...c });
               await sp.page.screenshot({ path: join(dir, `${n}.png`), fullPage: false });
@@ -659,6 +715,9 @@ async function main() {
             errors.push(...sp.errors);
             void old;
             await sp.ctx.close();
+          }
+          for (const want of EXPECTED_STATES) {
+            if (!snapped.has(want)) report.findings.push({ config: cfg, screen: want, check: 'state-missing', el: '', detail: 'hook not reached (moved or renamed?)' });
           }
           report.configs.push({ config: cfg, pageErrors: [...new Set(errors)].slice(0, 10) });
           for (const e of new Set(errors)) report.findings.push({ config: cfg, screen: '*', check: 'page-error', el: '', detail: e });

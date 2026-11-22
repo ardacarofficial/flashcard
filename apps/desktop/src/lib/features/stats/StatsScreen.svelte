@@ -941,7 +941,7 @@
     color: var(--danger);
   }
   .struggles .of {
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .struggles .when {
     color: var(--text-2);

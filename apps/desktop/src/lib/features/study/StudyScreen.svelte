@@ -891,7 +891,7 @@
     text-transform: uppercase;
     color: var(--text-2);
   }
-  .face-body :global(.fc-part-example-translation),
+  .face-body :global(.fc-example-translation),
   .face-body :global(.fc-part-example .fc-part-translation) {
     display: block;
     margin-top: var(--space-1);
@@ -899,6 +899,8 @@
     color: var(--text-2);
   }
   .face-body :global(.fc-part-source) {
+    /* The study face sets its own muted colour: no extra dimming from the card CSS (light theme). */
+    opacity: 1;
     margin-top: var(--space-3);
     font-size: var(--text-xs);
     font-weight: var(--weight-regular, 400);

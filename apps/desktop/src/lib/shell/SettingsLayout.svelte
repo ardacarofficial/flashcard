@@ -192,7 +192,7 @@
     margin: -2px 0 4px;
     padding: 0 8px;
     font-size: var(--text-2xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   ul {
     margin: 0;

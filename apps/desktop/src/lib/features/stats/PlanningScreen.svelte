@@ -787,7 +787,7 @@
   .range {
     margin-inline-start: var(--space-2);
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   :global(.pace) .basis {
     border-top: none;

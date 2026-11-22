@@ -182,6 +182,10 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     line-height: 1.2;
+    /* Drawn above the bar on the panel: its own panel background keeps it legible. */
+    background: var(--surface-1);
+    padding: 0 2px;
+    border-radius: 2px;
   }
   .val.peak-val {
     color: var(--text-1);

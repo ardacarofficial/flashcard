@@ -65,7 +65,7 @@
   }
   .n {
     grid-area: n;
-    color: var(--text-3);
+    color: var(--text-2);
     font-size: var(--text-sm);
     text-align: end;
   }
@@ -99,10 +99,11 @@
     line-height: var(--leading);
   }
   .contains :global(.fc-field) {
-    flex: 0 1 14rem;
+    /* Wide enough for the longest role ("The word (dictionary form)") in both languages. */
+    flex: 0 1 17rem;
     min-width: 0;
   }
   .clabel {
-    color: var(--text-3);
+    color: var(--text-2);
   }
 </style>

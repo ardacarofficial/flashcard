@@ -635,7 +635,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .path {
     min-width: 0;

@@ -98,7 +98,7 @@
   }
   .default {
     font-size: var(--text-2xs);
-    color: var(--text-3);
+    color: var(--text-2);
     border: 1px solid var(--border);
     border-radius: 999px;
     padding: 0 6px;
@@ -112,7 +112,7 @@
     line-height: var(--leading);
   }
   .ex-label {
-    color: var(--text-3);
+    color: var(--text-2);
     font-weight: var(--weight-medium);
   }
   .text :global(.reset) {
