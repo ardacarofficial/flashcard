@@ -19,9 +19,11 @@ refused by the safety layer: use `--permission-mode auto`.
 | s1 | AI provider presets (OpenRouter…), model list, test connection | MERGED (23d8f99). Open: `plugins/redact.rs` classifies new `ai.test` job as default IO (closed) — move to AI area; external links in Tauri may need opener; real keys never tested |
 | s2 | settings kit that explains, note types, MCP, automation recipes | running |
 | s3 | add cards in one place: single/bulk/paste/file; first-run guide | MERGED (4d2105f). Notes: "Şimdi çalış" goes to /study (wire to launcher after f1); S4 help should call openGuide() |
-| s4 | stats three questions, planning forecast model, `?` help sheet | running |
+| s4 | stats three questions, planning forecast model, `?` help sheet | MERGED (6180fb2). Open: 'Bunları çalış' starts a session then /study only offers Continue → hand over to F1 launcher; term/meaning picked by fixed keys → switch to R2 roles; `T::start` test helper needs `scope` after R1; help not a module |
 
 After they report: merge in order r2 → r1 → f1 → b0 → s1 → s2 → s3 → s4 (regenerate TS types after Rust merges),
 run full checks, then a journeys worker (launcher/keyboard/vocab journeys on the bridge; J5/J6 must turn green),
 independent review + polish, design consistency pass (bounded), docs/CHANGELOG/version 1.3.0, Windows installer
 via `.github/workflows/windows-build.yml`, try Windows WebDriver pilot (tauri-driver) as a non-gating job.
+
+Note: first runs of r1/r2/b0/s2/s4 hit the 7000 s wall-clock (machine load 30); all resumed with `followup-timeout.md` (logs `<name>-HHMMSS.jsonl`). Free disk by deleting `target/` of merged, clean worktrees.
