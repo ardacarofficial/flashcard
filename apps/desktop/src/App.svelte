@@ -257,9 +257,10 @@
     const unsubInbox = api.on('inbox_changed', (env) => {
       if (env.event.type === 'inbox_changed') inboxCount = env.event.data.pending;
     });
-    // Live updates: any deck/study event (or undo/redo, import, restore) re-reads the tree.
+    // Live updates: any deck/note/card/study event (or undo/redo, import, restore) re-reads
+    // the tree (v1.3: notes too — the counts every screen reads from `ctx.decks` stay true).
     const unsub = api.on(
-      ['deck_', 'study_', 'undone', 'redone', 'data_changed', 'imported', 'collection_'],
+      ['deck_', 'note', 'card', 'study_', 'undone', 'redone', 'data_changed', 'imported', 'collection_'],
       () => void loadDecks(),
     );
     return () => {

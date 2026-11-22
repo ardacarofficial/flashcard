@@ -5,7 +5,7 @@
   "modules": {
     "automation": {
       "name": "Otomasyon kuralları",
-      "description": "“Şu olduğunda … şu kartlar için … şunu yap” kuralları: kartları kendiliğinden etiketle, askıya al, taşı ya da sınıflandır."
+      "description": "“Şu olduğunda … şu kartlar için … şunu yap” kuralları: kartları kendiliğinden etiketle, kenara koy, taşı ya da sınıflandır."
     }
   },
   "settings": {
@@ -24,7 +24,7 @@
   },
   "automation": {
     "heading": "Otomasyon",
-    "intro": "Tekrar eden işleri uygulamaya bırak: bir şey olduğunda (ör. bir kartı yine unuttuğunda) seçtiğin kartları kendiliğinden etiketler, taşır ya da askıya alır.",
+    "intro": "Tekrar eden işleri uygulamaya bırak: bir şey olduğunda (ör. bir kartı yine unuttuğunda) seçtiğin kartları kendiliğinden etiketler, taşır ya da kenara koyar.",
     "new": "Kendi kuralını yaz",
     "recipes": {
       "title": "Hazır bir kuralla başla",
@@ -40,8 +40,8 @@
         "tag": "zor"
       },
       "suspend_leeches": {
-        "name": "Bir türlü akılda kalmayanları askıya al",
-        "description": "8 kez unuttuğun bir kart askıya alınır: sen düzeltip yeniden açana kadar sorulmaz."
+        "name": "Bir türlü akılda kalmayanları kenara koy",
+        "description": "8 kez unuttuğun bir kart kenara konur: sen düzeltip geri alana kadar sorulmaz."
       },
       "archive_learned": {
         "name": "Öğrendiğim kartları arşiv destesine taşı",
@@ -53,8 +53,8 @@
         "tag": "subtitle"
       },
       "suspend_flagged": {
-        "name": "Kırmızı bayraklı kartları askıya al",
-        "description": "Hatalı bir karta kırmızı bayrak koy: sen düzeltip yeniden açana kadar askıda kalır."
+        "name": "Kırmızı bayraklı kartları kenara koy",
+        "description": "Hatalı bir karta kırmızı bayrak koy: sen düzeltip geri alana kadar kenarda kalır."
       },
       "untag_learned": {
         "name": "Kolaylaşan kartlardan “zor” etiketini kaldır",
@@ -120,10 +120,10 @@
         "remove_tags": "{n, plural, =1 {{tags} etiketini kaldır} other {{tags} etiketlerini kaldır}}",
         "no_tags": "etiket ekle (bir etiket yaz)",
         "no_tags_remove": "etiket kaldır (bir etiket yaz)",
-        "suspend": "askıya al",
-        "unsuspend": "askıdan çıkar",
-        "bury": "bugünlük göm",
-        "unbury": "gömmeyi kaldır",
+        "suspend": "kenara koy",
+        "unsuspend": "kenardan çıkar",
+        "bury": "yarına bırak",
+        "unbury": "yarına bırakmayı geri al",
         "flag_on": "{flag} bayrak koy",
         "flag_off": "{flag} bayrağı kaldır",
         "move": "“{deck}” destesine taşı",
@@ -205,8 +205,8 @@
       "applied_action": {
         "add_tags": "{n} karta etiket eklendi",
         "remove_tags": "{n} karttan etiket kaldırıldı",
-        "set_suspended": "{n} kart askıya alındı ya da çıkarıldı",
-        "set_buried": "{n} kart gömüldü ya da çıkarıldı",
+        "set_suspended": "{n} kart kenara kondu ya da kenardan çıkarıldı",
+        "set_buried": "{n} kart yarına bırakıldı ya da geri alındı",
         "set_flag": "{n} kartın bayrağı değişti",
         "move_cards": "{n} kart taşındı",
         "set_attribute": "{n} karta sınıflandırma atandı",
@@ -283,7 +283,7 @@
       "bulk": {
         "add_tags": "Etiket ekle",
         "remove_tags": "Etiket kaldır",
-        "set_suspended": "Askıya al / bırak",
+        "set_suspended": "Kenara koy / kenardan çıkar",
         "set_buried": "Göm / çıkar",
         "set_flag": "Bayrak koy / kaldır",
         "move_cards": "Desteye taşı",

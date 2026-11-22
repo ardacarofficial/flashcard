@@ -93,7 +93,7 @@
     },
     "bulk": {
       "move_cards": "Move cards",
-      "set_suspended": "Pause / resume cards",
+      "set_suspended": "Set cards aside / bring them back",
       "set_buried": "Leave cards for tomorrow / undo",
       "set_flag": "Flag cards",
       "reset_progress": "Forget cards",

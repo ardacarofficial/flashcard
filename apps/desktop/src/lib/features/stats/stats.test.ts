@@ -40,9 +40,10 @@ describe('v0.6 screens on the dev mock', () => {
     // Leech actions cover every leech of the scope: one Rust command, no ids from here.
     // v1.3 (deliberate wording change): plain words, as in the study launcher.
     expect(await screen.findByText('60 cards you got wrong at least 8 times')).toBeTruthy();
-    await fireEvent.click(screen.getByRole('button', { name: 'Suspend' }));
+    // v1.3 (deliberate wording change): one word per concept — "Set aside" (was "Suspend").
+    await fireEvent.click(screen.getByRole('button', { name: 'Set aside' }));
     expect(await screen.findByText('60 changed, 0 already done')).toBeTruthy();
-    await fireEvent.click(screen.getByRole('button', { name: 'Suspend' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Set aside' }));
     expect(await screen.findByText('0 changed, 60 already done')).toBeTruthy();
   });
 

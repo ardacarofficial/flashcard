@@ -924,6 +924,18 @@
     display: inline;
     margin: 0 var(--space-1) 0 0;
   }
+  /* The note type's CSS (`.fc-card-… .fc-part-source { font-size: 0.8em }`) is scoped to the
+     card and would size the source relative to the 32 px face — larger than the example. The
+     study face fixes the three levels (meaning > example > source) one step more specifically.
+     A part of speech under the meaning (Subtitle card: `.fc-pron` after it) is a quiet note. */
+  .face-body :global(.card .fc-part-source) {
+    font-size: var(--text-xs);
+  }
+  .face-body :global(.card .fc-part-meaning + .fc-pron) {
+    margin-top: var(--space-1);
+    font-size: var(--text-md);
+    color: var(--text-2);
+  }
   /* Context hint: the example sentence with a visible blank. */
   .hint.context {
     display: flex;

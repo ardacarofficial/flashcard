@@ -29,7 +29,7 @@
     "show_answer": "Cevabı göster",
     "type_placeholder": "Cevabı yaz",
     "hint": "İpucu",
-    "suspend": "Durdur",
+    "suspend": "Kenara koy",
     "bury": "Yarına bırak",
     "undo": "Geri al",
     "end": "Ara ver",
@@ -102,7 +102,7 @@
       "new_desc": "Henüz hiç çalışmadığın kartlar"
     },
     "flag_menu": "Bayrak",
-    "suspend_desc": "Sen yeniden açana kadar bu kartı sorma",
+    "suspend_desc": "Sen geri alana kadar bu kartı sorma",
     "bury_desc": "Bugün bu kartı bir daha sorma",
     "flip": "Çevir",
     "flip_label": "Kartı çevir",

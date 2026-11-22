@@ -67,6 +67,17 @@
   let body = $state<HTMLDivElement | null>(null);
 
   const nt = $derived(notetypes?.find((n) => n.id === ntId) ?? null);
+  /**
+   * v1.3: a note type without an example sentence (Classic) — the type that has one (term,
+   * meaning, example: the smallest such), offered in one click so "a word with its sentence"
+   * never means guessing which note type to pick.
+   */
+  const hasRoles = (n: NonNullable<typeof nt>, roles: string[]) => roles.every((r) => n.fields.some((f) => f.role === r));
+  const exampleType = $derived(
+    nt && !nt.fields.some((f) => f.role === 'example')
+      ? ([...(notetypes ?? [])].filter((n) => hasRoles(n, ['term', 'meaning', 'example'])).sort((a, b) => a.fields.length - b.fields.length)[0] ?? null)
+      : null,
+  );
   const inline = $derived(new Set(editableFields(nt).map((f) => f.key)));
   /** Fields in the note type's order; text kinds are typed inline, media get their editor. */
   const allFields = $derived(nt?.fields ?? []);
@@ -482,6 +493,12 @@
         </div>
       {/if}
       <p class="keys">{t('quickadd.keys_hint')}</p>
+      {#if exampleType}
+        <p class="keys example-hint">
+          <span>{t('quickadd.example_hint', { name: exampleType.name })}</span>
+          <Button size="sm" variant="ghost" onclick={() => chooseType(exampleType.id)}>{t('quickadd.example_switch', { name: exampleType.name })}</Button>
+        </p>
+      {/if}
     {/if}
     <p class="sr-only" role="status">{status ?? ''}</p>
   </div>
@@ -609,6 +626,12 @@
     margin: 0;
     color: var(--text-2);
     font-size: var(--text-xs);
+  }
+  .example-hint {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
   }
   .no-deck {
     display: flex;

@@ -47,16 +47,16 @@
       "learning": "Learning",
       "review": "Review",
       "relearning": "Relearning",
-      "suspended": "Suspended",
-      "buried": "Buried"
+      "suspended": "Set aside",
+      "buried": "Left for tomorrow"
     },
     "bulk": {
       "heading": "Change selection",
       "move": "Move to deck",
-      "suspend": "Suspend",
-      "unsuspend": "Unsuspend",
-      "bury": "Bury",
-      "unbury": "Unbury",
+      "suspend": "Set aside",
+      "unsuspend": "Bring back",
+      "bury": "Leave for tomorrow",
+      "unbury": "Bring back today",
       "flag": "Flag",
       "flag_clear": "Clear flags",
       "reset": "Forget",
@@ -240,7 +240,7 @@
     },
     "browse": {
       "select_all": "Select all",
-      "suspend": "Suspend selection",
+      "suspend": "Set the selection aside",
       "info": "Card info",
       "delete": "Delete selection"
     },

@@ -156,6 +156,14 @@ describe('first-run guide (dev mock)', () => {
     const deck = added[0]!;
     expect(deck.children).toEqual([]);
     expect(selected.at(-1)).toBe(deck.deck.id);
+    // v1.3: an empty deck is not "first words added": step 1 stays open and the checklist
+    // starts folded (it must not cover the add page the user is about to type on) …
+    expect(guide.done).not.toContain('add');
+    expect(guide.view).toBe('pill');
+    // … and ticks itself once the collection holds a card.
+    const shown = { ...ctx, navigate, decks: [{ ...deck, counts: { ...deck.counts, total: 1 } }] };
+    await rerender({ ctx: shown });
+    await waitFor(() => expect(guide.done).toContain('add'));
   });
 
   it('skipping before setup calls onboarding.skip and closes the guide', async () => {

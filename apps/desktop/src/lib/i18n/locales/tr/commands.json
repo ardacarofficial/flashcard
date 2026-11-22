@@ -10,7 +10,7 @@
       "check_answer": "Cevabı kontrol et",
       "end": "Oturumu bitir",
       "summary": "Oturum özeti",
-      "suspend": "Kartları durdur (çalışma)",
+      "suspend": "Kartları kenara koy (çalışma)",
       "bury": "Kartları yarına bırak (çalışma)",
       "postpone": "Bugünün kartlarını ertele",
       "card_history": "Kartın tekrar geçmişi"
@@ -82,7 +82,7 @@
       "good": "Puan: İyi (dört düğmede)",
       "easy": "Puan: Kolay (dört düğmede)",
       "hint": "İpucu",
-      "suspend": "Kartı durdur (sen açana kadar sorma)",
+      "suspend": "Kartı kenara koy (sen geri alana kadar sorma)",
       "bury": "Kartı yarına bırak (bugün bir daha sorma)",
       "undo": "Son cevabı geri al",
       "end": "Oturumu bitir"

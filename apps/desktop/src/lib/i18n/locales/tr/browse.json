@@ -47,16 +47,16 @@
       "learning": "Öğreniliyor",
       "review": "Tekrar",
       "relearning": "Yeniden öğreniliyor",
-      "suspended": "Askıda",
-      "buried": "Gömülü"
+      "suspended": "Kenarda",
+      "buried": "Yarına bırakıldı"
     },
     "bulk": {
       "heading": "Seçimi değiştir",
       "move": "Desteye taşı",
-      "suspend": "Askıya al",
-      "unsuspend": "Askıdan çıkar",
-      "bury": "Göm",
-      "unbury": "Gömmeyi kaldır",
+      "suspend": "Kenara koy",
+      "unsuspend": "Kenardan çıkar",
+      "bury": "Yarına bırak",
+      "unbury": "Yarına bırakmayı geri al",
       "flag": "Bayrak",
       "flag_clear": "Bayrakları kaldır",
       "reset": "Sıfırla",
@@ -240,7 +240,7 @@
     },
     "browse": {
       "select_all": "Hepsini seç",
-      "suspend": "Seçimi askıya al",
+      "suspend": "Seçimi kenara koy",
       "info": "Kart bilgisi",
       "delete": "Seçimi sil"
     },
