@@ -131,6 +131,19 @@ Yerleşik Altyazı kartının ön yüzü (v1.3 X1, **migration 1301**) yalnız k
 
 Var olan koleksiyonlar **migration 1300** ile güncellenir: yerleşik bir not tipinin alanı, yerleşik anahtar ve türünü koruyorsa rolünü alır; şablon ön/arka/kart türü v1.2'de gönderildiği gibiyse yeni arka yüzü ve `answer_field`'ı alır; CSS hâlâ boşsa parça CSS'i eklenir. Düzenlenmiş her şey (şablon metni, alan türü, CSS) olduğu gibi kalır; adlar karşılaştırılmaz. Tekrar çalıştırmak hiçbir şeyi değiştirmez.
 
+### 4.2 Kelime dizini (v1.4)
+
+"Hangi kelimeleri biliyor?" sorusunun **tek** cevabı: okuma modu (`reading.analyze`, `reading.words.lookup`), Subtitle'ın `GET /subtitle/v1/known-words` ucu ve `words.*` API'si aynı kalıcı dizini okur (migration `1410_word_index`, modül `words`, kod `fc-app/src/modules/words/`, saf kurallar `fc_core::words`).
+
+- **Anahtar:** (dil, anahtar). Dil birincil alt etikettir (`en-GB` → `en`); anahtar bir lemma ya da en çok dört kelimelik bir ifade (`go`, `pick up`). Yalnız **çekim** birleşir (`went` → `go`, dilin lemmatizer'ı); **türetme** birleşmez (`actor` ≠ `act`).
+- **Kaynak:** not türünde `term` rolü olan her not — elle, Anki'den, Subtitle'dan, okuma modundan; hiç rolü olmayan not türü (Anki içe aktarımı, v1.3 öncesi türler) sıralama alanına düşer, cloze türleri hariç — ve okuma modunun elle işaretleri (`word_marks`).
+- **Dil:** notun Subtitle yakalamasının dili, yoksa okuma modunda yapıldığı metnin dili (`word_note_language`), yoksa ev destesinin `words.language` ayarı (deste, sonra uygulama kapsamı). Gönderilen varsayılan **boş**: dili bilinmeyen not hiçbir kelimeye yazılmaz, `words.stats.unassigned_notes` ile raporlanır; tahmin edilmez.
+- **Kanıt ayrı tutulur:** `word_index` satırında elle işaret (+zamanı) ile notların toplamı (not sayısı, canlı kart sayısı, en uzun tekrar aralığı, son tekrar, ilk not) ayrı sütunlardır; `word_index_notes` her notun katkısını tutar, not/kart kimlikleri buradan ve `cards_note` dizininden okunur.
+- **Durum okurken türetilir:** elle işaret kazanır (known/ignored); yoksa aralığı `words.known_interval_days` (varsayılan 21, istatistiklerin "olgun" tanımı) eşiğine ulaşmış bir kart → `known`; başka kart → `learning`; yoksa `new`. Eşik değişince yeniden kurmak gerekmez.
+- **Artımlı güncelleme:** `notes`, `cards`, `notetypes`, `subtitle_captures`, `word_note_language`, `word_marks` ve `words.language` ayarındaki her değişiklik tetikleyicilerle kirli kuyruğa (`word_index_dirty`, `word_index_dirty_keys`) girer; dağıtıcı (`App::run_command`) her yazma transaction'ının sonunda, oplog kaydından önce kuyruğu boşaltır (`words::index::drain`). Geri al/yinele de komut olduğu için dizin onlarla birlikte değişir; dizin türetilmiş veridir, oplog'a yazılmaz. Açılışta (`load_state`) da boşaltılır: migration mevcut her notu kuyruğa koyar.
+- **Tam yeniden kurma:** `words.index.rebuild` (arka plan işi → iç komut `words.index.rebuild_now`) dizini boşaltıp her şeyi kuyruğa koyar ve aynı yoldan boşaltır; artımlı sonuçla eşitliği tohumlu rastgele bir geçmişle test edilir (SQLite ve bellek deposu).
+- **Performans:** okuma tarafı yalnız birincil anahtar/dizin aramaları yapar (500 anahtarlık parçalar); 50 000 notta 500 biçimlik `words.lookup` debug derlemede ~35 ms. `reading.vocabulary_query` dolu ise yalnız ilgili kelimelerin kartları kapsamla süzülür.
+
 ## 5. Olay kaydı ve geri al (hibrit yaklaşım)
 
 Saf "event sourcing" (durumu her seferinde olaylardan yeniden üretmek) yerine **hibrit** bir model kullanılır: güncel durum normal tablolarda tutulur, her değişiklik **aynı transaction** içinde değişmez kayıtlara yazılır. Bu hem hızlı okuma hem tam geçmiş sağlar.
@@ -285,7 +298,7 @@ Her arayüzün bir **kimliği**, **yetenek bildirimi** (capabilities) ve **ayar 
 ## 15. Migration'lar
 
 - Her şema değişikliği numaralı ve **geri dönüşsüz ama test edilmiş** bir migration'dır.
-- Numaralar sürüm başına ayrılmış aralıklardadır (`fc-storage` `migrate::RELEASE_RANGES`; aralık dışı migration testleri kırar): v0.1 `1`–`99`, v0.2 `100`–`199` … v1.0 `1000`–`1099` (izlere bölünmüş, docs/07 §5.1), v1.1 `1100`–`1199` (migration yok), v1.2 `1200`–`1299` (`1200_subtitle`), **v1.3 `1300`–`1399`** (`1300_vocabulary_roles` ve `1301_subtitle_word_front`: yalnız veri; 1301 yerleşik Altyazı kartının ön yüzünü yalnız kelimeye indirir, yalnızca şablon hâlâ gönderildiği gibiyse). Dosyalar `crates/fc-storage/migrations/NNNN_ad.sql`; birleştikten sonra **asla düzenlenmez** (sağlama toplamı tutmazsa veritabanı açılmaz).
+- Numaralar sürüm başına ayrılmış aralıklardadır (`fc-storage` `migrate::RELEASE_RANGES`; aralık dışı migration testleri kırar): v0.1 `1`–`99`, v0.2 `100`–`199` … v1.0 `1000`–`1099` (izlere bölünmüş, docs/07 §5.1), v1.1 `1100`–`1199` (migration yok), v1.2 `1200`–`1299` (`1200_subtitle`), **v1.3 `1300`–`1399`** (`1300_vocabulary_roles` ve `1301_subtitle_word_front`: yalnız veri; 1301 yerleşik Altyazı kartının ön yüzünü yalnız kelimeye indirir, yalnızca şablon hâlâ gönderildiği gibiyse), **v1.4 `1400`–`1499`** (`1410_word_index`, iz A3'ün aralığı 1410–1429: kelime dizini, §4.2). Dosyalar `crates/fc-storage/migrations/NNNN_ad.sql`; birleştikten sonra **asla düzenlenmez** (sağlama toplamı tutmazsa veritabanı açılmaz).
 - Migration öncesi veritabanının otomatik anlık kopyası alınır (sadece migration sırasında, periyodik yedek değil).
 - CI'da: her migration boş veritabanında ve önceki sürümlerden üretilmiş örnek veritabanlarında çalıştırılır.
 - Veri formatları (deste paketi, yedek, eklenti manifesti) de sürüm numarası taşır.

@@ -1,0 +1,36 @@
+{
+  "modules": {
+    "words": {
+      "name": "Word index",
+      "description": "One list of the words you know, are learning or ignore, built from all your cards and marks. Reading mode and the Subtitle extension use it."
+    }
+  },
+  "settings": {
+    "words": {
+      "language": {
+        "label": "Language of the cards",
+        "description": "Which language the words on these cards are in (e.g. en). Set it per deck; empty means unknown and those cards do not count as words."
+      },
+      "known_interval_days": {
+        "label": "Days until a word counts as known",
+        "description": "A word whose card waits at least this many days between reviews counts as known. A word you marked yourself keeps your mark."
+      }
+    }
+  },
+  "commands": {
+    "words": {
+      "lookup": "Look up words",
+      "list": "List words",
+      "stats": "Word counts",
+      "index": {
+        "rebuild": "Rebuild the word index",
+        "rebuild_now": "Rebuild the word index"
+      }
+    }
+  },
+  "words": {
+    "job": {
+      "rebuilding": "Rebuilding the word index…"
+    }
+  }
+}

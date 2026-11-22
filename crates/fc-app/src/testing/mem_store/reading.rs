@@ -8,7 +8,7 @@ use fc_core::ReadingItemId;
 #[derive(Debug, Clone, Default)]
 pub struct ReadingState {
     items: BTreeMap<ReadingItemId, ReadingItemRecord>,
-    marks: BTreeMap<(String, String), WordMarkRecord>,
+    pub(super) marks: BTreeMap<(String, String), WordMarkRecord>,
 }
 
 fn with_count(mut r: ReadingItemRecord) -> ReadingItemRecord {

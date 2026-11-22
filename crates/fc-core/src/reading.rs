@@ -129,7 +129,8 @@ pub struct WordCounts {
 }
 
 impl WordCounts {
-    fn add(&mut self, s: WordStatus) {
+    /// Counts one more word of status `s`.
+    pub fn add(&mut self, s: WordStatus) {
         let slot = match s {
             WordStatus::New => &mut self.new,
             WordStatus::Learning => &mut self.learning,

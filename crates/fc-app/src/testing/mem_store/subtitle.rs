@@ -8,7 +8,7 @@ use fc_storage::repo::{SubtitleCaptureRecord, SubtitleKeyRecord, SubtitleUploadR
 #[derive(Debug, Clone, Default)]
 pub struct SubtitleState {
     keys: BTreeMap<SubtitleKeyId, SubtitleKeyRecord>,
-    captures: BTreeMap<String, SubtitleCaptureRecord>,
+    pub(super) captures: BTreeMap<String, SubtitleCaptureRecord>,
     uploads: BTreeMap<String, SubtitleUploadRecord>,
 }
 

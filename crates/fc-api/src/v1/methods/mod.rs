@@ -105,4 +105,5 @@ domains! {
     session,
     reminders,
     themes,
+    words,
 }

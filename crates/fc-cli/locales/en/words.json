@@ -1,0 +1,4 @@
+{
+  "oplog.summary.words.index.rebuild": "Started rebuilding the word index",
+  "oplog.summary.words.index.rebuild_now": "Rebuilt the word index"
+}

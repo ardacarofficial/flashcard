@@ -9,7 +9,7 @@ use fc_api::v1::decks::DeckRef;
 use fc_api::v1::modules::SetModuleEnabled;
 use fc_api::v1::notes::NoteRef;
 use fc_api::v1::oplog::ListOplog;
-use fc_core::card::SchedulingState;
+use fc_core::card::{CardState, SchedulingState};
 use fc_core::time::FixedClock;
 use fc_storage::{SqliteStore, Store};
 use serde_json::json;
@@ -485,6 +485,8 @@ pub(super) fn known_words_follow_the_cards_intervals(f: Factory) {
         ..SchedulingState::NEW
     };
     tx.update_card(&card).unwrap();
+    // A raw write outside the dispatcher: bring the word index along, as every command does.
+    crate::modules::words::index::drain(&mut *tx).unwrap();
     tx.commit().unwrap();
     let words = known_words(&t.app, Some("en"), None).unwrap().words;
     assert_eq!(words[0].status, SubtitleWordStatus::Known);

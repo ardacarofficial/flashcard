@@ -37,5 +37,6 @@ pub mod subtitle;
 pub mod tags;
 pub mod themes;
 pub mod tts;
+pub mod words;
 
 pub use methods::catalog;

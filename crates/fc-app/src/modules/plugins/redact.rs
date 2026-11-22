@@ -203,6 +203,9 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         | "reading.queue.set" | "reading.queue.read" | "reading.queue.postpone"
         | "reading.extracts.create" | "reading.words.mark" => Reads(READING),
         "reading.analyze" | "reading.words.lookup" => Reads(READING_CARDS),
+        // v1.4 word index: words and the notes/cards behind them.
+        "words.lookup" | "words.list" | "words.stats" => Reads(READING_CARDS),
+        "words.index.rebuild" | "words.index.rebuild_now" => Reads(READING),
         "reading.extracts.cloze" | "reading.cards.make" => Oracle(READING_NOTES),
         // Imports read any file or web page; clips run ffmpeg on a file.
         "reading.items.import" => Refused(FREE_PATHS),
@@ -375,6 +378,8 @@ fn job_domains(kind: &str) -> &'static [Domain] {
         "optimizer.run" => &["decks", "stats"],
         // Reading imports (files, web pages) and ffmpeg clips: like imports.
         "reading.import" | "reading.clip" => IO,
+        // The word index rebuild: counts only.
+        "words.index.rebuild" => READING,
         _ => IO,
     }
 }

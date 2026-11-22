@@ -1,0 +1,36 @@
+{
+  "modules": {
+    "words": {
+      "name": "Kelime dizini",
+      "description": "Bildiğin, öğrendiğin ve yok saydığın kelimelerin tek listesi; tüm kartlarından ve işaretlerinden kurulur. Okuma modu ve Subtitle eklentisi bunu kullanır."
+    }
+  },
+  "settings": {
+    "words": {
+      "language": {
+        "label": "Kartların dili",
+        "description": "Bu kartlardaki kelimelerin dili (ör. en). Desteye göre ayarla; boşsa dil bilinmiyor demektir ve bu kartlar kelime sayılmaz."
+      },
+      "known_interval_days": {
+        "label": "Kelimenin bilinmiş sayılacağı gün",
+        "description": "Kartı tekrarlar arasında en az bu kadar gün bekleyen kelime bilinmiş sayılır. Kendin işaretlediğin kelime senin işaretinde kalır."
+      }
+    }
+  },
+  "commands": {
+    "words": {
+      "lookup": "Kelimelere bak",
+      "list": "Kelimeleri listele",
+      "stats": "Kelime sayıları",
+      "index": {
+        "rebuild": "Kelime dizinini yeniden kur",
+        "rebuild_now": "Kelime dizinini yeniden kur"
+      }
+    }
+  },
+  "words": {
+    "job": {
+      "rebuilding": "Kelime dizini yeniden kuruluyor…"
+    }
+  }
+}

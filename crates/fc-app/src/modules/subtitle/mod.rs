@@ -52,14 +52,14 @@ use fc_api::v1::oplog::Actor;
 use fc_api::v1::settings::{ResetSetting, SetSetting};
 use fc_api::v1::subtitle::*;
 use fc_api::{ApiError, ApiMethod, ErrorCode};
-use fc_core::card::CardState;
 use fc_core::content::builtin;
 use fc_core::content::media::{detect_mime, media_hash};
+use fc_core::reading::WordStatus;
 use fc_core::settings::{SettingDef, SettingKind, SettingScope, SettingScopeKind};
 use fc_core::subtitle::{dedup_key, normalize_lang, normalize_lemma, CaptureText};
 use fc_core::{DeckId, NoteId, SubtitleKeyId, Timestamp};
 use fc_storage::repo::{
-    CardFilter, SubtitleCaptureRecord, SubtitleKeyRecord, SubtitleUploadRecord,
+    SubtitleCaptureRecord, SubtitleKeyRecord, SubtitleUploadRecord,
 };
 use fc_storage::Reads;
 use serde_json::{json, Value};
@@ -960,23 +960,12 @@ pub fn error_body(e: &ApiError) -> SubtitleErrorBody {
     }
 }
 
-/// Opaque cursor of the known-words page after `(lang, lemma)`.
-fn cursor_of(lang: &str, lemma: &str) -> String {
-    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(format!("{lang}\u{1f}{lemma}"))
-}
-
-fn parse_cursor(cursor: &str) -> Option<(String, String)> {
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(cursor.trim())
-        .ok()?;
-    let text = String::from_utf8(bytes).ok()?;
-    let (lang, lemma) = text.split_once('\u{1f}')?;
-    Some((lang.to_owned(), lemma.to_owned()))
-}
-
-/// `GET /subtitle/v1/known-words?lang=&cursor=`: captured words with their status from the
-/// cards' scheduling (interval ≥ 21 days = known, else learning), [`KNOWN_WORDS_PAGE`] per
-/// page by language and lemma. Words whose notes are all gone are left out.
+/// `GET /subtitle/v1/known-words?lang=&cursor=`: the words of the word index (v1.4,
+/// `crate::modules::words`) the extension can colour — **known** (a manual "I know this"
+/// mark, or a card whose interval reached `words.known_interval_days`, default 21) and
+/// **learning** (any other card) — whatever made their notes (Subtitle, reading mode, by hand,
+/// an Anki import). New and ignored words are left out (the contract has no such statuses).
+/// [`KNOWN_WORDS_PAGE`] per page by language and lemma.
 pub fn known_words(
     app: &App,
     lang: Option<&str>,
@@ -992,82 +981,50 @@ pub(crate) fn known_words_page(
     cursor: Option<&str>,
     size: u32,
 ) -> Result<SubtitleKnownWords, ApiError> {
+    use crate::modules::words;
     let after = match cursor.filter(|c| !c.trim().is_empty()) {
-        Some(c) => Some(parse_cursor(c).ok_or_else(|| {
+        Some(c) => Some(words::parse_cursor(c).ok_or_else(|| {
             ApiError::new(ErrorCode::ValidationInvalidParams, "cursor is not valid")
                 .with_detail("field", "cursor")
         })?),
         None => None,
     };
-    let lang = lang.map(normalize_lang).filter(|l| !l.is_empty());
+    let lang = lang
+        .map(normalize_lang)
+        .filter(|l| !l.is_empty())
+        .map(|l| fc_core::words::index_language(&l));
     read(app, |r| {
-        let cal = crate::modules::stats::facts::calendar(r, None)?;
-        let page = r.subtitle_lemma_page(
-            lang.as_deref(),
-            after.as_ref().map(|(a, b)| (a.as_str(), b.as_str())),
-            size.saturating_add(1),
-        )?;
+        let threshold_days = words::threshold(r)?;
+        let page = r.word_index_page(&fc_storage::repo::WordIndexQuery {
+            language: lang.clone(),
+            statuses: vec!["known".into(), "learning".into()],
+            threshold_days,
+            after,
+            limit: size.saturating_add(1),
+        })?;
         let more = page.len() > size as usize;
-        let page: Vec<_> = page.into_iter().take(size as usize).collect();
-        let rows = r.subtitle_captures_of(&page)?;
-        let note_ids: Vec<NoteId> = rows.iter().map(|c| c.note_id).collect();
-        let cards = if note_ids.is_empty() {
-            vec![]
-        } else {
-            r.list_cards(&CardFilter {
-                note_ids: Some(note_ids),
-                ..CardFilter::default()
-            })?
-        };
-        let mut words = Vec::new();
-        for (l, lemma) in &page {
-            let notes: BTreeSet<NoteId> = rows
-                .iter()
-                .filter(|c| c.lang == *l && c.lemma == *lemma)
-                .map(|c| c.note_id)
-                .collect();
-            let of: Vec<_> = cards
-                .iter()
-                .filter(|c| notes.contains(&c.note_id) && c.deleted_at.is_none())
-                .collect();
-            if of.is_empty() {
-                continue;
-            }
-            let interval = of
-                .iter()
-                .filter_map(|c| match (c.scheduling.state, c.scheduling.due, c.scheduling.last_review) {
-                    (CardState::Review, Some(due), Some(last)) => {
-                        u32::try_from((cal.index(due) - cal.index(last)).max(0)).ok()
-                    }
-                    _ => None,
-                })
-                .max()
-                .unwrap_or(0);
-            let updated = of
-                .iter()
-                .filter_map(|c| c.scheduling.last_review)
-                .max()
-                .or_else(|| {
-                    rows.iter()
-                        .filter(|c| c.lang == *l && c.lemma == *lemma)
-                        .map(|c| c.created_at)
-                        .max()
-                })
-                .unwrap_or(Timestamp::EPOCH);
-            words.push(SubtitleKnownWord {
-                lemma: lemma.clone(),
-                lang: l.clone(),
-                status: if interval >= fc_core::subtitle::KNOWN_INTERVAL_DAYS {
+        let words: Vec<SubtitleKnownWord> = page
+            .iter()
+            .take(size as usize)
+            .map(|w| SubtitleKnownWord {
+                lemma: w.key.clone(),
+                lang: w.language.clone(),
+                status: if words::row_status(w, threshold_days) == WordStatus::Known {
                     SubtitleWordStatus::Known
                 } else {
                     SubtitleWordStatus::Learning
                 },
-                interval_days: interval,
-                updated_at: fc_core::maintenance::iso_datetime(updated),
-            });
-        }
+                interval_days: w.max_interval_days.unwrap_or(0),
+                updated_at: fc_core::maintenance::iso_datetime(
+                    w.last_review
+                        .or(w.mark_at)
+                        .or(w.first_seen)
+                        .unwrap_or(Timestamp::EPOCH),
+                ),
+            })
+            .collect();
         let next_cursor = if more {
-            page.last().map(|(l, m)| cursor_of(l, m))
+            words.last().map(|w| words::cursor_of(&w.lang, &w.lemma))
         } else {
             None
         };
