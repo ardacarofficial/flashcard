@@ -172,19 +172,13 @@ pub fn plan_interval(
 
 // ------------------------------------------------------------------ workload
 
-/// Days until a memory of `stability` days falls to recall `retention`, on the FSRS-6
-/// forgetting curve with decay `decay` (`w20`, positive).
+/// Days until a memory of `stability` days falls to recall `retention`: the inverse of the one
+/// forgetting curve ([`fc_core::recall::Curve::days_to`]) with `decay` (callers pass
+/// [`fc_core::recall::decay_of_weights`] of the preset; an invalid one = the default decay).
 pub fn interval_at(stability: f64, retention: f64, decay: f64) -> Option<f64> {
-    if !(stability.is_finite() && stability > 0.0 && retention > 0.0 && retention < 1.0) {
-        return None;
-    }
-    let decay = if decay.is_finite() && decay > 0.0 {
-        decay
-    } else {
-        0.5
-    };
-    let factor = 0.9f64.powf(-1.0 / decay) - 1.0;
-    Some(stability / factor * (retention.powf(-1.0 / decay) - 1.0))
+    fc_core::recall::Curve::new(decay)
+        .unwrap_or_default()
+        .days_to(stability, retention)
 }
 
 /// Estimated reviews per day of review cards with `stabilities` at `retention`: each card

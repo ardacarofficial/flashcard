@@ -89,7 +89,7 @@ fn fsrs_curve_matches_its_definition() {
     assert!(f.next_difficulty(5.0, 1) > f.next_difficulty(5.0, 3));
     // Bad weights fall back to the defaults; FSRS-4.5 weights decay with 0.5.
     assert_eq!(Fsrs::new(&[1.0, 2.0]), f);
-    assert!(close(Fsrs::new(&DEFAULT_WEIGHTS[..17]).decay, 0.5));
+    assert!(close(Fsrs::new(&DEFAULT_WEIGHTS[..17]).curve.decay(), 0.5));
 }
 
 #[test]

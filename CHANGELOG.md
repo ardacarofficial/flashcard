@@ -5,7 +5,7 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 ## [Unreleased]
 
 ## Unreleased (v1.4)
-- A2/A5: **tek hatırlama olasılığı** (`fc_core::recall`: hazır ayarın kişisel `w20` sönümü + tam çalışma günü) kart bilgisi, istatistik, çalışma geçmişi ve `retrievability<…` sorgusunda (SQL'de `fc_recall`) aynı sayıyı verir; **"son yakalamama ne oldu?"**: her Subtitle yakalama denemesi metinsiz bir tanı satırı bırakır (`subtitle.captures.recent`, son 500, log paketinde `subtitle_captures.txt`, migration `1430_subtitle_capture_log`).
+- A2/A5: **tek hatırlama olasılığı** (`fc_core::recall`: hazır ayarın kişisel `w20` sönümü + tam çalışma günü) kart bilgisi, istatistik, çalışma geçmişi ve `retrievability<…` sorgusunda (SQL'de `fc_recall`) aynı sayıyı verir; **"son yakalamama ne oldu?"**: her Subtitle yakalama denemesi metinsiz bir tanı satırı bırakır (`subtitle.captures.recent`, son 500, log paketinde `subtitle_captures.txt`, migration `1430_subtitle_capture_log`); iş yükü tahmini, `optimizer.workload` ve "en düşük hatırlama önce" sırası da aynı eğri ve sönüm kuralıyla).
 
 ## [1.3.0] — v1.3 "kullanılır": akışlar, kelime kartları, gerçek çekirdekte doğrulama
 

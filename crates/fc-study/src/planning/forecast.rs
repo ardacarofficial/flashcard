@@ -41,6 +41,7 @@
 //! What it does not model: "Hard"/"Easy" answers, same-day short-term stability changes,
 //! load balancing (it moves reviews within a few days, the totals stay).
 
+use fc_core::recall::{decay_of_weights, Curve};
 use std::collections::BTreeMap;
 
 /// FSRS-6 default weights (`fsrs::FSRS6_DEFAULT_PARAMETERS`; same as the scheduler's).
@@ -63,10 +64,9 @@ pub const DEFAULT_SECS_PER_ANSWER: f64 = 8.0;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Fsrs {
     w: [f64; 21],
-    /// Forgetting-curve decay (positive): `w20` for FSRS-6, 0.5 before.
-    decay: f64,
-    /// `0.9^(-1/decay) - 1`.
-    factor: f64,
+    /// The forgetting curve: [`fc_core::recall::decay_of_weights`] of the preset's weights
+    /// (FSRS-6: `w20`; FSRS-4.5/5: their fixed 0.5), the curve card info shows.
+    curve: Curve,
     /// Divisor of the lapse stability floor (`exp(w17·w18)`; FSRS-4.5: none).
     failure_floor_divisor: Option<f64>,
 }
@@ -83,24 +83,36 @@ impl Fsrs {
         } else {
             21
         };
-        let decay = if len == 21 && w[20] > 0.0 { w[20] } else { 0.5 };
-        let factor = 0.9f64.powf(-1.0 / decay) - 1.0;
+        let given: &[f64] = if valid { weights } else { &[] };
+        let curve = Curve::new(decay_of_weights(given)).unwrap_or_default();
         Self {
             w,
-            decay,
-            factor,
+            curve,
             failure_floor_divisor: (len >= 19).then(|| (w[17] * w[18]).exp()),
         }
     }
 
-    /// Probability of recall `t` days after a review, for stability `s`.
+    /// Probability of recall `t` (study) days after a review, for stability `s` (at least the
+    /// model's minimum): [`fc_core::recall::Curve::retrievability`].
     pub fn retrievability(&self, t: f64, s: f64) -> f64 {
-        (1.0 + self.factor * t.max(0.0) / s.max(S_MIN)).powf(-self.decay)
+        self.curve.retrievability(s.max(S_MIN), t).unwrap_or(1.0)
+    }
+
+    /// Recall of a started card on day 0 of the forecast — `elapsed` whole study days after
+    /// its last review, as the simulation's first review of it sees it (`None` without a
+    /// stability or a known last review). Equals card info's recall probability.
+    pub fn recall_today(&self, c: &ForecastCard) -> Option<f64> {
+        if c.state == ForecastState::New {
+            return None;
+        }
+        let s = c.stability.filter(|s| s.is_finite() && *s > 0.0)?;
+        let last = -c.elapsed?.max(0);
+        Some(self.retrievability(0.0 - last as f64, s))
     }
 
     /// Whole days until recall falls to `retention` (at least 1, at most `max`).
     pub fn interval(&self, s: f64, retention: f64, max: u32) -> i64 {
-        let raw = s / self.factor * (retention.powf(-1.0 / self.decay) - 1.0);
+        let raw = self.curve.days_to(s.max(S_MIN), retention).unwrap_or(1.0);
         let max = f64::from(max.max(1));
         // In 1..=max after clamping, so the cast is exact.
         raw.round().clamp(1.0, max) as i64
