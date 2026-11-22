@@ -1,6 +1,6 @@
 /**
  * J4 CSV import through the UI: Create → "From a file" (v1.3: importing lives on the add-cards
- * page), existing deck, choose a CSV file (the browser build asks for its path), check the
+ * page), existing deck, choose a CSV file (the browser's file chooser), check the
  * mapped cards, import → the notes exist with the CSV's fields.
  */
 import { writeFileSync } from 'node:fs';
@@ -16,8 +16,10 @@ test('J4 CSV import through the UI → notes exist', async ({ page }) => {
     [`shore ${tag}`, 'kıyı'],
     [`storm ${tag}`, 'fırtına'],
   ];
-  // A real file in the profile folder (a space and Turkish letters in the name on purpose).
-  const csv = join(env.profile, `kelimeler ğüşİ ${Date.now()}.csv`);
+  // A real file in the profile folder (a space in the name on purpose). In the browser build
+  // the file's text is read by the page, so the path never reaches the core; headless
+  // Chromium does not deliver a file whose path has non-ASCII letters to the chooser.
+  const csv = join(env.profile, `kelimeler ${Date.now()}.csv`);
   writeFileSync(csv, rows.map(([a, b]) => `${a},${b}`).join('\n') + '\n', 'utf8');
 
   await openApp(page);
@@ -27,9 +29,11 @@ test('J4 CSV import through the UI → notes exist', async ({ page }) => {
   await main.getByRole('radio', { name: t('create.mode_existing'), exact: true }).click();
   await choose(page, t('create.deck'), deckName, main);
 
-  // Outside the desktop shell there is no native file dialog: the app asks for a path.
-  page.once('dialog', (d) => void d.accept(csv));
+  // Outside the desktop shell the browser's file chooser picks the file (its text goes to the core).
+  const chooser = page.waitForEvent('filechooser');
   await main.getByRole('button', { name: t('io.file.choose') }).click();
+  await (await chooser).setFiles(csv);
+  await expect(main.getByText(/kelimeler/).first()).toBeVisible();
   // The mapped preview is up: the import button names the 3 cards it will add.
   const start = main.getByTestId('import-start');
   await expect(start).toBeEnabled();

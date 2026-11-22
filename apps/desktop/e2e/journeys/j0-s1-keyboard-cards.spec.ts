@@ -3,6 +3,10 @@
  * launcher → Enter starts Cards on today's queue → Space flips (three times: front, back,
  * front, back) and grades NOTHING → 2 grades exactly one card and the next one is shown →
  * holding 2 down (key repeat) grades exactly one card.
+ *
+ * Runs first (file name `j0-…`): the whole-collection queue (Home's Start, `deck_id: null`)
+ * uses the built-in limits (20 new a day for ALL decks together), so once later journeys
+ * have studied 20 new cards today, "today's cards" of the collection is rightly empty.
  */
 import { cardHistory, endOpenSessions, expect, openApp, press, sessionNow, studyOptions, test } from '../fixtures';
 

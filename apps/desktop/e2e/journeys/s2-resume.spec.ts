@@ -12,6 +12,11 @@ test('S2 answer 3, Esc, reopen the launcher: Continue is first and resumes the s
   await makeDeck(name, Array.from({ length: 8 }, (_, i): [string, string] => [`${name} w${i}`, `anlam ${i}`]));
   await openApp(page);
 
+  // Started from its own deck (the whole collection's queue may be used up by earlier
+  // journeys today); the launcher is reopened from Home below.
+  await goToSection(page, 'shell.section.library');
+  await page.getByTestId('deck-row').filter({ hasText: name }).first().click();
+  await page.getByTestId('deck-study').focus();
   await press(page, 'Enter');
   await expect(page.getByTestId('launcher-start')).toBeEnabled();
   await press(page, 'Enter');
