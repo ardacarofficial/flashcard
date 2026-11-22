@@ -18,6 +18,7 @@ mod jobs;
 mod local_api;
 mod maintenance;
 mod mcp;
+mod meanings;
 mod notes;
 mod notetypes;
 mod oplog;

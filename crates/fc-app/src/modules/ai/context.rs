@@ -45,8 +45,12 @@ pub(crate) struct Target {
     pub note_id: Option<NoteId>,
     /// Classification values for generated notes.
     pub attributes: Vec<AttributeAssignment>,
-    /// Distractors: the field that holds them.
+    /// Distractors: the field that holds them. Meaning in context: the note's meaning field.
     pub field: Option<String>,
+    /// Meaning in context: the meaning the note has now (the source's), shown next to the
+    /// suggestion and never overwritten by it.
+    #[serde(default)]
+    pub original: String,
 }
 
 /// A request ready to preview or send.
@@ -71,6 +75,7 @@ pub(crate) fn feature_of(task: &AiTask) -> AiFeature {
         AiTask::Improve { .. } => AiFeature::Improve,
         AiTask::RewriteLeech { .. } => AiFeature::RewriteLeech,
         AiTask::Distractors { .. } => AiFeature::Distractors,
+        AiTask::MeaningInContext { .. } => AiFeature::MeaningInContext,
     }
 }
 
@@ -148,6 +153,128 @@ fn language(locale: Locale) -> &'static str {
         Locale::Tr => "Turkish",
         Locale::En => "English",
     }
+}
+
+/// Language name of a requested answer language (`tr`, `en-GB`, …; `None` = the app's).
+fn target_language(code: Option<&str>, locale: Locale) -> AppResult<String> {
+    let Some(code) = code.map(str::trim).filter(|c| !c.is_empty()) else {
+        return Ok(language(locale).to_owned());
+    };
+    if code.len() > 20 || !code.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(task_error("target_language", "unknown answer language"));
+    }
+    let primary = code.split(['-', '_']).next().unwrap_or(code).to_ascii_lowercase();
+    Ok(match primary.as_str() {
+        "tr" => "Turkish",
+        "en" => "English",
+        "de" => "German",
+        "fr" => "French",
+        "es" => "Spanish",
+        "it" => "Italian",
+        "pt" => "Portuguese",
+        "nl" => "Dutch",
+        "ru" => "Russian",
+        "ar" => "Arabic",
+        "ja" => "Japanese",
+        "ko" => "Korean",
+        "zh" => "Chinese",
+        _ => return Ok(code.to_owned()),
+    }
+    .to_owned())
+}
+
+/// Longest sentence of a meaning-in-context task (characters).
+pub(crate) const MAX_SENTENCE_CHARS: usize = 2000;
+/// Most offered meanings of a meaning-in-context task.
+pub(crate) const MAX_CANDIDATES: usize = 10;
+
+/// Text of the note field with `role` (`""` = none / empty).
+fn role_text(nt: &NoteType, note: &Note, role: fc_core::notetype::FieldRole) -> String {
+    nt.field_with_role(role)
+        .and_then(|f| note.fields.get(&f.key))
+        .map(|v| html_to_text(v).trim().to_owned())
+        .unwrap_or_default()
+}
+
+/// The meaning field of a note type (`meaning` role), if any.
+pub(crate) fn meaning_field(nt: &NoteType) -> Option<String> {
+    nt.field_with_role(fc_core::notetype::FieldRole::Meaning)
+        .map(|f| f.key.0.clone())
+}
+
+/// What a meaning-in-context task asks about, resolved from the task and its note.
+pub(crate) struct MeaningInput {
+    pub sentence: String,
+    pub lemma: String,
+    pub surface: String,
+    pub position: Option<u32>,
+    pub candidates: Vec<String>,
+    pub note_id: Option<NoteId>,
+    pub field: Option<String>,
+    pub original: String,
+}
+
+/// Resolves a [`AiTask::MeaningInContext`] (the note's fields by role fill what is not given).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn meaning_input(
+    reads: &dyn Reads,
+    note_id: Option<NoteId>,
+    sentence: Option<&str>,
+    lemma: Option<&str>,
+    surface: Option<&str>,
+    position: Option<u32>,
+    candidates: &[String],
+) -> AppResult<MeaningInput> {
+    use fc_core::notetype::FieldRole;
+    let given = |v: Option<&str>| v.map(|s| html_to_text(s).trim().to_owned()).filter(|s| !s.is_empty());
+    let (mut sentence, mut lemma, mut surface) = (given(sentence), given(lemma), given(surface));
+    let (mut field, mut original) = (None, String::new());
+    if let Some(id) = note_id {
+        let note = require_live_note(reads, id)?;
+        let nt = require_notetype(reads, note.notetype_id)?;
+        let filled = |s: String| Some(s).filter(|s| !s.is_empty());
+        sentence = sentence.or_else(|| filled(role_text(&nt, &note, FieldRole::Example)));
+        lemma = lemma.or_else(|| filled(role_text(&nt, &note, FieldRole::Term)));
+        surface = surface.or_else(|| filled(role_text(&nt, &note, FieldRole::Surface)));
+        field = meaning_field(&nt);
+        original = role_text(&nt, &note, FieldRole::Meaning);
+    }
+    let sentence = sentence.ok_or_else(|| task_error("no_sentence", "there is no sentence to read the word in"))?;
+    let lemma = lemma.ok_or_else(|| task_error("no_word", "there is no word to explain"))?;
+    if sentence.chars().count() > MAX_SENTENCE_CHARS || lemma.chars().count() > 200 {
+        return Err(task_error("too_long", "the sentence or the word is too long"));
+    }
+    let surface = surface.unwrap_or_else(|| lemma.clone());
+    if let Some(p) = position {
+        let at: String = sentence.chars().skip(p as usize).take(surface.chars().count()).collect();
+        if at.to_lowercase() != surface.to_lowercase() {
+            return Err(task_error("position", "the word is not at that position of the sentence"));
+        }
+    }
+    let mut offered: Vec<String> = Vec::new();
+    for c in candidates.iter().map(|c| html_to_text(c).trim().to_owned()).chain(
+        Some(original.clone()).filter(|o| !o.is_empty()),
+    ) {
+        if c.is_empty() || c.chars().count() > super::prompts::MAX_MEANING_CHARS {
+            continue;
+        }
+        if !offered.iter().any(|o| o.to_lowercase() == c.to_lowercase()) {
+            offered.push(c);
+        }
+    }
+    if offered.len() > MAX_CANDIDATES {
+        return Err(task_error("candidates", "at most 10 meanings can be offered"));
+    }
+    Ok(MeaningInput {
+        sentence,
+        lemma,
+        surface,
+        position,
+        candidates: offered,
+        note_id,
+        field,
+        original,
+    })
 }
 
 /// Fields the model reads and writes: text-like ones (media fields are left alone).
@@ -512,6 +639,49 @@ pub(crate) fn build(
                 count: *count,
                 answer: a,
             }
+        }
+        AiTask::MeaningInContext {
+            note_id,
+            sentence,
+            lemma,
+            surface,
+            position,
+            target_language: answer_lang,
+            candidates,
+        } => {
+            let m = meaning_input(
+                reads,
+                *note_id,
+                sentence.as_deref(),
+                lemma.as_deref(),
+                surface.as_deref(),
+                *position,
+                candidates,
+            )?;
+            vars.insert("language", target_language(answer_lang.as_deref(), locale)?);
+            vars.insert("sentence", m.sentence.clone());
+            vars.insert("lemma", m.lemma.clone());
+            vars.insert(
+                "surface",
+                match m.position {
+                    Some(p) => format!("{} (at character {p})", m.surface),
+                    None => m.surface.clone(),
+                },
+            );
+            vars.insert(
+                "candidates",
+                if m.candidates.is_empty() {
+                    String::new()
+                } else {
+                    format!("Meanings offered by the dictionary: {}\n", m.candidates.join("; "))
+                },
+            );
+            target.note_id = m.note_id;
+            target.field = m.field;
+            target.original = m.original;
+            items = 1;
+            max_tokens = 600;
+            OutputSpec::Meaning { sentence: m.sentence }
         }
     };
     let text = render_template(&template(reads, feature)?, &vars);

@@ -30,3 +30,7 @@ ProviderAiInvalidRequest => Provider, "errors.provider.ai_invalid_request";
 ProviderAiInvalidOutput => Provider, "errors.provider.ai_invalid_output";
 /// The OS keychain is not available or refused (`details.reason`).
 ProviderAiKeychain => Provider, "errors.provider.ai_keychain";
+/// The monthly AI budget is spent: an automatic request is not sent (`details.limit_usd`).
+ConflictAiBudgetExceeded => Conflict, "errors.conflict.ai_budget_exceeded";
+/// Asking without a preview needs the user's opt-in (`details.setting`).
+ConflictAiAutoOff => Conflict, "errors.conflict.ai_auto_off";

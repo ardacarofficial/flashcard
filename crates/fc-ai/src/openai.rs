@@ -91,9 +91,13 @@ impl OpenAi {
         let choice = v
             .pointer("/choices/0")
             .ok_or_else(|| self.http.failed("response without choices"))?;
+        // A structured-output refusal has `content: null` and the reason in `refusal` (v1.4):
+        // it is passed on as text, so the app's validation says what happened.
         let text = choice
             .pointer("/message/content")
             .and_then(Value::as_str)
+            .filter(|t| !t.is_empty())
+            .or_else(|| choice.pointer("/message/refusal").and_then(Value::as_str))
             .unwrap_or_default()
             .to_owned();
         Ok(CompletionResponse {

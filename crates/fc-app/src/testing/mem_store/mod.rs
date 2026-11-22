@@ -187,4 +187,5 @@ domains! {
     words => WordsState,
     word_data => WordDataState,
     capture_log => CaptureLogState,
+    meanings => MeaningState,
 }

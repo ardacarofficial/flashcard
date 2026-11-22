@@ -106,4 +106,5 @@ domains! {
     reminders,
     themes,
     words,
+    accepted_answers,
 }

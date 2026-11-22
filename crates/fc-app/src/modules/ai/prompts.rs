@@ -84,6 +84,21 @@ Fields:
 Question: {{question}}
 Correct answer: {{answer}}
 </card>",
+        AiFeature::MeaningInContext => "Which meaning of the word fits THIS sentence? Read the whole sentence: the word may be part of an expression or phrasal verb here (\"pick up the kids\" is not \"pick up a language\").
+
+<card>
+Sentence: {{sentence}}
+Word: {{lemma}}
+As written in the sentence: {{surface}}
+{{candidates}}</card>
+
+Answer in {{language}}:
+- meaning: the meaning that fits this sentence, short like a dictionary entry, in {{language}}. Pick one of the offered meanings if one fits, else give the right one.
+- phrase: the words of the sentence the meaning rests on, copied exactly from the sentence.
+- expression: true if the phrase is an expression or phrasal verb, not the word alone.
+- also_correct: up to 4 other correct {{language}} translations of the same meaning (may be empty).
+- not_this: up to 3 other common meanings of the word, in {{language}}, that do NOT fit this sentence.
+- confidence: from 0 to 1, how sure you are.",
     }
 }
 
@@ -284,6 +299,11 @@ pub(crate) enum OutputSpec {
         /// The correct answer (never accepted as an option).
         answer: String,
     },
+    /// `{"meaning", "phrase", "expression", "also_correct", "not_this", "confidence"}`.
+    Meaning {
+        /// The sentence (the phrase must be words of it).
+        sentence: String,
+    },
 }
 
 impl OutputSpec {
@@ -329,6 +349,19 @@ impl OutputSpec {
                 "required": ["distractors"],
                 "additionalProperties": false,
             })),
+            Self::Meaning { .. } => Some(json!({
+                "type": "object",
+                "properties": {
+                    "meaning": {"type": "string"},
+                    "phrase": {"type": "string"},
+                    "expression": {"type": "boolean"},
+                    "also_correct": {"type": "array", "items": {"type": "string"}},
+                    "not_this": {"type": "array", "items": {"type": "string"}},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["meaning", "phrase", "expression", "also_correct", "not_this", "confidence"],
+                "additionalProperties": false,
+            })),
         }
     }
 }
@@ -348,6 +381,111 @@ pub(crate) enum Parsed {
     Rewrite(Vec<AiFieldChange>, String),
     /// Options.
     Options(Vec<String>),
+    /// Meaning in context.
+    Meaning(MeaningAnswer),
+}
+
+/// A validated meaning-in-context answer.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct MeaningAnswer {
+    pub meaning: String,
+    pub phrase: String,
+    pub expression: bool,
+    pub also_correct: Vec<String>,
+    pub not_this: Vec<String>,
+    pub confidence: f32,
+}
+
+/// Most other correct translations kept.
+pub(crate) const MAX_ALSO_CORRECT: usize = 4;
+/// Most "not this sentence" meanings kept.
+pub(crate) const MAX_NOT_THIS: usize = 3;
+/// Longest meaning / phrase / list item accepted.
+pub(crate) const MAX_MEANING_CHARS: usize = 300;
+
+/// Lowercase words of `s`: punctuation and runs of spaces become one space (so a phrase
+/// "Pick up the kids" is found in "…, pick up the kids!").
+pub(crate) fn words_of(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut space = true;
+    for c in s.chars() {
+        if c.is_alphanumeric() || c == '\'' || c == '’' {
+            out.extend(c.to_lowercase());
+            space = false;
+        } else if !space {
+            out.push(' ');
+            space = true;
+        }
+    }
+    out.trim_end().to_owned()
+}
+
+fn string_list(m: &Map<String, Value>, key: &str, max: usize, exclude: &[&str]) -> Result<Vec<String>, String> {
+    let items = match m.get(key) {
+        None | Some(Value::Null) => return Ok(Vec::new()),
+        Some(Value::Array(items)) => items,
+        Some(_) => return Err(format!("`{key}` must be an array of strings")),
+    };
+    let mut out: Vec<String> = Vec::new();
+    for item in items {
+        let Some(s) = item.as_str() else {
+            return Err(format!("`{key}` must be an array of strings"));
+        };
+        let s = s.trim();
+        if s.is_empty() || s.chars().count() > MAX_MEANING_CHARS {
+            continue;
+        }
+        let low = s.to_lowercase();
+        if exclude.iter().any(|e| e.to_lowercase() == low) || out.iter().any(|o| o.to_lowercase() == low) {
+            continue;
+        }
+        out.push(s.to_owned());
+    }
+    out.truncate(max);
+    Ok(out)
+}
+
+fn parse_meaning(sentence: &str, text: &str) -> Result<Parsed, String> {
+    let m = object(text)?;
+    let text_of = |key: &str| -> Result<String, String> {
+        match m.get(key) {
+            Some(Value::String(s)) if !s.trim().is_empty() => {
+                let s = s.trim();
+                if s.chars().count() > MAX_MEANING_CHARS {
+                    Err(format!("`{key}` is too long"))
+                } else {
+                    Ok(s.to_owned())
+                }
+            }
+            _ => Err(format!("`{key}` must be a non-empty string")),
+        }
+    };
+    let meaning = text_of("meaning")?;
+    let phrase = text_of("phrase")?;
+    let found = words_of(&phrase);
+    if found.is_empty() || !format!(" {} ", words_of(sentence)).contains(&format!(" {found} ")) {
+        return Err("`phrase` must be words copied from the sentence".into());
+    }
+    let expression = match m.get("expression") {
+        Some(Value::Bool(b)) => *b,
+        _ => return Err("`expression` must be true or false".into()),
+    };
+    let confidence = match m.get("confidence").and_then(Value::as_f64) {
+        Some(c) if (0.0..=1.0).contains(&c) => c as f32,
+        _ => return Err("`confidence` must be a number from 0 to 1".into()),
+    };
+    let also_correct = string_list(&m, "also_correct", MAX_ALSO_CORRECT, &[&meaning])?;
+    let mut exclude: Vec<&str> = vec![&meaning];
+    exclude.extend(also_correct.iter().map(String::as_str));
+    let not_this = string_list(&m, "not_this", MAX_NOT_THIS, &exclude)?;
+    Ok(Parsed::Meaning(MeaningAnswer {
+        meaning,
+        phrase,
+        expression,
+        also_correct,
+        not_this,
+        confidence,
+    }))
 }
 
 fn object(text: &str) -> Result<Map<String, Value>, String> {
@@ -501,6 +639,7 @@ pub(crate) fn parse(spec: &OutputSpec, text: &str) -> Result<Parsed, String> {
             out.truncate(*count as usize);
             Ok(Parsed::Options(out))
         }
+        OutputSpec::Meaning { sentence } => parse_meaning(sentence, text),
     }
 }
 
@@ -585,6 +724,7 @@ mod tests {
                 &[
                     "count", "notetype", "fields", "classifications", "instructions", "source",
                     "note", "empty_fields", "language", "question", "answer", "followup", "given",
+                    "sentence", "lemma", "surface", "candidates",
                 ]
                 .into_iter()
                 .map(|k| (k, String::new()))
@@ -681,5 +821,44 @@ mod tests {
         assert_eq!(o, ["Lyon", "Nice"]);
         assert!(parse(&spec, r#"{"distractors": ["Paris"]}"#).is_err());
         assert!(parse(&OutputSpec::Text, "  ").is_err());
+    }
+
+    #[test]
+    fn meaning_in_context_is_validated() {
+        let spec = OutputSpec::Meaning {
+            sentence: "Can you pick up the kids at five?".into(),
+        };
+        let ok = r#"{"meaning": "almak (okuldan)", "phrase": "Pick up the kids",
+            "expression": true, "also_correct": ["alıp getirmek", "ALMAK (okuldan)", "", "okuldan almak"],
+            "not_this": ["kaldırmak", "öğrenmek", "alıp getirmek", "toplamak", "hızlanmak"],
+            "confidence": 0.92}"#;
+        let Parsed::Meaning(m) = parse(&spec, ok).unwrap() else { panic!() };
+        assert_eq!((m.meaning.as_str(), m.phrase.as_str(), m.expression), ("almak (okuldan)", "Pick up the kids", true));
+        // Duplicates of the meaning (any case) and blanks are dropped; lists are capped.
+        assert_eq!(m.also_correct, ["alıp getirmek", "okuldan almak"]);
+        assert_eq!(m.not_this, ["kaldırmak", "öğrenmek", "toplamak"]);
+        assert!((m.confidence - 0.92).abs() < 1e-6);
+        // Optional lists may be missing.
+        let Parsed::Meaning(m) = parse(
+            &spec,
+            r#"{"meaning": "almak", "phrase": "pick up", "expression": false, "confidence": 1}"#,
+        )
+        .unwrap() else { panic!() };
+        assert!(m.also_correct.is_empty() && m.not_this.is_empty());
+
+        for (bad, why) in [
+            ("I can't help with that.", "valid JSON"),
+            (r#"{"meaning": "", "phrase": "pick up", "expression": true, "confidence": 0.5}"#, "meaning"),
+            (r#"{"meaning": "almak", "phrase": "pick out", "expression": true, "confidence": 0.5}"#, "phrase"),
+            // A phrase must be whole words of the sentence.
+            (r#"{"meaning": "almak", "phrase": "ick up", "expression": true, "confidence": 0.5}"#, "phrase"),
+            (r#"{"meaning": "almak", "phrase": "pick up", "expression": "yes", "confidence": 0.5}"#, "expression"),
+            (r#"{"meaning": "almak", "phrase": "pick up", "expression": true, "confidence": 92}"#, "confidence"),
+            (r#"{"meaning": "almak", "phrase": "pick up", "expression": true, "confidence": 0.5, "not_this": "x"}"#, "not_this"),
+        ] {
+            let e = parse(&spec, bad).unwrap_err();
+            assert!(e.contains(why), "{bad}: {e}");
+        }
+        assert_eq!(words_of("  Pick-up,  the KIDS! "), "pick up the kids");
     }
 }

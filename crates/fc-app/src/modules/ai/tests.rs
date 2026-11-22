@@ -850,7 +850,14 @@ fn module_switch_internal_methods_and_missing_key() {
 
     assert_eq!(
         internal_methods_of(&t, &["ai"]),
-        ["ai.providers.restore", "ai.providers.set_models", "ai.usage.record"]
+        // v1.4: the meaning-in-context writes (an undo inverse, the suggestion job's write).
+        [
+            "ai.meaning.restore",
+            "ai.meaning.store_suggestion",
+            "ai.providers.restore",
+            "ai.providers.set_models",
+            "ai.usage.record"
+        ]
     );
     t.ok::<ModulesSetEnabled>(SetModuleEnabled { id: ID.into(), enabled: false });
     let e = t.err::<AiProvidersList>(Empty {});

@@ -6,6 +6,10 @@
     "ai": {
       "name": "Yapay zeka",
       "description": "Claude, OpenAI ya da yerel bir modelle metinden kart, açıklama, ipucu, cevap kontrolü ve kart iyileştirme. Her istek gönderilmeden önce gösterilir."
+    },
+    "accepted_answers": {
+      "name": "Kabul edilen cevaplar",
+      "description": "Yazılı kontrolün bir kart için kabul ettiği başka cevaplar (\"vazgeçmek\"in yanında \"bırakmak\"). Bu bilgisayarda kontrol edilir, yapay zeka kullanılmaz."
     }
   },
   "ai": {
@@ -28,7 +32,8 @@
       "check_answer": "Cevap kontrolü",
       "improve": "Kart iyileştirme",
       "rewrite_leech": "Zor kartı yeniden yazma",
-      "distractors": "Çeldiriciler"
+      "distractors": "Çeldiriciler",
+      "meaning_in_context": "Bu cümledeki anlam"
     },
     "preview": {
       "heading": "Göndermeden önce",
@@ -286,7 +291,8 @@
       "ai_key": "API anahtarı hatalı görünüyor (boş, çok uzun ya da boşluklu).",
       "ai_task": "Bu istek bu haliyle gönderilemez.",
       "ai_price": "Fiyatlar 0'dan büyük sayı olmalı, model adı da gerekli.",
-      "ai_source": "Bu kaynak kullanılamıyor (adresi, dosyayı ya da sayfaları kontrol et)."
+      "ai_source": "Bu kaynak kullanılamıyor (adresi, dosyayı ya da sayfaları kontrol et).",
+      "accepted_answer": "Bu kabul edilen cevap kaydedilemedi (alanı, uzunluğu ya da sayısını kontrol et)."
     },
     "not_found": {
       "ai_provider": "AI sağlayıcısı bulunamadı."
@@ -294,7 +300,9 @@
     "conflict": {
       "ai_no_provider": "Henüz AI sağlayıcısı yok. Yapay zeka → Sağlayıcılar'dan ekle.",
       "ai_no_model": "Bu sağlayıcı için bir model seç.",
-      "ai_preview_stale": "Önizlemeden sonra bir şey değişti. Yeniden önizle."
+      "ai_preview_stale": "Önizlemeden sonra bir şey değişti. Yeniden önizle.",
+      "ai_budget_exceeded": "Bu ayın AI bütçesi doldu, otomatik olarak hiçbir şey gönderilmez.",
+      "ai_auto_off": "Önizlemesiz sorma kapalı. AI ayarlarından \"Yakalanan kelimelere anlam öner\"i aç."
     },
     "provider": {
       "ai_unauthorized": "Sağlayıcı API anahtarını kabul etmedi (ya da anahtar yok).",
@@ -350,6 +358,15 @@
         },
         "distractors": {
           "label": "İstem: çeldiriciler"
+        },
+        "meaning_in_context": {
+          "label": "İstem: bu cümledeki anlam"
+        }
+      },
+      "meaning": {
+        "auto_suggest": {
+          "label": "Yakalanan kelimelere anlam öner",
+          "description": "Varsayılan olarak kapalı. Açınca yakalanan kelimenin cümlesi önizlemesiz AI sağlayıcına gönderilir, cevap öneri olarak saklanır; kartın ancak sen uygularsan değişir. Aylık bütçe dolunca durur."
         }
       }
     }
@@ -385,7 +402,20 @@
       },
       "sources": {
         "extract": "Kart kaynağı oku (PDF, web sayfası)"
+      },
+      "meaning": {
+        "get": "Bu cümledeki anlam",
+        "apply": "Anlamı uygula",
+        "suggest": "Anlam öner",
+        "restore": "Anlamı geri yükle",
+        "store_suggestion": "Anlam önerisini sakla"
       }
+    },
+    "accepted_answers": {
+      "list": "Kabul edilen cevaplar",
+      "add": "Kabul edilen cevap ekle",
+      "remove": "Kabul edilen cevabı kaldır",
+      "restore": "Kabul edilen cevapları geri yükle"
     }
   }
 }
