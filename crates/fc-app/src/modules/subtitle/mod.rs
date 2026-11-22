@@ -30,6 +30,7 @@
 
 pub(crate) mod capture;
 pub(crate) mod diagnostics;
+pub(crate) mod encounters;
 #[cfg(test)]
 mod tests;
 
@@ -56,8 +57,9 @@ use fc_core::content::builtin;
 use fc_core::content::media::{detect_mime, media_hash};
 use fc_core::reading::WordStatus;
 use fc_core::settings::{SettingDef, SettingKind, SettingScope, SettingScopeKind};
+use encounters::row_dto;
 use fc_core::subtitle::{dedup_key, normalize_lang, normalize_lemma, CaptureText};
-use fc_core::{DeckId, NoteId, SubtitleKeyId, Timestamp};
+use fc_core::{CardId, DeckId, NoteId, SubtitleKeyId, Timestamp};
 use fc_storage::repo::{
     SubtitleCaptureRecord, SubtitleKeyRecord, SubtitleUploadRecord,
 };
@@ -122,6 +124,7 @@ pub fn descriptor() -> ModuleDescriptor {
                 advanced: false,
                 scopes: vec![SettingScopeKind::App],
             },
+            encounters::same_word_setting(),
         ],
         ui: vec![main_menu(
             "subtitle.screen",
@@ -148,6 +151,12 @@ pub fn register(reg: &mut Registry) {
     reg.command::<SubtitleKeysTouch>(keys_touch);
     reg.query::<SubtitleCapturesRecent>(diagnostics::recent);
     reg.command::<SubtitleCapturesLog>(diagnostics::log);
+    reg.query::<SubtitleEncountersList>(encounters::list);
+    reg.command::<SubtitleEncountersSetPrimary>(encounters::set_primary);
+    reg.command::<SubtitleEncountersMove>(encounters::move_encounter);
+    reg.command::<SubtitleEncountersMergeNotes>(encounters::merge_notes);
+    reg.command::<SubtitleEncountersResolve>(encounters::resolve);
+    reg.command::<SubtitleEncountersPut>(encounters::put);
 }
 
 // ------------------------------------------------------------------ keys
@@ -389,6 +398,8 @@ fn outcome_of(status: SubtitleCaptureStatus, r: &SubtitleCaptureRecord) -> Subti
         status,
         card_id: r.card_id,
         note_id: r.note_id,
+        attached: false,
+        needs_review: false,
     }
 }
 
@@ -509,7 +520,6 @@ fn captures_create(
         ctx.tx.delete_subtitle_capture(&r.capture_id)?;
     }
     let notetype_id = notetype(ctx)?;
-    let deck_id = target_deck(ctx, c.deck_id.as_deref())?;
     let screenshot = uploaded(
         ctx,
         &c.capture_id,
@@ -532,73 +542,100 @@ fn captures_create(
         screenshot: screenshot.as_deref(),
         audio: audio.as_deref(),
     });
-    let v = ctx.call(&inverse_call::<NotesCreate>(&CreateNote {
-        notetype_id,
-        deck_id,
-        fields,
-        tags: note_tags(&c.tags),
-        attributes: vec![],
-        // The same word from another line is another card; the dedup key above decides.
-        allow_duplicate: Some(true),
-    })?)?;
-    let note: NoteDto = from_json(&v)?;
-    let card_id = note
-        .cards
-        .first()
-        .map(|c| c.id)
-        .ok_or_else(|| AppError::api(ErrorCode::Internal, "the subtitle note has no card"))?;
-    let row = SubtitleCaptureRecord {
-        capture_id: c.capture_id.clone(),
-        dedup_key: key,
-        lang: normalize_lang(&c.lang.target),
-        lemma: normalize_lemma(&c.term.lemma),
-        note_id: note.id,
-        card_id,
-        key_id: req.key_id,
-        created_at: ctx.now,
+    let facts = encounters::facts_of(c, &fields, screenshot.as_deref(), audio.as_deref());
+    let (lang, lemma) = (normalize_lang(&c.lang.target), normalize_lemma(&c.term.lemma));
+    // v1.4: a known word becomes another example of the note with its meaning.
+    let placement = if encounters::adds_examples(ctx.reads())? {
+        encounters::place(ctx.reads(), &lang, &lemma, &c.definition.text)?
+    } else {
+        encounters::Placement::NewNote { review: None }
     };
-    ctx.tx.insert_subtitle_capture(&row)?;
-    // v1.4 (B3): where the note came from, for `nereden:`/`kaynak:` queries.
-    ctx.tx.set_note_origin(&fc_storage::repo::NoteOriginRecord {
-        note_id: note.id,
-        origin: fc_core::query::NoteOrigin::Subtitle,
-        source: c
-            .source
-            .title
-            .as_deref()
-            .map(fc_core::subtitle::collapse_spaces)
-            .unwrap_or_default(),
-        site: c.source.site.trim().to_owned(),
-        video_id: c.source.video_id.clone().unwrap_or_default(),
-        created_at: ctx.now,
-    })?;
-    let mut inverse = vec![inverse_call::<SubtitleCapturesForget>(&SubtitleCaptureIds {
+    let mut inverse = Vec::new();
+    let (row, attached) = match placement {
+        encounters::Placement::Attach { note_id, card_id } => {
+            let row = SubtitleCaptureRecord {
+                capture_id: c.capture_id.clone(),
+                dedup_key: key,
+                lang,
+                lemma,
+                note_id,
+                card_id,
+                key_id: req.key_id,
+                created_at: ctx.now,
+                facts,
+                is_primary: false,
+                review_note_id: None,
+            };
+            ctx.tx.insert_subtitle_capture(&row)?;
+            // Only the examples list changes: the card, its schedule and history stay.
+            encounters::sync_note(ctx, note_id, false)?;
+            (row, true)
+        }
+        encounters::Placement::NewNote { review } => {
+            let deck_id = target_deck(ctx, c.deck_id.as_deref())?;
+            let v = ctx.call(&inverse_call::<NotesCreate>(&CreateNote {
+                notetype_id,
+                deck_id,
+                fields,
+                tags: note_tags(&c.tags),
+                attributes: vec![],
+                // The same word from another line may be another card; placement decides.
+                allow_duplicate: Some(true),
+            })?)?;
+            let note: NoteDto = from_json(&v)?;
+            let card_id = note
+                .cards
+                .first()
+                .map(|c| c.id)
+                .ok_or_else(|| AppError::api(ErrorCode::Internal, "the subtitle note has no card"))?;
+            let row = SubtitleCaptureRecord {
+                capture_id: c.capture_id.clone(),
+                dedup_key: key,
+                lang,
+                lemma,
+                note_id: note.id,
+                card_id,
+                key_id: req.key_id,
+                created_at: ctx.now,
+                facts,
+                is_primary: true,
+                review_note_id: review,
+            };
+            ctx.tx.insert_subtitle_capture(&row)?;
+            // v1.4 (B3): where the note came from, for `nereden:`/`kaynak:` queries.
+            ctx.tx.set_note_origin(&fc_storage::repo::NoteOriginRecord {
+                note_id: note.id,
+                origin: fc_core::query::NoteOrigin::Subtitle,
+                source: c
+                    .source
+                    .title
+                    .as_deref()
+                    .map(fc_core::subtitle::collapse_spaces)
+                    .unwrap_or_default(),
+                site: c.source.site.trim().to_owned(),
+                video_id: c.source.video_id.clone().unwrap_or_default(),
+                created_at: ctx.now,
+            })?;
+            (row, false)
+        }
+    };
+    inverse.push(inverse_call::<SubtitleCapturesForget>(&SubtitleCaptureIds {
         capture_ids: vec![row.capture_id.clone()],
-    })?];
+    })?);
     if !stale.is_empty() {
         inverse.push(inverse_call::<SubtitleCapturesRestore>(&SubtitleCaptureRows {
             rows: stale.into_iter().map(row_dto).collect(),
         })?);
     }
+    let mut response = outcome_of(SubtitleCaptureStatus::Created, &row);
+    response.attached = attached;
+    response.needs_review = row.review_note_id.is_some();
     Ok(CommandOutcome {
-        response: outcome_of(SubtitleCaptureStatus::Created, &row),
+        response,
         inverse,
         summary: summary::<SubtitleCapturesCreate>().param("word", c.term.lemma.trim().to_owned()),
         events: vec![DomainEvent::SubtitleChanged],
     })
-}
-
-fn row_dto(r: SubtitleCaptureRecord) -> SubtitleCaptureRow {
-    SubtitleCaptureRow {
-        capture_id: r.capture_id,
-        dedup_key: r.dedup_key,
-        lang: r.lang,
-        lemma: r.lemma,
-        note_id: r.note_id,
-        card_id: r.card_id,
-        key_id: r.key_id,
-        created_at: r.created_at,
-    }
 }
 
 fn captures_forget(
@@ -636,17 +673,21 @@ fn captures_restore(
         {
             continue;
         }
-        ctx.tx.insert_subtitle_capture(&SubtitleCaptureRecord {
-            capture_id: r.capture_id.clone(),
-            dedup_key: r.dedup_key,
-            lang: r.lang,
-            lemma: r.lemma,
-            note_id: r.note_id,
-            card_id: r.card_id,
-            key_id: r.key_id,
-            created_at: r.created_at,
-        })?;
-        ids.push(r.capture_id);
+        let id = r.capture_id.clone();
+        let mut rec = encounters::row_record(r);
+        // A primary encounter comes back as a secondary one when its note has another
+        // primary by now (the unique primary per note holds).
+        if rec.is_primary
+            && ctx
+                .reads()
+                .subtitle_encounters_of_note(rec.note_id)?
+                .iter()
+                .any(|o| o.is_primary)
+        {
+            rec.is_primary = false;
+        }
+        ctx.tx.insert_subtitle_capture(&rec)?;
+        ids.push(id);
     }
     let inverse = if ids.is_empty() {
         vec![]

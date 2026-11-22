@@ -13,3 +13,8 @@ NotFoundSubtitleKey => NotFound, "errors.not_found.subtitle_key";
 ConflictSubtitleKeyState => Conflict, "errors.conflict.subtitle_key_state";
 /// The built-in Subtitle card note type is missing or in the trash.
 ConflictSubtitleNoteType => Conflict, "errors.conflict.subtitle_note_type";
+/// Encounter (capture) not found (`details.capture_id`). v1.4.
+NotFoundSubtitleEncounter => NotFound, "errors.not_found.subtitle_encounter";
+/// An encounter operation does not apply (`details.reason`: `last_encounter`, `same_note`,
+/// `not_subtitle_note`, `not_in_review`, `selector`). v1.4.
+ValidationSubtitleEncounter => Validation, "errors.validation.subtitle_encounter";

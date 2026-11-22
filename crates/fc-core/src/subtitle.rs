@@ -9,7 +9,10 @@
 //!   sentence)))`), [`dedup_key`];
 //! * the **note fields** of a capture ([`note_fields`]): HTML-escaped text, the term in bold
 //!   inside the sentence (from its UTF-16 `term_offset`), the source as a link with the time;
-//! * the **known word** rule ([`KNOWN_INTERVAL_DAYS`]): the statistics' "mature" interval.
+//! * the **known word** rule ([`KNOWN_INTERVAL_DAYS`]): the statistics' "mature" interval;
+//! * v1.4 **encounters**: which note fields an encounter shows ([`EXAMPLE_KEYS`],
+//!   [`example_fields`]), the list of a note's other encounters ([`examples_html`]) and the
+//!   **same-meaning rule** ([`same_meaning`]).
 
 use crate::content::html::escape_html;
 use crate::reading::format_timestamp;
@@ -254,9 +257,132 @@ pub fn note_fields(c: &CaptureText<'_>) -> BTreeMap<String, String> {
         .collect()
 }
 
+/// The note fields that come from one encounter (the scene): what the note shows of its
+/// primary encounter. `word`, `meaning` and `pos` belong to the note (term + meaning).
+pub const EXAMPLE_KEYS: [&str; 6] = ["surface", "sentence", "translation", "image", "audio", "source"];
+
+/// The field listing a note's other encounters (built-in Subtitle note type, v1.4).
+pub const EXAMPLES_FIELD: &str = "examples";
+
+/// The [`EXAMPLE_KEYS`] part of a capture's note fields.
+pub fn example_fields(fields: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+    fields
+        .iter()
+        .filter(|(k, _)| EXAMPLE_KEYS.contains(&k.as_str()))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
+}
+
+/// The note's other encounters as field HTML, in the given order: each one's line (term in
+/// bold), its translation and its source. Encounters with neither a line nor a source are left
+/// out; none → `""` (the card's examples part is then not shown).
+pub fn examples_html(others: &[&BTreeMap<String, String>]) -> String {
+    let mut out = String::new();
+    for f in others {
+        let get = |k: &str| f.get(k).map(String::as_str).filter(|v| !v.trim().is_empty());
+        if get("sentence").is_none() && get("source").is_none() {
+            continue;
+        }
+        out.push_str("<div class=\"fc-example-other\">");
+        if let Some(s) = get("sentence") {
+            out.push_str(&format!("<div class=\"fc-example-text\">{s}</div>"));
+        }
+        if let Some(t) = get("translation") {
+            out.push_str(&format!("<div class=\"fc-example-translation\">{t}</div>"));
+        }
+        if let Some(s) = get("source") {
+            out.push_str(&format!("<div class=\"fc-example-source\">{s}</div>"));
+        }
+        out.push_str("</div>");
+    }
+    out
+}
+
+/// The senses of a definition, normalised for comparison: HTML tags and Markdown escapes
+/// removed, the common entities decoded, lowercase, split at `,` `;` `/` `|` and line breaks,
+/// each trimmed of spaces and `.!?:()"'` and collapsed; empty parts dropped.
+pub fn senses(definition: &str) -> Vec<String> {
+    let mut text = String::with_capacity(definition.len());
+    let mut in_tag = false;
+    let mut chars = definition.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '<' => in_tag = true,
+            '>' if in_tag => in_tag = false,
+            _ if in_tag => {}
+            '\\' => {
+                if let Some(n) = chars.next() {
+                    text.push(n);
+                }
+            }
+            _ => text.push(c),
+        }
+    }
+    let text = text
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&amp;", "&")
+        .to_lowercase();
+    let mut out: Vec<String> = Vec::new();
+    for part in text.split([',', ';', '/', '|', '\n']) {
+        let p = collapse_spaces(
+            part.trim_matches(|c: char| c.is_whitespace() || ".!?:()\"'".contains(c)),
+        );
+        if !p.is_empty() && !out.contains(&p) {
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// The same-meaning rule (v1.4, docs/06 §5.1): a new capture's definition is the SAME meaning
+/// as a note's when, after [`senses`], the two share at least one sense ("almak" ~ "almak,
+/// kaldırmak"; "Almak." ~ "almak"). Anything else — no shared sense, or an empty definition
+/// on either side — is UNSURE: the app keeps the capture as a separate note and asks the user
+/// (`review_note_id`), because merging two meanings by mistake is worse than one extra card.
+pub fn same_meaning(a: &str, b: &str) -> bool {
+    let (a, b) = (senses(a), senses(b));
+    a.iter().any(|s| b.contains(s))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_meaning_needs_a_shared_sense() {
+        assert!(same_meaning("almak", "Almak."));
+        assert!(same_meaning("almak, kaldırmak", "kaldırmak"));
+        assert!(same_meaning("<b>almak</b>; toplamak", "toplamak / derlemek"));
+        assert!(same_meaning("\\- almak", "- almak"));
+        assert!(same_meaning("a &amp; b", "a & b"));
+        assert!(!same_meaning("almak", "telefonu açmak"));
+        assert!(!same_meaning("", "almak"));
+        assert!(!same_meaning("almak", "  "));
+        assert_eq!(senses("Almak,  kaldırmak; almak"), ["almak", "kaldırmak"]);
+    }
+
+    #[test]
+    fn examples_list_the_other_scenes() {
+        let a: BTreeMap<String, String> = [
+            ("sentence".to_owned(), "I <b>pick up</b> the kids.".to_owned()),
+            ("translation".to_owned(), "Çocukları alırım.".to_owned()),
+            ("source".to_owned(), "Show · 1:02".to_owned()),
+            ("audio".to_owned(), "media:x".to_owned()),
+        ]
+        .into();
+        let empty = BTreeMap::new();
+        assert_eq!(
+            examples_html(&[&a, &empty]),
+            "<div class=\"fc-example-other\"><div class=\"fc-example-text\">I <b>pick up</b> the kids.</div><div class=\"fc-example-translation\">Çocukları alırım.</div><div class=\"fc-example-source\">Show · 1:02</div></div>"
+        );
+        assert_eq!(examples_html(&[]), "");
+        let f: BTreeMap<String, String> =
+            [("word".to_owned(), "x".to_owned()), ("audio".to_owned(), "media:y".to_owned())].into();
+        assert_eq!(example_fields(&f).keys().collect::<Vec<_>>(), ["audio"]);
+    }
 
     #[test]
     fn dedup_key_normalizes_lang_lemma_and_sentence() {

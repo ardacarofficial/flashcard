@@ -712,6 +712,8 @@ pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
             f("image", "Screenshot", "Ekran görüntüsü", FieldKind::Image),
             f("audio", "Audio", "Ses", FieldKind::Audio),
             f("source", "Source", "Kaynak", FieldKind::RichText).role(FieldRole::Source),
+            // v1.4 (migration 1490): the note's other encounters (scenes), filled by the app.
+            f("examples", "Examples", "Örnekler", FieldKind::RichText),
         ],
         &[T {
             key: "recognition",
@@ -727,6 +729,7 @@ pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
                 example_part!("sentence", "translation"),
                 "{{#image}}<div class=\"fc-media\">{{image}}</div>{{/image}}",
                 "{{#audio}}<div class=\"fc-media\">{{audio}}</div>{{/audio}}",
+                "{{#examples}}<div class=\"fc-part fc-part-examples\">{{examples}}</div>{{/examples}}",
                 source_part!()
             ),
             engine: engine::CLASSIC,

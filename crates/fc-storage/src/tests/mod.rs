@@ -8,6 +8,7 @@ mod ai;
 mod attributes;
 mod automation;
 mod capture_log;
+mod encounters;
 mod content;
 mod decks;
 mod inbox;

@@ -13,6 +13,7 @@
 
 use fc_core::{CardId, DeckId, NoteId, SubtitleKeyId, Timestamp};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use ts_rs::TS;
 
 // ------------------------------------------------------------------ app methods
@@ -128,6 +129,9 @@ pub enum SubtitleAttemptResult {
     /// `screenshot:<why>` / `audio:<why>` (`upload_unknown`, `upload_mismatch`,
     /// `file_missing`).
     MediaMissing,
+    /// v1.4: stored as another example (encounter) of an existing note of the same word and
+    /// meaning; no new card (`card_id` = that note's card).
+    Attached,
 }
 
 /// One capture attempt (v1.4 diagnostics). Only ids, codes and times: never the sentence,
@@ -183,7 +187,8 @@ pub struct RecordSubtitleCapture {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum SubtitleCaptureStatus {
-    /// A new note (HTTP 201).
+    /// Stored (HTTP 201): a new note, or (v1.4, [`SubtitleCaptureOutcome::attached`]) another
+    /// example of an existing note.
     Created,
     /// Same `capture_id`, or same language + lemma + sentence, seen before (HTTP 200).
     Duplicate,
@@ -198,10 +203,82 @@ pub struct SubtitleCaptureOutcome {
     pub card_id: CardId,
     /// The note.
     pub note_id: NoteId,
+    /// v1.4: the capture was added as another example (encounter) of an existing note of the
+    /// same word and meaning — no new card. On the wire it is `created` (it was stored).
+    #[serde(default)]
+    pub attached: bool,
+    /// v1.4: a new note was made, but the word already has a note whose meaning the app could
+    /// not match: the user decides (`subtitle.encounters.resolve`).
+    #[serde(default)]
+    pub needs_review: bool,
 }
 
-/// One capture → note mapping (`subtitle_captures` row).
+/// What an encounter saw (v1.4): its source facts. `null` = not sent, or not kept by a capture
+/// received before v1.4.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(optional_fields = nullable)]
+pub struct SubtitleEncounterFacts {
+    /// The term as clicked.
+    #[serde(default)]
+    pub surface: Option<String>,
+    /// Part of speech.
+    #[serde(default)]
+    pub pos: Option<String>,
+    /// The subtitle line (plain text).
+    #[serde(default)]
+    pub sentence: Option<String>,
+    /// The line in the user's language.
+    #[serde(default)]
+    pub translation: Option<String>,
+    /// UTF-16 `[start, end)` of the term in `sentence`.
+    #[serde(default)]
+    pub term_offset: Option<(i64, i64)>,
+    /// What was picked.
+    #[serde(default)]
+    pub kind: Option<SubtitleCaptureKind>,
+    /// The definition the user picked.
+    #[serde(default)]
+    pub definition: Option<String>,
+    /// Where the definition came from.
+    #[serde(default)]
+    pub definition_source: Option<SubtitleDefinitionSource>,
+    /// The service's video id.
+    #[serde(default)]
+    pub video_id: Option<String>,
+    /// Video title (with its episode).
+    #[serde(default)]
+    pub title: Option<String>,
+    /// `youtube`, `netflix`, …
+    #[serde(default)]
+    pub site: Option<String>,
+    /// The page at the line.
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Line start (ms).
+    #[serde(default)]
+    pub t_start_ms: Option<u64>,
+    /// Line end (ms).
+    #[serde(default)]
+    pub t_end_ms: Option<u64>,
+    /// Media hash of the screenshot.
+    #[serde(default)]
+    pub screenshot_hash: Option<String>,
+    /// Media hash of the audio clip.
+    #[serde(default)]
+    pub audio_hash: Option<String>,
+    /// The note fields this encounter shows when it is the primary one (`surface`,
+    /// `sentence`, `translation`, `image`, `audio`, `source`).
+    #[serde(default)]
+    pub example_fields: BTreeMap<String, String>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// One encounter: a `subtitle_captures` row (a capture, linked to a note).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(optional_fields = nullable)]
 pub struct SubtitleCaptureRow {
     /// The extension's id (UUIDv7).
     pub capture_id: String,
@@ -219,6 +296,103 @@ pub struct SubtitleCaptureRow {
     pub key_id: Option<SubtitleKeyId>,
     /// Received.
     pub created_at: Timestamp,
+    /// v1.4: what it saw (rows recorded before v1.4 in the undo history have none).
+    #[serde(default)]
+    pub facts: SubtitleEncounterFacts,
+    /// v1.4: the note's primary encounter (its example is the one on the card).
+    #[serde(default = "yes")]
+    pub is_primary: bool,
+    /// v1.4: waiting for the user's decision: maybe the same meaning as this note.
+    #[serde(default)]
+    pub review_note_id: Option<NoteId>,
+}
+
+/// `subtitle.encounters.list` (v1.4): exactly one selector.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct ListSubtitleEncounters {
+    /// Encounters of this note (primary first, then by arrival).
+    #[serde(default)]
+    pub note_id: Option<NoteId>,
+    /// Encounters of this word: `lang` + `lemma` (any note), by arrival.
+    #[serde(default)]
+    pub lang: Option<String>,
+    /// See `lang`.
+    #[serde(default)]
+    pub lemma: Option<String>,
+    /// Encounters from this video, by time in the video.
+    #[serde(default)]
+    pub video_id: Option<String>,
+    /// `true`: encounters waiting for a same/different meaning decision.
+    #[serde(default)]
+    pub needs_review: Option<bool>,
+}
+
+/// Response of the `subtitle.encounters.*` methods.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct SubtitleEncounterList {
+    /// Encounters.
+    pub encounters: Vec<SubtitleCaptureRow>,
+}
+
+/// `subtitle.encounters.set_primary`: this encounter's example goes on the card.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SubtitleEncounterRef {
+    /// The encounter (capture id).
+    pub capture_id: String,
+}
+
+/// `subtitle.encounters.move`: "this is a different meaning" (or another note's meaning).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct MoveSubtitleEncounter {
+    /// The encounter.
+    pub capture_id: String,
+    /// The note it belongs to (a live Subtitle note); `null` = a new note (a new card) with
+    /// this encounter as its example.
+    #[serde(default)]
+    pub to_note_id: Option<NoteId>,
+}
+
+/// `subtitle.encounters.merge_notes`: two notes of one word and meaning become one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct MergeSubtitleNotes {
+    /// One note.
+    pub a: NoteId,
+    /// The other.
+    pub b: NoteId,
+}
+
+/// Response of `subtitle.encounters.merge_notes`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct MergedSubtitleNotes {
+    /// The note kept: the one with more reviews (a tie: the older one). Its card, schedule
+    /// and history are unchanged; the other's encounters are its examples now.
+    pub kept_note_id: NoteId,
+    /// The other note, moved to the trash with its cards; its review history stays in the
+    /// review log (statistics and the optimizer still count it), and undo brings it back.
+    pub archived_note_id: NoteId,
+    /// Encounters moved over.
+    pub moved: u32,
+    /// Reviews of the archived note's cards (kept in the log).
+    pub archived_reviews: u32,
+    /// The kept note's encounters.
+    pub encounters: Vec<SubtitleCaptureRow>,
+}
+
+/// `subtitle.encounters.resolve`: the user's decision on a `needs_review` encounter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ResolveSubtitleEncounter {
+    /// The encounter.
+    pub capture_id: String,
+    /// `true` "aynı anlam": its note merges with the one it was compared with
+    /// (`merge_notes`); `false` "farklı anlam": it stays a separate note.
+    pub same_meaning: bool,
 }
 
 /// Internal `subtitle.captures.restore` (inverse of forget): rows to put back.
