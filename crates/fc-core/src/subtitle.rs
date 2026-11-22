@@ -259,7 +259,14 @@ pub fn note_fields(c: &CaptureText<'_>) -> BTreeMap<String, String> {
 
 /// The note fields that come from one encounter (the scene): what the note shows of its
 /// primary encounter. `word`, `meaning` and `pos` belong to the note (term + meaning).
-pub const EXAMPLE_KEYS: [&str; 6] = ["surface", "sentence", "translation", "image", "audio", "source"];
+pub const EXAMPLE_KEYS: [&str; 6] = [
+    "surface",
+    "sentence",
+    "translation",
+    "image",
+    "audio",
+    "source",
+];
 
 /// The field listing a note's other encounters (built-in Subtitle note type, v1.4).
 pub const EXAMPLES_FIELD: &str = "examples";
@@ -279,7 +286,11 @@ pub fn example_fields(fields: &BTreeMap<String, String>) -> BTreeMap<String, Str
 pub fn examples_html(others: &[&BTreeMap<String, String>]) -> String {
     let mut out = String::new();
     for f in others {
-        let get = |k: &str| f.get(k).map(String::as_str).filter(|v| !v.trim().is_empty());
+        let get = |k: &str| {
+            f.get(k)
+                .map(String::as_str)
+                .filter(|v| !v.trim().is_empty())
+        };
         if get("sentence").is_none() && get("source").is_none() {
             continue;
         }
@@ -355,7 +366,10 @@ mod tests {
     fn same_meaning_needs_a_shared_sense() {
         assert!(same_meaning("almak", "Almak."));
         assert!(same_meaning("almak, kaldırmak", "kaldırmak"));
-        assert!(same_meaning("<b>almak</b>; toplamak", "toplamak / derlemek"));
+        assert!(same_meaning(
+            "<b>almak</b>; toplamak",
+            "toplamak / derlemek"
+        ));
         assert!(same_meaning("\\- almak", "- almak"));
         assert!(same_meaning("a &amp; b", "a & b"));
         assert!(!same_meaning("almak", "telefonu açmak"));
@@ -367,7 +381,10 @@ mod tests {
     #[test]
     fn examples_list_the_other_scenes() {
         let a: BTreeMap<String, String> = [
-            ("sentence".to_owned(), "I <b>pick up</b> the kids.".to_owned()),
+            (
+                "sentence".to_owned(),
+                "I <b>pick up</b> the kids.".to_owned(),
+            ),
             ("translation".to_owned(), "Çocukları alırım.".to_owned()),
             ("source".to_owned(), "Show · 1:02".to_owned()),
             ("audio".to_owned(), "media:x".to_owned()),
@@ -379,8 +396,11 @@ mod tests {
             "<div class=\"fc-example-other\"><div class=\"fc-example-text\">I <b>pick up</b> the kids.</div><div class=\"fc-example-translation\">Çocukları alırım.</div><div class=\"fc-example-source\">Show · 1:02</div></div>"
         );
         assert_eq!(examples_html(&[]), "");
-        let f: BTreeMap<String, String> =
-            [("word".to_owned(), "x".to_owned()), ("audio".to_owned(), "media:y".to_owned())].into();
+        let f: BTreeMap<String, String> = [
+            ("word".to_owned(), "x".to_owned()),
+            ("audio".to_owned(), "media:y".to_owned()),
+        ]
+        .into();
         assert_eq!(example_fields(&f).keys().collect::<Vec<_>>(), ["audio"]);
     }
 

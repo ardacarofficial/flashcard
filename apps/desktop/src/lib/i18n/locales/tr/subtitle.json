@@ -17,6 +17,12 @@
       "share_known_words": {
         "label": "Bildiğin kelimeleri Subtitle ile paylaş",
         "description": "Kapalı: eklenti yalnız buraya kelime gönderir. Açık: hangi kelimeleri bildiğini ya da öğrendiğini de okuyup altyazıyı renklendirebilir."
+      },
+      "same_word": {
+        "label": "Zaten olan bir kelime tekrar gelince",
+        "description": "Başka bir örnek: kartı olan bir kelimenin aynı anlamdaki yeni sahnesi o karta başka bir örnek olarak eklenir (yeni kart yok, planı değişmez). Farklı bir anlam kendi kartını alır ve sana bir kez sorulur. Yeni kart: her replik yeni bir kart olur (v1.4 öncesi gibi).",
+        "add_example": "Başka bir örnek",
+        "always_new_card": "Yeni kart"
       }
     }
   },
@@ -33,6 +39,13 @@
       },
       "captures": {
         "recent": "Son Subtitle yakalama denemeleri"
+      },
+      "encounters": {
+        "list": "Bir kelimenin sahneleri (örnekleri)",
+        "set_primary": "Bu örneği kartta göster",
+        "move": "Örneği başka bir karta taşı",
+        "merge_notes": "Bir kelimenin iki kartını birleştir",
+        "resolve": "Aynı anlam mı, farklı mı?"
       }
     }
   },
@@ -40,10 +53,12 @@
     "validation": {
       "subtitle_capture": "Subtitle eklentisinden gelen bu kelime geçerli değil.",
       "subtitle_media": "Yalnız JPEG ekran görüntüsü ve WAV ses kaydı yüklenebilir.",
-      "subtitle_key": "Anahtar adı 1–60 karakter olmalı."
+      "subtitle_key": "Anahtar adı 1–60 karakter olmalı.",
+      "subtitle_encounter": "Bu örnek bu şekilde değiştirilemez."
     },
     "not_found": {
-      "subtitle_key": "Erişim anahtarı bulunamadı."
+      "subtitle_key": "Erişim anahtarı bulunamadı.",
+      "subtitle_encounter": "Örnek bulunamadı."
     },
     "conflict": {
       "subtitle_key_state": "Bu erişim anahtarı zaten iptal edilmiş.",

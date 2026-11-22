@@ -691,7 +691,9 @@ pub const SUBTITLE_FRONT: &str = "<div class=\"fc-word\">{{#surface}}{{surface}}
 /// (v1.3) shows the word, then three labelled parts: the meaning (with the part of speech),
 /// the example — the line and its translation — and where it came from (title · time, a link
 /// to that moment), with the screenshot and the audio clip between. No field is unique: the
-/// same word from another line is another card (the extension's own dedup key decides).
+/// same word from another line may be another card (the app's placement rule decides).
+/// v1.4 (migration 1490): an `examples` field lists the note's other encounters (scenes of
+/// the same word and meaning), shown on the back before the source; empty = not shown.
 pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
     make(
         now,

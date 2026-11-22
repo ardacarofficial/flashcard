@@ -3,7 +3,8 @@
 use super::{all, exec, id, json, one, opt_id, opt_ms, opt_ts, ts, Mode, SqliteTx, WriteMode};
 use crate::error::{StorageError, StorageResult};
 use crate::repo::{
-    EncounterFacts, SubtitleCaptureRecord, SubtitleKeyRecord, SubtitleRead, SubtitleUploadRecord, SubtitleWrite,
+    EncounterFacts, SubtitleCaptureRecord, SubtitleKeyRecord, SubtitleRead, SubtitleUploadRecord,
+    SubtitleWrite,
 };
 use fc_core::{NoteId, SubtitleKeyId, Timestamp};
 use rusqlite::params;
@@ -344,7 +345,10 @@ impl SubtitleWrite for SqliteTx<'_, WriteMode> {
             CAPTURES,
             &format!(
                 "INSERT INTO subtitle_captures ({CAPTURE_COLS}) VALUES ({})",
-                (1..=28).map(|i| format!("?{i}")).collect::<Vec<_>>().join(", ")
+                (1..=28)
+                    .map(|i| format!("?{i}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
             rusqlite::params_from_iter(capture_params(c)),
         )

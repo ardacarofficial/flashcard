@@ -3,4 +3,4 @@
 /**
  * What happened to one capture attempt.
  */
-export type SubtitleAttemptResult = "created" | "duplicate" | "rejected" | "media_missing";
+export type SubtitleAttemptResult = "created" | "duplicate" | "rejected" | "media_missing" | "attached";

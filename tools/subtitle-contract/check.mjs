@@ -144,6 +144,28 @@ try {
   assert.equal(fc('call', 'search.cards', JSON.stringify({ query: 'deck:Diziler' })).total, 1);
   console.log('ok  notes in the app');
 
+  // v1.4 (W1): a capture is an encounter. The same word and meaning from another scene is
+  // stored as another example of the same card — the client sees `created` (201), the card
+  // count does not move; a different meaning gets its own card and waits for the user.
+  const scene2 = { ...capture, capture_id: '0192812a-6f3c-7a41-9c2e-000000000004', context: { sentence: 'Where are my keys?', translation: 'Anahtarlarım nerede?', term_offset: [13, 17] }, source: { ...capture.source, t_start_ms: 120000, t_end_ms: 121500 }, media: {} };
+  assert.equal(await api.createCapture(scene2), 'created', 'another example is stored');
+  assert.equal(await api.createCapture(scene2), 'duplicate', 'its resend is a duplicate');
+  assert.equal(fc('call', 'search.cards', JSON.stringify({ query: 'deck:Subtitle' })).total, 1, 'no new card');
+  const keyNote = found.items[0].note_id;
+  const encounters = fc('call', 'subtitle.encounters.list', JSON.stringify({ note_id: keyNote })).encounters;
+  assert.deepEqual(encounters.map((e) => [e.is_primary, e.facts.t_end_ms, e.facts.video_id]), [[true, 86120, 'dQw4w9WgXcQ'], [false, 121500, 'dQw4w9WgXcQ']]);
+  assert.ok(fc('call', 'notes.get', JSON.stringify({ id: keyNote })).fields.examples.includes('Where are my <b>keys</b>?'));
+  const cardsBefore = fc('call', 'notes.get', JSON.stringify({ id: keyNote })).cards;
+  fc('call', 'subtitle.encounters.set_primary', JSON.stringify({ capture_id: encounters[1].capture_id }));
+  const after = fc('call', 'notes.get', JSON.stringify({ id: keyNote }));
+  assert.deepEqual(after.cards, cardsBefore, 'the same card, state and due date');
+  assert.ok(after.fields.sentence.includes('Where are my'));
+  const other = { ...scene2, capture_id: '0192812a-6f3c-7a41-9c2e-000000000005', definition: { text: 'tuş', source: 'ai' }, context: { sentence: 'Press the key.', translation: null, term_offset: [10, 13] } };
+  assert.equal(await api.createCapture(other), 'created');
+  assert.equal(fc('call', 'search.cards', JSON.stringify({ query: 'deck:Subtitle' })).total, 2, 'a different meaning is its own card');
+  assert.equal(fc('call', 'subtitle.encounters.list', JSON.stringify({ needs_review: true })).encounters.length, 1);
+  console.log('ok  encounters (another example, primary switch, a different meaning)');
+
   // An invalid capture alone: the extension sees "rejected" with the server's message.
   await assert.rejects(api.createCapture(bad), (e) => e instanceof FlashcardsApiError && e.kind === 'rejected' && e.status === 422 && e.message.includes('kind must be one of'));
   // A wrong key: "auth".

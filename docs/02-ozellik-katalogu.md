@@ -467,6 +467,7 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 - .srt / .vtt yüklenir. Cümleler listelenir, bilinmeyen kelime içerenler vurgulanır (okuma modu ile aynı motor).
 - Cümleden kart: cümle + çeviri + hedef kelime + zaman damgası.
 - Video dosyası da verilirse: ilgili ses kesiti ve ekran görüntüsü karta eklenir (ffmpeg ile).
+- **v1.4 — karşılaşmalar:** Subtitle eklentisinden gelen her yakalama kaynağıyla (video kimliği, başlık, başlangıç–bitiş, tür, tanım ve kaynağı, terimin cümledeki yeri, resim/ses) bir *karşılaşma* olarak saklanır ve bir nota (terim + anlam) bağlanır. Aynı kelimenin aynı anlamdaki ikinci sahnesi **yeni kart yapmaz**, o kartın başka bir örneği olur (`subtitle.same_word`: `add_example` varsayılan / `always_new_card`); anlamı farklı görünen yakalama ayrı kart olur ve "aynı anlam / farklı anlam" diye sorulur. Kartta görünen örnek değiştirilebilir (plan ve geçmiş aynı kalır), örnek başka bir karta ya da yeni karta taşınabilir, bir kelimenin iki kartı birleştirilebilir (geçmişi çok olan kalır, diğerinin geçmişi kayıtta arşivlenir). Ayrıntı: docs/06 §5.1.
 
 ## 26. 📚 Artımlı okuma (SuperMemo tarzı)
 

@@ -17,6 +17,12 @@
       "share_known_words": {
         "label": "Share known words with Subtitle",
         "description": "Off: the extension only sends words here. On: it may also read which words you know or are learning, to colour subtitles."
+      },
+      "same_word": {
+        "label": "When a word you already have comes again",
+        "description": "Another example: a new scene of a word you already have a card for, with the same meaning, is added to that card as another example (no new card; its schedule stays). A different meaning gets its own card and asks you once. New card: every line is a new card (as before v1.4).",
+        "add_example": "Another example",
+        "always_new_card": "New card"
       }
     }
   },
@@ -33,6 +39,13 @@
       },
       "captures": {
         "recent": "Recent Subtitle capture attempts"
+      },
+      "encounters": {
+        "list": "Scenes (examples) of a word",
+        "set_primary": "Show this example on the card",
+        "move": "Move an example to another card",
+        "merge_notes": "Merge two cards of one word",
+        "resolve": "Same or different meaning?"
       }
     }
   },
@@ -40,10 +53,12 @@
     "validation": {
       "subtitle_capture": "This word from the Subtitle extension is not valid.",
       "subtitle_media": "Only JPEG screenshots and WAV audio clips can be uploaded.",
-      "subtitle_key": "A key name needs 1–60 characters."
+      "subtitle_key": "A key name needs 1–60 characters.",
+      "subtitle_encounter": "This example cannot be changed like that."
     },
     "not_found": {
-      "subtitle_key": "Access key not found."
+      "subtitle_key": "Access key not found.",
+      "subtitle_encounter": "Example not found."
     },
     "conflict": {
       "subtitle_key_state": "This access key is already revoked.",

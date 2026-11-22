@@ -165,6 +165,7 @@ import type { ListNotes } from "./ListNotes";
 import type { ListOplog } from "./ListOplog";
 import type { ListReadingItems } from "./ListReadingItems";
 import type { ListRuns } from "./ListRuns";
+import type { ListSubtitleEncounters } from "./ListSubtitleEncounters";
 import type { ListTrash } from "./ListTrash";
 import type { ListVoices } from "./ListVoices";
 import type { ListWords } from "./ListWords";
@@ -192,7 +193,9 @@ import type { MediaDto } from "./MediaDto";
 import type { MediaItems } from "./MediaItems";
 import type { MediaRef } from "./MediaRef";
 import type { MergeAttributeOptions } from "./MergeAttributeOptions";
+import type { MergeSubtitleNotes } from "./MergeSubtitleNotes";
 import type { MergeTags } from "./MergeTags";
+import type { MergedSubtitleNotes } from "./MergedSubtitleNotes";
 import type { MethodList } from "./MethodList";
 import type { ModelDownload } from "./ModelDownload";
 import type { ModelDto } from "./ModelDto";
@@ -202,6 +205,7 @@ import type { ModuleDto } from "./ModuleDto";
 import type { ModuleList } from "./ModuleList";
 import type { MoveCards } from "./MoveCards";
 import type { MoveDeck } from "./MoveDeck";
+import type { MoveSubtitleEncounter } from "./MoveSubtitleEncounter";
 import type { NoteDto } from "./NoteDto";
 import type { NoteIds } from "./NoteIds";
 import type { NotePage } from "./NotePage";
@@ -271,6 +275,7 @@ import type { RepairResult } from "./RepairResult";
 import type { ResetSetting } from "./ResetSetting";
 import type { ResetShortcut } from "./ResetShortcut";
 import type { ResetWordData } from "./ResetWordData";
+import type { ResolveSubtitleEncounter } from "./ResolveSubtitleEncounter";
 import type { RestoreBackup } from "./RestoreBackup";
 import type { RuleDto } from "./RuleDto";
 import type { RuleList } from "./RuleList";
@@ -336,6 +341,8 @@ import type { StudyOptions } from "./StudyOptions";
 import type { StudyOptionsRequest } from "./StudyOptionsRequest";
 import type { SubmitTest } from "./SubmitTest";
 import type { SubtitleCaptureAttempts } from "./SubtitleCaptureAttempts";
+import type { SubtitleEncounterList } from "./SubtitleEncounterList";
+import type { SubtitleEncounterRef } from "./SubtitleEncounterRef";
 import type { SubtitleKeyDto } from "./SubtitleKeyDto";
 import type { SubtitleKeyList } from "./SubtitleKeyList";
 import type { SubtitleKeyRef } from "./SubtitleKeyRef";
@@ -653,6 +660,11 @@ export interface Methods {
   "subtitle.status": { kind: "query"; request: Empty; response: SubtitleStatus };
   "subtitle.default_deck.set": { kind: "command"; request: SetSubtitleDefaultDeck; response: SubtitleStatus };
   "subtitle.captures.recent": { kind: "query"; request: RecentSubtitleCaptures; response: SubtitleCaptureAttempts };
+  "subtitle.encounters.list": { kind: "query"; request: ListSubtitleEncounters; response: SubtitleEncounterList };
+  "subtitle.encounters.set_primary": { kind: "command"; request: SubtitleEncounterRef; response: SubtitleEncounterList };
+  "subtitle.encounters.move": { kind: "command"; request: MoveSubtitleEncounter; response: SubtitleEncounterList };
+  "subtitle.encounters.merge_notes": { kind: "command"; request: MergeSubtitleNotes; response: MergedSubtitleNotes };
+  "subtitle.encounters.resolve": { kind: "command"; request: ResolveSubtitleEncounter; response: SubtitleEncounterList };
   "maintenance.status": { kind: "query"; request: Empty; response: MaintenanceStatus };
   "maintenance.recovery.get": { kind: "query"; request: Empty; response: RecoveryDto };
   "maintenance.recovery.dismiss": { kind: "command"; request: Empty; response: RecoveryDto };
@@ -971,6 +983,11 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "subtitle.status": "query",
   "subtitle.default_deck.set": "command",
   "subtitle.captures.recent": "query",
+  "subtitle.encounters.list": "query",
+  "subtitle.encounters.set_primary": "command",
+  "subtitle.encounters.move": "command",
+  "subtitle.encounters.merge_notes": "command",
+  "subtitle.encounters.resolve": "command",
   "maintenance.status": "query",
   "maintenance.recovery.get": "query",
   "maintenance.recovery.dismiss": "command",

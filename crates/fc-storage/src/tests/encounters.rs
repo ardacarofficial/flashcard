@@ -19,7 +19,8 @@ const HASH: &str = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f0
 pub(crate) fn subtitle_v1_3(locale: Locale) -> NoteType {
     let mut nt = builtin::subtitle(Timestamp(1), locale);
     nt.fields.retain(|f| f.key.0 != "examples");
-    let part = "{{#examples}}<div class=\"fc-part fc-part-examples\">{{examples}}</div>{{/examples}}";
+    let part =
+        "{{#examples}}<div class=\"fc-part fc-part-examples\">{{examples}}</div>{{/examples}}";
     assert!(nt.templates[0].back.contains(part));
     nt.templates[0].back = nt.templates[0].back.replace(part, "");
     nt
@@ -75,12 +76,7 @@ fn migration_1490_backfills_encounters_and_keeps_cards_rendering_the_same() {
                     "INSERT INTO subtitle_captures (capture_id, dedup_key, lang, lemma, note_id,
                          card_id, key_id, created_at)
                      VALUES (?1, ?1, 'en', 'key', ?2, ?3, NULL, ?4)",
-                    rusqlite::params![
-                        id,
-                        note.id.to_string(),
-                        CardId(note.id.0).to_string(),
-                        at
-                    ],
+                    rusqlite::params![id, note.id.to_string(), CardId(note.id.0).to_string(), at],
                 )
                 .unwrap();
             }
@@ -110,7 +106,9 @@ fn migration_1490_backfills_encounters_and_keeps_cards_rendering_the_same() {
         // Backfill: facts that exist, NULL for the rest; the earliest capture is primary.
         let rows = r.subtitle_encounters_of_note(note.id).unwrap();
         assert_eq!(
-            rows.iter().map(|x| (x.capture_id.as_str(), x.is_primary)).collect::<Vec<_>>(),
+            rows.iter()
+                .map(|x| (x.capture_id.as_str(), x.is_primary))
+                .collect::<Vec<_>>(),
             [("cap-a", true), ("cap-b", false)]
         );
         let f = &rows[0].facts;
@@ -119,7 +117,14 @@ fn migration_1490_backfills_encounters_and_keeps_cards_rendering_the_same() {
         assert_eq!(f.audio_hash, None);
         assert_eq!(f.title.as_deref(), Some("Show"));
         assert_eq!(
-            (&f.sentence, &f.definition, &f.video_id, &f.kind, f.t_start_ms, f.t_end_ms),
+            (
+                &f.sentence,
+                &f.definition,
+                &f.video_id,
+                &f.kind,
+                f.t_start_ms,
+                f.t_end_ms
+            ),
             (&None, &None, &None, &None, None, None),
             "never invented"
         );
@@ -130,15 +135,18 @@ fn migration_1490_backfills_encounters_and_keeps_cards_rendering_the_same() {
         assert_eq!(r.recent_capture_log(10).unwrap().len(), 1);
         drop(r);
         let mut tx = store.write().unwrap();
-        tx.append_capture_log(&CaptureLogRecord {
-            seq: 0,
-            capture_id: "cap-c".into(),
-            at: Timestamp(30),
-            result: "attached".into(),
-            reason: None,
-            card_id: Some(CardId(note.id.0)),
-            duration_ms: 1,
-        }, 500)
+        tx.append_capture_log(
+            &CaptureLogRecord {
+                seq: 0,
+                capture_id: "cap-c".into(),
+                at: Timestamp(30),
+                result: "attached".into(),
+                reason: None,
+                card_id: Some(CardId(note.id.0)),
+                duration_ms: 1,
+            },
+            500,
+        )
         .unwrap();
         tx.commit().unwrap();
         let conn = Connection::open(&path).unwrap();
@@ -168,7 +176,12 @@ fn migration_1490_leaves_an_edited_back_alone_and_enforces_one_primary() {
         tx.commit().unwrap();
     }
     let store = SqliteStore::open(&path).unwrap();
-    let nt = store.read().unwrap().get_notetype(edited.id).unwrap().unwrap();
+    let nt = store
+        .read()
+        .unwrap()
+        .get_notetype(edited.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(nt.templates, edited.templates);
     let f = nt.fields.iter().find(|f| f.key.0 == "examples").unwrap();
     assert_eq!(f.name, "Örnekler");
