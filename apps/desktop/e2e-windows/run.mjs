@@ -7,7 +7,17 @@
  *   node apps/desktop/e2e-windows/run.mjs --app "%LOCALAPPDATA%\Flashcard\flashcard.exe" \
  *     --native-driver C:\path\msedgedriver.exe [--tauri-driver tauri-driver] [--out dir]
  *
- * Env equivalents: FC_EXE, MSEDGEDRIVER, TAURI_DRIVER, FC_WIN_E2E_OUT, FC_WIN_E2E_PORT.
+ * Env equivalents: FC_EXE, MSEDGEDRIVER, TAURI_DRIVER, FC_WIN_E2E_OUT, FC_WIN_E2E_PORT,
+ * FC_WIN_E2E_CDP_PORT, FC_WIN_E2E_STRATEGY (`--strategy`: only that session strategy),
+ * FC_WIN_E2E_VERBOSE_DRIVER=0 (`--no-verbose-driver`).
+ *
+ * Before the journeys:
+ *   PREFLIGHT the installed app runs on its own for 15 s (alive? its window? an error box?
+ *             does WebView2 open its DevTools port?), then it is closed
+ *   SESSION   strategies tried in order until one gives a WebDriver session (STRATEGIES):
+ *             driver+policy, attach+policy, driver; every failed try leaves a diagnosis
+ *             (processes with command lines, windows, DevToolsActivePort, CDP, a desktop
+ *             screenshot) and a verbose msedgedriver log in the output dir
  *
  * Journeys (in order, one app launch, one fresh profile):
  *   P  preparation: skip the first-run guide and create decks/notes through the app's own IPC
@@ -22,12 +32,13 @@
  * ./webdriver.mjs.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { createWriteStream, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { KEY, WebDriver } from './webdriver.mjs';
+import { IS_WINDOWS, POLICY_KEY, WebView2Policy, cdp, desktopScreenshot, isElevated, processes, stopApp, windows } from './win.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -44,6 +55,10 @@ const opts = {
   tauriDriver: arg('tauri-driver') ?? process.env.TAURI_DRIVER ?? 'tauri-driver',
   out: resolve(arg('out') ?? process.env.FC_WIN_E2E_OUT ?? join(here, '.results')),
   port: Number(arg('port') ?? process.env.FC_WIN_E2E_PORT ?? 4444),
+  /** The fixed DevTools port of the preflight and the attach strategy. */
+  cdpPort: Number(arg('cdp-port') ?? process.env.FC_WIN_E2E_CDP_PORT ?? 9333),
+  strategy: arg('strategy') ?? process.env.FC_WIN_E2E_STRATEGY ?? null,
+  verboseDriver: !process.argv.includes('--no-verbose-driver') && process.env.FC_WIN_E2E_VERBOSE_DRIVER !== '0',
 };
 const CI = process.env.CI === 'true';
 
@@ -147,11 +162,16 @@ const summary = {
   native_driver: opts.nativeDriver,
   node: process.version,
   platform: `${process.platform} ${process.arch}`,
+  elevated: null,
+  preflight: null,
+  /** Session attempts in order: `{ strategy, try, ok, ms, policy, error, diagnosis }`. */
+  attempts: [],
+  /** The strategy that gave the session. */
+  strategy: null,
   capabilities: null,
   journeys: results,
 };
 
-let driverProc = null;
 const wd = new WebDriver(`http://127.0.0.1:${opts.port}`);
 const rpc = (method, params = {}) => wd.execAsync(pageRpc, method, params);
 const probe = (selectors) => wd.exec(pageProbe, selectors);
@@ -293,6 +313,10 @@ async function prepare(facts) {
   // A fresh profile opens the first-run guide; the Linux seed skips it the same way.
   facts.onboarding_before = await rpc('onboarding.status', {});
   await rpc('onboarding.skip', {});
+  // A forced stop (preflight, a failed session try) makes this start "unclean": its recovery
+  // dialog would cover Home. Dismissed for this run; the reload below does not bring it back.
+  facts.recovery = await rpc('maintenance.recovery.get', {}).catch((e) => `unavailable: ${e.message}`);
+  await rpc('maintenance.recovery.dismiss', {}).catch(() => undefined);
   ctx.studyDeck = await makeDeck(`Pilot study ${tag}`, [
     ['apple', 'elma'],
     ['book', 'kitap'],
@@ -438,44 +462,342 @@ async function j3Study(facts) {
 
 // ------------------------------------------------------------------ processes
 
-function startDriver() {
+let driverProc = null;
+/** The app when the pilot started it itself (preflight, attach strategy). */
+let appProc = null;
+const APP_EXE = opts.app ? basename(opts.app) : null;
+const policy = APP_EXE ? new WebView2Policy(APP_EXE) : null;
+
+/**
+ * A msedgedriver wrapper that adds `--verbose --log-path` (tauri-driver passes no flags to
+ * the native driver). tauri-driver runs it like the exe (Rust runs .cmd files through cmd).
+ */
+function verboseWrapper(label) {
+  const cmd = join(opts.out, `msedgedriver-${label}.cmd`);
+  const logPath = join(opts.out, `msedgedriver-${label}.log`);
+  writeFileSync(cmd, `@echo off\r\n"${opts.nativeDriver}" %* --verbose "--log-path=${logPath}"\r\n`);
+  return cmd;
+}
+
+/** (Re)starts tauri-driver; its output goes to `tauri-driver-<label>.log` and the console. */
+async function startDriver(label, { verbose = opts.verboseDriver } = {}) {
+  await stopDriver();
+  const free = async () => !(await portOpen(opts.port)) && !(await portOpen(opts.port + 1));
+  await waitFor(`ports ${opts.port} and ${opts.port + 1} to be free`, free, 15_000).catch((e) => log(e.message));
+  const native = verbose && opts.nativeDriver && IS_WINDOWS ? verboseWrapper(label) : opts.nativeDriver;
   const args = ['--port', String(opts.port), '--native-port', String(opts.port + 1)];
-  if (opts.nativeDriver) args.push('--native-driver', opts.nativeDriver);
+  if (native) args.push('--native-driver', native);
   log(`starting ${opts.tauriDriver} ${args.join(' ')}`);
-  const logFile = createWriteStream(join(opts.out, 'tauri-driver.log'));
-  driverProc = spawn(opts.tauriDriver, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-  for (const s of [driverProc.stdout, driverProc.stderr]) {
+  const logFile = createWriteStream(join(opts.out, `tauri-driver-${label}.log`));
+  const proc = spawn(opts.tauriDriver, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  driverProc = proc;
+  for (const s of [proc.stdout, proc.stderr]) {
     s.on('data', (d) => {
       logFile.write(d);
       process.stdout.write(`[tauri-driver] ${d}`);
     });
   }
-  driverProc.on('error', (e) => log(`tauri-driver failed to start: ${e.message}`));
-  driverProc.on('exit', (code, sig) => log(`tauri-driver exited (${code ?? sig})`));
+  proc.on('error', (e) => log(`tauri-driver failed to start: ${e.message}`));
+  proc.on('exit', (code, sig) => {
+    log(`tauri-driver exited (${code ?? sig})`);
+    logFile.end();
+  });
+  // Both ears: tauri-driver (port) and the msedgedriver it started (port + 1).
+  const up = await waitFor(
+    `tauri-driver on ${opts.port} and msedgedriver on ${opts.port + 1}`,
+    async () => (await portOpen(opts.port)) && (await portOpen(opts.port + 1)),
+    30_000,
+  ).then(
+    () => true,
+    (e) => {
+      log(e.message);
+      return false;
+    },
+  );
+  if (up) return;
+  if (native !== opts.nativeDriver) {
+    log('the verbose msedgedriver wrapper did not come up: plain msedgedriver (no driver log file)');
+    return startDriver(label, { verbose: false });
+  }
+  throw new Error(`tauri-driver/msedgedriver did not start (see tauri-driver-${label}.log)`);
 }
 
-/** Stops tauri-driver with its children (msedgedriver → the app). Never throws. */
-function stopAll() {
-  if (driverProc && driverProc.exitCode === null) {
-    if (process.platform === 'win32') {
-      spawnSync('taskkill', ['/F', '/T', '/PID', String(driverProc.pid)], { stdio: 'ignore' });
-    } else {
-      driverProc.kill('SIGTERM');
+/** Stops tauri-driver with its children (msedgedriver, the app it launched). Never throws. */
+async function stopDriver() {
+  const proc = driverProc;
+  driverProc = null;
+  if (proc && proc.exitCode === null && proc.signalCode === null) {
+    if (IS_WINDOWS) spawnSync('taskkill', ['/F', '/T', '/PID', String(proc.pid)], { stdio: 'ignore' });
+    else proc.kill('SIGTERM');
+    for (let i = 0; i < 20 && proc.exitCode === null && proc.signalCode === null; i++) await sleep(250);
+  }
+  // On a CI runner nothing else is ours to keep.
+  if (IS_WINDOWS && CI) {
+    for (const image of ['msedgedriver.exe', 'tauri-driver.exe']) spawnSync('taskkill', ['/F', '/T', '/IM', image], { stdio: 'ignore' });
+  }
+}
+
+/** Starts the installed app directly (no driver); stdout/stderr → `app-<label>.stdio.log`. */
+function launchApp(label) {
+  const env = { ...process.env };
+  for (const k of Object.keys(env)) if (/^WEBVIEW2_/i.test(k)) delete env[k];
+  const logFile = createWriteStream(join(opts.out, `app-${label}.stdio.log`));
+  const proc = spawn(opts.app, [], { stdio: ['ignore', 'pipe', 'pipe'], env, windowsHide: false });
+  appProc = proc;
+  proc.stdout.pipe(logFile, { end: false });
+  proc.stderr.pipe(logFile, { end: false });
+  proc.on('error', (e) => log(`app (${label}) failed to start: ${e.message}`));
+  proc.on('exit', (code, sig) => {
+    log(`app (${label}) exited (${code ?? sig})`);
+    logFile.end();
+  });
+  log(`started the app directly (${label}): pid ${proc.pid}`);
+  return proc;
+}
+
+/** Stops every instance of the app (politely first) and the WebView2 processes of its profile. */
+async function stopTheApp() {
+  const did = await stopApp(APP_EXE, { marker: IDENTIFIER, ci: CI });
+  appProc = null;
+  return did;
+}
+
+/** `DevToolsActivePort` files: the app's own WebView2 folder and any `--user-data-dir` seen. */
+function devToolsActivePort(dirs) {
+  const out = {};
+  for (const dir of dirs) {
+    const f = join(dir, 'DevToolsActivePort');
+    try {
+      out[f] = readFileSync(f, 'utf8').trim().replace(/\s+/g, ' ');
+    } catch {
+      out[f] = null;
     }
   }
-  // On a CI runner nothing else is ours to keep: make sure no app or driver survives.
-  if (process.platform === 'win32' && CI) {
-    for (const image of [opts.app && basename(opts.app), 'msedgedriver.exe', 'tauri-driver.exe'].filter(Boolean)) {
-      spawnSync('taskkill', ['/F', '/T', '/IM', image], { stdio: 'ignore' });
+  return out;
+}
+
+/**
+ * What is going on right now, for the artifact and the log: the app/WebView2/driver
+ * processes with command lines, their windows (an error box has class #32770), whether the
+ * WebView2 browser process got `--remote-debugging-port`, DevToolsActivePort files, the CDP
+ * endpoint, a desktop screenshot. Writes `<label>-diagnosis.json`. Never throws.
+ */
+async function diagnose(label, { cdpPort = null } = {}) {
+  const d = { label, at: new Date().toISOString() };
+  try {
+    if (!IS_WINDOWS) {
+      d.skipped = 'not windows';
+      return d;
+    }
+    const procs = processes(APP_EXE);
+    d.processes = procs;
+    const list = Array.isArray(procs) ? procs : [];
+    const appPids = list.filter((p) => p.Name?.toLowerCase() === APP_EXE.toLowerCase()).map((p) => p.ProcessId);
+    d.app_pids = appPids;
+    d.windows = windows(appPids);
+    // The WebView2 browser process is the msedgewebview2.exe without `--type=`.
+    d.webview2_browsers = list
+      .filter((p) => /msedgewebview2/i.test(p.Name ?? '') && !/--type=/.test(p.CommandLine ?? ''))
+      .map((p) => {
+        const cmd = p.CommandLine ?? '';
+        return {
+          pid: p.ProcessId,
+          parent: p.ParentProcessId,
+          remote_debugging: cmd.match(/--remote-debugging-port=\S+/)?.[0] ?? null,
+          user_data_dir: cmd.match(/--user-data-dir=("[^"]+"|\S+)/)?.[1]?.replace(/"/g, '') ?? null,
+        };
+      });
+    const dirs = new Set(d.webview2_browsers.map((b) => b.user_data_dir).filter(Boolean));
+    if (process.env.LOCALAPPDATA) dirs.add(join(process.env.LOCALAPPDATA, IDENTIFIER, 'EBWebView'));
+    d.devtools_active_port = devToolsActivePort([...dirs]);
+    if (cdpPort) d.cdp = await cdp(cdpPort);
+    const png = `${label}-desktop.png`;
+    const err = desktopScreenshot(join(opts.out, png));
+    d.desktop_screenshot = err ? `failed: ${err.slice(0, 300)}` : png;
+  } catch (e) {
+    d.error = String(e?.stack ?? e);
+  }
+  try {
+    writeFileSync(join(opts.out, `${label}-diagnosis.json`), `${JSON.stringify(d, null, 2)}\n`);
+  } catch (e) {
+    log(`${label}-diagnosis.json: ${e.message}`);
+  }
+  const wins = Array.isArray(d.windows) ? d.windows.filter((w) => d.app_pids?.includes(w.pid) && w.visible) : [];
+  log(
+    `diagnosis ${label}: app ${d.app_pids?.length ? `running (pid ${d.app_pids.join(', ')})` : 'NOT running'}` +
+      `; app windows: ${wins.map((w) => `"${w.title}" [${w.class}]`).join(', ') || 'none'}` +
+      `; WebView2 browser: ${d.webview2_browsers?.map((b) => `${b.remote_debugging ?? 'NO --remote-debugging-port'} data=${b.user_data_dir ?? '?'}`).join(' | ') || 'none'}` +
+      `; DevToolsActivePort: ${Object.entries(d.devtools_active_port ?? {}).filter(([, v]) => v).map(([k, v]) => `${k} (${v})`).join(', ') || 'none'}` +
+      (d.cdp ? `; CDP ${cdpPort}: ${d.cdp.ok ? `${d.cdp.version?.Browser} (${d.cdp.targets?.length} targets)` : d.cdp.error}` : ''),
+  );
+  return d;
+}
+
+/** The app's own log and crash reports (default profile) into the artifact. */
+function collectProfileLogs() {
+  if (!process.env.APPDATA) return;
+  for (const sub of ['logs', 'crash']) {
+    const src = join(process.env.APPDATA, IDENTIFIER, sub);
+    try {
+      if (existsSync(src)) cpSync(src, join(opts.out, 'app-profile', sub), { recursive: true });
+    } catch (e) {
+      log(`copying ${src}: ${e.message}`);
     }
   }
+}
+
+// ------------------------------------------------------------------ preflight + session
+
+/** How long the app runs on its own in the preflight. */
+const PREFLIGHT_MS = 15_000;
+/** One session attempt (msedgedriver itself gives up on DevToolsActivePort after 60 s). */
+const SESSION_TIMEOUT_MS = 90_000;
+/** Attach strategy: how long the app may take to open its DevTools port. */
+const CDP_TIMEOUT_MS = 30_000;
+
+/**
+ * The installed app on its own (no driver) for 15 s, with the HKLM policy opening a fixed
+ * DevTools port: does it start, stay up, show its window (or an error box), does WebView2
+ * open the port? Then it is closed. Answers "app problem or driver problem" in one run.
+ */
+async function preflight() {
+  const d = { cdp_port: opts.cdpPort };
+  summary.preflight = d;
+  if (!IS_WINDOWS) {
+    d.skipped = 'not windows';
+    return;
+  }
+  d.stopped_before = await stopTheApp();
+  d.policy = policy.set(`--remote-debugging-port=${opts.cdpPort}`);
+  log(`preflight: WebView2 policy ${d.policy.hive ? `${d.policy.hive}\\${POLICY_KEY} ${APP_EXE} = ${d.policy.readback}` : `NOT set (${d.policy.errors.join('; ')})`}`);
+  const t0 = Date.now();
+  const proc = launchApp('preflight');
+  while (Date.now() - t0 < PREFLIGHT_MS && proc.exitCode === null) {
+    await sleep(1000);
+    if (!d.cdp_opened_after_ms && (await cdp(opts.cdpPort)).ok) d.cdp_opened_after_ms = Date.now() - t0;
+  }
+  d.ran_ms = Date.now() - t0;
+  d.alive = proc.exitCode === null;
+  d.exit_code = proc.exitCode;
+  d.diagnosis = await diagnose('preflight', { cdpPort: opts.cdpPort });
+  d.stopped_after = await stopTheApp();
+  policy.set(null);
+  const wins = (Array.isArray(d.diagnosis.windows) ? d.diagnosis.windows : []).filter((w) => d.diagnosis.app_pids?.includes(w.pid) && w.visible);
+  d.line =
+    `PREFLIGHT app ${d.alive ? `alive after ${(d.ran_ms / 1000).toFixed(0)}s` : `EXITED with ${d.exit_code} after ${(d.ran_ms / 1000).toFixed(1)}s`}` +
+      `, window ${wins.map((w) => `"${w.title}" [${w.class}]`).join(', ') || 'none'}` +
+      `, DevTools port ${opts.cdpPort} ${d.cdp_opened_after_ms ? `open after ${(d.cdp_opened_after_ms / 1000).toFixed(1)}s` : 'NEVER opened'}` +
+      ` (closed: ${d.stopped_after})`;
+  console.log(d.line);
+}
+
+/**
+ * Ways to get a WebDriver session, tried in order; the first that works is used and logged
+ * (`summary.strategy`). See ./README.md "Why the session failed".
+ */
+const STRATEGIES = [
+  {
+    id: 'driver+policy',
+    how: 'launch',
+    tries: 2,
+    policy: () => '--remote-debugging-port=0',
+    why: 'msedgedriver launches the app; the HKLM WebView2 policy (honoured by elevated hosts) opens the DevTools port',
+  },
+  {
+    id: 'attach+policy',
+    how: 'attach',
+    tries: 2,
+    policy: () => `--remote-debugging-port=${opts.cdpPort}`,
+    why: 'the pilot starts the app with a fixed DevTools port (HKLM policy); msedgedriver attaches by debuggerAddress (no DevToolsActivePort file involved)',
+  },
+  {
+    id: 'driver',
+    how: 'launch',
+    tries: 1,
+    policy: () => null,
+    why: 'as documented by Tauri: msedgedriver passes the port in WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS (ignored by elevated hosts since WebView2 150)',
+  },
+];
+
+async function openSession() {
+  const list = opts.strategy ? STRATEGIES.filter((s) => s.id === opts.strategy) : STRATEGIES;
+  if (list.length === 0) throw new Error(`unknown --strategy ${opts.strategy} (one of ${STRATEGIES.map((s) => s.id).join(', ')})`);
+  for (const s of list) {
+    for (let i = 1; i <= s.tries; i++) {
+      const label = `session-${s.id.replace('+', '-')}-${i}`;
+      const a = { strategy: s.id, why: s.why, try: i, ok: false, ms: 0, policy: null, error: null };
+      summary.attempts.push(a);
+      const t0 = Date.now();
+      let during = null;
+      let timer = null;
+      try {
+        await stopTheApp();
+        a.policy = policy ? policy.set(s.policy()) : null;
+        await startDriver(label);
+        log(`session strategy "${s.id}" try ${i}/${s.tries}: ${s.why}`);
+        if (s.how === 'launch') {
+          log(`creating a session for ${opts.app}`);
+          // While msedgedriver waits for the app: look at what is on screen after 20 s.
+          timer = setTimeout(() => (during = diagnose(`${label}-during`)), 20_000);
+          await wd.newSession(opts.app, { timeoutMs: SESSION_TIMEOUT_MS });
+        } else {
+          const proc = launchApp(label);
+          const c = await waitFor(
+            `the DevTools endpoint 127.0.0.1:${opts.cdpPort} with a page`,
+            async () => {
+              if (proc.exitCode !== null) return { exited: proc.exitCode };
+              const r = await cdp(opts.cdpPort);
+              return r.ok && r.targets.some((t) => t.type === 'page') ? r : null;
+            },
+            CDP_TIMEOUT_MS,
+            500,
+          );
+          if (c.exited !== undefined) throw new Error(`the app exited (${c.exited}) before opening its DevTools port`);
+          a.cdp = { browser: c.version?.Browser, targets: c.targets };
+          log(`attaching to 127.0.0.1:${opts.cdpPort} (${c.version?.Browser})`);
+          await wd.attachSession(`127.0.0.1:${opts.cdpPort}`, { timeoutMs: 60_000 });
+        }
+        clearTimeout(timer);
+        if (during) await during;
+        a.ok = true;
+        a.ms = Date.now() - t0;
+        summary.strategy = s.id;
+        log(`session strategy "${s.id}" try ${i}/${s.tries}: OK in ${(a.ms / 1000).toFixed(1)}s`);
+        a.diagnosis = await diagnose(`${label}-ok`, { cdpPort: s.how === 'attach' ? opts.cdpPort : null });
+        return s;
+      } catch (e) {
+        clearTimeout(timer);
+        if (during) await during;
+        a.ms = Date.now() - t0;
+        a.error = String(e?.message ?? e);
+        log(`session strategy "${s.id}" try ${i}/${s.tries}: FAILED after ${(a.ms / 1000).toFixed(1)}s: ${a.error.split('\n')[0]}`);
+        a.diagnosis = await diagnose(label, { cdpPort: s.how === 'attach' ? opts.cdpPort : null });
+        await wd.deleteSession();
+        await stopDriver();
+        await stopTheApp();
+      }
+    }
+  }
+  throw new Error(
+    `no WebDriver session: every strategy failed (${list.map((s) => s.id).join(', ')}). ` +
+      'See preflight-diagnosis.json, session-*-diagnosis.json, msedgedriver-*.log and tauri-driver-*.log in the results.',
+  );
+}
+
+async function stopAll() {
+  await stopDriver();
+  // The app msedgedriver launched is closed with the session; one the pilot started (attach)
+  // or any leftover on a CI runner is stopped here.
+  if (IS_WINDOWS && (CI || appProc)) await stopTheApp();
+  else if (appProc && appProc.exitCode === null) appProc.kill('SIGTERM');
+  policy?.restore();
 }
 
 async function main() {
   mkdirSync(opts.out, { recursive: true });
   if (!opts.app || !existsSync(opts.app)) throw new Error(`the app exe is missing: --app or FC_EXE (got ${opts.app})`);
-  if (process.platform === 'win32' && !opts.nativeDriver) throw new Error('--native-driver / MSEDGEDRIVER (msedgedriver.exe matching WebView2) is required');
-  if (process.platform !== 'win32') log('warning: this pilot is meant for Windows (WebView2 + msedgedriver)');
+  if (IS_WINDOWS && !opts.nativeDriver) throw new Error('--native-driver / MSEDGEDRIVER (msedgedriver.exe matching WebView2) is required');
+  if (!IS_WINDOWS) log('warning: this pilot is meant for Windows (WebView2 + msedgedriver)');
 
   // The app always opens the real per-user profile (%APPDATA%\app.flashcard.desktop):
   // refuse to write test decks into somebody's collection outside CI.
@@ -485,13 +807,13 @@ async function main() {
   if (summary.profile_existed && !CI && process.env.FC_WIN_E2E_ALLOW_EXISTING_PROFILE !== '1') {
     throw new Error(`${profile} exists: this run would add decks to that collection. Use a throwaway Windows user, or set FC_WIN_E2E_ALLOW_EXISTING_PROFILE=1.`);
   }
+  summary.elevated = IS_WINDOWS ? isElevated() : null;
+  log(`elevated: ${summary.elevated} (an elevated WebView2 host ignores WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS since runtime 150)`);
 
-  startDriver();
-  await waitFor(`tauri-driver on 127.0.0.1:${opts.port}`, () => portOpen(opts.port), 30_000);
-  log(`creating a session for ${opts.app}`);
-  await wd.newSession(opts.app);
+  await preflight();
+  await openSession();
   summary.capabilities = wd.capabilities;
-  log(`session ${wd.sessionId}: browserVersion (WebView2) ${wd.capabilities?.browserVersion}, msedgedriver ${wd.capabilities?.msedge?.msedgedriverVersion ?? '?'}`);
+  log(`session ${wd.sessionId} (${summary.strategy}): browserVersion (WebView2) ${wd.capabilities?.browserVersion}, msedgedriver ${wd.capabilities?.msedge?.msedgedriverVersion ?? '?'}`);
   await wd.setTimeouts({ script: 60_000, pageLoad: 60_000, implicit: 0 });
 
   await journey('P', 'preparation through IPC (skip onboarding, decks + notes)', prepare);
@@ -509,7 +831,8 @@ try {
   if (wd.sessionId) await evidence('setup');
 } finally {
   await wd.deleteSession();
-  stopAll();
+  await stopAll();
+  collectProfileLogs();
   summary.finished_at = new Date().toISOString();
   summary.fatal = fatal;
   summary.ok = !fatal && results.length > 0 && results.every((r) => r.status === 'PASS');
@@ -519,6 +842,20 @@ try {
   } catch (e) {
     log(`summary.json: ${e.message}`);
   }
-  console.log(`\n${summary.ok ? 'PASS' : 'FAIL'} windows pilot: ${results.map((r) => `${r.id}=${r.status}`).join(' ') || 'no journeys ran'} → ${opts.out}`);
+  const tried = summary.attempts.map((a) => `${a.strategy}#${a.try}=${a.ok ? 'ok' : 'fail'}`).join(' ') || 'none';
+  const sessionLine = `SESSION ${summary.strategy ? `via "${summary.strategy}"` : 'NONE'} (attempts: ${tried}; elevated: ${summary.elevated})`;
+  const finalLine = `${summary.ok ? 'PASS' : 'FAIL'} windows pilot: ${results.map((r) => `${r.id}=${r.status}`).join(' ') || 'no journeys ran'}`;
+  console.log(sessionLine);
+  console.log(`\n${finalLine} → ${opts.out}`);
+  // The workflow run's summary page: the three lines that answer "what happened".
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const rows = results.map((r) => `- ${r.status} ${r.id} ${r.name}${r.error ? `: ${r.error.split('\n')[0]}` : ''}`);
+    const md = ['### Windows WebDriver pilot', '', `- ${summary.preflight?.line ?? 'PREFLIGHT skipped'}`, `- ${sessionLine}`, ...rows, `- **${finalLine}**`, fatal ? `- setup: ${fatal.split('\n')[0]}` : ''];
+    try {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${md.filter(Boolean).join('\n')}\n`);
+    } catch (e) {
+      log(`step summary: ${e.message}`);
+    }
+  }
 }
 process.exit(summary.ok ? 0 : 1);

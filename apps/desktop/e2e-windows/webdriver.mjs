@@ -3,7 +3,8 @@
  *
  * Talks to `tauri-driver` (default http://127.0.0.1:4444), which forwards everything to
  * msedgedriver after rewriting `tauri:options` in the new-session request into
- * `ms:edgeOptions` (binary = the app's exe, browserName = webview2).
+ * `ms:edgeOptions` (binary = the app's exe, browserName = webview2); a request without
+ * `tauri:options` (attach by `debuggerAddress`) passes through unchanged.
  *
  * Only what the Windows pilot needs: sessions, find/click/send keys, keyboard actions,
  * sync/async scripts, screenshots. Spec: https://www.w3.org/TR/webdriver2/
@@ -71,22 +72,25 @@ export class WebDriver {
   /**
    * Starts the app through tauri-driver. Capability shape from the Tauri v2 WebDriver docs
    * (Selenium example: browserName "wry" + `tauri:options.application`); tauri-driver only
-   * reads `tauri:options` from `alwaysMatch` and replaces browserName with "webview2".
+   * reads `tauri:options` from `alwaysMatch` and replaces it with `ms:edgeOptions`
+   * (`binary` = the exe, browserName "webview2").
    */
-  async newSession(application, { args = [] } = {}) {
-    const value = await this.cmd(
-      'POST',
-      '/session',
-      {
-        capabilities: {
-          alwaysMatch: {
-            browserName: 'wry',
-            'tauri:options': { application, args },
-          },
-        },
-      },
-      { timeoutMs: 180_000 },
-    );
+  newSession(application, { args = [], timeoutMs = 90_000 } = {}) {
+    return this.createSession({ browserName: 'wry', 'tauri:options': { application, args } }, timeoutMs);
+  }
+
+  /**
+   * Attaches to an app that is already running with its DevTools port open (Microsoft's
+   * "attach to a running WebView2 app": browserName "webview2" + `debuggerAddress`). Without
+   * `tauri:options`, tauri-driver forwards the request unchanged.
+   */
+  attachSession(debuggerAddress, { timeoutMs = 60_000 } = {}) {
+    return this.createSession({ browserName: 'webview2', 'ms:edgeOptions': { debuggerAddress } }, timeoutMs);
+  }
+
+  /** New Session with these `alwaysMatch` capabilities. */
+  async createSession(alwaysMatch, timeoutMs) {
+    const value = await this.cmd('POST', '/session', { capabilities: { alwaysMatch } }, { timeoutMs });
     this.sessionId = value.sessionId;
     this.capabilities = value.capabilities ?? null;
     return value;

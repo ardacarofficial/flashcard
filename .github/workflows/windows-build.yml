@@ -75,12 +75,18 @@ jobs:
   # msedgedriver and runs three journeys (apps/desktop/e2e-windows/README.md). Runs after the
   # installer job, so it can never stop the installer from being built and uploaded;
   # `continue-on-error` keeps a red pilot from failing the workflow run.
+  # First run (45038113867) failed at session creation ("DevToolsActivePort file doesn't
+  # exist"): this runner is elevated, and since WebView2 Runtime 150 an elevated host ignores
+  # the WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS msedgedriver uses to open the DevTools port.
+  # run.mjs now sets the HKLM WebView2 policy for the app's exe (and removes it afterwards),
+  # runs the app alone first (PREFLIGHT line), tries session strategies in order (SESSION
+  # line) and leaves a diagnosis of every failed try in the results artifact.
   webdriver-pilot:
     name: WebDriver pilot (non-gating)
     needs: installer
     runs-on: windows-2025
     continue-on-error: true
-    timeout-minutes: 40
+    timeout-minutes: 50
     env:
       FC_WIN_E2E_OUT: ${{ github.workspace }}\e2e-windows-results
     steps:
@@ -176,9 +182,10 @@ jobs:
           Write-Host "tauri-driver: $(cargo install --list | Select-String '^tauri-driver') ($td)"
           "TAURI_DRIVER=$td" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       # Zero npm dependencies: Node 22's fetch speaks WebDriver to tauri-driver on 127.0.0.1:4444.
+      # Prints PREFLIGHT / SESSION / PASS|FAIL lines (also on the run's summary page).
       - name: Journeys against the installed app
         shell: pwsh
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: node apps/desktop/e2e-windows/run.mjs --app "$env:FC_EXE" --native-driver "$env:MSEDGEDRIVER" --tauri-driver "$env:TAURI_DRIVER" --out "$env:FC_WIN_E2E_OUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
@@ -193,3 +200,6 @@ jobs:
         run: |
           $u = Join-Path $env:LOCALAPPDATA 'Flashcard\uninstall.exe'
           if (Test-Path $u) { Start-Process -FilePath $u -ArgumentList '/S' -Wait }
+          # run.mjs removes its WebView2 policy itself; this covers a run cut off by the timeout.
+          $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+          if ($env:FC_EXE) { Remove-ItemProperty -Path $key -Name (Split-Path $env:FC_EXE -Leaf) -ErrorAction SilentlyContinue }
