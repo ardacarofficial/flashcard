@@ -1,0 +1,1517 @@
+<!doctype html>
+<html lang="tr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Çalışma modları · v1.4 taslak</title>
+<!--
+  v1.4 D1 prototype: the study launcher ("Çalış") and the five ways of studying, clickable end to
+  end with 8 sample cards. Stand-alone: inline CSS + JS, no network. Not app code: it is shown to
+  the owner to say "this / not this" before anything is built. Decisions and what moved where are
+  in the "Taslak notları" drawer (button on the top strip).
+-->
+<style>
+:root {
+  color-scheme: dark;
+  --surface-0: light-dark(#fafaf8, #0e0e10);
+  --surface-1: light-dark(#ffffff, #151518);
+  --surface-2: light-dark(#f3f3f0, #1c1c20);
+  --surface-3: light-dark(#e9e9e4, #25252b);
+  --border: light-dark(#e2e2dc, #2a2a31);
+  --border-strong: light-dark(#cfcfc7, #3a3a43);
+  --text-1: light-dark(#1a1a1c, #ededef);
+  --text-2: light-dark(#5c5c63, #a3a3ae);
+  --text-3: light-dark(#85858c, #74747f);
+  --accent: #f5b544;
+  --accent-fg: #17130a;
+  --accent-text: light-dark(#9a5b00, #f5b544);
+  --accent-soft: color-mix(in srgb, #f5b544 14%, transparent);
+  --selected: light-dark(#fef5e5, #2b2417);
+  --focus-ring: light-dark(#9a5b00, #f5b544);
+  --success: light-dark(#147a4b, #3dd68c);
+  --success-soft: color-mix(in srgb, light-dark(#147a4b, #3dd68c) 12%, light-dark(#ffffff, #151518));
+  --danger: light-dark(#c8323b, #ff6369);
+  --danger-soft: color-mix(in srgb, light-dark(#c8323b, #ff6369) 12%, light-dark(#ffffff, #151518));
+  --warning: light-dark(#b4520a, #ff9d4d);
+  --shadow-float: 0 12px 32px rgb(0 0 0 / 0.35);
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --motion: 140ms ease-out;
+}
+:root[data-theme='light'] { color-scheme: light; }
+@media (prefers-reduced-motion: reduce) { :root { --motion: 0ms; } }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--surface-0); color: var(--text-1); font: 13px/1.45 var(--font-sans);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+button, input, select { font: inherit; color: inherit; }
+.num, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ------------------------------------------------------------ prototype strip (not app UI) */
+#strip {
+  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
+  padding: 6px 12px; border-bottom: 1px dashed var(--border-strong);
+  background: repeating-linear-gradient(135deg, var(--surface-1) 0 10px, var(--surface-2) 10px 20px);
+  font-size: 12px; color: var(--text-2);
+}
+#strip .tag { font: 600 11px var(--font-mono); letter-spacing: .06em; color: var(--accent-fg); background: var(--accent); padding: 2px 6px; border-radius: 4px; }
+#strip .grp { display: inline-flex; align-items: center; gap: 6px; }
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 6px; overflow: hidden; background: var(--surface-1); }
+.seg button { border: 0; background: none; padding: 3px 8px; font-size: 12px; cursor: pointer; color: var(--text-2); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed='true'] { background: var(--surface-3); color: var(--text-1); font-weight: 600; }
+#strip .spacer { flex: 1; }
+
+/* ------------------------------------------------------------ buttons, chips, kbd */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 32px; padding: 0 12px;
+  border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text-1);
+  font-weight: 500; cursor: pointer; white-space: nowrap; transition: background var(--motion), border-color var(--motion);
+}
+.btn:hover { background: var(--surface-3); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--text-1)); }
+.btn.ghost { background: none; border-color: transparent; color: var(--text-2); }
+.btn.ghost:hover { background: var(--surface-2); color: var(--text-1); }
+.btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
+.btn.lg { height: 36px; padding: 0 16px; font-size: 14px; }
+.btn:disabled { cursor: not-allowed; background: var(--surface-2); border-color: var(--border); color: var(--text-2); }
+.kbd {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px;
+  font: 500 11px var(--font-mono); border: 1px solid var(--border-strong); border-radius: 4px; color: var(--text-2); background: var(--surface-1);
+}
+.btn.primary .kbd { background: color-mix(in srgb, var(--accent-fg) 12%, transparent); border-color: color-mix(in srgb, var(--accent-fg) 30%, transparent); color: var(--accent-fg); }
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border-strong); color: var(--text-2); white-space: nowrap; }
+.chip svg.i { width: 12px; height: 12px; }
+.chip.cal { color: var(--accent-text); border-color: color-mix(in srgb, var(--accent-text) 45%, transparent); background: var(--accent-soft); }
+.chip.ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, transparent); }
+.chip.bad { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.link { background: none; border: 0; padding: 0; color: var(--accent-text); cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+.link:hover { text-decoration: underline; }
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; background: none; border: 0; padding: 0; text-align: left; }
+.switch .track { width: 30px; height: 18px; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--border-strong); position: relative; flex: none; transition: background var(--motion); }
+.switch .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-2); transition: transform var(--motion), background var(--motion); }
+.switch[aria-checked='true'] .track { background: var(--accent); border-color: var(--accent); }
+.switch[aria-checked='true'] .track::after { transform: translateX(12px); background: var(--accent-fg); }
+.input { height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface-2); min-width: 0; }
+.input::placeholder { color: var(--text-3); }
+select.input { padding-right: 6px; }
+
+/* ------------------------------------------------------------ app shell */
+#app { flex: 1; min-height: 0; position: relative; }
+.shell { display: flex; height: 100%; }
+.side { width: 216px; flex: none; background: var(--surface-1); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 10px 8px; gap: 2px; }
+.brand { display: flex; align-items: center; gap: 8px; padding: 4px 8px 14px; font-weight: 600; font-size: 14px; }
+.brand .logo { width: 18px; height: 18px; border-radius: 4px; background: var(--accent); }
+.nav { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 8px; border-radius: 6px; color: var(--text-2); background: none; border: 0; cursor: pointer; text-align: left; width: 100%; }
+.nav:hover { background: var(--surface-2); color: var(--text-1); }
+.nav.on { background: var(--surface-3); color: var(--text-1); }
+.nav.on svg { color: var(--accent-text); }
+.nav .badge { margin-left: auto; font: 11px var(--font-mono); color: var(--text-2); }
+.side .grow { flex: 1; }
+.side hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; width: 100%; }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.top { height: 44px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px 0 24px; border-bottom: 1px solid var(--border); }
+.top .crumb { color: var(--text-2); }
+.top .crumb b { color: var(--text-1); font-weight: 500; }
+.top .grow { flex: 1; }
+.searchbox { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px 0 10px; width: 260px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-3); background: var(--surface-1); cursor: pointer; }
+.searchbox span.t { flex: 1; text-align: left; }
+.page { flex: 1; overflow: auto; padding: 24px; }
+.page-inner { max-width: 1120px; }
+
+/* ------------------------------------------------------------ home */
+.hero { display: flex; align-items: flex-end; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.hero .eyebrow { color: var(--accent-text); font-weight: 600; font-size: 12px; }
+.hero .big { font-size: 20px; display: flex; align-items: baseline; gap: 10px; margin: 2px 0 6px; }
+.hero .big .num { font-size: 40px; font-weight: 600; letter-spacing: -0.02em; }
+.hero .bd { color: var(--text-2); display: flex; gap: 14px; flex-wrap: wrap; }
+.hero .bd .num { color: var(--text-1); }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: 1px; }
+.hero .acts { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.hero .acts .under { color: var(--text-2); font-size: 12px; }
+.lead { color: var(--text-2); margin: 14px 0 20px; max-width: 70ch; }
+.resume-line { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); margin-bottom: 8px; }
+.resume-line .grow { flex: 1; }
+.resume-line .meta { color: var(--text-2); }
+h2.sec { font-size: 14px; font-weight: 600; margin: 24px 0 8px; }
+.table { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-1); }
+.trow { display: grid; grid-template-columns: 1fr 80px 80px 110px; align-items: center; height: 34px; padding: 0 8px 0 12px; border-top: 1px solid var(--border); }
+.trow:first-child { border-top: 0; color: var(--text-2); font-size: 12px; }
+.trow .r { text-align: right; padding-right: 16px; }
+
+/* ------------------------------------------------------------ launcher dialog */
+.overlay { position: absolute; inset: 0; background: rgb(0 0 0 / 0.55); display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; z-index: 20; }
+.dialog {
+  width: min(920px, 100%); max-height: 100%; display: flex; flex-direction: column;
+  background: var(--surface-1); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--shadow-float);
+}
+.dlg-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px 20px; }
+.dlg-head h1 { margin: 0; font-size: 16px; font-weight: 600; }
+.dlg-head .sub { color: var(--text-2); }
+.dlg-head .grow { flex: 1; }
+.dlg-body { overflow: auto; padding: 4px 20px 16px; }
+.dlg-foot { display: flex; align-items: center; gap: 16px; padding: 12px 16px 12px 20px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.dlg-foot .grow { flex: 1; }
+.foot-sum { color: var(--text-2); text-align: right; }
+.foot-sum b { color: var(--text-1); font-weight: 500; }
+.foot-sum .warn { color: var(--warning); }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 1000px) { .cols { grid-template-columns: 1fr; gap: 8px; } .dialog { width: min(660px, 100%); } }
+.lbl { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 14px 0 8px; display: flex; align-items: center; gap: 8px; }
+.lbl .step { font: 600 11px var(--font-mono); color: var(--text-2); border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 4px; }
+.resume-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-2); cursor: pointer; text-align: left; margin-bottom: 6px; }
+.resume-row:hover { border-color: var(--accent); }
+.resume-row:focus-visible, .resume-row.first { border-color: var(--accent); background: var(--selected); }
+.resume-row .grow { flex: 1; }
+.resume-row .meta { font: 12px var(--font-mono); color: var(--text-2); }
+.list { display: flex; flex-direction: column; gap: 6px; }
+.opt {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; align-items: center; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); cursor: pointer; text-align: left; width: 100%;
+  transition: border-color var(--motion), background var(--motion);
+}
+.opt:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.opt[aria-checked='true'] { border-color: var(--accent); background: var(--selected); }
+.opt .ic { grid-row: span 2; width: 32px; height: 32px; border-radius: 6px; background: var(--surface-3); display: grid; place-items: center; color: var(--text-2); }
+.opt[aria-checked='true'] .ic { color: var(--accent-text); background: var(--accent-soft); }
+.opt .name { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.opt .line { color: var(--text-2); grid-column: 2 / 4; }
+.opt .right { justify-self: end; }
+.opt .count { font: 600 14px var(--font-mono); }
+.opt.noicon { grid-template-columns: 1fr auto; }
+.opt.noicon .line { grid-column: 1 / 3; }
+.opt[aria-disabled='true'] { cursor: default; background: var(--surface-1); border-style: dashed; }
+.opt[aria-disabled='true'] .name, .opt[aria-disabled='true'] .count { color: var(--text-2); }
+.opt[aria-disabled='true'] .line { font-style: italic; }
+.legend { color: var(--text-2); font-size: 12px; margin-top: 10px; display: flex; gap: 8px; align-items: flex-start; }
+.legend svg { margin-top: 2px; }
+.more-btn { margin-top: 8px; }
+.box { border: 1px solid var(--border); border-radius: 8px; padding: 4px 12px; background: var(--surface-1); }
+.row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--border); }
+.row:first-child { border-top: 0; }
+.row .txt { flex: 1; min-width: 0; }
+.row .t1 { font-weight: 500; }
+.row .t2 { color: var(--text-2); font-size: 12px; }
+.row .demo { color: var(--text-3); font-size: 11px; font-style: italic; }
+.cbx { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--border); cursor: pointer; }
+.cbx:first-child { border-top: 0; }
+.cbx input { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+.err { color: var(--danger); font-size: 12px; margin-top: 6px; }
+.adv-head { display: flex; align-items: center; gap: 8px; }
+
+/* ------------------------------------------------------------ session frame */
+.session { display: flex; flex-direction: column; height: 100%; }
+.sbar { height: 44px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--border); }
+.sbar .title b { font-weight: 600; }
+.sbar .title span { color: var(--text-2); }
+.pbar { flex: 1; height: 6px; background: var(--surface-3); border-radius: 999px; overflow: hidden; display: flex; min-width: 60px; }
+.pbar i { display: block; height: 100%; background: var(--accent); transition: width var(--motion); }
+.pbar i.s { background: var(--success); }
+.pbar i.w { background: var(--accent); }
+.sbar .pos { font: 600 13px var(--font-mono); }
+.sbar .meta { color: var(--text-2); white-space: nowrap; }
+.sbar .meta .num { color: var(--text-1); }
+.sbody { flex: 1; overflow: auto; padding: 32px 24px 40px; }
+.stage { max-width: 720px; margin: 0 auto; }
+.how { color: var(--text-2); margin: 0 0 12px; display: flex; align-items: center; gap: 8px; min-height: 20px; }
+.how .step { font: 600 11px var(--font-mono); color: var(--accent-text); border: 1px solid color-mix(in srgb, var(--accent-text) 45%, transparent); border-radius: 4px; padding: 0 5px; }
+.fcard { border: 1px solid var(--border-strong); border-radius: 12px; background: var(--surface-1); min-height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px 32px; text-align: center; cursor: pointer; }
+.fcard.short { min-height: 180px; cursor: default; }
+.fcard .term { font-size: 36px; font-weight: 500; letter-spacing: -0.01em; }
+.fcard .meaning { font-size: 32px; font-weight: 500; }
+.fcard .q { font-size: 12px; color: var(--text-2); margin-bottom: 8px; }
+.part { width: 100%; text-align: left; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); }
+.part .pl { font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.part .ex { font-size: 14px; }
+.part .tr { color: var(--text-2); }
+.part.src { margin-top: 10px; padding-top: 10px; font-size: 12px; color: var(--text-2); }
+mark { background: var(--accent-soft); color: var(--accent-text); padding: 0 2px; border-radius: 3px; font-weight: 600; }
+.blank { display: inline-block; min-width: 3.2em; border-bottom: 2px solid var(--text-2); margin: 0 2px; }
+.hintbox { margin-top: 16px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); text-align: left; width: 100%; }
+.hintbox .pl { font-size: 11px; color: var(--text-2); margin-bottom: 2px; }
+.grades { display: grid; gap: 8px; margin-top: 12px; }
+.grades.two { grid-template-columns: 1fr 1fr; }
+.grades.four { grid-template-columns: repeat(4, 1fr); }
+.grade { height: 52px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface-1); display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; font-weight: 600; font-size: 14px; position: relative; }
+.grade:hover:not(:disabled) { background: var(--surface-2); }
+.grade:disabled { cursor: not-allowed; color: var(--text-2); }
+.grade .kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+.grade .ivl { font: 11px var(--font-mono); color: var(--text-2); font-weight: 400; }
+.grade.again svg { color: var(--warning); }
+.grade.good svg { color: var(--success); }
+.grade.four-g { flex-direction: column; gap: 0; }
+.tools { display: flex; align-items: center; gap: 4px; margin-top: 12px; flex-wrap: wrap; position: relative; }
+.tools .grow { flex: 1; }
+.tools .keys { color: var(--text-2); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; }
+.tools .keys .mono { color: var(--text-1); }
+.menu { position: absolute; top: 34px; left: 0; z-index: 5; width: 300px; background: var(--surface-1); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: var(--shadow-float); padding: 4px; }
+.menu button { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; width: 100%; text-align: left; padding: 8px 10px; border: 0; background: none; border-radius: 6px; cursor: pointer; }
+.menu button:hover { background: var(--surface-2); }
+.menu .d { grid-column: 1 / 3; color: var(--text-2); font-size: 12px; }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.choice { min-height: 52px; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface-1); cursor: pointer; text-align: left; font-size: 15px; }
+.choice:hover:not(:disabled) { background: var(--surface-2); }
+.choice:disabled { cursor: default; }
+.choice .kbd { flex: none; }
+.choice .mark { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; }
+.choice.right { border-color: var(--success); background: var(--success-soft); }
+.choice.right .mark { color: var(--success); }
+.choice.wrong { border-color: var(--danger); background: var(--danger-soft); }
+.choice.wrong .mark { color: var(--danger); }
+.choice.dim { opacity: .55; }
+.feedback { margin-top: 14px; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1); display: flex; gap: 12px; align-items: flex-start; }
+.feedback .grow { flex: 1; }
+.feedback .v { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.feedback.ok .v { color: var(--success); }
+.feedback.bad .v { color: var(--danger); }
+.feedback.almost .v { color: var(--warning); }
+.feedback .ex { margin-top: 4px; }
+.feedback .tr, .feedback .src { color: var(--text-2); font-size: 12px; }
+.typerow { display: flex; gap: 8px; margin-top: 12px; }
+.typerow .input { flex: 1; height: 40px; font-size: 16px; }
+.typerow .input.ok { border-color: var(--success); }
+.typerow .input.bad { border-color: var(--danger); }
+.autonext { height: 2px; background: var(--success); margin-top: 8px; border-radius: 2px; animation: drain 1.1s linear forwards; transform-origin: left; }
+@keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* exam paper */
+.paper { max-width: 760px; margin: 0 auto; }
+.q { padding: 18px 16px; border: 1px solid transparent; border-radius: 8px; margin-bottom: 4px; }
+.q.cur { border-color: var(--border-strong); background: var(--surface-1); }
+.q-head { display: flex; align-items: center; gap: 10px; color: var(--text-2); font-size: 12px; margin-bottom: 6px; }
+.q-head .num { color: var(--text-1); font-weight: 600; font-size: 13px; }
+.q-head .done { margin-left: auto; }
+.q-prompt { font-size: 18px; font-weight: 500; }
+.q-sub { color: var(--text-2); margin-top: 2px; }
+.q .choices { margin-top: 10px; }
+.q .choice { min-height: 42px; font-size: 14px; }
+.q .choice.sel { border-color: var(--accent); background: var(--selected); }
+.mgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px; }
+.mrow { display: flex; align-items: center; gap: 8px; height: 38px; }
+.mrow .w { flex: 1; font-weight: 500; }
+.mrow select { width: 76px; }
+.mlist div { height: 38px; display: flex; align-items: center; gap: 8px; }
+.paper-foot { display: flex; align-items: center; gap: 12px; padding: 16px; margin-top: 8px; border-top: 1px solid var(--border); }
+.paper-foot .grow { flex: 1; color: var(--text-2); }
+
+/* match board */
+.board { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tile { min-height: 92px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface-1); display: flex; align-items: center; justify-content: center; padding: 10px; text-align: center; cursor: pointer; font-size: 14px; transition: background var(--motion), border-color var(--motion), opacity 300ms; }
+.tile.term { font-weight: 600; }
+.tile:hover { background: var(--surface-2); }
+.tile.sel { border-color: var(--accent); background: var(--selected); }
+.tile.bad { border-color: var(--danger); background: var(--danger-soft); }
+.tile.gone { visibility: hidden; }
+.tile.hit { border-color: var(--success); background: var(--success-soft); }
+@media (max-width: 1000px) { .board { grid-template-columns: repeat(3, 1fr); } }
+
+/* summary / paused */
+.sum-head { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.ring { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font: 600 13px var(--font-mono); flex: none; }
+.sum-head h1 { margin: 0; font-size: 20px; font-weight: 600; }
+.sum-head p { margin: 2px 0 0; color: var(--text-2); }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); max-width: 760px; }
+.tiles > div { padding: 12px 16px; border-left: 1px solid var(--border); }
+.tiles > div:first-child { border-left: 0; }
+.tiles .l { color: var(--text-2); font-size: 12px; }
+.tiles .v { font: 600 22px var(--font-mono); margin-top: 2px; }
+.sched { display: flex; gap: 8px; align-items: center; color: var(--text-2); margin: 14px 0; }
+.acts { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 24px; }
+.missed { max-width: 760px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); }
+.missed .mr { display: grid; grid-template-columns: 28px 1.1fr 1.2fr 1.2fr 70px; gap: 8px; align-items: center; min-height: 34px; padding: 4px 12px; border-top: 1px solid var(--border); }
+.missed .mr:first-child { border-top: 0; color: var(--text-2); font-size: 12px; }
+.missed .mr .y { color: var(--danger); }
+.missed .mr .c { color: var(--success); }
+.missed.simple .mr { grid-template-columns: 1fr 1.4fr 1fr; }
+.muted { color: var(--text-2); }
+
+/* toast */
+.toast { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--surface-3); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 14px; box-shadow: var(--shadow-float); z-index: 40; display: flex; gap: 12px; align-items: center; max-width: calc(100% - 32px); }
+
+/* notes drawer */
+#notes { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--surface-1); border-left: 1px solid var(--border-strong); box-shadow: var(--shadow-float); z-index: 60; display: none; flex-direction: column; }
+#notes.open { display: flex; }
+#notes .nh { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+#notes .nh h2 { margin: 0; font-size: 15px; flex: 1; }
+#notes .nb { overflow: auto; padding: 4px 16px 24px; }
+#notes h3 { font-size: 13px; margin: 18px 0 8px; color: var(--accent-text); }
+#notes .qa { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: var(--surface-0); }
+#notes .qa .qq { font-weight: 600; margin-bottom: 4px; }
+#notes .qa .ab { color: var(--text-2); }
+#notes .qa .ab b { color: var(--text-1); }
+#notes .qa .pick { font: 11px var(--font-mono); color: var(--accent-text); margin-top: 4px; }
+#notes table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#notes td, #notes th { border-top: 1px solid var(--border); padding: 6px 4px; vertical-align: top; text-align: left; }
+#notes th { color: var(--text-2); font-weight: 600; }
+#notes ul { padding-left: 18px; margin: 4px 0; color: var(--text-2); }
+
+@media (max-width: 1023px) {
+  .side { width: 56px; padding: 10px 6px; }
+  .side .lbltxt, .brand .lbltxt, .nav .badge { display: none; }
+  .nav { justify-content: center; padding: 0; }
+  .brand { justify-content: center; padding: 4px 0 14px; }
+  .searchbox { width: 200px; }
+  .page { padding: 20px 16px; }
+  .tiles { grid-template-columns: repeat(2, 1fr); }
+  .tiles > div:nth-child(3) { border-left: 0; }
+  .tiles > div:nth-child(n+3) { border-top: 1px solid var(--border); }
+  .sbar .meta.opt-hide { display: none; }
+}
+</style>
+</head>
+<body>
+<div id="strip" role="region" aria-label="Taslak kontrolleri"></div>
+<div id="app"></div>
+<aside id="notes" aria-label="Taslak notları"></aside>
+
+<script>
+'use strict';
+
+/* ================================================================ data */
+const SAMPLE = [
+  { id: 1, term: 'give up', meaning: 'vazgeçmek', ex: "I'm not gonna {give up} on this.", exTr: 'Bundan vazgeçmeyeceğim.', src: 'Breaking Bad · S1E3', st: 'due' },
+  { id: 2, term: 'reluctant', meaning: 'isteksiz, gönülsüz', ex: 'He seemed {reluctant} to talk about it.', exTr: 'Bu konuda konuşmaya isteksiz görünüyordu.', src: 'Sherlock · S1E1', st: 'due' },
+  { id: 3, term: 'come across', meaning: 'rastlamak', ex: 'Did you {come across} anything weird?', exTr: 'Tuhaf bir şeye rastladın mı?', src: 'Stranger Things · S1E2', st: 'due' },
+  { id: 4, term: 'figure out', meaning: 'çözmek, anlamak', ex: "We'll {figure} it {out} together.", exTr: 'Bunu birlikte çözeceğiz.', src: 'Friends · S2E5', st: 'due' },
+  { id: 5, term: 'get rid of', meaning: '-den kurtulmak', ex: 'We have to {get rid of} the car.', exTr: 'Arabadan kurtulmamız lazım.', src: 'Breaking Bad · S1E2', st: 'new' },
+  { id: 6, term: 'borrow', meaning: 'ödünç almak', ex: 'Can I {borrow} your car tonight?', exTr: 'Bu akşam arabanı ödünç alabilir miyim?', src: 'The Office · S3E10', st: 'new' },
+  { id: 7, term: 'suspicious', meaning: 'şüpheli', ex: "That's a little {suspicious}, don't you think?", exTr: 'Biraz şüpheli, sence de öyle değil mi?', src: 'Sherlock · S1E3', st: 'later' },
+  { id: 8, term: 'take care of', meaning: 'halletmek, ilgilenmek', ex: "Don't worry, I'll {take care of} it.", exTr: 'Merak etme, ben hallederim.', src: 'Peaky Blinders · S1E1', st: 'later' },
+];
+const DECK = 'İngilizce';
+
+const MODES = {
+  cards: { name: 'Kartlar', icon: 'layers', line: 'Kartı çevir, bilip bilmediğini söyle; sıradaki tekrar buna göre ayarlanır.' },
+  test: { name: 'Test', icon: 'listcheck', line: 'Kelimeyi gör, dört şıktan anlamını seç; doğrusunu hemen görürsün.' },
+  learn: { name: 'Öğren', icon: 'steps', line: 'Adım adım: önce anlamını seç, sonra kelimeyi kendin yaz; bilene kadar geri gelir.' },
+  exam: { name: 'Sınav', icon: 'paper', line: 'Karışık sorulu bir kâğıt, sonunda puanın. Soru türlerini sen seçersin.' },
+  match: { name: 'Eşleştir', icon: 'grid', line: 'Kelimeleri anlamlarıyla eşleştir, süreye karşı.' },
+};
+const SCOPES = [
+  { k: 'due', name: 'Bugünün kartları', desc: 'Sırası gelen tekrarlar ve bugünkü yeni kartlar', practice: false, empty: 'Bugünlük hepsi tamam: sırası gelen kart kalmadı' },
+  { k: 'new', name: 'Yeni kartlar', desc: 'Henüz hiç çalışmadığın kartlar', practice: false, empty: 'Yeni kart kalmadı' },
+  { k: 'studied', name: 'Bugün çalıştıklarım', desc: 'Bugün cevapladığın her kart', practice: true, empty: 'Bugün henüz çalışmadın' },
+  { k: 'struggled', name: 'Bugün zorlandıklarım', desc: 'Bugün yanlış bildiğin ya da “Hâlâ öğreniyorum” dediğin kartlar', practice: true, empty: 'Bugün zorlandığın kart yok' },
+  { k: 'all', name: 'Tüm kartlar', desc: 'Destedeki her kart', practice: true, empty: 'Destede kart yok' },
+];
+const EXAM_TYPES = [
+  { k: 'mc', name: 'Çoktan seçmeli', line: 'Kelime verilir, dört şıktan anlamını seçersin.' },
+  { k: 'written', name: 'Yazarak', line: 'Anlam ve boşluklu cümle verilir, kelimeyi yazarsın.' },
+  { k: 'match', name: 'Eşleştirme', line: 'Dört kelimeyi dört anlamla eşlersin (tek soru sayılır).' },
+  { k: 'tf', name: 'Doğru / yanlış', line: 'Kapalı başlar: tahminle yarı yarıya tutar, öğretmesi zayıf.' },
+];
+const TYPE_NAME = { mc: 'Çoktan seçmeli', written: 'Yazarak', match: 'Eşleştirme', tf: 'Doğru / yanlış' };
+
+/* ================================================================ icons */
+const ICONS = {
+  layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
+  listcheck: '<path d="m3 7 2 2 4-4"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
+  steps: '<path d="M22 10 12 5 2 10l10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>',
+  paper: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  play: '<path d="M7 4l13 8-13 8z"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  home: '<path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/>',
+  library: '<path d="M4 4v16M9 4v16M14 4l5 16"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M8 17V9M13 17V5M18 17v-6"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/>',
+  settings: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+  bulb: '<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2z"/>',
+  more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+  ccheck: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  cx: '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>',
+  timer: '<circle cx="12" cy="14" r="8"/><path d="M12 10v4l2 2M10 2h4"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  up: '<path d="m18 15-6-6-6 6"/>',
+  printer: '<path d="M6 9V2h12v7"/><rect x="6" y="14" width="12" height="8"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  notes: '<path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  pause: '<path d="M8 5v14M16 5v14"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  side: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
+};
+const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const kbd = (k) => `<span class="kbd">${esc(k)}</span>`;
+const sentence = (ex, how) => esc(ex).replace(/\{([^}]*)\}/g, (_, w) => (how === 'blank' ? '<span class="blank" aria-label="boşluk"></span>' : `<mark>${w}</mark>`));
+const shuffle = (a) => { const r = a.slice(); for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; };
+const fmtSec = (ms) => (ms / 1000).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const fmtTime = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+
+/* ================================================================ state */
+const S = {
+  theme: 'dark', learnVariant: 'A', scopeVariant: 'A', homeVariant: 'A', advanced: false,
+  notesOpen: false,
+  screen: 'home', // home | session | paused | summary
+  launcher: null,
+  cards: [], studied: {}, struggled: {}, set_aside: {},
+  paused: {}, session: null, summary: null, pausedKey: null,
+  last: { mode: 'cards', scopeMore: false },
+  bestMatch: null,
+  toast: null, menu: false,
+};
+function resetData() {
+  S.cards = SAMPLE.map((c) => ({ ...c }));
+  S.studied = {}; S.struggled = {}; S.set_aside = {}; S.paused = {}; S.session = null; S.summary = null;
+  S.screen = 'home'; S.launcher = null; S.bestMatch = null; S.menu = false;
+}
+resetData();
+
+const card = (id) => S.cards.find((c) => c.id === id);
+const inToday = (c) => c.st === 'due' || c.st === 'new' || c.st === 'learning';
+function todayCounts() {
+  const t = S.cards.filter((c) => inToday(c) && !S.set_aside[c.id]);
+  return { total: t.length, due: t.filter((c) => c.st === 'due').length, learning: t.filter((c) => c.st === 'learning').length, fresh: t.filter((c) => c.st === 'new').length };
+}
+function scopeIds(k) {
+  const live = S.cards.filter((c) => !S.set_aside[c.id]);
+  if (k === 'due') return live.filter(inToday).sort((a, b) => order(a) - order(b)).map((c) => c.id);
+  if (k === 'new') return live.filter((c) => c.st === 'new').map((c) => c.id);
+  if (k === 'studied') return live.filter((c) => S.studied[c.id]).map((c) => c.id);
+  if (k === 'struggled') return live.filter((c) => S.struggled[c.id]).map((c) => c.id);
+  return live.map((c) => c.id);
+}
+const order = (c) => ({ learning: 0, due: 1, new: 2 })[c.st] ?? 3;
+const modeList = () => (S.learnVariant === 'B' ? ['cards', 'test', 'exam', 'match'] : ['cards', 'test', 'learn', 'exam', 'match']);
+function modeSchedules(m, L) {
+  if (m === 'cards' || m === 'learn') return true;
+  if (m === 'test') return S.learnVariant === 'B' && !!(L && L.untilLearned);
+  return false;
+}
+
+/* ================================================================ launcher */
+function openLauncher(opts = {}) {
+  clearTimer();
+  const m = modeList().includes(opts.mode || S.last.mode) ? opts.mode || S.last.mode : 'cards';
+  const L = {
+    mode: m, scope: 'due', more: S.scopeVariant === 'B' || S.last.scopeMore, count: '', practice: false, buttons: 2,
+    dir: 'term', exam: { mc: true, written: true, match: true, tf: false }, examCount: null, untilLearned: false,
+  };
+  let sc = opts.scope || 'due';
+  if (!scopeIds(sc).length) {
+    sc = ['due', 'studied', 'struggled', 'new', 'all'].find((k) => scopeIds(k).length) || 'all';
+  }
+  L.scope = sc;
+  if (sc !== 'due') L.more = true;
+  S.launcher = L;
+  S.focusAfter = Object.keys(S.paused).length ? '[data-fk="resume-0"]' : '[data-fk="mode-' + m + '"]';
+  render();
+}
+function launchInfo() {
+  const L = S.launcher;
+  const sc = SCOPES.find((s) => s.k === L.scope);
+  const ids = scopeIds(L.scope);
+  const practice = !modeSchedules(L.mode, L) || sc.practice || (S.advanced && L.practice);
+  let n = ids.length, reason = null;
+  const unit = L.mode === 'exam' ? 'soru' : L.mode === 'match' ? 'çift' : 'kart';
+  if (L.mode === 'exam') n = examCount(L, ids.length);
+  else {
+    if (L.mode === 'match') n = Math.min(n, 6);
+    if (S.advanced && Number(L.count) > 0) n = Math.min(n, Number(L.count));
+  }
+  if (!ids.length) reason = sc.empty;
+  else if (L.mode === 'match' && ids.length < 2) reason = 'Eşleştirmek için en az 2 kart gerekir';
+  else if (L.mode === 'exam' && !Object.values(L.exam).some(Boolean)) reason = 'En az bir soru türü seç';
+  return { ids, n, unit, practice, reason, sc };
+}
+const examCount = (L, max) => Math.max(1, Math.min(max || 1, L.examCount == null ? Math.min(10, max) : Number(L.examCount) || 1));
+
+function launcherView() {
+  const L = S.launcher;
+  const info = launchInfo();
+  const pausedKeys = Object.keys(S.paused);
+  const resumes = pausedKeys.map((k, i) => {
+    const s = S.paused[k];
+    const p = progressOf(s);
+    return `<button class="resume-row ${i === 0 ? 'first' : ''}" data-act="resume" data-k="${k}" data-fk="resume-${i}">
+      ${icon('play')}<span class="grow"><b>Devam et</b> · ${esc(s.title)} · ${esc(DECK)}</span>
+      <span class="meta">${p.answered} cevaplandı · ${p.left} kaldı</span></button>`;
+  }).join('');
+
+  const modes = modeList().map((m) => {
+    const M = MODES[m];
+    const sched = modeSchedules(m, L);
+    const line = m === 'test' && S.learnVariant === 'B' ? M.line + ' İstersen yanlışlar geri gelir.' : M.line;
+    return `<div class="opt" role="radio" tabindex="${L.mode === m ? 0 : -1}" aria-checked="${L.mode === m}" data-act="mode" data-v="${m}" data-fk="mode-${m}" data-group="mode">
+      <span class="ic">${icon(M.icon)}</span>
+      <span class="name">${M.name}</span>
+      <span class="right">${sched ? `<span class="chip cal">${icon('cal')}takvimi etkiler</span>` : '<span class="chip">pratik</span>'}</span>
+      <span class="line">${line}</span></div>`;
+  }).join('');
+
+  const scopeRow = (s) => {
+    const ids = scopeIds(s.k);
+    const dis = ids.length === 0;
+    return `<div class="opt noicon" role="radio" tabindex="${L.scope === s.k ? 0 : -1}" aria-checked="${L.scope === s.k}" aria-disabled="${dis}" data-act="scope" data-v="${s.k}" data-fk="scope-${s.k}" data-group="scope">
+      <span class="name">${s.name}${s.practice ? ' <span class="chip">pratik</span>' : ''}</span>
+      <span class="count right">${ids.length}</span>
+      <span class="line">${dis ? s.empty : s.desc}</span></div>`;
+  };
+  const progressive = S.scopeVariant === 'A';
+  const shown = progressive && !L.more ? SCOPES.filter((s) => s.k === 'due' || s.k === L.scope) : SCOPES;
+  const hiddenN = SCOPES.length - shown.length;
+  const scopes = shown.map(scopeRow).join('') + (progressive
+    ? `<button class="link more-btn" data-act="more" data-fk="more" aria-expanded="${L.more}">${L.more ? icon('up') + 'Yalnız bugünün kartları' : icon('down') + `Başka kartlar seç (${hiddenN})`}</button>`
+    : '');
+
+  // mode-specific options (always visible: they define the mode)
+  let modeOpts = '';
+  if (L.mode === 'exam') {
+    const max = info.ids.length;
+    modeOpts = `<div class="lbl"><span class="step">3</span>Sınavda neler olsun?</div>
+      <div class="box">${EXAM_TYPES.map((t) => `<label class="cbx"><input type="checkbox" data-act="examtype" data-v="${t.k}" ${L.exam[t.k] ? 'checked' : ''}><span><span class="t1">${t.name}</span><br><span class="row-t2 muted" style="font-size:12px">${t.line}</span></span></label>`).join('')}
+      <div class="row"><div class="txt"><div class="t1">Kaç soru?</div><div class="t2">En çok ${max} (seçtiğin kart sayısı)</div></div>
+      <input class="input num" style="width:72px" type="number" min="1" max="${max}" value="${examCount(L, max)}" data-bind="examCount" data-fk="examCount" aria-label="Kaç soru?"></div></div>`;
+  }
+  if (L.mode === 'test' && S.learnVariant === 'B') {
+    modeOpts = `<div class="lbl"><span class="step">3</span>Test</div><div class="box"><div class="row">
+      <div class="txt"><div class="t1">Öğrenene kadar devam et</div><div class="t2">Yanlışların geri gelir; doğru bildiklerini bir de yazarak sorar. Açıkken takvimi etkiler.</div></div>
+      ${sw('untilLearned', L.untilLearned, 'Öğrenene kadar devam et')}</div></div>`;
+  }
+
+  // advanced
+  let adv = '';
+  if (S.advanced) {
+    const rows = [];
+    if (L.mode !== 'exam') rows.push(`<div class="row"><div class="txt"><div class="t1">${L.mode === 'match' ? 'Kaç çift?' : 'Kaç kart?'}</div><div class="t2">Boş bırakırsan ${L.mode === 'match' ? 'en çok 6' : 'hepsi'}</div></div><input class="input num" style="width:72px" type="number" min="1" placeholder="${L.mode === 'match' ? '6' : 'Hepsi'}" value="${esc(L.count)}" data-bind="count" data-fk="count" aria-label="Kaç kart?"></div>`);
+    if (modeSchedules(L.mode, L)) rows.push(`<div class="row"><div class="txt"><div class="t1">Pratik</div><div class="t2">Açıksa cevapların takvimi değiştirmez.</div></div>${sw('practice', L.practice, 'Pratik')}</div>`);
+    if (L.mode === 'cards') {
+      rows.push(`<div class="row"><div class="txt"><div class="t1">Cevap düğmeleri</div><div class="t2">İki düğme: Hâlâ öğreniyorum / Biliyorum. Dört: Tekrar / Zor / İyi / Kolay.</div></div>
+        <div class="seg" role="group" aria-label="Cevap düğmeleri"><button data-act="lset" data-k="buttons" data-v="2" aria-pressed="${L.buttons === 2}">2</button><button data-act="lset" data-k="buttons" data-v="4" aria-pressed="${L.buttons === 4}">4</button></div></div>`);
+      rows.push(`<div class="row"><div class="txt"><div class="t1">Süre sınırı · Güven 1–5</div><div class="t2">Her karta süre koy; ya da düğme yerine ne kadar emin olduğunu seç.</div><div class="demo">bu taslakta yalnız gösterim</div></div><span class="muted">Kapalı</span></div>`);
+    }
+    if (L.mode === 'test') rows.push(`<div class="row"><div class="txt"><div class="t1">Ne sorulsun?</div><div class="t2">Kelimeyi görüp anlamını mı seçersin, anlamını görüp kelimeyi mi?</div></div>
+      <div class="seg" role="group" aria-label="Ne sorulsun?"><button data-act="lset" data-k="dir" data-v="term" aria-pressed="${L.dir === 'term'}">Kelime → anlam</button><button data-act="lset" data-k="dir" data-v="meaning" aria-pressed="${L.dir === 'meaning'}">Anlam → kelime</button></div></div>`);
+    rows.push(`<div class="row"><div class="txt"><div class="t1">Yalnız şu kartlar</div><div class="t2">Etikete, seviyeye ya da bir aramaya göre süz (ör. <span class="mono">seviye:B1</span>). Kayıtlı aramaların da burada.</div><div class="demo">bu taslakta yalnız gösterim</div></div><input class="input" style="width:150px" placeholder="Arama ya da kayıtlı arama" aria-label="Süzgeç"></div>`);
+    if (L.scope === 'due') rows.push(`<div class="row"><div class="txt"><div class="t1">Bugünün kartlarını ertele</div><div class="t2">Bugün vaktin yoksa sırası gelenleri birkaç gün ileri al.</div><div class="demo">bu taslakta yalnız gösterim</div></div><button class="btn sm" data-act="toast" data-msg="Erteleme bu taslakta çalışmıyor; uygulamada aynen duruyor.">Ertele…</button></div>`);
+    adv = `<div class="lbl"><span class="step">${modeOpts ? 4 : 3}</span>Gelişmiş</div><div class="box">${rows.join('')}</div>`;
+  }
+
+  const replacing = S.paused[L.mode] ? `<div class="muted" style="font-size:12px">Yeni başlarsan yarım kalan ${esc(S.paused[L.mode].title)} kapanır.</div>` : '';
+  const sum = info.reason
+    ? `<span class="warn">${esc(info.reason)}</span>`
+    : `<b>${MODES[L.mode].name} · ${esc(info.sc.name)} · <span class="num">${info.n}</span> ${info.unit}</b><br>${info.practice ? 'pratik: takvimin değişmez' : 'takvimi etkiler: cevapların sıradaki tekrarı ayarlar'}`;
+
+  return `<div class="overlay" data-act="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <div class="dlg-head"><h1 id="dlg-t">Çalış</h1><span class="sub">· ${esc(DECK)}</span><span class="grow"></span>
+      <button class="btn ghost sm" data-act="close" aria-label="Kapat (Esc)">${icon('x')}</button></div>
+    <div class="dlg-body" data-sk="dlg">
+      ${resumes ? `<div class="lbl" style="margin-top:4px">Yarım kalanlar</div>${resumes}` : ''}
+      <div class="cols">
+        <div>
+          <div class="lbl"><span class="step">1</span>Nasıl çalışmak istersin?</div>
+          <div class="list" role="radiogroup" aria-label="Nasıl çalışmak istersin?">${modes}</div>
+          <div class="legend">${icon('info')}<span><b>Takvim</b> = bir kelimeyi ne zaman yeniden göreceğin. “Takvimi etkiler” modlarda cevapların bunu ayarlar; “pratik” modlar takvimine dokunmaz, istediğin kadar oynayabilirsin.</span></div>
+        </div>
+        <div>
+          <div class="lbl"><span class="step">2</span>Hangi kartlar?</div>
+          <div class="list" role="radiogroup" aria-label="Hangi kartlar?">${scopes}</div>
+          ${modeOpts}${adv}
+        </div>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button class="switch" role="switch" aria-checked="${S.advanced}" data-act="advanced" data-fk="adv-sw"><span class="track"></span><span><b>Gelişmiş</b><br><span class="muted" style="font-size:12px">kart sayısı, süre, süzgeç, erteleme</span></span></button>
+      <span class="grow"></span>
+      <div class="foot-sum">${sum}${replacing}</div>
+      <button class="btn primary lg" data-act="start" data-fk="start" ${info.reason ? 'disabled' : ''}>${icon('play')}Başla ${kbd('↵')}</button>
+    </div>
+  </div></div>`;
+}
+const sw = (k, on, label) => `<button class="switch" role="switch" aria-checked="${on}" aria-label="${esc(label)}" data-act="lswitch" data-k="${k}" data-fk="sw-${k}"><span class="track"></span></button>`;
+
+/* ================================================================ sessions */
+function startFromLauncher() {
+  const L = S.launcher;
+  const info = launchInfo();
+  if (info.reason) return;
+  S.last.mode = L.mode;
+  delete S.paused[L.mode];
+  const ids = L.mode === 'cards' ? info.ids.slice(0, info.n) : shuffle(info.ids).slice(0, L.mode === 'exam' ? info.ids.length : info.n);
+  S.launcher = null;
+  startSession(L.mode, ids, { practice: info.practice, L, scopeName: info.sc.name, n: info.n });
+}
+function startSession(key, ids, o) {
+  clearTimer();
+  const L = o.L || {};
+  const base = { key, practice: o.practice, scopeName: o.scopeName, startedAt: Date.now(), answered: 0, missed: {}, scheduled: {} };
+  let s;
+  if (key === 'cards') {
+    s = { ...base, kind: 'cards', title: 'Kartlar', queue: ids.slice(), total: ids.length, flipped: false, hint: false, history: [], buttons: L.buttons || 2, known: 0 };
+  } else if (key === 'test' && !(S.learnVariant === 'B' && L.untilLearned)) {
+    s = { ...base, kind: 'test', title: 'Test', ids: ids.slice(), idx: 0, dir: L.dir || 'term', results: [] };
+    makeQuestion(s);
+  } else if (key === 'learn' || key === 'test') {
+    const items = {}; ids.forEach((id) => (items[id] = { stage: 1, misses: 0, learned: false }));
+    s = { ...base, kind: 'learn', title: key === 'test' ? 'Test · öğrenene kadar' : 'Öğren', items, queue: ids.slice(), total: ids.length, cur: null };
+    nextLearn(s);
+  } else if (key === 'exam') {
+    s = { ...base, kind: 'exam', title: 'Sınav', questions: buildExam(ids, L, o.n), cur: 0 };
+  } else if (key === 'match') {
+    const tiles = shuffle(ids.flatMap((id) => [{ key: 't' + id, id, kind: 'term', text: card(id).term }, { key: 'm' + id, id, kind: 'meaning', text: card(id).meaning }]));
+    s = { ...base, kind: 'match', title: 'Eşleştir', tiles, sel: null, bad: [], gone: {}, mistakes: 0, pairs: ids.length, acc: 0, t0: Date.now() };
+  }
+  S.session = s; S.screen = 'session'; S.menu = false;
+  S.focusAfter = s.kind === 'exam' ? '#q-0 button, #q-0 input, #q-0 select' : s.kind === 'learn' && s.stage2 ? '[data-fk="type"]' : null;
+  render();
+  if (s.kind === 'match') startMatchClock();
+}
+function progressOf(s) {
+  if (s.kind === 'cards') return { answered: s.answered, left: s.queue.length };
+  if (s.kind === 'test') return { answered: s.results.length, left: s.ids.length - s.results.length };
+  if (s.kind === 'learn') { const l = Object.values(s.items).filter((x) => x.learned).length; return { answered: l, left: s.total - l }; }
+  if (s.kind === 'exam') { const a = s.questions.filter(answered).length; return { answered: a, left: s.questions.length - a }; }
+  if (s.kind === 'match') { const g = Object.keys(s.gone).length / 2; return { answered: g, left: s.pairs - g }; }
+  return { answered: 0, left: 0 };
+}
+/** One answer lands in "today" data: studied / struggled and, unless practice, the schedule. */
+function record(s, id, ok, final = true) {
+  S.studied[id] = 1;
+  if (!ok) { S.struggled[id] = 1; s.missed[id] = (s.missed[id] || 0) + 1; }
+  if (!s.practice && final) {
+    const c = card(id);
+    c.st = ok ? 'later' : 'learning';
+    s.scheduled[id] = 1;
+  }
+}
+
+function pauseSession() {
+  const s = S.session; if (!s) return;
+  clearTimer();
+  if (s.kind === 'match') { s.acc += Date.now() - s.t0; stopMatchClock(); }
+  S.paused[s.key] = s; S.pausedKey = s.key; S.session = null; S.screen = 'paused'; S.menu = false;
+  S.focusAfter = '[data-fk="continue"]';
+  render();
+}
+function resume(key) {
+  const s = S.paused[key]; if (!s) return;
+  delete S.paused[key];
+  S.launcher = null; S.session = s; S.screen = 'session';
+  if (s.kind === 'match') { s.t0 = Date.now(); startMatchClock(); }
+  render();
+}
+function finish(s) {
+  clearTimer(); stopMatchClock();
+  S.session = null; S.screen = 'summary'; S.summary = summarize(s);
+  S.focusAfter = '[data-fk="sum-primary"]';
+  render();
+}
+
+/* ---------------- Kartlar */
+function cardsGrade(g) {
+  const s = S.session; if (!s.flipped || !s.queue.length) return;
+  if (g > s.buttons) return; // 2-button layout: 3 and 4 do nothing
+  const id = s.queue[0];
+  snapshot(s);
+  const ok = s.buttons === 4 ? g >= 2 : g === 2;
+  s.answered++;
+  s.queue.shift();
+  if (ok) { s.known++; record(s, id, true); }
+  else { record(s, id, false); s.queue.splice(Math.min(s.queue.length, 2), 0, id); }
+  s.flipped = false; s.hint = false; s.menu = false;
+  if (!s.queue.length) return finish(s);
+  render();
+}
+function snapshot(s) {
+  s.history.push(JSON.stringify({ queue: s.queue, answered: s.answered, known: s.known, missed: s.missed, scheduled: s.scheduled, cards: S.cards.map((c) => c.st), studied: S.studied, struggled: S.struggled, aside: S.set_aside }));
+}
+function cardsUndo() {
+  const s = S.session; const h = s.history.pop();
+  if (!h) return toast('Geri alınacak bir şey yok.');
+  const o = JSON.parse(h);
+  Object.assign(s, { queue: o.queue, answered: o.answered, known: o.known, missed: o.missed, scheduled: o.scheduled, flipped: true, hint: false });
+  S.cards.forEach((c, i) => (c.st = o.cards[i])); S.studied = o.studied; S.struggled = o.struggled; S.set_aside = o.aside;
+  toast('Son cevap geri alındı.');
+}
+function cardsAside(kind) {
+  const s = S.session; if (!s.queue.length) return;
+  snapshot(s);
+  const id = s.queue.shift();
+  if (kind === 'suspend') S.set_aside[id] = 1; else if (!s.practice) card(id).st = 'later';
+  s.flipped = false; s.hint = false; S.menu = false;
+  toast(kind === 'suspend' ? `“${card(id).term}” kenara kondu: sen geri alana kadar sorulmaz.` : `“${card(id).term}” yarına bırakıldı.`, 'Geri al (Z)');
+  if (!s.queue.length) return finish(s);
+  render();
+}
+
+/* ---------------- Test */
+function makeQuestion(s) {
+  const c = card(s.ids[s.idx]);
+  const dir = s.dir;
+  const others = shuffle(S.cards.filter((x) => x.id !== c.id)).slice(0, 3);
+  const pick = (x) => (dir === 'term' ? x.meaning : x.term);
+  s.q = { id: c.id, prompt: dir === 'term' ? c.term : c.meaning, answer: pick(c), options: shuffle([c, ...others]).map(pick) };
+  s.picked = null;
+}
+function testPick(i) {
+  const s = S.session; if (s.picked != null || i >= s.q.options.length) return;
+  s.picked = i;
+  const ok = s.q.options[i] === s.q.answer;
+  s.results.push({ id: s.q.id, ok, yours: s.q.options[i], right: s.q.answer, prompt: s.q.prompt });
+  s.answered++;
+  record(s, s.q.id, ok);
+  if (ok) S.timer = setTimeout(testNext, 1100);
+  S.focusAfter = '[data-fk="next"]';
+  render();
+}
+function testNext() {
+  clearTimer();
+  const s = S.session; if (!s || s.kind !== 'test' || s.picked == null) return;
+  s.idx++;
+  if (s.idx >= s.ids.length) return finish(s);
+  makeQuestion(s);
+  render();
+}
+
+/* ---------------- Öğren */
+function nextLearn(s) {
+  s.phase = 'ask'; s.picked = null; s.typed = ''; s.verdict = null;
+  if (!s.queue.length) { s.cur = null; return; }
+  s.cur = s.queue.shift();
+  const it = s.items[s.cur];
+  s.stage2 = it.stage === 2;
+  if (!s.stage2) {
+    const c = card(s.cur);
+    const others = shuffle(S.cards.filter((x) => x.id !== c.id)).slice(0, 3);
+    s.options = shuffle([c, ...others]).map((x) => x.meaning);
+  }
+}
+function learnPick(i) {
+  const s = S.session; if (s.phase !== 'ask' || s.stage2 || i >= s.options.length) return;
+  const c = card(s.cur); const it = s.items[s.cur];
+  s.picked = i; s.phase = 'feedback';
+  const ok = s.options[i] === c.meaning;
+  s.verdict = ok ? 'ok' : 'bad'; s.answered++;
+  if (ok) { it.stage = 2; S.timer = setTimeout(learnNext, 1100); }
+  else { it.misses++; record(s, s.cur, false, false); }
+  requeue(s, s.cur, ok ? 2 : 3);
+  S.focusAfter = '[data-fk="next"]';
+  render();
+}
+function learnCheck(dontKnow) {
+  const s = S.session; if (s.phase !== 'ask' || !s.stage2) return;
+  const c = card(s.cur); const it = s.items[s.cur];
+  const v = dontKnow ? 'dontknow' : checkTyped(s.typed, c.term);
+  if (v === 'empty') { toast('Önce bir şey yaz ya da “Bilmiyorum”a bas.'); return; }
+  s.verdict = v; s.phase = 'feedback'; s.answered++;
+  if (v === 'ok' || v === 'almost') {
+    it.learned = true; S.studied[s.cur] = 1;
+    if (!s.practice) { card(s.cur).st = 'later'; s.scheduled[s.cur] = 1; }
+    if (v === 'ok') S.timer = setTimeout(learnNext, 1100);
+  } else { it.misses++; record(s, s.cur, false, false); requeue(s, s.cur, 3); }
+  S.focusAfter = '[data-fk="next"]';
+  render();
+}
+function requeue(s, id, at) { s.queue.splice(Math.min(s.queue.length, at), 0, id); }
+function learnNext() {
+  clearTimer();
+  const s = S.session; if (!s || s.kind !== 'learn' || s.phase !== 'feedback') return;
+  if (Object.values(s.items).every((x) => x.learned)) return finish(s);
+  nextLearn(s);
+  S.focusAfter = s.stage2 ? '[data-fk="type"]' : null;
+  render();
+}
+function norm(x) { return x.toLowerCase().replace(/[.,!?'"’]/g, '').replace(/\s+/g, ' ').trim().replace(/^to /, ''); }
+function lev(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+function checkTyped(typed, answer) {
+  const a = norm(typed), b = norm(answer);
+  if (!a) return 'empty';
+  if (a === b) return 'ok';
+  if (b.length > 3 && lev(a, b) <= 1) return 'almost';
+  return 'bad';
+}
+
+/* ---------------- Sınav */
+function buildExam(ids, L, n) {
+  const types = EXAM_TYPES.map((t) => t.k).filter((k) => L.exam[k]);
+  const qs = [];
+  for (let i = 0; i < n; i++) {
+    const type = types[i % types.length];
+    const c = card(ids[i % ids.length]);
+    if (type === 'mc') {
+      const others = shuffle(S.cards.filter((x) => x.id !== c.id)).slice(0, 3);
+      qs.push({ type, id: c.id, prompt: c.term, options: shuffle([c, ...others]).map((x) => x.meaning), answer: c.meaning, a: null });
+    } else if (type === 'written') {
+      qs.push({ type, id: c.id, prompt: c.meaning, ex: c.ex, answer: c.term, a: '' });
+    } else if (type === 'tf') {
+      const truth = Math.random() < 0.5;
+      const other = shuffle(S.cards.filter((x) => x.id !== c.id))[0];
+      qs.push({ type, id: c.id, prompt: c.term, shown: truth ? c.meaning : other.meaning, truth, answer: c.meaning, a: null });
+    } else {
+      const set = [c, ...shuffle(S.cards.filter((x) => x.id !== c.id)).slice(0, 3)];
+      const meanings = shuffle(set.map((x) => x.meaning));
+      qs.push({ type, id: c.id, ids: set.map((x) => x.id), words: set.map((x) => x.term), meanings, key: set.map((x) => meanings.indexOf(x.meaning)), a: set.map(() => -1) });
+    }
+  }
+  return shuffle(qs);
+}
+function answered(q) {
+  if (q.type === 'written') return norm(q.a || '') !== '';
+  if (q.type === 'match') return q.a.some((x) => x >= 0);
+  return q.a != null;
+}
+function examPick(qi, o) {
+  const s = S.session; const q = s.questions[qi];
+  if (!q || (q.type === 'mc' && o > 3) || (q.type === 'tf' && o > 1)) return;
+  q.a = q.type === 'tf' ? o === 0 : o;
+  s.cur = Math.min(qi + 1, s.questions.length - 1);
+  S.focusAfter = qi + 1 < s.questions.length ? `#q-${qi + 1} button, #q-${qi + 1} input, #q-${qi + 1} select` : '[data-fk="submit"]';
+  S.scrollTo = qi + 1 < s.questions.length ? `#q-${qi + 1}` : '[data-fk="submit"]';
+  render();
+}
+function examSubmit(force) {
+  const s = S.session;
+  const blanks = s.questions.filter((q) => !answered(q)).length;
+  if (blanks && !force) { s.confirm = blanks; S.focusAfter = '[data-fk="submit-anyway"]'; S.scrollTo = '[data-fk="submit-anyway"]'; render(); return; }
+  s.questions.forEach((q) => {
+    let v;
+    if (!answered(q)) v = 'blank';
+    else if (q.type === 'mc') v = q.options[q.a] === q.answer ? 'ok' : 'bad';
+    else if (q.type === 'tf') v = q.a === q.truth ? 'ok' : 'bad';
+    else if (q.type === 'written') v = checkTyped(q.a, q.answer);
+    else { const r = q.a.filter((x, i) => x === q.key[i]).length; q.partial = r; v = r === q.key.length ? 'ok' : 'bad'; }
+    q.v = v;
+    if (v !== 'blank') record(s, q.id, v === 'ok' || v === 'almost');
+    else S.struggled[q.id] = 1, (s.missed[q.id] = 1);
+  });
+  s.answered = s.questions.length;
+  finish(s);
+}
+
+/* ---------------- Eşleştir */
+let clock = null;
+function startMatchClock() { stopMatchClock(); clock = setInterval(() => { const el = document.getElementById('mclock'); const s = S.session; if (el && s && s.kind === 'match') el.textContent = fmtSec(s.acc + Date.now() - s.t0) + ' sn'; }, 100); }
+function stopMatchClock() { if (clock) clearInterval(clock); clock = null; }
+function matchPick(key) {
+  const s = S.session; const t = s.tiles.find((x) => x.key === key);
+  if (!t || s.gone[key]) return;
+  s.bad = [];
+  if (!s.sel) { s.sel = key; return render(); }
+  if (s.sel === key) { s.sel = null; return render(); }
+  const a = s.tiles.find((x) => x.key === s.sel);
+  if (a.kind === t.kind) { s.sel = key; return render(); }
+  if (a.id === t.id) {
+    s.gone[a.key] = 1; s.gone[t.key] = 1; s.sel = null; s.answered++;
+    record(s, t.id, !s.missed[t.id]);
+    if (Object.keys(s.gone).length === s.tiles.length) { s.acc += Date.now() - s.t0; s.t0 = Date.now(); return finish(s); }
+  } else {
+    s.mistakes++; s.bad = [a.key, t.key]; s.missed[a.id] = (s.missed[a.id] || 0) + 1; S.struggled[a.id] = 1; s.sel = null;
+    setTimeout(() => { if (S.session === s) { s.bad = []; render(); } }, 600);
+  }
+  render();
+}
+
+/* ---------------- summary */
+function summarize(s) {
+  const dur = s.kind === 'match' ? s.acc : Date.now() - s.startedAt;
+  const missedIds = Object.keys(s.missed).map(Number);
+  const sched = Object.keys(s.scheduled).length;
+  const base = { key: s.key, kind: s.kind, title: s.title, practice: s.practice, sched, missedIds, dur };
+  if (s.kind === 'cards') {
+    const total = s.known;
+    return { ...base, head: 'Oturum bitti', sub: total ? `${total} kartın hepsini bildin${missedIds.length ? `; ${missedIds.length} tanesi birkaç tur sürdü` : ''}.` : 'Kalan kartları kenara koydun ya da yarına bıraktın.', ring: pct(total - missedIds.length, total),
+      tiles: [['Çalışılan kart', total], ['Cevap', s.answered], ['İlk seferde bildin', total - missedIds.length], ['Süre', fmtTime(dur)]],
+      rows: missedIds.map((id) => ({ term: card(id).term, right: card(id).meaning, yours: `${s.missed[id]} kez “Hâlâ öğreniyorum”` })) };
+  }
+  if (s.kind === 'test') {
+    const ok = s.results.filter((r) => r.ok).length;
+    return { ...base, head: 'Test bitti', sub: `${s.results.length} sorudan ${ok} doğru.`, ring: pct(ok, s.results.length),
+      tiles: [['Soru', s.results.length], ['Doğru', ok], ['Yanlış', s.results.length - ok], ['Süre', fmtTime(dur)]],
+      rows: s.results.filter((r) => !r.ok).map((r) => ({ term: r.prompt, right: r.right, yours: r.yours })) };
+  }
+  if (s.kind === 'learn') {
+    const first = Object.values(s.items).filter((x) => x.misses === 0).length;
+    return { ...base, head: 'Hepsini öğrendin', sub: `${s.total} kartın hepsi iki adımı da geçti.`, ring: pct(first, s.total),
+      tiles: [['Öğrenilen kart', s.total], ['Hiç kaçırmadan', first], ['Cevap', s.answered], ['Süre', fmtTime(dur)]],
+      rows: Object.entries(s.items).filter(([, x]) => x.misses).map(([id, x]) => ({ term: card(+id).term, right: card(+id).meaning, yours: `${x.misses} kez kaçtı` })) };
+  }
+  if (s.kind === 'exam') {
+    const q = s.questions; const ok = q.filter((x) => x.v === 'ok' || x.v === 'almost').length;
+    return { ...base, head: 'Sınav sonucu', sub: `${q.length} sorudan ${ok} doğru.`, ring: pct(ok, q.length),
+      tiles: [['Doğru', ok], ['Yanlış', q.filter((x) => x.v === 'bad').length], ['Boş', q.filter((x) => x.v === 'blank').length], ['Süre', fmtTime(dur)]],
+      exam: q, missedIds: [...new Set(q.filter((x) => x.v === 'bad' || x.v === 'blank').map((x) => x.id))] };
+  }
+  const best = S.bestMatch == null || dur < S.bestMatch;
+  if (best) S.bestMatch = dur;
+  return { ...base, head: 'Tahta temiz', sub: best ? 'Yeni en iyi süren!' : `En iyi süren ${fmtSec(S.bestMatch)} sn.`, ring: null, ringText: fmtSec(dur) + ' sn',
+    tiles: [['Çift', s.pairs], ['Yanlış eşleşme', s.mistakes], ['Süre', fmtSec(dur) + ' sn'], ['En iyi', fmtSec(S.bestMatch) + ' sn']],
+    rows: missedIds.map((id) => ({ term: card(id).term, right: card(id).meaning, yours: `${s.missed[id]} kez karıştı` })) };
+}
+function repeatMissed() {
+  const m = S.summary; if (!m || !m.missedIds.length) return;
+  const L = { buttons: 2, dir: 'term', exam: { mc: true, written: true, match: m.missedIds.length >= 2, tf: false }, untilLearned: m.title.startsWith('Test ·') };
+  const ids = m.missedIds.filter((id) => !S.set_aside[id]);
+  if (m.kind === 'match' && ids.length < 2) return toast('Eşleştirmek için en az 2 kart gerekir.');
+  startSession(m.key, ids, { practice: true, L, scopeName: 'Yanlışlar', n: ids.length });
+}
+
+/* ================================================================ views */
+function shell(main, crumb) {
+  return `<div class="shell">
+    <aside class="side">
+      <div class="brand"><span class="logo"></span><span class="lbltxt">Flashcard</span></div>
+      ${nav('home', 'Ana sayfa', true)}${nav('library', 'Kütüphane')}${nav('plus', 'Oluştur')}${nav('search', 'Ara')}${nav('chart', 'İstatistik')}
+      <span class="grow"></span><hr>
+      ${nav('inbox', 'Gelen kutusu', false, 3)}${nav('settings', 'Ayarlar')}
+    </aside>
+    <div class="main">
+      <header class="top"><span class="crumb">${crumb}</span><span class="grow"></span>
+        <button class="searchbox" data-act="toast" data-msg="Bu taslakta yalnız çalışma akışı var.">${icon('search')}<span class="t">Ara ya da komut çalıştır</span>${kbd('Ctrl K')}</button>
+        <button class="btn primary sm" data-act="toast" data-msg="Kart ekleme bu taslağın konusu değil (bkz. D3).">${icon('plus')}Kart ekle ${kbd('N')}</button>
+      </header>
+      <div class="page" data-sk="page"><div class="page-inner">${main}</div></div>
+    </div></div>`;
+}
+function nav(ic, label, on = false, badge) {
+  return `<button class="nav ${on ? 'on' : ''}" ${on ? 'data-act="home"' : `data-act="toast" data-msg="Bu taslakta yalnız Ana sayfa ve çalışma akışı var."`} title="${label}">${icon(ic)}<span class="lbltxt">${label}</span>${badge ? `<span class="badge">${badge}</span>` : ''}</button>`;
+}
+function homeView() {
+  const t = todayCounts();
+  const resumes = Object.keys(S.paused).map((k) => {
+    const s = S.paused[k]; const p = progressOf(s);
+    return `<div class="resume-line">${icon('pause')}<span class="grow"><b>Yarım kaldı:</b> ${esc(s.title)} · <span class="meta num">${p.answered} cevaplandı · ${p.left} kaldı</span></span><button class="btn sm" data-act="resume" data-k="${k}">${icon('play')}Devam et</button></div>`;
+  }).join('');
+  const bd = [];
+  if (t.due) bd.push(`<span><span class="dot" style="background:var(--accent)"></span>Sırası gelen <span class="num">${t.due}</span></span>`);
+  if (t.learning) bd.push(`<span><span class="dot" style="background:var(--warning)"></span>Öğreniliyor <span class="num">${t.learning}</span></span>`);
+  if (t.fresh) bd.push(`<span><span class="dot" style="background:var(--success)"></span>Yeni <span class="num">${t.fresh}</span></span>`);
+  let hero;
+  if (t.total) {
+    const acts = S.homeVariant === 'B'
+      ? `<button class="btn primary lg" data-act="quickstart" data-fk="home-primary">${icon('play')}Çalışmaya başla ${kbd('↵')}</button><span class="under">Kartlar · Bugünün kartları · <span class="num">${t.total}</span> kart</span><button class="link" data-act="launch" data-fk="home-other">Başka şekilde çalış…</button>`
+      : `<button class="btn primary lg" data-act="launch" data-fk="home-primary">${icon('play')}Çalışmaya başla ${kbd('↵')}</button><span class="under">Nasıl ve neyi çalışacağını seçersin</span>`;
+    hero = `<div class="hero"><div><div class="eyebrow">Bugün</div><div class="big"><span class="num">${t.total}</span> kart çalışılacak</div><div class="bd">${bd.join('')}</div></div><div class="acts">${acts}</div></div>
+      <p class="lead">Sırası gelen kartlarını çalış; bitince istersen pratik yap. Bir kelimeyi ne zaman yeniden göreceğini takvim belirler; sen sadece dürüstçe cevapla.</p>`;
+  } else {
+    hero = `<div class="hero"><div><div class="eyebrow">Bugün</div><div class="big">Bugünlük hepsi tamam</div><div class="bd">Sırası gelen kart kalmadı. Yarın yenileri gelecek.</div></div>
+      <div class="acts"><button class="btn primary lg" data-act="launch" data-fk="home-primary">${icon('play')}Pratik yap ${kbd('↵')}</button><span class="under">Takvimin değişmez</span></div></div>
+      <p class="lead">İstersen bugün çalıştıklarını ya da zorlandıklarını yeniden çalış; Test, Sınav ve Eşleştir hep pratiktir.</p>`;
+  }
+  const deckRow = `<div class="trow"><span>Deste</span><span class="r">Kart</span><span class="r">Bugün</span><span></span></div>
+    <div class="trow"><span><span class="dot" style="background:var(--accent)"></span>${DECK}</span><span class="r num">${S.cards.length}</span><span class="r num">${t.total}</span><span style="text-align:right"><button class="btn sm" data-act="launch">${icon('play')}Çalış</button></span></div>`;
+  return hero + resumes + `<h2 class="sec">Desteler</h2><div class="table">${deckRow}</div>`;
+}
+function pausedView() {
+  const s = S.paused[S.pausedKey];
+  if (!s) return homeView();
+  const p = progressOf(s);
+  return `<div class="sum-head"><div class="ring" style="border:4px solid var(--border-strong)">${icon('pause')}</div><div><h1>Ara verdin</h1><p>Kaldığın yerden devam edebilirsin. ${esc(s.title)} · <span class="num">${p.answered}</span> cevaplandı · <span class="num">${p.left}</span> kaldı.</p></div></div>
+    <div class="acts"><button class="btn primary" data-act="resume" data-k="${s.key}" data-fk="continue">${icon('play')}Devam et ${kbd('↵')}</button><button class="btn" data-act="home">Ana sayfaya dön</button></div>
+    <p class="muted">Yarım oturum açık kalır: Ana sayfada ve “Çalışmaya başla”da en üstte durur.${s.kind === 'exam' ? ' Sınavdaki cevapların saklandı.' : ''}</p>`;
+}
+function summaryView() {
+  const m = S.summary;
+  const ring = m.ring == null
+    ? `<div class="ring" style="border:4px solid var(--accent);font-size:11px">${esc(m.ringText)}</div>`
+    : `<div class="ring" style="border:4px solid ${m.ring >= 80 ? 'var(--success)' : m.ring >= 50 ? 'var(--accent)' : 'var(--danger)'}">%${m.ring}</div>`;
+  const tiles = `<div class="tiles">${m.tiles.map(([l, v]) => `<div><div class="l">${l}</div><div class="v">${v}</div></div>`).join('')}</div>`;
+  const sched = m.practice
+    ? `<div class="sched">${icon('info')}Pratikti: takvimin değişmedi. Bu kartlar “Bugün çalıştıklarım”da.</div>`
+    : `<div class="sched">${icon('cal')}Takvimin güncellendi: <span class="num">${m.sched}</span> kartın sıradaki tekrarı ayarlandı.</div>`;
+  const n = m.missedIds.length;
+  const repeatLabel = m.kind === 'match' ? 'Karıştırdıklarını tekrar oyna' : 'Yanlışları tekrar çalış';
+  const acts = `<div class="acts">
+    ${n ? `<button class="btn primary" data-act="repeat" data-fk="sum-primary">${icon('repeat')}${repeatLabel} · <span class="num">${n}</span> ${kbd('R')}</button>` : ''}
+    <button class="btn ${n ? '' : 'primary'}" data-act="again" ${n ? '' : 'data-fk="sum-primary"'}>${icon('play')}Tekrar çalış…</button>
+    <button class="btn ghost" data-act="home">Tamam</button></div>`;
+  let list = '';
+  if (m.exam) {
+    list = `<h2 class="sec">Sorular</h2><div class="missed"><div class="mr"><span>#</span><span>Soru</span><span>Senin cevabın</span><span>Doğrusu</span><span>Sonuç</span></div>
+      ${m.exam.map((q, i) => `<div class="mr"><span class="num">${i + 1}.</span><span>${examPromptText(q)}<br><span class="muted" style="font-size:11px">${TYPE_NAME[q.type]}</span></span><span class="${q.v === 'ok' ? '' : 'y'}">${esc(examYours(q))}</span><span class="c">${esc(examRight(q))}</span><span>${verdictChip(q.v, q)}</span></div>`).join('')}</div>`;
+  } else if (m.rows.length) {
+    const head = m.kind === 'test' ? ['Soru', 'Doğrusu', 'Senin seçimin'] : ['Kelime', 'Anlamı', 'Ne oldu'];
+    list = `<h2 class="sec">${m.kind === 'test' ? 'Kaçırdıkların' : 'Zorlandıkların'}</h2><div class="missed simple"><div class="mr"><span>${head[0]}</span><span>${head[1]}</span><span>${head[2]}</span></div>
+      ${m.rows.map((r) => `<div class="mr"><span><b>${esc(r.term)}</b></span><span class="c">${esc(r.right)}</span><span class="${m.kind === 'test' ? 'y' : 'muted'}">${esc(r.yours)}</span></div>`).join('')}</div>`;
+  } else list = `<p class="muted">Hiç kaçırmadın. 👏</p>`.replace(' 👏', '');
+  return `<div class="sum-head">${ring}<div><h1>${m.head}</h1><p>${esc(m.title)} · ${esc(m.sub)}</p></div></div>${tiles}${sched}${acts}${list}`;
+}
+function examPromptText(q) {
+  if (q.type === 'match') return q.words.map(esc).join(', ');
+  if (q.type === 'tf') return `${esc(q.prompt)} = ${esc(q.shown)}?`;
+  return esc(q.prompt);
+}
+function examYours(q) {
+  if (q.v === 'blank') return 'boş';
+  if (q.type === 'mc') return q.options[q.a];
+  if (q.type === 'tf') return q.a ? 'Doğru' : 'Yanlış';
+  if (q.type === 'written') return q.a;
+  return `${q.partial} / 4 doğru eşleşme`;
+}
+function examRight(q) {
+  if (q.type === 'tf') return q.truth ? 'Doğru' : `Yanlış (${q.answer})`;
+  if (q.type === 'match') return q.words.map((w, i) => `${w} → ${q.meanings[q.key[i]]}`).join(' · ');
+  return q.answer;
+}
+function verdictChip(v) {
+  if (v === 'ok') return `<span class="chip ok">${icon('check')}doğru</span>`;
+  if (v === 'almost') return `<span class="chip ok" title="Yazımda küçük bir fark var, doğru sayıldı">${icon('check')}az kaldı</span>`;
+  if (v === 'blank') return '<span class="chip">boş</span>';
+  return `<span class="chip bad">${icon('x')}yanlış</span>`;
+}
+
+function sessionView() {
+  const s = S.session;
+  const p = progressOf(s);
+  const total = p.answered + p.left;
+  let bar = `<div class="pbar" role="progressbar" aria-label="İlerleme" aria-valuenow="${p.answered}" aria-valuemax="${total}"><i style="width:${pct(p.answered, total)}%"></i></div>`;
+  let meta = '', right = '';
+  if (s.kind === 'cards') {
+    meta = `<span class="meta opt-hide">Kalan <span class="num">${s.queue.length}</span> · Bildin <span class="num">${s.known}</span></span>`;
+  } else if (s.kind === 'test') {
+    const ok = s.results.filter((r) => r.ok).length;
+    meta = `<span class="meta"><span class="num">${ok}</span> doğru · <span class="num">${s.results.length - ok}</span> yanlış</span>`;
+  } else if (s.kind === 'learn') {
+    const v = Object.values(s.items); const l = v.filter((x) => x.learned).length; const w = v.filter((x) => !x.learned && x.stage === 2).length;
+    bar = `<div class="pbar" role="progressbar" aria-label="Öğrenilen kartlar" aria-valuenow="${l}" aria-valuemax="${s.total}"><i class="s" style="width:${pct(l, s.total)}%"></i><i class="w" style="width:${pct(w, s.total)}%"></i></div>`;
+    meta = `<span class="meta"><span class="dot" style="background:var(--success)"></span>Öğrenildi <span class="num">${l}</span> · <span class="dot" style="background:var(--accent)"></span>Yazma adımında <span class="num">${w}</span> · Seçme adımında <span class="num">${s.total - l - w}</span></span>`;
+  } else if (s.kind === 'exam') {
+    meta = `<span class="meta">cevaplandı</span>`;
+    right = `<button class="btn ghost sm" data-act="toast" data-msg="Yazdır ve Cevap anahtarı burada kalır; bu taslakta çalışmaz.">${icon('printer')}<span class="opt-hide">Yazdır</span></button>`;
+  } else if (s.kind === 'match') {
+    meta = `<span class="meta">çift</span><span class="meta mono" style="display:inline-flex;gap:6px;align-items:center">${icon('timer')}<span id="mclock">${fmtSec(s.acc + Date.now() - s.t0)} sn</span></span>`;
+  }
+  const head = `<div class="sbar"><span class="title"><b>${esc(s.title)}</b> <span>/ ${esc(DECK)}</span></span>${bar}<span class="pos">${p.answered} / ${total}</span>${meta}
+    ${s.practice ? '<span class="chip">pratik</span>' : `<span class="chip cal">${icon('cal')}takvimi etkiler</span>`}${right}
+    <button class="btn ghost sm" data-act="pause">${icon('x')}Ara ver ${kbd('Esc')}</button></div>`;
+  let body = '';
+  if (s.kind === 'cards') body = cardsBody(s);
+  else if (s.kind === 'test') body = testBody(s);
+  else if (s.kind === 'learn') body = learnBody(s);
+  else if (s.kind === 'exam') body = examBody(s);
+  else body = matchBody(s);
+  return `<div class="session">${head}<div class="sbody" data-sk="sbody">${body}</div></div>`;
+}
+function cardsBody(s) {
+  const c = card(s.queue[0]);
+  const how = s.flipped
+    ? (s.practice ? 'Bildin mi? Pratik: cevabın takvimi değiştirmez.' : 'Bildin mi? Dürüst ol: bir sonraki tekrar buna göre ayarlanır.')
+    : 'Anlamını aklından söyle, sonra kartı çevir.';
+  const face = s.flipped
+    ? `<div class="meaning">${esc(c.meaning)}</div>
+       <div class="part"><div class="pl">Örnek</div><div class="ex">${sentence(c.ex)}</div><div class="tr">${esc(c.exTr)}</div></div>
+       <div class="part src"><span class="pl" style="display:inline">Kaynak</span> · ${esc(c.src)}</div>`
+    : `<div class="q">Ne anlama geliyor?</div><div class="term">${esc(c.term)}</div>
+       ${s.hint ? `<div class="hintbox"><div class="pl">İpucu · cümlede geçtiği yer</div>${sentence(c.ex)}</div>` : ''}`;
+  const grades = s.buttons === 4
+    ? `<div class="grades four" role="group" aria-label="Nasıl geçti?">${[['Tekrar', '<1dk'], ['Zor', '6dk'], ['İyi', '1g'], ['Kolay', '4g']].map(([l, iv], i) => `<button class="grade four-g" data-act="grade" data-g="${i + 1}" ${s.flipped ? '' : 'disabled'}>${l}<span class="ivl">${iv}</span>${kbd(String(i + 1))}</button>`).join('')}</div>`
+    : `<div class="grades two" role="group" aria-label="Nasıl geçti?">
+        <button class="grade again" data-act="grade" data-g="1" ${s.flipped ? '' : 'disabled'}>${icon('repeat')}Hâlâ öğreniyorum${kbd('1')}</button>
+        <button class="grade good" data-act="grade" data-g="2" ${s.flipped ? '' : 'disabled'}>${icon('ccheck')}Biliyorum${kbd('2')}</button></div>`;
+  const menu = S.menu ? `<div class="menu" role="menu">
+      <button role="menuitem" data-act="aside" data-v="suspend"><span>Kenara koy</span>${kbd('S')}<span class="d">Sen geri alana kadar bu kartı sorma</span></button>
+      <button role="menuitem" data-act="aside" data-v="bury"><span>Yarına bırak</span>${kbd('B')}<span class="d">Bugün bu kartı bir daha sorma</span></button></div>` : '';
+  return `<div class="stage"><p class="how">${how}</p>
+    <div class="fcard" data-act="flip" role="button" aria-label="Kartı çevir (Space)">${face}</div>
+    ${grades}
+    <div class="tools">
+      <button class="btn ghost sm" data-act="flip">Çevir ${kbd('Space')}</button>
+      <button class="btn ghost sm" data-act="hint" ${s.flipped ? 'disabled' : ''}>${icon('bulb')}İpucu ${kbd('H')}</button>
+      <button class="btn ghost sm" data-act="undo">${icon('undo')}Geri al ${kbd('Z')}</button>
+      <button class="btn ghost sm" data-act="menu" aria-haspopup="menu" aria-expanded="${S.menu}" aria-label="Diğer kart işlemleri">${icon('more')}</button>
+      ${menu}<span class="grow"></span>
+      <span class="keys"><span><span class="mono">Space</span> çevir</span><span><span class="mono">${s.buttons === 4 ? '1–4' : '1 2'}</span> cevapla</span><span><span class="mono">Esc</span> ara ver</span></span>
+    </div></div>`;
+}
+function choiceButtons(options, picked, rightIdx, act) {
+  return `<div class="choices" role="group" aria-label="Şıklar">${options.map((o, i) => {
+    let cls = '', mark = '';
+    if (picked != null) {
+      if (i === rightIdx) { cls = 'right'; mark = `<span class="mark">${icon('ccheck')}doğru cevap</span>`; }
+      else if (i === picked) { cls = 'wrong'; mark = `<span class="mark">${icon('cx')}senin seçimin</span>`; }
+      else cls = 'dim';
+    }
+    return `<button class="choice ${cls}" data-act="${act}" data-i="${i}" ${picked != null ? 'disabled' : ''} data-fk="${act}-${i}">${kbd(String(i + 1))}<span>${esc(o)}</span>${mark}</button>`;
+  }).join('')}</div>`;
+}
+function feedbackBox(ok, title, c, nextLabel, auto) {
+  return `<div class="feedback ${ok === true ? 'ok' : ok === 'almost' ? 'almost' : 'bad'}" role="status">
+    <div class="grow"><div class="v">${icon(ok === true ? 'ccheck' : ok === 'almost' ? 'info' : 'cx')}${title}</div>
+      <div class="ex">${sentence(c.ex)}</div><div class="tr">${esc(c.exTr)}</div><div class="src">${esc(c.src)}</div>${auto ? '<div class="autonext" aria-hidden="true"></div>' : ''}</div>
+    <button class="btn primary" data-act="next" data-fk="next">${nextLabel} ${kbd('↵')}</button></div>`;
+}
+function testBody(s) {
+  const q = s.q; const c = card(q.id);
+  const rightIdx = q.options.indexOf(q.answer);
+  const ok = s.picked != null && s.picked === rightIdx;
+  return `<div class="stage"><p class="how">${s.dir === 'term' ? 'Anlamı hangisi?' : 'İngilizcesi hangisi?'} <span class="muted">1–4 ile ya da tıklayarak seç.</span></p>
+    <div class="fcard short"><div class="term">${esc(q.prompt)}</div></div>
+    ${choiceButtons(q.options, s.picked, rightIdx, 'tpick')}
+    ${s.picked != null ? feedbackBox(ok, ok ? 'Doğru!' : `Olmadı. Doğrusu: ${esc(q.answer)}`, c, s.idx + 1 >= s.ids.length ? 'Sonucu gör' : 'Sonraki', ok) : ''}
+    <div class="tools"><span class="keys"><span><span class="mono">1–4</span> seç</span><span><span class="mono">Enter</span> sonraki</span><span><span class="mono">Esc</span> ara ver</span>${ok ? '<span>Doğruysa kendiliğinden geçer</span>' : ''}</span></div></div>`;
+}
+function learnBody(s) {
+  const c = card(s.cur);
+  if (!s.stage2) {
+    const rightIdx = s.options.indexOf(c.meaning);
+    return `<div class="stage"><p class="how"><span class="step">Adım 1 / 2</span> Anlamını seç <span class="muted">· doğru bilirsen kart yazma adımına geçer.</span></p>
+      <div class="fcard short"><div class="term">${esc(c.term)}</div></div>
+      ${choiceButtons(s.options, s.picked, rightIdx, 'lpick')}
+      ${s.phase === 'feedback' ? feedbackBox(s.verdict === 'ok', s.verdict === 'ok' ? 'Doğru! Birazdan bunu yazarak soracağım.' : `Olmadı. Doğrusu: ${esc(c.meaning)}. Bu kart birazdan yine gelecek.`, c, 'Sonraki', s.verdict === 'ok') : ''}
+      <div class="tools"><span class="keys"><span><span class="mono">1–4</span> seç</span><span><span class="mono">Enter</span> sonraki</span><span><span class="mono">Esc</span> ara ver</span></span></div></div>`;
+  }
+  const fb = s.phase === 'feedback';
+  const v = s.verdict;
+  const title = v === 'ok' ? 'Doğru! Bu kelimeyi öğrendin.' : v === 'almost' ? `Az kaldı, doğru sayıldı. Yazılışı: ${esc(c.term)}` : v === 'dontknow' ? `Cevap: ${esc(c.term)}. Birazdan yine soracağım.` : `Olmadı. Doğrusu: ${esc(c.term)}. Birazdan yine soracağım.`;
+  return `<div class="stage"><p class="how"><span class="step">Adım 2 / 2</span> İngilizcesini yaz <span class="muted">· doğru yazınca kart öğrenilmiş olur.</span></p>
+    <div class="fcard short"><div class="q">Bu anlamdaki kelime ne?</div><div class="meaning">${esc(c.meaning)}</div>
+      <div class="hintbox" style="text-align:center"><div class="pl">Cümlede</div>${sentence(c.ex, fb ? 'mark' : 'blank')}</div></div>
+    <div class="typerow"><input class="input ${fb ? (v === 'ok' || v === 'almost' ? 'ok' : 'bad') : ''}" data-bind="typed" data-fk="type" value="${esc(s.typed)}" placeholder="İngilizcesini yaz" aria-label="İngilizcesini yaz" autocomplete="off" spellcheck="false" ${fb ? 'readonly' : ''}>
+      ${fb ? '' : `<button class="btn primary lg" data-act="check">Kontrol et ${kbd('↵')}</button><button class="btn lg" data-act="dontknow">Bilmiyorum</button>`}</div>
+    ${fb ? feedbackBox(v === 'ok' ? true : v === 'almost' ? 'almost' : false, title, c, Object.values(s.items).every((x) => x.learned) ? 'Sonucu gör' : 'Sonraki', v === 'ok') : ''}
+    <div class="tools"><span class="keys"><span><span class="mono">Enter</span> kontrol et / sonraki</span><span><span class="mono">Esc</span> ara ver</span></span></div></div>`;
+}
+function examBody(s) {
+  const L = (i) => kbd(String(i + 1));
+  const qs = s.questions.map((q, i) => {
+    let inner = '';
+    if (q.type === 'mc') {
+      inner = `<div class="q-prompt">${esc(q.prompt)}</div><div class="q-sub">Anlamı hangisi?</div><div class="choices">${q.options.map((o, j) => `<button class="choice ${q.a === j ? 'sel' : ''}" data-act="epick" data-q="${i}" data-i="${j}" data-fk="ep-${i}-${j}" aria-pressed="${q.a === j}">${L(j)}<span>${esc(o)}</span></button>`).join('')}</div>`;
+    } else if (q.type === 'tf') {
+      inner = `<div class="q-prompt">${esc(q.prompt)} <span class="muted">=</span> ${esc(q.shown)}</div><div class="q-sub">Bu eşleşme doğru mu?</div><div class="choices">${['Doğru', 'Yanlış'].map((o, j) => `<button class="choice ${q.a === (j === 0) ? 'sel' : ''}" data-act="epick" data-q="${i}" data-i="${j}" data-fk="ep-${i}-${j}" aria-pressed="${q.a === (j === 0)}">${L(j)}<span>${o}</span></button>`).join('')}</div>`;
+    } else if (q.type === 'written') {
+      inner = `<div class="q-prompt">${esc(q.prompt)}</div><div class="q-sub">İngilizcesini yaz · ${sentence(q.ex, 'blank')}</div><div class="typerow"><input class="input" data-bind="examw" data-q="${i}" data-fk="ew-${i}" value="${esc(q.a)}" placeholder="İngilizcesi" aria-label="Soru ${i + 1}: İngilizcesini yaz" autocomplete="off" spellcheck="false"></div>`;
+    } else {
+      inner = `<div class="q-sub">Her kelimenin yanına anlamının harfini seç.</div><div class="mgrid"><div>${q.words.map((w, j) => `<div class="mrow"><span class="w">${esc(w)}</span><select class="input" data-bind="examm" data-q="${i}" data-j="${j}" data-fk="em-${i}-${j}" aria-label="${esc(w)} için anlam"><option value="-1">—</option>${q.meanings.map((_, k) => `<option value="${k}" ${q.a[j] === k ? 'selected' : ''}>${'ABCD'[k]}</option>`).join('')}</select></div>`).join('')}</div>
+        <div class="mlist">${q.meanings.map((m, k) => `<div><span class="kbd">${'ABCD'[k]}</span>${esc(m)}</div>`).join('')}</div></div>`;
+    }
+    return `<div class="q ${s.cur === i ? 'cur' : ''}" id="q-${i}" data-qi="${i}"><div class="q-head"><span class="num">${i + 1}.</span><span>${TYPE_NAME[q.type]}</span><span class="done chip" ${answered(q) ? '' : 'hidden'}>${icon('check')}cevaplandı</span></div>${inner}</div>`;
+  }).join('');
+  const blanks = s.questions.filter((q) => !answered(q)).length;
+  return `<div class="paper"><p class="how">Hepsini cevapla, sonra teslim et. Puanını ve doğrularını sonunda görürsün. <span class="muted">1–4 seç · Enter sonraki · Ctrl+Enter teslim et</span></p>${qs}
+    <div class="paper-foot"><span class="grow" id="paper-left">${s.confirm ? `<b style="color:var(--warning)">${s.confirm} soru boş.</b> Boşlar yanlış sayılmaz, “boş” yazılır.` : `${blanks ? `${blanks} soru boş` : 'Hepsi cevaplandı'}`}</span>
+      ${s.confirm ? `<button class="btn" data-act="esubmit-cancel">Geri dön</button><button class="btn primary" data-act="esubmit-force" data-fk="submit-anyway">Yine de teslim et</button>` : `<button class="btn primary lg" data-act="esubmit" data-fk="submit">Teslim et ${kbd('Ctrl ↵')}</button>`}</div></div>`;
+}
+function matchBody(s) {
+  return `<div style="max-width:960px;margin:0 auto"><p class="how">Bir kelimeye, sonra anlamına tıkla. Hepsini eşleyince süre durur. <span class="muted">Yanlış eşleşmeler kırmızı yanar.</span></p></div>
+    <div class="board" role="group" aria-label="Eşleştirme tahtası">${s.tiles.map((t) => `<button class="tile ${t.kind} ${s.sel === t.key ? 'sel' : ''} ${s.bad.includes(t.key) ? 'bad' : ''} ${s.gone[t.key] ? 'gone' : ''}" data-act="mpick" data-k="${t.key}" data-fk="tile-${t.key}" aria-pressed="${s.sel === t.key}" ${s.gone[t.key] ? 'tabindex="-1" aria-hidden="true"' : ''}>${esc(t.text)}</button>`).join('')}</div>`;
+}
+
+/* ================================================================ strip + notes */
+function stripView() {
+  const seg = (k, opts, label) => `<span class="grp">${label}<span class="seg" role="group" aria-label="${label}">${opts.map(([v, t]) => `<button data-act="set" data-k="${k}" data-v="${v}" data-fk="strip-${k}-${v}" aria-pressed="${String(S[k]) === v}">${t}</button>`).join('')}</span></span>`;
+  return `<span class="tag">TASLAK</span><span class="muted">Çalışma modları · v1.4 prototipi (uygulama değil)</span>
+    ${seg('learnVariant', [['A', 'A · ayrı mod'], ['B', 'B · Test’in içinde']], 'Öğren:')}
+    ${seg('scopeVariant', [['A', 'A · aşamalı'], ['B', 'B · hepsi açık']], 'Kapsam:')}
+    ${seg('homeVariant', [['A', 'A · seçtirir'], ['B', 'B · hemen başlar']], 'Ana sayfa düğmesi:')}
+    ${seg('advanced', [['false', 'kapalı'], ['true', 'açık']], 'Gelişmiş:')}
+    <span class="spacer"></span>
+    <button class="btn sm" data-act="reset" title="Örnek kartları ilk hâline döndür">Sıfırla</button>
+    <button class="btn sm" data-act="theme" aria-label="Temayı değiştir">${icon(S.theme === 'dark' ? 'sun' : 'moon')}${S.theme === 'dark' ? 'Açık' : 'Koyu'}</button>
+    <button class="btn sm primary" data-act="notes" aria-expanded="${S.notesOpen}">${icon('notes')}Taslak notları</button>`;
+}
+const QA = [
+  ['Test ne olsun?', '<b>Karar:</b> Test = bir kelime, dört şık, cevabı hemen gör (senin beklediğin). Eski “Test” (karışık sorulu kâğıt) artık <b>Sınav</b>. <b>Reddedilen:</b> adları olduğu gibi bırakıp yalnız açıklamaları değiştirmek; ad zaten yanlış beklenti yaratıyordu.', 'Bu ad ve ayrım doğru mu? A: evet · B: başka ad öner'],
+  ['Öğren ayrı mod mu kalsın? (şeritte A/B)', '<b>A:</b> Ayrı mod, Test’ten tek cümleyle ayrılır: “Adım adım: önce anlamını seç, sonra kelimeyi kendin yaz; bilene kadar geri gelir.” Takvimi etkiler. <b>B:</b> Öğren kalkar, Test’in içinde “Öğrenene kadar devam et” anahtarı olur (açıkken takvimi etkiler). B’de başlatıcıda 4 mod kalır.', 'A mı B mi?'],
+  ['Öğren’in yazma adımı neyi yazdırsın?', '<b>A (taslakta):</b> Türkçe anlamı ve boşluklu cümleyi gösterir, <b>İngilizce kelimeyi</b> yazarsın (tanımak → hatırlamak). <b>B:</b> v1.3 gibi Türkçe anlamı yazdırır.', 'A mı B mi?'],
+  ['Test takvimi etkilesin mi?', '<b>A (taslakta):</b> Hayır, Test pratiktir; istediğin kadar çöz, takvim bozulmaz. <b>B:</b> Evet, doğru/yanlış takvime işlenir (o zaman Kartlar’ın yerine de kullanılabilir).', 'A mı B mi?'],
+  ['Test’te doğru cevaptan sonra?', '<b>A (taslakta):</b> Doğruysa 1 saniye sonra kendiliğinden geçer (Enter beklemeden de geçirir), yanlışsa doğrusunu okuman için Enter bekler. <b>B:</b> Her zaman Enter bekler.', 'A mı B mi?'],
+  ['“Hangi kartlar?” nasıl görünsün? (şeritte A/B)', '<b>A:</b> Varsayılan “Bugünün kartları” tek satır; diğer dördü “Başka kartlar seç” ile bir tık uzakta (bugün boşsa kendiliğinden açılır). <b>B:</b> v1.3 gibi beşi hep açık.', 'A mı B mi?'],
+  ['Ana sayfadaki “Çalışmaya başla” ne yapsın? (şeritte A/B)', '<b>A:</b> Başlatıcıyı açar, Enter ile başlarsın (2 tuş). <b>B:</b> Doğrudan Kartlar + Bugünün kartları başlar (1 tuş); başka bir şey için “Başka şekilde çalış…”.', 'A mı B mi?'],
+  ['Gelişmiş anahtarı nerede? (şeritte kapalı/açık)', '<b>A (taslakta):</b> Uygulamadaki tek “Gelişmiş” anahtarı (D2’nin Ayarlar’ı) burada da görünür ve aynı anahtardır. Kapalıyken başlatıcıda yalnız mod ve kartlar var. <b>B:</b> Başlatıcıya özel “Daha fazla seçenek” açılırı.', 'A mı B mi?'],
+  ['Sınav’da doğru/yanlış', '<b>Karar:</b> Seçilebilir ama varsayılan kapalı (tahminle yarı yarıya tutar). Eşleştirme sorusu 4 kelime = tek soru, harf seçerek. <b>Reddedilen:</b> sürükle-bırak eşleştirme (klavyeyle zor, yazdırılamaz).', 'Eşleştirme sorusu böyle mi? A: evet · B: sürükle-bırak'],
+  ['Şık tuşları', '<b>Karar:</b> Her modda şıklar <span class="mono">1–4</span> (Sınav’da v1.3 alışkanlığı için <span class="mono">A–D</span> de çalışır). Space yalnız Kartlar’da çevirir. <b>Reddedilen:</b> Sınav’da yalnız A–D (iki ayrı alışkanlık).', 'Tamam mı? A: evet · B: Sınav’da yalnız A–D'],
+];
+const MOVED = [
+  ['v1.3 “Test” (karışık kâğıt, puan)', 'Sınav — soru türleri onay kutularıyla, doğru/yanlış varsayılan kapalı, “Kaç soru?” hep görünür. Yazdır / Cevap anahtarı kâğıdın üst satırında.'],
+  ['v1.3 “Öğren”', 'A: Öğren (yazma adımı İngilizce kelime). B: Test › “Öğrenene kadar devam et”.'],
+  ['(yeni) Test', '4 şık, tek tek, cevap hemen; pratik. Öğren’in ilk adımıyla aynı motor.'],
+  ['Mod düğmeleri (segment)', 'Mod listesi: simge + ad + tek satır + “takvimi etkiler / pratik” etiketi.'],
+  ['5 kapsam', 'Aynen, aynı sayılarla. A’da dördü “Başka kartlar seç” altında.'],
+  ['Kaç kart? (hep görünür)', 'Gelişmiş. Sınav’ın “Kaç soru?”su ve soru türleri modun kendi alanında, hep görünür.'],
+  ['Seçenekler açılırı: pratik, süre, güven 1–5, süzgeç, sorgu, kayıtlı sorgu, ertele', 'Hepsi Gelişmiş altında, her biri tek satır açıklamayla.'],
+  ['Cevap düğmeleri 2/4', 'Gelişmiş › Kartlar (Ayarlar’daki ayar da kalır).'],
+  ['Kenara koy / Yarına bırak (S / B)', 'Aynen: kart oturumunda ⋯ menüsü + tuşlar.'],
+  ['Yarım kalanlar / Devam et', 'Aynen, başlatıcının en üstünde odakta; Ana sayfada da tek satır.'],
+  ['Oturum sonu', 'Her modda aynı: puan, kaçırdıkların listesi, “Yanlışları tekrar çalış (R)”, “Tekrar çalış…”, takvime ne olduğu tek cümle.'],
+  ['Okuma, Odak (F), bayraklar, Ctrl+1–7', 'Bu taslakta çizilmedi, yerleri değişmiyor.'],
+];
+function notesView() {
+  return `<div class="nh">${icon('notes')}<h2>Taslak notları</h2><button class="btn ghost sm" data-act="notes" aria-label="Kapat">${icon('x')}</button></div>
+  <div class="nb">
+    <p class="muted">Her soruya “A” ya da “B” demen yeter. Şeritteki A/B düğmeleri ikisini de denemeni sağlar. <b>Sıfırla</b> örnek kartları baştan alır.</p>
+    <h3>Gezinti yolları</h3>
+    <ul><li>Ana sayfa → Çalışmaya başla (Enter) → mod + kartlar → Başla (Enter)</li>
+    <li>Kartlar: Space çevir, 1/2 cevapla, H ipucu, Z geri al, ⋯ kenara koy / yarına bırak</li>
+    <li>Test: 1–4 seç → doğrusu hemen → Enter → sonuç → Yanlışları tekrar çalış (R)</li>
+    <li>Öğren: seç → yaz → bilene kadar geri gelir</li>
+    <li>Sınav: tür seç → kâğıt → Teslim et (Ctrl+Enter) → soru soru sonuç</li>
+    <li>Eşleştir: kelime → anlam, süre</li>
+    <li>Herhangi bir anda Esc → Ara verdin → Devam et; Ana sayfada “Yarım kaldı”</li>
+    <li>Kartlar’da bugünü bitir → Ana sayfa “Bugünlük hepsi tamam” → Pratik yap</li></ul>
+    <h3>(a) Kararlar ve sorular</h3>
+    ${QA.map(([q, a, p], i) => `<div class="qa"><div class="qq">${i + 1}. ${q}</div><div class="ab">${a}</div><div class="pick">→ ${p}</div></div>`).join('')}
+    <h3>(b) v1.3’ten ne nereye taşındı</h3>
+    <table><tr><th>v1.3</th><th>Bu taslakta</th></tr>${MOVED.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</table>
+    <h3>Yapım için notlar (sana değil, geliştiriciye)</h3>
+    <ul><li>Test (4 şık) için Öğren oturumunun yalnız seçme adımlı, pratik bir türü yeter; yeni iş mantığı az.</li>
+    <li>Sınav’a “eşleştirme” soru türü eklenmeli (bugün yok: doğru/yanlış, çoktan seçmeli, yazılı var).</li>
+    <li>Öğren A’da yazma adımı terim alanını ister: kart şablonunun cevap alanı yerine rollerden “terim”.</li>
+    <li>Mod başına “takvimi etkiler / pratik” etiketi <span class="mono">study.options</span>’tan gelmeli (tek doğru kaynak).</li></ul>
+  </div>`;
+}
+
+/* ================================================================ render */
+const $app = document.getElementById('app');
+const $strip = document.getElementById('strip');
+const $notes = document.getElementById('notes');
+function render() {
+  document.documentElement.dataset.theme = S.theme;
+  const active = document.activeElement;
+  const fk = active && active.dataset ? active.dataset.fk : null;
+  const scroll = {}; document.querySelectorAll('[data-sk]').forEach((el) => (scroll[el.dataset.sk] = el.scrollTop));
+  $strip.innerHTML = stripView();
+  let html;
+  if (S.screen === 'session') html = sessionView();
+  else {
+    const main = S.screen === 'summary' ? summaryView() : S.screen === 'paused' ? pausedView() : homeView();
+    const crumb = S.screen === 'home' ? '<b>Ana sayfa</b>' : `Ana sayfa › <b>${S.screen === 'summary' ? 'Sonuç' : 'Ara verdin'}</b>`;
+    html = shell(main, crumb);
+  }
+  if (S.launcher) html += launcherView();
+  if (S.toast) html += `<div class="toast" role="status">${esc(S.toast.msg)}${S.toast.extra ? `<span class="muted">${esc(S.toast.extra)}</span>` : ''}</div>`;
+  $app.innerHTML = html;
+  $app.querySelectorAll('[data-sk]').forEach((el) => { if (scroll[el.dataset.sk]) el.scrollTop = scroll[el.dataset.sk]; });
+  $notes.classList.toggle('open', S.notesOpen);
+  if (S.notesOpen && !$notes.dataset.built) { $notes.innerHTML = notesView(); $notes.dataset.built = '1'; }
+  if (S.focusAfter) {
+    const el = $app.querySelector(S.focusAfter);
+    S.focusAfter = null;
+    if (el) focusEnd(el);
+  } else if (fk) {
+    const el = $app.querySelector(`[data-fk="${CSS.escape(fk)}"]`) || $strip.querySelector(`[data-fk="${CSS.escape(fk)}"]`);
+    if (el) focusEnd(el);
+  }
+  if (S.scrollTo) { const el = $app.querySelector(S.scrollTo); S.scrollTo = null; if (el) el.scrollIntoView({ block: 'nearest' }); }
+}
+function focusEnd(el) {
+  el.focus({ preventScroll: true });
+  if (el.tagName === 'INPUT' && el.type === 'text') el.setSelectionRange(el.value.length, el.value.length);
+}
+let toastTimer = null;
+function toast(msg, extra) {
+  S.toast = { msg, extra }; clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { S.toast = null; render(); }, 2600);
+  render();
+}
+function clearTimer() { if (S.timer) clearTimeout(S.timer); S.timer = null; }
+
+/* ================================================================ events */
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  // Sınav: clicking anywhere in a question makes it the current one (keys act on it).
+  const qel = e.target.closest('.q');
+  if (qel && S.session && S.session.kind === 'exam') setExamCur(+qel.dataset.qi);
+  if (!el) { if (S.menu && !e.target.closest('.menu')) { S.menu = false; render(); } return; }
+  const a = el.dataset.act, d = el.dataset;
+  if (a === 'overlay') { if (e.target === el) { S.launcher = null; render(); } return; }
+  if (a !== 'menu' && a !== 'aside' && S.menu) S.menu = false;
+  act(a, d, el);
+});
+function act(a, d, el) {
+  const s = S.session, L = S.launcher;
+  switch (a) {
+    case 'set': S[d.k] = d.v === 'true' ? true : d.v === 'false' ? false : d.v;
+      if (d.k === 'learnVariant' && L && !modeList().includes(L.mode)) L.mode = 'test';
+      if (d.k === 'scopeVariant' && L) L.more = d.v === 'B' || L.scope !== 'due';
+      return render();
+    case 'theme': S.theme = S.theme === 'dark' ? 'light' : 'dark'; return render();
+    case 'notes': S.notesOpen = !S.notesOpen; render(); if (S.notesOpen) $notes.querySelector('button').focus(); return;
+    case 'reset': clearTimer(); stopMatchClock(); resetData(); return toast('Örnek kartlar baştan alındı.');
+    case 'toast': return toast(d.msg);
+    case 'home': clearTimer(); S.screen = 'home'; S.summary = null; S.focusAfter = '[data-fk="home-primary"]'; return render();
+    case 'launch': return openLauncher();
+    case 'quickstart': {
+      const ids = scopeIds('due'); if (!ids.length) return openLauncher();
+      delete S.paused.cards;
+      return startSession('cards', ids, { practice: false, L: { buttons: 2 }, scopeName: 'Bugünün kartları', n: ids.length });
+    }
+    case 'close': S.launcher = null; S.focusAfter = '[data-fk="home-primary"]'; return render();
+    case 'mode': L.mode = d.v; S.focusAfter = `[data-fk="mode-${d.v}"]`; return render();
+    case 'scope': if (el.getAttribute('aria-disabled') === 'true') return; L.scope = d.v; S.focusAfter = `[data-fk="scope-${d.v}"]`; return render();
+    case 'more': L.more = !L.more; S.last.scopeMore = L.more; if (!L.more && L.scope !== 'due' && scopeIds('due').length) L.scope = 'due'; return render();
+    case 'advanced': S.advanced = !S.advanced; return render();
+    case 'lswitch': L[d.k] = !L[d.k]; return render();
+    case 'lset': L[d.k] = d.k === 'buttons' ? Number(d.v) : d.v; return render();
+    case 'examtype': L.exam[d.v] = el.checked; return render();
+    case 'start': return startFromLauncher();
+    case 'resume': return resume(d.k);
+    case 'pause': return pauseSession();
+    case 'flip': if (s && s.kind === 'cards') { s.flipped = !s.flipped; render(); } return;
+    case 'grade': return cardsGrade(Number(d.g));
+    case 'hint': if (s && !s.flipped) { s.hint = true; render(); } return;
+    case 'undo': cardsUndo(); return render();
+    case 'menu': S.menu = !S.menu; return render();
+    case 'aside': return cardsAside(d.v);
+    case 'tpick': return testPick(Number(d.i));
+    case 'next': return s.kind === 'test' ? testNext() : learnNext();
+    case 'lpick': return learnPick(Number(d.i));
+    case 'check': return learnCheck(false);
+    case 'dontknow': return learnCheck(true);
+    case 'epick': return examPick(Number(d.q), Number(d.i));
+    case 'esubmit': return examSubmit(false);
+    case 'esubmit-force': return examSubmit(true);
+    case 'esubmit-cancel': s.confirm = 0; { const qi = s.questions.findIndex((q) => !answered(q)); if (qi >= 0) { setExamCur(qi); S.focusAfter = `#q-${qi} button, #q-${qi} input, #q-${qi} select`; S.scrollTo = `#q-${qi}`; } } return render();
+    case 'mpick': return matchPick(d.k);
+    case 'repeat': return repeatMissed();
+    case 'again': {
+      const m = S.summary; S.screen = 'home';
+      return openLauncher({ mode: m && modeList().includes(m.key) ? m.key : undefined, scope: scopeIds('struggled').length ? 'struggled' : undefined });
+    }
+  }
+}
+function setExamCur(i) {
+  const s = S.session; if (!s || s.kind !== 'exam' || s.cur === i) return;
+  s.cur = i;
+  document.querySelectorAll('.q').forEach((q) => q.classList.toggle('cur', +q.dataset.qi === i));
+}
+document.addEventListener('focusin', (e) => { const q = e.target.closest && e.target.closest('.q'); if (q) setExamCur(+q.dataset.qi); });
+document.addEventListener('input', (e) => {
+  const el = e.target; const b = el.dataset && el.dataset.bind; if (!b) return;
+  const s = S.session, L = S.launcher;
+  if (b === 'typed') s.typed = el.value;
+  else if (b === 'examw') { const q = s.questions[+el.dataset.q]; q.a = el.value; updateExamChrome(); }
+  else if (b === 'count') { L.count = el.value; renderKeepCaret(el); }
+  else if (b === 'examCount') { L.examCount = el.value === '' ? null : el.value; renderKeepCaret(el); }
+});
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (el.dataset && el.dataset.bind === 'examm') { const q = S.session.questions[+el.dataset.q]; q.a[+el.dataset.j] = Number(el.value); S.session.confirm = 0; S.focusAfter = null; render(); const again = $app.querySelector(`select[data-q="${el.dataset.q}"][data-j="${el.dataset.j}"]`); if (again) again.focus(); }
+});
+/** While typing an exam answer only the counters change: no re-render (caret and focus stay). */
+function updateExamChrome() {
+  const s = S.session; const p = progressOf(s); const total = p.answered + p.left;
+  s.questions.forEach((q, i) => { const c = document.querySelector(`#q-${i} .done`); if (c) c.hidden = !answered(q); });
+  const pos = $app.querySelector('.sbar .pos'); if (pos) pos.textContent = `${p.answered} / ${total}`;
+  const bar = $app.querySelector('.sbar .pbar i'); if (bar) bar.style.width = pct(p.answered, total) + '%';
+  const left = document.getElementById('paper-left'); if (left && !s.confirm) left.textContent = p.left ? `${p.left} soru boş` : 'Hepsi cevaplandı';
+}
+function renderKeepCaret(el) {
+  // Update only the footer summary while typing a number (keeps the caret where it is).
+  const foot = $app.querySelector('.foot-sum'); const start = $app.querySelector('[data-act="start"]');
+  const info = launchInfo();
+  if (foot) foot.innerHTML = info.reason ? `<span class="warn">${esc(info.reason)}</span>` : `<b>${MODES[S.launcher.mode].name} · ${esc(info.sc.name)} · <span class="num">${info.n}</span> ${info.unit}</b><br>${info.practice ? 'pratik: takvimin değişmez' : 'takvimi etkiler: cevapların sıradaki tekrarı ayarlar'}`;
+  if (start) start.disabled = !!info.reason;
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.repeat) return; // a held key does one job
+  const t = e.target;
+  const typing = t.matches && t.matches('input:not([type=checkbox]), textarea, select');
+  if (S.notesOpen && e.key === 'Escape') { S.notesOpen = false; render(); return; }
+  if (S.notesOpen && $notes.contains(t)) return;
+  if (S.launcher) return launcherKey(e, t, typing);
+  if (S.screen === 'session') return sessionKey(e, t, typing);
+  if (S.screen === 'summary') {
+    if (typing) return;
+    if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey && S.summary.missedIds.length) { e.preventDefault(); repeatMissed(); }
+    return;
+  }
+  if (S.screen === 'paused') {
+    if (e.key === 'Enter' && !isControl(t)) { e.preventDefault(); resume(S.pausedKey); }
+    return;
+  }
+  if (S.screen === 'home' && e.key === 'Enter' && !isControl(t)) { e.preventDefault(); act(S.homeVariant === 'B' && todayCounts().total ? 'quickstart' : 'launch', {}); }
+});
+const isControl = (t) => t && t.closest && !!t.closest('button, a, input, select, textarea, [role="radio"], [role="switch"]');
+
+function launcherKey(e, t, typing) {
+  const L = S.launcher;
+  if (e.key === 'Escape') { e.preventDefault(); S.launcher = null; S.focusAfter = '[data-fk="home-primary"]'; render(); return; }
+  if (e.key === 'Tab') return trapTab(e);
+  const radio = t.closest && t.closest('[role="radio"]');
+  if (radio && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+    e.preventDefault();
+    const group = [...$app.querySelectorAll(`[data-group="${radio.dataset.group}"]`)].filter((r) => r.getAttribute('aria-disabled') !== 'true');
+    const i = group.indexOf(radio); const n = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1;
+    const next = group[(i + n + group.length) % group.length];
+    if (next) act(next.dataset.act, next.dataset, next);
+    return;
+  }
+  if (radio && e.key === ' ') { e.preventDefault(); act(radio.dataset.act, radio.dataset, radio); return; }
+  if (e.key === 'Enter') {
+    // Enter starts, unless focus is on a control that has its own Enter (a button, a switch).
+    if (t.closest && t.closest('button, [role="switch"]')) return;
+    if (t.type === 'checkbox') return;
+    e.preventDefault(); startFromLauncher();
+  }
+}
+function trapTab(e) {
+  const f = [...$app.querySelectorAll('.dialog button:not([disabled]), .dialog input, .dialog select, .dialog [tabindex="0"]')];
+  if (!f.length) return;
+  const i = f.indexOf(document.activeElement);
+  if (e.shiftKey && (i <= 0)) { e.preventDefault(); f[f.length - 1].focus(); }
+  else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+}
+function sessionKey(e, t, typing) {
+  const s = S.session; const k = e.key;
+  if (k === 'Escape') { e.preventDefault(); if (S.menu) { S.menu = false; render(); return; } return pauseSession(); }
+  if (e.ctrlKey || e.metaKey || e.altKey) {
+    if (s.kind === 'exam' && k === 'Enter') { e.preventDefault(); examSubmit(false); }
+    return;
+  }
+  const digit = /^[1-9]$/.test(k) ? Number(k) : null;
+  if (s.kind === 'cards') {
+    if (typing) return;
+    if (k === ' ') { e.preventDefault(); s.flipped = !s.flipped; render(); }
+    else if (digit) { e.preventDefault(); cardsGrade(digit); }
+    else if (k === 'h' || k === 'H') { if (!s.flipped) { s.hint = true; render(); } }
+    else if (k === 'z' || k === 'Z') { cardsUndo(); render(); }
+    else if (k === 's' || k === 'S') cardsAside('suspend');
+    else if (k === 'b' || k === 'B') cardsAside('bury');
+    else if (k === 'Enter' && !isControl(t)) { e.preventDefault(); }
+    return;
+  }
+  if (s.kind === 'test') {
+    if (digit && s.picked == null) { e.preventDefault(); testPick(digit - 1); }
+    else if (k === 'Enter' && s.picked != null) { e.preventDefault(); testNext(); }
+    return;
+  }
+  if (s.kind === 'learn') {
+    if (s.phase === 'feedback' && k === 'Enter') { e.preventDefault(); learnNext(); return; }
+    if (!s.stage2 && digit && s.phase === 'ask' && !typing) { e.preventDefault(); learnPick(digit - 1); return; }
+    if (s.stage2 && s.phase === 'ask' && k === 'Enter' && t.tagName !== 'BUTTON') { e.preventDefault(); learnCheck(false); }
+    return;
+  }
+  if (s.kind === 'exam') {
+    const q = s.questions[s.cur];
+    if (typing) {
+      if (k === 'Enter' && t.dataset.bind === 'examw') {
+        e.preventDefault();
+        const i = +t.dataset.q; const nx = i + 1;
+        if (nx < s.questions.length) { setExamCur(nx); render(); const el = $app.querySelector(`#q-${nx} button, #q-${nx} input, #q-${nx} select`); if (el) { el.focus(); document.getElementById('q-' + nx).scrollIntoView({ block: 'nearest' }); } }
+        else { render(); const sb = $app.querySelector('[data-fk="submit"]'); if (sb) { sb.focus(); sb.scrollIntoView({ block: 'nearest' }); } }
+      }
+      return;
+    }
+    const letter = /^[a-dA-D]$/.test(k) ? 'abcd'.indexOf(k.toLowerCase()) : -1;
+    const o = digit ? digit - 1 : letter;
+    if (o >= 0 && q && (q.type === 'mc' || q.type === 'tf')) { e.preventDefault(); examPick(s.cur, o); }
+    return;
+  }
+}
+
+render();
+S.focusAfter = '[data-fk="home-primary"]'; render();
+</script>
+</body>
+</html>
