@@ -82,7 +82,8 @@ pub(super) fn check(req: QueryText, ctx: &QueryCtx<'_>) -> AppResult<QueryCheck>
             })
         }
     };
-    let data = CatalogData::load(ctx.tx, ctx.now)?;
+    let mut data = CatalogData::load(ctx.tx, ctx.now)?;
+    data.lemmatize(ctx.tx, &req.query)?;
     Ok(match fc_core::query::compile_query(&req.query, &data.catalog()) {
         Ok(_) => QueryCheck {
             error: None,

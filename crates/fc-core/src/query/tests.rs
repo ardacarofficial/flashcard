@@ -216,6 +216,8 @@ impl World {
             now: NOW,
             day_start: None,
             deck_decay: &[],
+            known_interval_days: 21,
+            word_keys: &[],
         }
     }
 
@@ -293,6 +295,7 @@ impl Sample {
                 tag_ids: &self.tags,
                 attrs: &facts,
                 search_text: &self.text,
+                lang: &crate::query::LangFacts::NONE,
             },
             NOW,
         )
@@ -381,7 +384,12 @@ fn stored_queries_follow_option_renames_and_reorders() {
         render(&stored, &w.cat()),
         "cefr>=\"Orta seviye\"  -sinav:TYT deck:Dil"
     );
-    assert!(w.compile("level>=B1").is_err());
+    // v1.4 (deliberate change): with no classification called `level` any more, the old text
+    // is the word-data CEFR band (`fc_core::query::lang`), no longer the classification.
+    assert_eq!(
+        w.compile("level>=B1").unwrap(),
+        Filter::Pred(crate::query::Pred::Band(vec![3, 4, 5, 6]))
+    );
 
     // Reorder: B1 moves below A2 → `>= B1` now also takes A2 (follows the current order).
     let level = &mut w.attrs[0];

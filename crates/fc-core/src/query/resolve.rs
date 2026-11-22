@@ -20,17 +20,23 @@
 //! | classification key or name | `seviye:B1`, `seviye>=B1` (ordered lists), `sınav:TYT`, `puan>3`, `tarih<2025-01-01`, `x:*` = has a value; canonical `attr_<id>` keys and option ids too ([`super::canonical`]) |
 //! | field key or name | whole-field glob: `kelime:app*` |
 //!
+//! v1.4 language-learning keys (`durum:`, `dil:`, `kelime:`, `karşılaşma`, `nereden:`, `kaynak:`,
+//! `ses:`, `görsel:`, `sıklık`, `cefr:`): [`super::lang`]. A classification with the same key
+//! wins over them.
+//!
 //! `k!=v` is `-k:v` (also true when there is no value).
 
 use super::ast::{CmpOp, Expr, Span, Term};
 use super::error::{QueryError, QueryErrorKind as K};
 use super::filter::{AttrAlt, AttrTest, CardNum, Filter, Pred, TimeCol};
+use super::lang::{cefr_ordinal, word_key, MediaFrom, MediaKind, NoteOrigin};
 use super::text::{compile_regex, fold, tokens, Glob};
 use crate::attribute::{AttributeDef, AttributeKind};
 use crate::card::CardState;
 use crate::deck::{Deck, PATH_SEPARATOR};
 use crate::id::{CardId, DeckId, NoteId};
 use crate::notetype::NoteType;
+use crate::reading::WordStatus;
 use crate::tag::Tag;
 use crate::time::{Timestamp, MILLIS_PER_DAY};
 use std::collections::HashMap;
@@ -59,6 +65,13 @@ pub struct Catalog<'a> {
     /// [`crate::recall::DEFAULT_DECAY`] (personalised weights); other decks use the default.
     /// `retrievability` compares with the same [`crate::recall`] formula card info shows.
     pub deck_decay: &'a [(DeckId, f64)],
+    /// v1.4: "known by maturity" threshold of the word index (`words.known_interval_days`)
+    /// for `durum:`/`status:`.
+    pub known_interval_days: u32,
+    /// v1.4: lemma keys of `kelime:`/`word:` values ([`super::lang::word_values`], as typed →
+    /// the keys the app's lemmatizers give, `went` → `go`). A value without an entry matches
+    /// its own [`super::lang::word_key`] only.
+    pub word_keys: &'a [(String, Vec<String>)],
 }
 
 /// Built-in flag colors (1-based flag number = bit + 1, Anki's numbering), English and Turkish
@@ -448,7 +461,153 @@ impl<'a> Resolver<'a> {
                 need_eq(t)?;
                 Ok(Filter::Pred(Pred::CardIds(ids::<CardId>(t)?)))
             }
-            _ => self.attribute_or_field(t, &k),
+            _ => {
+                // v1.4 keys yield to a classification of the same name.
+                if super::canonical::defs_named(self.cat.attributes, &k).is_empty() {
+                    if let Some(f) = self.lang_term(t, &k)? {
+                        return Ok(f);
+                    }
+                }
+                self.attribute_or_field(t, &k)
+            }
+        }
+    }
+
+    /// v1.4 language-learning keys ([`super::lang`]); `None` = not one of them.
+    fn lang_term(&self, t: &Term, k: &str) -> Result<Option<Filter>, QueryError> {
+        let value = t.value.trim();
+        let v = fold(value);
+        let bad = || {
+            err(
+                K::UnknownOption {
+                    key: t.key.clone().unwrap_or_default(),
+                    value: t.value.clone(),
+                },
+                t.value_span,
+            )
+        };
+        let pred = |p: Pred| Ok(Some(Filter::Pred(p)));
+        match k {
+            "durum" | "status" => {
+                need_eq(t)?;
+                let s = match v.as_str() {
+                    "yeni" | "new" => WordStatus::New,
+                    "ogreniyorum" | "learning" | "learn" => WordStatus::Learning,
+                    "biliyorum" | "known" => WordStatus::Known,
+                    "yoksay" | "yok_say" | "yok say" | "ignored" | "ignore" => WordStatus::Ignored,
+                    _ => return Err(bad()),
+                };
+                pred(Pred::WordStatus {
+                    statuses: vec![s],
+                    known_days: self.cat.known_interval_days,
+                })
+            }
+            "dil" | "lang" | "language" => {
+                need_eq(t)?;
+                if matches!(v.as_str(), "yok" | "none") {
+                    return pred(Pred::Language(None));
+                }
+                let l = crate::words::index_language(value);
+                if l.is_empty() {
+                    return Err(bad());
+                }
+                pred(Pred::Language(Some(l)))
+            }
+            "kelime" | "word" => {
+                need_eq(t)?;
+                if value.starts_with("re:") {
+                    return Ok(None);
+                }
+                let word = if Glob::new(value).is_wild() {
+                    Filter::Pred(Pred::WordKeyGlob(Glob::new(value).source()))
+                } else {
+                    let mut keys = vec![word_key(value)];
+                    if let Some((_, more)) = self.cat.word_keys.iter().find(|(w, _)| w == &t.value)
+                    {
+                        for m in more {
+                            if !keys.contains(m) {
+                                keys.push(m.clone());
+                            }
+                        }
+                    }
+                    keys.retain(|k| !k.is_empty());
+                    if keys.is_empty() {
+                        return Err(bad());
+                    }
+                    Filter::Pred(Pred::WordKeys(keys))
+                };
+                // A field of that name keeps matching as before (`kelime:app*`).
+                Ok(Some(Filter::or(vec![word, self.field_or_nothing(t, k)?])))
+            }
+            "karsilasma" | "seen" => pred(Pred::Encounters(norm_op(t.op), parse_number(t)?)),
+            "nereden" | "from" => {
+                need_eq(t)?;
+                pred(Pred::Origins(vec![
+                    NoteOrigin::from_query(&v).ok_or_else(bad)?
+                ]))
+            }
+            "kaynak" | "source" => {
+                need_eq(t)?;
+                if value.starts_with("re:") {
+                    return Ok(None);
+                }
+                let src = Filter::Pred(Pred::Source(Glob::new(value).source()));
+                Ok(Some(Filter::or(vec![src, self.field_or_nothing(t, k)?])))
+            }
+            "ses" | "audio" | "gorsel" | "image" => {
+                need_eq(t)?;
+                let kind = if matches!(k, "ses" | "audio") {
+                    MediaKind::Audio
+                } else {
+                    MediaKind::Image
+                };
+                let from = match v.as_str() {
+                    "var" | "yes" | "evet" | "*" | "any" => MediaFrom::Any,
+                    "yok" | "none" | "no" | "hayir" => {
+                        return Ok(Some(Filter::negate(Filter::Pred(Pred::Media(
+                            kind,
+                            MediaFrom::Any,
+                        )))))
+                    }
+                    "video" | "altyazi" | "subtitle" | "klip" | "clip" => MediaFrom::Video,
+                    "dosya" | "file" => MediaFrom::File,
+                    "tts" if kind == MediaKind::Audio => {
+                        let ids: Vec<_> = self
+                            .cat
+                            .notetypes
+                            .iter()
+                            .filter(|n| n.deleted_at.is_none() && speaks(n))
+                            .map(|n| n.id)
+                            .collect();
+                        return Ok(Some(if ids.is_empty() {
+                            Filter::Nothing
+                        } else {
+                            Filter::Pred(Pred::NoteTypes(ids))
+                        }));
+                    }
+                    _ => return Err(bad()),
+                };
+                pred(Pred::Media(kind, from))
+            }
+            "siklik" | "freq" | "frequency" => {
+                pred(Pred::FreqRank(norm_op(t.op), parse_number(t)?))
+            }
+            "cefr" | "level" | "seviye" | "duzey" => {
+                let pivot = cefr_ordinal(value).ok_or_else(bad)?;
+                let op = norm_op(t.op);
+                let bands: Vec<u8> = (1..=6).filter(|b| op.holds(*b, pivot)).collect();
+                pred(Pred::Band(bands))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// The field match of `key:value` when some field has that key or name, else nothing.
+    fn field_or_nothing(&self, t: &Term, k: &str) -> Result<Filter, QueryError> {
+        match self.attribute_or_field(t, k) {
+            Ok(f) => Ok(f),
+            Err(e) if matches!(e.kind, K::UnknownKey { .. }) => Ok(Filter::Nothing),
+            Err(e) => Err(e),
         }
     }
 
@@ -542,6 +701,13 @@ impl<'a> Resolver<'a> {
             Filter::Pred(Pred::Tags(ids))
         }
     }
+}
+
+/// Whether a note type speaks its cards (`{{tts:…}}` in a template).
+fn speaks(nt: &NoteType) -> bool {
+    nt.templates
+        .iter()
+        .any(|t| t.front.contains("tts:") || t.back.contains("tts:"))
 }
 
 /// Full `A::B` path of a live deck (stops at a missing or trashed ancestor).

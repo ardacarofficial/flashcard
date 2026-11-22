@@ -118,6 +118,10 @@ pub(crate) struct CatalogData {
     day_start: Timestamp,
     /// v1.4: decay of decks with personalised preset weights (`retrievability`).
     deck_decay: Vec<(fc_core::DeckId, f64)>,
+    /// v1.4: word index threshold (`durum:`/`status:`).
+    known_interval_days: u32,
+    /// v1.4: lemma keys of the query's `kelime:`/`word:` values ([`Self::lemmatize`]).
+    word_keys: Vec<(String, Vec<String>)>,
 }
 
 impl CatalogData {
@@ -132,7 +136,53 @@ impl CatalogData {
             now,
             day_start: crate::modules::study::today::today_start(reads, now)?,
             deck_decay: crate::modules::stats::facts::deck_decays(reads)?,
+            known_interval_days: crate::modules::words::threshold(reads)?,
+            word_keys: Vec::new(),
         })
+    }
+
+    /// v1.4: lemmatizes the `kelime:`/`word:` values of `text` (`went` → `go`) in every
+    /// language of the word index (the reading default when it is empty), with the same
+    /// lemmatizers and key rule the index uses. Unparsable text is left to the resolver.
+    pub(crate) fn lemmatize(&mut self, reads: &dyn Reads, text: &str) -> AppResult<()> {
+        let Ok(expr) = fc_core::query::parse_query(text) else {
+            return Ok(());
+        };
+        let values = fc_core::query::lang::word_values(&expr);
+        if values.is_empty() {
+            return Ok(());
+        }
+        let mut langs: Vec<String> = reads
+            .word_index_counts(self.known_interval_days)?
+            .into_iter()
+            .map(|(l, _, _)| l)
+            .filter(|l| !l.is_empty())
+            .collect();
+        langs.sort();
+        langs.dedup();
+        if langs.is_empty() {
+            langs.push(crate::modules::reading::language_or_default(reads, "")?);
+        }
+        for v in values {
+            if self.word_keys.iter().any(|(w, _)| *w == v) {
+                continue;
+            }
+            let mut keys: Vec<String> = Vec::new();
+            for l in &langs {
+                let lem = crate::modules::reading::lemmatizer_for(l);
+                let lemmas: Vec<String> = crate::modules::reading::words::tokens(&*lem, v.trim(), l)?
+                    .into_iter()
+                    .map(|t| t.lemma)
+                    .collect();
+                if let Some(k) = fc_core::reading::headword_key(&lemmas, l) {
+                    if !keys.contains(&k) {
+                        keys.push(k);
+                    }
+                }
+            }
+            self.word_keys.push((v, keys));
+        }
+        Ok(())
     }
 
     /// The borrowed view the resolver takes.
@@ -146,6 +196,8 @@ impl CatalogData {
             now: self.now,
             day_start: Some(self.day_start),
             deck_decay: &self.deck_decay,
+            known_interval_days: self.known_interval_days,
+            word_keys: &self.word_keys,
         }
     }
 }
@@ -175,7 +227,8 @@ fn flag_names(reads: &dyn Reads) -> AppResult<Vec<(String, u32)>> {
 
 /// Parses and resolves `text` against the current catalog.
 pub(crate) fn compile(reads: &dyn Reads, text: &str, now: Timestamp) -> AppResult<Filter> {
-    let data = CatalogData::load(reads, now)?;
+    let mut data = CatalogData::load(reads, now)?;
+    data.lemmatize(reads, text)?;
     compile_query(text, &data.catalog()).map_err(|e| query_error(&e))
 }
 
@@ -206,3 +259,6 @@ pub(crate) fn row(index: &DeckIndex, h: CardHit, now: Timestamp) -> CardRow {
         note_updated_at: h.note_updated_at,
     }
 }
+
+#[cfg(test)]
+mod lang_tests;

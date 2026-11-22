@@ -11,6 +11,7 @@ pub mod canonical;
 pub mod error;
 pub mod eval;
 pub mod filter;
+pub mod lang;
 pub mod parse;
 pub mod resolve;
 pub mod text;
@@ -18,6 +19,7 @@ pub mod text;
 pub use ast::{CmpOp, Expr, Span, Term};
 pub use error::{QueryError, QueryErrorKind};
 pub use filter::{AttrAlt, AttrTest, CardNum, Filter, Pred, TimeCol};
+pub use lang::{LangFacts, MediaFrom, MediaKind, NoteOrigin};
 pub use parse::parse_query;
 pub use resolve::{compile_query, resolve, Catalog};
 

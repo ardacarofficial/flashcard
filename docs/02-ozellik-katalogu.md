@@ -221,6 +221,31 @@ Etiketler serbesttir. Sınıflandırma ise **kullanıcının tanımladığı yap
 - Tam metin arama için SQLite **FTS5**, Türkçe karakter normalizasyonuyla.
 - Sorgu dili saf bir ayrıştırıcıdır: `parse(metin) → AST`, `compile(AST) → SQL`. Hata mesajları konumlu ve anlaşılırdır.
 
+### 9.1 Dil öğrenimi sorguları `[v1.4]`
+
+"Bu bölümde geçen, sesi olan, iki farklı sahnede gördüğüm ama hâlâ öğrenmekte olduğum ifadeler" **tek sorgudur**:
+`kaynak:"*S1E2" ses:video karşılaşma>=2 durum:öğreniyorum`. Aynı sorgu sayım (`search.cards` toplamı), liste
+(`search.ids`) ve "bu sorguyu çalış" (`study.start` custom + `query`) için aynı kartları verir; iki klibi olan bir not bir kez
+sayılır (koşullar küme üyeliğidir, birleştirme yapmaz). Her kavram bir kelime, TR ve EN anahtarı (`fc_core::query::lang`):
+
+| TR | EN | Anlamı |
+|---|---|---|
+| `durum:` | `status:` | kelime dizinindeki durum (§ docs/03 4.2): `yeni`/`new` (kartı yok), `öğreniyorum`/`learning`, `biliyorum`/`known`, `yoksay`/`ignored`; elle işaret kazanır, eşik `words.known_interval_days` |
+| `dil:` | `lang:` | kelimenin dili (`dil:en`); `dil:yok` = dili bilinmeyen |
+| `kelime:` | `word:` | lemma ya da ifade, çekimi anlar: `kelime:went` = `go`'nun notları (türetme ayrı kalır); `*` ile lemma üzerinde joker. Aynı adlı alan da eskisi gibi eşleşir (`kelime:app*`) |
+| `karşılaşma` | `seen` | aynı kelimenin not (sahne, örnek) sayısı: `karşılaşma>=2` |
+| `nereden:` | `from:` | `altyazı`/`subtitle`, `okuma`/`reading`, `anki`, `içe_aktarma`/`import`, `elle`/`manual` |
+| `kaynak:` | `source:` | kaynak başlığı (video + bölüm, okuma metni), site ya da video kimliği; joker (`kaynak:"The Night Train*"`) |
+| `ses:` | `audio:` | `var`/`yes`, `yok`/`none`, `video` (videodan kesilen ses), `dosya`/`file`, `tts` (not türü seslendirir) |
+| `görsel:` | `image:` | `var`/`yes`, `yok`/`none`, `video` (ekran görüntüsü), `dosya`/`file` |
+| `sıklık` | `freq` | kelimenin sıklık sırası (`sıklık<=2000`), kelime verisi paketi gerekir |
+| `cefr:` | `level:` | CEFR bandı, sıralı (`cefr>=B1`); paket gerekir |
+
+- Aynı adlı bir **sınıflandırma** her zaman kazanır (v1.4 öncesi kayıtlı sorgular anlamını korur; `seviye>=B1` sizin sınıflandırmanızsa o kalır).
+- Köken ve kaynak `note_origins` tablosundadır (migration `1460_language_queries`): Subtitle yakalaması ve okuma modu notu yaparken yazar; eski Subtitle/okuma notları migration'da `source` alanından doldurulur, eski içe aktarmalar "elle" sayılır. "Videodan" = Subtitle eklentisinin yüklediği dosya (`subtitle-…` adı).
+- `sıklık`/`cefr` isteğe bağlı `word_frequency(language, key, rank, band)` tablosunu (ya da görünümünü) okur (kelime verisi paketi, iz B2); yoksa hiçbir şeyle eşleşmez (`-sıklık<100` hepsiyle).
+- Hız: 100 000 notta her koşul dizinlidir (`word_index_notes_key_only`, `word_index_notes_key`, `note_origins_origin`, `media_mime`); ölçüm ve plan `fc-storage` testi `language_predicates_at_100k`.
+
 ## 10. 🛠️ Kart yönetimi
 
 `[v0.4]` · 🧱 Komutlar, sorgu dili, olay kaydı

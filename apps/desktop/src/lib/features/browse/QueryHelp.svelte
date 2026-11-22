@@ -19,6 +19,11 @@
     { q: 'browse.syntax.not_q', d: 'browse.syntax.not_d' },
     { q: 'browse.syntax.or_q', d: 'browse.syntax.or_d' },
     { q: 'browse.syntax.phrase_q', d: 'browse.syntax.phrase_d' },
+    // v1.4 language-learning keys (docs/02 §9.1)
+    { q: 'browse.syntax.word_q', d: 'browse.syntax.word_d' },
+    { q: 'browse.syntax.seen_q', d: 'browse.syntax.seen_d' },
+    { q: 'browse.syntax.from_q', d: 'browse.syntax.from_d' },
+    { q: 'browse.syntax.media_q', d: 'browse.syntax.media_d' },
   ];
 </script>
 

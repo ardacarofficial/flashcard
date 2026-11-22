@@ -81,6 +81,8 @@ struct Row {
     tags: Vec<TagId>,
     values: Vec<(AttributeDefId, EntityRef, AttributeValue)>,
     text: String,
+    /// v1.4 language facts (filled by [`lang_world`]).
+    lang: fc_core::query::LangFacts,
 }
 
 struct World {
@@ -210,6 +212,7 @@ fn world(n_notes: u128, seed: u64) -> World {
                 tags: tag_ids,
                 values,
                 text,
+                lang: fc_core::query::LangFacts::default(),
             });
         }
         // One trashed note: never matches.
@@ -240,6 +243,8 @@ impl World {
             now: NOW,
             day_start: None,
             deck_decay: &[],
+            known_interval_days: 21,
+            word_keys: &[],
         };
         compile_query(q, &cat).unwrap_or_else(|e| panic!("{q}: {e}"))
     }
@@ -267,6 +272,7 @@ impl World {
                 tag_ids: &r.tags,
                 attrs: &facts,
                 search_text: &r.text,
+                lang: &r.lang,
             };
             if matches(f, &cf, NOW) {
                 out.push((r.card.created_at, r.card.id));
@@ -862,4 +868,367 @@ fn migration_1070_indexes_the_due_sort() {
         .map(Result::unwrap)
         .collect();
     assert!(plan.iter().all(|p| !p.contains("TEMP B-TREE")), "{plan:?}");
+}
+
+// ------------------------------------------------------------------ v1.4 language predicates
+
+const LANG_KEYS: &[&str] = &["go", "run", "pick up", "house", "actor"];
+const SOURCES: &[&str] = &["The Night Train · S1E2", "The Night Train · S1E3", "Book"];
+
+/// [`world`] plus random language data written straight into the tables the language
+/// predicates read (`word_index_notes`, `word_index`, `note_origins`, `media`/`note_media`,
+/// and the optional word-data table `word_frequency` when `with_freq`), mirrored in each row's
+/// [`fc_core::query::LangFacts`].
+fn lang_world(n_notes: u128, seed: u64, with_freq: bool) -> World {
+    use fc_core::query::{MediaKind, NoteOrigin};
+    use fc_core::reading::WordMark;
+    use fc_core::words::WordEvidence;
+    let mut w = world(n_notes, seed);
+    let mut rng = SplitMix64::new(seed ^ 0x5eed);
+    let conn = w.fx.raw();
+    conn.execute_batch("BEGIN").unwrap();
+    if with_freq {
+        conn.execute_batch(
+            "CREATE TABLE word_frequency (language TEXT NOT NULL, key TEXT NOT NULL,
+               rank INTEGER NOT NULL, band TEXT, PRIMARY KEY (language, key)) STRICT;
+             INSERT INTO word_frequency VALUES ('en', 'go', 30, 'A1'), ('en', 'run', 400, 'A2'),
+               ('en', 'pick up', 2500, 'B1'), ('de', 'house', 900, 'A1'), ('en', 'house', 800, 'a2');",
+        )
+        .unwrap();
+    }
+    let freq = |l: &str, k: &str| -> (Option<u32>, Option<u8>) {
+        if !with_freq {
+            return (None, None);
+        }
+        match (l, k) {
+            ("en", "go") => (Some(30), Some(1)),
+            ("en", "run") => (Some(400), Some(2)),
+            ("en", "pick up") => (Some(2500), Some(3)),
+            ("de", "house") => (Some(900), Some(1)),
+            ("en", "house") => (Some(800), Some(2)),
+            _ => (None, None),
+        }
+    };
+    let media: Vec<(String, &str, Option<&str>, MediaKind, bool)> = (0..6u8)
+        .map(|i| {
+            let (mime, name, kind, video) = match i {
+                0 => (
+                    "audio/mpeg",
+                    Some("subtitle-audio-1.mp3"),
+                    MediaKind::Audio,
+                    true,
+                ),
+                1 => ("audio/ogg", Some("voice.ogg"), MediaKind::Audio, false),
+                2 => ("audio/mpeg", None, MediaKind::Audio, false),
+                3 => (
+                    "image/jpeg",
+                    Some("SUBTITLE-screenshot-1.jpg"),
+                    MediaKind::Image,
+                    true,
+                ),
+                4 => ("image/png", Some("pic.png"), MediaKind::Image, false),
+                _ => (
+                    "video/mp4",
+                    Some("subtitle-clip.mp4"),
+                    MediaKind::Audio,
+                    false,
+                ),
+            };
+            (
+                format!("{:064x}", u128::from(i) + 1),
+                mime,
+                name,
+                kind,
+                video,
+            )
+        })
+        .collect();
+    for (hash, mime, name, _, _) in &media {
+        conn.execute(
+            "INSERT INTO media (hash, mime, size, original_name, ref_count, created_at)
+             VALUES (?1, ?2, 1, ?3, 0, 0)",
+            rusqlite::params![hash, mime, name],
+        )
+        .unwrap();
+    }
+    let mut notes_of: std::collections::BTreeMap<(String, String), Vec<usize>> = Default::default();
+    for (i, r) in w.rows.iter_mut().enumerate() {
+        let nid = r.note.id.to_string();
+        if rng.next_u64() % 5 != 0 {
+            let lang = *pick(&mut rng, &["en", "en", "de", ""]);
+            let key = *pick(&mut rng, LANG_KEYS);
+            conn.execute(
+                "INSERT INTO word_index_notes (note_id, language, key, cards, max_interval_days,
+                   last_review, created_at) VALUES (?1, ?2, ?3, 1, NULL, NULL, 0)",
+                rusqlite::params![nid, lang, key],
+            )
+            .unwrap();
+            r.lang.language = lang.to_owned();
+            r.lang.key = Some(key.to_owned());
+            if !lang.is_empty() {
+                notes_of
+                    .entry((lang.to_owned(), key.to_owned()))
+                    .or_default()
+                    .push(i);
+            }
+            (r.lang.rank, r.lang.band) = freq(lang, key);
+        }
+        match rng.next_u64() % 5 {
+            0 | 1 => {}
+            k => {
+                let origin =
+                    [NoteOrigin::Subtitle, NoteOrigin::Reading, NoteOrigin::Anki][k as usize - 2];
+                let source = if origin == NoteOrigin::Anki {
+                    ""
+                } else {
+                    *pick(&mut rng, SOURCES)
+                };
+                let (site, video) = if origin == NoteOrigin::Subtitle {
+                    ("youtube", "dQw4w9WgXcQ")
+                } else {
+                    ("", "")
+                };
+                conn.execute(
+                    "INSERT INTO note_origins (note_id, origin, source, site, video_id, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, 0)",
+                    rusqlite::params![nid, origin.as_str(), source, site, video],
+                )
+                .unwrap();
+                r.lang.origin = origin;
+                r.lang.source = [source, site, video]
+                    .into_iter()
+                    .filter(|x| !x.is_empty())
+                    .map(str::to_owned)
+                    .collect();
+            }
+        }
+        // Up to two media files (two from the video = one match, never two).
+        for _ in 0..(rng.next_u64() % 3) {
+            let (hash, _, _, kind, video) = pick(&mut rng, &media);
+            let n = conn
+                .execute(
+                    "INSERT OR IGNORE INTO note_media (note_id, hash) VALUES (?1, ?2)",
+                    rusqlite::params![nid, hash],
+                )
+                .unwrap();
+            if n > 0 && !hash.ends_with('6') {
+                r.lang.media.push((*kind, *video));
+            }
+        }
+    }
+    // The word rows: aggregates of their notes, a random review interval and mark.
+    for ((lang, key), idx) in &notes_of {
+        let max_interval = match rng.next_u64() % 3 {
+            0 => None,
+            1 => Some(5u32),
+            _ => Some(40),
+        };
+        let mark = match rng.next_u64() % 6 {
+            0 => Some(WordMark::Known),
+            1 => Some(WordMark::Ignored),
+            _ => None,
+        };
+        let cards = if rng.next_u64() % 7 == 0 {
+            0
+        } else {
+            idx.len() as u32
+        };
+        conn.execute(
+            "INSERT INTO word_index (language, key, mark, mark_at, notes, cards,
+               max_interval_days, last_review, first_seen) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, 0)",
+            rusqlite::params![
+                lang,
+                key,
+                mark.map(|m| m.as_str()),
+                mark.map(|_| 1i64),
+                idx.len() as i64,
+                i64::from(cards),
+                max_interval.map(i64::from)
+            ],
+        )
+        .unwrap();
+        let ev = WordEvidence {
+            mark: mark.map(|m| (m, Timestamp(1))),
+            notes: idx.len() as u32,
+            cards,
+            max_interval_days: max_interval,
+            last_review: None,
+            first_seen: Some(Timestamp(0)),
+        };
+        for i in idx {
+            w.rows[*i].lang.word = Some(ev.clone());
+        }
+    }
+    conn.execute_batch("COMMIT").unwrap();
+    w
+}
+
+/// Atoms of the v1.4 language keys (TR and EN spellings).
+const LANG_ATOMS: &[&str] = &[
+    "durum:yeni",
+    "status:learning",
+    "durum:öğreniyorum",
+    "durum:biliyorum",
+    "status:ignored",
+    "durum:\"yok say\"",
+    "dil:en",
+    "lang:de",
+    "dil:yok",
+    "kelime:go",
+    "word:\"pick  up\"",
+    "kelime:ho*",
+    "kelime:zzz",
+    "karşılaşma>=2",
+    "seen<3",
+    "karsilasma=1",
+    "nereden:altyazı",
+    "from:reading",
+    "nereden:anki",
+    "from:manual",
+    "nereden:içe_aktarma",
+    "kaynak:\"The Night Train*\"",
+    "source:\"*s1e2\"",
+    "kaynak:youtube",
+    "kaynak:dQw4w9WgXcQ",
+    "ses:var",
+    "audio:video",
+    "ses:dosya",
+    "ses:yok",
+    "görsel:var",
+    "image:video",
+    "gorsel:file",
+    "sıklık<=500",
+    "freq>1000",
+    "cefr:A1",
+    "level>=A2",
+    "cefr<=a2",
+    // the owner's example, and combinations
+    "kaynak:\"*S1E2\" ses:video karşılaşma>=2 durum:öğreniyorum",
+    "-durum:biliyorum dil:en",
+    "(nereden:altyazı OR nereden:okuma) -görsel:var",
+    "kelime:go OR kelime:run -ses:var",
+];
+
+#[test]
+fn language_atoms_agree_with_the_reference_evaluator() {
+    for with_freq in [true, false] {
+        let w = lang_world(400, 11, with_freq);
+        let mut non_trivial = 0;
+        for q in LANG_ATOMS {
+            let f = w.filter(q);
+            let (exp, act) = (w.expected(&f), w.actual(&f));
+            assert_eq!(act, exp, "query {q} (word data: {with_freq}): {f:?}");
+            if !exp.is_empty() && exp.len() < w.rows.len() {
+                non_trivial += 1;
+            }
+            // Correlated probes (automation) give the same answer.
+            let among: Vec<CardId> = w.rows.iter().map(|r| r.card.id).collect();
+            let probed =
+                w.fx.read(|r| r.search_card_ids_among(&f, NOW, &among).unwrap());
+            assert_eq!(probed, exp, "among: {q}");
+            // Count = list (no note counted twice: two media rows, one hit).
+            let page = w.fx.read(|r| {
+                r.search_cards(&CardSearch {
+                    filter: f.clone(),
+                    now: NOW,
+                    sort: CardSort::SortField,
+                    descending: false,
+                    notes_only: false,
+                    offset: 0,
+                    limit: 10_000,
+                })
+                .unwrap()
+            });
+            assert_eq!(page.total as usize, exp.len(), "count: {q}");
+            assert_eq!(page.hits.len(), exp.len(), "list: {q}");
+        }
+        let floor = if with_freq {
+            LANG_ATOMS.len() * 3 / 4
+        } else {
+            LANG_ATOMS.len() * 3 / 5
+        };
+        assert!(
+            non_trivial > floor,
+            "only {non_trivial} language atoms discriminate"
+        );
+    }
+}
+
+/// docs/02 §9.1: the language predicates at 100k notes — prints each query's time and its
+/// plan, asserts the plans use the indexes (no full scan of `word_index_notes`/`note_origins`
+/// /`media` driven per card) and a generous bound. Release:
+/// `cargo test -p fc-storage --release -- --nocapture language_predicates_at_100k`.
+#[test]
+fn language_predicates_at_100k() {
+    let w = lang_world(100_000, 3, true);
+    let queries = [
+        "durum:öğreniyorum",
+        "dil:en kelime:go",
+        "karşılaşma>=2",
+        "nereden:altyazı",
+        "kaynak:\"The Night Train · S1E2\"",
+        "ses:video",
+        "görsel:var",
+        "sıklık<=500",
+        "kaynak:\"*S1E2\" ses:video karşılaşma>=2 durum:öğreniyorum",
+    ];
+    let mut worst = 0u128;
+    for q in queries {
+        let f = w.filter(q);
+        let mut best = u128::MAX;
+        let mut total = 0;
+        for _ in 0..3 {
+            let t = Instant::now();
+            let p = w.fx.read(|r| {
+                r.search_cards(&CardSearch {
+                    filter: f.clone(),
+                    now: NOW,
+                    sort: CardSort::SortField,
+                    descending: false,
+                    notes_only: false,
+                    offset: 0,
+                    limit: 50,
+                })
+                .unwrap()
+            });
+            best = best.min(t.elapsed().as_micros());
+            total = p.total;
+        }
+        worst = worst.max(best);
+        println!("{:>8.2} ms  {total:>6} hits  {q}", best as f64 / 1000.0);
+    }
+    // Plans: every language table is reached through an index or once as a materialized set.
+    let conn = w.fx.raw();
+    crate::sqlite::search::register_functions(&conn).unwrap();
+    for (sql, must) in [
+        (
+            "EXPLAIN QUERY PLAN SELECT note_id FROM word_index_notes WHERE key IN ('go')",
+            "word_index_notes_key_only",
+        ),
+        (
+            "EXPLAIN QUERY PLAN SELECT note_id FROM word_index_notes WHERE language = 'en'",
+            "word_index_notes_key",
+        ),
+        (
+            "EXPLAIN QUERY PLAN SELECT nm.note_id FROM media m JOIN note_media nm ON nm.hash = m.hash
+              WHERE m.mime >= 'audio/' AND m.mime < 'audio0'",
+            "media_mime",
+        ),
+        (
+            "EXPLAIN QUERY PLAN SELECT note_id FROM note_origins WHERE origin IN ('subtitle')",
+            "note_origins_origin",
+        ),
+    ] {
+        let plan: Vec<String> = conn
+            .prepare(sql)
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(3))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        println!("{}\n  {}", sql.split_whitespace().collect::<Vec<_>>().join(" "), plan.join("\n  "));
+        assert!(plan.iter().any(|p| p.contains(must)), "{sql}: {plan:?}");
+    }
+    // Debug builds on a shared 4-core machine: generous (the docs/04 budget is 100 ms).
+    assert!(worst < 1_500_000, "slowest language query took {worst} µs");
 }

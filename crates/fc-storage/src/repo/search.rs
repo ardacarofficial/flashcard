@@ -8,6 +8,23 @@ use super::*;
 use fc_core::query::{Filter, SavedQuery};
 use fc_core::SavedQueryId;
 
+/// One `note_origins` row (v1.4, migration 1460): where a note came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoteOriginRecord {
+    /// The note.
+    pub note_id: NoteId,
+    /// Origin (never [`fc_core::query::NoteOrigin::Manual`]: that is the absence of a row).
+    pub origin: fc_core::query::NoteOrigin,
+    /// Source title (video title with its episode, reading text title); may be empty.
+    pub source: String,
+    /// Site (`youtube`, `netflix`); may be empty.
+    pub site: String,
+    /// Video id; may be empty.
+    pub video_id: String,
+    /// When it was recorded.
+    pub created_at: Timestamp,
+}
+
 /// Sort column of a card search.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CardSort {
@@ -157,6 +174,8 @@ pub trait SearchRead {
     fn card_reviews(&self, card: CardId) -> StorageResult<Vec<ReviewEntry>>;
     /// Database check.
     fn integrity_report(&self) -> StorageResult<IntegrityReport>;
+    /// v1.4: where these notes came from (rows only for notes that have one).
+    fn note_origins_of(&self, notes: &[NoteId]) -> StorageResult<Vec<NoteOriginRecord>>;
 }
 
 /// Search writes.
@@ -173,4 +192,7 @@ pub trait SearchWrite: SearchRead {
     /// decks nothing refers to any more (no notes, cards, child decks or classification
     /// scopes), and the classification values left without an entity.
     fn purge_trash(&mut self, before: Timestamp) -> StorageResult<PurgeCounts>;
+    /// v1.4: records (or replaces) where a note came from. Derived metadata like the word
+    /// index's note language: written by the producer next to the note it makes.
+    fn set_note_origin(&mut self, origin: &NoteOriginRecord) -> StorageResult<()>;
 }

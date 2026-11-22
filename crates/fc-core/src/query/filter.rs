@@ -2,9 +2,11 @@
 //! storage compiles to SQL (`fc-storage`) and what [`super::eval`] evaluates in memory.
 
 use super::ast::CmpOp;
+use super::lang::{MediaFrom, MediaKind, NoteOrigin};
 use crate::attribute::AttributeTarget;
 use crate::card::CardState;
 use crate::id::{AttributeDefId, AttributeOptionId, CardId, DeckId, NoteId, NoteTypeId, TagId};
+use crate::reading::WordStatus;
 use crate::time::Timestamp;
 
 /// A boolean filter over (card, note) pairs. Trashed cards/notes are excluded by the backends
@@ -158,6 +160,33 @@ pub enum Pred {
     NoteIds(Vec<NoteId>),
     /// Cards by id.
     CardIds(Vec<CardId>),
+    /// v1.4 (docs/02 §9.1, [`super::lang`]): the note's word has one of these statuses in the
+    /// word index (a manual mark wins; else a review interval ≥ `known_days` = known, any card
+    /// = learning, none = new). Notes outside the index never match.
+    WordStatus {
+        /// Statuses.
+        statuses: Vec<WordStatus>,
+        /// "Known by maturity" threshold (setting `words.known_interval_days`).
+        known_days: u32,
+    },
+    /// The note's index language is this primary subtag; `None` = no language known.
+    Language(Option<String>),
+    /// The note's word key is one of these (lemmas joined by a space).
+    WordKeys(Vec<String>),
+    /// The note's word key matches this glob ([`super::text::Glob::source`]).
+    WordKeyGlob(String),
+    /// Number of notes of the note's word (scenes, examples) compared with a number.
+    Encounters(CmpOp, f64),
+    /// The note came from one of these.
+    Origins(Vec<NoteOrigin>),
+    /// The note's source title, site or video id matches this glob.
+    Source(String),
+    /// The note references a stored media file of this kind and origin.
+    Media(MediaKind, MediaFrom),
+    /// Frequency rank of the note's word (optional word-data pack; no data = no match).
+    FreqRank(CmpOp, f64),
+    /// CEFR band ordinal (1–6) of the note's word is one of these (optional word-data pack).
+    Band(Vec<u8>),
 }
 
 impl Filter {

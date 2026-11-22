@@ -8,8 +8,8 @@ use fc_core::NoteId;
 /// `word_index`, `word_index_notes`, `word_note_language`.
 #[derive(Debug, Clone, Default)]
 pub struct WordsState {
-    notes: BTreeMap<NoteId, WordIndexNoteRecord>,
-    words: BTreeMap<(String, String), WordIndexRecord>,
+    pub(super) notes: BTreeMap<NoteId, WordIndexNoteRecord>,
+    pub(super) words: BTreeMap<(String, String), WordIndexRecord>,
     languages: BTreeMap<NoteId, String>,
 }
 
