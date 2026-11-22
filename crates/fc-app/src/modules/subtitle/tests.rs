@@ -48,6 +48,7 @@ suite!(
     a_capture_is_one_undo_step,
     a_word_whose_card_was_deleted_comes_back,
     restoring_a_backup_revokes_every_key,
+    restoring_a_backup_brings_no_capture_diagnostics,
 );
 
 /// A JPEG and a WAV header (what the media sniffer recognises).
@@ -640,4 +641,24 @@ pub(super) fn restoring_a_backup_revokes_every_key(f: Factory) {
         .rows
         .iter()
         .all(|r| matches!(r[col], fc_storage::repo::SqlValue::Integer(_))));
+}
+
+/// v1.4 A6: the capture diagnostics (`subtitle_capture_log`) are not user data and never come
+/// back with a restore (docs/06 §5.1): the restored profile's `subtitle.captures.recent`
+/// starts empty instead of listing attempts made against another collection.
+pub(super) fn restoring_a_backup_brings_no_capture_diagnostics(f: Factory) {
+    let (t, key) = setup(f);
+    capture(&t.app, &key, &example(1, "key", LINE)).unwrap();
+    let Ok(mut dump) = t.store.read().unwrap().dump_collection() else {
+        return;
+    };
+    let log = |d: &fc_storage::repo::CollectionDump| {
+        d.tables
+            .iter()
+            .find(|x| x.name == "subtitle_capture_log")
+            .map(|x| x.rows.len())
+    };
+    assert_eq!(log(&dump), Some(1), "the attempt is in the collection");
+    forget_keys(&mut dump);
+    assert_eq!(log(&dump), Some(0));
 }

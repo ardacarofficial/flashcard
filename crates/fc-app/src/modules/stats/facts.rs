@@ -14,7 +14,6 @@ use fc_core::query::filter::{Filter, Pred};
 use fc_core::settings::SettingScope;
 use fc_core::stats::{aggregate_days, merge_days, CardFact, DayAggregate, ReviewFact};
 use fc_core::{CardId, DeckId, Timestamp};
-use fc_providers::strategy::SchedulerParams;
 use fc_storage::repo::{ReviewLogRecord, StatsCacheRecord, StudyCardFilter, REVIEW_MODE_IMPORTED};
 use fc_storage::{Reads, Writes};
 use fc_study::day::{StudyDay, DEFAULT_ROLLOVER_HOUR, MAX_TZ_OFFSET_MINS};
@@ -155,25 +154,10 @@ pub(crate) fn review_facts(rows: &[(i64, ReviewLogRecord)], cal: StudyDay) -> Ve
     rows.iter().map(|(_, r)| review_fact(r, cal)).collect()
 }
 
-/// Scheduler parameters of a preset config (FSRS weights in `extra.weights`).
-pub(crate) fn params_of(p: &PresetConfig) -> SchedulerParams {
-    SchedulerParams {
-        desired_retention: p.desired_retention,
-        maximum_interval_days: p.maximum_interval_days,
-        learning_steps_mins: p.learning_steps_mins.clone(),
-        relearning_steps_mins: p.relearning_steps_mins.clone(),
-        extra: if p.fsrs_weights.is_empty() {
-            serde_json::Value::Null
-        } else {
-            serde_json::json!({ "weights": p.fsrs_weights })
-        },
-    }
-}
-
-/// Forgetting-curve decay of a preset (FSRS-6 `w20` of its weights; the default decay for
-/// default or unusable weights).
+/// Forgetting-curve decay of a preset: [`fc_core::recall::decay_of_weights`] (FSRS-6 `w20`,
+/// FSRS-4.5/5 their fixed 0.5, the default decay for default or unusable weights).
 pub(crate) fn decay_of(p: &PresetConfig) -> f64 {
-    fc_study::scheduler::decay(&params_of(p)).unwrap_or(fc_core::recall::DEFAULT_DECAY)
+    fc_core::recall::decay_of_weights(&p.fsrs_weights)
 }
 
 /// **The** recall probability of `card` at `now` (v1.4, one truth): the card's preset decay,
@@ -495,7 +479,7 @@ mod recall_tests {
     use fc_api::v1::notes::CreateNote;
     use fc_api::v1::presets::{AssignPreset, CreatePreset};
     use fc_api::v1::search::SearchCards;
-    use fc_api::v1::study::CardHistoryRequest;
+    use fc_api::v1::study::{CardHistoryRequest, SessionRef, StartSession, StudyKind};
     use fc_core::card::CardState;
     use fc_core::notetype::builtin;
     use fc_core::preset::PresetConfig;
@@ -546,7 +530,7 @@ mod recall_tests {
         c.scheduling.difficulty = Some(5.0);
         c.scheduling.reps = 3;
         c.scheduling.last_review = Some(last);
-        c.scheduling.due = Some(last.plus_days(10));
+        c.scheduling.due = Some(last.plus_days(3));
         tx.update_card(&c).unwrap();
         tx.commit().unwrap();
     }
@@ -570,48 +554,57 @@ mod recall_tests {
     }
 
     fn agree(store: Arc<dyn Store>) {
+        use fc_core::preset::ReviewOrder;
+        use fc_core::recall::{retrievability, DEFAULT_DECAY};
         // 15:00 UTC on Jan 11; the study day (UTC, rollover 04:00) began at 04:00.
         let now = Timestamp(T0 + 10 * MILLIS_PER_DAY + 15 * HOUR);
         let t = TestApp::with_clock(store, Arc::new(FixedClock::new(now)));
         let mine = deck(&t, "Mine");
-        let plain = deck(&t, "Plain");
+        let plain = deck(&t, "Mine::Plain");
         let mut weights: Vec<f64> = fc_study::scheduler::FSRS6_DEFAULT_WEIGHTS
             .iter()
             .map(|w| f64::from(*w))
             .collect();
         weights[20] = DECAY;
-        let p = t.ok::<PresetsCreate>(CreatePreset {
-            name: "Personal".into(),
-            config: Some(PresetConfig {
-                fsrs_weights: weights,
-                ..PresetConfig::default()
-            }),
-        });
-        t.ok::<PresetsAssign>(AssignPreset {
-            deck_ids: vec![mine],
-            preset_id: Some(p.id),
-        });
+        // Both presets study "lowest recall first"; only Mine has personalised weights.
+        let preset = |name: &str, w: Vec<f64>| {
+            t.ok::<PresetsCreate>(CreatePreset {
+                name: name.into(),
+                config: Some(PresetConfig {
+                    fsrs_weights: w,
+                    review_order: ReviewOrder::Retrievability,
+                    ..PresetConfig::default()
+                }),
+            })
+            .id
+        };
+        let (p, std) = (preset("Personal", weights.clone()), preset("Std", vec![]));
+        for (d, id) in [(mine, p), (plain, std)] {
+            t.ok::<PresetsAssign>(AssignPreset {
+                deck_ids: vec![d],
+                preset_id: Some(id),
+            });
+        }
         // Reviewed at 03:00 on Jan 3 = the study day of Jan 2: 9 study days ago (8.5 × 24 h).
         let last = Timestamp(T0 + 2 * MILLIS_PER_DAY + 3 * HOUR);
         let (a, b, fresh) = (card(&t, mine, "a"), card(&t, plain, "b"), card(&t, plain, "c"));
-        reviewed(&t, a, 8.0, last);
-        reviewed(&t, b, 8.0, last);
+        reviewed(&t, a, 3.0, last);
+        reviewed(&t, b, 2.5, last);
 
         let info = |id| t.ok::<BrowseCardInfo>(CardInfoRef { card_id: id }).retrievability;
         let history = |id| t.ok::<StudyCardHistory>(CardHistoryRequest { card_id: id }).retrievability;
         let (ra, rb) = (info(a).unwrap(), info(b).unwrap());
         // The truth: the preset's decay over whole study days.
-        assert_eq!(ra, fc_core::recall::retrievability(8.0, 9.0, DECAY).unwrap());
-        assert_eq!(
-            rb,
-            fc_core::recall::retrievability(8.0, 9.0, fc_core::recall::DEFAULT_DECAY).unwrap()
-        );
-        assert!(ra < rb && ra < 0.9 && ra > 0.85, "{ra} {rb}");
+        assert_eq!(ra, retrievability(3.0, 9.0, DECAY).unwrap());
+        assert_eq!(rb, retrievability(2.5, 9.0, DEFAULT_DECAY).unwrap());
+        // Personalised weights decide the order: on the default curve `a` would be stronger.
+        let ra_default = retrievability(3.0, 9.0, DEFAULT_DECAY).unwrap();
+        assert!(ra < rb && rb < ra_default, "{ra} {rb} {ra_default}");
         assert_eq!(info(fresh), None);
         // Study history panel.
         assert_eq!(history(a), Some(ra));
         assert_eq!(history(b), Some(rb));
-        // Statistics.
+        // Statistics and the workload forecast's day 0.
         let reads = t.store.read().unwrap();
         let cards: Vec<_> = [a, b, fresh]
             .iter()
@@ -621,6 +614,16 @@ mod recall_tests {
         let facts = card_facts(&*reads, &cards, cal, now).unwrap();
         let stats: Vec<Option<f64>> = facts.iter().map(|f| f.retrievability).collect();
         assert_eq!(stats, vec![Some(ra), Some(rb), None]);
+        let today = cal.index(now);
+        let day0: Vec<Option<f64>> = cards
+            .iter()
+            .zip([weights.clone(), vec![], vec![]])
+            .map(|(c, w)| {
+                let fc = crate::modules::planning::forecast_card(c, cal, today);
+                fc_study::planning::forecast::Fsrs::new(&w).recall_today(&fc)
+            })
+            .collect();
+        assert_eq!(day0, vec![Some(ra), Some(rb), None]);
         drop(reads);
         // The query, right at each card's own value.
         let eps = 1e-12;
@@ -630,12 +633,30 @@ mod recall_tests {
         assert_eq!(hits(&t, &format!("retrievability<{}", rb + eps)).len(), 2);
         assert_eq!(hits(&t, &format!("-retrievability<{}", ra + eps)).len(), 2);
         assert_eq!(hits(&t, &format!("retrievability<{} deck:Mine", rb)), vec![a]);
-        // Without the personalised preset, both cards fall back to the default curve.
+        // "Lowest recall first" serves the card card info calls weakest.
+        let session = t.ok::<StudyStart>(StartSession {
+            kind: StudyKind::Normal,
+            mode: None,
+            deck_id: Some(mine),
+            include_subdecks: Some(true),
+            filter: None,
+            from_session: None,
+            new_limit: Some(0),
+            order: None,
+            tz_offset_mins: Some(0),
+            modes: None,
+            scope: None,
+        });
+        assert_eq!(session.current.unwrap().card_id, a);
+        t.ok::<StudyEnd>(SessionRef {
+            session_id: session.id,
+        });
+        // Without the personalised preset, `a` falls back to the default curve.
         t.ok::<PresetsAssign>(AssignPreset {
             deck_ids: vec![mine],
             preset_id: None,
         });
-        assert_eq!(info(a), Some(rb));
+        assert_eq!(info(a), Some(ra_default));
         assert_eq!(hits(&t, &format!("retrievability<{}", ra + eps)), Vec::<CardId>::new());
     }
 

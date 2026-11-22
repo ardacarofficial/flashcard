@@ -12,6 +12,7 @@
 use fc_core::card::{Card, CardState, SchedulingState};
 use fc_core::preset::{NewCardOrder, ReviewOrder};
 use fc_core::rng::Rng;
+use fc_core::time::MILLIS_PER_DAY;
 use fc_core::{CardId, NoteId, Timestamp};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -145,7 +146,13 @@ pub struct BuildOptions<'a> {
     pub bury_siblings: bool,
     /// Randomness for [`Order::Random`].
     pub rng: &'a mut dyn Rng,
+    /// v1.4: forgetting-curve decay of a card's preset for [`ReviewOrder::Retrievability`]
+    /// (`fc_core::recall::decay_of_weights`); `None` = the default decay for every card.
+    pub decay_of: Option<&'a dyn Fn(&Card) -> f64>,
 }
+
+/// Recall order key of a review: (whole-study-day recall, hour-based recall on the same curve).
+type RecallKey = (f64, f64);
 
 fn shuffle<T>(items: &mut [T], rng: &mut dyn Rng) {
     for i in (1..items.len()).rev() {
@@ -219,20 +226,41 @@ pub fn build_queue(
                     shuffle(&mut reviews, opts.rng);
                 }
                 ReviewOrder::Retrievability => {
-                    // Recall probability falls monotonically with elapsed time / stability
-                    // (FSRS forgetting curve), so the largest ratio is the least likely
-                    // recalled. Cards without a stability go last.
-                    let overdue = |s: &SchedulingState| match (s.stability, s.last_review) {
-                        (Some(st), Some(last)) if st > 0.0 => {
-                            (opts.now.0 - last.0).max(0) as f64 / st
-                        }
-                        _ => f64::NEG_INFINITY,
+                    // v1.4: lowest recall first by the one truth card info shows
+                    // (`fc_core::recall`: the preset's decay, whole study days). Ties — cards
+                    // with the same whole-day age — go by the same curve over the real hours
+                    // since the review (the one reviewed earlier has had longer to fade);
+                    // card info cannot tell them apart, the queue still needs an order.
+                    // Cards without a recall probability go last.
+                    let day_start = opts.day_end.plus_millis(-MILLIS_PER_DAY);
+                    let now = opts.now;
+                    let decay_of = opts.decay_of;
+                    let recall = |c: &Card, s: &SchedulingState| -> RecallKey {
+                        let decay = decay_of.map_or(fc_core::recall::DEFAULT_DECAY, |f| f(c));
+                        let truth = fc_core::recall::card_retrievability(s, day_start, decay);
+                        let fine = match (s.stability, s.last_review) {
+                            (Some(st), Some(last)) => fc_core::recall::retrievability(
+                                st,
+                                (now.0 - last.0) as f64 / MILLIS_PER_DAY as f64,
+                                decay,
+                            ),
+                            _ => None,
+                        };
+                        (
+                            truth.unwrap_or(f64::INFINITY),
+                            fine.unwrap_or(f64::INFINITY),
+                        )
                     };
-                    reviews.sort_by(|(a, sa), (b, sb)| {
-                        overdue(sb)
-                            .total_cmp(&overdue(sa))
+                    let mut keyed: Vec<(RecallKey, (&Card, SchedulingState))> = reviews
+                        .drain(..)
+                        .map(|(c, s)| (recall(c, &s), (c, s)))
+                        .collect();
+                    keyed.sort_by(|(ra, (a, _)), (rb, (b, _))| {
+                        ra.0.total_cmp(&rb.0)
+                            .then_with(|| ra.1.total_cmp(&rb.1))
                             .then_with(|| key(a).cmp(&key(b)))
                     });
+                    reviews.extend(keyed.into_iter().map(|(_, cs)| cs));
                 }
             }
             new.sort_by_key(|(c, _)| key(c));
@@ -441,6 +469,7 @@ mod tests {
             order: Order::Due,
             bury_siblings: true,
             rng,
+            decay_of: None,
         }
     }
 
@@ -703,6 +732,7 @@ mod tests {
                     order,
                     bury_siblings: false,
                     rng: &mut rng,
+                    decay_of: None,
                 },
             )
             .into_iter()

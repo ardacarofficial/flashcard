@@ -449,7 +449,7 @@ fn validate_pace(n: u32) -> AppResult<()> {
 }
 
 /// A card as the forecast model sees it (suspended cards are left out by the caller).
-fn forecast_card(
+pub(crate) fn forecast_card(
     c: &Card,
     cal: StudyDay,
     today: i64,
