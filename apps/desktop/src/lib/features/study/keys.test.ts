@@ -67,6 +67,27 @@ describe('study keymap', () => {
     expect(keyAction('waiting', { key: '1' })).toBeNull();
   });
 
+  // v1.3 Y1: the graded card stays on screen while its answer is saved; a key pressed then
+  // acts only on what is on screen and is never kept for the next card.
+  it('leaving: the flip key, digits, H, S, B and flags do nothing; undo and leave still act', () => {
+    for (const k of [' ', '1', '2', '3', '4', 'h', 's', 'b', 'n', 'Enter']) expect(keyAction('leaving', { key: k })).toBeNull();
+    for (const k of ['1', '2']) expect(keyAction('leaving', { key: k }, false, { twoButtons: true })).toBeNull();
+    expect(keyAction('leaving', { key: '2' }, false, { choices: 3 })).toBeNull();
+    expect(keyAction('leaving', { key: '3', ctrlKey: true }, false, { flags: true })).toBeNull();
+    expect(keyAction('leaving', { key: 'z' })).toEqual({ kind: 'undo' });
+    expect(keyAction('leaving', { key: 'z', ctrlKey: true })).toEqual({ kind: 'undo' });
+    expect(keyAction('leaving', { key: 'Escape' })).toEqual({ kind: 'end' });
+    expect(keyAction('leaving', { key: 'Escape' }, true)).toEqual({ kind: 'end' });
+    expect(keyAction('leaving', { key: 'z', repeat: true })).toBeNull();
+    // Rebound keys follow the same rule.
+    const bindings = studyBindings([
+      { action: 'study.reveal', context: 'study', combo: 'J' },
+      { action: 'study.undo', context: 'study', combo: 'U' },
+    ]);
+    expect(keyAction('leaving', { key: 'j' }, false, { bindings })).toBeNull();
+    expect(keyAction('leaving', { key: 'u' }, false, { bindings })).toEqual({ kind: 'undo' });
+  });
+
   it('leaves keys alone while typing or with modifiers', () => {
     expect(keyAction('question', { key: 'h' }, true)).toBeNull();
     expect(keyAction('answer', { key: '3' }, true)).toBeNull();

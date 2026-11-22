@@ -2,14 +2,18 @@ import type { Rating } from '$lib/api/types';
 
 /**
  * Where the Cards screen is. `question`: the back has not been seen yet; `answer`: it has
- * (at least once — the learner may have flipped back to the front); `waiting`: the session is
- * open but every remaining card waits for its learning step.
+ * (at least once — the learner may have flipped back to the front); `leaving`: the card was
+ * graded (or paused / left for tomorrow) and stays on screen, as it was, while that is saved
+ * — until the next card's front is up; `waiting`: the session is open but every remaining
+ * card waits for its learning step.
  */
-export type StudyPhase = 'idle' | 'question' | 'answer' | 'waiting' | 'done';
+export type StudyPhase = 'idle' | 'question' | 'answer' | 'leaving' | 'waiting' | 'done';
 
 export type StudyAction =
   | { kind: 'flip' }
   | { kind: 'rate'; rating: Rating }
+  /** Confidence scale (v0.10): level 1–5 on the answer side, mapped onto a rating by the backend. */
+  | { kind: 'confidence'; level: number }
   | { kind: 'choose'; index: number }
   | { kind: 'flag'; flag: number }
   | { kind: 'hint' }
@@ -124,7 +128,10 @@ export function ratingOf(action: string | undefined, twoButtons = false): Rating
  * - Enter is never a page shortcut: it activates the focused control (the card flips when it
  *   has focus, a button presses);
  * - a held key repeats nothing (`repeat`), arrows are not ours, and while typing
- *   (`typing` = focus in a text field) only the leave key is.
+ *   (`typing` = focus in a text field) only the leave key is;
+ * - while the graded card is `leaving` a key acts only on what is on screen: the flip key,
+ *   the digits, H, S, B and the flags do nothing to it and are not kept for the next card;
+ *   undo (takes the grade back) and leave (pauses once the answer is saved) still work.
  * On the summary R repeats the mistakes.
  */
 export function keyAction(phase: StudyPhase, e: KeyInput, typing = false, opts: KeyOptions = {}): StudyAction | null {
@@ -132,7 +139,7 @@ export function keyAction(phase: StudyPhase, e: KeyInput, typing = false, opts: 
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const mod = !!(e.ctrlKey || e.metaKey);
   const card = phase === 'question' || phase === 'answer';
-  const open = card || phase === 'waiting';
+  const open = card || phase === 'leaving' || phase === 'waiting';
   const bindings = opts.bindings ?? new Map(Object.entries(STUDY_DEFAULT_KEYS));
   const bound = mod || e.altKey ? undefined : bindings.get(plainCombo(e.key));
   if (bound === 'study.end') return open ? { kind: 'end' } : null;

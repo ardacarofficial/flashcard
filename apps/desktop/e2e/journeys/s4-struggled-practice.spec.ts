@@ -52,8 +52,9 @@ test('S4 struggled today: count 2, practice session, schedule untouched', async 
     await expect(page.locator('.answer-bar [role=group]')).toBeVisible();
     await press(page, '2');
     await expect.poll(async () => (await sessionNow(practice.id)).answered).toBe(i);
-    // Saved is not yet shown: wait for the next card's front before the next Space (a Space
-    // that lands while the graded card is still on screen flips that card, not the next one).
+    // Saved is not yet shown: wait for the next card's front before the next Space. By design
+    // (Y1, K1) a key pressed while the graded card is still leaving does nothing and is not
+    // kept for the next card, so pressing Space earlier would leave the next card unturned.
     await expect(page.locator('.answer-bar [role=group]')).toBeHidden();
   }
 

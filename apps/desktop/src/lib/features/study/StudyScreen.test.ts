@@ -3,7 +3,7 @@
  * screen on the dev mock transport with key presses only — start (v1.3: in the launcher),
  * flip, rate, hint, undo, end-of-session summary, repeat mistakes, back.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { api, CLASSIC_NOTETYPE_ID } from '$lib/api';
 import { i18n } from '$lib/i18n/index.svelte';
@@ -17,6 +17,7 @@ import { setMockLearningStep } from './mock';
 i18n.locale = 'en';
 
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanup();
   setMockLearningStep(0);
 });
@@ -344,5 +345,109 @@ describe('study screen keys (v1.3 J7)', () => {
       input.remove();
       editor.remove();
     }
+  });
+});
+
+describe('study screen: a key right after a grade (v1.3 Y1)', () => {
+  /**
+   * Holds the next `study.answer` until `release()`: the graded card is "leaving" meanwhile
+   * (as with a slow disk). Resolves `sent` once the answer has been asked for.
+   */
+  function holdNextAnswer() {
+    const real = api.call.bind(api) as (m: string, p: unknown) => Promise<unknown>;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let sent!: () => void;
+    const asked = new Promise<void>((r) => (sent = r));
+    let held = false;
+    vi.spyOn(api, 'call').mockImplementation((async (m: string, p: unknown) => {
+      if (m === 'study.answer' && !held) {
+        held = true;
+        sent();
+        await gate;
+      }
+      return real(m, p);
+    }) as typeof api.call);
+    return { release, asked };
+  }
+
+  async function threeCards(path: string) {
+    await api.call('settings.set', { scope: { kind: 'app' }, key: 'study.answer_buttons', value: 'two' });
+    const deck = await api.call('decks.create', { path, parent_id: null });
+    for (const [front, back] of [['one', 'bir'], ['two', 'iki'], ['three', 'üç']].map(([f, b]) => [`${f} ${path}`, `${b} ${path}`])) {
+      await api.call('notes.create', {
+        notetype_id: CLASSIC_NOTETYPE_ID,
+        deck_id: deck.id,
+        fields: { front: front!, back: back! },
+        tags: [],
+        attributes: [],
+      });
+    }
+    await startSession(deck.id);
+    await side('question', `one ${path}`);
+    await key(' ');
+    await side('answer', `bir ${path}`);
+  }
+
+  const flashcard = () => document.querySelector<HTMLElement>('.fc-flashcard')!;
+  const flipped = () => flashcard().classList.contains('flipped');
+  const settle = () => new Promise((r) => setTimeout(r, 20));
+  const answered = async () => (await api.call('study.active', {})).session?.answered ?? -1;
+
+  it('keys pressed while the grade is saved do nothing to the graded card and are not kept for the next', async () => {
+    await threeCards('Ayrılan');
+    const hold = holdNextAnswer();
+    await key('2'); // I know it: the answer is being saved
+    await hold.asked;
+    // Space (page and focused card), Enter on the card, a click, digits, H, S, B: nothing.
+    await key(' ');
+    flashcard().focus();
+    await fireEvent.keyDown(flashcard(), { key: ' ' });
+    await fireEvent.keyDown(flashcard(), { key: 'Enter' });
+    await fireEvent.click(flashcard());
+    for (const k of ['1', '2', 'h', 's', 'b']) await key(k);
+    await settle();
+    // The graded card is still there, on its back (no flip to its front).
+    expect(flipped()).toBe(true);
+    expect(screen.getByTestId('answer').textContent?.trim()).toBe('bir Ayrılan');
+    expect(screen.getByTestId('study-count').textContent).toBe('1 / 3');
+    expect(screen.queryByTestId('hint')).toBeNull();
+
+    hold.release();
+    // Saved: the next card, on its FRONT; none of those keys landed on it.
+    await side('question', 'two Ayrılan');
+    await settle();
+    expect(flipped()).toBe(false);
+    expect(screen.queryByTestId('answer')).toBeNull();
+    expect(screen.queryByTestId('hint')).toBeNull();
+    expect(screen.getByTestId('study-count').textContent).toBe('2 / 3');
+    expect(await answered()).toBe(1);
+    // …and the keys work again on it.
+    await key(' ');
+    await side('answer', 'iki Ayrılan');
+  });
+
+  it('Z while the grade is saved takes it back: the same card returns on its front', async () => {
+    await threeCards('Geri');
+    const hold = holdNextAnswer();
+    await key('2');
+    await hold.asked;
+    await key('z');
+    hold.release();
+    await side('question', 'one Geri');
+    await waitFor(async () => expect(await answered()).toBe(0));
+    expect(flipped()).toBe(false);
+    expect(screen.getByTestId('study-count').textContent).toBe('1 / 3');
+  });
+
+  it('Esc while the grade is saved pauses once it is saved (the answer counts)', async () => {
+    await threeCards('Mola');
+    const hold = holdNextAnswer();
+    await key('2');
+    await hold.asked;
+    await key('Escape');
+    hold.release();
+    await screen.findByText('Paused — you can continue where you left off');
+    expect(screen.getByTestId('summary-answered').textContent).toBe('1');
   });
 });
