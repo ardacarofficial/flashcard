@@ -34,9 +34,6 @@ pub const ID: &str = "optimizer";
 /// Job kind.
 pub const JOB_KIND: &str = OptimizerRun::NAME;
 
-/// FSRS-6 forgetting-curve decay of the default weights (`w20`).
-const DEFAULT_DECAY: f64 = 0.1542;
-
 /// Descriptor (UI: a section of the planning screen and the preset editor).
 pub fn descriptor() -> ModuleDescriptor {
     ModuleDescriptor {
@@ -249,10 +246,8 @@ fn workload(req: WorkloadRequest, ctx: &QueryCtx<'_>) -> AppResult<WorkloadEstim
         .filter(|c| !c.suspended && c.scheduling.state != CardState::New)
         .filter_map(|c| c.scheduling.stability)
         .collect();
-    let decay = match preset.fsrs_weights.len() {
-        21 => preset.fsrs_weights[20],
-        _ => DEFAULT_DECAY,
-    };
+    // v1.4: the one decay rule (FSRS-6 `w20`, FSRS-4.5/5 0.5, else the default).
+    let decay = crate::modules::stats::facts::decay_of(&preset);
     let learning = preset.learning_steps_mins.len() as f64 + 1.0;
     let at = |r: f64| {
         fc_study::planning::daily_workload(&stabilities, r, decay, preset.new_per_day, learning)
