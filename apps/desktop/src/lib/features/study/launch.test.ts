@@ -66,7 +66,7 @@ describe('launcher preselection', () => {
 
   it('empty reasons and minutes', () => {
     expect(emptyReasonKey('new', 'daily_limit_reached')).toBe('study.launcher.empty.new_limit');
-    expect(emptyReasonKey('due', 'daily_limit_reached')).toBe('study.launcher.empty.review_limit');
+    expect(emptyReasonKey('due', 'daily_limit_reached')).toBe('study.launcher.empty.daily_limit');
     expect(emptyReasonKey('studied_today', 'none_studied_today')).toBe('study.launcher.empty.none_studied_today');
     expect(minutesUntil(1_000 + 13.2 * 60_000, 1_000)).toBe(14);
     expect(minutesUntil(500, 1_000)).toBe(1);

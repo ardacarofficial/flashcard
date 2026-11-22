@@ -89,7 +89,8 @@ export function pickScope(scopes: readonly StudyScopeOption[], kind: LaunchKind,
 
 /** i18n key of an empty scope's reason ("Günlük yeni kart sınırın doldu"). */
 export function emptyReasonKey(scope: StudyScope, reason: StudyEmptyReason): MessageKey {
-  if (reason === 'daily_limit_reached') return scope === 'new' ? 'study.launcher.empty.new_limit' : 'study.launcher.empty.review_limit';
+  // Today's queue holds reviews AND new cards: its limit is "today's limit", not the review one.
+  if (reason === 'daily_limit_reached') return scope === 'new' ? 'study.launcher.empty.new_limit' : 'study.launcher.empty.daily_limit';
   return `study.launcher.empty.${reason}` as MessageKey;
 }
 

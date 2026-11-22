@@ -172,7 +172,8 @@
         "review_limit": "Bugünlük tekrar sınırın doldu",
         "waiting": "Sıradaki kart {n} dk sonra",
         "none_studied_today": "Bugün henüz çalışmadın",
-        "none_struggled_today": "Bugün zorlandığın kart yok"
+        "none_struggled_today": "Bugün zorlandığın kart yok",
+        "daily_limit": "Bugünlük kart sınırın doldu (yeni kart ve tekrar sınırları)"
       },
       "count_label": "Kaç kart?",
       "count_label_test": "Kaç soru?",

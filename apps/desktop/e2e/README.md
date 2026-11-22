@@ -36,9 +36,15 @@ journey returns the ids and the data (`e2e/seed.json` in the profile).
 | J2 | Create page: 3 rows, `Ctrl+Enter` → deck + 3 notes; one `Ctrl+Z` removes all | must pass |
 | J3 | Search, `↓ Enter`, edit the back, `Ctrl+Enter` → field changed in the DB | must pass |
 | J4 | CSV import through the UI (path prompt outside Tauri) → notes exist | must pass |
-| J5 | 21 new / limit 20 / 20 studied: Home must not advertise what `study.start` can't serve | `test.fail` (known bug, gpt-review-1 §A) |
-| J6 | Subtitle card typed test: the meaning alone is the right answer | `test.fail` (known bug, gpt-review-1 §B.1) |
-| J7a/b | Ctrl+A / Ctrl+Z inside a text field edit the text (not "select all rows" / `oplog.undo`) | `test.fail` (known bug, found by J3) |
+| J5 | 21 new / limit 20 / 20 studied: Home must not advertise what `study.start` can't serve | must pass (fixed in v1.3) |
+| J6 | Subtitle card typed test: the meaning alone is the right answer | must pass (fixed in v1.3) |
+| J7a/b | Ctrl+A / Ctrl+Z inside a text field edit the text (not "select all rows" / `oplog.undo`) | must pass (fixed in v1.3) |
+| S1 | Home → Enter → launcher → Enter: Space×3 grades nothing, 2 grades one, holding 2 grades one | must pass |
+| S2 | Answer 3, Esc (pause), reopen the launcher: Continue is first and resumes the same session | must pass |
+| S3 | Deck page → Test → 10 questions → submit: score shown, no card's schedule changed | must pass |
+| S4 | Two cards Again → "struggled today" counts 2, practice (`trial`) rows, schedule untouched | must pass |
+| S5 | 21 new / limit 20: launcher and Home show 0 with the reason; empty start refused, open session kept | must pass |
+| S6 | Waiting state: a learning card showable in minutes → "Sıradaki kart … sonra", session stays open | must pass |
 
 A journey that shows a known bug is **never deleted or skipped**: the bug assertion comes after
 `test.fail(true, '<bug>')`, called only once the journey's own preconditions have passed (so a

@@ -172,7 +172,8 @@
         "review_limit": "Today’s review limit reached",
         "waiting": "Next card in {n} min",
         "none_studied_today": "You haven’t studied today yet",
-        "none_struggled_today": "Nothing you struggled with today"
+        "none_struggled_today": "Nothing you struggled with today",
+        "daily_limit": "Today's card limit is reached (new card and review limits)"
       },
       "count_label": "How many cards?",
       "count_label_test": "How many questions?",
