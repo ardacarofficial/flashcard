@@ -60,6 +60,20 @@ describe('Select', () => {
     expect(onchange).toHaveBeenLastCalledWith('apple');
     expect(screen.getByRole('combobox').getAttribute('aria-expanded')).toBe('false');
   });
+
+  it('a type-ahead letter belongs to the select: global shortcuts (N = Quick Add) never see it', async () => {
+    render(Select<string>, { options: FRUITS, value: 'apple', label: 'Fruit' });
+    const box = screen.getByRole('combobox', { name: 'Fruit' });
+    const seen: boolean[] = [];
+    const onWindow = (e: KeyboardEvent) => seen.push(e.defaultPrevented);
+    window.addEventListener('keydown', onWindow);
+    await fireEvent.keyDown(box, { key: 'Enter' });
+    // fireEvent returns false when the default was prevented.
+    expect(await fireEvent.keyDown(box, { key: 'n' })).toBe(false);
+    expect(await fireEvent.keyDown(box, { key: 'b' })).toBe(false);
+    window.removeEventListener('keydown', onWindow);
+    expect(seen.slice(-2)).toEqual([true, true]);
+  });
 });
 
 describe('Checkbox and Switch', () => {

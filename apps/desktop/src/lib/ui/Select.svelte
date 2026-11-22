@@ -137,7 +137,12 @@
         if (open) hide(false);
         return;
       default:
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) typeahead(e.key);
+        // A letter on a focused select is type-ahead: it belongs to the select, never to a
+        // page/global shortcut (v1.3, journey S10: "n" opened Quick Add mid type-ahead).
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          typeahead(e.key);
+        }
     }
   }
 
