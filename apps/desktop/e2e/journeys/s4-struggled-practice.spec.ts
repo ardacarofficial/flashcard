@@ -52,6 +52,9 @@ test('S4 struggled today: count 2, practice session, schedule untouched', async 
     await expect(page.locator('.answer-bar [role=group]')).toBeVisible();
     await press(page, '2');
     await expect.poll(async () => (await sessionNow(practice.id)).answered).toBe(i);
+    // Saved is not yet shown: wait for the next card's front before the next Space (a Space
+    // that lands while the graded card is still on screen flips that card, not the next one).
+    await expect(page.locator('.answer-bar [role=group]')).toBeHidden();
   }
 
   // Persisted: the two answers are practice rows on exactly the struggled cards…
