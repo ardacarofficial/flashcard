@@ -250,9 +250,10 @@ fn deterministic_and_bounded() {
     assert!(total(&hi) > total(&a));
     // Week means.
     let (cards_pd, mins_pd) = a.week_ending(20);
-    let manual: f64 = a.days[14..=20].iter().map(|p| p.answers).sum::<f64>() / 7.0;
-    assert!(close(cards_pd, manual));
-    assert!(close(mins_pd, manual)); // 60 s per answer
+    // v1.3 closing pass: cards a day count cards (as the launcher), minutes count answers.
+    let mean = |f: fn(&ForecastPoint) -> f64| a.days[14..=20].iter().map(f).sum::<f64>() / 7.0;
+    assert!(close(cards_pd, mean(|p| p.cards)));
+    assert!(close(mins_pd, mean(|p| p.answers))); // 60 s per answer
 }
 
 #[test]
