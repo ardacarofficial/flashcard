@@ -89,6 +89,7 @@ fn migration_1450_adds_meanings_and_accepted_answers_to_an_existing_collection()
 fn meanings_and_accepted_answers_round_trip_and_follow_a_purged_note() {
     let fx = Fx::seeded();
     fx.write(|tx| {
+        super::ensure_home(tx);
         tx.insert_note(&note(1, "give up", "vazgeçmek", &[], 1), "give up")
             .unwrap();
         tx.insert_note(&note(2, "pick up", "almak", &[], 1), "pick up")
