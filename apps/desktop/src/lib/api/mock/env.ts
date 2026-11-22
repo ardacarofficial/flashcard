@@ -139,6 +139,11 @@ if (mockScenario() === 'fresh') {
 } else if (import.meta.env.MODE === 'mock') seedDemo({ now, id, decks, attrs, notes, addDeck }, english.id);
 /** Flag bits per card id (`cards.set_flag` writes, card views read). */
 const cardFlags = new Map<string, number>();
+/**
+ * v1.3: adds that `oplog.undo` can revert (notes created, an import), newest last; a `null`
+ * revert marks a step the study mock undoes itself (the transport keeps the order).
+ */
+const undoLog: { revert: (() => void) | null; summary: string }[] = [];
 
 const tree = (parent: string | null): DeckTreeNode[] =>
   decks
@@ -182,6 +187,7 @@ const sameName = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleL
     attrs,
     notes,
     cardFlags,
+    undoLog,
     pathOf,
     addDeck,
     tree,

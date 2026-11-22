@@ -10,13 +10,7 @@
   },
   "onboarding": {
     "title": "Flashcard'a hoş geldin",
-    "intro": "Ne öğrenmek istiyorsun? Sana uygun bir deste kuralım. Her şeyi sonra değiştirebilirsin.",
-    "goal": {
-      "language": "Bir dil",
-      "exam": "Bir sınav",
-      "school": "Okul dersleri",
-      "general": "Başka bir şey"
-    },
+    "intro": "Dört kısa adımda başlayalım; her adım işi gerçekten yapar. İstediğin an geçebilirsin.",
     "subject": {
       "english": "İngilizce",
       "japanese": "Japonca",
@@ -33,10 +27,7 @@
     "starters": "Başlangıç desteleri",
     "starters_none": "Bu konu için başlangıç destesi yok; uygulama rehberi her zaman sunulur.",
     "notes": "{count} kart",
-    "back": "Geri",
-    "next": "İleri",
-    "apply": "Kur",
-    "skip": "Geç",
+    "skip": "Rehberi geç",
     "done": "Hazır: {count} kart eklendi. Geri al tüm kurulumu kaldırır.",
     "templates": {
       "cefr": "CEFR seviyeleri (A1–C2)",
@@ -46,9 +37,38 @@
       "school_grade": "Sınıf (1–12)",
       "difficulty": "Zorluk (kolay / orta / zor)"
     },
-    "close": "Kapat",
     "step": "Adım {n} / {total}",
-    "details_intro": "Destene bir ad ver ve başlamak için hazır desteler seç."
+    "subject_heading": "Ne öğreniyorsun?",
+    "starters_hint": "“Hazır desteyle başla” bunları desteye ekler. Kendi kelimelerinle başlarsan boş bir deste kurulur.",
+    "apply_own": "Kendi kelimelerimi ekleyeceğim",
+    "apply_starters": "Hazır desteyle başla",
+    "cancel": "Vazgeç",
+    "guide": {
+      "title": "Başlarken",
+      "progress": "{done}/{total}",
+      "hide": "Gizle",
+      "finish": "Rehberi bitir",
+      "open": "Başlangıç rehberini aç",
+      "done_sr": " (tamam)",
+      "optional": "isteğe bağlı",
+      "all_done": "Hepsi tamam! Rehberi Yardım’dan yeniden açabilirsin.",
+      "add": "İlk kelimelerini ekle",
+      "add_hint": "Kelimeyi, anlamını ve örnek cümleyi yaz; ör. “resilient → dayanıklı”.",
+      "add_setup_hint": "Ne öğrendiğini seç, desteni kuralım.",
+      "add_action": "Kart ekle",
+      "setup_action": "Kur",
+      "study": "Çalış",
+      "study_hint": "Kartlar tek tek gelir: cevabı düşün, çevir, bilip bilmediğini söyle.",
+      "study_action": "Çalış",
+      "where": "Bugünün kartları ve ilerlemen nerede",
+      "home_hint": "Ana sayfa bugün sırası gelen kartları gösterir.",
+      "home_action": "Ana sayfa",
+      "stats_hint": "İstatistikler gün gün ne kadar öğrendiğini gösterir.",
+      "stats_action": "İstatistikler",
+      "extension": "Tarayıcı eklentisini bağla",
+      "extension_hint": "Dizi izlerken bir kelimeyi altyazı cümlesiyle birlikte tek tıkla kaydet.",
+      "extension_action": "Bağla"
+    }
   },
   "starters": {
     "heading": "Başlangıç desteleri",

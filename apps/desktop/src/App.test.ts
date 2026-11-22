@@ -22,7 +22,7 @@ describe('<App> on the dev mock transport', () => {
     // Create: Add + the pages placed there, as tabs.
     await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     const tabs = await screen.findByRole('tablist', { name: 'Pages in Create' });
-    expect(Array.from(tabs.querySelectorAll('[role=tab]'), (t) => t.textContent?.trim())).toEqual(['Add', 'AI', 'Import / export', 'Starter decks']);
+    expect(Array.from(tabs.querySelectorAll('[role=tab]'), (t) => t.textContent?.trim())).toEqual(['Add', 'AI', 'Starter decks']);
     expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Create');
 
     // v1.1 Create: a new deck or an existing one (design-system Select); classifications
@@ -46,7 +46,7 @@ describe('<App> on the dev mock transport', () => {
     expect(groups).toEqual(['General', 'Study', 'Reading and modes', 'Connections', 'Plugins', 'Data', 'Profiles and lock']);
     const pages = Array.from(sub.querySelectorAll('button'), (b) => b.textContent?.trim());
     // Subtitle: off by default in the app, on in the dev mock (its settings page gets screenshots).
-    expect(pages).toEqual(['General', 'Shortcuts', 'Reminders', 'Deck options', 'Note types', 'Modes and reading', 'AI', 'MCP', 'Subtitle', 'Automation', 'Plugins', 'Import / export', 'Starter decks', 'Maintenance', 'Logs & updates', 'Profiles & lock']);
+    expect(pages).toEqual(['General', 'Shortcuts', 'Reminders', 'Deck options', 'Note types', 'Modes and reading', 'AI', 'MCP', 'Subtitle', 'Automation', 'Plugins', 'Export & backup', 'Starter decks', 'Maintenance', 'Logs & updates', 'Profiles & lock']);
     await fireEvent.click(screen.getByRole('button', { name: 'Reminders' }));
     expect(sub.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Reminders');
 

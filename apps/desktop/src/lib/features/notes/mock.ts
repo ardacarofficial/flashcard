@@ -8,7 +8,24 @@ export default {
       menu('notes.list', 'nav.notes', '/notes', 30),
     ]),
   ],
-  handlers: ({ now, id, emit, notes, decks, requireDeck, requireName, addDeck, sameName, pathOf }: MockEnv) => {
+  handlers: ({ now, id, emit, notes, decks, requireDeck, requireName, addDeck, sameName, pathOf, undoLog }: MockEnv) => {
+  /** v1.3: one undo step removes these notes (and a deck made for them). */
+  const undoable = (ids: string[], deckId: string | null = null) =>
+    undoLog.push({
+      summary: 'add.summary.undone',
+      revert: () => {
+        for (const noteId of ids) {
+          const i = notes.findIndex((n) => n.id === noteId);
+          if (i >= 0) notes.splice(i, 1);
+        }
+        if (ids.length) emit({ type: 'notes_deleted', data: { ids } });
+        const d = deckId ? decks.findIndex((x) => x.id === deckId) : -1;
+        if (d >= 0) {
+          decks.splice(d, 1);
+          emit({ type: 'deck_deleted', data: { id: deckId!, affected: { decks: 1, notes: 0, cards: 0 } } });
+        }
+      },
+    });
   const create = (req: CreateNote): NoteDto => {
     requireDeck(req.deck_id);
     if (!req.fields.front?.trim()) {
@@ -45,7 +62,11 @@ export default {
     return n;
   };
   return {
-  'notes.create': create,
+  'notes.create': (req) => {
+    const n = create(req);
+    undoable([n.id]);
+    return n;
+  },
 
   // v1.1: a set from the Create screen (the real backend makes it one undo step).
   'notes.create_many': (req) => {
@@ -57,6 +78,7 @@ export default {
       throw err('VALIDATION_FIELD_REQUIRED', 'errors.validation.field_required', 'notes');
     }
     let deckId: string;
+    let made: string | null = null;
     if (req.target.kind === 'deck') {
       deckId = requireDeck(req.target.id).id;
     } else {
@@ -69,6 +91,7 @@ export default {
       d.description = req.target.description ?? '';
       emit({ type: 'deck_created', data: { deck: { ...d, path: pathOf(d) } } });
       deckId = d.id;
+      made = d.id;
     }
     const out = { deck_id: deckId, note_ids: [] as string[], empty_rows: [] as number[], duplicate_rows: [] as number[] };
     req.notes.forEach((draft, row) => {
@@ -84,6 +107,7 @@ export default {
         else throw { ...(e as ApiError), details: { ...(e as ApiError).details, row } };
       }
     });
+    undoable(out.note_ids, made);
     return out;
   },
   'notes.list': ({ deck_id }) => ({

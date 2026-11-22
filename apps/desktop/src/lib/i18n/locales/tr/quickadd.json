@@ -23,6 +23,10 @@
     "discard_confirm": "Sil ve kapat",
     "keep_editing": "Devam et",
     "keys_hint": "Enter sonraki alana geçer, son alanda ekler · Shift+Enter yeni satır",
-    "loading": "Yükleniyor"
+    "loading": "Yükleniyor",
+    "optional": "{name} (isteğe bağlı)",
+    "duplicate": "“{term}” zaten var: bu not türünde aynı {fields} ile bir kart var. Yine de eklersen ikinci, ayrı bir kart olur.",
+    "more_hint_fields": "{fields}, sınıflandırma ve önizleme",
+    "other_ways": "Başka yol:"
   }
 }

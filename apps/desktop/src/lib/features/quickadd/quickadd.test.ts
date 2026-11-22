@@ -4,6 +4,8 @@ import { api } from '$lib/api';
 import { i18n } from '$lib/i18n/index.svelte';
 import { openQuickAdd } from '$lib/shell/commands.svelte';
 import { classicColumn, splitTags } from '../notes/create';
+import { takeAddWay } from '../notes/add-way.svelte';
+import type { NoteTypeDto } from '$lib/api/types';
 import type { ScreenCtx } from '../types';
 import QuickAddDialog from './QuickAddDialog.svelte';
 import QuickAddHost from './QuickAddHost.svelte';
@@ -115,5 +117,60 @@ describe('<QuickAddHost>', () => {
     expect(selectDeck).not.toHaveBeenCalled();
     spy.mockRestore();
     unmount();
+  });
+
+  it('v1.3: "Paste" / "From a file" / "Bulk" in the footer open the add page on the chosen deck', async () => {
+    const navigate = vi.fn();
+    const selectDeck = vi.fn();
+    const ctx = await ctxWith({ navigate, selectDeck });
+    const target = ctx.decks[0]!;
+    render(QuickAddDialog, { open: true, ctx, deck: target.deck.id });
+    await screen.findByLabelText(/^Term/);
+    const ways = screen.getByRole('group', { name: 'Other ways:' });
+    expect(Array.from(ways.querySelectorAll('button'), (b) => b.textContent?.trim())).toEqual(['Bulk', 'Paste', 'From a file']);
+    await fireEvent.click(screen.getByRole('button', { name: 'Paste' }));
+    expect(navigate).toHaveBeenCalledWith('/notes/new');
+    expect(selectDeck).toHaveBeenCalledWith(target.deck.id);
+    expect(takeAddWay()).toEqual({ way: 'paste', deckId: target.deck.id });
+  });
+
+  it('v1.3: a vocabulary type asks term, meaning and an optional example first; a duplicate is explained', async () => {
+    const vocab: NoteTypeDto = {
+      id: 'nt-vocab',
+      name: 'Vocabulary',
+      kind: 'standard',
+      fields: [
+        { key: 'word', name: 'Word', kind: 'rich_text', required: false, unique: true, searchable: true, default_value: null },
+        { key: 'meaning', name: 'Meaning', kind: 'rich_text', required: true, unique: false, searchable: true, default_value: null },
+        { key: 'pronunciation', name: 'Pronunciation', kind: 'text', required: false, unique: false, searchable: true, default_value: null },
+        { key: 'example', name: 'Example sentence', kind: 'rich_text', required: false, unique: false, searchable: true, default_value: null },
+      ],
+      templates: [],
+      css: '',
+      sort_field: 'word',
+      version: 1,
+      builtin: 'vocabulary',
+      updated_at: 0,
+    };
+    localStorage.setItem('fc.cards.last_notetype', vocab.id);
+    const real = api.call.bind(api);
+    const spy = vi.spyOn(api, 'call').mockImplementation(((method: string, req: never) => {
+      if (method === 'notetypes.list') return Promise.resolve({ notetypes: [vocab] });
+      if (method === 'notes.create') return Promise.reject({ code: 'CONFLICT_NOTE_DUPLICATE', messageKey: 'errors.conflict.note_duplicate', details: {} });
+      return real(method as never, req);
+    }) as typeof api.call);
+    const ctx = await ctxWith();
+    render(QuickAddDialog, { open: true, ctx, deck: ctx.decks[0]!.deck.id });
+    const word = await screen.findByLabelText('Word');
+    expect(screen.getByLabelText(/^Meaning/)).toBeTruthy();
+    expect(screen.getByLabelText('Example sentence (optional)')).toBeTruthy();
+    // Pronunciation waits under "More".
+    expect(screen.queryByLabelText('Pronunciation')).toBeNull();
+    await fireEvent.input(word, { target: { value: 'go' } });
+    await fireEvent.keyDown(word, { key: 'Enter', ctrlKey: true });
+    expect(await screen.findByText(/“go” is already there: a card with the same Word exists/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add anyway' })).toBeTruthy();
+    spy.mockRestore();
+    localStorage.removeItem('fc.cards.last_notetype');
   });
 });

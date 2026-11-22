@@ -1,6 +1,6 @@
 {
   "nav": {
-    "io": "Import / export"
+    "io": "Export & backup"
   },
   "modules": {
     "io": {
@@ -141,7 +141,103 @@
       "attribute_invalid": "Invalid classification value “{value}”.",
       "attribute_unknown_option": "Unknown option “{value}” (it can be created automatically)."
     },
-    "intro": "Bring cards in, take them out, back up the whole collection or print a deck."
+    "intro": "Export decks, back up the whole collection or print a deck.",
+    "need_deck": "Pick the deck above first, or give the new deck a name.",
+    "again_paste": "Paste another list",
+    "again_file": "Another file",
+    "steps": {
+      "label": "Steps",
+      "paste": "Paste",
+      "check": "Check",
+      "add": "Add",
+      "file": "Choose a file",
+      "map": "Map columns",
+      "import": "Import"
+    },
+    "sep": {
+      "tab": "Tab",
+      "comma": "Comma",
+      "semicolon": "Semicolon",
+      "dash": "Dash",
+      "spaces": "Spaces",
+      "custom": "Custom",
+      "line": "New line",
+      "blank": "Blank line",
+      "summary": "{field} between fields, {record} between cards",
+      "detected": "detected, {pct} sure",
+      "change": "Change",
+      "done": "Done",
+      "between_fields": "Between term and definition",
+      "between_cards": "Between cards",
+      "custom_field": "Custom separator between fields",
+      "custom_record": "Custom separator between cards"
+    },
+    "paste": {
+      "label": "Paste your list here",
+      "hint": "One card per line. Paste it as you copied it from a table, a spreadsheet or a document.",
+      "placeholder": "go\tgitmek\tI go to school by bus.\nbook\tkitap\tThis book is about a small village.",
+      "nothing": "No cards yet: type or paste a word and its meaning on each line.",
+      "add": "{count, plural, =0 {Add cards} one {Add # card} other {Add # cards}}",
+      "to_grid": "Edit in the grid first"
+    },
+    "file": {
+      "filter": "Card files",
+      "drop": "Drop the file here",
+      "drop_label": "File drop area",
+      "choose": "Choose a file…",
+      "change": "Another file",
+      "formats": "CSV, TSV or text; Anki (.apkg, .colpkg); a Quizlet export; JSON; deck package (.fcpack).",
+      "example": "word,meaning,example sentence  ·  go,gitmek,I go to school by bus.",
+      "unsupported": "This kind of file is not supported. Choose one of: {list}.",
+      "binary_in_browser": "Anki files and deck packages can only be opened in the app.",
+      "empty": "No cards found in this file.",
+      "advanced": "Advanced: choose the format yourself",
+      "import": "{count, plural, =0 {Import} one {Import # card} other {Import # cards}}"
+    },
+    "map": {
+      "found": "{count, plural, =0 {No cards found} one {# card found} other {# cards found}}",
+      "origin": {
+        "header": "columns matched from the header row",
+        "remembered": "the mapping you used last with this note type",
+        "order": "columns fill the fields in order; change them in the headers"
+      },
+      "ignore": "Don't import",
+      "tags": "Tags",
+      "dropped": "Column {cols} goes to no field and will not be imported.",
+      "use_type": "Switch to “{name}” to keep the example sentence",
+      "cards": "Your cards will look like this",
+      "front": "Front",
+      "back": "Back",
+      "no_card": "This row makes no card (a required field is empty)."
+    },
+    "dup": {
+      "label": "If the card already exists",
+      "skip": "Skip (recommended)",
+      "update": "Update the existing one",
+      "add": "Add anyway",
+      "explain": {
+        "skip": "If a card with the same {fields} already exists in this note type, that row is not added; the end tells you how many were skipped.",
+        "update": "If a card with the same {fields} exists, its fields are replaced by the file's; your study history stays.",
+        "add": "A new card is added even if one with the same {fields} exists; the same word can show up twice.",
+        "none": "This note type has no duplicate check: every row becomes a new card."
+      }
+    },
+    "package": {
+      "contents": "The package holds {notes} notes, {cards} cards, {decks} decks and {media} media files.",
+      "where": "A package brings its own decks and note types. If you picked a deck above, they all go inside it.",
+      "history_hint": "Turn it off to start the cards fresh."
+    },
+    "result": {
+      "duplicates": "{count, plural, one {# row already existed} other {# rows already existed}}"
+    },
+    "data": {
+      "import_title": "Want to import cards?",
+      "import_hint": "CSV, Anki, Quizlet and pasted lists now live on the Add cards page: you map the columns and see how the cards will look first.",
+      "import_go": "Add cards › From a file",
+      "export_hint": "To move a deck or the whole collection to another app or device.",
+      "backup_hint": "A one-file copy of everything: for a new computer, or in case something goes wrong.",
+      "print_hint": "To print the cards on paper or save them as a PDF."
+    }
   },
   "errors": {
     "validation": {

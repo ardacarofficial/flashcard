@@ -4,6 +4,9 @@
   and adds on the last field, Ctrl+Enter adds from anywhere. Adding keeps the dialog open,
   clears the fields, puts the cursor back in the first one and counts "Added · n" with an Undo
   (the app's normal `oplog.undo`). Each card is one ordinary `notes.create` command.
+  v1.3: the term, meaning and example sentence come first (other fields wait under "More"),
+  a duplicate is explained where it happens, adds end with the add page's shared confirmation,
+  and the footer switches to the page's other ways (bulk, paste, file) on the chosen deck.
 -->
 <script lang="ts">
   import { tick, untrack } from 'svelte';
@@ -14,12 +17,15 @@
   import { deckPaths } from '$lib/components/deck-paths';
   import { formatCount } from '$lib/format';
   import { t, td } from '$lib/i18n/index.svelte';
-  import { Button, ChevronRight, Dialog, Icon, Input, Layers, Select, Skeleton, Tag, Textarea, Undo2 } from '$lib/ui';
+  import { Button, ChevronRight, Dialog, Icon, Input, Layers, Select, Skeleton, Tag, Textarea } from '$lib/ui';
   import CardPreview from '../cards/CardPreview.svelte';
   import FieldInput from '../cards/FieldInput.svelte';
   import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
   import { draftKeeper } from '../maintenance/drafts';
   import { classicColumn, editableFields, splitTags } from '../notes/create';
+  import AddedSummary from '../notes/AddedSummary.svelte';
+  import { requestAddWay, type AddWay } from '../notes/add-way.svelte';
+  import { fieldRole, primaryFields } from '../notes/roles';
   import type { ScreenCtx } from '../types';
 
   interface Props {
@@ -63,8 +69,11 @@
   const nt = $derived(notetypes?.find((n) => n.id === ntId) ?? null);
   const inline = $derived(new Set(editableFields(nt).map((f) => f.key)));
   /** Fields in the note type's order; text kinds are typed inline, media get their editor. */
-  const fields = $derived(nt?.fields ?? []);
-  const textKeys = $derived(fields.filter((f) => inline.has(f.key)).map((f) => f.key));
+  const allFields = $derived(nt?.fields ?? []);
+  /** Up front: term, meaning, example sentence (+ required); the rest under "More". */
+  const fields = $derived(primaryFields(nt));
+  const extraFields = $derived(allFields.filter((f) => !fields.includes(f)));
+  const textKeys = $derived([...fields, ...extraFields].filter((f) => inline.has(f.key)).map((f) => f.key));
   const engines = $derived(nt ? nt.templates.map((x) => x.card_type) : []);
   const paths = $derived(deckPaths(ctx.decks));
   const deckOptions = $derived(paths.map((p) => ({ value: p.id, label: p.path })));
@@ -90,8 +99,18 @@
 
   function caption(f: FieldDef): string {
     const col = classicColumn(nt, textKeys.indexOf(f.key));
-    return col ? t(`create.${col}`) : f.name;
+    if (col) return t(`create.${col}`);
+    // An example sentence is welcome, never required (say so).
+    return fieldRole(nt, f) === 'example' && !f.required ? t('quickadd.optional', { name: f.name }) : f.name;
   }
+
+  /** The term typed in (for the duplicate message). */
+  const termText = $derived.by(() => {
+    const key = fields.find((f) => fieldRole(nt, f) === 'term')?.key ?? textKeys[0];
+    return key ? (values[key] ?? '').trim() : '';
+  });
+  /** Field names that decide "already there". */
+  const uniqueNames = $derived((nt?.fields ?? []).filter((f) => f.unique).map((f) => f.name).join(', '));
 
   function blankValues(type: NoteTypeDto | null): Record<string, string> {
     return Object.fromEntries((type?.fields ?? []).map((f) => [f.key, f.default_value ?? '']));
@@ -243,7 +262,9 @@
       const field = typeof err.details?.field === 'string' ? err.details.field : null;
       if (err.code === 'CONFLICT_NOTE_DUPLICATE') {
         duplicate = true;
-        error = message;
+        error = termText
+          ? t('quickadd.duplicate', { term: termText, fields: uniqueNames || nt.name })
+          : message;
       } else if (field && field in values) {
         fieldErrors = { [field]: message };
         await tick();
@@ -283,13 +304,26 @@
   }
 
   function bulk() {
+    go('bulk');
+  }
+
+  /** The add page's other ways, on the deck chosen here (typed text asks first). */
+  function go(way: AddWay) {
     if (dirty && !confirming) {
       confirming = true;
       return;
     }
     close(true);
+    requestAddWay(way, deckId);
+    if (deckId) ctx.selectDeck(deckId);
     ctx.navigate?.('/notes/new');
   }
+
+  const ways = $derived([
+    { id: 'bulk' as const, label: t('add.way.bulk') },
+    { id: 'paste' as const, label: t('add.way.paste') },
+    { id: 'file' as const, label: t('add.way.file') },
+  ]);
 
   function edited(key: string) {
     confirming = false;
@@ -382,10 +416,37 @@
           <button type="button" class="more-toggle" aria-expanded={moreOpen} onclick={() => (moreOpen = !moreOpen)}>
             <span class="chev" class:open={moreOpen}><Icon icon={ChevronRight} size={16} /></span>
             <span>{t('quickadd.more')}</span>
-            <span class="more-hint">{t('quickadd.more_hint')}</span>
+            <span class="more-hint">{extraFields.length > 0 ? t('quickadd.more_hint_fields', { fields: extraFields.map((f) => f.name).join(', ') }) : t('quickadd.more_hint')}</span>
           </button>
           {#if moreOpen}
             <div class="more-body">
+              {#if extraFields.length > 0}
+                <div class="fields">
+                  {#each extraFields as f (f.key)}
+                    <div class="field" data-qa-field={f.key}>
+                      {#if inline.has(f.key)}
+                        <Textarea
+                          label={caption(f)}
+                          required={f.required}
+                          rows={1}
+                          autoGrow
+                          maxRows={8}
+                          value={values[f.key] ?? ''}
+                          error={fieldErrors[f.key] ?? null}
+                          oninput={(e) => {
+                            values[f.key] = e.currentTarget.value;
+                            edited(f.key);
+                          }}
+                          onkeydown={(e) => onFieldKey(e, f.key)}
+                        />
+                      {:else}
+                        <FieldInput field={f} bind:value={() => values[f.key] ?? '', (v) => (values[f.key] = v)} {values} {engines} />
+                        {#if fieldErrors[f.key]}<p class="error small" role="alert">{fieldErrors[f.key]}</p>{/if}
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              {/if}
               {#if defs.length > 0}
                 <div class="attrs">
                   {#each defs as def (def.id)}
@@ -405,6 +466,20 @@
           {#if duplicate}<Button size="sm" onclick={() => void add(true)}>{t('quickadd.add_anyway')}</Button>{/if}
         </div>
       {/if}
+      {#if added > 0}
+        <div class="done" data-testid="quick-add-count">
+          {#key added}
+            <AddedSummary
+              compact
+              {ctx}
+              {added}
+              {deckId}
+              onundo={canUndo ? undo : null}
+              undoneText={t('quickadd.undone')}
+            />
+          {/key}
+        </div>
+      {/if}
       <p class="keys">{t('quickadd.keys_hint')}</p>
     {/if}
     <p class="sr-only" role="status">{status ?? ''}</p>
@@ -418,18 +493,15 @@
         <Button size="sm" variant="danger" onclick={() => close(true)}>{t('quickadd.discard_confirm')}</Button>
       {:else}
         <div class="left">
-          {#if added > 0}
-            <span class="count num" data-testid="quick-add-count">{t('quickadd.added', { count: formatCount(added) })}</span>
-            {#if canUndo}
-              <Button size="sm" variant="ghost" icon={Undo2} onclick={() => void undo()}>{t('quickadd.undo')}</Button>
-            {/if}
-          {:else if ctx.navigate && paths.length > 0}
-            <Button size="sm" variant="ghost" onclick={bulk}>{t('quickadd.bulk')}</Button>
+          {#if ctx.navigate && paths.length > 0}
+            <span class="other" id="qa-ways">{t('quickadd.other_ways')}</span>
+            <span class="ways" role="group" aria-labelledby="qa-ways">
+              {#each ways as w (w.id)}
+                <Button size="sm" variant="ghost" onclick={() => go(w.id)}>{w.label}</Button>
+              {/each}
+            </span>
           {/if}
         </div>
-        {#if added > 0 && ctx.navigate}
-          <Button size="sm" variant="ghost" onclick={bulk}>{t('quickadd.bulk')}</Button>
-        {/if}
         <Button size="sm" variant="ghost" kbd="Esc" onclick={() => close()}>{t('quickadd.close')}</Button>
         {#if paths.length > 0}
           <Button size="sm" variant="primary" kbd="Mod+Enter" loading={busy} disabled={!canAdd} onclick={() => void add(duplicate)}>
@@ -560,10 +632,18 @@
     margin-right: auto;
     min-width: 0;
   }
-  .count {
-    color: var(--success);
+  .other {
+    color: var(--text-2);
     font-size: var(--text-xs);
     white-space: nowrap;
+  }
+  .ways {
+    display: inline-flex;
+    flex-wrap: wrap;
+  }
+  .done {
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border);
   }
   .confirm {
     margin: 0 auto 0 0;

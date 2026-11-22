@@ -1,6 +1,8 @@
 {
   "starters": {
-    "none": "Bu dilde henüz başlangıç destesi yok.",
-    "added": "Eklendi"
+    "added": "Eklendi",
+    "empty": "Bu dilde henüz başlangıç destesi yok; kendi kartlarınla başlayabilirsin.",
+    "empty_action": "Kart ekle",
+    "empty_example": "Örnek kart: “resilient” → “dayanıklı”"
   }
 }

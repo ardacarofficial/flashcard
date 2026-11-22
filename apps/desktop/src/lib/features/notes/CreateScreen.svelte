@@ -1,10 +1,14 @@
 <!--
-  Create — the bulk editor (v1.2, design brief flow 1): one compact setup row (new/existing
-  deck, title or deck, parent, note type; description and classifications under "More") and
-  then a spreadsheet of numbered term | definition rows. Tab moves field to field across rows,
-  Enter on the last field of the last row adds a row, Ctrl+Enter saves. "Save" is ONE
-  `notes.create_many` command — one undo step, a new deck included. Paste to import uses the
-  v0.5 separator detection; single cards go through Quick Add (`N`).
+  Add cards (v1.3): ONE destination with four ways in — one card (Quick Add, `N`), bulk (the
+  grid), paste (text → detected separators → preview → add) and from a file (CSV/TSV, Anki,
+  Quizlet, JSON, deck packages; guided: choose → map → import). All four share the setup row
+  (new/existing deck, title or deck, parent, note type; description and classifications under
+  "More") and end with the same confirmation ("12 cards added · Undo · Open deck · Study now").
+
+  Bulk: a spreadsheet of numbered rows, one column per field. Tab moves field to field across
+  rows, Enter on the last field of the last row adds a row, Ctrl+Enter saves. "Save" is ONE
+  `notes.create_many` command — one undo step, a new deck included. Paste and file go through
+  `io.import.*` (Rust parses, maps and imports; one undo step).
 -->
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
@@ -18,7 +22,9 @@
     Button,
     ChevronDown,
     ClipboardPaste,
+    Columns3,
     EmptyState,
+    FileText,
     Icon,
     IconButton,
     ImagePlus,
@@ -29,12 +35,13 @@
     Select,
     Skeleton,
     Sparkles,
+    Tabs,
     Textarea,
     toast,
     Trash2,
     X,
   } from '$lib/ui';
-  import { formatCount } from '$lib/format';
+  import { openQuickAdd } from '$lib/shell/commands.svelte';
   import { mediaSnippet } from '../cards/content';
   import { resolveMedia, uploadMedia } from '../cards/media';
   import { moduleKnownOn, moduleOn, trackModules } from '../cards/modules.svelte';
@@ -42,7 +49,9 @@
   import type { ScreenCtx } from '../types';
   import { appendRows, blankRow, blankRows, classicColumn, editableFields, isBlank, toDrafts, type Row } from './create';
   import NoteEditor from '../cards/NoteEditor.svelte';
-  import PastePanel from './PastePanel.svelte';
+  import ImportFlow, { type Destination } from '../io/ImportFlow.svelte';
+  import AddedSummary from './AddedSummary.svelte';
+  import { ADD_WAYS, addWayRequest, lastAddWay, rememberAddWay, takeAddWay, type AddWay } from './add-way.svelte';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -65,7 +74,15 @@
   let error = $state<string | null>(null);
   let titleError = $state<string | null>(null);
   let rowErrors = $state<Record<number, string>>({});
-  let pasteOpen = $state(false);
+  /** The way in shown below the tabs (a request from Quick Add / elsewhere, else the last one). */
+  const asked = takeAddWay();
+  let way = $state<AddWay>(asked?.way ?? lastAddWay());
+  if (asked?.deckId) {
+    mode = 'existing';
+    deckId = asked.deckId;
+  }
+  /** The last bulk save (the shared confirmation above the grid). */
+  let saved = $state<{ added: number; skipped: number; deckId: string; at: number } | null>(null);
   let thumbs = $state<Record<number, string>>({});
   let uploading = $state<number | null>(null);
   /** "More": description and classifications (opens by itself when one is required). */
@@ -86,6 +103,82 @@
   const targetDeck = $derived(mode === 'new' ? parent || null : deckId);
   const canSave = $derived(!!nt && filled > 0 && !busy && (mode === 'new' ? !!title.trim() : !!deckId));
   const aiOn = $derived(moduleOn('ai') && !!ctx.navigate);
+  const wayTabs = $derived([
+    { id: 'single', label: t('add.way.single'), icon: Plus },
+    { id: 'bulk', label: t('add.way.bulk'), icon: Columns3 },
+    { id: 'paste', label: t('add.way.paste'), icon: ClipboardPaste },
+    { id: 'file', label: t('add.way.file'), icon: FileText },
+  ]);
+
+  function chooseWay(id: string) {
+    if (!(ADD_WAYS as readonly string[]).includes(id)) return;
+    way = id as AddWay;
+    rememberAddWay(way);
+  }
+
+  // A request while the page is open (Quick Add's "Paste" / "From a file").
+  $effect(() => {
+    void addWayRequest().seq;
+    untrack(() => {
+      const r = takeAddWay();
+      if (!r) return;
+      way = r.way;
+      if (r.deckId && paths.some((p) => p.id === r.deckId)) {
+        mode = 'existing';
+        deckId = r.deckId;
+      }
+    });
+  });
+
+  /** The deck for paste / file: the chosen one, or the new one created now (its own undo step). */
+  async function ensureDeck(): Promise<{ id: string; created: boolean } | null> {
+    if (mode === 'existing') return deckId ? { id: deckId, created: false } : null;
+    if (!title.trim()) {
+      titleError = t('create.title_required');
+      document.querySelector<HTMLInputElement>('.create .setup .title input')?.focus();
+      return null;
+    }
+    try {
+      const d = await api.call('decks.create', { path: title.trim(), parent_id: parent || null, description: description.trim() || null });
+      ctx.selectDeck(d.id);
+      deckId = d.id;
+      mode = 'existing';
+      title = '';
+      description = '';
+      return { id: d.id, created: true };
+    } catch (e) {
+      const err = e as ApiError;
+      titleError = td(err.messageKey ?? 'errors.internal.unexpected');
+      return null;
+    }
+  }
+
+  const destination = $derived<Destination>({
+    ready: mode === 'new' ? !!title.trim() : !!deckId,
+    deckId: mode === 'existing' ? deckId : null,
+    packageParent: mode === 'new' ? parent || null : deckId,
+    ensure: ensureDeck,
+  });
+
+  /** "One card": Quick Add on the chosen deck (a new deck is created first). */
+  async function single() {
+    if (mode === 'existing') {
+      openQuickAdd({ deckId });
+      return;
+    }
+    if (!title.trim()) {
+      // No decks at all: Quick Add itself says to make one first.
+      if (ctx.decks.length === 0) return void openQuickAdd();
+      titleError = t('create.title_required');
+      document.querySelector<HTMLInputElement>('.create .setup .title input')?.focus();
+      return;
+    }
+    const made = await ensureDeck();
+    if (!made) return;
+    // Quick Add picks from the shell's deck list: wait (briefly) until the new deck is in it.
+    for (let i = 0; i < 20 && !paths.some((p) => p.id === made.id); i++) await new Promise((r) => setTimeout(r, 50));
+    openQuickAdd({ deckId: made.id });
+  }
 
   function lastType(): string {
     try {
@@ -129,7 +222,7 @@
   // No decks yet: only "New deck" makes sense; the full editor needs an existing one.
   $effect(() => {
     if (ctx.decks.length === 0) mode = 'new';
-    else if (rich) mode = 'existing';
+    else if (rich && way === 'bulk') mode = 'existing';
   });
 
   // "Existing deck" without a choice yet: the selected deck (the shell's picker, the last save).
@@ -271,6 +364,7 @@
   function onPasted(added: Row[]) {
     rows = appendRows(rows, added.length ? added : [blankRow()]);
     if (!isBlank(rows[rows.length - 1]!)) rows = [...rows, blankRow()];
+    chooseWay('bulk');
     toast.show(t('create.paste.added', { count: added.length }), { tone: 'success' });
   }
 
@@ -309,9 +403,6 @@
       });
       await draft.discard();
       const dupes = r.duplicate_rows.length;
-      const message = dupes
-        ? t('create.saved_with_duplicates', { count: r.note_ids.length, dupes })
-        : t('create.saved', { count: r.note_ids.length });
       // Keep the duplicate rows on screen so they can be changed and saved again.
       const kept = r.duplicate_rows.map((i) => sent[i]!).filter(Boolean);
       reset();
@@ -320,12 +411,10 @@
         rowErrors = Object.fromEntries(kept.map((_, i) => [i, t('create.duplicate_row')]));
       }
       ctx.selectDeck(r.deck_id);
-      // "Existing deck" now offers the deck just filled.
+      // The next rows go to the deck just filled.
       deckId = r.deck_id;
-      toast.show(message, {
-        tone: dupes ? 'warning' : 'success',
-        action: { label: t('create.undo'), run: () => void ctx.guarded(() => api.call('oplog.undo', {})) },
-      });
+      mode = 'existing';
+      saved = { added: r.note_ids.length, skipped: dupes, deckId: r.deck_id, at: Date.now() };
     } catch (e) {
       const err = e as ApiError;
       const row = typeof err.details?.row === 'number' ? err.details.row : null;
@@ -346,7 +435,7 @@
   function onGlobalKey(e: KeyboardEvent) {
     // Not for a dialog above the page (Quick Add, paste): Ctrl+Enter is theirs there.
     if (e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
-    if (!(e.ctrlKey || e.metaKey) || e.key !== 'Enter' || rich) return;
+    if (!(e.ctrlKey || e.metaKey) || e.key !== 'Enter' || rich || way !== 'bulk') return;
     if (canSave) {
       e.preventDefault();
       void save();
@@ -362,18 +451,15 @@
 <svelte:window onkeydown={onGlobalKey} />
 
 <div class="create">
-  <PageHeader title={t('create.heading')}>
+  <PageHeader title={t('create.heading')} subtitle={t('add.subtitle')}>
     {#snippet actions()}
       {#if aiOn}
         <Button variant="ghost" icon={Sparkles} onclick={() => ctx.navigate?.('/ai')}>{t('create.ai')}</Button>
       {/if}
-      {#if !rich}
-        <Button icon={ClipboardPaste} onclick={() => (pasteOpen = true)} data-testid="open-dialog-paste" disabled={!nt}>
-          {t('create.paste.open')}
-        </Button>
-      {/if}
     {/snippet}
   </PageHeader>
+
+  <Tabs variant="pill" label={t('add.way.label')} tabs={wayTabs} value={way} onchange={chooseWay} class="ways" />
 
   {#if loadError}
     <EmptyState title={t('create.load_failed')} description={loadError} action={{ label: t('create.retry'), onclick: () => void loadTypes() }} />
@@ -383,14 +469,7 @@
       <Skeleton shape="card" height="180px" />
     </div>
   {:else}
-    <form
-      class="body"
-      novalidate
-      onsubmit={(e) => {
-        e.preventDefault();
-        void save();
-      }}
-    >
+    <div class="body">
       <div class="setup">
         <div class="mode">
           <span class="lbl" aria-hidden="true">{t('create.where')}</span>
@@ -398,7 +477,7 @@
             size="sm"
             label={t('create.where')}
             options={[
-              { value: 'new', label: t('create.mode_new'), disabled: rich },
+              { value: 'new', label: t('create.mode_new'), disabled: rich && way === 'bulk' },
               { value: 'existing', label: t('create.mode_existing'), disabled: ctx.decks.length === 0 },
             ]}
             bind:value={mode}
@@ -455,6 +534,47 @@
         </div>
       {/if}
 
+      {#if way === 'single'}
+        <div class="panel single">
+          <p class="lead">{t('add.single.lead')}</p>
+          <p class="example">{t('add.single.example')}</p>
+          <div><Button variant="primary" icon={Plus} kbd="N" onclick={() => void single()}>{t('add.single.open')}</Button></div>
+        </div>
+      {:else if way === 'paste' || way === 'file'}
+        {#key way}
+          <ImportFlow
+            {ctx}
+            kind={way}
+            {nt}
+            notetypes={notetypes ?? []}
+            onchoosetype={chooseType}
+            {destination}
+            onrows={way === 'paste' && !rich ? onPasted : undefined}
+          />
+        {/key}
+      {:else}
+      <form
+        class="bulk"
+        novalidate
+        onsubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+      {#if saved}
+        {#key saved.at}
+          <AddedSummary
+            {ctx}
+            added={saved.added}
+            skipped={saved.skipped}
+            reasons={saved.skipped > 0 ? [t('create.duplicates_kept', { count: saved.skipped })] : []}
+            deckId={saved.deckId}
+            onundo={async () => {
+              await api.call('oplog.undo', {});
+            }}
+          />
+        {/key}
+      {/if}
       {#if rich}
         {#if deckId}
           {@const path = paths.find((p) => p.id === deckId)?.path ?? ''}
@@ -531,21 +651,13 @@
           <Button variant="primary" type="submit" kbd="Mod+Enter" loading={busy} disabled={!canSave}>{t('create.save')}</Button>
         </div>
       {/if}
-    </form>
+      </form>
+      {/if}
+    </div>
   {/if}
 </div>
 
 <input bind:this={fileInput} class="file" type="file" accept="image/*" tabindex="-1" aria-hidden="true" onchange={(e) => void onFile(e.currentTarget.files)} />
-
-{#if nt}
-  <PastePanel
-    bind:open={pasteOpen}
-    notetypeId={nt.id}
-    deckId={targetDeck}
-    columns={fields.map((f, c) => ({ key: f.key, label: caption(c, f.name) }))}
-    onadd={onPasted}
-  />
-{/if}
 
 <style>
   .create {
@@ -555,6 +667,27 @@
   }
   .create :global(.fc-page-header) {
     margin-bottom: 0;
+  }
+  .bulk {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .single {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    align-items: flex-start;
+  }
+  .single .lead {
+    margin: 0;
+    color: var(--text-1);
+  }
+  .single .example {
+    margin: 0 0 var(--space-2);
+    color: var(--text-2);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
   }
   .skeleton,
   .body {

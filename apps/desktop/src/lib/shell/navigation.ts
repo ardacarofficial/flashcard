@@ -60,7 +60,8 @@ export const PLACEMENTS: readonly { route: string; place: Place; also?: Place[];
   { route: '/match', place: section('library'), tab: false },
   { route: '/reading', place: section('library'), tab: false },
   { route: '/plugins/view/*', place: section('library') },
-  // Create: add cards, generate with AI; import and starter decks are also here.
+  // Create: add cards (one, bulk, paste, file — v1.3: importing lives there), generate with
+  // AI; starter decks are also here.
   { route: '/notes/new', place: section('create') },
   { route: '/ai', place: section('create'), also: [settings('connections')] },
   // Search and Statistics.
@@ -82,7 +83,7 @@ export const PLACEMENTS: readonly { route: string; place: Place; also?: Place[];
   { route: '/subtitle', place: settings('connections') },
   { route: '/automation', place: settings('connections') },
   { route: '/plugins', place: settings('plugins') },
-  { route: '/io', place: settings('data'), also: [section('create')] },
+  { route: '/io', place: settings('data') },
   { route: '/starters', place: settings('data'), also: [section('create')] },
   { route: '/maintenance', place: settings('data') },
   { route: '/app-maintenance', place: settings('data') },

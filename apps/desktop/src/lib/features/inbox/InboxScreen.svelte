@@ -3,6 +3,9 @@
   preview, where it came from and the target deck; accept / edit / reject are on the row and
   on the keyboard (row focus: ↑↓ or J/K move, A accept, E or Enter edit, R or Delete reject,
   X or Space select, Ctrl+Enter accept the selection). The toolbar keeps bulk accept / reject.
+  v1.3: the captured sentence is shown with its source (it is kept on accept — the backend puts
+  it in the note type's example field); a row without a deck asks for one before anything is
+  sent, instead of failing.
 -->
 <script lang="ts">
   import { formatDate } from '$lib/format';
@@ -71,6 +74,13 @@
 
   const attrText = (v: unknown) => (Array.isArray(v) ? v.join(', ') : String(v));
 
+  /** Front / back of a proposal: the Classic shorthand, else its first two fields. */
+  const termOf = (i: InboxItemDto) => i.item.front ?? Object.values(i.item.fields ?? {})[0] ?? '';
+  const meaningOf = (i: InboxItemDto) => i.item.back ?? Object.values(i.item.fields ?? {})[1] ?? '';
+  /** Rows the user tried to accept without a deck (their pickers say so). */
+  let askDeck = $state<Record<string, boolean>>({});
+  const deckOf = (i: InboxItemDto) => drafts[i.id]?.deck ?? i.item.deck_id ?? null;
+
   async function load() {
     await ctx.guarded(async () => {
       const page = await api.call('inbox.list', { status: tab, page: { cursor: null, limit: 200 } });
@@ -78,8 +88,8 @@
       const next: Record<string, Draft> = {};
       for (const i of items) {
         next[i.id] = drafts[i.id] ?? {
-          front: i.item.front ?? '',
-          back: i.item.back ?? '',
+          front: termOf(i),
+          back: meaningOf(i),
           deck: i.item.deck_id ?? ctx.selectedDeck,
         };
       }
@@ -94,13 +104,22 @@
 
   function edited(i: InboxItemDto): boolean {
     const d = drafts[i.id];
-    return !!d && (d.front !== (i.item.front ?? '') || d.back !== (i.item.back ?? ''));
+    return !!d && (d.front !== termOf(i) || d.back !== meaningOf(i));
   }
 
   async function accept(chosen: InboxItemDto[]) {
     if (chosen.length === 0) return;
     notice = null;
     needsDeck = null;
+    // No deck yet: ask on those rows (nothing is sent until each has one).
+    const deckless = chosen.filter((i) => !deckOf(i));
+    if (deckless.length > 0) {
+      askDeck = Object.fromEntries(deckless.map((i) => [i.id, true]));
+      needsDeck = deckless[0]!.id;
+      await tick();
+      document.getElementById(`inbox-deck-${deckless[0]!.id}`)?.focus();
+      return;
+    }
     const keep = listHasFocus();
     let noDeck: InboxItemDto | null = null;
     const ok = await ctx.guarded(async () => {
@@ -109,8 +128,9 @@
           id: i.id,
           deck_id: drafts[i.id]?.deck ?? null,
           notetype_id: null,
-          // Edited text replaces the proposal (Classic front/back).
-          fields: edited(i) ? { front: drafts[i.id]!.front, back: drafts[i.id]!.back } : null,
+          // Edited text replaces the proposal's front/back; its other fields stay. (The captured
+          // sentence is the item's context: the backend keeps it either way.)
+          fields: edited(i) ? editedFields(i) : null,
           tags: null,
           attributes: null,
         })),
@@ -133,6 +153,19 @@
       return;
     }
     if (ok) await reloadKeepingFocus(keep);
+  }
+
+  /** The proposal's fields with the edited front / back written back where they came from. */
+  function editedFields(i: InboxItemDto): Record<string, string> {
+    const d = drafts[i.id]!;
+    const fields = { ...(i.item.fields ?? {}) };
+    if (i.item.front != null || i.item.back != null || Object.keys(fields).length === 0) {
+      return { ...fields, front: d.front, back: d.back };
+    }
+    const [first, second] = Object.keys(fields);
+    if (first) fields[first] = d.front;
+    if (second) fields[second] = d.back;
+    return fields;
   }
 
   async function reject(chosen: InboxItemDto[]) {
@@ -279,7 +312,10 @@
         icon={pending ? Check : undefined}
         title={pending ? t('inbox.empty') : t('inbox.empty_other')}
         description={pending ? t('inbox.empty_hint') : tab === 'accepted' ? t('inbox.empty_accepted_hint') : t('inbox.empty_rejected_hint')}
-      />
+        action={pending && ctx.navigate ? { label: t('inbox.empty_action'), onclick: () => ctx.navigate?.('/local-api') } : undefined}
+      >
+        {#if pending}<p class="example">{t('inbox.empty_example')}</p>{/if}
+      </EmptyState>
     </div>
   {:else}
     <div class="panel">
@@ -340,8 +376,8 @@
                 </div>
               {:else}
                 <div class="pair">
-                  <span class="front">{pending && d ? d.front : item.item.front}</span>
-                  <span class="back">{pending && d ? d.back : item.item.back}</span>
+                  <span class="front">{pending && d ? d.front : termOf(item)}</span>
+                  <span class="back">{pending && d ? d.back : meaningOf(item)}</span>
                 </div>
               {/if}
               <div class="meta">
@@ -371,7 +407,7 @@
                   options={deckOptions}
                   bind:value={d.deck}
                   placeholder={t('inbox.choose_deck')}
-                  error={needsDeck === item.id && !d.deck ? t('inbox.needs_deck') : undefined}
+                  error={(needsDeck === item.id || askDeck[item.id]) && !d.deck ? t('inbox.needs_deck') : undefined}
                   class="deck"
                 />
                 <div class="acts">
@@ -556,9 +592,14 @@
   }
   .sentence {
     margin: 0;
+    color: var(--text-1);
+    font-size: var(--text-sm);
+  }
+  .example {
+    margin: var(--space-2) 0 0;
     color: var(--text-2);
+    font-family: var(--font-mono);
     font-size: var(--text-xs);
-    font-style: italic;
   }
   .side {
     display: flex;

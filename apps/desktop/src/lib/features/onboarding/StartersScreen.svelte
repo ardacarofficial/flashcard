@@ -1,15 +1,17 @@
 <script lang="ts">
   /**
    * Built-in starter decks (v1.0): add one as an ordinary deck (one undo step). v1.2: a dense
-   * list (name and what it is, card count, Add) instead of a grid of big cards.
+   * list (name and what it is, card count, Add) instead of a grid of big cards. v1.3: opens the
+   * getting-started guide again.
    */
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { Locale, StarterDeckDto } from '$lib/api/types';
   import { i18n, t } from '$lib/i18n/index.svelte';
-  import { BookOpen, Button, Check, CircleCheck, EmptyState, Icon, Layers, Plus, SegmentedControl, Skeleton } from '$lib/ui';
+  import { BookOpen, Button, Check, CircleCheck, EmptyState, Icon, Layers, LifeBuoy, Plus, SegmentedControl, Skeleton } from '$lib/ui';
   import { LoadState, SettingsPage } from '../core/kit';
   import type { ScreenCtx } from '../types';
+  import { openGuide } from './guide.svelte';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -51,6 +53,7 @@
 
 <SettingsPage title={t('starters.heading')} subtitle={t('starters.intro')} width="wide">
   {#snippet actions()}
+    <Button size="sm" variant="ghost" icon={LifeBuoy} onclick={openGuide}>{t('onboarding.guide.open')}</Button>
     <SegmentedControl size="sm" label={t('starters.language')} options={languages} bind:value={locale} onchange={() => void load()} />
   {/snippet}
 
@@ -67,7 +70,12 @@
       {/each}
     </ul>
   {:else if starters.length === 0}
-    <EmptyState icon={Layers} title={t('starters.none')} />
+    <EmptyState
+      icon={Layers}
+      title={t('starters.empty')}
+      description={t('starters.empty_example')}
+      action={ctx.navigate ? { label: t('starters.empty_action'), icon: Plus, onclick: () => ctx.navigate?.('/notes/new') } : undefined}
+    />
   {:else}
     <ul class="list">
       {#each starters as d (d.id)}

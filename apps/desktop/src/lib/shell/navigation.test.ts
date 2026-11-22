@@ -63,20 +63,27 @@ describe('navigation (docs/11 §2)', () => {
   it('a switched-off module disappears everywhere (sections, settings, extra places, palette)', () => {
     const modules = [
       mod('decks', [menu('decks.tree', '/decks', 10)]),
-      mod('io', [menu('io.main', '/io', 60)]),
+      mod('onboarding', [menu('onboarding.starters', '/starters', 94)]),
       mod('browse', [menu('browse.cards', '/browse', 35)]),
     ];
     const on = buildNavigation(modules, SCREENS, HOME);
     expect(on.sections.map((s) => s.id)).toEqual(['home', 'library', 'create', 'search']);
-    expect(on.settings.map((g) => [g.id, g.entries.map((e) => e.id)])).toEqual([['data', ['io.main']]]);
-    // Import is also reachable from Create (an extra place), but listed once in the palette.
-    expect(on.sections.find((s) => s.id === 'create')?.entries.map((e) => e.id)).toEqual(['io.main@section.create']);
-    expect(on.all.filter((e) => e.route === '/io')).toHaveLength(1);
+    expect(on.settings.map((g) => [g.id, g.entries.map((e) => e.id)])).toEqual([['data', ['onboarding.starters']]]);
+    // Starter decks are also reachable from Create (an extra place), but listed once in the
+    // palette. (v1.3: Import / export left Create — importing is part of "Add cards".)
+    expect(on.sections.find((s) => s.id === 'create')?.entries.map((e) => e.id)).toEqual(['onboarding.starters@section.create']);
+    expect(on.all.filter((e) => e.route === '/starters')).toHaveLength(1);
 
     const off = buildNavigation([modules[0]!, { ...modules[1]!, enabled: false }, modules[2]!], SCREENS, HOME);
     expect(off.sections.map((s) => s.id)).toEqual(['home', 'library', 'search']);
     expect(off.settings).toEqual([]);
-    expect(off.all.some((e) => e.route === '/io')).toBe(false);
+    expect(off.all.some((e) => e.route === '/starters')).toBe(false);
+  });
+
+  it('v1.3: Export & backup lives under Settings › Data only (importing is part of Add cards)', () => {
+    const nav = buildNavigation([mod('io', [menu('io.main', '/io', 60)]), mod('notes', [menu('notes.add', '/notes/new', 20)])], SCREENS, HOME);
+    expect(nav.settings.map((g) => [g.id, g.entries.map((e) => e.id)])).toEqual([['data', ['io.main']]]);
+    expect(nav.sections.find((s) => s.id === 'create')?.entries.map((e) => e.id)).toEqual(['notes.add']);
   });
 
   it('orders pages as navigation.ts lists them; inbox is its own place; unknown routes go to "More"', () => {

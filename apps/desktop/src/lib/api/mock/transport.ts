@@ -43,6 +43,20 @@ export function createMockTransport(): Transport {
     } satisfies Handlers,
     ...features.map((f) => f.handlers(env)),
   );
+  // v1.3: one undo order for the adds recorded in env.undoLog and the study mock's own undo
+  // (answers, suspend / bury in a session): those leave a `null` marker, and undo hands a
+  // marker back to the feature's `oplog.undo`.
+  const featureUndo = handlers['oplog.undo'];
+  handlers['oplog.undo'] = (req) => {
+    const last = env.undoLog.pop();
+    if (!last || !last.revert) {
+      if (featureUndo) return featureUndo(req);
+      throw err('CONFLICT_NOTHING_TO_UNDO', 'errors.conflict.nothing_to_undo', '');
+    }
+    last.revert();
+    env.emit({ type: 'undone', data: { reverted_batch_id: env.id('batch'), summary: { key: last.summary, params: {} } } });
+    return { batch_id: env.id('batch'), reverted_batch_id: env.id('batch'), summary: { key: last.summary, params: {} } };
+  };
 
   return {
     async invoke(command, payload) {
@@ -54,7 +68,12 @@ export function createMockTransport(): Transport {
       const owner = modules.find((m) => m.methods.includes(method));
       if (owner && !owner.enabled) throw err('CONFLICT_MODULE_DISABLED', 'errors.conflict.module_disabled', command);
       // Deep-copy in and out so callers can't mutate mock state (mirrors IPC serialisation).
-      return structuredClone(h(structuredClone(payload ?? {})));
+      const req = structuredClone(payload ?? {}) as { session_id?: string | null };
+      const out = structuredClone(h(req));
+      if (method === 'study.answer' || ((method === 'study.suspend' || method === 'study.bury') && req.session_id)) {
+        env.undoLog.push({ revert: null, summary: '' });
+      }
+      return out;
     },
     async listen(handler) {
       env.listeners.add(handler);

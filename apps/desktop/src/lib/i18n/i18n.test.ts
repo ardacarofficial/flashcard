@@ -48,7 +48,7 @@ describe('i18n', () => {
     expect(interpolate(m, { n: 0 }, 'en')).toBe('none');
     expect(interpolate(m, { n: 1 }, 'en')).toBe('1 card');
     expect(interpolate(m, { n: 1234 }, 'en')).toBe('1,234 cards');
-    expect(translate('en', 'create.paste.add', { count: 1 })).toBe('Add 1 card');
+    expect(translate('en', 'io.paste.add', { count: 1 })).toBe('Add 1 card');
   });
 
   it('dynamic keys fall back to the key itself', () => {

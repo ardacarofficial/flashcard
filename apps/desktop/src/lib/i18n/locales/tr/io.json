@@ -1,6 +1,6 @@
 {
   "nav": {
-    "io": "İçe / dışa aktar"
+    "io": "Dışa aktar ve yedek"
   },
   "modules": {
     "io": {
@@ -141,7 +141,103 @@
       "attribute_invalid": "Geçersiz sınıflandırma değeri “{value}”.",
       "attribute_unknown_option": "Bilinmeyen seçenek “{value}” (otomatik oluşturulabilir)."
     },
-    "intro": "Kart al, dışa aktar, tüm koleksiyonu yedekle ya da bir desteyi yazdır."
+    "intro": "Desteleri dışa aktar, tüm koleksiyonu yedekle ya da bir desteyi yazdır.",
+    "need_deck": "Önce yukarıdan desteyi seç ya da yeni desteye bir ad ver.",
+    "again_paste": "Başka bir liste yapıştır",
+    "again_file": "Başka bir dosya",
+    "steps": {
+      "label": "Adımlar",
+      "paste": "Yapıştır",
+      "check": "Kontrol et",
+      "add": "Ekle",
+      "file": "Dosya seç",
+      "map": "Sütunları eşle",
+      "import": "İçe aktar"
+    },
+    "sep": {
+      "tab": "Sekme",
+      "comma": "Virgül",
+      "semicolon": "Noktalı virgül",
+      "dash": "Tire",
+      "spaces": "Boşluklar",
+      "custom": "Özel",
+      "line": "Yeni satır",
+      "blank": "Boş satır",
+      "summary": "Alanlar arasında {field}, kartlar arasında {record}",
+      "detected": "{pct} eminlikle algılandı",
+      "change": "Değiştir",
+      "done": "Tamam",
+      "between_fields": "Terim ile tanım arasında",
+      "between_cards": "Kartlar arasında",
+      "custom_field": "Alanlar arasındaki özel ayırıcı",
+      "custom_record": "Kartlar arasındaki özel ayırıcı"
+    },
+    "paste": {
+      "label": "Listeni buraya yapıştır",
+      "hint": "Her satır bir kart. Tablodan, Excel'den ya da belgeden kopyaladığın gibi yapıştırabilirsin.",
+      "placeholder": "go\tgitmek\tI go to school by bus.\nbook\tkitap\tThis book is about a small village.",
+      "nothing": "Henüz kart yok: her satıra bir kelime ve anlamını yaz ya da yapıştır.",
+      "add": "{count, plural, =0 {Kart ekle} other {# kart ekle}}",
+      "to_grid": "Önce tabloda düzenle"
+    },
+    "file": {
+      "filter": "Kart dosyaları",
+      "drop": "Dosyayı buraya bırak",
+      "drop_label": "Dosya bırakma alanı",
+      "choose": "Dosya seç…",
+      "change": "Başka dosya",
+      "formats": "CSV, TSV ya da metin; Anki (.apkg, .colpkg); Quizlet dışa aktarımı; JSON; deste paketi (.fcpack).",
+      "example": "kelime,anlam,örnek cümle  ·  go,gitmek,I go to school by bus.",
+      "unsupported": "Bu dosya türü desteklenmiyor. Şunlardan birini seç: {list}.",
+      "binary_in_browser": "Anki ve deste paketleri yalnızca uygulamada açılabilir.",
+      "empty": "Bu dosyada kart bulunamadı.",
+      "advanced": "Gelişmiş: biçimi elle seç",
+      "import": "{count, plural, =0 {İçe aktar} other {# kartı içe aktar}}"
+    },
+    "map": {
+      "found": "{count, plural, =0 {Kart bulunamadı} other {# kart bulundu}}",
+      "origin": {
+        "header": "sütunlar başlık satırından eşlendi",
+        "remembered": "bu not türünde son kullandığın eşleme",
+        "order": "sütunlar sırayla alanlara gidiyor; başlıklardan değiştirebilirsin"
+      },
+      "ignore": "Aktarma",
+      "tags": "Etiketler",
+      "dropped": "{cols}. sütun hiçbir alana gitmiyor ve aktarılmayacak.",
+      "use_type": "Örnek cümleyi saklamak için “{name}” türüne geç",
+      "cards": "Kartlar böyle görünecek",
+      "front": "Ön yüz",
+      "back": "Arka yüz",
+      "no_card": "Bu satırdan kart çıkmıyor (zorunlu bir alan boş)."
+    },
+    "dup": {
+      "label": "Kart zaten varsa",
+      "skip": "Atla (önerilen)",
+      "update": "Var olanı güncelle",
+      "add": "Yine de ekle",
+      "explain": {
+        "skip": "Bu not türünde aynı {fields} ile bir kart zaten varsa o satır eklenmez; kaç satırın atlandığı sonda yazar.",
+        "update": "Aynı {fields} ile bir kart varsa alanları dosyadakiyle değişir; çalışma geçmişin korunur.",
+        "add": "Aynı {fields} ile bir kart olsa bile yenisi eklenir; aynı kelime iki kez çıkabilir.",
+        "none": "Bu not türünde tekrar denetimi yok: her satır yeni bir kart olur."
+      }
+    },
+    "package": {
+      "contents": "Pakette {notes} not, {cards} kart, {decks} deste ve {media} medya dosyası var.",
+      "where": "Paket kendi destelerini ve not türlerini getirir. Yukarıda bir deste seçtiysen hepsi onun altına gelir.",
+      "history_hint": "Kapatırsan kartlar yeni başlar."
+    },
+    "result": {
+      "duplicates": "{count, plural, other {# satır zaten vardı}}"
+    },
+    "data": {
+      "import_title": "Kart mı içe aktarmak istiyorsun?",
+      "import_hint": "CSV, Anki, Quizlet ve yapıştırılan listeler artık Kart ekle sayfasında: önce sütunları eşleyip kartların nasıl görüneceğine bakarsın.",
+      "import_go": "Kart ekle › Dosyadan",
+      "export_hint": "Bir desteyi ya da tüm koleksiyonu başka bir uygulamaya veya cihaza taşımak için.",
+      "backup_hint": "Her şeyin tek dosyalık kopyası: bilgisayar değiştirirken ya da bir şey ters giderse diye.",
+      "print_hint": "Kartları kâğıda basmak ya da PDF almak için."
+    }
   },
   "errors": {
     "validation": {

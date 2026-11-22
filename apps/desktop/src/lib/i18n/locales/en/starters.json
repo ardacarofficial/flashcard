@@ -1,6 +1,8 @@
 {
   "starters": {
-    "none": "No starter decks in this language yet.",
-    "added": "Added"
+    "added": "Added",
+    "empty": "No starter decks in this language yet; you can start with your own cards.",
+    "empty_action": "Add cards",
+    "empty_example": "Example card: “resilient” → “dayanıklı”"
   }
 }

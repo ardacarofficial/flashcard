@@ -35,8 +35,8 @@
     }
   },
   "create": {
-    "heading": "Create",
-    "subtitle": "Make a set of cards: one term and definition per row.",
+    "heading": "Add cards",
+    "subtitle": "One term and its definition per row.",
     "where": "Where the cards go",
     "mode_new": "New deck",
     "mode_existing": "Existing deck",
@@ -72,32 +72,44 @@
     "retry": "Try again",
     "loading": "Loading",
     "paste": {
-      "open": "Paste to import",
-      "title": "Paste to import",
-      "description": "Paste a list from a spreadsheet, a document or another app. Each line becomes a card.",
-      "text": "Text to import",
-      "placeholder": "word<TAB>meaning\nword - meaning\nword, meaning",
-      "between_fields": "Between term and definition",
-      "between_cards": "Between cards",
-      "sep_tab": "Tab",
-      "sep_comma": "Comma",
-      "sep_dash": "Dash",
-      "sep_spaces": "Spaces",
-      "sep_custom": "Custom",
-      "rec_line": "New line",
-      "rec_blank": "Blank line",
-      "custom_field": "Custom separator between term and definition",
-      "custom_record": "Custom separator between cards",
-      "preview": "Preview",
-      "nothing": "Paste some text to see the cards here.",
-      "found": "{count, plural, one {# card} other {# cards}} found",
-      "confidence": "separators detected with {pct} confidence",
-      "more": "and {count} more",
-      "too_many": "Only the first {max, plural, one {# row} other {# rows}} fit in the editor. Use Import for longer lists.",
-      "add": "Add {count, plural, one {# card} other {# cards}}",
       "added": "Added {count, plural, one {# card} other {# cards}} to the list."
     },
     "more": "More",
-    "more_hint": "Description and classification"
+    "more_hint": "Description and classification",
+    "duplicates_kept": "{count, plural, one {# card already existed; it is kept below so you can change it and save again.} other {# cards already existed; they are kept below so you can change them and save again.}}"
+  },
+  "add": {
+    "subtitle": "Type them one by one, fill a grid, paste a list or bring a file: they all go to the deck you pick.",
+    "way": {
+      "label": "How do you want to add",
+      "single": "One card",
+      "bulk": "Bulk",
+      "paste": "Paste",
+      "file": "From a file"
+    },
+    "single": {
+      "lead": "Type the word, type its meaning, Enter: the window stays open for the next one.",
+      "example": "go → gitmek · I go to school by bus.",
+      "open": "Add one card"
+    },
+    "summary": {
+      "added": "{count, plural, =0 {No cards added} one {# card added} other {# cards added}}",
+      "updated": "{count, plural, one {# card updated} other {# cards updated}}",
+      "skipped": "{count, plural, one {# row skipped} other {# rows skipped}}",
+      "why": "Why? ({n})",
+      "undo": "Undo",
+      "undone": "Undone: the added cards are gone.",
+      "open_deck": "Open deck",
+      "study": "Study now"
+    },
+    "role": {
+      "term": "term",
+      "surface": "as it appeared",
+      "meaning": "meaning",
+      "example": "example sentence",
+      "example_translation": "sentence translation",
+      "source": "source",
+      "note": "note"
+    }
   }
 }

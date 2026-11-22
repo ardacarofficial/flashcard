@@ -120,46 +120,24 @@ describe('<CreateScreen> on the dev mock', () => {
 });
 
 describe('paste to import', () => {
-  const preview = (field_separator: string): ImportPreview =>
-    ({
-      format: 'text',
-      text_options: { field_separator, record_separator: '\n', quotes: true, max_fields: null },
-      confidence: 0.9,
-      columns: 2,
-      rows: [['kedi', 'cat']],
-      total_rows: 1,
-      suggested_columns: [
-        { kind: 'field', key: 'front' },
-        { kind: 'field', key: 'back' },
-      ],
-      package: null,
-    }) as ImportPreview;
-
+  // v1.3: the separators are their own control (shared by Paste and From a file).
   it.each([
     ['\t', 'Tab'],
     [' - ', 'Dash'],
     ['  ', 'Spaces'],
     [',', 'Comma'],
   ])('the separator control shows the separator Rust detected (%j → %s)', async (sep, label) => {
-    const real = api.call.bind(api);
-    const spy = vi.spyOn(api, 'call').mockImplementation(((method: string, req: unknown) =>
-      method === 'io.import.preview' ? Promise.resolve(preview(sep)) : real(method as never, req as never)) as typeof api.call);
-    const { default: PastePanel } = await import('./PastePanel.svelte');
-    render(PastePanel, {
-      open: true,
-      notetypeId: CLASSIC_NOTETYPE_ID,
-      deckId: null,
-      columns: [
-        { key: 'front', label: 'Front' },
-        { key: 'back', label: 'Back' },
-      ],
-      onadd: () => {},
+    const { default: Separators } = await import('../io/Separators.svelte');
+    render(Separators, {
+      options: { field_separator: sep, record_separator: '\n', quotes: true, max_fields: null },
+      confidence: 0.9,
+      onchange: () => {},
     });
-    await fireEvent.input(await screen.findByLabelText('Text to import'), { target: { value: `kedi${sep}cat` } });
+    expect(screen.getByText(new RegExp(`^${label} between fields`))).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Change' }));
     const group = await screen.findByRole('radiogroup', { name: 'Between term and definition' }, { timeout: 2000 });
     const checked = Array.from(group.querySelectorAll('[aria-checked="true"]'), (b) => b.textContent?.trim());
     expect(checked).toEqual([label]);
-    spy.mockRestore();
   });
 });
 

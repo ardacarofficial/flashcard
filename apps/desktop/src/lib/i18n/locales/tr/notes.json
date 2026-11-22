@@ -35,8 +35,8 @@
     }
   },
   "create": {
-    "heading": "Oluştur",
-    "subtitle": "Kart seti hazırla: her satıra bir terim ve tanımı.",
+    "heading": "Kart ekle",
+    "subtitle": "Her satıra bir terim ve tanımı.",
     "where": "Kartlar nereye",
     "mode_new": "Yeni deste",
     "mode_existing": "Mevcut deste",
@@ -72,32 +72,44 @@
     "retry": "Tekrar dene",
     "loading": "Yükleniyor",
     "paste": {
-      "open": "Yapıştırarak içe aktar",
-      "title": "Yapıştırarak içe aktar",
-      "description": "Bir tablodan, belgeden ya da başka bir uygulamadan liste yapıştır. Her satır bir kart olur.",
-      "text": "İçe aktarılacak metin",
-      "placeholder": "kelime<TAB>anlam\nkelime - anlam\nkelime, anlam",
-      "between_fields": "Terim ile tanım arasında",
-      "between_cards": "Kartlar arasında",
-      "sep_tab": "Sekme",
-      "sep_comma": "Virgül",
-      "sep_dash": "Tire",
-      "sep_spaces": "Boşluklar",
-      "sep_custom": "Özel",
-      "rec_line": "Yeni satır",
-      "rec_blank": "Boş satır",
-      "custom_field": "Terim ile tanım arasındaki özel ayırıcı",
-      "custom_record": "Kartlar arasındaki özel ayırıcı",
-      "preview": "Önizleme",
-      "nothing": "Kartları burada görmek için metin yapıştır.",
-      "found": "{count} kart bulundu",
-      "confidence": "ayırıcılar {pct} güvenle algılandı",
-      "more": "ve {count} kart daha",
-      "too_many": "Editöre yalnız ilk {max} satır sığar. Daha uzun listeler için İçe aktar'ı kullan.",
-      "add": "{count} kart ekle",
       "added": "Listeye {count} kart eklendi."
     },
     "more": "Diğer",
-    "more_hint": "Açıklama ve sınıflandırma"
+    "more_hint": "Açıklama ve sınıflandırma",
+    "duplicates_kept": "{count, plural, other {# kart zaten vardı; aşağıda bırakıldı, değiştirip yeniden kaydedebilirsin.}}"
+  },
+  "add": {
+    "subtitle": "Tek tek yaz, tablo gibi doldur, bir liste yapıştır ya da dosyadan al: hepsi seçtiğin desteye gider.",
+    "way": {
+      "label": "Nasıl eklemek istersin",
+      "single": "Tek kart",
+      "bulk": "Toplu",
+      "paste": "Yapıştır",
+      "file": "Dosyadan"
+    },
+    "single": {
+      "lead": "Kelimeyi yaz, anlamını yaz, Enter: pencere açık kalır, sıradakine geçersin.",
+      "example": "go → gitmek · I go to school by bus.",
+      "open": "Tek kart ekle"
+    },
+    "summary": {
+      "added": "{count, plural, =0 {Kart eklenmedi} other {# kart eklendi}}",
+      "updated": "{count, plural, other {# kart güncellendi}}",
+      "skipped": "{count, plural, other {# satır atlandı}}",
+      "why": "Neden? ({n})",
+      "undo": "Geri al",
+      "undone": "Geri alındı: eklenen kartlar kaldırıldı.",
+      "open_deck": "Desteyi aç",
+      "study": "Şimdi çalış"
+    },
+    "role": {
+      "term": "terim",
+      "surface": "geçtiği hâli",
+      "meaning": "anlam",
+      "example": "örnek cümle",
+      "example_translation": "cümle çevirisi",
+      "source": "kaynak",
+      "note": "not"
+    }
   }
 }
