@@ -21,6 +21,10 @@ methods! {
     PluginsSettingsGet = "plugins.settings.get", Query, "plugins", "plugins:read", Public, undo: false, PluginRef => PluginSettings;
     /// Sets (or resets) one plugin setting.
     PluginsSettingsSet = "plugins.settings.set", Command, "plugins", "plugins:write", Public, undo: true, SetPluginSetting => PluginSettings;
+    /// v1.4: the decks a plugin may learn words from (`words:read`; `null` = every deck).
+    PluginsWordDecksGet = "plugins.word_decks.get", Query, "plugins", "plugins:read", Public, undo: false, PluginRef => PluginWordDecks;
+    /// v1.4: limits (or unlimits) the decks a plugin may learn words from.
+    PluginsWordDecksSet = "plugins.word_decks.set", Command, "plugins", "plugins:write", Public, undo: true, SetPluginWordDecks => PluginWordDecks;
     /// Translations of active plugins.
     PluginsLocales = "plugins.locales", Query, "plugins", "plugins:read", Public, undo: false, GetPluginLocales => PluginLocales;
     /// A plugin's log channel (this run).

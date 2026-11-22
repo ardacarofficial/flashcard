@@ -88,6 +88,9 @@ pub struct SubtitleStatus {
     pub last_capture_at: Option<Timestamp>,
     /// Keys that work.
     pub active_keys: u32,
+    /// Whether `GET /subtitle/v1/known-words` shares the word index with the extension
+    /// (setting `subtitle.share_known_words`, off by default: Subtitle is a capture tool).
+    pub share_known_words: bool,
 }
 
 /// `subtitle.default_deck.set`.
@@ -432,7 +435,8 @@ pub struct SubtitleFeatures {
     pub media: bool,
     /// `POST /v1/captures:batch`.
     pub batch: bool,
-    /// `GET /v1/known-words`.
+    /// `GET /v1/known-words` answers with the word index (`false` while the user does not
+    /// share it, setting `subtitle.share_known_words`; the route still answers, empty).
     pub known_words: bool,
 }
 
@@ -561,6 +565,10 @@ pub struct SubtitleKnownWords {
     pub words: Vec<SubtitleKnownWord>,
     /// Pass as `?cursor=` for the next page; `null` = no more.
     pub next_cursor: Option<String>,
+    /// `false` = the user does not share known words with the extension (setting
+    /// `subtitle.share_known_words`, off by default): `words` is empty and `next_cursor`
+    /// `null`, a valid empty answer for any client (v1.4; clients ignore unknown fields).
+    pub shared: bool,
 }
 
 /// Exports the wire types (not reachable from public method signatures) to TypeScript.

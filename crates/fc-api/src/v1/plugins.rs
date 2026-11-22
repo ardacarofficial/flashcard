@@ -211,6 +211,30 @@ pub struct SetPluginPermissions {
     pub granted: Vec<String>,
 }
 
+/// `plugins.word_decks.set` (v1.4): the decks whose words a plugin may learn from the word
+/// index (`words:read`). `null` = every deck (the default); a list = those decks and their
+/// sub-decks only: a word shows only when every note behind it is in them, `words.stats` is
+/// refused, and reading mode's word colours (`reading.analyze`, `reading.words.lookup`) too.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct SetPluginWordDecks {
+    /// Plugin id.
+    pub id: String,
+    /// Decks (`null` = no limit).
+    #[serde(default)]
+    pub deck_ids: Option<Vec<fc_core::DeckId>>,
+}
+
+/// A plugin's word-index deck limit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct PluginWordDecks {
+    /// Plugin id.
+    pub id: String,
+    /// Decks (`null` = no limit).
+    pub deck_ids: Option<Vec<fc_core::DeckId>>,
+}
+
 /// Plugin settings: schema (keys local to the plugin) and resolved values.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct PluginSettings {

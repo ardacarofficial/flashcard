@@ -31,6 +31,7 @@ export default {
         captures,
         last_capture_at: lastCapture,
         active_keys: keys.filter((k) => k.revoked_at === null).length,
+        share_known_words: false,
       };
     };
     return {

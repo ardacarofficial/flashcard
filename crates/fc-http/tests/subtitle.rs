@@ -282,7 +282,7 @@ fn me_and_decks() {
     assert!(r.body["user"]["id"].as_str().is_some());
     assert_eq!(
         r.body["features"],
-        json!({"media": true, "batch": true, "known_words": true})
+        json!({"media": true, "batch": true, "known_words": false})
     );
     let decks = r.body["decks"].as_u64().unwrap();
     let r = fx.get("/subtitle/v1/decks");
@@ -482,8 +482,22 @@ fn known_words_come_from_the_reviews() {
         );
         assert_eq!(r.status, 201);
     }
+    // v1.4: not shared by default — still a 200 the extension's client reads as "no words".
     let r = fx.get("/subtitle/v1/known-words?lang=en");
     assert_eq!(r.status, 200, "{}", r.body);
+    assert_eq!(
+        r.body,
+        json!({"words": [], "next_cursor": null, "shared": false})
+    );
+    fx.t.ok::<SettingsSet>(fc_api::v1::settings::SetSetting {
+        scope: fc_core::settings::SettingScope::App,
+        key: "subtitle.share_known_words".into(),
+        value: json!(true),
+    });
+    assert_eq!(fx.get("/subtitle/v1/me").body["features"]["known_words"], true);
+    let r = fx.get("/subtitle/v1/known-words?lang=en");
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert_eq!(r.body["shared"], true);
     let words = r.body["words"].as_array().unwrap();
     assert_eq!(words.len(), 2);
     assert_eq!(words[0]["lemma"], "key");

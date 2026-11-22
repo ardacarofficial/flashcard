@@ -205,7 +205,8 @@
         "search": "search",
         "presets": "deck options",
         "attributes": "classifications",
-        "inbox": "the inbox"
+        "inbox": "the inbox",
+        "words": "which words you know (the word index)"
       }
     }
   },
@@ -222,6 +223,10 @@
       "uninstall": "Uninstall a plugin",
       "set_enabled": "Turn a plugin on/off",
       "set_permissions": "Change plugin permissions",
+      "word_decks": {
+        "get": "Decks a plugin may learn words from",
+        "set": "Limit the decks a plugin may learn words from"
+      },
       "settings": {
         "get": "Plugin settings",
         "set": "Change a plugin setting"

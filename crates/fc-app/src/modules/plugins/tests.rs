@@ -70,6 +70,8 @@ suite!(
     fs_open_limit_holds_while_reading,
     phase3_events_need_their_read_permission,
     plugin_tts_speaks_study_cards,
+    words_need_their_permission_and_stay_in_the_plugins_decks,
+    example_new_words_view,
 );
 
 const AUTOFILL: &str = "com.example.autofill";
@@ -1923,4 +1925,226 @@ fn plugin_tts_speaks_study_cards(f: Factory) {
     // webview's speech synthesis).
     t.ok::<PluginsSetPermissions>(SetPluginPermissions { id: TONE.into(), granted: vec![] });
     assert!(t.ok::<TtsProviders>(Empty {}).providers.is_empty());
+}
+
+// ------------------------------------------------------------------ v1.4 word index
+
+/// The first object holding `key` inside a plugin's reply.
+fn find_key<'a>(v: &'a Value, key: &str) -> Option<&'a Value> {
+    match v {
+        Value::Object(m) => m
+            .get(key)
+            .or_else(|| m.values().find_map(|x| find_key(x, key))),
+        Value::Array(a) => a.iter().find_map(|x| find_key(x, key)),
+        _ => None,
+    }
+}
+
+fn go_value(t: &TestApp, id: &str) -> Value {
+    run(t, id, "go").unwrap_or_else(|e| panic!("{id}: {e:?}")).result
+}
+
+/// v1.4: the word index is its own explicit permission (`words:read`); a plugin the user
+/// limited to some decks learns words from those decks (and their sub-decks) only — a word
+/// with any note elsewhere is `new` to it, whole-index reads are refused — and rebuilding
+/// the index is not plugin work.
+fn words_need_their_permission_and_stay_in_the_plugins_decks(f: Factory) {
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    set_app_setting(&t, "words.language", json!("en"));
+    let bb = deck(&t, "Breaking Bad");
+    let s1 = deck(&t, "Breaking Bad::S1");
+    let private = deck(&t, "Private");
+    classic(&t, &bb, "go", "gitmek");
+    classic(&t, &s1, "keys", "anahtar");
+    let secret = classic(&t, &private, "zebra", "zebra");
+    classic(&t, &bb, "apple", "elma");
+    classic(&t, &private, "apple", "elma");
+    let forms = json!({ "language": "en", "forms": ["went", "keys", "zebra", "apple"] });
+    let lookup = invoke_request("v1.words.lookup", forms.clone());
+
+    // reading:read is not enough any more: the words need words:read.
+    install_looper(&t, &dir, "com.test.reading", &lookup, 1, &["reading:read"]);
+    let out = go_text(&t, "com.test.reading");
+    assert!(out.contains("PERMISSION_DENIED") && out.contains("words:read"), "{out}");
+
+    // Granted, no limit: every deck.
+    install_looper(&t, &dir, "com.test.words", &lookup, 1, &["words:read"]);
+    let all = go_value(&t, "com.test.words");
+    let statuses = |v: &Value| -> Vec<String> {
+        find_key(v, "forms").unwrap().as_array().unwrap().iter()
+            .map(|f| f["status"].as_str().unwrap().to_owned()).collect()
+    };
+    assert_eq!(statuses(&all), ["learning", "learning", "learning", "learning"]);
+    assert!(all.to_string().contains(&secret.id.to_string()));
+
+    // Limited to Breaking Bad (sub-decks included).
+    assert_eq!(
+        t.ok::<PluginsWordDecksGet>(PluginRef { id: "com.test.words".into() }).deck_ids,
+        None
+    );
+    let limited = t.ok::<PluginsWordDecksSet>(SetPluginWordDecks {
+        id: "com.test.words".into(),
+        deck_ids: Some(vec![bb.id, bb.id]),
+    });
+    assert_eq!(limited.deck_ids, Some(vec![bb.id]));
+    let cut = go_value(&t, "com.test.words");
+    // went → go (BB), keys → key (BB::S1); zebra lives only in Private; apple in both.
+    assert_eq!(statuses(&cut), ["learning", "learning", "new", "new"]);
+    let rows = find_key(&cut, "forms").unwrap().as_array().unwrap();
+    assert!(rows[2]["word"].is_null() && rows[3]["word"].is_null());
+    assert!(!cut.to_string().contains(&secret.id.to_string()), "{cut}");
+
+    // words.list: the same rule, row by row.
+    let list = invoke_request("v1.words.list", json!({ "language": "en" }));
+    install_looper(&t, &dir, "com.test.list", &list, 1, &["words:read"]);
+    let keys = |v: &Value| -> Vec<String> {
+        find_key(v, "words").unwrap().as_array().unwrap().iter()
+            .map(|w| w["key"].as_str().unwrap().to_owned()).collect()
+    };
+    assert_eq!(keys(&go_value(&t, "com.test.list")), ["apple", "go", "key", "zebra"]);
+    t.ok::<PluginsWordDecksSet>(SetPluginWordDecks {
+        id: "com.test.list".into(),
+        deck_ids: Some(vec![bb.id]),
+    });
+    assert_eq!(keys(&go_value(&t, "com.test.list")), ["go", "key"]);
+
+    // Whole-index answers are refused under a limit; reading's word colours too.
+    let stats = invoke_request("v1.words.stats", json!({}));
+    install_looper(&t, &dir, "com.test.stats", &stats, 1, &["words:read"]);
+    assert!(go_text(&t, "com.test.stats").contains("\"languages\""));
+    t.ok::<PluginsWordDecksSet>(SetPluginWordDecks {
+        id: "com.test.stats".into(),
+        deck_ids: Some(vec![bb.id]),
+    });
+    assert!(go_text(&t, "com.test.stats").contains("PERMISSION_DENIED"));
+    let analyze = invoke_request("v1.reading.analyze", json!({ "text": "zebra", "language": "en" }));
+    install_looper(&t, &dir, "com.test.analyze", &analyze, 1, &["words:read", "reading:read", "cards:read", "notes:read"]);
+    t.ok::<PluginsWordDecksSet>(SetPluginWordDecks {
+        id: "com.test.analyze".into(),
+        deck_ids: Some(vec![bb.id]),
+    });
+    let out = go_text(&t, "com.test.analyze");
+    assert!(out.contains("PERMISSION_DENIED") && out.contains("some decks only"), "{out}");
+
+    // Rebuilding the index is whole-collection work.
+    let rebuild = invoke_request("v1.words.index.rebuild_now", json!({}));
+    install_looper(&t, &dir, "com.test.rebuild", &rebuild, 1, &["reading:write", "reading:read"]);
+    assert!(go_text(&t, "com.test.rebuild").contains("PERMISSION_DENIED"));
+
+    // The limit is the user's: an undoable step, gone with undo; unknown decks are refused.
+    undo(&t);
+    assert_eq!(
+        t.ok::<PluginsWordDecksGet>(PluginRef { id: "com.test.analyze".into() }).deck_ids,
+        None
+    );
+    let e = t
+        .app
+        .call::<PluginsWordDecksSet>(
+            &SetPluginWordDecks {
+                id: "com.test.words".into(),
+                deck_ids: Some(vec![fc_core::DeckId::from_uuid(uuid::Uuid::nil())]),
+            },
+            &Actor::User,
+        )
+        .unwrap_err();
+    assert_eq!(e.code, ErrorCode::NotFoundDeck);
+    // …and a plugin cannot lift its own limit (plugins:write is never grantable).
+    let lift = invoke_request("v1.plugins.word_decks.set", json!({ "id": "com.test.words", "deck_ids": null }));
+    assert!(Permission::parse("plugins:write").is_err());
+    install_looper(&t, &dir, "com.test.lift", &lift, 1, &[]);
+    assert!(go_text(&t, "com.test.lift").contains("PERMISSION_DENIED"));
+    assert!(t
+        .ok::<PluginsWordDecksGet>(PluginRef { id: "com.test.words".into() })
+        .deck_ids
+        .is_some());
+}
+
+/// v1.4 SDK example `new-words`: a read-only view over `words.lookup` (`words:read`).
+fn example_new_words_view(f: Factory) {
+    const NEW_WORDS: &str = "com.example.newwords";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    set_app_setting(&t, "words.language", json!("en"));
+    let d = deck(&t, "Breaking Bad");
+    classic(&t, &d, "go", "gitmek");
+    install(&t, &dir, "new-words", &["ui:view", "ui:menu", "words:read"]);
+    let open = t.ok::<PluginsUiOpen>(OpenPluginUi {
+        plugin_id: NEW_WORDS.into(),
+        view: "new-words".into(),
+        input: Value::Null,
+    });
+    let step = t.ok::<PluginsUiAct>(ActPluginUi {
+        session_id: open.session_id,
+        action: "check".into(),
+        values: [("text".to_owned(), json!("He went to the lab."))].into_iter().collect(),
+    });
+    let shown = serde_json::to_string(&step.node).unwrap();
+    assert!(shown.contains("\"learning\"") && shown.contains("\"go\""), "{shown}");
+    assert!(shown.contains("lab") && shown.contains("\"new\""), "{shown}");
+    // Without words:read it cannot look anything up.
+    t.ok::<PluginsSetPermissions>(SetPluginPermissions {
+        id: NEW_WORDS.into(),
+        granted: vec!["ui:view".into(), "ui:menu".into()],
+    });
+    let open = t.ok::<PluginsUiOpen>(OpenPluginUi {
+        plugin_id: NEW_WORDS.into(),
+        view: "new-words".into(),
+        input: Value::Null,
+    });
+    let e = t.err::<PluginsUiAct>(ActPluginUi {
+        session_id: open.session_id,
+        action: "check".into(),
+        values: [("text".to_owned(), json!("went"))].into_iter().collect(),
+    });
+    assert!(format!("{e:?}").contains("PERMISSION_DENIED"), "{e:?}");
+}
+
+/// The versioned samples of `plugins-sdk/samples/v1` match the API: each parses into the
+/// method's request/response types and writes back unchanged; kind and permission agree.
+#[test]
+fn plugin_api_samples_match_the_api() {
+    use fc_api::v1::words::*;
+    fn same<T: serde::de::DeserializeOwned + serde::Serialize>(file: &str, part: &str, v: &Value) {
+        let parsed: T = serde_json::from_value(v.clone())
+            .unwrap_or_else(|e| panic!("{file} {part}: {e}"));
+        assert_eq!(&serde_json::to_value(parsed).unwrap(), v, "{file} {part} changed shape");
+    }
+    let dir = fc_plugins::testing::repo_root().join("plugins-sdk/samples/v1");
+    let mut seen = 0;
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let file = path.file_name().unwrap().to_string_lossy().into_owned();
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let method = v["method"].as_str().unwrap();
+        let name = method.strip_prefix("v1.").unwrap();
+        let d = fc_api::v1::catalog()
+            .into_iter()
+            .find(|d| d.name == name)
+            .unwrap_or_else(|| panic!("{file}: no method {name}"));
+        assert_eq!(v["permission"], d.permission, "{file}");
+        assert_eq!(v["kind"], format!("{:?}", d.kind).to_lowercase(), "{file}");
+        assert!(!matches!(redact::exposure(name), redact::Exposure::Refused(_)), "{file}");
+        let (i, o) = (&v["input"], &v["output"]);
+        match name {
+            "words.lookup" => {
+                same::<LookupWords>(&file, "input", i);
+                same::<WordsLookupResult>(&file, "output", o);
+            }
+            "words.list" => {
+                same::<ListWords>(&file, "input", i);
+                same::<WordList>(&file, "output", o);
+            }
+            "words.stats" => {
+                same::<Empty>(&file, "input", i);
+                same::<WordStats>(&file, "output", o);
+            }
+            other => panic!("{file}: add {other} to this test"),
+        }
+        seen += 1;
+    }
+    assert_eq!(seen, 3);
 }

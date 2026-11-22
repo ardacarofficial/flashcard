@@ -1,0 +1,13 @@
+id = "com.example.newwords"
+name = "New words"
+version = "1.0.0"
+api_version = "1"
+authors = ["Flashcard"]
+description = "A view: paste a subtitle line, see which of its words are new to you (read-only, from the word index)."
+min_app_version = "1.3.0"
+permissions = ["ui:view", "ui:menu", "words:read"]
+
+[contributes]
+views = ["new-words"]
+menu_items = [{ id = "open", view = "new-words", icon = "search" }]
+locales = "locales"
