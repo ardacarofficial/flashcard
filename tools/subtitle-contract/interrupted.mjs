@@ -163,7 +163,7 @@ export async function runInterrupted() {
     {
       let delayMs = 40;
       let lo = 0;
-      let hi = 2_000;
+      let hi = 400;
       let midHit = 0;
       let n = 100;
       for (let round = 0; round < 8 && !(midHit > 0 && round >= 3); round++) {

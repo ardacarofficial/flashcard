@@ -99,7 +99,8 @@ const parse = (buf) => {
  * * `lose`: the server answers in full (it has committed), the client's socket is reset
  *   instead of getting the answer;
  * * `{ kill, delayMs }`: the request reaches the server, `kill()` is called after `delayMs`
- *   (the server process dies mid-request), the client's socket is reset.
+ *   (the server process dies mid-request), the client's socket is reset; an answer that came
+ *   before the kill is never delivered.
  *
  * `exchanges` lists every request with the server's answer as the proxy saw it (also the
  * answers the client never got), so a check can compare what happened with what was told.
@@ -123,8 +124,19 @@ export class Proxy {
     return `http://127.0.0.1:${this.port}${prefix}`;
   }
 
-  once(match, action) {
-    return new Promise((fired) => this.rules.push({ match, action, fired }));
+  /** Arms a rule; resolves with the broken exchange (rejects when nothing matched in time). */
+  once(match, action, timeoutMs = 60_000) {
+    return new Promise((fired, fail) => {
+      const timer = setTimeout(() => fail(new Error(`proxy rule ${JSON.stringify(action?.kill ? 'kill' : action)} never fired`)), timeoutMs);
+      this.rules.push({
+        match,
+        action,
+        fired: (exchange) => {
+          clearTimeout(timer);
+          fired(exchange);
+        },
+      });
+    });
   }
 
   close() {
@@ -145,6 +157,7 @@ export class Proxy {
       const headers = { ...req.headers, host: `127.0.0.1:${this.upstream}`, connection: 'close' };
       const cut = () => req.socket.resetAndDestroy?.() ?? req.socket.destroy();
       let told = false;
+      let killed = null;
       const fire = () => {
         if (rule && !told) {
           told = true;
@@ -159,6 +172,14 @@ export class Proxy {
           const raw = Buffer.concat(parts);
           exchange.status = ur.statusCode;
           exchange.body = parse(raw);
+          if (action?.kill) {
+            // The process dies before its answer gets out (even when it had finished).
+            (killed ?? Promise.resolve()).then(() => {
+              cut();
+              fire();
+            });
+            return;
+          }
           if (action === 'lose' || action === 'drop') {
             // Committed, but the client never hears it.
             cut();
@@ -187,7 +208,7 @@ export class Proxy {
             fire();
           });
         } else if (action?.kill) {
-          setTimeout(() => action.kill(), action.delayMs ?? 0);
+          killed = new Promise((done) => setTimeout(() => Promise.resolve(action.kill()).then(done), action.delayMs ?? 0));
         }
       });
     });
