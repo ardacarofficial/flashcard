@@ -230,3 +230,65 @@ fn owners_example_is_one_query_mem() {
     owners_example(Arc::new(MemStore::new()), false);
     owners_example(Arc::new(TempSqlite::new()), false);
 }
+
+/// v1.4 W1: `karşılaşma`/`seen` counts ENCOUNTERS. "key" captured in three scenes of one
+/// meaning is ONE note (one card) with three encounters; "door" has one. Count = list = study.
+fn encounters_are_counted_per_scene(store: Arc<dyn Store>) {
+    use crate::modules::subtitle as st;
+    use fc_api::v1::modules::SetModuleEnabled;
+    use fc_api::v1::subtitle::CreateSubtitleKey;
+    let t = TestApp::new(store);
+    t.ok::<ModulesSetEnabled>(SetModuleEnabled {
+        id: st::ID.into(),
+        enabled: true,
+    });
+    let secret = t
+        .ok::<SubtitleKeysCreate>(CreateSubtitleKey { name: "x".into() })
+        .secret;
+    let key = st::authenticate(&t.app, &st::key_hash(&secret)).unwrap();
+    let cap = |n: u32, lemma: &str, sentence: &str| {
+        let at = sentence.find(lemma).unwrap() as i64;
+        serde_json::json!({
+          "schema": 1, "capture_id": format!("0192812a-6f3c-7a41-9c2e-{n:012x}"), "kind": "word",
+          "lang": { "target": "en", "native": "tr" },
+          "term": { "surface": lemma, "lemma": lemma, "pos": "noun" },
+          "definition": { "text": format!("m {lemma}"), "source": "dict" },
+          "context": { "sentence": sentence, "translation": null, "term_offset": [at, at + lemma.len() as i64] },
+          "source": { "type": "video", "url": null, "title": EPISODE, "site": "youtube",
+                      "video_id": "v1", "t_start_ms": n * 1000, "t_end_ms": n * 1000 + 900 },
+          "media": {}, "deck_id": null, "tags": [], "created_at": "2026-10-12T10:00:00.000Z",
+          "client": { "name": "subtitle-extension", "ext_version": "3.1.3" }
+        })
+    };
+    let k1 = st::capture(&t.app, &key, &cap(1, "key", "Give me the key.")).unwrap();
+    for (n, s) in [(2, "The key is here."), (3, "Where is the key?")] {
+        let o = st::capture(&t.app, &key, &cap(n, "key", s)).unwrap();
+        assert!(o.attached && o.note_id == k1.note_id);
+    }
+    let door = st::capture(&t.app, &key, &cap(4, "door", "Open the door.")).unwrap();
+    assert_eq!(count(&t, "dil:en"), 2, "two cards");
+    for (q, want) in [
+        ("karşılaşma>=3", vec![k1.note_id]),
+        ("seen>=2", vec![k1.note_id]),
+        ("karşılaşma<2", vec![door.note_id]),
+        ("seen>3", vec![]),
+    ] {
+        assert_eq!(notes_of(&t, q), want, "{q}");
+        assert_eq!(count(&t, q) as usize, want.len(), "{q}");
+        let mut listed = t.ok::<SearchIdsMethod>(QueryText { query: q.into() }).card_ids;
+        listed.sort();
+        if !listed.is_empty() {
+            assert_eq!(study(&t, q), listed, "{q}: study = list");
+        }
+    }
+}
+
+#[test]
+fn encounters_are_counted_per_scene_sqlite() {
+    encounters_are_counted_per_scene(Arc::new(TempSqlite::new()));
+}
+
+#[test]
+fn encounters_are_counted_per_scene_mem() {
+    encounters_are_counted_per_scene(Arc::new(MemStore::new()));
+}

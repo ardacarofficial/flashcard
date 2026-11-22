@@ -281,7 +281,8 @@ pub fn example_fields(fields: &BTreeMap<String, String>) -> BTreeMap<String, Str
 }
 
 /// The note's other encounters as field HTML, in the given order: each one's line (term in
-/// bold), its translation and its source. Encounters with neither a line nor a source are left
+/// bold), its translation, its picture and sound (`media:` references) and its source.
+/// Encounters with neither a line nor a source are left
 /// out; none → `""` (the card's examples part is then not shown).
 pub fn examples_html(others: &[&BTreeMap<String, String>]) -> String {
     let mut out = String::new();
@@ -300,6 +301,23 @@ pub fn examples_html(others: &[&BTreeMap<String, String>]) -> String {
         }
         if let Some(t) = get("translation") {
             out.push_str(&format!("<div class=\"fc-example-translation\">{t}</div>"));
+        }
+        // v1.4: its own picture and sound (store references, so the note keeps them: backups
+        // and package exports carry them, the orphan clean-up leaves them).
+        let media = |k: &str| {
+            get(k)
+                .and_then(|v| v.strip_prefix(crate::content::refs::MEDIA_SCHEME))
+                .filter(|h| crate::content::refs::is_media_hash(h))
+        };
+        if let Some(h) = media("image") {
+            out.push_str(&format!(
+                "<div class=\"fc-example-media\"><img src=\"media:{h}\"></div>"
+            ));
+        }
+        if let Some(h) = media("audio") {
+            out.push_str(&format!(
+                "<div class=\"fc-example-media\"><audio controls src=\"media:{h}\"></audio></div>"
+            ));
         }
         if let Some(s) = get("source") {
             out.push_str(&format!("<div class=\"fc-example-source\">{s}</div>"));
@@ -378,6 +396,8 @@ mod tests {
         assert_eq!(senses("Almak,  kaldırmak; almak"), ["almak", "kaldırmak"]);
     }
 
+    const HASH: &str = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+
     #[test]
     fn examples_list_the_other_scenes() {
         let a: BTreeMap<String, String> = [
@@ -387,13 +407,14 @@ mod tests {
             ),
             ("translation".to_owned(), "Çocukları alırım.".to_owned()),
             ("source".to_owned(), "Show · 1:02".to_owned()),
-            ("audio".to_owned(), "media:x".to_owned()),
+            ("audio".to_owned(), format!("media:{HASH}")),
+            ("image".to_owned(), "media:not-a-hash".to_owned()),
         ]
         .into();
         let empty = BTreeMap::new();
         assert_eq!(
             examples_html(&[&a, &empty]),
-            "<div class=\"fc-example-other\"><div class=\"fc-example-text\">I <b>pick up</b> the kids.</div><div class=\"fc-example-translation\">Çocukları alırım.</div><div class=\"fc-example-source\">Show · 1:02</div></div>"
+            "<div class=\"fc-example-other\"><div class=\"fc-example-text\">I <b>pick up</b> the kids.</div><div class=\"fc-example-translation\">Çocukları alırım.</div><div class=\"fc-example-media\"><audio controls src=\"media:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\"></audio></div><div class=\"fc-example-source\">Show · 1:02</div></div>"
         );
         assert_eq!(examples_html(&[]), "");
         let f: BTreeMap<String, String> = [

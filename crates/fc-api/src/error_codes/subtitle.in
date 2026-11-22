@@ -18,3 +18,7 @@ NotFoundSubtitleEncounter => NotFound, "errors.not_found.subtitle_encounter";
 /// An encounter operation does not apply (`details.reason`: `last_encounter`, `same_note`,
 /// `not_subtitle_note`, `not_in_review`, `selector`). v1.4.
 ValidationSubtitleEncounter => Validation, "errors.validation.subtitle_encounter";
+/// `subtitle.encounters.merge_notes`: the two notes are not the same word in the same
+/// language (word index key; `details.a`, `details.b` = `<lang>|<key>`); pass `force: true`
+/// to merge anyway. v1.4.
+ConflictSubtitleMergeWords => Conflict, "errors.conflict.subtitle_merge_words";

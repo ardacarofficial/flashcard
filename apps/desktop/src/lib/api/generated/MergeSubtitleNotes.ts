@@ -12,4 +12,9 @@ a: NoteId,
 /**
  * The other.
  */
-b: NoteId, };
+b: NoteId, 
+/**
+ * Merge even when they are not the same word in the same language (by the word index
+ * key); otherwise that is `CONFLICT_SUBTITLE_MERGE_WORDS`.
+ */
+force?: boolean | null, };

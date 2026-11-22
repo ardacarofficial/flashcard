@@ -62,7 +62,8 @@
     },
     "conflict": {
       "subtitle_key_state": "Bu erişim anahtarı zaten iptal edilmiş.",
-      "subtitle_note_type": "Altyazı kartı not türü yok ya da çöpte. Yeniden kelime almak için onu geri yükle."
+      "subtitle_note_type": "Altyazı kartı not türü yok ya da çöpte. Yeniden kelime almak için onu geri yükle.",
+      "subtitle_merge_words": "Bu iki kart aynı dilde aynı kelime değil. Yine de birleştirmeyi yalnız eminsen seç."
     }
   },
   "subtitle": {

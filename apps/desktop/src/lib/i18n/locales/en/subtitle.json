@@ -62,7 +62,8 @@
     },
     "conflict": {
       "subtitle_key_state": "This access key is already revoked.",
-      "subtitle_note_type": "The Subtitle card note type is missing or in the trash. Restore it to receive words again."
+      "subtitle_note_type": "The Subtitle card note type is missing or in the trash. Restore it to receive words again.",
+      "subtitle_merge_words": "These two cards are not the same word in the same language. Merge them anyway only if you are sure."
     }
   },
   "subtitle": {

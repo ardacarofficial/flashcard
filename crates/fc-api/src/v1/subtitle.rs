@@ -360,11 +360,16 @@ pub struct MoveSubtitleEncounter {
 /// `subtitle.encounters.merge_notes`: two notes of one word and meaning become one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
 pub struct MergeSubtitleNotes {
     /// One note.
     pub a: NoteId,
     /// The other.
     pub b: NoteId,
+    /// Merge even when they are not the same word in the same language (by the word index
+    /// key); otherwise that is `CONFLICT_SUBTITLE_MERGE_WORDS`.
+    #[serde(default)]
+    pub force: Option<bool>,
 }
 
 /// Response of `subtitle.encounters.merge_notes`.

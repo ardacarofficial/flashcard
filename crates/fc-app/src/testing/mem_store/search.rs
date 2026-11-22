@@ -40,6 +40,19 @@ impl MemTx<'_> {
                     .and_then(fc_core::query::lang::cefr_ordinal);
             }
             if !n.language.is_empty() {
+                // Encounters beyond one per note, over the word's notes (the SQL view).
+                let caps = &s.domains.subtitle.captures;
+                f.extra_encounters = s
+                    .domains
+                    .words
+                    .notes
+                    .iter()
+                    .filter(|(_, x)| x.language == n.language && x.key == n.key)
+                    .map(|(id, _)| {
+                        let c = caps.values().filter(|c| c.note_id == *id).count();
+                        u32::try_from(c.saturating_sub(1)).unwrap_or(u32::MAX)
+                    })
+                    .sum();
                 f.word = s
                     .domains
                     .words

@@ -40,6 +40,7 @@ suite!(
     switching_the_primary_example_leaves_the_schedule_identical,
     moving_and_merging_keep_the_note_with_more_history,
     always_new_card_is_the_v1_3_behaviour,
+    merging_two_different_words_needs_force,
 );
 
 const LINE2: &str = "Where are my keys?";
@@ -289,6 +290,7 @@ fn moving_and_merging_keep_the_note_with_more_history(f: Factory) {
     let m = t.ok::<SubtitleEncountersMergeNotes>(MergeSubtitleNotes {
         a: first.note_id,
         b: new_note,
+        force: None,
     });
     assert_eq!((m.kept_note_id, m.archived_note_id), (new_note, first.note_id));
     assert_eq!((m.moved, m.archived_reviews), (1, 0));
@@ -308,6 +310,7 @@ fn moving_and_merging_keep_the_note_with_more_history(f: Factory) {
     let m = t.ok::<SubtitleEncountersMergeNotes>(MergeSubtitleNotes {
         a: first.note_id,
         b: new_note,
+        force: None,
     });
     assert_eq!((m.kept_note_id, m.archived_reviews), (first.note_id, 1));
     assert_eq!(
@@ -363,8 +366,16 @@ fn restore_into_a_clean_profile_plays_the_same_audio() {
     let mut v = example(1, "key", LINE);
     v["media"]["audio"] = json!({ "upload_id": up, "mime": "audio/wav" });
     let o = capture(&a.app, &key, &v).unwrap();
-    capture(&a.app, &key, &example(2, "key", LINE2)).unwrap();
+    // The second scene (another example) has its own clip.
+    let wav2 = [WAV, b"-scene-2"].concat();
+    let up2 = upload_of(&a, &key, 2, "audio", "audio/wav", &wav2).unwrap();
+    let mut v2 = example(2, "key", LINE2);
+    v2["media"]["audio"] = json!({ "upload_id": up2, "mime": "audio/wav" });
+    assert!(capture(&a.app, &key, &v2).unwrap().attached);
     let audio = note(&a, o.note_id).fields["audio"].clone();
+    let examples = note(&a, o.note_id).fields["examples"].clone();
+    let hash2 = fc_core::content::media::media_hash(&wav2);
+    assert!(examples.contains(&format!("<audio controls src=\"media:{hash2}\">")), "{examples}");
     let hash = audio.strip_prefix("media:").unwrap().to_owned();
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("b.fcbackup").to_string_lossy().into_owned();
@@ -387,4 +398,207 @@ fn restore_into_a_clean_profile_plays_the_same_audio() {
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].facts.audio_hash.as_deref(), Some(hash.as_str()));
     assert_eq!(rows[1].facts.sentence.as_deref(), Some(LINE2));
+    // The other example's clip came back too, and the card still lists it.
+    assert_eq!(rows[1].facts.audio_hash.as_deref(), Some(hash2.as_str()));
+    assert_eq!(note(&b, o.note_id).fields["examples"], examples);
+    assert_eq!(
+        b.store.read().unwrap().read_media_file(&hash2).unwrap(),
+        Some(wav2)
+    );
+}
+
+fn merging_two_different_words_needs_force(f: Factory) {
+    let (t, key) = setup(f);
+    let k = capture(&t.app, &key, &example(1, "key", LINE)).unwrap();
+    let door = capture(&t.app, &key, &example(2, "door", "Open the door.")).unwrap();
+    let e = t.err::<SubtitleEncountersMergeNotes>(MergeSubtitleNotes {
+        a: k.note_id,
+        b: door.note_id,
+        force: None,
+    });
+    assert_eq!(e.code, ErrorCode::ConflictSubtitleMergeWords);
+    assert_eq!(live_cards(&t), 2, "nothing changed");
+    // The user insists.
+    let m = t.ok::<SubtitleEncountersMergeNotes>(MergeSubtitleNotes {
+        a: k.note_id,
+        b: door.note_id,
+        force: Some(true),
+    });
+    assert_eq!(m.kept_note_id, k.note_id);
+    assert_eq!(by_note(&t, k.note_id).len(), 2);
+    assert_eq!(live_cards(&t), 1);
+    // Same word, same language: no force needed.
+    t.ok::<OplogUndo>(Empty {});
+    let mut piano = example(3, "key", LINE2);
+    piano["definition"]["text"] = json!("tuş");
+    let p = capture(&t.app, &key, &piano).unwrap();
+    assert!(p.needs_review);
+    t.ok::<SubtitleEncountersMergeNotes>(MergeSubtitleNotes {
+        a: k.note_id,
+        b: p.note_id,
+        force: None,
+    });
+    assert_eq!(by_note(&t, k.note_id).len(), 2);
+}
+
+/// `.apkg` and `.fcpack` exports carry the primary example and its media (re-imported into a
+/// clean profile); the other examples travel as the `examples` field with their own clips.
+#[test]
+fn package_exports_keep_the_primary_example_and_its_media() {
+    use fc_api::v1::io::{ExportFormat, ExportReport, ImportReport, ImportSource, StartExport, StartImport};
+    use fc_api::v1::jobs::{JobRef, JobStatus};
+    let profile = || {
+        let db = TempSqlite::new();
+        let data = db.path().parent().unwrap().to_path_buf();
+        let t = TestApp::new(Arc::new(db));
+        t.app.set_data_dir(data);
+        t
+    };
+    let finish = |t: &TestApp, id| {
+        t.app.run_pending_jobs().unwrap();
+        let j = t.ok::<JobsGet>(JobRef { id });
+        assert_eq!(j.status, JobStatus::Succeeded, "{:?}", j.error);
+        j.result.unwrap()
+    };
+    let a = profile();
+    enable(&a);
+    let (key, _) = new_key(&a, "Chrome");
+    let up = upload_of(&a, &key, 1, "audio", "audio/wav", WAV).unwrap();
+    let shot = upload_of(&a, &key, 1, "screenshot", "image/jpeg", JPEG).unwrap();
+    let mut v = example(1, "key", LINE);
+    v["media"] = json!({ "audio": { "upload_id": up, "mime": "audio/wav" },
+                         "screenshot": { "upload_id": shot, "mime": "image/jpeg" } });
+    let o = capture(&a.app, &key, &v).unwrap();
+    let wav2 = [WAV, b"-scene-2"].concat();
+    let up2 = upload_of(&a, &key, 2, "audio", "audio/wav", &wav2).unwrap();
+    let mut v2 = example(2, "key", LINE2);
+    v2["media"]["audio"] = json!({ "upload_id": up2, "mime": "audio/wav" });
+    capture(&a.app, &key, &v2).unwrap();
+    let want = note(&a, o.note_id).fields;
+    let hashes: Vec<String> = [want["audio"].as_str(), want["image"].as_str()]
+        .iter()
+        .map(|r| r.strip_prefix("media:").unwrap().to_owned())
+        .chain([fc_core::content::media::media_hash(&wav2)])
+        .collect();
+    let dir = tempfile::tempdir().unwrap();
+    for (format, file) in [(ExportFormat::Apkg, "s.apkg"), (ExportFormat::Fcpack, "s.fcpack")] {
+        let path = dir.path().join(file).to_string_lossy().into_owned();
+        let job = a.ok::<IoExportStart>(StartExport {
+            format,
+            path: path.clone(),
+            deck_id: Some(note(&a, o.note_id).home_deck_id),
+            include_history: None,
+            text_options: None,
+        });
+        let rep: ExportReport = serde_json::from_value(finish(&a, job.id)).unwrap();
+        assert_eq!((rep.notes, rep.media), (1, 3), "{file}");
+        let b = profile();
+        let job = b.ok::<IoImportStart>(StartImport {
+            source: ImportSource::File { path },
+            format: None,
+            text_options: None,
+            deck_id: None,
+            notetype_id: None,
+            columns: None,
+            skip_first_row: None,
+            duplicates: None,
+            create_missing_options: None,
+            include_history: None,
+        });
+        let r: ImportReport = serde_json::from_value(finish(&b, job.id)).unwrap();
+        assert_eq!(r.added_notes, 1, "{file}");
+        let n = note(&b, o.note_id).fields;
+        let tx = b.store.read().unwrap();
+        for k in ["word", "meaning", "sentence", "translation", "source", "audio", "image", "examples"] {
+            if format == ExportFormat::Fcpack {
+                assert_eq!(n.get(k), want.get(k), "{file}: {k}");
+            } else {
+                // Anki keeps the values; the field keys come back from the display names
+                // (`kelime`, `cümle`, …) and a picture/sound field as an `<img>`/`<audio>`
+                // tag of the same file — documented losses.
+                let w = want[k].strip_prefix("media:").unwrap_or(&want[k]);
+                assert!(
+                    n.values().any(|v| v == w || (w.len() == 64 && v.contains(w))),
+                    "{file}: {k} in {n:?}"
+                );
+            }
+        }
+        for h in &hashes {
+            assert!(tx.read_media_file(h).unwrap().is_some(), "{file}: media {h}");
+        }
+    }
+}
+
+/// C1's Test mode (`quiz`) on notes made from captures: options are `meaning` fields of notes,
+/// so an attached example (an encounter, not a note) is never an option, and two notes of one
+/// word (two meanings) are never each other's wrong options.
+#[test]
+fn quiz_never_offers_an_example_or_the_same_words_other_meaning() {
+    use fc_api::v1::modes::QuizAnswer;
+    use fc_api::v1::study::{StartSession, StudyKind, StudyOrder};
+    for f in [
+        (|| Arc::new(MemStore::new()) as Arc<dyn Store>) as Factory,
+        || Arc::new(SqliteStore::open_in_memory().unwrap()),
+    ] {
+        let (t, key) = setup(f);
+        let k = capture(&t.app, &key, &example(1, "key", LINE)).unwrap();
+        // Same meaning, its own wording: an example, never an option.
+        let mut scene = example(2, "key", LINE2);
+        scene["definition"]["text"] = json!("anahtar, EXAMPLE-ONLY");
+        assert!(capture(&t.app, &key, &scene).unwrap().attached);
+        // Another meaning of "key": its own note.
+        let mut piano = example(3, "key", "Press any key.");
+        piano["definition"]["text"] = json!("tuş");
+        assert!(capture(&t.app, &key, &piano).unwrap().needs_review);
+        for (n, (w, m)) in [("door", "kapı"), ("window", "pencere"), ("table", "masa"), ("chair", "sandalye")]
+            .into_iter()
+            .enumerate()
+        {
+            let mut v = example(10 + n as u32, w, &format!("The {w} is here."));
+            v["definition"]["text"] = json!(m);
+            capture(&t.app, &key, &v).unwrap();
+        }
+        let deck = note(&t, k.note_id).home_deck_id;
+        let mut s = t
+            .app
+            .call::<StudyStart>(
+                &StartSession {
+                    kind: StudyKind::Quiz,
+                    mode: None,
+                    deck_id: Some(deck),
+                    include_subdecks: None,
+                    filter: None,
+                    from_session: None,
+                    new_limit: None,
+                    order: Some(StudyOrder::Due),
+                    tz_offset_mins: Some(0),
+                    modes: None,
+                    scope: None,
+                },
+                &fc_api::v1::oplog::Actor::User,
+            )
+            .unwrap();
+        let mut asked = 0;
+        while let Some(card) = s.current.clone() {
+            let q = s.modes.as_ref().unwrap().quiz.clone().unwrap();
+            assert!(q.options.iter().all(|o| !o.contains("EXAMPLE-ONLY")), "{:?}", q.options);
+            let r = t.ok::<ModesQuizAnswer>(QuizAnswer {
+                session_id: s.id,
+                card_id: card.card_id,
+                choice: 0,
+                duration_ms: 900,
+            });
+            if q.term.as_deref() == Some("key") {
+                let wrong: Vec<&String> = q.options.iter().filter(|o| **o != r.expected).collect();
+                assert!(
+                    !wrong.iter().any(|o| *o == "anahtar" || *o == "tuş"),
+                    "the other meaning of key is not a wrong option: {:?}",
+                    q.options
+                );
+            }
+            s = r.session;
+            asked += 1;
+        }
+        assert_eq!(asked, 6, "one question per note, none per example");
+    }
 }

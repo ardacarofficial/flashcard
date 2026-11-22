@@ -575,16 +575,59 @@ fn reviews_of(reads: &dyn Reads, note: NoteId) -> AppResult<usize> {
 }
 
 /// Merges two notes; returns the response and the inverse of the encounter rows.
+/// The word of a note: its word index `(language, key)`, else (not indexed yet, or no
+/// language) the language and lemma of its encounters when they all agree.
+fn word_of(reads: &dyn Reads, note: NoteId) -> AppResult<Option<(String, String)>> {
+    if let Some(w) = reads
+        .word_index_notes_by_id(&[note])?
+        .into_iter()
+        .find(|w| !w.language.is_empty() && !w.key.is_empty())
+    {
+        return Ok(Some((w.language, w.key)));
+    }
+    let mut pairs: Vec<(String, String)> = reads
+        .subtitle_encounters_of_note(note)?
+        .into_iter()
+        .map(|r| (r.lang, r.lemma))
+        .collect();
+    pairs.dedup();
+    Ok(match pairs.as_slice() {
+        [one] => Some(one.clone()),
+        _ => None,
+    })
+}
+
 fn merge(
     ctx: &mut CommandCtx<'_>,
     a: NoteId,
     b: NoteId,
+    force: bool,
 ) -> AppResult<(MergedSubtitleNotes, Vec<InvokeRequest>)> {
     if a == b {
         return Err(invalid("same_note", "a note cannot be merged with itself"));
     }
     let na = require_subtitle_note(ctx, a)?;
     let nb = require_subtitle_note(ctx, b)?;
+    if !force {
+        let (wa, wb) = (word_of(ctx.reads(), a)?, word_of(ctx.reads(), b)?);
+        if wa.is_none() || wa != wb {
+            let show = |w: &Option<(String, String)>| {
+                w.as_ref().map_or_else(|| "?".to_owned(), |(l, k)| format!("{l}|{k}"))
+            };
+            return Err(AppError::Api(
+                ApiError::new(
+                    ErrorCode::ConflictSubtitleMergeWords,
+                    format!(
+                        "the notes are not the same word in the same language ({} vs {}); pass force: true to merge anyway",
+                        show(&wa),
+                        show(&wb)
+                    ),
+                )
+                .with_detail("a", show(&wa))
+                .with_detail("b", show(&wb)),
+            ));
+        }
+    }
     let (ra, rb) = (reviews_of(ctx.reads(), a)?, reviews_of(ctx.reads(), b)?);
     // More history wins; a tie keeps the older note (then the first named).
     let a_wins = ra > rb || (ra == rb && (na.created_at, na.id) <= (nb.created_at, nb.id));
@@ -646,7 +689,7 @@ pub(super) fn merge_notes(
     req: MergeSubtitleNotes,
     ctx: &mut CommandCtx<'_>,
 ) -> AppResult<CommandOutcome<MergedSubtitleNotes>> {
-    let (response, inverse) = merge(ctx, req.a, req.b)?;
+    let (response, inverse) = merge(ctx, req.a, req.b, req.force.unwrap_or(false))?;
     Ok(CommandOutcome {
         response,
         inverse,
@@ -665,7 +708,8 @@ pub(super) fn resolve(
     };
     let other_live = note_is_live(ctx.reads(), other)?;
     let (response, inverse) = if req.same_meaning && other_live {
-        let (m, inverse) = merge(ctx, r.note_id, other)?;
+        // The flagged note was made from a capture of the same word: no override needed.
+        let (m, inverse) = merge(ctx, r.note_id, other, false)?;
         (
             SubtitleEncounterList {
                 encounters: m.encounters,
