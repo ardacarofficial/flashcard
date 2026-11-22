@@ -194,6 +194,9 @@ fn replayable_methods_are_undoable_commands_without_side_channels() {
                 SubtitleKeysTouch::NAME,
                 // v1.4: capture diagnostics, never in the oplog.
                 SubtitleCapturesLog::NAME,
+                // v1.4: an automatic meaning suggestion a job writes (no inverse), never an
+                // inverse itself.
+                AiMeaningStoreSuggestion::NAME,
             ]
             .contains(&d.name)
         {
