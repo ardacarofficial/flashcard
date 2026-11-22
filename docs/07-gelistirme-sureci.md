@@ -54,6 +54,14 @@ Bağımlılık sürümleri `Cargo.lock` ve `pnpm-lock.yaml` ile sabitlenir.
 
 **Kural:** Her yeni komut için en az bir servis testi ve bir geri al testi.
 
+### 3.1 Gerçek çekirdeğe karşı yolculuklar (v1.3: dev köprüsü)
+
+v1.2 ekran görüntüleri **mock** arka uçla doğrulandı; mock'ta çalışıp gerçek uygulamada bozuk akışlar böyle çıktı. v1.3'ten beri arayüz akışları gerçek Rust çekirdeğine karşı da koşar:
+
+- **`fc dev serve --db <dosya> [--port N] [--token T]`** — *yalnızca geliştirme aracı*. Debug derlemede (veya `dev-bridge` cargo özelliğiyle) vardır, release `fc`'de hiç derlenmez. Koleksiyonu açar (yoksa oluşturur, migration'ları uygular) ve `127.0.0.1`'de `POST /rpc {method, params}` + `GET /events` (SSE) sunar. Masaüstü IPC'siyle **aynı** dağıtıcıyı kullanır (`fc_app::transport::dispatch`: kullanıcı aktörü, kilit kapısı, hata şekli, commit sonrası olaylar); eklentiye açık kısıtlı `fc-http` API'si değildir. Korumalar: yalnızca loopback, `Host` başlığı loopback olmalı, tarayıcı `Origin`'i yalnızca loopback `http://`, her istek (ör. `/health` hariç) rastgele anahtar ister. Anahtar zinciri yerine bellek içi sır deposu kullanır. **Gerçek koleksiyonuna karşı çalıştırma.**
+- **`pnpm -C apps/desktop dev:bridge`** — `VITE_FC_BRIDGE_URL` ve `VITE_FC_BRIDGE_TOKEN` ile arayüzü tarayıcıda köprüye bağlar (üçüncü transport; Tauri IPC ve mock aynen durur, köprü kodu üretim paketine girmez).
+- **`pnpm -C apps/desktop e2e`** — `fc`'yi derler (veya `FC_BIN`), geçici profil açar, gerçek komutlarla tohumlar ("İngilizce" 30 Klasik not; "Subtitle" eklentinin gönderdiği gibi 10 yakalama), köprüyü ve vite'ı rastgele portlarda başlatır, `apps/desktop/e2e/journeys/` altındaki Playwright yolculuklarını başsız Chromium'da koşar, her şeyi kapatır. Doğrulama **kalıcı sonuç** üzerindendir (RPC ile not alanları, oturum/tekrar kayıtları), piksel değil. Bilinen hatayı gösteren yolculuk silinmez: hata adıyla `test.fail` olarak işaretlenir ve düzelince işaret kaldırılır. Yolculuk ekleme: `apps/desktop/e2e/README.md`. CI: `ci.yml → journeys` (Linux).
+
 ## 4. Dal ve sürüm stratejisi
 
 - `main`: her zaman derlenen, testleri geçen durum.

@@ -9,6 +9,9 @@
 
 mod api;
 mod commands;
+// The dev bridge (v1.3): development builds only, never in a release `fc`.
+#[cfg(any(feature = "dev-bridge", debug_assertions))]
+mod dev;
 mod i18n;
 mod lookup;
 mod mcp;
@@ -68,6 +71,11 @@ enum Command {
     /// Local HTTP API: serve this collection to local programs (docs/06 §3).
     #[command(subcommand)]
     Api(api::ApiCommand),
+    /// DEVELOPMENT ONLY (debug builds / `dev-bridge` feature): the dev bridge for running the
+    /// desktop UI in a browser against this collection (`fc dev serve`).
+    #[cfg(any(feature = "dev-bridge", debug_assertions))]
+    #[command(subcommand)]
+    Dev(dev::DevCommand),
     /// Invoke any public API method with JSON params, e.g.
     /// `fc call decks.rename '{"id":"…","name":"X"}'`. Prints the JSON response.
     Call {
@@ -475,6 +483,8 @@ impl Command {
             // A CLI-only probe (registered or ad-hoc server), not an API method — like `plugin.pack`.
             Command::Mcp(mcp::McpCommand::Tools { .. }) => "mcp.tools",
             Command::Api(api::ApiCommand::Serve { .. }) => m::LocalApiClientsList::NAME,
+            #[cfg(any(feature = "dev-bridge", debug_assertions))]
+            Command::Dev(dev::DevCommand::Serve { .. }) => "dev.serve",
             Command::Call { method, .. } => method,
         }
     }
@@ -518,6 +528,16 @@ fn main() -> ExitCode {
     }
     if let Command::Api(api::ApiCommand::Serve { port }) = &cli.command {
         return match api::serve(&cli.db, *port, cli.lang) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                report(cli.command.method(), &e, cli.json, &early);
+                ExitCode::FAILURE
+            }
+        };
+    }
+    #[cfg(any(feature = "dev-bridge", debug_assertions))]
+    if let Command::Dev(dev::DevCommand::Serve { port, token }) = &cli.command {
+        return match dev::serve(&cli.db, *port, token.clone(), cli.lang) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 report(cli.command.method(), &e, cli.json, &early);

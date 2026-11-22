@@ -10,6 +10,7 @@
 //! * [`events`], [`jobs`], [`settings`], [`module`]: event bus, job queue, settings schema and
 //!   module descriptor contracts.
 //! * [`system`]: the only place reading the system clock and OS randomness.
+//! * [`transport`]: the user-facing dispatch every UI transport (IPC, dev bridge) shares.
 #![forbid(unsafe_code)]
 
 pub mod app;
@@ -25,6 +26,7 @@ pub(crate) mod support;
 pub mod system;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
+pub mod transport;
 
 pub use app::{App, AppDeps};
 pub use error::{AppError, AppResult};

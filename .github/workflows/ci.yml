@@ -148,6 +148,44 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  journeys:
+    needs: detect
+    if: needs.detect.outputs.frontend == 'true' && needs.detect.outputs.rust == 'true'
+    name: Yolculuklar (gerçek çekirdek, dev köprüsü)
+    runs-on: ubuntu-24.04  # Playwright has no Chromium build for ubuntu-26.04 yet
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.100.0 # = rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: journeys
+      - name: "fc (CLI, debug build: has fc dev serve)"
+        working-directory: .
+        run: cargo build --locked -p fc-cli
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/desktop/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+        env:
+          FC_BIN: ${{ github.workspace }}/target/debug/fc
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: journeys
+          path: apps/desktop/e2e/.results/
+          if-no-files-found: ignore
+          retention-days: 14
+
   extension:
     name: Tarayıcı eklentisi (check, test, build, e2e)
     runs-on: ubuntu-24.04  # Playwright has no Chromium build for ubuntu-26.04 yet
