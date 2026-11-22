@@ -140,14 +140,16 @@
       "kind": {
         "normal": "Cards",
         "learn": "Learn",
-        "test": "Test",
-        "match": "Match"
+        "test": "Exam",
+        "match": "Match",
+        "quiz": "Test"
       },
       "kind_desc": {
         "normal": "Flip the card and say how well you knew it; that sets when it comes back.",
         "learn": "Asks multiple choice first, then written; cards you get right move on in the schedule.",
-        "test": "A mixed practice paper with a score at the end. Never changes the schedule.",
-        "match": "Match words with their meanings against the clock. Doesn’t change the schedule."
+        "test": "A mixed paper (multiple choice, written, matching) with a score at the end. Doesn’t change the schedule.",
+        "match": "Match words with their meanings against the clock. Doesn’t change the schedule.",
+        "quiz": "One word, four options; pick one and see the right answer at once. Practice: doesn’t change the schedule."
       },
       "scope_label": "What to study",
       "scope": {
@@ -191,6 +193,28 @@
       "no_modes": "No study mode is on. Turn one on in Settings › Modules.",
       "deck_all": "All decks",
       "count_hint_test": "Leave empty for {n}"
+    },
+    "mode": {
+      "normal": {
+        "name": "Cards",
+        "description": "Flip the card and say how well you knew it; that sets when it comes back."
+      },
+      "quiz": {
+        "name": "Test",
+        "description": "One word, four options; you see the right answer as soon as you pick."
+      },
+      "learn": {
+        "name": "Learn",
+        "description": "Step by step: pick the meaning, then type it yourself; it comes back until you know it."
+      },
+      "test": {
+        "name": "Exam",
+        "description": "A paper of mixed questions with a score at the end."
+      },
+      "match": {
+        "name": "Match",
+        "description": "Match words with their meanings against the clock."
+      }
     }
   },
   "settings": {

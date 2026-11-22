@@ -33,7 +33,8 @@ include_subdecks?: boolean | null,
  */
 filter?: StudyFilter | null, 
 /**
- * Mistakes sessions: the session whose "Again" cards to repeat.
+ * Mistakes sessions: the session whose "Again" cards to repeat. v1.4 quiz sessions: the
+ * quiz whose missed words to ask again ("study the missed ones again").
  */
 from_session?: SessionId | null, 
 /**

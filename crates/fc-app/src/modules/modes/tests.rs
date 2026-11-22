@@ -493,9 +493,14 @@ pub fn test_generator_mixes_types_scores_and_never_schedules(f: &Factory) {
         yks.id,
         Some("sınav:TYT"),
         Some(StartModes {
+            // v1.4: true/false is off by default; this paper asks for the three v0.10 types.
             test: Some(TestOptions {
                 questions: Some(6),
-                kinds: None,
+                kinds: Some(vec![
+                    TestQuestionKind::TrueFalse,
+                    TestQuestionKind::MultipleChoice,
+                    TestQuestionKind::Written,
+                ]),
             }),
             ..StartModes::default()
         }),
@@ -547,6 +552,7 @@ pub fn test_generator_mixes_types_scores_and_never_schedules(f: &Factory) {
                 a.text = Some(key.expected.replace("cevap", "cevab"));
             }
             TestQuestionKind::Written => continue, // blank
+            TestQuestionKind::Matching => unreachable!("not asked for"),
         }
         answers.push(a);
     }

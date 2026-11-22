@@ -406,6 +406,7 @@ pub(super) fn kind_str(kind: StudyKind) -> &'static str {
         StudyKind::Learn => "learn",
         StudyKind::Test => "test",
         StudyKind::Match => "match",
+        StudyKind::Quiz => "quiz",
     }
 }
 
@@ -420,6 +421,7 @@ pub(crate) fn review_mode(config: &SessionConfig, confidence: bool) -> String {
         StudyKind::Learn => Some("learn"),
         StudyKind::Test => Some("test"),
         StudyKind::Match => Some("match"),
+        StudyKind::Quiz => Some("quiz"),
         StudyKind::Normal | StudyKind::Custom | StudyKind::Mistakes => {
             if modes.is_some_and(|m| m.timed.is_some()) {
                 Some("timed")

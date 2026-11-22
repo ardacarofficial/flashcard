@@ -11,6 +11,7 @@ export type TestOptions = {
  */
 questions?: number | null, 
 /**
- * Question types, mixed in turn (default: all three).
+ * Question types, mixed in turn (default since v1.4: multiple choice, written and
+ * matching — true/false only when asked for).
  */
 kinds?: Array<TestQuestionKind> | null, };

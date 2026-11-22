@@ -3,4 +3,4 @@
 /**
  * Question type of a test.
  */
-export type TestQuestionKind = "multiple_choice" | "written" | "true_false";
+export type TestQuestionKind = "multiple_choice" | "written" | "true_false" | "matching";

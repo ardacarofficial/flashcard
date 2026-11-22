@@ -29,12 +29,19 @@ pub enum StudyKind {
     /// v0.10 learn mode (Quizlet style): the chosen cards are asked as multiple choice, then
     /// written, until each is correct at every stage (`modes.learn.answer`).
     Learn,
-    /// v0.10 test: a paper of mixed question types from the chosen cards, scored on
-    /// submission (`modes.test.paper`, `modes.test.submit`). Never changes the schedule.
+    /// v0.10 test paper — shown as **"Exam"** ("Sınav") since v1.4 (the id stays `test` so
+    /// saved papers keep working): a paper of mixed question types from the chosen cards,
+    /// scored on submission (`modes.test.paper`, `modes.test.submit`). Never changes the
+    /// schedule.
     Test,
     /// v1.1 match: rounds of terms and definitions to pair against the clock
     /// (`modes.match.start/pick/finish`). Practice: never changes the schedule.
     Match,
+    /// v1.4 quiz — shown as **"Test"**: one word at a time with up to four meanings to pick
+    /// from; the right one is shown at once (`modes.quiz.answer`), the score and the missed
+    /// words at the end (`modes.quiz.result`). Practice unless the `quiz.affects_schedule`
+    /// setting is on. `from_session` (a finished quiz) asks its missed words again.
+    Quiz,
 }
 
 /// Whether answers change the schedule.
@@ -120,7 +127,8 @@ pub struct StartSession {
     /// Custom sessions: the card filter.
     #[serde(default)]
     pub filter: Option<StudyFilter>,
-    /// Mistakes sessions: the session whose "Again" cards to repeat.
+    /// Mistakes sessions: the session whose "Again" cards to repeat. v1.4 quiz sessions: the
+    /// quiz whose missed words to ask again ("study the missed ones again").
     #[serde(default)]
     pub from_session: Option<SessionId>,
     /// New cards at most (default: `study.new_per_session`).
@@ -244,9 +252,31 @@ pub struct StudyOptions {
     pub resumable: Vec<ResumableSession>,
     /// Always all five scopes: due, new, studied_today, struggled_today, all.
     pub scopes: Vec<StudyScopeOption>,
-    /// Kinds that can be started now (module switches): a subset of normal, learn, test,
-    /// match, in that order.
-    pub modes: Vec<StudyKind>,
+    /// v1.4: the modes that can be started now (module switches), in launcher order: normal
+    /// ("Cards"), quiz ("Test"), learn, test ("Exam"), match — each with its name, a one-line
+    /// description and whether it changes the schedule.
+    pub modes: Vec<StudyModeOption>,
+}
+
+/// v1.4: one study mode of `study.options` (the single source of a mode's name, description
+/// and "changes the schedule / practice" label).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct StudyModeOption {
+    /// Kind to start (`study.start.kind`).
+    pub kind: StudyKind,
+    /// i18n key of its name (`study.mode.<kind>.name`).
+    pub name_key: String,
+    /// i18n key of its one-line description (`study.mode.<kind>.description`).
+    pub description_key: String,
+    /// Answers change the schedule (cards, learn; quiz with `quiz.affects_schedule`). A
+    /// practice scope still makes any session practice.
+    pub affects_schedule: bool,
+    /// Exam (`test`): the question types it can ask, in paper order (empty for other kinds).
+    pub question_kinds: Vec<super::modes::TestQuestionKind>,
+    /// Exam: the types selected by default (true/false is off).
+    pub default_question_kinds: Vec<super::modes::TestQuestionKind>,
+    /// Exam: default number of questions (`practice_test.questions`; `null` for other kinds).
+    pub default_questions: Option<u32>,
 }
 
 /// Request naming a session.

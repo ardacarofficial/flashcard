@@ -86,7 +86,9 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
     // sessions also need a card to show now (learn/test/match take every card at once).
     let shows_now = match req.kind {
         StudyKind::Normal | StudyKind::Custom | StudyKind::Mistakes => planner.available(&queue),
-        StudyKind::Learn | StudyKind::Test | StudyKind::Match => !queue.is_empty(),
+        StudyKind::Learn | StudyKind::Test | StudyKind::Match | StudyKind::Quiz => {
+            !queue.is_empty()
+        }
     };
     if !shows_now {
         let (reason, next) = planner.empty_reason(&plan_req, &queue)?;

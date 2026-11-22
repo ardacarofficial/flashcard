@@ -1,7 +1,9 @@
 //! `practice_test` module: test papers (docs/02 §6.1). `study.start { kind: test }` picks the
 //! cards like a custom session (deck, query — e.g. `sınav:TYT` — classification filter, saved
-//! query) and fixes a paper of mixed question types (multiple choice, written, true/false)
-//! with its answer key in the session. `modes.test.paper` returns it (printable; the key only
+//! query) and fixes a paper of mixed question types (multiple choice, written, matching,
+//! true/false — v1.4 default: all but true/false) with its answer key in the session. Shown
+//! as **"Exam"** ("Sınav") since v1.4; the kind id stays `test` so saved papers keep working
+//! (the v1.4 "Test" is the `quiz` module). `modes.test.paper` returns it (printable; the key only
 //! after submission or on request), `modes.test.submit` grades it, logs one review per question
 //! (`review_log.mode = test`) and never changes the schedule. Submission is one undo step.
 //! v1.3: `modes.test.save_draft` keeps the answers of an open paper, so an unfinished test is
@@ -73,6 +75,7 @@ fn kind_of(k: TestQuestionKind) -> QuestionKind {
         TestQuestionKind::MultipleChoice => QuestionKind::MultipleChoice,
         TestQuestionKind::Written => QuestionKind::Written,
         TestQuestionKind::TrueFalse => QuestionKind::TrueFalse,
+        TestQuestionKind::Matching => QuestionKind::Matching,
     }
 }
 
@@ -81,7 +84,26 @@ fn kind_dto(k: QuestionKind) -> TestQuestionKind {
         QuestionKind::MultipleChoice => TestQuestionKind::MultipleChoice,
         QuestionKind::Written => TestQuestionKind::Written,
         QuestionKind::TrueFalse => TestQuestionKind::TrueFalse,
+        QuestionKind::Matching => TestQuestionKind::Matching,
     }
+}
+
+/// v1.4 `study.options`: the question types the exam offers, in order.
+pub(crate) fn offered_kinds() -> Vec<TestQuestionKind> {
+    pure::ALL_KINDS.into_iter().map(kind_dto).collect()
+}
+
+/// v1.4 `study.options`: the types selected by default (true/false off).
+pub(crate) fn default_kinds() -> Vec<TestQuestionKind> {
+    pure::DEFAULT_KINDS.into_iter().map(kind_dto).collect()
+}
+
+/// `practice_test.questions`.
+pub(crate) fn default_questions(reads: &dyn fc_storage::Reads) -> AppResult<u32> {
+    Ok(setting(reads, &SettingScope::App, QUESTIONS, descriptor)?
+        .as_u64()
+        .and_then(|n| u32::try_from(n).ok())
+        .unwrap_or(20))
 }
 
 /// `study.start` hook: builds the paper from the queued cards; the queue is emptied (a test
@@ -99,10 +121,7 @@ pub(super) fn init(
         .unwrap_or_default();
     let count = match opts.questions {
         Some(n) => n,
-        None => setting(v.reads, &SettingScope::App, QUESTIONS, descriptor)?
-            .as_u64()
-            .and_then(|n| u32::try_from(n).ok())
-            .unwrap_or(20),
+        None => default_questions(v.reads)?,
     };
     if count == 0 || count as usize > pure::MAX_QUESTIONS {
         return Err(crate::support::invalid(format!(
@@ -133,9 +152,16 @@ pub(super) fn init(
         if answer.trim().is_empty() {
             continue;
         }
+        // The word a matching question lists: the `term` field (v1.3 roles), else the
+        // question side as text.
+        let note = crate::support::notes::require_note(v.reads, card.note_id)?;
+        let nt = crate::support::notes::require_notetype(v.reads, note.notetype_id)?;
+        let term = crate::support::content::role_text(&nt, &note, fc_core::notetype::FieldRole::Term)
+            .unwrap_or_else(|| html_to_text(&r.card.sides.question).trim().to_owned());
         sources.push(TestSource {
             card_id: card.id,
             prompt_html: r.card.sides.question.clone(),
+            term,
             answer,
             own_options: own,
         });
@@ -183,10 +209,12 @@ fn question_dto(i: usize, q: &Question, key: bool) -> TestQuestionDto {
         prompt_html: q.prompt_html.clone(),
         options: q.options.clone(),
         statement: q.statement.clone(),
+        terms: q.terms.clone(),
         key: key.then(|| TestKeyDto {
             option: q.key.option,
             truth: q.key.truth,
             expected: q.key.expected.clone(),
+            pairs: q.key.pairs.clone(),
         }),
     }
 }
@@ -205,6 +233,7 @@ fn answers_dto(responses: &[Response]) -> Vec<TestAnswerDto> {
                 Response::Choice(c) => a.choice = Some(*c),
                 Response::Text(t) => a.text = Some(t.clone()),
                 Response::Truth(b) => a.truth = Some(*b),
+                Response::Pairs(p) => a.pairs = Some(p.clone()),
                 Response::Blank => {}
             }
             a
@@ -226,6 +255,7 @@ fn is_blank(r: &Response) -> bool {
     match r {
         Response::Blank => true,
         Response::Text(t) => t.trim().is_empty(),
+        Response::Pairs(p) => p.iter().all(Option::is_none),
         Response::Choice(_) | Response::Truth(_) => false,
     }
 }
@@ -261,6 +291,9 @@ fn paper_dto(s: &Session, t: &TestState, with_key: bool) -> TestPaperDto {
                     .enumerate()
                     .map(|(i, v)| TestItemDto {
                         index: index(i),
+                        matched: t.questions.get(i).and_then(|q| {
+                            pure::matched(q, g.responses.get(i).unwrap_or(&Response::Blank))
+                        }),
                         verdict: match v {
                             Verdict::Correct => TestVerdict::Correct,
                             Verdict::Almost => TestVerdict::Almost,
@@ -289,6 +322,12 @@ fn response(q: &Question, a: Option<&TestAnswerDto>) -> Response {
         QuestionKind::MultipleChoice => a.choice.map(Response::Choice),
         QuestionKind::TrueFalse => a.truth.map(Response::Truth),
         QuestionKind::Written => a.text.clone().map(Response::Text),
+        // One entry per word (missing ones blank, extra ones ignored).
+        QuestionKind::Matching => a.pairs.as_ref().map(|p| {
+            let mut p = p.clone();
+            p.resize(q.terms.len(), None);
+            Response::Pairs(p)
+        }),
     };
     r.unwrap_or(Response::Blank)
 }

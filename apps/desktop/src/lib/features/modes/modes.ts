@@ -18,10 +18,12 @@ export interface PaperInput {
   choice: Record<number, number>;
   truth: Record<number, boolean>;
   text: Record<number, string>;
+  /** v1.4 matching: per word, the option picked for it (`null` = none yet). */
+  pairs: Record<number, (number | null)[]>;
 }
 
 export function emptyInput(): PaperInput {
-  return { choice: {}, truth: {}, text: {} };
+  return { choice: {}, truth: {}, text: {}, pairs: {} };
 }
 
 /** `modes.test.submit` answers: one per filled question, the field matching its type. */
@@ -36,6 +38,10 @@ export function testAnswers(questions: TestQuestionDto[], input: PaperInput): Te
       case 'written': {
         const t = input.text[i]?.trim() ?? '';
         return t ? [{ index: i, choice: null, text: t, truth: null }] : [];
+      }
+      case 'matching': {
+        const p = input.pairs[i] ?? [];
+        return p.some((x) => x !== null) ? [{ index: i, choice: null, text: null, truth: null, pairs: p }] : [];
       }
     }
   });

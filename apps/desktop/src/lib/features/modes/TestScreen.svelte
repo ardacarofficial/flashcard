@@ -26,6 +26,7 @@
     Minus,
     OptionTile,
     PageHeader,
+    Select,
     Printer,
     ProgressRing,
     Skeleton,
@@ -113,11 +114,13 @@
     paper = await api.call('modes.test.paper', { session_id: s.id, with_key: null });
     const fresh = emptyInput();
     for (const q of paper.questions) if (q.kind === 'written') fresh.text[q.index] = '';
+    for (const q of paper.questions) if (q.kind === 'matching') fresh.pairs[q.index] = (q.terms ?? []).map(() => null);
     // v1.3: a continued paper comes back with the answers saved so far.
     for (const a of paper.draft ?? []) {
       if (a.choice != null) fresh.choice[a.index] = a.choice;
       if (a.truth != null) fresh.truth[a.index] = a.truth;
       if (a.text != null) fresh.text[a.index] = a.text;
+      if (a.pairs != null) fresh.pairs[a.index] = a.pairs;
     }
     input = fresh;
     savedDraft = JSON.stringify(paper.draft ?? []);
@@ -250,12 +253,17 @@
   }
 
   const truthText = (b: boolean | null | undefined) => (b ? t('modes.test.true') : t('modes.test.false'));
-  const keyText = (q: TestQuestionDto) => (q.kind === 'true_false' ? truthText(q.key?.truth) : (q.key?.expected ?? ''));
+  /** Matching: "word → meaning" per word (by the key, or by the picks). */
+  const pairText = (q: TestQuestionDto, picks: readonly (number | null)[] | null | undefined) =>
+    (q.terms ?? []).map((w, i) => `${w} → ${picks?.[i] != null ? (q.options[picks[i]!] ?? '') : '—'}`).join(' · ');
+  const keyText = (q: TestQuestionDto) =>
+    q.kind === 'true_false' ? truthText(q.key?.truth) : q.kind === 'matching' ? pairText(q, q.key?.pairs) : (q.key?.expected ?? '');
   const given = (q: TestQuestionDto): string => {
     const a: TestAnswerDto | undefined = paper?.answers?.find((x) => x.index === q.index);
     if (!a) return t('modes.test.blank_answer');
     if (q.kind === 'multiple_choice' && a.choice != null) return q.options[a.choice] ?? '';
     if (q.kind === 'true_false' && a.truth != null) return truthText(a.truth);
+    if (q.kind === 'matching' && a.pairs != null) return pairText(q, a.pairs);
     return a.text ?? t('modes.test.blank_answer');
   };
   const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
@@ -315,6 +323,28 @@
                 disabled={result !== null}
                 onclick={() => (input.truth[q.index] = o.value)}
                 testid="option-{q.index}-{i}"
+              />
+            {/each}
+          </div>
+        {:else if q.kind === 'matching'}
+          <ol class="match-options">
+            {#each q.options as option, i (i)}
+              <li><span class="num">{LETTERS[i]}</span> {option}</li>
+            {/each}
+          </ol>
+          <div class="match-words">
+            {#each q.terms ?? [] as term, w (w)}
+              <Select
+                label={term}
+                size="sm"
+                disabled={result !== null}
+                options={q.options.map((_, i) => ({ value: i, label: LETTERS[i] ?? String(i + 1) }))}
+                value={input.pairs[q.index]?.[w] ?? null}
+                onchange={(v: number) => {
+                  const p = [...(input.pairs[q.index] ?? (q.terms ?? []).map(() => null))];
+                  p[w] = v;
+                  input.pairs[q.index] = p;
+                }}
               />
             {/each}
           </div>
@@ -437,6 +467,18 @@
 </Dialog>
 
 <style>
+  .match-options {
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+    display: grid;
+    gap: 4px;
+  }
+  .match-words {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+  }
   .test {
     display: flex;
     flex-direction: column;

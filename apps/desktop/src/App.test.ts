@@ -92,7 +92,8 @@ describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
     // v1.3: a mode button opens the study launcher with that mode chosen — never a silent start.
     await screen.findByTestId('study-launcher', {}, { timeout: 5_000 });
     // (The mode control appears once `study.options` has answered.)
-    expect((await screen.findByRole('radio', { name: 'Test' }, { timeout: 5_000 })).getAttribute('aria-checked')).toBe('true');
+    // v1.4: the paper (`test`) is called "Exam" ("Test" is the four-option quiz).
+    expect((await screen.findByRole('radio', { name: 'Exam' }, { timeout: 5_000 })).getAttribute('aria-checked')).toBe('true');
     expect(page.classList.contains('focus')).toBe(false);
     const start = (await screen.findByTestId('launcher-start')) as HTMLButtonElement;
     await waitFor(() => expect(start.disabled).toBe(false));

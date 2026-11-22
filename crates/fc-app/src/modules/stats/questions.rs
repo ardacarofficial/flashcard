@@ -28,13 +28,15 @@ const SAME_BAND: f64 = 0.15;
 
 /// Every `review_log.mode` an answer can have besides imports: the scheduled ones and the
 /// practice ones (`trial`, `trial_<mode>`, `test`, `match`).
-const ANSWER_MODES: [&str; 10] = [
+const ANSWER_MODES: [&str; 12] = [
     SCHEDULED_REVIEW_MODES[0],
     SCHEDULED_REVIEW_MODES[1],
     SCHEDULED_REVIEW_MODES[2],
     SCHEDULED_REVIEW_MODES[3],
+    SCHEDULED_REVIEW_MODES[4],
     "trial",
     "trial_learn",
+    "trial_quiz",
     "trial_timed",
     "trial_confidence",
     "test",

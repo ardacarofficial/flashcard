@@ -65,13 +65,15 @@ export function rememberChoice(prefs: LaunchPrefs, deckId: string | null, kind: 
 export const DEFAULT_SCOPE: Readonly<Record<LaunchKind, StudyScope>> = {
   normal: 'due',
   learn: 'new',
+  // v1.4 Test (quiz) is practice, like the exam: every card of the deck.
+  quiz: 'all',
   test: 'all',
   match: 'all',
 };
 
 /** The mode shown first: the asked one, else the deck's last one, else Cards — if available. */
 export function pickKind(options: Pick<StudyOptions, 'modes'>, asked: LaunchKind | undefined, prefs: LaunchPrefs, deckId: string | null): LaunchKind | null {
-  const modes = options.modes.filter(isKind);
+  const modes = options.modes.map((m) => m.kind).filter(isKind);
   for (const k of [asked, prefs.modeByDeck[deckId ?? ALL_DECKS], 'normal' as const]) if (k && modes.includes(k)) return k;
   return modes[0] ?? null;
 }

@@ -13,6 +13,9 @@
 //!   (`modes.inline.preview/create`), usable during study and reading.
 //! * `match` ([`matching`], v1.1): pair terms with definitions against the clock
 //!   (`study.start { kind: match }`, `modes.match.start/pick/finish`); practice only.
+//! * `quiz` ([`quiz`], v1.4 — "Test" in the app): one word, up to four meanings, the right
+//!   one shown at once (`study.start { kind: quiz }`, `modes.quiz.answer/result`); practice
+//!   unless `quiz.affects_schedule`. (`practice_test` is the paper, shown as "Exam".)
 //!
 //! **Building blocks** (CLAUDE.md rule 3): every mode is a session kind or session option of
 //! the v0.2 engine. Answers go through `study::ext::answer_core` (scheduler, planning, sibling
@@ -28,7 +31,10 @@ pub mod inline_cards;
 pub mod learn;
 pub mod matching;
 pub mod practice_test;
+pub mod quiz;
 pub mod timed;
+#[cfg(test)]
+mod quiz_tests;
 #[cfg(test)]
 mod tests;
 
@@ -51,7 +57,7 @@ use fc_study::modes::{timed::Timed, ModesConfig};
 use fc_study::session::SessionState;
 use serde_json::Value;
 
-/// Registers the seven modules.
+/// Registers the eight modules.
 pub fn register(reg: &mut Registry) {
     learn::register(reg);
     practice_test::register(reg);
@@ -60,6 +66,7 @@ pub fn register(reg: &mut Registry) {
     focus::register(reg);
     inline_cards::register(reg);
     matching::register(reg);
+    quiz::register(reg);
 }
 
 // ------------------------------------------------------------------ shared helpers
@@ -124,6 +131,7 @@ pub(crate) fn prepare_start(
         StudyKind::Learn => require_module(ctx, learn::ID)?,
         StudyKind::Test => require_module(ctx, practice_test::ID)?,
         StudyKind::Match => require_module(ctx, matching::ID)?,
+        StudyKind::Quiz => require_module(ctx, quiz::ID)?,
         StudyKind::Normal | StudyKind::Custom | StudyKind::Mistakes => {}
     }
     let card_by_card = matches!(
@@ -187,6 +195,7 @@ pub(crate) fn init_state(
         StudyKind::Learn => learn::init(v, state, rng),
         StudyKind::Test => practice_test::init(v, req, state, rng),
         StudyKind::Match => matching::init(v, state),
+        StudyKind::Quiz => quiz::init(v, state, rng),
         StudyKind::Normal | StudyKind::Custom | StudyKind::Mistakes => Ok(()),
     }
 }
@@ -218,7 +227,8 @@ pub(crate) fn mode_progress(s: &Session) -> Option<(u32, u32)> {
         StudyKind::Normal
         | StudyKind::Custom
         | StudyKind::Mistakes
-        | StudyKind::Learn => None,
+        | StudyKind::Learn
+        | StudyKind::Quiz => None,
     }
 }
 
@@ -226,11 +236,20 @@ pub(crate) fn mode_progress(s: &Session) -> Option<(u32, u32)> {
 /// card past its time is answered by `modes.timed.expire` (`CONFLICT_TIME_UP`).
 pub(crate) fn check_button_answer(ctx: &CommandCtx<'_>, req: &AnswerCard) -> AppResult<()> {
     let session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
-    if session.config.kind == StudyKind::Learn {
-        return Err(session_mode(
-            "kind",
-            "learn cards are answered with modes.learn.answer",
-        ));
+    match session.config.kind {
+        StudyKind::Learn => {
+            return Err(session_mode(
+                "kind",
+                "learn cards are answered with modes.learn.answer",
+            ))
+        }
+        StudyKind::Quiz => {
+            return Err(session_mode(
+                "kind",
+                "quiz words are answered with modes.quiz.answer",
+            ))
+        }
+        _ => {}
     }
     timed::check_in_time(&session, req.card_id, ctx.now)
 }
@@ -248,7 +267,7 @@ pub(crate) fn session_modes(
     let state = s.state.modes.clone().unwrap_or_default();
     let plain = s.config.modes.is_none()
         && s.state.modes.is_none()
-        && !matches!(s.config.kind, StudyKind::Learn | StudyKind::Test);
+        && !matches!(s.config.kind, StudyKind::Learn | StudyKind::Test | StudyKind::Quiz);
     if plain {
         return Ok(None);
     }
@@ -271,6 +290,10 @@ pub(crate) fn session_modes(
         _ => None,
     };
     let test = state.test.as_ref().map(practice_test::info);
+    let quiz = match s.config.kind {
+        StudyKind::Quiz => Some(quiz::dto(s, shown)?),
+        _ => None,
+    };
     Ok(Some(SessionModesDto {
         rating_scale: if config.confidence {
             RatingScale::Confidence
@@ -282,5 +305,6 @@ pub(crate) fn session_modes(
         timed_out: state.timed_out,
         learn,
         test,
+        quiz,
     }))
 }

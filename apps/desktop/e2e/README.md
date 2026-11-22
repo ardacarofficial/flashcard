@@ -66,6 +66,7 @@ fix).
 | C2 | Planning's today = the launcher's today: 25 new (20 a day), 5 reviews a day → "Bugün ~20 kart" = `study.options`; no later day plans more than 20 new or 5 reviews | must pass (fixed in v1.3) |
 | C3 | Learn-ahead lowered to 0 while a learning card (due in 10 min) is on screen: Space + 2 is saved (review read back, no "no longer in the session"); the next card is chosen with the new value and waits | must pass (fixed in v1.3) |
 | C4 | A note's two cards in two decks: each deck alone offers its card; the whole-collection queue (Home → launcher → Enter) counts and serves one of them; a deck whose preset does not bury siblings keeps its card | must pass (fixed in v1.3) |
+| C5 | v1.4 Test (quiz): deck page → launcher → "Test" → each word asked with four meanings of the deck, key `1` picks, the verdict and the right meaning show at once, Enter goes on; the end score equals `modes.quiz.result` read back (every word answered, practice: one `trial_quiz` answer per card, schedules unchanged) | must pass (v1.4) |
 | K1 | A key right after a grade: four buttons, four cards in a row graded `1`/`2`/`3`/`4` with `Space` pressed at once (saving is held back 400 ms on purpose; half the cards turned with Space, half by clicking the card so it has the focus): while saving, the graded card stays on its back; the next card comes up on its front; each card has exactly one review in the session, with the pressed grade | must pass (fixed in v1.3) |
 
 A journey that shows a known bug is **never deleted or skipped**: the bug assertion comes after

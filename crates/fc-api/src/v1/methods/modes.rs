@@ -10,6 +10,13 @@ methods! {
     /// Undo restores the card, the learn progress and removes the review.
     ModesLearnAnswer = "modes.learn.answer", Command, "learn", "study:write", Public, undo: true, LearnAnswer => LearnAnswerResult;
 
+    // ---- quiz (module `quiz`, v1.4: "Test") ----
+    /// Picks an option for the shown word of a quiz; the verdict comes back at once. Undo
+    /// restores the word (and the card, when the quiz changes the schedule).
+    ModesQuizAnswer = "modes.quiz.answer", Command, "quiz", "study:write", Public, undo: true, QuizAnswer => QuizAnswerResult;
+    /// The score and the missed words of a quiz (also once it ended).
+    ModesQuizResult = "modes.quiz.result", Query, "quiz", "study:read", Public, undo: false, QuizRef => QuizResultDto;
+
     // ---- confidence (module `confidence`) ----
     /// Rates the shown card on the 1–5 confidence scale (mapped onto the four ratings).
     ModesConfidenceAnswer = "modes.confidence.answer", Command, "confidence", "study:write", Public, undo: true, ConfidenceAnswer => SessionDto;

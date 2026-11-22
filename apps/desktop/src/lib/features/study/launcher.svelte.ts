@@ -58,6 +58,9 @@ export function openLauncher(r: LaunchRequest): boolean {
 export const KIND_ROUTE: Readonly<Record<LaunchKind, string>> = {
   normal: '/study',
   learn: '/learn',
+  // v1.4: the quiz ("Test") runs on the Learn screen (its multiple-choice step) until the
+  // approved prototype's screen is built.
+  quiz: '/learn',
   test: '/test',
   match: '/match',
 };
@@ -96,5 +99,5 @@ export function takeHandoff(kind: LaunchKind): Handoff | null {
 
 /** The launcher kind of a session (`custom` / `mistakes` sessions run on the Cards screen). */
 export function launchKindOf(kind: SessionDto['kind']): LaunchKind {
-  return kind === 'learn' || kind === 'test' || kind === 'match' ? kind : 'normal';
+  return kind === 'learn' || kind === 'quiz' || kind === 'test' || kind === 'match' ? kind : 'normal';
 }

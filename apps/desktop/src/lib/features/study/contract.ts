@@ -26,8 +26,8 @@ export type NothingToStudy = { reason: StudyEmptyReason; next_available_at: Time
 export const SCOPES: readonly StudyScope[] = ['due', 'new', 'studied_today', 'struggled_today', 'all'];
 /** Practice scopes: the session never changes the schedule. */
 export const PRACTICE_SCOPES: readonly StudyScope[] = ['studied_today', 'struggled_today', 'all'];
-/** The launcher's modes, in display order. */
-export const LAUNCH_KINDS = ['normal', 'learn', 'test', 'match'] as const;
+/** The launcher's modes, in display order (v1.4: `quiz` is shown as "Test", `test` as "Exam"). */
+export const LAUNCH_KINDS = ['normal', 'quiz', 'learn', 'test', 'match'] as const;
 export type LaunchKind = (typeof LAUNCH_KINDS)[number];
 
 export const NOTHING_TO_STUDY = 'CONFLICT_NOTHING_TO_STUDY';

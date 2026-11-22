@@ -19,4 +19,8 @@ text?: string | null,
 /**
  * True/false.
  */
-truth?: boolean | null, };
+truth?: boolean | null, 
+/**
+ * v1.4 matching: for each word the option picked for it (`null` = left blank).
+ */
+pairs?: Array<number | null> | null, };
