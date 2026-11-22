@@ -50,6 +50,7 @@ body {
 button, input, select { font: inherit; color: inherit; }
 .num, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+[hidden] { display: none !important; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -82,6 +83,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
 .btn.lg { height: 36px; padding: 0 16px; font-size: 14px; }
 .btn:disabled { cursor: not-allowed; background: var(--surface-2); border-color: var(--border); color: var(--text-2); }
+.btn.ghost:disabled { background: none; border-color: transparent; opacity: .6; }
 .kbd {
   display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px;
   font: 500 11px var(--font-mono); border: 1px solid var(--border-strong); border-radius: 4px; color: var(--text-2); background: var(--surface-1);
@@ -121,8 +123,9 @@ select.input { padding-right: 6px; }
 .top .crumb { color: var(--text-2); }
 .top .crumb b { color: var(--text-1); font-weight: 500; }
 .top .grow { flex: 1; }
-.searchbox { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px 0 10px; width: 260px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-3); background: var(--surface-1); cursor: pointer; }
-.searchbox span.t { flex: 1; text-align: left; }
+.searchbox { display: inline-flex; align-items: center; gap: 8px; height: 28px; white-space: nowrap; overflow: hidden; padding: 0 6px 0 10px; width: 260px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-3); background: var(--surface-1); cursor: pointer; }
+.searchbox span.t { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.searchbox .kbd { flex: none; }
 .page { flex: 1; overflow: auto; padding: 24px; }
 .page-inner { max-width: 1120px; }
 
@@ -163,7 +166,8 @@ h2.sec { font-size: 14px; font-weight: 600; margin: 24px 0 8px; }
 .foot-sum b { color: var(--text-1); font-weight: 500; }
 .foot-sum .warn { color: var(--warning); }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-@media (max-width: 1000px) { .cols { grid-template-columns: 1fr; gap: 8px; } .dialog { width: min(660px, 100%); } }
+@media (max-width: 860px) { .cols { grid-template-columns: 1fr; gap: 8px; } .dialog { width: min(660px, 100%); } }
+@media (max-width: 1000px) { .foot-sum { order: -1; flex-basis: 100%; text-align: left; } }
 .lbl { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 14px 0 8px; display: flex; align-items: center; gap: 8px; }
 .lbl .step { font: 600 11px var(--font-mono); color: var(--text-2); border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 4px; }
 .resume-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-2); cursor: pointer; text-align: left; margin-bottom: 6px; }
@@ -211,7 +215,7 @@ h2.sec { font-size: 14px; font-weight: 600; margin: 24px 0 8px; }
 .sbar { height: 44px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--border); }
 .sbar .title b { font-weight: 600; }
 .sbar .title span { color: var(--text-2); }
-.pbar { flex: 1; height: 6px; background: var(--surface-3); border-radius: 999px; overflow: hidden; display: flex; min-width: 60px; }
+.pbar { flex: 1; height: 6px; background: var(--surface-3); border-radius: 999px; overflow: hidden; display: flex; min-width: 90px; }
 .pbar i { display: block; height: 100%; background: var(--accent); transition: width var(--motion); }
 .pbar i.s { background: var(--success); }
 .pbar i.w { background: var(--accent); }
@@ -333,7 +337,7 @@ mark { background: var(--accent-soft); color: var(--accent-text); padding: 0 2px
 .muted { color: var(--text-2); }
 
 /* toast */
-.toast { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--surface-3); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 14px; box-shadow: var(--shadow-float); z-index: 40; display: flex; gap: 12px; align-items: center; max-width: calc(100% - 32px); }
+.toast { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); background: var(--surface-3); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 14px; box-shadow: var(--shadow-float); z-index: 40; display: flex; gap: 12px; align-items: center; max-width: calc(100% - 32px); }
 
 /* notes drawer */
 #notes { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--surface-1); border-left: 1px solid var(--border-strong); box-shadow: var(--shadow-float); z-index: 60; display: none; flex-direction: column; }
@@ -603,9 +607,7 @@ function launcherView() {
   }
 
   const replacing = S.paused[L.mode] ? `<div class="muted" style="font-size:12px">Yeni başlarsan yarım kalan ${esc(S.paused[L.mode].title)} kapanır.</div>` : '';
-  const sum = info.reason
-    ? `<span class="warn">${esc(info.reason)}</span>`
-    : `<b>${MODES[L.mode].name} · ${esc(info.sc.name)} · <span class="num">${info.n}</span> ${info.unit}</b><br>${info.practice ? 'pratik: takvimin değişmez' : 'takvimi etkiler: cevapların sıradaki tekrarı ayarlar'}`;
+  const sum = footSum(info);
 
   return `<div class="overlay" data-act="overlay"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
     <div class="dlg-head"><h1 id="dlg-t">Çalış</h1><span class="sub">· ${esc(DECK)}</span><span class="grow"></span>
@@ -632,6 +634,15 @@ function launcherView() {
       <button class="btn primary lg" data-act="start" data-fk="start" ${info.reason ? 'disabled' : ''}>${icon('play')}Başla ${kbd('↵')}</button>
     </div>
   </div></div>`;
+}
+/** The footer line: what Başla will do, with the same number, and what it does to the schedule. */
+function footSum(info) {
+  const L = S.launcher;
+  if (info.reason) return `<span class="warn">${esc(info.reason)}</span>`;
+  const why = !info.practice ? 'takvimi etkiler: cevapların sıradaki tekrarı ayarlar'
+    : !modeSchedules(L.mode, L) ? 'pratik: takvimin değişmez'
+    : info.sc.practice ? `pratik: “${info.sc.name}” takvime dokunmaz` : 'pratik (Gelişmiş’te açtın): takvimin değişmez';
+  return `<b>${MODES[L.mode].name} · ${esc(info.sc.name)} · <span class="num">${info.n}</span> ${info.unit}</b><br>${why}`;
 }
 const sw = (k, on, label) => `<button class="switch" role="switch" aria-checked="${on}" aria-label="${esc(label)}" data-act="lswitch" data-k="${k}" data-fk="sw-${k}"><span class="track"></span></button>`;
 
@@ -1083,7 +1094,7 @@ function sessionView() {
   } else if (s.kind === 'learn') {
     const v = Object.values(s.items); const l = v.filter((x) => x.learned).length; const w = v.filter((x) => !x.learned && x.stage === 2).length;
     bar = `<div class="pbar" role="progressbar" aria-label="Öğrenilen kartlar" aria-valuenow="${l}" aria-valuemax="${s.total}"><i class="s" style="width:${pct(l, s.total)}%"></i><i class="w" style="width:${pct(w, s.total)}%"></i></div>`;
-    meta = `<span class="meta"><span class="dot" style="background:var(--success)"></span>Öğrenildi <span class="num">${l}</span> · <span class="dot" style="background:var(--accent)"></span>Yazma adımında <span class="num">${w}</span> · Seçme adımında <span class="num">${s.total - l - w}</span></span>`;
+    meta = `<span class="meta"><span class="dot" style="background:var(--success)"></span>Öğrenildi <span class="num">${l}</span> · <span class="dot" style="background:var(--accent)"></span>Yazma adımı <span class="num">${w}</span> · Seçme adımı <span class="num">${s.total - l - w}</span></span>`;
   } else if (s.kind === 'exam') {
     meta = `<span class="meta">cevaplandı</span>`;
     right = `<button class="btn ghost sm" data-act="toast" data-msg="Yazdır ve Cevap anahtarı burada kalır; bu taslakta çalışmaz.">${icon('printer')}<span class="opt-hide">Yazdır</span></button>`;
@@ -1209,10 +1220,10 @@ function matchBody(s) {
 /* ================================================================ strip + notes */
 function stripView() {
   const seg = (k, opts, label) => `<span class="grp">${label}<span class="seg" role="group" aria-label="${label}">${opts.map(([v, t]) => `<button data-act="set" data-k="${k}" data-v="${v}" data-fk="strip-${k}-${v}" aria-pressed="${String(S[k]) === v}">${t}</button>`).join('')}</span></span>`;
-  return `<span class="tag">TASLAK</span><span class="muted">Çalışma modları · v1.4 prototipi (uygulama değil)</span>
+  return `<span class="tag" title="Bu şerit uygulamanın parçası değil: taslağı denemek için">TASLAK · modlar</span>
     ${seg('learnVariant', [['A', 'A · ayrı mod'], ['B', 'B · Test’in içinde']], 'Öğren:')}
     ${seg('scopeVariant', [['A', 'A · aşamalı'], ['B', 'B · hepsi açık']], 'Kapsam:')}
-    ${seg('homeVariant', [['A', 'A · seçtirir'], ['B', 'B · hemen başlar']], 'Ana sayfa düğmesi:')}
+    ${seg('homeVariant', [['A', 'A · seçtirir'], ['B', 'B · hemen başlar']], 'Ana sayfa:')}
     ${seg('advanced', [['false', 'kapalı'], ['true', 'açık']], 'Gelişmiş:')}
     <span class="spacer"></span>
     <button class="btn sm" data-act="reset" title="Örnek kartları ilk hâline döndür">Sıfırla</button>
@@ -1409,7 +1420,7 @@ function renderKeepCaret(el) {
   // Update only the footer summary while typing a number (keeps the caret where it is).
   const foot = $app.querySelector('.foot-sum'); const start = $app.querySelector('[data-act="start"]');
   const info = launchInfo();
-  if (foot) foot.innerHTML = info.reason ? `<span class="warn">${esc(info.reason)}</span>` : `<b>${MODES[S.launcher.mode].name} · ${esc(info.sc.name)} · <span class="num">${info.n}</span> ${info.unit}</b><br>${info.practice ? 'pratik: takvimin değişmez' : 'takvimi etkiler: cevapların sıradaki tekrarı ayarlar'}`;
+  if (foot) foot.innerHTML = footSum(info);
   if (start) start.disabled = !!info.reason;
 }
 
