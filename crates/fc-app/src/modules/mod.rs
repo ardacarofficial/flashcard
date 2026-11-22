@@ -62,4 +62,5 @@ modules! {
     profiles,
     themes,
     words,
+    word_data,
 }

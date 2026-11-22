@@ -185,5 +185,6 @@ domains! {
     maintenance => MaintenanceState,
     ux => UxState,
     words => WordsState,
+    word_data => WordDataState,
     capture_log => CaptureLogState,
 }

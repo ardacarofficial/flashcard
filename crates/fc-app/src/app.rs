@@ -240,6 +240,8 @@ impl App {
         tx.delete_orphan_media_files()?;
         // The word index (v1.4): builds what a migration or another writer queued.
         crate::modules::words::index::drain(&mut *tx)?;
+        // Word data (v1.4): installs the shipped packs once (and again when they change).
+        crate::modules::word_data::install_bundled(&mut *tx, now)?;
         tx.commit()?;
         self.reload_cached_state()?;
         self.roll_back_unfinished_groups()?;

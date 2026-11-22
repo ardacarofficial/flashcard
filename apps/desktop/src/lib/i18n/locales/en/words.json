@@ -3,6 +3,10 @@
     "words": {
       "name": "Word index",
       "description": "One list of the words you know, are learning or ignore, built from all your cards and marks. Reading mode and the Subtitle extension use it."
+    },
+    "word_data": {
+      "name": "Word frequency and level",
+      "description": "Shows how often a word is heard in films and series and its estimated CEFR level (A1–C2), so you can learn the common words first. Uses a word list that comes with the app; no internet needed."
     }
   },
   "settings": {
@@ -25,6 +29,11 @@
       "index": {
         "rebuild": "Rebuild the word index",
         "rebuild_now": "Rebuild the word index"
+      },
+      "data": {
+        "sources": "Word data sources",
+        "import": "Import word data",
+        "reset": "Restore the built-in word data"
       }
     }
   },

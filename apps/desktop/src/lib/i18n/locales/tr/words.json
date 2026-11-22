@@ -3,6 +3,10 @@
     "words": {
       "name": "Kelime dizini",
       "description": "Bildiğin, öğrendiğin ve yok saydığın kelimelerin tek listesi; tüm kartlarından ve işaretlerinden kurulur. Okuma modu ve Subtitle eklentisi bunu kullanır."
+    },
+    "word_data": {
+      "name": "Kelime sıklığı ve seviyesi",
+      "description": "Bir kelimenin film ve dizilerde ne sık duyulduğunu ve tahmini CEFR seviyesini (A1–C2) gösterir; sık kelimeleri önce öğrenirsin. Uygulamayla gelen kelime listesini kullanır, internet gerekmez."
     }
   },
   "settings": {
@@ -25,6 +29,11 @@
       "index": {
         "rebuild": "Kelime dizinini yeniden kur",
         "rebuild_now": "Kelime dizinini yeniden kur"
+      },
+      "data": {
+        "sources": "Kelime verisi kaynakları",
+        "import": "Kelime verisi içe aktar",
+        "reset": "Yerleşik kelime verisine dön"
       }
     }
   },

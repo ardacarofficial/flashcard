@@ -85,5 +85,6 @@ domains! {
     maintenance: MaintenanceRead, MaintenanceWrite;
     ux: UxStateRead, UxStateWrite;
     words: WordIndexRead, WordIndexWrite;
+    word_data: WordDataRead, WordDataWrite;
     capture_log: CaptureLogRead, CaptureLogWrite;
 }

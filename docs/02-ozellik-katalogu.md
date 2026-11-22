@@ -432,6 +432,7 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 - Kelime **kökü / ailesi** desteği (run/running/ran): dil bazında lemmatizasyon sağlayıcısı (takılabilir).
 - Metindeki bilinen kelime yüzdesi ("Bu metnin %87'sini biliyorsun").
 - `[v1.4]` **Ortak kelime dizini:** renkler, yüzde ve Subtitle eklentisinin bilinen kelimeleri aynı kalıcı dizinden gelir; elle, Anki'den, Subtitle'dan ya da okumadan gelen her `term` notu sayılır. Elle işaret kartı yener; "bilinen" eşiği ayardır (`words.known_interval_days`, 21 gün). Destenin dili `words.language` ile verilir; dili bilinmeyen notlar raporlanır. API: `words.lookup` (toplu), `words.list`, `words.stats`, `words.index.rebuild` (docs/03 §4.2).
+- `[v1.4]` **Sıklık ve seviye:** her kelimenin film/dizi altyazılarındaki sıklık sırası ve tahmini CEFR bandı (profil listesinden mi, sıradan mı tahmin edildiği belirtilir); ifadeler belgeli kuralla tahmini bant alır; kelime ailesi (`act`/`actor`) gösterilir ama üyeleri bilinen yapmaz. `words.list` "bilmediğim en sık kelimeler" için sıraya/banda göre sıralar ve süzer. İngilizce paket uygulamayla gelir (CC BY-SA 4.0, kaynaklar `words.data.sources`), başka paket `words.data.import`; modül `word_data` kapatılabilir (docs/03 §4.3).
 
 ## 25. 🎬 Altyazıdan kart ve cümle madenciliği
 

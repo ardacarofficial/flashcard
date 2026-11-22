@@ -27,6 +27,7 @@ mod subtitle;
 mod tags;
 mod ux;
 mod vocab_roles;
+mod word_data;
 mod word_index;
 
 use crate::error::StorageResult;
