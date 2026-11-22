@@ -47,3 +47,4 @@ Final wave running (worktrees v13-x1/x2/x3): x1 core fixes (above three), x2 own
 only; writes `.orchestra/v13/owner-walkthrough.md`), x3 docs + version 1.3.0 + non-gating Windows WebDriver pilot.
 Then: merge x1 → x2 → x3, full checks + e2e myself, look at screens, push, fetch Windows installer artifact, final
 report to user (open: real keys for AI never tested; Windows window manual run; fc.exe not in installer for MCP).
+- x3 MERGED. Leftovers for final pass: terms differ Study vs Search/automation (Durdur/Askıya al, Yarına bırak/Göm); e2e/README J4 text; re-check '<!-- v1.3: verify after X1/X2 -->' markers in docs.
