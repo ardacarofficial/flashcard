@@ -9,7 +9,7 @@ use crate::handler::QueryCtx;
 use crate::support::decks::DeckIndex;
 use fc_api::v1::stats::*;
 use fc_core::card::Rating;
-use fc_core::notetype::NoteType;
+use fc_core::notetype::{FieldRole, NoteType};
 use fc_core::stats::{iso_date, streak, DayAggregate};
 use fc_core::{CardId, NoteTypeId, Timestamp};
 use fc_storage::repo::{is_practice_mode, SCHEDULED_REVIEW_MODES};
@@ -151,8 +151,22 @@ fn term_and_meaning(nt: &NoteType, fields: &fc_core::note::FieldValues) -> (Stri
             .find(|k| Some(*k) != except);
         (key.map(str::to_owned), key.and_then(text).unwrap_or_default())
     };
-    let (term_key, term) = pick(&TERM_KEYS, None);
-    let (_, meaning) = pick(&MEANING_KEYS, term_key.as_deref());
+    // v1.3: field roles say what a field contains (`term`, then `surface`; `meaning`); the
+    // fixed key lists are only the fallback for note types without roles.
+    let by_role = |roles: &[FieldRole]| -> Option<(String, String)> {
+        roles.iter().find_map(|r| {
+            let f = nt.fields.iter().find(|f| f.role == Some(*r))?;
+            text(f.key.as_str()).map(|t| (f.key.as_str().to_owned(), t))
+        })
+    };
+    let (term_key, term) = match by_role(&[FieldRole::Term, FieldRole::Surface]) {
+        Some((k, t)) => (Some(k), t),
+        None => pick(&TERM_KEYS, None),
+    };
+    let meaning = match by_role(&[FieldRole::Meaning]) {
+        Some((_, t)) => t,
+        None => pick(&MEANING_KEYS, term_key.as_deref()).1,
+    };
     (term, meaning)
 }
 
@@ -255,4 +269,38 @@ pub(super) fn struggles(req: StrugglesRequest, ctx: &QueryCtx<'_>) -> AppResult<
         items,
         study_query: (!studyable.is_empty()).then(|| format!("cid:{}", studyable.join(","))),
     })
+}
+
+#[cfg(test)]
+mod role_tests {
+    use super::term_and_meaning;
+    use fc_core::i18n::Locale;
+    use fc_core::note::FieldValues;
+    use fc_core::notetype::FieldKey;
+    use fc_core::Timestamp;
+
+    /// v1.3: term and meaning come from the field roles, not from key names — a subtitle-like
+    /// type whose word field is not called `word` must not show its sentence as the term.
+    #[test]
+    fn term_and_meaning_follow_roles() {
+        let mut nt = fc_core::content::builtin::subtitle(Timestamp(0), Locale::En);
+        for f in &mut nt.fields {
+            match f.key.as_str() {
+                "word" => f.key = FieldKey::new("lemma"),
+                "meaning" => f.key = FieldKey::new("gloss"),
+                _ => {}
+            }
+        }
+        let fields: FieldValues = [
+            ("lemma", "go"),
+            ("surface", "went"),
+            ("gloss", "gitmek"),
+            ("sentence", "I went home."),
+            ("translation", "Eve gittim."),
+        ]
+        .iter()
+        .map(|(k, v)| (FieldKey::new(*k), (*v).to_owned()))
+        .collect();
+        assert_eq!(term_and_meaning(&nt, &fields), ("go".to_owned(), "gitmek".to_owned()));
+    }
 }
