@@ -877,7 +877,7 @@ const SOURCES: &[&str] = &["The Night Train · S1E2", "The Night Train · S1E3",
 
 /// [`world`] plus random language data written straight into the tables the language
 /// predicates read (`word_index_notes`, `word_index`, `note_origins`, `media`/`note_media`,
-/// and the optional word-data table `word_frequency` when `with_freq`), mirrored in each row's
+/// and the word data behind the `word_frequency` view when `with_freq`), mirrored in each row's
 /// [`fc_core::query::LangFacts`].
 fn lang_world(n_notes: u128, seed: u64, with_freq: bool) -> World {
     use fc_core::query::{MediaKind, NoteOrigin};
@@ -888,11 +888,12 @@ fn lang_world(n_notes: u128, seed: u64, with_freq: bool) -> World {
     let conn = w.fx.raw();
     conn.execute_batch("BEGIN").unwrap();
     if with_freq {
+        // The word data (B2, migration 1440) behind the `word_frequency` view (1441).
         conn.execute_batch(
-            "CREATE TABLE word_frequency (language TEXT NOT NULL, key TEXT NOT NULL,
-               rank INTEGER NOT NULL, band TEXT, PRIMARY KEY (language, key)) STRICT;
-             INSERT INTO word_frequency VALUES ('en', 'go', 30, 'A1'), ('en', 'run', 400, 'A2'),
-               ('en', 'pick up', 2500, 'B1'), ('de', 'house', 900, 'A1'), ('en', 'house', 800, 'a2');",
+            "INSERT INTO word_data (language, form, lemma, rank, band, band_origin) VALUES
+               ('en', 'go', 'go', 30, 'A1', 'rank'), ('en', 'run', 'run', 400, 'A2', 'rank'),
+               ('en', 'pick up', 'pick up', 2500, 'B1', 'profile'),
+               ('de', 'house', 'house', 900, 'A1', 'rank'), ('en', 'house', 'house', 800, 'A2', 'rank');",
         )
         .unwrap();
     }

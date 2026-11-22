@@ -205,3 +205,42 @@ fn packs_replace_and_join_the_index() {
         assert!(r.word_data_get("en", &["go".into()]).unwrap().is_empty());
     });
 }
+
+/// 1441: the `word_frequency` view the language queries read is the word data, keyed by form.
+#[test]
+fn migration_1441_word_frequency_view_reads_the_word_data() {
+    let fx = Fx::seeded();
+    fx.write(|tx| {
+        let rows = [
+            row("go", "go", Some(1), Some("A1")),
+            row("went", "go", Some(1), Some("A1")),
+            row("according to", "according to", None, Some("A2")),
+        ];
+        tx.replace_word_data(&pack("en", "1"), &rows, &[]).unwrap();
+    });
+    let conn = fx.raw();
+    let got: Vec<(String, String, Option<i64>, Option<String>)> = conn
+        .prepare("SELECT language, key, rank, band FROM word_frequency ORDER BY key")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        got,
+        vec![
+            ("en".into(), "according to".into(), None, Some("A2".into())),
+            ("en".into(), "go".into(), Some(1), Some("A1".into())),
+            ("en".into(), "went".into(), Some(1), Some("A1".into())),
+        ]
+    );
+    // The view is not a table: a backup dump never carries it.
+    let tables: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name = 'word_frequency' AND type = 'table'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(tables, 0);
+}

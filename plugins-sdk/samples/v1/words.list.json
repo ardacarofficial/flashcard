@@ -2,12 +2,15 @@
   "method": "v1.words.list",
   "kind": "query",
   "permission": "words:read",
-  "note": "Index rows by language and key, paged (pass next_cursor back as cursor). note_ids/card_ids are empty in listings; under a deck limit rows outside the plugin's decks are left out.",
+  "note": "Index rows by language and key, paged (pass next_cursor back as cursor). note_ids/card_ids are empty in listings; under a deck limit rows outside the plugin's decks are left out. sort rank: heard most first (expressions without a rank last); bands / max_rank filter by the word-data pack.",
   "input": {
     "language": "en",
     "status": "learning",
     "cursor": null,
-    "limit": 2
+    "limit": 2,
+    "sort": "rank",
+    "bands": [],
+    "max_rank": null
   },
   "output": {
     "words": [
@@ -24,7 +27,14 @@
         "last_review": null,
         "first_seen": 1767139200000,
         "note_ids": [],
-        "card_ids": []
+        "card_ids": [],
+        "level": {
+          "lemma": "key",
+          "rank": 589,
+          "band": "A1",
+          "band_origin": "profile",
+          "estimated": false
+        }
       },
       {
         "language": "en",
@@ -39,9 +49,16 @@
         "last_review": 1767225600000,
         "first_seen": 1767139200000,
         "note_ids": [],
-        "card_ids": []
+        "card_ids": [],
+        "level": {
+          "lemma": null,
+          "rank": null,
+          "band": "A2",
+          "band_origin": "expression",
+          "estimated": true
+        }
       }
     ],
-    "next_cursor": "ZW4fcGljayB1cA"
+    "next_cursor": "ZW4fcGljayB1cB9aHzQyOTQ5NjcyOTU"
   }
 }
