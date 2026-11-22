@@ -174,10 +174,14 @@
   const openSettings = () => reopen('settings', nav.settings.flatMap((g) => g.entries));
   const openInbox = () => nav.inbox && show(nav.inbox);
 
-  /** Opens the entry with `route` (flashcard:// links, v0.9; `ctx.navigate`). */
+  /**
+   * Opens the entry with `route` (flashcard:// links, v0.9; `ctx.navigate`). v1.3: a route no
+   * enabled module offers says so instead of silently staying put.
+   */
   function openRoute(route: string) {
     const item = nav.all.find((m) => m.route === route);
     if (item) show(item);
+    else if (modules.length > 0) error = t('shell.route_off');
   }
 
   async function loadModules() {
@@ -356,6 +360,11 @@
   <QuickAddHost {ctx} enabled={!!addEntry} />
 {/await}
 
+<!-- Study launcher (v1.3): every "study" entry opens it; its dialog chunk loads on first open. -->
+{#await import('$lib/features/study/LauncherHost.svelte') then { default: LauncherHost }}
+  <LauncherHost {ctx} />
+{/await}
+
 <!-- App lock screen (v1.0); drawn above everything while locked. -->
 <LockHost
   onlockchange={(l) => (locked = l)}
@@ -380,6 +389,7 @@
   screens={nav.all.map((m) => ({ id: m.screen.id, label: td(m.label_key), hint: placeHint(m), open: () => show(m) }))}
   activeScreen={screen?.id ?? null}
   {guarded}
+  deckId={selectedDeck}
 />
 
 <style>

@@ -10,6 +10,7 @@
   import { t } from '$lib/i18n/index.svelte';
   import { Card, Chip } from '$lib/ui';
   import MasteryBar from './MasteryBar.svelte';
+  import { todayCounts } from './library';
 
   interface Props {
     node: DeckTreeNode;
@@ -20,7 +21,8 @@
   }
   let { node, summary, onopen, chips = true }: Props = $props();
 
-  const due = $derived(node.counts.due + node.counts.learning);
+  const today = $derived(todayCounts(node.counts));
+  const due = $derived(today.due + today.learning);
 </script>
 
 <Card onclick={onopen} label={t('library.open', { name: node.deck.name })} testid="deck-row" padding="sm" class="deck-card">
@@ -36,8 +38,8 @@
     {#if node.children.length > 0}
       <span aria-hidden="true">·</span> {t('library.subdecks', { count: node.children.length })}
     {/if}
-    {#if node.counts.new > 0}
-      <span aria-hidden="true">·</span> {t('library.new_count', { count: node.counts.new })}
+    {#if today.new > 0}
+      <span aria-hidden="true">·</span> {t('library.new_count', { count: today.new })}
     {/if}
   </span>
   {#if chips && summary && summary.chips.length > 0}

@@ -19,7 +19,7 @@ v1.2 aynı tema altyapısının üstünde koyu öncelikli, sık, klavye öncelik
 | Akış | Ne yapılır | Tuş |
 |---|---|---|
 | Kart ekle | Herhangi bir yerde `N` → ön alan → `Tab` → arka alan → `Ctrl+Enter` (pencere açık kalır, sıradaki karta geçilir) | 1 + yazı + 2 |
-| Bugünü çalış | Ana sayfada `Enter` → `Space` çevir → `1`/`2` (ya da `1`–`4`) | 1 + kart başına 2 |
+| Bugünü çalış | Ana sayfada `Enter` → başlatıcıda `Enter` (v1.3) → `Space` çevir → `1`/`2` (ya da `1`–`4`) | 2 + kart başına 2 |
 | Kartı bul ve düzelt | `Ctrl+K` ya da Ara'da `/` → sorgu → `↓` → `Enter` düzenle → `Ctrl+Enter` kaydet | 4 + yazı |
 | Toplu ekle | Oluştur → satırlarda `Tab`/`Enter` → `Ctrl+Enter` tek geri al adımı | yazı + 1 |
 | İlerlemeyi gör | Kenar çubuğunda İstatistik | 1 tıklama |
@@ -109,14 +109,15 @@ Değiştirilebilir olanlar Ayarlar → Genel → Kısayollar'da (`palette::UI_AC
 | Her yer | `Ctrl+K` | Komut paleti |
 | Her yer | `Ctrl+F` | Ara sayfası |
 | Her yer | `Ctrl+Z` / `Ctrl+Shift+Z` | Geri al / Yinele |
-| Ana sayfa | `Enter` | Çalışmaya başla |
-| Deste sayfası | `Enter` · `←`/`→` · `Space` | Çalış · önizlemede gez · önizlemeyi çevir |
+| Ana sayfa | `Enter` | Çalışma başlatıcısını aç (v1.3) |
+| Deste sayfası | `Enter` · `←`/`→` · `Space` | Başlatıcıyı aç · önizlemede gez · önizlemeyi çevir |
+| Çalışma başlatıcısı (v1.3) | `Enter` · `←`/`→` · `↑`/`↓` · `Tab` · `Esc` | Başla (odak "Devam et"te ise devam) · mod · ne çalışılacak · sayı/seçenekler · kapat |
 | Hızlı Ekle | `Tab` · `Enter` · `Shift+Enter` | Sonraki alan · sonraki alan / son alanda ekle · yeni satır |
 | Hızlı Ekle | `Ctrl+Enter` · `Esc` | Ekle (pencere açık kalır) · kapat (metin varsa iki kez) |
 | Oluştur | `Tab` · `Enter` (son alan) · `Ctrl+Enter` | Sonraki alan · yeni satır · kaydet |
 | Terim listesi | çift tık / kalem · `Ctrl+Enter` · `Esc` | Satır içi düzenle · kaydet · vazgeç |
-| Kartlar | `Space` · `1`–`4` | Çevir · Tekrar/Zor/İyi/Kolay (2'li düzende `1` Hâlâ öğreniyorum, `2` Biliyorum) |
-| Kartlar | `H` · `S` · `B` · `Z` · `Esc` | İpucu · askıya al · göm · geri al · bitir |
+| Kartlar | `Space` · `1`–`4` | Çevir (ön ⇄ arka, her basışta; asla puanlamaz) · Tekrar/Zor/İyi/Kolay, yalnız arka yüz görüldükten sonra (2'li düzende `1` Hâlâ öğreniyorum, `2` Biliyorum; `3`/`4` boş). `Enter` yalnız odaktaki düğmeye basar; basılı tutulan tuş tek işlem |
+| Kartlar | `H` · `S` · `B` · `Z` · `Esc` | İpucu · durdur (sen açana kadar) · yarına bırak · geri al · bitir |
 | Kartlar | `Ctrl+1`–`7` · `F` | Bayrak · odak modu |
 | Öğren / Test | `1`–`4` | Seçenek |
 | Ara | `/` · `↑`/`↓` · `Space` · `Shift+↑/↓` · `Enter` · `Esc` | Sorgu · gez · seç · seçimi genişlet · düzenle · kapat/temizle |

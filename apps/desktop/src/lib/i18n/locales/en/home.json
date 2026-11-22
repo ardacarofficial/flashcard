@@ -5,7 +5,7 @@
     "today_label": "cards to study",
     "start": "Start studying",
     "caught_up": "You're all caught up",
-    "caught_up_body": "Nothing is due right now. Come back later, or learn new cards in a deck.",
+    "caught_up_body": "Nothing is due right now. Practise what you studied today, or learn new cards.",
     "count_due": "Due",
     "count_learning": "Learning",
     "count_new": "New",
@@ -43,6 +43,8 @@
     "col_deck": "Deck",
     "col_mastery": "Mastery",
     "study": "Study",
-    "study_deck": "Study {name}"
+    "study_deck": "Study {name}",
+    "practice": "Practice",
+    "study_off": "The study module is off; turn it on in Settings › Modules."
   }
 }

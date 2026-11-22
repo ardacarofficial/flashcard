@@ -209,7 +209,7 @@ Etiketler serbesttir. Sınıflandırma ise **kullanıcının tanımladığı yap
 
 `[v0.2, v0.4]` · 🧱 Komutlar
 
-- Çalışmada: `Space` çevir, `1-4` puanla, `Z` geri al, `E` düzenle, `H` ipucu, `F` bayrak, `S` askıya al, `B` göm, `R` sesi tekrar çal.
+- Çalışmada: `Space` çevir (ön ⇄ arka, puanlamaz), `1-4` puanla (arka yüz görüldükten sonra), `Z` geri al, `E` düzenle, `H` ipucu, `F` bayrak, `S` askıya al, `B` göm, `R` sesi tekrar çal.
 - Genel: `Ctrl+K` komut paleti, `Ctrl+N` yeni not, `Ctrl+F` ara, `Ctrl+Z` geri al.
 - Tüm kısayollar ayarlardan değiştirilebilir. Çakışma tespiti.
 - **Komut paleti:** Uygulamadaki her eylem (eklentilerinkiler dahil) aranabilir ve çalıştırılabilir.

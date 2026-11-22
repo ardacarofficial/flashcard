@@ -2,7 +2,7 @@
  * Small lookups shared by the Library, the deck page and Home (v1.1). They only index what
  * the backend returned (`decks.tree`, `decks.summaries`); every number is computed in Rust.
  */
-import type { DeckId, DeckSummaries, DeckSummary, DeckTreeNode, Mastery, ModuleDto } from '$lib/api/types';
+import type { DeckCounts, DeckId, DeckSummaries, DeckSummary, DeckTreeNode, Mastery, ModuleDto } from '$lib/api/types';
 import type { Tone } from '$lib/ui';
 
 /** Every node of the tree by deck id. */
@@ -33,6 +33,19 @@ export function menuRoute(modules: ModuleDto[], match: { id?: string; route?: st
     }
   }
   return null;
+}
+
+/**
+ * "To study today" numbers of a deck (or `decks.summaries.today`). v1.3 (CONTRACT §1): when
+ * the backend sends the queue-based `today_*` fields next to the inventory counts, those are
+ * what a session would serve and win; otherwise the counts themselves are the queue's.
+ */
+export function todayCounts(c: DeckCounts): { due: number; learning: number; new: number; total: number } {
+  const q = c as DeckCounts & { today_due?: number; today_learning?: number; today_new?: number; today_total?: number };
+  const due = q.today_due ?? c.due;
+  const learning = q.today_learning ?? c.learning;
+  const fresh = q.today_new ?? c.new;
+  return { due, learning, new: fresh, total: q.today_total ?? due + learning + fresh };
 }
 
 /** Whether module `id` is enabled. */

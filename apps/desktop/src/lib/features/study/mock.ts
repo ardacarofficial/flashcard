@@ -3,7 +3,10 @@
  * "Again" sends a card to the back, fixed intervals). Not the real engine — that is fc-app's
  * `study` module; this only lets the screen run in a browser and in component tests.
  */
-import { err, menu, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
+import { err, menu, mockScenario, module, type Handlers, type MockEnv, type MockFeature } from '$lib/api/mock/env';
+import type { ApiError, ErrorCode } from '$lib/api/types';
+import type { StartStudy, StudyEmptyReason, StudyOptions, StudyOptionsRequest, StudyScope, StudyScopeOption } from './contract';
+import { PRACTICE_SCOPES, SCOPES } from './contract';
 import type { DeckCounts, DeckTreeNode, SettingDef } from '$lib/api/types';
 import type {
   MatchRoundDto,
@@ -21,11 +24,22 @@ const DAY = 86_400_000;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 const INTERVALS = [60_000, 6 * 60_000, 10 * 60_000, 4 * DAY];
 
+/**
+ * How long an "Again" card waits before it is shown again (a learning step). In the browser
+ * mock a minute, so the waiting state can be seen; in tests 0 unless a test sets it.
+ */
+let learningStepMs = import.meta.env.MODE === 'mock' ? 60_000 : 0;
+export function setMockLearningStep(ms: number): void {
+  learningStepMs = ms;
+}
+
 interface MockCard {
   card_id: string;
   note: NoteDto;
   /** Queue bucket of a Cards session (default `new`). */
   state?: 'new' | 'learning' | 'review';
+  /** Learning step: not shown before this wall-clock time (ms). */
+  waitUntil?: number;
 }
 
 /** Learn: stage per card (`learned` once right at both stages). */
@@ -97,7 +111,8 @@ const MODE_SETTINGS = [
 
 export default {
   modules: [module('study', [menu('study.session', 'nav.study', '/study', 5), menu('study.mode_settings', 'nav.mode_settings', '/mode-settings', 90)])],
-  handlers: ({ id, now, notes, ancestors, cardFlags, tree }: MockEnv) => {
+  handlers: ({ id, now, notes, decks, ancestors, cardFlags, tree, modules }: MockEnv) => {
+    const modulesOn = (m: string) => modules.enabled(m);
     const sessions = new Map<string, MockSession>();
     const undo: Array<{ id: string; snapshot: string }> = [];
 
@@ -106,9 +121,16 @@ export default {
       if (!s) throw err('NOT_FOUND_SESSION', 'errors.not_found.session', sessionId);
       return s;
     };
+    /** Brings the first card whose learning step is over to the front; false when all wait. */
+    const promote = (s: MockSession): boolean => {
+      const t = Date.now();
+      const i = s.queue.findIndex((c) => (c.waitUntil ?? 0) <= t);
+      if (i > 0) s.queue.unshift(...s.queue.splice(i, 1));
+      return i >= 0;
+    };
     const current = (s: MockSession): StudyCardDto | null => {
-      const c = s.queue[0];
-      if (!c || s.dto.ended_at !== null) return null;
+      if (s.dto.ended_at !== null || !promote(s)) return null;
+      const c = s.queue[0]!;
       return {
         card_id: c.card_id,
         note_id: c.note.id,
@@ -172,6 +194,9 @@ export default {
       },
       mistakes: s.again.length,
       current: s.test || s.match ? null : current(s),
+      next_due: s.test || s.match || s.dto.ended_at !== null || s.queue.length === 0 || s.queue.some((c) => (c.waitUntil ?? 0) <= Date.now())
+        ? null
+        : Math.min(...s.queue.map((c) => c.waitUntil ?? 0)),
       modes: modes(s),
     });
     const best = new Map<string, number>();
@@ -272,39 +297,175 @@ export default {
     };
     const remember = (s: MockSession) => undo.push({ id: s.dto.id, snapshot: JSON.stringify(s) });
 
+    /** Cards answered during the mock's "study day" (any mode); `struggled` = Again / wrong. */
+    const today = new Map<string, { struggled: boolean; scheduled: boolean }>();
+    const answeredToday = (cardId: string, struggled: boolean, scheduled: boolean) => {
+      const was = today.get(cardId);
+      today.set(cardId, { struggled: struggled || (was?.struggled ?? false), scheduled: scheduled || (was?.scheduled ?? false) });
+    };
+    /** Every card of a deck (with sub-decks), each once. */
+    const deckCards = (deckId: string | null): MockCard[] =>
+      notes
+        .filter((n) => !deckId || ancestors(n.home_deck_id).includes(deckId))
+        .flatMap((n) => n.cards.map((c) => ({ card_id: c.id, note: n })));
+    /** The browser demo's decks carry fixed "today" numbers (seed.ts); tests have none. */
+    const hasDemoCounts = (deckId: string | null) => {
+      if (import.meta.env.MODE !== 'mock') return false;
+      const find = (ns: DeckTreeNode[]): DeckTreeNode | null => {
+        for (const n of ns) {
+          if (n.deck.id === deckId) return n;
+          const hit = find(n.children);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      return deckId === null ? tree(null).some((n) => n.counts.total > 0) : (find(tree(null))?.counts.total ?? 0) > 0;
+    };
+    const nextMidnight = () => {
+      const d = new Date();
+      d.setHours(24, 0, 0, 0);
+      return d.getTime();
+    };
+    /**
+     * The cards a scope holds right now, or why it is empty. Both `study.options` and
+     * `study.start` use this, so the launcher's count is what a session gets (CONTRACT §1).
+     */
+    const resolve = (scope: StudyScope, deckId: string | null): { cards: MockCard[]; reason: StudyEmptyReason | null; next: number | null } => {
+      const base = deckCards(deckId);
+      const none = (reason: StudyEmptyReason, next: number | null = null) => ({ cards: [], reason, next });
+      if (base.length === 0) return none('no_cards');
+      switch (scope) {
+        case 'due':
+        case 'new': {
+          let queue: MockCard[];
+          if (hasDemoCounts(deckId)) {
+            const c = todayOf(deckId);
+            queue = c.due + c.learning + c.new === 0 ? [] : cardsQueue(base, deckId);
+          } else {
+            // Tests: every card is new until it is answered with the schedule on.
+            queue = base.filter((c) => !today.get(c.card_id)?.scheduled);
+          }
+          if (scope === 'new') queue = queue.filter((c) => (c.state ?? 'new') === 'new');
+          if (queue.length > 0) return { cards: queue, reason: null, next: null };
+          // The demo's never-studied decks: the daily new-card limit is used up.
+          const unseen = base.some((c) => !today.has(c.card_id));
+          return unseen && hasDemoCounts(deckId) ? none('daily_limit_reached', nextMidnight()) : none('nothing_due');
+        }
+        case 'studied_today': {
+          const cards = base.filter((c) => today.has(c.card_id));
+          return cards.length ? { cards, reason: null, next: null } : none('none_studied_today');
+        }
+        case 'struggled_today': {
+          const cards = base.filter((c) => today.get(c.card_id)?.struggled);
+          return cards.length ? { cards, reason: null, next: null } : none('none_struggled_today');
+        }
+        case 'all':
+          return { cards: base, reason: null, next: null };
+      }
+    };
+    const scopeOption = (scope: StudyScope, deckId: string | null): StudyScopeOption => {
+      const r = resolve(scope, deckId);
+      return {
+        scope,
+        count: r.cards.length,
+        mode: PRACTICE_SCOPES.includes(scope) ? 'trial' : 'scheduled',
+        empty_reason: r.cards.length ? null : r.reason,
+        next_available_at: r.cards.length ? null : r.next,
+      };
+    };
+    const nothingToStudy = (reason: StudyEmptyReason, next: number | null): ApiError => ({
+      ...err('CONFLICT_NOTHING_TO_STUDY' as ErrorCode, 'errors.conflict.nothing_to_study', reason),
+      details: { reason, next_available_at: next },
+    });
+    const deckName = (deckId: string | null) => (deckId ? (decks.find((d) => d.id === deckId)?.name ?? null) : null);
+    const newSession = (req: StartStudy, queue: MockCard[]): MockSession => ({
+      dto: {
+        id: id('session'),
+        kind: req.kind,
+        mode: req.mode ?? 'scheduled',
+        deck_id: req.deck_id ?? null,
+        started_at: now(),
+        ended_at: null,
+        counts: { new: 0, learning: 0, review: 0 },
+        answered: 0,
+        correct: 0,
+        mistakes: 0,
+        current: null,
+        next_due: null,
+        modes: null,
+      },
+      queue,
+      again: [],
+      time: 0,
+      hints: 0,
+    });
+
+    // The browser demo opens with an unfinished session to continue (and, with
+    // `?mock=waiting`, one whose cards all wait for their learning step).
+    if (import.meta.env.MODE === 'mock' && mockScenario() !== 'fresh') {
+      const en = decks.find((d) => d.name === 'İngilizce' && d.parent_id === null) ?? null;
+      const cards = deckCards(en?.id ?? null).slice(0, 5);
+      if (en && cards.length) {
+        const waiting = mockScenario() === 'waiting';
+        const s = newSession({ kind: 'normal', deck_id: en.id }, cards.map((c) => ({ ...c, state: 'learning', waitUntil: waiting ? Date.now() + 14 * 60_000 : 0 })));
+        s.dto.answered = 7;
+        s.dto.correct = 6;
+        s.time = 95_000;
+        sessions.set(s.dto.id, s);
+      }
+    }
+
     return {
       'settings.schema': () => ({ settings: MODE_SETTINGS }),
-      'study.start': (req) => {
-        for (const s of sessions.values()) s.dto.ended_at ??= now();
+      ...({
+        'study.options': ({ deck_id }: StudyOptionsRequest): StudyOptions => {
+          if (!modulesOn('study')) throw err('CONFLICT_MODULE_DISABLED', 'errors.conflict.module_disabled', 'v1.study.options');
+          const open = [...sessions.values()]
+            .filter((s) => s.dto.ended_at === null && (!deck_id || (s.dto.deck_id !== null && ancestors(s.dto.deck_id).includes(deck_id))))
+            .reverse();
+          return {
+            deck_id: deck_id ?? null,
+            deck_name: deckName(deck_id ?? null),
+            resumable: open.map((s) => ({
+              session: view(s),
+              deck_name: deckName(s.dto.deck_id),
+              answered: s.dto.answered,
+              remaining: s.test ? s.test.questions.length : s.queue.length,
+            })),
+            scopes: SCOPES.map((sc) => scopeOption(sc, deck_id ?? null)),
+            modes: (
+              [
+                ['normal', 'study'],
+                ['learn', 'learn'],
+                ['test', 'practice_test'],
+                ['match', 'match'],
+              ] as const
+            )
+              .filter(([, m]) => modulesOn('study') && modulesOn(m))
+              .map(([k]) => k),
+          };
+        },
+      } as unknown as Handlers),
+      'study.start': (raw) => {
+        const req = raw as StartStudy;
         const from = req.from_session ? require(req.from_session) : null;
-        const queue: MockCard[] = notes
-          .filter((n) => !req.deck_id || ancestors(n.home_deck_id).includes(req.deck_id))
-          .flatMap((n) => n.cards.map((c) => ({ card_id: c.id, note: n })))
-          .filter((c) => !from || from.again.includes(c.card_id));
-        const s: MockSession = {
-          dto: {
-            id: id('session'),
-            kind: req.kind,
-            mode: req.mode ?? 'scheduled',
-            deck_id: req.deck_id ?? null,
-            started_at: now(),
-            ended_at: null,
-            counts: { new: 0, learning: 0, review: 0 },
-            answered: 0,
-            correct: 0,
-            mistakes: 0,
-            current: null,
-            next_due: null,
-            modes: null,
-          },
-          queue,
-          again: [],
-          time: 0,
-          hints: 0,
-        };
-        if (req.kind === 'normal' && !from) {
-          s.queue = cardsQueue(queue, req.deck_id ?? null);
-        } else if (req.kind === 'learn') {
+        const deckId = req.deck_id ?? null;
+        // v1.3: a scope (Cards default: today's queue) resolves first; an empty one is an
+        // error that leaves every open session alone.
+        const scope: StudyScope | null = req.scope ?? (req.kind === 'normal' && !from ? 'due' : null);
+        let queue: MockCard[];
+        if (scope && (req.kind === 'normal' || req.kind === 'learn' || req.kind === 'test' || req.kind === 'match')) {
+          const r = resolve(scope, deckId);
+          if (r.cards.length === 0) throw nothingToStudy(r.reason ?? 'no_cards', r.next);
+          queue = r.cards;
+        } else {
+          queue = deckCards(deckId).filter((c) => !from || from.again.includes(c.card_id));
+        }
+        if (req.filter?.limit) queue = queue.slice(0, req.filter.limit);
+        for (const s of sessions.values()) s.dto.ended_at ??= now();
+        const s = newSession(req, queue);
+        if (scope && PRACTICE_SCOPES.includes(scope)) s.dto.mode = 'trial';
+        if (req.kind === 'learn') {
           s.queue = queue.slice(0, 30);
           s.learn = { stage: Object.fromEntries(s.queue.map((c) => [c.card_id, 'choice' as const])), mistakes: {}, total: s.queue.length };
         } else if (req.kind === 'test') {
@@ -328,6 +489,7 @@ export default {
         const stage = l.stage[card_id] === 'written' ? 'written' : 'choice';
         const picked = choice != null ? (learnOptions({ ...s, queue: [c, ...s.queue] }, c)[choice] ?? '') : (given ?? '');
         const ok = picked.trim().toLowerCase() === back(c).trim().toLowerCase();
+        answeredToday(card_id, !ok, s.dto.mode === 'scheduled');
         if (ok) l.stage[card_id] = stage === 'choice' ? 'written' : 'learned';
         else l.mistakes[card_id] = (l.mistakes[card_id] ?? 0) + 1;
         if (l.stage[card_id] !== 'learned') s.queue.splice(Math.min(2, s.queue.length), 0, c);
@@ -356,6 +518,10 @@ export default {
           return { index: q.index, verdict };
         });
         const n = (v: TestVerdict) => items.filter((i) => i.verdict === v).length;
+        for (const i of items) {
+          const q = t.questions.find((x) => x.index === i.index);
+          if (q && i.verdict !== 'blank') answeredToday(q.card_id, i.verdict !== 'correct', false);
+        }
         t.answers = answers;
         t.result = {
           total: items.length,
@@ -419,8 +585,9 @@ export default {
         requireCurrent(s, card_id);
         remember(s);
         const card = s.queue.shift()!;
+        answeredToday(card_id, rating === 'again', s.dto.mode === 'scheduled');
         if (rating === 'again') {
-          s.queue.push({ ...card, state: 'learning' });
+          s.queue.push({ ...card, state: 'learning', waitUntil: Date.now() + learningStepMs });
           if (!s.again.includes(card_id)) s.again.push(card_id);
         } else {
           s.dto.correct++;

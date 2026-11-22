@@ -93,8 +93,8 @@
     },
     "bulk": {
       "move_cards": "Move cards",
-      "set_suspended": "Suspend / unsuspend cards",
-      "set_buried": "Bury / unbury cards",
+      "set_suspended": "Pause / resume cards",
+      "set_buried": "Leave cards for tomorrow / undo",
       "set_flag": "Flag cards",
       "reset_progress": "Forget cards",
       "add_tags": "Add tags",

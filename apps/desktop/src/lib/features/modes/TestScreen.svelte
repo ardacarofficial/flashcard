@@ -5,18 +5,19 @@
    * changes the schedule. The paper prints (with or without the answer key). v1.2: an open
    * paper owns the window (`SessionFrame`, Esc leaves — after a confirmation once something is
    * answered; Ctrl+Enter submits). After grading: a score ring and a dense list of misses.
+   * v1.3: papers are made in the study launcher (question count, types, query live there); an
+   * unfinished paper can be continued from it.
    */
   import { formatPercent100 } from '$lib/format';
   import { onMount, tick } from 'svelte';
+  import type { SessionDto } from '$lib/api/types';
   import { api } from '$lib/api';
-  import type { TestAnswerDto, TestPaperDto, TestQuestionDto, TestQuestionKind, TestVerdict } from '$lib/api/types';
+  import type { TestAnswerDto, TestPaperDto, TestQuestionDto, TestVerdict } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import {
     Button,
-    Chip,
     CircleAlert,
     CircleCheck,
-    ClipboardCheck,
     Dialog,
     Icon,
     IconButton,
@@ -30,42 +31,52 @@
     TriangleAlert,
     type Tone,
   } from '$lib/ui';
-  import OptRow from './OptRow.svelte';
   import SessionFrame from './SessionFrame.svelte';
-  import SetupPanel from './SetupPanel.svelte';
-  import { moduleOn, trackModules } from '../cards/modules.svelte';
-  import { tzOffsetMins } from '../study/format';
+  import { trackModules } from '../cards/modules.svelte';
+  import type { StudyScope } from '../study/contract';
+  import LaunchIdle from '../study/LaunchIdle.svelte';
+  import { handoffSeq, launcher, openLauncher, takeHandoff, type Handoff } from '../study/launcher.svelte';
   import type { ScreenCtx } from '../types';
-  import { emptyInput, plainKey, testAnswers, type PaperInput } from './modes';
+  import { emptyInput, testAnswers, type PaperInput } from './modes';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
-  const KINDS: TestQuestionKind[] = ['true_false', 'multiple_choice', 'written'];
-
   let paper = $state<TestPaperDto | null>(null);
   let input = $state<PaperInput>(emptyInput());
-  let query = $state('');
-  let count = $state<number | string>(20);
-  let kinds = $state<Record<TestQuestionKind, boolean>>({ true_false: true, multiple_choice: true, written: true });
-  let notice = $state<string | null>(null);
-  let loading = $state(true);
   let startedAt = 0;
+  let deckOf = $state<string | null>(null);
+  let startedScope = $state<StudyScope | null>(null);
   let top = $state<HTMLElement | null>(null);
   /** "Leave the test?" — an unfinished paper with answers is only discarded on confirmation. */
   let confirmOpen = $state(false);
+  let newBtn = $state<HTMLButtonElement | null>(null);
+
+  // The graded paper: "New test" has the focus (Enter presses it).
+  $effect(() => {
+    if (result) void tick().then(() => newBtn?.focus());
+  });
+
+  // A paper started (or continued) in the study launcher arrives here.
+  const initial = takeHandoff('test');
+  let accepting = $state(initial !== null);
+  let hadSession = $state(false);
+
+  function accept(h: Handoff) {
+    startedScope = h.scope;
+    accepting = true;
+    hadSession = true;
+    void ctx.guarded(() => open(h.session)).finally(() => (accepting = false));
+  }
+
+  $effect(() => {
+    void handoffSeq();
+    const h = takeHandoff('test');
+    if (h) accept(h);
+  });
 
   onMount(() => {
     trackModules();
-    void api
-      .call('settings.get', { scope: { kind: 'app' }, keys: ['practice_test.questions'] })
-      .then(
-        (r) => {
-          const v = r.values.find((x) => x.key === 'practice_test.questions')?.value;
-          if (typeof v === 'number') count = v;
-        },
-        () => {},
-      )
-      .finally(() => (loading = false));
+    if (initial) accept(initial);
   });
 
   const result = $derived(paper?.result ?? null);
@@ -74,7 +85,6 @@
   const verdict = (i: number): TestVerdict | null => result?.items.find((x) => x.index === i)?.verdict ?? null;
   const answered = $derived(paper ? testAnswers(paper.questions, input).length : 0);
   const misses = $derived(paper && result ? paper.questions.filter((q) => verdict(q.index) !== 'correct') : []);
-  const noKind = $derived(!KINDS.some((k) => kinds[k]));
 
   const VERDICT: Record<TestVerdict, { tone: Tone; icon: typeof CircleCheck }> = {
     correct: { tone: 'success', icon: CircleCheck },
@@ -83,23 +93,9 @@
     blank: { tone: 'neutral', icon: Minus },
   };
 
-  async function start() {
-    notice = null;
-    const q = query.trim();
-    const chosen = KINDS.filter((k) => kinds[k]);
-    const s = await api.call('study.start', {
-      kind: 'test',
-      mode: 'scheduled',
-      deck_id: ctx.selectedDeck,
-      filter: q ? { attributes: [], states: null, due_only: null, limit: null, query: q, saved_query_id: null } : null,
-      tz_offset_mins: tzOffsetMins(),
-      modes: { timed: null, rating_scale: null, test: { questions: Number(count) || 20, kinds: chosen.length ? chosen : null } },
-    });
-    if ((s.modes?.test?.questions ?? 0) === 0) {
-      await api.call('study.end', { session_id: s.id });
-      notice = t('modes.test.nothing');
-      return;
-    }
+  /** Puts up the paper of a started (or continued) test session. */
+  async function open(s: SessionDto) {
+    deckOf = s.deck_id;
     paper = await api.call('modes.test.paper', { session_id: s.id, with_key: null });
     const fresh = emptyInput();
     for (const q of paper.questions) if (q.kind === 'written') fresh.text[q.index] = '';
@@ -136,6 +132,14 @@
     paper = null;
   }
 
+  /** "New test": the launcher on this deck, today's misses first when there were any. */
+  async function testAgain() {
+    const missed = misses.length > 0;
+    const deckId = deckOf ?? ctx.selectedDeck;
+    await newTest();
+    openLauncher({ deckId, kind: 'test', scope: missed ? 'struggled_today' : (startedScope ?? undefined) });
+  }
+
   /** Exit button / Esc on an open paper: leave at once when nothing is answered yet. */
   function requestExit() {
     if (!paper || result) return;
@@ -144,15 +148,8 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    if (e.defaultPrevented || confirmOpen) return;
+    if (e.defaultPrevented || confirmOpen || e.repeat) return;
     if (document.querySelector('[aria-modal="true"]')) return;
-    // Setup and result pages: Enter makes a paper / goes back to a new one (like Learn, Match).
-    if ((!paper || result) && e.key === 'Enter' && plainKey(e) && !loading) {
-      if ((e.target as HTMLElement | null)?.tagName === 'BUTTON') return;
-      e.preventDefault();
-      void ctx.guarded(paper ? newTest : start);
-      return;
-    }
     if (!paper || result) return;
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -284,7 +281,7 @@
         {#snippet actions()}
           <Button variant="ghost" icon={Printer} onclick={() => window.print()}>{t('modes.test.print')}</Button>
           <Button variant="ghost" onclick={() => void ctx.guarded(printKey)}>{t('modes.test.print_key')}</Button>
-          <Button variant="primary" kbd="Enter" aria-keyshortcuts="Enter" onclick={() => void ctx.guarded(newTest)}>{t('modes.test.new')}</Button>
+          <Button variant="primary" bind:element={newBtn} data-testid="test-new" onclick={() => void ctx.guarded(testAgain)}>{t('modes.test.new')}</Button>
         {/snippet}
       </PageHeader>
     </div>
@@ -332,46 +329,13 @@
     {/if}
     {@render questions()}
   </section>
-{:else}
+{:else if accepting}
   <section class="setup-page">
     <PageHeader title={t('modes.test.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
-    {#if loading}
-      <Skeleton shape="card" height="160px" />
-    {:else}
-      <SetupPanel title={t('modes.test.start_heading')} {notice}>
-        {#snippet meta()}<span>{t('modes.test.intro')}</span>{/snippet}
-        {#snippet actions()}
-          <Button variant="primary" icon={ClipboardCheck} kbd="Enter" aria-keyshortcuts="Enter" data-testid="study-start" onclick={() => void ctx.guarded(start)}>
-            {t('modes.test.start')}
-          </Button>
-        {/snippet}
-        {#if moduleOn('browse')}
-          <OptRow label={t('study.query_label')} labelFor="test-query">
-            <Input
-              id="test-query"
-              class="query"
-              size="sm"
-              label={t('study.query_label')}
-              hideLabel
-              bind:value={query}
-              placeholder={t('study.query_placeholder')}
-              spellcheck="false"
-            />
-          </OptRow>
-        {/if}
-        <OptRow label={t('modes.test.questions')} labelFor="test-count">
-          <Input id="test-count" class="count" size="sm" type="number" min="1" max="200" label={t('modes.test.questions')} hideLabel bind:value={count} />
-        </OptRow>
-        <OptRow label={t('modes.test.kinds')} description={noKind ? t('modes.test.all_kinds') : undefined}>
-          <div class="kind-chips" role="group" aria-label={t('modes.test.kinds')}>
-            {#each KINDS as k (k)}
-              <Chip label={t(`modes.test.kind.${k}`)} selected={kinds[k]} onclick={() => (kinds[k] = !kinds[k])} />
-            {/each}
-          </div>
-        </OptRow>
-      </SetupPanel>
-    {/if}
+    <Skeleton shape="card" height="160px" />
   </section>
+{:else}
+  <LaunchIdle {ctx} kind="test" title={t('modes.test.heading')} auto={!hadSession} />
 {/if}
 
 <Dialog bind:open={confirmOpen} role="alertdialog" size="sm" title={t('modes.test.discard_title')} description={t('modes.test.discard_body', { n: answered })} initialFocus=".keep">
@@ -394,17 +358,6 @@
     flex-direction: column;
     /* The start page is one column: the header (deck picker) lines up with the panel. */
     max-width: 760px;
-  }
-  .setup-page :global(.query) {
-    width: 240px;
-  }
-  .setup-page :global(.count) {
-    width: 80px;
-  }
-  .kind-chips {
-    display: flex;
-    gap: var(--space-2);
-    flex-wrap: wrap;
   }
   /* Paper. */
   .paper {

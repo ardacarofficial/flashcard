@@ -17,8 +17,8 @@
   import DeckPage from './DeckPage.svelte';
   import DeckTreeRows from './DeckTreeRows.svelte';
   import NameDialog from './NameDialog.svelte';
-  import { addCardAction, deckMenu, studyDeck, type DeckRequest } from './deck-menu';
-  import { nodesById, summariesById } from './library';
+  import { addCardAction, deckMenu, studyAction, type DeckRequest } from './deck-menu';
+  import { nodesById, summariesById, todayCounts } from './library';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -75,7 +75,7 @@
     const all = nodes.size;
     const top = ctx.decks.length;
     const decks = all > top ? t('library.subtitle_tree', { count: all, top, sub: all - top }) : t('library.subtitle', { count: all });
-    const today = summaries ? summaries.today.due + summaries.today.learning + summaries.today.new : 0;
+    const today = summaries ? todayCounts(summaries.today).total : 0;
     return today > 0 ? `${decks} · ${t('library.subtitle_today', { count: today })}` : decks;
   });
   const open = (id: DeckId) => ctx.selectDeck(id);
@@ -138,7 +138,7 @@
         summaries={byId}
         loading={!summaries}
         onopen={open}
-        onstudy={(node) => studyDeck(ctx, modules, node)}
+        onstudy={studyAction()}
         onadd={addCard}
         menu={(node) => deckMenu(ctx, modules, node, (r) => (request = r))}
       />

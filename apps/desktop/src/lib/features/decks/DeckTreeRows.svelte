@@ -12,6 +12,7 @@
   import { t } from '$lib/i18n/index.svelte';
   import { Chip, IconButton, ListRow, Menu, Play, Plus, type MenuItem } from '$lib/ui';
   import MasteryBar from './MasteryBar.svelte';
+  import { todayCounts } from './library';
 
   interface Props {
     nodes: DeckTreeNode[];
@@ -19,7 +20,8 @@
     /** Summaries still loading (bars show a placeholder). */
     loading?: boolean;
     onopen: (id: DeckId) => void;
-    onstudy: (node: DeckTreeNode) => void;
+    /** "Study" (opens the launcher); `null` when the study module is off (no button). */
+    onstudy: ((node: DeckTreeNode) => void) | null;
     onadd: ((node: DeckTreeNode) => void) | null;
     menu: (node: DeckTreeNode) => MenuItem[];
   }
@@ -94,10 +96,11 @@
 
 {#snippet cols(node: DeckTreeNode)}
   {@const s = summaries.get(node.deck.id) ?? null}
-  {@const due = node.counts.due + node.counts.learning}
+  {@const today = todayCounts(node.counts)}
+  {@const due = today.due + today.learning}
   <span class="num n" class:zero={node.counts.total === 0}>{formatCount(node.counts.total)}</span>
   <span class="num n due" class:zero={due === 0}>{formatCount(due)}</span>
-  <span class="num n" class:zero={node.counts.new === 0}>{formatCount(node.counts.new)}</span>
+  <span class="num n" class:zero={today.new === 0}>{formatCount(today.new)}</span>
   <MasteryBar summary={loading ? null : s} name={node.deck.name} />
   <span class="chips">
     {#each s?.chips ?? [] as chip (chip.attr_id + chip.label)}
@@ -139,7 +142,9 @@
       </span>
       {#snippet cells()}{@render cols(node)}{/snippet}
       {#snippet actions()}
-        <IconButton size="sm" icon={Play} label={t('library.study', { name: node.deck.name })} onclick={() => onstudy(node)} />
+        {#if onstudy}
+          <IconButton size="sm" icon={Play} label={t('library.study', { name: node.deck.name })} onclick={() => onstudy(node)} />
+        {/if}
         {#if onadd}
           <IconButton size="sm" icon={Plus} label={t('library.add_card', { name: node.deck.name })} onclick={() => onadd(node)} />
         {/if}

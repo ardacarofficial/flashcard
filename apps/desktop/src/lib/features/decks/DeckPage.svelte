@@ -39,8 +39,9 @@
   import TermList from './TermList.svelte';
   import { addCardAction, deckMenu, goWithDeck, type DeckRequest } from './deck-menu';
   import { pageEnter } from './keys';
-  import { studyNow } from '../study/intent';
-  import { menuRoute, moduleOn, nodesById, summariesById } from './library';
+  import { launcher, openLauncher } from '../study/launcher.svelte';
+  import type { LaunchKind } from '../study/contract';
+  import { menuRoute, moduleOn, nodesById, summariesById, todayCounts } from './library';
 
   interface Props {
     ctx: ScreenCtx;
@@ -77,7 +78,8 @@
   });
 
   const current = $derived(terms[Math.min(index, Math.max(0, terms.length - 1))] ?? null);
-  const due = $derived(node.counts.due + node.counts.learning);
+  const counts = $derived(todayCounts(node.counts));
+  const due = $derived(counts.due + counts.learning);
 
   async function loadTerms() {
     const id = deck.id;
@@ -156,26 +158,36 @@
 
   const go = (route: string | null) => goWithDeck(ctx, node, route);
 
-  /** Study modes whose module is on (Match: the `study.match` page). */
+  /**
+   * Study modes whose module is on (Match: the `study.match` page). v1.3: the four session
+   * modes open the study launcher with that mode preselected (never a silent start); Reading
+   * is a page of its own.
+   */
   const modes = $derived(
-    [
-      { id: 'cards', icon: Layers, route: menuRoute(modules, { route: '/study' }), title: t('deck_page.mode_cards'), desc: t('deck_page.mode_cards_desc') },
-      { id: 'learn', icon: Repeat, route: menuRoute(modules, { route: '/learn' }), title: t('deck_page.mode_learn'), desc: t('deck_page.mode_learn_desc') },
-      { id: 'test', icon: ClipboardCheck, route: menuRoute(modules, { route: '/test' }), title: t('deck_page.mode_test'), desc: t('deck_page.mode_test_desc') },
-      { id: 'match', icon: Shuffle, route: menuRoute(modules, { id: 'study.match' }), title: t('deck_page.mode_match'), desc: t('deck_page.mode_match_desc') },
-      { id: 'reading', icon: BookOpen, route: menuRoute(modules, { route: '/reading' }), title: t('deck_page.mode_reading'), desc: t('deck_page.mode_reading_desc') },
-    ].filter((m) => m.route !== null),
+    (
+      [
+        { id: 'cards', kind: 'normal', icon: Layers, route: menuRoute(modules, { route: '/study' }), title: t('deck_page.mode_cards'), desc: t('deck_page.mode_cards_desc') },
+        { id: 'learn', kind: 'learn', icon: Repeat, route: menuRoute(modules, { route: '/learn' }), title: t('deck_page.mode_learn'), desc: t('deck_page.mode_learn_desc') },
+        { id: 'test', kind: 'test', icon: ClipboardCheck, route: menuRoute(modules, { route: '/test' }), title: t('deck_page.mode_test'), desc: t('deck_page.mode_test_desc') },
+        { id: 'match', kind: 'match', icon: Shuffle, route: menuRoute(modules, { id: 'study.match' }), title: t('deck_page.mode_match'), desc: t('deck_page.mode_match_desc') },
+        { id: 'reading', kind: null, icon: BookOpen, route: menuRoute(modules, { route: '/reading' }), title: t('deck_page.mode_reading'), desc: t('deck_page.mode_reading_desc') },
+      ] as { id: string; kind: LaunchKind | null; icon: typeof Layers; route: string | null; title: string; desc: string }[]
+    ).filter((m) => m.route !== null && (m.kind === null || launcher.available)),
   );
-  const studyRoute = $derived(modes.find((m) => m.id === 'cards')?.route ?? null);
-  /** "Study" starts the session at once; the Cards mode button opens its start panel. */
+  const canStudy = $derived(launcher.available && modes.some((m) => m.kind !== null));
+  /** "Study": the launcher on this deck with the remembered mode. */
   function study() {
-    studyNow();
-    go(studyRoute);
+    openLauncher({ deckId: deck.id });
+  }
+  /** A mode button: the launcher with that mode preselected; Reading opens its page. */
+  function openMode(m: (typeof modes)[number]) {
+    if (m.kind) openLauncher({ deckId: deck.id, kind: m.kind });
+    else go(m.route);
   }
   const addCard = $derived(addCardAction(ctx, modules));
 
   function onWindowKey(e: KeyboardEvent) {
-    if (studyRoute && pageEnter(e)) {
+    if (canStudy && pageEnter(e)) {
       e.preventDefault();
       study();
     }
@@ -192,9 +204,9 @@
       : [],
   );
   const today = $derived([
-    { id: 'due', label: t('deck_page.today_due'), value: node.counts.due },
-    { id: 'learning', label: t('deck_page.learning'), value: node.counts.learning },
-    { id: 'new', label: t('deck_page.new'), value: node.counts.new },
+    { id: 'due', label: t('deck_page.today_due'), value: counts.due },
+    { id: 'learning', label: t('deck_page.learning'), value: counts.learning },
+    { id: 'new', label: t('deck_page.new'), value: counts.new },
   ]);
 </script>
 
@@ -217,8 +229,8 @@
 
 {#if modes.length}
   <div class="actionbar">
-    {#if studyRoute}
-      <Button variant="primary" icon={Play} kbd="Enter" aria-keyshortcuts="Enter" onclick={study}>
+    {#if canStudy}
+      <Button variant="primary" icon={Play} kbd="Enter" aria-keyshortcuts="Enter" data-testid="deck-study" onclick={study}>
         {t('deck_page.study')}
       </Button>
       <span class="divider" aria-hidden="true"></span>
@@ -226,7 +238,7 @@
     <div class="modes" role="group" aria-label={t('deck_page.modes')}>
       {#each modes as m (m.id)}
         <Tooltip text={m.desc} placement="bottom">
-          <Button icon={m.icon} class="mode" data-testid="deck-mode-{m.id}" onclick={() => go(m.route)}>
+          <Button icon={m.icon} class="mode" data-testid="deck-mode-{m.id}" onclick={() => openMode(m)}>
             {m.title}
             {#if m.id === 'cards' && due > 0}
               <span class="due-badge num" aria-label={t('deck_page.due_meta', { count: due })}>{formatCount(due)}</span>
@@ -305,7 +317,8 @@
         <h2 id="deck-subs" class="block-title">{t('deck_page.subdecks')}</h2>
         <ul class="sub-list">
           {#each node.children as child (child.deck.id)}
-            {@const childDue = child.counts.due + child.counts.learning}
+            {@const childToday = todayCounts(child.counts)}
+            {@const childDue = childToday.due + childToday.learning}
             <ListRow onclick={() => ctx.selectDeck(child.deck.id)} buttonLabel={t('library.open', { name: child.deck.name })} cellColumns="48px 96px">
               <span class="sub-name">
                 <span class="swatch" style:background={child.deck.color ?? 'var(--accent)'} aria-hidden="true"></span>

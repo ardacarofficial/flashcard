@@ -51,7 +51,8 @@
   function onkeydown(e: KeyboardEvent) {
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
-      flip();
+      // A held key is one flip (v1.3), not a flicker.
+      if (!e.repeat) flip();
     }
   }
 

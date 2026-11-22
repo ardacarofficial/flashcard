@@ -56,14 +56,15 @@ export interface MockFeature {
 /**
  * Mock-mode scenario from the URL, for screenshot states that need a different start
  * (`?mock=fresh` empty collection → first-run guide, `?mock=update` an update is out,
- * `?mock=locked` the app starts locked, PIN 1234). Only `pnpm dev:mock` reads it.
+ * `?mock=locked` the app starts locked, PIN 1234, `?mock=waiting` the open study session only
+ * has cards waiting for their learning step). Only `pnpm dev:mock` reads it.
  */
-export type MockScenario = 'fresh' | 'update' | 'locked';
+export type MockScenario = 'fresh' | 'update' | 'locked' | 'waiting';
 export function mockScenario(): MockScenario | null {
   if (import.meta.env.MODE !== 'mock') return null;
   try {
     const v = new URLSearchParams(globalThis.location?.search ?? '').get('mock');
-    return v === 'fresh' || v === 'update' || v === 'locked' ? v : null;
+    return v === 'fresh' || v === 'update' || v === 'locked' || v === 'waiting' ? v : null;
   } catch {
     return null;
   }
@@ -178,7 +179,10 @@ const requireName = (name: string) => {
   return n;
 };
 const sameName = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
+  /** Whether module `id` is on (the transport plugs in its `modules.list`; on by default). */
+  const modules = { enabled: (_id: string): boolean => true };
   return {
+    modules,
     listeners,
     now,
     id,

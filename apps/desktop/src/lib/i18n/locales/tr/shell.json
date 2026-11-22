@@ -86,5 +86,8 @@
       "unexpected": "Bir şeyler ters gitti.",
       "not_implemented": "Henüz kullanılamıyor."
     }
+  },
+  "shell": {
+    "route_off": "Bu sayfa şu an açık değil; modülü Ayarlar › Modüller’den açabilirsin."
   }
 }

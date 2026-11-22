@@ -28,6 +28,7 @@ export function createMockTransport(): Transport {
     }
   }
   const ui = new Map(modules.map((m) => [m.id, m.ui]));
+  env.modules.enabled = (id) => modules.find((m) => m.id === id)?.enabled ?? true;
   const handlers: Handlers = Object.assign(
     {
       'modules.list': () => ({ modules }),

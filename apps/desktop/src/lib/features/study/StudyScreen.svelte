@@ -1,34 +1,27 @@
 <script lang="ts">
   /**
-   * Flashcards (spaced repetition, docs/11 §3, v1.2 flow 2): a dense start panel; then the
-   * session owns the window (`SessionFrame`: progress, "12 / 40", remaining, Esc) with the
-   * card centred (max 720) and answer buttons exactly as wide as it — two by default ("Still
-   * learning" = again, "I know it" = good) or the four ratings with their next intervals
-   * (`study.answer_buttons`, a display preference stored in settings). The backend runs the
-   * session; this screen only shows and reports.
+   * Flashcards (spaced repetition, docs/11 §3). v1.3: sessions start in the study launcher
+   * (one dialog for every entry); this screen runs them. The running session owns the window
+   * (`SessionFrame`: progress, "12 / 40", remaining, Esc) with the card centred (max 720) and
+   * answer buttons exactly as wide as it — two by default ("Still learning" = again, "I know
+   * it" = good) or the four ratings with their next intervals (`study.answer_buttons`).
+   * Keys (keys.ts): Space flips front ⇄ back as often as you like and never grades; the rating
+   * keys grade once the back has been seen; H hint, Z undo, Esc leave; Enter only presses the
+   * focused control. When every remaining card waits for its learning step the session stays
+   * open and says when the next one comes. The backend runs the session; this screen only
+   * shows and reports.
    */
   import { formatCount, formatPercent100 } from '$lib/format';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { api } from '$lib/api';
-  import type {
-    AnswerCheckDto,
-    AttributeDefDto,
-    FlagDto,
-    Rating,
-    SavedQueryDto,
-    SessionDto,
-    SessionSummary,
-    StartModes,
-    StartSession,
-  } from '$lib/api/types';
+  import type { AnswerCheckDto, FlagDto, Rating, SessionDto, SessionSummary } from '$lib/api/types';
   import { ApiError } from '$lib/api';
   import { t, td } from '$lib/i18n/index.svelte';
   import {
     Button,
-    ChevronDown,
-    ChevronUp,
     Chip,
     CircleCheck,
+    Clock,
     Flag,
     Flashcard,
     Icon,
@@ -36,34 +29,31 @@
     Menu,
     OptionTile,
     PageHeader,
+    Play,
     ProgressRing,
     Repeat,
-    Select,
     Skeleton,
-    Switch,
     Undo2,
     type MenuItem,
   } from '$lib/ui';
-  import type { DeckCounts, DeckTreeNode } from '$lib/api/types';
   import StudyAi from '../ai/StudyAi.svelte';
   import CardView from '../cards/CardView.svelte';
   import PluginToolbar from '../plugins/PluginToolbar.svelte';
   import { defaultFlagKey, flagColor, hasFlag } from '../cards/flags';
-  import { moduleKnownOn, moduleOn, trackModules } from '../cards/modules.svelte';
+  import { moduleOn, trackModules } from '../cards/modules.svelte';
   import type { ScreenCtx } from '../types';
   import { intervalLabel, tzOffsetMins } from './format';
-  // v0.10 study modes: start options, timer, confidence scale, focus, inline cards.
+  // v0.10 study modes: timer, confidence scale, focus, inline cards.
   import ConfidenceButtons from '../modes/ConfidenceButtons.svelte';
   import FocusToggle from '../modes/FocusToggle.svelte';
   import InlineComposer from '../modes/InlineComposer.svelte';
-  import OptRow from '../modes/OptRow.svelte';
   import SessionFrame from '../modes/SessionFrame.svelte';
-  import SetupPanel from '../modes/SetupPanel.svelte';
-  import StudyModeOptions from '../modes/StudyModeOptions.svelte';
   import TimerBar from '../modes/TimerBar.svelte';
   import { plainKey } from '../modes/modes';
-  import { keyAction, RATINGS, studyBindings, type StudyAction, type StudyPhase } from './keys';
-  import { takeStudyNow } from './intent';
+  import type { HintView, StudyScope } from './contract';
+  import { ariaKeys, keyAction, keyFor, RATINGS, studyBindings, type StudyAction, type StudyPhase } from './keys';
+  import { handoffSeq, launcher, openLauncher, takeHandoff, type Handoff } from './launcher.svelte';
+  import LaunchIdle from './LaunchIdle.svelte';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -72,36 +62,29 @@
 
   let session = $state<SessionDto | null>(null);
   let summary = $state<SessionSummary | null>(null);
-  let resumable = $state<SessionDto | null>(null);
-  let loading = $state(true);
+  /** The scope the session was started with (the summary's "Study again" builds on it). */
+  let startedScope = $state<StudyScope | null>(null);
+  /** The back has been seen at least once (the rating keys work from then on). */
   let revealed = $state(false);
-  /** Which face the card shows (the learner may flip back to the question). */
+  /** Which face the card shows (Space flips it back and forth). */
   let flipped = $state(false);
-  let hint = $state<string | null>(null);
+  let hint = $state<HintView | null>(null);
   let typed = $state('');
   let check = $state<AnswerCheckDto | null>(null);
-  let practice = $state(false);
-  let attrs = $state<AttributeDefDto[]>([]);
-  let filterAttr = $state('');
-  let filterValue = $state('');
-  /** Custom session from the query language (v0.4), or a saved query ("filtered deck"). */
-  let customQuery = $state('');
-  let savedQueries = $state<SavedQueryDto[]>([]);
-  let savedId = $state('');
-  let postponeDays = $state<number | string>(1);
-  let modeOptions = $state<StartModes | null>(null);
   let composing = $state(false);
-  let showOptions = $state(false);
-  let notice = $state<string | null>(null);
   let buttons = $state<'two' | 'four'>('two');
   let busy = false;
   let shownAt = 0;
   let revealedAt: number | null = null;
   let input = $state<HTMLInputElement | null>(null);
+  let doneBtn = $state<HTMLButtonElement | null>(null);
+  let waitBtn = $state<HTMLButtonElement | null>(null);
   /** Flag names/colors (`flags.list`, Anki numbering from `card_flag_defs`). */
   let flagDefs = $state<FlagDto[]>([]);
   /** Picked option of a choice card. */
   let picked = $state<number | null>(null);
+  /** Wall clock for the waiting countdown. */
+  let now = $state(Date.now());
   /**
    * Study keys from `shortcuts.list`; `undefined` = built-in defaults. Loaded the same way as
    * the shell's `ShortcutHost` (not gated by the palette UI) so both agree on who handles
@@ -147,42 +130,39 @@
 
   const card = $derived(session?.current ?? null);
   const choice = $derived(card?.sides.interaction.kind === 'choice' ? card.sides.interaction : null);
-  const cardFlags = $derived(
-    card && moduleOn('flags') ? flagDefs.filter((f) => hasFlag(card.flags, f.flag)) : [],
-  );
-  const phase = $derived<StudyPhase>(summary ? 'done' : card ? (revealed ? 'answer' : 'question') : 'idle');
+  const cardFlags = $derived(card && moduleOn('flags') ? flagDefs.filter((f) => hasFlag(card.flags, f.flag)) : []);
+  /** Open, nothing to show now, a learning card due later: "next card in N min". */
+  const waiting = $derived(!summary && !!session && !card && session.ended_at === null && session.next_due !== null);
+  const phase = $derived<StudyPhase>(summary ? 'done' : card ? (revealed ? 'answer' : 'question') : waiting ? 'waiting' : 'idle');
   // A running session owns the window (v1.2: no sidebar, no top bar); the summary is a
   // normal page again, so the learner can go anywhere from it.
-  $effect(() => ctx.setFocus?.(phase === 'question' || phase === 'answer'));
-  const filterDef = $derived(attrs.find((a) => a.id === filterAttr) ?? null);
+  $effect(() => ctx.setFocus?.(phase === 'question' || phase === 'answer' || phase === 'waiting'));
   const twoButtons = $derived(buttons === 'two');
+
+  // The launcher hands a started (or continued) session over: when the screen opens, and
+  // whenever it hands over another while this screen is already open ("Study again").
+  const initial = takeHandoff('normal');
+  let accepting = $state(initial !== null);
+  /** A session ran here: back on the empty page the launcher does not pop up again. */
+  let hadSession = $state(false);
+
+  function accept(h: Handoff) {
+    startedScope = h.scope;
+    accepting = true;
+    hadSession = true;
+    void ctx.guarded(() => settle(h.session)).finally(() => (accepting = false));
+  }
+
+  $effect(() => {
+    void handoffSeq();
+    const h = takeHandoff('normal');
+    if (h) accept(h);
+  });
 
   onMount(() => {
     trackModules();
-    // Opened by "Start studying" (Home, deck page): start at once, no start panel first.
-    const now = takeStudyNow();
-    void ctx
-      .guarded(async () => {
-        const open = (await api.call('study.active', {})).session;
-        // Learn, test and match sessions resume on their own screens.
-        resumable = open && !['learn', 'test', 'match'].includes(open.kind) ? open : null;
-      })
-      .finally(() => {
-        loading = false;
-        if (now) void run({ kind: 'start' });
-      });
-    void loadSaved();
-    const unsub = api.on(['saved_queries', 'module_toggled'], () => void loadSaved());
-    return () => void unsub.then((u) => u());
+    if (initial) accept(initial);
   });
-
-  async function loadSaved() {
-    try {
-      savedQueries = moduleOn('browse') ? (await api.call('saved_queries.list', {})).items : [];
-    } catch {
-      savedQueries = [];
-    }
-  }
 
   async function loadFlags() {
     try {
@@ -198,29 +178,21 @@
     return () => void unsub.then((u) => u());
   });
 
-  // Classifications of the selected deck feed the custom-session filter.
+  // Waiting: tick every second; when the next card is due, fetch it.
   $effect(() => {
-    const deck = ctx.selectedDeck;
-    filterAttr = '';
-    filterValue = '';
-    attrs = [];
-    if (!deck || !moduleKnownOn('attributes')) return;
-    void api.call('attributes.effective', { deck_id: deck, target: 'note' }).then(
-      (r) => {
-        if (ctx.selectedDeck === deck) {
-          attrs = r.attributes
-            .map((a) => a.def)
-            .filter((d) => d.kind === 'enum' || d.kind === 'ordered_enum' || d.kind === 'multi_enum');
-        }
-      },
-      () => (attrs = []),
-    );
+    if (!waiting) return;
+    now = Date.now();
+    const id = setInterval(() => {
+      now = Date.now();
+      if (session?.next_due !== null && session?.next_due !== undefined && now >= session.next_due && !busy) void ctx.guarded(reload);
+    }, 1000);
+    return () => clearInterval(id);
   });
-
-  // A new classification clears its value.
   $effect(() => {
-    void filterAttr;
-    filterValue = '';
+    if (waiting) void tick().then(() => waitBtn?.focus());
+  });
+  $effect(() => {
+    if (phase === 'done') void tick().then(() => doneBtn?.focus());
   });
 
   function show(s: SessionDto) {
@@ -246,56 +218,23 @@
     return api.call('modes.timed.start', { session_id: s.id, card_id: s.current.card_id });
   }
 
+  /** Shows the session's card; with only waiting cards the session stays open; else it ends. */
   async function settle(s: SessionDto) {
     if (s.current) show(await startTimer(s));
-    else await finish(s);
+    else if (s.ended_at === null && s.next_due !== null) {
+      session = s;
+      summary = null;
+    } else await finish(s);
   }
 
   async function finish(s: SessionDto) {
     session = s;
     summary = await api.call('study.end', { session_id: s.id });
-    resumable = null;
-  }
-
-  const queryText = $derived(customQuery.trim());
-  const custom = $derived((filterAttr !== '' && filterValue !== '') || queryText !== '' || savedId !== '');
-
-  function startRequest(): StartSession {
-    const filtered = filterAttr !== '' && filterValue !== '';
-    const byQuery = queryText !== '' || savedId !== '';
-    return {
-      kind: custom ? 'custom' : 'normal',
-      mode: practice ? 'trial' : 'scheduled',
-      deck_id: ctx.selectedDeck,
-      filter: custom
-        ? {
-            attributes: filtered ? [{ attr_id: filterAttr, values: [filterValue] }] : [],
-            // A query decides due-ness itself (`is:due`); the classification picker studies
-            // what is due.
-            due_only: byQuery ? null : true,
-            query: savedId === '' && queryText !== '' ? queryText : null,
-            saved_query_id: savedId === '' ? null : savedId,
-          }
-        : null,
-      tz_offset_mins: tzOffsetMins(),
-      modes: modeOptions,
-    };
-  }
-
-  async function start() {
-    notice = null;
-    const s = await api.call('study.start', startRequest());
-    if (!s.current) {
-      await api.call('study.end', { session_id: s.id });
-      notice = t('study.nothing');
-      return;
-    }
-    show(await startTimer(s));
   }
 
   async function reload() {
     const id = session?.id ?? summary?.session_id;
-    if (!id) return;
+    if (!id || summary) return;
     await settle(await api.call('study.session', { session_id: id }));
   }
 
@@ -330,6 +269,7 @@
     await reveal();
   }
 
+  /** First sight of the back: checks a typed answer, then shows the back. */
   async function reveal() {
     if (card?.type_answer && !check) await checkTyped();
     revealed = true;
@@ -338,15 +278,21 @@
     input?.blur();
   }
 
+  /** Space: the first time shows the back (the answer); after that it just turns the card. */
+  async function flip() {
+    if (!revealed) return reveal();
+    flipped = !flipped;
+  }
+
   async function rate(rating: Rating) {
-    if (!session || !card) return;
-    const now = Date.now();
+    if (!session || !card || !revealed) return;
+    const at = Date.now();
     try {
       const next = await api.call('study.answer', {
         session_id: session.id,
         card_id: card.card_id,
         rating,
-        duration_ms: Math.max(0, now - shownAt),
+        duration_ms: Math.max(0, at - shownAt),
         reveal_ms: revealedAt === null ? null : Math.max(0, revealedAt - shownAt),
       });
       await settle(next);
@@ -359,14 +305,14 @@
 
   /** Confidence scale (v0.10): level 1–5, mapped onto a rating by the backend. */
   async function rateConfidence(level: number) {
-    if (!session || !card) return;
-    const now = Date.now();
+    if (!session || !card || !revealed) return;
+    const at = Date.now();
     try {
       const next = await api.call('modes.confidence.answer', {
         session_id: session.id,
         card_id: card.card_id,
         level,
-        duration_ms: Math.max(0, now - shownAt),
+        duration_ms: Math.max(0, at - shownAt),
         reveal_ms: revealedAt === null ? null : Math.max(0, revealedAt - shownAt),
       });
       await settle(next);
@@ -383,15 +329,17 @@
     await settle(await api.call('modes.timed.expire', { session_id: session.id, card_id: card.card_id }));
   }
 
-  async function resume(s: SessionDto) {
-    // Timed: a card whose countdown never started gets it now (`settle`).
-    await settle(s);
-  }
-
   /** Two or four answer buttons: a display preference the backend validates and stores. */
   async function setButtons(v: 'two' | 'four') {
     buttons = v;
     await api.call('settings.set', { scope: { kind: 'app' }, key: BUTTONS_KEY, value: v });
+  }
+
+  /** The launcher, on this deck — "Study again" preselects what makes sense after a session. */
+  function studyAgain() {
+    const deckId = session?.deck_id ?? ctx.selectedDeck;
+    const struggled = (summary?.mistakes ?? 0) > 0 || (session?.mistakes ?? 0) > 0;
+    openLauncher({ deckId, kind: 'normal', scope: struggled ? 'struggled_today' : (startedScope ?? undefined) });
   }
 
   async function run(a: StudyAction) {
@@ -402,10 +350,8 @@
         const s = session;
         const c = card;
         switch (a.kind) {
-          case 'start':
-            return start();
-          case 'reveal':
-            return reveal();
+          case 'flip':
+            return flip();
           case 'rate':
             return rate(a.rating);
           case 'choose':
@@ -417,9 +363,9 @@
             }
             return;
           case 'hint':
-            if (s && c) {
-              const h = await api.call('study.hint', { session_id: s.id, card_id: c.card_id });
-              hint = h.text ?? hint;
+            if (s && c && !revealed) {
+              const h = (await api.call('study.hint', { session_id: s.id, card_id: c.card_id })) as HintView;
+              if (h.text || h.html) hint = h;
             }
             return;
           case 'suspend':
@@ -444,11 +390,10 @@
             return reload();
           case 'end':
             if (!s) return;
-            // Nothing answered yet: no "0 of 0" summary, straight back to the start panel.
+            // Nothing answered yet: no "0 of 0" summary.
             if (s.answered === 0) {
               await api.call('study.end', { session_id: s.id });
               session = null;
-              resumable = null;
               return;
             }
             return finish(s);
@@ -456,17 +401,13 @@
             if (summary && summary.mistakes > 0) {
               const r = await api.call('study.start', {
                 kind: 'mistakes',
-                mode: practice ? 'trial' : 'scheduled',
+                mode: summary.mode,
                 from_session: summary.session_id,
                 tz_offset_mins: tzOffsetMins(),
-                modes: modeOptions,
+                modes: null,
               });
               await settle(r);
             }
-            return;
-          case 'back':
-            summary = null;
-            session = null;
             return;
         }
       });
@@ -475,15 +416,31 @@
     }
   }
 
+  function back() {
+    summary = null;
+    session = null;
+  }
+
+  /** Space on an answer button would press it: here Space only ever flips the card. */
+  const ANSWER_BUTTON = '.answer-bar button, .tools .flip-btn';
+
   function onKey(e: KeyboardEvent) {
     // The card (or another control) handled it already (e.g. Space on the focused card).
     if (e.defaultPrevented) return;
+    if (document.querySelector('[aria-modal="true"]')) return;
     const el = e.target as HTMLElement | null;
     const tag = el?.tagName ?? '';
-    const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-    // Buttons handle their own Enter/Space; keep shortcuts working everywhere else.
+    const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!el?.isContentEditable;
     const asButton = tag === 'BUTTON' || (el instanceof HTMLElement && el.getAttribute('role') === 'button');
+    const flipKey = bindings ? keyFor('study.reveal', bindings) : 'Space';
+    if (asButton && e.key === ' ' && flipKey === 'Space' && el?.closest(ANSWER_BUTTON) && (phase === 'question' || phase === 'answer')) {
+      e.preventDefault();
+      if (!e.repeat) void run({ kind: 'flip' });
+      return;
+    }
+    // Buttons handle their own Enter/Space; keep shortcuts working everywhere else.
     if (asButton && (e.key === 'Enter' || e.key === ' ')) return;
+    if (e.repeat) return;
     // v0.10: inline cards (N), confidence levels (1–5) on the answer side.
     if (card && plainKey(e) && e.key.toLowerCase() === 'n' && moduleOn('inline_cards')) {
       e.preventDefault();
@@ -511,27 +468,15 @@
   }
 
   function onTypedKey(e: KeyboardEvent) {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.repeat) {
       e.preventDefault();
-      void run({ kind: 'reveal' });
+      void run({ kind: 'flip' });
     }
   }
 
-  /** The learner flipped the card (click / Space on it): the first flip reveals the answer. */
+  /** The learner turned the card (click, or Space/Enter on the focused card). */
   function onflip(f: boolean) {
-    if (f && !revealed) void run({ kind: 'reveal' });
-  }
-
-  async function postpone() {
-    notice = null;
-    await ctx.guarded(async () => {
-      const r = await api.call('study.postpone', {
-        deck_id: ctx.selectedDeck,
-        days: Number(postponeDays) || 1,
-        tz_offset_mins: tzOffsetMins(),
-      });
-      notice = t('study.postponed', { count: r.cards });
-    });
+    if (f && !revealed) void run({ kind: 'flip' });
   }
 
   function interval(ms: number): string {
@@ -548,22 +493,25 @@
   const position = $derived(session ? session.answered + 1 : 0);
   const total = $derived(session ? session.answered + Math.max(remaining, 1) : 0);
 
-  const attrOptions = $derived([
-    { value: '', label: t('study.filter_any') },
-    ...attrs.map((a) => ({ value: a.id, label: a.name })),
-  ]);
-  const valueOptions = $derived([
-    { value: '', label: t('study.filter_any') },
-    ...(filterDef?.options ?? []).map((o) => ({ value: o.id, label: o.label })),
-  ]);
-  const savedOptions = $derived([
-    { value: '', label: t('study.filter_any') },
-    ...savedQueries.map((q) => ({ value: q.id, label: q.name })),
-  ]);
+  // The keys as bound now (the shortcut editor may have changed them): legend, hints, aria.
+  const keys = $derived({
+    flip: keyFor('study.reveal', bindings),
+    again: keyFor('study.again', bindings),
+    hard: keyFor('study.hard', bindings),
+    good: keyFor('study.good', bindings),
+    easy: keyFor('study.easy', bindings),
+    hint: keyFor('study.hint', bindings),
+    undo: keyFor('study.undo', bindings),
+    end: keyFor('study.end', bindings),
+    suspend: keyFor('study.suspend', bindings),
+    bury: keyFor('study.bury', bindings),
+  });
+  const rateKeys = $derived(twoButtons ? [keys.again, keys.hard] : [keys.again, keys.hard, keys.good, keys.easy]);
+  const keyText = (k: string | null) => (k === 'Escape' ? 'Esc' : (k ?? ''));
 
   const toolItems = $derived<MenuItem[]>([
-    { id: 'suspend', label: t('study.suspend'), keys: ['S'], onselect: () => void run({ kind: 'suspend' }) },
-    { id: 'bury', label: t('study.bury'), keys: ['B'], onselect: () => void run({ kind: 'bury' }) },
+    { id: 'suspend', label: `${t('study.suspend')} — ${t('study.suspend_desc')}`, keys: keys.suspend ? [keyText(keys.suspend)] : undefined, onselect: () => void run({ kind: 'suspend' }) },
+    { id: 'bury', label: `${t('study.bury')} — ${t('study.bury_desc')}`, keys: keys.bury ? [keyText(keys.bury)] : undefined, onselect: () => void run({ kind: 'bury' }) },
     ...(moduleOn('inline_cards')
       ? [{ id: 'inline', label: t('modes.inline.open'), keys: ['N'], onselect: () => (composing = true) }]
       : []),
@@ -572,24 +520,6 @@
       ? { id: 'buttons', label: t('study.buttons.use_four'), onselect: () => void ctx.guarded(() => setButtons('four')) }
       : { id: 'buttons', label: t('study.buttons.use_two'), onselect: () => void ctx.guarded(() => setButtons('two')) },
   ]);
-
-  /** Today's counts of the selected deck (the tree's own numbers), or of all decks. */
-  function findNode(nodes: DeckTreeNode[], id: string): DeckTreeNode | null {
-    for (const n of nodes) {
-      if (n.deck.id === id) return n;
-      const hit = findNode(n.children, id);
-      if (hit) return hit;
-    }
-    return null;
-  }
-  const today = $derived.by((): Pick<DeckCounts, 'due' | 'learning' | 'new'> | null => {
-    if (ctx.selectedDeck) return findNode(ctx.decks, ctx.selectedDeck)?.counts ?? null;
-    if (ctx.decks.length === 0) return null;
-    return ctx.decks.reduce(
-      (a, n) => ({ due: a.due + n.counts.due, learning: a.learning + n.counts.learning, new: a.new + n.counts.new }),
-      { due: 0, learning: 0, new: 0 },
-    );
-  });
 
   /** Flags as a menu in the quiet tools row (also Ctrl+1–7); a set flag is ticked. */
   const flagItems = $derived<MenuItem[]>(
@@ -603,105 +533,26 @@
 
   const minutes = (ms: number) => Math.floor(ms / 60_000);
   const seconds = (ms: number) => String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0');
+  const waitLeft = $derived(session?.next_due ? Math.max(0, session.next_due - now) : 0);
 </script>
 
 <svelte:window onkeydown={onKey} />
 
 {#snippet counts(c: { due: number; learning: number; new: number })}
-  <span class="cnt"><span class="k">{t('study.count.due')}</span><span class="num v">{formatCount(c.due)}</span></span>
-  <span class="cnt"><span class="k">{t('study.count.learning')}</span><span class="num v">{formatCount(c.learning)}</span></span>
-  <span class="cnt"><span class="k">{t('study.count.new')}</span><span class="num v">{formatCount(c.new)}</span></span>
+  <span class="cnt" title={t('study.count.due_desc')}><span class="k">{t('study.count.due')}</span><span class="num v">{formatCount(c.due)}</span></span>
+  <span class="cnt" title={t('study.count.learning_desc')}><span class="k">{t('study.count.learning')}</span><span class="num v">{formatCount(c.learning)}</span></span>
+  <span class="cnt" title={t('study.count.new_desc')}><span class="k">{t('study.count.new')}</span><span class="num v">{formatCount(c.new)}</span></span>
 {/snippet}
 
 {#if phase === 'idle'}
-  <section class="study">
-    <PageHeader title={t('study.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
-    {#if loading}
+  {#if accepting}
+    <section class="study">
+      <PageHeader title={t('study.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
       <Skeleton shape="card" height="120px" />
-    {:else}
-      <SetupPanel title={custom ? t('study.custom_heading') : t('study.start_heading')} {notice}>
-        {#snippet meta()}
-          {#if custom}
-            <span>{t('study.custom_intro')}</span>
-          {:else if today}
-            {@render counts(today)}
-          {:else}
-            <span>{t('study.start_intro')}</span>
-          {/if}
-        {/snippet}
-        {#snippet actions()}
-          {#if resumable}
-            <Button onclick={() => resumable && void ctx.guarded(() => resume(resumable!))}>{t('study.resume')}</Button>
-          {/if}
-          <Button variant="primary" kbd="Enter" aria-keyshortcuts="Enter" data-testid="study-start" onclick={() => void run({ kind: 'start' })}>
-            {custom ? t('study.custom_start') : t('study.start')}
-          </Button>
-        {/snippet}
-        <div class="opts-toggle">
-          <Button
-            variant="ghost"
-            size="sm"
-            iconEnd={showOptions ? ChevronUp : ChevronDown}
-            aria-expanded={showOptions}
-            aria-controls="study-options"
-            onclick={() => (showOptions = !showOptions)}
-          >
-            {t('study.options')}
-          </Button>
-          {#if practice}<Chip size="sm" tone="accent" label={t('study.practice_badge')} />{/if}
-        </div>
-        {#if showOptions}
-          <div id="study-options">
-            <OptRow label={t('study.practice_label')} description={t('study.practice_hint')}>
-              <Switch ariaLabel={t('study.practice_label')} bind:checked={practice} />
-            </OptRow>
-            <StudyModeOptions bind:value={modeOptions} />
-            {#if attrs.length > 0}
-              <OptRow label={t('study.filter_label')}>
-                <Select class="sel" size="sm" label={t('study.filter_label')} hideLabel options={attrOptions} bind:value={filterAttr} />
-                {#if filterDef}
-                  <Select class="sel" size="sm" label={filterDef.name} hideLabel options={valueOptions} bind:value={filterValue} />
-                {/if}
-              </OptRow>
-            {/if}
-            {#if moduleOn('browse')}
-              <OptRow label={t('study.query_label')} labelFor="study-query">
-                <Input
-                  id="study-query"
-                  class="query"
-                  size="sm"
-                  label={t('study.query_label')}
-                  hideLabel
-                  bind:value={customQuery}
-                  disabled={savedId !== ''}
-                  placeholder={t('study.query_placeholder')}
-                  spellcheck="false"
-                />
-                {#if savedQueries.length > 0}
-                  <Select class="sel" size="sm" label={t('study.saved_label')} hideLabel options={savedOptions} bind:value={savedId} />
-                {/if}
-              </OptRow>
-            {/if}
-            <OptRow label={t('study.postpone_label')} labelFor="study-postpone">
-              <Input
-                id="study-postpone"
-                class="days"
-                size="sm"
-                type="number"
-                min="1"
-                max="365"
-                label={t('study.postpone_label')}
-                hideLabel
-                bind:value={postponeDays}
-              />
-              <span class="unit">{t('study.postpone_days')}</span>
-              <Button size="sm" onclick={() => void postpone()}>{t('study.postpone')}</Button>
-            </OptRow>
-          </div>
-        {/if}
-      </SetupPanel>
-    {/if}
-  </section>
+    </section>
+  {:else}
+    <LaunchIdle {ctx} kind="normal" title={t('study.heading')} auto={!hadSession} />
+  {/if}
 {:else if phase === 'done' && summary}
   <section class="summary" role="status">
     <header class="sum-head">
@@ -723,9 +574,14 @@
       </div>
     </dl>
     <div class="sum-actions">
-      <Button variant="primary" kbd="Enter" aria-keyshortcuts="Enter" onclick={() => void run({ kind: 'back' })}>
+      <Button variant="primary" bind:element={doneBtn} onclick={back}>
         {t('study.summary.back')}
       </Button>
+      {#if launcher.available}
+        <Button icon={Play} title={t('study.summary.again_desc')} data-testid="study-again" onclick={studyAgain}>
+          {t('study.summary.again')}
+        </Button>
+      {/if}
       {#if summary.mistakes > 0}
         <Button icon={Repeat} kbd="R" aria-keyshortcuts="R" onclick={() => void run({ kind: 'repeat' })}>
           {t('study.summary.repeat')}
@@ -733,6 +589,37 @@
       {/if}
     </div>
   </section>
+{:else if session && waiting}
+  <SessionFrame
+    title={t('study.heading')}
+    subtitle={ctx.selectedPath ?? t('study.whole_collection')}
+    progressLabel={t('study.progress_label')}
+    value={session.answered}
+    max={total}
+    count={t('study.position', { n: session.answered, total })}
+    countTestid="study-count"
+    exitLabel={t('study.end_label')}
+    exitText={t('study.end')}
+    exitTestid="study-end"
+    onexit={() => void run({ kind: 'end' })}
+  >
+    {#snippet meta()}
+      {@render counts({ due: session!.counts.review, learning: session!.counts.learning, new: session!.counts.new })}
+    {/snippet}
+    <section class="waiting" data-testid="study-waiting" aria-live="polite">
+      <span class="wait-icon"><Icon icon={Clock} size={24} /></span>
+      <h2>{waitLeft < 60_000 ? t('study.waiting.soon') : t('study.waiting.title', { n: Math.ceil(waitLeft / 60_000) })}</h2>
+      <p class="wait-clock num" role="timer" aria-label={t('study.waiting.countdown_label')}>{minutes(waitLeft)}:{seconds(waitLeft)}</p>
+      <p class="wait-body">{t('study.waiting.body')}</p>
+      <div class="wait-actions">
+        <Button variant="primary" bind:element={waitBtn} data-testid="study-wait" onclick={() => void ctx.guarded(reload)}>{t('study.waiting.wait')}</Button>
+        {#if launcher.available}
+          <Button icon={Play} onclick={() => openLauncher({ deckId: session?.deck_id ?? ctx.selectedDeck })}>{t('study.waiting.other')}</Button>
+        {/if}
+        <Button data-testid="study-finish" onclick={() => session && void ctx.guarded(() => finish(session!))}>{t('study.waiting.finish')}</Button>
+      </div>
+    </section>
+  </SessionFrame>
 {:else if session && card}
   <SessionFrame
     title={t('study.heading')}
@@ -751,7 +638,7 @@
       {@render counts({ due: session!.counts.review, learning: session!.counts.learning, new: session!.counts.new })}
     {/snippet}
     {#snippet extra()}
-      {#if session!.mode === 'trial'}<Chip size="sm" tone="accent" label={t('study.practice_badge')} />{/if}
+      {#if session!.mode === 'trial'}<span title={t('study.practice_hint')}><Chip size="sm" tone="accent" label={t('study.practice_badge')} /></span>{/if}
       {#each cardFlags as f (f.flag)}
         <span class="flag" style:--flag={flagColor(f)} data-testid="flag">{f.name ?? td(defaultFlagKey(f.flag))}</span>
       {/each}
@@ -776,7 +663,13 @@
       {/snippet}
     </Flashcard>
     <PluginToolbar cardId={card.card_id} />
-    {#if hint && !revealed}<p class="hint" data-testid="hint">{hint}</p>{/if}
+    {#if hint && !revealed}
+      {#if hint.kind === 'context' && hint.html}
+        <p class="hint context" data-testid="hint"><span class="hint-label">{t('study.hint_context')}</span><span class="hint-sentence">{@html hint.html}</span></p>
+      {:else}
+        <p class="hint" data-testid="hint">{hint.text}</p>
+      {/if}
+    {/if}
     {#if choice}
       <div class="choices" role="group" aria-label={t('study.choices')}>
         {#each choice.options as option, i (i)}
@@ -818,15 +711,15 @@
         <ConfidenceButtons levels={session.modes.confidence} onrate={(l) => void ctx.guarded(() => rateConfidence(l))} />
       {:else if revealed && twoButtons}
         <div class="answers two" role="group" aria-label={t('study.rate_label')}>
-          <button type="button" class="ans again" aria-keyshortcuts="1" onclick={() => void run({ kind: 'rate', rating: 'again' })}>
+          <button type="button" class="ans again" aria-keyshortcuts={ariaKeys(keys.again)} data-testid="rate-again" onclick={() => void run({ kind: 'rate', rating: 'again' })}>
             <Icon icon={Repeat} size={16} />
             <span class="lbl">{t('study.buttons.still_learning')}</span>
-            <kbd class="key" aria-hidden="true">1</kbd>
+            {#if keys.again}<kbd class="key" aria-hidden="true">{keyText(keys.again)}</kbd>{/if}
           </button>
-          <button type="button" class="ans good" aria-keyshortcuts="2" onclick={() => void run({ kind: 'rate', rating: 'good' })}>
+          <button type="button" class="ans good" aria-keyshortcuts={ariaKeys(keys.hard)} data-testid="rate-good" onclick={() => void run({ kind: 'rate', rating: 'good' })}>
             <Icon icon={CircleCheck} size={16} />
             <span class="lbl">{t('study.buttons.know_it')}</span>
-            <kbd class="key" aria-hidden="true">2</kbd>
+            {#if keys.hard}<kbd class="key" aria-hidden="true">{keyText(keys.hard)}</kbd>{/if}
           </button>
         </div>
       {:else if revealed}
@@ -836,28 +729,34 @@
               type="button"
               class="ans rating {r}"
               class:suggested={check?.suggested_rating === r}
-              aria-keyshortcuts={String(i + 1)}
+              aria-keyshortcuts={ariaKeys(rateKeys[i] ?? null)}
+              data-testid="rate-{r}"
               onclick={() => void run({ kind: 'rate', rating: r })}
             >
               <span class="lbl">{t(`study.rating.${r}`)}</span>
-              <span class="sub"><span class="num ivl">{interval(card.intervals[i]?.interval_ms ?? 0)}</span><kbd class="key" aria-hidden="true">{i + 1}</kbd></span>
+              <span class="sub"><span class="num ivl">{interval(card.intervals[i]?.interval_ms ?? 0)}</span>{#if rateKeys[i]}<kbd class="key" aria-hidden="true">{keyText(rateKeys[i] ?? null)}</kbd>{/if}</span>
             </button>
           {/each}
         </div>
       {:else}
-        <button type="button" class="ans reveal" data-testid="flip" aria-keyshortcuts="Space" onclick={() => void run({ kind: 'reveal' })}>
+        <button type="button" class="ans reveal" data-testid="flip" aria-keyshortcuts={ariaKeys(keys.flip)} onclick={() => void run({ kind: 'flip' })}>
           <span class="lbl">{t('study.show_answer')}</span>
-          <kbd class="key" aria-hidden="true">Space</kbd>
+          {#if keys.flip}<kbd class="key" aria-hidden="true">{keyText(keys.flip)}</kbd>{/if}
         </button>
       {/if}
     </div>
 
     <div class="tools">
       <div class="tool-btns">
-        <Button variant="ghost" size="sm" kbd="H" aria-keyshortcuts="H" disabled={revealed} onclick={() => void run({ kind: 'hint' })}>
+        {#if revealed}
+          <Button variant="ghost" size="sm" class="flip-btn" kbd={keys.flip ? keyText(keys.flip) : undefined} aria-keyshortcuts={ariaKeys(keys.flip)} data-testid="flip-again" onclick={() => void run({ kind: 'flip' })}>
+            {t('study.flip')}
+          </Button>
+        {/if}
+        <Button variant="ghost" size="sm" kbd={keys.hint ? keyText(keys.hint) : undefined} aria-keyshortcuts={ariaKeys(keys.hint)} disabled={revealed} onclick={() => void run({ kind: 'hint' })}>
           {t('study.hint')}
         </Button>
-        <Button variant="ghost" size="sm" icon={Undo2} kbd="Z" aria-keyshortcuts="Z" onclick={() => void run({ kind: 'undo' })}>
+        <Button variant="ghost" size="sm" icon={Undo2} kbd={keys.undo ? keyText(keys.undo) : undefined} aria-keyshortcuts={ariaKeys(keys.undo)} onclick={() => void run({ kind: 'undo' })}>
           {t('study.undo')}
         </Button>
         {#if moduleOn('flags') && flagItems.length > 0}
@@ -866,10 +765,12 @@
         <FocusToggle />
         <Menu items={toolItems} label={t('study.more')} placement="top" align="start" />
       </div>
-      <!-- Only keys no button on screen shows already: on the answer Space (and Enter) answer "good". -->
-      {#if revealed && !confidence}
-        <p class="legend" data-focus-hide><kbd>Space</kbd> {twoButtons ? t('study.buttons.know_it') : t('study.rating.good')}</p>
-      {/if}
+      <!-- What the keys do right now (they follow the shortcut editor). -->
+      <p class="legend" data-focus-hide data-testid="study-legend">
+        {#if keys.flip}<span><kbd>{keyText(keys.flip)}</kbd> {t('study.legend.flip')}</span>{/if}
+        {#if revealed && !confidence && rateKeys.some(Boolean)}<span><kbd>{rateKeys.filter(Boolean).map(keyText).join(' ')}</kbd> {t('study.legend.rate')}</span>{/if}
+        {#if keys.end}<span><kbd>{keyText(keys.end)}</kbd> {t('study.legend.leave')}</span>{/if}
+      </p>
     </div>
 
     <StudyAi cardId={card.card_id} {revealed} typed={card.type_answer ? typed : null} />
@@ -898,25 +799,123 @@
     color: var(--text-1);
     font-weight: var(--weight-medium);
   }
-  .opts-toggle {
+  .wait-icon {
+    display: inline-flex;
+    color: var(--accent-text);
+  }
+  /* Waiting for a learning step: the session stays open. */
+  .waiting {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-1) var(--space-2);
-    border-top: 1px solid var(--border);
+    gap: var(--space-3);
+    padding: var(--space-8) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-flashcard);
+    background: var(--surface-1);
+    text-align: center;
   }
-  #study-options :global(.sel) {
-    min-width: 160px;
+  .waiting h2 {
+    margin: 0;
+    font-size: var(--text-xl);
+    font-weight: var(--weight-semibold);
   }
-  #study-options :global(.query) {
-    width: 240px;
+  .wait-clock {
+    margin: 0;
+    font-size: var(--text-2xl);
+    color: var(--text-1);
   }
-  #study-options :global(.days) {
-    width: 72px;
-  }
-  .unit {
-    font-size: var(--text-xs);
+  .wait-body {
+    margin: 0;
+    max-width: 52ch;
     color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .wait-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  /* Card back of the built-in vocabulary types (CONTRACT §2): the meaning is the answer, the
+     example a separate labelled block (sentence, then its translation, muted), the source a
+     small caption. Only presentation; the parts come from the card template. */
+  .face-body :global(.fc-part-meaning) {
+    font-size: var(--text-card);
+    font-weight: var(--weight-semibold);
+    line-height: var(--leading-tight);
+    color: var(--text-1);
+  }
+  .face-body :global(.fc-part-example) {
+    margin: var(--space-4) auto 0;
+    max-width: 56ch;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-2);
+    font-size: var(--text-md);
+    font-weight: var(--weight-regular, 400);
+    line-height: var(--leading);
+    text-align: start;
+    color: var(--text-1);
+  }
+  .face-body :global(.fc-part-example .fc-part-label),
+  .face-body :global(.fc-part-source .fc-part-label) {
+    display: block;
+    margin-bottom: var(--space-1);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-medium);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-2);
+  }
+  .face-body :global(.fc-part-example-translation),
+  .face-body :global(.fc-part-example .fc-part-translation) {
+    display: block;
+    margin-top: var(--space-1);
+    font-size: var(--text-sm);
+    color: var(--text-2);
+  }
+  .face-body :global(.fc-part-source) {
+    margin-top: var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-regular, 400);
+    line-height: var(--leading);
+    color: var(--text-2);
+  }
+  .face-body :global(.fc-part-source .fc-part-label) {
+    display: inline;
+    margin: 0 var(--space-1) 0 0;
+  }
+  /* Context hint: the example sentence with a visible blank. */
+  .hint.context {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    font-family: inherit;
+    letter-spacing: normal;
+  }
+  .hint-label {
+    font-size: var(--text-2xs);
+    color: var(--text-2);
+  }
+  .hint-sentence {
+    font-size: var(--text-lg);
+    color: var(--text-1);
+  }
+  .hint-sentence :global(.fc-blank),
+  .hint-sentence :global(mark),
+  .hint-sentence :global(u) {
+    display: inline-block;
+    min-width: 3em;
+    border-bottom: 2px solid var(--accent-text);
+    background: none;
+    color: transparent;
+  }
+  .legend {
+    display: inline-flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
   }
   /* Session. */
   .flag {

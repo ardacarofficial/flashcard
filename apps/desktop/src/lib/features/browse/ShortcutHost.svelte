@@ -18,6 +18,8 @@
   import Textarea from '$lib/ui/Textarea.svelte';
   import { LayoutGrid, Plus, Search, Terminal, Undo2 } from '$lib/ui/icons';
   import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
+  import { openLauncher } from '../study/launcher.svelte';
+  import type { LaunchKind } from '../study/contract';
   import { bindingMap, comboOf, filterItems, groupItems, paletteItems, typingTarget, type PaletteAction, type PaletteItem } from './palette';
 
   interface ScreenLink {
@@ -32,10 +34,13 @@
     screens,
     activeScreen,
     guarded,
+    deckId = null,
   }: {
     screens: ScreenLink[];
     activeScreen: string | null;
     guarded: (fn: () => Promise<unknown>) => Promise<boolean>;
+    /** The selected deck (the study launcher opens on it). */
+    deckId?: string | null;
   } = $props();
 
   let entries = $state<PaletteEntry[]>([]);
@@ -119,6 +124,19 @@
     pending = null;
   }
 
+  /**
+   * Methods the palette does not run raw (v1.3): `study.start` would start a session and throw
+   * it away — it opens the study launcher instead (the Cards page asks what to study).
+   */
+  const LAUNCHES = new Set(['v1.study.start']);
+
+  function launchStudy(kind?: LaunchKind): boolean {
+    return openLauncher({ deckId, kind });
+  }
+
+  /** Study mode pages: opening one from the palette also opens the launcher with that mode. */
+  const MODE_SCREENS: Record<string, LaunchKind> = { study: 'normal', learn: 'learn', test: 'test', match: 'match' };
+
   async function runMethod(entry: PaletteEntry, body: unknown) {
     const ok = await guarded(() => api.call(entry.method.replace(/^v1\./, '') as never, body as never));
     if (ok) close();
@@ -129,9 +147,14 @@
     if (item.kind === 'screen') {
       screens.find((s) => s.id === item.screenId)?.open();
       close();
+      const kind = MODE_SCREENS[item.screenId];
+      if (kind) launchStudy(kind);
     } else if (item.kind === 'action') {
       close();
       await act(item.action);
+    } else if (LAUNCHES.has(item.entry.method)) {
+      close();
+      launchStudy();
     } else if (item.entry.direct) {
       await runMethod(item.entry, {});
     } else {
@@ -171,6 +194,7 @@
       case 'ui.redo':
         return void guarded(() => api.oplog.redo());
     }
+    if (LAUNCHES.has(action) && launchStudy()) return;
     const entry = entries.find((e) => e.method === action);
     if (entry?.direct) return runMethod(entry, {});
     window.dispatchEvent(new CustomEvent('fc:shortcut', { detail: action }));
@@ -183,15 +207,23 @@
       return;
     }
     if (open) return;
+    // v1.3: a held key is one action (holding Ctrl+Z must not undo ten times).
+    if (e.repeat || e.defaultPrevented) return;
     const combo = comboOf(e);
     if (!combo) return;
+    const typing = typingTarget(e.target);
     // Plain keys typed into a field belong to the field.
-    if (typingTarget(e.target) && !e.ctrlKey && !e.metaKey && !e.altKey) return;
+    if (typing && !e.ctrlKey && !e.metaKey && !e.altKey) return;
     const actions = bindings.get(combo);
     if (!actions?.length) return;
+    // In a field, text editing keeps its own keys (Ctrl+Z undoes typing, Ctrl+A selects text).
+    if (typing && TEXT_EDITING.has(actions[0]!)) return;
     e.preventDefault();
     void act(actions[0]!);
   }
+
+  /** Actions whose usual combos are text-editing keys inside a field. */
+  const TEXT_EDITING = new Set(['ui.undo', 'ui.redo', 'browse.select_all', 'browse.delete']);
 
   function onListKey(e: KeyboardEvent) {
     if (e.key === 'ArrowDown') {

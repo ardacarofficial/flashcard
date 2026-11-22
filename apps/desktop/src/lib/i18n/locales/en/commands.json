@@ -1,7 +1,7 @@
 {
   "commands": {
     "study": {
-      "start": "Start studying",
+      "start": "Choose what to study",
       "session": "Study session",
       "active": "Open study session",
       "answer": "Rate the card",
@@ -9,8 +9,8 @@
       "check_answer": "Check an answer",
       "end": "End the session",
       "summary": "Session summary",
-      "suspend": "Suspend cards (study)",
-      "bury": "Bury cards (study)",
+      "suspend": "Pause cards (study)",
+      "bury": "Leave cards for tomorrow (study)",
       "postpone": "Postpone today's cards",
       "card_history": "Card review history"
     },
@@ -75,14 +75,14 @@
   },
   "shortcuts": {
     "study": {
-      "reveal": "Show the answer",
-      "again": "Rate: again",
-      "hard": "Rate: hard",
-      "good": "Rate: good",
-      "easy": "Rate: easy",
+      "reveal": "Flip the card (front ⇄ back)",
+      "again": "Rate: Again / Still learning",
+      "hard": "Rate: Hard / I know it (two buttons)",
+      "good": "Rate: Good (four buttons)",
+      "easy": "Rate: Easy (four buttons)",
       "hint": "Hint",
-      "suspend": "Suspend card",
-      "bury": "Bury card",
+      "suspend": "Pause the card (until you turn it back on)",
+      "bury": "Leave the card for tomorrow (not again today)",
       "undo": "Undo last answer",
       "end": "End session"
     }

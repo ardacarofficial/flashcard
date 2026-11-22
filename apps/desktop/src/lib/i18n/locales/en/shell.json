@@ -86,5 +86,8 @@
       "unexpected": "Something went wrong.",
       "not_implemented": "Not available yet."
     }
+  },
+  "shell": {
+    "route_off": "That page isn’t available right now; you can turn its module on in Settings › Modules."
   }
 }

@@ -19,6 +19,16 @@
   let filter = $state('');
   let recording = $state<string | null>(null);
 
+  /** Fixed study keys (keys.ts; not in `shortcuts.list`). */
+  const FIXED = [
+    { id: 'enter', keys: 'Enter' },
+    { id: 'choice', keys: '1–9' },
+    { id: 'flag', keys: 'Mod+1–7' },
+    { id: 'repeat', keys: 'R' },
+    { id: 'focus', keys: 'F' },
+    { id: 'inline', keys: 'N' },
+  ] as const;
+
   const label = (key: string, action: string) => {
     const s = td(key);
     return s === key ? action : s;
@@ -105,7 +115,7 @@
     </SettingsSection>
   {:else}
     {#each groups as g (g.context)}
-      <SettingsSection title={td(`shortcuts.context.${g.context}`)} body="rows">
+      <SettingsSection title={td(`shortcuts.context.${g.context}`)} description={g.context === 'study' ? t('shortcuts.study_intro') : undefined} body="rows">
         {#each g.rows as r (r.action)}
           {@const name = label(r.label_key, r.action)}
           <FormRow label={name}>
@@ -134,12 +144,27 @@
         {/each}
       </SettingsSection>
     {/each}
+    {#if !filter.trim()}
+      <!-- v1.3: the study keys that are not rebindable, so the page tells the whole truth. -->
+      <SettingsSection title={t('shortcuts.fixed.title')} description={t('shortcuts.fixed.description')} body="rows">
+        {#each FIXED as f (f.id)}
+          <FormRow label={t(`shortcuts.fixed.${f.id}`)}>
+            <span class="fixed"><Kbd keys={f.keys} /></span>
+          </FormRow>
+        {/each}
+      </SettingsSection>
+    {/if}
   {/if}
 </SettingsPage>
 
 <style>
   .filter {
     max-width: 22rem;
+  }
+  .fixed {
+    display: inline-flex;
+    justify-content: flex-end;
+    min-width: 8rem;
   }
   .conflicts {
     display: flex;
