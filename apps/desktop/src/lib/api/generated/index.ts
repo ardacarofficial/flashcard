@@ -672,6 +672,7 @@ export type * from "./WordCard";
 export type * from "./WordCounts";
 export type * from "./WordEntryDto";
 export type * from "./WordFormResult";
+export type * from "./WordIndexRebuilt";
 export type * from "./WordInfo";
 export type * from "./WordList";
 export type * from "./WordMark";

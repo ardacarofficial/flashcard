@@ -370,6 +370,7 @@ import type { UpdateRule } from "./UpdateRule";
 import type { UpdateSavedQuery } from "./UpdateSavedQuery";
 import type { UpdateStatus } from "./UpdateStatus";
 import type { VoiceList } from "./VoiceList";
+import type { WordIndexRebuilt } from "./WordIndexRebuilt";
 import type { WordInfo } from "./WordInfo";
 import type { WordList } from "./WordList";
 import type { WordMarksChanged } from "./WordMarksChanged";
@@ -677,6 +678,7 @@ export interface Methods {
   "words.list": { kind: "query"; request: ListWords; response: WordList };
   "words.stats": { kind: "query"; request: Empty; response: WordStats };
   "words.index.rebuild": { kind: "command"; request: Empty; response: JobDto };
+  "words.index.rebuild_now": { kind: "command"; request: Empty; response: WordIndexRebuilt };
 }
 
 /** Unqualified method name. */
@@ -985,4 +987,5 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "words.list": "query",
   "words.stats": "query",
   "words.index.rebuild": "command",
+  "words.index.rebuild_now": "command",
 };

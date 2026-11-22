@@ -99,6 +99,12 @@ pub struct WordCardRow {
     pub last_review: Option<Timestamp>,
 }
 
+/// The dirty queues: notes, then `(language, key)` pairs.
+pub type WordIndexDirty = (Vec<NoteId>, Vec<(String, String)>);
+
+/// Every word row and every note row.
+pub type WordIndexDump = (Vec<WordIndexRecord>, Vec<WordIndexNoteRecord>);
+
 /// Reads of the word index.
 pub trait WordIndexRead {
     /// Rows of `keys` in `language` (missing keys are simply absent).
@@ -118,7 +124,7 @@ pub trait WordIndexRead {
     /// Note rows of notes.
     fn word_index_notes_by_id(&self, notes: &[NoteId]) -> StorageResult<Vec<WordIndexNoteRecord>>;
     /// Every row of both tables, ordered (equality checks and diagnostics).
-    fn word_index_dump(&self) -> StorageResult<(Vec<WordIndexRecord>, Vec<WordIndexNoteRecord>)>;
+    fn word_index_dump(&self) -> StorageResult<WordIndexDump>;
     /// Live notes among `notes`, with what the index reads of them.
     fn word_note_sources(&self, notes: &[NoteId]) -> StorageResult<Vec<WordNoteSource>>;
     /// Live cards of `notes`.
@@ -132,7 +138,7 @@ pub trait WordIndexRead {
 /// Writes of the word index.
 pub trait WordIndexWrite {
     /// Takes (and empties) the dirty queues: notes, then `(language, key)` pairs.
-    fn take_word_index_dirty(&mut self) -> StorageResult<(Vec<NoteId>, Vec<(String, String)>)>;
+    fn take_word_index_dirty(&mut self) -> StorageResult<WordIndexDirty>;
     /// Empties the index and queues every note and mark (a full rebuild on the next drain).
     fn reset_word_index(&mut self) -> StorageResult<()>;
     /// Inserts or replaces a note row.

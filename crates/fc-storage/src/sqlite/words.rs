@@ -160,7 +160,7 @@ impl<M: Mode> WordIndexRead for SqliteTx<'_, M> {
         )
     }
 
-    fn word_index_dump(&self) -> StorageResult<(Vec<WordIndexRecord>, Vec<WordIndexNoteRecord>)> {
+    fn word_index_dump(&self) -> StorageResult<crate::repo::WordIndexDump> {
         let words = all(
             self.conn(),
             WORDS,
@@ -253,7 +253,7 @@ impl<M: Mode> WordIndexRead for SqliteTx<'_, M> {
 }
 
 impl WordIndexWrite for SqliteTx<'_, WriteMode> {
-    fn take_word_index_dirty(&mut self) -> StorageResult<(Vec<NoteId>, Vec<(String, String)>)> {
+    fn take_word_index_dirty(&mut self) -> StorageResult<crate::repo::WordIndexDirty> {
         let notes = all(
             self.conn(),
             "word_index_dirty",

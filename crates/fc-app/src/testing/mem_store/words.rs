@@ -98,7 +98,7 @@ impl WordIndexRead for MemTx<'_> {
         Ok(notes.iter().filter_map(|id| n.get(id).cloned()).collect())
     }
 
-    fn word_index_dump(&self) -> StorageResult<(Vec<WordIndexRecord>, Vec<WordIndexNoteRecord>)> {
+    fn word_index_dump(&self) -> StorageResult<WordIndexDump> {
         let w = &self.s().domains.words;
         Ok((
             w.words.values().cloned().collect(),
@@ -164,7 +164,7 @@ impl WordIndexRead for MemTx<'_> {
 }
 
 impl WordIndexWrite for MemTx<'_> {
-    fn take_word_index_dirty(&mut self) -> StorageResult<(Vec<NoteId>, Vec<(String, String)>)> {
+    fn take_word_index_dirty(&mut self) -> StorageResult<WordIndexDirty> {
         let s = self.s();
         let mut notes: Vec<NoteId> = s.notes.keys().copied().collect();
         notes.extend(s.domains.words.notes.keys().copied());
