@@ -7,5 +7,10 @@
   "oplog.summary.subtitle.captures.forget": "Subtitle kayıtları unutuldu",
   "oplog.summary.subtitle.captures.restore": "Subtitle kayıtları geri getirildi",
   "oplog.summary.subtitle.media.upload": "Subtitle: bir resim ya da ses geldi",
-  "oplog.summary.subtitle.captures.log": "Subtitle: bir yakalama denemesi kaydedildi"
+  "oplog.summary.subtitle.captures.log": "Subtitle: bir yakalama denemesi kaydedildi",
+  "oplog.summary.subtitle.encounters.set_primary": "Subtitle: kartta başka bir örnek gösterildi",
+  "oplog.summary.subtitle.encounters.move": "Subtitle: bir örnek taşındı",
+  "oplog.summary.subtitle.encounters.merge_notes": "Subtitle: bir kelimenin iki kartı birleştirildi",
+  "oplog.summary.subtitle.encounters.resolve": "Subtitle: aynı mı farklı mı anlam kararı verildi",
+  "oplog.summary.subtitle.encounters.put": "Subtitle: örnekler geri konuldu"
 }
