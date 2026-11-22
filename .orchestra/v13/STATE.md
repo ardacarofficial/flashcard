@@ -57,3 +57,11 @@ aliases, docs, guides); markers removed; journey tables list 31 journeys; Window
 bundle the release `fc` (tauri.cli.conf.json + scripts/stage-cli.mjs; workflows fail if fc.exe
 is missing; UNVERIFIED until Windows CI runs). Final: cargo 1557 pass, vitest 508, e2e 31/31
 (S4 race fixed), screens 688 PNG 0 findings, contract check passed. Not pushed.
+
+## Final (2026-11-22)
+Y1 (key right after a grade never lands on the graded card; journey K1) and Y2 (Windows pilot: HKLM
+WebView2 policy, strategies, self-diagnosis) merged. Verified on the merged tree: fmt/clippy clean,
+cargo 1557 pass / 0 fail, vitest 512, e2e 32/32 (needs PLAYWRIGHT_CHROMIUM_EXECUTABLE here).
+Windows run 45049894201 at f5287c0: installer built, fc.exe check passed, WebDriver pilot PASSED
+(strategy driver+policy; P, J1–J3). Installer Flashcard_1.3.0_x64-setup.exe delivered to the owner.
+Open: manual run in a real Windows window, AI providers with real keys, Subtitle extension in a real browser.
