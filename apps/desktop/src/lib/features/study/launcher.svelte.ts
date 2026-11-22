@@ -19,6 +19,13 @@ export interface LaunchRequest {
   kind?: LaunchKind;
   /** Preselected scope ("Study again": struggled today); otherwise the mode's last scope. */
   scope?: StudyScope;
+  /**
+   * A given card set (query language), e.g. Statistics' "Study these": the launcher opens
+   * with the filter filled in (its options shown) instead of a scope.
+   */
+  query?: string;
+  /** Preset the "practice" switch (schedule untouched). */
+  practice?: boolean;
 }
 
 type Handler = (r: LaunchRequest) => void;

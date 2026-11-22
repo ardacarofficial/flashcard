@@ -52,6 +52,7 @@
     type Tone,
   } from '$lib/ui';
   import type { ScreenCtx } from '../types';
+  import { launcher, openLauncher } from '../study/launcher.svelte';
   import { LoadState } from '../core/kit';
   import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
   import BarChart from './BarChart.svelte';
@@ -92,7 +93,6 @@
   let window_ = $state<'1' | '7' | '30'>('7');
   let struggles = $state<StruggleList | null>(null);
   let notice = $state<string | null>(null);
-  let starting = $state(false);
 
   const flatten = (nodes: DeckTreeNode[]): { id: string; path: string }[] =>
     nodes.flatMap((n) => [{ id: n.deck.id, path: n.deck.path }, ...flatten(n.children)]);
@@ -158,36 +158,14 @@
   }
 
   /**
-   * "Study these": a practice session (schedule untouched) of exactly the listed cards — the
-   * query comes from Rust with the list. The Study screen offers to continue it.
+   * "Study these": the study launcher opens on exactly the listed cards (the query comes from
+   * Rust with the list) as practice — the schedule is untouched; the learner presses Start.
    */
-  async function practise() {
+  function practise() {
     const query = struggles?.study_query;
-    if (!query || starting) return;
-    starting = true;
+    if (!query) return;
     notice = null;
-    await ctx.guarded(async () => {
-      const s = await api.call('study.start', {
-        kind: 'custom',
-        mode: 'trial',
-        deck_id: null,
-        include_subdecks: null,
-        filter: { attributes: [], states: null, due_only: false, limit: null, query, saved_query_id: null },
-        from_session: null,
-        new_limit: null,
-        order: null,
-        tz_offset_mins: tzOffset(),
-        modes: null,
-      });
-      if (!s.current) {
-        await api.call('study.end', { session_id: s.id });
-        notice = t('stats.struggles.nothing');
-        return;
-      }
-      if (ctx.navigate) ctx.navigate('/study');
-      else notice = t('stats.struggles.started');
-    });
-    starting = false;
+    if (!openLauncher({ deckId: null, kind: 'normal', query, practice: true })) notice = t('stats.struggles.nothing');
   }
 
   async function suspend(cardId: string) {
@@ -428,9 +406,8 @@
               variant="primary"
               size="sm"
               icon={Play}
-              loading={starting}
-              disabled={studyable === 0}
-              onclick={() => void practise()}
+              disabled={studyable === 0 || !launcher.available}
+              onclick={practise}
               data-testid="struggles-study">{t('stats.struggles.study_n', { n: studyable })}</Button
             >
             <span class="muted">{t('stats.struggles.study_hint')}</span>

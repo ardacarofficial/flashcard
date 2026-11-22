@@ -49,8 +49,9 @@
   import InlineComposer from '../modes/InlineComposer.svelte';
   import SessionFrame from '../modes/SessionFrame.svelte';
   import TimerBar from '../modes/TimerBar.svelte';
+  import { isEditableTarget } from '$lib/keyboard';
   import { plainKey } from '../modes/modes';
-  import type { HintView, StudyScope } from './contract';
+  import type { HintDto, StudyScope } from './contract';
   import { ariaKeys, keyAction, keyFor, RATINGS, studyBindings, type StudyAction, type StudyPhase } from './keys';
   import { handoffSeq, launcher, openLauncher, takeHandoff, type Handoff } from './launcher.svelte';
   import LaunchIdle from './LaunchIdle.svelte';
@@ -68,7 +69,7 @@
   let revealed = $state(false);
   /** Which face the card shows (Space flips it back and forth). */
   let flipped = $state(false);
-  let hint = $state<HintView | null>(null);
+  let hint = $state<HintDto | null>(null);
   let typed = $state('');
   let check = $state<AnswerCheckDto | null>(null);
   let composing = $state(false);
@@ -364,7 +365,7 @@
             return;
           case 'hint':
             if (s && c && !revealed) {
-              const h = (await api.call('study.hint', { session_id: s.id, card_id: c.card_id })) as HintView;
+              const h = await api.call('study.hint', { session_id: s.id, card_id: c.card_id });
               if (h.text || h.html) hint = h;
             }
             return;
@@ -430,7 +431,7 @@
     if (document.querySelector('[aria-modal="true"]')) return;
     const el = e.target as HTMLElement | null;
     const tag = el?.tagName ?? '';
-    const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!el?.isContentEditable;
+    const typing = isEditableTarget(el);
     const asButton = tag === 'BUTTON' || (el instanceof HTMLElement && el.getAttribute('role') === 'button');
     const flipKey = bindings ? keyFor('study.reveal', bindings) : 'Space';
     if (asButton && e.key === ' ' && flipKey === 'Space' && el?.closest(ANSWER_BUTTON) && (phase === 'question' || phase === 'answer')) {

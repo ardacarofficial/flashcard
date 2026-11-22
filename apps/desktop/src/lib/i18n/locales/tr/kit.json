@@ -25,7 +25,7 @@
       "keys": "Klavye kısayollarını değiştir",
       "ai": "Yapay zekayla kart üret (API anahtarı)",
       "subtitle": "Tarayıcıda izlerken kelime yakala",
-      "backup": "Yedek al, dosyadan kart aktar",
+      "backup": "Yedek al, kartlarını dışa aktar",
       "where": {
         "presets": "Deste ayarları",
         "reminders": "Hatırlatıcılar",
@@ -33,7 +33,7 @@
         "shortcuts": "Kısayollar",
         "ai": "Yapay zeka",
         "subtitle": "Subtitle",
-        "io": "İçe / dışa aktar"
+        "io": "Dışa aktar ve yedek"
       }
     }
   }

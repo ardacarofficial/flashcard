@@ -3,8 +3,8 @@
  * "Again" sends a card to the back, fixed intervals). Not the real engine — that is fc-app's
  * `study` module; this only lets the screen run in a browser and in component tests.
  */
-import { err, menu, mockScenario, module, type Handlers, type MockEnv, type MockFeature } from '$lib/api/mock/env';
-import type { ApiError, ErrorCode } from '$lib/api/types';
+import { err, menu, mockScenario, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
+import type { ApiError } from '$lib/api/types';
 import type { StartStudy, StudyEmptyReason, StudyOptions, StudyOptionsRequest, StudyScope, StudyScopeOption } from './contract';
 import { PRACTICE_SCOPES, SCOPES } from './contract';
 import type { DeckCounts, DeckTreeNode, SettingDef } from '$lib/api/types';
@@ -15,6 +15,7 @@ import type {
   SessionModesDto,
   SessionSummary,
   StudyCardDto,
+  TestAnswerDto,
   TestPaperDto,
   TestQuestionDto,
   TestVerdict,
@@ -69,7 +70,7 @@ interface MockSession {
   time: number;
   hints: number;
   learn?: MockLearn;
-  test?: { questions: TestQuestionDto[]; result: TestPaperDto['result']; answers: TestPaperDto['answers'] };
+  test?: { questions: TestQuestionDto[]; result: TestPaperDto['result']; answers: TestPaperDto['answers']; draft?: TestAnswerDto[] | null };
   match?: MockMatch;
 }
 
@@ -227,6 +228,7 @@ export default {
         questions: t.questions.map((q) => ({ ...q, key: key || t.result ? q.key : null })),
         answers: t.answers,
         result: t.result,
+        draft: t.result ? null : (t.draft ?? null),
       };
     };
     /** A test paper: true/false, multiple choice, written, in turn. */
@@ -374,7 +376,7 @@ export default {
       };
     };
     const nothingToStudy = (reason: StudyEmptyReason, next: number | null): ApiError => ({
-      ...err('CONFLICT_NOTHING_TO_STUDY' as ErrorCode, 'errors.conflict.nothing_to_study', reason),
+      ...err('CONFLICT_NOTHING_TO_STUDY', 'errors.conflict.nothing_to_study', reason),
       details: { reason, next_available_at: next },
     });
     const deckName = (deckId: string | null) => (deckId ? (decks.find((d) => d.id === deckId)?.name ?? null) : null);
@@ -417,7 +419,6 @@ export default {
 
     return {
       'settings.schema': () => ({ settings: MODE_SETTINGS }),
-      ...({
         'study.options': ({ deck_id }: StudyOptionsRequest): StudyOptions => {
           if (!modulesOn('study')) throw err('CONFLICT_MODULE_DISABLED', 'errors.conflict.module_disabled', 'v1.study.options');
           const open = [...sessions.values()]
@@ -429,8 +430,8 @@ export default {
             resumable: open.map((s) => ({
               session: view(s),
               deck_name: deckName(s.dto.deck_id),
-              answered: s.dto.answered,
-              remaining: s.test ? s.test.questions.length : s.queue.length,
+              answered: s.test ? (s.test.draft?.length ?? 0) : s.dto.answered,
+              remaining: s.test ? s.test.questions.length - (s.test.draft?.length ?? 0) : s.queue.length,
             })),
             scopes: SCOPES.map((sc) => scopeOption(sc, deck_id ?? null)),
             modes: (
@@ -445,9 +446,7 @@ export default {
               .map(([k]) => k),
           };
         },
-      } as unknown as Handlers),
-      'study.start': (raw) => {
-        const req = raw as StartStudy;
+      'study.start': (req: StartStudy) => {
         const from = req.from_session ? require(req.from_session) : null;
         const deckId = req.deck_id ?? null;
         // v1.3: a scope (Cards default: today's queue) resolves first; an empty one is an
@@ -462,7 +461,8 @@ export default {
           queue = deckCards(deckId).filter((c) => !from || from.again.includes(c.card_id));
         }
         if (req.filter?.limit) queue = queue.slice(0, req.filter.limit);
-        for (const s of sessions.values()) s.dto.ended_at ??= now();
+        // One open session per kind (fc-app `end_open_sessions`): a test paper waits while you study cards.
+        for (const s of sessions.values()) if (s.dto.kind === req.kind) s.dto.ended_at ??= now();
         const s = newSession(req, queue);
         if (scope && PRACTICE_SCOPES.includes(scope)) s.dto.mode = 'trial';
         if (req.kind === 'learn') {
@@ -505,6 +505,13 @@ export default {
         };
       },
       'modes.test.paper': ({ session_id, with_key }) => paper(require(session_id), with_key ?? false),
+      'modes.test.save_draft': ({ session_id, answers }) => {
+        const s = require(session_id);
+        const t = s.test!;
+        if (t.result) throw err('CONFLICT_TEST_SUBMITTED', 'errors.conflict.test_submitted', session_id);
+        t.draft = answers;
+        return paper(s, false);
+      },
       'modes.test.submit': ({ session_id, answers }) => {
         const s = require(session_id);
         const t = s.test!;

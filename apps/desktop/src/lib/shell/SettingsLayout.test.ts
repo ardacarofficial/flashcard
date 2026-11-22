@@ -44,7 +44,8 @@ describe('settings layout (v1.3)', () => {
     render(SettingsLayout, { groups: nav().settings, active: null, open, children });
     await fireEvent.input(screen.getByRole('searchbox', { name: 'Search settings' }), { target: { value: 'backup' } });
     const items = screen.getAllByTestId('subnav-item');
-    expect(items.map((b) => b.querySelector('.name')?.textContent)).toEqual(['Import / export']);
+    // v1.3: importing moved to the add-cards page; the Data page is "Export & backup".
+    expect(items.map((b) => b.querySelector('.name')?.textContent)).toEqual(['Export & backup']);
     await fireEvent.click(items[0]!);
     expect(open).toHaveBeenCalledWith(expect.objectContaining({ route: '/io' }));
 

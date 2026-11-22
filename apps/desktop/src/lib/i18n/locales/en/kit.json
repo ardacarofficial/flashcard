@@ -25,7 +25,7 @@
       "keys": "Change keyboard shortcuts",
       "ai": "Make cards with AI (API key)",
       "subtitle": "Catch words while watching in the browser",
-      "backup": "Back up, import cards from a file",
+      "backup": "Back up, export your cards",
       "where": {
         "presets": "Deck options",
         "reminders": "Reminders",
@@ -33,7 +33,7 @@
         "shortcuts": "Shortcuts",
         "ai": "AI",
         "subtitle": "Subtitle",
-        "io": "Import / export"
+        "io": "Export & backup"
       }
     }
   }

@@ -9,6 +9,7 @@
   import { t, td } from '$lib/i18n/index.svelte';
   import { BookOpen, Button, CircleAlert, CircleCheck, Icon, Play, Undo2 } from '$lib/ui';
   import type { ScreenCtx } from '../types';
+  import { launcher, openLauncher } from '../study/launcher.svelte';
 
   interface Props {
     ctx: ScreenCtx;
@@ -52,6 +53,12 @@
     }
   }
 
+  function studyNow() {
+    if (!deckId) return;
+    ctx.selectDeck(deckId);
+    openLauncher({ deckId, kind: 'normal' });
+  }
+
   function open(route: string) {
     if (!deckId) return;
     ctx.selectDeck(deckId);
@@ -79,7 +86,10 @@
       {/if}
       {#if known && ctx.navigate && added + updated > 0}
         <Button size="sm" variant="ghost" icon={BookOpen} onclick={() => open('/decks')}>{t('add.summary.open_deck')}</Button>
-        <Button size="sm" variant={compact ? 'ghost' : 'secondary'} icon={Play} onclick={() => open('/study')}>{t('add.summary.study')}</Button>
+        {#if launcher.available}
+          <!-- "Study now": the study launcher on this deck (never a silent start). -->
+          <Button size="sm" variant={compact ? 'ghost' : 'secondary'} icon={Play} data-testid="added-study" onclick={studyNow}>{t('add.summary.study')}</Button>
+        {/if}
       {/if}
     </div>
   {/if}

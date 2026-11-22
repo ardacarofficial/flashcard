@@ -7,6 +7,7 @@ import GoalsScreen from './GoalsScreen.svelte';
 import PlanningScreen from './PlanningScreen.svelte';
 import StatsScreen from './StatsScreen.svelte';
 import { pct, seconds } from './format';
+import { setLauncherHandler } from '../study/launcher.svelte';
 
 i18n.locale = 'en';
 
@@ -89,11 +90,11 @@ describe('v0.6 screens on the dev mock', () => {
     call.mockRestore();
   });
 
-  it('overview answers three questions; "Study these" practises exactly the listed words', async () => {
-    // The study mock's own card set does not matter here: the session it returns has a card.
-    const real = api.call.bind(api);
-    const call = vi.spyOn(api, 'call').mockImplementation(((m: string, b: unknown) =>
-      m === 'study.start' ? Promise.resolve({ id: 'session-1', current: { card_id: 'card-struggle-0' } }) : real(m as never, b as never)) as never);
+  it('overview answers three questions; "Study these" opens the launcher on exactly the listed words', async () => {
+    const call = vi.spyOn(api, 'call');
+    // v1.3: "Study these" opens the study launcher preselected (practice, the listed cards); it never starts a session itself.
+    const opened = vi.fn();
+    const unregister = setLauncherHandler(opened);
     const navigate = vi.fn();
     render(StatsScreen, { ctx: { ...ctx, navigate } });
     // 1 · today, with the verdict Rust computed.
@@ -106,16 +107,15 @@ describe('v0.6 screens on the dev mock', () => {
     expect(within(panel).getByText('gitmek (geçmiş)')).toBeTruthy();
     const study = within(panel).getByRole('button', { name: 'Study these · 6' });
     await fireEvent.click(study);
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/study'));
-    const start = call.mock.calls.find(([m]) => m === 'study.start')![1] as {
-      kind: string;
-      mode: string;
-      filter: { query: string; due_only: boolean };
-    };
-    expect(start.kind).toBe('custom');
-    expect(start.mode).toBe('trial');
-    expect(start.filter.due_only).toBe(false);
-    expect(start.filter.query).toBe(`cid:${Array.from({ length: 6 }, (_, i) => `card-struggle-${i}`).join(',')}`);
+    expect(opened).toHaveBeenCalledWith({
+      deckId: null,
+      kind: 'normal',
+      practice: true,
+      query: `cid:${Array.from({ length: 6 }, (_, i) => `card-struggle-${i}`).join(',')}`,
+    });
+    expect(call.mock.calls.some(([m]) => m === 'study.start')).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+    unregister();
     // Suspend / tag stay as secondary row actions.
     expect(within(panel).getByRole('button', { name: 'More actions for went' })).toBeTruthy();
     // "Today" narrows the window (a new Rust query).

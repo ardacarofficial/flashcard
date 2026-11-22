@@ -9,7 +9,7 @@
    * unfinished paper can be continued from it.
    */
   import { formatPercent100 } from '$lib/format';
-  import { onMount, tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import type { SessionDto } from '$lib/api/types';
   import { api } from '$lib/api';
   import type { TestAnswerDto, TestPaperDto, TestQuestionDto, TestVerdict } from '$lib/api/types';
@@ -99,9 +99,35 @@
     paper = await api.call('modes.test.paper', { session_id: s.id, with_key: null });
     const fresh = emptyInput();
     for (const q of paper.questions) if (q.kind === 'written') fresh.text[q.index] = '';
+    // v1.3: a continued paper comes back with the answers saved so far.
+    for (const a of paper.draft ?? []) {
+      if (a.choice != null) fresh.choice[a.index] = a.choice;
+      if (a.truth != null) fresh.truth[a.index] = a.truth;
+      if (a.text != null) fresh.text[a.index] = a.text;
+    }
     input = fresh;
+    savedDraft = JSON.stringify(paper.draft ?? []);
     startedAt = Date.now();
   }
+
+  /** The answers last saved with `modes.test.save_draft` (JSON), so a pause loses nothing. */
+  let savedDraft = '';
+  async function saveDraft() {
+    if (!paper || paper.result) return;
+    const answers = testAnswers(paper.questions, input);
+    const json = JSON.stringify(answers);
+    if (json === savedDraft) return;
+    savedDraft = json;
+    await api.call('modes.test.save_draft', { session_id: paper.session_id, answers });
+  }
+  // Answers are saved shortly after each change (and when the screen goes away).
+  $effect(() => {
+    if (!paper || result) return;
+    void JSON.stringify(input);
+    const timer = setTimeout(() => void saveDraft().catch(() => {}), 600);
+    return () => clearTimeout(timer);
+  });
+  onDestroy(() => void saveDraft().catch(() => {}));
 
   async function submit() {
     if (!paper) return;

@@ -10,6 +10,7 @@ import type { FieldDef, NoteTypeDto } from '$lib/api/types';
 import { i18n } from '$lib/i18n/index.svelte';
 import type { ScreenCtx } from '../types';
 import AddedSummary from './AddedSummary.svelte';
+import { setLauncherHandler } from '../study/launcher.svelte';
 import CreateScreen from './CreateScreen.svelte';
 import ImportFlow from '../io/ImportFlow.svelte';
 import { addWayRequest, requestAddWay, takeAddWay } from './add-way.svelte';
@@ -80,8 +81,12 @@ describe('<AddedSummary> (the one confirmation)', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Open deck' }));
     expect(selectDeck).toHaveBeenLastCalledWith('d1');
     expect(navigate).toHaveBeenLastCalledWith('/decks');
-    await fireEvent.click(screen.getByRole('button', { name: 'Study now' }));
-    expect(navigate).toHaveBeenLastCalledWith('/study');
+    // v1.3: "Study now" opens the study launcher on the deck (never a silent start).
+    const opened = vi.fn();
+    const unregister = setLauncherHandler(opened);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Study now' }));
+    expect(opened).toHaveBeenLastCalledWith({ deckId: 'd1', kind: 'normal' });
+    unregister();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(onundo).toHaveBeenCalledOnce();
@@ -139,8 +144,11 @@ describe('Paste: text → detected separator → preview → add (dev mock)', ()
 
     // The text box is cleared for the next list; the confirmation stays.
     expect((screen.getByRole('textbox', { name: 'Paste your list here' }) as HTMLTextAreaElement).value).toBe('');
-    await fireEvent.click(screen.getByRole('button', { name: 'Study now' }));
-    expect(navigate).toHaveBeenCalledWith('/study');
+    const opened = vi.fn();
+    const unregister = setLauncherHandler(opened);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Study now' }));
+    expect(opened).toHaveBeenCalledWith({ deckId: deck, kind: 'normal' });
+    unregister();
     await fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     await waitFor(async () => expect((await api.note.list(deck)).items).toHaveLength(0));
   });

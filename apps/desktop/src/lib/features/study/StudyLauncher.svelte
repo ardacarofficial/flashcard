@@ -124,9 +124,9 @@
       options = null;
       notice = null;
       limit = '';
-      showOptions = false;
-      practice = false;
-      query = '';
+      showOptions = !!request.query;
+      practice = request.practice ?? false;
+      query = request.query ?? '';
       savedId = '';
       attrId = '';
       attrValue = '';
