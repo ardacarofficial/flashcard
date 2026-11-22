@@ -206,6 +206,11 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         // v1.4 word index: words and the notes/cards behind them.
         "words.lookup" | "words.list" | "words.stats" => Reads(READING_CARDS),
         "words.index.rebuild" | "words.index.rebuild_now" => Reads(READING),
+        // v1.4 word data: packs, sources and licences (reference data, no user text); an
+        // import reads a free path, and replacing the packs is the user's decision.
+        "words.data.sources" => Reads(READING),
+        "words.data.import" => Refused(FREE_PATHS),
+        "words.data.reset" => Refused("the word data is the user's choice"),
         "reading.extracts.cloze" | "reading.cards.make" => Oracle(READING_NOTES),
         // Imports read any file or web page; clips run ffmpeg on a file.
         "reading.items.import" => Refused(FREE_PATHS),

@@ -295,6 +295,9 @@ pub struct WordDataRow {
     pub origin: Option<BandOrigin>,
 }
 
+/// A lemma's rank and band (with its origin).
+type LemmaFacts = (u32, Option<(CefrBand, BandOrigin)>);
+
 /// Why a pack was refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{0}")]
@@ -404,7 +407,7 @@ impl WordPack {
     /// also a lemma or headword keeps the lemma's own row.
     pub fn rows(&self) -> Vec<WordDataRow> {
         let mut rows = Vec::with_capacity(self.words.len() + self.forms.len());
-        let mut of_lemma: BTreeMap<&str, (u32, Option<(CefrBand, BandOrigin)>)> = BTreeMap::new();
+        let mut of_lemma: BTreeMap<&str, LemmaFacts> = BTreeMap::new();
         for (i, w) in self.words.iter().enumerate() {
             let rank = u32::try_from(i + 1).unwrap_or(u32::MAX);
             let band = word_band(Some(rank), self.profile.get(w).copied());
