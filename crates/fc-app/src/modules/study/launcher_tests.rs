@@ -273,9 +273,11 @@ pub fn modes_follow_module_switches(f: &Factory) {
     let t = T::new(f(), 105);
     let deck = t.deck("D");
     t.note(deck.id, "a", "1");
+    // v1.4: the modes are described (`StudyModeOption`); the quiz ("Test") is one of them.
+    let kinds = |o: StudyOptions| o.modes.into_iter().map(|m| m.kind).collect::<Vec<_>>();
     assert_eq!(
-        t.options(Some(deck.id)).modes,
-        [StudyKind::Normal, StudyKind::Learn, StudyKind::Test, StudyKind::Match]
+        kinds(t.options(Some(deck.id))),
+        [StudyKind::Normal, StudyKind::Quiz, StudyKind::Learn, StudyKind::Test, StudyKind::Match]
     );
     t.ok::<ModulesSetEnabled>(SetModuleEnabled {
         id: "learn".into(),
@@ -285,7 +287,10 @@ pub fn modes_follow_module_switches(f: &Factory) {
         id: "match".into(),
         enabled: false,
     });
-    assert_eq!(t.options(Some(deck.id)).modes, [StudyKind::Normal, StudyKind::Test]);
+    assert_eq!(
+        kinds(t.options(Some(deck.id))),
+        [StudyKind::Normal, StudyKind::Quiz, StudyKind::Test]
+    );
     let e = t.err::<StudyStart>(t.start_req(StudyKind::Learn, Some(StudyScope::All), Some(deck.id)));
     assert_eq!(e.code, ErrorCode::ConflictModuleDisabled);
     t.ok::<ModulesSetEnabled>(SetModuleEnabled {
@@ -448,6 +453,7 @@ pub fn every_kind_resumes(f: &Factory) {
             choice: Some(0),
             text: Some("x".into()),
             truth: Some(true),
+            pairs: None,
         })
         .collect();
     t.ok::<ModesTestSaveDraft>(SaveTestDraft {

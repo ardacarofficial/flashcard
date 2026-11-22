@@ -41,7 +41,7 @@
   }
   let { open = $bindable(false), request, onstart }: Props = $props();
 
-  const TEST_KINDS: TestQuestionKind[] = ['true_false', 'multiple_choice', 'written'];
+  const TEST_KINDS: TestQuestionKind[] = ['multiple_choice', 'written', 'matching', 'true_false'];
 
   let options = $state<StudyOptions | null>(null);
   let failed = $state<string | null>(null);
@@ -58,7 +58,10 @@
   let attrId = $state('');
   let attrValue = $state('');
   let modes = $state<StartModes | null>(null);
-  let testKinds = $state<Record<TestQuestionKind, boolean>>({ true_false: true, multiple_choice: true, written: true });
+  // v1.4: true/false is off by default (guessing gets half right). Matching is offered but not
+  // preselected here: this paper screen picks its letters with a list box, not the A–D keys
+  // (the approved prototype's screen will); the API's own default includes it.
+  let testKinds = $state<Record<TestQuestionKind, boolean>>({ true_false: false, multiple_choice: true, written: true, matching: false });
   let testQuestions = $state(20);
   let postponeDays = $state<number | string>(1);
   let attrs = $state<AttributeDefDto[]>([]);
@@ -155,7 +158,7 @@
   const selected = $derived(scopes.find((s) => s.scope === scope));
   const resumable = $derived(options?.resumable ?? []);
   const deckName = $derived(options?.deck_name ?? t('study.launcher.deck_all'));
-  const kindOptions = $derived((options?.modes ?? []).filter((k): k is LaunchKind => k !== 'custom' && k !== 'mistakes').map((k) => ({ value: k, label: t(`study.launcher.kind.${k}`) })));
+  const kindOptions = $derived((options?.modes ?? []).map((m) => m.kind).filter((k): k is LaunchKind => k !== 'custom' && k !== 'mistakes').map((k) => ({ value: k, label: t(`study.launcher.kind.${k}`) })));
 
   const choice = $derived<LaunchChoice | null>(
     kind

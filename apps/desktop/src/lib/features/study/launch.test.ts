@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StudyScopeOption } from './contract';
+import type { StudyKind, StudyModeOption } from '$lib/api/types';
 import { emptyPrefs, emptyReasonKey, isCustom, minutesUntil, parsePrefs, pickKind, pickScope, plannedCount, startRequest, type LaunchChoice } from './launch';
 
 const scope = (s: StudyScopeOption['scope'], count: number): StudyScopeOption => ({
@@ -32,7 +33,9 @@ const choice = (over: Partial<LaunchChoice> = {}): LaunchChoice => ({
 });
 
 describe('launcher preselection', () => {
-  const modes = { modes: ['normal', 'learn', 'test', 'match'] as const };
+  // v1.4: `study.options.modes` describes each mode; only the kind matters here.
+  const mode = (kind: StudyKind): StudyModeOption => ({ kind, name_key: '', description_key: '', affects_schedule: false, question_kinds: [], default_question_kinds: [], default_questions: null });
+  const modes = { modes: (['normal', 'learn', 'test', 'match'] as const).map(mode) };
 
   it('a mode button wins, then the deck’s last mode, then Cards', () => {
     const prefs = { ...emptyPrefs(), modeByDeck: { d1: 'learn' as const } };
@@ -40,7 +43,7 @@ describe('launcher preselection', () => {
     expect(pickKind({ modes: [...modes.modes] }, undefined, prefs, 'd1')).toBe('learn');
     expect(pickKind({ modes: [...modes.modes] }, undefined, prefs, 'd2')).toBe('normal');
     // A mode whose module is off is never preselected.
-    expect(pickKind({ modes: ['normal', 'match'] }, 'test', prefs, 'd1')).toBe('normal');
+    expect(pickKind({ modes: [mode('normal'), mode('match')] }, 'test', prefs, 'd1')).toBe('normal');
     expect(pickKind({ modes: [] }, undefined, prefs, null)).toBeNull();
   });
 

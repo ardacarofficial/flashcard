@@ -1,5 +1,6 @@
 {
   "oplog.summary.modes.learn.answer": "Answered a card in learn mode",
+  "oplog.summary.modes.quiz.answer": "Word answered in Test",
   "oplog.summary.modes.confidence.answer": "Rated a card with confidence {level}/5",
   "oplog.summary.modes.timed.expire": "A card's time ran out",
   "oplog.summary.modes.timed.start": "Started the card timer",

@@ -533,6 +533,22 @@ impl<'a> Planner<'a> {
                     .ok_or_else(|| invalid("a mistakes session needs from_session"))?;
                 Some(Session::load(reads, self.v.registry, from)?.state.again)
             }
+            // v1.4: "study the missed ones again" — the words a quiz missed (and the query's,
+            // when both are given).
+            StudyKind::Quiz => match req.from_session {
+                Some(from) => {
+                    let s = Session::load(reads, self.v.registry, from)?;
+                    let missed = crate::modules::modes::quiz::missed_cards(&s)?;
+                    Some(match matching {
+                        Some(ids) => {
+                            let ids: HashSet<CardId> = ids.into_iter().collect();
+                            missed.into_iter().filter(|c| ids.contains(c)).collect()
+                        }
+                        None => missed,
+                    })
+                }
+                None => matching,
+            },
             StudyKind::Normal
             | StudyKind::Custom
             | StudyKind::Learn
@@ -589,9 +605,11 @@ impl<'a> Planner<'a> {
             Some(_) => false,
             None => match req.kind {
                 StudyKind::Normal => filter.due_only.unwrap_or(true),
-                StudyKind::Custom | StudyKind::Learn | StudyKind::Test | StudyKind::Match => {
-                    filter.due_only.unwrap_or(false)
-                }
+                StudyKind::Custom
+                | StudyKind::Learn
+                | StudyKind::Test
+                | StudyKind::Match
+                | StudyKind::Quiz => filter.due_only.unwrap_or(false),
                 StudyKind::Mistakes => false,
             },
         };

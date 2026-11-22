@@ -191,7 +191,9 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         | "modes.test.paper" | "modes.test.save_draft" => Reads(STUDY_CARDS),
         // The backend judges a learn answer and grades a test against the card's answer: the
         // verdict says what the card holds, so they need the read permissions to run at all.
-        "modes.learn.answer" | "modes.test.submit" => Oracle(STUDY_CARDS),
+        "modes.learn.answer" | "modes.test.submit" | "modes.quiz.answer" => Oracle(STUDY_CARDS),
+        // v1.4 quiz result: words and meanings of a session (like a test paper).
+        "modes.quiz.result" => Reads(STUDY_CARDS),
         // v1.1 match: rounds hold card text (terms, definitions) like a session.
         "modes.match.start" | "modes.match.finish" => Reads(STUDY_CARDS),
         // Whether two tiles pair up says what the card holds: an oracle, like learn answers.

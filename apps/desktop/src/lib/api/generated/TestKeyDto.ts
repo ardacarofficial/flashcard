@@ -15,4 +15,8 @@ truth: boolean | null,
 /**
  * Correct answer as text.
  */
-expected: string, };
+expected: string, 
+/**
+ * v1.4 matching: for each word (`terms` order) the index of its meaning in `options`.
+ */
+pairs?: Array<number> | null, };

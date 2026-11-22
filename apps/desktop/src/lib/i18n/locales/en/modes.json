@@ -5,8 +5,8 @@
       "description": "Each card as multiple choice, then written, until you know it at every step."
     },
     "practice_test": {
-      "name": "Practice tests",
-      "description": "Printable tests with mixed question types and a score."
+      "name": "Exam",
+      "description": "Printable, scored papers with mixed question types."
     },
     "confidence": {
       "name": "Confidence rating",
@@ -27,11 +27,15 @@
     "match": {
       "name": "Match",
       "description": "Pair terms with their definitions against the clock."
+    },
+    "quiz": {
+      "name": "Test (four options)",
+      "description": "One word, four meanings; the right one shows as soon as you pick."
     }
   },
   "nav": {
     "learn": "Learn",
-    "test": "Test",
+    "test": "Exam",
     "match": "Match"
   },
   "settings": {
@@ -128,6 +132,16 @@
         "label": "Best match time (ms)",
         "description": "Fastest round in this deck (0 = none)."
       }
+    },
+    "quiz": {
+      "affects_schedule": {
+        "label": "Test changes the schedule",
+        "description": "When on, right and wrong answers in Test move the cards’ next reviews. When off, Test is practice."
+      },
+      "max_cards": {
+        "label": "Words in a Test",
+        "description": "The most words one Test asks."
+      }
     }
   },
   "errors": {
@@ -154,9 +168,9 @@
         "start": "Start the card timer"
       },
       "test": {
-        "paper": "Test paper",
-        "submit": "Submit the test",
-        "save_draft": "Save test answers"
+        "paper": "Exam paper",
+        "submit": "Submit the exam",
+        "save_draft": "Save exam answers"
       },
       "inline": {
         "preview": "Preview cards from text",
@@ -166,6 +180,10 @@
         "start": "Deal a match round",
         "pick": "Pick a match pair",
         "finish": "Finish a match round"
+      },
+      "quiz": {
+        "answer": "Pick an option in Test",
+        "result": "Test result"
       }
     }
   },
@@ -211,7 +229,8 @@
       "kind": {
         "multiple_choice": "Multiple choice",
         "written": "Written",
-        "true_false": "True or false"
+        "true_false": "True or false",
+        "matching": "Matching"
       },
       "start": "Create test",
       "nothing": "No cards for a test here.",
@@ -256,7 +275,8 @@
       "discard_title": "Leave this test?",
       "discard_body": "Your {n, plural, one {# answer} other {# answers}} will be lost; the test is not graded.",
       "discard_keep": "Back to the test",
-      "discard": "Leave test"
+      "discard": "Leave test",
+      "match_word": "Word {n}"
     },
     "options": {
       "timed": "Time limit",
@@ -328,6 +348,12 @@
     "session": {
       "show_nav": "Show menu",
       "hide_nav": "Hide menu"
+    },
+    "quiz": {
+      "few_options": "This deck has few meanings: {count} options for this word.",
+      "done": "{correct} / {total} right",
+      "missed_again": "Study the missed ones again",
+      "practice": "Practice: your schedule didn’t change."
     }
   }
 }

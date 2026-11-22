@@ -5,8 +5,8 @@
       "description": "Her kart önce çoktan seçmeli, sonra yazarak; her adımda bilinene kadar."
     },
     "practice_test": {
-      "name": "Deneme testleri",
-      "description": "Karışık soru tipli, yazdırılabilir ve puanlı testler."
+      "name": "Sınav",
+      "description": "Karışık soru tipli, yazdırılabilir ve puanlı sınav kâğıtları."
     },
     "confidence": {
       "name": "Güven bazlı puanlama",
@@ -27,11 +27,15 @@
     "match": {
       "name": "Eşleştir",
       "description": "Terimleri tanımlarıyla süreye karşı eşleştir."
+    },
+    "quiz": {
+      "name": "Test (dört şık)",
+      "description": "Bir kelime, dört anlam; seçince doğrusu hemen görünür."
     }
   },
   "nav": {
     "learn": "Öğren",
-    "test": "Test",
+    "test": "Sınav",
     "match": "Eşleştir"
   },
   "settings": {
@@ -128,6 +132,16 @@
         "label": "En iyi eşleştirme süresi (ms)",
         "description": "Bu destedeki en hızlı tur (0 = yok)."
       }
+    },
+    "quiz": {
+      "affects_schedule": {
+        "label": "Test takvimi etkilesin",
+        "description": "Açıksa Test’teki doğru/yanlış cevaplar kartların tekrar zamanını değiştirir. Kapalıyken Test pratiktir."
+      },
+      "max_cards": {
+        "label": "Testteki kelime",
+        "description": "Bir Test’in en çok kaç kelime soracağı."
+      }
     }
   },
   "errors": {
@@ -154,9 +168,9 @@
         "start": "Kart sayacını başlat"
       },
       "test": {
-        "paper": "Test kâğıdı",
-        "submit": "Testi teslim et",
-        "save_draft": "Test cevaplarını kaydet"
+        "paper": "Sınav kâğıdı",
+        "submit": "Sınavı teslim et",
+        "save_draft": "Sınav cevaplarını kaydet"
       },
       "inline": {
         "preview": "Metinden kartları önizle",
@@ -166,6 +180,10 @@
         "start": "Eşleştirme turu dağıt",
         "pick": "Eşleştirme çifti seç",
         "finish": "Eşleştirme turunu bitir"
+      },
+      "quiz": {
+        "answer": "Test’te şık seç",
+        "result": "Test sonucu"
       }
     }
   },
@@ -211,7 +229,8 @@
       "kind": {
         "multiple_choice": "Çoktan seçmeli",
         "written": "Yazılı",
-        "true_false": "Doğru / yanlış"
+        "true_false": "Doğru / yanlış",
+        "matching": "Eşleştirme"
       },
       "start": "Test oluştur",
       "nothing": "Burada test yapılacak kart yok.",
@@ -256,7 +275,8 @@
       "discard_title": "Test bırakılsın mı?",
       "discard_body": "Verdiğin {n} cevap kaybolacak; test puanlanmaz.",
       "discard_keep": "Teste dön",
-      "discard": "Testi bırak"
+      "discard": "Testi bırak",
+      "match_word": "{n}. kelime"
     },
     "options": {
       "timed": "Süre sınırı",
@@ -328,6 +348,12 @@
     "session": {
       "show_nav": "Menüyü göster",
       "hide_nav": "Menüyü gizle"
+    },
+    "quiz": {
+      "few_options": "Bu destede az anlam var: bu kelimede {count} şık.",
+      "done": "{correct} / {total} doğru",
+      "missed_again": "Yanlışları tekrar çalış",
+      "practice": "Pratikti: takvimin değişmedi."
     }
   }
 }

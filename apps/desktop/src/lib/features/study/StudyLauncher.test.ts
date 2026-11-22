@@ -68,8 +68,9 @@ describe('study launcher', () => {
       ['bird', 'kuş'],
     ]);
     const navigate = await open({ deckId: deck.id, kind: 'test' });
-    expect(screen.getByRole('radio', { name: 'Test' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByTestId('launcher-mode-desc').textContent).toMatch(/Never changes the schedule/);
+    // v1.4: the paper (`test`) is called "Exam"; "Test" is the four-option quiz.
+    expect(screen.getByRole('radio', { name: 'Exam' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByTestId('launcher-mode-desc').textContent).toMatch(/Doesn’t change the schedule/);
     // Test defaults to every card; the counts are the backend's.
     expect(scopeButton('all').getAttribute('aria-checked')).toBe('true');
     expect(screen.getByTestId('launcher-scope-all').textContent).toMatch(/3/);

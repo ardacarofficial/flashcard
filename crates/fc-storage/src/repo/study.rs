@@ -29,8 +29,9 @@ pub struct SessionRecord {
 pub const REVIEW_MODE_IMPORTED: &str = "imported";
 
 /// `review_log.mode` values of answers that changed the schedule (v0.2 `normal`, v0.10
-/// `learn`, `timed`, `confidence`): the rows today's study limits count.
-pub const SCHEDULED_REVIEW_MODES: [&str; 4] = ["normal", "learn", "timed", "confidence"];
+/// `learn`, `timed`, `confidence`, v1.4 `quiz` with `quiz.affects_schedule`): the rows today's
+/// study limits count.
+pub const SCHEDULED_REVIEW_MODES: [&str; 5] = ["normal", "learn", "timed", "confidence", "quiz"];
 
 /// Whether a `review_log.mode` is **practice** — the answer did not change the schedule:
 /// `trial`, `trial_<mode>` (v0.10 practice variants: `trial_learn`, `trial_timed`,

@@ -3,7 +3,7 @@
  * → 10 questions → answer every question → Ctrl+Enter submits → the score is shown, and no
  * card's scheduling fields changed (a test never touches the schedule).
  */
-import { cardsIn, endOpenSessions, expect, goToSection, makeDeck, openApp, press, rpc, scheduling, studyOptions, test, uniq } from '../fixtures';
+import { cardsIn, endOpenSessions, expect, goToSection, makeDeck, openApp, press, rpc, scheduling, studyOptions, t, test, uniq } from '../fixtures';
 
 interface Paper {
   session_id: string;
@@ -24,7 +24,8 @@ test('S3 deck page → Test → 10 questions → answer → submit: score, sched
   await page.getByTestId('deck-mode-test').click();
   const launcher = page.getByTestId('study-launcher');
   await expect(launcher).toBeVisible();
-  await expect(launcher.getByRole('radio', { name: /^Test/ })).toHaveAttribute('aria-checked', 'true');
+  // v1.4: the paper (kind `test`) is called "Sınav" ("Test" is the four-option quiz).
+  await expect(launcher.getByRole('radio', { name: t('study.launcher.kind.test'), exact: true })).toHaveAttribute('aria-checked', 'true');
   const count = launcher.locator('input[type=number], input[inputmode=numeric]').first();
   await count.fill('10');
   await press(page, 'Enter');

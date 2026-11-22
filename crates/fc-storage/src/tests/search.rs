@@ -690,35 +690,65 @@ const BENCH_QUERIES: &[&str] = &[
     "(seviye:B1 OR seviye:B2) app",
 ];
 
-/// Times a full browser request (count + first page of 50 + row data) per query, best of
-/// `runs`; prints and returns the slowest query's time in µs.
-fn bench(w: &World, runs: usize) -> u128 {
-    let mut worst = 0u128;
-    for q in BENCH_QUERIES {
-        let f = w.filter(q);
-        let mut best = u128::MAX;
-        let mut total = 0;
-        for _ in 0..runs {
-            let t = Instant::now();
-            let p = w.fx.read(|r| {
-                r.search_cards(&CardSearch {
-                    filter: f.clone(),
-                    now: NOW,
-                    sort: CardSort::SortField,
-                    descending: true,
-                    notes_only: false,
-                    offset: 0,
-                    limit: 50,
-                })
-                .unwrap()
-            });
-            best = best.min(t.elapsed().as_micros());
-            total = p.total;
-        }
-        worst = worst.max(best);
-        println!("{:>8.2} ms  {total:>6} hits  {q}", best as f64 / 1000.0);
-    }
-    worst
+/// The reference work of the calibrated bound in `bench_search_20k_scaled`: a glob no index
+/// can narrow, so every note's text is decoded and matched (`fc_text_glob`), matching nothing.
+/// It does the same kind of work as the queries (SQLite + the app's functions, one thread), so
+/// a loaded machine slows it as much as them.
+const BENCH_SCAN: &str = "q*zzz*x";
+
+/// One full browser request (count + first page of 50 + row data): (µs, total hits).
+fn timed_search(w: &World, f: &Filter) -> (u128, u32) {
+    let t = Instant::now();
+    let p = w.fx.read(|r| {
+        r.search_cards(&CardSearch {
+            filter: f.clone(),
+            now: NOW,
+            sort: CardSort::SortField,
+            descending: true,
+            notes_only: false,
+            offset: 0,
+            limit: 50,
+        })
+        .unwrap()
+    });
+    (t.elapsed().as_micros(), p.total)
+}
+
+/// One benchmark query: its best time and the best time of the reference scan measured
+/// alternately with it (so both saw the same load), in µs.
+struct Timing {
+    query: &'static str,
+    best: u128,
+    scan: u128,
+}
+
+/// Times every query, best of `runs`, each run followed by one reference scan; prints them.
+fn bench(w: &World, runs: usize) -> Vec<Timing> {
+    let scan = w.filter(BENCH_SCAN);
+    BENCH_QUERIES
+        .iter()
+        .map(|q| {
+            let f = w.filter(q);
+            let (mut best, mut scan_best, mut total) = (u128::MAX, u128::MAX, 0);
+            for _ in 0..runs {
+                let (us, hits) = timed_search(w, &f);
+                best = best.min(us);
+                total = hits;
+                scan_best = scan_best.min(timed_search(w, &scan).0);
+            }
+            println!(
+                "{:>8.2} ms  {total:>6} hits  (scan {:>7.2} ms, {:>4.2}×)  {q}",
+                best as f64 / 1000.0,
+                scan_best as f64 / 1000.0,
+                best as f64 / scan_best as f64
+            );
+            Timing {
+                query: q,
+                best,
+                scan: scan_best,
+            }
+        })
+        .collect()
 }
 
 /// docs/04 v0.4: "100k notta arama < 100 ms". Run with
@@ -727,7 +757,7 @@ fn bench(w: &World, runs: usize) -> u128 {
 #[ignore = "benchmark: builds a 100k-note database"]
 fn bench_search_100k() {
     let w = world(100_000, 42);
-    let worst = bench(&w, 5);
+    let worst = bench(&w, 5).iter().map(|t| t.best).max().unwrap();
     assert!(worst < 100_000, "slowest query took {worst} µs");
 }
 
@@ -735,16 +765,34 @@ fn bench_search_100k() {
 /// queries. The docs/04 budget (100 ms for 100k notes) scales linearly to 20 ms; CI runners
 /// are shared and noisy, so the assertion allows 3× that. (Debug builds measure about the
 /// same as release here: the time is spent in SQLite, built with `opt-level = 1`.)
+///
+/// **Calibrated (v1.4):** on a loaded machine (a full `cargo test` beside other builds) every
+/// query took 3–4× the budget, the reference scan as much. So the budget grows with the
+/// machine's measured slowness, never below 60 ms: a query passes if it is under 60 ms *or*
+/// under [`SCAN_SHARE`] of the reference scan timed alternately with it. On the machine the
+/// share was calibrated on (a quiet scan of ~`60 ms / SCAN_SHARE`) both read the same; a
+/// query that loses its index (a full scan, or a sort of every match) fails both, loaded or
+/// not.
 #[test]
 fn bench_search_20k_scaled() {
     let w = world(20_000, 42);
     let budget_us: u128 = 60_000;
-    let worst = bench(&w, 3);
-    assert!(
-        worst < budget_us,
-        "slowest query took {worst} µs (budget {budget_us} µs)"
-    );
+    for t in bench(&w, 5) {
+        let share = t.best as f64 / t.scan as f64;
+        assert!(
+            t.best < budget_us || share < SCAN_SHARE,
+            "{}: {} µs (budget {budget_us} µs), {share:.2}× the reference scan ({} µs; at most {SCAN_SHARE}×)",
+            t.query,
+            t.best,
+            t.scan
+        );
+    }
 }
+
+/// See [`bench_search_20k_scaled`]: 60 ms over the reference scan's ~100 ms on the machine it
+/// was calibrated on (v1.4: worst query 0.19×, ≤ 0.13× under 8 busy loops; a query that lost
+/// its index 0.7–1.2×).
+const SCAN_SHARE: f64 = 0.6;
 
 /// Pages read by walking a sort index (large result sets) equal sorting every match.
 #[test]

@@ -40,16 +40,7 @@ pub(super) fn options(req: StudyOptionsRequest, ctx: &QueryCtx<'_>) -> AppResult
             next_available_at,
         });
     }
-    let mut modes = vec![StudyKind::Normal];
-    for (kind, module) in [
-        (StudyKind::Learn, crate::modules::modes::learn::ID),
-        (StudyKind::Test, crate::modules::modes::practice_test::ID),
-        (StudyKind::Match, crate::modules::modes::matching::ID),
-    ] {
-        if module_enabled(ctx.tx, ctx.registry, module)? {
-            modes.push(kind);
-        }
-    }
+    let modes = mode_options(ctx)?;
     let day_start = {
         let day = fc_study::day::StudyDay::new(tz, planner.day_start_hour());
         day.start(day.index(ctx.now))
@@ -76,7 +67,11 @@ pub(super) fn options(req: StudyOptionsRequest, ctx: &QueryCtx<'_>) -> AppResult
         let dto = session_dto(v, &s, ctx.now)?;
         let progress = match s.config.kind {
             StudyKind::Test | StudyKind::Match => crate::modules::modes::mode_progress(&s),
-            StudyKind::Normal | StudyKind::Custom | StudyKind::Mistakes | StudyKind::Learn => {
+            StudyKind::Normal
+            | StudyKind::Custom
+            | StudyKind::Mistakes
+            | StudyKind::Learn
+            | StudyKind::Quiz => {
                 let c = dto.counts;
                 Some((s.state.answered, c.new + c.learning + c.review))
             }
@@ -101,4 +96,41 @@ pub(super) fn options(req: StudyOptionsRequest, ctx: &QueryCtx<'_>) -> AppResult
         scopes,
         modes,
     })
+}
+
+/// v1.4: the modes the launcher offers (module switches), in its order — Cards, Test (quiz),
+/// Learn, Exam (test paper), Match — with their names, one-line descriptions and whether
+/// they change the schedule (the single source of the "practice" label).
+fn mode_options(ctx: &QueryCtx<'_>) -> AppResult<Vec<StudyModeOption>> {
+    use crate::modules::modes::{learn, matching, practice_test, quiz};
+    let mut out = Vec::new();
+    for (kind, module, key) in [
+        (StudyKind::Normal, None, "normal"),
+        (StudyKind::Quiz, Some(quiz::ID), "quiz"),
+        (StudyKind::Learn, Some(learn::ID), "learn"),
+        (StudyKind::Test, Some(practice_test::ID), "test"),
+        (StudyKind::Match, Some(matching::ID), "match"),
+    ] {
+        if let Some(m) = module {
+            if !module_enabled(ctx.tx, ctx.registry, m)? {
+                continue;
+            }
+        }
+        let affects_schedule = match kind {
+            StudyKind::Normal | StudyKind::Learn => true,
+            StudyKind::Quiz => quiz::affects_schedule(ctx.tx)?,
+            StudyKind::Test | StudyKind::Match | StudyKind::Custom | StudyKind::Mistakes => false,
+        };
+        let exam = kind == StudyKind::Test;
+        out.push(StudyModeOption {
+            kind,
+            name_key: format!("study.mode.{key}.name"),
+            description_key: format!("study.mode.{key}.description"),
+            affects_schedule,
+            question_kinds: if exam { practice_test::offered_kinds() } else { Vec::new() },
+            default_question_kinds: if exam { practice_test::default_kinds() } else { Vec::new() },
+            default_questions: if exam { Some(practice_test::default_questions(ctx.tx)?) } else { None },
+        });
+    }
+    Ok(out)
 }
