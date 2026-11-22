@@ -239,6 +239,7 @@ impl World {
             flag_names: &[],
             now: NOW,
             day_start: None,
+            deck_decay: &[],
         };
         compile_query(q, &cat).unwrap_or_else(|e| panic!("{q}: {e}"))
     }

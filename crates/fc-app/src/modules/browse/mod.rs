@@ -116,6 +116,8 @@ pub(crate) struct CatalogData {
     now: Timestamp,
     /// Start of the study day (v1.3: `reviewed:1` = today).
     day_start: Timestamp,
+    /// v1.4: decay of decks with personalised preset weights (`retrievability`).
+    deck_decay: Vec<(fc_core::DeckId, f64)>,
 }
 
 impl CatalogData {
@@ -129,6 +131,7 @@ impl CatalogData {
             flag_names: flag_names(reads)?,
             now,
             day_start: crate::modules::study::today::today_start(reads, now)?,
+            deck_decay: crate::modules::stats::facts::deck_decays(reads)?,
         })
     }
 
@@ -142,6 +145,7 @@ impl CatalogData {
             flag_names: &self.flag_names,
             now: self.now,
             day_start: Some(self.day_start),
+            deck_decay: &self.deck_decay,
         }
     }
 }

@@ -238,7 +238,7 @@ Etiketler serbesttir. Sınıflandırma ise **kullanıcının tanımladığı yap
 `[v0.2, v0.4]` · 🧱 Olay kaydı
 
 - Kartın tüm geçmişi: her tekrarın tarihi, puanı, süresi, o andaki stabilite/zorluk, kullanılan ipucu, oturum türü.
-- Eklenme tarihi, son değişiklik, bir sonraki vade, mevcut hatırlama olasılığı.
+- Eklenme tarihi, son değişiklik, bir sonraki vade, mevcut hatırlama olasılığı (v1.4: istatistik ve `retrievability<…` sorgusuyla aynı sayı — hazır ayarın kişisel sönümü, tam çalışma günü; `fc_core::recall`).
 - Hafıza grafiği (zamana göre stabilite).
 - Notun düzenleme geçmişi (eski alan değerleri).
 

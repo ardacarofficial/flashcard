@@ -100,7 +100,71 @@ pub struct SetSubtitleDefaultDeck {
     pub deck_id: Option<DeckId>,
 }
 
+/// `subtitle.captures.recent` (v1.4): the newest capture attempts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct RecentSubtitleCaptures {
+    /// How many (default 50, at most the number kept, 500).
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
+/// What happened to one capture attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum SubtitleAttemptResult {
+    /// A new card.
+    Created,
+    /// Matched a card already there (same capture id, or same language + lemma + sentence).
+    Duplicate,
+    /// Not recorded: `reason` is the contract's error code, `:` and the field when one is
+    /// known (`invalid_capture:term.lemma`).
+    Rejected,
+    /// A new card, but a picture or sound it referred to was not there: `reason` lists
+    /// `screenshot:<why>` / `audio:<why>` (`upload_unknown`, `upload_mismatch`,
+    /// `file_missing`).
+    MediaMissing,
+}
+
+/// One capture attempt (v1.4 diagnostics). Only ids, codes and times: never the sentence,
+/// the word, a URL or a video title.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SubtitleCaptureAttempt {
+    /// The capture id as sent (empty when the request had none).
+    pub capture_id: String,
+    /// When it arrived.
+    pub at: Timestamp,
+    /// Result.
+    pub result: SubtitleAttemptResult,
+    /// Machine reason (see [`SubtitleAttemptResult`]).
+    pub reason: Option<String>,
+    /// The card made or matched.
+    pub card_id: Option<CardId>,
+    /// Time the app spent on it, ms.
+    pub duration_ms: u32,
+}
+
+/// Response of `subtitle.captures.recent`, newest first.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct SubtitleCaptureAttempts {
+    /// Attempts.
+    pub attempts: Vec<SubtitleCaptureAttempt>,
+    /// How many the app keeps (older ones are forgotten).
+    pub kept: u32,
+}
+
 // ------------------------------------------------------------------ internal methods
+
+/// Internal `subtitle.captures.log` (v1.4): notes one capture attempt (diagnostics; never in
+/// the oplog).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct LogSubtitleCaptureAttempt {
+    /// The attempt (`at` is the time it arrived).
+    pub attempt: SubtitleCaptureAttempt,
+}
 
 /// Internal `subtitle.captures.create`: a validated capture from the HTTP server.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

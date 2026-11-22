@@ -25,12 +25,14 @@ const DAY_START_HOUR: &str = "study.day_start_hour";
 
 // ------------------------------------------------------------------ calendar
 
-/// The user's study calendar: client UTC offset + the `study.day_start_hour` setting.
+/// The user's study calendar: client UTC offset (given, else the one the last `study.start`
+/// recorded, else UTC — v1.4: the same fallback as the query language's `today_start`) + the
+/// `study.day_start_hour` setting.
 pub(crate) fn calendar(reads: &dyn Reads, tz_offset_mins: Option<i32>) -> AppResult<StudyDay> {
-    let tz = tz_offset_mins.unwrap_or(0);
-    if tz.abs() > MAX_TZ_OFFSET_MINS {
+    if tz_offset_mins.is_some_and(|tz| tz.abs() > MAX_TZ_OFFSET_MINS) {
         return Err(invalid("tz_offset_mins out of range"));
     }
+    let tz = crate::modules::study::today::client_tz(reads, tz_offset_mins)?;
     let hour = resolve_stored(reads, &SettingScope::App, DAY_START_HOUR)?
         .and_then(|(v, _)| v.as_u64())
         .and_then(|h| u8::try_from(h).ok())
@@ -168,6 +170,66 @@ pub(crate) fn params_of(p: &PresetConfig) -> SchedulerParams {
     }
 }
 
+/// Forgetting-curve decay of a preset (FSRS-6 `w20` of its weights; the default decay for
+/// default or unusable weights).
+pub(crate) fn decay_of(p: &PresetConfig) -> f64 {
+    fc_study::scheduler::decay(&params_of(p)).unwrap_or(fc_core::recall::DEFAULT_DECAY)
+}
+
+/// **The** recall probability of `card` at `now` (v1.4, one truth): the card's preset decay,
+/// whole study days on `cal` ([`fc_core::recall::card_retrievability`]). Card info, statistics,
+/// the study history panel and the query language (`retrievability<0.9`, through
+/// [`deck_decays`]) all give the same number.
+pub(crate) fn card_retrievability(
+    card: &Card,
+    cal: StudyDay,
+    now: Timestamp,
+    presets: &mut Presets<'_>,
+) -> AppResult<Option<f64>> {
+    if card.scheduling.state == CardState::New {
+        return Ok(None);
+    }
+    let decay = decay_of(presets.of(card.deck_id)?);
+    Ok(fc_core::recall::card_retrievability(
+        &card.scheduling,
+        cal.start(cal.index(now)),
+        decay,
+    ))
+}
+
+/// Decay of every deck whose preset's differs from the default (the query catalog's
+/// `deck_decay`), from one deck and preset listing.
+pub(crate) fn deck_decays(reads: &dyn Reads) -> AppResult<Vec<(DeckId, f64)>> {
+    let presets: HashMap<_, f64> = reads
+        .list_presets()?
+        .into_iter()
+        .map(|p| (p.id, decay_of(&p.config)))
+        .collect();
+    if presets
+        .values()
+        .all(|d| d.to_bits() == fc_core::recall::DEFAULT_DECAY.to_bits())
+    {
+        return Ok(Vec::new());
+    }
+    let index = DeckIndex::load(reads)?;
+    let mut out = Vec::new();
+    // Trashed decks too: their cards still show a probability in card info.
+    for deck in reads.list_decks(true)? {
+        // The nearest assigned preset up the ancestry (`presets::effective`).
+        let decay = index
+            .ancestry(deck.id)?
+            .into_iter()
+            .rev()
+            .find_map(|id| index.get(id)?.preset_id.and_then(|p| presets.get(&p)))
+            .copied()
+            .unwrap_or(fc_core::recall::DEFAULT_DECAY);
+        if decay.to_bits() != fc_core::recall::DEFAULT_DECAY.to_bits() {
+            out.push((deck.id, decay));
+        }
+    }
+    Ok(out)
+}
+
 /// Effective preset of decks, cached.
 pub(crate) struct Presets<'a> {
     reads: &'a dyn Reads,
@@ -224,14 +286,7 @@ pub(crate) fn card_fact(
         (CardState::Review, Some(d), Some(l)) => u32::try_from((d - l).max(0)).ok(),
         _ => None,
     };
-    let retrievability = match (s.state, s.stability, s.last_review) {
-        (CardState::New, _, _) => None,
-        (_, Some(st), Some(last)) => {
-            let params = params_of(presets.of(card.deck_id)?);
-            fc_study::scheduler::retrievability(st, f64::from(cal.days_between(last, now)), &params)
-        }
-        _ => None,
-    };
+    let retrievability = card_retrievability(card, cal, now, presets)?;
     Ok(CardFact {
         card_id: card.id,
         state: s.state,
@@ -425,4 +480,172 @@ pub(crate) fn rendered_query(
     let Some(q) = stored else { return Ok(None) };
     let cat = crate::modules::browse::CatalogData::load(reads, now)?;
     Ok(Some(fc_core::query::canonical::render(q, &cat.catalog())))
+}
+
+/// v1.4 A2: card info, statistics, the study history panel and the query language give one
+/// recall probability — the preset's personalised decay, whole study days.
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod recall_tests {
+    use super::{calendar, card_facts};
+    use crate::testing::{MemStore, TempSqlite, TestApp};
+    use fc_api::v1::browse::CardInfoRef;
+    use fc_api::v1::decks::CreateDeck;
+    use fc_api::v1::methods::*;
+    use fc_api::v1::notes::CreateNote;
+    use fc_api::v1::presets::{AssignPreset, CreatePreset};
+    use fc_api::v1::search::SearchCards;
+    use fc_api::v1::study::CardHistoryRequest;
+    use fc_core::card::CardState;
+    use fc_core::notetype::builtin;
+    use fc_core::preset::PresetConfig;
+    use fc_core::time::{FixedClock, MILLIS_PER_DAY};
+    use fc_core::{CardId, DeckId, Timestamp};
+    use fc_storage::Store;
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+
+    /// 2026-01-01T00:00Z.
+    const T0: i64 = 1_767_225_600_000;
+    const HOUR: i64 = 3_600_000;
+    /// Personalised decay (FSRS-6 `w20`).
+    const DECAY: f64 = 0.5;
+
+    fn deck(t: &TestApp, path: &str) -> DeckId {
+        t.ok::<DecksCreate>(CreateDeck {
+            path: path.into(),
+            parent_id: None,
+            description: None,
+            icon: None,
+            color: None,
+        })
+        .id
+    }
+
+    fn card(t: &TestApp, deck: DeckId, front: &str) -> CardId {
+        t.ok::<NotesCreate>(CreateNote {
+            notetype_id: builtin::CLASSIC_ID,
+            deck_id: deck,
+            fields: BTreeMap::from([
+                ("front".to_owned(), front.to_owned()),
+                ("back".to_owned(), "x".to_owned()),
+            ]),
+            tags: vec![],
+            attributes: vec![],
+            allow_duplicate: None,
+        })
+        .cards[0]
+            .id
+    }
+
+    fn reviewed(t: &TestApp, id: CardId, stability: f64, last: Timestamp) {
+        let mut tx = t.store.write().unwrap();
+        let mut c = tx.get_card(id).unwrap().unwrap();
+        c.scheduling.state = CardState::Review;
+        c.scheduling.stability = Some(stability);
+        c.scheduling.difficulty = Some(5.0);
+        c.scheduling.reps = 3;
+        c.scheduling.last_review = Some(last);
+        c.scheduling.due = Some(last.plus_days(10));
+        tx.update_card(&c).unwrap();
+        tx.commit().unwrap();
+    }
+
+    fn hits(t: &TestApp, query: &str) -> Vec<CardId> {
+        let mut ids: Vec<CardId> = t
+            .ok::<SearchCardsMethod>(SearchCards {
+                query: query.into(),
+                sort: None,
+                descending: None,
+                notes_only: None,
+                offset: None,
+                limit: None,
+            })
+            .items
+            .into_iter()
+            .map(|r| r.card_id)
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    fn agree(store: Arc<dyn Store>) {
+        // 15:00 UTC on Jan 11; the study day (UTC, rollover 04:00) began at 04:00.
+        let now = Timestamp(T0 + 10 * MILLIS_PER_DAY + 15 * HOUR);
+        let t = TestApp::with_clock(store, Arc::new(FixedClock::new(now)));
+        let mine = deck(&t, "Mine");
+        let plain = deck(&t, "Plain");
+        let mut weights: Vec<f64> = fc_study::scheduler::FSRS6_DEFAULT_WEIGHTS
+            .iter()
+            .map(|w| f64::from(*w))
+            .collect();
+        weights[20] = DECAY;
+        let p = t.ok::<PresetsCreate>(CreatePreset {
+            name: "Personal".into(),
+            config: Some(PresetConfig {
+                fsrs_weights: weights,
+                ..PresetConfig::default()
+            }),
+        });
+        t.ok::<PresetsAssign>(AssignPreset {
+            deck_ids: vec![mine],
+            preset_id: Some(p.id),
+        });
+        // Reviewed at 03:00 on Jan 3 = the study day of Jan 2: 9 study days ago (8.5 × 24 h).
+        let last = Timestamp(T0 + 2 * MILLIS_PER_DAY + 3 * HOUR);
+        let (a, b, fresh) = (card(&t, mine, "a"), card(&t, plain, "b"), card(&t, plain, "c"));
+        reviewed(&t, a, 8.0, last);
+        reviewed(&t, b, 8.0, last);
+
+        let info = |id| t.ok::<BrowseCardInfo>(CardInfoRef { card_id: id }).retrievability;
+        let history = |id| t.ok::<StudyCardHistory>(CardHistoryRequest { card_id: id }).retrievability;
+        let (ra, rb) = (info(a).unwrap(), info(b).unwrap());
+        // The truth: the preset's decay over whole study days.
+        assert_eq!(ra, fc_core::recall::retrievability(8.0, 9.0, DECAY).unwrap());
+        assert_eq!(
+            rb,
+            fc_core::recall::retrievability(8.0, 9.0, fc_core::recall::DEFAULT_DECAY).unwrap()
+        );
+        assert!(ra < rb && ra < 0.9 && ra > 0.85, "{ra} {rb}");
+        assert_eq!(info(fresh), None);
+        // Study history panel.
+        assert_eq!(history(a), Some(ra));
+        assert_eq!(history(b), Some(rb));
+        // Statistics.
+        let reads = t.store.read().unwrap();
+        let cards: Vec<_> = [a, b, fresh]
+            .iter()
+            .map(|id| reads.get_card(*id).unwrap().unwrap())
+            .collect();
+        let cal = calendar(&*reads, None).unwrap();
+        let facts = card_facts(&*reads, &cards, cal, now).unwrap();
+        let stats: Vec<Option<f64>> = facts.iter().map(|f| f.retrievability).collect();
+        assert_eq!(stats, vec![Some(ra), Some(rb), None]);
+        drop(reads);
+        // The query, right at each card's own value.
+        let eps = 1e-12;
+        assert_eq!(hits(&t, &format!("retrievability<{}", ra + eps)), vec![a]);
+        assert_eq!(hits(&t, &format!("retrievability<{}", ra - eps)), Vec::<CardId>::new());
+        assert_eq!(hits(&t, &format!("retrievability>={}", ra - eps)).len(), 2);
+        assert_eq!(hits(&t, &format!("retrievability<{}", rb + eps)).len(), 2);
+        assert_eq!(hits(&t, &format!("-retrievability<{}", ra + eps)).len(), 2);
+        assert_eq!(hits(&t, &format!("retrievability<{} deck:Mine", rb)), vec![a]);
+        // Without the personalised preset, both cards fall back to the default curve.
+        t.ok::<PresetsAssign>(AssignPreset {
+            deck_ids: vec![mine],
+            preset_id: None,
+        });
+        assert_eq!(info(a), Some(rb));
+        assert_eq!(hits(&t, &format!("retrievability<{}", ra + eps)), Vec::<CardId>::new());
+    }
+
+    #[test]
+    fn card_info_stats_and_query_agree_in_memory() {
+        agree(Arc::new(MemStore::new()));
+    }
+
+    #[test]
+    fn card_info_stats_and_query_agree_on_sqlite() {
+        agree(Arc::new(TempSqlite::new()));
+    }
 }

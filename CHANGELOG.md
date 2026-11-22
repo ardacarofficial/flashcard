@@ -4,6 +4,9 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased]
 
+## Unreleased (v1.4)
+- A2/A5: **tek hatırlama olasılığı** (`fc_core::recall`: hazır ayarın kişisel `w20` sönümü + tam çalışma günü) kart bilgisi, istatistik, çalışma geçmişi ve `retrievability<…` sorgusunda (SQL'de `fc_recall`) aynı sayıyı verir; **"son yakalamama ne oldu?"**: her Subtitle yakalama denemesi metinsiz bir tanı satırı bırakır (`subtitle.captures.recent`, son 500, log paketinde `subtitle_captures.txt`, migration `1430_subtitle_capture_log`).
+
 ## [1.3.0] — v1.3 "kullanılır": akışlar, kelime kartları, gerçek çekirdekte doğrulama
 
 Workspace sürümü `1.3.0`. Proje sahibi v1.2'yi Windows'ta denedi: "Daha güzel ama kullanamıyorum." v1.2 sahte bir backend'e karşı ekran görüntüleriyle doğrulanmıştı; kullanılamaz akışlar böyle geçti. v1.3 yeni özellik için özellik eklemez: var olanı **kullanılır, öngörülebilir ve kendini anlatan** hâle getirir. Tema aynı (docs/11 §4); düzenleyici fikir artık akışlar (docs/11 §1). Hiçbir özellik, ayar ya da kısayol kaldırılmadı; taşınanlar ulaşılabilir. Migration'lar `1300_vocabulary_roles` ve `1301_subtitle_word_front` (v1.3 aralığı 1300–1399).

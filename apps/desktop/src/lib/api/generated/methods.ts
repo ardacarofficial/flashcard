@@ -247,6 +247,7 @@ import type { ReadingItemDto } from "./ReadingItemDto";
 import type { ReadingItemList } from "./ReadingItemList";
 import type { ReadingItemRef } from "./ReadingItemRef";
 import type { ReadingSessionDone } from "./ReadingSessionDone";
+import type { RecentSubtitleCaptures } from "./RecentSubtitleCaptures";
 import type { RecoveryDto } from "./RecoveryDto";
 import type { RefreshStatsCache } from "./RefreshStatsCache";
 import type { ReminderCounts } from "./ReminderCounts";
@@ -326,6 +327,7 @@ import type { StudyCardsChanged } from "./StudyCardsChanged";
 import type { StudyOptions } from "./StudyOptions";
 import type { StudyOptionsRequest } from "./StudyOptionsRequest";
 import type { SubmitTest } from "./SubmitTest";
+import type { SubtitleCaptureAttempts } from "./SubtitleCaptureAttempts";
 import type { SubtitleKeyDto } from "./SubtitleKeyDto";
 import type { SubtitleKeyList } from "./SubtitleKeyList";
 import type { SubtitleKeyRef } from "./SubtitleKeyRef";
@@ -630,6 +632,7 @@ export interface Methods {
   "subtitle.keys.revoke": { kind: "command"; request: SubtitleKeyRef; response: SubtitleKeyDto };
   "subtitle.status": { kind: "query"; request: Empty; response: SubtitleStatus };
   "subtitle.default_deck.set": { kind: "command"; request: SetSubtitleDefaultDeck; response: SubtitleStatus };
+  "subtitle.captures.recent": { kind: "query"; request: RecentSubtitleCaptures; response: SubtitleCaptureAttempts };
   "maintenance.status": { kind: "query"; request: Empty; response: MaintenanceStatus };
   "maintenance.recovery.get": { kind: "query"; request: Empty; response: RecoveryDto };
   "maintenance.recovery.dismiss": { kind: "command"; request: Empty; response: RecoveryDto };
@@ -934,6 +937,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "subtitle.keys.revoke": "command",
   "subtitle.status": "query",
   "subtitle.default_deck.set": "command",
+  "subtitle.captures.recent": "query",
   "maintenance.status": "query",
   "maintenance.recovery.get": "query",
   "maintenance.recovery.dismiss": "command",
