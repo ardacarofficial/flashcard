@@ -260,9 +260,14 @@ fn card_qa(reads: &dyn Reads, registry: &Registry, locale: Locale, card: &Card) 
             locale,
         },
     )?;
+    // v1.3: like the study engine — the typed key, else the field the template asks for (a
+    // vocabulary card's meaning, not the example and source under it), else the back's
+    // answer part.
     let answer = match &r.raw.interaction {
         Interaction::Type { expected } => expected.clone(),
-        _ => answer_text(&r.sides.answer),
+        Interaction::Choice { .. } => answer_text(&r.sides.answer),
+        Interaction::SelfGrade => crate::support::content::answer_field_text(&nt, &note, &card.template_key)
+            .unwrap_or_else(|| answer_text(&r.sides.answer)),
     };
     Ok((html_to_text(&r.sides.question), answer))
 }

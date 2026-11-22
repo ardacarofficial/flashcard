@@ -486,8 +486,23 @@ fn forecast(req: ForecastRequest, ctx: &QueryCtx<'_>) -> AppResult<WorkloadForec
         None => None,
     };
 
-    // Scope: cards, options and the current pace.
-    let (cards, config, current, target) = match req.deck_id {
+    // Today's queue (v1.3): the study planner's, so day 0 is the number Home and the
+    // launcher show; the collection's limits are those of the decks its queue is made of.
+    let tz = crate::modules::study::today::client_tz(reads, req.tz_offset_mins)?;
+    let mut planner = crate::modules::study::today::Planner::new(
+        crate::modules::study::ext::View::query(ctx),
+        ctx.now,
+        tz,
+    )?;
+    let (today_new, today_learning, today_review) =
+        crate::modules::study::today::today_counts(&mut planner, req.deck_id)?;
+    let roots = match req.deck_id {
+        Some(_) => Vec::new(),
+        None => planner.collection_roots()?,
+    };
+    drop(planner);
+    // Scope: cards, options, the current pace and the reviews a day.
+    let (cards, config, current, target, reviews_per_day) = match req.deck_id {
         Some(d) => {
             let target = pace_target(reads, &index, d)?;
             let cards = reads.study_cards(&fc_storage::repo::StudyCardFilter {
@@ -496,24 +511,25 @@ fn forecast(req: ForecastRequest, ctx: &QueryCtx<'_>) -> AppResult<WorkloadForec
             })?;
             let config = crate::modules::presets::effective(reads, d)?.config;
             let current = config.new_per_day;
-            (cards, config, current, Some(target))
+            let reviews = config.reviews_per_day;
+            (cards, config, current, Some(target), reviews)
         }
         None => {
             let cards = crate::modules::stats::facts::scope_card_rows(reads, None)?
                 .into_iter()
                 .filter(|c| !c.suspended)
                 .collect::<Vec<_>>();
-            let mut current = 0u32;
-            for root in index.children(None) {
-                current = current.saturating_add(
-                    crate::modules::presets::effective(reads, root.id)?.config.new_per_day,
-                );
+            let (mut current, mut reviews) = (0u32, 0u32);
+            for root in roots {
+                let c = crate::modules::presets::effective(reads, root)?.config;
+                current = current.saturating_add(c.new_per_day);
+                reviews = reviews.saturating_add(c.reviews_per_day);
             }
             let config = fc_core::preset::PresetConfig {
                 desired_retention: crate::modules::stats::target_retention(reads, None, &cards)?,
                 ..fc_core::preset::PresetConfig::default()
             };
-            (cards, config, current, None)
+            (cards, config, current, None, reviews)
         }
     };
     let new_per_day = req.new_per_day.unwrap_or(current);
@@ -558,13 +574,23 @@ fn forecast(req: ForecastRequest, ctx: &QueryCtx<'_>) -> AppResult<WorkloadForec
             new_done_today: new_today,
             days: horizon,
             secs_per_answer: secs,
+            reviews_per_day: Some(reviews_per_day),
+            // Day 0: today's queue; another pace changes only its new cards.
+            today: Some(model::TodayQueue {
+                new: if new_per_day == current {
+                    today_new
+                } else {
+                    new_per_day.saturating_sub(new_today)
+                },
+                started: today_learning.saturating_add(today_review),
+            }),
         },
     );
     let day_dto = |p: &model::ForecastPoint| ForecastDayDto {
         offset: p.offset,
         date: iso_date(today + i64::from(p.offset)),
-        cards: p.answers,
-        reviews: p.reviews,
+        cards: p.cards,
+        reviews: p.review_cards,
         new_cards: p.introduced,
         minutes: p.minutes,
     };
@@ -593,7 +619,7 @@ fn forecast(req: ForecastRequest, ctx: &QueryCtx<'_>) -> AppResult<WorkloadForec
                 week: u32::try_from(i + 1).unwrap_or(u32::MAX),
                 start_date: iso_date(today + i64::from(first)),
                 end_date: iso_date(today + i64::from(last)),
-                cards_per_day: w.iter().map(|p| p.answers).sum::<f64>() / n,
+                cards_per_day: w.iter().map(|p| p.cards).sum::<f64>() / n,
                 minutes_per_day: w.iter().map(|p| p.minutes).sum::<f64>() / n,
                 new_cards: w.iter().map(|p| p.introduced).sum(),
             }
@@ -603,7 +629,7 @@ fn forecast(req: ForecastRequest, ctx: &QueryCtx<'_>) -> AppResult<WorkloadForec
         .days
         .iter()
         .fold(None::<&model::ForecastPoint>, |best, p| match best {
-            Some(b) if b.answers >= p.answers => Some(b),
+            Some(b) if b.cards >= p.cards => Some(b),
             _ => Some(p),
         })
         .map(day_dto)

@@ -432,7 +432,7 @@
       "col_cards": "Kart / gün",
       "col_minutes": "Dakika / gün",
       "col_new": "Yeni kart",
-      "meaning": "Tahmin, kartlarının hafıza durumundan ve şablonundaki hedef hatırlamadan hesaplanır; yükü gösterir, günlük tekrar sınırını uygulamaz.",
+      "meaning": "Bugün, Çalış penceresindeki sayıdır. Sonraki günler kartlarının hafıza durumundan ve şablonundaki hedef hatırlamadan hesaplanır; günlük yeni kart ve tekrar sınırları uygulanır, sınırı aşan tekrarlar ertesi güne kalır.",
       "apply": "Uygula",
       "apply_preset": "Uygularsan “{preset}” şablonunda günde {n} yeni kart olur (şu an {current}).",
       "apply_create": "Bu destenin şablonu yok: uygularsan günde {n} yeni kartlık “{deck}” şablonu oluşturulur.",

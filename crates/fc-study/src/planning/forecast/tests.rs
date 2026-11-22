@@ -13,6 +13,8 @@ fn params(new_per_day: u32, days: u32) -> ForecastParams {
         new_done_today: 0,
         days,
         secs_per_answer: 60.0,
+        reviews_per_day: None,
+        today: None,
     }
 }
 
@@ -251,4 +253,58 @@ fn deterministic_and_bounded() {
     let manual: f64 = a.days[14..=20].iter().map(|p| p.answers).sum::<f64>() / 7.0;
     assert!(close(cards_pd, manual));
     assert!(close(mins_pd, manual)); // 60 s per answer
+}
+
+#[test]
+fn reviews_per_day_caps_a_day_and_carries_the_rest() {
+    // 30 reviews due today, nothing else: a limit of 10 shows 10 a day for three days.
+    let cards: Vec<ForecastCard> = (0..30).map(|_| review(0, 2000.0, 5.0, 10)).collect();
+    let free = forecast(&cards, &params(0, 5));
+    assert!(close(free.days[0].review_cards, 30.0));
+    assert!(close(free.days[0].cards, 30.0));
+    let f = forecast(
+        &cards,
+        &ForecastParams {
+            reviews_per_day: Some(10),
+            ..params(0, 5)
+        },
+    );
+    for p in &f.days[..3] {
+        assert!(close(p.cards, 10.0), "day {}: {}", p.offset, p.cards);
+    }
+    assert!(close(f.days[3].cards, 0.0));
+    // The work is moved, not lost: same answers in total.
+    let total = |f: &Forecast| f.days.iter().map(|p| p.answers).sum::<f64>();
+    assert!((total(&f) - total(&free)).abs() < 1e-6);
+    assert!(f.days.iter().all(|p| p.review_cards <= 10.0 + 1e-9));
+}
+
+#[test]
+fn day_zero_is_todays_queue() {
+    // The planner says: 20 cards today (5 new + 15 started), whatever the model would say.
+    let mut cards: Vec<ForecastCard> = (0..40).map(|_| review(0, 2000.0, 5.0, 10)).collect();
+    cards.extend((0..50).map(|_| new_card()));
+    let f = forecast(
+        &cards,
+        &ForecastParams {
+            reviews_per_day: Some(15),
+            today: Some(TodayQueue {
+                new: 5,
+                started: 15,
+            }),
+            ..params(5, 6)
+        },
+    );
+    assert!(close(f.days[0].cards, 20.0));
+    assert!(close(f.days[0].introduced, 5.0));
+    assert!(close(f.days[0].review_cards, 15.0));
+    // The 25 left of today's reviews come back within the limit.
+    assert!(close(f.days[1].review_cards, 15.0));
+    // Day 2: the last 10 of them (+ the first of today's new cards coming back), capped.
+    assert!(f.days[2].review_cards >= 10.0 - 1e-9 && f.days[2].review_cards <= 15.0 + 1e-9);
+    assert!(f.days.iter().skip(1).all(|p| close(p.introduced, 5.0)));
+    // Mass conservation still holds.
+    for p in &f.days {
+        assert!((p.started + p.unseen - f.total_cards).abs() < 1e-6);
+    }
 }

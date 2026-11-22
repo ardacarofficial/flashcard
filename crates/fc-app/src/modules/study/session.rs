@@ -80,6 +80,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         mut rng,
         query,
         practice,
+        ..
     } = planner.plan(&plan_req)?;
     // v1.3: an empty start creates nothing and leaves the open sessions alone. Card-by-card
     // sessions also need a card to show now (learn/test/match take every card at once).
@@ -305,6 +306,8 @@ pub(crate) fn answer_core(
             requeue_at(&outcome.state, day_end)
         },
     );
+    // The next card is chosen with the learn-ahead setting as it is now (v1.3).
+    session.reset_shown_window();
     // Its countdown ends with the answer (a card coming back later starts a new one).
     crate::modules::modes::timed::card_left_screen(&mut session.state, card.id);
     if let Some(after) = hooks.after {

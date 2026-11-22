@@ -856,3 +856,36 @@ fn module_switch_internal_methods_and_missing_key() {
     let e = t.err::<AiProvidersList>(Empty {});
     assert_eq!(e.code, ErrorCode::ConflictModuleDisabled);
 }
+
+/// v1.3 closing pass: the "answer" an AI hint / check / explanation is given for a
+/// vocabulary card is the field the card asks for (the meaning), not its whole back with the
+/// example, translation and source.
+#[test]
+fn a_vocabulary_cards_answer_is_its_meaning() {
+    let server = MockServer::start(|_| claude_text("ok"));
+    let t = app();
+    claude(&t, &server, Some(KEY));
+    let d = deck(&t, "Subtitle");
+    let note = t.ok::<NotesCreate>(fc_api::v1::notes::CreateNote {
+        notetype_id: fc_core::content::builtin::find(fc_core::content::builtin::SUBTITLE).unwrap().id,
+        deck_id: d.id,
+        fields: [
+            ("word", "go"),
+            ("surface", "went"),
+            ("meaning", "gitmek"),
+            ("sentence", "I <b>went</b> home."),
+            ("translation", "Eve gittim."),
+            ("source", "Film · 1:23"),
+        ]
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .collect(),
+        tags: vec![],
+        attributes: vec![],
+        allow_duplicate: None,
+    });
+    let p = preview(&t, AiTask::Hint { card_id: note.cards[0].id });
+    let text = &p.messages[0].text;
+    assert!(text.contains("gitmek"), "{text}");
+    assert!(!text.contains("Film") && !text.contains("Eve gittim"), "{text}");
+}

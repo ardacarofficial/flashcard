@@ -28,9 +28,18 @@
 //! exactly monotonic in the pace (more new cards a day never lowers the total work up to any
 //! day) and existing cards are simulated independently of it.
 //!
-//! What it does not model: daily review limits (the forecast is the load that *falls due*),
-//! "Hard"/"Easy" answers, same-day short-term stability changes, load balancing (it moves
-//! reviews within a few days, the totals stay).
+//! **Daily limits** (v1.3): a day shows at most `reviews_per_day` started cards; the rest wait
+//! for the next day (carried over with their answers — their memory is not re-simulated for
+//! the delay). **Day 0 is today's real queue** when the caller passes it ([`TodayQueue`]: the
+//! study planner's count, after the deck presets' limits, sibling burying and what was
+//! already studied today), so the forecast's "today" is the number Home and the launcher
+//! show; what the queue leaves of the cards due today carries over like any backlog.
+//!
+//! A day's **cards** are what a launcher counts (started cards shown that day + new cards
+//! introduced); its **answers** add relearning and learning steps and give the minutes.
+//!
+//! What it does not model: "Hard"/"Easy" answers, same-day short-term stability changes,
+//! load balancing (it moves reviews within a few days, the totals stay).
 
 use std::collections::BTreeMap;
 
@@ -181,6 +190,19 @@ pub struct ForecastParams {
     pub days: u32,
     /// Mean time of one answer (seconds).
     pub secs_per_answer: f64,
+    /// Most started cards shown a day (the presets' reviews/day; `None` = no limit).
+    pub reviews_per_day: Option<u32>,
+    /// Today's real queue (day 0); `None` = simulated like the other days.
+    pub today: Option<TodayQueue>,
+}
+
+/// Today's queue as the study planner builds it (v1.3): day 0 of the forecast.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TodayQueue {
+    /// New cards introduced today (the planner's, or the planned pace's allowance).
+    pub new: u32,
+    /// Started cards (learning + review) in today's queue.
+    pub started: u32,
 }
 
 /// One forecast day.
@@ -188,6 +210,11 @@ pub struct ForecastParams {
 pub struct ForecastPoint {
     /// Days from today.
     pub offset: u32,
+    /// Cards to study that day: started cards shown (within the reviews/day limit) + new
+    /// cards introduced. Day 0 with a [`TodayQueue`] = that queue.
+    pub cards: f64,
+    /// Started cards shown that day (reviews and learning cards, within the limit).
+    pub review_cards: f64,
     /// Expected answers on cards already started before that day (reviews, relearning and
     /// learning steps).
     pub reviews: f64,
@@ -218,7 +245,7 @@ pub struct Forecast {
 }
 
 impl Forecast {
-    /// Mean answers and minutes per day over the (up to) 7 days ending at `offset`.
+    /// Mean cards and minutes per day over the (up to) 7 days ending at `offset`.
     pub fn week_ending(&self, offset: u32) -> (f64, f64) {
         let end = (offset as usize).min(self.days.len().saturating_sub(1));
         let start = end.saturating_sub(6);
@@ -228,7 +255,7 @@ impl Forecast {
         }
         let n = slice.len() as f64;
         (
-            slice.iter().map(|p| p.answers).sum::<f64>() / n,
+            slice.iter().map(|p| p.cards).sum::<f64>() / n,
             slice.iter().map(|p| p.minutes).sum::<f64>() / n,
         )
     }
@@ -252,6 +279,8 @@ struct Sim<'a> {
     /// (due day, ln-stability bucket, difficulty bucket) → merged cohort.
     queue: BTreeMap<(i64, i64, i64), Cohort>,
     answers: Vec<f64>,
+    /// Cards shown each day (mass reviewed or finishing its steps).
+    cards: Vec<f64>,
     /// Mass in the simulation after each day.
     mass: Vec<f64>,
     /// Mass not yet in `queue` that joins on a day (learning cards graduating), for the mass
@@ -268,6 +297,7 @@ impl<'a> Sim<'a> {
             relearning_steps: f64::from(p.relearning_steps),
             queue: BTreeMap::new(),
             answers: vec![0.0; days],
+            cards: vec![0.0; days],
             mass: vec![0.0; days],
             pending: 0.0,
         }
@@ -315,6 +345,7 @@ impl<'a> Sim<'a> {
         let r = f.retrievability(day as f64 - c.last, c.s);
         let idx = day as usize;
         self.answers[idx] += c.mass * (1.0 + (1.0 - r) * self.relearning_steps);
+        self.cards[idx] += c.mass;
         let pass = Cohort {
             mass: c.mass * r,
             s: f.stability_after_success(c.s, c.d, r),
@@ -351,6 +382,7 @@ impl<'a> Sim<'a> {
                 for &(mass, s, d) in items {
                     // Their next answer finishes the steps.
                     self.answers[day as usize] += mass;
+                    self.cards[day as usize] += mass;
                     self.pending -= mass;
                     self.graduate(day, mass, s, d);
                 }
@@ -426,10 +458,10 @@ pub fn forecast(cards: &[ForecastCard], p: &ForecastParams) -> Forecast {
     let mut left = unseen;
     let mut new_finished_on = None;
     for (day, slot) in intro.iter_mut().enumerate() {
-        let allowance = if day == 0 {
-            f64::from(p.new_per_day.saturating_sub(p.new_done_today))
-        } else {
-            f64::from(p.new_per_day)
+        let allowance = match (day, p.today) {
+            (0, Some(t)) => f64::from(t.new),
+            (0, None) => f64::from(p.new_per_day.saturating_sub(p.new_done_today)),
+            _ => f64::from(p.new_per_day),
         };
         let n = allowance.min(left);
         *slot = n;
@@ -446,22 +478,44 @@ pub fn forecast(cards: &[ForecastCard], p: &ForecastParams) -> Forecast {
     };
     let mut out = Vec::with_capacity(days);
     let mut not_yet = unseen;
+    // Started cards (and their answers) left over by the reviews/day limit.
+    let (mut backlog_cards, mut backlog_answers) = (0.0f64, 0.0f64);
     for day in 0..days {
-        let mut reviews = existing.answers[day];
+        let mut due_answers = existing.answers[day];
+        let mut due_cards = existing.cards[day];
         let mut started = existing.mass[day];
         for k in 0..=day {
             if intro[k] > 0.0 {
                 started += intro[k] * unit.mass[day - k];
                 if k < day {
-                    reviews += intro[k] * unit.answers[day - k];
+                    due_answers += intro[k] * unit.answers[day - k];
+                    due_cards += intro[k] * unit.cards[day - k];
                 }
             }
         }
+        due_cards += backlog_cards;
+        due_answers += backlog_answers;
+        let shown = match (day, p.today) {
+            (0, Some(t)) => f64::from(t.started),
+            _ => p
+                .reviews_per_day
+                .map_or(due_cards, |l| due_cards.min(f64::from(l))),
+        };
+        // Answers go with the cards shown (one each when the model had none due).
+        let reviews = if due_cards > 0.0 {
+            due_answers * (shown / due_cards).min(1.0) + (shown - due_cards).max(0.0)
+        } else {
+            shown
+        };
+        backlog_cards = (due_cards - shown).max(0.0);
+        backlog_answers = (due_answers - reviews).max(0.0);
         let new_answers = intro[day] * unit.answers[0];
         not_yet -= intro[day];
         let answers = reviews + new_answers;
         out.push(ForecastPoint {
             offset: day as u32,
+            cards: shown + intro[day],
+            review_cards: shown,
             reviews,
             new_answers,
             introduced: intro[day],

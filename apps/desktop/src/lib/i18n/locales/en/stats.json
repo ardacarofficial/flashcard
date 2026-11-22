@@ -432,7 +432,7 @@
       "col_cards": "Cards / day",
       "col_minutes": "Minutes / day",
       "col_new": "New cards",
-      "meaning": "Computed from your cards' memory and your preset's target recall; it shows the load and does not apply the daily review limit.",
+      "meaning": "Today is the number the Study window shows. Later days come from your cards' memory and your preset's target recall, within the daily new-card and review limits; reviews over the limit move to the next day.",
       "apply": "Apply",
       "apply_preset": "Applying sets {n} new cards a day in preset “{preset}” (now {current}).",
       "apply_create": "This deck has no preset: applying creates preset “{deck}” with {n} new cards a day.",

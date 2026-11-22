@@ -20,7 +20,7 @@ use fc_core::time::MILLIS_PER_DAY;
 use fc_core::i18n::Locale;
 use fc_core::content::render::render_field;
 use fc_core::note::Note;
-use fc_core::notetype::{FieldKey, FieldRole, NoteType};
+use fc_core::notetype::{FieldRole, NoteType};
 use fc_core::{CardId, DeckId, NoteId, NoteTypeId, SessionId, Timestamp};
 use fc_providers::strategy::{
     Interaction, ReviewOutcome, Scheduler, SchedulerParams, StrategyError,
@@ -174,7 +174,8 @@ pub(crate) struct Session {
     stored: Stored,
     /// The app's queue cache (saves update it).
     cache: Option<Arc<state_diff::QueueCache>>,
-    /// `study.learn_ahead_mins` in ms (v1.3), as read when the session was loaded.
+    /// `study.learn_ahead_mins` in ms (v1.3), as read when the session was loaded (the
+    /// session works with [`Session::shown_window_ms`]).
     pub learn_ahead_ms: i64,
 }
 
@@ -269,6 +270,9 @@ impl Session {
     /// since it was loaded or last saved. Returns what undoes this save (for the
     /// `study.restore` inverse): a diff back to the stored state, not a copy of the queue.
     pub fn save(&mut self, tx: &mut dyn fc_storage::Writes) -> AppResult<state_diff::SessionUndo> {
+        // v1.3: the window the card on screen was chosen with, widened by a raised setting,
+        // never narrowed between two answers ([`Session::shown_window_ms`]).
+        self.state.learn_ahead_ms = Some(self.shown_window_ms());
         let ops = state_diff::diff(&self.stored.state.queue, &self.state.queue);
         let stored_queue = std::mem::take(&mut self.stored.state.queue);
         let stored_rest = serde_json::to_value(&self.stored.state);
@@ -337,19 +341,33 @@ impl Session {
         if self.record.ended_at.is_some() {
             return None;
         }
-        queue::next_entry(&self.state.queue, now, self.learn_ahead_ms)
+        queue::next_entry(&self.state.queue, now, self.shown_window_ms())
+    }
+
+    /// The learn-ahead window the session works with (v1.3): the larger of the setting now
+    /// and the one recorded at the start / last answer. A raised `study.learn_ahead_mins`
+    /// applies at once; a lowered one from the next answer, so the card on screen never
+    /// disappears or becomes unanswerable because of a settings change.
+    pub fn shown_window_ms(&self) -> i64 {
+        self.state
+            .learn_ahead_ms
+            .map_or(self.learn_ahead_ms, |w| w.max(self.learn_ahead_ms))
+    }
+
+    /// Starts the window over from the setting (a new card is chosen: start, answer).
+    pub fn reset_shown_window(&mut self) {
+        self.state.learn_ahead_ms = Some(self.learn_ahead_ms);
     }
 
     /// Fails unless `card` can be answered now: it is queued and available (no due time, or
-    /// due within the learn-ahead window). Not necessarily [`Session::current`]: a learning
-    /// card coming due while another card is on screen must not invalidate the shown card.
+    /// due within the learn-ahead window it was shown with). Not necessarily
+    /// [`Session::current`]: a learning card coming due while another card is on screen must
+    /// not invalidate the shown card, and neither may a lowered learn-ahead setting.
     pub fn require_available(&self, card: CardId, now: Timestamp) -> AppResult<()> {
+        let window = self.shown_window_ms();
         let available = self.record.ended_at.is_none()
             && self.state.queue.iter().any(|e| {
-                e.card_id == card
-                    && e
-                        .due
-                        .is_none_or(|d| d <= now.plus_millis(self.learn_ahead_ms))
+                e.card_id == card && e.due.is_none_or(|d| d <= now.plus_millis(window))
             });
         if !available {
             return Err(not_available(card));
@@ -525,7 +543,7 @@ pub(crate) fn render_for_study(v: View<'_>, card: &Card) -> AppResult<StudyRende
         // v1.3: the field the template asks for (a vocabulary card owes its meaning, not the
         // example and source printed under it), else the answer part of the back.
         Interaction::SelfGrade => (
-            answer_field_text(&nt, &note, &card.template_key)
+            content::answer_field_text(&nt, &note, &card.template_key)
                 .unwrap_or_else(|| answer_text(&r.sides.answer)),
             false,
         ),
@@ -537,27 +555,12 @@ pub(crate) fn render_for_study(v: View<'_>, card: &Card) -> AppResult<StudyRende
     })
 }
 
-/// Plain text of `key`'s value in `note`, rendered as its field kind renders it (Markdown
-/// and all); `None` when the field does not exist or shows no text.
-fn field_text(nt: &NoteType, note: &Note, key: &FieldKey) -> Option<String> {
-    let def = nt.field(key)?;
-    let raw = note.fields.get(key)?;
-    let text = html_to_text(&render_field(def.kind, raw, None, &|_| None));
-    (!text.trim().is_empty()).then_some(text)
-}
-
 /// Rendered HTML of the field with `role` in `note` (`None` when absent or empty).
 fn role_html(nt: &NoteType, note: &Note, role: FieldRole) -> Option<String> {
     let def = nt.field_with_role(role)?;
     let raw = note.fields.get(&def.key)?;
     let html = render_field(def.kind, raw, None, &|_| None);
     (!html_to_text(&html).trim().is_empty()).then_some(html)
-}
-
-/// Text of the field the card's template asks for (`CardTemplate::answer_field`, v1.3).
-fn answer_field_text(nt: &NoteType, note: &Note, template_key: &str) -> Option<String> {
-    let key = content::template_for(nt, template_key)?.answer_field.as_ref()?;
-    field_text(nt, note, key)
 }
 
 /// The v1.3 context hint of a rendered card (X1 rule: a hint may reveal context but never
@@ -818,7 +821,7 @@ pub(crate) fn session_dto(v: View<'_>, s: &Session, now: Timestamp) -> AppResult
         // window `study.learn_ahead_mins`), so the waiting screen's countdown ends exactly
         // when the card comes.
         next_due: if current.is_none() && s.record.ended_at.is_none() {
-            queue::next_due(&s.state.queue).map(|d| queue::available_at(d, s.learn_ahead_ms))
+            queue::next_due(&s.state.queue).map(|d| queue::available_at(d, s.shown_window_ms()))
         } else {
             None
         },

@@ -13,10 +13,11 @@ use fc_api::{ApiError, ErrorCode};
 use fc_core::card::{Card, CardSpec};
 use fc_core::content::builtin;
 use fc_core::content::refs::{extract_links, extract_media, link_key};
+use fc_core::content::render::render_field;
 use fc_core::content::{sanitize_css, sanitize_html, validate_templates};
 use fc_core::i18n::Locale;
 use fc_core::note::{fnv1a64, strip_html, Note};
-use fc_core::notetype::{validate_notetype, CardTemplate, NoteType};
+use fc_core::notetype::{validate_notetype, CardTemplate, FieldKey, FieldRole, NoteType};
 use fc_core::{CardId, DeckId, Timestamp};
 use fc_providers::strategy::{
     CardInput, CardTypeEngine, Interaction, RenderContext, RenderedCard, StrategyError,
@@ -24,6 +25,7 @@ use fc_providers::strategy::{
 use fc_providers::Capability;
 use fc_storage::repo::{CardFilter, FieldSample, NoteRefs};
 use fc_storage::{Reads, WriteTx};
+use fc_study::text::html_to_text;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -111,6 +113,52 @@ pub(crate) fn template_for<'n>(nt: &'n NoteType, template_key: &str) -> Option<&
         .iter()
         .find(|t| t.key == template_key)
         .or_else(|| (nt.templates.len() == 1).then(|| &nt.templates[0]))
+}
+
+/// Plain text of `key`'s value in `note`, rendered as its field kind renders it (Markdown
+/// and all); `None` when the field does not exist or shows no text.
+pub(crate) fn field_text(nt: &NoteType, note: &Note, key: &FieldKey) -> Option<String> {
+    let def = nt.field(key)?;
+    let raw = note.fields.get(key)?;
+    let text = html_to_text(&render_field(def.kind, raw, None, &|_| None));
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_owned())
+}
+
+/// Plain text of the field with `role` in `note` (`None` when absent or empty).
+pub(crate) fn role_text(nt: &NoteType, note: &Note, role: FieldRole) -> Option<String> {
+    field_text(nt, note, &nt.field_with_role(role)?.key)
+}
+
+/// Text of the field the card's template asks for (`CardTemplate::answer_field`, v1.3).
+pub(crate) fn answer_field_text(nt: &NoteType, note: &Note, template_key: &str) -> Option<String> {
+    let key = template_for(nt, template_key)?.answer_field.as_ref()?;
+    field_text(nt, note, key)
+}
+
+/// The word and what it means, by field roles (v1.3), for modes that pair or quiz a term with
+/// its definition whatever the card's direction (match tiles): the `term` (else `surface`)
+/// field, and the field the template asks for when that is not the word itself, else the
+/// `meaning` field. `None` for note types without those roles (callers fall back to the
+/// rendered question and answer).
+pub(crate) fn term_and_definition(
+    nt: &NoteType,
+    note: &Note,
+    template_key: &str,
+) -> Option<(String, String)> {
+    let term =
+        role_text(nt, note, FieldRole::Term).or_else(|| role_text(nt, note, FieldRole::Surface))?;
+    let answer_field = template_for(nt, template_key)
+        .and_then(|t| t.answer_field.as_ref())
+        .and_then(|k| nt.field(k));
+    let definition = match answer_field {
+        Some(f) if !matches!(f.role, Some(FieldRole::Term | FieldRole::Surface)) => {
+            field_text(nt, note, &f.key)
+        }
+        _ => None,
+    }
+    .or_else(|| role_text(nt, note, FieldRole::Meaning))?;
+    Some((term, definition))
 }
 
 /// Creates the cards `note` should have but lacks (no **live** card with that template key)

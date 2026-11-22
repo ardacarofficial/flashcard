@@ -313,9 +313,10 @@ pub struct ForecastDayDto {
     pub offset: u32,
     /// Local date, `YYYY-MM-DD`.
     pub date: String,
-    /// Expected answers that day (reviews + new cards' learning steps).
+    /// Cards to study that day as a launcher counts them (started cards within the decks'
+    /// reviews/day + new cards introduced). Day 0 = today's real queue (`study.options`).
     pub cards: f64,
-    /// Of which: answers on cards started before that day.
+    /// Of which: started cards (reviews and learning cards).
     pub reviews: f64,
     /// New cards introduced that day.
     pub new_cards: f64,
@@ -330,7 +331,7 @@ pub struct ForecastOutlook {
     pub offset: u32,
     /// Its date.
     pub date: String,
-    /// Mean answers per day over that week (the 7 days ending on `date`).
+    /// Mean cards per day over that week (the 7 days ending on `date`).
     pub cards_per_day: f64,
     /// Mean minutes per day over that week.
     pub minutes_per_day: f64,
@@ -345,7 +346,7 @@ pub struct ForecastWeek {
     pub start_date: String,
     /// Last day (the forecast's last day for a short final week).
     pub end_date: String,
-    /// Mean answers per day.
+    /// Mean cards per day.
     pub cards_per_day: f64,
     /// Mean minutes per day.
     pub minutes_per_day: f64,

@@ -13,7 +13,7 @@ offset: number,
  */
 date: string, 
 /**
- * Mean answers per day over that week (the 7 days ending on `date`).
+ * Mean cards per day over that week (the 7 days ending on `date`).
  */
 cards_per_day: number, 
 /**

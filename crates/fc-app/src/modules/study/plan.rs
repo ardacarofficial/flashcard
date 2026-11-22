@@ -18,7 +18,7 @@ use fc_core::card::{CardState, Rating};
 use fc_core::preset::NewCardOrder;
 use fc_core::rng::SplitMix64;
 use fc_core::settings::SettingScope;
-use fc_core::{CardId, DeckId, SessionId, Timestamp};
+use fc_core::{CardId, DeckId, NoteId, SessionId, Timestamp};
 use fc_storage::repo::{NewCardsFirst, ReviewLogRecord, StudyCardFilter, REVIEW_MODE_IMPORTED};
 use fc_storage::Reads;
 use fc_study::day::{StudyDay, MAX_TZ_OFFSET_MINS};
@@ -140,6 +140,8 @@ pub(crate) struct Plan {
     pub query: Option<String>,
     /// Practice scope: the session is `trial` whatever was asked.
     pub practice: bool,
+    /// The queue keeps one review/new card per note (the deck preset's sibling burying).
+    pub bury_siblings: bool,
 }
 
 /// Plans queues at one instant. Caches what several plans share (deck index, today's
@@ -373,8 +375,8 @@ impl<'a> Planner<'a> {
             ..req.filter.clone()
         };
         let mut learning: Vec<QueueEntry> = Vec::new();
-        let mut reviews: Vec<Vec<QueueEntry>> = Vec::new();
-        let mut new: Vec<Vec<QueueEntry>> = Vec::new();
+        let mut reviews: Vec<Vec<(QueueEntry, bool)>> = Vec::new();
+        let mut new: Vec<Vec<(QueueEntry, bool)>> = Vec::new();
         let mut query = None;
         let mut rng = SplitMix64::new(req.seed);
         for root in roots {
@@ -398,8 +400,8 @@ impl<'a> Planner<'a> {
             for e in plan.queue {
                 match e.kind {
                     QueueKind::Learning => learning.push(e),
-                    QueueKind::Review => r.push(e),
-                    QueueKind::New => n.push(e),
+                    QueueKind::Review => r.push((e, plan.bury_siblings)),
+                    QueueKind::New => n.push((e, plan.bury_siblings)),
                 }
             }
             reviews.push(r);
@@ -414,12 +416,23 @@ impl<'a> Planner<'a> {
                 .and_then(|(v, _)| v.as_u64())
                 .map(|n| u32::try_from(n).unwrap_or(u32::MAX)),
         };
-        let mut new = interleave(new);
+        // Sibling burying across decks (v1.3): a note's cards in different decks are not both
+        // studied today — as within one deck, a review/new card whose deck buries siblings is
+        // left out when a card of its note is already queued (learning cards always stay).
+        let mut notes: HashSet<NoteId> = learning.iter().map(|e| e.note_id).collect();
+        let mut keep = |list: Vec<(QueueEntry, bool)>| -> Vec<QueueEntry> {
+            list.into_iter()
+                .filter(|(e, bury)| notes.insert(e.note_id) || !bury)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        let reviews = keep(interleave(reviews));
+        let mut new = keep(interleave(new));
         if let Some(cap) = cap {
             new.truncate(cap as usize);
         }
         let mut queue = learning;
-        queue.extend(interleave(reviews));
+        queue.extend(reviews);
         queue.extend(new);
         if let Some(limit) = req.filter.limit {
             queue.truncate(limit as usize);
@@ -429,6 +442,7 @@ impl<'a> Planner<'a> {
             rng,
             query,
             practice: false,
+            bury_siblings: false,
         })
     }
 
@@ -697,6 +711,7 @@ impl<'a> Planner<'a> {
             rng,
             query,
             practice,
+            bury_siblings,
         })
     }
 }
@@ -713,7 +728,7 @@ fn is_limited(req: &PlanRequest<'_>) -> bool {
 }
 
 /// Takes one entry from each list in turn (lists keep their own order).
-fn interleave(lists: Vec<Vec<QueueEntry>>) -> Vec<QueueEntry> {
+fn interleave<T>(lists: Vec<Vec<T>>) -> Vec<T> {
     let total = lists.iter().map(Vec::len).sum();
     let mut out = Vec::with_capacity(total);
     let mut iters: Vec<_> = lists.into_iter().map(Vec::into_iter).collect();

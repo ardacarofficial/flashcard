@@ -18,6 +18,8 @@ use crate::handler::{inverse_call, CommandCtx, CommandOutcome};
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::modules::study::ext::*;
 use crate::registry::Registry;
+use crate::support::content;
+use crate::support::notes::{require_note, require_notetype};
 use crate::support::summary;
 use fc_api::v1::cardtypes::CardInteraction;
 use fc_api::v1::methods::{
@@ -76,8 +78,8 @@ pub fn register(reg: &mut Registry) {
     reg.command::<ModesMatchFinish>(finish);
 }
 
-/// `study.start` hook: the queued cards become the pool (term = question, definition = the
-/// answer); the queue is emptied (a match is played by rounds, not card by card).
+/// `study.start` hook: the queued cards become the pool (term = the `term`/`surface` field and
+/// definition = the asked-for or `meaning` field by role, else question / answer); the queue is emptied (a match is played by rounds, not card by card).
 pub(super) fn init(v: View<'_>, state: &mut SessionState) -> AppResult<()> {
     let mut pool = Vec::new();
     for e in &state.queue {
@@ -85,17 +87,27 @@ pub(super) fn init(v: View<'_>, state: &mut SessionState) -> AppResult<()> {
             break;
         }
         let card = require_live_card(v.reads, e.card_id)?;
-        let r = render_for_study(v, &card)?;
-        let definition = match &r.card.sides.interaction {
-            CardInteraction::Choice { options, correct } => options
-                .get(*correct as usize)
-                .map(|o| html_to_text(o))
-                .unwrap_or_default(),
-            CardInteraction::SelfGrade | CardInteraction::Type { .. } => r.expected.clone(),
+        // v1.3: a vocabulary card's tiles are its word and its meaning (field roles), never
+        // the rendered front (which may carry the sentence) or the whole back.
+        let note = require_note(v.reads, card.note_id)?;
+        let nt = require_notetype(v.reads, note.notetype_id)?;
+        let (term, definition) = match content::term_and_definition(&nt, &note, &card.template_key) {
+            Some(pair) => pair,
+            None => {
+                let r = render_for_study(v, &card)?;
+                let definition = match &r.card.sides.interaction {
+                    CardInteraction::Choice { options, correct } => options
+                        .get(*correct as usize)
+                        .map(|o| html_to_text(o))
+                        .unwrap_or_default(),
+                    CardInteraction::SelfGrade | CardInteraction::Type { .. } => r.expected.clone(),
+                };
+                (html_to_text(&r.card.sides.question), definition)
+            }
         };
         pool.push(MatchItem {
             card_id: card.id,
-            term: html_to_text(&r.card.sides.question).trim().to_owned(),
+            term: term.trim().to_owned(),
             definition: definition.trim().to_owned(),
         });
     }

@@ -679,6 +679,141 @@ pub fn learn_ahead_is_a_setting_and_the_wait_is_truthful(f: &Factory) {
     assert_eq!(e.code, ErrorCode::ValidationSettingValue);
 }
 
+/// v1.3 closing pass: a note's cards in different decks are not both in the collection's
+/// queue when their deck buries siblings (as within one deck); each deck alone still offers
+/// its own card.
+pub fn siblings_across_decks_in_the_collection_queue(f: &Factory) {
+    let t = T::new(f(), 113);
+    let nt = super::two_way(&t);
+    let a = t.deck("A");
+    let b = t.deck("B");
+    let note = t.note_of(nt, a.id, "dog", "köpek");
+    assert_eq!(note.cards.len(), 2);
+    t.put_card(note.cards[1].id, |c| c.deck_id = b.id);
+    let due = |d: Option<DeckId>| t.scope(&t.options(d), StudyScope::Due).count;
+    assert_eq!((due(Some(a.id)), due(Some(b.id))), (1, 1));
+    assert_eq!(due(None), 1, "siblings buried across decks");
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, None);
+    assert_eq!(T::served(&s), 1);
+    t.ok::<StudyEnd>(SessionRef { session_id: s.id });
+    // B does not bury siblings: its card stays next to A's.
+    let preset = t.ok::<PresetsCreate>(fc_api::v1::presets::CreatePreset {
+        name: "no bury".into(),
+        config: Some(fc_core::preset::PresetConfig {
+            bury_siblings: false,
+            ..fc_core::preset::PresetConfig::default()
+        }),
+    });
+    t.ok::<PresetsAssign>(fc_api::v1::presets::AssignPreset {
+        deck_ids: vec![b.id],
+        preset_id: Some(preset.id),
+    });
+    assert_eq!(due(None), 2);
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, None);
+    assert_eq!(T::served(&s), 2);
+}
+
+/// v1.3 closing pass: the planning forecast's day 0 is the launcher's count (same planner),
+/// for a deck and for the whole collection, and later days keep the presets' limits.
+pub fn forecast_today_is_the_launchers_count(f: &Factory) {
+    use fc_api::v1::planning::ForecastRequest;
+    let t = T::new(f(), 114);
+    let a = t.deck("A");
+    let b = t.deck("B");
+    for i in 0..25 {
+        t.note(a.id, &format!("a{i}"), "x");
+    }
+    let now = t.now();
+    for i in 0..12 {
+        let id = t.note(b.id, &format!("b{i}"), "x");
+        t.put_card(id, |c| {
+            c.scheduling.state = CardState::Review;
+            c.scheduling.due = Some(now.plus_millis(-MILLIS_PER_DAY));
+            c.scheduling.stability = Some(10.0);
+            c.scheduling.difficulty = Some(5.0);
+            c.scheduling.last_review = Some(now.plus_millis(-11 * MILLIS_PER_DAY));
+            c.scheduling.reps = 3;
+        });
+    }
+    // B: 5 reviews a day; A: the default 20 new a day.
+    let preset = t.ok::<PresetsCreate>(fc_api::v1::presets::CreatePreset {
+        name: "5 reviews".into(),
+        config: Some(fc_core::preset::PresetConfig {
+            reviews_per_day: 5,
+            ..fc_core::preset::PresetConfig::default()
+        }),
+    });
+    t.ok::<PresetsAssign>(fc_api::v1::presets::AssignPreset {
+        deck_ids: vec![b.id],
+        preset_id: Some(preset.id),
+    });
+    let forecast = |deck: Option<DeckId>| {
+        t.ok::<PlanningForecast>(ForecastRequest {
+            deck_id: deck,
+            tz_offset_mins: Some(0),
+            days: Some(10),
+            ..ForecastRequest::default()
+        })
+    };
+    let due = |d: Option<DeckId>| t.scope(&t.options(d), StudyScope::Due).count;
+    for deck in [None, Some(a.id), Some(b.id)] {
+        let f = forecast(deck);
+        assert_eq!(f.days[0].cards, f64::from(due(deck)), "day 0 of {deck:?}");
+    }
+    assert_eq!(due(None), 25);
+    let fb = forecast(Some(b.id));
+    assert_eq!(fb.days[0].reviews, 5.0);
+    assert!(fb.days.iter().all(|d| d.reviews <= 5.0 + 1e-9), "reviews/day kept");
+    assert_eq!(fb.days[1].reviews, 5.0, "the rest of today's reviews come tomorrow");
+    let fa = forecast(Some(a.id));
+    assert!(fa.days.iter().all(|d| d.new_cards <= 20.0 + 1e-9), "new/day kept");
+    // After studying, day 0 follows the queue.
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(b.id));
+    t.answer_all(s, Rating::Good);
+    assert_eq!(due(None), 20);
+    assert_eq!(forecast(None).days[0].cards, 20.0);
+}
+
+/// v1.3 closing pass: lowering `study.learn_ahead_mins` while a learning card is on screen
+/// never takes that card away or makes its answer fail; the new value counts from the next
+/// card.
+pub fn lowering_learn_ahead_keeps_the_card_on_screen(f: &Factory) {
+    let t = T::new(f(), 115);
+    let deck = t.deck("D");
+    let a = t.note(deck.id, "a", "1");
+    let b = t.note(deck.id, "b", "2");
+    let due_at = t.now().plus_millis(10 * MIN);
+    for id in [a, b] {
+        t.put_card(id, |c| {
+            c.scheduling.state = CardState::Learning;
+            c.scheduling.due = Some(due_at);
+        });
+    }
+    // Default 20 min: a card due in 10 is shown now.
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(deck.id));
+    let shown = s.current.as_ref().unwrap().card_id;
+    t.ok::<SettingsSet>(SetSetting {
+        scope: SettingScope::App,
+        key: LEARN_AHEAD_MINS.into(),
+        value: serde_json::json!(0),
+    });
+    // The session read again still shows it, and its answer is taken.
+    assert_eq!(t.session(s.id).current.map(|c| c.card_id), Some(shown));
+    let s = t.answer(s.id, shown, Rating::Good);
+    assert_eq!(t.history(shown).reviews.len(), 1, "the answer was saved");
+    // The next card is chosen with the new value: the other one waits for its step.
+    assert!(s.current.is_none());
+    assert_eq!(s.ended_at, None);
+    assert_eq!(s.next_due, Some(due_at));
+    // Raising it again applies at once.
+    t.ok::<SettingsSet>(SetSetting {
+        scope: SettingScope::App,
+        key: LEARN_AHEAD_MINS.into(),
+        value: serde_json::json!(20),
+    });
+    assert!(t.session(s.id).current.is_some());
+}
+
 macro_rules! launcher_suite {
     ($factory:expr) => {
         launcher_suite!(@tests $factory;
@@ -693,6 +828,9 @@ macro_rules! launcher_suite {
             the_collection_queue_is_each_decks_own,
             a_collection_cap_only_when_set,
             learn_ahead_is_a_setting_and_the_wait_is_truthful,
+            siblings_across_decks_in_the_collection_queue,
+            forecast_today_is_the_launchers_count,
+            lowering_learn_ahead_keeps_the_card_on_screen,
         );
     };
     (@tests $factory:expr; $($name:ident),* $(,)?) => {

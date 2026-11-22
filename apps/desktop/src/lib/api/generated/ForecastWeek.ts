@@ -17,7 +17,7 @@ start_date: string,
  */
 end_date: string, 
 /**
- * Mean answers per day.
+ * Mean cards per day.
  */
 cards_per_day: number, 
 /**

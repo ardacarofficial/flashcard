@@ -13,11 +13,12 @@ offset: number,
  */
 date: string, 
 /**
- * Expected answers that day (reviews + new cards' learning steps).
+ * Cards to study that day as a launcher counts them (started cards within the decks'
+ * reviews/day + new cards introduced). Day 0 = today's real queue (`study.options`).
  */
 cards: number, 
 /**
- * Of which: answers on cards started before that day.
+ * Of which: started cards (reviews and learning cards).
  */
 reviews: number, 
 /**

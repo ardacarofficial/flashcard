@@ -506,3 +506,46 @@ fn imports_map_sentence_columns_by_role() {
         ("dog", "köpek")
     );
 }
+
+/// v1.3 closing pass: Match pairs a vocabulary card's word with its meaning (field roles),
+/// never the rendered front or the whole back (sentence, translation, source); Learn expects
+/// the meaning alone. A note type without roles keeps the front / answer.
+#[test]
+fn match_and_learn_use_the_word_and_its_meaning() {
+    use fc_api::v1::modes::{LearnAnswer, MatchRef, MatchSide};
+    let t = TestApp::mem();
+    let d = deck(&t, "Subtitle");
+    went(&t, d.id);
+    note(
+        &t,
+        nt(builtin::SUBTITLE),
+        d.id,
+        &[("word", "bring"), ("surface", "brought"), ("meaning", "getirmek"),
+          ("sentence", "He <b>brought</b> his sister to the party."), ("source", "Film · 2:00")],
+    );
+    note(&t, CLASSIC_ID, d.id, &[("front", "apple"), ("back", "elma")]);
+    let s = start(&t, d.id, "match", serde_json::Value::Null);
+    let r = t.ok::<ModesMatchStart>(MatchRef { session_id: s.id });
+    let side = |side: MatchSide| {
+        let mut v: Vec<String> = r.tiles.iter().filter(|x| x.side == side).map(|x| x.text.clone()).collect();
+        v.sort();
+        v
+    };
+    assert_eq!(side(MatchSide::Term), ["apple", "bring", "go"]);
+    assert_eq!(side(MatchSide::Definition), ["elma", "getirmek", "gitmek"]);
+
+    // Learn: one card, written stage; the meaning alone is right and is what it expects.
+    let t = TestApp::mem();
+    let d2 = deck(&t, "Learn");
+    let one = went(&t, d2.id).cards[0].id;
+    let s = start(&t, d2.id, "learn", serde_json::Value::Null);
+    assert_eq!(current(&s).card_id, one);
+    let r = t.ok::<ModesLearnAnswer>(LearnAnswer {
+        session_id: s.id,
+        card_id: one,
+        choice: None,
+        given: Some("gitmek".into()),
+        duration_ms: 1000,
+    });
+    assert_eq!((r.grade, r.expected.as_str()), (AnswerGrade::Correct, "gitmek"));
+}

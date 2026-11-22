@@ -95,6 +95,13 @@ pub struct SessionState {
     /// sessions, so their persisted state is unchanged.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub modes: Option<crate::modes::ModesState>,
+    /// v1.3: the learn-ahead window (ms) the card on screen was chosen with — the app's
+    /// `study.learn_ahead_mins` at the start or the last answer, widened (never narrowed) by
+    /// saves in between. A card the session showed stays answerable when the setting is
+    /// lowered while it is on screen; the new value chooses from the next card. Absent in
+    /// sessions from before v1.3 (the setting alone).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub learn_ahead_ms: Option<i64>,
 }
 
 /// Order of reviews and new cards.

@@ -1243,8 +1243,10 @@ pub fn forecast_and_apply_pace(f: &Factory) {
     assert_eq!(fc.days.len(), 14);
     assert_eq!(fc.days[0].date, fc_core::stats::iso_date(today));
     assert_eq!((fc.days[0].new_cards, fc.days[1].new_cards), (20.0, 10.0));
-    // 3 answers per new card on its first day (2 learning steps + 1).
-    assert!((fc.days[0].cards - 60.0).abs() < 1e-9);
+    // v1.3 closing pass: a day counts cards as the launcher does (today = its queue, 20);
+    // the minutes still count 3 answers per new card on its first day (2 steps + 1).
+    assert!((fc.days[0].cards - 20.0).abs() < 1e-9);
+    assert!((fc.days[0].minutes - 60.0 * 8.0 / 60.0).abs() < 1e-9);
     assert_eq!(fc.new_finished_on, Some(fc_core::stats::iso_date(today + 1)));
     assert!(!fc.measured_time && (fc.secs_per_answer - 8.0).abs() < 1e-9);
     assert_eq!(fc.peak.offset, 0);
