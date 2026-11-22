@@ -4,3 +4,4 @@
 *.icns binary
 *.apkg binary
 *.colpkg binary
+CHANGELOG.md merge=union
