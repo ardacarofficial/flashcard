@@ -1,7 +1,10 @@
 import { formatCurrency } from '$lib/format';
 import { api } from '$lib/api';
+import { td } from '$lib/i18n/index.svelte';
 import type {
+  AiConnectionTest,
   AiJobResult,
+  AiModelList,
   AiPreview,
   AiProviderId,
   AiSourceInput,
@@ -77,4 +80,35 @@ export function aiResult(job: JobDto): AiJobResult | null {
 export function usd(v: number | null | undefined): string | null {
   if (v === null || v === undefined) return null;
   return formatCurrency(v, 'USD');
+}
+
+/** Fetches a provider's model list (an `ai.models` job); the list is also cached on the provider. */
+export async function fetchModels(id: AiProviderId): Promise<{ job: JobDto; list: AiModelList | null }> {
+  const started = await api.call('ai.providers.refresh_models', { id });
+  const job = isFinal(started) ? started : await followJob(started, () => {});
+  return { job, list: resultOf<AiModelList>(job) };
+}
+
+/** Tests a provider's connection (an `ai.test` job: one tiny request, explained). */
+export async function testConnection(id: AiProviderId): Promise<{ job: JobDto; test: AiConnectionTest | null }> {
+  const started = await api.call('ai.providers.test', { id });
+  const job = isFinal(started) ? started : await followJob(started, () => {});
+  return { job, test: resultOf<AiConnectionTest>(job) };
+}
+
+/** Models matching `query` (case-insensitive, every word), the exact match first. */
+export function filterModels(models: readonly string[], query: string): string[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const hits = models.filter((m) => words.every((w) => m.toLowerCase().includes(w)));
+  const exact = query.trim();
+  return exact && hits.includes(exact) ? [exact, ...hits.filter((m) => m !== exact)] : hits;
+}
+
+/** A failed job's error in words: its message plus the provider's own reason, if any. */
+export function jobErrorText(job: JobDto, fallback: string): string {
+  const e = job.error;
+  if (!e) return fallback;
+  const reason = typeof e.details?.reason === 'string' ? e.details.reason : null;
+  const text = td(e.message_key);
+  return reason && reason !== text ? `${text} (${reason})` : text;
 }

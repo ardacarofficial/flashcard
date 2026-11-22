@@ -111,6 +111,7 @@ fn ai_note_batches_are_replayable_undo_steps() {
         AiRun::NAME,
         AiSourcesExtract::NAME,
         AiProvidersRefreshModels::NAME,
+        AiProvidersTest::NAME,
     ] {
         assert!(!replayable(&t, name), "{name}");
     }

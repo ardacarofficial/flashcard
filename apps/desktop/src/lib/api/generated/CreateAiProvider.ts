@@ -2,7 +2,8 @@
 import type { AiProviderKind } from "./AiProviderKind";
 
 /**
- * `ai.providers.create`. Missing values come from the kind's defaults.
+ * `ai.providers.create`. Missing values come from the preset recognised from `kind` and
+ * `base_url` (name, default model, suggested models), else the kind's defaults.
  */
 export type CreateAiProvider = { 
 /**

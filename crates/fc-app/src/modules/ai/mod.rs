@@ -16,6 +16,12 @@
 //! `ai.provider.<id>`): `ai.providers.set_key` is not an undo step, so its params never reach
 //! the oplog; responses carry only `has_key`; provider errors are scrubbed of the key.
 //!
+//! **Provider setup** (v1.3, docs/06 §1.1): `ai.providers.list` carries the preset gallery
+//! (`fc_ai::presets`); a provider's preset, key rule and status are derived from its kind and
+//! address; `ai.providers.refresh_models` (`ai.models` job → `AiModelList`) and
+//! `ai.providers.test` (`ai.test` job → `AiConnectionTest`, kept in [`AiServices`] for this
+//! app run) make one request each.
+//!
 //! **Classifications** (docs/02 §8.1): generation and field filling read the deck's
 //! classifications (values given or their defaults), put them in the prompt ("Seviye: B1") and
 //! on the generated notes.
@@ -34,16 +40,20 @@ mod tests;
 mod tests_v2;
 #[cfg(test)]
 mod tests_phase3;
+#[cfg(test)]
+mod tests_presets;
 
 use crate::app::App;
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::registry::Registry;
 use fc_ai::secrets::{NoSecrets, SecretStore};
-use fc_api::v1::ai::AiFeature;
+use fc_api::v1::ai::{AiConnectionTest, AiFeature};
 use fc_core::settings::{SettingDef, SettingKind, SettingScopeKind};
 use fc_core::AiProviderId;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use fc_storage::repo::AiProviderRecord;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 /// Module id.
@@ -53,6 +63,8 @@ pub const ID: &str = "ai";
 pub const REQUEST_JOB: &str = "ai.request";
 /// Job kind of a model list refresh.
 pub const MODELS_JOB: &str = "ai.models";
+/// Job kind of a connection test.
+pub const TEST_JOB: &str = "ai.test";
 /// Job kind of a source extraction (PDF pages, web page).
 pub const SOURCE_JOB: &str = "ai.source";
 /// Worker lane of every AI job: network waits never hold up imports/exports.
@@ -84,6 +96,9 @@ pub struct AiServices {
     keychain: AtomicBool,
     /// First retry pause in ms (doubles each retry); tests set 0.
     retry_base_ms: AtomicU64,
+    /// Last connection test per provider, with the setup it tested ([`test_fingerprint`]).
+    /// Memory only: a status for this app run, not data (nothing to undo or sync).
+    tests: Mutex<HashMap<AiProviderId, (String, AiConnectionTest)>>,
 }
 
 impl Default for AiServices {
@@ -92,8 +107,15 @@ impl Default for AiServices {
             secrets: RwLock::new(Arc::new(NoSecrets)),
             keychain: AtomicBool::new(false),
             retry_base_ms: AtomicU64::new(1000),
+            tests: Mutex::new(HashMap::new()),
         }
     }
+}
+
+/// What a connection test result is valid for: the protocol, address and model. (A key
+/// change forgets the result explicitly: the key itself is never part of anything stored.)
+pub(crate) fn test_fingerprint(p: &AiProviderRecord) -> String {
+    format!("{}\n{}\n{}", p.kind, p.base_url, p.default_model)
 }
 
 impl AiServices {
@@ -132,6 +154,25 @@ impl AiServices {
             retry_after_ms,
             jitter_unit(),
         )
+    }
+
+    /// The last test of `p`, if it tested `p`'s current setup.
+    pub(crate) fn last_test(&self, p: &AiProviderRecord) -> Option<AiConnectionTest> {
+        let tests = self.tests.lock().ok()?;
+        let (fingerprint, test) = tests.get(&p.id)?;
+        (*fingerprint == test_fingerprint(p)).then(|| test.clone())
+    }
+
+    pub(crate) fn remember_test(&self, p: &AiProviderRecord, test: AiConnectionTest) {
+        if let Ok(mut tests) = self.tests.lock() {
+            tests.insert(p.id, (test_fingerprint(p), test));
+        }
+    }
+
+    pub(crate) fn forget_test(&self, id: AiProviderId) {
+        if let Ok(mut tests) = self.tests.lock() {
+            tests.remove(&id);
+        }
     }
 
     #[cfg(test)]

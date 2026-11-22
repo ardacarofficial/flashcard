@@ -12,7 +12,7 @@ use fc_providers::{Capability, ProviderError, ProviderErrorKind, ProviderInfo, P
 use serde_json::{json, Value};
 
 /// API version header value.
-const VERSION: &str = "2023-06-01";
+pub(crate) const VERSION: &str = "2023-06-01";
 /// Name of the tool that carries structured output.
 const TOOL: &str = "emit_result";
 
@@ -29,7 +29,7 @@ impl Anthropic {
         }
     }
 
-    fn body(&self, request: &CompletionRequest) -> ProviderResult<Value> {
+    pub(crate) fn body(&self, request: &CompletionRequest) -> ProviderResult<Value> {
         let mut messages = Vec::new();
         for m in &request.messages {
             let mut content = Vec::new();

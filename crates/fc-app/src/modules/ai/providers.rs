@@ -4,12 +4,13 @@
 //! oplog).
 
 use super::context::{require_live_provider, require_provider};
-use super::{key_account, AiServices, MODELS_JOB};
+use super::{key_account, AiServices, MODELS_JOB, TEST_JOB};
 use crate::error::{AppError, AppResult};
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
 use crate::registry::Registry;
 use crate::support::summary;
 use fc_ai::secrets::{Secret, SecretError};
+use fc_ai::presets::{self, ProviderPreset};
 use fc_ai::ProviderKind;
 use fc_api::v1::ai::*;
 use fc_api::v1::common::Empty;
@@ -18,7 +19,7 @@ use fc_api::v1::jobs::JobDto;
 use fc_api::v1::methods::{
     AiPricesDelete, AiPricesList, AiPricesSet, AiProvidersCreate, AiProvidersDelete,
     AiProvidersList, AiProvidersRefreshModels, AiProvidersRestore, AiProvidersSetKey,
-    AiProvidersSetModels, AiProvidersUpdate, AiRoutesList, AiRoutesSet,
+    AiProvidersSetModels, AiProvidersTest, AiProvidersUpdate, AiRoutesList, AiRoutesSet,
 };
 use fc_api::{ApiError, ErrorCode};
 use fc_core::AiProviderId;
@@ -38,6 +39,7 @@ pub(super) fn register(reg: &mut Registry, services: &Arc<AiServices>) {
     let s = Arc::clone(services);
     reg.command::<AiProvidersSetKey>(move |r, ctx: &mut CommandCtx<'_>| set_key(&s, r, ctx));
     reg.command::<AiProvidersRefreshModels>(refresh_models);
+    reg.command::<AiProvidersTest>(test);
     let s = Arc::clone(services);
     reg.command::<AiProvidersRestore>(move |r, ctx: &mut CommandCtx<'_>| restore(&s, r, ctx));
     reg.command::<AiProvidersSetModels>(set_models);
@@ -82,22 +84,37 @@ pub(crate) fn parse_kind(s: &str) -> AppResult<AiProviderKind> {
         .map_err(|e| AppError::api(ErrorCode::Internal, format!("provider kind {s:?}: {e}")))
 }
 
-/// Suggested starting values of a kind (Claude first; model ids are data, editable).
+/// Suggested starting values of a kind: those of the preset its default address is (model ids
+/// are data, editable).
 fn kind_info(kind: ProviderKind) -> AiProviderKindInfo {
-    let (default_model, suggested): (&str, &[&str]) = match kind {
-        ProviderKind::Anthropic => (
-            "claude-sonnet-5-5",
-            &["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"],
-        ),
-        _ => ("", &[]),
-    };
+    let preset = presets::detect(kind, kind.default_base_url());
     AiProviderKindInfo {
         kind: api_kind(kind),
         default_base_url: kind.default_base_url().into(),
-        default_model: default_model.into(),
-        suggested_models: suggested.iter().map(|s| (*s).to_owned()).collect(),
+        default_model: preset.default_model.into(),
+        suggested_models: strings(preset.suggested_models),
         needs_key: kind.needs_key(),
         local: kind.local(),
+    }
+}
+
+fn strings(items: &[&str]) -> Vec<String> {
+    items.iter().map(|s| (*s).to_owned()).collect()
+}
+
+fn preset_dto(p: &ProviderPreset) -> AiProviderPreset {
+    AiProviderPreset {
+        id: p.id.into(),
+        kind: api_kind(p.kind),
+        name: p.name.into(),
+        base_url: p.base_url.into(),
+        needs_key: p.needs_key,
+        key_url: p.key_url.map(str::to_owned),
+        setup_url: p.setup_url.map(str::to_owned),
+        local: p.local,
+        free: p.free,
+        default_model: p.default_model.into(),
+        suggested_models: strings(p.suggested_models),
     }
 }
 
@@ -115,9 +132,26 @@ pub(crate) fn has_key(services: &AiServices, id: AiProviderId) -> bool {
     matches!(services.secrets().get(&key_account(id)), Ok(Some(_)))
 }
 
+/// Whether requests to `p` need a key (its preset's rule, see [`presets::needs_key`]).
+pub(crate) fn needs_key(p: &AiProviderRecord) -> AppResult<bool> {
+    Ok(presets::needs_key(kind_of(parse_kind(&p.kind)?), &p.base_url))
+}
+
 pub(crate) fn dto(services: &AiServices, p: &AiProviderRecord) -> AppResult<AiProviderDto> {
     let kind = parse_kind(&p.kind)?;
     let k = kind_of(kind);
+    let needs_key = presets::needs_key(k, &p.base_url);
+    let has_key = has_key(services, p.id);
+    let last_test = services.last_test(p);
+    let status = if needs_key && !has_key {
+        AiProviderStatus::NeedsKey
+    } else if p.default_model.trim().is_empty() {
+        AiProviderStatus::NeedsModel
+    } else if last_test.as_ref().is_some_and(|t| t.outcome != AiTestOutcome::Ok) {
+        AiProviderStatus::TestFailed
+    } else {
+        AiProviderStatus::Ready
+    };
     Ok(AiProviderDto {
         id: p.id,
         kind,
@@ -126,22 +160,15 @@ pub(crate) fn dto(services: &AiServices, p: &AiProviderRecord) -> AppResult<AiPr
         default_model: p.default_model.clone(),
         models: p.models.clone(),
         is_default: p.is_default,
-        has_key: has_key(services, p.id),
-        needs_key: k.needs_key(),
-        local: k.local() || is_loopback(&p.base_url),
+        has_key,
+        needs_key,
+        local: k.local() || presets::is_loopback(&p.base_url),
+        preset: presets::detect(k, &p.base_url).id.into(),
+        status,
+        last_test,
         created_at: p.created_at,
         updated_at: p.updated_at,
     })
-}
-
-/// A base URL on this computer.
-fn is_loopback(url: &str) -> bool {
-    let rest = url.split("://").nth(1).unwrap_or(url);
-    if rest.starts_with("[::1]") {
-        return true;
-    }
-    let host = rest.split(['/', ':']).next().unwrap_or_default();
-    host == "localhost" || host.starts_with("127.")
 }
 
 fn snapshot(p: &AiProviderRecord) -> AppResult<AiProviderSnapshot> {
@@ -239,6 +266,7 @@ fn list(services: &AiServices, reads: &dyn Reads) -> AppResult<AiProviderList> {
             .map(|p| dto(services, p))
             .collect::<AppResult<_>>()?,
         kinds: ProviderKind::ALL.into_iter().map(kind_info).collect(),
+        presets: presets::PRESETS.iter().map(preset_dto).collect(),
         keychain: services.has_keychain(),
         keychain_session_only: services.has_keychain() && !services.keys_persist(),
     })
@@ -249,11 +277,18 @@ fn create(
     req: CreateAiProvider,
     ctx: &mut CommandCtx<'_>,
 ) -> AppResult<CommandOutcome<AiProviderDto>> {
-    let info = kind_info(kind_of(req.kind));
-    let name = clean_name(req.name.as_deref().unwrap_or(default_name(req.kind)))?;
-    let base_url = clean_url(req.base_url.as_deref().unwrap_or(&info.default_base_url))?;
+    let kind = kind_of(req.kind);
+    let base_url = clean_url(req.base_url.as_deref().unwrap_or(kind.default_base_url()))?;
+    // Name and models come from the preset the address is (OpenRouter, Groq, …).
+    let preset = presets::detect(kind, &base_url);
+    let fallback_name = if preset.name.is_empty() {
+        default_name(req.kind)
+    } else {
+        preset.name
+    };
+    let name = clean_name(req.name.as_deref().unwrap_or(fallback_name))?;
     let default_model = clean_model(
-        req.default_model.as_deref().unwrap_or(&info.default_model),
+        req.default_model.as_deref().unwrap_or(preset.default_model),
         "default_model",
     )?;
     let live = ctx.reads().list_ai_providers(false)?;
@@ -266,7 +301,7 @@ fn create(
         name: name.clone(),
         base_url,
         default_model,
-        models: info.suggested_models.clone(),
+        models: strings(preset.suggested_models),
         is_default,
         position: all.iter().map(|p| p.position + 1).max().unwrap_or(0),
         created_at: ctx.now,
@@ -339,6 +374,7 @@ fn update(
             .secrets()
             .delete(&key_account(p.id))
             .map_err(keychain_error)?;
+        services.forget_test(p.id);
     }
     Ok(CommandOutcome {
         response: dto(services, &p)?,
@@ -375,6 +411,7 @@ fn delete(
         .secrets()
         .delete(&key_account(old.id))
         .map_err(keychain_error)?;
+    services.forget_test(old.id);
     Ok(CommandOutcome {
         response: dto(services, &p)?,
         inverse: vec![inverse_call::<AiProvidersRestore>(&RestoreAiProviders { rows })?],
@@ -408,6 +445,7 @@ fn restore(
                     .secrets()
                     .delete(&key_account(row.id))
                     .map_err(keychain_error)?;
+                services.forget_test(row.id);
             }
         }
         ctx.tx.upsert_ai_provider(&restored)?;
@@ -455,6 +493,8 @@ fn set_key(
         None => store.delete(&account),
     }
     .map_err(keychain_error)?;
+    // A test of the old key says nothing about the new one.
+    services.forget_test(p.id);
     Ok(CommandOutcome {
         response: dto(services, &p)?,
         // Not an undo step: the params (the key) must never be written to the oplog.
@@ -471,6 +511,17 @@ fn refresh_models(req: AiProviderRef, ctx: &mut CommandCtx<'_>) -> AppResult<Com
         response: job,
         inverse: vec![],
         summary: summary::<AiProvidersRefreshModels>(),
+        events: vec![],
+    })
+}
+
+fn test(req: AiProviderRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<JobDto>> {
+    require_live_provider(ctx.reads(), req.id)?;
+    let job = crate::jobs::enqueue(ctx, TEST_JOB, serde_json::json!({ "provider_id": req.id }))?;
+    Ok(CommandOutcome {
+        response: job,
+        inverse: vec![],
+        summary: summary::<AiProvidersTest>(),
         events: vec![],
     })
 }

@@ -27,9 +27,10 @@ describe('<AiScreen> on the dev mock', () => {
     const deck = (await api.deck.tree()).roots[0]!.deck.id;
     render(AiScreen, { ctx: ctx(deck) });
 
-    // A provider first: Claude is the default kind; without a key nothing can be sent.
+    // A provider first (v1.3: "Add provider" opens the preset gallery, covered in
+    // providers.test.ts; here Claude is made directly): without a key nothing can be sent.
+    await api.call('ai.providers.create', { kind: 'anthropic', name: null, base_url: null, default_model: null, is_default: null });
     await fireEvent.click(screen.getByRole('tab', { name: 'Providers' }));
-    await fireEvent.click(await screen.findByRole('button', { name: 'Add provider' }));
     expect(await screen.findByText('No API key yet.')).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('tab', { name: 'Make cards' }));

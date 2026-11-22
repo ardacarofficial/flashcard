@@ -103,10 +103,120 @@ pub struct AiProviderDto {
     pub needs_key: bool,
     /// Runs on this computer (nothing leaves it).
     pub local: bool,
+    /// Preset this provider is recognised as from its kind and address (`openrouter`,
+    /// `custom`, … — an id of [`AiProviderList::presets`]).
+    pub preset: String,
+    /// Whether it can be used now, or what is missing.
+    pub status: AiProviderStatus,
+    /// The last connection test of this setup in this app run (`null` = not tested, or the
+    /// key, address or model changed since).
+    pub last_test: Option<AiConnectionTest>,
     /// Created.
     pub created_at: Timestamp,
     /// Updated.
     pub updated_at: Timestamp,
+}
+
+/// Whether a provider can be used, or the first thing missing (in setup order).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum AiProviderStatus {
+    /// Key (if needed) and model set; the last test (if any) passed.
+    Ready,
+    /// The provider needs an API key and none is stored.
+    NeedsKey,
+    /// No default model chosen.
+    NeedsModel,
+    /// The last connection test of this setup failed (see `last_test`).
+    TestFailed,
+}
+
+/// A named starting point for a new provider (v1.3 gallery). Presets reuse the four
+/// protocols; creating one is `ai.providers.create` with its `kind` and `base_url`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AiProviderPreset {
+    /// Stable id (`anthropic`, `openai`, `openrouter`, `gemini`, `groq`, `mistral`,
+    /// `deepseek`, `ollama`, `lmstudio`, `custom`); UI text is `ai.preset.<id>.*`.
+    pub id: String,
+    /// Protocol.
+    pub kind: AiProviderKind,
+    /// The vendor's name (`""` for `custom`: named in the user's language by the UI).
+    pub name: String,
+    /// Base URL (`""` for `custom`: the user types it).
+    pub base_url: String,
+    /// Requests need a key (hosted services). Others accept an optional one.
+    pub needs_key: bool,
+    /// Where to create a key.
+    pub key_url: Option<String>,
+    /// Where to download the software (local servers).
+    pub setup_url: Option<String>,
+    /// Runs on this computer.
+    pub local: bool,
+    /// Free: local, or a free tier / free models.
+    pub free: bool,
+    /// Model a new provider starts with (`""` = pick from the fetched list).
+    pub default_model: String,
+    /// Model ids offered before the list is fetched.
+    pub suggested_models: Vec<String>,
+}
+
+/// What a connection test found (plain-language categories).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum AiTestOutcome {
+    /// The provider answered.
+    Ok,
+    /// A key is needed and none is stored (nothing was sent).
+    NoKey,
+    /// The key was rejected.
+    WrongKey,
+    /// No credit / quota left on the account.
+    NoCredit,
+    /// The model does not exist or this key may not use it.
+    ModelNotFound,
+    /// Something answered, but not this API: check the address.
+    WrongAddress,
+    /// Too many requests right now.
+    RateLimited,
+    /// The provider had an error of its own.
+    ServiceDown,
+    /// The server could not be reached (offline, not running, wrong host, timeout).
+    CannotReach,
+    /// The secure connection failed (certificate; a proxy or antivirus intercepting TLS).
+    Tls,
+    /// Something else (see `message`).
+    Failed,
+}
+
+/// Result of an `ai.test` job (`JobDto.result`), also kept as the provider's `last_test`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AiConnectionTest {
+    /// Provider.
+    pub provider_id: AiProviderId,
+    /// Category.
+    pub outcome: AiTestOutcome,
+    /// Model the test asked (`null` = no model chosen: the model list was requested).
+    pub model: Option<String>,
+    /// Model that answered, as the provider names it (`openrouter/auto` → the routed one).
+    pub answered_model: Option<String>,
+    /// HTTP status (`null` = no answer, or nothing sent).
+    pub http_status: Option<u16>,
+    /// The provider's or network's own message (key scrubbed; never kept for a rejected key).
+    pub message: Option<String>,
+    /// Round trip in ms.
+    pub latency_ms: u32,
+    /// When.
+    pub checked_at: Timestamp,
+}
+
+/// Result of an `ai.models` job (`JobDto.result`): the fetched model ids, also stored as the
+/// provider's `models` (the cache the picker reads).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AiModelList {
+    /// Provider.
+    pub provider_id: AiProviderId,
+    /// Model ids, sorted.
+    pub models: Vec<String>,
 }
 
 /// What a new provider of a kind starts with.
@@ -133,6 +243,8 @@ pub struct AiProviderList {
     pub providers: Vec<AiProviderDto>,
     /// Kinds that can be added (Claude first).
     pub kinds: Vec<AiProviderKindInfo>,
+    /// Named starting points for the "add provider" gallery, in display order.
+    pub presets: Vec<AiProviderPreset>,
     /// Whether API keys can be stored on this system (an OS keychain is available).
     pub keychain: bool,
     /// Stored keys last only for this login session or app run (Linux kernel keyring, memory
@@ -140,7 +252,8 @@ pub struct AiProviderList {
     pub keychain_session_only: bool,
 }
 
-/// `ai.providers.create`. Missing values come from the kind's defaults.
+/// `ai.providers.create`. Missing values come from the preset recognised from `kind` and
+/// `base_url` (name, default model, suggested models), else the kind's defaults.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 #[ts(optional_fields = nullable)]

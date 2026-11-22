@@ -26,7 +26,7 @@ impl Ollama {
         self.http.key().map(|k| format!("Bearer {}", k.expose()))
     }
 
-    fn body(&self, request: &CompletionRequest) -> ProviderResult<Value> {
+    pub(crate) fn body(&self, request: &CompletionRequest) -> ProviderResult<Value> {
         let mut messages = Vec::new();
         if let Some(system) = request.system.as_deref().filter(|s| !s.is_empty()) {
             messages.push(json!({"role": "system", "content": system}));

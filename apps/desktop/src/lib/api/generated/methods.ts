@@ -524,6 +524,7 @@ export interface Methods {
   "ai.providers.delete": { kind: "command"; request: AiProviderRef; response: AiProviderDto };
   "ai.providers.set_key": { kind: "command"; request: SetAiProviderKey; response: AiProviderDto };
   "ai.providers.refresh_models": { kind: "command"; request: AiProviderRef; response: JobDto };
+  "ai.providers.test": { kind: "command"; request: AiProviderRef; response: JobDto };
   "ai.routes.list": { kind: "query"; request: Empty; response: AiRouteList };
   "ai.routes.set": { kind: "command"; request: AiRouteDto; response: AiRouteDto };
   "ai.prices.list": { kind: "query"; request: Empty; response: AiPriceList };
@@ -820,6 +821,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "ai.providers.delete": "command",
   "ai.providers.set_key": "command",
   "ai.providers.refresh_models": "command",
+  "ai.providers.test": "command",
   "ai.routes.list": "query",
   "ai.routes.set": "command",
   "ai.prices.list": "query",

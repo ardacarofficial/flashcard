@@ -4,6 +4,7 @@
   "oplog.summary.ai.providers.delete": "AI sağlayıcısı kaldırıldı: {name}",
   "oplog.summary.ai.providers.set_key": "API anahtarı değişti: {name}",
   "oplog.summary.ai.providers.refresh_models": "Model listesi yenileniyor",
+  "oplog.summary.ai.providers.test": "Bağlantı deneniyor",
   "oplog.summary.ai.providers.restore": "AI sağlayıcısı geri geldi: {name}",
   "oplog.summary.ai.providers.set_models": "Model listesi güncellendi",
   "oplog.summary.ai.routes.set": "{feature} için AI modeli değişti",

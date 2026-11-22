@@ -17,8 +17,11 @@ methods! {
     AiProvidersDelete = "ai.providers.delete", Command, "ai", "ai:write", Public, undo: true, AiProviderRef => AiProviderDto;
     /// Stores or removes a provider's API key in the OS keychain. Never logged or undoable.
     AiProvidersSetKey = "ai.providers.set_key", Command, "ai", "ai_keys:write", Public, undo: false, SetAiProviderKey => AiProviderDto;
-    /// Starts a job that fetches the provider's model list.
+    /// Starts a job that fetches the provider's model list (result: `AiModelList`).
     AiProvidersRefreshModels = "ai.providers.refresh_models", Command, "ai", "ai_requests:write", Public, undo: false, AiProviderRef => JobDto;
+    /// Starts an `ai.test` job: one minimal request to the provider (a tiny completion to its
+    /// default model, or the model list without one), explained (result: `AiConnectionTest`).
+    AiProvidersTest = "ai.providers.test", Command, "ai", "ai_requests:write", Public, undo: false, AiProviderRef => JobDto;
     /// Internal: writes provider rows back exactly (inverse of provider commands).
     AiProvidersRestore = "ai.providers.restore", Command, "ai", "ai:write", Internal, undo: true, RestoreAiProviders => Empty;
     /// Internal: stores a fetched model list (a cache: it returns no inverse, so it never
