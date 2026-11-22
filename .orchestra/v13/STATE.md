@@ -48,3 +48,12 @@ only; writes `.orchestra/v13/owner-walkthrough.md`), x3 docs + version 1.3.0 + n
 Then: merge x1 → x2 → x3, full checks + e2e myself, look at screens, push, fetch Windows installer artifact, final
 report to user (open: real keys for AI never tested; Windows window manual run; fc.exe not in installer for MCP).
 - x3 MERGED. Leftovers for final pass: terms differ Study vs Search/automation (Durdur/Askıya al, Yarına bırak/Göm); e2e/README J4 text; re-check '<!-- v1.3: verify after X1/X2 -->' markers in docs.
+
+## Closing pass (main checkout, 2026-11-22)
+Merged tree green; core: Match/AI answers by field role, forecast day 0 = launcher queue with
+daily limits, learn-ahead change keeps the card on screen, sibling burying across decks
+(journeys C1–C4); one word per concept (CLI, automation, search help, `is:kenarda`/`is:yarına`
+aliases, docs, guides); markers removed; journey tables list 31 journeys; Windows installers
+bundle the release `fc` (tauri.cli.conf.json + scripts/stage-cli.mjs; workflows fail if fc.exe
+is missing; UNVERIFIED until Windows CI runs). Final: cargo 1557 pass, vitest 508, e2e 31/31
+(S4 race fixed), screens 688 PNG 0 findings, contract check passed. Not pushed.
