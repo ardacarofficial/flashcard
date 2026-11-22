@@ -11,6 +11,21 @@ pub mod suite;
 
 pub use mem_store::{MemState, MemStore, MemTx};
 
+/// The word-data pack [`TestApp`] installs at start-up in place of the shipped English one: a
+/// handful of English words (ranks by position, a CEFR profile entry, an inflected form, a
+/// family), so start-up stays cheap in the thousand app tests.
+pub const TEST_WORD_DATA: &[fc_providers::word_data::ShippedPack] =
+    &[fc_providers::word_data::ShippedPack {
+        language: "en",
+        checksum: "test-fixture-1",
+        bytes:
+            br#"{"format":"fc-word-data","format_version":1,"language":"en","version":"0.0.0-test",
+ "name":"Test fixture","licence":"CC0",
+ "sources":[{"name":"Test fixture","url":"","licence":"CC0","attribution":""}],
+ "words":["go","house","door","act","actor"],"profile":{"january":"A1"},
+ "forms":{"went":"go","houses":"house"},"family":{"actor":"act"}}"#,
+    }];
+
 use crate::events::{EventBus, InMemoryEventBus};
 use crate::{App, AppDeps};
 use fc_api::v1::events::EventEnvelope;
@@ -105,7 +120,27 @@ impl TestApp {
     }
 
     /// New app over `store` reading time from `clock` (v1.0: reminders, the app lock).
+    /// Start-up installs the tiny [`TEST_WORD_DATA`] pack, not the shipped English one
+    /// (≈60 000 rows); a test that needs the real pack uses
+    /// [`TestApp::with_shipped_word_data`].
     pub fn with_clock(store: Arc<dyn Store>, clock: Arc<dyn Clock>) -> Self {
+        Self::build(store, clock, TEST_WORD_DATA)
+    }
+
+    /// New app over `store` whose start-up installs the word-data packs the app ships.
+    pub fn with_shipped_word_data(store: Arc<dyn Store>) -> Self {
+        Self::build(
+            store,
+            Arc::new(TickClock::new(1_767_225_600_000)),
+            fc_providers::word_data::BUNDLED,
+        )
+    }
+
+    fn build(
+        store: Arc<dyn Store>,
+        clock: Arc<dyn Clock>,
+        word_data: &'static [fc_providers::word_data::ShippedPack],
+    ) -> Self {
         let bus = Arc::new(InMemoryEventBus::new());
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = events.clone();
@@ -119,6 +154,7 @@ impl TestApp {
             events: bus,
         })
         .unwrap();
+        app.set_shipped_word_data(word_data);
         app.load_state().unwrap();
         Self { app, store, events }
     }

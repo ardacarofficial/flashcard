@@ -30,6 +30,7 @@ mod study;
 mod subtitle;
 mod tags;
 mod ux;
+mod word_data;
 mod words;
 
 use crate::error::{in_table, StorageError, StorageResult};

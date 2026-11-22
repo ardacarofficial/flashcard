@@ -13,6 +13,13 @@ pub struct WordsState {
     languages: BTreeMap<NoteId, String>,
 }
 
+impl WordsState {
+    /// Word rows, by (language, key) (read by the word data, B2).
+    pub(super) fn rows(&self) -> impl Iterator<Item = &WordIndexRecord> {
+        self.words.values()
+    }
+}
+
 fn status(w: &WordIndexRecord, threshold: u32) -> String {
     if let Some(m) = &w.mark {
         return m.clone();

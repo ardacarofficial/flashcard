@@ -2,10 +2,14 @@
   "method": "v1.words.lookup",
   "kind": "query",
   "permission": "words:read",
-  "note": "Forms as they appear in a text; each comes back with its key (lemma) and status. A word the plugin may not see (deck limit) comes back as new with word: null.",
+  "note": "Forms as they appear in a text; each comes back with its key (lemma) and status. A word the plugin may not see (deck limit) comes back as new with word: null. level: frequency rank and CEFR band from the word-data pack (band_origin profile = a CEFR list, rank/expression = estimated); family: other members of the word's family, each with its own status (empty here).",
   "input": {
     "language": "en",
-    "forms": ["went", "keys", "zebra"]
+    "forms": [
+      "went",
+      "keys",
+      "zebra"
+    ]
   },
   "output": {
     "language": "en",
@@ -28,9 +32,28 @@
           "known_by_maturity": true,
           "last_review": 1767225600000,
           "first_seen": 1767139200000,
-          "note_ids": ["0192812a-6f3c-7a41-9c2e-000000000001"],
-          "card_ids": ["0192812a-6f3c-7a41-9c2e-000000000101"]
-        }
+          "note_ids": [
+            "0192812a-6f3c-7a41-9c2e-000000000001"
+          ],
+          "card_ids": [
+            "0192812a-6f3c-7a41-9c2e-000000000101"
+          ],
+          "level": {
+            "lemma": "go",
+            "rank": 32,
+            "band": "A1",
+            "band_origin": "profile",
+            "estimated": false
+          }
+        },
+        "level": {
+          "lemma": "go",
+          "rank": 32,
+          "band": "A1",
+          "band_origin": "profile",
+          "estimated": false
+        },
+        "family": []
       },
       {
         "form": "keys",
@@ -48,11 +71,43 @@
           "known_by_maturity": false,
           "last_review": null,
           "first_seen": 1767139200000,
-          "note_ids": ["0192812a-6f3c-7a41-9c2e-000000000002"],
-          "card_ids": ["0192812a-6f3c-7a41-9c2e-000000000102"]
-        }
+          "note_ids": [
+            "0192812a-6f3c-7a41-9c2e-000000000002"
+          ],
+          "card_ids": [
+            "0192812a-6f3c-7a41-9c2e-000000000102"
+          ],
+          "level": {
+            "lemma": "key",
+            "rank": 589,
+            "band": "A1",
+            "band_origin": "profile",
+            "estimated": false
+          }
+        },
+        "level": {
+          "lemma": "key",
+          "rank": 589,
+          "band": "A1",
+          "band_origin": "profile",
+          "estimated": false
+        },
+        "family": []
       },
-      { "form": "zebra", "key": "zebra", "status": "new", "word": null }
+      {
+        "form": "zebra",
+        "key": "zebra",
+        "status": "new",
+        "word": null,
+        "level": {
+          "lemma": "zebra",
+          "rank": 9072,
+          "band": "B2",
+          "band_origin": "profile",
+          "estimated": false
+        },
+        "family": []
+      }
     ]
   }
 }

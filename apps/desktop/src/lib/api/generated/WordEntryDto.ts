@@ -2,6 +2,7 @@
 import type { CardId } from "./CardId";
 import type { NoteId } from "./NoteId";
 import type { Timestamp } from "./Timestamp";
+import type { WordLevelDto } from "./WordLevelDto";
 import type { WordMark } from "./WordMark";
 import type { WordStatus } from "./WordStatus";
 
@@ -60,4 +61,9 @@ note_ids: Array<NoteId>,
 /**
  * Their live cards (`words.lookup` only; empty in listings).
  */
-card_ids: Array<CardId>, };
+card_ids: Array<CardId>, 
+/**
+ * Frequency rank and CEFR band (`None` = the word-data module is off or the pack does
+ * not know the word).
+ */
+level: WordLevelDto | null, };

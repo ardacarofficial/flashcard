@@ -37,6 +37,19 @@ const EXCLUDED: &[&str] = &[
     "word_index_dirty_keys",
 ];
 
+/// Rows of a table a dump leaves out, as a `WHERE` condition on the rows it keeps. The word
+/// data the app ships (v1.4 B2, `word_data_packs.origin = 'bundled'`) is reinstalled from the
+/// binary, so a backup carries only imported packs.
+fn dump_filter(table: &str) -> Option<&'static str> {
+    match table {
+        "word_data_packs" => Some("origin = 'imported'"),
+        "word_data" | "word_family" => {
+            Some("language IN (SELECT language FROM word_data_packs WHERE origin = 'imported')")
+        }
+        _ => None,
+    }
+}
+
 fn corrupt(message: impl ToString) -> StorageError {
     StorageError::Corrupt {
         table: BACKUP,
@@ -181,8 +194,9 @@ impl<M: Mode> InteropRead for SqliteTx<'_, M> {
             } else {
                 t.pk.iter().map(|c| quote(c)).collect::<Vec<_>>().join(", ")
             };
+            let filter = dump_filter(&t.name).map_or(String::new(), |w| format!(" WHERE {w}"));
             let sql = format!(
-                "SELECT {} FROM {} ORDER BY {order}",
+                "SELECT {} FROM {}{filter} ORDER BY {order}",
                 select.join(", "),
                 quote(&t.name)
             );

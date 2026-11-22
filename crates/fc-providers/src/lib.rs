@@ -23,6 +23,7 @@ pub mod lemma;
 pub mod provider;
 pub mod speech;
 pub mod strategy;
+pub mod word_data;
 
 pub use provider::{Capability, ProviderError, ProviderErrorKind, ProviderInfo, ProviderResult};
 

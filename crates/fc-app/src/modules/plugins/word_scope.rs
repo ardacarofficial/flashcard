@@ -10,6 +10,7 @@
 //!   allowed deck (or below one); otherwise the form comes back as `new` with no evidence —
 //!   what it would say if those other notes did not exist and nothing else knew the word.
 //!   (A word with notes on both sides is hidden whole: its status mixes both.)
+//!   Family members (word data) keep their keys but read `new`.
 //! * `words.list`: rows that fail the same test are dropped (a page may come back shorter;
 //!   `next_cursor` stays valid).
 //! * `words.stats` and reading mode's word colours (`reading.analyze`,
@@ -138,6 +139,11 @@ pub(crate) fn cut(app: &App, plugin: &str, method: &str, value: Value) -> AppRes
             if !f.word.as_ref().is_some_and(|w| word_ok(&w.note_ids, &inside)) {
                 f.word = None;
                 f.status = WordStatus::New;
+            }
+            // Word data (v1.4 B2): family members are pack reference data, but their statuses
+            // come from the whole index, so a limited plugin sees them as `new`.
+            for m in &mut f.family {
+                m.status = WordStatus::New;
             }
         }
         return serde_json::to_value(r).map_err(internal);

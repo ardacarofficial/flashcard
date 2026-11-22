@@ -133,6 +133,7 @@ import type { HintDto } from "./HintDto";
 import type { HintRequest } from "./HintRequest";
 import type { ImportPreview } from "./ImportPreview";
 import type { ImportReadingItem } from "./ImportReadingItem";
+import type { ImportWordData } from "./ImportWordData";
 import type { InboxChangeCount } from "./InboxChangeCount";
 import type { InboxCount } from "./InboxCount";
 import type { InboxItemDto } from "./InboxItemDto";
@@ -269,6 +270,7 @@ import type { ReorderRules } from "./ReorderRules";
 import type { RepairResult } from "./RepairResult";
 import type { ResetSetting } from "./ResetSetting";
 import type { ResetShortcut } from "./ResetShortcut";
+import type { ResetWordData } from "./ResetWordData";
 import type { RestoreBackup } from "./RestoreBackup";
 import type { RuleDto } from "./RuleDto";
 import type { RuleList } from "./RuleList";
@@ -377,6 +379,8 @@ import type { UpdateSavedQuery } from "./UpdateSavedQuery";
 import type { UpdateStatus } from "./UpdateStatus";
 import type { VerifyBackup } from "./VerifyBackup";
 import type { VoiceList } from "./VoiceList";
+import type { WordDataPackDto } from "./WordDataPackDto";
+import type { WordDataSources } from "./WordDataSources";
 import type { WordIndexRebuilt } from "./WordIndexRebuilt";
 import type { WordInfo } from "./WordInfo";
 import type { WordList } from "./WordList";
@@ -692,6 +696,9 @@ export interface Methods {
   "words.stats": { kind: "query"; request: Empty; response: WordStats };
   "words.index.rebuild": { kind: "command"; request: Empty; response: JobDto };
   "words.index.rebuild_now": { kind: "command"; request: Empty; response: WordIndexRebuilt };
+  "words.data.sources": { kind: "query"; request: Empty; response: WordDataSources };
+  "words.data.import": { kind: "command"; request: ImportWordData; response: WordDataPackDto };
+  "words.data.reset": { kind: "command"; request: ResetWordData; response: WordDataSources };
 }
 
 /** Unqualified method name. */
@@ -1007,4 +1014,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "words.stats": "query",
   "words.index.rebuild": "command",
   "words.index.rebuild_now": "command",
+  "words.data.sources": "query",
+  "words.data.import": "command",
+  "words.data.reset": "command",
 };

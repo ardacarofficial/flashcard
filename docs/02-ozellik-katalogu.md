@@ -243,7 +243,7 @@ sayılır (koşullar küme üyeliğidir, birleştirme yapmaz). Her kavram bir ke
 
 - Aynı adlı bir **sınıflandırma** her zaman kazanır (v1.4 öncesi kayıtlı sorgular anlamını korur; `seviye>=B1` sizin sınıflandırmanızsa o kalır).
 - Köken ve kaynak `note_origins` tablosundadır (migration `1460_language_queries`): Subtitle yakalaması ve okuma modu notu yaparken yazar; eski Subtitle/okuma notları migration'da `source` alanından doldurulur, eski içe aktarmalar "elle" sayılır. "Videodan" = Subtitle eklentisinin yüklediği dosya (`subtitle-…` adı).
-- `sıklık`/`cefr` isteğe bağlı `word_frequency(language, key, rank, band)` tablosunu (ya da görünümünü) okur (kelime verisi paketi, iz B2); yoksa hiçbir şeyle eşleşmez (`-sıklık<100` hepsiyle).
+- `sıklık`/`cefr`, kelime verisinin `word_frequency(language, key, rank, band)` görünümünü okur (migration `1441_word_frequency_view`, iz B2; uygulamayla gelen İngilizce paket hep kuruludur): notun dizin anahtarının paketteki satırı (lemma, çekimli biçim ya da CEFR profil başlığı; `went` → `go`'nun sırası). Paketin bilmediği kelimenin ve kendi satırı olmayan ifadenin sırası/bandı yoktur: `sıklık<1000` onlarla eşleşmez, `-sıklık<1000` eşleşir. Bant, profil listesinde varsa profilin seviyesi, yoksa sıradan tahmindir (docs/03 §4.3). Görünüm yoksa (eski şema) bu koşullar hiçbir şeyle eşleşmez.
 - Hız: 100 000 notta her koşul dizinlidir (`word_index_notes_key_only`, `word_index_notes_key`, `note_origins_origin`, `media_mime`); ölçüm ve plan `fc-storage` testi `language_predicates_at_100k`.
 
 ## 10. 🛠️ Kart yönetimi
@@ -458,6 +458,7 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 - Kelime **kökü / ailesi** desteği (run/running/ran): dil bazında lemmatizasyon sağlayıcısı (takılabilir).
 - Metindeki bilinen kelime yüzdesi ("Bu metnin %87'sini biliyorsun").
 - `[v1.4]` **Ortak kelime dizini:** renkler, yüzde ve Subtitle eklentisinin bilinen kelimeleri aynı kalıcı dizinden gelir; elle, Anki'den, Subtitle'dan ya da okumadan gelen her `term` notu sayılır. Elle işaret kartı yener; "bilinen" eşiği ayardır (`words.known_interval_days`, 21 gün). Destenin dili `words.language` ile verilir; dili bilinmeyen notlar raporlanır. API: `words.lookup` (toplu), `words.list`, `words.stats`, `words.index.rebuild` (docs/03 §4.2).
+- `[v1.4]` **Sıklık ve seviye:** her kelimenin film/dizi altyazılarındaki sıklık sırası ve tahmini CEFR bandı (profil listesinden mi, sıradan mı tahmin edildiği belirtilir); ifadeler belgeli kuralla tahmini bant alır; kelime ailesi (`act`/`actor`) gösterilir ama üyeleri bilinen yapmaz. `words.list` "bilmediğim en sık kelimeler" için sıraya/banda göre sıralar ve süzer. İngilizce paket uygulamayla gelir (CC BY-SA 4.0, kaynaklar `words.data.sources`), başka paket `words.data.import`; modül `word_data` kapatılabilir (docs/03 §4.3).
 
 ## 25. 🎬 Altyazıdan kart ve cümle madenciliği
 

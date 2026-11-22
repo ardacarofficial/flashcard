@@ -209,6 +209,11 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         // to some decks (`word_scope`). Rebuilding it is whole-collection work.
         "words.lookup" | "words.list" | "words.stats" => Reads(WORDS),
         "words.index.rebuild" | "words.index.rebuild_now" => Refused(UNBOUNDED),
+        // v1.4 word data: packs, sources and licences (reference data, no user text); an
+        // import reads a free path, and replacing the packs is the user's decision.
+        "words.data.sources" => Reads(WORDS),
+        "words.data.import" => Refused(FREE_PATHS),
+        "words.data.reset" => Refused("the word data is the user's choice"),
         "reading.extracts.cloze" | "reading.cards.make" => Oracle(READING_NOTES),
         // Imports read any file or web page; clips run ffmpeg on a file.
         "reading.items.import" => Refused(FREE_PATHS),

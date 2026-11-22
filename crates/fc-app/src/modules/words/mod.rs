@@ -28,6 +28,7 @@ use crate::handler::{CommandCtx, CommandOutcome, QueryCtx};
 use crate::jobs::{JobContext, JobHandler};
 use crate::module::ModuleDescriptor;
 use crate::modules::reading::{language_or_default, lemmatizer_for, words::tokens};
+use crate::modules::word_data;
 use crate::registry::Registry;
 use crate::support::summary;
 use base64::Engine;
@@ -40,7 +41,10 @@ use fc_core::reading::{headword_key, WordCounts, WordMark, WordStatus};
 use fc_core::settings::{SettingDef, SettingKind, SettingScope, SettingScopeKind};
 use fc_core::words::{index_language, DEFAULT_KNOWN_INTERVAL_DAYS};
 use fc_core::{CardId, NoteId};
-use fc_storage::repo::{WordIndexQuery, WordIndexRecord};
+use fc_core::word_data::CefrBand;
+use fc_storage::repo::{
+    WordDataQuery, WordDataRecord, WordDataSort, WordIndexQuery, WordIndexRecord, NO_BAND, NO_RANK,
+};
 use fc_storage::Reads;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
@@ -174,6 +178,7 @@ pub(crate) fn entry_dto(
         first_seen: r.first_seen,
         note_ids,
         card_ids,
+        level: None,
     }
 }
 
@@ -184,12 +189,35 @@ pub(crate) fn cursor_of(language: &str, key: &str) -> String {
 
 /// `(language, key)` of a cursor.
 pub(crate) fn parse_cursor(cursor: &str) -> Option<(String, String)> {
+    parse_sorted_cursor(cursor).map(|(l, k, _)| (l, k))
+}
+
+/// Opaque cursor of the page after a row of a list sorted by rank or band (word data): the
+/// row's `(language, key)` and its sort values.
+fn sorted_cursor_of(language: &str, key: &str, band: &str, rank: u32) -> String {
+    base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(format!("{language}\u{1f}{key}\u{1f}{band}\u{1f}{rank}"))
+}
+
+/// `(language, key, (band, rank) sort values)` of a page cursor.
+type SortedCursor = (String, String, Option<(String, u32)>);
+
+/// `(language, key, sort values)` of a cursor (sort values only in sorted cursors).
+fn parse_sorted_cursor(cursor: &str) -> Option<SortedCursor> {
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(cursor.trim())
         .ok()?;
     let text = String::from_utf8(bytes).ok()?;
-    let (l, k) = text.split_once('\u{1f}')?;
-    Some((l.to_owned(), k.to_owned()))
+    let parts: Vec<&str> = text.split('\u{1f}').collect();
+    match parts.as_slice() {
+        [l, k] => Some(((*l).to_owned(), (*k).to_owned(), None)),
+        [l, k, b, r] => Some((
+            (*l).to_owned(),
+            (*k).to_owned(),
+            Some(((*b).to_owned(), r.parse().ok()?)),
+        )),
+        _ => None,
+    }
 }
 
 fn bad_cursor() -> AppError {
@@ -251,24 +279,69 @@ fn lookup(req: LookupWords, ctx: &QueryCtx<'_>) -> AppResult<WordsLookupResult> 
         }
     }
     let threshold_days = threshold(ctx.tx)?;
+    // Word data (v1.4 B2): rank and band of each form, and the families of their lemmas.
+    let with_data = word_data::enabled(ctx.tx, ctx.registry)?;
+    let data = if with_data {
+        let wanted = req
+            .forms
+            .iter()
+            .map(|f| f.trim().to_lowercase())
+            .chain(keys.iter().cloned());
+        word_data::rows_for(ctx.tx, &language, wanted)?
+    } else {
+        HashMap::new()
+    };
+    let levels: Vec<Option<WordLevelDto>> = req
+        .forms
+        .iter()
+        .zip(&keys_of_forms)
+        .map(|(form, key)| {
+            let key = key.as_deref()?;
+            let form = form.trim().to_lowercase();
+            word_data::level_of(&language, Some(&form), key, &data)
+        })
+        .collect();
+    let lemmas: Vec<String> = levels
+        .iter()
+        .flatten()
+        .filter_map(|l| l.lemma.clone())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let families = if with_data {
+        word_data::families(ctx.tx, &language, &lemmas, threshold_days)?
+    } else {
+        HashMap::new()
+    };
     let forms = req
         .forms
         .iter()
         .zip(keys_of_forms)
-        .map(|(form, key)| {
+        .zip(levels)
+        .map(|((form, key), level)| {
             let word = key.as_ref().and_then(|k| rows.get(k)).map(|r| {
                 let notes = notes_of.get(&r.key).cloned().unwrap_or_default();
                 let cards = notes
                     .iter()
                     .flat_map(|n| cards_of.get(n).into_iter().flatten().copied())
                     .collect();
-                entry_dto(r, threshold_days, notes, cards)
+                let mut dto = entry_dto(r, threshold_days, notes, cards);
+                dto.level.clone_from(&level);
+                dto
             });
+            let family = level
+                .as_ref()
+                .and_then(|l| l.lemma.as_ref())
+                .and_then(|l| families.get(l))
+                .cloned()
+                .unwrap_or_default();
             WordFormResult {
                 form: form.clone(),
                 status: word.as_ref().map_or(WordStatus::New, |w| w.status),
                 key,
                 word,
+                level,
+                family,
             }
         })
         .collect();
@@ -282,9 +355,23 @@ fn lookup(req: LookupWords, ctx: &QueryCtx<'_>) -> AppResult<WordsLookupResult> 
 
 fn list(req: ListWords, ctx: &QueryCtx<'_>) -> AppResult<WordList> {
     let limit = req.limit.unwrap_or(DEFAULT_PAGE).clamp(1, MAX_PAGE);
-    let after = match req.cursor.as_deref().filter(|c| !c.trim().is_empty()) {
-        Some(c) => Some(parse_cursor(c).ok_or_else(bad_cursor)?),
-        None => None,
+    let sort = req.sort.unwrap_or_default();
+    let with_data = word_data::enabled(ctx.tx, ctx.registry)?;
+    if !with_data && (sort != WordSort::Key || !req.bands.is_empty() || req.max_rank.is_some()) {
+        return Err(AppError::Api(ApiError::new(
+            ErrorCode::ConflictModuleDisabled,
+            "sorting or filtering by frequency needs the word-data module",
+        )));
+    }
+    let (after, after_sort) = match req.cursor.as_deref().filter(|c| !c.trim().is_empty()) {
+        Some(c) => {
+            let (l, k, s) = parse_sorted_cursor(c).ok_or_else(bad_cursor)?;
+            if sort != WordSort::Key && s.is_none() {
+                return Err(bad_cursor());
+            }
+            (Some((l, k)), s)
+        }
+        None => (None, None),
     };
     let language = req
         .language
@@ -293,21 +380,79 @@ fn list(req: ListWords, ctx: &QueryCtx<'_>) -> AppResult<WordList> {
         .filter(|l| !l.is_empty())
         .map(index_language);
     let threshold_days = threshold(ctx.tx)?;
-    let rows = ctx.tx.word_index_page(&WordIndexQuery {
+    let q = WordIndexQuery {
         language,
         statuses: req.status.map(|s| s.as_str().to_owned()).into_iter().collect(),
         threshold_days,
         after,
         limit: limit.saturating_add(1),
-    })?;
+    };
+    let rows: Vec<(WordIndexRecord, Option<WordDataRecord>)> = if with_data {
+        ctx.tx.word_index_page_with_data(
+            &q,
+            &WordDataQuery {
+                sort: match sort {
+                    WordSort::Key => WordDataSort::Key,
+                    WordSort::Rank => WordDataSort::Rank,
+                    WordSort::Band => WordDataSort::Band,
+                },
+                bands: req.bands.iter().map(|b| b.as_str().to_owned()).collect(),
+                max_rank: req.max_rank,
+                after_sort,
+            },
+        )?
+    } else {
+        ctx.tx
+            .word_index_page(&q)?
+            .into_iter()
+            .map(|r| (r, None))
+            .collect()
+    };
     let more = rows.len() > limit as usize;
-    let words: Vec<WordEntryDto> = rows
+    let page = &rows[..rows.len().min(limit as usize)];
+    // Expressions without a pack row of their own get the expression rule's band.
+    let mut parts: HashMap<String, HashMap<String, WordDataRecord>> = HashMap::new();
+    if with_data {
+        let mut by_lang: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+        for (r, d) in page {
+            if d.is_none() && r.key.contains(' ') {
+                by_lang.entry(&r.language).or_default().push(r.key.clone());
+            }
+        }
+        for (l, keys) in by_lang {
+            parts.insert(l.to_owned(), word_data::rows_for(ctx.tx, l, keys)?);
+        }
+    }
+    let words: Vec<WordEntryDto> = page
         .iter()
-        .take(limit as usize)
-        .map(|r| entry_dto(r, threshold_days, vec![], vec![]))
+        .map(|(r, d)| {
+            let mut dto = entry_dto(r, threshold_days, vec![], vec![]);
+            if with_data {
+                dto.level = match d {
+                    Some(d) => word_data::level_of(
+                        &r.language,
+                        None,
+                        &r.key,
+                        &HashMap::from([(r.key.clone(), d.clone())]),
+                    ),
+                    None => parts
+                        .get(&r.language)
+                        .and_then(|rows| word_data::level_of(&r.language, None, &r.key, rows)),
+                };
+            }
+            dto
+        })
         .collect();
     let next_cursor = if more {
-        words.last().map(|w| cursor_of(&w.language, &w.key))
+        page.last().map(|(r, d)| match sort {
+            WordSort::Key => cursor_of(&r.language, &r.key),
+            WordSort::Rank | WordSort::Band => sorted_cursor_of(
+                &r.language,
+                &r.key,
+                d.as_ref().and_then(|d| d.band.as_deref()).unwrap_or(NO_BAND),
+                d.as_ref().and_then(|d| d.rank).unwrap_or(NO_RANK),
+            ),
+        })
     } else {
         None
     };
@@ -327,11 +472,38 @@ fn stats(_req: Empty, ctx: &QueryCtx<'_>) -> AppResult<WordStats> {
             counts.add(s);
         }
     }
+    // Word data (v1.4 B2): the same counts per CEFR band.
+    let mut bands: BTreeMap<String, BTreeMap<Option<CefrBand>, WordCounts>> = BTreeMap::new();
+    if word_data::enabled(ctx.tx, ctx.registry)? {
+        for (language, band, status, n) in ctx.tx.word_index_band_counts(threshold_days)? {
+            let s = WordStatus::ALL
+                .into_iter()
+                .find(|s| s.as_str() == status)
+                .unwrap_or(WordStatus::New);
+            let counts = bands
+                .entry(language)
+                .or_default()
+                .entry(band.as_deref().and_then(CefrBand::parse))
+                .or_default();
+            for _ in 0..n {
+                counts.add(s);
+            }
+        }
+    }
     Ok(WordStats {
         threshold_days,
         languages: per
             .into_iter()
-            .map(|(language, counts)| LanguageWordCounts { language, counts })
+            .map(|(language, counts)| LanguageWordCounts {
+                bands: bands
+                    .remove(&language)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(band, counts)| BandWordCounts { band, counts })
+                    .collect(),
+                language,
+                counts,
+            })
             .collect(),
         unassigned_notes: ctx.tx.word_index_unassigned()?,
     })
