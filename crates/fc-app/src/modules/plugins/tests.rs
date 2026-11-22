@@ -1901,6 +1901,7 @@ fn plugin_tts_speaks_study_cards(f: Factory) {
         order: None,
         tz_offset_mins: Some(0),
         modes: None,
+        scope: None,
     });
     let card = session.current.expect("a card to study");
     let span = card.sides.tts.first().expect("the card has a tts span").clone();

@@ -183,6 +183,7 @@ impl T {
                 order: Some(StudyOrder::Due),
                 tz_offset_mins: Some(0),
                 modes,
+                scope: None,
             },
             &Actor::User,
         )

@@ -175,6 +175,7 @@ fn start_with(
         order: None,
         tz_offset_mins: Some(0),
         modes: None,
+        scope: None,
     })
 }
 
@@ -459,8 +460,22 @@ pub fn preset_daily_limits_apply(f: &Factory) {
     assert_eq!(s.counts.new, 1, "new_per_day = 1");
     let c = s.current.clone().unwrap();
     answer(t, &s, c.card_id, Rating::Easy);
-    let s2 = start(t, StudyKind::Normal, StudyMode::Scheduled, w.parent.id);
-    assert_eq!(s2.counts.new, 0, "today's new card already introduced");
+    // Today's new card already introduced: v1.3 starts no session and says why.
+    let e = t.err::<StudyStart>(StartSession {
+        kind: StudyKind::Normal,
+        mode: Some(StudyMode::Scheduled),
+        deck_id: Some(w.parent.id),
+        include_subdecks: None,
+        filter: None,
+        from_session: None,
+        new_limit: None,
+        order: None,
+        tz_offset_mins: Some(0),
+        modes: None,
+        scope: None,
+    });
+    assert_eq!(e.code, ErrorCode::ConflictNothingToStudy);
+    assert_eq!(e.details["reason"], "daily_limit_reached");
     // Undo gives the day's allowance back.
     t.ok::<OplogUndo>(Empty {});
     let s3 = start(t, StudyKind::Normal, StudyMode::Scheduled, w.parent.id);

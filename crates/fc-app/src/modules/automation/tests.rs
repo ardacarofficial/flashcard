@@ -559,6 +559,7 @@ fn flag_and_answer_triggers(f: Factory) {
         order: None,
         tz_offset_mins: Some(0),
         modes: None,
+        scope: None,
     });
     let first = s.current.unwrap().card_id;
     let s = w.t.ok::<StudyAnswer>(AnswerCard {
@@ -1024,6 +1025,7 @@ fn start_session(w: &W) -> SessionDto {
         order: None,
         tz_offset_mins: Some(0),
         modes: None,
+        scope: None,
     })
 }
 
@@ -1419,6 +1421,7 @@ fn mode_answers_trigger_answer_rules(f: Factory) {
             rating_scale: Some(RatingScale::Confidence),
             ..StartModes::default()
         }),
+        scope: None,
     });
     let before = snapshot(&w.t);
     let card = s.current.as_ref().unwrap().card_id;

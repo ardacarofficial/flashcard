@@ -697,8 +697,9 @@ pub(crate) fn session_dto(v: View<'_>, s: &Session, now: Timestamp) -> AppResult
         answered: s.state.answered,
         correct: s.state.correct,
         mistakes: u32::try_from(s.state.again.len()).unwrap_or(u32::MAX),
+        // v1.3: when the first waiting card can be shown (learn-ahead), not its due time.
         next_due: if current.is_none() && s.record.ended_at.is_none() {
-            queue::next_due(&s.state.queue)
+            queue::next_due(&s.state.queue).map(|d| d.plus_millis(-LEARN_AHEAD_MS))
         } else {
             None
         },

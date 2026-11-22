@@ -4,7 +4,7 @@
  * Not a source of truth for behaviour: the real rules live in fc-app.
  */
 import type { MethodName, RequestOf, ResponseOf } from '../generated/methods';
-import { DEMO_COUNTS, seedDemo } from './seed';
+import { DEMO_COUNTS, deckCounts, seedDemo } from './seed';
 import type {
   ApiError,
   AttributeDefDto,
@@ -146,7 +146,7 @@ const tree = (parent: string | null): DeckTreeNode[] =>
     .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
     .map((deck) => ({
       deck: { ...deck, path: pathOf(deck) },
-      counts: (import.meta.env.MODE === 'mock' && DEMO_COUNTS[deck.name]) || { new: 0, learning: 0, due: 0, total: 0 },
+      counts: (import.meta.env.MODE === 'mock' && DEMO_COUNTS[deck.name]) || deckCounts({ new: 0, learning: 0, due: 0, total: 0 }),
       children: tree(deck.id),
     }));
 

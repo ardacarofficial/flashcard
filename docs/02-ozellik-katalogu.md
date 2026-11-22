@@ -106,6 +106,8 @@ Kart türü motorunun üç işi vardır: **kart üret**, **soruyu sun**, **cevab
 | Öğren modu (Quizlet tarzı) | Kart önce çoktan seçmeli, sonra yazarak sorulur. Kart her seviyede doğru cevaplanınca "öğrenildi" olur `[v0.10]` | Seçilebilir |
 | Test | Desteden karışık soru tipleriyle sınav kâğıdı üretilir, sonunda puan verilir `[v0.10]` | ❌ |
 
+**Çalışma başlatıcı** `[v1.3]` (`study.options`): bir deste için her **kapsamın** tam kart sayısı, boşsa nedeni ve ne zaman dolacağı, yarım kalan oturumlar ("Devam et · 7 cevap") ve açık modüllerin türleri. Kapsamlar: **Bugünün kartları** (normal oturumun kuyruğu, limitlerle), **Yeni kartlar**, **Bugün çalıştıklarım**, **Bugün zorlandıklarım** (bugün "Tekrar" denen / yanlış cevaplanan kartlar), **Tümü**. Son üçü deneme (takvimi etkilemez), kart kümesi başlarken sabitlenir. "Bugün" yerel çalışma günüdür (`study.day_start_hour`). Ana sayfa, Kütüphane ve deste sayfasındaki "bugün" sayıları aynı kuyruk mantığından gelir. Boş başlatma oturum açmaz, yarım oturumu kapatmaz. Her türden bir oturum açık kalabilir; test kâğıdı cevaplarını saklar (`modes.test.save_draft`).
+
 ### 6.2 Çalışma sırasında araçlar
 
 - 💬 **İpucu motoru:** Ayarlanabilir ipucu stratejileri: ilk harf, her kelimenin ilk harfi, harflerin bir kısmı, belirli bir alan (ör. örnek cümle), AI ipucu. Kaç ipucu kullanıldığı kaydedilir.

@@ -104,6 +104,7 @@ fn no_reminder_after_studying_or_on_other_days() {
         order: None,
         tz_offset_mins: Some(IST),
         modes: None,
+        scope: None,
     });
     let card = s.current.clone().unwrap();
     fx.t.ok::<StudyAnswer>(AnswerCard {

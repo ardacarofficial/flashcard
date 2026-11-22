@@ -6,6 +6,7 @@ import type { StudyFilter } from "./StudyFilter";
 import type { StudyKind } from "./StudyKind";
 import type { StudyMode } from "./StudyMode";
 import type { StudyOrder } from "./StudyOrder";
+import type { StudyScope } from "./StudyScope";
 
 /**
  * `study.start`.
@@ -50,4 +51,12 @@ tz_offset_mins?: number | null,
 /**
  * v0.10 study modes: time limit, rating scale, test options.
  */
-modes?: StartModes | null, };
+modes?: StartModes | null, 
+/**
+ * v1.3: which cards (`null` = the kind's own default: today's queue for `normal`, every
+ * card of the deck for `learn`/`test`/`match`, the filter for `custom`). Kinds `normal`,
+ * `learn`, `test`, `match` only. `studied_today`, `struggled_today` and `all` are
+ * practice (`mode` is forced to `trial`) over a set frozen at start. An empty set fails
+ * with `CONFLICT_NOTHING_TO_STUDY` and leaves every open session as it was.
+ */
+scope?: StudyScope | null, };

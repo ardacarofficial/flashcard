@@ -8,3 +8,7 @@ ConflictSessionEnded => Conflict, "errors.conflict.session_ended";
 ConflictNotCurrentCard => Conflict, "errors.conflict.not_current_card";
 /// Scheduler parameters rejected (`details.reason`).
 ValidationSchedulerParams => Validation, "errors.validation.scheduler_params";
+/// v1.3: `study.start` found no card for the scope (`details.reason`: a `StudyEmptyReason`;
+/// `details.next_available_at`: ms timestamp or null). No session was created; open sessions
+/// are untouched.
+ConflictNothingToStudy => Conflict, "errors.conflict.nothing_to_study";

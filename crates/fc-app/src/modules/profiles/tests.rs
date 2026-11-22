@@ -234,6 +234,7 @@ fn switching_profiles_drops_the_in_memory_queue_cache() {
         order: None,
         tz_offset_mins: Some(0),
         modes: None,
+        scope: None,
     });
     let card = s.current.as_ref().expect("a card to study").card_id;
     fx.t.ok::<StudyAnswer>(AnswerCard {

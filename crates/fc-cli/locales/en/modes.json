@@ -4,6 +4,7 @@
   "oplog.summary.modes.timed.expire": "A card's time ran out",
   "oplog.summary.modes.timed.start": "Started the card timer",
   "oplog.summary.modes.test.submit": "Submitted a test: {percent}%",
+  "oplog.summary.modes.test.save_draft": "Saved test answers",
   "oplog.summary.modes.inline.create": "Created {count} card(s) from text",
   "oplog.summary.modes.match.start": "Dealt a match round",
   "oplog.summary.modes.match.pick": "Picked a match pair",

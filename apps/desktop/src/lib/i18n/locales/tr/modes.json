@@ -155,7 +155,8 @@
       },
       "test": {
         "paper": "Test kâğıdı",
-        "submit": "Testi teslim et"
+        "submit": "Testi teslim et",
+        "save_draft": "Test cevaplarını kaydet"
       },
       "inline": {
         "preview": "Metinden kartları önizle",

@@ -57,7 +57,9 @@ mistakes: number,
  */
 current: StudyCardDto | null, 
 /**
- * When the next waiting learning card becomes available, if any.
+ * When the next waiting learning card can be shown (its due time minus the learn-ahead
+ * window), while no card is current and the session is open. The session stays open
+ * while it waits.
  */
 next_due: Timestamp | null, 
 /**

@@ -366,6 +366,7 @@ fn anki_import_study_backup_wipe_restore_is_identical() {
             order: None,
             tz_offset_mins: Some(0),
             modes: None,
+            scope: None,
         })
     };
     let s = start();

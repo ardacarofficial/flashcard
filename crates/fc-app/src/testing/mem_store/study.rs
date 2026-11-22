@@ -39,6 +39,20 @@ impl StudyRead for MemTx<'_> {
             .cloned())
     }
 
+    fn open_sessions(&self) -> StorageResult<Vec<SessionRecord>> {
+        let mut out: Vec<SessionRecord> = self
+            .s()
+            .domains
+            .study
+            .sessions
+            .values()
+            .filter(|s| s.ended_at.is_none())
+            .cloned()
+            .collect();
+        out.sort_by_key(|s| std::cmp::Reverse((s.started_at, s.id)));
+        Ok(out)
+    }
+
     fn study_cards(&self, f: &StudyCardFilter) -> StorageResult<Vec<Card>> {
         let s = self.s();
         let mut out: Vec<Card> = s
@@ -103,6 +117,20 @@ impl StudyRead for MemTx<'_> {
             .reviews
             .values()
             .filter(|r| r.created_at >= since && r.mode == mode)
+            .cloned()
+            .collect();
+        out.sort_by_key(|r| (r.created_at, r.id));
+        Ok(out)
+    }
+
+    fn review_logs_since_any(&self, since: Timestamp) -> StorageResult<Vec<ReviewLogRecord>> {
+        let mut out: Vec<ReviewLogRecord> = self
+            .s()
+            .domains
+            .study
+            .reviews
+            .values()
+            .filter(|r| r.created_at >= since)
             .cloned()
             .collect();
         out.sort_by_key(|r| (r.created_at, r.id));

@@ -147,7 +147,9 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "search.ids" | "search.check" | "saved_queries.list" | "saved_queries.create"
         | "saved_queries.update" | "saved_queries.delete" => Reads(SEARCH),
         "study.start" | "study.session" | "study.active" | "study.answer" | "study.hint"
-        | "study.check_answer" | "study.suspend" | "study.bury" | "study.postpone" => {
+        | "study.check_answer" | "study.suspend" | "study.bury" | "study.postpone"
+        // v1.3: the launcher lists open sessions (their current cards) and card counts.
+        | "study.options" => {
             Reads(STUDY_CARDS)
         }
         "study.end" | "study.summary" | "study.card_history" => Reads(STUDY),
@@ -175,7 +177,7 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "ai.notes.add" | "ai.notes.update" => Refused(AI_WRITES),
         // Phase 4, v0.10 study modes: results are study sessions and cards (like `study.*`).
         "modes.confidence.answer" | "modes.timed.start" | "modes.timed.expire"
-        | "modes.test.paper" => Reads(STUDY_CARDS),
+        | "modes.test.paper" | "modes.test.save_draft" => Reads(STUDY_CARDS),
         // The backend judges a learn answer and grades a test against the card's answer: the
         // verdict says what the card holds, so they need the read permissions to run at all.
         "modes.learn.answer" | "modes.test.submit" => Oracle(STUDY_CARDS),

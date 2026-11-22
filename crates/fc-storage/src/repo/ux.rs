@@ -7,6 +7,9 @@ use super::*;
 pub const UX_ONBOARDING_DONE: &str = "onboarding.done";
 /// Key: local day index of the last study reminder shown.
 pub const UX_REMINDER_LAST_DAY: &str = "reminders.last_day";
+/// Key (v1.3): the client's UTC offset in minutes as last given to `study.start`, for queries
+/// that get none (today counts, the query language's study day).
+pub const UX_CLIENT_TZ: &str = "study.client_tz";
 
 /// `ux_state` reads.
 pub trait UxStateRead {

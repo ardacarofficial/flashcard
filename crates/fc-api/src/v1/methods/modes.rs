@@ -25,6 +25,8 @@ methods! {
     // ---- test (module `practice_test`) ----
     /// The questions of a test session (answer key after submission or on request).
     ModesTestPaper = "modes.test.paper", Query, "practice_test", "study:read", Public, undo: false, TestPaperRequest => TestPaperDto;
+    /// v1.3: saves the answers of an unfinished paper (continued later). Session bookkeeping.
+    ModesTestSaveDraft = "modes.test.save_draft", Command, "practice_test", "study:write", Public, undo: false, SaveTestDraft => TestPaperDto;
     /// Grades a test, logs one review per question (`mode = test`) and returns the score.
     ModesTestSubmit = "modes.test.submit", Command, "practice_test", "study:write", Public, undo: true, SubmitTest => TestPaperDto;
 

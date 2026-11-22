@@ -129,6 +129,7 @@ fn start(
         order: None,
         tz_offset_mins: Some(0),
         modes: None,
+        scope: None,
     })
 }
 
@@ -439,13 +440,21 @@ pub fn custom_sessions_from_queries(f: &Factory) {
     );
     answer(&t, &s, dog, Rating::Good);
     assert!(card(&t, dog).scheduling.due.unwrap() > now(&t));
-    let s = start(
-        &t,
-        StudyKind::Custom,
-        None,
-        Some(by_query("seviye:A2 is:due")),
-    );
-    assert!(s.current.is_none());
+    // v1.3: an empty query result starts no session.
+    let e = t.err::<StudyStart>(StartSession {
+        kind: StudyKind::Custom,
+        mode: Some(StudyMode::Scheduled),
+        deck_id: None,
+        include_subdecks: None,
+        filter: Some(by_query("seviye:A2 is:due")),
+        from_session: None,
+        new_limit: None,
+        order: None,
+        tz_offset_mins: Some(0),
+        modes: None,
+        scope: None,
+    });
+    assert_eq!(e.code, ErrorCode::ConflictNothingToStudy);
     // Classification comparison + query text combined with the structured filter (AND).
     let b1 = start(&t, StudyKind::Custom, None, Some(by_query("seviye>=B1")));
     assert_eq!(b1.current.clone().unwrap().card_id, house);
@@ -497,6 +506,7 @@ pub fn custom_sessions_from_queries(f: &Factory) {
         order: None,
         tz_offset_mins: None,
         modes: None,
+        scope: None,
     });
     assert_eq!(e.code, ErrorCode::ValidationQuery);
     assert!(e.details["start"].is_number());
@@ -515,6 +525,7 @@ pub fn custom_sessions_from_queries(f: &Factory) {
         order: None,
         tz_offset_mins: None,
         modes: None,
+        scope: None,
     });
     assert_eq!(e.code, ErrorCode::ValidationInvalidParams);
 }

@@ -143,7 +143,31 @@ impl T {
             order: None,
             tz_offset_mins: Some(0),
             modes: None,
+            scope: None,
         })
+    }
+
+    /// v1.3: `None` when there is nothing to study (`CONFLICT_NOTHING_TO_STUDY`: no session
+    /// is created).
+    fn try_start(&self, kind: StudyKind, mode: StudyMode, deck: Option<DeckId>) -> Option<SessionDto> {
+        let req = StartSession {
+            kind,
+            mode: Some(mode),
+            deck_id: deck,
+            include_subdecks: None,
+            filter: None,
+            from_session: None,
+            new_limit: None,
+            order: None,
+            tz_offset_mins: Some(0),
+            modes: None,
+            scope: None,
+        };
+        match self.app.call::<StudyStart>(&req, &Actor::User) {
+            Ok(s) => Some(s),
+            Err(e) if e.code == ErrorCode::ConflictNothingToStudy => None,
+            Err(e) => panic!("study.start failed: {e:?}"),
+        }
     }
 
     fn session(&self, id: SessionId) -> SessionDto {
@@ -400,6 +424,7 @@ pub fn trial_mode_never_changes_cards(f: &Factory) {
         order: None,
         tz_offset_mins: Some(0),
         modes: None,
+        scope: None,
     });
     assert_eq!(trial.counts.new + trial.counts.review, 3);
     let ratings = [Rating::Again, Rating::Hard, Rating::Good, Rating::Again, Rating::Easy];
@@ -453,7 +478,10 @@ pub fn simulation_365_days(f: &Factory) {
         let mut rng = SplitMix64::new(42);
         for day in 0..365i64 {
             t.clock.set(Timestamp(T0 + day * MILLIS_PER_DAY));
-            let mut s = t.start(StudyKind::Normal, StudyMode::Scheduled, None);
+            // v1.3: a day with nothing due starts no session.
+            let Some(mut s) = t.try_start(StudyKind::Normal, StudyMode::Scheduled, None) else {
+                continue;
+            };
             for _ in 0..200 {
                 let Some(c) = s.current.clone() else { break };
                 let rating = match rng.below(10) {
@@ -571,6 +599,7 @@ pub fn mistakes_session_repeats_again_cards(f: &Factory) {
         order: None,
         tz_offset_mins: None,
         modes: None,
+        scope: None,
     });
     let total = m.counts.new + m.counts.learning + m.counts.review;
     assert_eq!(total, 2);
@@ -594,6 +623,7 @@ pub fn mistakes_session_repeats_again_cards(f: &Factory) {
         order: None,
         tz_offset_mins: None,
         modes: None,
+        scope: None,
     });
     assert_eq!(e.code, ErrorCode::ValidationInvalidParams);
 }
@@ -673,6 +703,7 @@ pub fn custom_session_filters_by_classification(f: &Factory) {
             order: Some(StudyOrder::Due),
             tz_offset_mins: Some(0),
             modes: None,
+            scope: None,
         })
     };
     let due = start(StudyKind::Normal, filter(None));
@@ -792,8 +823,8 @@ pub fn postpone_moves_due_cards_and_undoes(f: &Factory) {
     for c in [a, b] {
         assert_eq!(t.card(c).scheduling.due, Some(t.now().plus_days(3)));
     }
-    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, None);
-    assert!(s.current.is_none(), "nothing due today any more");
+    // v1.3: nothing due today any more — no session starts (it used to open an empty one).
+    assert!(t.try_start(StudyKind::Normal, StudyMode::Scheduled, None).is_none());
     t.undo();
     assert_eq!(vec![t.card(a), t.card(b)], before);
     for days in [0, 400] {
@@ -898,6 +929,7 @@ pub fn study_errors(f: &Factory) {
         order: None,
         tz_offset_mins: Some(10_000),
         modes: None,
+        scope: None,
     });
     assert_eq!(e.code, ErrorCode::ValidationInvalidParams);
     // Rule 7: the module can be switched off.
@@ -929,6 +961,7 @@ pub fn new_limit_and_order(f: &Factory) {
         order: Some(StudyOrder::NewestFirst),
         tz_offset_mins: None,
         modes: None,
+        scope: None,
     });
     assert_eq!(s.counts.new, 5);
     assert_eq!(s.current.unwrap().card_id, cards[4]);
@@ -986,6 +1019,10 @@ mod sqlite_file {
     use std::sync::Arc;
     study_suite!(|| -> Arc<dyn Store> { Arc::new(TempSqlite::new()) });
 }
+
+/// v1.3 study launcher (`study.options`, scoped starts, resume of every kind).
+#[path = "launcher_tests.rs"]
+mod launcher;
 
 #[test]
 fn v02_internal_methods() {
