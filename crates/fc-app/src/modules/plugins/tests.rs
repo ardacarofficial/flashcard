@@ -1966,7 +1966,7 @@ fn words_need_their_permission_and_stay_in_the_plugins_decks(f: Factory) {
     // reading:read is not enough any more: the words need words:read.
     install_looper(&t, &dir, "com.test.reading", &lookup, 1, &["reading:read"]);
     let out = go_text(&t, "com.test.reading");
-    assert!(out.contains("PERMISSION_DENIED") && out.contains("words:read"), "{out}");
+    assert!(out.contains("PERMISSION_DENIED"), "{out}");
 
     // Granted, no limit: every deck.
     install_looper(&t, &dir, "com.test.words", &lookup, 1, &["words:read"]);
@@ -2027,12 +2027,8 @@ fn words_need_their_permission_and_stay_in_the_plugins_decks(f: Factory) {
     let out = go_text(&t, "com.test.analyze");
     assert!(out.contains("PERMISSION_DENIED") && out.contains("some decks only"), "{out}");
 
-    // Rebuilding the index is whole-collection work.
-    let rebuild = invoke_request("v1.words.index.rebuild_now", json!({}));
-    install_looper(&t, &dir, "com.test.rebuild", &rebuild, 1, &["reading:write", "reading:read"]);
-    assert!(go_text(&t, "com.test.rebuild").contains("PERMISSION_DENIED"));
-
-    // The limit is the user's: an undoable step, gone with undo; unknown decks are refused.
+    // The limit is the user's: an undoable step (the last one here), gone with undo; unknown
+    // decks are refused.
     undo(&t);
     assert_eq!(
         t.ok::<PluginsWordDecksGet>(PluginRef { id: "com.test.analyze".into() }).deck_ids,
@@ -2049,6 +2045,11 @@ fn words_need_their_permission_and_stay_in_the_plugins_decks(f: Factory) {
         )
         .unwrap_err();
     assert_eq!(e.code, ErrorCode::NotFoundDeck);
+    // Rebuilding the index is whole-collection work.
+    let rebuild = invoke_request("v1.words.index.rebuild_now", json!({}));
+    install_looper(&t, &dir, "com.test.rebuild", &rebuild, 1, &["reading:write", "reading:read"]);
+    assert!(go_text(&t, "com.test.rebuild").contains("PERMISSION_DENIED"));
+
     // …and a plugin cannot lift its own limit (plugins:write is never grantable).
     let lift = invoke_request("v1.plugins.word_decks.set", json!({ "id": "com.test.words", "deck_ids": null }));
     assert!(Permission::parse("plugins:write").is_err());

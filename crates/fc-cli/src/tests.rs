@@ -588,7 +588,12 @@ fn call_help_shows_the_word_index() {
         .unwrap()
         .render_long_help()
         .to_string();
-    for m in ["words.lookup", "words.list", "words.stats", "subtitle.share_known_words"] {
+    for m in [
+        "words.lookup",
+        "words.list",
+        "words.stats",
+        "subtitle.share_known_words",
+    ] {
         assert!(help.contains(m), "{m} missing from:\n{help}");
     }
 }

@@ -12,4 +12,10 @@ words: Array<SubtitleKnownWord>,
 /**
  * Pass as `?cursor=` for the next page; `null` = no more.
  */
-next_cursor: string | null, };
+next_cursor: string | null, 
+/**
+ * `false` = the user does not share known words with the extension (setting
+ * `subtitle.share_known_words`, off by default): `words` is empty and `next_cursor`
+ * `null`, a valid empty answer for any client (v1.4; clients ignore unknown fields).
+ */
+shared: boolean, };

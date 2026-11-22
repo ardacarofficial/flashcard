@@ -39,4 +39,9 @@ last_capture_at: Timestamp | null,
 /**
  * Keys that work.
  */
-active_keys: number, };
+active_keys: number, 
+/**
+ * Whether `GET /subtitle/v1/known-words` shares the word index with the extension
+ * (setting `subtitle.share_known_words`, off by default: Subtitle is a capture tool).
+ */
+share_known_words: boolean, };

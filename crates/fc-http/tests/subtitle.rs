@@ -494,7 +494,10 @@ fn known_words_come_from_the_reviews() {
         key: "subtitle.share_known_words".into(),
         value: json!(true),
     });
-    assert_eq!(fx.get("/subtitle/v1/me").body["features"]["known_words"], true);
+    assert_eq!(
+        fx.get("/subtitle/v1/me").body["features"]["known_words"],
+        true
+    );
     let r = fx.get("/subtitle/v1/known-words?lang=en");
     assert_eq!(r.status, 200, "{}", r.body);
     assert_eq!(r.body["shared"], true);
