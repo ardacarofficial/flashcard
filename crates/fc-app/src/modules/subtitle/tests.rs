@@ -48,6 +48,7 @@ suite!(
     a_capture_is_one_undo_step,
     a_word_whose_card_was_deleted_comes_back,
     restoring_a_backup_revokes_every_key,
+    restoring_a_backup_brings_no_capture_diagnostics,
 );
 
 /// A JPEG and a WAV header (what the media sniffer recognises).
@@ -65,6 +66,14 @@ fn new_key(t: &TestApp, name: &str) -> (SubtitleKeyDto, String) {
     let c = t.ok::<SubtitleKeysCreate>(CreateSubtitleKey { name: name.into() });
     let key = authenticate(&t.app, &key_hash(&c.secret)).unwrap();
     (key, c.secret)
+}
+
+fn share_known_words(t: &TestApp, on: bool) {
+    t.ok::<SettingsSet>(SetSetting {
+        scope: SettingScope::App,
+        key: SHARE_KNOWN_WORDS.into(),
+        value: json!(on),
+    });
 }
 
 fn setup(f: Factory) -> (TestApp, SubtitleKeyDto) {
@@ -465,7 +474,20 @@ pub(super) fn known_words_follow_the_cards_intervals(f: Factory) {
     de["lang"]["target"] = json!("DE");
     capture(&t.app, &key, &de).unwrap();
 
+    // v1.4: not shared by default — an empty last page that says so, and `/me` agrees.
+    assert!(!t.ok::<SubtitleStatusGet>(Empty {}).share_known_words);
+    let off = known_words(&t.app, Some("en"), None).unwrap();
+    assert_eq!(
+        (off.words.len(), off.next_cursor.clone(), off.shared),
+        (0, None, false)
+    );
+    assert!(!me(&t.app, &key).unwrap().features.known_words);
+    share_known_words(&t, true);
+    assert!(t.ok::<SubtitleStatusGet>(Empty {}).share_known_words);
+    assert!(me(&t.app, &key).unwrap().features.known_words);
+
     let all = known_words(&t.app, Some("en"), None).unwrap();
+    assert!(all.shared);
     let lemmas: Vec<_> = all.words.iter().map(|w| w.lemma.as_str()).collect();
     assert_eq!(lemmas, ["key", "pick up"]);
     assert!(all.words.iter().all(|w| w.status == SubtitleWordStatus::Learning));
@@ -513,6 +535,10 @@ pub(super) fn known_words_follow_the_cards_intervals(f: Factory) {
     });
     let words = known_words(&t.app, Some("en"), None).unwrap().words;
     assert_eq!(words.iter().map(|w| w.lemma.as_str()).collect::<Vec<_>>(), ["pick up"]);
+
+    // Switched off again: nothing more is shared.
+    share_known_words(&t, false);
+    assert!(known_words(&t.app, Some("en"), None).unwrap().words.is_empty());
 }
 
 pub(super) fn a_capture_is_one_undo_step(f: Factory) {
@@ -615,4 +641,77 @@ pub(super) fn restoring_a_backup_revokes_every_key(f: Factory) {
         .rows
         .iter()
         .all(|r| matches!(r[col], fc_storage::repo::SqlValue::Integer(_))));
+}
+
+/// v1.4 A6: the capture diagnostics (`subtitle_capture_log`) are not user data and never come
+/// back with a restore (docs/06 §5.1): the restored profile's `subtitle.captures.recent`
+/// starts empty instead of listing attempts made against another collection.
+pub(super) fn restoring_a_backup_brings_no_capture_diagnostics(f: Factory) {
+    let (t, key) = setup(f);
+    capture(&t.app, &key, &example(1, "key", LINE)).unwrap();
+    let Ok(mut dump) = t.store.read().unwrap().dump_collection() else {
+        return;
+    };
+    let log = |d: &fc_storage::repo::CollectionDump| {
+        d.tables
+            .iter()
+            .find(|x| x.name == "subtitle_capture_log")
+            .map(|x| x.rows.len())
+    };
+    assert_eq!(log(&dump), Some(1), "the attempt is in the collection");
+    forget_keys(&mut dump);
+    assert_eq!(log(&dump), Some(0));
+}
+
+/// v1.4 (B3): a capture records where its note came from, so the language queries find it —
+/// the persisted result read back through `search.cards`. Media origin only where stored
+/// media exists (SQLite; the in-memory store does not model media files).
+fn captures_are_found_by_language_queries(f: Factory, with_media: bool) {
+    use fc_api::v1::search::SearchCards;
+    let (t, key) = setup(f);
+    let mut v = example(1, "key", LINE);
+    if with_media {
+        let shot = upload_of(&t, &key, 1, "screenshot", "image/jpeg", JPEG).unwrap();
+        let audio = upload_of(&t, &key, 1, "audio", "audio/wav", WAV).unwrap();
+        v["media"] = json!({
+            "screenshot": {"upload_id": shot, "mime": "image/jpeg"},
+            "audio": {"upload_id": audio, "mime": "audio/wav"},
+        });
+    }
+    capture(&t.app, &key, &v).unwrap();
+    let count = |q: &str| {
+        t.ok::<SearchCardsMethod>(SearchCards {
+            query: q.into(),
+            sort: None,
+            descending: None,
+            notes_only: None,
+            offset: None,
+            limit: None,
+        })
+        .total
+    };
+    for q in [
+        "nereden:altyazı",
+        "from:subtitle kaynak:\"Never Gonna Give You Up\"",
+        "source:youtube",
+        "kaynak:dQw4w9WgXcQ",
+        "kelime:keys dil:en durum:öğreniyorum",
+    ] {
+        assert_eq!(count(q), 1, "{q}");
+    }
+    assert_eq!(count("nereden:elle"), 0);
+    if with_media {
+        assert_eq!(count("ses:video görsel:video"), 1);
+        assert_eq!(count("ses:dosya"), 0);
+    }
+}
+
+#[test]
+fn captures_are_found_by_language_queries_sqlite() {
+    captures_are_found_by_language_queries(|| Arc::new(TempSqlite::new()), true);
+}
+
+#[test]
+fn captures_are_found_by_language_queries_mem() {
+    captures_are_found_by_language_queries(|| Arc::new(MemStore::new()), false);
 }

@@ -1367,8 +1367,12 @@ impl OpHost<'_> {
                 .with_detail("missing", missing),
             ));
         }
+        // v1.4: a plugin limited to some decks learns words from those only.
+        super::word_scope::check(app, self.plugin.id(), name)?;
         let r = match &entry.handler {
-            ErasedHandler::Query(_) => app.invoke_hooked(method, params, &actor, true, crate::modules::plugins::Hooks::Off),
+            ErasedHandler::Query(_) => app
+                .invoke_hooked(method, params, &actor, true, crate::modules::plugins::Hooks::Off)
+                .and_then(|v| super::word_scope::cut(app, self.plugin.id(), name, v)),
             ErasedHandler::Action(_) => Err(denied(method, d.permission, "plugins cannot run plugin operations")),
             ErasedHandler::Command(_) => {
                 if self.mode == Mode::Hook {

@@ -162,6 +162,7 @@ fn item_matches(
             tag_ids: &tag_ids,
             attrs: &attrs,
             search_text: &text,
+            lang: &fc_core::query::LangFacts::NONE,
         },
         now,
     ))

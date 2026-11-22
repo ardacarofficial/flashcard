@@ -158,7 +158,15 @@
       "or_q": "(cat OR dog)",
       "or_d": "Either one",
       "phrase_q": "\"exact phrase\"",
-      "phrase_d": "Quotes keep words together"
+      "phrase_d": "Quotes keep words together",
+      "word_q": "word:went",
+      "word_d": "Every form of the word (went → go) and expressions; also status:learning / known / new / ignored, lang:en",
+      "seen_q": "seen>=2",
+      "seen_d": "Words you met in at least two scenes (notes)",
+      "from_q": "from:subtitle",
+      "from_d": "Where the card came from: subtitle, reading, anki, import, manual; source:\"*S1E2\" episode or video title",
+      "media_q": "audio:video",
+      "media_d": "Has a sound clip taken from the video; also audio:yes / none / file / tts, image:yes"
     },
     "saved_short": "Saved",
     "keys": {

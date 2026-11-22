@@ -108,7 +108,10 @@
       "create_deck": "Create a deck",
       "add_notes": "Add notes",
       "update_note": "Edit a note",
-      "set_classification": "Set a classification (asks for confirmation)"
+      "set_classification": "Set a classification (asks for confirmation)",
+      "words_lookup": "Look up words (which are new to you)",
+      "words_list": "List your words (by status or deck)",
+      "words_stats": "Count your words"
     },
     "client": {
       "heading": "External MCP servers",

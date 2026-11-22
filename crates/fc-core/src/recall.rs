@@ -23,23 +23,96 @@ pub fn valid_decay(decay: f64) -> bool {
     decay.is_finite() && decay > 0.0
 }
 
-/// `F` of the curve with `decay` (`R(S, S) = 0.9`).
-fn factor(decay: f64) -> f64 {
-    0.9f64.powf(-1.0 / decay) - 1.0
+/// Decay of FSRS-4.5 and FSRS-5 (17 / 19 weights): their curve has a fixed `d = 0.5`.
+pub const FSRS5_DECAY: f64 = 0.5;
+
+/// Decay of a preset's FSRS weights — the one rule every surface uses (v1.4):
+/// * 21 finite weights (FSRS-6): `w20` at the scheduler's `f32` precision (`fsrs-rs` computes
+///   in `f32`, and [`DEFAULT_DECAY`] is defined the same way);
+/// * 17 / 19 finite weights (FSRS-4.5 / FSRS-5): [`FSRS5_DECAY`], the fixed decay of those
+///   model versions (not a guess: the curve they were optimised on);
+/// * anything else (empty = the default weights, invalid): [`DEFAULT_DECAY`].
+pub fn decay_of_weights(weights: &[f64]) -> f64 {
+    if !weights.iter().all(|w| w.is_finite()) {
+        return DEFAULT_DECAY;
+    }
+    match weights.len() {
+        21 => {
+            #[allow(clippy::cast_possible_truncation)]
+            let d = f64::from(weights[20] as f32);
+            if valid_decay(d) {
+                d
+            } else {
+                DEFAULT_DECAY
+            }
+        }
+        17 | 19 => FSRS5_DECAY,
+        _ => DEFAULT_DECAY,
+    }
+}
+
+/// The forgetting curve of one decay, with its factor computed once (hot loops: the
+/// workload forecast, queue ordering). [`retrievability`] is this curve.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Curve {
+    decay: f64,
+    /// `F = 0.9^(-1/d) − 1` (`R(S, S) = 0.9`).
+    factor: f64,
+}
+
+impl Default for Curve {
+    /// The curve of [`DEFAULT_DECAY`].
+    fn default() -> Self {
+        Self {
+            decay: DEFAULT_DECAY,
+            factor: 0.9f64.powf(-1.0 / DEFAULT_DECAY) - 1.0,
+        }
+    }
+}
+
+impl Curve {
+    /// The curve of `decay` (`None` for an invalid one).
+    pub fn new(decay: f64) -> Option<Self> {
+        valid_decay(decay).then(|| Self {
+            decay,
+            factor: 0.9f64.powf(-1.0 / decay) - 1.0,
+        })
+    }
+
+    /// Its decay.
+    pub fn decay(&self) -> f64 {
+        self.decay
+    }
+
+    /// `R` after `elapsed_days` (negative or non-finite = 0) for a memory of `stability` days
+    /// (`None` for a non-positive or non-finite stability).
+    pub fn retrievability(&self, stability: f64, elapsed_days: f64) -> Option<f64> {
+        if !(stability.is_finite() && stability > 0.0) {
+            return None;
+        }
+        let t = if elapsed_days.is_finite() {
+            elapsed_days.max(0.0)
+        } else {
+            0.0
+        };
+        Some((1.0 + self.factor * t / stability).powf(-self.decay))
+    }
+
+    /// Days after which a memory of `stability` days falls to recall `retention` (the inverse
+    /// of [`Curve::retrievability`]); `None` outside `0 < retention < 1` or for a bad
+    /// stability.
+    pub fn days_to(&self, stability: f64, retention: f64) -> Option<f64> {
+        if !(stability.is_finite() && stability > 0.0 && retention > 0.0 && retention < 1.0) {
+            return None;
+        }
+        Some(stability / self.factor * (retention.powf(-1.0 / self.decay) - 1.0))
+    }
 }
 
 /// `R` after `elapsed_days` for a memory of `stability` days. `None` for a non-positive or
 /// non-finite stability or an invalid decay.
 pub fn retrievability(stability: f64, elapsed_days: f64, decay: f64) -> Option<f64> {
-    if !(stability.is_finite() && stability > 0.0 && valid_decay(decay)) {
-        return None;
-    }
-    let t = if elapsed_days.is_finite() {
-        elapsed_days.max(0.0)
-    } else {
-        0.0
-    };
-    Some((1.0 + factor(decay) * t / stability).powf(-decay))
+    Curve::new(decay)?.retrievability(stability, elapsed_days)
 }
 
 /// Whole study days from the study day of `last_review` to the current one, which began at
@@ -100,6 +173,27 @@ mod tests {
         assert_eq!(retrievability(f64::NAN, 1.0, 0.5), None);
         assert_eq!(retrievability(1.0, 1.0, 0.0), None);
         assert_eq!(retrievability(1.0, 1.0, f64::NAN), None);
+    }
+
+    #[test]
+    fn decay_follows_the_model_version_and_curve_inverts() {
+        let mut w = vec![1.0; 21];
+        w[20] = 0.1542;
+        assert_eq!(decay_of_weights(&w).to_bits(), DEFAULT_DECAY.to_bits());
+        w[20] = 0.5;
+        assert_eq!(decay_of_weights(&w), 0.5);
+        assert_eq!(decay_of_weights(&[1.0; 19]), FSRS5_DECAY);
+        assert_eq!(decay_of_weights(&[1.0; 17]), FSRS5_DECAY);
+        assert_eq!(decay_of_weights(&[]), DEFAULT_DECAY);
+        assert_eq!(decay_of_weights(&[1.0; 20]), DEFAULT_DECAY);
+        w[3] = f64::NAN;
+        assert_eq!(decay_of_weights(&w), DEFAULT_DECAY);
+        let c = Curve::new(0.3).unwrap();
+        let t = c.days_to(12.0, 0.8).unwrap();
+        assert!((c.retrievability(12.0, t).unwrap() - 0.8).abs() < 1e-12);
+        assert!((c.days_to(12.0, 0.9).unwrap() - 12.0).abs() < 1e-9);
+        assert_eq!(c.days_to(12.0, 1.0), None);
+        assert_eq!(Curve::new(0.0), None);
     }
 
     #[test]

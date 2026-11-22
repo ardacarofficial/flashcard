@@ -4,6 +4,7 @@
   "oplog.summary.plugins.set_enabled": "Turned plugin {name} on/off",
   "oplog.summary.plugins.set_permissions": "Changed the permissions of plugin {name}",
   "oplog.summary.plugins.settings.set": "Changed setting {key} of plugin {name}",
+  "oplog.summary.plugins.word_decks.set": "Changed the decks plugin {name} may learn words from",
   "oplog.summary.plugins.run": "Plugin {plugin}",
   "oplog.summary.plugins.ui.open": "Opened a plugin view",
   "oplog.summary.plugins.ui.act": "Plugin view action",

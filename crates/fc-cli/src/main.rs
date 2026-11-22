@@ -26,6 +26,20 @@ use fc_core::NoteId;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+/// `fc call --help`: the word index (v1.4) as examples — read-only, need `words:read`.
+const CALL_EXAMPLES: &str = "\
+Word index (v1.4, read-only):
+  fc call words.lookup '{\"language\":\"en\",\"forms\":[\"went\",\"picked up\"]}'
+      status of word forms as they appear (went → go): new, learning, known, ignored
+  fc call words.list '{\"language\":\"en\",\"status\":\"learning\",\"limit\":50}'
+      index rows, paged: pass next_cursor back as \"cursor\"
+  fc call words.stats
+      words per status per language, and notes without a language
+  fc call words.index.rebuild
+      rebuilds the index in a background job (derived data)
+Settings that shape it: words.language (app or deck), words.known_interval_days;
+Subtitle reads it only with subtitle.share_known_words on.";
+
 /// Flashcard command-line interface.
 #[derive(Debug, Parser)]
 #[command(name = "fc", version, about = "Flashcard CLI")]
@@ -78,6 +92,7 @@ enum Command {
     Dev(dev::DevCommand),
     /// Invoke any public API method with JSON params, e.g.
     /// `fc call decks.rename '{"id":"…","name":"X"}'`. Prints the JSON response.
+    #[command(after_long_help = CALL_EXAMPLES)]
     Call {
         /// Method name (`decks.create` or qualified `v1.decks.create`).
         method: String,

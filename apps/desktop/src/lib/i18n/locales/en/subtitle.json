@@ -13,6 +13,10 @@
       "default_deck": {
         "label": "Deck for Subtitle cards",
         "description": "Deck id that captures go to when the extension names none. Empty: a deck called Subtitle, made on first use. Easier to choose on the Subtitle page."
+      },
+      "share_known_words": {
+        "label": "Share known words with Subtitle",
+        "description": "Off: the extension only sends words here. On: it may also read which words you know or are learning, to colour subtitles."
       }
     }
   },

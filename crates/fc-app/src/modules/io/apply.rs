@@ -539,6 +539,7 @@ impl Writer {
             }
         };
         insert_note(ctx, nt, &note)?;
+        record_origin(ctx, note.id, fc_core::query::NoteOrigin::Import)?;
         self.created.notes.push(note.id);
         report.added_notes += 1;
         for spec in specs {
@@ -804,6 +805,7 @@ impl Writer {
                 note.id = NoteId::generate(ctx.ids);
             }
             insert_note(ctx, &nt, &note)?;
+            record_origin(ctx, note.id, p.origin)?;
             self.created.notes.push(note.id);
             st.report.added_notes += 1;
             st.note_map.insert(n.id, note.id);
@@ -1023,6 +1025,24 @@ impl Writer {
 
 /// Whether an option id is already used by any definition.
 /// A history number in `review_log`'s range (negative → 0).
+/// v1.4 (B3): where an added note came from (`nereden:anki`, `nereden:içe_aktarma`). Derived
+/// metadata like the word index's note language: a trashed or undone import leaves it harmless.
+fn record_origin(
+    ctx: &mut CommandCtx<'_>,
+    note: NoteId,
+    origin: fc_core::query::NoteOrigin,
+) -> AppResult<()> {
+    ctx.tx.set_note_origin(&fc_storage::repo::NoteOriginRecord {
+        note_id: note,
+        origin,
+        source: String::new(),
+        site: String::new(),
+        video_id: String::new(),
+        created_at: ctx.now,
+    })?;
+    Ok(())
+}
+
 fn clamp_u32(v: i64) -> u32 {
     u32::try_from(v.max(0)).unwrap_or(u32::MAX)
 }

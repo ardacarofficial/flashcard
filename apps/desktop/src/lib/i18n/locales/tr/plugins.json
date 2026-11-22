@@ -205,7 +205,8 @@
         "search": "Aramayı",
         "presets": "Deste ayarlarını",
         "attributes": "Sınıflandırmaları",
-        "inbox": "Gelen kutusunu"
+        "inbox": "Gelen kutusunu",
+        "words": "Hangi kelimeleri bildiğini (kelime dizinini)"
       }
     }
   },
@@ -222,6 +223,10 @@
       "uninstall": "Eklentiyi kaldır",
       "set_enabled": "Eklentiyi aç/kapat",
       "set_permissions": "Eklenti izinlerini değiştir",
+      "word_decks": {
+        "get": "Eklentinin kelime öğrenebileceği desteler",
+        "set": "Eklentinin kelime öğrenebileceği desteleri sınırla"
+      },
       "settings": {
         "get": "Eklenti ayarları",
         "set": "Eklenti ayarını değiştir"

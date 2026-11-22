@@ -13,6 +13,7 @@ media: boolean,
  */
 batch: boolean, 
 /**
- * `GET /v1/known-words`.
+ * `GET /v1/known-words` answers with the word index (`false` while the user does not
+ * share it, setting `subtitle.share_known_words`; the route still answers, empty).
  */
 known_words: boolean, };

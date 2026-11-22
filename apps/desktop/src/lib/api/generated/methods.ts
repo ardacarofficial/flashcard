@@ -230,6 +230,7 @@ import type { PluginLocales } from "./PluginLocales";
 import type { PluginLogs } from "./PluginLogs";
 import type { PluginRef } from "./PluginRef";
 import type { PluginSettings } from "./PluginSettings";
+import type { PluginWordDecks } from "./PluginWordDecks";
 import type { PostponeCards } from "./PostponeCards";
 import type { PostponeReading } from "./PostponeReading";
 import type { PresetDto } from "./PresetDto";
@@ -304,6 +305,7 @@ import type { SetModuleEnabled } from "./SetModuleEnabled";
 import type { SetPluginEnabled } from "./SetPluginEnabled";
 import type { SetPluginPermissions } from "./SetPluginPermissions";
 import type { SetPluginSetting } from "./SetPluginSetting";
+import type { SetPluginWordDecks } from "./SetPluginWordDecks";
 import type { SetReadingPosition } from "./SetReadingPosition";
 import type { SetReadingQueue } from "./SetReadingQueue";
 import type { SetSetting } from "./SetSetting";
@@ -580,6 +582,8 @@ export interface Methods {
   "plugins.set_permissions": { kind: "command"; request: SetPluginPermissions; response: PluginDto };
   "plugins.settings.get": { kind: "query"; request: PluginRef; response: PluginSettings };
   "plugins.settings.set": { kind: "command"; request: SetPluginSetting; response: PluginSettings };
+  "plugins.word_decks.get": { kind: "query"; request: PluginRef; response: PluginWordDecks };
+  "plugins.word_decks.set": { kind: "command"; request: SetPluginWordDecks; response: PluginWordDecks };
   "plugins.locales": { kind: "query"; request: GetPluginLocales; response: PluginLocales };
   "plugins.logs": { kind: "query"; request: PluginRef; response: PluginLogs };
   "plugins.run": { kind: "command"; request: RunPluginCommand; response: PluginCommandResult };
@@ -896,6 +900,8 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "plugins.set_permissions": "command",
   "plugins.settings.get": "query",
   "plugins.settings.set": "command",
+  "plugins.word_decks.get": "query",
+  "plugins.word_decks.set": "command",
   "plugins.locales": "query",
   "plugins.logs": "query",
   "plugins.run": "command",

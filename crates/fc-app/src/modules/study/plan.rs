@@ -656,6 +656,32 @@ impl<'a> Planner<'a> {
                     c.buried_until = None;
                 }
             }
+            // v1.4: "lowest recall first" ranks by the recall card info shows: each card's
+            // own preset decay (`stats::facts::decay_of`).
+            let decays: HashMap<fc_core::DeckId, f64> = if matches!(
+                order,
+                Order::Preset {
+                    review: fc_core::preset::ReviewOrder::Retrievability,
+                    ..
+                }
+            ) {
+                let mut presets = crate::modules::stats::facts::Presets::new(reads);
+                let mut m = HashMap::new();
+                for c in &candidates {
+                    if let std::collections::hash_map::Entry::Vacant(e) = m.entry(c.deck_id) {
+                        e.insert(crate::modules::stats::facts::decay_of(presets.of(c.deck_id)?));
+                    }
+                }
+                m
+            } else {
+                HashMap::new()
+            };
+            let decay_of = |c: &fc_core::card::Card| {
+                decays
+                    .get(&c.deck_id)
+                    .copied()
+                    .unwrap_or(fc_core::recall::DEFAULT_DECAY)
+            };
             // Seeded from the session id: shuffles are reproducible from the stored session.
             let mut rng = SplitMix64::new(req.seed);
             let queue = queue::build_queue(
@@ -670,6 +696,7 @@ impl<'a> Planner<'a> {
                     order,
                     bury_siblings,
                     rng: &mut rng,
+                    decay_of: Some(&decay_of),
                 },
             );
             let by_id: HashMap<CardId, &fc_core::card::Card> =

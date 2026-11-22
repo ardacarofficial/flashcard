@@ -8,18 +8,20 @@
 use super::{all, exec, id, json_list, one, ts, Mode, SqliteTx, WriteMode};
 use crate::error::StorageResult;
 use crate::repo::{
-    CardHit, CardSearch, CardSort, IntegrityReport, PurgeCounts, ReviewEntry, SearchPage,
-    SearchRead, SearchWrite,
+    CardHit, CardSearch, CardSort, IntegrityReport, NoteOriginRecord, PurgeCounts, ReviewEntry,
+    SearchPage, SearchRead, SearchWrite,
 };
 use fc_core::attribute::AttributeTarget;
 use fc_core::card::Card;
 use fc_core::note::{strip_html, Note};
 use fc_core::query::eval::sql_op;
 use fc_core::query::filter::{AttrTest, CardNum, Filter, Pred, TimeCol};
+use fc_core::query::lang::{CEFR_BANDS, VIDEO_MEDIA_PREFIX};
 use fc_core::query::text::{
     compile_regex, field_glob_matches, fields_text, fold, glob_index_tokens, regex_matches, Glob,
 };
-use fc_core::query::SavedQuery;
+use fc_core::query::{MediaFrom, NoteOrigin, SavedQuery};
+use fc_core::reading::WordStatus;
 use fc_core::tag::TagName;
 use fc_core::{CardId, NoteId, NoteTypeId, SavedQueryId, Timestamp};
 use rusqlite::functions::{Context, FunctionFlags};
@@ -93,6 +95,12 @@ pub(crate) fn register_functions(conn: &Connection) -> rusqlite::Result<()> {
         let values: fc_core::note::FieldValues =
             serde_json::from_str(ctx.get_raw(1).as_str().map_err(user_err)?).map_err(user_err)?;
         Ok(fts_text(&fc_core::note::searchable_text_of(&defs, &values)))
+    })?;
+    // v1.4 (migration 1460): source title of a note's `source` field.
+    conn.create_scalar_function("fc_source_title", 1, flags, |ctx| {
+        Ok(ctx
+            .get::<Option<String>>(0)?
+            .map(|s| fc_core::query::lang::source_title(&s)))
     })?;
     conn.create_scalar_function("fc_index_sort", 1, flags, |ctx| {
         Ok(ctx.get::<Option<String>>(0)?.map(|s| fts_sort_text(&s)))
@@ -413,7 +421,239 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
             "c.id IN (SELECT value FROM json_each({}))",
             out.param(json(ids))
         ),
+        Pred::WordStatus {
+            statuses,
+            known_days,
+        } => {
+            // The threshold only when a status reads it (an unused parameter is an error).
+            let k = if statuses
+                .iter()
+                .any(|s| matches!(s, WordStatus::Known | WordStatus::Learning))
+            {
+                out.param(i64::from(*known_days))
+            } else {
+                String::new()
+            };
+            let conds: Vec<String> = statuses
+                .iter()
+                .map(|s| match s {
+                    WordStatus::Known => format!(
+                        "w.mark = 'known' OR (w.mark IS NULL AND w.cards > 0 \
+                         AND w.max_interval_days >= {k})"
+                    ),
+                    WordStatus::Ignored => "w.mark = 'ignored'".to_owned(),
+                    WordStatus::Learning => format!(
+                        "w.mark IS NULL AND w.cards > 0 \
+                         AND NOT coalesce(w.max_interval_days >= {k}, 0)"
+                    ),
+                    WordStatus::New => "w.mark IS NULL AND w.cards = 0".to_owned(),
+                })
+                .map(|c| format!("({c})"))
+                .collect();
+            if conds.is_empty() {
+                return "0".into();
+            }
+            note_in(
+                out,
+                "wn.note_id",
+                &format!(
+                    "FROM word_index_notes wn JOIN word_index w \
+                     ON w.language = wn.language AND w.key = wn.key \
+                     WHERE wn.language <> '' AND ({})",
+                    conds.join(" OR ")
+                ),
+            )
+        }
+        Pred::Language(Some(l)) => {
+            let l = out.param(l.clone());
+            note_in(
+                out,
+                "note_id",
+                &format!("FROM word_index_notes WHERE language = {l}"),
+            )
+        }
+        Pred::Language(None) => format!(
+            "NOT EXISTS (SELECT 1 FROM word_index_notes WHERE note_id = {} AND language <> '')",
+            out.note
+        ),
+        Pred::WordKeys(keys) => {
+            let list = out.list(keys);
+            note_in(
+                out,
+                "note_id",
+                &format!("FROM word_index_notes WHERE key IN {list}"),
+            )
+        }
+        Pred::WordKeyGlob(g) => {
+            let g = out.param(g.clone());
+            note_in(
+                out,
+                "note_id",
+                &format!("FROM word_index_notes WHERE fc_glob({g}, key)"),
+            )
+        }
+        Pred::Encounters(op, n) => {
+            let n = out.param(*n);
+            note_in(
+                out,
+                "wn.note_id",
+                &format!(
+                    "FROM word_index_notes wn JOIN word_index w \
+                     ON w.language = wn.language AND w.key = wn.key \
+                     WHERE wn.language <> '' AND w.notes {} {n}",
+                    sql_op(*op)
+                ),
+            )
+        }
+        Pred::Origins(list) => {
+            let stored: Vec<&str> = list
+                .iter()
+                .filter(|o| **o != NoteOrigin::Manual)
+                .map(|o| o.as_str())
+                .collect();
+            let mut parts = Vec::new();
+            if !stored.is_empty() {
+                let l = out.list(&stored);
+                parts.push(note_in(
+                    out,
+                    "note_id",
+                    &format!("FROM note_origins WHERE origin IN {l}"),
+                ));
+            }
+            if list.contains(&NoteOrigin::Manual) {
+                parts.push(format!(
+                    "NOT EXISTS (SELECT 1 FROM note_origins WHERE note_id = {})",
+                    out.note
+                ));
+            }
+            if parts.is_empty() {
+                "0".into()
+            } else {
+                parts.join(" OR ")
+            }
+        }
+        Pred::Source(g) => {
+            let g = out.param(g.clone());
+            note_in(
+                out,
+                "note_id",
+                &format!(
+                    "FROM note_origins WHERE (fc_glob({g}, source) OR fc_glob({g}, site) \
+                     OR fc_glob({g}, video_id))"
+                ),
+            )
+        }
+        Pred::Media(kind, from) => {
+            let prefix = kind.mime_prefix();
+            // `mime` range on `media_mime`: `audio/` ≤ mime < `audio0` ('0' follows '/').
+            let lo = out.param(prefix.to_owned());
+            let hi = out.param(format!("{}0", &prefix[..prefix.len() - 1]));
+            let video = format!(
+                "(m.original_name IS NOT NULL AND substr(lower(m.original_name), 1, {}) = '{}')",
+                VIDEO_MEDIA_PREFIX.len(),
+                VIDEO_MEDIA_PREFIX
+            );
+            let origin = match from {
+                MediaFrom::Any => String::new(),
+                MediaFrom::Video => format!(" AND {video}"),
+                MediaFrom::File => format!(" AND NOT {video}"),
+            };
+            note_in(
+                out,
+                "nm.note_id",
+                &format!(
+                    "FROM media m JOIN note_media nm ON nm.hash = m.hash \
+                     WHERE m.mime >= {lo} AND m.mime < {hi}{origin}"
+                ),
+            )
+        }
+        Pred::FreqRank(op, n) => {
+            let n = out.param(*n);
+            note_in(
+                out,
+                "wn.note_id",
+                &format!(
+                    "FROM word_index_notes wn JOIN word_frequency f \
+                     ON f.language = wn.language AND f.key = wn.key \
+                     WHERE f.rank {} {n}",
+                    sql_op(*op)
+                ),
+            )
+        }
+        Pred::Band(bands) => {
+            let labels: Vec<String> = bands
+                .iter()
+                .filter_map(|b| CEFR_BANDS.get(usize::from(*b).wrapping_sub(1)))
+                .map(|b| (*b).to_owned())
+                .collect();
+            if labels.is_empty() {
+                return "0".into();
+            }
+            let l = out.list(&labels);
+            note_in(
+                out,
+                "wn.note_id",
+                &format!(
+                    "FROM word_index_notes wn JOIN word_frequency f \
+                     ON f.language = wn.language AND f.key = wn.key \
+                     WHERE lower(f.band) IN {l}"
+                ),
+            )
+        }
     }
+}
+
+/// Set membership of the card's note: `<note> IN (SELECT <col> <from_where>)`, or with
+/// [`Sql::correlated`] the probe `EXISTS (SELECT 1 <from_where> AND <col> = <note>)`.
+/// `from_where` is `FROM … WHERE …`.
+fn note_in(out: &Sql, col: &str, from_where: &str) -> String {
+    if out.correlated {
+        format!("EXISTS (SELECT 1 {from_where} AND {col} = {})", out.note)
+    } else {
+        format!("{} IN (SELECT {col} {from_where})", out.note)
+    }
+}
+
+/// Whether the optional word-data table (`word_frequency(language, key, rank, band)`, the
+/// frequency/CEFR pack) exists. Without it `sıklık`/`cefr` match nothing.
+fn has_word_frequency(conn: &Connection) -> StorageResult<bool> {
+    Ok(one(
+        conn,
+        "sqlite_master",
+        "SELECT 1 FROM sqlite_master WHERE name = 'word_frequency' AND type IN ('table', 'view')",
+        [],
+        |r| r.get::<_, i64>(0),
+    )?
+    .is_some())
+}
+
+/// `filter` with the word-data predicates replaced by "no match" (no data: false, so a negated
+/// one is true — what the in-memory evaluator says without a rank or band).
+fn without_word_data(f: &Filter) -> Filter {
+    match f {
+        Filter::And(v) => Filter::and(v.iter().map(without_word_data).collect()),
+        Filter::Or(v) => Filter::or(v.iter().map(without_word_data).collect()),
+        Filter::Not(x) => Filter::negate(without_word_data(x)),
+        Filter::Pred(Pred::FreqRank(..) | Pred::Band(_)) => Filter::Nothing,
+        other => other.clone(),
+    }
+}
+
+fn uses_word_data(f: &Filter) -> bool {
+    match f {
+        Filter::And(v) | Filter::Or(v) => v.iter().any(uses_word_data),
+        Filter::Not(x) => uses_word_data(x),
+        Filter::Pred(Pred::FreqRank(..) | Pred::Band(_)) => true,
+        _ => false,
+    }
+}
+
+/// The filter storage can run: word-data predicates dropped when the pack's table is missing.
+fn runnable<'f>(conn: &Connection, f: &'f Filter) -> StorageResult<std::borrow::Cow<'f, Filter>> {
+    if uses_word_data(f) && !has_word_frequency(conn)? {
+        return Ok(std::borrow::Cow::Owned(without_word_data(f)));
+    }
+    Ok(std::borrow::Cow::Borrowed(f))
 }
 
 /// `FROM … WHERE …` selecting live cards of live notes matching `filter` (aliases `c`, `n`).
@@ -606,6 +846,11 @@ impl<M: Mode> SqliteTx<'_, M> {
 
 impl<M: Mode> SearchRead for SqliteTx<'_, M> {
     fn search_cards(&self, s: &CardSearch) -> StorageResult<SearchPage> {
+        let filter = runnable(self.conn(), &s.filter)?;
+        let s = &CardSearch {
+            filter: filter.into_owned(),
+            ..s.clone()
+        };
         // 1. One pass over the filter collects every match, unsorted: the total, and the
         //    rowids to sort for small sets. (A window count would force every match to be
         //    sorted, even when the page can be read off an index.)
@@ -681,7 +926,8 @@ impl<M: Mode> SearchRead for SqliteTx<'_, M> {
     }
 
     fn search_card_ids(&self, filter: &Filter, now: Timestamp) -> StorageResult<Vec<CardId>> {
-        let m = matching(filter, now);
+        let filter = runnable(self.conn(), filter)?;
+        let m = matching(&filter, now);
         card_ids(
             self.conn(),
             &format!("SELECT c.id {} ORDER BY c.created_at, c.id", m.text),
@@ -701,6 +947,8 @@ impl<M: Mode> SearchRead for SqliteTx<'_, M> {
         if among.is_empty() {
             return Ok(Vec::new());
         }
+        let filter = runnable(self.conn(), filter)?;
+        let filter = filter.as_ref();
         // Driven by the given ids (`CROSS JOIN` pins them as the outer loop, each a primary
         // key probe); set predicates are correlated probes per row, never a materialized set.
         let mut sql = Sql {
@@ -815,6 +1063,17 @@ impl<M: Mode> SearchRead for SqliteTx<'_, M> {
         )
     }
 
+    fn note_origins_of(&self, notes: &[NoteId]) -> StorageResult<Vec<NoteOriginRecord>> {
+        all(
+            self.conn(),
+            "note_origins",
+            "SELECT note_id, origin, source, site, video_id, created_at FROM note_origins
+             WHERE note_id IN (SELECT value FROM json_each(?1)) ORDER BY note_id",
+            [json_list(notes)],
+            origin_row,
+        )
+    }
+
     fn integrity_report(&self) -> StorageResult<IntegrityReport> {
         let conn = self.conn();
         let cards = |sql: &str| all(conn, "cards", sql, [], |r| id::<CardId>(r, 0));
@@ -880,7 +1139,48 @@ const DANGLING_VALUES: &str = "(v.entity_kind = 'note' AND NOT EXISTS
    OR (v.entity_kind = 'card' AND NOT EXISTS
       (SELECT 1 FROM cards WHERE id = v.entity_id))";
 
+fn origin_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<NoteOriginRecord> {
+    let origin: String = r.get(1)?;
+    Ok(NoteOriginRecord {
+        note_id: id(r, 0)?,
+        origin: NoteOrigin::parse(&origin).unwrap_or_default(),
+        source: r.get(2)?,
+        site: r.get(3)?,
+        video_id: r.get(4)?,
+        created_at: ts(r, 5)?,
+    })
+}
+
 impl SearchWrite for SqliteTx<'_, WriteMode> {
+    fn set_note_origin(&mut self, o: &NoteOriginRecord) -> StorageResult<()> {
+        if o.origin == NoteOrigin::Manual {
+            exec(
+                self.conn(),
+                "note_origins",
+                "DELETE FROM note_origins WHERE note_id = ?1",
+                [o.note_id.to_string()],
+            )?;
+            return Ok(());
+        }
+        exec(
+            self.conn(),
+            "note_origins",
+            "INSERT INTO note_origins (note_id, origin, source, site, video_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(note_id) DO UPDATE SET origin = ?2, source = ?3, site = ?4,
+                 video_id = ?5, created_at = ?6",
+            params![
+                o.note_id.to_string(),
+                o.origin.as_str(),
+                o.source,
+                o.site,
+                o.video_id,
+                o.created_at.0
+            ],
+        )?;
+        Ok(())
+    }
+
     fn purge_trash(&mut self, before: Timestamp) -> StorageResult<PurgeCounts> {
         let conn = self.conn();
         let t = before.0;

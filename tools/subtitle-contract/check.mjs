@@ -2,22 +2,27 @@
 // Contract check (v1.2, docs/06 §5.1): drives the Subtitle extension's **own** HTTP client
 // (`src/flashcards/api.ts` of the extension's repository, unchanged) against a real
 // `fc --db <tmp> api serve`, the way the extension's background does: connection test, decks,
-// media upload (and its retry), a capture (and its resend), a batch, known words, a wrong key.
+// media upload (and its retry), a capture (and its resend), a batch, known words (not shared by
+// default, then shared after `subtitle.share_known_words`), a wrong key.
+// Then (v1.4, `interrupted.mjs`) the release acceptance: the extension's own outbox and client
+// through broken exchanges (line dropped, answer lost, server killed mid-batch and restarted,
+// undo then resend), a backup restored into a fresh profile, and `subtitle.captures.recent`
+// checked against every attempt.
 //
 //   cargo build -p fc-cli
 //   [FC_BIN=target/debug/fc] [SUBTITLE_REPO=/path/to/subtitle] node tools/subtitle-contract/check.mjs
 //
-// Exits non-zero on the first broken expectation. Needs Node ≥ 22.7: `api.ts` is loaded with
-// `--experimental-transform-types` (it uses TypeScript parameter properties, which plain type
-// stripping rejects); the script re-runs itself with that flag when it was not given.
-// `FC_BIN` defaults to the repository's `target/debug/fc` when it exists, else `fc` on PATH.
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+// Exits non-zero on the first broken expectation. Needs Node ≥ 22.7: the extension's sources
+// are loaded with `--experimental-transform-types` (they use TypeScript parameter properties,
+// which plain type stripping rejects); the script re-runs itself with that flag when it was not
+// given. `FC_BIN` defaults to the repository's `target/debug/fc` when it exists, else `fc` on PATH.
+import { spawn, spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
+import { FC, REPO, fcCli, freePort } from './harness.mjs';
 
 if (!process.execArgv.includes('--experimental-transform-types')) {
   const r = spawnSync(
@@ -28,25 +33,11 @@ if (!process.execArgv.includes('--experimental-transform-types')) {
   process.exit(r.status ?? 1);
 }
 
-const localFc = resolve(dirname(fileURLToPath(import.meta.url)), '../../target/debug', process.platform === 'win32' ? 'fc.exe' : 'fc');
-const FC = process.env.FC_BIN ?? (existsSync(localFc) ? localFc : 'fc');
-const REPO = process.env.SUBTITLE_REPO ?? '/home/user/subtitle';
 const { FlashcardsApi, FlashcardsApiError } = await import(pathToFileURL(join(REPO, 'src/flashcards/api.ts')).href);
 
 const dir = mkdtempSync(join(tmpdir(), 'fc-subtitle-contract-'));
 const db = join(dir, 'collection.db');
-const fc = (...args) => {
-  const out = execFileSync(FC, ['--db', db, '--json', ...args], { encoding: 'utf8' });
-  return out.trim() === '' ? null : JSON.parse(out);
-};
-const freePort = () =>
-  new Promise((resolve) => {
-    const s = createServer();
-    s.listen(0, '127.0.0.1', () => {
-      const { port } = s.address();
-      s.close(() => resolve(port));
-    });
-  });
+const fc = fcCli(db);
 
 let serve;
 let failed = false;
@@ -69,7 +60,8 @@ try {
 
   const me = await api.me();
   assert.equal(me.user.name, 'contract check');
-  assert.deepEqual(me.features, { media: true, batch: true, known_words: true });
+  // v1.4: known words are not shared unless the user turns `subtitle.share_known_words` on.
+  assert.deepEqual(me.features, { media: true, batch: true, known_words: false });
   console.log('ok  GET /v1/me', JSON.stringify(me));
 
   const deck = fc('call', 'decks.create', JSON.stringify({ path: 'Diziler' }));
@@ -126,6 +118,18 @@ try {
   assert.equal(results[2].error.retryable, false);
   console.log('ok  POST /v1/captures:batch', JSON.stringify(results.map((r) => r.status)));
 
+  // Not shared (the default): the client reads the documented "not shared" answer as an
+  // empty last page — no error, no retry.
+  const notShared = await api.knownWords('en');
+  assert.deepEqual(notShared, { words: [], next_cursor: null });
+  const raw = await fetch(`${url}/v1/known-words?lang=en`, { headers: { Authorization: `Bearer ${secret}` } });
+  assert.equal(raw.status, 200);
+  assert.deepEqual(await raw.json(), { words: [], next_cursor: null, shared: false });
+  console.log('ok  GET /v1/known-words while not shared', JSON.stringify(notShared));
+
+  fc('call', 'settings.set', JSON.stringify({ scope: { kind: 'app' }, key: 'subtitle.share_known_words', value: true }));
+  assert.equal(fc('call', 'subtitle.status', '{}').share_known_words, true);
+  assert.equal((await api.me()).features.known_words, true);
   const known = await api.knownWords('en');
   assert.deepEqual(known.words.map((w) => [w.lemma, w.status]), [['key', 'learning'], ['pick up', 'learning']]);
   assert.equal(known.next_cursor, null);
@@ -152,5 +156,15 @@ try {
 } finally {
   serve?.kill();
   rmSync(dir, { recursive: true, force: true });
+}
+if (!failed) {
+  try {
+    const { runInterrupted } = await import('./interrupted.mjs');
+    await runInterrupted();
+    console.log('interruption acceptance passed');
+  } catch (e) {
+    failed = true;
+    console.error('interruption acceptance FAILED:', e);
+  }
 }
 process.exit(failed ? 1 : 0);

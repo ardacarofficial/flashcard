@@ -1,0 +1,14 @@
+{
+  "method": "v1.words.stats",
+  "kind": "query",
+  "permission": "words:read",
+  "note": "Words per status per language. Refused (PERMISSION_DENIED) for a plugin the user limited to some decks.",
+  "input": {},
+  "output": {
+    "threshold_days": 21,
+    "languages": [
+      { "language": "en", "counts": { "new": 0, "learning": 2, "known": 1, "ignored": 0 } }
+    ],
+    "unassigned_notes": 0
+  }
+}

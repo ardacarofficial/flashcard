@@ -88,6 +88,9 @@ pub const MAX_AUDIO_BYTES: usize = 5 * 1024 * 1024;
 pub const MAX_BATCH: usize = 50;
 /// Uploads older than this are forgotten (ms).
 pub const UPLOAD_TTL_MS: i64 = 24 * 60 * 60 * 1000;
+/// Setting: answer `GET /subtitle/v1/known-words` from the word index (default off: the
+/// owner uses Subtitle as a capture tool; off → an empty, `shared: false` answer).
+pub const SHARE_KNOWN_WORDS: &str = "subtitle.share_known_words";
 /// Words per known-words page.
 pub const KNOWN_WORDS_PAGE: u32 = 500;
 
@@ -99,16 +102,27 @@ pub fn descriptor() -> ModuleDescriptor {
         description_key: "modules.subtitle.description",
         enabled_by_default: false,
         can_disable: true,
-        settings: vec![SettingDef {
-            key: DEFAULT_DECK.to_owned(),
-            kind: SettingKind::Text { max_len: Some(64) },
-            default: json!(""),
-            label_key: format!("settings.{DEFAULT_DECK}.label"),
-            description_key: Some(format!("settings.{DEFAULT_DECK}.description")),
-            // Chosen on the Subtitle screen (a deck picker), not typed as an id.
-            advanced: true,
-            scopes: vec![SettingScopeKind::App],
-        }],
+        settings: vec![
+            SettingDef {
+                key: DEFAULT_DECK.to_owned(),
+                kind: SettingKind::Text { max_len: Some(64) },
+                default: json!(""),
+                label_key: format!("settings.{DEFAULT_DECK}.label"),
+                description_key: Some(format!("settings.{DEFAULT_DECK}.description")),
+                // Chosen on the Subtitle screen (a deck picker), not typed as an id.
+                advanced: true,
+                scopes: vec![SettingScopeKind::App],
+            },
+            SettingDef {
+                key: SHARE_KNOWN_WORDS.to_owned(),
+                kind: SettingKind::Bool,
+                default: json!(false),
+                label_key: format!("settings.{SHARE_KNOWN_WORDS}.label"),
+                description_key: Some(format!("settings.{SHARE_KNOWN_WORDS}.description")),
+                advanced: false,
+                scopes: vec![SettingScopeKind::App],
+            },
+        ],
         ui: vec![main_menu(
             "subtitle.screen",
             "nav.subtitle",
@@ -254,9 +268,18 @@ fn keys_touch(req: SubtitleKeyRef, ctx: &mut CommandCtx<'_>) -> AppResult<Comman
 }
 
 /// Restoring a backup revokes every Subtitle key (a crafted backup must not bring a working
-/// key with it): an active key is marked revoked as of its creation time.
+/// key with it): an active key is marked revoked as of its creation time. The capture
+/// diagnostics are dropped too (v1.4: not user data; a restored profile's
+/// `subtitle.captures.recent` starts empty — docs/06 §5.1).
 pub(crate) fn forget_keys(dump: &mut fc_storage::repo::CollectionDump) {
     use fc_storage::repo::SqlValue;
+    for t in dump
+        .tables
+        .iter_mut()
+        .filter(|t| t.name == "subtitle_capture_log")
+    {
+        t.rows.clear();
+    }
     for t in dump.tables.iter_mut().filter(|t| t.name == "subtitle_keys") {
         let col = |n: &str| t.columns.iter().position(|c| c == n);
         let (Some(revoked), Some(created)) = (col("revoked_at"), col("created_at")) else {
@@ -288,6 +311,13 @@ fn default_deck(reads: &dyn Reads) -> AppResult<Option<DeckId>> {
     })
 }
 
+/// Whether the user shares known words with the extension ([`SHARE_KNOWN_WORDS`]).
+pub(crate) fn shares_known_words(reads: &dyn Reads) -> AppResult<bool> {
+    Ok(resolve_stored(reads, &SettingScope::App, SHARE_KNOWN_WORDS)?
+        .and_then(|(v, _)| v.as_bool())
+        .unwrap_or(false))
+}
+
 /// `http://127.0.0.1:<port>/subtitle`.
 pub fn address(port: u16) -> String {
     format!("http://127.0.0.1:{port}{PATH_PREFIX}")
@@ -315,6 +345,7 @@ fn status_of(reads: &dyn Reads) -> AppResult<SubtitleStatus> {
         captures,
         last_capture_at: last,
         active_keys: u32::try_from(active).unwrap_or(u32::MAX),
+        share_known_words: shares_known_words(reads)?,
     })
 }
 
@@ -527,6 +558,20 @@ fn captures_create(
         created_at: ctx.now,
     };
     ctx.tx.insert_subtitle_capture(&row)?;
+    // v1.4 (B3): where the note came from, for `nereden:`/`kaynak:` queries.
+    ctx.tx.set_note_origin(&fc_storage::repo::NoteOriginRecord {
+        note_id: note.id,
+        origin: fc_core::query::NoteOrigin::Subtitle,
+        source: c
+            .source
+            .title
+            .as_deref()
+            .map(fc_core::subtitle::collapse_spaces)
+            .unwrap_or_default(),
+        site: c.source.site.trim().to_owned(),
+        video_id: c.source.video_id.clone().unwrap_or_default(),
+        created_at: ctx.now,
+    })?;
     let mut inverse = vec![inverse_call::<SubtitleCapturesForget>(&SubtitleCaptureIds {
         capture_ids: vec![row.capture_id.clone()],
     })?];
@@ -797,11 +842,13 @@ pub fn touch_key(app: &App, key: &SubtitleKeyDto) -> Result<(), ApiError> {
 
 /// `GET /subtitle/v1/me`.
 pub fn me(app: &App, key: &SubtitleKeyDto) -> Result<SubtitleMe, ApiError> {
-    let decks = read(app, |r| {
-        Ok(r.list_decks(false)?
+    let (decks, share) = read(app, |r| {
+        let decks = r
+            .list_decks(false)?
             .iter()
             .filter(|d| d.deleted_at.is_none())
-            .count())
+            .count();
+        Ok((decks, shares_known_words(r)?))
     })?;
     Ok(SubtitleMe {
         user: SubtitleUser {
@@ -813,7 +860,7 @@ pub fn me(app: &App, key: &SubtitleKeyDto) -> Result<SubtitleMe, ApiError> {
         features: SubtitleFeatures {
             media: true,
             batch: true,
-            known_words: true,
+            known_words: share,
         },
     })
 }
@@ -966,6 +1013,11 @@ pub fn error_body(e: &ApiError) -> SubtitleErrorBody {
 /// **learning** (any other card) — whatever made their notes (Subtitle, reading mode, by hand,
 /// an Anki import). New and ignored words are left out (the contract has no such statuses).
 /// [`KNOWN_WORDS_PAGE`] per page by language and lemma.
+///
+/// Only while the user shares them ([`SHARE_KNOWN_WORDS`], off by default): otherwise the
+/// answer is `{"words": [], "next_cursor": null, "shared": false}` — a valid last page for
+/// the extension's client (`api.ts` reads `words ?? []` and ignores unknown fields), and
+/// `/me` says `known_words: false`. Nothing of the index is read then.
 pub fn known_words(
     app: &App,
     lang: Option<&str>,
@@ -994,6 +1046,13 @@ pub(crate) fn known_words_page(
         .filter(|l| !l.is_empty())
         .map(|l| fc_core::words::index_language(&l));
     read(app, |r| {
+        if !shares_known_words(r)? {
+            return Ok(SubtitleKnownWords {
+                words: vec![],
+                next_cursor: None,
+                shared: false,
+            });
+        }
         let threshold_days = words::threshold(r)?;
         let page = r.word_index_page(&fc_storage::repo::WordIndexQuery {
             language: lang.clone(),
@@ -1028,7 +1087,11 @@ pub(crate) fn known_words_page(
         } else {
             None
         };
-        Ok(SubtitleKnownWords { words, next_cursor })
+        Ok(SubtitleKnownWords {
+            words,
+            next_cursor,
+            shared: true,
+        })
     })
 }
 

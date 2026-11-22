@@ -1,0 +1,47 @@
+{
+  "method": "v1.words.list",
+  "kind": "query",
+  "permission": "words:read",
+  "note": "Index rows by language and key, paged (pass next_cursor back as cursor). note_ids/card_ids are empty in listings; under a deck limit rows outside the plugin's decks are left out.",
+  "input": {
+    "language": "en",
+    "status": "learning",
+    "cursor": null,
+    "limit": 2
+  },
+  "output": {
+    "words": [
+      {
+        "language": "en",
+        "key": "key",
+        "status": "learning",
+        "mark": null,
+        "mark_at": null,
+        "notes": 1,
+        "cards": 1,
+        "max_interval_days": null,
+        "known_by_maturity": false,
+        "last_review": null,
+        "first_seen": 1767139200000,
+        "note_ids": [],
+        "card_ids": []
+      },
+      {
+        "language": "en",
+        "key": "pick up",
+        "status": "learning",
+        "mark": null,
+        "mark_at": null,
+        "notes": 1,
+        "cards": 2,
+        "max_interval_days": 3,
+        "known_by_maturity": false,
+        "last_review": 1767225600000,
+        "first_seen": 1767139200000,
+        "note_ids": [],
+        "card_ids": []
+      }
+    ],
+    "next_cursor": "ZW4fcGljayB1cA"
+  }
+}

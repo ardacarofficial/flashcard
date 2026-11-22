@@ -46,6 +46,8 @@ pub const MCP_PERMISSIONS: &[&str] = &[
     "settings:read",
     "modules:read",
     "mcp:read",
+    // v1.4: the word index (`words.lookup/list/stats`, read-only tools).
+    "words:read",
 ];
 
 /// Descriptor.
