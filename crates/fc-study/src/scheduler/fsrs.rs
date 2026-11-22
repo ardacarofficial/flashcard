@@ -23,16 +23,18 @@ pub const FSRS6_DEFAULT_WEIGHTS: [f32; 21] = [
     0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542,
 ];
 
-/// Probability of recall after `elapsed_days` for a memory of `stability` days (FSRS-6
-/// forgetting curve with the decay `w20` of `params`' weights — custom `extra.weights` or the
-/// defaults). `None` for a non-positive/unknown stability or invalid weights.
+/// Probability of recall after `elapsed_days` for a memory of `stability` days: the one
+/// formula, [`fc_core::recall::retrievability`], with the [`decay`] of `params`. `None` for a
+/// non-positive/unknown stability or invalid weights.
 pub fn retrievability(stability: f64, elapsed_days: f64, params: &SchedulerParams) -> Option<f64> {
-    if !(stability.is_finite() && stability > 0.0) {
-        return None;
-    }
-    let decay = -f64::from(*weights(params).ok()?.get(20)?);
-    let factor = 0.9f64.powf(1.0 / decay) - 1.0;
-    Some((1.0 + factor * elapsed_days.max(0.0) / stability).powf(decay))
+    fc_core::recall::retrievability(stability, elapsed_days, decay(params)?)
+}
+
+/// Forgetting-curve decay (FSRS-6 `w20`) of `params`' weights — custom `extra.weights` or the
+/// defaults ([`fc_core::recall::DEFAULT_DECAY`]). `None` for invalid weights.
+pub fn decay(params: &SchedulerParams) -> Option<f64> {
+    let d = f64::from(*weights(params).ok()?.get(20)?);
+    fc_core::recall::valid_decay(d).then_some(d)
 }
 
 /// The FSRS scheduler (default).

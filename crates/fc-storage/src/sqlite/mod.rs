@@ -6,6 +6,7 @@
 
 mod ai;
 mod attributes;
+mod capture_log;
 mod cards;
 mod content;
 mod decks;

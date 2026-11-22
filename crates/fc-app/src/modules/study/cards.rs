@@ -283,15 +283,11 @@ pub(super) fn history(req: CardHistoryRequest, ctx: &QueryCtx<'_>) -> AppResult<
             req.card_id,
         )
     })?;
-    let s = &card.scheduling;
-    let retrievability = match (s.state, s.stability, s.last_review) {
-        (CardState::New, _, _) => None,
-        (_, Some(stability), Some(last)) => fc_study::scheduler::retrievability(
-            stability,
-            (ctx.now.as_millis() - last.as_millis()) as f64 / MILLIS_PER_DAY as f64,
-            &params_for_deck(ctx.tx, card.deck_id, &mut std::collections::HashMap::new())?,
-        ),
-        _ => None,
+    // v1.4: the one recall formula card info, stats and search use.
+    let retrievability = {
+        use crate::modules::stats::facts::{calendar, card_retrievability, Presets};
+        let cal = calendar(ctx.tx, None)?;
+        card_retrievability(&card, cal, ctx.now, &mut Presets::new(ctx.tx))?
     };
     Ok(CardHistory {
         card: snapshot(&card),

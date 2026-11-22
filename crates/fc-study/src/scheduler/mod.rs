@@ -25,7 +25,7 @@
 mod fsrs;
 mod sm2;
 
-pub use self::fsrs::{retrievability, FsrsScheduler, FSRS6_DEFAULT_WEIGHTS};
+pub use self::fsrs::{decay, retrievability, FsrsScheduler, FSRS6_DEFAULT_WEIGHTS};
 pub use self::sm2::Sm2Scheduler;
 
 use crate::day::{StudyDay, MAX_TZ_OFFSET_MINS};

@@ -27,6 +27,7 @@ pub mod paging;
 pub mod preset;
 pub mod query;
 pub mod reading;
+pub mod recall;
 pub mod rng;
 pub mod settings;
 pub mod shortcut;

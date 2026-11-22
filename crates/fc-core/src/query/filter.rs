@@ -136,9 +136,20 @@ pub enum Pred {
     FlagBit(u32),
     /// Card numeric property.
     Num(CardNum, CmpOp, f64),
-    /// Retrievability comparison, expressed on `x = elapsed_days / stability`:
-    /// `x <op> threshold` (see [`retrievability_threshold`]).
-    Elapsed(CmpOp, f64),
+    /// Recall probability comparison `R <op> value` (v1.4: [`crate::recall`], the formula card
+    /// info and statistics use): `decay` of the card's preset, elapsed whole study days counted
+    /// to the study day that began at `day_start`. False for cards without `R` (new, never
+    /// reviewed).
+    Recall {
+        /// Comparison.
+        op: CmpOp,
+        /// Right-hand side.
+        value: f64,
+        /// FSRS-6 decay (`w20`) of the preset.
+        decay: f64,
+        /// Start of the current study day.
+        day_start: Timestamp,
+    },
     /// Time column `>=` / `<=` a point in time.
     Time(TimeCol, CmpOp, Timestamp),
     /// Classification.
@@ -147,14 +158,6 @@ pub enum Pred {
     NoteIds(Vec<NoteId>),
     /// Cards by id.
     CardIds(Vec<CardId>),
-}
-
-/// FSRS forgetting curve factor: `R(t, S) = (1 + F·t/S)^-0.5` with `F = 19/81`.
-pub const FSRS_FACTOR: f64 = 19.0 / 81.0;
-
-/// Threshold on `x = t/S` equivalent to `R = r` (`R` decreases as `x` grows).
-pub fn retrievability_threshold(r: f64) -> f64 {
-    (1.0 / (r * r) - 1.0) / FSRS_FACTOR
 }
 
 impl Filter {

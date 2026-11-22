@@ -13,7 +13,7 @@
 //! | `is:` | `new learn review relearn due suspended buried flagged` |
 //! | `flag:` | `0`/`none`, `1`–`7`, `red orange green blue pink turquoise purple` (TR names too, plus [`Catalog::flag_names`]), `*` |
 //! | `stability` `difficulty` `lapses` `reps` | number with `= != < <= > >=` |
-//! | `retrievability` | FSRS recall probability now, `0..1` |
+//! | `retrievability` | FSRS recall probability now, `0..1` ([`crate::recall`]: the preset's decay from [`Catalog::deck_decay`], whole study days to [`Catalog::day_start`]) |
 //! | `added:N` `edited:N` `reviewed:N` | within the last N days — study days when [`Catalog::day_start`] is set (`reviewed:1` = today, `reviewed:2` = today and yesterday), else rolling 24 h periods; `due:N` = due within N days |
 //! | `re:` | regex over all fields; `<field>:re:<regex>` for one field |
 //! | `nid:` `cid:` | comma-separated ids |
@@ -24,7 +24,7 @@
 
 use super::ast::{CmpOp, Expr, Span, Term};
 use super::error::{QueryError, QueryErrorKind as K};
-use super::filter::{retrievability_threshold, AttrAlt, AttrTest, CardNum, Filter, Pred, TimeCol};
+use super::filter::{AttrAlt, AttrTest, CardNum, Filter, Pred, TimeCol};
 use super::text::{compile_regex, fold, tokens, Glob};
 use crate::attribute::{AttributeDef, AttributeKind};
 use crate::card::CardState;
@@ -55,6 +55,10 @@ pub struct Catalog<'a> {
     /// zone and day-start hour). With it, `added:N`/`edited:N`/`reviewed:N` count study days
     /// (`reviewed:1` = since the day began); without it, rolling 24 h periods before `now`.
     pub day_start: Option<Timestamp>,
+    /// v1.4: FSRS decay (`w20`) of every deck whose preset's differs from
+    /// [`crate::recall::DEFAULT_DECAY`] (personalised weights); other decks use the default.
+    /// `retrievability` compares with the same [`crate::recall`] formula card info shows.
+    pub deck_decay: &'a [(DeckId, f64)],
 }
 
 /// Built-in flag colors (1-based flag number = bit + 1, Anki's numbering), English and Turkish
@@ -240,6 +244,52 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// `retrievability <op> value`: one [`Pred::Recall`] per distinct preset decay, each
+    /// limited to its decks; the default decay covers every other deck.
+    fn recall(&self, op: CmpOp, value: f64) -> Filter {
+        let day_start = self.cat.day_start.unwrap_or(self.cat.now);
+        let one = |decay: f64| {
+            Filter::Pred(Pred::Recall {
+                op,
+                value,
+                decay,
+                day_start,
+            })
+        };
+        let custom: Vec<(DeckId, f64)> = self
+            .cat
+            .deck_decay
+            .iter()
+            .copied()
+            .filter(|(_, d)| crate::recall::valid_decay(*d))
+            .filter(|(_, d)| d.to_bits() != crate::recall::DEFAULT_DECAY.to_bits())
+            .collect();
+        if custom.is_empty() {
+            return one(crate::recall::DEFAULT_DECAY);
+        }
+        // Group by decay (bit-exact), in first-seen order for a stable filter.
+        let mut groups: Vec<(f64, Vec<DeckId>)> = Vec::new();
+        for (deck, decay) in &custom {
+            match groups
+                .iter_mut()
+                .find(|(d, _)| d.to_bits() == decay.to_bits())
+            {
+                Some((_, ids)) => ids.push(*deck),
+                None => groups.push((*decay, vec![*deck])),
+            }
+        }
+        let all: Vec<DeckId> = custom.iter().map(|(d, _)| *d).collect();
+        let mut alts: Vec<Filter> = groups
+            .into_iter()
+            .map(|(decay, ids)| Filter::and(vec![Filter::Pred(Pred::Decks(ids)), one(decay)]))
+            .collect();
+        alts.push(Filter::and(vec![
+            Filter::negate(Filter::Pred(Pred::Decks(all))),
+            one(crate::recall::DEFAULT_DECAY),
+        ]));
+        Filter::or(alts)
+    }
+
     fn expr(&self, e: &Expr) -> Result<Filter, QueryError> {
         Ok(match e {
             Expr::And(v) => Filter::and(v.iter().map(|x| self.expr(x)).collect::<Result<_, _>>()?),
@@ -364,18 +414,8 @@ impl<'a> Resolver<'a> {
                 pred(Pred::Num(prop, norm_op(t.op), parse_number(t)?))
             }
             "retrievability" => {
-                let r = parse_number(t)?;
-                let op = norm_op(t.op);
-                if r <= 0.0 {
-                    // R is always > 0 for a reviewed card.
-                    return Ok(match op {
-                        CmpOp::Gt | CmpOp::Ge => {
-                            Filter::Pred(Pred::Elapsed(CmpOp::Gt, f64::NEG_INFINITY))
-                        }
-                        _ => Filter::Nothing,
-                    });
-                }
-                pred(Pred::Elapsed(op.flipped(), retrievability_threshold(r)))
+                let value = parse_number(t)?;
+                Ok(self.recall(norm_op(t.op), value))
             }
             "added" | "edited" | "reviewed" | "due" => {
                 need_eq(t)?;

@@ -26,6 +26,9 @@
       "status": "Subtitle connection",
       "default_deck": {
         "set": "Choose the deck for Subtitle cards"
+      },
+      "captures": {
+        "recent": "Recent Subtitle capture attempts"
       }
     }
   },

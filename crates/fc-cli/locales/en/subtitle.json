@@ -6,5 +6,6 @@
   "oplog.summary.subtitle.captures.create": "Subtitle: added {word}",
   "oplog.summary.subtitle.captures.forget": "Forgot Subtitle captures",
   "oplog.summary.subtitle.captures.restore": "Restored Subtitle captures",
-  "oplog.summary.subtitle.media.upload": "Subtitle: received a picture or a sound"
+  "oplog.summary.subtitle.media.upload": "Subtitle: received a picture or a sound",
+  "oplog.summary.subtitle.captures.log": "Subtitle: noted a capture attempt"
 }

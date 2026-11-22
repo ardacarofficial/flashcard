@@ -29,4 +29,9 @@ methods! {
     /// Internal: notes a key's last request (HTTP server, at most once a minute). Never in
     /// the oplog.
     SubtitleKeysTouch = "subtitle.keys.touch", Command, "subtitle", "subtitle:write", Internal, undo: true (replay: false), SubtitleKeyRef => Empty;
+    /// v1.4: what happened to the latest capture attempts (result, reason, card, duration),
+    /// newest first. Only ids, codes and times.
+    SubtitleCapturesRecent = "subtitle.captures.recent", Query, "subtitle", "subtitle:read", Public, undo: false, RecentSubtitleCaptures => SubtitleCaptureAttempts;
+    /// Internal (v1.4): notes one capture attempt, keeping the newest 500. Never in the oplog.
+    SubtitleCapturesLog = "subtitle.captures.log", Command, "subtitle", "subtitle:write", Internal, undo: true (replay: false), LogSubtitleCaptureAttempt => Empty;
 }
