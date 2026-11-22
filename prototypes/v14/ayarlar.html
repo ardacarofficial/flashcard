@@ -1,0 +1,1529 @@
+<!doctype html>
+<html lang="tr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ayarlar · v1.4 taslak</title>
+<style>
+/* Tokens: apps/desktop/src/lib/theme/tokens.css (v1.2 design system), dark first. */
+:root, :root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface-0:#0e0e10; --surface-1:#151518; --surface-2:#1c1c20; --surface-3:#25252b;
+  --border:#2a2a31; --border-strong:#3a3a43;
+  --text-1:#ededef; --text-2:#a3a3ae; --text-3:#74747f;
+  --accent:#f5b544; --accent-fg:#17130a; --accent-text:#f5b544;
+  --accent-soft:color-mix(in srgb,#f5b544 14%,transparent);
+  --selected:#342b1e;
+  --success:#3dd68c; --success-soft:color-mix(in srgb,#3dd68c 10%,#151518);
+  --warning:#ff9d4d; --warning-soft:color-mix(in srgb,#ff9d4d 12%,#151518);
+  --danger:#ff6369; --danger-soft:color-mix(in srgb,#ff6369 10%,#151518);
+  --backdrop:rgb(0 0 0 / .6);
+  --shadow-float:0 12px 32px rgb(0 0 0 / .5),0 2px 6px rgb(0 0 0 / .35);
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+  --surface-0:#fafaf8; --surface-1:#ffffff; --surface-2:#f3f3f0; --surface-3:#e9e9e4;
+  --border:#e2e2dc; --border-strong:#cfcfc7;
+  --text-1:#1a1a1c; --text-2:#5c5c63; --text-3:#85858c;
+  --accent-text:#9a5b00; --selected:#fef5e5;
+  --success:#147a4b; --success-soft:color-mix(in srgb,#147a4b 10%,#fff);
+  --warning:#b4520a; --warning-soft:color-mix(in srgb,#ff9d4d 12%,#fff);
+  --danger:#c8323b; --danger-soft:color-mix(in srgb,#c8323b 10%,#fff);
+  --backdrop:rgb(20 20 24 / .32);
+  --shadow-float:0 12px 32px rgb(0 0 0 / .14),0 2px 6px rgb(0 0 0 / .08);
+}
+:root {
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, monospace;
+  --r-ctl:6px; --r-card:8px; --r-flash:12px; --r-pill:999px;
+  --ctl-sm:28px; --ctl-md:32px; --row-h:34px;
+  --motion:150ms; --ease:cubic-bezier(.16,1,.3,1);
+}
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; }
+body { background:var(--surface-0); color:var(--text-1); font:13px/1.45 var(--font-sans); -webkit-font-smoothing:antialiased; }
+button, input, select, textarea { font:inherit; color:inherit; }
+button { cursor:pointer; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.num, .mono { font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.muted { color:var(--text-2); } .faint { color:var(--text-3); }
+.sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+svg.i { width:16px; height:16px; flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }
+svg.i.s14 { width:14px; height:14px; }
+
+/* ---------- prototype strip (not part of the app) ---------- */
+.proto { position:fixed; inset:0 0 auto 0; height:30px; z-index:40; display:flex; align-items:center; gap:14px; padding:0 12px;
+  background:repeating-linear-gradient(135deg,var(--surface-2) 0 10px,var(--surface-1) 10px 20px); border-bottom:1px dashed var(--border-strong); font-size:12px; color:var(--text-2); white-space:nowrap; overflow-x:auto; }
+.proto b { color:var(--text-1); font-weight:600; }
+.proto .ab { display:inline-flex; align-items:center; gap:6px; }
+.proto .ab .seg button { min-height:0; height:20px; padding:0 8px; font-size:11px; flex-direction:row; }
+.proto > * { flex:none; }
+.proto .seg { flex-wrap:nowrap; }
+@media (max-width:1180px) { .proto .desc { display:none; } }
+.proto .sp { flex:1; }
+.proto .pbtn { height:22px; padding:0 10px; border:1px solid var(--border-strong); background:var(--surface-1); border-radius:var(--r-ctl); font-size:12px; }
+.proto .pbtn { border-color:var(--accent); color:var(--text-1); }
+.proto .pbtn.on { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
+
+/* ---------- app shell ---------- */
+.app { position:fixed; inset:30px 0 0 0; display:grid; grid-template-columns:216px minmax(0,1fr); }
+.appnav { background:var(--surface-1); border-right:1px solid var(--border); display:flex; flex-direction:column; padding:12px 8px; gap:2px; min-height:0; }
+.brand { display:flex; align-items:center; gap:8px; font-weight:600; padding:4px 10px 16px; }
+.brand .logo { width:18px; height:18px; border-radius:4px; background:var(--accent); }
+.nav-item { display:flex; align-items:center; gap:10px; height:30px; padding:0 10px; border-radius:var(--r-ctl); color:var(--text-2); border:0; background:none; text-align:left; width:100%; }
+.nav-item:hover { background:var(--surface-2); color:var(--text-1); }
+.nav-item.on { background:var(--surface-3); color:var(--text-1); box-shadow:inset 2px 0 0 var(--accent); }
+.nav-item .cnt { margin-left:auto; font-family:var(--font-mono); font-size:11px; color:var(--text-2); }
+.appnav .grow { flex:1; }
+.appnav hr { border:0; border-top:1px solid var(--border); margin:6px 2px; width:auto; }
+.avatar { width:22px; height:22px; border-radius:50%; background:var(--surface-3); display:grid; place-items:center; font-size:10px; font-weight:600; color:var(--text-1); }
+.main { display:grid; grid-template-rows:44px minmax(0,1fr); min-width:0; min-height:0; }
+.topbar { display:flex; align-items:center; gap:12px; padding:0 16px 0 24px; border-bottom:1px solid var(--border); }
+.crumb { display:flex; align-items:center; gap:6px; color:var(--text-2); min-width:0; white-space:nowrap; overflow:hidden; }
+.crumb b { color:var(--text-1); font-weight:500; overflow:hidden; text-overflow:ellipsis; }
+.topbar .sp { flex:1; }
+.palette { display:flex; align-items:center; gap:8px; height:28px; width:280px; padding:0 6px 0 10px; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface-1); color:var(--text-3); }
+.palette .sp { flex:1; }
+kbd { font-family:var(--font-mono); font-size:11px; padding:1px 5px; border:1px solid var(--border-strong); border-bottom-width:2px; border-radius:4px; color:var(--text-2); background:var(--surface-2); }
+
+/* ---------- settings area ---------- */
+.settings { display:grid; grid-template-columns:260px minmax(0,1fr); min-height:0; }
+.snav { border-right:1px solid var(--border); padding:16px 12px 12px; display:flex; flex-direction:column; gap:12px; min-height:0; overflow:auto; }
+.search { position:relative; }
+.search input { width:100%; height:32px; padding:0 30px 0 32px; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface-2); }
+.search input::-webkit-search-cancel-button { display:none; }
+.search input::placeholder { color:var(--text-3); }
+.search > svg { position:absolute; left:10px; top:8px; color:var(--text-3); }
+.search .clear { position:absolute; right:4px; top:4px; width:24px; height:24px; border:0; background:none; color:var(--text-3); border-radius:4px; display:none; }
+.search.has .clear { display:grid; place-items:center; }
+.results { display:flex; flex-direction:column; gap:1px; }
+.results .rh { font-size:11px; color:var(--text-3); padding:2px 4px 4px; }
+.res { display:block; text-align:left; width:100%; border:1px solid transparent; background:none; padding:6px 8px; border-radius:var(--r-ctl); }
+.res:hover, .res.act { background:var(--surface-2); border-color:var(--border); }
+.res .rl { color:var(--text-1); display:block; }
+.res .rl mark { background:var(--accent-soft); color:inherit; border-radius:2px; }
+.res .rp { color:var(--text-2); font-size:12px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:1px; }
+.tag { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 6px; border-radius:var(--r-pill); font-size:11px; font-weight:500; border:1px solid var(--border-strong); color:var(--text-2); white-space:nowrap; }
+.tag.adv { border-color:transparent; background:var(--surface-3); color:var(--text-1); }
+.tag.rec { border-color:transparent; background:var(--accent-soft); color:var(--accent-text); }
+.tag.ok { border-color:transparent; background:var(--success-soft); color:var(--success); }
+.tag.off { border-color:transparent; background:var(--surface-3); color:var(--text-2); }
+.tag.warn { border-color:transparent; background:var(--warning-soft); color:var(--warning); }
+.tag.new { border-color:transparent; background:var(--accent); color:var(--accent-fg); }
+.ngroup { display:flex; flex-direction:column; gap:1px; }
+.ngroup h3 { margin:6px 0 4px; padding:0 8px; font-size:11px; font-weight:600; color:var(--text-2); text-transform:none; letter-spacing:.01em; }
+.ngroup .hint { padding:0 8px 4px; font-size:11px; color:var(--text-3); margin:-2px 0 2px; }
+.sitem { display:flex; align-items:center; gap:8px; min-height:30px; padding:4px 8px; border-radius:var(--r-ctl); border:0; background:none; color:var(--text-2); text-align:left; width:100%; }
+.sitem:hover { background:var(--surface-2); color:var(--text-1); }
+.sitem.on { background:var(--surface-3); color:var(--text-1); box-shadow:inset 2px 0 0 var(--accent); }
+.sitem .q { display:block; font-size:11px; color:var(--text-3); line-height:1.3; }
+.sitem.on .q { color:var(--text-2); }
+.sitem .st { margin-left:auto; }
+.dot { width:7px; height:7px; border-radius:50%; background:var(--text-3); flex:none; }
+.dot.ok { background:var(--success); } .dot.off { background:var(--text-3); } .dot.warn { background:var(--warning); }
+.advswitch { margin-top:auto; border-top:1px solid var(--border); padding:12px 4px 2px; display:flex; flex-direction:column; gap:6px; }
+.advswitch .line { display:flex; align-items:center; justify-content:space-between; gap:8px; font-weight:500; }
+.advswitch p { margin:0; font-size:12px; color:var(--text-2); }
+
+.content { overflow:auto; min-width:0; scroll-behavior:smooth; }
+.page { max-width:860px; padding:24px 32px 96px; }
+.page-h { display:flex; align-items:flex-start; gap:16px; margin-bottom:20px; }
+.page-h .t { flex:1; min-width:0; }
+.page-h h1 { margin:0; font-size:20px; font-weight:600; line-height:1.3; }
+.page-h p { margin:4px 0 0; color:var(--text-2); font-size:14px; max-width:62ch; }
+.banner { display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--border); border-radius:var(--r-card); background:var(--surface-1); margin-bottom:16px; }
+.banner.adv { background:var(--surface-2); }
+.banner.warn { background:var(--warning-soft); border-color:transparent; }
+.banner.ok { background:var(--success-soft); border-color:transparent; }
+.banner .bt { flex:1; }
+.banner .bt b { display:block; font-weight:600; }
+section.sec { margin:0 0 28px; }
+section.sec > h2 { display:flex; align-items:center; gap:8px; margin:0 0 2px; font-size:14px; font-weight:600; }
+section.sec > .sd { margin:0 0 8px; color:var(--text-2); max-width:66ch; }
+.rows { border-top:1px solid var(--border); }
+.rows { container-type:inline-size; }
+.row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px 24px; align-items:start; padding:12px 0; border-bottom:1px solid var(--border); }
+.row.flash { animation:flash 1.6s var(--ease); }
+@keyframes flash { 0%,40% { background:var(--accent-soft); box-shadow:-8px 0 0 var(--accent-soft),8px 0 0 var(--accent-soft); } 100% { background:transparent; } }
+.row.stack { grid-template-columns:minmax(0,1fr); }
+.rlabel { font-size:14px; font-weight:500; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.rdesc { margin:2px 0 0; color:var(--text-2); max-width:58ch; }
+.effect { margin:6px 0 0; display:flex; gap:6px; align-items:flex-start; color:var(--text-1); max-width:60ch; }
+.effect::before { content:'→'; color:var(--accent-text); font-weight:600; }
+.effect.warn { color:var(--warning); } .effect.warn::before { content:'!'; color:var(--warning); }
+.effect:empty { display:none; }
+.ctl { display:flex; flex-direction:column; align-items:flex-end; gap:6px; justify-self:end; }
+.row.stack .ctl { align-items:stretch; justify-self:stretch; }
+.reset { border:0; background:none; color:var(--accent-text); font-size:12px; padding:0; }
+.reset:hover { text-decoration:underline; }
+
+/* controls */
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:var(--ctl-md); padding:0 12px; border-radius:var(--r-ctl); border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text-1); font-weight:500; white-space:nowrap; }
+.btn:hover { background:var(--surface-3); }
+.btn.primary { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
+.btn.primary:hover { filter:brightness(.95); }
+.btn.ghost { background:none; border-color:transparent; color:var(--text-2); }
+.btn.ghost:hover { background:var(--surface-2); color:var(--text-1); }
+.btn.danger { color:var(--danger); }
+.btn.sm { height:var(--ctl-sm); padding:0 10px; font-size:12px; }
+.btn:disabled { opacity:.55; cursor:default; }
+.seg { display:inline-flex; padding:2px; gap:2px; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface-2); flex-wrap:wrap; }
+.seg button { min-height:26px; padding:2px 10px; border:1px solid transparent; border-radius:4px; background:none; color:var(--text-2); display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.2; }
+.seg button:hover { color:var(--text-1); }
+.seg button[aria-checked='true'] { background:var(--surface-0); border-color:var(--border-strong); color:var(--text-1); font-weight:500; }
+:root[data-theme='light'] .seg button[aria-checked='true'] { background:#fff; }
+.seg small { font-size:10px; color:var(--accent-text); font-weight:500; }
+.sw { position:relative; width:36px; height:20px; border-radius:999px; border:1px solid var(--border-strong); background:var(--surface-3); padding:0; flex:none; transition:background var(--motion); }
+.sw::after { content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:var(--text-2); transition:transform var(--motion) var(--ease), background var(--motion); }
+.sw[aria-checked='true'] { background:var(--accent); border-color:var(--accent); }
+.sw[aria-checked='true']::after { transform:translateX(16px); background:var(--accent-fg); }
+.inp, select.inp, textarea.inp { height:var(--ctl-md); padding:0 10px; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface-2); min-width:0; }
+textarea.inp { height:auto; padding:8px 10px; font-family:var(--font-mono); font-size:12px; line-height:1.5; width:100%; resize:vertical; }
+.inp:focus { border-color:var(--accent); outline:none; box-shadow:0 0 0 2px var(--accent-soft); }
+.inp.num { width:88px; text-align:right; }
+.inp.wide { width:280px; }
+.numwrap { display:inline-flex; align-items:center; gap:6px; }
+.numwrap .unit { color:var(--text-2); font-size:12px; }
+.quick { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.quick button { display:flex; flex-direction:column; align-items:center; min-width:62px; padding:4px 8px; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface-2); line-height:1.25; }
+.quick button b { font-family:var(--font-mono); font-size:14px; }
+.quick button span { font-size:11px; color:var(--text-2); }
+.quick button[aria-pressed='true'] { border-color:var(--accent); background:var(--accent-soft); }
+.quick button.rec span { color:var(--accent-text); }
+.days { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
+.days button { width:40px; height:28px; border-radius:var(--r-ctl); border:1px solid var(--border); background:var(--surface-2); color:var(--text-2); font-size:12px; }
+.days button[aria-pressed='true'] { background:var(--accent-soft); border-color:var(--accent); color:var(--text-1); font-weight:500; }
+
+/* cards / tiles */
+.panel { border:1px solid var(--border); border-radius:var(--r-card); background:var(--surface-1); }
+.hero { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)) 1.4fr; gap:0; margin-bottom:24px; }
+.hero > div { padding:12px 14px; border-right:1px solid var(--border); min-width:0; }
+.hero > div:last-child { border-right:0; }
+.stat .k { font-size:12px; color:var(--text-2); }
+.stat .v { font-family:var(--font-mono); font-size:24px; font-weight:600; line-height:1.2; margin-top:2px; }
+.stat .v small { font-family:var(--font-sans); font-size:13px; font-weight:400; color:var(--text-2); margin-left:2px; }
+.spark svg { width:100%; height:48px; display:block; }
+.spark .k { font-size:12px; color:var(--text-2); display:flex; justify-content:space-between; }
+.links { display:flex; flex-direction:column; border-top:1px solid var(--border); }
+.links button { display:flex; align-items:center; gap:10px; text-align:left; padding:9px 2px; border:0; border-bottom:1px solid var(--border); background:none; color:var(--text-1); }
+.links button:hover { background:var(--surface-1); }
+.links button .w { margin-left:auto; color:var(--text-2); font-size:12px; display:flex; gap:6px; align-items:center; }
+.conn { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:4px 14px; align-items:center; padding:12px 14px; border-bottom:1px solid var(--border); }
+.conn:last-child { border-bottom:0; }
+.conn .ic { width:32px; height:32px; border-radius:var(--r-ctl); display:grid; place-items:center; background:var(--surface-2); border:1px solid var(--border); grid-row:span 2; }
+.conn .nm { font-weight:600; font-size:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.conn .ds { color:var(--text-2); grid-column:2; }
+.conn .ac { grid-row:1 / span 2; grid-column:3; display:flex; gap:6px; }
+.steps { counter-reset:st; list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
+.steps li { counter-increment:st; display:grid; grid-template-columns:24px minmax(0,1fr); gap:10px; align-items:start; }
+.steps li::before { content:counter(st); width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-family:var(--font-mono); font-size:12px; border:1px solid var(--border-strong); color:var(--text-2); }
+.steps li.done::before { content:'✓'; background:var(--success-soft); border-color:transparent; color:var(--success); }
+.code { font-family:var(--font-mono); font-size:12px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface-2); display:flex; justify-content:space-between; gap:8px; align-items:center; word-break:break-all; }
+
+/* flashcard preview */
+.cardlab { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:24px; align-items:start; }
+.cardlab > div { min-width:0; }
+.flash { border:1px solid var(--border-strong); border-radius:var(--r-flash); background:var(--surface-1); min-height:220px; padding:22px 20px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:10px; cursor:pointer; position:relative; }
+.flash .side { position:absolute; top:8px; left:10px; font-size:11px; color:var(--text-3); }
+.flash .fl { position:absolute; top:6px; right:8px; }
+.fc-term { font-size:28px; font-weight:600; line-height:1.2; }
+.fc-surface { font-size:14px; color:var(--text-2); }
+.fc-meaning { font-size:22px; font-weight:600; }
+.fc-ex { font-size:14px; line-height:1.5; max-width:34ch; }
+.fc-ex i { font-style:normal; color:var(--accent-text); font-weight:600; }
+.fc-ex .lb, .fc-src .lb { display:block; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); margin-bottom:2px; }
+.fc-tr { font-size:13px; color:var(--text-2); }
+.fc-src { font-size:12px; color:var(--text-2); }
+.fc-note { font-size:12px; color:var(--text-2); font-style:italic; }
+.fc-shot { width:150px; height:70px; border-radius:6px; background:linear-gradient(160deg,#2a3a2a,#3b2d1c 60%,#1b1b22); border:1px solid var(--border); display:grid; place-items:end center; padding-bottom:6px; color:#f2e9c9; font-size:10px; text-shadow:0 1px 2px #000; }
+.fc-audio { display:inline-flex; gap:6px; align-items:center; font-size:12px; color:var(--text-2); border:1px solid var(--border); border-radius:999px; padding:2px 10px; }
+.fc-divider { width:60%; border-top:1px dashed var(--border-strong); }
+.zones { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.zone { border:1px dashed var(--border-strong); border-radius:var(--r-card); padding:10px; min-height:96px; background:var(--surface-1); }
+.zone.over { border-color:var(--accent); background:var(--accent-soft); }
+.zone h4 { margin:0 0 8px; font-size:12px; font-weight:600; color:var(--text-2); display:flex; justify-content:space-between; }
+.zone .chips { display:flex; flex-wrap:wrap; gap:6px; }
+.zone .empty { color:var(--text-3); font-size:12px; }
+.chip { white-space:nowrap; display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:var(--r-pill); border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text-1); font-size:12px; font-weight:500; cursor:grab; }
+.chip:hover { border-color:var(--accent); }
+.chip .ex { color:var(--text-3); font-weight:400; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chip.pool { background:none; border-style:dashed; color:var(--text-2); }
+.chip[aria-expanded='true'] { border-color:var(--accent); background:var(--accent-soft); }
+.menu { position:absolute; z-index:30; min-width:190px; padding:4px; border:1px solid var(--border-strong); border-radius:var(--r-card); background:var(--surface-1); box-shadow:var(--shadow-float); }
+.menu button { display:flex; width:100%; gap:8px; align-items:center; padding:6px 8px; border:0; background:none; border-radius:4px; text-align:left; }
+.menu button:hover, .menu button:focus-visible { background:var(--surface-2); outline:none; }
+.menu hr { border:0; border-top:1px solid var(--border); margin:4px 0; }
+.menu .mh { padding:4px 8px; font-size:11px; color:var(--text-3); }
+.recipes { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
+.recipe { text-align:left; border:1px solid var(--border); border-radius:var(--r-card); background:var(--surface-1); padding:10px; display:flex; flex-direction:column; gap:8px; position:relative; }
+.recipe[aria-pressed='true'] { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 6%,var(--surface-1)); }
+.recipe .mini { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.recipe .mini div { border:1px solid var(--border); border-radius:6px; background:var(--surface-0); min-height:58px; padding:6px; font-size:11px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:2px; }
+.recipe .mini b { font-size:13px; }
+.recipe .mini i { font-style:normal; color:var(--accent-text); font-weight:600; }
+.recipe .rt { font-weight:600; display:flex; justify-content:space-between; gap:8px; }
+.recipe .rd { color:var(--text-2); font-size:12px; }
+.recipe .ck { width:18px; height:18px; border-radius:4px; border:1px solid var(--border-strong); display:grid; place-items:center; font-size:12px; flex:none; }
+.recipe[aria-pressed='true'] .ck { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); }
+.typepick { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+.typepick button { text-align:left; border:1px solid var(--border); border-radius:var(--r-card); background:var(--surface-1); padding:8px 12px; min-width:180px; }
+.typepick button[aria-pressed='true'] { border-color:var(--accent); background:var(--selected); }
+.typepick b { display:block; } .typepick span { font-size:12px; color:var(--text-2); }
+.savebar { position:sticky; bottom:0; margin-top:16px; display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--border-strong); border-radius:var(--r-card); background:var(--surface-1); box-shadow:var(--shadow-float); }
+.savebar .bt { flex:1; }
+.savebar ul { margin:2px 0 0; padding-left:18px; color:var(--text-2); }
+
+/* tables */
+table.t { width:100%; border-collapse:collapse; }
+table.t th { text-align:left; font-size:12px; color:var(--text-2); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--border); }
+table.t td { padding:7px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+table.nt select.inp { width:130px; } table.nt th { white-space:nowrap; }
+table.t tr.sel td { background:var(--selected); }
+table.t tr.click { cursor:pointer; } table.t tr.click:hover td { background:var(--surface-2); }
+.split { display:grid; grid-template-columns:220px minmax(0,1fr); gap:20px; align-items:start; }
+.list { display:flex; flex-direction:column; border:1px solid var(--border); border-radius:var(--r-card); overflow:hidden; }
+.list button { text-align:left; border:0; border-bottom:1px solid var(--border); background:var(--surface-1); padding:8px 10px; }
+.list button:last-child { border-bottom:0; }
+.list button[aria-pressed='true'] { background:var(--selected); box-shadow:inset 2px 0 0 var(--accent); }
+.list button span { display:block; font-size:12px; color:var(--text-2); }
+details.more { border:1px solid var(--border); border-radius:var(--r-card); margin:8px 0 24px; }
+details.more > summary { cursor:pointer; padding:10px 12px; font-weight:600; list-style:none; display:flex; gap:8px; align-items:center; }
+details.more > summary::before { content:'›'; display:inline-block; transition:transform var(--motion); color:var(--text-2); }
+details.more[open] > summary::before { transform:rotate(90deg); }
+details.more > summary span { font-weight:400; color:var(--text-2); }
+details.more > .in { padding:0 12px 4px; }
+
+/* drawer, dialog, toast */
+.notes-btn { position:fixed; right:16px; bottom:16px; z-index:35; }
+.drawer { position:fixed; top:30px; right:0; bottom:0; width:min(560px,100vw); z-index:45; background:var(--surface-1); border-left:1px solid var(--border-strong); box-shadow:var(--shadow-float); transform:translateX(102%); transition:transform 200ms var(--ease); display:flex; flex-direction:column; }
+.drawer.open { transform:none; }
+.drawer header { display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--border); }
+.drawer header h2 { margin:0; font-size:16px; flex:1; }
+.drawer .body { overflow:auto; padding:12px 16px 40px; }
+.drawer h3 { font-size:14px; margin:18px 0 6px; }
+.drawer .q { border:1px solid var(--border); border-radius:var(--r-card); padding:10px 12px; margin-bottom:8px; }
+.drawer .q b { display:block; margin-bottom:4px; }
+.drawer .q .opt { display:grid; grid-template-columns:22px minmax(0,1fr); gap:4px; color:var(--text-2); margin-top:2px; }
+.drawer .q .opt.ch { color:var(--text-1); }
+.drawer .q .opt span:first-child { font-family:var(--font-mono); font-weight:600; color:var(--accent-text); }
+.drawer table.t td, .drawer table.t th { font-size:12px; padding:5px 6px; }
+.scrim { position:fixed; inset:0; background:var(--backdrop); z-index:50; display:none; place-items:center; padding:16px; }
+.scrim.open { display:grid; }
+.dialog { width:min(520px,100%); max-height:calc(100vh - 64px); overflow:auto; background:var(--surface-1); border:1px solid var(--border-strong); border-radius:var(--r-card); box-shadow:var(--shadow-float); padding:18px 20px; }
+.dialog h2 { margin:0 0 4px; font-size:16px; }
+.dialog .acts { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
+.toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%) translateY(20px); opacity:0; z-index:60; display:flex; align-items:center; gap:12px; padding:8px 8px 8px 14px; border:1px solid var(--border-strong); border-radius:var(--r-card); background:var(--surface-1); box-shadow:var(--shadow-float); transition:all var(--motion) var(--ease); pointer-events:none; }
+.toast.show { opacity:1; transform:translateX(-50%); pointer-events:auto; }
+
+/* narrow window (≤ 1023 px): icon sidebar; ≤ 900 px: tighter settings nav, controls under labels */
+@media (max-width:1023.98px) {
+  .app { grid-template-columns:56px minmax(0,1fr); }
+  .appnav .lbl, .brand span, .nav-item .cnt { display:none; }
+  .nav-item { justify-content:center; padding:0; }
+  .brand { justify-content:center; padding:4px 0 16px; }
+  .palette { width:200px; }
+  .settings { grid-template-columns:220px minmax(0,1fr); }
+  .page { padding:20px 20px 96px; }
+  .hero { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .hero > .spark { grid-column:1 / -1; border-top:1px solid var(--border); border-right:0; }
+  .cardlab { grid-template-columns:minmax(0,1fr) 250px; gap:16px; }
+  .zones { grid-template-columns:minmax(0,1fr); }
+  .flash { min-height:180px; }
+  .fc-term { font-size:24px; }
+}
+@media (max-width:930px) {
+  .row { grid-template-columns:minmax(0,1fr); }
+  .ctl { align-items:flex-start; justify-self:start; }
+  .quick, .days { justify-content:flex-start; }
+  .palette .ph { display:none; } .palette { width:auto; }
+  .split { grid-template-columns:minmax(0,1fr); }
+}
+@container (max-width:620px) {
+  .row { grid-template-columns:minmax(0,1fr); }
+  .ctl { align-items:flex-start; justify-self:start; }
+  .quick, .days { justify-content:flex-start; }
+}
+@media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
+</style>
+</head>
+<body>
+<div class="proto" role="region" aria-label="Taslak araçları">
+  <b>TASLAK</b><span class="desc">Ayarlar · v1.4 · uygulamanın kodu değil, tıklanabilir bir prova</span>
+  <span class="ab">Not türleri: <span class="seg" role="radiogroup" aria-label="Not türleri varyantı" id="ab-nt"></span></span>
+  <span class="ab">Deste ayarları: <span class="seg" role="radiogroup" aria-label="Deste ayarları varyantı" id="ab-deck"></span></span>
+  <span class="ab">Tema: <span class="seg" role="radiogroup" aria-label="Taslak teması" id="ab-theme"></span></span>
+  <span class="sp"></span>
+  <button class="pbtn" id="notes-top" type="button">Taslak notları</button>
+</div>
+
+<div class="app">
+  <aside class="appnav" aria-label="Ana gezinme">
+    <div class="brand"><span class="logo"></span><span>Flashcard</span></div>
+    <button class="nav-item" type="button" data-fake title="Ana sayfa"><svg class="i"><use href="#i-home"/></svg><span class="lbl">Ana sayfa</span></button>
+    <button class="nav-item" type="button" data-fake title="Kütüphane"><svg class="i"><use href="#i-lib"/></svg><span class="lbl">Kütüphane</span></button>
+    <button class="nav-item" type="button" data-fake title="Oluştur"><svg class="i"><use href="#i-plus"/></svg><span class="lbl">Oluştur</span></button>
+    <button class="nav-item" type="button" data-fake title="Ara"><svg class="i"><use href="#i-search"/></svg><span class="lbl">Ara</span></button>
+    <button class="nav-item" type="button" data-fake title="İstatistik"><svg class="i"><use href="#i-chart"/></svg><span class="lbl">İstatistik</span></button>
+    <div class="grow"></div>
+    <hr>
+    <button class="nav-item" type="button" data-fake title="Gelen kutusu"><svg class="i"><use href="#i-inbox"/></svg><span class="lbl">Gelen kutusu</span><span class="cnt">3</span></button>
+    <button class="nav-item on" type="button" aria-current="page" title="Ayarlar"><svg class="i"><use href="#i-gear"/></svg><span class="lbl">Ayarlar</span></button>
+    <button class="nav-item" type="button" data-fake title="Ana profil"><span class="avatar">AP</span><span class="lbl">Ana profil</span></button>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <nav class="crumb" aria-label="Buradasın"><span>Ayarlar</span><svg class="i s14"><use href="#i-chev"/></svg><b id="crumb"></b></nav>
+      <span class="sp"></span>
+      <span class="palette"><svg class="i s14"><use href="#i-search"/></svg><span class="ph">Ara ya da komut çalıştır</span><span class="sp"></span><kbd>Ctrl</kbd><kbd>K</kbd></span>
+      <button class="btn primary sm" type="button" data-fake><svg class="i s14"><use href="#i-plus"/></svg>Kart ekle <kbd>N</kbd></button>
+    </header>
+    <div class="settings">
+      <nav class="snav" aria-label="Ayar bölümleri">
+        <div class="search" id="searchbox">
+          <svg class="i s14"><use href="#i-search"/></svg>
+          <label class="sr" for="q">Ayarlarda ara</label>
+          <input id="q" type="search" autocomplete="off" placeholder="Ayarlarda ara…" aria-controls="results">
+          <button class="clear" type="button" aria-label="Aramayı temizle" id="qclear"><svg class="i s14"><use href="#i-x"/></svg></button>
+        </div>
+        <div class="results" id="results" role="listbox" aria-label="Arama sonuçları" hidden></div>
+        <div id="navlist"></div>
+        <div class="advswitch">
+          <div class="line"><label for="advsw">Gelişmiş ayarlar</label><button class="sw" role="switch" id="advsw" type="button" aria-checked="false"></button></div>
+          <p id="advline"></p>
+        </div>
+      </nav>
+      <main class="content" id="content" tabindex="-1"></main>
+    </div>
+  </div>
+</div>
+
+<aside class="drawer" id="drawer" aria-label="Taslak notları" aria-hidden="true">
+  <header><h2>Taslak notları</h2><button class="btn ghost sm" type="button" id="drawer-close">Kapat <kbd>Esc</kbd></button></header>
+  <div class="body" id="drawer-body"></div>
+</aside>
+<div class="scrim" id="scrim"><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t" id="dialog"></div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V21H3z"/><path d="M9 21v-6h6v6"/></symbol>
+  <symbol id="i-lib" viewBox="0 0 24 24"><path d="M4 4v16M9 4v16M14 4l6 16"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-3"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5 5h14l2 8v6H3v-6z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 3h10l4 4v14H5z"/><path d="M9 11h6M9 15h6"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4 18a8 8 0 1 1 16 0"/><path d="m12 18 4-5"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h10M7 14h6"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 21h4"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7L11.5 6.8"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.5-1.5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.8 1.5-1.5 0-1.2-1-1.5-1-2.5s.8-1.5 2-1.5H17a4 4 0 0 0 4-4c0-4.7-4-8.5-9-8.5z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></symbol>
+  <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="2"/><path d="M12 4v4M9 13h.01M15 13h.01"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-flip" viewBox="0 0 24 24"><path d="M4 9h13l-3-3M20 15H7l3 3"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></symbol>
+</svg>
+<script>
+'use strict';
+/* ================================================================ helpers */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const ic = (n, cls = '') => `<svg class="i ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const fmt = (n) => Number(n).toLocaleString('tr-TR');
+const fold = (s) => String(s).toLocaleLowerCase('tr').replace(/ı/g, 'i').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('fc-proto-ayarlar.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('fc-proto-ayarlar.' + k, JSON.stringify(v)); } catch { /* private window */ } },
+};
+const DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+const DAYS_LONG = ['pazartesi', 'salı', 'çarşamba', 'perşembe', 'cuma', 'cumartesi', 'pazar'];
+
+/* ================================================================ sample collection */
+const DECKS = [
+  { id: 'en', name: 'İngilizce', depth: 0, cards: 0 },
+  { id: 'bb', name: 'Breaking Bad', depth: 1, cards: 212, parent: 'en' },
+  { id: 'fr', name: 'Friends', depth: 1, cards: 140, parent: 'en' },
+  { id: 'of', name: 'The Office', depth: 1, cards: 60, parent: 'en' },
+  { id: 'pv', name: 'Phrasal verbs', depth: 0, cards: 88 },
+  { id: 'yds', name: 'YDS kelimeleri', depth: 0, cards: 300 },
+];
+const WAITING_NEW = 146; // new words captured but never shown yet
+
+/* ================================================================ state */
+const S = {
+  page: store.get('page', 'tempo'),
+  adv: store.get('adv', false),
+  nt: store.get('nt', 'A'),
+  deck: store.get('deck', 'A'),
+  theme: store.get('theme', 'dark'),
+  oneOff: null, // advanced page opened from search while Advanced is off
+  v: {},
+  conn: { subtitle: true, ai: false, mcp: false, rules: 0 },
+  subSetup: 0,
+  backup: { last: 'dün 21:04', verified: true },
+  tempos: {
+    genel: { name: 'Genel tempo', new_per_day: 20, reviews_per_day: 200, retention: 0.9, learning_steps: '1 10', relearning_steps: '10', max_interval: 36500, new_order: 'added', review_order: 'due', bury: true, fsrs: '' },
+    sinav: { name: 'Sınav temposu', new_per_day: 30, reviews_per_day: 400, retention: 0.92, learning_steps: '1 10 60', relearning_steps: '10', max_interval: 180, new_order: 'random', review_order: 'retrievability', bury: true, fsrs: '' },
+  },
+  deckTempo: { en: 'genel', bb: null, fr: null, of: null, pv: 'genel', yds: 'sinav' }, // null = inherits from the parent deck
+  selTempo: 'genel',
+  selDeck: 'bb',
+  ntType: 'subtitle',
+  advType: 'subtitle',
+  advTab: 'fields',
+  shortcuts: null,
+  capture: null,
+  profiles: [{ name: 'Ana profil', cards: 1284, cur: true }],
+  lock: { on: false, kind: 'pin', idle: 15 },
+  undo: null,
+};
+
+/* ---------------------------------------------------------------- card types (fields have ROLES) */
+const ROLE = {
+  term: { label: 'Kelime', d: 'Sözlükteki hâli' },
+  surface: { label: 'Geçtiği hâli', d: 'Cümlede geçtiği gibi' },
+  meaning: { label: 'Anlam', d: 'Türkçesi' },
+  example: { label: 'Örnek cümle', d: 'Kelimenin geçtiği cümle' },
+  example_tr: { label: 'Cümlenin çevirisi', d: 'Örnek cümlenin Türkçesi' },
+  source: { label: 'Kaynak', d: 'Dizi, film, bölüm' },
+  shot: { label: 'Ekran görüntüsü', d: 'Sahnenin karesi' },
+  audio: { label: 'Ses kaydı', d: 'Repliğin sesi' },
+  note: { label: 'Notun', d: 'Kendi açıklaman' },
+};
+const TYPES = {
+  subtitle: {
+    name: 'Subtitle’dan gelenler', v13: 'Altyazı kartı', notes: 412,
+    sample: { term: 'give up', surface: 'gave up', meaning: 'vazgeçmek, bırakmak', example: 'He *gave up* everything for this family.', example_tr: 'Bu aile için her şeyden vazgeçti.', source: 'Breaking Bad · S1E3 · 00:21:14', shot: 'He gave up everything…', audio: '0:03', note: '' },
+    fields: ['term', 'surface', 'meaning', 'example', 'example_tr', 'source', 'shot', 'audio', 'note'],
+  },
+  word: {
+    name: 'Elle eklediğin kelimeler', v13: 'Kelime kartı', notes: 88,
+    sample: { term: 'figure out', meaning: 'çözmek, anlamak', example: 'We need to *figure out* what happened.', example_tr: 'Ne olduğunu çözmemiz lazım.', source: 'The Office · S2E1', note: 'out ile kullanılır' },
+    fields: ['term', 'meaning', 'example', 'example_tr', 'source', 'note'],
+  },
+};
+const LAYOUT0 = {
+  subtitle: { front: ['term'], back: ['meaning', 'example', 'example_tr', 'source'], reverse: false },
+  word: { front: ['term'], back: ['meaning', 'example', 'example_tr'], reverse: false },
+};
+const clone = (o) => JSON.parse(JSON.stringify(o));
+S.layout = clone(LAYOUT0); S.layoutSaved = clone(LAYOUT0);
+const RECIPES = [
+  { id: 'see', t: 'Kelimeyi gör → anlamını hatırla', d: 'Klasik kart. Çoğu kişi için yeter.', rec: true, front: ['term'], q: 'meaning' },
+  { id: 'ctx', t: 'Cümlede gör → anlamını hatırla', d: 'Kelime, geçtiği cümlenin içinde vurgulu.', front: ['example*'], q: 'meaning' },
+  { id: 'rev', t: 'Anlamı gör → kelimeyi hatırla', d: 'Ters yön. Konuşurken kelimeyi bulmanı sağlar.', front: ['meaning'], q: 'term' },
+  { id: 'gap', t: 'Boşluğu doldur → kelimeyi yaz', d: 'Cümlede kelime boş; anlamı ipucu.', front: ['example_', 'meaning~'], q: 'term' },
+  { id: 'scene', t: 'Sahneyi gör → kelimeyi hatırla', d: 'Ekran görüntüsü ve replik.', front: ['shot', 'example_'], q: 'term', only: 'subtitle' },
+  { id: 'listen', t: 'Dinle → kelimeyi hatırla', d: 'Repliğin sesi; kulağını eğitir.', front: ['audio'], q: 'term', only: 'subtitle' },
+];
+S.recipes = { subtitle: { on: ['see'], back: ['meaning', 'example', 'example_tr', 'source'] }, word: { on: ['see'], back: ['meaning', 'example', 'example_tr'] } };
+S.recipesSaved = clone(S.recipes);
+S.previewSide = 'front';
+S.previewRecipe = null;
+
+/* ================================================================ pages */
+const BASIC = [
+  { id: 'tempo', icon: 'gauge', nav: 'Günlük tempo', title: 'Günde kaç kart çalışayım?', intro: 'Her gün kaç yeni kelime göreceğini ve ne kadar sağlam hatırlamak istediğini seç. Altta, bu tempoyla günde kaç dakika süreceğini görürsün.', kw: 'yeni kart günlük sınır tekrar hatırlama oranı tempo deste ayarları' },
+  { id: 'cards', icon: 'card', nav: 'Kartların görünüşü', title: 'Kartlarım nasıl görünsün?', intro: 'Kartın ön yüzünde ne sorulsun, arka yüzünde ne görünsün? Kutulara yerleştir, sağda kartın hemen değişsin.', kw: 'not türü ön yüz arka yüz alan şablon ters iki yönlü kart' },
+  { id: 'remind', icon: 'bell', nav: 'Hatırlatma', title: 'Ne zaman hatırlatayım?', intro: 'Kartların beklerken günde bir bildirim. O gün zaten çalıştıysan gelmez.', kw: 'bildirim saat gün hatırlatıcı tepsi' },
+  { id: 'connect', icon: 'film', nav: 'Subtitle ve bağlantılar', title: 'Subtitle’dan kelimeler geliyor mu?', intro: 'Dizi izlerken + bastığın kelimeler buraya kart olarak gelir. Altta, isteğe bağlı yardımcılar: yapay zeka, asistan ve otomatik kurallar.', kw: 'subtitle eklenti tarayıcı yapay zeka ai asistan mcp otomasyon bağlantı' },
+  { id: 'backup', icon: 'shield', nav: 'Yedek', title: 'Kartlarım güvende mi?', intro: 'Uygulama kartlarını kendiliğinden yedekler ve her yedeğin geri açılabildiğini denetler. Buradan ne sıklıkla olacağını seçersin.', kw: 'yedek geri yükle backup kaybetmek' },
+  { id: 'look', icon: 'palette', nav: 'Dil ve görünüm', title: 'Uygulama nasıl görünsün?', intro: 'Menülerin dili ve renkler. Kartlarının içeriği değişmez.', kw: 'dil tema renk koyu açık vurgu' },
+];
+const ADV_GROUPS = [
+  { name: 'Çalışma', pages: [
+    { id: 'deck-tempos', nav: 'Deste tempoları', title: 'Desteler hangi tempoyla çalışsın?', intro: 'Bazı destelerin farklı çalışmasını istiyorsan (ör. sınav destesinde günde daha çok yeni kart). Öğrenme adımları, kart sırası ve zamanlayıcı da burada.', v13: 'Çalışma ve kartlar › Deste ayarları' },
+    { id: 'nt-adv', nav: 'Not türleri (tam)', title: 'Not türleri: alanlar, şablon kodu, CSS', intro: 'Kartı kendin tasarlamak istersen. Çoğu kişiye Temel’deki “Kartların görünüşü” yeter.', v13: 'Çalışma ve kartlar › Not türleri' },
+    { id: 'study-screen', nav: 'Çalışma ekranı', title: 'Çalışırken neler olsun?', intro: 'Cevap düğmeleri, ipucu, yazarak cevap, odak modu, yeni günün saati.', v13: 'Modlar ve okuma (bir kısmı v1.3’te ekranda yoktu)' },
+    { id: 'modes', nav: 'Öğren, Test, Sınav, Eşleştir', title: 'Diğer çalışma yolları', intro: 'Oturum uzunlukları. Takvimini etkileyen tek şey Kartlar’dır; bunlar pratik.', v13: 'Modlar ve okuma' },
+    { id: 'reading', nav: 'Okuma', title: 'Okuma', intro: 'Metin ve altyazı okurken kelimelere dokunup kart yaptığın yer.', v13: 'Modlar ve okuma › Okuma' },
+    { id: 'planning', nav: 'Planlama ve zor kartlar', title: 'Planlama ve zor kartlar', intro: 'Tekrarları günlere dengeli dağıtmak, hafif günler ve “sürekli zorlandığın” kartlar.', v13: 'İstatistik › Planlama (ayarları); bir kısmı ekranda yoktu' },
+  ] },
+  { name: 'Uygulama', pages: [
+    { id: 'shortcuts', nav: 'Klavye kısayolları', title: 'Klavye kısayolları', intro: 'Her tuşun tek bir işi var. Bir satıra tıkla, yeni tuşa bas.', v13: 'Genel › Kısayollar' },
+    { id: 'adding', nav: 'Kart ekleme', title: 'Kart eklerken', intro: 'Hızlı ekleme kısayolu, panodan öneriler ve sınıflandırmalar.', v13: 'v1.3’te ekranı yoktu (yalnız komutla)' },
+    { id: 'profiles', nav: 'Profiller ve kilit', title: 'Profiller ve kilit', intro: 'Aynı bilgisayarda ayrı bir koleksiyon ya da uygulamayı PIN’le kilitlemek.', v13: 'Genel › Profiller ve kilit' },
+  ] },
+  { name: 'Bağlantılar (ayrıntı)', pages: [
+    { id: 'ai', nav: 'Yapay zeka', title: 'Yapay zeka', intro: 'Sağlayıcılar, özellik başına model, fiyatlar, bütçe ve istemler.', v13: 'Bağlantılar › Yapay zeka' },
+    { id: 'subtitle-adv', nav: 'Subtitle ayrıntıları', title: 'Subtitle: erişim anahtarları', intro: 'Eklentiye verdiğin anahtarlar. Bir tarayıcıyı artık kullanmıyorsan anahtarını iptal et.', v13: 'Bağlantılar › Subtitle' },
+    { id: 'mcp', nav: 'Asistanlar (MCP)', title: 'Asistanlar (MCP)', intro: 'Claude gibi bir asistan destelerini okuyup senin için kart ekleyebilsin.', v13: 'Gelişmiş › Asistanlar (MCP)' },
+    { id: 'local-api', nav: 'Yerel API', title: 'Yerel API', intro: 'Bu bilgisayardaki başka programların sana kart önermesi (Gelen kutusuna düşer).', v13: 'Gelişmiş › Yerel API' },
+    { id: 'automation', nav: 'Otomasyon', title: 'Otomatik kurallar', intro: 'Bir şey olduğunda (ör. bir kartı yine unuttuğunda) kartları kendiliğinden etiketle, taşı ya da kenara koy.', v13: 'Gelişmiş › Otomasyon' },
+    { id: 'plugins', nav: 'Eklentiler', title: 'Eklentiler', intro: 'Yeni kart türleri, çalışma modları ya da sesler ekleyen .fcplugin dosyaları.', v13: 'Gelişmiş › Eklentiler' },
+  ] },
+  { name: 'Veri ve bakım', pages: [
+    { id: 'export', nav: 'Dışa aktar ve yazdır', title: 'Dışa aktar ve yazdır', intro: 'Desteleri Anki’ye ya da başka bir cihaza taşı, kâğıda bas. (Kart içe aktarmak: Oluştur › Dosyadan.)', v13: 'Veri › Dışa aktar ve yedek' },
+    { id: 'starters', nav: 'Başlangıç desteleri', title: 'Başlangıç desteleri', intro: 'Hazır destelerden birini koleksiyonuna ekle. (Oluştur’da da var.)', v13: 'Veri › Başlangıç desteleri' },
+    { id: 'maintenance', nav: 'Bakım ve çöp', title: 'Bakım ve çöp kutusu', intro: 'Silinenler, kopya notlar ve koleksiyonun sağlık kontrolü.', v13: 'Gelişmiş › Bakım' },
+    { id: 'logs', nav: 'Günlükler ve güncellemeler', title: 'Günlükler ve güncellemeler', intro: 'Hata raporu için günlük, çökme sonrası denetim, güncellemeler.', v13: 'Gelişmiş › Günlükler ve güncellemeler' },
+  ] },
+];
+const ADV = ADV_GROUPS.flatMap((g) => g.pages.map((p) => ({ ...p, group: g.name, adv: true })));
+const ALL = [...BASIC.map((p) => ({ ...p, adv: false })), ...ADV];
+const pageOf = (id) => ALL.find((p) => p.id === id) ?? ALL[0];
+
+/* ================================================================ settings registry (one row = one setting) */
+const REG = [];
+function R(page, sec, id, label, desc, type, cur, rec, x = {}) {
+  REG.push({ page, sec, id, label, desc, type, rec, ...x });
+  S.v[id] = cur;
+}
+const onoff = (v) => (v ? 'açık' : 'kapalı');
+// --- study screen
+R('study-screen', 'Cevap verirken', 'study.answer_buttons', 'Kaç cevap düğmesi?', 'İki düğme: “Hâlâ öğreniyorum / Biliyorum”. Dört düğme: Tekrar / Zor / İyi / Kolay, her birinin üstünde kartın ne zaman döneceği yazar.', 'seg', 'two', 'two',
+  { opts: [['two', 'İki düğme'], ['four', 'Dört düğme']], v13: 'Modlar ve okuma › Kart çalışma', effect: (v) => (v === 'two' ? 'Tuşlar: 1 = Hâlâ öğreniyorum, 2 = Biliyorum.' : 'Tuşlar: 1 Tekrar · 2 Zor · 3 İyi · 4 Kolay.') });
+R('study-screen', 'Cevap verirken', 'study.type_answer', 'Cevabı yazarak ver', 'Kartı çevirmeden önce bir kutuya cevabını yazarsın; uygulama karşılaştırır.', 'switch', false, false, { v13: 'ekranda yoktu', effect: (v) => (v ? '“give up” kartında “vazgeçmek” yazarsın, uygulama doğru/yanlış gösterir.' : '') });
+R('study-screen', 'Cevap verirken', 'study.answer_checker', 'Yazdığın cevap nasıl kontrol edilsin?', 'Yalnız “Cevabı yazarak ver” açıkken işe yarar.', 'select', 'normalized', 'normalized',
+  { opts: [['exact', 'Birebir aynı olmalı'], ['normalized', 'Büyük/küçük harf ve noktalama önemsiz'], ['tolerant', 'Küçük yazım hatalarına izin ver'], ['multi', 'Birkaç doğru cevap + yazım hatası']], v13: 'ekranda yoktu', effect: (v) => ({ exact: '“Vazgeçmek.” yanlış sayılır (nokta fazla).', normalized: '“Vazgeçmek.” doğru; “vazgecmek” yanlış.', tolerant: '“vazgecmek” de doğru sayılır.', multi: '“vazgeçmek” de “bırakmak” da doğru.' })[v] });
+R('study-screen', 'Cevap verirken', 'study.fold_turkish', 'ı/i, ş/s, ğ/g… eşit sayılsın', 'Türkçe klavyen yoksa işine yarar.', 'switch', true, true, { v13: 'ekranda yoktu', effect: (v) => (v ? '“vazgecmek” = “vazgeçmek”.' : '“vazgecmek” yanlış sayılır.') });
+R('study-screen', 'Cevap verirken', 'study.auto_grade', 'Yazdığın cevaba göre kendiliğinden puanla', 'Doğruysa “Biliyorum”, yanlışsa “Hâlâ öğreniyorum”; sen düğmeye basmazsın.', 'switch', false, false, { v13: 'ekranda yoktu' });
+R('study-screen', 'Cevap verirken', 'study.hint_strategy', 'İpucu (H) harfleri nasıl açsın?', 'Önce cümle gösterilir; harfler ondan sonra.', 'seg', 'first_letters', 'first_letters',
+  { opts: [['first_letters', 'İlk harfler'], ['word_starts', 'Her kelimenin başı'], ['partial', 'Harflerin bir kısmı']], v13: 'ekranda yoktu', effect: (v) => ({ first_letters: 'vazgeçmek → v _ _ _ _ _ _ _ _', word_starts: 'give up → g _ _ _ u _', partial: 'vazgeçmek → v a _ g _ ç _ e _' })[v] });
+R('study-screen', 'Kartlar ne zaman gelir', 'study.day_start_hour', 'Yeni gün saat kaçta başlasın?', 'Gece geç çalışıyorsan, gece yarısından sonrası hâlâ “bugün” sayılsın.', 'number', 4, 4, { min: 0, max: 23, unit: ':00', v13: 'ekranda yoktu', effect: (v) => `Saat 0${v}:00’a kadar çalıştığın kartlar bir önceki güne sayılır.`.replace(/0(\d\d)/, '$1') });
+R('study-screen', 'Kartlar ne zaman gelir', 'study.learn_ahead_mins', 'Bekleyen öğrenme kartını erken göster', 'Yeni öğrendiğin bir kart birkaç dakika sonra dönecekse, beklemek yerine en çok bu kadar önce gösterilir.', 'number', 20, 20, { min: 0, max: 120, unit: 'dk', v13: 'Modlar ve okuma › Kart çalışma', effect: (v) => (Number(v) === 0 ? 'Hep beklersin: “Sıradaki kart 6 dk sonra” ekranı çıkar.' : `${v} dk içinde dönecek kart beklemeden gelir.`) });
+R('study-screen', 'Kartlar ne zaman gelir', 'study.new_per_session', 'Bir oturumda en çok kaç yeni kart?', '0 = destelerin kendi günlük sınırı geçerli (Günlük tempo).', 'number', 0, 0, { min: 0, max: 999, unit: 'kart', v13: 'ekranda yoktu', effect: (v) => (Number(v) === 0 ? 'Sınırı Günlük tempo belirler.' : `“Tüm desteler”i çalışırken en çok ${v} yeni kart.`) });
+R('study-screen', 'Kartlar ne zaman gelir', 'decks.include_subdecks', 'Bir desteyi çalışırken alt destelerini de kat', '“İngilizce”yi seçince Breaking Bad, Friends, The Office da gelir.', 'switch', true, true, { v13: 'deste sayfasında' });
+R('study-screen', 'Kartlar ne zaman gelir', 'study.scheduler', 'Zamanlayıcı', 'Kartın ne zaman geri geleceğini hesaplayan yöntem. FSRS daha az tekrarla aynı hatırlamayı sağlar.', 'seg', 'fsrs', 'fsrs', { opts: [['fsrs', 'FSRS'], ['sm2', 'SM-2 (eski Anki)']], v13: 'ekranda yoktu' });
+R('study-screen', 'Puanlama', 'confidence.rating_scale', 'Nasıl puanlarsın?', 'Düğmelerle ya da “ne kadar emindim?” diye 1–5 arası.', 'seg', 'buttons', 'buttons', { opts: [['buttons', 'Düğmeler'], ['confidence', 'Güven 1–5']], v13: 'Modlar ve okuma › Kart çalışma' });
+[1, 2, 3, 4, 5].forEach((n) => R('study-screen', 'Puanlama', `confidence.map.${n}`, `Güven ${n} şu sayılsın`, 'Zamanlayıcıya giden puan.', 'select', ['again', 'hard', 'good', 'good', 'easy'][n - 1], ['again', 'hard', 'good', 'good', 'easy'][n - 1],
+  { opts: [['again', 'Tekrar'], ['hard', 'Zor'], ['good', 'İyi'], ['easy', 'Kolay']], cond: () => S.v['confidence.rating_scale'] === 'confidence', v13: 'Modlar ve okuma › Kart çalışma' }));
+R('study-screen', 'Süre ve odak', 'timed.seconds', 'Zamanlı çalışmada kart başına süre', 'Başlatıcıda “Süreli” seçersen.', 'number', 10, 10, { min: 3, max: 120, unit: 'sn', v13: 'Modlar ve okuma › Kart çalışma' });
+R('study-screen', 'Süre ve odak', 'timed.on_timeout', 'Süre dolunca', 'Cevap vermeden süre biterse karta ne olsun?', 'seg', 'again', 'again', { opts: [['again', 'Bilemedim say'], ['skip', 'Geç, sonra sor']], v13: 'Modlar ve okuma › Kart çalışma' });
+R('study-screen', 'Süre ve odak', 'focus.auto', 'Hep odak modunda başla', 'Odak modu: yalnız kart, başka hiçbir şey.', 'switch', false, false, { v13: 'Modlar ve okuma › Kart çalışma' });
+R('study-screen', 'Süre ve odak', 'focus.fullscreen', 'Odak modu tam ekran olsun', '', 'switch', true, true, { v13: 'Modlar ve okuma › Kart çalışma' });
+R('study-screen', 'Süre ve odak', 'focus.hide_counts', 'Odak modunda kalan kart sayısını gizle', 'Sayıyı görmek seni geriyorsa.', 'switch', false, false, { v13: 'Modlar ve okuma › Kart çalışma' });
+R('study-screen', 'Ses', 'tts.provider', 'Kelimeyi kim sesli okusun?', 'Kartta 🔊 düğmesi. Eklentiyle başka sesler gelebilir.', 'select', 'system', 'system', { opts: [['system', 'Bilgisayarın kendi sesi'], ['off', 'Sesli okuma kapalı']], v13: 'ekranda yoktu' });
+// --- modes
+R('modes', 'Oturum uzunlukları', 'learn.max_cards', 'Öğren: bir oturumda kaç kelime?', 'Öğren her kelimeyi önce seçerek, sonra yazarak sorar; bilene kadar geri getirir.', 'number', 20, 20, { min: 5, max: 100, unit: 'kelime', v13: 'Modlar ve okuma › Öğren, test ve eşleştir', effect: (v) => `Yaklaşık ${Math.round(v * 0.6)} dk sürer.` });
+R('modes', 'Oturum uzunlukları', 'practice_test.questions', 'Sınav: kaç soru?', 'Sınav (v1.3’teki adıyla “Deneme testi”): karışık sorulu kâğıt, sonunda puan. Takvimini değiştirmez.', 'number', 20, 20, { min: 5, max: 200, unit: 'soru', v13: 'Modlar ve okuma › Öğren, test ve eşleştir' });
+// --- reading
+R('reading', 'Okuma', 'reading.default_language', 'Yeni metinlerin dili', 'Kelimelere dokununca hangi dilin sözlüğüne bakılacağı.', 'select', 'en', 'en', { opts: [['en', 'İngilizce'], ['de', 'Almanca'], ['es', 'İspanyolca'], ['tr', 'Türkçe']], v13: 'Modlar ve okuma › Okuma' });
+R('reading', 'Okuma', 'reading.vocabulary_query', 'Hangi kartlar “bildiğin kelimeler” sayılsın?', 'Metinde kelimeler bildiğine göre renklenir. Boş: tüm kartların.', 'text', '', '', { ph: 'ör. deste:İngilizce', v13: 'Modlar ve okuma › Okuma' });
+R('reading', 'Okuma', 'reading.ffmpeg_path', 'ffmpeg programı', 'Videodan ses kesiti ve ekran görüntüsü almak için. Bilmiyorsan dokunma.', 'text', 'ffmpeg', 'ffmpeg', { v13: 'Modlar ve okuma › Okuma' });
+// --- planning
+R('planning', 'Tekrarları dağıt', 'planning.load_balance', 'Tekrarları günlere dengeli dağıt', 'Bir gün 40, ertesi gün 200 tekrar olmasın diye kartları bir iki gün kaydırır.', 'switch', true, true, { v13: 'İstatistik › Planlama' });
+R('planning', 'Tekrarları dağıt', 'planning.easy_days', 'Hafif günler', 'Seçtiğin günlerde daha az tekrar gelir (ör. hafta sonu).', 'days', [], [], { v13: 'İstatistik › Planlama', effect: (v) => (v.length ? `${v.map((d) => DAYS_LONG[d]).join(', ')} günleri tekrarların yaklaşık yarısı gelir.` : 'Her gün aynı yük.') });
+R('planning', 'Zor kartlar', 'stats.leech_threshold', 'Kaç kez unutunca “sürekli zorlandığın” kart sayılsın?', 'İstatistik’te ayrı listelenir; istersen yeniden yazarsın.', 'number', 8, 8, { min: 2, max: 30, unit: 'kez', v13: 'ekranda yoktu', effect: (v) => `Bir kartı ${v}. kez unuttuğunda “zorlandıkların” listesine girer.` });
+// --- adding
+R('adding', 'Hızlı ekleme', 'quick_add.shortcut', 'Her yerden kart ekleme kısayolu', 'Uygulama arka plandayken bile (ör. tarayıcıda) bu tuşlarla Hızlı Ekle açılır.', 'text', 'Ctrl+Shift+Space', 'Ctrl+Shift+Space', { v13: 'ekranda yoktu' });
+R('adding', 'Hızlı ekleme', 'quick_add.prefill_clipboard', 'Kopyaladığın metinle başla', 'Hızlı Ekle açılınca son kopyaladığın kelime hazır gelir.', 'switch', true, true, { v13: 'ekranda yoktu' });
+R('adding', 'Panodan öneriler', 'clipboard.min_chars', 'En kısa öneri', 'Bundan kısa kopyaladıkların öneri olmaz.', 'number', 2, 2, { min: 1, max: 50, unit: 'karakter', v13: 'ekranda yoktu' });
+R('adding', 'Panodan öneriler', 'clipboard.max_chars', 'En uzun öneri', 'Bundan uzun metinler (ör. paragraf) öneri olmaz.', 'number', 200, 200, { min: 10, max: 5000, unit: 'karakter', v13: 'ekranda yoktu' });
+R('adding', 'Sınıflandırmalar', 'attributes.remember_last', 'Son seçtiğin seviye/sınav etiketlerini hatırla', 'Not eklerken en son seçtiğin değerlerle başlarsın.', 'switch', true, true, { v13: 'ekranda yoktu' });
+// --- reminders (basic)
+R('remind', 'Günlük hatırlatma', 'reminders.enabled', 'Her gün hatırlat', 'Bekleyen kart varsa seçtiğin saatte bir bildirim gelir. O gün çalıştıysan gelmez.', 'switch', true, true, { v13: 'Genel › Hatırlatıcılar', effect: () => nextReminder() });
+R('remind', 'Günlük hatırlatma', 'reminders.minute_of_day', 'Saat kaçta?', 'Uygulama o saatte kapalıysa, sonraki 3 saat içinde açınca yine hatırlatır.', 'time', '20:00', '20:00', { cond: () => S.v['reminders.enabled'], v13: 'Genel › Hatırlatıcılar' });
+R('remind', 'Günlük hatırlatma', 'reminders.weekdays', 'Hangi günler?', 'Hafta sonu dinlenmek istiyorsan Cmt ve Paz’ı kapat.', 'days', [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6], { cond: () => S.v['reminders.enabled'], v13: 'Genel › Hatırlatıcılar', effect: (v) => (v.length === 7 ? 'Her gün.' : v.length === 0 ? 'Hiçbir gün seçili değil: hatırlatma gelmez.' : `Yalnız ${v.map((d) => DAYS_LONG[d]).join(', ')}.`) });
+R('remind', 'Pencereyi kapatınca', 'reminders.keep_in_tray', 'Pencereyi kapatınca uygulama saatin yanında açık kalsın', 'Hatırlatmanın gelebilmesi için uygulamanın arka planda açık olması gerekir.', 'switch', true, true, { v13: 'Genel › Hatırlatıcılar', effect: (v) => (v ? 'Pencereyi kapatınca uygulama tepside bekler; hatırlatmalar gelir.' : 'Pencereyi kapatınca uygulama da kapanır: o gün hatırlatma gelmez.'), warn: (v) => !v && S.v['reminders.enabled'] });
+// --- look (basic)
+R('look', 'Dil', 'app.locale', 'Uygulamanın dili', 'Menüler ve mesajlar. Kartlarının içeriği değişmez.', 'seg', 'tr', 'tr', { opts: [['tr', 'Türkçe'], ['en', 'English']], v13: 'Genel › Dil', effect: (v) => (v === 'en' ? '(Taslakta metinler Türkçe kalır.)' : '') });
+R('look', 'Renkler', 'app.theme', 'Açık mı koyu mu?', 'Sistem: bilgisayarın ayarına uyar.', 'seg', 'dark', 'system', { opts: [['system', 'Sistem'], ['light', 'Açık'], ['dark', 'Koyu']], v13: 'Genel › Görünüm › Renk düzeni' });
+R('look', 'Renkler', 'themes.preset', 'Renk paleti', 'Tüm uygulama için sakin bir renk takımı.', 'seg', 'default', 'default', { opts: [['default', 'Varsayılan'], ['paper', 'Kâğıt'], ['sage', 'Adaçayı'], ['slate', 'Arduvaz'], ['contrast', 'Yüksek kontrast']], v13: 'Genel › Görünüm › Tema' });
+R('look', 'Renkler', 'themes.accent', 'Vurgu rengi', 'Düğmelerin ve vurguların rengi. Boş: paletin kendi rengi.', 'color', '', '', { v13: 'Genel › Görünüm › Vurgu rengi' });
+// --- backup (basic; automatic backups arrive with v1.4 A1)
+R('backup', 'Otomatik yedek', 'backup.auto', 'Ne sıklıkla yedeklensin?', 'Yedek; notları, kartları, tekrar geçmişini, ayarları, ses ve görüntüleri içerir.', 'seg', 'daily', 'daily', { opts: [['off', 'Kapalı'], ['daily', 'Her gün'], ['weekly', 'Haftada bir']], v13: 'yeni (v1.4)', effect: (v) => (v === 'off' ? 'Yalnız “Şimdi yedekle”ye bastığında yedek alınır.' : v === 'daily' ? 'Bir sonraki: bugün, uygulama açıkken ilk boş anda.' : 'Bir sonraki: pazartesi.'), warn: (v) => v === 'off' });
+R('backup', 'Otomatik yedek', 'backup.keep', 'Kaç yedek saklansın?', 'En eskisi silinir; son sağlam yedek asla silinmez.', 'number', 7, 7, { min: 1, max: 60, unit: 'yedek', cond: () => S.v['backup.auto'] !== 'off', v13: 'yeni (v1.4)', effect: (v) => `${S.v['backup.auto'] === 'weekly' ? v * 7 : v} gün geriye dönebilirsin · yaklaşık ${fmt(Math.round(v * 38))} MB yer.` });
+R('backup', 'Otomatik yedek', 'backup.folder', 'Yedekler nereye kaydedilsin?', 'Başka bir diske ya da Dropbox/OneDrive klasörüne koyarsan bilgisayar bozulsa da kartların kalır.', 'folder', 'C:\\Users\\Sen\\Belgeler\\Flashcard yedekleri', 'C:\\Users\\Sen\\Belgeler\\Flashcard yedekleri', { v13: 'yeni (v1.4)' });
+// --- AI
+R('ai', 'Harcama', 'ai.monthly_budget_usd', 'Aylık bütçe', 'Aşılacaksa istek gönderilmeden önce sorulur. 0 = sınır yok.', 'number', 5, 5, { min: 0, max: 1000, unit: 'USD', v13: 'Bağlantılar › Yapay zeka' });
+R('ai', 'Bağlantı', 'ai.request_timeout_secs', 'Bir isteği en çok kaç saniye bekle', '', 'number', 60, 60, { min: 5, max: 600, unit: 'sn', v13: 'Bağlantılar › Yapay zeka' });
+R('ai', 'Bağlantı', 'ai.max_retries', 'Başarısız isteği kaç kez yeniden dene', '', 'number', 2, 2, { min: 0, max: 5, unit: 'kez', v13: 'Bağlantılar › Yapay zeka' });
+R('ai', 'Bağlantı', 'ai.web.allow_private_hosts', 'Yerel ağdaki sayfalara izin ver', 'Yapay zekaya bir web sayfası verirken 192.168… gibi adresler. Bilmiyorsan kapalı bırak.', 'switch', false, false, { v13: 'Bağlantılar › Yapay zeka' });
+[['generate_cards', 'kart üretme'], ['fill_fields', 'alan doldurma'], ['explain', 'açıklama'], ['hint', 'ipucu'], ['check_answer', 'cevap kontrolü'], ['improve', 'kart iyileştirme'], ['rewrite_leech', 'zor kartı yeniden yazma'], ['distractors', 'yanlış şıklar (Test)']].forEach(([k, l]) =>
+  R('ai', 'İstemler', `ai.prompt.${k}`, `İstem: ${l}`, 'Yapay zekaya giden talimat. Boş: uygulamanın kendi istemi.', 'textarea', '', '', { v13: 'Bağlantılar › Yapay zeka', ph: 'Boş: varsayılan istem' }));
+// --- MCP, local API, automation, plugins
+R('mcp', 'İzinler', 'mcp.server.allow_writes', 'Asistan kart ekleyebilsin', 'Kapalıyken yalnız okur. Açıkken yaptığı her değişikliği uygulamada geri alabilirsin; hiçbir şeyi silemez.', 'switch', true, true, { v13: 'Gelişmiş › Asistanlar (MCP)' });
+R('local-api', 'Bağlantı', 'local_api.port', 'Port', 'Programların bağlandığı kapı numarası. Başka bir program kullanıyorsa değiştir.', 'number', 47821, 47821, { min: 1024, max: 65535, v13: 'Gelişmiş › Yerel API' });
+R('local-api', 'Sınırlar', 'local_api.inbox_max_items', 'Bir program en çok kaç öneri bekletebilir', '', 'number', 500, 500, { min: 1, max: 10000, unit: 'öneri', v13: 'Gelişmiş › Yerel API' });
+R('local-api', 'Sınırlar', 'local_api.inbox_max_kib', 'Bir programın bekleyen önerileri en çok', '', 'number', 4096, 4096, { min: 64, max: 65536, unit: 'KiB', v13: 'Gelişmiş › Yerel API' });
+R('local-api', 'Sınırlar', 'local_api.inbox_daily_max', 'Bir program günde en çok kaç öneri', '', 'number', 1000, 1000, { min: 1, max: 100000, unit: 'öneri', v13: 'Gelişmiş › Yerel API' });
+R('automation', 'Güvenlik sınırları', 'automation.max_depth', 'Bir kural başka bir kuralı en çok kaç kez tetikleyebilir', 'Kurallar birbirini sonsuza dek tetiklemesin diye.', 'number', 3, 3, { min: 1, max: 10, v13: 'Gelişmiş › Otomasyon' });
+R('automation', 'Güvenlik sınırları', 'automation.max_runs_per_event', 'Bir değişiklikten sonra en çok kural çalışması', '', 'number', 20, 20, { min: 1, max: 200, v13: 'Gelişmiş › Otomasyon' });
+[['timeout_ms', 'Çağrı başına süre sınırı', 1000, 'ms'], ['fuel_millions', 'Çağrı başına iş sınırı', 100, 'milyon adım'], ['memory_mb', 'Bellek sınırı', 64, 'MB'], ['max_failures', 'Kaç hatada eklenti kapatılsın', 3, 'hata'], ['max_hooks_per_action', 'İşlem başına eklenti tepkisi', 8, 'tepki'], ['kv_max_keys', 'Eklenti başına depo kaydı', 10000, 'kayıt'], ['kv_max_mb', 'Eklenti başına depo boyutu', 16, 'MB'], ['max_host_calls', 'Eklenti çağrısı başına istek', 100, 'istek'], ['host_mb_per_call', 'Eklenti çağrısı başına veri', 8, 'MB'], ['hook_ms_per_action', 'İşlem başına eklenti tepki süresi', 200, 'ms']].forEach(([k, l, d, u]) =>
+  R('plugins', 'Kaynak sınırları', `plugins.${k}`, l, '', 'number', d, d, { unit: u, min: 1, max: 1e6, v13: 'Gelişmiş › Eklentiler › Kaynak sınırları' }));
+R('plugins', 'Kaynak sınırları', 'plugins.before_hook_failure', 'Bir eklentinin kontrolü hata verirse', 'İşlem yine yapılsın mı, durdurulsun mu?', 'seg', 'allow', 'allow', { opts: [['allow', 'İşleme devam et'], ['block', 'İşlemi durdur']], v13: 'Gelişmiş › Eklentiler › Kaynak sınırları' });
+// --- data
+R('export', 'Dışa aktar', 'export.format', 'Hangi biçimde?', 'Deste paketi her şeyi taşır; metin ve JSON yalnız notları.', 'select', 'fcpack', 'fcpack', { opts: [['fcpack', 'Deste paketi (.fcpack)'], ['apkg', 'Anki destesi (.apkg)'], ['colpkg', 'Anki koleksiyonu (.colpkg)'], ['text', 'Metin (.txt)'], ['json', 'JSON (.json)']], v13: 'Veri › Dışa aktar ve yedek' });
+R('export', 'Dışa aktar', 'export.history', 'Tekrar geçmişi de gelsin', 'Başka bir cihaz tam kaldığın yerden devam eder.', 'switch', true, true, { v13: 'Veri › Dışa aktar ve yedek' });
+R('export', 'Yazdır', 'print.layout', 'Kâğıtta nasıl dursun?', 'Çift taraflı baskıda arka yüzler aynalanır.', 'seg', 'cards_2x4', 'cards_2x4', { opts: [['cards_2x4', 'Kart 2×4'], ['cards_3x5', 'Kart 3×5'], ['list', 'Liste']], v13: 'Veri › Dışa aktar ve yedek › Yazdır' });
+R('maintenance', 'Çöp kutusu', 'browse.trash_retention_days', 'Silinenler çöpte kaç gün kalsın?', 'Sonra kalıcı olarak silinir. Bu süre içinde geri getirebilirsin.', 'number', 30, 30, { min: 1, max: 3650, unit: 'gün', v13: 'Gelişmiş › Bakım', effect: (v) => `Bugün sildiğin bir kart ${v} gün boyunca geri getirilebilir.` });
+R('logs', 'Günlükler', 'maintenance.log_level', 'Günlük ne kadar ayrıntılı olsun?', 'Bir hatayı bildirirken “Ayrıntılı” işe yarar.', 'seg', 'info', 'info', { opts: [['warn', 'Yalnız sorunlar'], ['info', 'Normal'], ['debug', 'Ayrıntılı']], v13: 'Gelişmiş › Günlükler ve güncellemeler' });
+R('logs', 'Günlükler', 'maintenance.log_max_kb', 'Günlük dosyası en çok', '', 'number', 2048, 2048, { min: 64, max: 65536, unit: 'KiB', v13: 'Gelişmiş › Günlükler ve güncellemeler' });
+R('logs', 'Günlükler', 'maintenance.log_files', 'Kaç eski günlük dosyası saklansın', '', 'number', 5, 5, { min: 1, max: 50, unit: 'dosya', v13: 'Gelişmiş › Günlükler ve güncellemeler' });
+R('logs', 'Güvenlik', 'maintenance.check_after_crash', 'Çökmeden sonra koleksiyonu denetle', 'Uygulama beklenmedik kapanırsa, açılışta bozuk bir şey var mı bakar.', 'switch', true, true, { v13: 'Gelişmiş › Günlükler ve güncellemeler' });
+R('logs', 'Güncellemeler', 'updates.check_on_start', 'Açılışta güncelleme var mı bak', 'Yalnız sürüm numarası sorulur; hakkında hiçbir şey gönderilmez.', 'switch', true, true, { v13: 'Gelişmiş › Günlükler ve güncellemeler' });
+
+/* tempo (deck settings) fields: stored per tempo, not in S.v */
+const TEMPO_FIELDS = [
+  { k: 'new_per_day', sec: 'Günlük sınırlar', label: 'Her gün kaç yeni kelime?', desc: 'Hiç görmediğin kelimeler. Artırırsan daha hızlı ilerlersin ama birkaç gün sonra tekrarlar da artar.', type: 'number', rec: 10, min: 0, max: 9999, unit: 'kelime', basic: true },
+  { k: 'reviews_per_day', sec: 'Günlük sınırlar', label: 'Günde en çok kaç tekrar?', desc: 'Sınıra gelince o günün kalan tekrarları yarına kalır.', type: 'number', rec: 200, min: 0, max: 9999, unit: 'tekrar', basic: true },
+  { k: 'retention', sec: 'Öğrenme ve hatırlama', label: 'Ne kadar sağlam hatırlamak istiyorsun?', desc: 'Bir kart geri geldiğinde onu hâlâ hatırlıyor olma olasılığın.', type: 'seg', rec: 0.9, opts: [[0.85, 'Rahat', '%85'], [0.9, 'Dengeli', '%90'], [0.95, 'Sıkı', '%95']], basic: true },
+  { k: 'learning_steps', sec: 'Öğrenme ve hatırlama', label: 'Yeni kelime ilk gün kaç kez sorulsun?', desc: 'Dakika olarak, boşlukla ayır. Son adımı da bilince günlük tekrarlara geçer.', type: 'text', rec: '1 10', unit: 'dk' },
+  { k: 'relearning_steps', sec: 'Öğrenme ve hatırlama', label: 'Unuttuğun kelime ne zaman yeniden sorulsun?', desc: '“Tekrar” deyince. Dakika olarak, boşlukla ayır.', type: 'text', rec: '10', unit: 'dk' },
+  { k: 'new_order', sec: 'Sıra ve aralıklar', label: 'Yeni kelimeler hangi sırayla?', desc: '', type: 'seg', rec: 'added', opts: [['added', 'Eklediğim sırayla'], ['random', 'Karışık']] },
+  { k: 'review_order', sec: 'Sıra ve aralıklar', label: 'Tekrarlar hangi sırayla?', desc: '“En zayıf önce”: unutmak üzere olduklarını öne alır.', type: 'seg', rec: 'due', opts: [['due', 'Tarihine göre'], ['retrievability', 'En zayıf önce'], ['random', 'Karışık']] },
+  { k: 'bury', sec: 'Sıra ve aralıklar', label: 'Aynı kelimenin iki kartı aynı gün gelmesin', desc: 'Hem “İngilizce → Türkçe” hem ters kartı varsa, biri bugün gelince öbürü yarına kalır.', type: 'switch', rec: true },
+  { k: 'max_interval', sec: 'Sıra ve aralıklar', label: 'Çok iyi bildiğin kart en geç ne zaman sorulsun?', desc: '', type: 'number', rec: 36500, min: 1, max: 36500, unit: 'gün' },
+  { k: 'fsrs', sec: 'Zamanlayıcı (FSRS)', label: 'FSRS parametreleri', desc: 'Senin hafızana göre hesaplanan sayılar. Elle yazılmaz: İstatistik › Planlama’daki “Optimize et” yazar. Boş: herkese uygun varsayılanlar.', type: 'text', rec: '', ph: 'Boş: varsayılan parametreler' },
+];
+const tempoEffect = (k, v, t) => {
+  const e = est(t.new_per_day, t.retention, t.reviews_per_day);
+  switch (k) {
+    case 'new_per_day': return Number(v) === 0 ? 'Yeni kelime gelmez; yalnız tekrar edersin.' : `Bekleyen ${WAITING_NEW} yeni kelime ~${Math.ceil(WAITING_NEW / v)} günde biter.`;
+    case 'reviews_per_day': return e.rev30raw > v ? { warn: true, t: `Bu tempoda bir ay sonra günde ~${e.rev30raw} tekrar olacak ama sınır ${v}: her gün ~${e.rev30raw - v} tekrar birikir. Sınırı artır ya da yeni kelimeyi azalt.` } : `Bu tempoda günde ~${e.rev30raw} tekrar olur; sınır yetiyor.`;
+    case 'retention': { const base = est(t.new_per_day, 0.9, 1e9).rev30raw; const pct = Math.round((e.rev30raw / base - 1) * 100); return `Her 100 kelimeden ~${Math.round(v * 100)} tanesini hatırlarsın.` + (pct ? ` Tekrarlar Dengeli’ye göre ~%${Math.abs(pct)} ${pct > 0 ? 'fazla' : 'az'}.` : ''); }
+    case 'learning_steps': { const st = String(v).trim().split(/\s+/).filter(Boolean); return st.length ? `Yeni kelime ${st.map((x) => `${x} dk`).join(', sonra ')} sonra yeniden sorulur; sonra yarın.` : 'Adım yok: ilk cevaptan sonra doğrudan günlük tekrarlara geçer.'; }
+    case 'relearning_steps': { const st = String(v).trim().split(/\s+/).filter(Boolean); return st.length ? `Unuttuğun kelime ${st.map((x) => `${x} dk`).join(', ')} sonra yeniden gelir.` : 'Unuttuğun kelime yarına planlanır.'; }
+    case 'max_interval': return v >= 36500 ? 'Sınır yok (100 yıl).' : `En geç ${v >= 365 ? `${(v / 365).toFixed(1).replace('.0', '')} yılda` : `${v} günde`} bir yeniden sorulur.`;
+    default: return '';
+  }
+};
+
+/* ================================================================ estimates (prototype model, labelled "tahmin") */
+function est(n, r, limit = 1e9) {
+  n = Number(n) || 0;
+  const k = r <= 0.85 ? 5 : r <= 0.9 ? 7 : 11; // steady reviews per daily new word
+  const revAt = (d) => n * k * (1 - Math.exp(-d / 12));
+  const minAt = (d) => (n * 25 + Math.min(revAt(d), limit) * 8) / 60;
+  const rev30raw = Math.round(revAt(30));
+  return { rev30raw, rev30: Math.min(rev30raw, limit), min1: Math.round(minAt(1)), min30: Math.round(minAt(30)), curve: Array.from({ length: 61 }, (_, d) => minAt(d)), month: n * 30 };
+}
+function nextReminder() {
+  if (!S.v['reminders.enabled']) return 'Hatırlatma gelmez. Çalışmayı unutursan kartlar birikir.';
+  const days = S.v['reminders.weekdays'];
+  if (!days.length) return { warn: true, t: 'Hiçbir gün seçili değil: hatırlatma gelmez.' };
+  const [h, m] = S.v['reminders.minute_of_day'].split(':').map(Number);
+  const now = new Date();
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now); d.setDate(now.getDate() + i); d.setHours(h, m, 0, 0);
+    const wd = (d.getDay() + 6) % 7;
+    if (days.includes(wd) && d > now) {
+      const when = i === 0 ? 'bugün' : i === 1 ? 'yarın' : DAYS_LONG[wd];
+      return `Sonraki hatırlatma: ${when} ${S.v['reminders.minute_of_day']} · “Bugün 34 kart seni bekliyor (12 tekrar, 22 yeni).”`;
+    }
+  }
+  return '';
+}
+</script>
+<script>
+'use strict';
+/* ================================================================ rows (the settings kit) */
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const isBasicPage = (pid) => BASIC.some((p) => p.id === pid);
+function dispVal(d, v) {
+  if (d.type === 'switch') return onoff(v);
+  if (d.opts) { const o = d.opts.find((x) => same(x[0], v)); return o ? (o[2] ? `${o[1]} (${o[2]})` : o[1]) : String(v); }
+  if (d.type === 'days') return v.length ? v.map((x) => DAYS[x]).join(' ') : 'hiçbiri';
+  if (d.type === 'number') return `${fmt(v)}${d.unit ? ' ' + d.unit : ''}`;
+  return v === '' ? 'boş' : String(v);
+}
+const keyOf = (id, tempo) => (tempo ? `${id}@${tempo}` : id);
+const domId = (id, tempo) => 'c-' + keyOf(id, tempo).replace(/[^a-z0-9]/gi, '-');
+function getVal(id, tempo) { return tempo ? S.tempos[tempo][id.replace('tempo.', '')] : S.v[id]; }
+function effectOf(d, v, tempo) {
+  let e = tempo ? tempoEffect(d.k, v, S.tempos[tempo]) : d.effect ? d.effect(v) : '';
+  if (!e) return '';
+  if (typeof e === 'string') e = { t: e, warn: d.warn ? d.warn(v) : false };
+  return `<p class="effect${e.warn ? ' warn' : ''}">${esc(e.t)}</p>`;
+}
+function tagOf(d, v, pid) {
+  if (d.rec === undefined || d.type === 'folder') return '';
+  if (same(v, d.rec)) return isBasicPage(pid) ? '<span class="tag rec">önerilen</span>' : '';
+  return `<span class="tag">önerilen: ${esc(dispVal(d, d.rec))}</span>`;
+}
+function control(d, v, tempo, lid) {
+  const id = tempo ? `tempo.${d.k}` : d.id;
+  const at = `data-set="${id}"${tempo ? ` data-tempo="${tempo}"` : ''}`;
+  const did = domId(id, tempo);
+  switch (d.type) {
+    case 'switch': return `<button type="button" class="sw" role="switch" id="${did}" aria-labelledby="${lid}" aria-checked="${!!v}" ${at}></button>`;
+    case 'seg': return `<span class="seg" role="radiogroup" aria-labelledby="${lid}">${d.opts.map((o, i) => `<button type="button" role="radio" id="${did}-${i}" aria-checked="${same(o[0], v)}" ${at} data-val='${esc(JSON.stringify(o[0]))}'>${esc(o[1])}${o[2] ? ` <span class="mono" style="font-size:11px;color:var(--text-2)">${o[2]}</span>` : ''}${same(o[0], d.rec) ? '<small>önerilen</small>' : ''}</button>`).join('')}</span>`;
+    case 'select': return `<select class="inp" id="${did}" aria-labelledby="${lid}" ${at}>${d.opts.map((o) => `<option value='${esc(JSON.stringify(o[0]))}' ${same(o[0], v) ? 'selected' : ''}>${esc(o[1])}${same(o[0], d.rec) ? ' (önerilen)' : ''}</option>`).join('')}</select>`;
+    case 'number': return `<span class="numwrap"><input class="inp num" type="number" id="${did}" aria-labelledby="${lid}" value="${esc(v)}" ${d.min !== undefined ? `min="${d.min}"` : ''} ${d.max !== undefined ? `max="${d.max}"` : ''} ${at}>${d.unit ? `<span class="unit">${esc(d.unit)}</span>` : ''}</span>`;
+    case 'text': return `<span class="numwrap"><input class="inp wide" type="text" id="${did}" aria-labelledby="${lid}" value="${esc(v)}" placeholder="${esc(d.ph || '')}" ${at}>${d.unit ? `<span class="unit">${esc(d.unit)}</span>` : ''}</span>`;
+    case 'textarea': return `<textarea class="inp" rows="3" id="${did}" aria-labelledby="${lid}" placeholder="${esc(d.ph || '')}" ${at}>${esc(v)}</textarea>`;
+    case 'time': return `<input class="inp" type="time" id="${did}" aria-labelledby="${lid}" value="${esc(v)}" ${at}>`;
+    case 'days': return `<span class="days" role="group" aria-labelledby="${lid}">${DAYS.map((n, i) => `<button type="button" id="${did}-${i}" aria-pressed="${v.includes(i)}" data-day="${i}" ${at}>${n}</button>`).join('')}</span>`;
+    case 'color': return `<span class="days" role="radiogroup" aria-labelledby="${lid}">${[['', 'Paletin'], ['#f5b544', 'Kehribar'], ['#7fb38a', 'Yeşil'], ['#8aa4c8', 'Mavi'], ['#e58fb0', 'Pembe']].map(([c, n], i) => `<button type="button" role="radio" id="${did}-${i}" style="width:auto;padding:0 8px;display:inline-flex;gap:6px;align-items:center" aria-checked="${c === v}" aria-pressed="${c === v}" ${at} data-val='${JSON.stringify(c)}'>${c ? `<span style="width:12px;height:12px;border-radius:50%;background:${c}"></span>` : ''}${n}</button>`).join('')}</span>`;
+    case 'folder': return `<span class="numwrap"><span class="code" style="max-width:300px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;word-break:normal" title="${esc(v)}">${esc(v)}</span><button class="btn sm" type="button" data-act="toast" data-msg="(Taslak) Klasör seçme penceresi açılır.">Değiştir…</button></span>`;
+    default: return '';
+  }
+}
+function rowHTML(d, pid, tempo) {
+  const id = tempo ? `tempo.${d.k}` : d.id;
+  const v = tempo ? S.tempos[tempo][d.k] : S.v[d.id];
+  const lid = 'l-' + domId(id, tempo);
+  const stack = d.type === 'textarea';
+  const resetable = d.rec !== undefined && !same(v, d.rec) && d.type !== 'folder';
+  return `<div class="row${stack ? ' stack' : ''}" id="row-${keyOf(id, tempo).replace(/[^a-z0-9]/gi, '-')}">
+    <div><div class="rlabel"><span id="${lid}">${esc(d.label)}</span><span data-live="tag" data-id="${id}" ${tempo ? `data-tempo="${tempo}"` : ''} data-page="${pid}">${tagOf(d, v, pid)}</span></div>
+      ${d.desc ? `<p class="rdesc">${esc(d.desc)}</p>` : ''}
+      <div data-live="eff" data-id="${id}" ${tempo ? `data-tempo="${tempo}"` : ''}>${effectOf(d, v, tempo)}</div></div>
+    <div class="ctl">${d.k === 'new_per_day' ? quickPicks(tempo, v) : ''}${control(d, v, tempo, lid)}
+      <span data-live="reset" data-id="${id}" ${tempo ? `data-tempo="${tempo}"` : ''}>${resetable ? `<button type="button" class="reset" data-reset="${id}" ${tempo ? `data-tempo="${tempo}"` : ''}>Önerilene dön</button>` : ''}</span></div>
+  </div>`;
+}
+function quickPicks(tempo, v) {
+  return `<div class="quick" role="group" aria-label="Hazır tempolar">${[[5, 'Rahat'], [10, 'Önerilen'], [20, 'Hızlı'], [30, 'Yoğun']].map(([n, l]) => `<button type="button" class="${n === 10 ? 'rec' : ''}" aria-pressed="${Number(v) === n}" data-set="tempo.new_per_day" data-tempo="${tempo}" data-val="${n}"><b>${n}</b><span>${l} · ~${est(n, S.tempos[tempo].retention, S.tempos[tempo].reviews_per_day).min30} dk</span></button>`).join('')}</div>`;
+}
+const defOf = (id) => (id.startsWith('tempo.') ? TEMPO_FIELDS.find((f) => f.k === id.slice(6)) : REG.find((r) => r.id === id));
+function regSections(pid, only) {
+  const defs = REG.filter((d) => d.page === pid && (!only || only.includes(d.sec)) && (!d.cond || d.cond()));
+  const secs = [...new Set(defs.map((d) => d.sec))];
+  return secs.map((s) => `<section class="sec"><h2>${esc(s)}</h2><div class="rows">${defs.filter((d) => d.sec === s).map((d) => rowHTML(d, pid)).join('')}</div></section>`).join('');
+}
+function tempoRows(tid, pid, filter) {
+  const fs = TEMPO_FIELDS.filter(filter);
+  const secs = [...new Set(fs.map((f) => f.sec))];
+  return secs.map((s) => `<section class="sec"><h2>${esc(s)}</h2><div class="rows">${fs.filter((f) => f.sec === s).map((f) => rowHTML(f, pid, tid)).join('')}</div></section>`).join('');
+}
+
+/* ================================================================ live refresh (no re-render while typing) */
+function refreshLive() {
+  $$('[data-live]').forEach((el) => {
+    const k = el.dataset.live, id = el.dataset.id, tempo = el.dataset.tempo;
+    if (k === 'hero') el.innerHTML = heroHTML();
+    else if (k === 'quick') el.innerHTML = '';
+    else if (id) {
+      const d = defOf(id); if (!d) return;
+      const v = getVal(id, tempo);
+      if (k === 'eff') el.innerHTML = effectOf(d, v, tempo);
+      if (k === 'tag') el.innerHTML = tagOf(d, v, el.dataset.page);
+      if (k === 'reset') el.innerHTML = d.rec !== undefined && !same(v, d.rec) && d.type !== 'folder' ? `<button type="button" class="reset" data-reset="${id}" ${tempo ? `data-tempo="${tempo}"` : ''}>Önerilene dön</button>` : '';
+    }
+  });
+  $$('.quick button').forEach((b) => (b.ariaPressed = String(Number(getVal('tempo.new_per_day', b.dataset.tempo)) === Number(b.dataset.val))));
+  renderNav();
+}
+function setVal(id, v, tempo, opt = {}) {
+  const prev = getVal(id, tempo);
+  if (same(prev, v)) return;
+  if (tempo) S.tempos[tempo][id.slice(6)] = v; else S.v[id] = v;
+  S.undo = { id, tempo, prev };
+  applySideEffects(id);
+  if (opt.live) refreshLive(); else render();
+  if (!opt.quiet) toast(`Kaydedildi: ${defOf(id)?.label ?? ''}`, true);
+}
+function applySideEffects(id) {
+  if (id === 'app.theme') { const t = S.v['app.theme']; S.theme = t === 'system' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : t; store.set('theme', S.theme); applyTheme(); renderStrip(); }
+  if (id === 'themes.preset' || id === 'themes.accent') applyTheme();
+}
+const PRESET_ACCENT = { default: '#f5b544', paper: '#d0893b', sage: '#7fb38a', slate: '#8aa4c8', contrast: '#ffd400' };
+function applyTheme() {
+  document.documentElement.dataset.theme = S.theme;
+  const a = S.v['themes.accent'] || PRESET_ACCENT[S.v['themes.preset']] || '#f5b544';
+  const r = document.documentElement.style;
+  if (a === '#f5b544') { ['--accent', '--accent-soft', '--accent-text'].forEach((p) => r.removeProperty(p)); }
+  else { r.setProperty('--accent', a); r.setProperty('--accent-soft', `color-mix(in srgb, ${a} 14%, transparent)`); r.setProperty('--accent-text', S.theme === 'light' ? `color-mix(in srgb, ${a} 60%, #000)` : a); }
+}
+
+/* ================================================================ toast & dialog */
+let toastTimer;
+function toast(msg, undo = false) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${esc(msg)}</span>${undo ? '<button class="btn ghost sm" type="button" id="toast-undo">Geri al</button>' : ''}`;
+  t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+  $('#toast-undo')?.addEventListener('click', () => {
+    const u = S.undo; if (!u) return;
+    if (u.tempo) S.tempos[u.tempo][u.id.slice(6)] = u.prev; else S.v[u.id] = u.prev;
+    S.undo = null; applySideEffects(u.id); render(); toast('Geri alındı.');
+  });
+}
+let dlgReturn = null;
+function dialog(html, onMount) {
+  dlgReturn = document.activeElement;
+  $('#dialog').innerHTML = html; $('#scrim').classList.add('open');
+  onMount?.($('#dialog'));
+  ($('#dialog [autofocus]') || $('#dialog button'))?.focus();
+}
+function closeDialog() { $('#scrim').classList.remove('open'); $('#dialog').innerHTML = ''; dlgReturn?.focus?.(); }
+
+/* ================================================================ navigation */
+function go(pid, focusRow) {
+  const p = pageOf(pid);
+  S.oneOff = p.adv && !S.adv ? pid : null;
+  S.page = pid; store.set('page', pid);
+  closeMenu();
+  render();
+  $('#content').scrollTop = 0;
+  if (focusRow) {
+    const el = document.getElementById(focusRow);
+    if (el) { el.scrollIntoView({ block: 'center' }); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); el.querySelector('button, input, select, textarea')?.focus({ preventScroll: true }); }
+  } else $('#content').focus({ preventScroll: true });
+}
+function renderNav() {
+  const item = (p, q) => {
+    let st = '';
+    if (p.id === 'connect') st = `<span class="dot ${S.conn.subtitle ? 'ok' : 'off'} st" title="${S.conn.subtitle ? 'Subtitle bağlı' : 'Subtitle bağlı değil'}"></span>`;
+    if (p.id === 'backup') st = `<span class="dot ${S.v['backup.auto'] === 'off' ? 'warn' : 'ok'} st" title="${S.v['backup.auto'] === 'off' ? 'Otomatik yedek kapalı' : 'Yedek sağlam'}"></span>`;
+    return `<button type="button" class="sitem${S.page === p.id ? ' on' : ''}" data-go="${p.id}" ${S.page === p.id ? 'aria-current="page"' : ''}>${p.icon ? ic(p.icon, 's14') : ''}<span style="min-width:0">${esc(p.nav)}${q ? `<span class="q">${esc(p.title)}</span>` : ''}</span>${st}</button>`;
+  };
+  let h = `<div class="ngroup">${S.adv ? '<h3>Temel</h3>' : ''}${BASIC.map((p) => item(p, !S.adv)).join('')}</div>`;
+  if (S.adv) h += ADV_GROUPS.map((g) => `<div class="ngroup"><h3>${esc(g.name)}</h3>${g.pages.map((p) => item(p, false)).join('')}</div>`).join('');
+  else if (S.oneOff) h += `<div class="ngroup"><h3>Şu an açık</h3>${item(pageOf(S.oneOff), false)}<p class="hint">Gelişmiş kapalı; başka bir sayfaya geçince bu listeden kalkar.</p></div>`;
+  $('#navlist').innerHTML = h;
+  $('#advsw').ariaChecked = String(S.adv);
+  $('#advline').textContent = S.adv ? `Açık: ${ADV.length} sayfa daha görünüyor. Tercihin hatırlanır.` : `Kapalı: ${BASIC.length} sayfa. Açınca ${ADV.length} sayfa daha görünür; v1.3’teki hiçbir ayar silinmedi.`;
+}
+function render() {
+  const p = pageOf(S.page);
+  const focusId = document.activeElement?.id;
+  $('#crumb').textContent = p.adv ? `Gelişmiş › ${p.nav}` : p.nav;
+  renderNav();
+  const body = (PAGES_R[p.id] || (() => regSections(p.id)))();
+  const oneOff = S.oneOff === p.id ? `<div class="banner adv">${ic('search')}<div class="bt"><b>Bu bir Gelişmiş ayar sayfası.</b>Gelişmiş görünüm kapalı kalıyor; bu sayfayı yine de açabilirsin. Başka bir sayfaya geçince listeden kalkar.</div><button type="button" class="btn sm" data-act="adv-on">Gelişmiş’i aç</button></div>` : '';
+  const related = (RELATED[p.id] || []).length ? `<section class="sec"><h2>İlgili ayarlar</h2><p class="sd">Çoğu kişi bunlara hiç dokunmaz.</p><div class="links">${RELATED[p.id].map(([lbl, to, row]) => { const tp = pageOf(to); return `<button type="button" data-go="${to}" ${row ? `data-row="${row}"` : ''}><span>${esc(lbl)}</span><span class="w">${esc(tp.nav)}${tp.adv && !S.adv ? '<span class="tag adv">Gelişmiş’te</span>' : ''}${ic('chev', 's14')}</span></button>`; }).join('')}</div></section>` : '';
+  $('#content').innerHTML = `<div class="page"><div class="page-h"><div class="t"><h1>${esc(p.title)}</h1><p>${esc(p.intro)}</p></div>${HEAD_ACT[p.id] ? HEAD_ACT[p.id]() : ''}</div>${oneOff}${body}${related}</div>`;
+  if (focusId && document.getElementById(focusId)) document.getElementById(focusId).focus({ preventScroll: true });
+  wireDnD();
+}
+
+/* ================================================================ BASIC 1 — tempo */
+function heroHTML() {
+  const t = S.tempos.genel, e = est(t.new_per_day, t.retention, t.reviews_per_day);
+  const w = 260, h = 48, max = Math.max(30, ...e.curve);
+  const pts = e.curve.map((m, d) => `${((d / 60) * w).toFixed(1)},${(h - 4 - (m / max) * (h - 8)).toFixed(1)}`).join(' ');
+  return `<div class="stat"><div class="k">Günde</div><div class="v">~${e.min30}<small>dk</small></div><div class="k">ilk hafta ~${e.min1} dk</div></div>
+    <div class="stat"><div class="k">Bir ayda yeni</div><div class="v">${fmt(e.month)}<small>kelime</small></div><div class="k">günde ${t.new_per_day}</div></div>
+    <div class="stat"><div class="k">Bekleyen ${WAITING_NEW} yeni kelime</div><div class="v">${t.new_per_day > 0 ? `~${Math.ceil(WAITING_NEW / t.new_per_day)}` : '∞'}<small>günde biter</small></div><div class="k">Subtitle’dan gelenler</div></div>
+    <div class="spark"><div class="k"><span>Günlük süre, önümüzdeki 60 gün</span><span class="mono">tahmin</span></div><svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Günlük süre ${e.min1} dakikadan ${e.min30} dakikaya çıkar"><polyline points="0,${h} ${pts} ${w},${h}" fill="var(--accent-soft)" stroke="none"/><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg><div class="k"><span>bugün</span><span>1 ay</span><span>2 ay</span></div></div>`;
+}
+function tempoScope() {
+  const uses = (tid) => DECKS.filter((d) => effTempo(d.id) === tid);
+  const own = DECKS.filter((d) => effTempo(d.id) !== 'genel');
+  return `<div class="banner">${ic('lib')}<div class="bt"><b>Bu tempo ${uses('genel').filter((d) => d.cards).length} destene uygulanır.</b>${own.length ? `${own.map((d) => `“${esc(d.name)}”`).join(', ')} kendi temposunu kullanıyor (${esc(S.tempos[effTempo(own[0].id)].name)}: günde ${S.tempos[effTempo(own[0].id)].new_per_day} yeni).` : 'Bütün destelerin aynı tempoda.'}</div><button type="button" class="btn sm" data-go="deck-tempos">Desteye göre ayarla</button></div>`;
+}
+function effTempo(did) { let d = DECKS.find((x) => x.id === did); while (d) { if (S.deckTempo[d.id]) return S.deckTempo[d.id]; d = DECKS.find((x) => x.id === d.parent); } return 'genel'; }
+const PAGES_R = {};
+const HEAD_ACT = {};
+PAGES_R.tempo = () => `<div class="panel hero" data-live="hero">${heroHTML()}</div>${tempoRows('genel', 'tempo', (f) => f.basic)}${tempoScope()}`;
+
+/* ================================================================ BASIC 2 — cards (Model A: boxes, Model B: recipes) */
+const exHTML = (s, mode) => esc(s).replace(/\*(.+?)\*/g, (_, w) => (mode === 'blank' ? '<i>_____</i>' : `<i>${w}</i>`));
+function partHTML(role, smp, opt = {}) {
+  const v = smp[role.replace(/[*_~]$/, '')];
+  const r = role.replace(/[*_~]$/, '');
+  if (v === undefined) return '';
+  if (r !== 'note' && !v) return '';
+  switch (r) {
+    case 'term': return `<div class="fc-term">${esc(v)}</div>`;
+    case 'surface': return `<div class="fc-surface">cümlede: <b>${esc(v)}</b></div>`;
+    case 'meaning': return role.endsWith('~') ? `<div class="fc-tr">ipucu: ${esc(v)}</div>` : `<div class="fc-meaning">${esc(v)}</div>`;
+    case 'example': return `<div class="fc-ex">${opt.front && !role.endsWith('*') && !role.endsWith('_') ? '' : ''}<span class="lb">Örnek</span>${exHTML(v, role.endsWith('_') ? 'blank' : '')}</div>`;
+    case 'example_tr': return `<div class="fc-tr">${esc(v)}</div>`;
+    case 'source': return `<div class="fc-src"><span class="lb">Kaynak</span>${esc(v)}</div>`;
+    case 'shot': return `<div class="fc-shot">“${esc(v)}”</div>`;
+    case 'audio': return `<span class="fc-audio">${ic('play', 's14')} Replik · ${esc(v)}</span>`;
+    case 'note': return v ? `<div class="fc-note">${esc(v)}</div>` : '';
+  }
+  return '';
+}
+function flashHTML(front, back, side, label) {
+  const smp = TYPES[S.ntType].sample;
+  const f = front.map((r) => partHTML(r, smp, { front: true })).join('');
+  const b = back.map((r) => partHTML(r, smp)).join('');
+  return `<div class="flash" role="button" tabindex="0" data-act="flip" aria-label="Önizleme kartı, çevirmek için tıkla ya da Boşluk">
+    <span class="side">${side === 'front' ? 'Ön yüz · soru' : 'Arka yüz · cevap'}${label ? ` · ${esc(label)}` : ''}</span>
+    ${f || '<span class="faint">Ön yüz boş</span>'}${side === 'back' ? `<div class="fc-divider"></div>${b || '<span class="faint">Arka yüz boş</span>'}` : ''}
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px"><span class="muted" style="font-size:12px">Örnek: gerçek bir ${S.ntType === 'subtitle' ? 'Subtitle' : ''} kartın</span><button type="button" class="btn sm" data-act="flip">${ic('flip', 's14')}Çevir <kbd>Space</kbd></button></div>`;
+}
+function typePicker() {
+  return `<div class="typepick" role="group" aria-label="Hangi kartlar">${Object.entries(TYPES).map(([k, t]) => `<button type="button" aria-pressed="${S.ntType === k}" data-act="nttype" data-type="${k}"><b>${esc(t.name)}</b><span class="mono">${fmt(t.notes)}</span><span> kelime · v1.3 adı: ${esc(t.v13)}</span></button>`).join('')}</div>`;
+}
+function cardsDirty() { return S.nt === 'A' ? !same(S.layout, S.layoutSaved) : !same(S.recipes, S.recipesSaved); }
+function saveBar() {
+  if (!cardsDirty()) return '';
+  const n = TYPES[S.ntType].notes, items = [];
+  let bad = '';
+  for (const k of Object.keys(TYPES)) {
+    const tn = TYPES[k].notes, nm = TYPES[k].name;
+    if (S.nt === 'A') {
+      const a = S.layout[k], b = S.layoutSaved[k];
+      if (!a.front.length) bad = `${nm}: ön yüz boş, kart hiçbir şey sormaz.`;
+      if (!same(a.front, b.front) || !same(a.back, b.back)) items.push(`${nm}: ${fmt(tn)} kartın görünüşü değişir. Tekrar geçmişin aynen kalır.`);
+      if (a.reverse && !b.reverse) items.push(`${nm}: ${fmt(tn)} yeni ters kart eklenir; günlük yeni kelime sınırına göre gelir.`);
+      if (!a.reverse && b.reverse) items.push(`${nm}: ters kartlar kenara konur (silinmez; yeniden açarsan kaldıkları yerden devam eder).`);
+    } else {
+      const a = S.recipes[k], b = S.recipesSaved[k];
+      if (!a.on.length) bad = `${nm}: en az bir kart tarifi seç.`;
+      const add = a.on.filter((x) => !b.on.includes(x)).length, rem = b.on.filter((x) => !a.on.includes(x)).length;
+      if (add) items.push(`${nm}: ${fmt(tn * add)} yeni kart eklenir (${add} tarif × ${fmt(tn)} kelime).`);
+      if (rem) items.push(`${nm}: ${rem} tarifin kartları kenara konur (silinmez).`);
+      if (!same(a.back, b.back)) items.push(`${nm}: cevap yüzü değişir; tekrar geçmişin aynen kalır.`);
+    }
+  }
+  void n;
+  return `<div class="savebar" role="region" aria-label="Kaydedilmemiş değişiklik"><div class="bt"><b>Kaydedince:</b><ul>${items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>${bad ? `<p class="effect warn">${esc(bad)}</p>` : ''}</div><button type="button" class="btn" data-act="cards-discard">Vazgeç</button><button type="button" class="btn primary" data-act="cards-save" ${bad ? 'disabled' : ''}>Kaydet</button></div>`;
+}
+function chipHTML(role, where) {
+  const smp = TYPES[S.ntType].sample;
+  const ex = String(smp[role] ?? '').replace(/\*/g, '');
+  return `<button type="button" class="chip${where === 'pool' ? ' pool' : ''}" draggable="true" data-chip="${role}" data-where="${where}" aria-haspopup="menu" aria-expanded="false">${esc(ROLE[role].label)}${ex ? `<span class="ex">${esc(ex)}</span>` : ''}</button>`;
+}
+function cardsA() {
+  const L = S.layout[S.ntType], T = TYPES[S.ntType];
+  const pool = T.fields.filter((f) => !L.front.includes(f) && !L.back.includes(f));
+  const side = S.previewSide;
+  const rev = S.previewRecipe === 'rev' && L.reverse;
+  const front = rev ? ['meaning'] : L.front, back = rev ? [...L.front.filter((x) => x !== 'meaning'), ...L.back.filter((x) => x !== 'meaning')] : L.back;
+  return `${typePicker()}<div class="cardlab"><div>
+    <div class="zones">
+      <div class="zone" data-zone="front"><h4><span>Ön yüz · soru</span><span class="faint">${L.front.length}</span></h4><div class="chips">${L.front.map((r) => chipHTML(r, 'front')).join('') || '<span class="empty">Buraya sürükle ya da aşağıdan tıkla</span>'}</div></div>
+      <div class="zone" data-zone="back"><h4><span>Arka yüz · cevap</span><span class="faint">${L.back.length}</span></h4><div class="chips">${L.back.map((r) => chipHTML(r, 'back')).join('') || '<span class="empty">Buraya sürükle ya da aşağıdan tıkla</span>'}</div></div>
+    </div>
+    <div class="zone" data-zone="pool" style="margin-top:12px;min-height:0"><h4><span>Kartta görünmeyenler</span><span class="faint">tıkla, nereye koyacağını seç</span></h4><div class="chips">${pool.map((r) => chipHTML(r, 'pool')).join('') || '<span class="empty">Hepsi kartta.</span>'}</div></div>
+    <div class="rows" style="margin-top:16px"><div class="row"><div><div class="rlabel" id="l-rev">Ters yönden de sorulsun</div><p class="rdesc">Türkçesini görüp İngilizcesini hatırlarsın. Konuşurken kelimeyi bulmanı sağlar.</p>${L.reverse ? `<p class="effect">Her kelime 2 kart olur: ${fmt(T.notes)} yeni kart. Günde ${S.tempos.genel.new_per_day} yeni kelimeyle ~${Math.ceil(T.notes / Math.max(1, S.tempos.genel.new_per_day))} günde hepsi bir kez sorulur.</p>` : ''}</div><div class="ctl"><button type="button" class="sw" role="switch" aria-labelledby="l-rev" aria-checked="${L.reverse}" data-act="rev" id="c-rev"></button></div></div></div>
+  </div>
+  <div>${L.reverse ? `<div class="seg" role="radiogroup" aria-label="Hangi kart" style="margin-bottom:8px"><button type="button" role="radio" aria-checked="${!rev}" data-act="prevrec" data-r="">EN → TR</button><button type="button" role="radio" aria-checked="${rev}" data-act="prevrec" data-r="rev">TR → EN (ters)</button></div>` : ''}${flashHTML(front, back, side)}</div></div>${saveBar()}`;
+}
+function cardsB() {
+  const T = TYPES[S.ntType], Rc = S.recipes[S.ntType];
+  const list = RECIPES.filter((r) => !r.only || r.only === S.ntType);
+  const smp = T.sample;
+  const mini = (r) => `<div class="mini"><div>${r.front.map((x) => { const k = x.replace(/[*_~]$/, ''); if (k === 'term') return `<b>${esc(smp.term)}</b>`; if (k === 'meaning') return x.endsWith('~') ? `<span class="faint">${esc(smp.meaning)}</span>` : `<b>${esc(smp.meaning)}</b>`; if (k === 'example') return `<span>${exHTML(smp.example, x.endsWith('_') ? 'blank' : '')}</span>`; if (k === 'shot') return '<span class="fc-shot" style="width:70px;height:30px;font-size:8px"></span>'; if (k === 'audio') return `<span>${ic('play', 's14')}</span>`; return ''; }).join('')}</div><div><b>${esc(r.q === 'term' ? smp.term : smp.meaning)}</b><span class="faint">+ cevap yüzü</span></div></div>`;
+  const on = list.filter((r) => Rc.on.includes(r.id));
+  const cur = on.find((r) => r.id === S.previewRecipe) || on[0];
+  const back = (cur ? [cur.q] : []).concat(Rc.back.filter((x) => !cur || x !== cur.q));
+  return `${typePicker()}
+  <section class="sec"><h2>Bir kelimeden hangi kartlar çıksın?</h2><p class="sd">Her seçtiğin tarif, her kelime için bir kart demek. Çoğu kişiye ilki yeter.</p>
+  <div class="recipes">${list.map((r) => `<button type="button" class="recipe" aria-pressed="${Rc.on.includes(r.id)}" data-act="recipe" data-r="${r.id}">${mini(r)}<div class="rt"><span>${esc(r.t)}</span><span class="ck">${Rc.on.includes(r.id) ? '✓' : ''}</span></div><div class="rd">${esc(r.d)}${r.rec ? ' <span class="tag rec">önerilen</span>' : ''}</div></button>`).join('')}</div>
+  <p class="effect">Her kelime ${on.length} kart olur · ${fmt(T.notes)} kelime → ${fmt(T.notes * on.length)} kart.</p></section>
+  <section class="sec"><h2>Cevap yüzünde neler görünsün?</h2><p class="sd">Sorulan şey en üstte, büyük. Diğerleri altında, küçük ve etiketli.</p>
+  <div class="days" style="justify-content:flex-start">${T.fields.filter((f) => f !== 'term' && f !== 'surface').map((f) => `<button type="button" style="width:auto;padding:0 10px" aria-pressed="${Rc.back.includes(f)}" data-act="recback" data-f="${f}">${esc(ROLE[f].label)}</button>`).join('')}</div></section>
+  <section class="sec"><h2>Önizleme</h2>${on.length > 1 ? `<div class="seg" role="radiogroup" aria-label="Hangi tarif" style="margin-bottom:8px">${on.map((r) => `<button type="button" role="radio" aria-checked="${r === cur}" data-act="prevrec" data-r="${r.id}">${esc(r.t.split('→')[0].trim())}</button>`).join('')}</div>` : ''}
+  <div style="max-width:420px">${cur ? flashHTML(cur.front, back, S.previewSide, cur.t) : '<p class="muted">Bir tarif seç.</p>'}</div></section>${saveBar()}`;
+}
+PAGES_R.cards = () => (S.nt === 'A' ? cardsA() : cardsB()) + `<div class="banner adv" style="margin-top:20px">${ic('note')}<div class="bt"><b>Kart tasarımını kendin yazmak mı istiyorsun?</b>Alanlar, HTML şablon kodu ve CSS: Gelişmiş › Not türleri (tam).</div><button type="button" class="btn sm" data-go="nt-adv">Aç</button></div>`;
+
+/* ---------------------------------------------------------------- chip menu + drag and drop */
+let openMenu = null;
+function closeMenu() { if (openMenu) { openMenu.el.remove(); openMenu.chip.ariaExpanded = 'false'; const c = openMenu.chip; openMenu = null; return c; } return null; }
+function chipMenu(chip) {
+  const was = closeMenu(); if (was === chip) return;
+  const role = chip.dataset.chip, where = chip.dataset.where;
+  const m = document.createElement('div'); m.className = 'menu'; m.setAttribute('role', 'menu');
+  const opts = [];
+  if (where !== 'front') opts.push(['front', 'Ön yüze koy (soru)']);
+  if (where !== 'back') opts.push(['back', 'Arka yüze koy (cevap)']);
+  if (where !== 'pool') opts.push(['pool', 'Kartta gösterme']);
+  m.innerHTML = `<div class="mh">${esc(ROLE[role].label)} · ${esc(ROLE[role].d)}</div>` + opts.map(([w, l]) => `<button type="button" role="menuitem" data-mv="${w}">${esc(l)}</button>`).join('') + (where !== 'pool' ? `<hr><button type="button" role="menuitem" data-mv="up">Öne al</button><button type="button" role="menuitem" data-mv="down">Sona al</button>` : '');
+  document.body.appendChild(m);
+  const r = chip.getBoundingClientRect();
+  m.style.left = Math.min(r.left, innerWidth - 210) + 'px'; m.style.top = r.bottom + 4 + scrollY + 'px';
+  chip.ariaExpanded = 'true';
+  openMenu = { el: m, chip };
+  m.addEventListener('click', (e) => { const b = e.target.closest('[data-mv]'); if (!b) return; moveChip(role, b.dataset.mv); });
+  m.addEventListener('keydown', (e) => {
+    const items = $$('[data-mv]', m), i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeMenu()?.focus(); }
+  });
+  m.querySelector('button').focus();
+}
+function moveChip(role, to) {
+  const L = S.layout[S.ntType];
+  const from = L.front.includes(role) ? 'front' : L.back.includes(role) ? 'back' : 'pool';
+  closeMenu();
+  if (to === 'up' || to === 'down') { const a = L[from]; a.splice(a.indexOf(role), 1); to === 'up' ? a.unshift(role) : a.push(role); }
+  else { if (from !== 'pool') L[from].splice(L[from].indexOf(role), 1); if (to !== 'pool') L[to].push(role); }
+  render();
+  $(`[data-chip="${role}"]`)?.focus();
+}
+function wireDnD() {
+  $$('.chip[draggable]').forEach((c) => c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', c.dataset.chip); e.dataTransfer.effectAllowed = 'move'; }));
+  $$('[data-zone]').forEach((z) => {
+    z.addEventListener('dragover', (e) => { e.preventDefault(); z.classList.add('over'); });
+    z.addEventListener('dragleave', () => z.classList.remove('over'));
+    z.addEventListener('drop', (e) => { e.preventDefault(); z.classList.remove('over'); const r = e.dataTransfer.getData('text/plain'); if (r && ROLE[r]) moveChip(r, z.dataset.zone); });
+  });
+}
+</script>
+<script>
+'use strict';
+/* ================================================================ BASIC 3–6 */
+PAGES_R.remind = () => regSections('remind') + `<section class="sec"><h2>Bildirimler sana ulaşıyor mu?</h2><div class="rows"><div class="row"><div><div class="rlabel">Deneme bildirimi</div><p class="rdesc">Hemen bir tane gönderir. Gelmiyorsa Windows’un bildirim ayarlarında Flashcard’a izin ver.</p></div><div class="ctl"><button type="button" class="btn" data-act="toast" data-msg="Deneme bildirimi gönderildi: “Bugün 34 kart seni bekliyor.”">${ic('bell', 's14')}Deneme gönder</button></div></div></div></section>`;
+
+const HELPERS = [
+  { k: 'ai', icon: 'spark', name: 'Yapay zeka', on: 'Bağlı · OpenRouter · bu ay $0,42', off: 'Kelimeye anlam, örnek cümle ve yanlış şıklar yazar. İsteğe bağlı; ücretli olabilir.', page: 'ai' },
+  { k: 'mcp', icon: 'bot', name: 'Asistan (Claude gibi)', on: 'Bağlı · Claude Desktop · kart ekleyebilir', off: 'Bir yapay zeka asistanı destelerini okuyup senin için kart ekleyebilsin.', page: 'mcp' },
+  { k: 'rules', icon: 'zap', name: 'Otomatik kurallar', on: '1 kural açık · “Sürekli unuttuklarını etiketle”', off: 'Tekrar eden işler kendiliğinden olsun (ör. sürekli unuttuğun kartları etiketle).', page: 'automation' },
+];
+function subtitleBlock() {
+  if (S.conn.subtitle) {
+    return `<div class="panel conn" style="border-bottom:1px solid var(--border)"><span class="ic">${ic('film')}</span><div class="nm">Subtitle eklentisi <span class="tag ok">● Bağlı</span></div><div class="ds">Son kelime <b>give up</b> · Breaking Bad S1E3 · 2 saat önce. Bu hafta <span class="mono">23</span> kelime geldi.</div><div class="ac"><button type="button" class="btn sm ghost" data-act="sub-off">Bağlantıyı kes</button></div></div>
+    <div class="rows" style="margin-top:8px"><div class="row" id="row-subtitle-default-deck"><div><div class="rlabel" id="l-subdeck">Yakaladığın kelimeler hangi desteye gitsin?</div><p class="rdesc">Yeni kelimeler bu desteye kart olarak düşer; sonra istediğin desteye taşıyabilirsin.</p><p class="effect">Bundan sonra yakaladıkların “${esc(S.v['subtitle.default_deck'])}” destesine gelir.</p></div><div class="ctl"><select class="inp" id="c-subdeck" aria-labelledby="l-subdeck" data-act-change="subdeck">${DECKS.map((d) => `<option ${d.name === S.v['subtitle.default_deck'] ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div></div></div>`;
+  }
+  const st = S.subSetup;
+  return `<div class="banner warn">${ic('film')}<div class="bt"><b>Subtitle bağlı değil.</b>Üç adımda bağlarsın; bir kez yapman yeter.</div></div>
+  <ol class="steps">
+    <li class="${st > 0 ? 'done' : ''}"><div><b>Subtitle eklentisini tarayıcına kur</b><p class="rdesc">Chrome ya da Edge. Kurduysan geç.</p>${st === 0 ? `<div style="display:flex;gap:8px;margin-top:6px"><button type="button" class="btn sm" data-act="sub-step" data-n="1">Eklenti sayfasını aç</button><button type="button" class="btn sm ghost" data-act="sub-step" data-n="1">Zaten kurulu</button></div>` : ''}</div></li>
+    <li class="${st > 1 ? 'done' : ''}"><div><b>Bağlantı anahtarı oluştur</b><p class="rdesc">Eklenti bu anahtarla yalnız kart ekleyebilir; başka hiçbir şeye dokunamaz.</p>${st === 1 ? `<button type="button" class="btn sm primary" style="margin-top:6px" data-act="sub-step" data-n="2">Anahtar oluştur</button>` : ''}${st >= 2 ? `<div class="code" style="margin-top:6px"><span>fc_sub_7Q2k-Nf83-xa91</span><button type="button" class="btn sm ghost" data-act="toast" data-msg="Kopyalandı.">${ic('copy', 's14')}Kopyala</button></div>` : ''}</div></li>
+    <li class="${st > 2 ? 'done' : ''}"><div><b>Eklentinin ayarlarına yapıştır, sonra dene</b><p class="rdesc">Eklenti simgesi › Ayarlar › “Flashcard anahtarı”.</p>${st === 2 ? `<button type="button" class="btn sm primary" style="margin-top:6px" data-act="sub-step" data-n="3">Bağlantıyı dene</button>` : ''}</div></li>
+  </ol>`;
+}
+PAGES_R.connect = () => `<section class="sec"><h2>${ic('film')} Subtitle</h2>${subtitleBlock()}</section>
+  <section class="sec"><h2>Yardımcılar</h2><p class="sd">Hepsi isteğe bağlı; hiçbiri olmadan da uygulama tam çalışır.</p>
+  <div class="panel">${HELPERS.map((h) => { const on = h.k === 'rules' ? S.conn.rules > 0 : S.conn[h.k]; return `<div class="conn"><span class="ic">${ic(h.icon)}</span><div class="nm">${esc(h.name)} ${on ? '<span class="tag ok">● Bağlı</span>' : '<span class="tag off">Bağlı değil</span>'}</div><div class="ds">${esc(on ? h.on : h.off)}</div><div class="ac">${on ? `<button type="button" class="btn sm" data-go="${h.page}">Ayrıntılar${!S.adv ? ' <span class="tag adv">Gelişmiş’te</span>' : ''}</button>` : `<button type="button" class="btn sm primary" data-act="setup" data-k="${h.k}">Kur</button>`}</div></div>`; }).join('')}</div></section>
+  <p class="muted" style="font-size:12px">Taslak: <button type="button" class="reset" data-act="sub-toggle">Subtitle durumunu değiştir (bağlı ⇄ bağlı değil)</button></p>`;
+S.v['subtitle.default_deck'] = 'İngilizce';
+
+PAGES_R.backup = () => {
+  const off = S.v['backup.auto'] === 'off';
+  return `<div class="banner ${off ? 'warn' : 'ok'}">${ic('shield')}<div class="bt"><b>${off ? 'Otomatik yedek kapalı.' : 'Evet, güvende.'}</b>Son yedek: <span class="mono">${esc(S.backup.last)}</span> · denetlendi, geri açılabiliyor. İçinde <span class="mono">800</span> not, <span class="mono">1.284</span> kart, <span class="mono">9.412</span> tekrar, <span class="mono">380</span> ses ve görüntü.</div></div>
+  <div style="display:flex;gap:8px;margin:-4px 0 24px;flex-wrap:wrap"><button type="button" class="btn primary" data-act="backup-now">Şimdi yedekle</button><button type="button" class="btn" data-act="restore">Yedekten geri yükle…</button></div>
+  ${regSections('backup')}`;
+};
+PAGES_R.look = () => regSections('look');
+
+/* ================================================================ ADVANCED: deck tempos (A: shared tempos, B: general + per-deck exception) */
+function deckName(d) { return d.depth ? `${DECKS.find((x) => x.id === d.parent).name} › ${d.name}` : d.name; }
+function tempoA() {
+  const t = S.tempos[S.selTempo];
+  const users = DECKS.filter((d) => effTempo(d.id) === S.selTempo);
+  return `<div class="split"><div><div class="list" role="group" aria-label="Tempolar">${Object.entries(S.tempos).map(([k, x]) => `<button type="button" aria-pressed="${k === S.selTempo}" data-act="seltempo" data-t="${k}"><b>${esc(x.name)}</b><span>günde ${x.new_per_day} yeni · ${DECKS.filter((d) => effTempo(d.id) === k && d.cards).length} deste</span></button>`).join('')}</div>
+    <button type="button" class="btn sm" style="margin-top:8px;width:100%" data-act="newtempo">${ic('plus', 's14')}Yeni tempo (kopyala)</button></div>
+  <div><div class="banner">${ic('lib')}<div class="bt"><b>${users.filter((d) => d.cards).length} deste bu tempoyu kullanıyor.</b>Burada değiştirdiğin her şey hepsini etkiler. ${users.filter((d) => d.cards).map((d) => esc(deckName(d))).join(', ') || 'Henüz hiçbiri.'}</div></div>
+    <div class="rows" style="margin-bottom:20px"><div class="row"><div><div class="rlabel" id="l-tname">Adı</div><p class="rdesc">Yalnız bu listede görünür.</p></div><div class="ctl"><input class="inp wide" id="c-tname" aria-labelledby="l-tname" value="${esc(t.name)}" data-act-change="tname"></div></div></div>
+    ${tempoRows(S.selTempo, 'deck-tempos', () => true)}
+    <section class="sec"><h2>Hangi deste hangi tempoda?</h2><p class="sd">Alt deste kendi temposu yoksa üst destesininkini kullanır.</p>
+    <table class="t"><thead><tr><th>Deste</th><th class="num">Kart</th><th>Tempo</th></tr></thead><tbody>${DECKS.map((d) => `<tr><td style="padding-left:${8 + d.depth * 18}px">${esc(d.name)}</td><td class="num">${d.cards ? fmt(d.cards) : ''}</td><td><select class="inp" aria-label="${esc(d.name)} temposu" data-act-change="decktempo" data-d="${d.id}">${d.parent ? `<option value="" ${!S.deckTempo[d.id] ? 'selected' : ''}>Üst desteden (${esc(S.tempos[effTempo(d.parent)].name)})</option>` : ''}${Object.entries(S.tempos).map(([k, x]) => `<option value="${k}" ${S.deckTempo[d.id] === k ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></section>
+    ${S.selTempo !== 'genel' ? `<section class="sec"><h2 style="color:var(--danger)">Bu tempoyu sil</h2><p class="sd">Onu kullanan desteler Genel tempoya döner. Kartlarına bir şey olmaz; geri alınabilir.</p><button type="button" class="btn danger" data-act="deltempo">Tempoyu sil</button></section>` : ''}
+  </div></div>`;
+}
+function tempoB() {
+  const d = DECKS.find((x) => x.id === S.selDeck);
+  const tid = effTempo(d.id), ownTid = S.deckTempo[d.id];
+  const own = ownTid && ownTid !== 'genel';
+  return `<section class="sec"><h2>Desteler</h2><p class="sd">Her deste Genel tempoyla çalışır. Birini farklı istiyorsan seç ve “Bu desteye özel” de.</p>
+  <table class="t"><thead><tr><th>Deste</th><th class="num">Kart</th><th>Tempo</th><th class="num">Günde yeni</th><th>Hatırlama</th></tr></thead><tbody>${DECKS.map((x) => { const tt = S.tempos[effTempo(x.id)]; const o = S.deckTempo[x.id] && S.deckTempo[x.id] !== 'genel'; return `<tr class="click${x.id === S.selDeck ? ' sel' : ''}" data-act="seldeck" data-d="${x.id}" tabindex="0"><td style="padding-left:${8 + x.depth * 18}px">${esc(x.name)}</td><td class="num">${x.cards ? fmt(x.cards) : ''}</td><td>${o ? `<span class="tag rec">kendi</span>` : effTempo(x.id) !== 'genel' ? '<span class="faint">üst desteden</span>' : '<span class="muted">Genel</span>'}</td><td class="num">${tt.new_per_day}</td><td class="num">%${Math.round(tt.retention * 100)}</td></tr>`; }).join('')}</tbody></table></section>
+  <section class="sec"><h2>${esc(deckName(d))}</h2>
+  ${own ? `<div class="banner">${ic('gauge')}<div class="bt"><b>Bu desteye özel tempo.</b>Genel tempo değişse de bu deste etkilenmez.</div><button type="button" class="btn sm" data-act="b-apply">Şu destelere de uygula…</button><button type="button" class="btn sm" data-act="b-general">Genel tempoya döndür</button></div>${tempoRows(ownTid, 'deck-tempos', () => true)}`
+    : `<div class="banner">${ic('gauge')}<div class="bt"><b>${tid === 'genel' ? 'Genel tempoyu kullanıyor' : `Üst destesinin temposunu kullanıyor (${esc(S.tempos[tid].name)})`}:</b> günde ${S.tempos[tid].new_per_day} yeni, %${Math.round(S.tempos[tid].retention * 100)} hatırlama. Genel tempoyu “Günlük tempo” sayfasında değiştirirsin.</div><button type="button" class="btn sm primary" data-act="b-own">Bu desteye özel ayarla</button></div>${S.tempos[tid] === S.tempos.genel ? `<details class="more"><summary>Genel temponun ayrıntıları <span>öğrenme adımları, sıra, FSRS</span></summary><div class="in">${tempoRows('genel', 'deck-tempos', (f) => !f.basic)}</div></details>` : ''}`}
+  </section>`;
+}
+PAGES_R['deck-tempos'] = () => `<div class="banner adv">${ic('note')}<div class="bt"><b>Model ${S.deck}: ${S.deck === 'A' ? 'Tempolar (paylaşılan paketler)' : 'Genel tempo + desteye özel istisna'}</b>${S.deck === 'A' ? 'v1.3’teki “ayar paketi”nin yeni adı. Bir tempo birçok desteye verilir; değiştirince hepsi değişir.' : 'Paket kavramı görünmez. Her deste ya Genel tempoda ya kendine özel; paylaşmak = “şu destelere de uygula”.'} Taslak çubuğundan A/B değiştir.</div></div>` + (S.deck === 'A' ? tempoA() : tempoB());
+
+/* ================================================================ ADVANCED: note types (full) */
+const NT_ADV = {
+  classic: { name: 'Klasik', notes: 13, fields: [['Ön', 'term', 'Biçimli metin'], ['Arka', 'meaning', 'Biçimli metin']], tpl: [['Tanıma', 'meaning']] },
+  classic_rev: { name: 'Klasik + ters', notes: 0, fields: [['Ön', 'term', 'Biçimli metin'], ['Arka', 'meaning', 'Biçimli metin']], tpl: [['Tanıma', 'meaning'], ['Ters', 'term']] },
+  cloze: { name: 'Boşluk doldurma', notes: 0, fields: [['Metin', 'example', 'Biçimli metin'], ['Ek bilgi', 'note', 'Biçimli metin']], tpl: [['Boşluk', 'whole']] },
+  word: { name: 'Kelime kartı', notes: 88, fields: [['Kelime', 'term', 'Düz metin'], ['Anlam', 'meaning', 'Düz metin'], ['Örnek', 'example', 'Biçimli metin'], ['Örnek çevirisi', 'example_tr', 'Düz metin'], ['Kaynak', 'source', 'Düz metin'], ['Not', 'note', 'Biçimli metin']], tpl: [['Tanıma', 'meaning']] },
+  subtitle: { name: 'Altyazı kartı', notes: 412, fields: [['Kelime', 'term', 'Düz metin'], ['Geçtiği hâli', 'surface', 'Düz metin'], ['Anlam', 'meaning', 'Düz metin'], ['Altyazı cümlesi', 'example', 'Biçimli metin'], ['Çeviri', 'example_tr', 'Düz metin'], ['Kaynak', 'source', 'Düz metin'], ['Ekran görüntüsü', 'shot', 'Bir resim'], ['Ses', 'audio', 'Ses kaydı'], ['Not', 'note', 'Biçimli metin']], tpl: [['Tanıma', 'meaning']] },
+};
+PAGES_R['nt-adv'] = () => {
+  const T = NT_ADV[S.advType];
+  const tab = S.advTab;
+  const roleSel = (r, i) => `<select class="inp" aria-label="${i + 1}. alan ne içeriyor">${[['none', 'Başka bir şey'], ...Object.entries(ROLE).map(([k, x]) => [k, x.label])].map(([k, l]) => `<option ${k === r ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  const kinds = ['Biçimli metin', 'Düz metin', 'Bir resim', 'Ses kaydı', 'Video', 'Sayı', 'Etiket listesi', 'Başka bir nota bağlantı'];
+  const body = tab === 'fields'
+    ? `<div style="overflow-x:auto"><table class="t nt"><thead><tr><th>#</th><th>Adı</th><th>Ne içeriyor?</th><th>Türü</th><th>Zorunlu</th><th title="İşaretli alanların hepsi aynıysa yeni not kopya sayılır">Kopya kontrolü</th><th>Aranır</th></tr></thead><tbody>${T.fields.map(([n, r, k], i) => `<tr><td class="num">${i + 1}</td><td><input class="inp" style="width:110px" value="${esc(n)}" aria-label="${i + 1}. alanın adı"></td><td>${roleSel(r, i)}</td><td><select class="inp" aria-label="${i + 1}. alanın türü">${kinds.map((x) => `<option ${x === k ? 'selected' : ''}>${x}</option>`).join('')}</select></td><td><input type="checkbox" ${i === 0 ? 'checked' : ''} aria-label="Zorunlu"></td><td><input type="checkbox" ${i === 0 ? 'checked' : ''} aria-label="Kopya kontrolü"></td><td><input type="checkbox" ${i < 3 ? 'checked' : ''} aria-label="Aranır"></td></tr>`).join('')}</tbody></table></div>
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap"><button type="button" class="btn sm">${ic('plus', 's14')}Alan ekle</button><span class="muted">Notun adı olarak görünen alan:</span><select class="inp">${T.fields.map(([n]) => `<option>${esc(n)}</option>`).join('')}</select></div>`
+    : tab === 'tpl'
+      ? T.tpl.map(([n, q], i) => `<section class="sec"><h2>${i + 1}. kart: ${esc(n)}</h2><div class="rows"><div class="row"><div><div class="rlabel">Bu kart neyi soruyor?</div><p class="rdesc">Yazarak cevapta ve Test’te cevabın bu alanla karşılaştırılır.</p></div><div class="ctl"><select class="inp">${[...T.fields.map(([fn, r]) => [r, fn]), ['whole', 'Arka yüzün tamamı']].map(([r, l]) => `<option ${r === q ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div></div>
+        <div class="row stack"><div><div class="rlabel">Ön yüz (HTML)</div><p class="rdesc">Bir alanı koymak için kodunu çift süslü paranteze yaz: {{${esc(T.fields[0][0].toLowerCase())}}}</p></div><div class="ctl"><textarea class="inp" rows="3" aria-label="Ön yüz HTML">{{${esc(T.fields[0][0])}}}</textarea></div></div>
+        <div class="row stack"><div><div class="rlabel">Arka yüz (HTML)</div></div><div class="ctl"><textarea class="inp" rows="5" aria-label="Arka yüz HTML">{{FrontSide}}\n&lt;hr id=answer&gt;\n${T.fields.slice(1, 5).map(([fn]) => `{{${esc(fn)}}}`).join('\n')}</textarea></div></div></div></section>`).join('') + '<button type="button" class="btn sm">' + ic('plus', 's14') + 'Kart şablonu ekle</button>'
+      : `<div class="rows"><div class="row stack"><div><div class="rlabel">Bu türün kartlarına uygulanan stil (CSS)</div></div><div class="ctl"><textarea class="inp" rows="8" aria-label="CSS">.card {\n  font-family: system-ui;\n  text-align: center;\n}\n.fc-part-meaning { font-size: 1.4em; }</textarea></div></div></div>`;
+  return `<div class="split"><div><div class="list" role="group" aria-label="Not türleri">${Object.entries(NT_ADV).map(([k, x]) => `<button type="button" aria-pressed="${k === S.advType}" data-act="advtype" data-t="${k}"><b>${esc(x.name)}</b><span>hazır · ${x.fields.length} alan · ${fmt(x.notes)} not</span></button>`).join('')}</div>
+    <button type="button" class="btn sm" style="margin-top:8px;width:100%" data-act="toast" data-msg="(Taslak) Başlangıç noktası seç: Kelime · Kelime + örnek · İki yönlü · Boşluk doldurma · Subtitle · Sade.">${ic('plus', 's14')}Yeni not türü</button></div>
+  <div><div class="rows" style="margin-bottom:16px"><div class="row"><div><div class="rlabel">Adı</div><p class="rdesc">${fmt(T.notes)} not bu türde. Her not ${T.tpl.length} kart olur.</p></div><div class="ctl" style="flex-direction:row"><input class="inp" value="${esc(T.name)}" aria-label="Not türünün adı"><button type="button" class="btn sm">${ic('copy', 's14')}Kopyasını oluştur</button></div></div></div>
+    <div class="seg" role="tablist" aria-label="Not türü bölümleri" style="margin-bottom:12px">${[['fields', 'Alanlar'], ['tpl', 'Kart şablonları (kod)'], ['css', 'Görünüm (CSS)']].map(([k, l]) => `<button type="button" role="tab" aria-selected="${k === tab}" aria-checked="${k === tab}" data-act="advtab" data-t="${k}">${l}</button>`).join('')}</div>
+    ${body}
+    <section class="sec" style="margin-top:24px"><h2 style="color:var(--danger)">Bu türü sil</h2><p class="sd">${T.notes ? `${fmt(T.notes)} not bu türü kullanıyor; notları olan bir tür silinemez. Önce Kütüphane’de bu notları seçip “Not türünü değiştir” ile başka türe taşı.` : 'Hiçbir not bu türü kullanmıyor; silmek hiçbir kartı etkilemez. Geri alabilirsin.'}${S.advType === 'subtitle' ? ' Subtitle eklentisi kelimeleri bu türe kaydeder.' : ''}</p><button type="button" class="btn danger" ${T.notes || S.advType === 'classic' ? 'disabled' : ''}>Türü sil</button></section>
+  </div></div>`;
+};
+
+/* ================================================================ ADVANCED: the rest */
+const SHORTCUTS = [
+  ['Çalışırken', 'reveal', 'Kartı çevir (ön ⇄ arka)', 'Space'], ['Çalışırken', 'again', 'Puan: Tekrar / Hâlâ öğreniyorum', '1'], ['Çalışırken', 'hard', 'Puan: Zor / Biliyorum (iki düğmede)', '2'], ['Çalışırken', 'good', 'Puan: İyi (dört düğmede)', '3'], ['Çalışırken', 'easy', 'Puan: Kolay (dört düğmede)', '4'],
+  ['Çalışırken', 'hint', 'İpucu', 'H'], ['Çalışırken', 'suspend', 'Kenara koy (sen geri alana kadar sorma)', 'S'], ['Çalışırken', 'bury', 'Yarına bırak (bugün bir daha sorma)', 'B'], ['Çalışırken', 'undo', 'Son cevabı geri al', 'Z'], ['Çalışırken', 'end', 'Ara ver (oturum açık kalır)', 'Esc'],
+  ['Her yerde', 'add', 'Kart ekle (Hızlı Ekle)', 'N'], ['Her yerde', 'palette', 'Ara ya da komut çalıştır', 'Ctrl+K'], ['Her yerde', 'app-undo', 'Geri al', 'Ctrl+Z'], ['Her yerde', 'help', 'Kısayolları göster', '?'],
+];
+S.shortcuts = Object.fromEntries(SHORTCUTS.map((s) => [s[1], s[3]]));
+PAGES_R.shortcuts = () => [...new Set(SHORTCUTS.map((s) => s[0]))].map((g) => `<section class="sec"><h2>${g}</h2><div class="rows">${SHORTCUTS.filter((s) => s[0] === g).map(([, k, l, d]) => `<div class="row" id="row-sc-${k}"><div><div class="rlabel">${esc(l)}${S.shortcuts[k] !== d ? `<span class="tag">varsayılan: ${esc(d)}</span>` : ''}</div>${S.capture?.k === k && S.capture.err ? `<p class="effect warn">${esc(S.capture.err)}</p>` : ''}</div><div class="ctl" style="flex-direction:row;align-items:center"><button type="button" class="btn sm" data-act="capture" data-k="${k}" aria-label="${esc(l)}: ${esc(S.shortcuts[k])}, değiştirmek için bas">${S.capture?.k === k ? '<span class="muted">Yeni tuşa bas… (Esc: vazgeç)</span>' : `<kbd>${esc(S.shortcuts[k])}</kbd>`}</button>${S.shortcuts[k] !== d ? `<button type="button" class="reset" data-act="sc-reset" data-k="${k}">Varsayılana dön</button>` : ''}</div></div>`).join('')}</div></section>`).join('') + `<p class="muted">Her tuşun tek işi var: bir tuş zaten başka bir işe bağlıysa atanmaz, sana hangisi olduğu söylenir.</p>`;
+
+PAGES_R.profiles = () => `<section class="sec"><h2>Profiller</h2><p class="sd">Her profil ayrı bir koleksiyondur (ör. kardeşin için).</p><div class="panel">${S.profiles.map((p) => `<div class="conn"><span class="ic"><span class="avatar">${esc(p.name.slice(0, 2).toUpperCase())}</span></span><div class="nm">${esc(p.name)} ${p.cur ? '<span class="tag ok">şu an açık</span>' : ''}</div><div class="ds"><span class="mono">${fmt(p.cards)}</span> kart</div><div class="ac">${p.cur ? '' : '<button type="button" class="btn sm">Aç</button>'}</div></div>`).join('')}</div>
+  <button type="button" class="btn sm" style="margin-top:8px" data-act="add-profile">${ic('plus', 's14')}Profil ekle</button></section>
+  <section class="sec"><h2>Uygulama kilidi</h2><p class="sd">Açılışta ve bir süre dokunmazsan PIN ya da parola sorar. Kartlar şifrelenmez: yalnız bilgisayarının başına geçen birini durdurur.</p><div class="rows">
+  <div class="row"><div><div class="rlabel" id="l-lock">Kilit</div></div><div class="ctl"><button type="button" class="sw" role="switch" id="c-lock" aria-labelledby="l-lock" aria-checked="${S.lock.on}" data-act="lock"></button></div></div>
+  ${S.lock.on ? `<div class="row"><div><div class="rlabel" id="l-lk">Kilit türü</div><p class="rdesc">PIN 4–12 rakam; parola 6–128 karakter.</p></div><div class="ctl"><span class="seg" role="radiogroup" aria-labelledby="l-lk">${[['pin', 'PIN (rakam)'], ['password', 'Parola']].map(([k, l]) => `<button type="button" role="radio" aria-checked="${S.lock.kind === k}" data-act="lockkind" data-k="${k}">${l}</button>`).join('')}</span><button type="button" class="btn sm">PIN’i değiştir</button></div></div>
+  <div class="row"><div><div class="rlabel" id="l-idle">Dokunmazsan kaç dakika sonra kilitlensin?</div><p class="effect">${S.lock.idle ? `${S.lock.idle} dk dokunmazsan pencere kilitlenir; açınca kaldığın yerden devam edersin.` : 'Yalnız açılışta sorar.'}</p></div><div class="ctl"><select class="inp" aria-labelledby="l-idle" data-act-change="idle">${[0, 5, 15, 30, 60].map((m) => `<option value="${m}" ${m === S.lock.idle ? 'selected' : ''}>${m ? m + ' dk' : 'Hiçbir zaman'}</option>`).join('')}</select></div></div>` : ''}</div></section>`;
+
+PAGES_R.ai = () => `<section class="sec"><h2>Sağlayıcılar</h2><p class="sd">Her istek gönderilmeden önce sana gösterilir. Anahtarlar yalnız Windows’un anahtar zincirinde durur.</p>
+  ${S.conn.ai ? `<div class="panel"><div class="conn"><span class="ic">${ic('spark')}</span><div class="nm">OpenRouter <span class="tag ok">● Çalışıyor</span></div><div class="ds">Model: google/gemini-2.5-flash · bu ay <span class="mono">$0,42</span> / $5</div><div class="ac"><button type="button" class="btn sm">Test et</button><button type="button" class="btn sm ghost danger" data-act="ai-off">Kaldır</button></div></div></div>` : `<div class="banner">${ic('spark')}<div class="bt"><b>Henüz sağlayıcı yok.</b>Ücretsiz başlamak için OpenRouter, Gemini ya da Groq; bilgisayarında çalışan Ollama da olur.</div><button type="button" class="btn sm primary" data-act="setup" data-k="ai">Sağlayıcı ekle</button></div>`}</section>
+  <section class="sec"><h2>Özellik başına model</h2><p class="sd">Ör. kart üretmek için güçlü, kontrol için hızlı bir model.</p><table class="t"><thead><tr><th>Özellik</th><th>Model</th></tr></thead><tbody>${['Kart üretme', 'Alan doldurma', 'Açıklama', 'İpucu', 'Cevap kontrolü', 'Kart iyileştirme', 'Zor kartı yeniden yazma', 'Yanlış şıklar (Test)'].map((f) => `<tr><td>${f}</td><td><select class="inp" aria-label="${f} modeli" ${S.conn.ai ? '' : 'disabled'}><option>Varsayılan model</option><option>google/gemini-2.5-flash</option><option>anthropic/claude-sonnet-5.5</option></select></td></tr>`).join('')}</tbody></table></section>
+  <section class="sec"><h2>Fiyatlar</h2><p class="sd">Milyon token başına USD; yalnız tahmin için. Sağlayıcılar fiyat değiştirir.</p><table class="t"><thead><tr><th>Model</th><th class="num">Girdi</th><th class="num">Çıktı</th></tr></thead><tbody><tr><td>google/gemini-2.5-flash</td><td class="num"><input class="inp num" value="0.30" aria-label="girdi fiyatı"></td><td class="num"><input class="inp num" value="2.50" aria-label="çıktı fiyatı"></td></tr></tbody></table></section>
+  ${regSections('ai', ['Harcama', 'Bağlantı'])}
+  <details class="more"><summary>İstemler <span>· yapay zekaya giden 8 talimat; boş = uygulamanınki</span></summary><div class="in">${regSections('ai', ['İstemler'])}</div></details>`;
+
+PAGES_R['subtitle-adv'] = () => `<section class="sec"><h2>Erişim anahtarları</h2><p class="sd">Her tarayıcı için bir anahtar. Eklenti bir anahtarla yalnız kart ekleyebilir.</p><table class="t"><thead><tr><th>Anahtar</th><th>Son kullanım</th><th></th></tr></thead><tbody>${S.conn.subtitle ? `<tr><td><span class="mono">fc_sub_…xa91</span> · Chrome</td><td>2 saat önce</td><td style="text-align:right"><button type="button" class="btn sm ghost danger" data-act="sub-off">İptal et</button></td></tr>` : '<tr><td colspan="3" class="muted">Anahtar yok. Subtitle ve bağlantılar sayfasından kur.</td></tr>'}</tbody></table><button type="button" class="btn sm" style="margin-top:8px" data-act="toast" data-msg="(Taslak) Yeni anahtar bir kez gösterilir; kopyala ve eklentiye yapıştır.">${ic('plus', 's14')}Yeni anahtar</button></section>
+  <section class="sec"><h2>Nasıl çalışır?</h2><p class="sd">Video izlerken bir kelimeye + basarsın; eklenti kelimeyi, altyazı cümlesini, saniyeyi ve (istersen) ekran görüntüsüyle sesi bu uygulamaya yollar. Kart “Altyazı kartı” türünde, seçtiğin destede oluşur.</p></section>`;
+
+PAGES_R.mcp = () => `<section class="sec"><h2>Asistanını bağla</h2>${S.conn.mcp ? `<div class="banner ok">${ic('bot')}<div class="bt"><b>Claude Desktop bağlı.</b>Son istek: 3 gün önce (“phrasal verbs destesine 10 kart ekle”).</div></div>` : `<div class="banner">${ic('bot')}<div class="bt"><b>Bağlı asistan yok.</b>Asistanını seç, ayarı ona yapıştır, bu kadar.</div><button type="button" class="btn sm primary" data-act="setup" data-k="mcp">Kur</button></div>`}</section>
+  ${regSections('mcp')}
+  <section class="sec"><h2>Dış MCP sunucuları</h2><p class="sd">Tersi: uygulamanın yapay zekası başka programları kullanır (ör. sözlük). Çoğu kişi kullanmaz.</p><p class="muted">Ekli sunucu yok.</p><button type="button" class="btn sm">${ic('plus', 's14')}Sunucu ekle</button></section>`;
+
+PAGES_R['local-api'] = () => `<section class="sec"><h2>Bağlı programlar</h2><p class="sd">Bir program ilk bağlanmak istediğinde sana sorulur. Önerileri Gelen kutusuna düşer; sen kabul etmeden kart olmaz.</p><p class="muted">Bağlı program yok.</p></section>` + regSections('local-api');
+
+PAGES_R.automation = () => `<section class="sec"><h2>Kuralların</h2>${S.conn.rules ? `<div class="panel"><div class="conn"><span class="ic">${ic('zap')}</span><div class="nm">Sürekli unuttuklarını etiketle <span class="tag ok">açık</span></div><div class="ds">Bir kartı 8. kez unutunca “zor” etiketi eklenir. Şu an 14 kart.</div><div class="ac"><button type="button" class="btn sm ghost" data-act="rules-off">Kapat</button></div></div></div>` : `<div class="banner">${ic('zap')}<div class="bt"><b>Kural yok.</b>Hazır bir kuralla başla.</div><button type="button" class="btn sm primary" data-act="setup" data-k="rules">Kur</button></div>`}</section>
+  <section class="sec"><h2>Son çalışmalar</h2><p class="muted">${S.conn.rules ? 'Bugün 09:12 · “Sürekli unuttuklarını etiketle” · 1 kart etiketlendi.' : 'Henüz çalışan kural yok.'}</p></section>
+  <details class="more"><summary>Kuralı elle yaz <span>· JSON</span></summary><div class="in"><textarea class="inp" rows="5" aria-label="Kural JSON">{ "when": "review.lapsed", "if": "lapses >= 8", "then": { "add_tag": "zor" } }</textarea></div></details>` + regSections('automation');
+
+PAGES_R.plugins = () => `<section class="sec"><h2>Kurulu eklentiler</h2><p class="muted">Kurulu eklenti yok.</p><button type="button" class="btn sm" data-act="toast" data-msg="(Taslak) .fcplugin dosyası seçme penceresi açılır; kurmadan önce istediği izinler gösterilir.">${ic('plus', 's14')}Dosyadan kur (.fcplugin)</button></section>
+  <details class="more"><summary>Kaynak sınırları <span>· bir eklentinin en çok ne kadar süre, bellek ve veri kullanabileceği</span></summary><div class="in">${regSections('plugins')}</div></details>`;
+
+PAGES_R.export = () => `<section class="sec"><h2>Dışa aktar</h2><div class="rows"><div class="row"><div><div class="rlabel" id="l-exdeck">Hangi desteler?</div></div><div class="ctl"><select class="inp" aria-labelledby="l-exdeck"><option>Tüm koleksiyon</option>${DECKS.map((d) => `<option>${esc(deckName(d))}</option>`).join('')}</select></div></div></div></section>${regSections('export', ['Dışa aktar'])}<button type="button" class="btn primary" style="margin:-12px 0 28px" data-act="toast" data-msg="(Taslak) Kaydetme penceresi açılır.">Dışa aktar…</button>${regSections('export', ['Yazdır'])}<button type="button" class="btn" style="margin-top:-12px" data-act="toast" data-msg="(Taslak) Baskı önizlemesi hazırlanır.">Yazdır / PDF kaydet…</button>
+  <div class="banner adv" style="margin-top:24px">${ic('plus')}<div class="bt"><b>Kart içe aktarmak mı istiyorsun?</b>Oluştur › Dosyadan (Anki .apkg, CSV, metin).</div></div>`;
+
+PAGES_R.starters = () => `<div class="panel">${[['En sık 1000 İngilizce kelime', 1000], ['Phrasal verbs (temel)', 300], ['Günlük konuşma kalıpları', 150]].map(([n, c]) => `<div class="conn"><span class="ic">${ic('lib')}</span><div class="nm">${n}</div><div class="ds"><span class="mono">${fmt(c)}</span> kart · Örnek: “resilient” → “dayanıklı”</div><div class="ac"><button type="button" class="btn sm" data-act="toast" data-msg="(Taslak) “${n}” koleksiyonuna eklendi.">Ekle</button></div></div>`).join('')}</div>`;
+
+PAGES_R.maintenance = () => regSections('maintenance') + `<section class="sec"><h2>Temizlik ve denetim</h2><div class="rows">
+  <div class="row"><div><div class="rlabel">Çöp kutusu</div><p class="rdesc">3 not, 1 deste bekliyor. Geri getirebilir ya da kalıcı olarak silebilirsin.</p></div><div class="ctl" style="flex-direction:row"><button type="button" class="btn sm">Aç</button><button type="button" class="btn sm danger">Boşalt…</button></div></div>
+  <div class="row"><div><div class="rlabel">Kopya notlar</div><p class="rdesc">İki kez eklediğin kelimeleri bulur.</p></div><div class="ctl"><button type="button" class="btn sm" data-act="toast" data-msg="2 kopya bulundu: “give up”, “figure out”. Ara ekranında açılır.">Bul</button></div></div>
+  <div class="row"><div><div class="rlabel">Koleksiyonu denetle</div><p class="rdesc">Kartlar, notlar ve desteler arasında bozuk bağ arar; istersen onarır.</p></div><div class="ctl"><button type="button" class="btn sm" data-act="toast" data-msg="Denetlendi: sorun yok.">Denetle</button></div></div></div></section>`;
+
+PAGES_R.logs = () => regSections('logs') + `<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn" data-act="toast" data-msg="(Taslak) Günlük dışa aktarıldı; anahtarlar ve parolalar çıkarıldı.">Günlüğü dışa aktar…</button><button type="button" class="btn" data-act="toast" data-msg="Güncelsin: 1.4.0.">Güncelleme var mı bak</button></div>`;
+
+PAGES_R.modes = () => regSections('modes') + `<div class="rows"><div class="row"><div><div class="rlabel">Eşleştir: en iyi süren</div><p class="rdesc">Destedeki en hızlı tur. Sıfırlarsan yeniden yarışırsın.</p></div><div class="ctl" style="flex-direction:row;align-items:center"><span class="mono" style="font-size:16px">0:42</span><button type="button" class="btn sm" data-act="toast" data-msg="En iyi süre sıfırlandı.">Sıfırla</button></div></div></div>
+  <p class="muted" style="margin-top:16px">Test (tek kelime, dört şık) için ayar gerekmez: uzunluğunu başlatıcıda seçersin. Adlar D1 “Çalışma modları” taslağıyla aynı: Test = dört şık, Sınav = karışık kâğıt.</p>`;
+
+/* related links under basic pages */
+const RELATED = {
+  tempo: [['Öğrenme adımları, kart sırası, en uzun aralık, FSRS', 'deck-tempos'], ['Bazı desteler farklı tempoda çalışsın', 'deck-tempos'], ['Yeni gün saat kaçta başlasın', 'study-screen', 'row-study-day-start-hour'], ['Hafta sonu daha az tekrar (hafif günler)', 'planning', 'row-planning-easy-days']],
+  cards: [['Cevabı yazarak ver', 'study-screen', 'row-study-type-answer'], ['İki mi dört mü cevap düğmesi', 'study-screen', 'row-study-answer-buttons'], ['İpucu nasıl açılsın', 'study-screen', 'row-study-hint-strategy']],
+  remind: [['Klavye kısayolları', 'shortcuts']],
+  connect: [['Subtitle erişim anahtarları', 'subtitle-adv'], ['Yerel API (başka programlar)', 'local-api'], ['Eklentiler', 'plugins']],
+  backup: [['Dışa aktar (Anki, başka cihaz) ve yazdır', 'export'], ['Çöp kutusu ve koleksiyon denetimi', 'maintenance']],
+  look: [['Klavye kısayolları', 'shortcuts'], ['Profiller ve uygulama kilidi', 'profiles']],
+};
+</script>
+<script>
+'use strict';
+/* ================================================================ search (finds advanced settings too) */
+const EXTRA = [
+  ['Ön yüzde ne sorulsun, arka yüzde ne görünsün?', 'cards', 'kart görünüş alan rol kelime anlam örnek cümle kaynak ekran görüntüsü ses not türü'],
+  ['Ters yönden de sorulsun (Türkçe → İngilizce)', 'cards', 'iki yönlü ters reverse üretme'],
+  ['Şablon kodu (HTML) ve CSS', 'nt-adv', 'şablon html css kod tasarım'],
+  ['Alanlar: türü, zorunlu, kopya kontrolü, aranır', 'nt-adv', 'alan field zorunlu kopya duplicate arama sıralama'],
+  ['Yeni not türü, türü kopyala ya da sil', 'nt-adv', 'not türü oluştur kopya sil klasik boşluk doldurma cloze'],
+  ['Deneme bildirimi gönder', 'remind', 'bildirim test gelmiyor'],
+  ['Subtitle’ı bağla', 'connect', 'eklenti tarayıcı chrome edge anahtar bağla kur'],
+  ['Yakaladığın kelimeler hangi desteye gitsin?', 'connect', 'subtitle deste varsayılan', 'row-subtitle-default-deck'],
+  ['Yapay zeka sağlayıcısı ekle', 'ai', 'api anahtar key model openrouter gemini groq claude openai ollama'],
+  ['Özellik başına model', 'ai', 'model yapay zeka'],
+  ['Yapay zeka fiyatları', 'ai', 'token ücret maliyet'],
+  ['Asistan bağla (Claude, Cursor)', 'mcp', 'mcp asistan claude desktop code'],
+  ['Dış MCP sunucuları', 'mcp', 'sunucu server'],
+  ['Otomatik kural ekle', 'automation', 'kural tetik etiketle taşı kenara koy otomasyon'],
+  ['Eklenti kur (.fcplugin)', 'plugins', 'eklenti plugin kur'],
+  ['Şimdi yedekle', 'backup', 'yedek backup'],
+  ['Yedekten geri yükle', 'backup', 'restore geri yükle eski'],
+  ['Çöp kutusu', 'maintenance', 'silinen geri getir boşalt'],
+  ['Kopya notları bul', 'maintenance', 'duplicate aynı iki kez'],
+  ['Koleksiyonu denetle', 'maintenance', 'bozuk onar sağlık'],
+  ['Profil ekle', 'profiles', 'profil kardeş koleksiyon'],
+  ['Uygulama kilidi (PIN ya da parola)', 'profiles', 'kilit pin parola şifre güvenlik'],
+  ['Günlüğü dışa aktar', 'logs', 'hata rapor log'],
+  ['Başlangıç destesi ekle', 'starters', 'hazır deste 1000 kelime'],
+  ['Dışa aktar (Anki .apkg, .fcpack, metin)', 'export', 'anki taşı başka cihaz'],
+  ['Yazdır / PDF kaydet', 'export', 'baskı kâğıt pdf'],
+  ['Bir desteye farklı tempo ver', 'deck-tempos', 'ayar paketi preset deste ayarları kopyala'],
+  ['Eşleştir: en iyi süre', 'modes', 'eşleştir rekor'],
+  ['Kart içe aktar', 'export', 'içe aktar import csv apkg dosyadan'],
+];
+let INDEX = [];
+function buildIndex() {
+  const rid = (id) => 'row-' + id.replace(/[^a-z0-9]/gi, '-');
+  INDEX = [
+    ...ALL.map((p) => ({ label: p.title, sub: p.nav, page: p.id, kw: `${p.kw || ''} ${p.nav} ${p.intro}` })),
+    ...REG.map((d) => ({ label: d.label, sub: `${pageOf(d.page).nav} › ${d.sec}`, page: d.page, row: rid(d.id), kw: `${d.desc} ${(d.opts || []).map((o) => o[1]).join(' ')}` })),
+    ...TEMPO_FIELDS.map((f) => ({ label: f.label, sub: f.basic ? 'Günlük tempo' : `Deste tempoları › ${f.sec}`, page: f.basic ? 'tempo' : 'deck-tempos', row: f.basic ? rid(`tempo.${f.k}@genel`) : null, kw: `${f.desc} ${(f.opts || []).map((o) => o[1]).join(' ')} deste ayarları` })),
+    ...EXTRA.map(([label, page, kw, row]) => ({ label, sub: pageOf(page).nav, page, kw, row })),
+    ...SHORTCUTS.map(([g, k, l]) => ({ label: l, sub: `Klavye kısayolları › ${g}`, page: 'shortcuts', row: `row-sc-${k}`, kw: `kısayol tuş klavye ${S.shortcuts[k]}` })),
+  ].map((x) => ({ ...x, adv: pageOf(x.page).adv, f: fold(`${x.label} ${x.sub} ${x.kw}`), fl: fold(x.label) }));
+}
+function highlight(label, words) {
+  let out = '', map = [], fl = '';
+  for (let i = 0; i < label.length; i++) { const f = fold(label[i]); for (let j = 0; j < f.length; j++) map.push(i); fl += f; }
+  const hit = new Array(label.length).fill(false);
+  for (const w of words) { let p = fl.indexOf(w); while (p >= 0) { for (let j = p; j < p + w.length; j++) hit[map[j]] = true; p = fl.indexOf(w, p + 1); } }
+  let open = false;
+  for (let i = 0; i < label.length; i++) { if (hit[i] && !open) { out += '<mark>'; open = true; } if (!hit[i] && open) { out += '</mark>'; open = false; } out += esc(label[i]); }
+  return out + (open ? '</mark>' : '');
+}
+let RES = [], act = 0;
+function search(q) {
+  const box = $('#results');
+  $('#searchbox').classList.toggle('has', !!q);
+  const words = fold(q).split(/\s+/).filter(Boolean);
+  if (!words.length) { box.hidden = true; box.innerHTML = ''; RES = []; return; }
+  RES = INDEX.filter((x) => words.every((w) => x.f.includes(w)))
+    .map((x) => ({ ...x, s: (words.every((w) => x.fl.includes(w)) ? 0 : 2) + (x.adv ? 1 : 0) }))
+    .sort((a, b) => a.s - b.s || a.label.length - b.label.length).slice(0, 12);
+  act = 0;
+  box.hidden = false;
+  box.innerHTML = RES.length
+    ? `<div class="rh">${RES.length} sonuç · ↑↓ ve Enter</div>` + RES.map((r, i) => `<button type="button" class="res${i === act ? ' act' : ''}" role="option" aria-selected="${i === act}" data-res="${i}"><span class="rl">${highlight(r.label, words)}</span><span class="rp">${esc(r.sub)}${r.adv && !S.adv ? '<span class="tag adv">Gelişmiş’te</span>' : ''}</span></button>`).join('')
+    : `<div class="rh">Bulunamadı. Başka bir kelime dene: “saat”, “PIN”, “yedek”, “şablon”.</div>`;
+}
+function openResult(i) { const r = RES[i]; if (r) go(r.page, r.row); }
+
+/* ================================================================ dialogs: one "Kur" path each */
+const SETUP = {
+  ai: {
+    title: 'Yapay zekayı kur',
+    steps: [
+      (c) => `<p class="muted">Hangisini kullanmak istiyorsun? Emin değilsen OpenRouter: ücretsiz modellerle başlar.</p><div class="list" role="radiogroup" aria-label="Sağlayıcı" style="margin-top:10px">${[['openrouter', 'OpenRouter', 'Birçok model tek anahtarla · ücretsiz modeller var'], ['gemini', 'Google Gemini', 'Ücretsiz kotası var'], ['groq', 'Groq', 'Çok hızlı, ücretsiz kotası var'], ['anthropic', 'Claude (Anthropic)', 'Ücretli, güçlü'], ['openai', 'OpenAI', 'Ücretli'], ['ollama', 'Ollama', 'Bilgisayarında çalışır, anahtar gerekmez']].map(([k, n, d]) => `<button type="button" role="radio" aria-pressed="${c.p === k}" aria-checked="${c.p === k}" data-act="dlg-pick" data-v="${k}"><b>${n}</b><span>${d}</span></button>`).join('')}</div>`,
+      () => `<p class="muted">OpenRouter hesabında bir anahtar oluştur ve buraya yapıştır. Anahtar yalnız Windows’un anahtar zincirine kaydedilir.</p><p><span class="code"><span>openrouter.ai/keys</span><button type="button" class="btn sm ghost" data-act="toast" data-msg="Bağlantı kopyalandı.">Kopyala</button></span></p><label class="rlabel" for="dlg-key">Anahtar</label><input class="inp" style="width:100%;margin-top:4px" id="dlg-key" placeholder="sk-or-…" value="sk-or-v1-••••••••••••3f9a" autofocus>`,
+      (c) => c.tested ? `<div class="banner ok">${ic('spark')}<div class="bt"><b>Çalışıyor.</b>google/gemini-2.5-flash 0,4 sn’de cevap verdi. Kelime kartlarında “Yapay zekayla doldur” artık açık.</div></div>` : `<p class="muted">Çok kısa bir istek gönderilir (birkaç token, ~$0,0001).</p><button type="button" class="btn primary" data-act="dlg-test">Dene</button>`,
+    ],
+    done: () => { S.conn.ai = true; },
+  },
+  mcp: {
+    title: 'Asistanını bağla',
+    steps: [
+      (c) => `<p class="muted">Hangi asistanı kullanıyorsun?</p><div class="list" role="radiogroup" aria-label="Asistan" style="margin-top:10px">${[['desktop', 'Claude Desktop', 'Masaüstü uygulaması'], ['code', 'Claude Code', 'Komut satırı'], ['cursor', 'Cursor', 'Kod düzenleyici'], ['other', 'Başka bir MCP istemcisi', 'Ayarı elle yaparsın']].map(([k, n, d]) => `<button type="button" role="radio" aria-pressed="${c.p === k}" aria-checked="${c.p === k}" data-act="dlg-pick" data-v="${k}"><b>${n}</b><span>${d}</span></button>`).join('')}</div>`,
+      () => `<p class="muted">Bu ayarı kopyala ve Claude Desktop › Ayarlar › Geliştirici › “Yapılandırmayı düzenle” dosyasına yapıştır. Yollar bu bilgisayara göre hazır.</p><pre class="code" style="display:block;white-space:pre-wrap">{ "mcpServers": { "flashcard": {
+  "command": "C:\\\\Program Files\\\\Flashcard\\\\fc.exe",
+  "args": ["mcp", "--profile", "Ana profil"] } } }</pre><button type="button" class="btn sm" style="margin-top:8px" data-act="toast" data-msg="Kopyalandı.">${ic('copy', 's14')}Kopyala</button>`,
+      (c) => c.tested ? `<div class="banner ok">${ic('bot')}<div class="bt"><b>Bağlandı.</b>Asistanına “Phrasal verbs destesine 5 kart ekle” diyebilirsin; eklediği her şeyi geri alabilirsin.</div></div>` : `<p class="muted">Claude Desktop’u kapatıp aç, sonra dene.</p><button type="button" class="btn primary" data-act="dlg-test">Dene</button>`,
+    ],
+    done: () => { S.conn.mcp = true; },
+  },
+  rules: {
+    title: 'Otomatik bir kural aç',
+    steps: [
+      (c) => `<p class="muted">Hazır bir kural seç. Sayılar şu anki koleksiyonundan.</p><div class="list" role="radiogroup" aria-label="Kural" style="margin-top:10px">${[['leech', 'Sürekli unuttuklarını “zor” diye etiketle', 'Şu an 14 kart'], ['show', 'Subtitle’dan gelenleri dizinin adıyla etiketle', '412 kart'], ['shelve', '60 gündür hiç bilemediğin kartı kenara koy', '3 kart']].map(([k, n, d]) => `<button type="button" role="radio" aria-pressed="${c.p === k}" aria-checked="${c.p === k}" data-act="dlg-pick" data-v="${k}"><b>${n}</b><span>${d}</span></button>`).join('')}</div>`,
+    ],
+    done: () => { S.conn.rules = 1; },
+  },
+};
+function setupHTML() {
+  const c = S.dlg, D = SETUP[c.k], last = c.step === D.steps.length - 1;
+  const canNext = (c.step !== 0 || c.p) && (!last || D.steps.length === 1 || c.tested);
+  return `<h2 id="dlg-t">${D.title}</h2>${D.steps.length > 1 ? `<p class="faint" style="margin:0 0 10px">Adım ${c.step + 1} / ${D.steps.length}</p>` : ''}${D.steps[c.step](c)}
+  <div class="acts">${c.step > 0 ? '<button type="button" class="btn ghost" data-act="dlg-back">Geri</button>' : '<button type="button" class="btn ghost" data-act="dlg-close">Vazgeç</button>'}<button type="button" class="btn primary" data-act="dlg-next" ${canNext ? '' : 'disabled'}>${last ? (D.steps.length === 1 ? 'Kuralı aç' : 'Bitti') : 'Devam'}</button></div>`;
+}
+function openSetup(k) { S.dlg = { k, step: 0, p: k === 'ai' ? 'openrouter' : k === 'mcp' ? 'desktop' : 'leech' }; dialog(setupHTML()); }
+const rerenderDlg = () => { $('#dialog').innerHTML = setupHTML(); ($('#dialog [autofocus]') || $('#dialog [data-act="dlg-next"]:not([disabled])') || $('#dialog button'))?.focus(); };
+
+/* ================================================================ actions */
+const ACT = {
+  toast: (el) => toast(el.dataset.msg),
+  'adv-on': () => { setAdv(true); },
+  flip: () => { S.previewSide = S.previewSide === 'front' ? 'back' : 'front'; render(); $('.flash')?.focus(); },
+  nttype: (el) => { S.ntType = el.dataset.type; S.previewSide = 'front'; S.previewRecipe = null; render(); },
+  rev: () => { const L = S.layout[S.ntType]; L.reverse = !L.reverse; if (!L.reverse && S.previewRecipe === 'rev') S.previewRecipe = null; render(); },
+  prevrec: (el) => { S.previewRecipe = el.dataset.r || null; S.previewSide = 'front'; render(); },
+  recipe: (el) => { const a = S.recipes[S.ntType].on, r = el.dataset.r; a.includes(r) ? a.splice(a.indexOf(r), 1) : a.push(r); render(); },
+  recback: (el) => { const a = S.recipes[S.ntType].back, f = el.dataset.f; a.includes(f) ? a.splice(a.indexOf(f), 1) : a.push(f); render(); },
+  'cards-save': () => { if (S.nt === 'A') S.layoutSaved = clone(S.layout); else S.recipesSaved = clone(S.recipes); render(); toast('Kaydedildi. Kartların yeni hâliyle gelecek.', false); },
+  'cards-discard': () => { if (S.nt === 'A') S.layout = clone(S.layoutSaved); else S.recipes = clone(S.recipesSaved); render(); },
+  'sub-off': () => { S.conn.subtitle = false; S.subSetup = 0; render(); toast('Subtitle bağlantısı kesildi.'); },
+  'sub-toggle': () => { S.conn.subtitle = !S.conn.subtitle; S.subSetup = 0; render(); },
+  'sub-step': (el) => { S.subSetup = Number(el.dataset.n); if (S.subSetup >= 3) { S.conn.subtitle = true; toast('Bağlandı: eklentiden deneme kelimesi geldi (“hello”).'); } render(); },
+  setup: (el) => openSetup(el.dataset.k),
+  'dlg-pick': (el) => { S.dlg.p = el.dataset.v; rerenderDlg(); },
+  'dlg-test': () => { S.dlg.tested = true; rerenderDlg(); },
+  'dlg-back': () => { S.dlg.step--; S.dlg.tested = false; rerenderDlg(); },
+  'dlg-close': () => closeDialog(),
+  'dlg-next': () => { const D = SETUP[S.dlg.k]; if (S.dlg.step < D.steps.length - 1) { S.dlg.step++; rerenderDlg(); } else { D.done(); closeDialog(); render(); toast(`${D.title.replace(/ı?(kur|bağla|aç)$/i, '').trim()}: hazır.`); } },
+  'backup-now': () => { toast('Yedekleniyor…'); setTimeout(() => { S.backup.last = 'az önce'; render(); toast('Yedek alındı ve denetlendi: geri açılabiliyor.'); }, 700); },
+  restore: () => dialog(`<h2 id="dlg-t">Yedekten geri yükle</h2><p class="muted">Hangi güne dönmek istiyorsun?</p><div class="list" role="radiogroup" aria-label="Yedek" style="margin:10px 0">${['Dün 21:04 · 800 not · denetlendi ✓', '2 gün önce 20:51 · 796 not · denetlendi ✓', '3 gün önce 21:30 · 790 not · denetlendi ✓', 'Bir dosya seç (.fcbackup)…'].map((x, i) => `<button type="button" role="radio" aria-checked="${i === 0}" aria-pressed="${i === 0}" data-act="pick-backup">${x}</button>`).join('')}</div><div class="banner warn"><div class="bt"><b>Şu anki hâlin önce yedeklenir.</b>Sonra seçtiğin yedek onun yerine geçer. Fikrini değiştirirsen o yedekten geri dönersin.</div></div><div class="acts"><button type="button" class="btn ghost" data-act="dlg-close">Vazgeç</button><button type="button" class="btn primary" data-act="restore-go">Geri yükle</button></div>`),
+  'pick-backup': (el) => { $$('[data-act="pick-backup"]').forEach((b) => { b.ariaChecked = b.ariaPressed = String(b === el); }); },
+  'restore-go': () => { closeDialog(); toast('(Taslak) Geri yüklendi. Önceki hâlin “önce-geri-yükleme.fcbackup” olarak saklandı.'); },
+  'ai-off': () => { S.conn.ai = false; render(); },
+  'rules-off': () => { S.conn.rules = 0; render(); },
+  seltempo: (el) => { S.selTempo = el.dataset.t; render(); },
+  newtempo: () => { const id = 't' + Date.now(); S.tempos[id] = { ...clone(S.tempos[S.selTempo]), name: `${S.tempos[S.selTempo].name} (kopya)` }; S.selTempo = id; render(); toast('Tempo kopyalandı. Bir desteye vermek için aşağıdaki tabloyu kullan.'); },
+  deltempo: () => { const k = S.selTempo; Object.keys(S.deckTempo).forEach((d) => { if (S.deckTempo[d] === k) S.deckTempo[d] = DECKS.find((x) => x.id === d).parent ? null : 'genel'; }); delete S.tempos[k]; S.selTempo = 'genel'; render(); toast('Tempo silindi; desteleri Genel tempoya döndü.', false); },
+  seldeck: (el) => { S.selDeck = el.dataset.d; render(); },
+  'b-own': () => { const d = S.selDeck, id = 'own-' + d, base = S.tempos[effTempo(d)]; S.tempos[id] = { ...clone(base), name: `${DECKS.find((x) => x.id === d).name} (özel)` }; S.deckTempo[d] = id; render(); },
+  'b-general': () => { const d = S.selDeck, t = S.deckTempo[d]; S.deckTempo[d] = DECKS.find((x) => x.id === d).parent ? null : 'genel'; if (t && t.startsWith('own-') && !Object.values(S.deckTempo).includes(t)) delete S.tempos[t]; render(); },
+  'b-apply': () => dialog(`<h2 id="dlg-t">Bu tempoyu başka destelere de uygula</h2><p class="muted">Seçtiklerin bu destenin ayarlarının bir kopyasını alır.</p>${DECKS.filter((d) => d.id !== S.selDeck && d.cards).map((d) => `<label style="display:flex;gap:8px;padding:4px 0"><input type="checkbox"> ${esc(deckName(d))}</label>`).join('')}<div class="acts"><button type="button" class="btn ghost" data-act="dlg-close">Vazgeç</button><button type="button" class="btn primary" data-act="dlg-close">Uygula</button></div>`),
+  advtype: (el) => { S.advType = el.dataset.t; render(); },
+  advtab: (el) => { S.advTab = el.dataset.t; render(); },
+  capture: (el) => { S.capture = { k: el.dataset.k }; render(); $(`[data-act="capture"][data-k="${el.dataset.k}"]`)?.focus(); },
+  'sc-reset': (el) => { const k = el.dataset.k; S.shortcuts[k] = SHORTCUTS.find((s) => s[1] === k)[3]; render(); },
+  lock: () => { S.lock.on = !S.lock.on; render(); if (S.lock.on) toast('(Taslak) Önce bir PIN belirlersin; sonra kilit açılır.'); },
+  lockkind: (el) => { S.lock.kind = el.dataset.k; render(); },
+  'add-profile': () => dialog(`<h2 id="dlg-t">Yeni profil</h2><p class="muted">Ayrı, boş bir koleksiyon. İstediğin zaman profil menüsünden geçersin.</p><label class="rlabel" for="pname">Adı</label><input class="inp" id="pname" style="width:100%;margin-top:4px" value="Kardeşim" autofocus><div class="acts"><button type="button" class="btn ghost" data-act="dlg-close">Vazgeç</button><button type="button" class="btn primary" data-act="add-profile-go">Oluştur</button></div>`),
+  'add-profile-go': () => { S.profiles.push({ name: $('#pname').value || 'Yeni profil', cards: 0 }); closeDialog(); render(); },
+};
+const ACTC = {
+  subdeck: (el) => { S.v['subtitle.default_deck'] = el.value; render(); toast('Kaydedildi.'); },
+  tname: (el) => { S.tempos[S.selTempo].name = el.value || 'Adsız tempo'; render(); },
+  decktempo: (el) => { S.deckTempo[el.dataset.d] = el.value || null; render(); toast('Kaydedildi.'); },
+  idle: (el) => { S.lock.idle = Number(el.value); render(); },
+};
+function setAdv(on) { S.adv = on; store.set('adv', on); if (on) S.oneOff = null; else if (pageOf(S.page).adv) S.oneOff = S.page; buildIndex(); render(); search($('#q').value); }
+
+/* ================================================================ events */
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (openMenu && !t.closest('.menu') && !t.closest('[data-chip]')) closeMenu();
+  const res = t.closest('[data-res]'); if (res) return openResult(Number(res.dataset.res));
+  const chip = t.closest('[data-chip]'); if (chip) return chipMenu(chip);
+  const goEl = t.closest('[data-go]'); if (goEl) return go(goEl.dataset.go, goEl.dataset.row);
+  const fake = t.closest('[data-fake]'); if (fake) return toast('Taslak yalnız Ayarlar’ı gösterir.');
+  const a = t.closest('[data-act]'); if (a && ACT[a.dataset.act]) return ACT[a.dataset.act](a, e);
+  const rs = t.closest('[data-reset]'); if (rs) { const d = defOf(rs.dataset.reset); return setVal(rs.dataset.reset, clone(d.rec), rs.dataset.tempo); }
+  const set = t.closest('button[data-set]');
+  if (set) {
+    const id = set.dataset.set, tempo = set.dataset.tempo, cur = getVal(id, tempo);
+    if (set.dataset.day !== undefined) { const d = Number(set.dataset.day); const v = cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].sort(); return setVal(id, v, tempo); }
+    if (set.classList.contains('sw')) return setVal(id, !cur, tempo);
+    return setVal(id, JSON.parse(set.dataset.val), tempo);
+  }
+});
+let focusPrev = null;
+document.addEventListener('focusin', (e) => { const el = e.target.closest?.('[data-set]'); focusPrev = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') ? { id: el.dataset.set, tempo: el.dataset.tempo, val: clone(getVal(el.dataset.set, el.dataset.tempo)) } : null; });
+const parseInput = (el, d) => (el.type === 'number' ? Math.max(d.min ?? -Infinity, Math.min(d.max ?? Infinity, Number(el.value) || 0)) : el.tagName === 'SELECT' ? JSON.parse(el.value) : el.value);
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (el.id === 'q') return search(el.value);
+  if (!el.dataset?.set || el.tagName === 'SELECT') return;
+  const d = defOf(el.dataset.set); const v = parseInput(el, d);
+  if (el.dataset.tempo) S.tempos[el.dataset.tempo][el.dataset.set.slice(6)] = v; else S.v[el.dataset.set] = v;
+  refreshLive();
+});
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (el.dataset?.actChange && ACTC[el.dataset.actChange]) return ACTC[el.dataset.actChange](el);
+  if (!el.dataset?.set) return;
+  const id = el.dataset.set, tempo = el.dataset.tempo, d = defOf(id), v = parseInput(el, d);
+  if (el.tagName === 'SELECT') return setVal(id, v, tempo);
+  const prev = focusPrev && focusPrev.id === id ? focusPrev.val : null;
+  if (tempo) S.tempos[tempo][id.slice(6)] = v; else S.v[id] = v;
+  if (prev !== null && !same(prev, v)) { S.undo = { id, tempo, prev }; focusPrev.val = clone(v); toast(`Kaydedildi: ${d.label}`, true); }
+  render();
+});
+document.addEventListener('keydown', (e) => {
+  if (S.capture) {
+    e.preventDefault();
+    if (e.key === 'Escape') { const k = S.capture.k; S.capture = null; render(); $(`[data-act="capture"][data-k="${k}"]`)?.focus(); return; }
+    if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
+    const name = (e.ctrlKey ? 'Ctrl+' : '') + (e.altKey ? 'Alt+' : '') + (e.key === ' ' ? 'Space' : e.key.length === 1 ? e.key.toUpperCase() : e.key);
+    const k = S.capture.k, other = Object.entries(S.shortcuts).find(([kk, v]) => v === name && kk !== k);
+    if (other) { S.capture = { k, err: `${name} zaten “${SHORTCUTS.find((s) => s[1] === other[0])[2]}” için. Önce onu değiştir ya da başka bir tuş seç.` }; render(); $(`[data-act="capture"][data-k="${k}"]`)?.focus(); return; }
+    S.shortcuts[k] = name; S.capture = null; render(); $(`[data-act="capture"][data-k="${k}"]`)?.focus(); toast(`Kaydedildi: ${name}`); buildIndex();
+    return;
+  }
+  if (e.target.id === 'q') {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!RES.length) return; act = (act + (e.key === 'ArrowDown' ? 1 : RES.length - 1)) % RES.length; $$('.res').forEach((b, i) => { b.classList.toggle('act', i === act); b.ariaSelected = String(i === act); }); return; }
+    if (e.key === 'Enter') { e.preventDefault(); openResult(act); return; }
+    if (e.key === 'Escape') { e.target.value = ''; search(''); return; }
+  }
+  if (e.key === 'Escape') {
+    if (openMenu) { closeMenu()?.focus(); return; }
+    if ($('#scrim').classList.contains('open')) { closeDialog(); return; }
+    if ($('#drawer').classList.contains('open')) { toggleDrawer(false); return; }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); $('#q').focus(); $('#q').select(); return; }
+  const inField = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName);
+  if (e.key === ' ' && S.page === 'cards' && !inField && (e.target === document.body || e.target.id === 'content' || e.target.classList.contains('flash'))) { e.preventDefault(); ACT.flip(); }
+  if (e.key === 'Enter' && e.target.classList?.contains('flash')) { e.preventDefault(); ACT.flip(); }
+  if (e.key === 'Enter' && e.target.matches?.('tr[data-act]')) { e.preventDefault(); ACT[e.target.dataset.act](e.target); }
+});
+$('#scrim').addEventListener('click', (e) => { if (e.target.id === 'scrim') closeDialog(); });
+$('#advsw').addEventListener('click', () => setAdv(!S.adv));
+$('#qclear').addEventListener('click', () => { $('#q').value = ''; search(''); $('#q').focus(); });
+
+/* ================================================================ prototype strip + notes drawer */
+function abSeg(el, opts, val, on) {
+  el.innerHTML = opts.map(([v, l]) => `<button type="button" role="radio" aria-checked="${v === val}" data-v="${v}">${l}</button>`).join('');
+  el.onclick = (e) => { const b = e.target.closest('[data-v]'); if (b) on(b.dataset.v); };
+}
+function renderStrip() {
+  abSeg($('#ab-nt'), [['A', 'A · kutular'], ['B', 'B · tarifler']], S.nt, (v) => { S.nt = v; store.set('nt', v); renderStrip(); if (S.page !== 'cards') go('cards'); else render(); });
+  abSeg($('#ab-deck'), [['A', 'A · tempolar'], ['B', 'B · istisna']], S.deck, (v) => { S.deck = v; store.set('deck', v); renderStrip(); if (S.page !== 'deck-tempos') go('deck-tempos'); else render(); });
+  abSeg($('#ab-theme'), [['dark', 'Koyu'], ['light', 'Açık']], S.theme, (v) => { S.theme = v; S.v['app.theme'] = v; store.set('theme', v); applyTheme(); renderStrip(); render(); });
+}
+function toggleDrawer(open) {
+  const d = $('#drawer'); d.classList.toggle('open', open); d.ariaHidden = String(!open);
+  $('#notes-top').classList.toggle('on', open);
+  if (open) $('#drawer-close').focus(); else $('#notes-top').focus();
+}
+$('#notes-top').addEventListener('click', () => toggleDrawer(!$('#drawer').classList.contains('open')));
+$('#drawer-close').addEventListener('click', () => toggleDrawer(false));
+
+const QUESTIONS = [
+  ['Not türleri: hangi model?', [['A', 'Ön/arka kutuları: alanları (rolleriyle) “Ön yüz” ve “Arka yüz” kutularına yerleştir; ters yön tek anahtar.'], ['B', 'Kart tarifleri: “Kelimeyi gör → anlamını hatırla” gibi hazır tarifleri seç; her tarif bir kart.']], 'Taslak çubuğunda A/B. Benim tercihim A: v1.3 kavramına en yakın ve tek ekranda her şey görünür. B, “kaç kart çıkacak?” sorusunu daha iyi cevaplıyor.', 'A'],
+  ['Deste ayarları: hangi model?', [['A', 'Tempolar: v1.3 “ayar paketi”nin yeni adı. Birden çok deste aynı tempoyu paylaşır; tablo hangi destenin hangi tempoda olduğunu gösterir.'], ['B', 'Genel tempo + istisna: paket kavramı görünmez. Deste ya Genel’dedir ya kendine özel; paylaşmak “şu destelere de uygula”.']], 'İkisi de aynı veriyi kullanır (paketler arka planda kalır). B daha az kavram; A çok deste paylaşan biri için daha net.', 'B'],
+  ['Temel görünüm 6 sayfa: Klavye kısayolları temelde olsun mu?', [['A', 'Gelişmiş’te; arama “kısayol” deyince bulur (taslaktaki).'], ['B', '“Dil ve görünüm” sayfasına bir bölüm olarak gelsin.']], '', 'A'],
+  ['Aramadan bir Gelişmiş ayar açınca ne olsun?', [['A', 'Sayfa bir kerelik açılır, Gelişmiş anahtarı kapalı kalır, üstte “Gelişmiş’i aç” düğmesi (taslaktaki).'], ['B', 'Gelişmiş anahtarı kendiliğinden açılır.']], '', 'A'],
+  ['Gelişmiş açıkken Temel sayfalar değişsin mi?', [['A', 'Hayır: Temel sayfalar hep aynı; Gelişmiş yalnız yeni sayfalar ekler (taslaktaki).'], ['B', 'Evet: Temel sayfaların altına ilgili gelişmiş satırlar da gelir.']], 'A seçildi çünkü ekran, anahtara göre şekil değiştirmeyince kafa karışmaz.', 'A'],
+  ['Hatırlama oranı Temel’de mi?', [['A', 'Evet, üç seçenek: Rahat %85 / Dengeli %90 / Sıkı %95 (taslaktaki).'], ['B', 'Hayır, yalnız Gelişmiş’te yüzde olarak.']], '', 'A'],
+  ['“Önerilen” günlük yeni kelime 10 mu, 20 mi?', [['A', '10: günde ~13 dk (taslaktaki; senin şu anki değerin 20 olduğu için “Önerilene dön” görünür).'], ['B', '20: v1.3 varsayılanı, günde ~26 dk.']], 'Süre tahmini kaba bir modeldir (yeni kelime ~25 sn, tekrar ~8 sn); gerçek uygulamada senin geçmişinden hesaplanmalı (A-işçileri).', 'A'],
+  ['Kaydetme: anında mı, düğmeyle mi?', [['A', 'Tek bir ayar anında kaydedilir + “Geri al”; var olan kartları değiştiren şeyler (kartın görünüşü, ters kart) “Kaydedince: …” çubuğuyla onay ister (taslaktaki).'], ['B', 'Her sayfada bir “Kaydet” düğmesi.']], '', 'A'],
+  ['Yapay zeka, asistan, otomasyon Temel’de nerede?', [['A', '“Subtitle ve bağlantılar” sayfasının altında “Yardımcılar”: yalnız bağlı/bağlı değil + Kur (taslaktaki).'], ['B', 'Ayrı bir 7. sayfa “Yardımcılar”.']], '', 'A'],
+  ['Ters kartı kapatınca var olan ters kartlar ne olsun?', [['A', 'Kenara konur (silinmez, geri açınca kaldığı yerden devam).'], ['B', 'Silinir (çöpe).']], 'v1.3 kartı olan şablonun kaldırılmasına izin vermiyor; A bunu kullanıcıya açmanın güvenli yolu. Backend işi gerekir.', 'A'],
+  ['Eklenti/AI/MCP “Ayrıntılar” Gelişmiş kapalıyken açılsın mı?', [['A', 'Evet, bir kerelik (aramadaki gibi) ve “Gelişmiş’te” etiketiyle (taslaktaki).'], ['B', 'Hayır, önce Gelişmiş açılmalı.']], '', 'A'],
+];
+const MOVES = [
+  ['Genel › Dil, Görünüm (renk düzeni, tema, vurgu)', 'Temel › Dil ve görünüm'],
+  ['Genel › “Ne değiştirmek istiyorsun?” soruları', 'Temel sayfaların kendisi oldu (soru başlıklı)'],
+  ['Genel › Hatırlatıcılar (saat, günler, tepside kal, deneme)', 'Temel › Hatırlatma'],
+  ['Genel › Kısayollar', 'Gelişmiş › Klavye kısayolları'],
+  ['Genel › Profiller ve kilit', 'Gelişmiş › Profiller ve kilit'],
+  ['Çalışma ve kartlar › Deste ayarları: günlük yeni, günlük tekrar, hatırlama oranı', 'Temel › Günlük tempo (Genel tempo)'],
+  ['Deste ayarları: öğrenme/yeniden öğrenme adımları, sıra, ilişkili kartlar, en uzun aralık, FSRS, paketler ve destelere atama', 'Gelişmiş › Deste tempoları (A/B)'],
+  ['Çalışma ve kartlar › Not türleri: alan rolleri, kartın ön/arka yüzü, ters kart', 'Temel › Kartların görünüşü (A/B)'],
+  ['Not türleri: alan adları, türleri, zorunlu/kopya/aranır, şablon kodu, CSS, yeni/kopya/sil', 'Gelişmiş › Not türleri (tam)'],
+  ['Modlar ve okuma › Kart çalışma (düğmeler, erken göster, güven, süre, odak)', 'Gelişmiş › Çalışma ekranı'],
+  ['Modlar ve okuma › Öğren, test ve eşleştir', 'Gelişmiş › Öğren, Test, Sınav, Eşleştir (deneme testi = Sınav)'],
+  ['Modlar ve okuma › Okuma', 'Gelişmiş › Okuma'],
+  ['Bağlantılar › Yapay zeka', 'Temel › Subtitle ve bağlantılar (durum + Kur); Gelişmiş › Yapay zeka (sağlayıcılar, modeller, fiyat, bütçe, istemler)'],
+  ['Bağlantılar › Subtitle', 'Temel › Subtitle ve bağlantılar (durum, kurulum, deste); Gelişmiş › Subtitle ayrıntıları (anahtarlar)'],
+  ['Veri › Dışa aktar ve yedek', 'Temel › Yedek; Gelişmiş › Dışa aktar ve yazdır'],
+  ['Veri › Başlangıç desteleri', 'Gelişmiş › Başlangıç desteleri (Oluştur’da da)'],
+  ['Gelişmiş › Otomasyon', 'Temel: durum + Kur; Gelişmiş › Otomasyon'],
+  ['Gelişmiş › Asistanlar (MCP)', 'Temel: durum + Kur; Gelişmiş › Asistanlar (MCP)'],
+  ['Gelişmiş › Yerel API', 'Gelişmiş › Yerel API'],
+  ['Gelişmiş › Eklentiler (+ kaynak sınırları)', 'Gelişmiş › Eklentiler'],
+  ['Gelişmiş › Bakım (çöp, kopyalar, denetim)', 'Gelişmiş › Bakım ve çöp'],
+  ['Gelişmiş › Günlükler ve güncellemeler', 'Gelişmiş › Günlükler ve güncellemeler'],
+  ['İstatistik › Planlama: yük dengeleme, hafif günler', 'Gelişmiş › Planlama ve zor kartlar (ayarlar); optimizasyon İstatistik’te kalır'],
+];
+function drawerHTML() {
+  const hidden = REG.filter((d) => d.v13 === 'ekranda yoktu');
+  return `<p class="muted">Bu dosya bir prova: hiçbir şey kaydedilmez (yalnız Gelişmiş anahtarı, A/B ve tema bu tarayıcıda hatırlanır). Her soruya “A” ya da “B” demen yeter.</p>
+  <h3>Tıklanacak yollar</h3><ol style="padding-left:18px;margin:0;color:var(--text-2)">
+  <li>Günlük tempo: 5/10/20/30’a bas, süre ve grafik canlı değişir; tekrar sınırını 50 yap, uyarıyı gör.</li>
+  <li>Kartların görünüşü: bir çipe tıkla (ya da sürükle), ön/arka değiştir; kartı Space ile çevir; ters yönü aç → “Kaydedince” çubuğu.</li>
+  <li>Taslak çubuğundan Not türleri B ve Deste ayarları A/B.</li>
+  <li>Arama: “saat”, “PIN”, “şablon”, “ffmpeg”, “ı/i” → “Gelişmiş’te” etiketli sonuçlar; Enter ile aç.</li>
+  <li>Subtitle: “durumu değiştir” → 3 adımlı kurulum; Yardımcılar’da “Kur”.</li>
+  <li>Yedek: Şimdi yedekle, Geri yükle, otomatik yedeği kapat (uyarı + kenar çubuğunda turuncu nokta).</li>
+  <li>Gelişmiş anahtarını aç: 19 sayfa daha. Kısayollar’da bir tuşu değiştir, “H”ye bas → çakışma uyarısı.</li></ol>
+  <h3>(a) Kararlar: A mı B mi?</h3>${QUESTIONS.map(([q, opts, note, ch], i) => `<div class="q"><b>${i + 1}. ${esc(q)}</b>${opts.map(([k, t]) => `<div class="opt${k === ch ? ' ch' : ''}"><span>${k}</span><span>${esc(t)}</span></div>`).join('')}${note ? `<p class="faint" style="margin:6px 0 0;font-size:12px">${esc(note)}</p>` : ''}</div>`).join('')}
+  <h3>(b) v1.3’te neredeydi → şimdi nerede</h3><table class="t"><thead><tr><th>v1.3</th><th>v1.4 taslak</th></tr></thead><tbody>${MOVES.map(([a, b]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join('')}</tbody></table>
+  <h3>v1.3’te ekranı olmayan ayarlar (artık görünür)</h3><p class="muted" style="margin:0 0 6px">Bulduğum kadarıyla bunlar yalnız komutla (fc / palet) değişiyordu:</p><ul style="padding-left:18px;margin:0;color:var(--text-2)">${hidden.map((d) => `<li>${esc(d.label)} <span class="faint">(${esc(d.id)} → ${esc(pageOf(d.page).nav)})</span></li>`).join('')}</ul>
+  <h3>v1.4 ile gelen yeni</h3><ul style="padding-left:18px;margin:0;color:var(--text-2)"><li>Otomatik yedek (sıklık, kaç kopya, klasör) ve “denetlendi” durumu: A1 (yedek) işinin ayarları; bu taslak ekranını öneriyor.</li><li>Süre tahmini (“günde ~13 dk”): bugün yok; Rust’ta hesaplanmalı (kural 1).</li></ul>
+  <h3>Hiçbir şey kaybolmadı</h3><p class="muted">Her v1.3 sayfası ve ayarı yukarıdaki tabloda bir yere gidiyor; arama hepsini (Gelişmiş kapalıyken de) bulur.</p>`;
+}
+
+/* ================================================================ init */
+S.v['app.theme'] = S.theme;
+// fixes for wording that depends on padding
+REG.find((d) => d.id === 'study.day_start_hour').effect = (v) => `Gece ${String(v).padStart(2, '0')}:00’a kadar çalıştıkların bir önceki güne sayılır.`;
+buildIndex();
+applyTheme();
+renderStrip();
+$('#drawer-body').innerHTML = drawerHTML();
+if (!pageOf(S.page) || (pageOf(S.page).adv && !S.adv)) S.page = 'tempo';
+render();
+</script>
+</body>
+</html>
