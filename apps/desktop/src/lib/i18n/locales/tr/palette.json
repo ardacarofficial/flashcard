@@ -93,8 +93,8 @@
     },
     "bulk": {
       "move_cards": "Kartları taşı",
-      "set_suspended": "Kartları askıya al / aç",
-      "set_buried": "Kartları göm / çıkar",
+      "set_suspended": "Kartları durdur / yeniden aç",
+      "set_buried": "Kartları yarına bırak / geri al",
       "set_flag": "Kartları bayrakla",
       "reset_progress": "Kartları sıfırla",
       "add_tags": "Etiket ekle",

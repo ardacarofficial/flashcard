@@ -40,6 +40,8 @@ import { secondsLeft, testAnswers, emptyInput } from './modes';
 import LearnScreen from './LearnScreen.svelte';
 import TestScreen from './TestScreen.svelte';
 import StudyScreen from '../study/StudyScreen.svelte';
+import { handOff } from '../study/launcher.svelte';
+import type { LaunchKind } from '../study/contract';
 
 i18n.locale = 'en';
 
@@ -121,6 +123,15 @@ function base(method: string): unknown {
   throw new Error(`unexpected ${method}`);
 }
 
+/**
+ * v1.3: sessions start in the study launcher, which hands the started session to the mode's
+ * screen. Here the scripted backend starts it with the request the launcher would send for
+ * the same choice (launch.test.ts covers how the launcher builds it).
+ */
+async function launch(kind: LaunchKind, req: Record<string, unknown>) {
+  handOff({ kind, session: await call('study.start', { kind, deck_id: 'deck-1', ...req }), scope: null });
+}
+
 async function key(k: string, target: Element | Window = window) {
   await new Promise((r) => setTimeout(r, 0));
   await fireEvent.keyDown(target, { key: k });
@@ -184,9 +195,8 @@ describe('learn screen', () => {
       }
       return base(m);
     });
+    await launch('learn', { mode: 'scheduled', scope: 'new' });
     render(LearnScreen, { ctx: ctx() });
-    await screen.findByRole('button', { name: /Start learning/ });
-    await key('Enter');
     await screen.findByText('Pick the answer');
     expect(call).toHaveBeenCalledWith('study.start', expect.objectContaining({ kind: 'learn', deck_id: 'deck-1' }));
     await key('2'); // porsuk
@@ -238,10 +248,12 @@ describe('test screen', () => {
       return base(m);
     });
     const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+    await launch('test', {
+      filter: { attributes: [], query: 'exam:TYT', saved_query_id: null, due_only: null, limit: null },
+      scope: null,
+      modes: { timed: null, rating_scale: null, test: { questions: 3, kinds: null } },
+    });
     render(TestScreen, { ctx: ctx() });
-    await fireEvent.input(await screen.findByLabelText('Query'), { target: { value: 'exam:TYT' } });
-    await fireEvent.input(screen.getByLabelText('Questions'), { target: { value: '3' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Create test' }));
     await screen.findByTestId('question-2');
     expect(screen.queryByText(/Answer: a3/)).toBeNull(); // no key on the paper
     await fireEvent.click(screen.getByRole('button', { name: 'Print answer key' }));
@@ -298,14 +310,10 @@ describe('study screen modes', () => {
       }
       return base(m);
     });
+    await launch('normal', { scope: 'due', modes: { timed: { seconds: 10, on_timeout: 'again' }, rating_scale: 'confidence', test: null } });
     render(StudyScreen, { ctx: ctx() });
-    await fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
-    await fireEvent.click(await screen.findByRole('switch', { name: 'Time limit' }));
-    await fireEvent.click(screen.getByRole('combobox', { name: 'Rating' }));
-    await fireEvent.click(await screen.findByRole('option', { name: 'Confidence 1–5' }));
-    await key('Enter');
     await screen.findByTestId('timer');
-    await key(' '); // reveal
+    await key(' '); // flip: the answer
     await screen.findByText('How sure were you?');
     expect(screen.queryByRole('button', { name: /Good/ })).toBeNull(); // no four buttons
     await key('3');
@@ -328,12 +336,8 @@ describe('study screen modes', () => {
       }
       return base(m);
     });
+    await launch('normal', { scope: 'due', modes: { timed: { seconds: 10, on_timeout: 'again' }, rating_scale: 'confidence', test: null } });
     render(StudyScreen, { ctx: ctx() });
-    await fireEvent.click(await screen.findByRole('button', { name: 'Options' }));
-    await fireEvent.click(await screen.findByRole('switch', { name: 'Time limit' }));
-    await fireEvent.click(screen.getByRole('combobox', { name: 'Rating' }));
-    await fireEvent.click(await screen.findByRole('option', { name: 'Confidence 1–5' }));
-    await key('Enter');
     await key(' ');
     await screen.findByText('How sure were you?');
     await key('4');
@@ -352,8 +356,8 @@ describe('study screen modes', () => {
       }
       return base(m);
     });
+    await launch('normal', { scope: 'due' });
     render(StudyScreen, { ctx: ctx() });
-    await key('Enter');
     await screen.findByTestId('focus-toggle');
     await key('f');
     expect(document.documentElement.classList.contains('fc-focus')).toBe(true);

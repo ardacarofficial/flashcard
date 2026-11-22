@@ -1,7 +1,7 @@
 {
   "commands": {
     "study": {
-      "start": "Çalışmaya başla",
+      "start": "Çalışmayı seç",
       "session": "Çalışma oturumu",
       "active": "Açık çalışma oturumu",
       "answer": "Kartı puanla",
@@ -9,8 +9,8 @@
       "check_answer": "Cevabı kontrol et",
       "end": "Oturumu bitir",
       "summary": "Oturum özeti",
-      "suspend": "Kartları askıya al (çalışma)",
-      "bury": "Kartları göm (çalışma)",
+      "suspend": "Kartları durdur (çalışma)",
+      "bury": "Kartları yarına bırak (çalışma)",
       "postpone": "Bugünün kartlarını ertele",
       "card_history": "Kartın tekrar geçmişi"
     },
@@ -75,14 +75,14 @@
   },
   "shortcuts": {
     "study": {
-      "reveal": "Cevabı göster",
-      "again": "Puan: tekrar",
-      "hard": "Puan: zor",
-      "good": "Puan: iyi",
-      "easy": "Puan: kolay",
+      "reveal": "Kartı çevir (ön ⇄ arka)",
+      "again": "Puan: Tekrar / Hâlâ öğreniyorum",
+      "hard": "Puan: Zor / Biliyorum (iki düğmede)",
+      "good": "Puan: İyi (dört düğmede)",
+      "easy": "Puan: Kolay (dört düğmede)",
       "hint": "İpucu",
-      "suspend": "Kartı askıya al",
-      "bury": "Kartı göm",
+      "suspend": "Kartı durdur (sen açana kadar sorma)",
+      "bury": "Kartı yarına bırak (bugün bir daha sorma)",
       "undo": "Son cevabı geri al",
       "end": "Oturumu bitir"
     }

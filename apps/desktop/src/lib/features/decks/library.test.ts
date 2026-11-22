@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { i18n } from '$lib/i18n/index.svelte';
 import { api } from '$lib/api';
@@ -7,6 +7,7 @@ import HomeScreen from '../home/HomeScreen.svelte';
 import type { ScreenCtx } from '../types';
 import { nodesById } from './library';
 import { pageEnter } from './keys';
+import { setLauncherHandler, type LaunchRequest } from '../study/launcher.svelte';
 
 i18n.locale = 'en';
 
@@ -27,6 +28,15 @@ const ctx = (over: Partial<ScreenCtx> = {}): ScreenCtx => ({
 });
 
 describe('v1.1 Library, deck page and Home on the dev mock', () => {
+  // v1.3: "Study" opens the study launcher (the shell's LauncherHost registers it).
+  const launched = vi.fn<(r: LaunchRequest) => void>();
+  let unregister = () => {};
+  beforeEach(() => {
+    launched.mockReset();
+    unregister = setLauncherHandler(launched);
+  });
+  afterEach(() => unregister());
+
   it('shows one empty state with one action when there are no decks', async () => {
     render(LibraryScreen, { ctx: ctx() });
     expect(await screen.findByText('No decks yet')).toBeTruthy();
@@ -90,11 +100,23 @@ describe('v1.1 Library, deck page and Home on the dev mock', () => {
   it('Home shows today and the start button', async () => {
     const decks = (await api.deck.tree()).roots;
     render(HomeScreen, { ctx: ctx({ decks }) });
-    expect(await screen.findByRole('button', { name: /Start studying/ })).toBeTruthy();
+    // Nothing is due in the test collection: the button still leads somewhere (practice).
+    const start = await screen.findByTestId('home-start');
+    expect(start.textContent).toMatch(/Practice|Start studying/);
     expect(await screen.findByText('Today')).toBeTruthy();
+    await fireEvent.click(start);
+    expect(launched).toHaveBeenCalledWith({ deckId: null });
   });
 
-  it('deck page: Enter starts studying the deck unless the focus is on a control', async () => {
+  it('Home without the study module: no dead Start button, a line that explains', async () => {
+    unregister();
+    const decks = (await api.deck.tree()).roots;
+    render(HomeScreen, { ctx: ctx({ decks }) });
+    expect(await screen.findByTestId('home-study-off')).toBeTruthy();
+    expect(screen.queryByTestId('home-start')).toBeNull();
+  });
+
+  it('deck page: Enter opens the launcher on the deck unless the focus is on a control', async () => {
     const decks = (await api.deck.tree()).roots;
     const deck = decks[0]!;
     const routes: string[] = [];
@@ -103,11 +125,16 @@ describe('v1.1 Library, deck page and Home on the dev mock', () => {
     const study = await screen.findByRole('button', { name: /^Study/ });
     study.focus();
     await fireEvent.keyDown(study, { key: 'Enter' });
-    expect(routes).toEqual([]);
+    expect(launched).not.toHaveBeenCalled();
     study.blur();
     await fireEvent.keyDown(document.body, { key: 'Enter' });
-    expect(routes).toEqual(['/study']);
-    expect(selected).toBe(deck.deck.id);
+    // v1.3: never a silent start — the launcher opens on this deck; nothing navigates yet.
+    expect(launched).toHaveBeenCalledWith({ deckId: deck.deck.id });
+    expect(routes).toEqual([]);
+    void selected;
+    // A mode button opens the same launcher with that mode chosen.
+    await fireEvent.click(screen.getByTestId('deck-mode-test'));
+    expect(launched).toHaveBeenLastCalledWith({ deckId: deck.deck.id, kind: 'test' });
   });
 
   it('pageEnter ignores fields, modifiers and open dialogs', () => {

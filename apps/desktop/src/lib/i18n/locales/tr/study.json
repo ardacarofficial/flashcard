@@ -25,12 +25,12 @@
     "postponed": "{count} kart ertelendi.",
     "nothing": "Şu an çalışılacak kart yok.",
     "remaining": "Yeni {new} · Öğreniliyor {learning} · Tekrar {review}",
-    "practice_badge": "Deneme",
+    "practice_badge": "Pratik",
     "show_answer": "Cevabı göster",
     "type_placeholder": "Cevabı yaz",
     "hint": "İpucu",
-    "suspend": "Askıya al",
-    "bury": "Göm",
+    "suspend": "Durdur",
+    "bury": "Yarına bırak",
     "undo": "Geri al",
     "end": "Bitir",
     "rating": {
@@ -62,7 +62,9 @@
       "cards": "Çalışılan kart",
       "mistakes_label": "Yanlışlar",
       "time_label": "Süre",
-      "time_value": "{min}:{sec}"
+      "time_value": "{min}:{sec}",
+      "again": "Tekrar çalış",
+      "again_desc": "Başlatıcıyı açar; bugün zorlandıkların seçili gelir."
     },
     "choices": "Seçenekler",
     "choice_right": "Doğru seçenek",
@@ -72,8 +74,8 @@
     "custom_heading": "Özel oturum",
     "custom_intro": "Filtrenin seçtiği kartları çalışır.",
     "options": "Seçenekler",
-    "practice_label": "Pratik modu",
-    "practice_hint": "Cevaplar takvimi değiştirmez.",
+    "practice_label": "Pratik",
+    "practice_hint": "Cevapların takvimi değiştirmez.",
     "progress_label": "Oturum ilerlemesi",
     "position": "{n} / {total}",
     "end_label": "Oturumu bitir",
@@ -90,11 +92,102 @@
       "rate": "Puanla"
     },
     "count": {
-      "due": "Vadeli",
+      "due": "Sırası gelen",
       "learning": "Öğreniliyor",
-      "new": "Yeni"
+      "new": "Yeni",
+      "due_desc": "Bugün tekrar etme zamanı gelen kartlar",
+      "learning_desc": "Kısa aralıklarla yeniden sorulan kartlar",
+      "new_desc": "Henüz hiç çalışmadığın kartlar"
     },
-    "flag_menu": "Bayrak"
+    "flag_menu": "Bayrak",
+    "suspend_desc": "Sen yeniden açana kadar bu kartı sorma",
+    "bury_desc": "Bugün bu kartı bir daha sorma",
+    "flip": "Çevir",
+    "flip_label": "Kartı çevir",
+    "legend": {
+      "flip": "çevir",
+      "rate": "puanla",
+      "hint": "ipucu",
+      "undo": "geri al",
+      "leave": "çık"
+    },
+    "hint_context": "Cümledeki boşluğu doldur",
+    "idle": {
+      "title": "Ne çalışmak istersin?",
+      "body": "Modu ve ne çalışacağını seç; sayılar her seçenekte yazıyor.",
+      "open": "Çalışmayı seç",
+      "off": "Çalışma modülü kapalı. Ayarlar › Modüller’den açabilirsin."
+    },
+    "waiting": {
+      "title": "Sıradaki kart {n} dk sonra",
+      "soon": "Sıradaki kart birazdan",
+      "body": "Kalan kartlar kısa bir aradan sonra yeniden sorulacak. Bekleyebilir, başka bir şey çalışabilir ya da şimdilik bitirebilirsin.",
+      "wait": "Bekle",
+      "other": "Başka bir şey çalış",
+      "finish": "Bitir",
+      "countdown_label": "Kalan süre"
+    },
+    "launcher": {
+      "title": "Çalış",
+      "title_deck": "{deck} · çalış",
+      "loading": "Seçenekler yükleniyor…",
+      "resume_heading": "Yarım kalanlar",
+      "resume": "Devam et",
+      "resume_meta": "{answered} cevaplandı · {remaining} kaldı",
+      "mode_label": "Mod",
+      "kind": {
+        "normal": "Kartlar",
+        "learn": "Öğren",
+        "test": "Test",
+        "match": "Eşleştir"
+      },
+      "kind_desc": {
+        "normal": "Kartı çevir, ne kadar bildiğini söyle; sıradaki tekrar zamanı buna göre belirlenir.",
+        "learn": "Önce şıklı, sonra yazarak sorar; doğru bildiğin kartların takvimi ilerler.",
+        "test": "Karışık sorulu bir sınav kâğıdı, sonunda puanın. Takvimi hiç değiştirmez.",
+        "match": "Kelimeleri anlamlarıyla süreye karşı eşleştir. Takvimi değiştirmez."
+      },
+      "scope_label": "Ne çalışayım?",
+      "scope": {
+        "due": "Bugünün kartları",
+        "new": "Yeni kartlar",
+        "studied_today": "Bugün çalıştıklarım",
+        "struggled_today": "Bugün zorlandıklarım",
+        "all": "Tüm kartlar"
+      },
+      "scope_desc": {
+        "due": "Sırası gelen tekrarlar ve bugünkü yeni kartlar",
+        "new": "Henüz hiç çalışmadığın kartlar, günlük sınır içinde",
+        "studied_today": "Bugün cevapladığın her kart",
+        "struggled_today": "Bugün “Tekrar” dediğin ya da yanlış cevapladığın kartlar",
+        "all": "Destedeki her kart"
+      },
+      "practice_tag": "pratik · takvimi değiştirmez",
+      "empty": {
+        "no_cards": "Bu destede henüz kart yok",
+        "nothing_due": "Bugün sırası gelen kart yok",
+        "new_limit": "Günlük yeni kart sınırın doldu",
+        "review_limit": "Bugünlük tekrar sınırın doldu",
+        "waiting": "Sıradaki kart {n} dk sonra",
+        "none_studied_today": "Bugün henüz çalışmadın",
+        "none_struggled_today": "Bugün zorlandığın kart yok"
+      },
+      "count_label": "Kaç kart?",
+      "count_label_test": "Kaç soru?",
+      "count_all": "Hepsi",
+      "count_hint": "Boş bırakırsan hepsi",
+      "options": "Seçenekler",
+      "practice_desc": "Bugünün kartlarını takvime dokunmadan çalış.",
+      "custom_note": "Seçeneklerde bir filtre seçili: kartları o seçiyor.",
+      "start": "Başla",
+      "cards": "{count, plural, other {# kart}}",
+      "questions": "{count, plural, other {# soru}}",
+      "filtered": "filtreyle",
+      "nothing_now": "Şu an başlatılamıyor: {reason}.",
+      "no_modes": "Açık çalışma modu yok. Ayarlar › Modüller’den birini aç.",
+      "deck_all": "Tüm desteler",
+      "count_hint_test": "Boş bırakırsan {n}"
+    }
   },
   "settings": {
     "study": {

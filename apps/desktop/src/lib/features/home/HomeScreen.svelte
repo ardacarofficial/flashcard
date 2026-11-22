@@ -34,10 +34,9 @@
     Timer,
   } from '$lib/ui';
   import MasteryBar from '../decks/MasteryBar.svelte';
-  import { studyDeck } from '../decks/deck-menu';
   import { pageEnter } from '../decks/keys';
-  import { studyNow } from '../study/intent';
-  import { moduleOn, nodesById, summariesById } from '../decks/library';
+  import { launcher, openLauncher } from '../study/launcher.svelte';
+  import { moduleOn, nodesById, summariesById, todayCounts } from '../decks/library';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -55,9 +54,11 @@
 
   const nodes = $derived(nodesById(ctx.decks));
   const byId = $derived(summariesById(summaries));
-  const today = $derived(summaries?.today ?? null);
-  const todayCount = $derived(today ? today.due + today.learning + today.new : 0);
-  const work = (n: DeckTreeNode) => n.counts.due + n.counts.learning + n.counts.new;
+  const today = $derived(summaries ? todayCounts(summaries.today) : null);
+  const todayCount = $derived(today?.total ?? 0);
+  const work = (n: DeckTreeNode) => todayCounts(n.counts).total;
+  /** The study launcher is there (the study module is on): Start and the row buttons open it. */
+  const canStudy = $derived(launcher.available);
 
   type Row = { node: DeckTreeNode; depth: number };
   /** Decks with work today in tree order (sub-decks indented under their parent). */
@@ -85,11 +86,13 @@
 
   const open = (route: string) => ctx.navigate?.(route);
 
+  /**
+   * "Start studying" (v1.3): the study launcher over every deck. It shows what each choice
+   * holds, so even with nothing due it leads somewhere (practice what you studied today, all
+   * cards) — never a dead click; without the study module the button is not there.
+   */
   function study() {
-    if (todayCount === 0) return;
-    ctx.selectDeck(null);
-    studyNow();
-    open('/study');
+    openLauncher({ deckId: null });
   }
 
   function openDeck(id: string) {
@@ -98,7 +101,7 @@
   }
 
   function onWindowKey(e: KeyboardEvent) {
-    if (todayCount > 0 && pageEnter(e)) {
+    if (canStudy && pageEnter(e)) {
       e.preventDefault();
       study();
     }
@@ -202,7 +205,21 @@
           <p class="sub">{t('home.caught_up_body')}</p>
         {/if}
       </div>
-      <Button variant="primary" size="lg" icon={Play} kbd="Enter" aria-keyshortcuts="Enter" disabled={todayCount === 0} onclick={study}>{t('home.start')}</Button>
+      {#if canStudy}
+        <Button
+          variant={todayCount > 0 ? 'primary' : 'secondary'}
+          size="lg"
+          icon={Play}
+          kbd="Enter"
+          aria-keyshortcuts="Enter"
+          data-testid="home-start"
+          onclick={study}
+        >
+          {todayCount > 0 ? t('home.start') : t('home.practice')}
+        </Button>
+      {:else}
+        <p class="sub off" data-testid="home-study-off">{t('home.study_off')}</p>
+      {/if}
     </section>
 
     {#if inbox > 0}
@@ -293,15 +310,18 @@
                 <span class="label">{node.deck.name}</span>
               </span>
               {#snippet cells()}
-                <span class="num n due" class:zero={node.counts.due === 0}>{formatCount(node.counts.due)}</span>
-                <span class="num n" class:zero={node.counts.learning === 0}>{formatCount(node.counts.learning)}</span>
-                <span class="num n" class:zero={node.counts.new === 0}>{formatCount(node.counts.new)}</span>
+                {@const c = todayCounts(node.counts)}
+                <span class="num n due" class:zero={c.due === 0}>{formatCount(c.due)}</span>
+                <span class="num n" class:zero={c.learning === 0}>{formatCount(c.learning)}</span>
+                <span class="num n" class:zero={c.new === 0}>{formatCount(c.new)}</span>
                 <MasteryBar summary={byId.get(node.deck.id) ?? null} name={node.deck.name} />
               {/snippet}
               {#snippet actions()}
-                <Button size="sm" variant="ghost" icon={Play} disabled={work(node) === 0} aria-label={t('home.study_deck', { name: node.deck.name })} onclick={() => studyDeck(ctx, modules, node)}>
-                  {t('home.study')}
-                </Button>
+                {#if canStudy}
+                  <Button size="sm" variant="ghost" icon={Play} aria-label={t('home.study_deck', { name: node.deck.name })} onclick={() => openLauncher({ deckId: node.deck.id })}>
+                    {t('home.study')}
+                  </Button>
+                {/if}
               {/snippet}
             </ListRow>
           {/each}

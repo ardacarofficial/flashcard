@@ -29,8 +29,8 @@
     "show_answer": "Show answer",
     "type_placeholder": "Type the answer",
     "hint": "Hint",
-    "suspend": "Suspend",
-    "bury": "Bury",
+    "suspend": "Pause",
+    "bury": "Leave for tomorrow",
     "undo": "Undo",
     "end": "End",
     "rating": {
@@ -62,7 +62,9 @@
       "cards": "Cards studied",
       "mistakes_label": "Mistakes",
       "time_label": "Time",
-      "time_value": "{min}:{sec}"
+      "time_value": "{min}:{sec}",
+      "again": "Study again",
+      "again_desc": "Opens the launcher with today’s struggles selected."
     },
     "choices": "Options",
     "choice_right": "Correct option",
@@ -72,8 +74,8 @@
     "custom_heading": "Custom session",
     "custom_intro": "Studies the cards your filter picks.",
     "options": "Options",
-    "practice_label": "Practice mode",
-    "practice_hint": "Answers do not change the schedule.",
+    "practice_label": "Practice",
+    "practice_hint": "Your answers don’t change the schedule.",
     "progress_label": "Session progress",
     "position": "{n} / {total}",
     "end_label": "End session",
@@ -92,9 +94,100 @@
     "count": {
       "due": "Due",
       "learning": "Learning",
-      "new": "New"
+      "new": "New",
+      "due_desc": "Cards whose review is due today",
+      "learning_desc": "Cards asked again at short intervals",
+      "new_desc": "Cards you have never studied"
     },
-    "flag_menu": "Flag"
+    "flag_menu": "Flag",
+    "suspend_desc": "Don’t ask this card again until you turn it back on",
+    "bury_desc": "Don’t ask this card again today",
+    "flip": "Flip",
+    "flip_label": "Flip the card",
+    "legend": {
+      "flip": "flip",
+      "rate": "rate",
+      "hint": "hint",
+      "undo": "undo",
+      "leave": "leave"
+    },
+    "hint_context": "Fill the gap in the sentence",
+    "idle": {
+      "title": "What do you want to study?",
+      "body": "Pick a mode and what to study; every choice shows its count.",
+      "open": "Choose what to study",
+      "off": "The study module is off. You can turn it on in Settings › Modules."
+    },
+    "waiting": {
+      "title": "Next card in {n, plural, one {# min} other {# min}}",
+      "soon": "Next card in a moment",
+      "body": "The remaining cards come back after a short break. Wait, study something else, or finish for now.",
+      "wait": "Wait",
+      "other": "Study something else",
+      "finish": "Finish",
+      "countdown_label": "Time left"
+    },
+    "launcher": {
+      "title": "Study",
+      "title_deck": "Study · {deck}",
+      "loading": "Loading options…",
+      "resume_heading": "Unfinished",
+      "resume": "Continue",
+      "resume_meta": "{answered} answered · {remaining} left",
+      "mode_label": "Mode",
+      "kind": {
+        "normal": "Cards",
+        "learn": "Learn",
+        "test": "Test",
+        "match": "Match"
+      },
+      "kind_desc": {
+        "normal": "Flip the card and say how well you knew it; that sets when it comes back.",
+        "learn": "Asks multiple choice first, then written; cards you get right move on in the schedule.",
+        "test": "A mixed practice paper with a score at the end. Never changes the schedule.",
+        "match": "Match words with their meanings against the clock. Doesn’t change the schedule."
+      },
+      "scope_label": "What to study",
+      "scope": {
+        "due": "Today’s cards",
+        "new": "New cards",
+        "studied_today": "Studied today",
+        "struggled_today": "Struggled with today",
+        "all": "All cards"
+      },
+      "scope_desc": {
+        "due": "Due reviews and today’s new cards",
+        "new": "Cards you have never studied, within the daily limit",
+        "studied_today": "Every card you answered today",
+        "struggled_today": "Cards you rated “Again” or got wrong today",
+        "all": "Every card in the deck"
+      },
+      "practice_tag": "practice · schedule unchanged",
+      "empty": {
+        "no_cards": "This deck has no cards yet",
+        "nothing_due": "Nothing is due today",
+        "new_limit": "Daily new-card limit reached",
+        "review_limit": "Today’s review limit reached",
+        "waiting": "Next card in {n} min",
+        "none_studied_today": "You haven’t studied today yet",
+        "none_struggled_today": "Nothing you struggled with today"
+      },
+      "count_label": "How many cards?",
+      "count_label_test": "How many questions?",
+      "count_all": "All",
+      "count_hint": "Leave empty for all",
+      "options": "Options",
+      "practice_desc": "Study today’s cards without touching the schedule.",
+      "custom_note": "A filter is set in Options: it picks the cards.",
+      "start": "Start",
+      "cards": "{count, plural, one {# card} other {# cards}}",
+      "questions": "{count, plural, one {# question} other {# questions}}",
+      "filtered": "filtered",
+      "nothing_now": "Can’t start right now: {reason}.",
+      "no_modes": "No study mode is on. Turn one on in Settings › Modules.",
+      "deck_all": "All decks",
+      "count_hint_test": "Leave empty for {n}"
+    }
   },
   "settings": {
     "study": {

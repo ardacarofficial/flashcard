@@ -14,7 +14,8 @@
  * `test-submit`, `match-tile` (+ `data-side`), `term-list`, `.view-toggle`, `browse-row`,
  * `browse-select`, `settings-select`, `update-open`, `open-dialog-*`; the shell keys `N`
  * (Quick Add) and `Ctrl+K` (palette) and Enter on the Search grid (note editor); mock scenarios
- * `?mock=fresh|update|locked`. Without them the script falls back to the v1.0 markup.
+ * `?mock=fresh|update|locked|waiting` (v1.3: `waiting` = the launcher with "Continue", then a
+ * session whose cards all wait). Study modes start in the launcher (`launcher-start`). Without them the script falls back to the v1.0 markup.
  * Exit code is non-zero only with `--strict` and findings.
  */
 import { spawn } from 'node:child_process';
@@ -594,9 +595,14 @@ async function main() {
                 if (!(await openDeck())) break;
                 await page.locator(`[data-testid="${id}"]`).click().catch(() => {});
                 await settle(page);
+                // v1.3: a mode button opens the study launcher with that mode preselected.
                 await snap(`state-${mode}`);
-                const start = page.locator('[data-testid="study-start"]').first();
-                if (!(await start.count())) continue;
+                const launch = page.locator('[data-testid="launcher-start"]:not([disabled])').first();
+                const start = (await launch.count()) ? launch : page.locator('[data-testid="study-start"]').first();
+                if (!(await start.count())) {
+                  await page.keyboard.press('Escape');
+                  continue;
+                }
                 await start.click().catch(() => {});
                 await settle(page);
                 await snap(`state-${mode}-active`);
@@ -612,7 +618,7 @@ async function main() {
             await extraStates();
           }
           // mock scenarios: first-run guide, lock screen, update notice
-          for (const [scenario, shot] of [['fresh', 'state-onboarding'], ['locked', 'state-lock'], ['update', 'state-update']]) {
+          for (const [scenario, shot] of [['fresh', 'state-onboarding'], ['locked', 'state-lock'], ['update', 'state-update'], ['waiting', 'state-home-waiting']]) {
             const sp = await newPage(browser, { lang, theme, width }, `?mock=${scenario}`);
             const old = page;
             await settle(sp.page);
@@ -625,6 +631,23 @@ async function main() {
               shots++;
             };
             await take(shot);
+            if (scenario === 'waiting') {
+              // v1.3: Home → the launcher ("Continue" first) → a session whose cards all wait.
+              const homeStart = sp.page.locator('[data-testid="home-start"]').first();
+              if (await homeStart.count()) {
+                await homeStart.click();
+                await sp.page.locator('[data-testid="launcher-start"]').first().waitFor({ timeout: 8000 }).catch(() => {});
+                await settle(sp.page);
+                await take('state-launcher');
+                const resume = sp.page.locator('[data-testid="launcher-resume"]').first();
+                if (await resume.count()) {
+                  await resume.click();
+                  await sp.page.locator('[data-testid="study-waiting"]').first().waitFor({ timeout: 8000 }).catch(() => {});
+                  await settle(sp.page);
+                  await take('state-cards-waiting');
+                }
+              }
+            }
             if (scenario === 'update') {
               const openBtn = sp.page.locator('[data-testid="update-open"]').first();
               if (await openBtn.count()) {

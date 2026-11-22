@@ -9,7 +9,7 @@ import { openQuickAdd } from '$lib/shell/commands.svelte';
 import { Download, Pencil, Plus, SlidersHorizontal, Trash2, type MenuItem } from '$lib/ui';
 import type { ScreenCtx } from '../types';
 import { menuRoute } from './library';
-import { studyNow } from '../study/intent';
+import { launcher, openLauncher } from '../study/launcher.svelte';
 
 /** A dialog the ⋯ menu asks `DeckDialogs` to open. */
 export type DeckRequest = { kind: 'rename' | 'sub' | 'delete'; node: DeckTreeNode };
@@ -21,10 +21,13 @@ export function goWithDeck(ctx: ScreenCtx, node: DeckTreeNode, route: string | n
   ctx.navigate?.(route);
 }
 
-/** Starts the spaced-repetition session (`/study`) on `node`'s deck. */
-export function studyDeck(ctx: ScreenCtx, modules: ModuleDto[], node: DeckTreeNode): void {
-  studyNow();
-  goWithDeck(ctx, node, menuRoute(modules, { route: '/study' }) ?? '/study');
+/**
+ * "Study" on a deck (v1.3): opens the study launcher on it — never a silent start. `null`
+ * when the study module is off (the entry is then hidden).
+ */
+export function studyAction(): ((node: DeckTreeNode) => void) | null {
+  if (!launcher.available) return null;
+  return (node) => void openLauncher({ deckId: node.deck.id });
 }
 
 /**

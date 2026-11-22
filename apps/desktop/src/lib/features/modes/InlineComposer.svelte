@@ -68,7 +68,7 @@
     if (e.key === 'Escape') {
       e.preventDefault();
       onclose();
-    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.repeat) {
       e.preventDefault();
       void create();
     }

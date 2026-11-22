@@ -86,13 +86,18 @@ describe('<App> on the dev mock transport', () => {
     expect(await screen.findByTestId('deck-mode-match')).toBeTruthy();
     await fireEvent.click(await screen.findByTestId('deck-mode-test'));
     const page = document.querySelector('main .page')!;
-    // Before the session: deck picker, no Library tabs (modes are not tabs).
-    expect(await screen.findByRole('combobox', { name: 'Deck' })).toBeTruthy();
-    expect(screen.queryByRole('tablist', { name: 'Pages in Library' })).toBeNull();
+    // v1.3: a mode button opens the study launcher with that mode chosen — never a silent start.
+    await screen.findByTestId('study-launcher', {}, { timeout: 5_000 });
+    expect(screen.getByRole('radio', { name: 'Test' }).getAttribute('aria-checked')).toBe('true');
     expect(page.classList.contains('focus')).toBe(false);
-    await fireEvent.click(await screen.findByTestId('study-start'));
-    await waitFor(() => expect(page.classList.contains('focus')).toBe(true));
+    const start = (await screen.findByTestId('launcher-start')) as HTMLButtonElement;
+    await waitFor(() => expect(start.disabled).toBe(false));
+    expect(start.textContent).toMatch(/Focus · 4 questions/);
+    await fireEvent.click(start);
+    await waitFor(() => expect(page.classList.contains('focus')).toBe(true), { timeout: 5_000 });
+    // The running paper owns the window: no deck picker, no Library tabs.
     expect(screen.queryByRole('combobox', { name: 'Deck' })).toBeNull();
+    expect(screen.queryByRole('tablist', { name: 'Pages in Library' })).toBeNull();
     // Leaving the screen ends the focus layout; the sidebar goes back to the Library page.
     await fireEvent.click(screen.getByRole('button', { name: 'Library' }));
     await waitFor(() => expect(page.classList.contains('focus')).toBe(false));

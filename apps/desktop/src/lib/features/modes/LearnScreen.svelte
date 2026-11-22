@@ -2,18 +2,18 @@
   /**
    * Learn mode (docs/02 §6.1, Quizlet style). The backend picks the cards (deck, query such as
    * `level:A2`), asks each at its stage (multiple choice, then written), judges the answer and
-   * schedules the card; this screen only shows and reports. v1.2: a dense start panel; the
-   * running session owns the window (`SessionFrame`). Keys: 1–4 pick, Enter check/continue
-   * (and on the end screen: learn again), Z undo, Esc end.
+   * schedules the card; this screen only shows and reports. v1.3: sessions start in the
+   * study launcher (no setup panel here); the running session owns the window
+   * (`SessionFrame`). Keys: 1–4 pick, Enter check/continue, Z undo, Esc end; a held key is one
+   * press.
    */
   import { formatCount } from '$lib/format';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { api } from '$lib/api';
   import type { LearnAnswerResult, SessionDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import {
     Button,
-    ChevronRight,
     CircleAlert,
     CircleCheck,
     GraduationCap,
@@ -23,43 +23,66 @@
     OptionTile,
     Repeat,
     Skeleton,
-    Switch,
     TriangleAlert,
   } from '$lib/ui';
-  import OptRow from './OptRow.svelte';
   import SessionFrame from './SessionFrame.svelte';
-  import SetupPanel from './SetupPanel.svelte';
   import CardView from '../cards/CardView.svelte';
-  import { moduleOn, trackModules } from '../cards/modules.svelte';
-  import { tzOffsetMins } from '../study/format';
+  import { trackModules } from '../cards/modules.svelte';
+  import type { StudyScope } from '../study/contract';
+  import LaunchIdle from '../study/LaunchIdle.svelte';
+  import { handoffSeq, launcher, openLauncher, takeHandoff, type Handoff } from '../study/launcher.svelte';
   import type { ScreenCtx } from '../types';
   import { plainKey } from './modes';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
   let session = $state<SessionDto | null>(null);
-  let resumable = $state<SessionDto | null>(null);
   let feedback = $state<LearnAnswerResult | null>(null);
   let finished = $state<SessionDto | null>(null);
-  let loading = $state(true);
-  let query = $state('');
-  let practice = $state(false);
   let typed = $state('');
   let picked = $state<number | null>(null);
-  let notice = $state<string | null>(null);
   let input = $state<HTMLInputElement | null>(null);
   let continueBtn = $state<HTMLButtonElement | null>(null);
+  let againBtn = $state<HTMLButtonElement | null>(null);
   let busy = false;
   let shownAt = 0;
+  /** The scope the session was started with ("Learn again" builds on it). */
+  let startedScope = $state<StudyScope | null>(null);
+
+  // A session started (or continued) in the study launcher arrives here.
+  const initial = takeHandoff('learn');
+  let accepting = $state(initial !== null);
+  let hadSession = $state(false);
+
+  function accept(h: Handoff) {
+    startedScope = h.scope;
+    finished = null;
+    accepting = true;
+    hadSession = true;
+    void run(() => settle(h.session)).finally(() => (accepting = false));
+  }
+
+  $effect(() => {
+    void handoffSeq();
+    const h = takeHandoff('learn');
+    if (h) accept(h);
+  });
 
   onMount(() => {
     trackModules();
-    void ctx
-      .guarded(async () => {
-        const s = (await api.call('study.active', {})).session;
-        resumable = s?.kind === 'learn' ? s : null;
-      })
-      .finally(() => (loading = false));
+    if (initial) accept(initial);
+  });
+
+  // The shell's global undo (Ctrl+Z, palette) may take back an answer: show the card again.
+  $effect(() => {
+    const unsub = api.on(['undone', 'redone'], () => {
+      if (session && !busy) void run(async () => show(await api.call('study.session', { session_id: session!.id })));
+    });
+    return () => void unsub.then((u) => u());
+  });
+
+  $effect(() => {
+    if (finished) void tick().then(() => againBtn?.focus());
   });
 
   const card = $derived(session?.current ?? null);
@@ -84,27 +107,13 @@
       finished = s;
       session = null;
       feedback = null;
-      resumable = null;
     }
   }
 
-  async function start() {
-    notice = null;
-    finished = null;
-    const q = query.trim();
-    const s = await api.call('study.start', {
-      kind: 'learn',
-      mode: practice ? 'trial' : 'scheduled',
-      deck_id: ctx.selectedDeck,
-      filter: q ? { attributes: [], states: null, due_only: null, limit: null, query: q, saved_query_id: null } : null,
-      tz_offset_mins: tzOffsetMins(),
-    });
-    if (!s.current) {
-      await api.call('study.end', { session_id: s.id });
-      notice = t('modes.learn.nothing');
-      return;
-    }
-    show(s);
+  /** "Learn again": the launcher on this deck, today's struggles first when there were any. */
+  function learnAgain() {
+    const struggled = (finished?.mistakes ?? 0) > 0;
+    openLauncher({ deckId: finished?.deck_id ?? ctx.selectedDeck, kind: 'learn', scope: struggled ? 'struggled_today' : (startedScope ?? undefined) });
   }
 
   async function answer(choice: number | null) {
@@ -146,15 +155,11 @@
   }
 
   function onKey(e: KeyboardEvent) {
+    // Handled already (the palette's Esc), an open dialog, or a held key: not ours.
+    if (e.defaultPrevented || e.repeat || document.querySelector('[aria-modal="true"]')) return;
     const tag = (e.target as HTMLElement | null)?.tagName ?? '';
     if (tag === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
-    if (!session) {
-      if (e.key === 'Enter' && plainKey(e)) {
-        e.preventDefault();
-        void run(start);
-      }
-      return;
-    }
+    if (!session) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       void run(end);
@@ -176,7 +181,7 @@
         e.preventDefault();
         void run(() => answer(i));
       }
-    } else if (learn?.stage === 'written' && e.key === 'Enter') {
+    } else if (learn?.stage === 'written' && e.key === 'Enter' && tag === 'INPUT') {
       e.preventDefault();
       void run(() => answer(null));
     } else if (e.key.toLowerCase() === 'z' && plainKey(e)) {
@@ -292,54 +297,19 @@
       </div>
     </header>
     <div class="done-actions">
-      <Button variant="primary" icon={Repeat} kbd="Enter" onclick={() => void run(start)}>{t('modes.learn.again')}</Button>
+      {#if launcher.available}
+        <Button variant="primary" icon={Repeat} bind:element={againBtn} title={t('study.summary.again_desc')} data-testid="learn-again" onclick={learnAgain}>{t('modes.learn.again')}</Button>
+      {/if}
       <Button onclick={() => (finished = null)}>{t('modes.learn.back')}</Button>
     </div>
   </section>
-{:else}
+{:else if accepting}
   <section class="learn">
     <PageHeader title={t('modes.learn.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
-    {#if loading}
-      <Skeleton shape="card" height="120px" />
-    {:else}
-      <SetupPanel title={t('modes.learn.start_heading')} {notice}>
-        {#snippet meta()}
-          <span class="steps">
-            <span class="st"><span class="step num" aria-hidden="true">1</span>{t('modes.learn.stage_choice')}</span>
-            <span class="arrow" aria-hidden="true"><Icon icon={ChevronRight} size={14} /></span>
-            <span class="st"><span class="step num" aria-hidden="true">2</span>{t('modes.learn.stage_written')}</span>
-            <span class="arrow" aria-hidden="true"><Icon icon={ChevronRight} size={14} /></span>
-            <span class="st ok"><Icon icon={CircleCheck} size={14} />{t('modes.learn.learned_card')}</span>
-          </span>
-        {/snippet}
-        {#snippet actions()}
-          {#if resumable}
-            <Button onclick={() => resumable && void run(() => settle(resumable!))}>{t('study.resume')}</Button>
-          {/if}
-          <Button variant="primary" kbd="Enter" aria-keyshortcuts="Enter" data-testid="study-start" onclick={() => void run(start)}>
-            {t('modes.learn.start')}
-          </Button>
-        {/snippet}
-        <OptRow label={t('study.practice_label')} description={t('study.practice_hint')}>
-          <Switch ariaLabel={t('study.practice_label')} bind:checked={practice} />
-        </OptRow>
-        {#if moduleOn('browse')}
-          <OptRow label={t('study.query_label')} labelFor="learn-query">
-            <Input
-              id="learn-query"
-              class="query"
-              size="sm"
-              label={t('study.query_label')}
-              hideLabel
-              bind:value={query}
-              placeholder={t('study.query_placeholder')}
-              spellcheck="false"
-            />
-          </OptRow>
-        {/if}
-      </SetupPanel>
-    {/if}
+    <Skeleton shape="card" height="120px" />
   </section>
+{:else}
+  <LaunchIdle {ctx} kind="learn" title={t('modes.learn.heading')} auto={!hadSession} />
 {/if}
 
 <style>
@@ -348,27 +318,6 @@
     flex-direction: column;
     /* The start page is one column: the header (deck picker) lines up with the panel. */
     max-width: 760px;
-  }
-  .learn :global(.query) {
-    width: 240px;
-  }
-  .steps {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-  }
-  .st {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .st.ok {
-    color: var(--success);
-  }
-  .arrow {
-    display: inline-flex;
-    color: var(--text-3);
   }
   .step {
     display: inline-flex;

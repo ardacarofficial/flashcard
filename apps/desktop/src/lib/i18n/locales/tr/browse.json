@@ -251,7 +251,18 @@
     "record_for": "“{action}” için yeni tuşlara bas",
     "change_for": "“{action}” kısayolunu değiştir",
     "unbind_for": "“{action}” kısayolunu kaldır",
-    "unbound_text": "Atanmamış"
+    "unbound_text": "Atanmamış",
+    "study_intro": "Çevir tuşu kartı ön ⇄ arka çevirir, ne kadar basarsan bas puan vermez. Puan tuşları kartın arkası en az bir kez görüldükten sonra çalışır. Basılı tutulan tuş tek işlem sayılır.",
+    "fixed": {
+      "title": "Çalışmada sabit tuşlar",
+      "description": "Bunlar değiştirilemez; her biri tek bir iş yapar.",
+      "enter": "Odaktaki düğmeye ya da karta basar (başka bir şey yapmaz)",
+      "choice": "Şıklı kartın sorusunda o şıkkı seçer",
+      "flag": "Kartın bayrağını açar / kapatır",
+      "repeat": "Oturum özetinde yanlışları tekrar çalıştırır",
+      "focus": "Odak modunu açar / kapatır",
+      "inline": "Çalışırken bu desteye yeni kart ekler"
+    }
   },
   "errors": {
     "validation": {

@@ -251,7 +251,18 @@
     "record_for": "Press the new keys for “{action}”",
     "change_for": "Change shortcut for “{action}”",
     "unbind_for": "Remove shortcut for “{action}”",
-    "unbound_text": "Not set"
+    "unbound_text": "Not set",
+    "study_intro": "The flip key turns the card front ⇄ back as often as you like and never rates. The rating keys work once the back has been seen. Holding a key down counts as one press.",
+    "fixed": {
+      "title": "Fixed keys while studying",
+      "description": "These can’t be changed; each does one thing.",
+      "enter": "Presses the focused button or the card (nothing else)",
+      "choice": "On a multiple-choice question, picks that option",
+      "flag": "Turns the card’s flag on / off",
+      "repeat": "On the session summary, studies the mistakes again",
+      "focus": "Turns focus mode on / off",
+      "inline": "Adds a new card to this deck while studying"
+    }
   },
   "errors": {
     "validation": {

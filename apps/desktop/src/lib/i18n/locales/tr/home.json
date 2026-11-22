@@ -5,7 +5,7 @@
     "today_label": "kart çalışılacak",
     "start": "Çalışmaya başla",
     "caught_up": "Hepsi tamam",
-    "caught_up_body": "Şu an vadesi gelen kart yok. Sonra tekrar bak ya da bir destede yeni kart öğren.",
+    "caught_up_body": "Şu an sırası gelen kart yok. Bugün çalıştıklarını pratik yapabilir ya da yeni kart öğrenebilirsin.",
     "count_due": "Vadeli",
     "count_learning": "Öğreniliyor",
     "count_new": "Yeni",
@@ -43,6 +43,8 @@
     "col_deck": "Deste",
     "col_mastery": "Ustalık",
     "study": "Çalış",
-    "study_deck": "{name} destesini çalış"
+    "study_deck": "{name} destesini çalış",
+    "practice": "Pratik yap",
+    "study_off": "Çalışma modülü kapalı; Ayarlar › Modüller’den açabilirsin."
   }
 }

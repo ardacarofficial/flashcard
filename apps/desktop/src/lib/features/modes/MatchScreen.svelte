@@ -4,30 +4,30 @@
    * its definition — right pairs leave the board, a wrong pair shakes (a colour flash under
    * reduced motion). The backend deals the round, checks every pick, times it on its own clock
    * and keeps the deck's best time (`modes.match.*`); this screen only shows and reports.
-   * Keys: Enter starts / plays again, Esc ends.
+   * Keys: on the result Enter plays again (the focused button), Esc ends. v1.3: rounds start
+   * in the study launcher (what to match from, how many); no setup panel here.
    */
   import { formatDecimal } from '$lib/format';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick as nextTick } from 'svelte';
   import { api } from '$lib/api';
-  import type { MatchResultDto, MatchRoundDto, MatchTileDto } from '$lib/api/types';
+  import type { MatchResultDto, MatchRoundDto, MatchTileDto, SessionDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
-  import { Button, Chip, EmptyState, Icon, Input, PageHeader, Shuffle, Skeleton, Timer, Trophy } from '$lib/ui';
-  import OptRow from './OptRow.svelte';
+  import { Button, Chip, EmptyState, Icon, PageHeader, Play, Shuffle, Skeleton, Timer, Trophy } from '$lib/ui';
   import SessionFrame from './SessionFrame.svelte';
-  import SetupPanel from './SetupPanel.svelte';
-  import { moduleOn, trackModules } from '../cards/modules.svelte';
-  import { tzOffsetMins } from '../study/format';
+  import { trackModules } from '../cards/modules.svelte';
+  import type { StudyScope } from '../study/contract';
+  import LaunchIdle from '../study/LaunchIdle.svelte';
+  import { handoffSeq, launcher, openLauncher, takeHandoff, type Handoff } from '../study/launcher.svelte';
   import type { ScreenCtx } from '../types';
-  import { plainKey } from './modes';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
   let round = $state<MatchRoundDto | null>(null);
   let result = $state<MatchResultDto | null>(null);
-  let resumable = $state<string | null>(null);
-  let loading = $state(true);
   let tooFew = $state(false);
-  let query = $state('');
+  let deckOf = $state<string | null>(null);
+  let startedScope = $state<StudyScope | null>(null);
+  let againBtn = $state<HTMLButtonElement | null>(null);
   let selected = $state<number | null>(null);
   /** Tiles of the last wrong pair (shake / flash for a moment). */
   let wrong = $state<number[]>([]);
@@ -38,14 +38,31 @@
   let tick: ReturnType<typeof setInterval> | null = null;
   let wrongTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // A round started (or continued) in the study launcher arrives here.
+  const initial = takeHandoff('match');
+  let accepting = $state(initial !== null);
+  let hadSession = $state(false);
+
+  function accept(h: Handoff) {
+    startedScope = h.scope;
+    accepting = true;
+    hadSession = true;
+    void run(() => open(h.session)).finally(() => (accepting = false));
+  }
+
+  $effect(() => {
+    void handoffSeq();
+    const h = takeHandoff('match');
+    if (h) accept(h);
+  });
+
   onMount(() => {
     trackModules();
-    void ctx
-      .guarded(async () => {
-        const s = (await api.call('study.active', {})).session;
-        resumable = s?.kind === 'match' ? s.id : null;
-      })
-      .finally(() => (loading = false));
+    if (initial) accept(initial);
+  });
+
+  $effect(() => {
+    if (result) void nextTick().then(() => againBtn?.focus());
   });
 
   onDestroy(() => {
@@ -82,30 +99,27 @@
     else startClock();
   }
 
-  async function start() {
-    const q = query.trim();
+  /** Deals a round of a started (or continued) match session. */
+  async function open(s: SessionDto) {
     result = null;
-    const s = await api.call('study.start', {
-      kind: 'match',
-      mode: 'scheduled',
-      deck_id: ctx.selectedDeck,
-      filter: q ? { attributes: [], states: null, due_only: null, limit: null, query: q, saved_query_id: null } : null,
-      tz_offset_mins: tzOffsetMins(),
-    });
+    deckOf = s.deck_id;
     const r = await api.call('modes.match.start', { session_id: s.id });
     if (r.tiles.length === 0) await api.call('study.end', { session_id: s.id });
-    resumable = null;
     show(r);
   }
 
-  async function resume(id: string) {
-    resumable = null;
-    show(await api.call('modes.match.start', { session_id: id }));
+  /** Another round of the same session. */
+  async function again() {
+    if (!round) return;
+    show(await api.call('modes.match.start', { session_id: round.session_id }));
   }
 
-  async function again() {
-    if (!round) return start();
-    show(await api.call('modes.match.start', { session_id: round.session_id }));
+  /** "Study again": the launcher on this deck in Match. */
+  async function studyAgain() {
+    const deckId = deckOf ?? ctx.selectedDeck;
+    const missed = (result?.mistakes ?? 0) > 0;
+    await end();
+    openLauncher({ deckId, kind: 'match', scope: missed ? 'struggled_today' : (startedScope ?? undefined) });
   }
 
   async function end() {
@@ -154,15 +168,11 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    if (e.defaultPrevented) return;
-    const tag = (e.target as HTMLElement | null)?.tagName ?? '';
-    if (tag === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
+    if (e.defaultPrevented || e.repeat) return;
+    if (document.querySelector('[aria-modal="true"]')) return;
     if (e.key === 'Escape' && round) {
       e.preventDefault();
       void run(end);
-    } else if (e.key === 'Enter' && plainKey(e) && !playing && !tooFew) {
-      e.preventDefault();
-      void run(result ? again : start);
     }
   }
 </script>
@@ -232,9 +242,12 @@
       {/if}
     </header>
     <div class="done-actions">
-      <Button variant="primary" icon={Shuffle} kbd="Enter" aria-keyshortcuts="Enter" onclick={() => void run(again)}>
+      <Button variant="primary" icon={Shuffle} bind:element={againBtn} data-testid="match-again" onclick={() => void run(again)}>
         {t('modes.match.again')}
       </Button>
+      {#if launcher.available}
+        <Button icon={Play} title={t('study.summary.again_desc')} onclick={() => void run(studyAgain)}>{t('study.summary.again')}</Button>
+      {/if}
       <Button kbd="Esc" aria-keyshortcuts="Escape" onclick={() => void run(end)}>{t('modes.match.done')}</Button>
     </div>
   </section>
@@ -251,39 +264,13 @@
       />
     </div>
   </section>
-{:else}
+{:else if accepting}
   <section class="match">
     <PageHeader title={t('modes.match.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
-    {#if loading}
-      <Skeleton shape="card" height="120px" />
-    {:else}
-      <SetupPanel title={t('modes.match.start_heading')}>
-        {#snippet meta()}<span>{t('modes.match.intro')}</span>{/snippet}
-        {#snippet actions()}
-          {#if resumable}
-            <Button onclick={() => resumable && void run(() => resume(resumable!))}>{t('study.resume')}</Button>
-          {/if}
-          <Button variant="primary" icon={Shuffle} kbd="Enter" aria-keyshortcuts="Enter" data-testid="study-start" onclick={() => void run(start)}>
-            {t('modes.match.start')}
-          </Button>
-        {/snippet}
-        {#if moduleOn('browse')}
-          <OptRow label={t('study.query_label')} labelFor="match-query">
-            <Input
-              id="match-query"
-              class="query"
-              size="sm"
-              label={t('study.query_label')}
-              hideLabel
-              bind:value={query}
-              placeholder={t('study.query_placeholder')}
-              spellcheck="false"
-            />
-          </OptRow>
-        {/if}
-      </SetupPanel>
-    {/if}
+    <Skeleton shape="card" height="120px" />
   </section>
+{:else}
+  <LaunchIdle {ctx} kind="match" title={t('modes.match.heading')} auto={!hadSession} />
 {/if}
 
 <style>
@@ -292,9 +279,6 @@
     flex-direction: column;
     /* The start page is one column: the header (deck picker) lines up with the panel. */
     max-width: 760px;
-  }
-  .match :global(.query) {
-    width: 240px;
   }
   .empty {
     max-width: 760px;
