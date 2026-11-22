@@ -45,14 +45,14 @@
   },
   "subtitle": {
     "heading": "Subtitle",
-    "intro": "Words you add with + in video subtitles (Subtitle browser extension) become cards here, with the line, its translation, a screenshot and the audio.",
+    "intro": "Words you add with + while watching videos with the Subtitle browser extension arrive here as cards. You connect the extension once; after that you rarely need this page.",
     "load_failed": "Could not load the Subtitle settings.",
     "retry": "Try again",
     "connect": {
       "title": "Connect the extension",
-      "description": "Works while this app is open. Only this computer can connect.",
+      "description": "You connect (pair) the extension with this app using an access key. The connection only works while this app is open, and only from this computer.",
       "address": "Server address",
-      "address_hint": "Paste this as the server address in the extension.",
+      "address_hint": "Paste this into the “server address” field in the extension's settings.",
       "copy": "Copy",
       "copied": "Copied",
       "step1": "Create an access key below and copy it.",
@@ -62,7 +62,7 @@
     },
     "keys": {
       "title": "Access keys",
-      "description": "One key per browser. Revoke a key when you no longer use it: it stops working at once.",
+      "description": "A key is the password the extension needs to add cards to this app. Create one per browser. Revoke a key you no longer use: that browser can no longer connect, right away.",
       "none": "No keys yet.",
       "name": "Key name",
       "name_placeholder": "e.g. Chrome at home",
@@ -82,7 +82,7 @@
     },
     "deck": {
       "title": "Where cards go",
-      "description": "Captures go to the deck chosen in the extension; otherwise here.",
+      "description": "If you picked a deck in the extension, words go there; otherwise to the deck chosen here.",
       "label": "Deck",
       "fallback": "{name} (made on first use)",
       "received": {
@@ -90,12 +90,21 @@
         "some": "{count, plural, one {# word} other {# words}} received, last {time}.",
         "label": "Words received",
         "last": "Last {time}"
-      }
+      },
+      "hint": "The deck cards go to when the extension names none. Changing it only affects words that arrive from now on; cards already here stay where they are.",
+      "example": "Right now → new words go to the “{deck}” deck."
     },
     "off": {
       "title": "The Subtitle extension is off",
       "body": "Turn it on and the extension can connect to the app on this computer. You can also switch it in Settings → Modules.",
       "enable": "Turn on"
+    },
+    "how": {
+      "title": "How it works",
+      "capture": "While watching a video in your browser, you press the + next to a word in the subtitles.",
+      "sent": "The extension sends the word and the subtitle sentence it appeared in to this app, plus, when it has them, the meaning, a translation of the sentence, a screenshot and the audio of that moment, and a link to that second of the video.",
+      "card": "It becomes a card in your chosen deck: the word and the sentence on the front (the word in bold), meaning, translation, picture and audio on the back. It goes straight into the deck, not through the inbox.",
+      "repeat": "Adding the same word from the same sentence again makes no second card. The same word from another sentence makes a new card."
     }
   }
 }

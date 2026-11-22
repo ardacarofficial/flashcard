@@ -169,7 +169,7 @@
   },
   "local_api": {
     "heading": "Yerel API",
-    "intro": "Bu bilgisayardaki programlar yerel API üzerinden kart önerebilir ve destelerini okuyabilir. Yalnızca bu bilgisayar 127.0.0.1:{port} adresinden bağlanabilir. Her program bir kez sorar; ne yapabileceğine sen karar verirsin.",
+    "intro": "Bu bilgisayardaki başka programların (ör. Flashcard tarayıcı eklentisi) sana kart önermesini sağlar; bir program bağlanmak istediğinde ya da bir programın iznini geri almak istediğinde buraya gelirsin.",
     "clients": "Bağlı programlar",
     "none": "Henüz program yok.",
     "status": {
@@ -210,7 +210,28 @@
       "script": "Betik"
     },
     "waiting": "Onay bekleyenler",
-    "none_allowed": "Henüz izin verilen program yok."
+    "none_allowed": "Henüz izin verilen program yok.",
+    "how": {
+      "title": "Nasıl çalışır?",
+      "ask_label": "Her program önce sorar",
+      "ask": "Bir program ilk kez bağlanmak istediğinde uygulama sana sorar ve ne yapmak istediğini gösterir (ör. \"Gelen kutusuna kart önermek\"). İzin verdiğin işler dışında hiçbir şey yapamaz.",
+      "cards_label": "Kartlar nereye gider?",
+      "cards": "Önerilen kartlar Gelen kutusunda bekler; sen kabul edene kadar destelerine girmez. Yalnızca \"Doğrudan not eklemek\" iznini verdiğin bir program gelen kutusunu atlar.",
+      "safe_label": "Kim bağlanabilir?",
+      "safe": "Yalnızca bu bilgisayardaki programlar, 127.0.0.1:{port} adresinden; internetten ya da ağından kimse ulaşamaz. Bir izni istediğin an buradan geri alabilirsin."
+    },
+    "waiting_hint": "Bu programlar bağlanmak istiyor. İzin vermek istemediğin işlerin işaretini kaldır, sonra İzin ver ya da Reddet'i seç.",
+    "clients_hint": "Her satırda programın ne yapabildiği ve en son ne zaman bağlandığı yazar. \"İzni kaldır\" bağlantısını hemen keser; tekrar bağlanmak için sana yeniden sorması gerekir.",
+    "advanced": {
+      "summary": "Port, izinler ve işlemler: kendi programını yazarken ya da bir sorunu ararken.",
+      "port": "Port",
+      "port_hint": "Programlar yalnızca bu bilgisayarda bu porta bağlanır. Portu ve programların öneri sınırlarını komut paletinden (Ctrl+K) değiştirebilirsin; yeni port modül yeniden açılınca geçerli olur.",
+      "scopes": "Bir programın alabileceği izinler",
+      "scopes_hint": "Program bunlardan hangilerine ihtiyacı olduğunu söyler; hangilerini alacağına sen karar verirsin.",
+      "methods": "Bir programın çağırabileceği işlemler",
+      "methods_hint": "Liste bu kadar. Her biri POST /v1/<ad> ile çağrılır ve yanında yazan izni ister; silme hiçbir zaman mümkün değildir.",
+      "none": "İşlem listelenmedi."
+    }
   },
   "clipboard": {
     "suggest": "“{text}” kart olarak eklensin mi?",

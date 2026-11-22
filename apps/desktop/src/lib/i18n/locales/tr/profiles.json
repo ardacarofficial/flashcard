@@ -10,7 +10,7 @@
   },
   "profiles": {
     "heading": "Profiller",
-    "intro": "Her profil kendi desteleri, medyası ve ayarlarıyla ayrı bir koleksiyondur.",
+    "intro": "Aynı bilgisayarda ayrı bir koleksiyon açmak (ör. kardeşin için) ya da uygulamayı bir PIN'le kilitlemek istediğinde buraya gelirsin.",
     "unavailable": "Profiller yalnız masaüstü uygulamasında var.",
     "default_name": "Ana profil",
     "active": "Kullanımda",
@@ -25,11 +25,12 @@
     "delete": "Sil",
     "confirm_delete": "“{name}” profili ve tüm kartları silinsin mi? Bu geri alınamaz.",
     "delete_secret": "O profilin PIN'i/parolası",
-    "delete_title": "Profil silinsin mi?"
+    "delete_title": "Profil silinsin mi?",
+    "what": "Her profil ayrı bir koleksiyondur: kendi desteleri, kartları, medyası, ayarları ve yapay zeka anahtarları vardır; profiller birbirinin kartlarını görmez. Başka bir profili açınca uygulama o profille yeniden başlar."
   },
   "lock": {
     "heading": "Uygulama kilidi",
-    "intro": "Dosyaları değil pencereyi kilitler: bilgisayar hesabını kullanabilen biri koleksiyonu yine de kopyalayabilir.",
+    "intro": "Açıkken uygulama açılışta ve bir süre kullanılmadığında PIN ya da parola sorar. Kartlar şifrelenmez: bu yalnız bilgisayarının başına geçen birinin pencereyi açmasını engeller.",
     "off": "Bu profil için kilit yok.",
     "on_pin": "PIN ile kilitli.",
     "on_password": "Parolayla kilitli.",
@@ -63,12 +64,29 @@
     "held_title": "Kilit açılınca çalışacak bağlantılar",
     "held_body": "Bu flashcard:// bağlantıları uygulama kilitliyken geldi. Kilidi açınca çalışırlar; istemiyorsan bırakabilirsin.",
     "held_discard": "Açılmasın",
-    "idle_hint": "Uygulamayı bu kadar süre kullanmadığında pencere kilitlenir.",
+    "idle_hint": "Bu kadar süre uygulamaya dokunmazsan pencere kilitlenir. Kilidi açınca kaldığın yerden devam edersin.",
     "current_hint": "Kilidi değiştirmek ya da kaldırmak için gerekir.",
     "kind_label": "Kilit türü",
     "kind_hint": "PIN 4–12 rakamdır; parola 6–128 karakter.",
     "danger_heading": "Uygulama kilidini kaldır",
-    "clear_desc": "Pencere yeniden PIN ya da parola sormadan açılır. Onaylamak için mevcut olanı gir."
+    "clear_desc": "Pencere yeniden PIN ya da parola sormadan açılır. Onaylamak için mevcut olanı gir.",
+    "new_hint": "Bunu gir ve “Kilidi kur” düğmesine bas; bundan sonra açılışta sorulur.",
+    "new_hint_change": "Değiştirmek için yukarıya şu ankini, buraya yenisini yaz.",
+    "forgot": "PIN'imi unutursam ne olur?",
+    "forgot_desc": "Uygulamanın içinden “PIN'imi unuttum” diye sıfırlama yok. Kartların silinmez ve şifreli değildir; kilit ekranından başka bir profili de açabilirsin.",
+    "forgot_keychain": "Bu profilin kilidini kaldırmak için işletim sisteminin anahtar zincirinden (Windows'ta Kimlik Bilgisi Yöneticisi) “app.flashcard” altındaki “{account}” kaydını sil. Flashcard sonraki açılışta “Kilit bilgisi kayıp” der ve kilidi kaldırmanı önerir; sonra yeni bir PIN koyabilirsin.",
+    "forgot_file": "Bu bilgisayarda kilit özeti profil listesi dosyasında (profiles.json) tutuluyor. Kilidi kaldırmak için o dosyada bu profilin kilit kaydındaki “hash” alanını sil; Flashcard sonraki açılışta “Kilit bilgisi kayıp” der ve kilidi kaldırmanı önerir ({account}).",
+    "advanced_summary": "PIN'in nasıl saklandığı ve kilidin neyi korumadığı.",
+    "storage_heading": "Kilit nasıl çalışır",
+    "storage_label": "PIN nerede saklanır",
+    "scope_label": "Kilidin korumadıkları",
+    "attempts_label": "Yanlış denemeler",
+    "attempts_note": "İlk 5 yanlış deneme serbest; sonra 1 sn, 2 sn, 4 sn… en çok 5 dk beklersin. Sayaç diskte tutulur, uygulamayı yeniden başlatmak yeni deneme hakkı vermez.",
+    "example": {
+      "idle": "{count} dk → {count} dakika uygulamaya dokunmazsan kilit ekranı gelir.",
+      "idle_never": "Hiçbir zaman → yalnız açılışta ve “Şimdi kilitle”ye bastığında kilitlenir.",
+      "kind": "PIN: 4821 · Parola: mavi-kedi-42"
+    }
   },
   "commands": {
     "profiles": {

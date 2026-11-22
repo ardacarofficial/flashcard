@@ -1,6 +1,6 @@
 {
   "nav": {
-    "mcp": "MCP"
+    "mcp": "Asistanlar (MCP)"
   },
   "modules": {
     "mcp": {
@@ -28,27 +28,76 @@
         "add": "MCP sunucusu ekle",
         "update": "MCP sunucusunu düzenle",
         "remove": "MCP sunucusunu kaldır"
-      }
+      },
+      "setup": "MCP kurulum yolları"
     }
   },
   "mcp": {
-    "heading": "MCP",
+    "heading": "Asistanlar (MCP)",
+    "subtitle": "Claude gibi bir yapay zeka asistanını bağla; destelerini okuyabilsin ve senin için kart ekleyebilsin. Bir kez kurman yeter; çoğu kişiye ilk sekme yeter.",
+    "tabs": {
+      "label": "MCP işleri",
+      "connect": "Asistanını bağla",
+      "servers": "Dış MCP sunucuları"
+    },
+    "connect": {
+      "setup_heading": "Bağlantıyı kur",
+      "intro": "Asistan, bu profilin koleksiyonunu fc adlı küçük bir komut satırı programıyla açar. Asistanını seç, aşağıdaki ayarı ona yapıştır, bu kadar.",
+      "client": "Hangi asistanı kullanıyorsun?",
+      "client_hint": "Ayar her birinde biraz farklı. \"Diğer\", MCP destekleyen her uygulama içindir (Cursor, VS Code, …).",
+      "clients": {
+        "claude_desktop": "Claude Desktop",
+        "claude_code": "Claude Code",
+        "other": "Diğer MCP istemcisi"
+      },
+      "fc_missing": {
+        "label": "fc programı bulunamadı",
+        "description": "Asistanın fc adlı komut satırı aracına ihtiyacı var; bu araç ne uygulamanın yanında ne de PATH'inde bulundu. Elinde varsa tam yolunu buraya yaz, aşağıdaki ayar kendiliğinden güncellenir. Yazmazsan ayarda yalnızca \"fc\" yazar; bu da ancak fc PATH'ine eklendiğinde çalışır.",
+        "input": "fc programının yolu"
+      },
+      "db_unknown": "Uygulama masaüstü uygulaması olarak başlatılmadığı için koleksiyon dosyasının yeri bilinmiyor: ayardaki yolu kendi collection.db dosyanla değiştir.",
+      "steps": "Nasıl kurulur?",
+      "steps_hint": "Üç adım, bir kez.",
+      "claude_desktop": {
+        "open": "Claude Desktop'ta Ayarlar → Geliştirici → Yapılandırmayı düzenle'yi aç.",
+        "file": "Şu dosya açılır:",
+        "paste": "Aşağıdaki metni kopyala ve o dosyaya yapıştır. Dosyada zaten \"mcpServers\" varsa yalnızca \"flashcard\" bölümünü onun içine ekle.",
+        "restart": "Dosyayı kaydet, Claude Desktop'tan tamamen çık (sistem tepsisinden de) ve yeniden aç."
+      },
+      "claude_code": {
+        "open": "Bir terminal aç (Windows'ta PowerShell, macOS'ta Terminal).",
+        "paste": "Aşağıdaki komutu kopyala, terminale yapıştır ve Enter'a bas. Bir kez yeterli.",
+        "restart": "Claude Code'u yeniden başlat. İçinde /mcp yazınca flashcard bağlı görünmeli."
+      },
+      "other": {
+        "open": "İstemcinin ayarlarında yeni bir MCP sunucusu ekle; türü \"stdio\" (başlatılan bir komut) olsun.",
+        "paste": "\"Komut\" alanına programı, \"argümanlar\" alanına geri kalanını (her satıra bir tane) yaz. JSON istiyorsa Claude Desktop'taki metni kullan.",
+        "restart": "İstemciyi yeniden başlat.",
+        "command": "Komut",
+        "args": "Argümanlar"
+      },
+      "copy": "Kopyala",
+      "copied": "Kopyalandı. Şimdi asistanına yapıştır.",
+      "copy_failed": "Kopyalanamadı: metni seçip kendin kopyala.",
+      "snippet_label": {
+        "claude_desktop": "claude_desktop_config.json",
+        "claude_code": "Terminal komutu",
+        "other": "Komut satırının tamamı"
+      },
+      "test": "Nasıl denerim?",
+      "test_hint": "Asistanına \"Destelerimi listele\" de. Destelerinin adlarını sayarsa bağlantı çalışıyor. Saymazsa ayardaki yolları kontrol et ve asistanı yeniden başlat."
+    },
     "server": {
-      "heading": "Claude'dan kullan",
-      "intro": "MCP konuşan yapay zeka asistanları bu uygulamanın sunucusunu başlatıp bu koleksiyonla çalışır. Yaptıkları her değişiklik geri alabileceğin sıradan bir adımdır.",
-      "allow_writes": "Asistanlar değişiklik yapabilsin",
-      "read_only_note": "Asistanlar şu an yalnızca okuyabilir.",
-      "setup": "Kurulum",
-      "claude_code": "Claude Code",
-      "claude_desktop": "Claude Desktop (claude_desktop_config.json)",
-      "db_hint": "Yolu kendi koleksiyon dosyanla değiştir.",
-      "tools": "Araçlar",
-      "read": "okur",
-      "write": "yazar",
-      "changes_content": "içeriği değiştirir",
-      "setup_hint": "Claude Code ya da Claude Desktop’a yapıştırılacak ayar.",
-      "show_setup": "Kurulumu göster",
-      "hide_setup": "Kurulumu gizle"
+      "heading": "Asistan neler yapabilir?",
+      "intro": "Yalnızca burada listelenen işleri. Hiçbir şeyi silemez; yaptığı her değişiklik, uygulamada geri alabileceğin sıradan bir adımdır.",
+      "read_only": "Yalnızca okuyabilsin",
+      "read_only_on": "Asistan destelerini ve kartlarını görebilir ama hiçbir şeyi değiştiremez: değiştiren araçlar ona hiç sunulmaz.",
+      "read_only_off": "Asistan deste ve kart da ekleyebilir, notları düzenleyebilir. Yine de silemez ve her değişikliği geri alabilirsin.",
+      "read_only_example": "Açıkken \"bu kelimeleri desteme ekle\" dersen asistan yalnızca okuyabildiğini söyler.",
+      "reads": "Okuyabilir",
+      "writes": "Değiştirebilir",
+      "writes_off": "Değiştirebilir (kapalı: yalnızca okuma)",
+      "changes_content": "var olanı değiştirir"
     },
     "tools": {
       "list_decks": "Desteleri listele",
@@ -63,7 +112,7 @@
     },
     "client": {
       "heading": "Dış MCP sunucuları",
-      "intro": "Araçlarını uygulamanın yapay zeka özelliklerinin kullanabileceği sunucular. Her çağrı gösterilir; bir şey değiştiren araçlar önce sorar.",
+      "intro": "İlk sekmede bir asistan bu uygulamayı kullanır; burada tersi olur: uygulama başka programları kullanır. Uygulamanın yapay zeka özellikleri (ör. senin için kart yazarken) buraya eklediğin sunucuların araçlarını çağırabilir; örneğin bilgisayarındaki dosyaları okumak ya da bir not uygulamasından metin çekmek.",
       "none": "Henüz sunucu yok.",
       "name": "Ad",
       "transport": "Bağlantı",
@@ -83,9 +132,16 @@
       "trust_approve": "Onayla",
       "add_heading": "Sunucu ekle",
       "add_title": "Bu programa güveniyor musun?",
-      "approve_title": "Bu sunucu onaylansın mı?"
-    },
-    "subtitle": "Yapay zeka asistanlarını koleksiyonuna, uygulamayı da dış araç sunucularına bağla."
+      "approve_title": "Bu sunucu onaylansın mı?",
+      "when": "Buna yalnızca yapay zeka özelliklerinin böyle kaynaklara ulaşmasını istiyorsan ihtiyacın var. İstemiyorsan boş bırak; başka hiçbir şey buna bağlı değil.",
+      "safety": "Sunucu, bilgisayarında senin yetkilerinle çalışan bir programdır. Uygulama onu ancak tam komutunu onayladıktan sonra başlatır; bir şey değiştiren araçlar önce sorar. Yalnızca kendin kurduğun ve güvendiğin sunucuları ekle.",
+      "what_label": "Bu ne?",
+      "when_label": "Ne zaman gerekir?",
+      "safety_label": "Güvenli mi?",
+      "list": "Sunucuların",
+      "add_hint": "Komutu ve argümanlarını sunucunun kendi kurulum talimatı söyler (ör. npx ve -y @modelcontextprotocol/server-filesystem).",
+      "unapproved": "{count} tanesi onay bekliyor"
+    }
   },
   "errors": {
     "validation": {

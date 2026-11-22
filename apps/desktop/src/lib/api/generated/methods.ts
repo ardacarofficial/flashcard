@@ -180,6 +180,7 @@ import type { MatchRoundDto } from "./MatchRoundDto";
 import type { McpServerDto } from "./McpServerDto";
 import type { McpServerList } from "./McpServerList";
 import type { McpServerRef } from "./McpServerRef";
+import type { McpSetup } from "./McpSetup";
 import type { McpToolList } from "./McpToolList";
 import type { MediaContent } from "./MediaContent";
 import type { MediaDto } from "./MediaDto";
@@ -510,6 +511,7 @@ export interface Methods {
   "shortcuts.set": { kind: "command"; request: SetShortcut; response: ShortcutList };
   "shortcuts.reset": { kind: "command"; request: ResetShortcut; response: ShortcutList };
   "mcp.tools.list": { kind: "query"; request: Empty; response: McpToolList };
+  "mcp.setup": { kind: "query"; request: Empty; response: McpSetup };
   "mcp.servers.list": { kind: "query"; request: Empty; response: McpServerList };
   "mcp.servers.add": { kind: "command"; request: AddMcpServer; response: McpServerDto };
   "mcp.servers.update": { kind: "command"; request: UpdateMcpServer; response: McpServerDto };
@@ -813,6 +815,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "shortcuts.set": "command",
   "shortcuts.reset": "command",
   "mcp.tools.list": "query",
+  "mcp.setup": "query",
   "mcp.servers.list": "query",
   "mcp.servers.add": "command",
   "mcp.servers.update": "command",

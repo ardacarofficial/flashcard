@@ -45,14 +45,14 @@
   },
   "subtitle": {
     "heading": "Subtitle",
-    "intro": "Video altyazılarında + ile eklediğin kelimeler (Subtitle tarayıcı eklentisi) burada kart olur: cümlesi, çevirisi, ekran görüntüsü ve sesiyle.",
+    "intro": "Subtitle tarayıcı eklentisiyle video izlerken + bastığın kelimeler buraya kart olarak gelir. Eklentiyi bir kez bağlarsın; sonra bu sayfaya pek uğraman gerekmez.",
     "load_failed": "Subtitle ayarları yüklenemedi.",
     "retry": "Tekrar dene",
     "connect": {
       "title": "Eklentiyi bağla",
-      "description": "Bu uygulama açıkken çalışır. Yalnız bu bilgisayar bağlanabilir.",
+      "description": "Eklentiyi bu uygulamaya bir erişim anahtarıyla bağlarsın (eşleştirme). Bağlantı yalnız bu uygulama açıkken ve yalnız bu bilgisayardan çalışır.",
       "address": "Sunucu adresi",
-      "address_hint": "Eklentide sunucu adresi olarak bunu yapıştır.",
+      "address_hint": "Eklentinin ayarlarında “sunucu adresi” alanına bunu yapıştır.",
       "copy": "Kopyala",
       "copied": "Kopyalandı",
       "step1": "Aşağıdan bir erişim anahtarı oluştur ve kopyala.",
@@ -62,7 +62,7 @@
     },
     "keys": {
       "title": "Erişim anahtarları",
-      "description": "Her tarayıcı için bir anahtar. Artık kullanmadığın anahtarı iptal et: hemen çalışmaz olur.",
+      "description": "Anahtar, eklentinin bu uygulamaya kart ekleyebilmesi için gereken paroladır. Her tarayıcı için bir tane oluştur. Artık kullanmadığın anahtarı iptal et: o tarayıcı hemen bağlanamaz olur.",
       "none": "Henüz anahtar yok.",
       "name": "Anahtar adı",
       "name_placeholder": "ör. Evdeki Chrome",
@@ -82,7 +82,7 @@
     },
     "deck": {
       "title": "Kartlar nereye gider",
-      "description": "Kelimeler eklentide seçilen desteye gider; seçilmediyse buraya.",
+      "description": "Eklentide bir deste seçtiysen kelimeler oraya gider; seçmediysen buradaki desteye.",
       "label": "Deste",
       "fallback": "{name} (ilk kullanımda oluşturulur)",
       "received": {
@@ -90,12 +90,21 @@
         "some": "{count, plural, one {# kelime} other {# kelime}} geldi, sonuncusu {time}.",
         "label": "Gelen kelimeler",
         "last": "Sonuncusu {time}"
-      }
+      },
+      "hint": "Eklenti deste söylemediğinde kartların gideceği deste. Değiştirmek yalnız bundan sonra gelen kelimeleri etkiler; gelmiş kartlar yerinde kalır.",
+      "example": "Şu an → yeni kelimeler “{deck}” destesine gider."
     },
     "off": {
       "title": "Subtitle eklentisi kapalı",
       "body": "Açınca eklenti bu bilgisayardaki uygulamaya bağlanabilir. Ayarlar → Modüller’den de kapatıp açabilirsin.",
       "enable": "Aç"
+    },
+    "how": {
+      "title": "Nasıl çalışır?",
+      "capture": "Tarayıcıda video izlerken altyazıdaki bir kelimenin yanındaki + düğmesine basarsın.",
+      "sent": "Eklenti kelimeyi ve geçtiği altyazı cümlesini bu uygulamaya gönderir; varsa anlamını, cümlenin çevirisini, o anın ekran görüntüsünü, sesini ve videonun o saniyesine bağlantıyı da ekler.",
+      "card": "Seçtiğin destede bir kart olur: ön yüzde kelime ve cümle (kelime kalın), arka yüzde anlam, çeviri, resim ve ses. Gelen kutusuna uğramadan doğrudan desteye gider.",
+      "repeat": "Aynı kelimeyi aynı cümleden bir daha eklersen ikinci kart oluşmaz. Başka bir cümleden eklersen yeni kart olur."
     }
   }
 }

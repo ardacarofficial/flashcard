@@ -3,7 +3,8 @@
   extension and the three setup steps; the access keys (one per browser: made here, shown once,
   revocable) as dense rows; the deck captures go to and what has arrived. Same frame as the
   other connection pages (MCP, Local API): settings-kit sections, 44 px rows, mono for
-  addresses, key prefixes and counts.
+  addresses, key prefixes and counts. v1.3: a "how it works" section first (what is captured,
+  where it goes, what a card looks like), the deck row marks its default and can put it back.
 -->
 <script lang="ts">
   import { onMount, tick } from 'svelte';
@@ -13,8 +14,8 @@
   import { formatCount, formatDateTime } from '$lib/format';
   import { t } from '$lib/i18n/index.svelte';
   import type { ScreenCtx } from '../types';
-  import { Button, Chip, Copy, Dialog, EmptyState, FolderInput, Icon, Input, KeyRound, Link, Plus, Select, Skeleton, TriangleAlert, toast } from '$lib/ui';
-  import { FormRow, SettingsPage, SettingsSection } from '../core/kit';
+  import { Button, Chip, CircleHelp, Copy, Dialog, EmptyState, FolderInput, Icon, Input, KeyRound, Link, Plus, Select, Skeleton, TriangleAlert, toast } from '$lib/ui';
+  import { FormRow, SettingsPage, SettingsSection, isDefault, loadDefaults } from '../core/kit';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -92,6 +93,7 @@
   }
 
   onMount(() => {
+    void loadDefaults();
     void load();
     const unsub = api.on(['subtitle_', 'module_toggled', 'data_changed', 'undone', 'redone'], () => void load());
     return () => void unsub.then((u) => u());
@@ -101,6 +103,9 @@
     { value: '', label: t('subtitle.deck.fallback', { name: status?.fallback_deck ?? 'Subtitle' }) },
     ...deckPaths(ctx.decks).map((d) => ({ value: d.id, label: d.path })),
   ]);
+  const how = $derived([t('subtitle.how.capture'), t('subtitle.how.sent'), t('subtitle.how.card'), t('subtitle.how.repeat')]);
+  /** Where a word goes now (the chosen deck, else the fallback deck). */
+  const target = $derived(status ? (status.default_deck_path ?? status.fallback_deck) : '');
   const steps = $derived([t('subtitle.connect.step1'), t('subtitle.connect.step2'), t('subtitle.connect.step3')]);
   const used = (k: SubtitleKeyDto) =>
     k.last_used_at ? t('subtitle.keys.last_used', { time: formatDateTime(k.last_used_at) }) : t('subtitle.keys.never_used');
@@ -121,6 +126,14 @@
       <EmptyState size="sm" title={t('subtitle.load_failed')} action={{ label: t('subtitle.retry'), onclick: () => void load() }} />
     </SettingsSection>
   {:else}
+    <SettingsSection title={t('subtitle.how.title')} icon={CircleHelp}>
+      <ol class="how" data-testid="subtitle-how">
+        {#each how as line, i (i)}
+          <li><span class="n" aria-hidden="true">{i + 1}</span><span>{line}</span></li>
+        {/each}
+      </ol>
+    </SettingsSection>
+
     <SettingsSection title={t('subtitle.connect.title')} description={t('subtitle.connect.description')} icon={Link} body="rows">
       {#if !status}
         <div class="pad"><Skeleton lines={2} /></div>
@@ -201,7 +214,14 @@
       {#if !status}
         <div class="pad"><Skeleton lines={2} /></div>
       {:else}
-        <FormRow label={t('subtitle.deck.label')} labelFor="subtitle-deck">
+        <FormRow
+          label={t('subtitle.deck.label')}
+          labelFor="subtitle-deck"
+          description={t('subtitle.deck.hint')}
+          example={t('subtitle.deck.example', { deck: target })}
+          isDefault={isDefault('subtitle.default_deck', status.default_deck_id ?? '')}
+          onReset={() => ((deck = ''), void setDeck(''))}
+        >
           <Select id="subtitle-deck" label={t('subtitle.deck.label')} hideLabel options={deckOptions} bind:value={deck} onchange={(v) => void setDeck(v)} />
         </FormRow>
         <div data-testid="subtitle-received">
@@ -251,6 +271,23 @@
     color: var(--text-1);
     overflow-wrap: anywhere;
     user-select: all;
+  }
+  .how {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-width: 68ch;
+  }
+  .how li {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    line-height: var(--leading);
+    color: var(--text-2);
   }
   .steps {
     list-style: none;

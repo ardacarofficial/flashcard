@@ -121,7 +121,28 @@ describe('section tabs (v1.1)', () => {
     const lib = nav.sections.find((s) => s.id === 'library')!;
     expect(lib.entries.filter((e) => e.tab).map((e) => e.route)).toEqual(['/decks', '/notes']);
     expect(lib.entries.filter((e) => !e.tab).map((e) => e.route)).toEqual(['/study', '/match']);
-    // Their settings live in Settings → "Reading and modes".
-    expect(nav.settings.find((g) => g.id === 'reading')?.entries.map((e) => e.route)).toEqual(['/mode-settings']);
+    // Their settings live in Settings → "Studying and cards" (v1.3: was its own group).
+    expect(nav.settings.find((g) => g.id === 'study')?.entries.map((e) => e.route)).toEqual(['/mode-settings']);
+  });
+});
+
+describe('settings groups (v1.3)', () => {
+  const route = (id: string, r: string, order = 50) => mod(id, [menu(id, r, order)]);
+  it('groups by task, everyday first; technical pages only under a separate "Advanced" group', () => {
+    const routes = ['/reminders', '/shortcuts', '/profiles', '/presets', '/notetypes', '/mode-settings', '/ai', '/subtitle', '/io', '/starters', '/automation', '/mcp', '/local-api', '/plugins', '/maintenance', '/app-maintenance'];
+    const nav = buildNavigation(
+      routes.map((r, i) => route(`m${i}`, r, 100 - i)),
+      SCREENS,
+      HOME,
+    );
+    expect(nav.settings.map((g) => [g.id, g.entries.map((e) => e.route)])).toEqual([
+      ['general', ['/reminders', '/shortcuts', '/profiles']],
+      ['study', ['/presets', '/notetypes', '/mode-settings']],
+      ['connections', ['/ai', '/subtitle']],
+      ['data', ['/io', '/starters']],
+      ['advanced', ['/automation', '/mcp', '/local-api', '/plugins', '/maintenance', '/app-maintenance']],
+    ]);
+    // Fewer groups than pages, and nothing lost: every page is reachable from Settings once.
+    expect(nav.settings.flatMap((g) => g.entries).filter((e) => e.primary || e.route === '/ai')).toHaveLength(routes.length);
   });
 });

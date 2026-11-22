@@ -5,12 +5,12 @@
   "modules": {
     "presets": {
       "name": "Deck options",
-      "description": "Presets of study options (daily limits, steps, desired retention) shared by decks."
+      "description": "Packages of study options shared by decks: daily limits, learning steps, desired retention."
     }
   },
   "presets": {
     "heading": "Deck options",
-    "intro": "A deck uses its own preset, else its parent deck's, else the defaults.",
+    "intro": "Set how many new cards and reviews a deck shows each day, and when a card you got wrong comes back.",
     "list": "Presets",
     "none": "No presets yet: every deck uses the defaults.",
     "new": "New preset",
@@ -21,24 +21,22 @@
     "delete": "Delete",
     "save": "Save",
     "saved": "Saved.",
-    "decks": "Decks",
-    "decks_none": "Not assigned to any deck.",
+    "decks": "Decks using this preset",
+    "decks_none": "No deck uses this preset yet. Pick one below.",
     "assign": "Use for deck",
     "assign_pick": "Choose a deck",
     "unassign": "Remove from “{path}”",
-    "advanced": "Advanced",
     "field": {
       "name": "Name",
       "new_per_day": "New cards per day",
       "reviews_per_day": "Maximum reviews per day",
       "learning_steps_mins": "Learning steps (minutes)",
       "relearning_steps_mins": "Relearning steps (minutes)",
-      "steps_hint": "Separated by spaces, e.g. 1 10",
       "desired_retention": "Desired retention",
       "fsrs_weights": "FSRS parameters",
-      "fsrs_hint": "Empty = defaults. Filled in by the optimizer.",
+      "fsrs_hint": "Leave it empty to use defaults that suit most people. The optimizer in Statistics → Planning works these out from your review history and writes them here.",
       "maximum_interval_days": "Maximum interval (days)",
-      "bury_siblings": "Bury related cards until tomorrow",
+      "bury_siblings": "Leave related cards for tomorrow",
       "new_order": "New card order",
       "review_order": "Review order"
     },
@@ -53,16 +51,64 @@
     },
     "deck_count": "{n, plural, one {# deck} other {# decks}}",
     "new_placeholder": "New preset name",
-    "pick": "Choose a preset to edit its options.",
-    "none_hint": "Create one to give some decks their own limits and steps.",
-    "decks_intro": "Decks that use this preset (subdecks inherit it).",
+    "pick": "Choose a preset on the left to see its options.",
+    "none_hint": "If some decks should work differently (e.g. more new cards a day for an exam deck), create a preset and use it for those decks.",
+    "decks_intro": "When a deck gets a preset, its subdecks use it too (unless they have their own).",
     "desc": {
-      "new_per_day": "How many new cards to introduce each day.",
-      "reviews_per_day": "Reviews stop for the day at this number.",
-      "desired_retention": "Chance you still remember a card when it comes back (0.70–0.99)."
+      "name": "Only shown in this list; it does not change how you study.",
+      "new_per_day": "How many new (never seen) cards to show each day. More means faster progress, but more reviews on the following days too.",
+      "reviews_per_day": "The most reviews asked in one day. At the limit, that day's reviews stop.",
+      "desired_retention": "The chance you still remember a card when it comes back (70%–99%).",
+      "learning_steps": "How many minutes apart you see a new card at first. In minutes, separated by spaces.",
+      "relearning_steps": "How many minutes apart you see a card again after you forget it (answer “Again”).",
+      "new_order": "New cards in the order they were added, or mixed.",
+      "review_order": "The order waiting reviews come in. “Weakest memory first” brings forward the cards you are about to forget.",
+      "bury_siblings": "Cards made from the same note (e.g. a reverse card) don't come one after another on the same day.",
+      "maximum_interval_days": "The longest time between two reviews of a card (1–36500 days)."
     },
     "danger": "Delete preset",
-    "delete_desc": "Decks using it fall back to their parent deck or the defaults. Undo is available."
+    "delete_desc": "Decks using it fall back to their parent deck's preset or the defaults. Undo is available.",
+    "inherits_from": "from parent: {path}",
+    "used_by": "{n, plural, one {# deck uses this preset: everything you change here affects it.} other {# decks use this preset: everything you change here affects all of them.}}",
+    "used_by_none": "No deck uses this preset yet; you can use it for a deck below.",
+    "on_defaults": "{n, plural, one {# deck uses no preset: it runs on the defaults.} other {# decks use no preset: they run on the defaults.}}",
+    "unsaved": "You have unsaved changes.",
+    "unsaved_shared": "You have unsaved changes. Saving affects {n} decks.",
+    "advanced_summary": "Card order, related cards, maximum interval and FSRS parameters. Most people never touch these.",
+    "fsrs_placeholder": "Empty: default parameters",
+    "open_optimizer": "Optimize in Planning",
+    "how": {
+      "title": "What is a preset?",
+      "what": "A preset is one set of deck options you can use for several decks at once: how many new cards a day, how many reviews, when a card you got wrong comes back.",
+      "inherit": "A deck uses its own preset; if it has none, its parent deck's; if that has none either, the defaults.",
+      "shared": "Changing a preset changes every deck that uses it. To make just one deck different, copy the preset and use the copy for that deck."
+    },
+    "section": {
+      "daily": "Daily limits",
+      "daily_desc": "The most you will study in one day. Once a limit is reached, that day's cards are done.",
+      "memory": "Learning and remembering",
+      "memory_desc": "How often cards come back.",
+      "order": "Order and intervals",
+      "order_desc": "The order cards come in and how far apart they can get.",
+      "fsrs": "Scheduler (FSRS)",
+      "fsrs_desc": "Numbers that tune the scheduler (FSRS) to your memory. Not typed by hand."
+    },
+    "unit": {
+      "minutes": "{n, plural, other {# min}}",
+      "hours": "{n, plural, other {# h}}",
+      "days": "{n, plural, one {# day} other {# days}}"
+    },
+    "example": {
+      "new_per_day": "{n} → at most {n} new words are asked each day; the rest wait for the next days.",
+      "reviews_per_day": "{n} → after {n} reviews, the rest wait until tomorrow.",
+      "desired_retention": "{pct} → the aim is that you remember about {n} of every 100 cards. Raise it and cards come back more often.",
+      "learning": "{steps} → a new card is asked again after these gaps; once you know it at the last step it moves to daily reviews.",
+      "learning_none": "No steps → a new card moves to daily reviews right after your first answer.",
+      "relearning": "{steps} → a card you forgot is asked again after these gaps, then goes back to daily reviews.",
+      "relearning_none": "No steps → a card you forgot is simply scheduled for tomorrow or later.",
+      "maximum_interval_days": "{span} → even a card you know very well is asked again within this time.",
+      "bury_siblings": "If a word has both an “English → Turkish” and a “Turkish → English” card, once one comes up today the other waits until tomorrow."
+    }
   },
   "errors": {
     "validation": {

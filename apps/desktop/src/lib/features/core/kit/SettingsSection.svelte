@@ -1,6 +1,6 @@
 <!--
   One titled group of a Settings (or Statistics) page (v1.2): a small heading with an optional
-  one-line description and actions, then the body — no box around it. `body="rows"` stacks
+  plain description (body size, v1.3) and actions, then the body — no box around it. `body="rows"` stacks
   `FormRow`s divided by 1px lines (the line above the first row closes the heading); `md` is
   free content. `tone="danger"` marks the destructive group, which goes last on a page and
   is set apart by extra space and a red heading.
@@ -73,7 +73,7 @@
     align-items: center;
     gap: 6px;
     margin: 0;
-    font-size: var(--text-sm);
+    font-size: var(--text-md);
     font-weight: var(--weight-semibold);
     line-height: var(--leading-tight);
     color: var(--text-1);
@@ -89,9 +89,10 @@
     color: var(--danger);
   }
   .desc {
-    margin: 2px 0 0;
+    margin: 4px 0 0;
+    max-width: 68ch;
     color: var(--text-2);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     line-height: var(--leading);
   }
   .actions {

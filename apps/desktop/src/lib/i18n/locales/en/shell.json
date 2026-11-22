@@ -39,14 +39,14 @@
     "app": {
       "locale": {
         "label": "App language",
-        "description": "Language of the app’s menus, messages and built-in note types."
+        "description": "Menus, messages and the names of newly created ready-made note types use this language. Your cards' content does not change."
       },
       "theme": {
         "label": "Theme",
         "description": "Light, dark, or follow the system setting."
       }
     },
-    "general_intro": "Language, colours and how the app looks."
+    "general_intro": "Pick the app's language and look here. Not sure where a setting lives? Start with the questions below."
   },
   "lang": {
     "tr": "Türkçe",

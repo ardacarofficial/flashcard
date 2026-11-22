@@ -44,6 +44,21 @@ pub struct McpToolList {
     pub writes_allowed: bool,
 }
 
+/// Response of `mcp.setup`: what an MCP client's configuration needs to start this
+/// collection's server (`<fc_path> --db <db_path> mcp serve`), so the UI can show a snippet
+/// with real paths instead of placeholders.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct McpSetup {
+    /// The open collection file (`<profile folder>/collection.db`) when the desktop app
+    /// started this process; `null` when unknown (CLI, tests).
+    pub db_path: Option<String>,
+    /// The `fc` command-line program: next to the running executable, else the first one on
+    /// `PATH`; `null` when neither exists (the UI then asks the user for it).
+    pub fc_path: Option<String>,
+    /// Operating system the app runs on (`windows`, `macos`, `linux`, …), for per-OS hints.
+    pub platform: String,
+}
+
 /// How the app talks to an external MCP server.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]

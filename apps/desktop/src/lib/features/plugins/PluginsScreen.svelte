@@ -1,3 +1,8 @@
+<!--
+  Settings → Advanced → Plugins: what a plugin is and how it is fenced in (v1.3), the installed
+  plugins (on/off, commands, permissions in plain words, settings, log, uninstall), the files
+  plugins downloaded, and under "Advanced" the sandbox limits every plugin runs under.
+-->
 <script lang="ts">
   import { formatDecimal } from '$lib/format';
   import { onMount } from 'svelte';
@@ -7,6 +12,8 @@
   import { pickFile } from '../io/files';
   import type { ScreenCtx } from '../types';
   import { loadPluginTexts, uiText } from './texts.svelte';
+  import { describePermission } from './permissions';
+  import PluginLimits from './PluginLimits.svelte';
   import {
     Button,
     Card,
@@ -20,17 +27,19 @@
     HardDrive,
     Icon,
     Input,
+    Info,
     Play,
     Puzzle,
     ScrollText,
     Select,
     Shield,
+    SlidersHorizontal,
     Switch,
     Trash2,
     Upload,
     type Tone,
   } from '$lib/ui';
-  import { FormRow, LoadState, SettingsPage, SettingsSection } from '../core/kit';
+  import { FormRow, LoadState, SettingsAdvanced, SettingsPage, SettingsSection } from '../core/kit';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -186,7 +195,7 @@
 
 {#snippet perm(p: { permission: string; sensitive: boolean }, checked: boolean, set: (v: boolean) => void)}
   <li>
-    <Checkbox {checked} onchange={set}>
+    <Checkbox {checked} onchange={set} description={describePermission(p.permission)}>
       <span class="perm"><code>{p.permission}</code>
         {#if p.sensitive}<Chip size="sm" tone="warning" icon={Shield} label={t('plugins.sensitive')} />{/if}</span>
     </Checkbox>
@@ -197,6 +206,14 @@
   {#snippet actions()}
     <Button variant="primary" icon={Upload} onclick={chooseFile}>{t('plugins.install')}</Button>
   {/snippet}
+
+  <SettingsSection title={t('plugins.how.title')} icon={Info}>
+    <ul class="explain">
+      <li>{t('plugins.how.what')}</li>
+      <li>{t('plugins.how.sandbox')}</li>
+      <li>{t('plugins.how.off')}</li>
+    </ul>
+  </SettingsSection>
 
   {#if !loaded}
     <Card padding="lg">
@@ -256,6 +273,7 @@
 
               <div class="block">
                 <h3>{t('plugins.permissions')}</h3>
+                <p class="muted">{t('plugins.permissions_hint')}</p>
                 {#if p.permissions.length === 0}
                   <p class="muted">{t('plugins.no_permissions')}</p>
                 {:else}
@@ -327,6 +345,12 @@
       {/each}
     </SettingsSection>
   {/if}
+
+  <SettingsAdvanced id="plugins" summary={t('plugins.limits.summary')}>
+    <SettingsSection title={t('plugins.limits.heading')} description={t('plugins.limits.description')} icon={SlidersHorizontal} body="rows">
+      <PluginLimits {ctx} />
+    </SettingsSection>
+  </SettingsAdvanced>
 </SettingsPage>
 
 {#if pending}
@@ -454,13 +478,6 @@
     gap: var(--space-2);
     padding: var(--space-3) var(--space-4) var(--space-2) calc(var(--space-4) + 28px + var(--space-3));
   }
-  /* Setting rows bring their own side padding: line their labels up with the blocks. */
-  .block.flush {
-    padding-inline: calc(28px + var(--space-1)) 0;
-  }
-  .block.flush h3 {
-    padding-inline: var(--space-6) var(--space-4);
-  }
   .block h3 {
     margin: 0;
     font-size: var(--text-xs);
@@ -482,6 +499,17 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+  }
+  .explain {
+    margin: 0;
+    padding-inline-start: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-width: 68ch;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+    line-height: var(--leading);
   }
   .perm {
     display: inline-flex;
@@ -520,12 +548,6 @@
   @media (max-width: 1023.98px) {
     .block,
     .error {
-      padding-inline: var(--space-4);
-    }
-    .block.flush {
-      padding-inline: 0;
-    }
-    .block.flush h3 {
       padding-inline: var(--space-4);
     }
     .notice {

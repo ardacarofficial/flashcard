@@ -1,5 +1,40 @@
 {
   "kit": {
-    "retry": "Try again"
+    "retry": "Try again",
+    "default": "default",
+    "reset": "Reset to default",
+    "example": "Example:",
+    "advanced": {
+      "title": "Advanced settings"
+    },
+    "search": {
+      "label": "Search settings",
+      "placeholder": "Search settings…",
+      "clear": "Clear search",
+      "none": "No setting mentions “{query}”. Try another word.",
+      "results": "{count, plural, one {Found on # page} other {Found on # pages}}"
+    }
+  },
+  "settings": {
+    "guide": {
+      "title": "What do you want to change?",
+      "description": "The settings people look for most. Click one to open the right page, or type in the search box above.",
+      "new_per_day": "How many new words a day?",
+      "reminder": "Remind me to study every day",
+      "card_back": "What shows on the front and back of a card?",
+      "keys": "Change keyboard shortcuts",
+      "ai": "Make cards with AI (API key)",
+      "subtitle": "Catch words while watching in the browser",
+      "backup": "Back up, import cards from a file",
+      "where": {
+        "presets": "Deck options",
+        "reminders": "Reminders",
+        "notetypes": "Note types",
+        "shortcuts": "Shortcuts",
+        "ai": "AI",
+        "subtitle": "Subtitle",
+        "io": "Import / export"
+      }
+    }
   }
 }

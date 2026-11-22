@@ -14,13 +14,132 @@
     }
   },
   "notetype": {
-    "intro": "What a note holds (fields) and which cards it makes (templates).",
+    "intro": "Decide which boxes you fill in when adding a note and which cards a note turns into; the ready-made types are usually enough.",
     "list": "Note types",
     "empty": "No note types yet.",
-    "field_actions": "Actions",
-    "sort_field_hint": "The field shown for a note in lists and search results.",
-    "syntax_intro": "Each template makes one card per note. Insert fields with double braces.",
+    "sort_field_hint": "Shown as the note's title in the Library and in search results.",
+    "syntax_intro": "Each template makes one card from every note. To put a field on the card, write its code in double braces, e.g. {{word}}.",
     "remove_template": "Remove template “{name}”",
-    "preview_heading": "Preview"
+    "preview_heading": "Preview",
+    "pick_title": "Pick a note type",
+    "pick_desc": "Every note belongs to a type. The ready-made types come with the app; for one of your own, use “New note type” and start from a ready-made starting point.",
+    "group_own": "Your types",
+    "group_builtin": "Ready-made types",
+    "field_count": "{fields, plural, one {# field} other {# fields}}",
+    "copy_action": "Make a copy",
+    "name_hint": "You see this name in the type list when adding a note.",
+    "used_by": "{notes, plural, =0 {No notes use this type yet.} one {# note uses this type.} other {# notes use this type.}}",
+    "makes_cards": "{cards, plural, =1 {Each note becomes 1 card.} other {Each note becomes up to # cards.}}",
+    "makes_cloze": "Every gap you mark in a note becomes its own card.",
+    "fields_desc": "The boxes you fill in when adding a note, in this order. A note isn't saved while a required field is empty.",
+    "field_n": "Field {n}",
+    "field_name_n": "Name of field {n}",
+    "contains_label": "Holds:",
+    "contains": {
+      "rich_text": "Formatted text (bold, lists, pictures)",
+      "text": "Plain text",
+      "image": "A picture",
+      "audio": "A sound clip",
+      "video": "A video",
+      "number": "A number",
+      "tag_list": "A list of tags",
+      "link": "A link to another note"
+    },
+    "contains_pick": "What “{name}” will hold",
+    "required_of": "Required: {name}",
+    "move_field_up": "Move “{name}” up",
+    "move_field_down": "Move “{name}” down",
+    "remove_field": "Remove “{name}”",
+    "preview_desc": "This is how the cards of this type look. As sample content, each field shows its own name.",
+    "preview_which": "Which card",
+    "side_front": "Front (question)",
+    "side_back": "Back (answer)",
+    "flip_to_back": "Show the back",
+    "flip_to_front": "Show the front",
+    "preview_broken": "The template code can't make cards like this, so it can't be saved:",
+    "unsaved": "You have unsaved changes.",
+    "discard": "Discard",
+    "save_loses_field": "“{name}” will be removed: its content in {notes, plural, one {# note} other {# notes}} is lost.",
+    "save_new_cards": "The new “{name}” template adds a card to each of the {notes, plural, one {# note} other {# notes}} of this type (unless its front would be empty).",
+    "delete_classic": "Classic is the app's base type and can't be deleted. Other types you don't use can be.",
+    "delete_in_use": "{notes, plural, one {# note uses} other {# notes use}} this type. A type with notes can't be deleted: first select those notes in the Library and move them with “Change note type”, or delete them.",
+    "delete_free": "No note uses this type, so deleting it affects no notes or cards. Undo brings it back.",
+    "delete_subtitle": "The Subtitle extension saves the words it captures as this type; if you delete it, no new cards arrive from the extension.",
+    "remove_field_title": "Remove the “{name}” field?",
+    "remove_field_body": "When you save, the “{name}” content of {notes, plural, one {# note} other {# notes}} is deleted. Their other fields, cards and review history stay as they are; Undo brings it back.",
+    "remove_field_confirm": "Remove field",
+    "remove_template_title": "Remove the “{name}” template?",
+    "remove_template_body": "No cards have been made from this template yet, so removing it affects no cards. Until you save, Discard brings it back.",
+    "remove_template_confirm": "Remove template",
+    "switch_title": "Throw away unsaved changes?",
+    "switch_body": "You haven't saved your changes to “{name}”. They are lost if you switch to another type.",
+    "discard_confirm": "Throw away changes",
+    "field_used_title": "“{name}” is used on the cards",
+    "field_used_body": "This field is shown by the {templates} template. First take {code} out of the template under “Advanced: template code” below; then you can remove the field.",
+    "template_in_use_title": "“{name}” can't be removed",
+    "template_in_use_body": "{cards, plural, one {# card was} other {# cards were}} made from this template (counting the trash). Removing a template with cards would leave those cards and their review history orphaned, so the app doesn't allow it. You can still edit its front and back code.",
+    "understood": "Got it",
+    "code": {
+      "title": "Advanced: template code",
+      "summary": "The cards' HTML templates, CSS styling and the fields' technical settings. No need to open it unless you want to write the card design yourself.",
+      "fields_title": "Technical field settings",
+      "fields_desc": "Each field's kind (text, picture, sound…), the duplicate check and whether search looks inside it.",
+      "unique_hint": "if all ticked fields match another note, the new note counts as a duplicate.",
+      "searchable_hint": "search also looks inside this field.",
+      "codes_label": "Field codes",
+      "codes_new": "New fields get their code when you save.",
+      "syntax_label": "Syntax",
+      "front_html": "Front (HTML)",
+      "back_html": "Back (HTML)",
+      "css_desc": "Styling applied only to the cards of this type.",
+      "new_template_cards": "When you save, each of the {notes, plural, one {# note} other {# notes}} of this type gets a card from this template (unless its front would be empty)."
+    },
+    "start": {
+      "intro": "Pick a starting point and give it a name. You can change its fields and looks afterwards.",
+      "label": "Starting point",
+      "missing": "This ready-made type was deleted, so it can't be used.",
+      "name_label": "Name",
+      "name_hint": "You see this name in the type list when adding a note.",
+      "create": "Create",
+      "word": {
+        "title": "Word",
+        "name": "My words",
+        "desc": "The word on the front, its meaning on the back. One card per word."
+      },
+      "word_example": {
+        "title": "Word + example sentence",
+        "name": "Word and example",
+        "desc": "The word on the front; its meaning and a sentence using it on the back."
+      },
+      "reverse": {
+        "title": "Both directions",
+        "name": "Both ways",
+        "desc": "Each note becomes 2 cards, front→back and back→front, so you're asked both ways."
+      },
+      "cloze": {
+        "title": "Fill in the blank (cloze)",
+        "name": "Fill in the blank",
+        "desc": "Every word you hide in a sentence becomes its own card."
+      },
+      "subtitle": {
+        "title": "Subtitle",
+        "name": "Subtitle words",
+        "desc": "The same fields as the Subtitle extension's cards: word, subtitle line, meaning, translation, screenshot. The extension keeps using its own ready-made type."
+      },
+      "blank": {
+        "title": "Plain: front and back",
+        "name": "New note type",
+        "desc": "Two fields, one card. Start here if you want to shape it yourself."
+      },
+      "field": {
+        "word": "Word",
+        "meaning": "Meaning",
+        "example": "Example sentence"
+      },
+      "template": {
+        "recognition": "Recognition"
+      }
+    },
+    "delete_row": "Delete “{name}”"
   }
 }

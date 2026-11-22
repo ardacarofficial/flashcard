@@ -5,40 +5,239 @@
   "modules": {
     "automation": {
       "name": "Otomasyon kuralları",
-      "description": "“Ne zaman … eğer … yap …” kuralları: kartları kendiliğinden etiketle, askıya al, taşı ya da sınıflandır."
+      "description": "“Şu olduğunda … şu kartlar için … şunu yap” kuralları: kartları kendiliğinden etiketle, askıya al, taşı ya da sınıflandır."
     }
   },
   "settings": {
     "automation": {
       "max_depth": {
-        "label": "Kural zinciri derinliği",
-        "description": "Kaç kural art arda birbirini tetikleyebilir (kural kendini asla yeniden tetiklemez)."
+        "label": "En uzun kural zinciri",
+        "description": "Bir kuralın yaptığı değişiklik başka bir kuralı başlatabilir (etiket ekleyen bir kural, “bir notu düzenlediğinde” kuralını çalıştırır). Bu sayı, bir zincirde art arda en çok kaç kural çalışacağını belirler; daha uzun zincir durur, böylece kurallar sonsuza dek birbirini çağıramaz. Kural kendini asla yeniden başlatmaz.",
+        "example": "3 → A kuralı B'yi, B de C'yi başlatabilir; C'nin başlattığı dördüncü kural atlanır (geçmişte görünür)."
       },
       "max_runs_per_event": {
-        "label": "Değişiklik başına kural çalışması",
-        "description": "Bir değişikliğin ardından en çok bu kadar kural çalışır."
+        "label": "Bir değişiklikten sonra en çok kural çalışması",
+        "description": "Tek bir değişiklikten sonra (bir kartı cevaplamak, bir içe aktarma, zamanlanmış bir çalışma) toplam en çok bu kadar kural çalışır; fazlası atlanır ve geçmişte yazar.",
+        "example": "20 → kart cevaplayınca çalışan 30 kuralın olsa bile her cevaptan sonra en çok 20'si çalışır."
       }
     }
   },
   "automation": {
-    "heading": "Otomasyon kuralları",
-    "intro": "Bir şey olduğunda ve kartlar sorguya uyduğunda eylemler çalışır. Her çalışma tek geri al adımıdır.",
-    "none": "Henüz kural yok.",
-    "new": "Yeni kural",
-    "edit_rule": "Kuralı düzenle",
-    "edit": "Düzenle",
-    "delete": "Sil",
-    "run_now": "Şimdi çalıştır",
-    "up": "Yukarı taşı",
-    "down": "Aşağı taşı",
-    "name": "Ad",
-    "enabled": "Açık",
+    "heading": "Otomasyon",
+    "intro": "Tekrar eden işleri uygulamaya bırak: bir şey olduğunda (ör. bir kartı yine unuttuğunda) seçtiğin kartları kendiliğinden etiketler, taşır ya da askıya alır.",
+    "new": "Kendi kuralını yaz",
+    "recipes": {
+      "title": "Hazır bir kuralla başla",
+      "description": "Birini seç: dolu olarak açılır, etiketi, desteyi ya da sayıyı değiştirebilirsin; kaydetmeden hiçbir şey olmaz.",
+      "matching": "{n, plural, =0 {Henüz uyan kart yok} other {# kart uyuyor}}",
+      "counting": "Sayılıyor…",
+      "no_count": "Sayı alınamadı",
+      "exists": "Kurallarında zaten var",
+      "subtitle_type": "Altyazı kartı",
+      "tag_forgotten": {
+        "name": "Sürekli unuttuğum kartları etiketle",
+        "description": "Bir kartı 4. kez unuttuğunda ona “zor” etiketi konur; sonra bu kartları ayrıca çalışabilirsin.",
+        "tag": "zor"
+      },
+      "suspend_leeches": {
+        "name": "Bir türlü akılda kalmayanları askıya al",
+        "description": "8 kez unuttuğun bir kart askıya alınır: sen düzeltip yeniden açana kadar sorulmaz."
+      },
+      "archive_learned": {
+        "name": "Öğrendiğim kartları arşiv destesine taşı",
+        "description": "90 günden uzun hatırlayacağın kartlar seçtiğin desteye taşınır; günlük destelerin sade kalır."
+      },
+      "tag_subtitle": {
+        "name": "Yeni Subtitle kartlarına etiket ekle",
+        "description": "Tarayıcıdaki Subtitle eklentisiyle yakaladığın her kelimeye bir etiket konur (ör. dizinin adı).",
+        "tag": "subtitle"
+      },
+      "suspend_flagged": {
+        "name": "Kırmızı bayraklı kartları askıya al",
+        "description": "Hatalı bir karta kırmızı bayrak koy: sen düzeltip yeniden açana kadar askıda kalır."
+      },
+      "untag_learned": {
+        "name": "Kolaylaşan kartlardan “zor” etiketini kaldır",
+        "description": "Günde bir kez: artık 30 günden uzun hatırladığın “zor” kartların etiketi kalkar."
+      }
+    },
+    "editor": {
+      "new_title": "Yeni kural",
+      "edit_title": "Kuralı düzenle",
+      "name": "Ad",
+      "name_hint": "Yalnız senin için: kuralı listede tanıman için.",
+      "sentence_label": "Kural ne yapar",
+      "sentence_hint": "Değiştirmek için altı çizili bir parçaya tıkla.",
+      "part_when": "Ne zaman çalışsın?",
+      "part_cards": "Hangi kartlar için?",
+      "part_do": "Ne yapılsın?",
+      "done": "Tamam",
+      "enabled": "Kaydedince açık olsun",
+      "enabled_hint": "Kapalıysa kural durur; yalnız “Şimdi çalıştır” dediğinde çalışır.",
+      "save": "Kuralı kaydet",
+      "cancel": "Vazgeç",
+      "missing_deck": "Kartların taşınacağı desteyi seç.",
+      "missing_tags": "En az bir etiket yaz.",
+      "missing_attr": "Bir sınıflandırma seç.",
+      "missing_name": "Kurala bir ad ver."
+    },
+    "sentence": {
+      "pattern": "{when}, {cards} için {action}.",
+      "or": " ya da ",
+      "and": " ve ",
+      "list": ", ",
+      "when": {
+        "note_added": "Yeni bir not eklendiğinde",
+        "note_updated": "Bir notu düzenlediğinde",
+        "card_answered": "Bir kartı cevapladığında",
+        "card_answered_with": "Bir kartı {ratings} ile cevapladığında",
+        "card_flagged": "Bir karta bayrak koyduğunda",
+        "card_flagged_with": "Bir karta {flags} bayrak koyduğunda",
+        "classification_changed": "Bir kartın sınıflandırması değiştiğinde",
+        "imported": "Bir içe aktarma bittiğinde",
+        "inbox_added": "Gelen kutusuna bir öneri düştüğünde",
+        "schedule_minutes": "{n, plural, other {# dakikada bir}}",
+        "schedule_hours": "{n, plural, =1 {Saatte bir} other {# saatte bir}}",
+        "schedule_days": "{n, plural, =1 {Günde bir kez} other {# günde bir}}"
+      },
+      "cards": {
+        "event": "ilgili kartlar",
+        "all": "bütün kartlar",
+        "lapses": "{n} ya da daha çok kez unuttuğun kartlar",
+        "stability": "{n} günden uzun hatırlayacağın kartlar",
+        "tag_stability": "“{tag}” etiketli ve artık {n} günden uzun hatırlayacağın kartlar",
+        "tag": "“{tag}” etiketli kartlar",
+        "notetype": "“{name}” türündeki kartlar",
+        "subtitle": "Subtitle'dan gelen kartlar",
+        "deck": "“{deck}” destesindeki kartlar",
+        "flag": "{flag} bayraklı kartlar",
+        "query": "“{query}” sorgusuna uyan kartlar",
+        "inbox_all": "her öneri",
+        "inbox_query": "“{query}” sorgusuna uyan öneriler"
+      },
+      "action": {
+        "add_tags": "{n, plural, =1 {{tags} etiketini ekle} other {{tags} etiketlerini ekle}}",
+        "remove_tags": "{n, plural, =1 {{tags} etiketini kaldır} other {{tags} etiketlerini kaldır}}",
+        "no_tags": "etiket ekle (bir etiket yaz)",
+        "no_tags_remove": "etiket kaldır (bir etiket yaz)",
+        "suspend": "askıya al",
+        "unsuspend": "askıdan çıkar",
+        "bury": "bugünlük göm",
+        "unbury": "gömmeyi kaldır",
+        "flag_on": "{flag} bayrak koy",
+        "flag_off": "{flag} bayrağı kaldır",
+        "move": "“{deck}” destesine taşı",
+        "move_none": "bir desteye taşı (deste seç)",
+        "set_attribute": "{attr} değerini {value} yap",
+        "clear_attribute": "{attr} değerini temizle",
+        "attribute_none": "bir sınıflandırma ata (seç)",
+        "reset_progress": "ilerlemesini sıfırla",
+        "accept": "not olarak kabul et",
+        "accept_deck": "“{deck}” destesine not olarak kabul et",
+        "other": "{action}"
+      }
+    },
+    "kind": {
+      "label": "Kartlar",
+      "all": "Bütün kartlar",
+      "event": "İlgili kartlar",
+      "lapses": "Sık unuttuğun kartlar",
+      "stability": "İyi bildiğin kartlar",
+      "tag_stability": "Artık iyi bildiğin etiketli kartlar",
+      "tag": "Bir etiketi olan kartlar",
+      "notetype": "Bir not türündeki kartlar",
+      "deck": "Bir destedeki kartlar",
+      "flag": "Bayraklı kartlar",
+      "query": "Arama sorgusu yaz…",
+      "lapses_n": "En az kaç kez unutulmuş",
+      "stability_n": "En az kaç gün hatırlanacak",
+      "stability_hint": "Zamanlayıcının, kartı ne kadar süre hatırlayacağına dair tahmini.",
+      "tag_name": "Etiket",
+      "notetype_name": "Not türü",
+      "deck_name": "Deste",
+      "flag_name": "Bayrak",
+      "query_hint": "Göz at ekranındaki arama dili, ör. deck:İngilizce lapses>=3 tag:fiil"
+    },
+    "schedule": {
+      "every": "Her",
+      "unit": "Birim",
+      "minutes": "dakika",
+      "hours": "saat",
+      "days": "gün",
+      "hint": "En az 15 dakika. Yeni zamanlanmış kural hemen bir kez çalışır."
+    },
+    "preview": {
+      "title": "Önizleme",
+      "counting": "Sayılıyor…",
+      "affected": "{n, plural, =0 {Şu an hiçbir kart değişmez} other {Şu an # kart etkilenir}}",
+      "items_affected": "{n, plural, =0 {Şu an bekleyen öneri yok} other {Şu an # öneri not olur}}",
+      "matched": "{matched} kart uyuyor, {same} tanesi zaten böyle.",
+      "samples": "Örneğin",
+      "more": "ve {n} kart daha",
+      "event_note": "Kaydettikten sonra kendiliğinden, yalnız ilgili kartlar için çalışır. Bu kartlara da hemen uygulamak istersen listede “Şimdi çalıştır”a bas.",
+      "schedule_note": "Kaydedince hemen bir kez, sonra kendi aralığında çalışır.",
+      "dry_run": "Önizleme hiçbir şeyi değiştirmez.",
+      "error": "Önizleme yapılamadı: {error}",
+      "truncated": "Bir çalışmada en çok 5000 kart işlenir; kalanlar sonraki çalışmada."
+    },
+    "raw": {
+      "title": "Gelişmiş: kuralı elle yaz",
+      "summary": "Bütün tetikleyiciler, hazır seçenekler yerine arama sorgusu ve bir kuralda 10 eyleme kadar."
+    },
+    "rules": {
+      "title": "Kuralların",
+      "description": "Kurallar yukarıdan aşağıya çalışır. Kapattığın kural silinmez, yalnız çalışmaz.",
+      "none": "Henüz kural yok.",
+      "none_hint": "Aşağıdaki hazır kurallardan biriyle başla ya da kendi kuralını yaz.",
+      "off": "Kapalı",
+      "delete_title": "“{name}” silinsin mi?",
+      "delete_body": "Kural durur ve listeden kalkar. Şimdiye kadar yaptıkları kalır. Geri al (Ctrl+Z) ile geri getirebilirsin.",
+      "ran": "{n, plural, =0 {Çalıştı: uyan kart yoktu} other {# kart için çalıştı}}"
+    },
+    "runs": {
+      "title": "Son çalışmalar",
+      "description": "Kurallarının son yaptıkları, en yenisi üstte. Her çalışma tek bir geri al adımıdır.",
+      "none": "Henüz hiçbir kural çalışmadı.",
+      "today": "Bugün {time}",
+      "yesterday": "Dün {time}",
+      "deleted_rule": "silinmiş kural",
+      "applied": "{n} kart için yapıldı",
+      "applied_action": {
+        "add_tags": "{n} karta etiket eklendi",
+        "remove_tags": "{n} karttan etiket kaldırıldı",
+        "set_suspended": "{n} kart askıya alındı ya da çıkarıldı",
+        "set_buried": "{n} kart gömüldü ya da çıkarıldı",
+        "set_flag": "{n} kartın bayrağı değişti",
+        "move_cards": "{n} kart taşındı",
+        "set_attribute": "{n} karta sınıflandırma atandı",
+        "reset_progress": "{n} kartın ilerlemesi sıfırlandı",
+        "accept": "{n} öneri kabul edildi"
+      },
+      "no_match": "uyan kart yoktu, hiçbir şey değişmedi",
+      "skipped_cycle": "atlandı: kendini yeniden başlatacaktı",
+      "skipped_depth": "atlandı: kural zinciri çok uzadı (aşağıda Gelişmiş'e bak)",
+      "skipped_budget": "atlandı: tek bir değişiklik çok fazla kural çalıştırdı (aşağıda Gelişmiş'e bak)",
+      "failed": "çalışmadı: {error}",
+      "via": {
+        "manual": "elle çalıştırıldı",
+        "schedule": "zamanı gelince",
+        "note_added": "not eklenince",
+        "note_updated": "not düzenlenince",
+        "card_answered": "kart cevaplanınca",
+        "card_flagged": "bayrak konunca",
+        "classification_changed": "sınıflandırma değişince",
+        "imported": "içe aktarma bitince",
+        "inbox_added": "öneri gelince"
+      }
+    },
+    "advanced": {
+      "title": "Gelişmiş: kural zincirleri",
+      "summary": "Kuralların birbirini sonsuza dek başlatmasını önleyen sınırlar. Varsayılanlar neredeyse herkese uyar."
+    },
     "when": "Ne zaman",
-    "if": "Eğer",
-    "do": "Yap",
+    "if": "Hangi kartlar",
+    "do": "Ne yapılsın",
     "condition": "Kartlar (sorgu)",
-    "every_label": "Her (dakika)",
-    "every_mins": "{n} dakikada bir",
     "tags": "Etiketler (virgülle)",
     "on": "Açık",
     "flag": "Bayrak",
@@ -48,15 +247,11 @@
     "clear": "(temizle)",
     "add_action": "Eylem ekle",
     "remove_action": "Kaldır",
-    "save": "Kuralı kaydet",
-    "preview": "Önizle",
-    "cancel": "Vazgeç",
-    "preview_summary": "{matched} kart uyuyor, {changed} kart değişirdi. Hiçbir şey değiştirilmedi.",
-    "truncated": "Bir çalışmada yalnız ilk 5000 kart işlenir.",
-    "would_change": "değişirdi",
-    "runs": "Son çalışmalar",
-    "no_runs": "Henüz çalışma yok.",
-    "matched": "{n} kart",
+    "edit": "Düzenle",
+    "delete": "Sil",
+    "run_now": "Şimdi çalıştır",
+    "up": "Yukarı taşı",
+    "down": "Aşağı taşı",
     "trigger": {
       "label": "Tetikleyici",
       "note_added": "Not eklenince",
@@ -102,9 +297,7 @@
     "condition_example": "ör. seviye:A1 lapses>=5",
     "inbox_condition_hint": "Gelen kutusu kurallarında sorgu, önerinin olacağı kartta denetlenir (ör. deck:İngilizce seviye:B1).",
     "auto_accept_active": "Programların önerilerini sen bakmadan kabul eden kurallar: {names}. Eşleştirilmiş bir programın ya da eklentinin önerdiği her şey hemen not olur (her program en çok günlük sınırı kadar önerebilir: Ctrl+K → local_api.inbox_daily_max ayarı).",
-    "auto_accept_warning": "Bu kural önerileri sen bakmadan kabul eder: eşleştirilmiş bir programın ya da eklentinin önerdiği her şey hemen not olur. Koşulu dar tut; her program yine de günlük öneri sınırına tabidir (Ctrl+K → local_api.inbox_daily_max ayarı).",
-    "rules": "Kurallar",
-    "none_hint": "Örneğin: sürekli unuttuğun kartları etiketle ya da biten kartları başka desteye taşı."
+    "auto_accept_warning": "Bu kural önerileri sen bakmadan kabul eder: eşleştirilmiş bir programın ya da eklentinin önerdiği her şey hemen not olur. Koşulu dar tut; her program yine de günlük öneri sınırına tabidir (Ctrl+K → local_api.inbox_daily_max ayarı)."
   },
   "errors": {
     "validation": {

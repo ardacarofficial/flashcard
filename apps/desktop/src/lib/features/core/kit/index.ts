@@ -7,3 +7,6 @@ export { default as SettingsPage } from './SettingsPage.svelte';
 export { default as SettingsSection } from './SettingsSection.svelte';
 export { default as FormRow } from './FormRow.svelte';
 export { default as LoadState } from './LoadState.svelte';
+export { default as SettingsAdvanced } from './SettingsAdvanced.svelte';
+export { settingsSearch, matchesQuery } from './search.svelte';
+export { defaultOf, isDefault, loadDefaults, resetSetting } from './defaults.svelte';

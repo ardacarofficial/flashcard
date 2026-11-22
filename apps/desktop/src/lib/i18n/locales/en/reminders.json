@@ -12,25 +12,25 @@
     "reminders": {
       "enabled": {
         "label": "Daily reminder",
-        "description": "Show a notification when cards are waiting today."
+        "description": "When on, a notification comes at your chosen time if cards are waiting; not on days you already studied."
       },
       "minute_of_day": {
         "label": "Reminder time",
-        "description": "Local time, minutes after midnight."
+        "description": "The time the notification comes (this computer's clock)."
       },
       "weekdays": {
         "label": "Reminder days",
-        "description": "Days of the week the reminder may come."
+        "description": "Reminders only come on the chosen days."
       },
       "keep_in_tray": {
         "label": "Keep running in the tray",
-        "description": "Closing the window hides it; the app stays in the system tray so reminders keep coming."
+        "description": "When on, closing the window only hides it: the app keeps running in the system tray and reminders keep coming. When off, closing the window quits the app."
       }
     }
   },
   "reminders": {
     "heading": "Reminders",
-    "intro": "One notification a day at the time you choose, only when cards are waiting and you have not studied yet.",
+    "intro": "One notification a day so you don't forget to study: choose the time and the days here.",
     "enabled": "Remind me every day",
     "time": "Time",
     "days": "Days",
@@ -52,10 +52,20 @@
     "sent": "Test reminder sent.",
     "notification": "{total, plural, one {# card} other {# cards}} are waiting for you today ({due} due, {new} new).",
     "daily": "Daily reminder",
-    "time_hint": "Local time of the notification.",
-    "test_hint": "Check that notifications reach you.",
+    "time_hint": "The time the notification comes (this computer's clock). If the app is not open then, it still reminds you when you open it within the next 3 hours.",
+    "test_hint": "Check right now that notifications reach you. If nothing shows, allow Flashcard in your system's notification settings.",
     "tray": "Tray",
-    "test_row": "Test notification"
+    "test_row": "Test notification",
+    "daily_desc": "The notification only comes when cards are waiting and you have not studied yet that day; at most once a day.",
+    "tray_desc": "For reminders to come, the app has to keep running in the background.",
+    "desc": {
+      "enabled": "When on, a notification comes at your chosen time if cards are waiting. Not on days you already studied or when nothing is waiting.",
+      "days": "Reminders only come on the chosen days. Want weekends off? Turn off Sat and Sun.",
+      "keep_in_tray": "When on, closing the window only hides it; the app keeps running in the tray next to the clock and reminders come. When off, closing the window quits the app and no reminder comes that day."
+    },
+    "example": {
+      "enabled": "At {time} a notification says “{total, plural, one {# card is} other {# cards are}} waiting for you today”."
+    }
   },
   "commands": {
     "reminders": {

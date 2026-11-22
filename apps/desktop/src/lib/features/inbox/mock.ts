@@ -134,7 +134,24 @@ export default {
         return v.length >= 2 ? { suggest: true, text: v, reason: null } : { suggest: false, text: '', reason: 'too_short' };
       },
       'local_api.clients.list': () => ({ clients: [...clients], grantable_scopes: SCOPES, port: 28735 }),
-      'local_api.methods': () => ({ methods: [] }),
+      // The real allow-list (fc-app `local_api::HTTP_METHODS`).
+      'local_api.methods': () => ({
+        methods: (
+          [
+            ['inbox.add', 'command', 'inbox:write'],
+            ['inbox.list', 'query', 'inbox:read'],
+            ['decks.list', 'query', 'decks:read'],
+            ['decks.tree', 'query', 'decks:read'],
+            ['decks.create', 'command', 'decks:write'],
+            ['notetypes.list', 'query', 'notetypes:read'],
+            ['notes.get', 'query', 'notes:read'],
+            ['notes.create', 'command', 'notes:write'],
+            ['attributes.effective', 'query', 'attributes:read'],
+            ['tags.list', 'query', 'tags:read'],
+            ['search.cards', 'query', 'search:read'],
+          ] as const
+        ).map(([name, kind, permission]) => ({ name, kind, permission })),
+      }),
       'local_api.clients.approve': ({ id: cid, scopes }) => {
         const c = client(cid);
         if (c.status !== 'pending') {

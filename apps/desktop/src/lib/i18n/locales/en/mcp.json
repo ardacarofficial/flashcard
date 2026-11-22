@@ -1,6 +1,6 @@
 {
   "nav": {
-    "mcp": "MCP"
+    "mcp": "Assistants (MCP)"
   },
   "modules": {
     "mcp": {
@@ -28,27 +28,76 @@
         "add": "Add an MCP server",
         "update": "Edit an MCP server",
         "remove": "Remove an MCP server"
-      }
+      },
+      "setup": "MCP setup paths"
     }
   },
   "mcp": {
-    "heading": "MCP",
+    "heading": "Assistants (MCP)",
+    "subtitle": "Connect an AI assistant such as Claude so it can read your decks and add cards for you. Set it up once; most people only need the first tab.",
+    "tabs": {
+      "label": "MCP tasks",
+      "connect": "Connect your assistant",
+      "servers": "External MCP servers"
+    },
+    "connect": {
+      "setup_heading": "Set up the connection",
+      "intro": "The assistant opens this profile's collection through a small command-line program called fc. Pick your assistant, paste the setting below into it, and you're done.",
+      "client": "Which assistant do you use?",
+      "client_hint": "The setting differs a little for each one. \"Other\" covers any app that supports MCP (Cursor, VS Code, …).",
+      "clients": {
+        "claude_desktop": "Claude Desktop",
+        "claude_code": "Claude Code",
+        "other": "Other MCP client"
+      },
+      "fc_missing": {
+        "label": "The fc program was not found",
+        "description": "The assistant needs the command-line tool fc, and it is neither next to this app nor on your PATH. If you have it, type its full path here and the setting below updates itself. Without it the setting just says \"fc\", which only works once fc is on your PATH.",
+        "input": "Path of the fc program"
+      },
+      "db_unknown": "This app was not started as the desktop app, so the collection file's location is unknown: replace the path in the setting with your collection.db.",
+      "steps": "How to set it up",
+      "steps_hint": "Three steps, once.",
+      "claude_desktop": {
+        "open": "In Claude Desktop, open Settings → Developer → Edit Config.",
+        "file": "It opens this file:",
+        "paste": "Copy the text below and paste it into that file. If the file already has \"mcpServers\", add only the \"flashcard\" part inside it.",
+        "restart": "Save the file, quit Claude Desktop completely (also from the system tray) and open it again."
+      },
+      "claude_code": {
+        "open": "Open a terminal (PowerShell on Windows, Terminal on macOS).",
+        "paste": "Copy the command below, paste it into the terminal and press Enter. Once is enough.",
+        "restart": "Start Claude Code again. Typing /mcp in it should show flashcard as connected."
+      },
+      "other": {
+        "open": "In your client's settings, add a new MCP server of type \"stdio\" (a command it starts).",
+        "paste": "Put the program into the \"command\" field and the rest into \"arguments\", one per line. If it wants JSON, use the Claude Desktop text instead.",
+        "restart": "Restart the client.",
+        "command": "Command",
+        "args": "Arguments"
+      },
+      "copy": "Copy",
+      "copied": "Copied. Now paste it into your assistant.",
+      "copy_failed": "Could not copy: select the text and copy it yourself.",
+      "snippet_label": {
+        "claude_desktop": "claude_desktop_config.json",
+        "claude_code": "Terminal command",
+        "other": "Full command line"
+      },
+      "test": "How to test it",
+      "test_hint": "Ask your assistant: \"List my decks.\" If it names your decks, the connection works. If it doesn't, check the paths in the setting and restart the assistant."
+    },
     "server": {
-      "heading": "Use from Claude",
-      "intro": "AI assistants that speak MCP start this app's server and work with this collection. Every change they make is an ordinary step you can undo.",
-      "allow_writes": "Let assistants make changes",
-      "read_only_note": "Assistants can only read now.",
-      "setup": "Setup",
-      "claude_code": "Claude Code",
-      "claude_desktop": "Claude Desktop (claude_desktop_config.json)",
-      "db_hint": "Replace the path with your collection file.",
-      "tools": "Tools",
-      "read": "reads",
-      "write": "writes",
-      "changes_content": "changes content",
-      "setup_hint": "What to paste into Claude Code or Claude Desktop.",
-      "show_setup": "Show setup",
-      "hide_setup": "Hide setup"
+      "heading": "What the assistant can do",
+      "intro": "Only the jobs listed here. It can never delete anything, and every change it makes is an ordinary step you can undo in the app.",
+      "read_only": "Read only",
+      "read_only_on": "The assistant can see your decks and cards but cannot change anything: the tools that change things are not even offered to it.",
+      "read_only_off": "The assistant can also add decks and cards and edit notes. It still cannot delete, and you can undo each change.",
+      "read_only_example": "On: if you say \"add these words to my deck\", the assistant replies that it may only read.",
+      "reads": "It can read",
+      "writes": "It can change",
+      "writes_off": "It can change (off: read only)",
+      "changes_content": "changes existing content"
     },
     "tools": {
       "list_decks": "List decks",
@@ -63,7 +112,7 @@
     },
     "client": {
       "heading": "External MCP servers",
-      "intro": "Servers whose tools the app's AI features may use. Each call is shown; tools that change things ask first.",
+      "intro": "On the first tab an assistant uses this app; here it is the other way round: the app uses other programs. The app's AI features (for example when they write cards for you) may call the tools of the servers you add here, such as reading files on your computer or fetching text from a notes app.",
       "none": "No servers yet.",
       "name": "Name",
       "transport": "Connection",
@@ -83,9 +132,16 @@
       "trust_approve": "Approve",
       "add_heading": "Add a server",
       "add_title": "Trust this program?",
-      "approve_title": "Approve this server?"
-    },
-    "subtitle": "Connect AI assistants to your collection, and the app to external tool servers."
+      "approve_title": "Approve this server?",
+      "when": "You only need this if you want the AI features to reach such sources. If not, leave it empty: nothing else depends on it.",
+      "safety": "A server is a program that runs on your computer with your permissions. The app starts it only after you approve its exact command, and tools that change things ask first. Add only servers you installed yourself and trust.",
+      "what_label": "What is this?",
+      "when_label": "When do I need it?",
+      "safety_label": "Is it safe?",
+      "list": "Your servers",
+      "add_hint": "The server's own instructions tell you the command and its arguments (e.g. npx and -y @modelcontextprotocol/server-filesystem).",
+      "unapproved": "{count} waiting for approval"
+    }
   },
   "errors": {
     "validation": {

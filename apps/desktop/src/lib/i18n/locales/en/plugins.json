@@ -19,7 +19,7 @@
     "plugins": {
       "timeout_ms": {
         "label": "Time limit per call (ms)",
-        "description": "A plugin call running longer than this is stopped (the work it asks the app to do counts too)."
+        "description": "A plugin call that takes longer than this is stopped (work it asks the app to do counts too). E.g. 3000 ms → work not done in 3 seconds is cut off."
       },
       "fuel_millions": {
         "label": "Work limit per call (millions of steps)",
@@ -31,7 +31,7 @@
       },
       "max_failures": {
         "label": "Failures before switching off",
-        "description": "A plugin that fails this many times in a row is switched off; you are told."
+        "description": "A plugin that fails this many times in a row is switched off and you are told. You can switch it back on yourself."
       },
       "before_hook_failure": {
         "label": "When a plugin check fails",
@@ -75,7 +75,7 @@
   },
   "plugins": {
     "heading": "Plugins",
-    "intro": "Plugins run in a sandbox and can only do what you allow.",
+    "intro": "Plugins add new card types, study modes or voices to the app. If you got a .fcplugin file, install it here and switch it on or off.",
     "install": "Install from file…",
     "pick_prompt": "Path of the .fcplugin file",
     "none": "No plugins installed.",
@@ -105,7 +105,7 @@
     "install_confirm": "Install",
     "update_confirm": "Update",
     "cancel": "Cancel",
-    "grant_hint": "Untick what you do not want to allow. You can change it later.",
+    "grant_hint": "The plugin can only do what is ticked. Those marked “asks separately” (internet, microphone, files, AI) start unticked; tick them if you need them. You can change this later.",
     "contributes": "Adds",
     "contrib": {
       "commands": "Commands",
@@ -145,7 +145,69 @@
     "empty_hint": "Plugins add card types, study modes and voices. They run in a sandbox.",
     "installed": "Installed plugins",
     "no_permissions": "This plugin needs no permissions.",
-    "show_logs": "Show log"
+    "show_logs": "Show log",
+    "permissions_hint": "The plugin can only do what is ticked. Untick a permission and that feature stops working, but the rest of the plugin still runs.",
+    "how": {
+      "title": "What is a plugin?",
+      "what": "A plugin is a small program written by someone else: it adds new card types, study modes, voices or commands to the app.",
+      "sandbox": "It runs in a sandbox: it can reach your cards, files or the internet only as far as the permissions you give it. Every run has a time, memory and work limit; a plugin that keeps failing is switched off by itself.",
+      "off": "Switch it off and the plugin doesn't run at all but stays installed. Uninstall it and it is removed; cards it made stay where they are."
+    },
+    "limits": {
+      "summary": "Time, memory and storage limits plugins run under. Look here if a plugin keeps stopping at a limit.",
+      "heading": "Resource limits",
+      "description": "These limits apply to every plugin. A plugin that goes past one is stopped for that run; if it keeps failing it is switched off. Raising a limit makes room for a slow plugin but also lets a faulty one tie up the app for longer.",
+      "range": "Allowed: {min}–{max}. Default: {default}.",
+      "none": "The limits could not be loaded, or the plugins module is off."
+    },
+    "perm": {
+      "unknown": "Reaches a part of the app.",
+      "network": "Can connect to {host} on the internet, and nowhere else.",
+      "ui": "Adds to the interface: {point}.",
+      "read": "Can read {area} (not change).",
+      "write": "Can change {area}.",
+      "host": {
+        "ai_invoke": "Can use AI with your key (may cost money).",
+        "stt_invoke": "Can turn speech into text.",
+        "translate_invoke": "Can ask for translations.",
+        "audio_record": "Can record sound with the microphone.",
+        "fs_pick": "Can read a file, only one you choose.",
+        "models_manage": "Can download and delete the model files it needs.",
+        "tts_provide": "Adds a voice that reads cards aloud.",
+        "card_types_provide": "Adds new card types.",
+        "storage_kv": "Can keep data in its own small storage."
+      },
+      "point": {
+        "study_mode": "a study mode",
+        "view": "a page of its own",
+        "menu": "a menu item",
+        "sidebar": "a sidebar panel",
+        "card_toolbar": "a card toolbar button",
+        "command": "a command",
+        "settings": "settings",
+        "notify": "notifications"
+      },
+      "hook": {
+        "before": "Can step in before an action ({target}) and change or stop it.",
+        "after": "Is told after an action ({target}).",
+        "event": "Is told when something happens in the app ({target})."
+      },
+      "area": {
+        "notes": "your notes",
+        "cards": "your cards",
+        "decks": "your decks",
+        "tags": "tags",
+        "notetypes": "note types",
+        "media": "media files",
+        "study": "study sessions",
+        "stats": "your statistics",
+        "settings": "settings",
+        "search": "search",
+        "presets": "deck options",
+        "attributes": "classifications",
+        "inbox": "the inbox"
+      }
+    }
   },
   "jobs": {
     "plugins": {

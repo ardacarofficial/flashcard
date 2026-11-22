@@ -39,14 +39,14 @@
     "app": {
       "locale": {
         "label": "Uygulama dili",
-        "description": "Menülerin, mesajların ve hazır not türlerinin dili."
+        "description": "Menüler, mesajlar ve yeni oluşturulan hazır not türlerinin adları bu dilde görünür. Kartlarının içeriği değişmez."
       },
       "theme": {
         "label": "Tema",
         "description": "Açık, koyu ya da sistem ayarına uy."
       }
     },
-    "general_intro": "Dil, renkler ve uygulamanın görünümü."
+    "general_intro": "Uygulamanın dilini ve görünümünü buradan seçersin. Aradığın ayarı bilmiyorsan aşağıdaki sorulardan başla."
   },
   "lang": {
     "tr": "Türkçe",

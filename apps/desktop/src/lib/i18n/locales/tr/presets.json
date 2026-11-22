@@ -5,15 +5,15 @@
   "modules": {
     "presets": {
       "name": "Deste ayarları",
-      "description": "Destelerin paylaştığı çalışma ayarı şablonları (günlük sınırlar, adımlar, hedef hatırlama)."
+      "description": "Destelerin paylaştığı ayar paketleri: günlük sınırlar, öğrenme adımları, hedef hatırlama oranı."
     }
   },
   "presets": {
     "heading": "Deste ayarları",
-    "intro": "Deste kendi şablonunu, yoksa üst destesininkini, o da yoksa varsayılanları kullanır.",
-    "list": "Şablonlar",
-    "none": "Henüz şablon yok: tüm desteler varsayılanları kullanıyor.",
-    "new": "Yeni şablon",
+    "intro": "Bir destenin günde kaç yeni kart ve tekrar göstereceğini, yanlış bildiğin kartın ne zaman geri geleceğini buradan ayarlarsın.",
+    "list": "Ayar paketleri",
+    "none": "Henüz ayar paketi yok: tüm desteler varsayılanları kullanıyor.",
+    "new": "Yeni paket",
     "new_name": "Ad",
     "defaults_name": "Varsayılanlar",
     "clone": "Kopyala",
@@ -21,24 +21,22 @@
     "delete": "Sil",
     "save": "Kaydet",
     "saved": "Kaydedildi.",
-    "decks": "Desteler",
-    "decks_none": "Hiçbir desteye atanmadı.",
-    "assign": "Destede kullan",
+    "decks": "Bu paketi kullanan desteler",
+    "decks_none": "Henüz hiçbir deste bu paketi kullanmıyor. Aşağıdan bir deste seç.",
+    "assign": "Bu destede kullan",
     "assign_pick": "Deste seç",
     "unassign": "“{path}” destesinden kaldır",
-    "advanced": "Gelişmiş",
     "field": {
       "name": "Ad",
       "new_per_day": "Günlük yeni kart",
       "reviews_per_day": "Günlük en çok tekrar",
       "learning_steps_mins": "Öğrenme adımları (dakika)",
       "relearning_steps_mins": "Yeniden öğrenme adımları (dakika)",
-      "steps_hint": "Boşlukla ayır, ör. 1 10",
       "desired_retention": "Hedef hatırlama oranı",
       "fsrs_weights": "FSRS parametreleri",
-      "fsrs_hint": "Boş = varsayılanlar. Optimizasyon doldurur.",
+      "fsrs_hint": "Boş bırakırsan herkes için uygun varsayılanlar kullanılır. İstatistik → Planlama'daki optimizasyon bunları senin tekrar geçmişinden hesaplayıp buraya yazar.",
       "maximum_interval_days": "En uzun aralık (gün)",
-      "bury_siblings": "İlişkili kartları yarına göm",
+      "bury_siblings": "İlişkili kartları yarına bırak",
       "new_order": "Yeni kart sırası",
       "review_order": "Tekrar sırası"
     },
@@ -52,28 +50,76 @@
       "retrievability": "En zayıf hatıra önce"
     },
     "deck_count": "{n} deste",
-    "new_placeholder": "Yeni şablon adı",
-    "pick": "Ayarlarını düzenlemek için bir şablon seç.",
-    "none_hint": "Bazı destelere kendi sınırlarını ve adımlarını vermek için bir şablon oluştur.",
-    "decks_intro": "Bu şablonu kullanan desteler (alt desteler de devralır).",
+    "new_placeholder": "Yeni paket adı",
+    "pick": "Ayarlarını görmek için soldan bir paket seç.",
+    "none_hint": "Bazı destelerin farklı çalışmasını istiyorsan (ör. sınav destesinde günde daha çok yeni kart) bir paket oluştur ve o destelere uygula.",
+    "decks_intro": "Bir desteye paket verince alt desteleri de onu kullanır (kendi paketleri yoksa).",
     "desc": {
-      "new_per_day": "Her gün kaç yeni kart gösterilsin.",
-      "reviews_per_day": "Tekrarlar bu sayıya ulaşınca o gün durur.",
-      "desired_retention": "Kart geri geldiğinde onu hâlâ hatırlama olasılığın (0,70–0,99)."
+      "name": "Yalnız bu listede görünür; çalışmayı etkilemez.",
+      "new_per_day": "Her gün kaç yeni (hiç görmediğin) kart gösterilsin. Artırırsan daha hızlı ilerlersin ama sonraki günlerde tekrarlar da artar.",
+      "reviews_per_day": "Bir günde en fazla kaç tekrar sorulsun. Sınıra gelince o günün tekrarları durur.",
+      "desired_retention": "Bir kart geri geldiğinde onu hâlâ hatırlıyor olma olasılığın (%70–%99).",
+      "learning_steps": "Yeni bir kartı ilk günlerde kaç dakika arayla göreceğin. Dakika olarak, boşlukla ayır.",
+      "relearning_steps": "Bildiğin bir kartı unutunca (“Tekrar” deyince) kaç dakika arayla yeniden göreceğin.",
+      "new_order": "Yeni kartlar eklendikleri sırayla mı, karışık mı gelsin.",
+      "review_order": "Bekleyen tekrarlar hangi sırayla gelsin. “En zayıf hatıra önce”, unutmak üzere olduğun kartları öne alır.",
+      "bury_siblings": "Aynı nottan çıkan kartlar (ör. ters yönlü kart) aynı gün art arda gelmesin.",
+      "maximum_interval_days": "Bir kartın iki tekrarı arasındaki en uzun süre (1–36500 gün)."
     },
-    "danger": "Şablonu sil",
-    "delete_desc": "Onu kullanan desteler üst destenin ayarlarına ya da varsayılanlara döner. Geri alınabilir."
+    "danger": "Paketi sil",
+    "delete_desc": "Bu paketi kullanan desteler üst destenin paketine ya da varsayılanlara döner. Geri alınabilir.",
+    "inherits_from": "üst desteden: {path}",
+    "used_by": "Bu paketi {n} deste kullanıyor: burada değiştirdiğin her şey hepsini etkiler.",
+    "used_by_none": "Bu paketi henüz hiçbir deste kullanmıyor; aşağıdan bir desteye uygulayabilirsin.",
+    "on_defaults": "{n} deste paket kullanmıyor: varsayılanlarla çalışıyor.",
+    "unsaved": "Kaydedilmemiş değişiklik var.",
+    "unsaved_shared": "Kaydedilmemiş değişiklik var. Kaydedince {n} deste etkilenir.",
+    "advanced_summary": "Kart sırası, ilişkili kartlar, en uzun aralık ve FSRS parametreleri. Çoğu kişi hiç dokunmaz.",
+    "fsrs_placeholder": "Boş: varsayılan parametreler",
+    "open_optimizer": "Planlama'da optimize et",
+    "how": {
+      "title": "Ayar paketi nedir?",
+      "what": "Ayar paketi, birden çok desteye aynı anda uygulayabildiğin bir ayar takımıdır: günde kaç yeni kart, kaç tekrar, yanlış bildiğin kart ne zaman geri gelir.",
+      "inherit": "Bir deste kendi paketini kullanır; yoksa üst destesininkini, o da yoksa varsayılanları.",
+      "shared": "Bir paketi değiştirirsen onu kullanan bütün desteler değişir. Tek bir desteyi farklı yapmak istiyorsan paketi kopyala ve kopyayı o desteye uygula."
+    },
+    "section": {
+      "daily": "Günlük sınırlar",
+      "daily_desc": "Bir günde en fazla ne kadar çalışacağını belirler. Sınıra gelince o gün için kart bitmiş sayılır.",
+      "memory": "Öğrenme ve hatırlama",
+      "memory_desc": "Kartların ne sıklıkla geri geleceğini belirler.",
+      "order": "Sıra ve aralıklar",
+      "order_desc": "Kartların hangi sırayla geleceği ve ne kadar seyrekleşebileceği.",
+      "fsrs": "Zamanlayıcı (FSRS)",
+      "fsrs_desc": "Zamanlayıcının (FSRS) senin hafızana göre ayarlanmış sayıları. Elle yazılmaz."
+    },
+    "unit": {
+      "minutes": "{n, plural, other {# dk}}",
+      "hours": "{n, plural, other {# sa}}",
+      "days": "{n, plural, other {# gün}}"
+    },
+    "example": {
+      "new_per_day": "{n} → her gün en fazla {n} yeni kelime sorulur; kalanlar sonraki günlere kalır.",
+      "reviews_per_day": "{n} → o gün {n} tekrardan sonrası yarına kalır.",
+      "desired_retention": "{pct} → her 100 karttan yaklaşık {n} tanesini hatırlaman hedeflenir. Yükseltirsen kartlar daha sık gelir.",
+      "learning": "{steps} → yeni bir kart bu aralıklarla yeniden sorulur; son adımı da bilince günlük tekrarlara geçer.",
+      "learning_none": "Adım yok → yeni kart ilk cevabından sonra doğrudan günlük tekrarlara geçer.",
+      "relearning": "{steps} → unuttuğun bir kart bu aralıklarla yeniden sorulur, sonra yine günlük tekrarlara döner.",
+      "relearning_none": "Adım yok → unuttuğun kart hemen yarına ya da sonrasına planlanır.",
+      "maximum_interval_days": "{span} → çok iyi bildiğin bir kart bile en geç bu kadar sonra yeniden sorulur.",
+      "bury_siblings": "Bir kelimenin hem “İngilizce → Türkçe” hem “Türkçe → İngilizce” kartı varsa, biri bugün gelince öbürü yarına kalır."
+    }
   },
   "errors": {
     "validation": {
-      "preset_name": "Şablona bir ad ver (en çok 100 karakter).",
+      "preset_name": "Pakete bir ad ver (en çok 100 karakter).",
       "preset_config": "Bir ayar izin verilen aralığın dışında."
     },
     "not_found": {
-      "preset": "Şablon bulunamadı."
+      "preset": "Ayar paketi bulunamadı."
     },
     "conflict": {
-      "preset_name": "Bu adda bir şablon zaten var."
+      "preset_name": "Bu adda bir paket zaten var."
     }
   }
 }
