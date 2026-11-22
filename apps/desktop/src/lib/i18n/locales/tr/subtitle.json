@@ -26,6 +26,9 @@
       "status": "Subtitle bağlantısı",
       "default_deck": {
         "set": "Subtitle kartlarının destesini seç"
+      },
+      "captures": {
+        "recent": "Son Subtitle yakalama denemeleri"
       }
     }
   },
