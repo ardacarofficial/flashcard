@@ -15,9 +15,9 @@ Gösterim: `[v0.2]` = hedef sürüm · 🧱 = dayandığı yapı taşları
 - Deste oluşturma, yeniden adlandırma, taşıma (sürükle-bırak), silme (çöp kutusuna).
 - Deste açıklaması, ikonu ve rengi.
 - Her deste bir **ayar şablonuna (preset)** bağlıdır. `[v0.4]`
-- Deste başına özet: yeni, öğreniliyor, bugün vadesi gelen kart sayıları.
-- `[v1.3]` "Bugün" sayıları envanter değil, **bugünün kuyruğudur**: o desteye şimdi başlatılan normal oturumun sunacağı kartlar (günlük ve oturum başı sınırlar, alt deste ayarı, kardeş gömme, boş kartlar dahil). `decks.tree` / `decks.summaries` bunları `today_due`, `today_learning`, `today_new`, `today_total` alanlarında verir (eski `due`/`learning`/`new` alanları aynı değeri taşır); Ana sayfa, Kütüphane, deste sayfası, başlatıcı ve hatırlatıcı aynı kuyruk planlayıcısını kullanır (bkz. [03 §9.1](03-mimari.md)). Tüm koleksiyonun ("Tüm desteler") sayısı koleksiyon çapındaki bir oturumun kuyruğudur; her destenin kendi şablon sınırlarına uyması (deste kuyruklarının birleşimi; koleksiyon üst sınırı yalnızca ayarlanmışsa) ve deste sayılarının toplamının koleksiyon sayısına eşit olması v1.3'ün son düzeltmesidir.
-  <!-- v1.3: verify after X1/X2 -->
+- Deste başına özet: yeni, öğreniliyor, bugün sırası gelen kart sayıları.
+- `[v1.3]` "Bugün" sayıları envanter değil, **bugünün kuyruğudur**: o desteye şimdi başlatılan normal oturumun sunacağı kartlar (günlük ve oturum başı sınırlar, alt deste ayarı, kardeşleri yarına bırakma, boş kartlar dahil). `decks.tree` / `decks.summaries` bunları `today_due`, `today_learning`, `today_new`, `today_total` alanlarında verir (eski `due`/`learning`/`new` alanları aynı değeri taşır); Ana sayfa, Kütüphane, deste sayfası, başlatıcı ve hatırlatıcı aynı kuyruk planlayıcısını (`today_counts`) kullanır (bkz. [03 §9.1](03-mimari.md)).
+- `[v1.3]` **"Tüm desteler"** (`deck_id: null`) kuyruğu, destelerin kendi kuyruklarının birleşimidir: her üst düzey deste ve alt destelerini dahil etmeyen bir destenin alt desteleri, **her biri kendi ayar şablonuyla** (günlük yeni/tekrar sınırı, sıra, kardeşleri yarına bırakma) planlanır; öğrenme kartları vade sırasıyla önde, sonra tekrarlar ve yeniler desteler arasında sırayla dağıtılır. Bir destede sınır dolunca diğerleri sıfırlanmaz. Koleksiyon çapında üst sınır yalnızca istenirse (`new_limit`) ya da `study.new_per_session` uygulama genelinde ayarlıysa uygulanır. Kardeşleri yarına bırakma **desteler arasında da** geçerlidir: notunun bir kartı kuyruktaysa, kardeşlerini bırakan destedeki tekrar/yeni kart dışarıda kalır (öğrenme kartları hep kalır).
 
 ## 2. 🃏 Notlar ve kartlar
 
@@ -94,8 +94,8 @@ Kart türü motorunun üç işi vardır: **kart üret**, **soruyu sun**, **cevab
 
 - Akış: kart gösterilir → (cevap verilir) → çevrilir → puanlanır → sonraki kart.
 - **Oturum motoru** backend'dedir: sıradaki kartı backend seçer, frontend sadece gösterir.
-- Kart sırası: vadesi gelenler, öğrenilmekte olanlar, yeniler. Karıştırma seçenekleri: rastgele, yeniden eskiye, en zordan kolaya.
-- **Kardeş kartlar** aynı gün gösterilmez (gömülür), ayarla kapatılabilir.
+- Kart sırası: sırası gelenler, öğrenilmekte olanlar, yeniler. Karıştırma seçenekleri: rastgele, yeniden eskiye, en zordan kolaya.
+- **Kardeş kartlar** aynı gün gösterilmez (yarına bırakılır), ayarla kapatılabilir.
 - **Cevap süresi** ölçülür ve olay olarak kaydedilir (cevabı gösterene kadar ve puanlayana kadar ayrı ayrı).
 - **Geri al:** son puanlama geri alınır, kart tekrar gösterilir.
 - **Oturum sonu ekranı:** çalışılan kart sayısı, doğruluk, süre, "**Yanlışları tekrar çalış**" butonu. `[v1.3]` "Yeniden çalış" başlatıcıyı açar (yanlış varsa "Bugün zorlandıklarım" önceden seçili).
@@ -124,13 +124,13 @@ Kart türü motorunun üç işi vardır: **kart üret**, **soruyu sun**, **cevab
 
   | Kapsam | Ne | Takvimi etkiler mi? |
   |---|---|---|
-  | `due` · Bugünün kartları | Normal oturumun kuyruğu: vadesi gelenler, öğrenme adımları ve yeniler, sınırlar içinde | ✅ |
+  | `due` · Bugünün kartları | Normal oturumun kuyruğu: sırası gelenler, öğrenme adımları ve yeniler, sınırlar içinde | ✅ |
   | `new` · Yeni kartlar | Yalnızca hiç görülmemiş kartlar, yeni kart sınırı içinde | ✅ |
   | `studied_today` · Bugün çalıştıklarım | Bugünkü çalışma gününde herhangi bir modda cevaplanan farklı kartlar | ❌ pratik |
   | `struggled_today` · Bugün zorlandıklarım | Bugün "Tekrar" denen ya da yanlış cevaplanan farklı kartlar | ❌ pratik |
   | `all` · Tümü | Destedeki her kart (askıdakiler hariç) | ❌ pratik |
 
-- Son üçü **pratiktir**: istek ne derse desin oturum `trial` olur, kart kümesi başlarken **sabitlenir**, gömülü kardeşler de çalışılır, öğrenme adımı beklenmez.
+- Son üçü **pratiktir**: istek ne derse desin oturum `trial` olur, kart kümesi başlarken **sabitlenir**, yarına bırakılmış kardeşler de çalışılır, öğrenme adımı beklenmez.
 - **Sayı, sunulacak olandır:** bir kapsamın sayısı, o an başlatılan oturumun sunacağı kart sayısının tam kendisidir (Rust testiyle güvencede: `scopes[due].count` = `study.start { kind: normal, scope: due }`'nun sunduğu kartlar). "Bugün" yerel çalışma günüdür (`study.day_start_hour`, varsayılan 04:00).
 - **Boş kapsam** devre dışı görünür ve nedenini söyler (`empty_reason`): `no_cards` (destede kart yok), `nothing_due`, `daily_limit_reached` ("bugünün kart sınırı"), `waiting` (yalnızca adımını bekleyen öğrenme kartları), `none_studied_today`, `none_struggled_today`. Durum değişecekse `next_available_at` ne zaman olacağını verir: sınırda bir sonraki çalışma gününün başı, beklemede ilk kartın gösterilebileceği an.
 - **Boş başlatma hiçbir şey yapmaz:** seçilen küme boşsa `study.start` `CONFLICT_NOTHING_TO_STUDY` hatası döner (`details.reason`, `details.next_available_at`); oturum oluşturmaz, açık oturumu **kapatmaz**. Başlatıcı açık kalır.
@@ -142,20 +142,19 @@ Kart türü motorunun üç işi vardır: **kart üret**, **soruyu sun**, **cevab
 - **Her türden bir oturum açık kalabilir** (Kartlar, Öğren, Test, Eşleştir, özel, yanlışlar): yeni bir Kartlar oturumu yarım test kâğıdını kapatmaz; aynı türden yeni başlatma yalnızca o türün açık oturumunu kapatır. Test kâğıdı cevaplarını taslak olarak saklar (`modes.test.save_draft`), devam edilince geri gelir.
 - **Devam et:** başlatıcı bu destenin yarım oturumlarını (her tür, en yenisi önce) cevaplanan ve kalan sayılarıyla sunar. Önceki çalışma gününden kalan Kartlar oturumu sunulmaz (yeni başlatma bugünün kuyruğunu kurar); silinmiş destenin oturumu da.
 - **`Esc` = duraklat:** kart kalmışken Kartlar oturumundan çıkmak o ana kadar yapılanı gösterir (`study.summary`) ve oturumu **açık bırakır**; başlatıcıdaki ve özetteki "Devam et" aynı oturuma döner. Hiç cevap verilmemişse oturum kapanır; kuyruk bittiğinde özet gelir.
-- **Bekleme durumu:** kalan kartların hepsi öğrenme adımını bekliyorsa oturum açık kalır. `SessionDto.next_due` kartın gösterilebileceği anı verir; ekran "Sıradaki kart N dk sonra" geri sayımını ve **Bekle / Başka bir şey çalış / Bitir** seçeneklerini gösterir. Öğrenme kartı vadesinden en çok 20 dk önce gösterilebilir (öne alma penceresi), bu yüzden şimdilik `next_due` ve `next_available_at` "vade − 20 dk"dır ve 20 dakikadan kısa adımlar hiç bekletmez. Öne alma penceresi bir ayar olacak ve `next_available_at` kartın gerçekten sunulacağı an olacak.
-  <!-- v1.3: verify after X1/X2 -->
-- **Sade sözler:** çalışma ekranında Askıya al = "Durdur", Göm = "Yarına bırak", oturumdan çıkış = "Ara ver"; sayıların ne demek olduğu yazar.
+- **Bekleme durumu:** kalan kartların hepsi öğrenme adımını bekliyorsa oturum açık kalır. `SessionDto.next_due` kartın gösterilebileceği anı verir; ekran "Sıradaki kart N dk sonra" geri sayımını ve **Bekle / Başka bir şey çalış / Bitir** seçeneklerini gösterir. Başka kart kalmadığında öğrenme kartı, adımı dolmadan en çok **önden öğrenme penceresi** kadar erken gösterilir: `study.learn_ahead_mins` ayarı ("Öğrenme kartını erken göster", varsayılan 20 dk, 0 = adım dolana kadar hep bekle). `next_due` ve `next_available_at` kartın gerçekten sunulacağı andır (vade − pencere); bekleme ekranı yalnız gerçekten beklemen gerektiğinde görünür.
+- **Ayar değişikliği ekrandaki kartı almaz:** oturum açıkken pencere küçültülürse ekrandaki kart geçerli kalır; oturum, gösterilen kartı seçtiği pencereyi bir sonraki cevaba kadar korur (`SessionState.learn_ahead_ms`, `Session::shown_window_ms`). Büyütülen pencere hemen geçerlidir.
+- **Tek kavram, tek söz:** sırası gelen (EN "Due"; tarih sütunu "Tekrar tarihi"), **Kenara koy** / "Kenarda" (askıya alma; EN "Set aside"), **Yarına bırak** / "Yarına bırakıldı" (gömme; EN "Leave for tomorrow"), oturumdan çıkış **Ara ver** (EN'de tek "Pause"), öğrenme sayısı "Öğreniliyor"; sayıların ne demek olduğu yazar.
 
 ### 6.2 Çalışma sırasında araçlar
 
 - 💬 **İpucu motoru:** Ayarlanabilir ipucu stratejileri: ilk harf, her kelimenin ilk harfi, harflerin bir kısmı, belirli bir alan (ör. örnek cümle), AI ipucu. Kaç ipucu kullanıldığı kaydedilir.
-  - `[v1.3]` **İpucu türleri** (`study.hint` → `HintDto.kind` + `html`): **bağlam** (`context`): notun örnek cümlesi (`example` rolündeki alan) terimi içeriyorsa ilk ipucu, o geçişin gizlendiği cümledir (`I ___ home.`). **Harf** (`letters`): sonraki seviyeler ve kullanılabilir cümlesi olmayan notlar, seçili stratejiyle. Cümle kartın ön yüzünde zaten görünüyorsa ya da gizlenmiş cümlede cevap başka bir yerde de geçiyorsa harf ipucuyla başlanır; bu yüzden ön yüzünde cümle olan yerleşik Altyazı kartının ilk ipucu şimdilik harftir.
-  - Kural (v1.3 sonu): ipucu bağlamı gösterebilir ama cevabı asla. Yerleşik kelime/altyazı **ileri** kartının ön yüzü yalnızca kelimeyi gösterir ve ilk ipucu, kelimesi vurgulanmış örnek cümledir (bağlam); **ters** kartın ilk ipucu terimin boşaltıldığı cümledir. Yerleşik şablonlar 1300'den sonraki yeni bir veri migration'ıyla (yalnızca düzenlenmemişse) güncellenir.
-    <!-- v1.3: verify after X1/X2 -->
+  - `[v1.3]` **İpucu türleri** (`study.hint` → `HintDto.kind` + `html`): **bağlam** (`context`): notun örnek cümlesi (`example` rolündeki alan) terimi içeriyorsa ilk ipucu, o geçişin gizlendiği cümledir (`I ___ home.`). **Harf** (`letters`): sonraki seviyeler ve kullanılabilir cümlesi olmayan notlar, seçili stratejiyle. Cümle kartın ön yüzünde zaten görünüyorsa ya da cümle cevabı ele verecekse harf ipucuyla başlanır.
+  - **Kural:** ipucu bağlamı gösterebilir ama cevabı asla. Yerleşik kelime/altyazı **ileri** kartının ön yüzü yalnızca kelimeyi gösterir (Altyazı'da geçtiği hâli, farklıysa yanında sözlük hâli: "went go"); ilk ipucu, kelimesi vurgulanmış örnek cümledir (bağlam; anlam cümlede geçiyorsa yalnız orası boşaltılır). **Ters** (üretim) kartın ilk ipucu kelimenin boşaltıldığı cümledir ("I ___ home."). Sonraki seviyeler harftir. Mevcut koleksiyonlarda yerleşik Altyazı ön yüzü migration 1301 ile (yalnızca şablon düzenlenmemişse) yalnız kelimeye indi; yerleşik Kelime kartının ön yüzünde zaten cümle yoktu.
 - 📝 **Kart üstüne not:** Kullanıcının kişisel notu (ör. "Bunu şöyle hatırlıyorum"). Not türü alanlarından ayrıdır.
 - 🚩 **Bayraklama:** Renkli bayraklar (kırmızı, turuncu, yeşil, mavi, mor...). Bayrak adları özelleştirilebilir (ör. kırmızı = "düzelt").
-- ⏸️ **Askıya al:** Kart elle tekrar açılana kadar gösterilmez.
-- ⛱️ **Göm:** Kart sadece bugün gösterilmez.
+- ⏸️ **Kenara koy** (askıya alma): Kart sen kenardan çıkarana kadar gösterilmez.
+- ⛱️ **Yarına bırak** (gömme): Kart sadece bugün gösterilmez.
 - ✏️ **Kartı düzenle:** Çalışmadan çıkmadan kartı düzenleme.
 - ℹ️ **Kart bilgisi:** Bkz. §11.
 - 🔊 **Sesli okuma:** TTS sağlayıcısı varsa alan seslendirilir (otomatik ya da butonla).
@@ -227,7 +226,7 @@ Etiketler serbesttir. Sınıflandırma ise **kullanıcının tanımladığı yap
 `[v0.4]` · 🧱 Komutlar, sorgu dili, olay kaydı
 
 - **Kart tarayıcısı:** Tablo görünümü, sütunlar seçilebilir (alanlar, deste, etiket, vade, stabilite, zorluk, unutma sayısı...), sıralama, sorgu çubuğu.
-- **Toplu işlemler:** Seçili kartlara: taşı, etiket ekle/çıkar, askıya al, göm, bayrakla, sil, vadeyi sıfırla, not türünü değiştir (alan eşleme ile), bul-değiştir. Hepsi **tek transaction** ve **tek geri al**.
+- **Toplu işlemler:** Seçili kartlara: taşı, etiket ekle/çıkar, kenara koy, yarına bırak, bayrakla, sil, vadeyi sıfırla, not türünü değiştir (alan eşleme ile), bul-değiştir. Hepsi **tek transaction** ve **tek geri al**.
 - **Çöp kutusu:** Silinen notlar 30 gün (ayarlanabilir) tutulur, geri yüklenebilir, sonra kalıcı silinir.
 - **Tekrar eden kart tespiti:** Kart eklerken ve içe aktarırken, "benzersiz" işaretli alana göre (normalize edilmiş) uyarı. Ayrıca "Tekrarları bul" aracı.
 - **Veritabanı kontrolü:** Sahipsiz kart, eksik medya, bozuk alan, tutarsız zamanlama tespiti ve onarımı. Önce rapor, sonra onayla onarım.
@@ -258,7 +257,7 @@ Etiketler serbesttir. Sınıflandırma ise **kullanıcının tanımladığı yap
 - Çalışmada (`[v1.3]` **bir tuş, bir iş**):
   - `Space` kartı çevirir (ön ⇄ arka, istendiği kadar); **asla puanlamaz**.
   - `1-4` puanlar (iki düğmeli görünümde yalnız `1` "Hâlâ öğreniyorum" ve `2` "Biliyorum"), ama **yalnızca arka yüz görüldükten sonra**; önce hiçbir şey yapmaz. Çoktan seçmeli kartın sorusunda rakamlar seçenek seçer.
-  - `H` ipucu (soru yüzünde), `S` durdur (askıya al), `B` yarına bırak (göm), `Z` son puanı geri al, `Esc` ara ver (oturum açık kalır, §6.1.2), `Ctrl/⌘+1–7` bayrak; özet ekranında `R` yanlışları tekrarlar.
+  - `H` ipucu (soru yüzünde), `S` kenara koy, `B` yarına bırak, `Z` son puanı geri al, `Esc` ara ver (oturum açık kalır, §6.1.2), `Ctrl/⌘+1–7` bayrak; özet ekranında `R` yanlışları tekrarlar.
   - `Enter` sayfa kısayolu değildir: yalnızca odaktaki denetimi çalıştırır (odaktaki kart çevrilir, odaktaki düğmeye basılır).
   - Basılı tutulan tuş bir kez işler (tekrar etmez). Tuş açıklamaları ve `aria-keyshortcuts` kısayol düzenleyicisindeki atamayı izler.
 - Genel: `Ctrl+K` komut paleti, `Ctrl+N` yeni not (Hızlı ekleme), `Ctrl+F` ara, `Ctrl+Z` / `Ctrl+Shift+Z` geri al / yinele.
@@ -338,9 +337,9 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 | 🔥 Seri | Kaç gündür aralıksız çalışıldığı, en uzun seri |
 | ✅ Başarı oranı | Doğru cevap yüzdesi (yeni / genç / olgun kartlar ayrı) |
 | 📅 Aktivite ısı haritası | Gün gün çalışma yoğunluğu |
-| 🐌 Zor kartlar (leech) | Unutma sayısı eşiği aşan kartlar. Eşik ayarlanabilir. Eylem: etiketle, askıya al, AI ile yeniden yaz |
+| 🐌 Zor kartlar (leech) | Unutma sayısı eşiği aşan kartlar. Eşik ayarlanabilir. Eylem: etiketle, kenara koy, AI ile yeniden yaz |
 | ⏱️ Cevap süreleri | Ortalama, dağılım, en yavaş kartlar |
-| 🔮 Gelecek tahmini | Önümüzdeki günlerde vadesi gelecek kart sayısı |
+| 🔮 Gelecek tahmini | Önümüzdeki günlerde sırası gelecek kart sayısı |
 | 🧠 Hafıza durumu | Yeni / öğreniliyor / genç / olgun / askıda dağılımı |
 | 📈 Gelişim | Haftalık/aylık çalışma ve başarı trendi |
 | 🕐 En verimli saat | Saatlere göre başarı oranı |
@@ -348,7 +347,7 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 | 🎯 Gerçekleşen vs hedef hatırlama | Hedef %90 ise gerçekte kaç |
 | 📈 Deste karnesi | Destenin ne kadarının "oturduğu" yüzde olarak |
 
-- **Genel bakış üç soruyla açılır** `[v1.3]`: **Bugün nasılım?** (`stats.today`: bugün / dün cevaplar, doğruluk, süre, seri, hedef; Rust'ın "dün ile aynı tempodasın / gerisindesin / öndesin" yargısı), **Önümde ne var?** (gelecek tahmininin 7 günü — bugün ve en yoğun gün yazıyla işaretli — bir tıkla 30 gün), **Nelerde zorlanıyorum?** (`stats.struggles`: son 1 / 7 / 30 günde "Tekrar" ya da yanlış cevaplanan kartlar, her modda, pratik ve test dahil; kelime, anlam, yanlış/cevap, son görülme. Kelime ve anlam alan rollerinden seçilir (`term`, yoksa `surface`; `meaning`), rolsüz türlerde bilinen alan adlarından). Birincil eylem **"Bunları çalış"**: çalışma başlatıcısını (§6.1.1) Rust'ın listeyle verdiği `cid:` sorgusu ve **pratik** (takvim değişmez) önceden seçili açar. Askıya al / etiketle satır eylemi olarak kalır. Diğer tüm istatistikler altta "Ayrıntılar" başlığında, her biri bir satırlık "bu ne anlama geliyor" açıklamasıyla.
+- **Genel bakış üç soruyla açılır** `[v1.3]`: **Bugün nasılım?** (`stats.today`: bugün / dün cevaplar, doğruluk, süre, seri, hedef; Rust'ın "dün ile aynı tempodasın / gerisindesin / öndesin" yargısı), **Önümde ne var?** (gelecek tahmininin 7 günü — bugün ve en yoğun gün yazıyla işaretli — bir tıkla 30 gün), **Nelerde zorlanıyorum?** (`stats.struggles`: son 1 / 7 / 30 günde "Tekrar" ya da yanlış cevaplanan kartlar, her modda, pratik ve test dahil; kelime, anlam, yanlış/cevap, son görülme. Kelime ve anlam alan rollerinden seçilir (`term`, yoksa `surface`; `meaning`), rolsüz türlerde bilinen alan adlarından). Birincil eylem **"Bunları çalış"**: çalışma başlatıcısını (§6.1.1) Rust'ın listeyle verdiği `cid:` sorgusu ve **pratik** (takvim değişmez) önceden seçili açar. Kenara koy / etiketle satır eylemi olarak kalır. Diğer tüm istatistikler altta "Ayrıntılar" başlığında, her biri bir satırlık "bu ne anlama geliyor" açıklamasıyla.
 - İstatistikler olaylardan hesaplanır. Yeni istatistik eklemek şema değişikliği gerektirmez.
 - Büyük koleksiyonlar için ön hesaplanmış özet tabloları (olaylardan türetilir, her an yeniden üretilebilir).
 
@@ -365,9 +364,8 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 
 `[v1.0, v1.3]` · 🧱 Kuyruk planlayıcısı, şemalı ayarlar
 
-- İşletim sistemi bildirimi: "Bugün 40 kartın var." (vadesi gelen + öğrenme ve yeni ayrı sayılır).
-- `[v1.3]` **Sayı, Başlat'ın sunacağı kuyruktur:** tüm koleksiyon için ortak kuyruk planlayıcısının bugünkü kuyruğu (günlük yeni/tekrar sınırları ve oturum başı sınır dahil), yani Ana sayfanın gösterdiği sayı. v1.2 destelerin envanterini topluyordu (görülmemiş her kart "yeni" sayılıyordu, günlük sınır yok sayılıyordu), bu yüzden bildirim Başlat'ın sunamayacağı kartları da vaat ediyordu. Koleksiyon kuyruğunun destelerin kendi sınırlarına uyması (§1) bildirime de yansır.
-  <!-- v1.3: verify after X1/X2 -->
+- İşletim sistemi bildirimi: "Bugün 40 kartın var." (sırası gelen + öğrenme ve yeni ayrı sayılır).
+- `[v1.3]` **Sayı, Başlat'ın sunacağı kuyruktur:** tüm koleksiyon için ortak kuyruk planlayıcısının bugünkü kuyruğu (günlük yeni/tekrar sınırları ve oturum başı sınır dahil), yani Ana sayfanın gösterdiği sayı. v1.2 destelerin envanterini topluyordu (görülmemiş her kart "yeni" sayılıyordu, günlük sınır yok sayılıyordu), bu yüzden bildirim Başlat'ın sunamayacağı kartları da vaat ediyordu. Koleksiyon kuyruğu destelerin kendi sınırlarıyla kurulur (§1); bildirim de aynı `today_counts` sayısını kullanır.
 - Saat ve haftanın günleri seçilir. Günde en çok bir bildirim; seçilen saat kaçırıldıysa (uygulama kapalıydı) 3 saate kadar yine gönderilir, sonra o gün atlanır.
 - **Bugün çalışıldıysa** (bugünkü çalışma gününde en az bir normal cevap) ya da kuyruk boşsa bildirim gönderilmez. `[v1.3]` "Bugün", sabit 04:00 yerine `study.day_start_hour` ayarına göre başlar.
 - "Bildirimi dene" (`reminders.test`) aynı sayıyla hemen bir bildirim gönderir; `reminders.status` sıradaki bildirim zamanını ve sayıları verir.
@@ -394,8 +392,8 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 - **MCP istemcisi** ve **MCP sunucusu.**
 - **Hazır sağlayıcılar** `[v1.3]`: Claude, OpenAI, OpenRouter, Google Gemini, Groq, Mistral, DeepSeek, Ollama (yerel), LM Studio (yerel), "Özel (OpenAI uyumlu)". Bunlar dört protokolün (Anthropic, OpenAI, OpenAI uyumlu, Ollama) üstünde **ön ayardır**, yeni motor değil. Anahtar gerekip gerekmediği tür ve adresten anlaşılır: barındırılan uyumlu servisler (OpenRouter gibi) anahtar ister, bu bilgisayardaki ya da yerel ağdaki sunucular istemez (v1.2'de OpenRouter'ın anahtar alanı hiç görünmüyordu).
 - **Kurulum üç adım** `[v1.3]`: anahtar → model (sağlayıcının listesinden aranabilir seçici, `ai.models` işi; listede olmayan ad da yazılabilir) → **Bağlantıyı dene** (`ai.providers.test`: tek ve en küçük istek; sonuç düz sözle: anahtar yok/yanlış, kredi yok, model yok, adres yanlış, hız sınırı, servis çalışmıyor, ulaşılamıyor, sertifika). Sağlayıcı satırları durumu gösterir (hazır, anahtar gerekli, model gerekli, test başarısız). Ayrıntı: [06 §1.1](06-ai-ve-entegrasyonlar.md).
-- AI sağlayıcı kurulumu ve kullanım/harcama Ayarlar'da toplanır; AI ile kart üretme Kart ekle sayfasında (§15.4) bir yol olur.
-  <!-- v1.3: verify after X1/X2 -->
+- `[v1.3]` İki yer, iki iş: **Oluştur › Yapay zeka** yalnızca "Yapay zekayla kart üret"tir (deste formdaki bir alan; sağlayıcı yoksa kuruluma bağlantı verir); **Ayarlar › Bağlantılar › Yapay zeka** sağlayıcılar ve kullanım/harcama sekmeleridir.
+- `[v1.3]` AI ipucu, kontrol ve açıklama "cevap" olarak kartın **cevap alanını** (şablonun `answer_field`'ı) alır, bütün arka yüzü değil.
 - **Asistanını bağla** `[v1.3]` (MCP ekranının ilk sekmesi): istemci seçilir (Claude Desktop, Claude Code, diğer), bu profilin gerçek `collection.db` ve `fc` yollarıyla doldurulmuş, kopyalanabilir parçacık gösterilir (`mcp.setup`), nasıl deneneceği yazar; asistanın neler yapabileceği (araç listesi, okur/değiştirir) ve "Yalnızca okuyabilsin" anahtarı. Dış MCP sunucuları ayrı sekmededir. Ayrıntı: [06 §2.1](06-ai-ve-entegrasyonlar.md).
 
 ## 22. 🌉 Dış dünya ile bağlantı
@@ -417,10 +415,10 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 - "**Ne zaman** (olay) + **eğer** (sorgu) + **yap** (komut)" kuralları.
 - Örnekler:
   - Kart kırmızı bayraklanınca → `#düzelt` etiketi ekle.
-  - Kart 8 kez unutulunca → askıya al ve `#leech` etiketle.
+  - Kart 8 kez unutulunca → kenara koy ve `#leech` etiketle.
   - Gelen kutusuna İngilizce kelime düşünce → "Kelime kartı" not türüyle İngilizce destesine ekle, AI ile anlamını doldur.
 - Kurallar sırayla ve sınırlı derinlikte çalışır (sonsuz döngü engellenir). Her kural çalışması kaydedilir.
-- **Hazır tarifler** `[v1.3]`: altı tarif: "Sürekli unuttuğum kartları etiketle" (Tekrar denince, `lapses>=4` → "zor" etiketi), "Bir türlü akılda kalmayanları askıya al" (`lapses>=8`), "Öğrendiğim kartları arşiv destesine taşı" (`stability>=90`), "Yeni Subtitle kartlarına etiket ekle" (not eklenince), "Kırmızı bayraklı kartları askıya al", "Kolaylaşan kartlardan 'zor' etiketini kaldır" (günde bir, `tag:"zor" stability>=30`). Tarif yalnızca var olan tetikleyici + sorgu + eylemin önceden doldurulmuş taslağıdır (yeni yapı taşı yok). Her tarif etkilenecek kart sayısını canlı gösterir; kural düzenlenebilir tek bir cümle olarak okunur; ham düzenleyici "Gelişmiş" altında; çalışma geçmişi okunur cümlelerle.
+- **Hazır tarifler** `[v1.3]`: altı tarif: "Sürekli unuttuğum kartları etiketle" (Tekrar denince, `lapses>=4` → "zor" etiketi), "Bir türlü akılda kalmayanları kenara koy" (`lapses>=8`), "Öğrendiğim kartları arşiv destesine taşı" (`stability>=90`), "Yeni Subtitle kartlarına etiket ekle" (not eklenince), "Kırmızı bayraklı kartları kenara koy", "Kolaylaşan kartlardan 'zor' etiketini kaldır" (günde bir, `tag:"zor" stability>=30`). Tarif yalnızca var olan tetikleyici + sorgu + eylemin önceden doldurulmuş taslağıdır (yeni yapı taşı yok). Her tarif etkilenecek kart sayısını canlı gösterir; kural düzenlenebilir tek bir cümle olarak okunur; ham düzenleyici "Gelişmiş" altında; çalışma geçmişi okunur cümlelerle.
 
 ## 24. 📖 Okuma modu
 

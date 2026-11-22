@@ -234,8 +234,7 @@ The app uses the FSRS scheduler.
 
 Every way to study opens the same window: **Start studying** on **Home** (or `Enter`), a deck's **Study** button, the mode tiles on the deck page, **Study these** in Statistics, or **Study now** after adding cards. Opened without a deck, the launcher works on **All decks**.
 
-The "N cards to study today" number on **Home**, the launcher's **Today’s cards** count and the cards a session really serves come from the same calculation. The **All decks** queue honours each deck's own new-card and review limits.
-<!-- v1.3: verify after X1/X2 -->
+The "N cards to study today" number on **Home**, the launcher's **Today’s cards** count and the cards a session really serves come from the same calculation. The **All decks** queue honours each deck's own new-card and review limits: one deck reaching its limit does not affect the others. When a note's cards sit in different decks (say, the forward and the reverse card), only one of them comes up on the same day; the other waits for tomorrow.
 
 In the launcher, from top to bottom:
 
@@ -272,7 +271,7 @@ Flip the card and say how well you knew it; that sets when it comes back.
 | `1`–`9` | On a multiple-choice question, pick that option |
 | `Enter` | Presses only the focused button or the card, nothing else |
 | `H` | Hint (on the question) |
-| `S` | Pause the card (until you turn it back on) |
+| `S` | Set the card aside (until you bring it back) |
 | `B` | Leave the card for tomorrow (not again today) |
 | `Z` | Undo last answer |
 | `Ctrl+1`–`Ctrl+7` | Toggle a flag |
@@ -287,11 +286,9 @@ A key held down counts as one press: holding `2` rates one card only. While you 
 
 **Hints.** `H` or **Hint**. If the note has an example sentence, the first hint is context: you see the word inside that sentence; when the word is what the card asks for, it is hidden as a gap ("Fill the gap in the sentence", for example `I ___ home.`). Further hints reveal letters of the answer (setting **Hint style**: first letters, start of every word, or some letters). Notes without an example sentence start with letters.
 
-On the built-in Vocabulary and Subtitle cards the front shows only the word; the first hint brings the example sentence with the word highlighted. On the reverse (Production) card the first hint is the sentence with the term blanked out.
-<!-- v1.3: verify after X1/X2 -->
+On the built-in Vocabulary and Subtitle cards the front shows only the word; the first hint brings the example sentence with the word highlighted. On the reverse (Production) card the first hint is the sentence with the term blanked out. The rule is simple: a hint shows context, never the answer.
 
-**Waiting.** A card on a short learning step (say, back in 10 minutes) may be shown a few minutes early; this learn-ahead window is a setting (20 minutes by default). When every remaining card really has to wait, the screen says "Next card in N min" and counts down: **Wait**, **Study something else** or **Finish**. The session stays open.
-<!-- v1.3: verify after X1/X2 -->
+**Waiting.** A card on a short learning step (say, back in 10 minutes) may be shown a few minutes early; this learn-ahead window is a setting (**Show learning cards early**, 20 minutes by default; 0 = always wait for the step). Changing it during a session never takes away the card on screen. When every remaining card really has to wait, the screen says "Next card in N min" and counts down: **Wait**, **Study something else** or **Finish**. The session stays open.
 
 **When the session ends**, **Session complete** shows cards studied, accuracy, time and mistakes. **Study again** opens the launcher with **Struggled with today** selected; `R` studies the mistakes right away.
 
@@ -354,7 +351,7 @@ The query language is the same in **Browse**, the study launcher's **Query** opt
 | `type:cloze` | Card type: `classic`, `typing`, `cloze`, `multiple_choice`, `image_occlusion` |
 | `card:` | Card template |
 | `is:new` `is:learn` `is:review` `is:relearn` | Card state |
-| `is:due` `is:suspended` `is:buried` `is:flagged` | Due, paused, left for tomorrow, flagged |
+| `is:due` `is:suspended` (`is:aside`) `is:buried` (`is:tomorrow`) `is:flagged` | Due, set aside, left for tomorrow, flagged |
 | `flag:red` · `flag:1` | Flag: 1–7, a colour name (EN/TR) or your own flag name; `flag:0` / `flag:none` unflagged, `flag:*` any |
 | `stability>30` `difficulty>7` `lapses>=5` `reps<3` | Numbers; `=` `!=` `<` `<=` `>` `>=` |
 | `retrievability<0.8` | Recall probability right now (0–1) |
@@ -452,8 +449,7 @@ There is no plugin store yet; you install plugins from files.
 
 AI is entirely optional: it stays off and nothing is sent until you set up a provider. Then you can make cards from a text, fill empty fields while you write, and ask for an explanation or a hint while you study.
 
-**Where.** The **AI** page is currently both in the **Create** section and under **Settings** → **Connections**, with three tabs: **Make cards**, **Providers**, **Usage**. Provider setup and usage are moving into Settings, and making cards with AI is becoming a way on the **Add cards** page.
-<!-- v1.3: verify after X1/X2 -->
+**Where.** Two places, two jobs: **Create** → **AI** is only **Make cards with AI** (the deck is a field of the form; the **Generate with AI** button on the Create page leads there too). Provider setup and usage live in **Settings** → **Connections** → **AI**, on the **Providers** and **Usage** tabs. With no provider yet, the make-cards page takes you there with **Connect a provider**.
 
 **Add a provider.** **Providers** → **Add provider** opens a gallery: **Claude**, **OpenAI**, **OpenRouter**, **Google Gemini**, **Groq**, **Mistral**, **DeepSeek**, **Ollama**, **LM Studio** and **Custom (OpenAI-compatible)**. Each has a short description and a "free option" or "local · free" tag. Pick one and three steps follow:
 
@@ -553,10 +549,10 @@ Words go to the deck picked in the extension, else the screen's **Deck**, else a
 **Settings** → **Advanced** → **Automation**: let the app do repetitive jobs. **Start from a ready rule** offers six recipes, each with a live count of the cards it matches right now:
 
 - **Tag cards I keep forgetting** (a "difficult" tag on the 4th lapse)
-- **Pause cards that never stick** (after 8 lapses)
+- **Set aside cards that never stick** (after 8 lapses)
 - **Move learned cards to an archive deck** (cards you will remember for 90+ days)
 - **Tag new Subtitle cards**
-- **Pause red-flagged cards**
+- **Set aside red-flagged cards**
 - **Remove “difficult” once a card is easy** (once a day)
 
 A recipe opens filled in; you can change the tag, the deck or the number, and nothing happens until you save. Rules read as one editable sentence; the raw editor is under **Advanced**. The run history is a readable list.

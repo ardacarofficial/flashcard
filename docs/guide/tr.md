@@ -232,8 +232,7 @@ Uygulama FSRS zamanlayıcısını kullanır.
 
 Her çalışma tek bir pencereden başlar: **Ana sayfa**'da **Çalışmaya başla** (ya da `Enter`), bir destenin **Çalış** düğmesi, deste sayfasındaki mod kutucukları, istatistiklerdeki **Bunları çalış** ya da kart ekledikten sonra **Şimdi çalış**. Deste seçmeden açarsan başlatıcı **Tüm desteler** için çalışır.
 
-**Ana sayfa**'daki "Bugün N kart çalışılacak" sayısı, başlatıcının **Bugünün kartları** sayısı ve oturumun gerçekten getirdiği kartlar aynı hesaptan gelir. **Tüm desteler** sırası her destenin kendi günlük yeni kart ve tekrar sınırlarına uyar.
-<!-- v1.3: verify after X1/X2 -->
+**Ana sayfa**'daki "Bugün N kart çalışılacak" sayısı, başlatıcının **Bugünün kartları** sayısı ve oturumun gerçekten getirdiği kartlar aynı hesaptan gelir. **Tüm desteler** sırası her destenin kendi günlük yeni kart ve tekrar sınırlarına uyar: bir destede sınır dolunca diğerleri etkilenmez. Bir notun kartları farklı destelerdeyse (ör. ileri ve ters kart) aynı gün yalnız biri gelir, öbürü yarına kalır.
 
 Başlatıcıda yukarıdan aşağı:
 
@@ -270,7 +269,7 @@ Kartı çevirip ne kadar bildiğini söylersin; sıradaki tekrar zamanı buna g�
 | `1`–`9` | Çoktan seçmeli kartın sorusunda o şıkkı seç |
 | `Enter` | Yalnız odaktaki düğmeye ya da karta basar, başka bir şey yapmaz |
 | `H` | İpucu (soru tarafında) |
-| `S` | Kartı durdur (sen açana kadar sorma) |
+| `S` | Kartı kenara koy (sen geri alana kadar sorma) |
 | `B` | Kartı yarına bırak (bugün bir daha sorma) |
 | `Z` | Son cevabı geri al |
 | `Ctrl+1`–`Ctrl+7` | Bayrak aç/kapa |
@@ -285,11 +284,9 @@ Basılı tutulan bir tuş tek işlem sayılır: `2`'yi basılı tutmak yalnız b
 
 **İpucu.** `H` ya da **İpucu**. Notun bir örnek cümlesi varsa ilk ipucu bağlamdır: kelimeyi o cümlenin içinde görürsün; cevap olarak istenen kelime cümlede boşluk olarak gizlenir ("Cümledeki boşluğu doldur", ör. `I ___ home.`). Sonraki ipuçları cevabın harflerini açar (**İpucu türü** ayarı: ilk harfler, her kelimenin başı ya da harflerin bir kısmı). Örnek cümlesi olmayan notlarda ipucu doğrudan harflerle başlar.
 
-Hazır Kelime ve Altyazı kartlarında ön yüz yalnız kelimeyi gösterir; ilk ipucu örnek cümleyi kelime vurgulanmış olarak getirir. Ters (Üretme) kartta ilk ipucu, terimi boşluk olarak gizleyen cümledir.
-<!-- v1.3: verify after X1/X2 -->
+Hazır Kelime ve Altyazı kartlarında ön yüz yalnız kelimeyi gösterir; ilk ipucu örnek cümleyi kelime vurgulanmış olarak getirir. Ters (Üretme) kartta ilk ipucu, terimi boşluk olarak gizleyen cümledir. Kural basit: ipucu bağlamı gösterir, cevabı asla.
 
-**Bekleme.** Kısa bir öğrenme adımındaki kart (ör. 10 dakika sonra) zamanı gelmeden de birkaç dakika erken sorulabilir; bu öne alma süresi bir ayardır (varsayılan 20 dakika). Kalan tüm kartlar gerçekten beklemek zorundaysa ekran "Sıradaki kart N dk sonra" der ve geri sayar: **Bekle**, **Başka bir şey çalış** ya da **Bitir**. Oturum açık kalır.
-<!-- v1.3: verify after X1/X2 -->
+**Bekleme.** Kısa bir öğrenme adımındaki kart (ör. 10 dakika sonra) zamanı gelmeden de birkaç dakika erken sorulabilir; bu öne alma süresi bir ayardır (**Öğrenme kartını erken göster**, varsayılan 20 dakika; 0 = adım dolana kadar hep bekle). Ayarı oturum sırasında değiştirsen de ekrandaki kart elinden alınmaz. Kalan tüm kartlar gerçekten beklemek zorundaysa ekran "Sıradaki kart N dk sonra" der ve geri sayar: **Bekle**, **Başka bir şey çalış** ya da **Bitir**. Oturum açık kalır.
 
 **Oturum bitince** **Oturum bitti** ekranı çalışılan kart sayısını, doğruluğu, süreyi ve yanlışları gösterir. **Tekrar çalış** başlatıcıyı **Bugün zorlandıklarım** seçili açar; `R` yanlışları hemen tekrar çalıştırır.
 
@@ -352,12 +349,12 @@ Sorgu dili **Göz at**, çalışma başlatıcısının **Sorgu** seçeneği, oto
 | `type:cloze` | Kart türü: `classic`, `typing`, `cloze`, `multiple_choice`, `image_occlusion` |
 | `card:` | Kart şablonu |
 | `is:new` `is:learn` `is:review` `is:relearn` | Kart durumu (`is:yeni` de olur) |
-| `is:due` `is:suspended` `is:buried` `is:flagged` | Vadesi gelmiş, durdurulmuş, yarına bırakılmış, bayraklı |
+| `is:due` `is:suspended` (`is:kenarda`) `is:buried` (`is:yarına`) `is:flagged` | Sırası gelmiş, kenara konmuş, yarına bırakılmış, bayraklı |
 | `flag:red` · `flag:kirmizi` · `flag:1` | Bayrak: 1–7 ya da renk adı (TR/EN) ya da kendi bayrak adın; `flag:0` / `flag:none` bayraksız, `flag:*` herhangi |
 | `stability>30` `difficulty>7` `lapses>=5` `reps<3` | Sayısal; `=` `!=` `<` `<=` `>` `>=` |
 | `retrievability<0.8` | Şu anki hatırlama olasılığı (0–1) |
 | `added:7` `edited:7` `reviewed:1` | Son N çalışma günü içinde eklenen / düzenlenen / tekrar edilen (gün **Yeni gün şu saatte başlar** ayarına göre) |
-| `due:3` | N gün içinde vadesi gelecek |
+| `due:3` | N gün içinde sırası gelecek |
 | `seviye:B1` · `seviye>=B1` · `sınav:TYT` | Sınıflandırma (anahtar ya da ad); `seviye:*` = değeri olan |
 | `kelime:app*` | Alan araması; `*` joker |
 | `re:^ab` · `kelime:re:^ab` | Düzenli ifade (tüm alanlar / tek alan) |
@@ -450,8 +447,7 @@ Eklenti mağazası henüz yok; eklentiyi dosyadan kurarsın.
 
 Yapay zeka tamamen isteğe bağlıdır: bir sağlayıcı kurana kadar kapalıdır ve hiçbir şey gönderilmez. Kurunca bir metinden kart üretebilir, kart yazarken boş alanları doldurtabilir, çalışırken açıklama ya da ipucu isteyebilirsin.
 
-**Nerede.** **Yapay zeka** sayfası şu an hem **Oluştur** bölümünde hem **Ayarlar** → **Bağlantılar**'dadır; üç sekmesi var: **Kart üret**, **Sağlayıcılar**, **Kullanım**. Sağlayıcı kurma ve kullanım Ayarlar'a, yapay zekayla kart üretme de **Kart ekle** sayfasına bir yol olarak taşınıyor.
-<!-- v1.3: verify after X1/X2 -->
+**Nerede.** İki yer, iki iş: **Oluştur** → **Yapay zeka** yalnız **Yapay zekayla kart üret**'tir (deste formun bir alanı; Oluştur sayfasındaki **AI ile üret** düğmesi de oraya götürür). Sağlayıcı kurma ve kullanım **Ayarlar** → **Bağlantılar** → **Yapay zeka**'da, **Sağlayıcılar** ve **Kullanım** sekmelerindedir. Henüz sağlayıcı yoksa kart üretme sayfası **Sağlayıcı bağla** ile seni oraya götürür.
 
 **Sağlayıcı ekle.** **Sağlayıcılar** → **Sağlayıcı ekle** bir galeri açar: **Claude**, **OpenAI**, **OpenRouter**, **Google Gemini**, **Groq**, **Mistral**, **DeepSeek**, **Ollama**, **LM Studio** ve **Özel (OpenAI uyumlu)**. Her birinin altında kısa bir açıklama ve "ücretsiz seçenek" ya da "yerel · ücretsiz" etiketi var. Seçince üç adım gelir:
 
@@ -551,10 +547,10 @@ Kelimeler eklentide seçtiğin desteye, seçmediysen ekrandaki **Deste**'ye, o d
 **Ayarlar** → **Gelişmiş** → **Otomasyon**: tekrar eden işleri uygulamaya bırakırsın. **Hazır bir kuralla başla** altında altı tarif var; her biri şu an kaç kartın uyduğunu canlı gösterir:
 
 - **Sürekli unuttuğum kartları etiketle** (4. unutuşta "zor" etiketi)
-- **Bir türlü akılda kalmayanları askıya al** (8 unutuşta)
+- **Bir türlü akılda kalmayanları kenara koy** (8 unutuşta)
 - **Öğrendiğim kartları arşiv destesine taşı** (90 günden uzun hatırlayacakların)
 - **Yeni Subtitle kartlarına etiket ekle**
-- **Kırmızı bayraklı kartları askıya al**
+- **Kırmızı bayraklı kartları kenara koy**
 - **Kolaylaşan kartlardan “zor” etiketini kaldır** (günde bir kez)
 
 Tarif dolu olarak açılır; etiketi, desteyi ya da sayıyı değiştirebilirsin, kaydetmeden hiçbir şey olmaz. Kurallar tek, düzenlenebilir bir cümle olarak görünür; ham düzenleyici **Gelişmiş** altındadır. Çalışma geçmişi okunur bir listedir.

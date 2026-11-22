@@ -30,21 +30,25 @@ browser extension makes them (`POST /subtitle/v1/captures` on `fc api serve`: wo
 meaning, highlighted sentence, translation, source), the first-run guide skipped. `seed()` in a
 journey returns the ids and the data (`e2e/seed.json` in the profile).
 
+Every journey **must pass**; none is marked `test.fail` today (S7c turned green with X1's hint
+fix).
+
 | Journey | What | Status |
 |---|---|---|
-| J1 | Quick Add: `N`, type, `Ctrl+Enter` ×2 → two notes in the chosen deck | must pass |
-| J2 | Create page: 3 rows, `Ctrl+Enter` → deck + 3 notes; one `Ctrl+Z` removes all | must pass |
-| J3 | Search, `↓ Enter`, edit the back, `Ctrl+Enter` → field changed in the DB | must pass |
-| J4 | CSV import through the UI (path prompt outside Tauri) → notes exist | must pass |
+| J1 | Quick Add: `N`, type, `Ctrl+Enter` ×2 → two notes in the chosen deck, exactly the typed fields | must pass |
+| J2 | Create page: new deck, 3 rows, `Ctrl+Enter` → deck + 3 notes; one `Ctrl+Z` (`oplog.undo`) removes all three and the deck | must pass |
+| J3 | Search, `↓ Enter`, edit the back, `Ctrl+Enter` → field changed in the DB, nothing else | must pass |
+| J4 | Create › From a file: existing deck, the CSV picked with the **file chooser**, mapped preview says 3 → import → notes exist with the CSV's fields | must pass |
 | J5 | 21 new / limit 20 / 20 studied: Home must not advertise what `study.start` can't serve | must pass (fixed in v1.3) |
-| J6 | Subtitle card typed test: the meaning alone is the right answer | must pass (fixed in v1.3) |
-| J7a/b | Ctrl+A / Ctrl+Z inside a text field edit the text (not "select all rows" / `oplog.undo`) | must pass (fixed in v1.3) |
-| S1 | Home → Enter → launcher → Enter: Space×3 grades nothing, 2 grades one, holding 2 grades one | must pass |
-| S2 | Home → Enter → Enter, answer 3, Esc (pause), reopen the launcher from Home: Continue is first and resumes the same session | must pass |
-| S3 | Deck page → Test → 10 questions → submit: score shown, no card's schedule changed | must pass |
+| J6 | Subtitle card typed test: the meaning alone ("gitmek") is the right answer | must pass (fixed in v1.3) |
+| J7a | Note editor (Search → `Enter`): `Ctrl+A` selects the field's text, not all rows | must pass (fixed in v1.3) |
+| J7b | Quick Add: `Ctrl+Z` while typing edits the text, never undoes the card saved before | must pass (fixed in v1.3) |
+| S1 | Home → Enter → launcher → Enter (whole collection): Space×3 grades nothing, 2 grades one, holding 2 grades one | must pass |
+| S2 | Home → Enter → Enter, answer 3, Esc (pause), reopen the launcher from Home: Continue is first (focused) and resumes the same session | must pass |
+| S3 | Deck page → Test → 10 questions → answer all → `Ctrl+Enter`: score shown, no card's schedule changed | must pass |
 | S4 | Two cards Again → "struggled today" counts 2, practice (`trial`) rows, schedule untouched | must pass |
 | S5 | 21 new / limit 20: launcher and Home show 0 with the reason; empty start refused, open session kept | must pass |
-| S6 | Waiting state on 1 m / 10 m steps: within the learn-ahead window (`study.learn_ahead_mins`, 20) "Again" brings the card straight back; at 0 → "Sıradaki kart … sonra", session open, `next_due` = due time, the card comes back when the countdown ends | must pass |
+| S6 | 1 m / 10 m steps: at learn-ahead 0 → "Sıradaki kart … sonra", session open, `next_due` = due time, the card comes back when the countdown ends; within the default window (`study.learn_ahead_mins` = 20) "Again" brings the card straight back | must pass |
 | S7a | Subtitle card go/went, launcher → Test (written only): the paper opens in the answer field, "gitmek" is graded correct (paper read back with the key) | must pass |
 | S7b | Subtitle card back (Cards, Space): meaning, example (+ translation), source as separate parts, labelled by `cards.part.*` | must pass |
 | S7c | Hint rule (X1): Subtitle front = the word only (went + "go"); H = the line with the word highlighted, never the meaning, then letters; a reverse (Vocabulary production) card blanks the word: "I ___ home after the party." | must pass (fixed in v1.3) |
@@ -52,7 +56,16 @@ journey returns the ids and the data (`e2e/seed.json` in the profile).
 | S9 | Create › Paste `word⇥meaning⇥sentence` ×3 into Vocabulary → example field holds the sentence; one Ctrl+Z removes all three | must pass |
 | S10 | Settings › Note types: a field's role and a card's "asks for" field survive save + reload (`notetypes.get`) | must pass |
 | S11 | Settings › Deck options: 5 new a day on a 15-new deck → launcher and `study.options` offer 5; reset to default → 15 | must pass |
-| S12 | Quick Add: after a save, Ctrl+A / Ctrl+Z inside the field edit the text; the saved note and the oplog are untouched | must pass |
+| S12 | Quick Add: after a save, Ctrl+A / Ctrl+Z inside the field edit the text; the saved note, the deck's note count and the oplog are untouched | must pass |
+| O1 | Library → a deck → Create: "Existing deck" with that deck preselected, cursor in the first term; Ctrl+Enter saves the note in THAT deck, no deck created | must pass (fixed in v1.3) |
+| O1b | Create from the sidebar: the cursor is in the first term | must pass (fixed in v1.3) |
+| O2 | Library row's visible "Study" → Enter → Space, 2 → Esc: focus on Continue, Enter resumes the SAME session; Esc → Tab → Done goes to the deck page, the paused session stays open | must pass (fixed in v1.3) |
+| O3 | Deck page → Learn with a paused Test of that deck: the launcher lists the Test under Continue but Enter starts Learn; the Test stays open | must pass (fixed in v1.3) |
+| O4 | Test paper by keyboard, 6 questions: A–D pick and move on, typed answer + Enter moves on, the last lands on Submit, Ctrl+Enter hands it in → no blanks in the graded paper | must pass (fixed in v1.3) |
+| C1 | Match on Subtitle cards: tiles are the word (`term`) ↔ its meaning (answer field), never the line, translation or source; round played, one `review_log.mode = match` answer per card read back | must pass (fixed in v1.3) |
+| C2 | Planning's today = the launcher's today: 25 new (20 a day), 5 reviews a day → "Bugün ~20 kart" = `study.options`; no later day plans more than 20 new or 5 reviews | must pass (fixed in v1.3) |
+| C3 | Learn-ahead lowered to 0 while a learning card (due in 10 min) is on screen: Space + 2 is saved (review read back, no "no longer in the session"); the next card is chosen with the new value and waits | must pass (fixed in v1.3) |
+| C4 | A note's two cards in two decks: each deck alone offers its card; the whole-collection queue (Home → launcher → Enter) counts and serves one of them; a deck whose preset does not bury siblings keeps its card | must pass (fixed in v1.3) |
 
 A journey that shows a known bug is **never deleted or skipped**: the bug assertion comes after
 `test.fail(true, '<bug>')`, called only once the journey's own preconditions have passed (so a

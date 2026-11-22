@@ -119,6 +119,8 @@ Kullananlar (hepsi Rust'ta):
 | Yapı taşı | Davranış |
 |---|---|
 | Yazılı cevap, Test, Öğren, Eşleştir (`study::engine::render_for_study`) | Kendi kendine notlanan kartta beklenen cevap `answer_field` alanının metnidir; yoksa arka yüzün cevap kısmı (eski davranış). Yazma, boşluk doldurma ve çoktan seçmeli motorlar kendi cevaplarını belirlemeye devam eder. |
+| Eşleştir kutucukları (`modes::matching`, `support::content::term_and_definition`) | Rolü olan tiplerde kutucuklar `term` (yoksa `surface`) alanı ↔ şablonun cevap alanı (kelimenin kendisi değilse; yoksa `meaning`); cümle, çeviri, kaynak asla. Rolsüz tiplerde çizilen soru ve cevap. |
+| AI ipucu, kontrol, açıklama (`modules/ai/context.rs`) | "Cevap" yazılan kartta beklenen cevap, kendi notlananda `answer_field` alanının metnidir (örnek ve kaynak değil); yoksa arka yüzün cevap kısmı. |
 | İpucu (`fc-study::hint`) | Kural (v1.3 X1): **ipucu bağlam gösterebilir, cevabı asla.** Notun `example` cümlesi 1. seviyedir (`HintDto.kind = context`), sonraki seviyeler cevabın harf ipuçlarıdır. Kelimeyi soran kart (ters/üretme: `answer_field` rolü `term`/`surface`) cümledeki geçişi `___` ile gizler; geçiş yoksa cümle olduğu gibi bağlamdır. Anlamı soran kart (ileri) kelimeyi vurgular (`<b class="fc-context-word">`) ve yalnız cevap (anlam ya da `, ; / \|` ile ayrılmış seçeneklerinden biri) cümlede geçiyorsa onu gizler. Geçiş: önce kalın işaretli kısım (yakalamanın UTF-16 konumundan), yoksa `surface` sonra `term` için tam kelime, büyük/küçük harf duyarsız. Cümle soru yüzünde zaten görünüyorsa, gizlendikten sonra cevap başka yerde de geçiyorsa (kelimeyi soran kartta çekimli hâli de: *goes*, *going*) bağlam ipucu verilmez, harflere düşülür. |
 | Deste sayfası terim listesi (`notes.terms`) | Sütunlar `term` ve `meaning` alanlarıdır; satırda `term_field` / `definition_field` döner ve satır içi düzenleme bunlara yazar. İkisi birden olmayan tiplerde ilk iki alan gösterilir ve `ambiguous: true` gelir: arayüz tahmin etmek yerine tam editörü açar. |
 | Gelen kutusu kabulü (`inbox.accept`) | `front`/`back` kısayolu `term`/`meaning` alanlarına gider; yakalanan cümle `example`, sayfa `source` alanına yazılır (boşsa). Not tipi seçilmemiş ve cümle taşıyan öğe, cümleyi tutabilen yerleşik Altyazı kartı olur. |
@@ -210,16 +212,16 @@ Yeni hata kodu: **`CONFLICT_NOTHING_TO_STUDY`**: `study.start` seçilen kapsamda
 ## 9. Oturum motoru
 
 - Çalışma oturumu backend'de bir durum makinesidir: `start(kind, query, config) → next() → reveal() → answer(rating) → … → end()`.
-- Kuyruk oluşturma: vadesi gelenler, öğrenme adımları, yeniler; karıştırma stratejisi; kardeş gömme.
+- Kuyruk oluşturma: sırası gelenler, öğrenme adımları, yeniler; karıştırma stratejisi; kardeşleri yarına bırakma (kodda `bury_siblings`).
 - Oturum durumu `sessions` tablosunda kalıcıdır (çökme kurtarma).
 - Takvimi etkilemeyen oturumlar (deneme, test) `review_log`'a `mode` alanıyla yazar ama `cards` durumunu değiştirmez.
 - Zamanlı mod, ipucu sayacı, cevap süresi ölçümü oturum motorundadır. Frontend sadece "gösterildi / çevrildi" zamanlarını bildirir (backend kendi zamanıyla doğrular).
-- v1.3: **her türden bir açık oturum** (`study.start` yalnızca aynı türün açık oturumunu kapatır; test kâğıdı bir Kartlar oturumundan sağ çıkar). Kalan kartların hepsi öğrenme adımını bekleyen oturum açık kalır; `SessionDto.next_due` kartın gösterilebileceği anı verir. Öğrenme kartı vadesinden `LEARN_AHEAD_MS` (20 dk, `fc_study::session`) önce gösterilebilir; bu pencere bir ayar olacak ve `next_due` / `next_available_at` kartın gerçekten sunulacağı an olacak.
-  <!-- v1.3: verify after X1/X2 -->
+- v1.3: **her türden bir açık oturum** (`study.start` yalnızca aynı türün açık oturumunu kapatır; test kâğıdı bir Kartlar oturumundan sağ çıkar). Kalan kartların hepsi öğrenme adımını bekleyen oturum açık kalır; `SessionDto.next_due` kartın gösterilebileceği anı verir. Başka kart kalmadığında öğrenme kartı vadesinden en çok önden öğrenme penceresi kadar önce gösterilir: `study.learn_ahead_mins` ayarı (varsayılan 20 = `fc_study::session::LEARN_AHEAD_MS`, 0–1440; `plan.rs` `learn_ahead_ms`). `next_due` / `next_available_at` kartın gerçekten sunulacağı andır (vade − pencere).
+- Ayar değişikliği ekrandaki kartı almaz: oturum, gösterilen kartı seçtiği pencereyi `SessionState.learn_ahead_ms`'te tutar; `Session::shown_window_ms` bu değerle şimdiki ayarın büyüğüdür. Büyütülen pencere hemen, küçültülen bir sonraki cevaptan (yeni kart seçilince, `reset_shown_window`) geçerli olur; kart "artık oturumda değil" olmaz.
 
 ### 9.1 Kuyruk planlayıcısı (v1.3)
 
-"Bugün çalışılacak" her sayı **tek yerde** hesaplanır: `crates/fc-app/src/modules/study/plan.rs` (`Planner`, `PlanRequest`, `today_counts`). Bir istek (deste + alt deste ayarı, oturum türü, `StudyScope`, filtre/sorgu) bir kuyruğa çözülür: istemcinin saat dilimindeki çalışma günü (`study.day_start_hour`), deste şablonunun günlük sınırları eksi bugün çalışılanlar (yalnız takvimi değiştiren cevaplar, her mod), `study.new_per_session`, kardeş gömme, gömülü/askıdaki kartlar ve boş kartlar (kuyruktaki her kart denetlenir).
+"Bugün çalışılacak" her sayı **tek yerde** hesaplanır: `crates/fc-app/src/modules/study/plan.rs` (`Planner`, `PlanRequest`, `today_counts`). Bir istek (deste + alt deste ayarı, oturum türü, `StudyScope`, filtre/sorgu) bir kuyruğa çözülür: istemcinin saat dilimindeki çalışma günü (`study.day_start_hour`), deste şablonunun günlük sınırları eksi bugün çalışılanlar (yalnız takvimi değiştiren cevaplar, her mod), `study.new_per_session`, kardeşleri yarına bırakma (`bury_siblings`), yarına bırakılmış/kenardaki kartlar ve boş kartlar (kuyruktaki her kart denetlenir).
 
 | Kullanan | Ne alır |
 |---|---|
@@ -231,10 +233,10 @@ Yeni hata kodu: **`CONFLICT_NOTHING_TO_STUDY`**: `study.start` seçilen kapsamda
 
 - Planlayıcı bir anda birden çok planı paylaşılan önbellekle (deste dizini, bugünün cevapları, boş kart denetimi) kurar; deste ağacının bütün sayıları tek planlayıcıya mal olur.
 - Saat dilimi verilmeyen sorgular (`decks.tree`, hatırlatıcı, sorgu dili) son `study.start`'ın kaydettiği istemci farkını (`ux_state`) kullanır, böylece aynı çalışma gününü paylaşırlar.
-- Pratik kapsamları (`studied_today`, `struggled_today`, `all`) sınırsızdır, kümeyi başta sabitler, gömülüleri de alır ve öğrenme adımı beklemez; oturum `trial` olur.
+- Pratik kapsamları (`studied_today`, `struggled_today`, `all`) sınırsızdır, kümeyi başta sabitler, yarına bırakılmışları da alır ve öğrenme adımı beklemez; oturum `trial` olur.
 - **Değişmez (Rust testi, `launcher_tests.rs`):** aynı saat ve deste için `study.options.scopes[due].count` = `study.start { kind: normal, scope: due }`'nun sunduğu kart sayısı.
-- Koleksiyon çapındaki kuyruk ("Tüm desteler", `deck_id: null`) her destenin kendi şablon sınırlarına uyar: deste kuyruklarının birleşimi, koleksiyon üst sınırı yalnızca ayarlanmışsa; değişmez: deste başına `today_*` toplamı = koleksiyonun `today_*`'ı.
-  <!-- v1.3: verify after X1/X2 -->
+- **Koleksiyon çapındaki kuyruk** ("Tüm desteler", `deck_id: null`; `plan_collection`): `collection_roots`'un (her üst düzey deste ve alt destelerini dahil etmeyen bir destenin alt desteleri; her canlı deste tam bir kez) kendi planlarının birleşimi, **her biri kendi şablonuyla** (günlük yeni/tekrar sınırı, sıra, kardeşleri yarına bırakma) ve alt deste ayarıyla. Harmanlama: öğrenme kartları vade sırasıyla önde, sonra tekrarlar, sonra yeniler; tekrar ve yeniler desteler arasında sırayla alınır. Koleksiyon üst sınırı yalnızca istenirse (`new_limit`) ya da `study.new_per_session` uygulama genelinde ayarlıysa. **Kardeşler desteler arasında da** yarına bırakılır: notunun bir kartı kuyruktaysa, destesi kardeşleri bırakan tekrar/yeni kart dışarıda kalır; öğrenme kartları hep kalır (C4). Değişmez (`launcher_tests.rs`): bir notun kartları farklı destelere dağılmamışsa deste başına `today_*` toplamı = koleksiyonun `today_*`'ı; dağılmışsa koleksiyonun sayısı toplamdan küçük olabilir.
+- **Planlama tahmini** (`fc_study::planning::forecast`, `modules/planning.rs`): 0. gün bugünün gerçek kuyruğudur (`TodayQueue`, Ana sayfa ve başlatıcının sayısı); sonraki günler şablonların günlük yeni ve tekrar sınırlarına uyar, sınırı aşan tekrarlar ertesi güne kayar. Günün "kart" sayısı kart sayar (başlatıcı gibi), dakikalar cevap sayar.
 
 ## 10. Takılabilir arayüzler (strateji deseni)
 
@@ -283,8 +285,7 @@ Her arayüzün bir **kimliği**, **yetenek bildirimi** (capabilities) ve **ayar 
 ## 15. Migration'lar
 
 - Her şema değişikliği numaralı ve **geri dönüşsüz ama test edilmiş** bir migration'dır.
-- Numaralar sürüm başına ayrılmış aralıklardadır (`fc-storage` `migrate::RELEASE_RANGES`; aralık dışı migration testleri kırar): v0.1 `1`–`99`, v0.2 `100`–`199` … v1.0 `1000`–`1099` (izlere bölünmüş, docs/07 §5.1), v1.1 `1100`–`1199` (migration yok), v1.2 `1200`–`1299` (`1200_subtitle`), **v1.3 `1300`–`1399`** (`1300_vocabulary_roles`: yalnız veri; v1.3'ün ikinci veri migration'ı, yerleşik kelime/altyazı şablonları için, bu aralıkta 1300'den sonra gelir). Dosyalar `crates/fc-storage/migrations/NNNN_ad.sql`; birleştikten sonra **asla düzenlenmez** (sağlama toplamı tutmazsa veritabanı açılmaz).
-  <!-- v1.3: verify after X1/X2 -->
+- Numaralar sürüm başına ayrılmış aralıklardadır (`fc-storage` `migrate::RELEASE_RANGES`; aralık dışı migration testleri kırar): v0.1 `1`–`99`, v0.2 `100`–`199` … v1.0 `1000`–`1099` (izlere bölünmüş, docs/07 §5.1), v1.1 `1100`–`1199` (migration yok), v1.2 `1200`–`1299` (`1200_subtitle`), **v1.3 `1300`–`1399`** (`1300_vocabulary_roles` ve `1301_subtitle_word_front`: yalnız veri; 1301 yerleşik Altyazı kartının ön yüzünü yalnız kelimeye indirir, yalnızca şablon hâlâ gönderildiği gibiyse). Dosyalar `crates/fc-storage/migrations/NNNN_ad.sql`; birleştikten sonra **asla düzenlenmez** (sağlama toplamı tutmazsa veritabanı açılmaz).
 - Migration öncesi veritabanının otomatik anlık kopyası alınır (sadece migration sırasında, periyodik yedek değil).
 - CI'da: her migration boş veritabanında ve önceki sürümlerden üretilmiş örnek veritabanlarında çalıştırılır.
 - Veri formatları (deste paketi, yedek, eklenti manifesti) de sürüm numarası taşır.

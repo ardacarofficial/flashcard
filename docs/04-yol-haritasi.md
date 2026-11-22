@@ -259,7 +259,8 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [x] Boş başlatma `CONFLICT_NOTHING_TO_STUDY`: oturum açmaz, yarım oturumu kapatmaz; pratik kapsamları takvime dokunmaz (S3, S4, S5).
 - [x] `Space` asla puanlamaz, `Esc` ara verir ve Devam et aynı oturuma döner, yazı alanında `Ctrl+Z`/`Ctrl+A` metne aittir (S1, S2, J7, S12).
 - [x] Altyazı kartında doğru cevap yalnız anlam; "Tanım" anlamı düzenler; kart arkası etiketli parçalar; cümle içe aktarmada ve gelen kutusunda korunur (J6, S7a, S7b, S8, S9, S10; migration 1300 fikstür testleri).
-- [ ] İpucu kuralı iki yönde (S7c), "Tüm desteler" kuyruğu deste ayarlarına uyar, önden öğrenme penceresi ayar <!-- v1.3: verify after X1/X2 -->
+- [x] İpucu kuralı iki yönde (S7c); "Tüm desteler" kuyruğu her destenin şablonuna uyar, kardeşleri desteler arasında da yarına bırakır (S1, S2, C4); önden öğrenme penceresi ayar ve değişikliği ekrandaki kartı almaz (S6, C3); Planlama'nın bugünü = başlatıcının (C2).
+- [x] Sahibin gözüyle (X2): görünür "Çalış", kavram başına tek söz, klavyeyle Test kâğıdı, AI Oluştur'da üretme / Ayarlar'da kurulum, ara ver → Devam et, `?` sayfa tuşları (O1–O4); Eşleştir rollerden (C1).
 - [x] Yolculuklar gerçek çekirdekte, kaydedilen sonuç üzerinde (`pnpm -C apps/desktop e2e`, CI `journeys`).
 - [ ] Windows: kurulu uygulamada WebDriver pilotu (`windows-build.yml` → `webdriver-pilot`, kapıda değil) yeşil ve proje sahibinin elle koşusu.
 
