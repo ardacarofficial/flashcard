@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [claude/clever-archimedes-u8c7rp]
+    branches: [claude/clever-archimedes-u8c7rp, claude/festive-einstein-8y0kld]
   pull_request:
 
 concurrency:

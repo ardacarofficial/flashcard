@@ -4,6 +4,87 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased]
 
+## [1.3.0] — v1.3 "kullanılır": akışlar, kelime kartları, gerçek çekirdekte doğrulama
+
+Workspace sürümü `1.3.0`. Proje sahibi v1.2'yi Windows'ta denedi: "Daha güzel ama kullanamıyorum." v1.2 sahte bir backend'e karşı ekran görüntüleriyle doğrulanmıştı; kullanılamaz akışlar böyle geçti. v1.3 yeni özellik için özellik eklemez: var olanı **kullanılır, öngörülebilir ve kendini anlatan** hâle getirir. Tema aynı (docs/11 §4); düzenleyici fikir artık akışlar (docs/11 §1). Hiçbir özellik, ayar ya da kısayol kaldırılmadı; taşınanlar ulaşılabilir. Migration `1300_vocabulary_roles` (v1.3 aralığı 1300–1399).
+
+### Çalışma
+- **Tek başlatıcı.** "Çalış" demenin her yolu (Ana sayfa düğmesi/satırları/`Enter`, Kütüphane satırı, deste sayfasının Çalış'ı ve mod düğmeleri, palet, oturum sonundaki "Tekrar çalış", İstatistik'in "Bunları çalış"ı, kart eklemenin "Şimdi çalış"ı) aynı iletişim kutusunu açar: önce yarım kalanlar ("Devam et · 7 cevaplandı · 13 kaldı"), sonra mod (Kartlar / Öğren / Test / Eşleştir, her biri takvime ne yaptığını söyler), sonra **ne çalışayım**, kaç kart, kapalı seçenekler. `Enter` başlatır, `Esc` kapatır. Mod başına kurulum panelleri kalktı. Son mod deste başına, son kapsam mod başına hatırlanır.
+- **Beş kapsam, tam sayılarıyla:** Bugünün kartları · Yeni kartlar · Bugün çalıştıklarım · Bugün zorlandıklarım · Tüm kartlar. Son üçü **pratik**: takvimi değiştirmez, kart kümesi başlarken dondurulur. Boş kapsam nedenini söyler ("Bugünlük kart sınırın doldu", "Sıradaki kart 6 dk sonra", "Bugün henüz çalışmadın").
+- **Gösterilen sayı = verilen kart.** Ana sayfa, Kütüphane, deste sayfası, başlatıcı ve hatırlatıcılar aynı kuyruk planlayıcısından sayar; "Bugün 12" diyen yer 12 kart verir.
+- **Klavye: bir tuş, bir iş.** `Space` kartı her basışta çevirir (ön ⇄ arka) ve **asla puanlamaz**; puan tuşları yalnız arka yüz görüldükten sonra çalışır; `Enter` yalnız odaktaki düğmeye basar; basılı tutulan tuş tek iş yapar; ipuçları ve `aria-keyshortcuts` kısayol düzenleyicisini izler.
+- **Ara ver, kaldığın yerden devam et.** `Esc` oturumu bitirmez, duraklatır: o ana kadarki özet + "Devam et"; başlatıcının ilk satırı da aynı oturumu sunar. Tür başına tek açık oturum; Test kâğıdı cevaplarını taslak olarak saklar.
+- **Bekleme.** Kalan kartların hepsi öğrenme adımında bekliyorsa oturum kapanmaz: "Sıradaki kart N dk sonra" + geri sayım, Bekle / Başka bir şey çalış / Bitir.
+- <!-- v1.3: verify after X1/X2 --> "Tüm desteler" kuyruğu her destenin kendi günlük sınırlarına uyar (bir destede sınır dolunca diğerleri sıfırlanmaz); önden öğrenme penceresi ayar oldu ve bekleme ekranı yalnız gerçekten beklemen gerektiğinde görünür.
+- Düz kelimeler: "Yarına bırak" (bugün bir daha sorma), "Durdur" (sen açana kadar sorma), sayıların ne olduğu yazılı.
+
+### Kelime kartları
+- **Alan rolleri ve "kart neyi soruyor".** Not türü alanı ne içerdiğini söyler (terim, geçtiği hâli, anlam, örnek, örnek çevirisi, kaynak, not); kart şablonu hangi alanı sorduğunu (`answer_field`). Yerleşik türler (Klasik, ters, Kelime, Cümle, Altyazı…) bunları bir data migration ile alır; **senin değiştirdiğin şablonlara dokunulmaz.** Not türü düzenleyicisinde "Bu alan ne içeriyor?" ve "Bu kart neyi soruyor?".
+- **Doğru cevap yalnız sorulan alan.** "went" (go → gitmek) kartında yazılı cevap, Test, Öğren ve Eşleştir yalnız "gitmek"i bekler; ters kart terimi.
+- **İpucu önce bağlam.** Notun örnek cümlesi varsa ilk ipucu cümledir ("Cümledeki boşluğu doldur"), sonra harfler. Cevap cümlede başka yerde de geçiyorsa harflerle başlanır. <!-- v1.3: verify after X1/X2 --> İleri kartın ön yüzü yalnız kelimeyi gösterir, ilk ipucu cümleyi bağlam olarak; ters kartta ilk ipucu terimi boşluklu cümle.
+- **Kart arkası üç etiketli parça:** anlam (en büyük) › örnek (cümle + çevirisi, ayrı ve "Örnek" etiketli) › kaynak (en küçük). Örnek cümle artık cevabın parçası gibi görünmez.
+- Deste sayfasının terim listesi terim/tanım sütunlarını rollerden seçer; "Tanım"ı düzenlemek anlamı değiştirir. Hangi alanın ne olduğu bilinmeyen türlerde kalem tam düzenleyiciyi açar.
+- İstatistik'in "Nelerde zorlanıyorum?" tablosu kelimeyi ve anlamı rollerden alır.
+
+### Kart ekleme
+- **Tek yer:** Oluştur "Nasıl eklemek istersin?" — Tek kart (Hızlı Ekle, `N`) · Toplu · Yapıştır · Dosyadan. Aynı hedef seçici (yeni/var olan deste, not türü), aynı onay: "12 kart eklendi · Geri al · Desteyi aç · Şimdi çalış", atlanan satırlar nedenleriyle.
+- **Yapıştır ve Dosyadan tek rehberli akış:** sütunlar not türünün alanlarına rol adlarıyla eşlenir (canlı önizleme), ayırıcı algılanır ve değiştirilebilir, yinelenen kural düz cümleyle; eşleme başlıktan ("sentence", "örnek", "definition"…), yoksa son eşlemeden, yoksa rol sırasından gelir. **Cümle sütunu örnek alanına gider.** Sürükle-bırak.
+- İçe aktarma Ayarlar'dan çıktı; Ayarlar › Veri › Dışa aktar ve yedek dışa aktarma, yedek ve yazdırmayı tutar.
+- Hızlı Ekle önce terim / anlam / isteğe bağlı örnek; yinelenen kart satır içinde açıklanır; altta aynı destede Toplu / Yapıştır / Dosyadan.
+- **Yakalanan cümle kaybolmuyor:** gelen kutusundan kabulde cümle örnek alanına, sayfa kaynak alanına yazılır; cümle taşıyan öğe not türü seçilmemişse "Altyazı kartı" olur. Satır neye dönüşeceğini söyler; destesiz satır göndermeden önce deste ister.
+- İlk açılış: 4 adımlı, kapatılabilir rehber (kelime ekle ya da başlangıç destesi, çalış, bugünün kartları ve ilerleme nerede, isteğe bağlı tarayıcı eklentisi).
+- <!-- v1.3: verify after X1/X2 --> Yapay zekâyla kart üretmek bir ekleme yolu; sağlayıcı kurulumu ve kullanım Ayarlar'da.
+
+### Ayarlar
+- **Ayar öğretir:** her sayfa bir cümleyle açılır; her satırın açıklaması gövde boyunda ve "bunu değiştirirsem ne olur?" sorusunu cevaplar, somut örnek, "varsayılan" işareti ve **Varsayılana dön** (`settings.reset`, geri alınabilir); teknik kısımlar sayfa başına hatırlanan **Gelişmiş** altında; ayarlarda **arama**. Dar pencerede satırlar alt alta.
+- Gruplar göreve göre: Genel · Çalışma ve kartlar · Bağlantılar · Veri · ayrı çizgiyle Gelişmiş ("çoğu zaman gerekmez"). Genel sayfası "Ne değiştirmek istiyorsun?" ile başlar.
+- **Not türleri** öğrenen görünümüyle: tür kutucukları, alan listesi + çevrilebilir canlı önizleme, hazır başlangıç noktalarından yeni tür, şablon kodu/CSS "Gelişmiş: şablon kodu" altında, kaydetmeden/silmeden önce tam veri kaybı uyarısı.
+- **MCP:** "Asistanını bağla" (istemci seç, bu profilin gerçek yollarıyla hazır parça, kopyala, test, salt okunur anahtarı; `mcp.setup`) ve ayrı "Dış MCP sunucuları".
+- **Otomasyon:** altı hazır tarif, etkilenen kart sayısı canlı; kural tek düzenlenebilir cümle; ham düzenleyici Gelişmiş'te; okunur çalışma geçmişi.
+- Hazır ayarlar, hatırlatıcılar, profiller ve kilit, eklentiler (sandbox sınırları görünür), Subtitle ve yerel API sayfaları ne yaptıklarını anlatır.
+
+### Yapay zekâ
+- **Hazır sağlayıcılar:** Claude, OpenAI, **OpenRouter**, Gemini, Groq, Mistral, DeepSeek, Ollama, LM Studio ve özel OpenAI uyumlu adres — dört protokolün üstünde. OpenRouter gibi barındırılan uyumlu adresler artık anahtar ister (v1.2'de anahtar alanı gizleniyordu); bu bilgisayardaki/yerel ağdaki sunucular istemez.
+- **Üç adım:** anahtar → model (listeden aranabilir, liste gelmezse elle) → **Test**. Test tek küçük istek atar ve sonucu düz söyler: tamam / anahtar yok / anahtar yanlış / kredi yok / model yok / adres yanlış / hız sınırı / servis çalışmıyor / ulaşılamıyor / TLS; sağlayıcının mesajıyla (anahtar maskeli).
+- Sağlayıcı satırları durumlarını ve son testi gösterir; varsayılan sağlayıcı, yönlendirme ve fiyatlar korunur. <!-- v1.3: verify after X1/X2 --> Kurulum ve kullanım Ayarlar › Bağlantılar › Yapay zeka'da.
+
+### İstatistik ve Planlama
+- **İstatistik üç soruyla açılır:** Bugün nasılım? (bugün ve dün, gidişat cümlesi) · Önümde ne var? (7 gün, en yoğun gün yazıyla) · Nelerde zorlanıyorum? ("Bunları çalış · N" başlatıcıyı pratik + bu kartlarla açar). Ayrıntılar altta, her panel tek satırlık anlamıyla.
+- **Planlama "Günde kaç yeni kart?" ile başlar:** sınav tarihi ve canlı tahmin (Rust'ta saf FSRS iş yükü modeli), ne değişeceğini söyleyen "Uygula" (tek geri al adımı; destenin hazır ayarı yoksa oluşturup atar). Optimizasyon ve yük dengeleme Gelişmiş'te.
+- Hedefler boşluklu cümleler; yeni hedef türü "günde N kart".
+- **`?`** kısayol yardımı: canlı kısayol tablosu, bağlama göre gruplu, aranabilir.
+- Hatırlatıcılar her görmemiş kartı değil, Başla'nın gerçekten vereceği kuyruğu sayar; "bugün çalışıldı" çalışma günü başlangıcına uyar.
+- Sorgu dili: `added:N` / `edited:N` / `reviewed:N` kayan 24 saat yerine yerel çalışma günlerini sayar.
+
+### Düzeltmeler
+- **Vaat edilen ≠ verilen kart:** 21 yeni kart, sınır 20, 20'si çalışılmışken Ana sayfa "1 kart" diyordu, `study.start` sıfır veriyordu. Artık her sayı aynı kuyruktan; boş başlatma `CONFLICT_NOTHING_TO_STUDY` ile reddedilir, **oturum açmaz ve yarım oturumu kapatmaz** (eskiden yarım oturum boş bir yenisi uğruna kapanıyordu).
+- **Yazı alanında `Ctrl+Z` kayıtlı bir kartı siliyordu** (Ara'da genel geri al çalışıyordu), `Ctrl+A` tablo satırlarını seçiyordu. Yazı alanında yerel düzenleme kazanır; açık iletişim kutusunda kabuk kısayolları çekilir.
+- **`Esc` oturumu bitiriyordu**, "Devam et" hiç çalışamıyordu. Artık ara verir.
+- **`Space` puanlıyordu:** iki basış "Biliyorum" sayıp kartı geçiyordu. Artık yalnız çevirir.
+- **Altyazı kartlarında yanlış cevap anahtarı:** beklenen cevap anlam + cümle + çeviri + kaynaktı. Artık yalnız anlam.
+- **"Tanım"ı düzenlemek yanlış alanı değiştiriyordu:** Altyazı notunda anlam yerine "geçtiği hâli" (went).
+- **OpenRouter için anahtar alanı gizliydi** (yeni uyumlu sağlayıcı "anahtar gerekmez" sayılıyordu).
+- Gelen kutusundan ve CSV'den gelen cümle kayboluyordu (Klasik'in ön/arka alanlarına sığmıyordu).
+- Modülü kapalı bir çalışma girişi ölü tıklamaydı (yönlendirici eksik rotayı sessizce yutuyordu); Ana sayfa artık ölü bir Başla sunmaz, eksik rota açıklanır.
+- Paletteki ham `study.start` komutu oturumu çalıştırıp hiçbir yerde göstermiyordu; artık başlatıcıyı açar.
+- Test klavyeyle başlatılınca odak sayfada kalıyordu; kâğıt ilk cevaba odaklanır.
+- Başlatıcı yeni kart sınırı dolduğunda "tekrar sınırı doldu" diyordu; artık "Bugünlük kart sınırın doldu".
+- Açık bir Select'te harf yazarak seçerken `n` Hızlı Ekle'yi açıyordu.
+- Basılı tutulan tuş tek seferlik eylemleri tekrarlıyordu (Ara, terim listesi, tablolar, Öğren, düzenleyiciler, Gelen kutusu, Hızlı Ekle, Oluştur).
+- İstatistik'in "unutulanlar" tablosu sabit alan adlarına bakıp kelime türlerinde cümleyi ya da çeviriyi gösteriyordu.
+- Yeni ekranlarda ikincil metin okunmuyordu (`--text-3` yalnız yer tutucu/süs).
+- `html_to_text`, `&` işaretinden sonra 12 bayt içinde çok baytlı harf gelince çöküyordu (`Tom & ğğğğğğ`).
+- Eklenti erişimi: yeni `ai.test` işi AI alanında sınıflanır (not metni taşımaz); `study.options` eklentiler için `decks:read` ister.
+
+### Geliştirici
+- **Dev köprüsü:** `fc --db <dosya> dev serve [--port N] [--token T]` (yalnız debug ya da `dev-bridge` özelliği; sürümde yok): loopback HTTP, `POST /rpc` + SSE `/events`, rastgele belirteç, Host/Origin korumaları. Masaüstü IPC ile **aynı dağıtım** (`fc_app::transport::dispatch`). Ön yüzde üçüncü taşıyıcı `vite --mode bridge`.
+- **Yolculuklar** (`apps/desktop/e2e/`, `pnpm -C apps/desktop e2e`): Playwright, gerçek çekirdek, gerçek komutlarla tohumlanmış geçici profil (eklentinin HTTP sözleşmesiyle Altyazı yakalamaları dahil); doğrulama **kaydedilen sonuç** üzerinde. J1–J7, S1–S12; CI'da Linux `journeys` işi. Mock ekran görüntüleri artık yalnız görsel kontrol (docs/11 §5). <!-- v1.3: verify after X1/X2 -->
+- **Windows WebDriver pilotu** (`windows-build.yml` → `webdriver-pilot`, `continue-on-error`): kurulu NSIS uygulamasına `tauri-driver` + uyumlu `msedgedriver` ile üç yolculuk; kod `apps/desktop/e2e-windows/`. CI ilk kez koşana kadar denenmedi.
+- API (sürümlü, TS tipleri üretildi): `study.options`; `study.start` + `scope`; `SessionDto.next_due`; `modes.test.save_draft`; `HintDto.kind` + `html`; `NoteTerm.term_field` / `definition_field` / `ambiguous`; `ColumnTarget::Role`; `decks.*` `today_*` alanları; `ai.providers.list` → `presets`, `ai.providers.test` (`ai.test` işi), `ai.models` işinin sonucu tipli (`AiModelList`); `mcp.setup`; `stats.today`, `stats.struggles`; `planning.forecast`, `planning.apply_pace`; hedef türü `daily_cards`; hata kodu `CONFLICT_NOTHING_TO_STUDY`.
+- Çekirdek: `FieldDef.role`, `CardTemplate.answer_field` (isteğe bağlı JSON, eski kayıtlar değişmeden yüklenir); `fc-study::hint` (`context_hint`, `leveled_hint`), `fc-study::planning::forecast`; ortak kuyruk planlayıcısı `study/plan.rs`. **Migration 1300** yalnız veri: değiştirilmemiş yerleşik not türlerine rol/cevap alanı/yeni kart arkası, idempotent, v1.2'nin her yerleşiğinden fikstürle testli (iki dil).
+- `screens.mjs`: modlar başlatıcıdan başlar, `?mock=waiting`, `state-cards-paused`, yakalanamayan durum `state-missing` bulgusu.
+- `$lib/keyboard` (`isEditableTarget`): neyin yazı alanı olduğuna tek yer karar verir.
+
 ## [1.2.0] — v1.2 arayüz yeniden tasarımı + Subtitle bağlantısı
 
 Workspace sürümü `1.2.0`. v1.1 arayüzü (ferah, büyük yuvarlak kartlar, açık gri + mor, ağır kart ekleme formu) proje sahibince rahatsız edici bulunup reddedildi; arayüz akışlardan başlayarak yeniden tasarlandı (docs/11). **Hiçbir özellik kaldırılmadı**, Rust davranışı ve API değişmedi.

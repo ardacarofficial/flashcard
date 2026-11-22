@@ -8,9 +8,9 @@
 | Masaüstü kabuğu | Tauri 2 | Windows'ta WebView2 |
 | Async | tokio | |
 | Veritabanı | SQLite (rusqlite, bundled) + FTS5 | WAL modu |
-| Migration | rusqlite_migration (veya eşdeğeri) | |
+| Migration | Kendi küçük çalıştırıcısı (`fc-storage::migrate`) | `migrations/NNNN_ad.sql`, sağlama toplamlı, sürüm aralıklı |
 | Serileştirme | serde, serde_json | |
-| TS tip üretimi | specta + tauri-specta | |
+| TS tip üretimi | ts-rs (`fc-api` `gen-ts`) | CI `gen-ts --check` |
 | Zamanlayıcı | fsrs-rs (resmi FSRS Rust kütüphanesi) | |
 | Hata | thiserror (kütüphaneler), anyhow (sadece uç uygulamalar) | |
 | Log | tracing, tracing-subscriber, tracing-appender | |
@@ -49,18 +49,46 @@ Bağımlılık sürümleri `Cargo.lock` ve `pnpm-lock.yaml` ile sabitlenir.
 | Simülasyon | Zamanlayıcı ve yük dengeleme | Deterministik saat, aylarca simülasyon |
 | Benchmark | 100k not ölçeği | criterion |
 | Frontend | Bileşenler | Vitest |
-| Uçtan uca | Ana akışlar | Playwright |
+| Uçtan uca: yolculuklar (v1.3) | Kullanıcı akışları, **gerçek çekirdeğe karşı**, kalıcı sonuç üzerinden (§3.1) | Playwright + `fc dev serve` |
+| Görsel denetim | Ekranlar, mock arka uçla; yalnız görünüş ([docs/11 §5.3](11-tasarim.md)) | `scripts/screens.mjs` |
+| Windows pilotu (v1.3) | Kurulu uygulamada üç yolculuk; geçit değil (§3.1) | tauri-driver + msedgedriver |
 | Eklenti | Örnek eklentiler, izin reddi, kaynak sınırları | Sahte host |
 
 **Kural:** Her yeni komut için en az bir servis testi ve bir geri al testi.
 
 ### 3.1 Gerçek çekirdeğe karşı yolculuklar (v1.3: dev köprüsü)
 
-v1.2 ekran görüntüleri **mock** arka uçla doğrulandı; mock'ta çalışıp gerçek uygulamada bozuk akışlar böyle çıktı. v1.3'ten beri arayüz akışları gerçek Rust çekirdeğine karşı da koşar:
+v1.2 ekran görüntüleri **mock** arka uçla doğrulandı; mock'ta çalışıp gerçek uygulamada bozuk akışlar böyle çıktı (21 yeni kart / sınır 20 / 20 çalışılmışken Ana sayfa 1 kart vaat edip `study.start` 0 veriyordu, altyazı kartının yazılı cevabı yanlış anahtarla notlanıyordu, metin alanında `Ctrl+Z` kayıtlı bir kartı siliyordu…). v1.3'ten beri:
 
-- **`fc dev serve --db <dosya> [--port N] [--token T]`** — *yalnızca geliştirme aracı*. Debug derlemede (veya `dev-bridge` cargo özelliğiyle) vardır, release `fc`'de hiç derlenmez. Koleksiyonu açar (yoksa oluşturur, migration'ları uygular) ve `127.0.0.1`'de `POST /rpc {method, params}` + `GET /events` (SSE) sunar. Masaüstü IPC'siyle **aynı** dağıtıcıyı kullanır (`fc_app::transport::dispatch`: kullanıcı aktörü, kilit kapısı, hata şekli, commit sonrası olaylar); eklentiye açık kısıtlı `fc-http` API'si değildir. Korumalar: yalnızca loopback, `Host` başlığı loopback olmalı, tarayıcı `Origin`'i yalnızca loopback `http://`, her istek (ör. `/health` hariç) rastgele anahtar ister. Anahtar zinciri yerine bellek içi sır deposu kullanır. **Gerçek koleksiyonuna karşı çalıştırma.**
-- **`pnpm -C apps/desktop dev:bridge`** — `VITE_FC_BRIDGE_URL` ve `VITE_FC_BRIDGE_TOKEN` ile arayüzü tarayıcıda köprüye bağlar (üçüncü transport; Tauri IPC ve mock aynen durur, köprü kodu üretim paketine girmez).
-- **`pnpm -C apps/desktop e2e`** — `fc`'yi derler (veya `FC_BIN`), geçici profil açar, gerçek komutlarla tohumlar ("İngilizce" 30 Klasik not; "Subtitle" eklentinin gönderdiği gibi 10 yakalama), köprüyü ve vite'ı rastgele portlarda başlatır, `apps/desktop/e2e/journeys/` altındaki Playwright yolculuklarını başsız Chromium'da koşar, her şeyi kapatır. Doğrulama **kalıcı sonuç** üzerindendir (RPC ile not alanları, oturum/tekrar kayıtları), piksel değil. Bilinen hatayı gösteren yolculuk silinmez: hata adıyla `test.fail` olarak işaretlenir ve düzelince işaret kaldırılır. Yolculuk ekleme: `apps/desktop/e2e/README.md`. CI: `ci.yml → journeys` (Linux).
+> **Doğrulama ilkesi.** Mock ekran görüntüleri (`pnpm screens`, [docs/11 §5.3](11-tasarim.md)) yalnızca **görsel** denetimdir: hiyerarşi, hizalama, taşma, kontrast. Bir akışın **kabulü**, gerçek Rust çekirdeğine karşı koşan bir yolculuktur ve kullanıcının yaptığıyla **saklanan sonuç** (not alanları, oturum ve tekrar kayıtları, oplog) karşılaştırılır. Arayüz akışını değiştiren iş, yolculuğu eklenmeden ya da güncellenmeden bitmiş sayılmaz.
+
+**Dev köprüsü**
+
+- **`fc --db <dosya> dev serve [--port N] [--token T]`**: *yalnızca geliştirme aracı*. Debug derlemede (ya da `dev-bridge` cargo özelliğiyle) vardır, release `fc`'de hiç derlenmez. Koleksiyonu açar (yoksa oluşturur, migration'ları uygular), stdout'a tek satır `{"url": …, "token": …}` yazar ve `127.0.0.1`'de `POST /rpc {method, params}` (`v1.` öneki isteğe bağlı; yanıt `{"ok": true, "result"}` ya da `{"ok": false, "error": ApiError}`), `GET /events` (SSE, masaüstünün `fc://event`'te yaydığı zarfın aynısı) ve anahtarsız `GET /health` sunar. Masaüstü IPC'siyle **aynı** dağıtıcıyı kullanır (`fc_app::transport::dispatch`: kullanıcı aktörü, kilit kapısı, hata şekli, commit sonrası olaylar; docs/03 §7); eklentiye açık kısıtlı `fc-http` API'si değildir. Korumalar: soket yalnızca loopback, `Host` başlığı loopback adres + bağlanılan port olmalı (DNS yeniden bağlama), tarayıcı `Origin`'i yalnızca loopback `http://` (CORS yalnız ona), `/health` dışında her istek anahtarı ister (`Authorization: Bearer`, `EventSource` için `?token=`; `--token` en az 16 karakter, verilmezse rastgele). Anahtar zinciri yerine bellek içi sır deposu, arka planda iş işçisi. **Gerçek koleksiyonuna karşı çalıştırma.**
+- **`pnpm -C apps/desktop dev:bridge`**: `VITE_FC_BRIDGE_URL` ve `VITE_FC_BRIDGE_TOKEN` ile arayüzü tarayıcıda köprüye bağlar (`vite --mode bridge`: üçüncü taşıma; Tauri IPC ve mock aynen durur, köprü kodu üretim paketine girmez).
+
+**Yolculuklar** (`apps/desktop/e2e/`; tasarım tarafı [docs/11 §5.1](11-tasarim.md))
+
+```bash
+pnpm -C apps/desktop e2e                        # fc'yi derle, tohumla, bütün yolculuklar
+pnpm -C apps/desktop e2e -- --grep J3           # tek yolculuk (argümanlar `playwright test`'e gider)
+FC_BIN=target/debug/fc pnpm -C apps/desktop e2e # `cargo build`'i atla
+FC_E2E_KEEP=1 pnpm -C apps/desktop e2e          # geçici profili sakla (yolu yazılır)
+```
+
+- `e2e/run.mjs`: `fc`'yi derler (debug: `dev serve` içinde; ya da `FC_BIN`), geçici profil açar, köprüyü rastgele port + anahtarla başlatır, gerçek komutlarla tohumlar (`seed.mjs`: "İngilizce" destesinde 30 Klasik not; "Subtitle" destesinde, eklentinin `fc api serve`'e `POST /subtitle/v1/captures` ile gönderdiği gibi 10 yakalama; ilk açılış rehberi atlanmış), `vite --mode bridge`'i rastgele portta başlatır, `playwright test -c e2e/playwright.config.ts` koşar (başsız Chromium: `PLAYWRIGHT_CHROMIUM_EXECUTABLE`, yoksa Playwright'ın kendisi), sonra her şeyi durdurur ve profili siler. Başarısız yolculukların izleri ve ekran görüntüleri `apps/desktop/e2e/.results/` altında (git'e girmez).
+- Yolculuklar sırayla, tek bir paylaşılan profilde koşar; her biri kendi destesini/notlarını kurar, başkasının verisine güvenmez. Tuş takımı önce; seçiciler rol + `t()` (i18n anahtarı) ve `data-testid`. Doğrulama **kalıcı sonuç** üzerindendir (`rpc()` ile okunan not alanları, oturum ve tekrar kayıtları), piksel değil.
+- **Liste ve her birinin neyi doğruladığı:** `apps/desktop/e2e/README.md` (J1–J7: ekleme, toplu oluşturma, arama-düzeltme, CSV, vaat edilen = sunulan, altyazı yazılı cevabı, metin alanında tuşlar; S1–S12: başlatıcı ve tuş modeli, devam etme, Test, zorlandıklarım pratiği, boş başlatma, bekleme, altyazı kartı, terim listesi, rol ile yapıştırma, not türü rolleri, deste günlük sınırı, Hızlı ekleme alan tuşları). Yeni yolculuk ekleme adımları da orada.
+- **Bilinen hata kuralı:** bir hatayı gösteren yolculuk **silinmez, atlanmaz**. Hata iddiası, yolculuğun kendi ön koşulları geçtikten **sonra** çağrılan `test.fail(true, '<hata>')` satırının arkasına konur (bozuk bir seçici yine yüksek sesle kırılır). Hata düzelince Playwright "expected to fail but passed" der: `test.fail` satırı düzeltmeyle **aynı commit'te** kaldırılır. Şu an işaretli tek yolculuk S7c'dir (Altyazı kartında ilk ipucunun bağlam cümlesi olması); v1.3'ün bağlam ipucu düzeltmesiyle yeşile dönmesi beklenir.
+  <!-- v1.3: verify after X1/X2 -->
+- **CI:** `ci.yml → journeys` (Linux, `ubuntu-24.04`): `cargo build -p fc-cli` (debug), `playwright install --with-deps chromium`, `FC_BIN` ile `pnpm e2e`; başarısızlıkta `e2e/.results/` artefakt olur.
+- Köprüyü elle açmak: `cargo run -p fc-cli -- --db /tmp/x.db dev serve` → yazdığı `url` ve `token` ile `VITE_FC_BRIDGE_URL=… VITE_FC_BRIDGE_TOKEN=… pnpm -C apps/desktop dev:bridge`.
+
+**Windows WebDriver pilotu** (v1.3, `apps/desktop/e2e-windows/`; tasarım tarafı [docs/11 §5.2](11-tasarim.md))
+
+- `.github/workflows/windows-build.yml` → `webdriver-pilot` işi: **geçit değildir** (`continue-on-error: true`, kurulum işinden sonra koşar; kırmızı olsa da kurulum artefaktını ve akışı bozmaz). `windows-2025` üzerinde kurulum artefaktını sessiz, kullanıcı başına kurar; çalıştırıcı imajını, WebView2 çalışma zamanını ve sürücü sürümlerini günlüğe yazar; WebView2 sürümüne birebir uyan `msedgedriver`'ı ve `tauri-driver`'ı kurar; **kurulu** uygulamaya karşı üç yolculuk koşar: uygulama açılır ve Ana sayfa çizilir; Hızlı ekleme (`N`, yaz, `Ctrl+Enter`) bir not oluşturur; Ana sayfa → `Enter` → başlatıcı → `Enter` → `Space`×3 → `2` oturumu tam bir kart ilerletir. Doğrulama IPC üzerinden (`notes.list`/`notes.get`, `study.session`, `study.card_history`). Sonuçlar (`summary.json`, ekran görüntüleri, `tauri-driver.log`) `webdriver-pilot-results` artefaktıdır.
+- npm bağımlılığı yok: `webdriver.mjs` Node 22 `fetch`'i üstünde küçük bir W3C WebDriver istemcisi, `run.mjs` koşucu. Elle (Windows'ta, atılabilir bir kullanıcı/VM'de: uygulama gerçek kullanıcı profilini açar) çalıştırma: `apps/desktop/e2e-windows/README.md`.
+- **Durum: Windows makinesi olmadan yazıldı; CI koşana kadar denenmedi.** İlk koşuların düzeltme (sürücü/çalışma zamanı eşleşmesi, odak, seçiciler) gerektirmesi beklenir.
 
 ## 4. Dal ve sürüm stratejisi
 
@@ -76,7 +104,9 @@ v1.2 ekran görüntüleri **mock** arka uçla doğrulandı; mock'ta çalışıp 
 - Sonraki fazlarda her ajan **ayrı bir git worktree**'de, kendi özellik dalında çalışır.
 - Her iz (track) için net bir sınır: hangi crate'lere/klasörlere dokunabilir, hangi API'leri ekleyebilir.
 - **Ortak dosyalar** (migration listesi, kayıt defteri, `fc-api` DTO'ları) çakışma noktasıdır:
-  - Migration numaraları iz başına önceden ayrılır (ör. v0.2: 0100–0199, v0.3: 0200–0299). v1.0 aralığı (`1000`–`1099`) izlere bölündü ve `fc-storage` `migrate::V1_LANE_RANGES` + `v1_migrations_stay_in_their_lane_range` testiyle zorunlu: **ux** (iz N) `1000`–`1049` (`1000_ux_state`), **release** (iz O) `1050`–`1069` (`1050_maintenance`), **tur 2** (performans/i18n/temalar) `1070`–`1089` (henüz kayıtlı değil: o iz aralığını `V1_LANE_RANGES`'e ekler), **quality** (iz Q) `1090`–`1099` (şimdilik migration yok). Tam liste docs/10 §10.
+  - Migration numaraları iz başına önceden ayrılır (ör. v0.2: 0100–0199, v0.3: 0200–0299). v1.0 aralığı (`1000`–`1099`) izlere bölündü ve `fc-storage` `migrate::V1_LANE_RANGES` + `v1_migrations_stay_in_their_lane_range` testiyle zorunlu: **ux** (iz N) `1000`–`1049` (`1000_ux_state`), **release** (iz O) `1050`–`1069` (`1050_maintenance`), **tur 2** (performans/i18n/temalar) `1070`–`1089` (henüz kayıtlı değil: o iz aralığını `V1_LANE_RANGES`'e ekler), **quality** (iz Q) `1090`–`1099` (şimdilik migration yok). Tam liste docs/10 §10. Sonraki sürümler (`migrate::RELEASE_RANGES`): v1.1 `1100`–`1199` (migration yok), v1.2 `1200`–`1299` (`1200_subtitle`), **v1.3 `1300`–`1399`**: `1300`–`1329` kelime alan rolleri (`1300_vocabulary_roles`), kalanı iz görev tanımına göre; v1.3'ün yerleşik kelime/altyazı şablonlarını güncelleyen ikinci veri migration'ı bu aralıkta 1300'den sonra gelir.
+  <!-- v1.3: verify after X1/X2 -->
+  - v1.3 izleri (`.claude/worktrees/v13-<ad>`, yerel dal `v13/<ad>`; ortak tel sözleşmesi önceden yazıldı): **b0** dev köprüsü + yolculuklar, **r1** çalışma arka ucu (`study.options`, kapsamlar, kuyruk planlayıcısı), **r2** kelime alanları (roller, `answer_field`, ipucu, kart arkası), **f1** başlatıcı + tuş modeli, **s1** AI ön ayarları, **s2** ayar kiti/not türleri/MCP/otomasyon, **s3** kart ekleme, **s4** istatistik/planlama; birleştirme r2 → r1 → f1 → b0 → s1 → s2 → s3 → s4 (her Rust birleşmesinden sonra TS tipleri yeniden üretilir), ardından yolculuklar ve son dalga (**x1** çekirdek düzeltmeleri, **x2** gözden geçirme ve cila, **x3** belgeler ve sürüm).
   - Kayıt defteri, modül başına ayrı dosyalardan toplanır (her modül kendi `register()` fonksiyonuna sahip).
 - Orkestratör (ana ajan) her iz bittiğinde: inceler, testleri çalıştırır, `main`'e birleştirir, sonraki izlere bildirir.
 - Her iz bir **görev tanımıyla** başlar: amaç, kapsam, kabul kriterleri ([04](04-yol-haritasi.md)), dokunulabilir dosyalar, yasaklar.
@@ -86,6 +116,9 @@ v1.2 ekran görüntüleri **mock** arka uçla doğrulandı; mock'ta çalışıp 
 - 4 çekirdek: 3-4 iz · 8 çekirdek / 16 GB: 4-5 iz · 16 çekirdek / 64 GB: 8-10 iz.
 - Disk: her worktree'nin `target/` klasörü 3-5 GB tutabilir. Ortak derleme önbelleği için `sccache` önerilir.
 - `CARGO_BUILD_JOBS` iz başına sınırlanarak ajanların birbirini boğması önlenir.
+- Disk darsa: `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0` (hata ayıklama bilgisi ve artımlı önbellek diski hızla doldurur; CI da `CARGO_INCREMENTAL=0` kullanır). Birleştirilmiş ve temiz worktree'lerin `target/` klasörü silinebilir.
+- Başsız Linux kapsayıcısında (gtk/webkit yok) Tauri kabuğu derlenmez: `cargo clippy/test --workspace --exclude fc-desktop`; `apps/desktop/src-tauri` değişikliği ilk kez Windows CI'da derlenir. Vekil (proxy) arkasında iki `fc-ai` testi yerel sahte sunucuya ulaşmak için `NO_PROXY="127.0.0.1,localhost,.test"` ister.
+- Her worktree'nin kendi `node_modules`'ü gerekir (`pnpm -C apps/desktop install`).
 
 ### 5.3 Önerilen iz dağılımı
 
@@ -105,6 +138,7 @@ v1.2 ekran görüntüleri **mock** arka uçla doğrulandı; mock'ta çalışıp 
 
 ### 6.2 Windows
 - Windows derlemesi ve kurulum dosyası GitHub Actions'ta (`windows-2025`) üretilir.
+- **Dal için kurulum dosyası** (`.github/workflows/windows-build.yml`, v1.3): etiket beklemeden bir dalı Windows'ta denemek için imzasız NSIS kurulumunu derler (`pnpm tauri build --bundles nsis --config src-tauri/tauri.unsigned.conf.json`) ve `flashcard-windows-installer` artefaktı olarak 14 gün saklar. Elle (`workflow_dispatch`) ya da akışta listelenen dala push ile çalışır; gerçek sürümler yine `release.yml` (etiket `v*`, §8.3) ile çıkar. Aynı akıştaki `webdriver-pilot` işi geçit olmayan Windows pilotudur (§3.1).
 - Gerçek kullanım testleri proje sahibi tarafından Windows'ta yapılır.
 
 ### 6.3 VDS (ör. Hetzner CPX42: 8 vCPU, 16 GB RAM, 320 GB disk)
@@ -120,8 +154,9 @@ Bir görev şu durumda bitmiştir:
 2. Testler yazıldı ve geçiyor; clippy ve fmt temiz.
 3. API değiştiyse TS tipleri yeniden üretildi ve frontend derleniyor.
 4. Migration eklendiyse migration testi var.
-5. İlgili doküman güncellendi.
-6. Commit edildi ve push'landı.
+5. Arayüz akışı değiştiyse (v1.3'ten beri) onu gerçek çekirdeğe karşı sınayan yolculuk eklendi ya da güncellendi ve `pnpm -C apps/desktop e2e` geçiyor (§3.1); mock ekran görüntüsü kabul yerine geçmez.
+6. İlgili doküman güncellendi.
+7. Commit edildi ve push'landı.
 
 ## 8. Windows sürümü: kurulum, imzalı güncelleme, yayın (v1.0, iz O)
 
