@@ -30,11 +30,19 @@ pub fn retrievability(stability: f64, elapsed_days: f64, params: &SchedulerParam
     fc_core::recall::retrievability(stability, elapsed_days, decay(params)?)
 }
 
-/// Forgetting-curve decay (FSRS-6 `w20`) of `params`' weights — custom `extra.weights` or the
-/// defaults ([`fc_core::recall::DEFAULT_DECAY`]). `None` for invalid weights.
+/// Forgetting-curve decay of `params`' weights (`extra.weights`, else the defaults) by the one
+/// rule, [`fc_core::recall::decay_of_weights`]. `None` when `extra.weights` is not a list of
+/// numbers.
 pub fn decay(params: &SchedulerParams) -> Option<f64> {
-    let d = f64::from(*weights(params).ok()?.get(20)?);
-    fc_core::recall::valid_decay(d).then_some(d)
+    let Some(raw) = params.extra.get("weights") else {
+        return Some(fc_core::recall::DEFAULT_DECAY);
+    };
+    let w: Vec<f64> = raw
+        .as_array()?
+        .iter()
+        .map(serde_json::Value::as_f64)
+        .collect::<Option<_>>()?;
+    Some(fc_core::recall::decay_of_weights(&w))
 }
 
 /// The FSRS scheduler (default).

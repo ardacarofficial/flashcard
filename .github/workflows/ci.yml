@@ -189,6 +189,8 @@ jobs:
   extension:
     name: Tarayıcı eklentisi (check, test, build, e2e)
     runs-on: ubuntu-24.04  # Playwright has no Chromium build for ubuntu-26.04 yet
+    env:
+      SUBTITLE_REPO_TOKEN: ${{ secrets.SUBTITLE_REPO_TOKEN }}
     defaults:
       run:
         working-directory: apps/browser-extension
@@ -216,6 +218,30 @@ jobs:
       - run: pnpm e2e
         env:
           FC_BIN: ${{ github.workspace }}/target/debug/fc
+      # The Subtitle extension's own client and outbox against the real `fc api serve`
+      # (docs/06 §5.1): the contract, then the v1.4 interruption acceptance (dropped line,
+      # lost answer, server killed mid-batch, undo + resend, backup → fresh profile). The
+      # extension's repository is private: the step runs when the `SUBTITLE_REPO_TOKEN`
+      # secret (read access to it) is set, and says so when it is not.
+      - name: Subtitle eklentisi deposu
+        if: env.SUBTITLE_REPO_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ardacarofficial/subtitle
+          ref: claude/busy-dijkstra-rdh5da
+          token: ${{ env.SUBTITLE_REPO_TOKEN }}
+          path: subtitle-ext
+      - name: Subtitle sözleşmesi + kesinti kabulü (gerçek istemci, gerçek fc)
+        working-directory: .
+        run: |
+          if [ ! -d subtitle-ext ]; then
+            echo "::warning::SUBTITLE_REPO_TOKEN is not set: the Subtitle contract check did not run"
+            exit 0
+          fi
+          node tools/subtitle-contract/check.mjs
+        env:
+          FC_BIN: ${{ github.workspace }}/target/debug/fc
+          SUBTITLE_REPO: ${{ github.workspace }}/subtitle-ext
 
   windows:
     needs: detect
