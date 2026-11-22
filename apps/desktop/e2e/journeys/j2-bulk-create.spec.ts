@@ -9,6 +9,10 @@ test('J2 bulk create: 3 rows, Ctrl+Enter → deck with 3 notes; one undo removes
   await discardDrafts();
   await openApp(page);
   await goToSection(page, 'shell.section.create');
+  // v1.3: the add-cards page has four ways in; this journey is "Bulk" into a new deck.
+  const main = page.locator('#fc-main');
+  await main.getByRole('tab', { name: t('add.way.bulk'), exact: true }).click();
+  await main.getByRole('radio', { name: t('create.mode_new'), exact: true }).click();
 
   const title = page.getByRole('textbox', { name: t('create.title') });
   await title.click();

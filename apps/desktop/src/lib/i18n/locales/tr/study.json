@@ -32,7 +32,7 @@
     "suspend": "Durdur",
     "bury": "Yarına bırak",
     "undo": "Geri al",
-    "end": "Bitir",
+    "end": "Ara ver",
     "rating": {
       "again": "Tekrar",
       "hard": "Zor",
@@ -64,7 +64,9 @@
       "time_label": "Süre",
       "time_value": "{min}:{sec}",
       "again": "Tekrar çalış",
-      "again_desc": "Başlatıcıyı açar; bugün zorlandıkların seçili gelir."
+      "again_desc": "Başlatıcıyı açar; bugün zorlandıkların seçili gelir.",
+      "paused": "Ara verdin — kaldığın yerden devam edebilirsin",
+      "continue": "Devam et"
     },
     "choices": "Seçenekler",
     "choice_right": "Doğru seçenek",
@@ -78,7 +80,7 @@
     "practice_hint": "Cevapların takvimi değiştirmez.",
     "progress_label": "Oturum ilerlemesi",
     "position": "{n} / {total}",
-    "end_label": "Oturumu bitir",
+    "end_label": "Ara ver (sonra kaldığın yerden devam edersin)",
     "rate_label": "Nasıl geçti?",
     "more": "Diğer kart işlemleri",
     "buttons": {

@@ -177,7 +177,7 @@ describe('study screen', () => {
     expect((await api.call('study.active', {})).session).toBeNull();
   });
 
-  it('Escape after answering shows the summary', async () => {
+  it('Escape after answering pauses: what you did so far, the session stays open, Continue returns to it', async () => {
     const deck = await api.call('decks.create', { path: 'Özet', parent_id: null });
     for (const [front, back] of [['three', 'üç'], ['four', 'dört']] as const) {
       await api.call('notes.create', {
@@ -194,8 +194,14 @@ describe('study screen', () => {
     await key('2');
     await screen.findByText('four');
     await key('Escape');
-    await screen.findByText('Session complete');
+    // v1.3: leaving with cards left is a pause (the launcher offers "Continue" with this session).
+    await screen.findByText('Paused — you can continue where you left off');
     expect(screen.getByTestId('summary-answered').textContent).toBe('1');
+    const open = (await api.call('study.active', {})).session;
+    expect(open?.ended_at).toBeNull();
+    await fireEvent.click(screen.getByTestId('study-continue'));
+    await screen.findByText('four');
+    expect((await api.call('study.active', {})).session?.id).toBe(open?.id);
   });
 
   it('shows two answer buttons by default: 1 = Still learning, 2 = I know it', async () => {
@@ -278,5 +284,65 @@ describe('study screen v1.3', () => {
     // The on-screen legend tells the truth: Space flips, 1 2 rate.
     expect(screen.getByTestId('study-legend').textContent).toMatch(/Space flip/);
     expect(screen.getByTestId('study-legend').textContent).toMatch(/1 2 rate/);
+  });
+});
+
+describe('study screen keys (v1.3 J7)', () => {
+  async function threeCards(path: string) {
+    await api.call('settings.set', { scope: { kind: 'app' }, key: 'study.answer_buttons', value: 'two' });
+    const deck = await api.call('decks.create', { path, parent_id: null });
+    for (const [front, back] of [['one', 'bir'], ['two', 'iki'], ['three', 'üç']].map(([f, b]) => [`${f} ${path}`, `${b} ${path}`])) {
+      await api.call('notes.create', {
+        notetype_id: CLASSIC_NOTETYPE_ID,
+        deck_id: deck.id,
+        fields: { front: front!, back: back! },
+        tags: [],
+        attributes: [],
+      });
+    }
+    await startSession(deck.id);
+    await side('question', `one ${path}`);
+  }
+
+  it('holding 2 grades exactly one card', async () => {
+    await threeCards('Basılı');
+    await key(' ');
+    await screen.findByTestId('answer');
+    await key('2'); // the key goes down: one grade
+    await side('question', 'two Basılı');
+    expect(screen.getByTestId('study-count').textContent).toBe('2 / 3');
+    // Still held while the next card is turned: the repeats grade nothing.
+    await key(' ');
+    await side('answer', 'iki Basılı');
+    for (let i = 0; i < 5; i++) await fireEvent.keyDown(window, { key: '2', repeat: true });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByTestId('study-count').textContent).toBe('2 / 3');
+    expect(screen.getByTestId('answer').textContent?.trim()).toBe('iki Basılı');
+  });
+
+  it('plain keys typed into a text field or contenteditable do not flip, grade, pause or bury', async () => {
+    await threeCards('Yazı');
+    const input = document.body.appendChild(document.createElement('input'));
+    const editor = document.body.appendChild(document.createElement('div'));
+    editor.setAttribute('contenteditable', 'true');
+    try {
+      for (const target of [input, editor]) {
+        for (const k of [' ', 'h', 's', 'b', 'z', 'n']) await fireEvent.keyDown(target, { key: k });
+      }
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.queryByTestId('answer')).toBeNull();
+      expect(screen.queryByTestId('hint')).toBeNull();
+      await key(' ');
+      await screen.findByTestId('answer');
+      for (const target of [input, editor]) {
+        for (const k of ['1', '2']) await fireEvent.keyDown(target, { key: k });
+      }
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.getByTestId('study-count').textContent).toBe('1 / 3');
+      await side('answer', 'bir Yazı');
+    } finally {
+      input.remove();
+      editor.remove();
+    }
   });
 });

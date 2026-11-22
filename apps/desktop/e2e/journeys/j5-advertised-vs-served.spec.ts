@@ -2,11 +2,11 @@
  * J5 "advertised vs served" (gpt-review-1 §A). 21 new cards, the default 20 new cards a day,
  * 20 studied: Home must not advertise cards `study.start` cannot serve.
  *
- * KNOWN BUG, expected to FAIL until fixed: Home reads inventory counts from `decks.tree`
+ * Was a known bug until v1.3 (R1 fixed it): Home reads inventory counts from `decks.tree`
  * (`crates/fc-storage/src/sqlite/decks.rs`: every new card, ignoring the daily limit), while
  * `study.start` builds the real queue (`crates/fc-app/src/modules/study/session.rs`: limits,
  * study day). So Home says "1 new" and Start serves nothing. CONTRACT.md §1 (R1: `study.options`,
- * queue-based `today_*` counts) fixes it; then remove `test.fail` below.
+ * queue-based `today_*` counts) fixes it.
  */
 import { expect, makeDeck, openApp, rpc, RpcError, test, uniq } from '../fixtures';
 
@@ -66,7 +66,5 @@ test('J5 Home advertises only what study.start can serve (21 new, limit 20, 20 s
           .slice(0, 3)
           .reduce((sum, w) => sum + Number(w), 0);
 
-  // Preconditions held (the journey itself works); from here on the known bug decides.
-  test.fail(true, 'Known bug (gpt-review-1 §A): Home advertises inventory, not the queue study.start serves');
   expect(advertised, `Home advertises ${advertised} for ${name}, study.start serves ${canServe}`).toBe(canServe);
 });

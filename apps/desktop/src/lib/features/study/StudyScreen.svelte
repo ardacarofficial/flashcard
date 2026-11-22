@@ -233,6 +233,21 @@
     summary = await api.call('study.end', { session_id: s.id });
   }
 
+  /** "What you did so far" of a session that stays open (`study.summary` does not end it). */
+  async function pause(s: SessionDto) {
+    session = s;
+    summary = await api.call('study.summary', { session_id: s.id });
+  }
+
+  /** Back into a paused session, where it was. */
+  async function resumePaused() {
+    const id = summary?.session_id;
+    if (!id) return;
+    const s = await api.call('study.session', { session_id: id });
+    summary = null;
+    await settle(s);
+  }
+
   async function reload() {
     const id = session?.id ?? summary?.session_id;
     if (!id || summary) return;
@@ -397,6 +412,9 @@
               session = null;
               return;
             }
+            // v1.3: leaving with cards left is a pause — the session stays open (the launcher
+            // offers "Continue" with the same session); only an empty queue ends it.
+            if (s.current || s.next_due !== null) return pause(s);
             return finish(s);
           case 'repeat':
             if (summary && summary.mistakes > 0) {
@@ -561,7 +579,7 @@
         <span class="ring-value num">{formatPercent100(accuracy)}</span>
       </ProgressRing>
       <div>
-        <h1>{t('study.summary.heading')}</h1>
+        <h1>{summary.ended_at === null ? t('study.summary.paused') : t('study.summary.heading')}</h1>
         <p class="muted">{t('study.summary.accuracy', { correct: summary.correct, total: summary.answered })}</p>
       </div>
     </header>
@@ -575,7 +593,10 @@
       </div>
     </dl>
     <div class="sum-actions">
-      <Button variant="primary" bind:element={doneBtn} onclick={back}>
+      {#if summary.ended_at === null}
+        <Button variant="primary" icon={Play} data-testid="study-continue" onclick={() => void ctx.guarded(resumePaused)}>{t('study.summary.continue')}</Button>
+      {/if}
+      <Button variant={summary.ended_at === null ? 'secondary' : 'primary'} bind:element={doneBtn} onclick={back}>
         {t('study.summary.back')}
       </Button>
       {#if launcher.available}

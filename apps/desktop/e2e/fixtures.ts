@@ -212,3 +212,76 @@ export async function discardDrafts(): Promise<void> {
   const { items } = await rpc<{ items: { key: string }[] }>('maintenance.drafts.list', {});
   for (const d of items) await rpc('maintenance.drafts.discard', { key: d.key });
 }
+
+// ------------------------------------------------------------------ study (v1.3 journeys)
+
+/** The client's UTC offset in minutes, as the app sends it (study-day boundary). */
+export const tz = -new Date().getTimezoneOffset();
+
+export interface SessionRow {
+  id: string;
+  kind: string;
+  mode: string;
+  deck_id: string | null;
+  ended_at: number | null;
+  answered: number;
+  next_due: number | null;
+  current: { card_id: string } | null;
+}
+
+export interface StudyOptionsRow {
+  resumable: { session: SessionRow; answered: number; remaining: number }[];
+  scopes: { scope: string; count: number; mode: string; empty_reason: string | null; next_available_at: number | null }[];
+}
+
+/** `study.options` for a deck (`null` = every deck). */
+export function studyOptions(deckId: string | null): Promise<StudyOptionsRow> {
+  return rpc<StudyOptionsRow>('study.options', { deck_id: deckId, include_subdecks: null, tz_offset_mins: tz });
+}
+
+/** Ends every unfinished session (journeys share a profile: "Continue" must not take over). */
+export async function endOpenSessions(): Promise<void> {
+  for (const r of (await studyOptions(null)).resumable) await rpc('study.end', { session_id: r.session.id }).catch(() => undefined);
+}
+
+export interface ReviewRow {
+  id: string;
+  card_id: string;
+  session_id: string | null;
+  rating: string;
+  mode: string;
+}
+export interface CardSnapshot {
+  id: string;
+  state: string;
+  due: number | null;
+  stability: number | null;
+  difficulty: number | null;
+  reps: number;
+  lapses: number;
+  last_review: number | null;
+  suspended: boolean;
+  buried_until: number | null;
+}
+
+/** A card's scheduling fields and its review log, read back from the collection. */
+export function cardHistory(cardId: string): Promise<{ card: CardSnapshot; reviews: ReviewRow[] }> {
+  return rpc('study.card_history', { card_id: cardId });
+}
+
+/** The scheduling fields only (what a practice session must leave alone). */
+export async function scheduling(cardId: string): Promise<Omit<CardSnapshot, 'id'>> {
+  const { card } = await cardHistory(cardId);
+  const { state, due, stability, difficulty, reps, lapses, last_review, suspended, buried_until } = card;
+  return { state, due, stability, difficulty, reps, lapses, last_review, suspended, buried_until };
+}
+
+/** Card ids of a deck's notes. */
+export async function cardsIn(deckId: string): Promise<string[]> {
+  return (await notesIn(deckId)).flatMap((n) => ((n as unknown as { cards: { id: string }[] }).cards ?? []).map((c) => c.id));
+}
+
+/** The session as the core has it now. */
+export function sessionNow(id: string): Promise<SessionRow> {
+  return rpc<SessionRow>('study.session', { session_id: id });
+}

@@ -32,7 +32,7 @@
     "suspend": "Pause",
     "bury": "Leave for tomorrow",
     "undo": "Undo",
-    "end": "End",
+    "end": "Pause",
     "rating": {
       "again": "Again",
       "hard": "Hard",
@@ -64,7 +64,9 @@
       "time_label": "Time",
       "time_value": "{min}:{sec}",
       "again": "Study again",
-      "again_desc": "Opens the launcher with today’s struggles selected."
+      "again_desc": "Opens the launcher with today’s struggles selected.",
+      "paused": "Paused — you can continue where you left off",
+      "continue": "Continue"
     },
     "choices": "Options",
     "choice_right": "Correct option",
@@ -78,7 +80,7 @@
     "practice_hint": "Your answers don’t change the schedule.",
     "progress_label": "Session progress",
     "position": "{n} / {total}",
-    "end_label": "End session",
+    "end_label": "Pause (continue later where you left off)",
     "rate_label": "How did it go?",
     "more": "More card actions",
     "buttons": {

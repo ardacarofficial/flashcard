@@ -1,10 +1,10 @@
 /**
  * J6 Subtitle card, typed test: the expected answer of a Subtitle note is its MEANING only.
  *
- * KNOWN BUG, expected to FAIL until fixed (gpt-review-1 §B.1): the written-answer key is the
+ * Was a known bug until v1.3 (gpt-review-1 §B.1, fixed by R2): the written-answer key is the
  * whole answer side's text (`crates/fc-app/src/modules/study/engine.rs` `answer_text`: meaning +
  * translation + source), so typing just "gitmek" for "went" is marked wrong. CONTRACT.md §2
- * (R2: field roles, the template's `answer_field`) fixes it; then remove `test.fail` below.
+ * (R2: field roles, the template's `answer_field`) fixes it.
  */
 import { expect, rpc, seed, test } from '../fixtures';
 
@@ -40,7 +40,6 @@ test('J6 subtitle card typed test: typing the meaning only is correct', async ()
   const graded = await rpc<Paper>('modes.test.paper', { session_id: s.id, with_key: true });
   expect(graded.result?.total).toBe(subtitle.length);
 
-  test.fail(true, 'Known bug (gpt-review-1 §B.1): the written answer key of a Subtitle card is the whole back, not the meaning');
   const wrong = (graded.result?.items ?? [])
     .filter((i) => i.verdict !== 'correct')
     .map((i) => `${answers.find((a) => a.index === i.index)?.text} → expected ${JSON.stringify(graded.questions.find((q) => q.index === i.index)?.key?.expected)}`);
