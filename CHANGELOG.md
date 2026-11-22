@@ -6,7 +6,6 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## Unreleased (v1.4)
 - A2/A5: **tek hatırlama olasılığı** (`fc_core::recall`: hazır ayarın kişisel `w20` sönümü + tam çalışma günü) kart bilgisi, istatistik, çalışma geçmişi ve `retrievability<…` sorgusunda (SQL'de `fc_recall`) aynı sayıyı verir; **"son yakalamama ne oldu?"**: her Subtitle yakalama denemesi metinsiz bir tanı satırı bırakır (`subtitle.captures.recent`, son 500, log paketinde `subtitle_captures.txt`, migration `1430_subtitle_capture_log`).
-### Unreleased (v1.4)
 - **A1 — Her zaman geri dönen yedek:** `.fcbackup` v2 dosyadan dosyaya akışla yazılır/okunur (1 GiB okuma tavanı kalktı, eski yedekler okunur), manifest her medyayı boyut + SHA-256 ile listeler, eksik medya `missing_media` ile raporlanıp yedek "eksik" işaretlenir, yedek geçici profile geri yüklenip doğrulanmadan yerine konmaz; yeni `io.backup.verify`, `io.backup.status`, `io.backup.auto`, ayarlar `io.auto_backup` (kapalı/günlük/haftalık, varsayılan günlük) ve `io.auto_backup_keep` (7).
 
 ## [1.3.0] — v1.3 "kullanılır": akışlar, kelime kartları, gerçek çekirdekte doğrulama
