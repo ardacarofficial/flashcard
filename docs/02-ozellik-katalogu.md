@@ -242,7 +242,7 @@ sayılır (koşullar küme üyeliğidir, birleştirme yapmaz). Her kavram bir ke
 | `durum:` | `status:` | kelime dizinindeki durum (§ docs/03 4.2): `yeni`/`new` (kartı yok), `öğreniyorum`/`learning`, `biliyorum`/`known`, `yoksay`/`ignored`; elle işaret kazanır, eşik `words.known_interval_days` |
 | `dil:` | `lang:` | kelimenin dili (`dil:en`); `dil:yok` = dili bilinmeyen |
 | `kelime:` | `word:` | lemma ya da ifade, çekimi anlar: `kelime:went` = `go`'nun notları (türetme ayrı kalır); `*` ile lemma üzerinde joker. Aynı adlı alan da eskisi gibi eşleşir (`kelime:app*`) |
-| `karşılaşma` | `seen` | aynı kelimenin not (sahne, örnek) sayısı: `karşılaşma>=2` |
+| `karşılaşma` | `seen` | aynı kelimenin karşılaşma sayısı: her not bir, Subtitle notu yakalanan her sahne için bir (v1.4 W1, `subtitle_encounter_counts`): `karşılaşma>=2` |
 | `nereden:` | `from:` | `altyazı`/`subtitle`, `okuma`/`reading`, `anki`, `içe_aktarma`/`import`, `elle`/`manual` |
 | `kaynak:` | `source:` | kaynak başlığı (video + bölüm, okuma metni), site ya da video kimliği; joker (`kaynak:"The Night Train*"`) |
 | `ses:` | `audio:` | `var`/`yes`, `yok`/`none`, `video` (videodan kesilen ses), `dosya`/`file`, `tts` (not türü seslendirir) |
@@ -476,6 +476,7 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 - .srt / .vtt yüklenir. Cümleler listelenir, bilinmeyen kelime içerenler vurgulanır (okuma modu ile aynı motor).
 - Cümleden kart: cümle + çeviri + hedef kelime + zaman damgası.
 - Video dosyası da verilirse: ilgili ses kesiti ve ekran görüntüsü karta eklenir (ffmpeg ile).
+- **v1.4 — karşılaşmalar:** Subtitle eklentisinden gelen her yakalama kaynağıyla (video kimliği, başlık, başlangıç–bitiş, tür, tanım ve kaynağı, terimin cümledeki yeri, resim/ses) bir *karşılaşma* olarak saklanır ve bir nota (terim + anlam) bağlanır. Aynı kelimenin aynı anlamdaki ikinci sahnesi **yeni kart yapmaz**, o kartın başka bir örneği olur (`subtitle.same_word`: `add_example` varsayılan / `always_new_card`); anlamı farklı görünen yakalama ayrı kart olur ve "aynı anlam / farklı anlam" diye sorulur. Kartta görünen örnek değiştirilebilir (plan ve geçmiş aynı kalır), örnek başka bir karta ya da yeni karta taşınabilir, bir kelimenin iki kartı birleştirilebilir (geçmişi çok olan kalır, diğerinin geçmişi kayıtta arşivlenir). Ayrıntı: docs/06 §5.1.
 
 ## 26. 📚 Artımlı okuma (SuperMemo tarzı)
 

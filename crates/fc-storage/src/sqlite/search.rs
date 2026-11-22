@@ -498,9 +498,17 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
                 out,
                 "wn.note_id",
                 &format!(
+                    // v1.4 W1: encounters, not notes — each note counts once (a reading-mode
+                    // or hand-made note as before), a Subtitle note once per scene
+                    // (`subtitle_encounter_counts`, migration 1490).
                     "FROM word_index_notes wn JOIN word_index w \
                      ON w.language = wn.language AND w.key = wn.key \
-                     WHERE wn.language <> '' AND w.notes {} {n}",
+                     LEFT JOIN (SELECT x.language, x.key, sum(c.encounters - 1) AS extra \
+                       FROM subtitle_encounter_counts c \
+                       JOIN word_index_notes x ON x.note_id = c.note_id \
+                       WHERE c.encounters > 1 GROUP BY x.language, x.key) e \
+                     ON e.language = wn.language AND e.key = wn.key \
+                     WHERE wn.language <> '' AND w.notes + coalesce(e.extra, 0) {} {n}",
                     sql_op(*op)
                 ),
             )

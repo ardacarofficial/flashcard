@@ -30,6 +30,9 @@ fn capture(id: &str, lang: &str, lemma: &str, sentence: &str, at: i64) -> Subtit
         card_id: CardId(u(1000 + at as u128)),
         key_id: Some(SubtitleKeyId(u(1))),
         created_at: Timestamp(at),
+        facts: Default::default(),
+        is_primary: true,
+        review_note_id: None,
     }
 }
 

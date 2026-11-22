@@ -148,11 +148,14 @@ fn pred(p: &Pred, f: &CardFacts<'_>, now: Timestamp) -> bool {
             .key
             .as_ref()
             .is_some_and(|k| Glob::new(src).matches(k)),
-        Pred::Encounters(op, n) => f
-            .lang
-            .word
-            .as_ref()
-            .is_some_and(|w| op.holds(f64::from(w.notes), *n)),
+        // v1.4 W1: the word's encounters (notes + extra Subtitle scenes), never fewer than
+        // its notes.
+        Pred::Encounters(op, n) => f.lang.word.as_ref().is_some_and(|w| {
+            op.holds(
+                f64::from(w.notes.saturating_add(f.lang.extra_encounters)),
+                *n,
+            )
+        }),
         Pred::Origins(list) => list.contains(&f.lang.origin),
         Pred::Source(src) => {
             let g = Glob::new(src);

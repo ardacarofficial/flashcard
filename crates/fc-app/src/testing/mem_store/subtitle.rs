@@ -118,6 +118,66 @@ impl SubtitleRead for MemTx<'_> {
         Ok(v)
     }
 
+    fn subtitle_encounters_of_note(
+        &self,
+        note: fc_core::NoteId,
+    ) -> StorageResult<Vec<SubtitleCaptureRecord>> {
+        let mut v: Vec<_> = self
+            .s()
+            .domains
+            .subtitle
+            .captures
+            .values()
+            .filter(|c| c.note_id == note)
+            .cloned()
+            .collect();
+        v.sort_by(|a, b| {
+            (!a.is_primary, a.created_at, &a.capture_id).cmp(&(
+                !b.is_primary,
+                b.created_at,
+                &b.capture_id,
+            ))
+        });
+        Ok(v)
+    }
+
+    fn subtitle_encounters_of_video(
+        &self,
+        video_id: &str,
+    ) -> StorageResult<Vec<SubtitleCaptureRecord>> {
+        let mut v: Vec<_> = self
+            .s()
+            .domains
+            .subtitle
+            .captures
+            .values()
+            .filter(|c| c.facts.video_id.as_deref() == Some(video_id))
+            .cloned()
+            .collect();
+        v.sort_by(|a, b| {
+            (a.facts.t_start_ms, a.created_at, &a.capture_id).cmp(&(
+                b.facts.t_start_ms,
+                b.created_at,
+                &b.capture_id,
+            ))
+        });
+        Ok(v)
+    }
+
+    fn subtitle_encounters_in_review(&self) -> StorageResult<Vec<SubtitleCaptureRecord>> {
+        let mut v: Vec<_> = self
+            .s()
+            .domains
+            .subtitle
+            .captures
+            .values()
+            .filter(|c| c.review_note_id.is_some())
+            .cloned()
+            .collect();
+        v.sort_by(|a, b| (a.created_at, &a.capture_id).cmp(&(b.created_at, &b.capture_id)));
+        Ok(v)
+    }
+
     fn get_subtitle_upload(&self, id: &str) -> StorageResult<Option<SubtitleUploadRecord>> {
         Ok(self.s().domains.subtitle.uploads.get(id).cloned())
     }
@@ -138,6 +198,16 @@ impl SubtitleRead for MemTx<'_> {
     }
 }
 
+impl MemTx<'_> {
+    /// Another row of the same note is primary too (`subtitle_captures_primary`).
+    fn primary_clash(&self, row: &SubtitleCaptureRecord) -> bool {
+        row.is_primary
+            && self.s().domains.subtitle.captures.values().any(|c| {
+                c.capture_id != row.capture_id && c.note_id == row.note_id && c.is_primary
+            })
+    }
+}
+
 impl SubtitleWrite for MemTx<'_> {
     fn upsert_subtitle_key(&mut self, key: &SubtitleKeyRecord) -> StorageResult<()> {
         if self
@@ -150,9 +220,25 @@ impl SubtitleWrite for MemTx<'_> {
         Ok(())
     }
 
+    fn update_subtitle_capture(&mut self, row: &SubtitleCaptureRecord) -> StorageResult<bool> {
+        if self.get_subtitle_capture(&row.capture_id)?.is_none() {
+            return Ok(false);
+        }
+        if self.primary_clash(row) {
+            return Err(constraint("subtitle_captures"));
+        }
+        self.m()
+            .domains
+            .subtitle
+            .captures
+            .insert(row.capture_id.clone(), row.clone());
+        Ok(true)
+    }
+
     fn insert_subtitle_capture(&mut self, row: &SubtitleCaptureRecord) -> StorageResult<()> {
         if self.get_subtitle_capture(&row.capture_id)?.is_some()
             || self.subtitle_capture_by_dedup_key(&row.dedup_key)?.is_some()
+            || self.primary_clash(row)
         {
             return Err(constraint("subtitle_captures"));
         }

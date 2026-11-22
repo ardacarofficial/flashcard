@@ -271,10 +271,12 @@ pub(super) fn captures_are_idempotent_by_id_and_by_sentence(f: Factory) {
     .unwrap();
     assert_eq!(same_line.status, SubtitleCaptureStatus::Duplicate);
     assert_eq!(same_line.card_id, first.card_id);
-    // The same word from another line is a new card.
+    // v1.4 (deliberate change): the same word and meaning from another line is stored as
+    // another example of the same card (`created` on the wire); see `encounters_tests`.
     let other = capture(&t.app, &key, &example(3, "key", "Where are my keys?")).unwrap();
     assert_eq!(other.status, SubtitleCaptureStatus::Created);
-    assert_ne!(other.note_id, first.note_id);
+    assert!(other.attached);
+    assert_eq!(other.note_id, first.note_id);
     assert_eq!(rows(&t), 2);
 }
 
@@ -715,3 +717,7 @@ fn captures_are_found_by_language_queries_sqlite() {
 fn captures_are_found_by_language_queries_mem() {
     captures_are_found_by_language_queries(|| Arc::new(MemStore::new()), false);
 }
+
+/// v1.4 W1: encounters (uses the helpers above).
+#[path = "encounters_tests.rs"]
+mod encounters_tests;

@@ -10,7 +10,7 @@
 //! | `durum:` `status:` | word status from the index: `yeni`/`new`, `öğreniyorum`/`learning`, `biliyorum`/`known`, `yoksay`/`ignored` |
 //! | `dil:` `lang:` | the word's language (primary subtag, `dil:en`); `dil:yok` = none known |
 //! | `kelime:` `word:` | lemma or expression, inflection understood (`kelime:went` = `kelime:go`); `*` = glob over the lemma |
-//! | `karşılaşma` `seen` | notes (scenes, examples) of the same word, `karşılaşma>=2` |
+//! | `karşılaşma` `seen` | encounters of the same word (v1.4 W1: each note once, a Subtitle note once per captured scene), `karşılaşma>=2` |
 //! | `nereden:` `from:` | `altyazı`/`subtitle`, `okuma`/`reading`, `elle`/`manual`, `anki`, `içe_aktarma`/`import` |
 //! | `kaynak:` `source:` | source title (video/episode, reading text), site or video id; glob |
 //! | `ses:` `audio:` | `var`/`yes`, `yok`/`none`, `video` (clip from the video), `dosya`/`file`, `tts` |
@@ -216,6 +216,10 @@ pub struct LangFacts {
     pub rank: Option<u32>,
     /// CEFR band ordinal (1–6) of the word (word-data pack).
     pub band: Option<u8>,
+    /// v1.4 W1: encounters of the word beyond one per note: for each of its notes, its
+    /// Subtitle encounters minus one (`subtitle_encounter_counts`). `karşılaşma`/`seen` =
+    /// the word's notes + this.
+    pub extra_encounters: u32,
 }
 
 impl LangFacts {
@@ -229,6 +233,7 @@ impl LangFacts {
         media: Vec::new(),
         rank: None,
         band: None,
+        extra_encounters: 0,
     };
 
     /// Status of the note's word with the "known by maturity" threshold.

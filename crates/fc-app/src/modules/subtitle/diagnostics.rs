@@ -38,6 +38,7 @@ fn result_str(r: SubtitleAttemptResult) -> &'static str {
         SubtitleAttemptResult::Duplicate => "duplicate",
         SubtitleAttemptResult::Rejected => "rejected",
         SubtitleAttemptResult::MediaMissing => "media_missing",
+        SubtitleAttemptResult::Attached => "attached",
     }
 }
 
@@ -46,6 +47,7 @@ fn result_of(s: &str) -> SubtitleAttemptResult {
         "created" => SubtitleAttemptResult::Created,
         "duplicate" => SubtitleAttemptResult::Duplicate,
         "media_missing" => SubtitleAttemptResult::MediaMissing,
+        "attached" => SubtitleAttemptResult::Attached,
         _ => SubtitleAttemptResult::Rejected,
     }
 }
@@ -147,6 +149,11 @@ pub(crate) fn observe(
         Ok(o) => match (o.status, media) {
             (SubtitleCaptureStatus::Duplicate, _) => {
                 (SubtitleAttemptResult::Duplicate, None, Some(o.card_id))
+            }
+            // v1.4: another example of an existing note (a missing picture or sound only
+            // matters for a new card's fields).
+            (SubtitleCaptureStatus::Created, _) if o.attached => {
+                (SubtitleAttemptResult::Attached, None, Some(o.card_id))
             }
             (SubtitleCaptureStatus::Created, None) => {
                 (SubtitleAttemptResult::Created, None, Some(o.card_id))

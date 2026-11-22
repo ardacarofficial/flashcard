@@ -10,6 +10,7 @@ mod automation;
 mod capture_log;
 mod content;
 mod decks;
+mod encounters;
 mod inbox;
 mod interop;
 mod maintenance;

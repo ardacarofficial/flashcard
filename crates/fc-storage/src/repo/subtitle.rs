@@ -3,6 +3,7 @@
 
 use super::*;
 use fc_core::SubtitleKeyId;
+use std::collections::BTreeMap;
 
 /// One `subtitle_keys` row.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,7 +24,49 @@ pub struct SubtitleKeyRecord {
     pub revoked_at: Option<Timestamp>,
 }
 
-/// One `subtitle_captures` row.
+/// What a capture saw (v1.4, migration `1490`): the source facts of an encounter. `None` =
+/// not sent, or a capture received before v1.4 that did not keep it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EncounterFacts {
+    /// The term as clicked.
+    pub surface: Option<String>,
+    /// Part of speech.
+    pub pos: Option<String>,
+    /// The subtitle line as sent (plain text).
+    pub sentence: Option<String>,
+    /// The line in the user's language.
+    pub translation: Option<String>,
+    /// UTF-16 start of the term in `sentence`.
+    pub term_start: Option<i64>,
+    /// UTF-16 end of the term in `sentence`.
+    pub term_end: Option<i64>,
+    /// `word`, `phrase` or `sentence`.
+    pub kind: Option<String>,
+    /// The definition the user picked.
+    pub definition: Option<String>,
+    /// `dict`, `ai` or `mt`.
+    pub definition_source: Option<String>,
+    /// The service's video id.
+    pub video_id: Option<String>,
+    /// Video title (with its episode).
+    pub title: Option<String>,
+    /// `youtube`, `netflix`, …
+    pub site: Option<String>,
+    /// Page address at the line.
+    pub url: Option<String>,
+    /// Line start (ms).
+    pub t_start_ms: Option<i64>,
+    /// Line end (ms).
+    pub t_end_ms: Option<i64>,
+    /// Media hash of the screenshot.
+    pub screenshot_hash: Option<String>,
+    /// Media hash of the audio clip.
+    pub audio_hash: Option<String>,
+    /// The note fields this encounter shows when it is the primary one.
+    pub example_fields: BTreeMap<String, String>,
+}
+
+/// One `subtitle_captures` row: an encounter (v1.4) linked to a note.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubtitleCaptureRecord {
     /// The extension's id (UUIDv7).
@@ -42,6 +85,12 @@ pub struct SubtitleCaptureRecord {
     pub key_id: Option<SubtitleKeyId>,
     /// Received.
     pub created_at: Timestamp,
+    /// Source facts (v1.4).
+    pub facts: EncounterFacts,
+    /// The note's primary encounter (at most one per note).
+    pub is_primary: bool,
+    /// Needs the user's decision: maybe the same meaning as this note.
+    pub review_note_id: Option<NoteId>,
 }
 
 /// One `subtitle_uploads` row.
@@ -95,6 +144,16 @@ pub trait SubtitleRead {
         &self,
         lemmas: &[(String, String)],
     ) -> StorageResult<Vec<SubtitleCaptureRecord>>;
+    /// Encounters of a note: the primary first, then by arrival.
+    fn subtitle_encounters_of_note(&self, note: NoteId)
+        -> StorageResult<Vec<SubtitleCaptureRecord>>;
+    /// Encounters from one video, by time in the video, then arrival.
+    fn subtitle_encounters_of_video(
+        &self,
+        video_id: &str,
+    ) -> StorageResult<Vec<SubtitleCaptureRecord>>;
+    /// Encounters waiting for a same/different meaning decision, by arrival.
+    fn subtitle_encounters_in_review(&self) -> StorageResult<Vec<SubtitleCaptureRecord>>;
     /// An upload by id.
     fn get_subtitle_upload(&self, id: &str) -> StorageResult<Option<SubtitleUploadRecord>>;
     /// The upload of `capture_id` + `kind`.
@@ -113,6 +172,9 @@ pub trait SubtitleWrite: SubtitleRead {
     /// Inserts a mapping. An existing id or dedup key →
     /// `Constraint { "subtitle_captures" }`.
     fn insert_subtitle_capture(&mut self, row: &SubtitleCaptureRecord) -> StorageResult<()>;
+    /// Rewrites every column of an existing row (by `capture_id`); whether it existed. The
+    /// caller clears an old primary first (`Constraint { "subtitle_captures" }` otherwise).
+    fn update_subtitle_capture(&mut self, row: &SubtitleCaptureRecord) -> StorageResult<bool>;
     /// Deletes a mapping; whether it existed.
     fn delete_subtitle_capture(&mut self, capture_id: &str) -> StorageResult<bool>;
     /// Inserts or replaces the upload of its `(capture_id, kind)`.

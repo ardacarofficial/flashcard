@@ -93,7 +93,8 @@ fn migration_1300_upgrades_untouched_builtins_to_the_v1_3_definitions() {
             let versions = match (changed, b.key == builtin::SUBTITLE) {
                 (false, _) => 1,
                 (true, false) => 2,
-                (true, true) => 3,
+                // 1490 (v1.4) adds the `examples` field.
+                (true, true) => 4,
             };
             assert_eq!(now.version, versions, "{}", b.key);
             assert_eq!(now.updated_at > Timestamp(1), changed, "{}", b.key);
@@ -246,7 +247,7 @@ fn sql_1301() -> &'static str {
 
 /// The v1.3 Subtitle type as 1300 left it (a collection opened by the v1.3 build before X1).
 fn subtitle_at_1300(locale: Locale) -> NoteType {
-    let mut st = builtin::subtitle(Timestamp(1), locale);
+    let mut st = super::encounters::subtitle_v1_3(locale);
     st.templates[0].front = v1_2(locale)
         .into_iter()
         .find(|n| n.builtin.as_deref() == Some(builtin::SUBTITLE))
@@ -278,7 +279,8 @@ fn migration_1301_gives_the_subtitle_card_a_word_only_front() {
         assert_eq!(now.templates[0].front, builtin::SUBTITLE_FRONT);
         assert!(!now.templates[0].front.contains("sentence"));
         assert_eq!((now.fields, now.css), (want.fields, want.css));
-        assert_eq!(now.version, at_1300.version + 1);
+        // 1301, then 1490 (v1.4: the `examples` field).
+        assert_eq!(now.version, at_1300.version + 2);
         assert!(now.updated_at > Timestamp(1));
     }
 }
@@ -304,9 +306,10 @@ fn migration_1301_leaves_edited_subtitle_templates_alone_and_is_idempotent() {
         tx.commit().unwrap();
     }
     let store = SqliteStore::open(&path).unwrap();
+    // (1490, v1.4, still adds the `examples` field and part to the untouched back.)
     assert_eq!(
-        get(&store, edited.id),
-        edited,
+        get(&store, edited.id).templates[0].front,
+        edited.templates[0].front,
         "an edited front is the user's"
     );
     assert_eq!(

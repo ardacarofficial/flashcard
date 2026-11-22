@@ -691,7 +691,9 @@ pub const SUBTITLE_FRONT: &str = "<div class=\"fc-word\">{{#surface}}{{surface}}
 /// (v1.3) shows the word, then three labelled parts: the meaning (with the part of speech),
 /// the example — the line and its translation — and where it came from (title · time, a link
 /// to that moment), with the screenshot and the audio clip between. No field is unique: the
-/// same word from another line is another card (the extension's own dedup key decides).
+/// same word from another line may be another card (the app's placement rule decides).
+/// v1.4 (migration 1490): an `examples` field lists the note's other encounters (scenes of
+/// the same word and meaning), shown on the back before the source; empty = not shown.
 pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
     make(
         now,
@@ -712,6 +714,8 @@ pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
             f("image", "Screenshot", "Ekran görüntüsü", FieldKind::Image),
             f("audio", "Audio", "Ses", FieldKind::Audio),
             f("source", "Source", "Kaynak", FieldKind::RichText).role(FieldRole::Source),
+            // v1.4 (migration 1490): the note's other encounters (scenes), filled by the app.
+            f("examples", "Examples", "Örnekler", FieldKind::RichText),
         ],
         &[T {
             key: "recognition",
@@ -727,6 +731,7 @@ pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
                 example_part!("sentence", "translation"),
                 "{{#image}}<div class=\"fc-media\">{{image}}</div>{{/image}}",
                 "{{#audio}}<div class=\"fc-media\">{{audio}}</div>{{/audio}}",
+                "{{#examples}}<div class=\"fc-part fc-part-examples\">{{examples}}</div>{{/examples}}",
                 source_part!()
             ),
             engine: engine::CLASSIC,
