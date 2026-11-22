@@ -360,8 +360,14 @@
     openLauncher({ deckId, kind: 'normal', scope: struggled ? 'struggled_today' : (startedScope ?? undefined) });
   }
 
+  /** Esc pressed while an answer was still being saved: leave right after it (never lost). */
+  let pendingEnd = false;
+
   async function run(a: StudyAction) {
-    if (busy) return;
+    if (busy) {
+      if (a.kind === 'end') pendingEnd = true;
+      return;
+    }
     busy = true;
     try {
       await ctx.guarded(async () => {
@@ -434,6 +440,10 @@
       });
     } finally {
       busy = false;
+      if (pendingEnd) {
+        pendingEnd = false;
+        void run({ kind: 'end' });
+      }
     }
   }
 
