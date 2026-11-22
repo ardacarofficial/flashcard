@@ -41,9 +41,29 @@ jobs:
       - name: Frontend dependencies
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
+      # v1.3: the installer ships the release `fc` CLI beside the app (Settings › MCP points
+      # assistants at it; `mcp.setup` looks next to the running executable). Release build,
+      # no `dev-bridge` feature: the development bridge is never in it.
+      - name: Stage the fc CLI for the bundle
+        working-directory: apps/desktop
+        run: node scripts/stage-cli.mjs
       - name: Build the NSIS installer (unsigned)
         working-directory: apps/desktop
-        run: pnpm tauri build --bundles nsis --config src-tauri/tauri.unsigned.conf.json
+        run: pnpm tauri build --bundles nsis --config src-tauri/tauri.unsigned.conf.json --config src-tauri/tauri.cli.conf.json
+      - name: The installer contains fc.exe (Settings › MCP needs it)
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          if (-not $setup) { throw "no NSIS installer under target/release/bundle/nsis" }
+          $sevenZip = (Get-Command 7z -ErrorAction SilentlyContinue).Source
+          if (-not $sevenZip) { $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe' }
+          if (-not (Test-Path $sevenZip)) { throw "7-Zip not found: cannot list the installer" }
+          $list = & $sevenZip l $setup.FullName
+          if ($LASTEXITCODE -ne 0) { throw "7z could not list $($setup.Name)" }
+          $list | Write-Host
+          $fc = $list | Select-String -Pattern '(^|[\s\\/])fc\.exe$'
+          if (-not $fc) { throw "fc.exe is missing from $($setup.Name): Settings › MCP would have no fc program to point assistants at" }
+          Write-Host "OK: $($setup.Name) ships $($fc.Line.Trim())"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: flashcard-windows-installer
@@ -89,6 +109,8 @@ jobs:
           $exe = Get-ChildItem $dir -Filter *.exe | Where-Object { $_.Name -notlike 'uninstall*' } | Select-Object -First 1
           if (-not $exe) { throw "no installed app under $dir (per-user install expected)" }
           Write-Host "installed: $($exe.FullName)"
+          $fc = Join-Path $dir 'fc.exe'
+          if (Test-Path $fc) { Write-Host "fc CLI installed beside the app: $fc" } else { Write-Warning "fc.exe is not beside the installed app ($dir): Settings › MCP will not find it" }
           "FC_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Runner, WebView2 and Edge versions
         shell: pwsh

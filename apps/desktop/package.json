@@ -11,6 +11,7 @@
     "dev:bridge": "node scripts/merge-locales.mjs && vite --mode bridge",
     "build": "node scripts/merge-locales.mjs && vite build",
     "bundle:check": "node scripts/check-bundle.mjs",
+    "stage-cli": "node scripts/stage-cli.mjs",
     "preview": "vite preview",
     "check": "node scripts/merge-locales.mjs && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tsconfig.node.json --noEmit && tsc -p e2e/tsconfig.json --noEmit",
     "test": "node scripts/merge-locales.mjs && vitest run",

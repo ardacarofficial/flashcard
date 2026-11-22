@@ -52,7 +52,7 @@
       },
       "fc_missing": {
         "label": "fc programı bulunamadı",
-        "description": "Asistanın fc adlı komut satırı aracına ihtiyacı var; bu araç ne uygulamanın yanında ne de PATH'inde bulundu. Elinde varsa tam yolunu buraya yaz, aşağıdaki ayar kendiliğinden güncellenir. Yazmazsan ayarda yalnızca \"fc\" yazar; bu da ancak fc PATH'ine eklendiğinde çalışır.",
+        "description": "Asistanın fc adlı komut satırı aracına ihtiyacı var. Kurulan uygulama onu kendi yanında getirir; burada ne uygulamanın yanında ne de PATH'inde bulundu (geliştirici olarak çalıştırıyorsan önce `cargo build -p fc-cli` ile oluştur). Tam yolunu buraya yaz, aşağıdaki ayar kendiliğinden güncellenir. Yazmazsan ayarda yalnızca \"fc\" yazar; bu da ancak fc PATH'ine eklendiğinde çalışır.",
         "input": "fc programının yolu"
       },
       "db_unknown": "Uygulama masaüstü uygulaması olarak başlatılmadığı için koleksiyon dosyasının yeri bilinmiyor: ayardaki yolu kendi collection.db dosyanla değiştir.",

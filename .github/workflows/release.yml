@@ -67,6 +67,10 @@ jobs:
       - name: Build the frontend
         working-directory: apps/desktop
         run: pnpm build
+      # v1.3: the installers ship the release `fc` CLI beside the app (Settings › MCP).
+      - name: Stage the fc CLI for the bundle
+        working-directory: apps/desktop
+        run: node scripts/stage-cli.mjs
       - name: Signing key present?
         id: sign
         shell: bash
@@ -75,11 +79,11 @@ jobs:
         run: |
           if [ -n "$KEY" ]; then
             echo "signed=true" >> "$GITHUB_OUTPUT"
-            echo 'args=--config src-tauri/tauri.prebuilt.conf.json' >> "$GITHUB_OUTPUT"
+            echo 'args=--config src-tauri/tauri.prebuilt.conf.json --config src-tauri/tauri.cli.conf.json' >> "$GITHUB_OUTPUT"
           else
             echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not set: building without update signatures (no latest.json)."
             echo "signed=false" >> "$GITHUB_OUTPUT"
-            echo 'args=--config src-tauri/tauri.prebuilt.conf.json --config src-tauri/tauri.unsigned.conf.json' >> "$GITHUB_OUTPUT"
+            echo 'args=--config src-tauri/tauri.prebuilt.conf.json --config src-tauri/tauri.unsigned.conf.json --config src-tauri/tauri.cli.conf.json' >> "$GITHUB_OUTPUT"
           fi
       - name: Build installers and create the draft release
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # action-v0.6.2
@@ -106,3 +110,17 @@ jobs:
           prerelease: false
           includeUpdaterJson: ${{ steps.sign.outputs.signed == 'true' }}
           updaterJsonPreferNsis: true
+      - name: The installer contains fc.exe (Settings › MCP needs it)
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          if (-not $setup) { throw "no NSIS installer under target/release/bundle/nsis" }
+          $sevenZip = (Get-Command 7z -ErrorAction SilentlyContinue).Source
+          if (-not $sevenZip) { $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe' }
+          if (-not (Test-Path $sevenZip)) { throw "7-Zip not found: cannot list the installer" }
+          $list = & $sevenZip l $setup.FullName
+          if ($LASTEXITCODE -ne 0) { throw "7z could not list $($setup.Name)" }
+          $list | Write-Host
+          $fc = $list | Select-String -Pattern '(^|[\s\\/])fc\.exe$'
+          if (-not $fc) { throw "fc.exe is missing from $($setup.Name): do not publish this draft (Settings › MCP needs it)" }
+          Write-Host "OK: $($setup.Name) ships $($fc.Line.Trim())"

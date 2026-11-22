@@ -52,8 +52,9 @@ pub struct McpSetup {
     /// The open collection file (`<profile folder>/collection.db`) when the desktop app
     /// started this process; `null` when unknown (CLI, tests).
     pub db_path: Option<String>,
-    /// The `fc` command-line program: next to the running executable, else the first one on
-    /// `PATH`; `null` when neither exists (the UI then asks the user for it).
+    /// The `fc` command-line program: next to the running executable (the Windows installer
+    /// ships it there, v1.3), else the first one on `PATH`; `null` when neither exists (a
+    /// development build: the UI then says so and asks the user for it).
     pub fc_path: Option<String>,
     /// Operating system the app runs on (`windows`, `macos`, `linux`, …), for per-OS hints.
     pub platform: String,

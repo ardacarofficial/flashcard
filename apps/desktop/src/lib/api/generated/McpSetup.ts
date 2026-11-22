@@ -12,8 +12,9 @@ export type McpSetup = {
  */
 db_path: string | null, 
 /**
- * The `fc` command-line program: next to the running executable, else the first one on
- * `PATH`; `null` when neither exists (the UI then asks the user for it).
+ * The `fc` command-line program: next to the running executable (the Windows installer
+ * ships it there, v1.3), else the first one on `PATH`; `null` when neither exists (a
+ * development build: the UI then says so and asks the user for it).
  */
 fc_path: string | null, 
 /**

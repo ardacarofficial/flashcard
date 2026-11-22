@@ -52,7 +52,7 @@
       },
       "fc_missing": {
         "label": "The fc program was not found",
-        "description": "The assistant needs the command-line tool fc, and it is neither next to this app nor on your PATH. If you have it, type its full path here and the setting below updates itself. Without it the setting just says \"fc\", which only works once fc is on your PATH.",
+        "description": "The assistant needs the command-line tool fc. The installed app ships it next to itself; here it is neither next to this app nor on your PATH (running a development build? Build it first with `cargo build -p fc-cli`). Type its full path here and the setting below updates itself. Without it the setting just says \"fc\", which only works once fc is on your PATH.",
         "input": "Path of the fc program"
       },
       "db_unknown": "This app was not started as the desktop app, so the collection file's location is unknown: replace the path in the setting with your collection.db.",
