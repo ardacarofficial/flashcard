@@ -214,6 +214,7 @@ impl World {
             attributes: &self.attrs,
             flag_names: &[],
             now: NOW,
+            day_start: None,
         }
     }
 
@@ -696,4 +697,34 @@ proptest! {
             prop_assert!(s.hits(&either));
         }
     }
+}
+
+/// v1.3: with the study day's start in the catalog, `reviewed:N` (and `added`/`edited`)
+/// count study days — `reviewed:1` = since today began — not rolling 24 h periods.
+#[test]
+fn relative_days_follow_the_study_day() {
+    let w = world();
+    let day_start = Timestamp(NOW.0 - 5 * 3_600_000); // the day began 5 h ago
+    let cat = Catalog {
+        day_start: Some(day_start),
+        ..w.cat()
+    };
+    let mut yesterday_late = sample(1, 2, "a");
+    yesterday_late.card.scheduling.state = CardState::Review;
+    // 6 h ago: within 24 h, but before today's study day began.
+    yesterday_late.card.scheduling.last_review = Some(Timestamp(NOW.0 - 6 * 3_600_000));
+    let mut this_morning = sample(2, 2, "b");
+    this_morning.card.scheduling.state = CardState::Review;
+    this_morning.card.scheduling.last_review = Some(Timestamp(NOW.0 - 4 * 3_600_000));
+    for (q, expect) in [("reviewed:1", [false, true]), ("reviewed:2", [true, true])] {
+        let f = compile_query(q, &cat).unwrap();
+        assert_eq!(
+            [yesterday_late.hits(&f), this_morning.hits(&f)],
+            expect,
+            "{q}"
+        );
+    }
+    // Without a study day: the last 24 hours.
+    let f = w.compile("reviewed:1").unwrap();
+    assert!(yesterday_late.hits(&f) && this_morning.hits(&f));
 }

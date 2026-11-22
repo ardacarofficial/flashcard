@@ -14,7 +14,7 @@
 //! | `flag:` | `0`/`none`, `1`–`7`, `red orange green blue pink turquoise purple` (TR names too, plus [`Catalog::flag_names`]), `*` |
 //! | `stability` `difficulty` `lapses` `reps` | number with `= != < <= > >=` |
 //! | `retrievability` | FSRS recall probability now, `0..1` |
-//! | `added:N` `edited:N` `reviewed:N` | within the last N days; `due:N` = due within N days |
+//! | `added:N` `edited:N` `reviewed:N` | within the last N days — study days when [`Catalog::day_start`] is set (`reviewed:1` = today, `reviewed:2` = today and yesterday), else rolling 24 h periods; `due:N` = due within N days |
 //! | `re:` | regex over all fields; `<field>:re:<regex>` for one field |
 //! | `nid:` `cid:` | comma-separated ids |
 //! | classification key or name | `seviye:B1`, `seviye>=B1` (ordered lists), `sınav:TYT`, `puan>3`, `tarih<2025-01-01`, `x:*` = has a value; canonical `attr_<id>` keys and option ids too ([`super::canonical`]) |
@@ -51,6 +51,10 @@ pub struct Catalog<'a> {
     pub flag_names: &'a [(String, u32)],
     /// "Now" for relative times (`added:7`, `is:due`, retrievability).
     pub now: Timestamp,
+    /// v1.3: start of the current local study day (the app computes it from the user's time
+    /// zone and day-start hour). With it, `added:N`/`edited:N`/`reviewed:N` count study days
+    /// (`reviewed:1` = since the day began); without it, rolling 24 h periods before `now`.
+    pub day_start: Option<Timestamp>,
 }
 
 /// Built-in flag colors (1-based flag number = bit + 1, Anki's numbering), English and Turkish
@@ -376,7 +380,13 @@ impl<'a> Resolver<'a> {
                 need_eq(t)?;
                 let days = parse_days(t)?;
                 let now = self.cat.now;
-                let back = now.plus_millis(-days.saturating_mul(MILLIS_PER_DAY));
+                let back = match self.cat.day_start {
+                    // N study days: today's and the N − 1 before it.
+                    Some(start) if days >= 1 => {
+                        start.plus_millis(-(days - 1).saturating_mul(MILLIS_PER_DAY))
+                    }
+                    _ => now.plus_millis(-days.saturating_mul(MILLIS_PER_DAY)),
+                };
                 let (col, op, at) = match k.as_str() {
                     "added" => (TimeCol::CardCreated, CmpOp::Ge, back),
                     "edited" => (TimeCol::NoteEdited, CmpOp::Ge, back),

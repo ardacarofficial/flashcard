@@ -148,6 +148,10 @@ pub struct TestState {
     /// Result once submitted.
     #[serde(default)]
     pub graded: Option<Graded>,
+    /// v1.3: answers saved while the paper is open (paper order; empty = none saved), so an
+    /// unfinished test can be continued.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub draft: Vec<Response>,
 }
 
 /// Builds a paper of `count` questions (at most [`MAX_QUESTIONS`], at most one per source)

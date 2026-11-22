@@ -114,6 +114,8 @@ pub(crate) struct CatalogData {
     attributes: Vec<fc_core::attribute::AttributeDef>,
     flag_names: Vec<(String, u32)>,
     now: Timestamp,
+    /// Start of the study day (v1.3: `reviewed:1` = today).
+    day_start: Timestamp,
 }
 
 impl CatalogData {
@@ -126,6 +128,7 @@ impl CatalogData {
             attributes: reads.list_attribute_defs(false)?,
             flag_names: flag_names(reads)?,
             now,
+            day_start: crate::modules::study::today::today_start(reads, now)?,
         })
     }
 
@@ -138,6 +141,7 @@ impl CatalogData {
             attributes: &self.attributes,
             flag_names: &self.flag_names,
             now: self.now,
+            day_start: Some(self.day_start),
         }
     }
 }

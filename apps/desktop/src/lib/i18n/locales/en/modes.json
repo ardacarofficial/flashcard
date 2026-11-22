@@ -155,7 +155,8 @@
       },
       "test": {
         "paper": "Test paper",
-        "submit": "Submit the test"
+        "submit": "Submit the test",
+        "save_draft": "Save test answers"
       },
       "inline": {
         "preview": "Preview cards from text",

@@ -8,7 +8,9 @@ import type { DeckSummary } from "./DeckSummary";
  */
 export type DeckSummaries = { 
 /**
- * Today's counts of the whole collection (the sum of the top-level decks of `decks.tree`).
+ * Today's counts of the whole collection: the queue of a whole-collection session
+ * (`study.start { deck_id: null }`; v1.3 — not the sum of the top-level decks, limits
+ * apply per queue). `total` = every live card.
  */
 today: DeckCounts, 
 /**

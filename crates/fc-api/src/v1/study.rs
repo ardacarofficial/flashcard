@@ -135,6 +135,118 @@ pub struct StartSession {
     /// v0.10 study modes: time limit, rating scale, test options.
     #[serde(default)]
     pub modes: Option<super::modes::StartModes>,
+    /// v1.3: which cards (`null` = the kind's own default: today's queue for `normal`, every
+    /// card of the deck for `learn`/`test`/`match`, the filter for `custom`). Kinds `normal`,
+    /// `learn`, `test`, `match` only. `studied_today`, `struggled_today` and `all` are
+    /// practice (`mode` is forced to `trial`) over a set frozen at start. An empty set fails
+    /// with `CONFLICT_NOTHING_TO_STUDY` and leaves every open session as it was.
+    #[serde(default)]
+    pub scope: Option<StudyScope>,
+}
+
+/// v1.3: which cards a session takes (`study.options`, `study.start`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum StudyScope {
+    /// Today's queue exactly as a normal session builds it: (re)learning cards due today,
+    /// due reviews and new cards within the deck's daily and per-session limits.
+    Due,
+    /// Unseen cards only, within the new-card limits.
+    New,
+    /// Distinct cards answered during the current local study day (any mode). Practice.
+    StudiedToday,
+    /// Distinct cards rated Again / answered wrong during the current local study day (any
+    /// mode). Practice.
+    StruggledToday,
+    /// Every card of the deck. Practice.
+    All,
+}
+
+/// v1.3: why a scope has no cards (`StudyScopeOption::empty_reason`, details of
+/// `CONFLICT_NOTHING_TO_STUDY`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum StudyEmptyReason {
+    /// The deck has no cards.
+    NoCards,
+    /// Nothing is due today (and, for `new`, no unseen card is left).
+    NothingDue,
+    /// Today's new/review limit is used up; `next_available_at` = start of the next study
+    /// day.
+    DailyLimitReached,
+    /// Only learning cards remain and none can be shown yet; `next_available_at` = when the
+    /// first one can.
+    Waiting,
+    /// No card was answered during this study day.
+    NoneStudiedToday,
+    /// No card was rated Again / answered wrong during this study day.
+    NoneStruggledToday,
+}
+
+/// `study.options`: what the study launcher offers for a deck. No side effects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct StudyOptionsRequest {
+    /// Deck (`null` = whole collection).
+    #[serde(default)]
+    pub deck_id: Option<DeckId>,
+    /// Include sub-decks (default: the `decks.include_subdecks` setting, as `study.start`).
+    #[serde(default)]
+    pub include_subdecks: Option<bool>,
+    /// Client UTC offset, minutes (study-day boundary). Default: the offset the client last
+    /// gave `study.start`, else 0.
+    #[serde(default)]
+    pub tz_offset_mins: Option<i32>,
+}
+
+/// An unfinished session the launcher can continue.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct ResumableSession {
+    /// The session as `study.session` returns it.
+    pub session: SessionDto,
+    /// Name (full path) of its deck (`null` = whole collection).
+    pub deck_name: Option<String>,
+    /// Answers given so far (test: questions answered on the saved draft).
+    pub answered: u32,
+    /// What is left: queued cards; test: unanswered questions; match: pairs left on the
+    /// board (or usable cards before the first round).
+    pub remaining: u32,
+}
+
+/// One scope of the launcher.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct StudyScopeOption {
+    /// Scope.
+    pub scope: StudyScope,
+    /// Exactly how many cards a session started now with this scope contains (the card set
+    /// of a `normal` session; learn takes at most its card limit from it, a test draws its
+    /// questions from it).
+    pub count: u32,
+    /// `scheduled` for `due`/`new`; `trial` (practice, the schedule is untouched) otherwise.
+    pub mode: StudyMode,
+    /// Set when `count` is 0.
+    pub empty_reason: Option<StudyEmptyReason>,
+    /// When cards become available: limits reset (`daily_limit_reached`) or the first
+    /// waiting learning card can be shown (`waiting`).
+    pub next_available_at: Option<Timestamp>,
+}
+
+/// Response of `study.options`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct StudyOptions {
+    /// Deck asked about.
+    pub deck_id: Option<DeckId>,
+    /// Its full path (`null` = whole collection).
+    pub deck_name: Option<String>,
+    /// Unfinished sessions relevant to the deck (all kinds; every deck for `deck_id: null`),
+    /// newest first.
+    pub resumable: Vec<ResumableSession>,
+    /// Always all five scopes: due, new, studied_today, struggled_today, all.
+    pub scopes: Vec<StudyScopeOption>,
+    /// Kinds that can be started now (module switches): a subset of normal, learn, test,
+    /// match, in that order.
+    pub modes: Vec<StudyKind>,
 }
 
 /// Request naming a session.
@@ -219,7 +331,9 @@ pub struct SessionDto {
     pub mistakes: u32,
     /// Card to show now (`null` = finished, or waiting for `next_due`).
     pub current: Option<StudyCardDto>,
-    /// When the next waiting learning card becomes available, if any.
+    /// When the next waiting learning card can be shown (its due time minus the learn-ahead
+    /// window), while no card is current and the session is open. The session stays open
+    /// while it waits.
     pub next_due: Option<Timestamp>,
     /// v0.10 study modes of the session (`null` when it uses none; may be absent from
     /// clients/mocks written before v0.10).

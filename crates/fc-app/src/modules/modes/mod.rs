@@ -191,6 +191,37 @@ pub(crate) fn init_state(
     }
 }
 
+/// v1.3 resume (`study.options.resumable`): `(answered, remaining)` of an open test or match
+/// session — test: questions answered on the saved draft / left (`None` once submitted);
+/// match: pairs matched so far / pairs left on the current board, or the usable cards
+/// before the first round (`None` when the last round is over: nothing to continue). Other
+/// kinds: `None` (their queue says it).
+pub(crate) fn mode_progress(s: &Session) -> Option<(u32, u32)> {
+    let modes = s.state.modes.as_ref()?;
+    let n = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    match s.config.kind {
+        StudyKind::Test => practice_test::progress(modes.test.as_ref()?),
+        StudyKind::Match => {
+            let m = modes.matching.as_ref()?;
+            match &m.round {
+                Some(r) if r.finished_ms.is_none() => {
+                    let left = r.pairs.iter().filter(|p| !p.matched).count();
+                    Some((s.state.answered, n(left)))
+                }
+                Some(_) => None,
+                None => {
+                    let usable = fc_study::modes::matching::usable(&m.pool).len();
+                    (usable >= 2).then_some((s.state.answered, n(usable)))
+                }
+            }
+        }
+        StudyKind::Normal
+        | StudyKind::Custom
+        | StudyKind::Mistakes
+        | StudyKind::Learn => None,
+    }
+}
+
 /// `study.answer` hook: learn cards are judged, not rated (`modes.learn.answer`); a timed
 /// card past its time is answered by `modes.timed.expire` (`CONFLICT_TIME_UP`).
 pub(crate) fn check_button_answer(ctx: &CommandCtx<'_>, req: &AnswerCard) -> AppResult<()> {

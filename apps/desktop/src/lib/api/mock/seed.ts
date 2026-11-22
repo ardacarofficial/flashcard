@@ -11,18 +11,27 @@ type Env = Pick<MockEnv, 'now' | 'id' | 'decks' | 'attrs' | 'notes' | 'addDeck'>
 const CEFR = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const EXAMS = ['YKS', 'TOEFL', 'IELTS', 'KPSS', 'YDS'];
 
+/** Counts with the v1.3 `today_*` twins (the mock's today numbers are the plain ones). */
+export const deckCounts = (c: Pick<DeckCounts, 'new' | 'learning' | 'due' | 'total'>): DeckCounts => ({
+  ...c,
+  today_due: c.due,
+  today_learning: c.learning,
+  today_new: c.new,
+  today_total: c.new + c.learning + c.due,
+});
+
 /** Per deck-name counts shown in the tree (leaf numbers; parents show their own too). */
 export const DEMO_COUNTS: Record<string, DeckCounts> = {
-  İngilizce: { new: 12, learning: 4, due: 31, total: 420 },
-  Fiiller: { new: 5, learning: 2, due: 14, total: 160 },
-  Kelime: { new: 7, learning: 2, due: 17, total: 210 },
-  Deyimler: { new: 0, learning: 0, due: 0, total: 50 },
-  YKS: { new: 20, learning: 6, due: 48, total: 640 },
-  Matematik: { new: 8, learning: 3, due: 20, total: 260 },
-  Biyoloji: { new: 6, learning: 2, due: 18, total: 220 },
-  Tarih: { new: 6, learning: 1, due: 10, total: 160 },
-  Almanca: { new: 10, learning: 0, due: 0, total: 35 },
-  'Tıbbi Terminoloji': { new: 0, learning: 1, due: 9, total: 180 },
+  İngilizce: deckCounts({ new: 12, learning: 4, due: 31, total: 420 }),
+  Fiiller: deckCounts({ new: 5, learning: 2, due: 14, total: 160 }),
+  Kelime: deckCounts({ new: 7, learning: 2, due: 17, total: 210 }),
+  Deyimler: deckCounts({ new: 0, learning: 0, due: 0, total: 50 }),
+  YKS: deckCounts({ new: 20, learning: 6, due: 48, total: 640 }),
+  Matematik: deckCounts({ new: 8, learning: 3, due: 20, total: 260 }),
+  Biyoloji: deckCounts({ new: 6, learning: 2, due: 18, total: 220 }),
+  Tarih: deckCounts({ new: 6, learning: 1, due: 10, total: 160 }),
+  Almanca: deckCounts({ new: 10, learning: 0, due: 0, total: 35 }),
+  'Tıbbi Terminoloji': deckCounts({ new: 0, learning: 1, due: 9, total: 180 }),
 };
 
 const NOTES: Array<[deck: string, front: string, back: string, level?: string, exam?: string]> = [

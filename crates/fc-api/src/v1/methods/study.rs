@@ -10,6 +10,9 @@ methods! {
     StudyStart = "study.start", Command, "study", "study:write", Public, undo: false, StartSession => SessionDto;
     /// A session with its current card and the next interval of every button.
     StudySession = "study.session", Query, "study", "study:read", Public, undo: false, SessionRef => SessionDto;
+    /// v1.3 launcher: per scope the exact card count, empty reason and next availability,
+    /// unfinished sessions to continue and the kinds that can start.
+    StudyOptionsGet = "study.options", Query, "study", "study:read", Public, undo: false, StudyOptionsRequest => StudyOptions;
     /// The most recent open session (resume after restart/crash).
     StudyActive = "study.active", Query, "study", "study:read", Public, undo: false, Empty => ActiveSession;
     /// Rates the current card. Undo restores the card, the session and removes the review.

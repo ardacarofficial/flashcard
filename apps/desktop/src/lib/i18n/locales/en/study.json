@@ -246,7 +246,8 @@
     },
     "conflict": {
       "session_ended": "This study session has ended.",
-      "not_current_card": "This card is no longer in the session."
+      "not_current_card": "This card is no longer in the session.",
+      "nothing_to_study": "There is nothing to study here right now."
     },
     "validation": {
       "scheduler_params": "Invalid scheduler settings."

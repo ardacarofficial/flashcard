@@ -129,8 +129,8 @@ impl T {
             .id
     }
 
-    fn start(&self, mode: StudyMode, deck: Option<DeckId>) -> SessionDto {
-        self.ok::<StudyStart>(StartSession {
+    fn start(&self, mode: StudyMode, deck: Option<DeckId>) -> Option<SessionDto> {
+        let req = StartSession {
             kind: StudyKind::Normal,
             mode: Some(mode),
             deck_id: deck,
@@ -141,13 +141,22 @@ impl T {
             order: None,
             tz_offset_mins: Some(0),
             modes: None,
-        })
+            scope: None,
+        };
+        // v1.3: nothing to study starts no session.
+        match self.app.call::<StudyStart>(&req, &Actor::User) {
+            Ok(s) => Some(s),
+            Err(e) if e.code == fc_api::ErrorCode::ConflictNothingToStudy => None,
+            Err(e) => panic!("study.start failed: {e:?}"),
+        }
     }
 
     /// Answers every card of a session until it is empty (every `again_every`-th card is
     /// forgotten the first time it is shown), returns how many answers.
     fn study(&self, mode: StudyMode, deck: Option<DeckId>, again_every: usize) -> usize {
-        let mut s = self.start(mode, deck);
+        let Some(mut s) = self.start(mode, deck) else {
+            return 0;
+        };
         let mut n = 0;
         let mut seen = std::collections::HashSet::new();
         while let Some(c) = s.current.clone() {
@@ -297,7 +306,7 @@ pub fn cache_equals_recomputation(f: &Factory) {
 
     // Undo of an answer deletes its review row: the cache is not used until rebuilt.
     t.day(9);
-    let s = t.start(StudyMode::Scheduled, None);
+    let s = t.start(StudyMode::Scheduled, None).unwrap();
     let c = s.current.clone().expect("cards due by day 9");
     t.ok::<StudyAnswer>(AnswerCard {
         session_id: s.id,
@@ -553,7 +562,7 @@ pub fn breakdown_cache_equals_recomputation(f: &Factory) {
     assert!(breakdown_agrees(&t, &req));
     // A removed review (undo of an answer) invalidates the cache.
     t.day(9);
-    let s = t.start(StudyMode::Scheduled, None);
+    let s = t.start(StudyMode::Scheduled, None).unwrap();
     let c = s.current.clone().expect("cards due by day 9");
     t.ok::<StudyAnswer>(AnswerCard {
         session_id: s.id,
@@ -853,7 +862,7 @@ pub fn exam_mode_and_exam_commands(f: &Factory) {
     assert_eq!(list.items[0].days_left, 20);
     assert_eq!(list.items[0].cards, 1);
     // The buttons already show the exam-bounded interval.
-    let s = t.start(StudyMode::Scheduled, None);
+    let s = t.start(StudyMode::Scheduled, None).unwrap();
     let shown = s.current.as_ref().unwrap();
     let good = shown.intervals.iter().find(|p| p.rating == Rating::Good).unwrap();
     if shown.card_id == in_exam {
@@ -943,7 +952,7 @@ pub fn goals_progress_and_undo(f: &Factory) {
         query: Some("deck:D".into()),
     });
     // Day 0: 3 cards learned.
-    let mut s = t.start(StudyMode::Scheduled, None);
+    let mut s = t.start(StudyMode::Scheduled, None).unwrap();
     for _ in 0..3 {
         let c = s.current.clone().unwrap();
         t.clock.advance(60_000);

@@ -160,6 +160,7 @@ fn real_anki_packages_import_draw_and_study() {
             order: None,
             tz_offset_mins: Some(0),
             modes: None,
+            scope: None,
         });
         let current = session.current.clone().expect("a card to study");
         t.ok::<StudyAnswer>(AnswerCard {

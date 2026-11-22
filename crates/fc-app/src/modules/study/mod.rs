@@ -13,13 +13,24 @@
 //! * `cards`: `study.suspend/bury/postpone/restore/card_history`.
 //! * `state_diff`: how a session's queue is stored and undone (v1.0): row edits and diffs
 //!   instead of whole-queue copies.
+//! * `plan` (v1.3): which cards a session takes — one planner for `study.start`,
+//!   `study.options` and the today counts of the deck list, so they always agree.
+//! * `options` (v1.3): `study.options`, the study launcher's data.
 
 mod cards;
 mod engine;
+mod options;
+mod plan;
 mod session;
 mod state_diff;
 #[cfg(test)]
 mod tests;
+
+/// v1.3 today's queue for other modules (`decks.tree`/`decks.summaries` counts, the query
+/// language's study day): the same planner `study.start` uses.
+pub(crate) mod today {
+    pub(crate) use super::plan::{client_tz, today_counts, today_start, Planner};
+}
 
 /// Extension points of the session engine for the v0.10 study modes (`modules::modes`):
 /// sessions, rendering, the shared answer path and its hooks. Modes add session kinds and
@@ -149,6 +160,7 @@ pub fn register(reg: &mut Registry) {
     reg.command::<StudyStart>(session::start);
     reg.query::<StudySession>(session::get);
     reg.query::<StudyActive>(session::active);
+    reg.query::<StudyOptionsGet>(options::options);
     reg.command::<StudyAnswer>(session::answer);
     reg.command::<StudyHint>(session::hint);
     reg.query::<StudyCheckAnswer>(session::check_answer);

@@ -106,6 +106,7 @@ fn start() -> StartSession {
         order: None,
         tz_offset_mins: Some(0),
         modes: None,
+        scope: None,
     }
 }
 

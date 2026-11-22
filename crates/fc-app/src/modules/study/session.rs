@@ -1,48 +1,56 @@
 //! Session handlers: start, current card, answer (undoable), hints, answer checking, end.
 
 use super::engine::*;
+use super::plan::{Plan, PlanRequest, Planner, UX_CLIENT_TZ};
 use super::*;
 use crate::error::AppResult;
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
-use crate::support::decks::DeckIndex;
 use crate::support::{invalid, summary};
 use fc_api::v1::common::Empty;
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::study::*;
 use fc_core::card::{CardState, Rating};
-use fc_core::rng::SplitMix64;
 use fc_core::settings::SettingScope;
 use fc_core::{CardId, ReviewLogId, SessionId, Timestamp};
-use fc_core::preset::NewCardOrder;
-use fc_storage::repo::{CardFilter, NewCardsFirst, ReviewLogRecord, SessionRecord, StudyCardFilter};
+use fc_storage::repo::{CardFilter, ReviewLogRecord, SessionRecord};
 use fc_api::v1::cardtypes::CardInteraction;
 use fc_providers::strategy::{CardResponse, Evaluation};
 use fc_study::answer::{check, CheckOptions, CheckerKind, Grade};
 use fc_study::text::html_to_text;
 use fc_study::day::MAX_TZ_OFFSET_MINS;
 use fc_study::hint::HintKind;
-use fc_study::session::{self as queue, BuildOptions, Order, SessionState};
+use fc_study::session::{self as queue, SessionState};
 
-/// Ends every open session at `now` (one session is open at a time).
-fn end_open_sessions(ctx: &mut CommandCtx<'_>) -> AppResult<()> {
-    // Bounded: each iteration closes one.
-    for _ in 0..1_000 {
-        let Some(mut open) = ctx.reads().latest_open_session()? else {
-            return Ok(());
-        };
-        open.ended_at = Some(ctx.now);
-        ctx.tx.upsert_session(&open)?;
+/// Ends the open sessions of `kind` at `now` (v1.3: one session is open per kind, so a test
+/// paper or a learn round survives a flashcard session started in between).
+fn end_open_sessions(ctx: &mut CommandCtx<'_>, kind: StudyKind) -> AppResult<()> {
+    let kind = kind_str(kind);
+    for mut open in ctx.reads().open_sessions()? {
+        if open.kind == kind {
+            open.ended_at = Some(ctx.now);
+            ctx.tx.upsert_session(&open)?;
+        }
     }
     Ok(())
 }
 
-fn order_of(o: StudyOrder) -> Order {
-    match o {
-        StudyOrder::Due => Order::Due,
-        StudyOrder::Random => Order::Random,
-        StudyOrder::HardestFirst => Order::HardestFirst,
-        StudyOrder::NewestFirst => Order::NewestFirst,
-    }
+/// `CONFLICT_NOTHING_TO_STUDY` with why and when that changes.
+fn nothing_to_study(reason: StudyEmptyReason, next: Option<Timestamp>) -> crate::AppError {
+    let reason_str = serde_json::to_value(reason)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default();
+    crate::AppError::Api(
+        fc_api::ApiError::new(
+            fc_api::ErrorCode::ConflictNothingToStudy,
+            format!("nothing to study ({reason_str})"),
+        )
+        .with_detail("reason", reason_str)
+        .with_detail(
+            "next_available_at",
+            next.map_or(serde_json::Value::Null, |t| serde_json::Value::from(t.0)),
+        ),
+    )
 }
 
 pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<SessionDto>> {
@@ -51,199 +59,53 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         return Err(invalid("tz_offset_mins out of range"));
     }
     let id = SessionId::generate(ctx.ids);
-    let mode = req.mode.unwrap_or_default();
-    let filter = req.filter.clone().unwrap_or_default();
-    // Which cards.
-    let deck_ids = match req.deck_id {
-        Some(d) => {
-            let index = DeckIndex::load(ctx.reads())?;
-            index.require_live(d)?;
-            let subdecks = match req.include_subdecks {
-                Some(b) => b,
-                None => setting_bool_any(ctx, d)?,
-            };
-            Some(if subdecks { index.live_subtree(d) } else { vec![d] })
-        }
-        None => None,
-    };
-    // Query-language filter (v0.4): text, or a saved query ("filtered deck").
-    let query = match (filter.query.as_deref().map(str::trim), filter.saved_query_id) {
-        (Some(q), Some(_)) if !q.is_empty() => {
-            return Err(invalid("give either filter.query or filter.saved_query_id"))
-        }
-        (_, Some(id)) => Some(crate::modules::browse::require_saved_query(ctx.reads(), id)?.query),
-        (Some(q), None) if !q.is_empty() => Some(q.to_owned()),
-        _ => None,
-    };
-    if query.is_some() && req.kind == StudyKind::Mistakes {
-        return Err(invalid("a mistakes session takes no query"));
-    }
-    let matching = match &query {
-        Some(q) => {
-            let compiled = crate::modules::browse::compile(ctx.reads(), q, ctx.now)?;
-            Some(ctx.reads().search_card_ids(&compiled, ctx.now)?)
-        }
-        None => None,
-    };
-    let card_ids = match req.kind {
-        StudyKind::Mistakes => {
-            let from = req
-                .from_session
-                .ok_or_else(|| invalid("a mistakes session needs from_session"))?;
-            Some(Session::load(ctx.reads(), ctx.registry, from)?.state.again)
-        }
-        StudyKind::Normal
-        | StudyKind::Custom
-        | StudyKind::Learn
-        | StudyKind::Test
-        | StudyKind::Match => matching,
-    };
     // v0.10 modes: module switches, time limit, rating scale (validated before anything is
     // written).
     let modes_config = crate::modules::modes::prepare_start(ctx, &req)?;
-    let scope_decks = deck_ids.clone();
-    let scope = deck_scope(req.deck_id);
+    let filter = req.filter.clone().unwrap_or_default();
+    let plan_req = PlanRequest {
+        kind: req.kind,
+        scope: req.scope,
+        deck_id: req.deck_id,
+        include_subdecks: req.include_subdecks,
+        filter: &filter,
+        from_session: req.from_session,
+        new_limit: req.new_limit,
+        order: req.order,
+        seed: id.0.as_u64_pair().1,
+    };
+    let mut planner = Planner::new(View::cmd(ctx), ctx.now, tz)?;
+    let Plan {
+        queue,
+        mut rng,
+        query,
+        practice,
+    } = planner.plan(&plan_req)?;
+    // v1.3: an empty start creates nothing and leaves the open sessions alone. Card-by-card
+    // sessions also need a card to show now (learn/test/match take every card at once).
+    let shows_now = match req.kind {
+        StudyKind::Normal | StudyKind::Custom | StudyKind::Mistakes => planner.available(&queue),
+        StudyKind::Learn | StudyKind::Test | StudyKind::Match => !queue.is_empty(),
+    };
+    if !shows_now {
+        let (reason, next) = planner.empty_reason(&plan_req, &queue)?;
+        return Err(nothing_to_study(reason, next));
+    }
+    let day_start_hour = planner.day_start_hour();
+    drop(planner);
     let config = SessionConfig {
         kind: req.kind,
-        mode,
+        // Practice scopes never change the schedule, whatever was asked.
+        mode: if practice {
+            StudyMode::Trial
+        } else {
+            req.mode.unwrap_or_default()
+        },
         deck_id: req.deck_id,
         tz_offset_mins: tz,
-        day_start_hour: u8::try_from(setting_u32(ctx.reads(), &SettingScope::App, DAY_START_HOUR)?)
-            .unwrap_or(fc_study::day::DEFAULT_ROLLOVER_HOUR),
+        day_start_hour,
         modes: modes_config,
     };
-    // Deck options (v0.4 presets, inherited from parent decks): order, sibling burying.
-    let preset = effective_options(ctx.reads(), req.deck_id)?;
-    let order = match req.order {
-        Some(o) => order_of(o),
-        None => Order::Preset {
-            new: preset.new_order,
-            review: preset.review_order,
-        },
-    };
-    // Normal sessions respect the deck preset's daily limits (minus what was studied today).
-    let daily = match req.kind {
-        StudyKind::Normal => Some(daily_left(ctx, req.deck_id, scope_decks.as_deref(), &config)?),
-        // Hand-picked sessions (custom, mistakes, learn, test, match) are not limited; their
-        // schedule-changing answers still count towards later normal sessions (docs/10 §24).
-        StudyKind::Custom
-        | StudyKind::Mistakes
-        | StudyKind::Learn
-        | StudyKind::Test
-        | StudyKind::Match => None,
-    };
-    let new_limit = match (req.new_limit, daily) {
-        (Some(n), _) => Some(n),
-        (None, Some((new_left, _))) => {
-            Some(setting_u32(ctx.reads(), &scope, NEW_PER_SESSION)?.min(new_left))
-        }
-        (None, None) => None,
-    };
-    let review_limit = daily.map(|(_, reviews_left)| reviews_left);
-    let bury_siblings = buries_siblings(req.kind) && preset.bury_siblings;
-    let due_only = match req.kind {
-        StudyKind::Normal => filter.due_only.unwrap_or(true),
-        StudyKind::Custom | StudyKind::Learn | StudyKind::Test | StudyKind::Match => {
-            filter.due_only.unwrap_or(false)
-        }
-        StudyKind::Mistakes => false,
-    };
-    let day_end = config.day_end(ctx.now);
-    // v1.0: only what the queue can take is read — cards in progress due today (through the
-    // due index) and, when new cards come in a fixed order, the first ones up to the limit
-    // (more are read only if burying or empty cards leave the limit unfilled).
-    let newest_first = match order {
-        Order::Due | Order::HardestFirst => Some(false),
-        Order::NewestFirst => Some(true),
-        Order::Preset { new: NewCardOrder::Added, .. } => Some(false),
-        Order::Random | Order::Preset { new: NewCardOrder::Random, .. } => None,
-    };
-    let mut new_read = new_limit
-        .zip(newest_first)
-        .map(|(n, newest)| NewCardsFirst { n: n.saturating_mul(2).saturating_add(32), newest });
-    let mut card_filter = StudyCardFilter {
-        deck_ids,
-        card_ids,
-        states: filter.states.clone(),
-        attributes: filter
-            .attributes
-            .iter()
-            .map(|c| (c.attr_id, c.values.clone()))
-            .collect(),
-        include_suspended: false,
-        due_before: due_only.then_some(day_end),
-        new_first: None,
-    };
-    // Empty cards (v0.3: the note no longer yields them) are never studied. Checked for the
-    // cards a limit counts (reviews, new cards) — an empty one is left out and the queue
-    // built again — and for every card of learn/test sessions (their stages and papers are
-    // made from the queue); a learning card is skipped when it comes up.
-    let check_all = matches!(
-        req.kind,
-        StudyKind::Learn | StudyKind::Test | StudyKind::Match
-    );
-    let mut empty = EmptyCards::new(View::cmd(ctx));
-    let mut excluded: std::collections::HashSet<CardId> = std::collections::HashSet::new();
-    let seed = id.0.as_u64_pair().1;
-    // Bounded: every round leaves out a card or reads more new cards.
-    let (mut queue, mut rng) = loop {
-        card_filter.new_first = new_read;
-        let mut candidates = ctx.reads().study_cards(&card_filter)?;
-        let new_read_all = new_read.is_none_or(|f| {
-            (candidates
-                .iter()
-                .filter(|c| c.scheduling.state == CardState::New)
-                .count() as u64)
-                < u64::from(f.n)
-        });
-        candidates.retain(|c| !excluded.contains(&c.id));
-        // Seeded from the session id: shuffles are reproducible from the stored session.
-        let mut rng = SplitMix64::new(seed);
-        let queue = queue::build_queue(
-            &candidates,
-            |c| c.scheduling.clone(),
-            BuildOptions {
-                now: ctx.now,
-                day_end,
-                due_only,
-                new_limit,
-                review_limit,
-                order,
-                bury_siblings,
-                rng: &mut rng,
-            },
-        );
-        let by_id: std::collections::HashMap<CardId, &fc_core::card::Card> =
-            candidates.iter().map(|c| (c.id, c)).collect();
-        let mut found = false;
-        for e in &queue {
-            if e.kind == queue::QueueKind::Learning && !check_all {
-                continue;
-            }
-            if let Some(card) = by_id.get(&e.card_id) {
-                if empty.is_empty(card)? {
-                    excluded.insert(card.id);
-                    found = true;
-                }
-            }
-        }
-        if found {
-            continue;
-        }
-        let new_taken = queue.iter().filter(|e| e.kind == queue::QueueKind::New).count() as u64;
-        match (new_read, new_limit) {
-            (Some(f), Some(limit)) if !new_read_all && new_taken < u64::from(limit) => {
-                new_read = Some(NewCardsFirst {
-                    n: f.n.saturating_mul(4),
-                    ..f
-                });
-            }
-            _ => break (queue, rng),
-        }
-    };
-    if let Some(limit) = filter.limit {
-        queue.truncate(limit as usize);
-    }
     let mut state = SessionState {
         queue,
         last_event_at: Some(ctx.now),
@@ -251,7 +113,12 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
     };
     // v0.10: learn progress / test paper (no-op for other kinds).
     crate::modules::modes::init_state(View::cmd(ctx), &req, &config, &mut state, &mut rng)?;
-    end_open_sessions(ctx)?;
+    end_open_sessions(ctx, req.kind)?;
+    // The client's offset, for queries that get none (today counts, `reviewed:1`).
+    if req.tz_offset_mins.is_some() {
+        ctx.tx
+            .set_ux_state(UX_CLIENT_TZ, &serde_json::Value::from(tz), ctx.now)?;
+    }
     let mut session = Session::new(
         ctx.registry,
         SessionRecord {
@@ -274,62 +141,6 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         summary: summary::<StudyStart>(),
         events: Vec::new(),
     })
-}
-
-/// New and review cards still allowed today by the preset of `deck`: its `new_per_day` /
-/// `reviews_per_day` minus the distinct cards first studied / reviewed (scheduled mode) since
-/// the study day began, counted over `decks` (all decks when `None`).
-fn daily_left(
-    ctx: &CommandCtx<'_>,
-    deck: Option<fc_core::DeckId>,
-    decks: Option<&[fc_core::DeckId]>,
-    config: &SessionConfig,
-) -> AppResult<(u32, u32)> {
-    let preset = effective_options(ctx.reads(), deck)?;
-    let day = config.study_day();
-    let since = day.start(day.index(ctx.now));
-    let mut new = std::collections::HashSet::new();
-    let mut reviewed = std::collections::HashSet::new();
-    // Every schedule-changing answer counts, whatever mode it came from (v0.10).
-    let mut logs = Vec::new();
-    for mode in fc_storage::repo::SCHEDULED_REVIEW_MODES {
-        logs.extend(ctx.reads().review_logs_since(since, mode)?);
-    }
-    logs.sort_by_key(|r| r.created_at);
-    for r in logs {
-        let set = match r.state_before {
-            CardState::New => &mut new,
-            CardState::Review => &mut reviewed,
-            CardState::Learning | CardState::Relearning => continue,
-        };
-        if set.contains(&r.card_id) {
-            continue;
-        }
-        let in_scope = match decks {
-            None => true,
-            Some(decks) => ctx
-                .reads()
-                .get_card(r.card_id)?
-                .is_some_and(|c| decks.contains(&c.deck_id)),
-        };
-        if in_scope {
-            set.insert(r.card_id);
-        }
-    }
-    let count = |s: &std::collections::HashSet<CardId>| u32::try_from(s.len()).unwrap_or(u32::MAX);
-    Ok((
-        preset.new_per_day.saturating_sub(count(&new)),
-        preset.reviews_per_day.saturating_sub(count(&reviewed)),
-    ))
-}
-
-/// `decks.include_subdecks` at the deck (the decks module owns the setting).
-fn setting_bool_any(ctx: &CommandCtx<'_>, deck: fc_core::DeckId) -> AppResult<bool> {
-    Ok(
-        crate::settings::resolve_stored(ctx.reads(), &SettingScope::Deck(deck), "decks.include_subdecks")?
-            .and_then(|(v, _)| v.as_bool())
-            .unwrap_or(true),
-    )
 }
 
 pub(super) fn get(req: SessionRef, ctx: &QueryCtx<'_>) -> AppResult<SessionDto> {

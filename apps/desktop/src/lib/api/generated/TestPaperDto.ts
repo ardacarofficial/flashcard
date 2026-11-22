@@ -23,4 +23,9 @@ answers: Array<TestAnswerDto> | null,
 /**
  * Result (after submission).
  */
-result: TestResultDto | null, };
+result: TestResultDto | null, 
+/**
+ * v1.3: the answers saved so far with `modes.test.save_draft` while the paper is open
+ * (`null` after submission; may be absent from clients/mocks written before v1.3).
+ */
+draft?: Array<TestAnswerDto> | null, };

@@ -90,48 +90,65 @@ fn ensure_name_free(
 
 // ------------------------------------------------------------------ queries
 
+/// v1.3: a deck's counts — today's numbers are its study queue (`study.start { kind:
+/// normal }` on it now, through the study module's planner), `total` the live cards of the
+/// deck and its sub-decks.
+fn deck_counts(today: (u32, u32, u32), total: u32) -> DeckCounts {
+    let (new, learning, due) = today;
+    DeckCounts {
+        new,
+        learning,
+        due,
+        total,
+        today_due: due,
+        today_learning: learning,
+        today_new: new,
+        today_total: new + learning + due,
+    }
+}
+
+/// The study planner for today's counts, on the client's study day (`tz_offset_mins` as
+/// last given to `study.start`).
+fn today_planner<'a>(ctx: &'a QueryCtx<'_>) -> AppResult<crate::modules::study::today::Planner<'a>> {
+    use crate::modules::study::today::{client_tz, Planner};
+    let v = crate::modules::study::ext::View::query(ctx);
+    Planner::new(v, ctx.now, client_tz(ctx.tx, None)?)
+}
+
 fn tree(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<DeckTree> {
     let index = DeckIndex::load(ctx.tx)?;
-    let own: HashMap<DeckId, DeckCounts> = ctx
+    let own_total: HashMap<DeckId, u32> = ctx
         .tx
         .card_counts_by_deck(ctx.now)?
         .into_iter()
-        .map(|(id, c)| {
-            (
-                id,
-                DeckCounts {
-                    new: c.new,
-                    learning: c.learning,
-                    due: c.review_due,
-                    total: c.total,
-                },
-            )
-        })
+        .map(|(id, c)| (id, c.total))
         .collect();
-    fn node(index: &DeckIndex, own: &HashMap<DeckId, DeckCounts>, d: &Deck) -> DeckTreeNode {
+    let mut planner = today_planner(ctx)?;
+    fn node(
+        index: &DeckIndex,
+        own_total: &HashMap<DeckId, u32>,
+        planner: &mut crate::modules::study::today::Planner<'_>,
+        d: &Deck,
+    ) -> AppResult<DeckTreeNode> {
         let children: Vec<DeckTreeNode> = index
             .children(Some(d.id))
             .into_iter()
-            .map(|c| node(index, own, c))
-            .collect();
-        let mut counts = own.get(&d.id).copied().unwrap_or_default();
-        for c in &children {
-            counts.new += c.counts.new;
-            counts.learning += c.counts.learning;
-            counts.due += c.counts.due;
-            counts.total += c.counts.total;
-        }
-        DeckTreeNode {
+            .map(|c| node(index, own_total, planner, c))
+            .collect::<AppResult<_>>()?;
+        let total = own_total.get(&d.id).copied().unwrap_or_default()
+            + children.iter().map(|c| c.counts.total).sum::<u32>();
+        let today = crate::modules::study::today::today_counts(planner, Some(d.id))?;
+        Ok(DeckTreeNode {
             deck: index.dto(d),
-            counts,
+            counts: deck_counts(today, total),
             children,
-        }
+        })
     }
     let roots = index
         .children(None)
         .into_iter()
-        .map(|d| node(&index, &own, d))
-        .collect();
+        .map(|d| node(&index, &own_total, &mut planner, d))
+        .collect::<AppResult<_>>()?;
     Ok(DeckTree { roots })
 }
 
@@ -157,15 +174,17 @@ fn summaries(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<DeckSummaries> {
     let reads = ctx.tx;
     let index = DeckIndex::load(reads)?;
     let live: HashSet<DeckId> = index.live().map(|d| d.id).collect();
-    let mut today = DeckCounts::default();
+    let mut total = 0;
     for (id, c) in reads.card_counts_by_deck(ctx.now)? {
         if live.contains(&id) {
-            today.new += c.new;
-            today.learning += c.learning;
-            today.due += c.review_due;
-            today.total += c.total;
+            total += c.total;
         }
     }
+    // Whole collection: the queue of `study.start { deck_id: null }` (Home's Start).
+    let today = deck_counts(
+        crate::modules::study::today::today_counts(&mut today_planner(ctx)?, None)?,
+        total,
+    );
     let cards = reads.study_cards(&fc_storage::repo::StudyCardFilter {
         include_suspended: true,
         ..Default::default()

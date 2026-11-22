@@ -273,6 +273,7 @@ import type { RunOptimizer } from "./RunOptimizer";
 import type { RunPluginCommand } from "./RunPluginCommand";
 import type { RunResult } from "./RunResult";
 import type { SaveDraft } from "./SaveDraft";
+import type { SaveTestDraft } from "./SaveTestDraft";
 import type { SavedQueryDto } from "./SavedQueryDto";
 import type { SavedQueryList } from "./SavedQueryList";
 import type { SavedQueryRef } from "./SavedQueryRef";
@@ -321,6 +322,8 @@ import type { StatsRequest } from "./StatsRequest";
 import type { StruggleList } from "./StruggleList";
 import type { StrugglesRequest } from "./StrugglesRequest";
 import type { StudyCardsChanged } from "./StudyCardsChanged";
+import type { StudyOptions } from "./StudyOptions";
+import type { StudyOptionsRequest } from "./StudyOptionsRequest";
 import type { SubmitTest } from "./SubmitTest";
 import type { SubtitleKeyDto } from "./SubtitleKeyDto";
 import type { SubtitleKeyList } from "./SubtitleKeyList";
@@ -433,6 +436,7 @@ export interface Methods {
   "attributes.values.set": { kind: "command"; request: SetAttributeValues; response: AttributeValues };
   "study.start": { kind: "command"; request: StartSession; response: SessionDto };
   "study.session": { kind: "query"; request: SessionRef; response: SessionDto };
+  "study.options": { kind: "query"; request: StudyOptionsRequest; response: StudyOptions };
   "study.active": { kind: "query"; request: Empty; response: ActiveSession };
   "study.answer": { kind: "command"; request: AnswerCard; response: SessionDto };
   "study.hint": { kind: "command"; request: HintRequest; response: HintDto };
@@ -573,6 +577,7 @@ export interface Methods {
   "modes.timed.expire": { kind: "command"; request: ExpireCard; response: SessionDto };
   "modes.timed.start": { kind: "command"; request: StartTimer; response: SessionDto };
   "modes.test.paper": { kind: "query"; request: TestPaperRequest; response: TestPaperDto };
+  "modes.test.save_draft": { kind: "command"; request: SaveTestDraft; response: TestPaperDto };
   "modes.test.submit": { kind: "command"; request: SubmitTest; response: TestPaperDto };
   "modes.match.start": { kind: "command"; request: MatchRef; response: MatchRoundDto };
   "modes.match.pick": { kind: "command"; request: MatchPick; response: MatchPickResult };
@@ -734,6 +739,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "attributes.values.set": "command",
   "study.start": "command",
   "study.session": "query",
+  "study.options": "query",
   "study.active": "query",
   "study.answer": "command",
   "study.hint": "command",
@@ -874,6 +880,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "modes.timed.expire": "command",
   "modes.timed.start": "command",
   "modes.test.paper": "query",
+  "modes.test.save_draft": "command",
   "modes.test.submit": "command",
   "modes.match.start": "command",
   "modes.match.pick": "command",

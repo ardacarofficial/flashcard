@@ -362,6 +362,22 @@ pub struct TestPaperDto {
     pub answers: Option<Vec<TestAnswerDto>>,
     /// Result (after submission).
     pub result: Option<TestResultDto>,
+    /// v1.3: the answers saved so far with `modes.test.save_draft` while the paper is open
+    /// (`null` after submission; may be absent from clients/mocks written before v1.3).
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub draft: Option<Vec<TestAnswerDto>>,
+}
+
+/// `modes.test.save_draft` (v1.3): keeps the answers of an unfinished paper so the test can
+/// be continued later (`study.options.resumable`). Replaces the saved draft.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SaveTestDraft {
+    /// Session (kind `test`, not submitted).
+    pub session_id: SessionId,
+    /// Answers so far (questions not listed are blank).
+    pub answers: Vec<TestAnswerDto>,
 }
 
 /// An answer to one question; set the field matching the question type (none = blank).

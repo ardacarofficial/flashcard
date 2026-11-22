@@ -75,6 +75,19 @@ impl<M: Mode> StudyRead for SqliteTx<'_, M> {
         )
     }
 
+    fn open_sessions(&self) -> StorageResult<Vec<SessionRecord>> {
+        all(
+            self.conn(),
+            SESSIONS,
+            &format!(
+                "SELECT {SESSION_COLS} FROM sessions WHERE ended_at IS NULL
+                 ORDER BY started_at DESC, id DESC"
+            ),
+            [],
+            session_row,
+        )
+    }
+
     fn study_cards(&self, filter: &StudyCardFilter) -> StorageResult<Vec<Card>> {
         let states = filter
             .states
@@ -233,6 +246,19 @@ impl<M: Mode> StudyRead for SqliteTx<'_, M> {
                  ORDER BY created_at, id"
             ),
             params![since.0, mode],
+            review_row,
+        )
+    }
+
+    fn review_logs_since_any(&self, since: Timestamp) -> StorageResult<Vec<ReviewLogRecord>> {
+        all(
+            self.conn(),
+            REVIEWS,
+            &format!(
+                "SELECT {REVIEW_COLS} FROM review_log WHERE created_at >= ?1
+                 ORDER BY created_at, id"
+            ),
+            params![since.0],
             review_row,
         )
     }

@@ -4,6 +4,8 @@
 //! with its answer key in the session. `modes.test.paper` returns it (printable; the key only
 //! after submission or on request), `modes.test.submit` grades it, logs one review per question
 //! (`review_log.mode = test`) and never changes the schedule. Submission is one undo step.
+//! v1.3: `modes.test.save_draft` keeps the answers of an open paper, so an unfinished test is
+//! continued from `study.options.resumable` with its answers.
 
 use super::{session_mode, setting};
 use crate::error::AppResult;
@@ -13,7 +15,7 @@ use crate::modules::study::ext::*;
 use crate::registry::Registry;
 use crate::support::summary;
 use fc_api::v1::cardtypes::CardInteraction;
-use fc_api::v1::methods::{ModesTestPaper, ModesTestSubmit, StudyRestore};
+use fc_api::v1::methods::{ModesTestPaper, ModesTestSaveDraft, ModesTestSubmit, StudyRestore};
 use fc_api::v1::modes::*;
 use fc_api::v1::study::{RestoreStudy, StartSession, StudyKind};
 use fc_api::{ApiError, ErrorCode};
@@ -63,6 +65,7 @@ pub fn register(reg: &mut Registry) {
     reg.module(descriptor());
     reg.query::<ModesTestPaper>(paper);
     reg.command::<ModesTestSubmit>(submit);
+    reg.command::<ModesTestSaveDraft>(save_draft);
 }
 
 fn kind_of(k: TestQuestionKind) -> QuestionKind {
@@ -143,6 +146,7 @@ pub(super) fn init(
         test: Some(TestState {
             questions,
             graded: None,
+            draft: Vec::new(),
         }),
         ..ModesState::default()
     });
@@ -187,6 +191,45 @@ fn question_dto(i: usize, q: &Question, key: bool) -> TestQuestionDto {
     }
 }
 
+/// Answers in paper order as DTOs (blank ones included: index order is the paper's).
+fn answers_dto(responses: &[Response]) -> Vec<TestAnswerDto> {
+    responses
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut a = TestAnswerDto {
+                index: index(i),
+                ..TestAnswerDto::default()
+            };
+            match r {
+                Response::Choice(c) => a.choice = Some(*c),
+                Response::Text(t) => a.text = Some(t.clone()),
+                Response::Truth(b) => a.truth = Some(*b),
+                Response::Blank => {}
+            }
+            a
+        })
+        .collect()
+}
+
+/// v1.3 resume: `(answered, remaining)` questions of an unsubmitted paper (answered = not
+/// blank on the saved draft); `None` once submitted (nothing to continue).
+pub(crate) fn progress(t: &TestState) -> Option<(u32, u32)> {
+    if t.graded.is_some() {
+        return None;
+    }
+    let answered = t.draft.iter().filter(|r| !is_blank(r)).count();
+    Some((index(answered), index(t.questions.len().saturating_sub(answered))))
+}
+
+fn is_blank(r: &Response) -> bool {
+    match r {
+        Response::Blank => true,
+        Response::Text(t) => t.trim().is_empty(),
+        Response::Choice(_) | Response::Truth(_) => false,
+    }
+}
+
 fn paper_dto(s: &Session, t: &TestState, with_key: bool) -> TestPaperDto {
     let key = with_key || t.graded.is_some();
     TestPaperDto {
@@ -197,25 +240,11 @@ fn paper_dto(s: &Session, t: &TestState, with_key: bool) -> TestPaperDto {
             .enumerate()
             .map(|(i, q)| question_dto(i, q, key))
             .collect(),
-        answers: t.graded.as_ref().map(|g| {
-            g.responses
-                .iter()
-                .enumerate()
-                .map(|(i, r)| {
-                    let mut a = TestAnswerDto {
-                        index: index(i),
-                        ..TestAnswerDto::default()
-                    };
-                    match r {
-                        Response::Choice(c) => a.choice = Some(*c),
-                        Response::Text(t) => a.text = Some(t.clone()),
-                        Response::Truth(b) => a.truth = Some(*b),
-                        Response::Blank => {}
-                    }
-                    a
-                })
-                .collect()
-        }),
+        answers: t.graded.as_ref().map(|g| answers_dto(&g.responses)),
+        draft: match t.graded {
+            Some(_) => None,
+            None => Some(answers_dto(&t.draft)),
+        },
         result: t.graded.as_ref().map(|g| {
             let count = |v: Verdict| index(g.verdicts.iter().filter(|x| **x == v).count());
             TestResultDto {
@@ -262,6 +291,43 @@ fn response(q: &Question, a: Option<&TestAnswerDto>) -> Response {
         QuestionKind::Written => a.text.clone().map(Response::Text),
     };
     r.unwrap_or(Response::Blank)
+}
+
+/// `modes.test.save_draft` (v1.3): keeps the answers of an open paper. Session bookkeeping
+/// like `study.hint` (no undo step: the answers count only when the paper is submitted).
+fn save_draft(req: SaveTestDraft, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<TestPaperDto>> {
+    let mut session = Session::load(ctx.reads(), ctx.registry, req.session_id)?;
+    session.require_open()?;
+    let t = test_state(&session)?;
+    if t.graded.is_some() {
+        return Err(ApiError::new(ErrorCode::ConflictTestSubmitted, "the test was submitted already")
+            .with_detail("id", session.record.id.to_string())
+            .into());
+    }
+    if let Some(a) = req.answers.iter().find(|a| a.index as usize >= t.questions.len()) {
+        return Err(crate::support::invalid(format!(
+            "answer index {} is outside the paper ({} questions)",
+            a.index,
+            t.questions.len()
+        )));
+    }
+    let draft: Vec<Response> = t
+        .questions
+        .iter()
+        .enumerate()
+        .map(|(i, q)| response(q, req.answers.iter().find(|a| a.index as usize == i)))
+        .collect();
+    if let Some(t) = session.state.modes.as_mut().and_then(|m| m.test.as_mut()) {
+        t.draft = draft;
+    }
+    session.save(ctx.tx)?;
+    let t = test_state(&session)?;
+    Ok(CommandOutcome {
+        response: paper_dto(&session, t, false),
+        inverse: Vec::new(),
+        summary: summary::<ModesTestSaveDraft>(),
+        events: Vec::new(),
+    })
 }
 
 fn submit(req: SubmitTest, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<TestPaperDto>> {

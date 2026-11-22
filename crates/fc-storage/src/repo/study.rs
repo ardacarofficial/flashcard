@@ -135,6 +135,8 @@ pub trait StudyRead {
     fn get_session(&self, id: SessionId) -> StorageResult<Option<SessionRecord>>;
     /// Most recently started open session.
     fn latest_open_session(&self) -> StorageResult<Option<SessionRecord>>;
+    /// Every open session, most recently started first (v1.3: one may be open per kind).
+    fn open_sessions(&self) -> StorageResult<Vec<SessionRecord>>;
     /// Candidate cards (ordered by creation time, id).
     fn study_cards(&self, filter: &StudyCardFilter) -> StorageResult<Vec<Card>>;
     /// Review log entry by id.
@@ -144,6 +146,9 @@ pub trait StudyRead {
     /// Reviews written at or after `since` with `mode`, oldest first (daily limits).
     fn review_logs_since(&self, since: Timestamp, mode: &str)
         -> StorageResult<Vec<ReviewLogRecord>>;
+    /// Reviews written at or after `since`, any mode, oldest first (v1.3: what was studied
+    /// during the study day).
+    fn review_logs_since_any(&self, since: Timestamp) -> StorageResult<Vec<ReviewLogRecord>>;
     /// The queue rows of a session, in `seq` order.
     fn session_queue(&self, session: SessionId) -> StorageResult<Vec<SessionQueueRow>>;
 }

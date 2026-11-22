@@ -1,4 +1,5 @@
 import { err, menu, module, settingsPage, type MockEnv, type MockFeature } from '$lib/api/mock/env';
+import { deckCounts } from '$lib/api/mock/seed';
 import type { DeckCounts, DeckDto, DeckSummary, Mastery, NoteTerm } from '$lib/api/types';
 
 export default {
@@ -10,13 +11,14 @@ export default {
     const roots = tree(null);
     const flat = (ns: typeof roots): typeof roots => ns.flatMap((n) => [n, ...flat(n.children)]);
     const nodes = flat(roots);
-    const today: DeckCounts = { new: 0, learning: 0, due: 0, total: 0 };
+    const sum = { new: 0, learning: 0, due: 0, total: 0 };
     for (const r of roots) {
-      today.new += r.counts.new;
-      today.learning += r.counts.learning;
-      today.due += r.counts.due;
-      today.total += r.counts.total;
+      sum.new += r.counts.new;
+      sum.learning += r.counts.learning;
+      sum.due += r.counts.due;
+      sum.total += r.counts.total;
     }
+    const today: DeckCounts = deckCounts(sum);
     const items: DeckSummary[] = nodes.map((n, i) => {
       const total = n.counts.total;
       const mastered = Math.round(total * [0.62, 0.35, 0.48, 0.8, 0.22, 0.4, 0.55, 0.3, 0.05, 0.7][i % 10]!);

@@ -31,17 +31,31 @@ pub struct DeckDto {
     pub updated_at: Timestamp,
 }
 
-/// Card counts shown next to a deck (including sub-decks).
+/// Card counts shown next to a deck.
+///
+/// v1.3: the "today" numbers are today's study queue of the deck — exactly what
+/// `study.start { kind: normal }` on it would serve now (study day, sub-deck setting, daily
+/// and per-session limits, sibling burying, empty cards; `study.options` scope `due`). They
+/// are not additive over sub-decks (limits apply per deck). `new`/`learning`/`due` carry the
+/// same values as `today_new`/`today_learning`/`today_due` (kept for older clients).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 pub struct DeckCounts {
-    /// New cards available today.
+    /// New cards in today's queue (= `today_new`).
     pub new: u32,
-    /// Cards in (re)learning due today.
+    /// (Re)learning cards in today's queue (= `today_learning`).
     pub learning: u32,
-    /// Review cards due today.
+    /// Review cards in today's queue (= `today_due`).
     pub due: u32,
-    /// All cards (not deleted).
+    /// All cards of the deck and its sub-decks (not deleted; inventory, not today).
     pub total: u32,
+    /// Due reviews in today's queue.
+    pub today_due: u32,
+    /// (Re)learning cards in today's queue (some may still be waiting for their step).
+    pub today_learning: u32,
+    /// New cards in today's queue (within the daily and per-session limits).
+    pub today_new: u32,
+    /// `today_due + today_learning + today_new`: the number a session started now serves.
+    pub today_total: u32,
 }
 
 /// A node of the deck tree.
@@ -188,7 +202,9 @@ pub struct DeckSummary {
 /// Response of `decks.summaries`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct DeckSummaries {
-    /// Today's counts of the whole collection (the sum of the top-level decks of `decks.tree`).
+    /// Today's counts of the whole collection: the queue of a whole-collection session
+    /// (`study.start { deck_id: null }`; v1.3 — not the sum of the top-level decks, limits
+    /// apply per queue). `total` = every live card.
     pub today: DeckCounts,
     /// Every live deck, in tree order.
     pub decks: Vec<DeckSummary>,

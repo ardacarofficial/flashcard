@@ -4,6 +4,7 @@
       "start": "Choose what to study",
       "session": "Study session",
       "active": "Open study session",
+      "options": "Study options for a deck",
       "answer": "Rate the card",
       "hint": "Show a hint",
       "check_answer": "Check an answer",

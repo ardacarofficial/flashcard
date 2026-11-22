@@ -4,6 +4,7 @@
   "oplog.summary.modes.timed.expire": "Kartın süresi doldu",
   "oplog.summary.modes.timed.start": "Kart sayacı başlatıldı",
   "oplog.summary.modes.test.submit": "Test teslim edildi: %{percent}",
+  "oplog.summary.modes.test.save_draft": "Test cevapları kaydedildi",
   "oplog.summary.modes.inline.create": "Metinden {count} kart oluşturuldu",
   "oplog.summary.modes.match.start": "Eşleştirme turu dağıtıldı",
   "oplog.summary.modes.match.pick": "Eşleştirme çifti seçildi",

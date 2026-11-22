@@ -246,7 +246,8 @@
     },
     "conflict": {
       "session_ended": "Bu çalışma oturumu bitti.",
-      "not_current_card": "Bu kart artık oturumda değil."
+      "not_current_card": "Bu kart artık oturumda değil.",
+      "nothing_to_study": "Şu an burada çalışılacak kart yok."
     },
     "validation": {
       "scheduler_params": "Geçersiz zamanlayıcı ayarları."
