@@ -164,11 +164,13 @@ import type { ListReadingItems } from "./ListReadingItems";
 import type { ListRuns } from "./ListRuns";
 import type { ListTrash } from "./ListTrash";
 import type { ListVoices } from "./ListVoices";
+import type { ListWords } from "./ListWords";
 import type { LocalApiMethodList } from "./LocalApiMethodList";
 import type { LocaleRequest } from "./LocaleRequest";
 import type { LockState } from "./LockState";
 import type { LogExportDto } from "./LogExportDto";
 import type { LookupWord } from "./LookupWord";
+import type { LookupWords } from "./LookupWords";
 import type { MaintenanceStatus } from "./MaintenanceStatus";
 import type { MakeReadingCard } from "./MakeReadingCard";
 import type { MarkWords } from "./MarkWords";
@@ -369,7 +371,10 @@ import type { UpdateSavedQuery } from "./UpdateSavedQuery";
 import type { UpdateStatus } from "./UpdateStatus";
 import type { VoiceList } from "./VoiceList";
 import type { WordInfo } from "./WordInfo";
+import type { WordList } from "./WordList";
 import type { WordMarksChanged } from "./WordMarksChanged";
+import type { WordStats } from "./WordStats";
+import type { WordsLookupResult } from "./WordsLookupResult";
 import type { WorkloadEstimate } from "./WorkloadEstimate";
 import type { WorkloadForecast } from "./WorkloadForecast";
 import type { WorkloadRequest } from "./WorkloadRequest";
@@ -668,6 +673,10 @@ export interface Methods {
   "themes.current": { kind: "query"; request: Empty; response: ThemeDto };
   "themes.presets": { kind: "query"; request: Empty; response: ThemePresetList };
   "themes.set": { kind: "command"; request: SetTheme; response: ThemeDto };
+  "words.lookup": { kind: "query"; request: LookupWords; response: WordsLookupResult };
+  "words.list": { kind: "query"; request: ListWords; response: WordList };
+  "words.stats": { kind: "query"; request: Empty; response: WordStats };
+  "words.index.rebuild": { kind: "command"; request: Empty; response: JobDto };
 }
 
 /** Unqualified method name. */
@@ -972,4 +981,8 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "themes.current": "query",
   "themes.presets": "query",
   "themes.set": "command",
+  "words.lookup": "query",
+  "words.list": "query",
+  "words.stats": "query",
+  "words.index.rebuild": "command",
 };

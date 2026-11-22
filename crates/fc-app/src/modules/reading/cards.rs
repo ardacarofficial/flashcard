@@ -96,7 +96,7 @@ fn make(req: MakeReadingCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutc
     };
     // Where it came from: "Title · 1:02" (subtitle cue time).
     let mut source = String::new();
-    // The language the word was read in (v1.4 word index): the item's, else reading mode's.
+    // The language the word was read in (v1.4 word index).
     let mut language = None;
     if let Some(id) = req.item_id {
         let item = require_item(ctx.reads(), id)?;
@@ -155,13 +155,13 @@ fn make(req: MakeReadingCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutc
         .map(|(k, v)| (k.to_owned(), v))
         .collect();
     let note = create_note(ctx, notetype, req.deck_id, fields, req.tags)?;
-    let language = match language {
-        Some(l) => l,
-        None => super::language_or_default(ctx.reads(), "")?,
-    };
-    // Derived data like the index itself: an undone note is simply not indexed.
-    ctx.tx
-        .set_word_note_language(note.id, &fc_core::words::index_language(&language))?;
+    // Made from a text: the word index (v1.4) knows its language. Without a text the deck's
+    // `words.language` decides (never guessed). Derived data like the index itself: an undone
+    // note is simply not indexed.
+    if let Some(language) = language {
+        ctx.tx
+            .set_word_note_language(note.id, &fc_core::words::index_language(&language))?;
+    }
     Ok(CommandOutcome {
         response: note,
         // Undone through the nested `notes.create` entry (same batch).

@@ -32,6 +32,9 @@ const EXCLUDED: &[&str] = &[
     "stats_day_cache",
     "stats_cache_meta",
     "review_log_generation",
+    // v1.4 word index queues: transient (the triggers refill them as a restore writes rows).
+    "word_index_dirty",
+    "word_index_dirty_keys",
 ];
 
 fn corrupt(message: impl ToString) -> StorageError {

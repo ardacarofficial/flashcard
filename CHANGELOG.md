@@ -4,6 +4,10 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased]
 
+## Unreleased (v1.4)
+
+- A3 — ortak kelime dizini: okuma modu, Subtitle `known-words` ve yeni `words.lookup/list/stats/index.rebuild` aynı kalıcı dizini okur (migration `1410_word_index`); çekim birleşir, türetme birleşmez; elle işaret kazanır, "bilinen" eşiği `words.known_interval_days`; deste dili `words.language`, dili bilinmeyen notlar raporlanır (docs/03 §4.2).
+
 ## [1.3.0] — v1.3 "kullanılır": akışlar, kelime kartları, gerçek çekirdekte doğrulama
 
 Workspace sürümü `1.3.0`. Proje sahibi v1.2'yi Windows'ta denedi: "Daha güzel ama kullanamıyorum." v1.2 sahte bir backend'e karşı ekran görüntüleriyle doğrulanmıştı; kullanılamaz akışlar böyle geçti. v1.3 yeni özellik için özellik eklemez: var olanı **kullanılır, öngörülebilir ve kendini anlatan** hâle getirir. Tema aynı (docs/11 §4); düzenleyici fikir artık akışlar (docs/11 §1). Hiçbir özellik, ayar ya da kısayol kaldırılmadı; taşınanlar ulaşılabilir. Migration'lar `1300_vocabulary_roles` ve `1301_subtitle_word_front` (v1.3 aralığı 1300–1399).

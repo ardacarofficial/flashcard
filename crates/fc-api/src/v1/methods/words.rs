@@ -13,6 +13,7 @@ methods! {
     WordsStats = "words.stats", Query, "words", "reading:read", Public, undo: false, Empty => WordStats;
     /// Rebuilds the whole index in a background job (`words.index.rebuild`).
     WordsIndexRebuild = "words.index.rebuild", Command, "words", "reading:write", Public, undo: false, Empty => JobDto;
-    /// Internal: empties the index and builds it again in one transaction (the job's step).
-    WordsIndexRebuildNow = "words.index.rebuild_now", Command, "words", "reading:write", Internal, undo: false, Empty => WordIndexRebuilt;
+    /// Empties the index and builds it again in one transaction (the job's step; derived
+    /// data, so nothing to undo).
+    WordsIndexRebuildNow = "words.index.rebuild_now", Command, "words", "reading:write", Public, undo: false, Empty => WordIndexRebuilt;
 }

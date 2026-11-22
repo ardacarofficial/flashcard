@@ -1,4 +1,4 @@
-//! The word index (v1.4, docs/03 §5.2): the pure rules behind "which words does he know".
+//! The word index (v1.4, docs/03 §4.2): the pure rules behind "which words does he know".
 //!
 //! A word is keyed by **(language, key)**: the language is a primary subtag (`en`, never
 //! `en-GB`, see [`index_language`]) and the key is the lemma of a word or the lemmas of a

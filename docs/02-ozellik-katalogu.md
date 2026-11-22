@@ -429,6 +429,7 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 - Kelimeye tıklayınca: anlam (sözlük/çeviri/AI), "Kart yap" (cümle bağlamıyla birlikte), "Biliyorum" işaretle.
 - Kelime **kökü / ailesi** desteği (run/running/ran): dil bazında lemmatizasyon sağlayıcısı (takılabilir).
 - Metindeki bilinen kelime yüzdesi ("Bu metnin %87'sini biliyorsun").
+- `[v1.4]` **Ortak kelime dizini:** renkler, yüzde ve Subtitle eklentisinin bilinen kelimeleri aynı kalıcı dizinden gelir; elle, Anki'den, Subtitle'dan ya da okumadan gelen her `term` notu sayılır. Elle işaret kartı yener; "bilinen" eşiği ayardır (`words.known_interval_days`, 21 gün). Destenin dili `words.language` ile verilir; dili bilinmeyen notlar raporlanır. API: `words.lookup` (toplu), `words.list`, `words.stats`, `words.index.rebuild` (docs/03 §4.2).
 
 ## 25. 🎬 Altyazıdan kart ve cümle madenciliği
 

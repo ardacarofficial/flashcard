@@ -257,14 +257,14 @@ impl WordIndexWrite for SqliteTx<'_, WriteMode> {
         let notes = all(
             self.conn(),
             "word_index_dirty",
-            "SELECT note_id FROM word_index_dirty ORDER BY note_id",
+            "SELECT DISTINCT note_id FROM word_index_dirty ORDER BY note_id",
             [],
             |r| id(r, 0),
         )?;
         let keys = all(
             self.conn(),
             "word_index_dirty_keys",
-            "SELECT language, key FROM word_index_dirty_keys ORDER BY language, key",
+            "SELECT DISTINCT language, key FROM word_index_dirty_keys ORDER BY language, key",
             [],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )?;
@@ -291,8 +291,10 @@ impl WordIndexWrite for SqliteTx<'_, WriteMode> {
         self.conn().execute_batch(
             "DELETE FROM word_index;
              DELETE FROM word_index_notes;
-             INSERT OR IGNORE INTO word_index_dirty (note_id) SELECT id FROM notes;
-             INSERT OR IGNORE INTO word_index_dirty_keys (language, key)
+             DELETE FROM word_index_dirty;
+             DELETE FROM word_index_dirty_keys;
+             INSERT INTO word_index_dirty (note_id) SELECT id FROM notes;
+             INSERT INTO word_index_dirty_keys (language, key)
                  SELECT language, lemma FROM word_marks;",
         )?;
         Ok(())

@@ -1,4 +1,4 @@
--- 1410_word_index (v1.4 A3, docs/03 §5.2): one persisted word index, the single answer to
+-- 1410_word_index (v1.4 A3, docs/03 §4.2): one persisted word index, the single answer to
 -- "which words does he know" for reading mode, the Subtitle extension and the `words.*` API.
 --
 -- * `word_index_notes`: what each note contributes — one row per live note whose note type
@@ -19,8 +19,9 @@
 --   at the end of every write transaction (`fc_app::modules::words::index::drain`), so the
 --   index is updated by every command — undo and redo included — and never by hand.
 --
--- The triggers insert with `WHERE NOT EXISTS`, never `OR IGNORE`: an outer statement's
--- conflict clause (an upsert's) would override a trigger's own.
+-- The queues have no unique key (the drain reads them DISTINCT): a whole-table copy (backup
+-- restore) may add rows the triggers already queued. The triggers skip queued entries with
+-- `WHERE NOT EXISTS` (never `OR IGNORE`: an outer upsert's conflict clause would override it).
 --
 -- The migration marks every existing note and mark dirty; the app builds the index when it
 -- opens the collection.
@@ -55,14 +56,15 @@ CREATE TABLE word_note_language (
 ) STRICT, WITHOUT ROWID;
 
 CREATE TABLE word_index_dirty (
-    note_id TEXT PRIMARY KEY NOT NULL
-) STRICT, WITHOUT ROWID;
+    note_id TEXT NOT NULL
+) STRICT;
+CREATE INDEX word_index_dirty_note ON word_index_dirty (note_id);
 
 CREATE TABLE word_index_dirty_keys (
     language TEXT NOT NULL,
-    key      TEXT NOT NULL,
-    PRIMARY KEY (language, key)
-) STRICT, WITHOUT ROWID;
+    key      TEXT NOT NULL
+) STRICT;
+CREATE INDEX word_index_dirty_keys_key ON word_index_dirty_keys (language, key);
 
 -- notes
 CREATE TRIGGER word_index_notes_ins AFTER INSERT ON notes BEGIN
@@ -174,5 +176,5 @@ WHEN OLD.key = 'words.language' BEGIN
 END;
 
 -- build the index of an existing collection on first open
-INSERT OR IGNORE INTO word_index_dirty (note_id) SELECT id FROM notes;
-INSERT OR IGNORE INTO word_index_dirty_keys (language, key) SELECT language, lemma FROM word_marks;
+INSERT INTO word_index_dirty (note_id) SELECT id FROM notes;
+INSERT INTO word_index_dirty_keys (language, key) SELECT language, lemma FROM word_marks;

@@ -27,15 +27,27 @@ use std::sync::Arc;
 
 type Factory = dyn Fn() -> Arc<dyn Store>;
 
+/// A deck whose cards are English words (v1.4 word index: `words.language`).
 fn deck(t: &TestApp, path: &str) -> DeckId {
-    t.ok::<DecksCreate>(CreateDeck {
-        path: path.into(),
-        parent_id: None,
-        description: None,
-        icon: None,
-        color: None,
-    })
-    .id
+    let id = t
+        .ok::<DecksCreate>(CreateDeck {
+            path: path.into(),
+            parent_id: None,
+            description: None,
+            icon: None,
+            color: None,
+        })
+        .id;
+    deck_language(t, id, "en");
+    id
+}
+
+fn deck_language(t: &TestApp, d: DeckId, lang: &str) {
+    t.ok::<SettingsSet>(SetSetting {
+        scope: SettingScope::Deck(d),
+        key: crate::modules::words::LANGUAGE.into(),
+        value: serde_json::json!(lang),
+    });
 }
 
 fn word_card(t: &TestApp, deck_id: DeckId, word: &str, meaning: &str) -> NoteDto {
@@ -222,13 +234,20 @@ fn word_colours_follow_fsrs_maturity(f: &Factory) {
     assert_eq!(info.cards[0].word, "to run");
     assert_eq!(info.cards[0].meaning.as_deref(), Some("koşmak"));
 
-    // Marks only matter without cards.
+    // v1.4: a manual mark wins over the cards (the word index keeps both as evidence).
     assert_eq!(mark(&t, "en", &["run", "cat", "john"], Some(WordMark::Ignored)), 3);
     let a = analyze(&t, text, "en");
-    assert_eq!(status_of(&a, "ran"), WordStatus::Known, "cards win over marks");
+    assert_eq!(status_of(&a, "ran"), WordStatus::Ignored, "a mark wins over the cards");
     assert_eq!(status_of(&a, "cats"), WordStatus::Ignored);
     assert_eq!(status_of(&a, "John"), WordStatus::Ignored);
-    // 3 run-forms known out of 11 countable words (13 words − 2 ignored).
+    // The 3 run-forms are ignored too: nothing known out of 8 countable words (13 − 5).
+    assert_eq!(a.summary.running.known, 0);
+    assert_eq!(a.summary.running.ignored, 5);
+    assert!(a.summary.known_pct.abs() < 1e-9);
+    // Cleared, the cards speak again: 3 run-forms known out of 11 countable words.
+    assert_eq!(mark(&t, "en", &["run"], None), 1);
+    let a = analyze(&t, text, "en");
+    assert_eq!(status_of(&a, "ran"), WordStatus::Known);
     assert_eq!(a.summary.running.known, 3);
     assert_eq!(a.summary.running.ignored, 2);
     assert!((a.summary.known_pct - 27.3).abs() < 1e-9);
@@ -252,12 +271,13 @@ fn word_colours_follow_fsrs_maturity(f: &Factory) {
         key: super::VOCABULARY_QUERY.into(),
         value: serde_json::json!("deck:Nothing"),
     });
-    assert_eq!(status_of(&analyze(&t, text, "en"), "ran"), WordStatus::Ignored);
+    assert_eq!(status_of(&analyze(&t, text, "en"), "ran"), WordStatus::New);
 }
 
 fn turkish_words_and_marks_undo(f: &Factory) {
     let t = TestApp::new(f());
     let d = deck(&t, "Türkçe");
+    deck_language(&t, d, "tr");
     let text = "Kalemlerimizden birini aldık. Kitapları masaya koyduk.";
     let a = analyze(&t, text, "tr-TR");
     assert_eq!(a.lemmatizer, "builtin.tr");

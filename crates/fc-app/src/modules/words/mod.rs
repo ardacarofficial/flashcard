@@ -1,4 +1,4 @@
-//! `words` module (v1.4, docs/02 §24, docs/03 §5.2): the word index — one persisted answer to
+//! `words` module (v1.4, docs/02 §24, docs/03 §4.2): the word index — one persisted answer to
 //! "which words does he know", read by reading mode (`reading.analyze`,
 //! `reading.words.lookup`), the Subtitle extension (`GET /subtitle/v1/known-words`) and the
 //! `words.*` API.

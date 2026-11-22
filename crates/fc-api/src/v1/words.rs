@@ -1,4 +1,4 @@
-//! The word index (v1.4, docs/03 §5.2): "which words does he know", one answer for reading
+//! The word index (v1.4, docs/03 §4.2): "which words does he know", one answer for reading
 //! mode, the Subtitle extension and scripts. A word is a (language, key) pair: the language
 //! is a primary subtag (`en`) and the key a lemma or a short expression (`go`, `pick up`).
 //! Its evidence is kept apart (manual mark; notes, cards and the longest interval) and its
