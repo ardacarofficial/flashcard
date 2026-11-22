@@ -63,6 +63,7 @@ suite!(
     hook_budget_is_charged_to_the_initiator,
     bulk_edit_cannot_switch_one_plugin_off_for_another,
     looping_hooks_are_still_switched_off,
+    looping_hooks_hit_the_deadline,
     faults_in_another_plugins_chain_are_not_counted,
     oplog_cannot_be_read_by_plugins,
     results_are_filtered_by_read_permissions,
@@ -1578,16 +1579,8 @@ fn bulk_edit_cannot_switch_one_plugin_off_for_another(f: Factory) {
     assert!(skipped_notices(&t).is_empty());
 }
 
-/// A plugin whose own hook code loops is still switched off (its own fault, each action's
-/// deadline counted, `plugins.max_failures` in a row); the plugin next to it is not.
-fn looping_hooks_are_still_switched_off(f: Factory) {
-    const SPIN: &str = "com.test.spin";
-    const CALM: &str = "com.test.calm";
-    let t = TestApp::new(f());
-    let dir = tempfile::tempdir().unwrap();
-    set_app_setting(&t, SETTING_TIMEOUT, json!(200));
-    let ids = notes(&t, "Spin", 20);
-    let spin = r#"(module
+/// A hook whose code never returns (no host calls: nothing but the sandbox's budgets can end it).
+const SPIN_WAT: &str = r#"(module
   (memory (export "memory") 1)
   (global $heap (mut i32) (i32.const 1024))
   (func (export "fc_abi_version") (result i32) (i32.const 1))
@@ -1600,19 +1593,66 @@ fn looping_hooks_are_still_switched_off(f: Factory) {
     (loop $l (br $l))
     unreachable)
 )"#;
+
+/// A plugin whose own hook code loops is still switched off (its own fault, one per action,
+/// `plugins.max_failures` in a row); the plugin next to it is not.
+///
+/// Deterministic on a loaded machine (v1.4): the loop is ended by the **fuel** budget (a
+/// count of executed instructions, the same under any load), and the wall-clock limits are
+/// set to their maximum so they never decide. Before, a 200 ms deadline ended the loop and
+/// applied to the well-behaved neighbour too: under load *its* hooks timed out (20 + 2 runs
+/// instead of 40). The deadline path itself is [`looping_hooks_hit_the_deadline`].
+fn looping_hooks_are_still_switched_off(f: Factory) {
+    const SPIN: &str = "com.test.spin";
+    const CALM: &str = "com.test.calm";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    set_app_setting(&t, SETTING_FUEL, json!(5));
+    set_app_setting(&t, SETTING_TIMEOUT, json!(60_000));
+    set_app_setting(&t, SETTING_HOOK_TIME, json!(600_000));
+    let ids = notes(&t, "Spin", 20);
     let perms = ["hooks:event:note_updated"];
-    install_wat(&t, &dir, SPIN, spin, &perms, &[], &perms);
+    install_wat(&t, &dir, SPIN, SPIN_WAT, &perms, &[], &perms);
     install_counter(&t, &dir, CALM, "note_updated");
     for round in 1..=3u32 {
-        let start = std::time::Instant::now();
         tag_all(&t, &ids, &format!("r{round}"));
-        assert!(start.elapsed() < std::time::Duration::from_secs(10), "round {round}");
-        assert_eq!(plugin(&t, SPIN).failures, round, "one fault per action, then skipped");
-        assert_eq!(log_lines(&t, CALM, "ran"), 20 * round as usize);
+        let r = round as usize;
+        assert_eq!(plugin(&t, SPIN).failures, round, "one fault per action");
+        // Every run of the spinning hook faults and logs it: one run per action, the other
+        // 19 events of the action skip it.
+        assert_eq!(log_lines(&t, SPIN, "OUT_OF_FUEL"), r, "round {round}: then skipped");
+        assert_eq!(log_lines(&t, SPIN, "TIMEOUT"), 0, "the wall clock decided nothing");
+        assert_eq!(log_lines(&t, CALM, "ran"), 20 * r, "round {round}");
     }
     assert_eq!(plugin(&t, SPIN).status, PluginStatus::AutoDisabled);
     let calm = plugin(&t, CALM);
     assert_eq!((calm.status, calm.failures), (PluginStatus::Active, 0));
+    // Switched off: the next action runs only the neighbour.
+    tag_all(&t, &ids, "r4");
+    assert_eq!(log_lines(&t, SPIN, "OUT_OF_FUEL"), 3);
+    assert_eq!(log_lines(&t, CALM, "ran"), 80);
+}
+
+/// The same loop ended by the **deadline** (`plugins.timeout_ms`; fuel at its default, which
+/// a loop cannot burn in 200 ms on any machine): a timeout is the plugin's own fault, counted
+/// once per action, and switches it off. Its outcome does not depend on load (the loop never
+/// returns, so it always meets the deadline); no well-behaved plugin shares the short
+/// deadline here, because whether *its* hooks finish within 200 ms would.
+fn looping_hooks_hit_the_deadline(f: Factory) {
+    const SPIN: &str = "com.test.spin";
+    let t = TestApp::new(f());
+    let dir = tempfile::tempdir().unwrap();
+    set_app_setting(&t, SETTING_TIMEOUT, json!(200));
+    let ids = notes(&t, "Spin", 20);
+    let perms = ["hooks:event:note_updated"];
+    install_wat(&t, &dir, SPIN, SPIN_WAT, &perms, &[], &perms);
+    for round in 1..=3u32 {
+        tag_all(&t, &ids, &format!("r{round}"));
+        assert_eq!(plugin(&t, SPIN).failures, round, "one fault per action");
+        assert_eq!(log_lines(&t, SPIN, "TIMEOUT"), round as usize, "then skipped");
+        assert_eq!(log_lines(&t, SPIN, "OUT_OF_FUEL"), 0);
+    }
+    assert_eq!(plugin(&t, SPIN).status, PluginStatus::AutoDisabled);
 }
 
 /// Sibling of finding 1: A cannot switch B off by feeding B's hook input it faults on. B's
