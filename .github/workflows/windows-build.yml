@@ -50,3 +50,124 @@ jobs:
           path: target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
           retention-days: 14
+
+  # PILOT, non-gating (v1.3): drives the installed app (WebView2) with tauri-driver +
+  # msedgedriver and runs three journeys (apps/desktop/e2e-windows/README.md). Runs after the
+  # installer job, so it can never stop the installer from being built and uploaded;
+  # `continue-on-error` keeps a red pilot from failing the workflow run.
+  webdriver-pilot:
+    name: WebDriver pilot (non-gating)
+    needs: installer
+    runs-on: windows-2025
+    continue-on-error: true
+    timeout-minutes: 40
+    env:
+      FC_WIN_E2E_OUT: ${{ github.workspace }}\e2e-windows-results
+    steps:
+      # Only the pilot's own folder (+ root files such as rust-toolchain.toml): no pnpm, no lockfile.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: apps/desktop/e2e-windows
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@d5e4d57b030548f435d0befec15ff413a2c60eff # 1.100.0 (= rust-toolchain.toml)
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: flashcard-windows-installer
+          path: installer
+      # Same logic as `windows-smoke` in ci.yml.
+      - name: Silent per-user install
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem installer/*-setup.exe | Select-Object -First 1
+          if (-not $setup) { throw "no NSIS installer in the artifact" }
+          Write-Host "installing $($setup.FullName)"
+          $p = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exited with $($p.ExitCode)" }
+          $dir = Join-Path $env:LOCALAPPDATA 'Flashcard'
+          $exe = Get-ChildItem $dir -Filter *.exe | Where-Object { $_.Name -notlike 'uninstall*' } | Select-Object -First 1
+          if (-not $exe) { throw "no installed app under $dir (per-user install expected)" }
+          Write-Host "installed: $($exe.FullName)"
+          "FC_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Runner, WebView2 and Edge versions
+        shell: pwsh
+        run: |
+          function Pv($key) { (Get-ItemProperty -Path $key -Name pv -ErrorAction SilentlyContinue).pv }
+          $wv2 = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $edge = '{56EB18F8-B008-4CBD-B6D2-8C97FE7E9062}'
+          $wvMachine = Pv "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$wv2"
+          $wvMachine64 = Pv "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\$wv2"
+          $wvUser = Pv "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$wv2"
+          $edgeReg = Pv "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$edge"
+          $edgeExe = Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'
+          $edgeFile = if (Test-Path $edgeExe) { (Get-Item $edgeExe).VersionInfo.ProductVersion } else { $null }
+          Write-Host "runner image:        $env:ImageOS $env:ImageVersion"
+          Write-Host "WebView2 (HKLM x86): $wvMachine"
+          Write-Host "WebView2 (HKLM):     $wvMachine64"
+          Write-Host "WebView2 (HKCU):     $wvUser"
+          Write-Host "Edge (registry):     $edgeReg"
+          Write-Host "Edge (msedge.exe):   $edgeFile"
+          Write-Host "runner msedgedriver: $env:EDGEWEBDRIVER (not used: matched to Edge, not WebView2)"
+          $v = @($wvMachine, $wvMachine64, $wvUser) | Where-Object { $_ } | Select-Object -First 1
+          if (-not $v) { $v = $edgeFile; Write-Warning "no WebView2 runtime version in the registry; falling back to Edge $v" }
+          if (-not $v) { throw "neither WebView2 nor Edge version found" }
+          "WEBVIEW2_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      # The driver must match the WebView2 runtime exactly, or session creation can hang
+      # (https://v2.tauri.app/develop/tests/webdriver/manual-setup/). Download that exact build;
+      # fall back to msedgedriver-tool (what the Tauri CI guide uses; it matches installed Edge).
+      - name: msedgedriver matching the WebView2 runtime
+        shell: pwsh
+        run: |
+          $v = $env:WEBVIEW2_VERSION
+          $dir = Join-Path $env:RUNNER_TEMP 'msedgedriver'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $zip = Join-Path $env:RUNNER_TEMP 'edgedriver_win64.zip'
+          $ok = $false
+          foreach ($host_ in 'https://msedgedriver.microsoft.com', 'https://msedgedriver.azureedge.net') {
+            try {
+              Invoke-WebRequest -Uri "$host_/$v/edgedriver_win64.zip" -OutFile $zip -UseBasicParsing
+              Expand-Archive -Path $zip -DestinationPath $dir -Force
+              $ok = $true
+              Write-Host "downloaded msedgedriver $v from $host_"
+              break
+            } catch { Write-Warning "msedgedriver $v from ${host_}: $($_.Exception.Message)" }
+          }
+          if (-not $ok) {
+            Write-Warning "falling back to msedgedriver-tool (matches the installed Edge, not WebView2)"
+            cargo install --git https://github.com/chippers/msedgedriver-tool --rev 8c4b34f51b45f5cf08013366d703de464ab871d1
+            Push-Location $dir
+            & "$env:USERPROFILE\.cargo\bin\msedgedriver-tool.exe"
+            Pop-Location
+          }
+          $driver = Get-ChildItem -Path $dir -Recurse -Filter msedgedriver.exe | Select-Object -First 1
+          if (-not $driver) { throw "no msedgedriver.exe under $dir" }
+          $out = & $driver.FullName --version
+          Write-Host "msedgedriver: $out ($($driver.FullName))"
+          if ($out -notmatch [regex]::Escape($v)) { Write-Warning "msedgedriver ($out) does not report WebView2 $v" }
+          "MSEDGEDRIVER=$($driver.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: tauri-driver
+        shell: pwsh
+        run: |
+          cargo install tauri-driver --locked
+          $td = (Get-Command tauri-driver -ErrorAction Stop).Source
+          Write-Host "tauri-driver: $(cargo install --list | Select-String '^tauri-driver') ($td)"
+          "TAURI_DRIVER=$td" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      # Zero npm dependencies: Node 22's fetch speaks WebDriver to tauri-driver on 127.0.0.1:4444.
+      - name: Journeys against the installed app
+        shell: pwsh
+        timeout-minutes: 15
+        run: node apps/desktop/e2e-windows/run.mjs --app "$env:FC_EXE" --native-driver "$env:MSEDGEDRIVER" --tauri-driver "$env:TAURI_DRIVER" --out "$env:FC_WIN_E2E_OUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: webdriver-pilot-results
+          path: ${{ env.FC_WIN_E2E_OUT }}
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Silent uninstall
+        if: always()
+        shell: pwsh
+        run: |
+          $u = Join-Path $env:LOCALAPPDATA 'Flashcard\uninstall.exe'
+          if (Test-Path $u) { Start-Process -FilePath $u -ArgumentList '/S' -Wait }

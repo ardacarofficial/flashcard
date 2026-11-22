@@ -6,7 +6,7 @@ Bu dosya, bu repoda çalışan AI ajanları için başlangıç bağlamıdır.
 
 Rust + Tauri 2 ile masaüstü flash kart uygulaması. Tüm plan `docs/` klasöründedir. **Bir işe başlamadan önce `docs/README.md` ve ilgili dokümanları oku.**
 
-- Durum: **v1.2.0: arayüz yeniden tasarlandı + Subtitle bağlantısı** — bkz. `docs/11-tasarim.md`, `docs/06-ai-ve-entegrasyonlar.md` §5.1. Bekleyen: Windows'ta elle koşu ve Subtitle eklentisinin gerçek bir tarayıcıda denenmesi.
+- Durum: **v1.3.0: "kullanılır" sürümü** (tek çalışma başlatıcısı, bir tuş = bir iş, alan rolleri, kart eklemenin tek yeri, kendini anlatan ayarlar, AI hazır sağlayıcıları) — bkz. `docs/11-tasarim.md`, `CHANGELOG.md`. Bekleyen: Windows WebDriver pilotunun CI'da ilk koşusu, Windows'ta elle koşu, Subtitle eklentisinin gerçek bir tarayıcıda denenmesi.
 - Öncelikli platform: **Windows** (macOS/Linux sonra).
 
 ## İletişim
@@ -39,6 +39,10 @@ pnpm -C apps/desktop check
 pnpm -C apps/desktop tauri dev
 pnpm -C apps/browser-extension install && pnpm -C apps/browser-extension check   # + test, build, e2e (FC_BIN=target/debug/fc)
 ```
+
+## Doğrulama
+
+Mock ekran görüntüleri (`pnpm -C apps/desktop screens`) yalnız görsel kontroldür. Bir akışın kabulü, gerçek Rust çekirdeğine dev köprüsüyle (`fc dev serve`) bağlı **yolculuklardır**: `pnpm -C apps/desktop e2e` (`apps/desktop/e2e/README.md`); yolculuk **kaydedilen sonucu** API'den geri okuyarak doğrular. Ayrıntı: `docs/11-tasarim.md` §5, `docs/07-gelistirme-sureci.md` §3.1.
 
 ## Bitti tanımı
 

@@ -2,7 +2,9 @@
 
 This guide covers everyday use of the Flashcard desktop app. The app runs on your computer, your data stays on your computer, and it sends no telemetry.
 
-Names in bold (for example **Decks**, **Study**) are the menu and button names in the app. If you use the app in Turkish, see the [Turkish guide](tr.md).
+Names in bold (for example **Library**, **Study**) are the menu and button names in the app. If you use the app in Turkish, see the [Turkish guide](tr.md).
+
+**What changed in v1.3?** For a short, friendly tour see [What's new in v1.3](v1.3-en.md).
 
 ## Contents
 
@@ -12,18 +14,20 @@ Names in bold (for example **Decks**, **Study**) are the menu and button names i
 4. [Classifications (levels, exams)](#classifications-levels-exams)
 5. [Adding cards and note types](#adding-cards-and-note-types)
 6. [Study](#study)
-7. [Query language](#query-language)
-8. [Import and export](#import-and-export)
-9. [Plugins](#plugins)
-10. [AI](#ai)
-11. [MCP](#mcp)
-12. [Browser extension](#browser-extension)
-13. [Profiles and app lock](#profiles-and-app-lock)
-14. [Reminders and tray](#reminders-and-tray)
-15. [Crash recovery and logs](#crash-recovery-and-logs)
-16. [Data folder](#data-folder)
-17. [Backup and restore](#backup-and-restore)
-18. [Troubleshooting](#troubleshooting)
+7. [Statistics and planning](#statistics-and-planning)
+8. [Query language](#query-language)
+9. [Import and export](#import-and-export)
+10. [Plugins](#plugins)
+11. [AI](#ai)
+12. [MCP](#mcp)
+13. [Browser extension](#browser-extension)
+14. [Automation](#automation)
+15. [Profiles and app lock](#profiles-and-app-lock)
+16. [Reminders and tray](#reminders-and-tray)
+17. [Crash recovery and logs](#crash-recovery-and-logs)
+18. [Data folder](#data-folder)
+19. [Backup and restore](#backup-and-restore)
+20. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -43,71 +47,82 @@ Windows is the first platform. macOS and Linux builds come later. The project's 
 
 The installer contains only the desktop app. The `fc` command-line tool is not included (see [MCP](#mcp)).
 
-**Updates.** The app contacts the update server only when you ask: **Logs & updates** → **Check for updates**. If a new version is out, press **Download** ("Downloading and verifying…"), then **Install and restart**. The app closes, installs the update without questions and starts again; your data stays. Every update is signed with the project's key; a download with a wrong signature is refused and nothing is installed. Nothing is installed without your click. To check at every start, turn on the setting `updates.check_on_start` (off by default): `Ctrl+K` → **Change a setting** → `{"scope": {"kind": "app"}, "key": "updates.check_on_start", "value": true}`. A found update then shows a "Version … is available." banner with **See update**.
+**Updates.** The app contacts the update server only when you ask: **Settings** → **Advanced** → **Logs & updates** → **Check for updates**. If a new version is out, press **Download** ("Downloading and verifying…"), then **Install and restart**. The app closes, installs the update without questions and starts again; your data stays. Every update is signed with the project's key; a download with a wrong signature is refused and nothing is installed. Nothing is installed without your click. To check at every start, turn on the setting `updates.check_on_start` (off by default): `Ctrl+K` → **Change a setting** → `{"scope": {"kind": "app"}, "key": "updates.check_on_start", "value": true}`. A found update then shows a "Version … is available." banner with **See update**.
 
 **Uninstall:** Windows *Settings* → *Apps* → Flashcard → *Uninstall*. Your data folder (see [Data folder](#data-folder)) stays unless you tick the uninstaller's box to delete the application data; that deletes all profiles, settings and logs for good.
 
 ## First run
 
-On an empty collection the app opens the first-run guide (**Welcome to Flashcard**):
+On an empty collection the app opens with **Welcome to Flashcard**: "Four short steps to get going; each one does the real thing."
 
-1. "What do you want to learn?": pick a subject (**English**, **Japanese**, **Chinese**, **Another language**, **YKS (TYT / AYT / YDT)**, **Another exam**, **School (grades 1–12)**, **General knowledge**). Each one shows the classification it sets up, for example **Classification: CEFR levels (A1–C2)**. **Next**.
-2. Check the **Deck name** and tick the **Starter decks** you want. **Set up**.
+1. **What are you learning?**: pick a subject (**English**, **Japanese**, **Chinese**, **Another language**, **YKS (TYT / AYT / YDT)**, **Another exam**, **School (grades 1–12)**, **General knowledge**). Each one shows the classification it sets up, for example **Classification: CEFR levels (A1–C2)**. Check the **Deck name** and tick any **Starter decks** you want.
+2. **Start with a ready deck** adds the ticked starter decks; **I’ll add my own words** sets up an empty deck.
 
-The guide creates a deck with that classification, a fitting note type (**Vocabulary** for languages, **Classic** otherwise), a deck options preset for languages ("Language learning", 15 new cards a day) and exams ("Exam preparation", 30 new cards a day), and the chosen starter decks. All of it is one undo step: `Ctrl+Z` removes the whole setup. **Skip** closes the guide; it does not come back. A collection that already has cards never shows it.
+The setup creates a deck with that classification, a fitting note type (**Vocabulary** for languages, **Classic** otherwise), a deck options preset for languages ("Language learning", 15 new cards a day) and exams ("Exam preparation", 30 new cards a day), and the chosen starter decks. All of it is one undo step: `Ctrl+Z` removes the whole setup. **Skip the guide** closes the dialog. A collection that already has cards never shows it.
 
-**Starter decks** (menu): small decks written for this app, in Turkish or English (**Language of the cards**): basic English words (A1–A2), YKS TYT math basics, world capitals and an app guide. **Add** puts one into your collection as an ordinary deck you can change or delete.
+Afterwards a small **Getting started** checklist stays at the bottom right. Each step's button does the thing: **Add your first words**, **Study**, **Where today’s cards and your progress live** (**Home**, **Statistics**) and the optional **Connect the browser extension**. **Hide** folds it away, **Finish the guide** closes it. Open it again with **Open the getting-started guide** on the **Starter decks** page.
 
-The menu is on the left, the selected screen in the middle. The menus you will use most:
+**Starter decks**: small decks written for this app, in Turkish or English (**Language of the cards**): basic English words (A1–A2), YKS TYT math basics, world capitals and an app guide. **Add** puts one into your collection as an ordinary deck you can change or delete.
 
-| Menu | What it is for |
+**The layout.** The left side has five sections; a section's pages show as tabs at the top:
+
+| Section | What is in it |
 |---|---|
-| **Decks** | Deck tree: create, rename, delete |
-| **Add** | Add a new note (and its cards) |
-| **Notes** | Notes of the selected deck |
-| **Study** | Spaced repetition session |
-| **Learn**, **Test** | Learn mode and practice test |
-| **Browse** | Search with the query language, bulk changes |
-| **Import / export** | Files in and out, backup, printing |
-| **Profiles & lock** | Separate collections, PIN/password lock |
-| **Reminders** | Daily notification, tray |
-| **Logs & updates** | Version, updates, logs, crash reports |
-| **Settings** | Language and theme |
+| **Home** | How many cards to study today, **Start studying**, streak, goal, decks to study today |
+| **Library** | **Decks** (deck page, study modes) and **Notes** |
+| **Create** | **Add** (the Add cards page), **AI**, **Starter decks** |
+| **Search** | **Browse**: search with the query language and bulk changes |
+| **Statistics** | **Overview**, **Planning**, **Goals** |
 
-The menu also has **Deck options**, **Note types**, **Statistics**, **Planning**, **Goals**, **Reading**, **Inbox**, **Automation**, **AI**, **MCP**, **Plugins**, **Starter decks**, **Maintenance** and **Shortcuts** (and **Local API** once that module is on). A module that is turned off has no menu entry.
+The **Inbox** (with the number of waiting proposals) and **Settings** sit at the bottom left. A module that is turned off has no page anywhere.
 
-**Settings:** the **Settings** screen has only **Language** (Türkçe / English), the colour scheme (**System**, **Light**, **Dark**), a **Theme** preset (**Default**, **Paper**, **Sage**, **Slate**, **High contrast**) and an optional custom **Accent colour**. Some modules keep their options on their own screen: **Reminders**, **Profiles & lock**, the write switch on **MCP**.
+**Settings.** Settings are in five groups, by what you want to do:
 
-**Command palette:** open it with `Ctrl+K`. Type a command or screen name and press **Run**. Some commands need values in the **Parameters (JSON)** box. In this version this is how you turn modules on or off and change every other setting:
+| Group | Pages |
+|---|---|
+| **General** | Language, **Appearance** (colour scheme, **Theme**, **Accent colour**), **Classifications**, **Reminders**, **Shortcuts**, **Profiles & lock** |
+| **Studying and cards** | **Deck options**, **Note types**, **Modes and reading** |
+| **Connections** | **AI**, **Subtitle** |
+| **Data** | **Export & backup**, **Starter decks** |
+| **Advanced** | "Technical settings: you rarely need these." **Automation**, **Assistants (MCP)**, **Local API**, **Plugins**, **Maintenance**, **Logs & updates** |
+
+Settings explain themselves: under every row it says what it does and what changing it means, often with an **Example:**. The default value is marked **default**; **Reset to default** undoes a change to a row. Rows you rarely need are under **Advanced settings** at the bottom of each page (whether it is open is remembered). Not sure which page a setting is on? Type in **Search settings**: matching rows are highlighted and **Advanced settings** opens by itself when needed. The **General** page starts with **What do you want to change?** (for example "How many new words a day?", "Remind me to study every day"); click one to open the right page.
+
+**Command palette:** open it with `Ctrl+K`. Type a command or screen name and press **Run**. Some commands need values in the **Parameters (JSON)** box. This is how you turn modules on or off and change settings that have no row on a screen:
 
 - **Turn a module on/off**: `{"id": "local_api", "enabled": true}`
 - **Change a setting**: `{"scope": {"kind": "app"}, "key": "timed.seconds", "value": 20}`
 
-**Global shortcuts** (all can be changed on the **Shortcuts** screen):
+**Global shortcuts** (all can be changed under **Settings** → **General** → **Shortcuts**):
 
 | Key | Action |
 |---|---|
+| `?` | Keyboard shortcuts list |
 | `Ctrl+K` | Open command palette |
 | `Ctrl+F` | Search cards |
-| `Ctrl+N` | New note |
+| `N` or `Ctrl+N` | Add card (quick add window) |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Shift+Z` | Redo |
+
+**The `?` shortcuts sheet.** When you are not typing, press `?` (or the **?** button in the top bar, or **Keyboard shortcuts** in the palette): every shortcut that applies right now opens in a searchable list. **Change shortcuts** takes you to the **Shortcuts** page. Shortcuts do not fire inside a text field: `Ctrl+Z` and `Ctrl+A` undo and select the text there and never touch your cards. A key held down acts once.
 
 Almost every change can be undone: adding or deleting notes, ratings, bulk changes, imports.
 
 ## Decks
 
-On the **Decks** screen:
+Decks live under **Library** → **Decks** (**Cards** or **Tree** view):
 
-- **New deck** creates a top-level deck.
-- **New subdeck** adds a deck under the selected one. Example tree: `Languages` → `English` → `A1`.
-- **Rename** and **Delete** change a deck. A deleted deck goes to the trash with its subdecks, notes and cards.
+- **New deck** creates a deck. Use `::` in the name for a subdeck, for example `Languages::English::A1`.
+- Click a deck to open its page: a card preview, **Study modes** (**Flashcards**, **Learn**, **Test**, **Match**, **Reading**), progress and the **Terms in this deck** list.
+- The **Deck actions** menu on the deck page has **Rename**, **New subdeck**, **Deck options**, **Export** and **Delete deck**. A deleted deck goes to the trash with its subdecks, notes and cards.
 
-Get a deleted deck or note back with **Maintenance** → **Trash** → **Restore**. By default, items are deleted for good after 30 days in the trash.
+In the term list, **Term** and **Definition** are edited in place. The app knows which field is the term and which the meaning from the field roles of the note type (see [note types](#adding-cards-and-note-types)); for a note type where it cannot tell, the pencil opens the note's full editor instead of guessing.
+
+Get a deleted deck or note back with **Settings** → **Advanced** → **Maintenance** → **Trash** → **Restore**. By default, items are deleted for good after 30 days in the trash.
 
 In queries, deck paths use `::`: `deck:"Languages::English"`. Selecting a deck includes its subdecks.
 
-**Deck options:** values such as new cards per day, maximum reviews per day, learning steps, **Desired retention** and **Maximum interval (days)** live in a preset. Create one with **New preset** and assign it with **Use for deck**. A deck uses its own preset, else its parent deck's, else the defaults.
+**Deck options** (**Settings** → **Studying and cards** → **Deck options**): values such as **New cards per day**, **Maximum reviews per day**, learning steps, **Desired retention** and **Maximum interval (days)** live in a **preset**. Create one with **New preset** and assign it with **Use for deck**. A deck uses its own preset, else its parent deck's, else the defaults.
 
 ## Classifications (levels, exams)
 
@@ -132,7 +147,7 @@ Built-in templates:
 
 A classification copied from a template is fully yours: add, rename, reorder and merge options. Saved queries keep working after a rename.
 
-**Defining one.** This version has no separate screen for defining classifications. The first-run guide sets one up for its deck. Otherwise:
+**Defining one.** The first-run setup creates one for its deck. Otherwise:
 
 - Command palette (`Ctrl+K`) → **Classification from template** → `{"template_id": "cefr"}`. This defines it for the whole collection.
 - For one deck, with the `fc` command-line tool (not included in the installer, see [MCP](#mcp)): `fc attribute apply-template cefr --deck Languages --locale en`.
@@ -141,27 +156,45 @@ With `--locale tr` the names are Turkish (**Seviye**, **Sınav**), so queries li
 
 **Using them.**
 
-- When you add a note, the deck's classifications appear next to the fields. Mandatory ones are marked **Required**.
+- When you add a card, the deck's classifications appear next to the fields (in quick add under **More**). Mandatory ones are marked **Required**.
 - In queries: `level:B1`, `level>=B1` (for ordered options), `exam:TYT`, or with Turkish names `seviye:B1`, `sınav:TYT`. Keys ignore case and accents: `sinav:TYT` works too.
 - **Browse** → change selection → **Classification** sets a value in bulk.
 - On import you can map a column to a classification (see below).
 - **Statistics** has a **By classification** breakdown.
-- A custom session, learn mode and practice test can target one: `level:A2`, `exam:TYT`.
+- In the study launcher, **Options** → **Only cards with** or **Query** (`level:A2`, `exam:TYT`) targets a classification.
 
 ## Adding cards and note types
 
 Flashcard separates **notes** from **cards**. A note is the content (fields). Cards are generated from it by its note type. For example, a **Classic + reverse** note makes two cards.
 
-**Adding a note:**
+### Add cards: four ways, one place
 
-1. Choose a deck on the left.
-2. Go to **Add** and pick the **Note type**.
-3. Fill in the fields, then any classifications and **Tags**.
-4. Press **Add**. You see "Note added."
+Every way to add cards is on one page: **Create** → **Add** (titled **Add cards**). At the top it asks **How do you want to add** and offers four ways:
+
+| Way | When |
+|---|---|
+| **One card** | A word or two: opens the quick add window |
+| **Bulk** | Fill it in like a grid: one term and its definition per row |
+| **Paste** | A list you copied from a spreadsheet, a table or a document |
+| **From a file** | A CSV/text, Anki, Quizlet, JSON or deck package file |
+
+All four share the same **Where the cards go** choice (**New deck** or **Existing deck**, and the **Note type**) and end with the same result: "12 cards added" · **Undo** · **Open deck** · **Study now**. If rows were skipped, **Why?** gives the reason for each. **Study now** opens the study launcher on that deck.
+
+**One card (quick add).** It also opens from anywhere with `N`, `Ctrl+N` or **Add card** in the top bar. The word, its meaning and an optional example sentence come first; other fields, classifications and the preview are under **More**. `Enter` moves to the next field and adds on the last one; `Shift+Enter` is a new line. The window stays open for the next word. If the word already exists the window says so right away ("“go” is already there…") and offers **Add anyway**. The **Other ways:** links at the bottom switch to **Bulk**, **Paste** and **From a file** on the chosen deck.
+
+**Bulk.** Rows of **Term** and **Definition**. `Tab` goes to the next field, `Enter` on the last card adds a new one, `Ctrl+Enter` saves (**Create**). You can add an image to a row. Cards that already exist are kept below so you can change them and save again.
+
+**Paste.** Paste your list into the box: one card per line. The app finds the separators itself (tab, comma, semicolon, colon, dash…) and shows live how the cards will look. If a separator is wrong, press **Change** and pick the one **Between term and definition** and **Between cards**. Then **Add N cards**. **Edit in the grid first** moves the list into the **Bulk** grid.
+
+**From a file.** Drop the file or press **Choose a file…**. Steps: **Choose a file** → **Map columns** → **Import**. Details in [Import and export](#import-and-export).
+
+**Columns are mapped by role.** When pasting or importing, choose what each column becomes from its header: a field (by role name: **term**, **meaning**, **example sentence**, **sentence translation**, **source**…), **Tags**, a classification or **Don't import**. The app fills the mapping in for you: from header words (`word`, `kelime`, `meaning`, `anlam`, `sentence`, `örnek`…), else from the mapping you used last with this note type, else in order (term, meaning, example…). It tells you which one it used. So the sentence in `word ⇥ meaning ⇥ sentence` rows lands in the note's example sentence field. If the chosen note type has no example sentence field, the app warns you: "Switch to “Vocabulary” to keep the example sentence". A column that goes to no field is pointed out too.
+
+**If the card already exists**: **Skip (recommended)**, **Update the existing one** or **Add anyway**. Under each choice it says in plain words what will happen (for example, updating keeps your study history).
 
 Fields accept Markdown, `$math$` (KaTeX) and `[[links]]`. Drop or paste images, audio or video. Adding the same file twice keeps a single copy on disk.
 
-**Built-in note types:**
+### Built-in note types
 
 | Note type | In short |
 |---|---|
@@ -174,80 +207,142 @@ Fields accept Markdown, `$math$` (KaTeX) and `[[links]]`. Drop or paste images, 
 | Image occlusion | Draw masks on an image; one card per mask |
 | Image quiz | The image is the question |
 | Listening card | Audio is played |
-| Vocabulary | Word, meaning, example sentence |
-| Sentence card | Sentence, translation, target word |
+| Vocabulary | Word, meaning, example sentence; **Recognition** and **Production** cards |
+| Sentence card | Sentence, translation, target word, meaning, source |
+| Subtitle card | Cards from the Subtitle extension: word, as it appeared, meaning, sentence and its translation, source, screenshot |
 
-On the **Note types** screen create one with **New note type** or **Copy** a built-in one. Add fields (**Add field**), card templates (**Add template**) and edit **Styling (CSS)**. The template language has `{{field}}`, `{{#field}}…{{/field}}`, `{{cloze:field}}`, `{{type:field}}`, `{{hint:field}}`, `{{tts:en:field}}` and `{{FrontSide}}`. Adding or removing a field does not break existing cards or their history.
+**The back of a vocabulary card.** The back of Vocabulary, Sentence and Subtitle cards is three separate parts: the **meaning**, largest; below it, labelled **Example**, the sentence and its translation (on its own line); smallest, **Source**. Templates you edited yourself are never changed.
+
+### Note types
+
+**Settings** → **Studying and cards** → **Note types**. The page opens from a learner's point of view: the types as tiles (**Your types**, **Ready-made types**), the chosen type's fields and a live preview of its cards (flip it with **Show the back**). Each type says how many notes use it and how many cards each note becomes.
+
+- **New note type** starts from a ready-made starting point: **Word**, **Word + example sentence**, **Both directions**, **Fill in the blank (cloze)**, **Subtitle** or **Plain: front and back**. You can also duplicate a ready-made type with **Make a copy**.
+- **Field roles: "Contains:"** For each field, pick what it holds: **The word (dictionary form)**, **As it appeared (e.g. “went”)**, **Its meaning**, **An example sentence**, **The example sentence's translation**, **Where it came from**, **A note or explanation** or **Something else**. With roles the app does not have to guess: hints, import, the inbox, the term list and statistics all use the right field. A role can be on only one field of a type.
+- **What does each card ask for?** For each card template, pick which field is the answer (or **The whole back side**). When you type an answer, and in Test, Learn and Match, your answer is compared with that field. For example, on a "went" card from a subtitle (go → gitmek), typing "gitmek" is enough; you are not expected to type the example sentence and the source. The reverse card asks for the term.
+- Template code, styling (CSS) and field details are under **Advanced: template code**. The template language has `{{field}}`, `{{#field}}…{{/field}}`, `{{cloze:field}}`, `{{type:field}}`, `{{hint:field}}`, `{{tts:en:field}}` and `{{FrontSide}}`. Before you save or delete, the app tells you exactly what would be lost. Adding or removing a field does not break existing cards or their history.
+
+Built-in types from v1.2 that you never changed (Vocabulary, Sentence, Subtitle card and the others) get these roles and answer fields by themselves with the update.
 
 **Quick cards while studying:** on the study screen, `N` opens **New cards from text**. Each line becomes a card: `porsuk :: badger`. The session keeps going, and all cards are undone in one step.
 
 ## Study
 
-On **Study**, choose a deck on the left (or none for **All decks**) and press **Study now** or `Enter`. The app uses the FSRS scheduler.
+The app uses the FSRS scheduler.
 
-**Ratings.** After you see the answer, pick one of four buttons. Each button shows when the card comes back (`10m`, `3d` and so on).
+### Starting to study: the launcher
 
-| Button | Key | Meaning |
-|---|---|---|
-| **Again** | `1` | I did not know it |
-| **Hard** | `2` | I struggled |
-| **Good** | `3` | I knew it |
-| **Easy** | `4` | Too easy |
+Every way to study opens the same window: **Start studying** on **Home** (or `Enter`), a deck's **Study** button, the mode tiles on the deck page, **Study these** in Statistics, or **Study now** after adding cards. Opened without a deck, the launcher works on **All decks**.
 
-**Study shortcuts:**
+The "N cards to study today" number on **Home**, the launcher's **Today’s cards** count and the cards a session really serves come from the same calculation. The **All decks** queue honours each deck's own new-card and review limits.
+<!-- v1.3: verify after X1/X2 -->
+
+In the launcher, from top to bottom:
+
+1. **Unfinished**: an unfinished session sits at the top and has the focus; **Continue** picks it up where you left off ("12 answered · 8 left").
+2. **Mode**: **Cards**, **Learn**, **Test**, **Match**. Below it, what the mode does to your schedule.
+3. **What to study**: five scopes, each showing exactly how many cards it will bring:
+
+   | Scope | What it brings | Schedule |
+   |---|---|---|
+   | **Today’s cards** | Due reviews and today’s new cards (within the daily limits) | Changes |
+   | **New cards** | Cards you have never studied, within the daily limit | Changes |
+   | **Studied today** | Every card you answered today (in any mode) | **practice · schedule unchanged** |
+   | **Struggled with today** | Cards you rated "Again" or got wrong today | **practice · schedule unchanged** |
+   | **All cards** | Every card in the deck | **practice · schedule unchanged** |
+
+   An empty scope cannot be picked and says why: "This deck has no cards yet", "Nothing is due today", "Today's card limit is reached (new card and review limits)", "Next card in 5 min", "You haven’t studied today yet", "Nothing you struggled with today".
+4. **How many cards?** (**How many questions?** for Test): leave it empty for all.
+5. **Options** (collapsed): **Practice** ("Study today’s cards without touching the schedule."), **Time limit** and **Rating** (Cards), **Only cards with** (a classification), **Query** and **Saved query**, **Postpone today's cards**, and **Question types** for Test.
+
+`Enter` starts (**Start · 20 cards**), `Esc` closes. If a start is not possible the window stays open and says why; your open session is untouched. The app remembers the last mode for each deck and the last scope for each mode.
+
+### A Cards session
+
+Flip the card and say how well you knew it; that sets when it comes back.
+
+**Answer buttons.** By default there are two: **Still learning** (`1`) and **I know it** (`2`). If you prefer four: **Again** (`1`), **Hard** (`2`), **Good** (`3`), **Easy** (`4`); each shows when the card comes back (`10m`, `3d` and so on). Switch in the session with **Show four answer buttons** / **Show two answer buttons**, or for good under **Settings** → **Studying and cards** → **Modes and reading** → **Answer buttons**.
+
+**Keys: one key, one job.**
 
 | Key | Action |
 |---|---|
-| `Space` or `Enter` | Show answer; on the answer, rate **Good** |
-| `1`–`4` | Rate |
-| `1`–`9` | Pick an option on a multiple-choice card |
-| `H` | Hint |
-| `S` | Suspend |
-| `B` | Bury (until tomorrow) |
+| `Space` | Flip the card (front ⇄ back), as often as you like. **Never rates.** |
+| `1`–`2` (two buttons) · `1`–`4` (four buttons) | Rate; only once the back has been seen |
+| `1`–`9` | On a multiple-choice question, pick that option |
+| `Enter` | Presses only the focused button or the card, nothing else |
+| `H` | Hint (on the question) |
+| `S` | Pause the card (until you turn it back on) |
+| `B` | Leave the card for tomorrow (not again today) |
 | `Z` | Undo last answer |
 | `Ctrl+1`–`Ctrl+7` | Toggle a flag |
 | `N` | New cards from text |
 | `F` | Focus mode |
-| `Esc` | End session |
+| `Esc` | Pause the session |
 | `R` (on the summary) | Study mistakes again |
 
-`Space`, `1`–`4`, `H`, `S`, `B`, `Z` and `Esc` can be changed on the **Shortcuts** screen.
+A key held down counts as one press: holding `2` rates one card only. While you are in a text field (for example typing an answer) only `Esc` works. `Space`, the rating keys, `H`, `S`, `B`, `Z` and `Esc` can be changed on the **Shortcuts** page; `Enter`, the option digits, flags, `R`, `F` and `N` are fixed (**Fixed keys while studying**). The key hints on screen show the keys you assigned.
 
-**Options before you start:**
+**Pausing and continuing.** `Esc` (or **Pause**) does not end the session: it shows what you have done so far ("Paused — you can continue where you left off") and keeps the session open. **Continue**, or **Continue** at the top of the launcher, returns to the same session.
 
-- **Practice mode (does not change the schedule)**: card schedules stay as they are.
-- **Custom session**: type a query such as `level:A2 is:due` in **Query**, or pick a **Saved query**.
-- **Postpone today's cards**: enter the number of days and press **Postpone**.
+**Hints.** `H` or **Hint**. If the note has an example sentence, the first hint is context: you see the word inside that sentence; when the word is what the card asks for, it is hidden as a gap ("Fill the gap in the sentence", for example `I ___ home.`). Further hints reveal letters of the answer (setting **Hint style**: first letters, start of every word, or some letters). Notes without an example sentence start with letters.
 
-When the session ends, the **Session complete** screen shows cards studied, accuracy, time and mistakes.
+On the built-in Vocabulary and Subtitle cards the front shows only the word; the first hint brings the example sentence with the word highlighted. On the reverse (Production) card the first hint is the sentence with the term blanked out.
+<!-- v1.3: verify after X1/X2 -->
+
+**Waiting.** A card on a short learning step (say, back in 10 minutes) may be shown a few minutes early; this learn-ahead window is a setting (20 minutes by default). When every remaining card really has to wait, the screen says "Next card in N min" and counts down: **Wait**, **Study something else** or **Finish**. The session stays open.
+<!-- v1.3: verify after X1/X2 -->
+
+**When the session ends**, **Session complete** shows cards studied, accuracy, time and mistakes. **Study again** opens the launcher with **Struggled with today** selected; `R` studies the mistakes right away.
 
 ### Modes
 
-| Mode | Where | What it does |
+| Mode | Schedule | What it does |
 |---|---|---|
-| Learn | **Learn** menu | Every card is asked as multiple choice, then written. A card is learned once you get it right at both steps. A wrong written answer goes back to multiple choice. |
-| Test | **Test** menu | A practice test with mixed questions from the chosen cards. It does not change your schedule. |
-| Confidence | Study → **Rating** → **Confidence 1–5** | Instead of four buttons you answer "How sure were you?" from 1 to 5. |
-| Timed | Study → **Time limit** | A time limit for every card. |
-| Focus | Study → **Focus** button or `F` | Full screen with distractions hidden. |
+| **Cards** | Changes (not in practice scopes) | Flip the card, say how well you knew it. |
+| **Learn** | Cards you get right move on (not in practice scopes) | Every card is asked as multiple choice, then written. A card is learned once you get it right at both steps. A wrong written answer goes back to multiple choice. |
+| **Test** | Never changes | A mixed practice paper with a score at the end. |
+| **Match** | Doesn't change | Match words with their meanings against the clock. |
 
-**Learn mode:** choose a deck, optionally type `level:A2` in **Query**, press **Start learning**. Keys: `1`–`4` pick, `Enter` check / continue, `Z` undo, `Esc` end.
+All of them start from the launcher's **Mode**. In Cards mode you also have:
 
-**Practice test:** choose **Questions** and **Question types** (**Multiple choice**, **Written**, **True or false**), optionally type `exam:TYT` in **Query**, press **Create test**. Print the paper with **Print** or **Print answer key**. **Submit** scores it; "almost" counts as half a point. Submitting can be undone.
+| Option | Where | What it does |
+|---|---|---|
+| Confidence | Launcher → **Options** → **Rating** → **Confidence 1–5** | Instead of buttons you answer "How sure were you?" from 1 to 5. |
+| Timed | Launcher → **Options** → **Time limit** | A time limit for every card. |
+| Focus | **Focus** button in the session or `F` | Full screen with distractions hidden. |
+
+**Learn:** keys: `1`–`4` pick, `Enter` check / continue, `Z` undo, `Esc` end.
+
+**Test:** **How many questions?** and **Options** → **Question types** (**Multiple choice**, **Written**, **True or false**; none picked means all). The paper opens with the focus in the first answer. The answers of a paper you leave half done are kept; come back with **Continue** in the launcher. Print the paper with **Print** or **Print answer key**. **Submit** scores it; "almost" counts as half a point. Submitting can be undone. A written answer is compared with the field the card asks for in its note type.
 
 **Confidence rating:** the default mapping is 1–2 = Again, 3 = Hard, 4 = Good, 5 = Easy. Keys `1`–`5` work on the answer side. Change the mapping with the settings `confidence.map.1` … `confidence.map.5`.
 
 **Timed mode:** enter the time in **Seconds**. For **When time runs out** choose **Count as Again** or **Skip**. The timer starts when the card appears, runs per card and cannot be restarted. An answer after the time is up is not accepted.
 
-**Focus mode:** the settings `focus.fullscreen`, `focus.hide_counts` and `focus.auto` control full screen, hiding counters and starting every session in focus mode.
+**Focus mode:** the settings `focus.fullscreen`, `focus.hide_counts` and `focus.auto` control full screen, hiding counters and starting every session in focus mode (**Settings** → **Studying and cards** → **Modes and reading**).
 
-Practice modes (practice mode, tests) are not counted in statistics. Each mode is its own module and can be turned off.
+Practice sessions, Test and Match never change your cards' schedule. Each mode is its own module and can be turned off.
 
-**Other study settings** (by setting key): `study.scheduler` (FSRS or SM-2), **Answer checking** (`study.answer_checker`: exact, ignore case and punctuation, allow typos, several answers), **Treat ı/i, ş/s… as equal** (`study.fold_turkish`), **Hint style** (`study.hint_strategy`).
+**Other study settings** (by setting key): `study.scheduler` (FSRS or SM-2), **Answer checking** (`study.answer_checker`: exact, ignore case and punctuation, allow typos, several answers), **Treat ı/i, ş/s… as equal** (`study.fold_turkish`), **Hint style** (`study.hint_strategy`), **Next day starts at** (`study.day_start_hour`, default 04:00; the "today" numbers follow it).
+
+## Statistics and planning
+
+**Statistics** → **Overview** opens with three questions:
+
+- **How am I doing today?** What you answered today, how many were correct, time, streak and your goal, with a sentence comparing it to yesterday or the last 7 days ("Ahead of yesterday: 40 cards then, 52 already today.").
+- **What's ahead?** Reviews in the next 7 or 30 days, with the busiest day marked. **Plan your pace** goes to Planning.
+- **What am I struggling with?** Words you got wrong today, in the last 7 or in the last 30 days, most misses first (practice and tests included). **Study these** opens the launcher with those cards: it is a practice session, your schedule stays as it is. You can also pause a word from there or tag it "hard".
+
+The detailed charts are below, each with a one-line meaning.
+
+**Planning** → **Plan your pace**: answer **New cards a day?** with a number and optionally enter **My exam date (optional)**. The app shows a live forecast: "At this pace, in 4 weeks: ~85 cards and ~12 min a day.", the busiest day, when your new cards run out, and with an exam date how many new cards a day you need to start them all (**Use N**). Minutes use your average time per card over the last 30 days. **Apply** sets the new cards per day in the chosen deck's preset (creating one if the deck has none, and adding the exam date); it is undone in one step. Load balancing, the FSRS optimizer and workload by target retention are under **Advanced**.
+
+**Goals**: a goal is a sentence with blanks to fill in (**Cards every day**, **Finish a deck**, **Minutes every day**…). Daily goals start from zero every day; goals with a deadline show a forecast at your current pace.
 
 ## Query language
 
-The query language is the same in **Browse**, custom sessions, learn/test, automation and MCP. Terms separated by spaces are combined with AND.
+The query language is the same in **Browse**, the study launcher's **Query** option, automation and MCP. Terms separated by spaces are combined with AND.
 
 | Syntax | Meaning |
 |---|---|
@@ -259,11 +354,11 @@ The query language is the same in **Browse**, custom sessions, learn/test, autom
 | `type:cloze` | Card type: `classic`, `typing`, `cloze`, `multiple_choice`, `image_occlusion` |
 | `card:` | Card template |
 | `is:new` `is:learn` `is:review` `is:relearn` | Card state |
-| `is:due` `is:suspended` `is:buried` `is:flagged` | Due, suspended, buried, flagged |
+| `is:due` `is:suspended` `is:buried` `is:flagged` | Due, paused, left for tomorrow, flagged |
 | `flag:red` · `flag:1` | Flag: 1–7, a colour name (EN/TR) or your own flag name; `flag:0` / `flag:none` unflagged, `flag:*` any |
 | `stability>30` `difficulty>7` `lapses>=5` `reps<3` | Numbers; `=` `!=` `<` `<=` `>` `>=` |
 | `retrievability<0.8` | Recall probability right now (0–1) |
-| `added:7` `edited:7` `reviewed:1` | Added / edited / reviewed in the last N days |
+| `added:7` `edited:7` `reviewed:1` | Added / edited / reviewed in the last N study days (days follow **Next day starts at**) |
 | `due:3` | Due within N days |
 | `level:B1` · `level>=B1` · `exam:TYT` | Classification (key or name); `level:*` = has a value |
 | `word:app*` | Field search; `*` is a wildcard |
@@ -273,44 +368,42 @@ The query language is the same in **Browse**, custom sessions, learn/test, autom
 | `a OR b` · `(level:B1 OR level:B2)` | Or, grouping |
 | `level!=B1` | Same as `-level:B1` (notes without a value match too) |
 
-For a bad query the app shows where the error is. On **Browse**, name a query with **Save query**; saved queries can also be picked as **Saved query** on the study screen.
+For a bad query the app shows where the error is. On **Browse**, name a query with **Save query**; saved queries can also be picked as **Saved query** in the study launcher (**Cards** mode → **Options**).
 
 ## Import and export
 
-Everything is on the **Import / export** screen. It has four tabs: **Import**, **Export**, **Backup**, **Print**. Choose a deck on the left first.
+**Importing** now lives on the **Add cards** page: **Create** → **Add** → **From a file** (to paste a list, **Paste**). **Export, backup and printing** are under **Settings** → **Data** → **Export & backup**; its "Want to import cards?" link takes you to **Add cards › From a file**.
 
-### Text and CSV
+### Importing from a file
 
-1. **Import** → **Source**: **File** or **Paste text**.
-2. **Format**: leave **Automatic** or choose **Text / CSV**.
-3. The app finds the separators and says "Detected automatically (…%)". All of these are recognised:
+1. **Where the cards go**: pick the deck and note type.
+2. Drop the file or press **Choose a file…**. Supported: CSV, TSV or text; Anki (.apkg, .colpkg); a Quizlet export; JSON; deck package (.fcpack).
+3. **Map columns**: from each column's header choose what it becomes (a field role, **Tags**, a classification or **Don't import**). The app fills the mapping in from the header row, your last mapping or the column order, and shows the front and back live under **Your cards will look like this**. Tick **First row is a header** if there is one.
+4. If the separators are wrong, press **Change**: **Between term and definition** (tab, comma, semicolon, dash, spaces or custom) and **Between cards** (**New line**, **Blank line** — for multi-line definitions — or custom).
+5. **If the card already exists**: **Skip (recommended)**, **Update the existing one** or **Add anyway**.
+6. If a classification column has unknown values, tick **Create missing classification options**.
+7. **Import N cards**.
+
+All of these lines are recognised:
 
 ```
 dog, köpek
 cat: kedi
 Arda	porsuk
 "Arda, Ali": porsuk
+go	gitmek	I go to school by bus.
 ```
 
-4. Check the **Preview** table. If columns are split wrong, fix it:
-   - Type the right separator in **Between term and definition** (`,` `;` `:` ` - ` `~` ` / ` and so on; `\t` for a tab; two spaces for columns lined up with spaces).
-   - **Between cards**: **New line**, **Blank line** (for multi-line definitions) or `;`.
-   - Tick **First row is a header** if there is one.
-5. Above each column choose what it becomes: a field, **Tags**, a classification, or **Don't import**.
-6. **If a note already exists**: **Skip it**, **Update it** or **Add anyway**.
-7. If a classification column has unknown values, tick **Create missing classification options**.
-8. Press "Import into …".
-
-The file encoding is detected (UTF-8, UTF-16, Turkish Windows-1254). Anki's `#separator:` header line is read too. Auto-detection is not right for every file; the preview always lets you fix it by hand.
+The file encoding is detected (UTF-8, UTF-16, Turkish Windows-1254). Anki's `#separator:` header line is read too. Auto-detection is not right for every file; you can always fix it by hand. To pick the format yourself, use **Advanced: choose the format yourself**.
 
 ### Quizlet
 
-Paste Quizlet's export text and choose **Quizlet** as **Format**. Default: tab between term and definition, new line between cards. If you chose custom separators in Quizlet, type the same ones in the preview.
+Paste Quizlet's export text into **Paste**, or choose its file. Default: tab between term and definition, new line between cards. If you chose custom separators in Quizlet, pick the same ones under the separators.
 
 ### Anki (.apkg, .colpkg)
 
-- **Import:** choose an **Anki (.apkg, .colpkg)** file. The preview shows the number of notes, cards, media files and decks. With **Keep review history and scheduling** ticked, cards keep their Anki schedule. Cloze, image and audio cards are supported; old and new Anki package layouts are read.
-- **Export:** **Export** → **Anki deck (.apkg)** or **Anki collection (.colpkg)**. **Include review history and scheduling** exports the schedule too. Packages are written in the older schema that every Anki since 2.0 imports. Exported packages are tested by opening them in real Anki (the official `anki` library, 26.09): notes, cards, scheduling, history, media and image occlusion masks arrive unchanged.
+- **Import:** choose the `.apkg` or `.colpkg` file under **From a file**. It shows how many notes, cards, decks and media files the package holds. With **Keep review history and scheduling** ticked, cards keep their Anki schedule (turn it off to start the cards fresh). A package brings its own decks and note types; if you picked a deck above, they all go under it. Cloze, image and audio cards are supported; old and new Anki package layouts are read.
+- **Export:** **Export & backup** → **Export** → **Anki deck (.apkg)** or **Anki collection (.colpkg)**. **Include review history and scheduling** exports the schedule too. Packages are written in the older schema that every Anki since 2.0 imports. Exported packages are tested by opening them in real Anki (the official `anki` library, 26.09): notes, cards, scheduling, history, media and image occlusion masks arrive unchanged.
 
 ### JSON
 
@@ -323,7 +416,7 @@ A note format you can edit by hand:
                "tags": ["animals"], "attributes": { "level": "A1" } } ] }
 ```
 
-Without `notetype`, Classic is used. Fields and classifications are given by key or name. To export, choose **JSON (.json)**.
+Without `notetype`, Classic is used. Fields and classifications are given by key or name; a role name (`term`, `meaning`, `example`…) works in place of a field too. To export, choose **JSON (.json)**.
 
 ### Deck package (.fcpack)
 
@@ -331,10 +424,12 @@ The least lossy way to move a deck to another Flashcard: notes, cards, media, cl
 
 ### Export and print
 
+**Settings** → **Data** → **Export & backup** (**Deck actions** → **Export** on a deck page comes here too). Each tab starts with a line saying what it is for.
+
 - **Export** writes the selected deck with its subdecks; with no deck selected, the whole collection. Formats: **Deck package (.fcpack)**, **Anki deck (.apkg)**, **Anki collection (.colpkg)**, **Text (.txt)**, **JSON (.json)**.
 - On the **Print** tab choose a **Layout** (**Cards, 2 × 4 per page**, **Cards, 3 × 5 per page**, **List**), press **Prepare**, then **Print / save as PDF**. Backs are mirrored for double-sided printing.
 
-Long jobs can be cancelled with **Cancel**; nothing changes when you cancel. A finished import is undone in one step (**Undo import** or `Ctrl+Z`).
+Long jobs can be cancelled with **Cancel**; nothing changes when you cancel. A finished import is undone in one step (**Undo** on the result, or `Ctrl+Z`).
 
 ## Plugins
 
@@ -342,44 +437,61 @@ Plugins run in a sandbox (WASM) and can only do what you allow. They can add car
 
 **Installing:**
 
-1. **Plugins** → **Install from file…** → choose a `.fcplugin` file.
+1. **Settings** → **Advanced** → **Plugins** → **Install from file…** → choose a `.fcplugin` file.
 2. The dialog shows the plugin's name, version, what it adds and the permissions it asks for.
 3. Untick what you do not want to allow. Items marked "asks separately" are sensitive permissions.
 4. Press **Install**.
 
 Each plugin has **Turn on** / **Turn off**, **Permissions**, **Settings**, **Log** and **Uninstall**. When uninstalling you can tick **Also delete its saved data**; notes it created stay.
 
-A plugin that hangs or crashes does not take the app down: calls are cut off by time, work and memory limits. A plugin that fails several times in a row is switched off ("Switched off after errors"); turn it back on with **Turn on**.
+A plugin that hangs or crashes does not take the app down: calls are cut off by time, work and memory limits (the page shows them). A plugin that fails several times in a row is switched off ("Switched off after errors"); turn it back on with **Turn on**.
 
 There is no plugin store yet; you install plugins from files.
 
 ## AI
 
-The **AI** screen has three tabs: **Make cards**, **Providers**, **Usage**.
+AI is entirely optional: it stays off and nothing is sent until you set up a provider. Then you can make cards from a text, fill empty fields while you write, and ask for an explanation or a hint while you study.
 
-**Add a provider:** **Providers** → **Add provider**. Types: **Anthropic Claude**, **OpenAI**, **OpenAI-compatible**, **Ollama (local)**. Enter the API key and press **Save key**. The key is stored only in the operating system's keychain, never in the database or a backup. Keys belong to the profile: each profile has its own. With **Model per feature** you can, for example, use a strong model for making cards and a fast one for checks.
+**Where.** The **AI** page is currently both in the **Create** section and under **Settings** → **Connections**, with three tabs: **Make cards**, **Providers**, **Usage**. Provider setup and usage are moving into Settings, and making cards with AI is becoming a way on the **Add cards** page.
+<!-- v1.3: verify after X1/X2 -->
+
+**Add a provider.** **Providers** → **Add provider** opens a gallery: **Claude**, **OpenAI**, **OpenRouter**, **Google Gemini**, **Groq**, **Mistral**, **DeepSeek**, **Ollama**, **LM Studio** and **Custom (OpenAI-compatible)**. Each has a short description and a "free option" or "local · free" tag. Pick one and three steps follow:
+
+1. **Paste the key**: the "Get a key here:" link shows the provider's key page (for OpenRouter, `openrouter.ai/keys`). The key is stored only in the operating system's keychain, never in the database or a backup, and the app never shows it again. For Ollama and LM Studio this step is **Connect the server** and no key is needed. For **Custom** you enter the address and (if needed) a key; servers on your computer or home network do not need one.
+2. **Pick a model**: the list comes from the provider; search it or type a model name.
+3. **Test the connection**: a very short request (a few tokens) is sent to the model and you see the result ("The connection works." · "… answered · 420 ms").
+
+If the test fails, the reason is in plain words, along with the provider's own message (never the key): "The key was rejected…", "No credit or quota left on the account…", "This model was not found or this key may not use it…", "Too many requests right now…", "Could not reach the server…", "Could not make a secure connection (certificate)…".
+
+In the provider list every row shows its status (**ready**, **needs a key**, **no model chosen**, **test failed**) and has **Test connection** right in the row. The address is under **Advanced**; if it changes, you are asked before a stored key is sent to the new address. Keys belong to the profile: each profile has its own. The **Default provider** is used for every feature; with **Model per feature** you can, for example, use a strong model for making cards and a fast one for checks.
 
 **Make cards:**
 
-1. Choose a deck on the left.
+1. Choose a deck.
 2. **Source from**: **Text**, **PDF** (with a page range) or **Web page**.
 3. Set **Note type**, **How many** and optionally **Extra instructions** (for example "focus on verbs").
 4. **Preview**. The **Before sending** dialog shows provider, model, estimated tokens and cost. **Show exactly what will be sent** shows the full text.
 5. **Send**. Take the suggestions you want with **Add**.
 
-If the deck has a level classification, the cards are made for that level.
+**Generate with AI** in the **Bulk** grid leads here too. If the deck has a level classification, the cards are made for that level.
 
 **While studying:** the study screen shows **AI hint**, **Explain** and **Check with AI** buttons.
 
-**Cost:** the **Usage** tab shows requests this month and in the last 7 days. Set a monthly budget with the `ai.monthly_budget_usd` setting. Costs are estimates from the price table; keep the **Prices** table current. With Ollama the model runs on your computer and nothing leaves it.
+**Cost:** the **Usage** tab shows requests this month and in the last 7 days. Set a monthly budget with the `ai.monthly_budget_usd` setting. Costs are estimates from the price table; keep the **Prices** table current. With Ollama and LM Studio the model runs on your computer and nothing leaves it.
 
 ## MCP
 
-MCP lets assistants such as Claude Desktop and Claude Code work with your collection. The **Use from Claude** part of the **MCP** screen shows the setup snippets to copy, the tool list and the write switch.
+MCP lets assistants such as Claude Desktop and Claude Code work with your collection. The **Settings** → **Advanced** → **Assistants (MCP)** page has two tabs: **Connect your assistant** and **External MCP servers**.
 
-**Setup:** the server runs through the `fc` command-line tool and opens your collection file (`collection.db`). The installer does not include `fc`. Build it from the source code with `cargo build -p fc-cli --release` (it lands in `target\release\fc.exe`) or get it separately, then use its full path. In the examples `C:\Tools\fc.exe` stands for that path; replace it and the collection path with your own.
+**Connect your assistant:**
 
-Claude Code:
+1. **Which assistant do you use?**: **Claude Desktop**, **Claude Code** or **Other MCP client** (Cursor, VS Code…).
+2. **How to set it up** gives three steps and a ready text to copy. The text holds this profile's real `collection.db` path and the path of the `fc` program. **Copy**, then paste it into your assistant (Claude Desktop: **Settings → Developer → Edit Config**; Claude Code: run the command in a terminal). Restart the assistant.
+3. **How to test it**: ask your assistant to "List my decks". If it names your decks, the connection works.
+
+The server runs through the `fc` command-line tool. The installer does not include `fc`: build it from the source code with `cargo build -p fc-cli --release` (it lands in `target\release\fc.exe`) or get it separately. If the app cannot find `fc` next to itself or on your PATH, it says "The fc program was not found"; type its full path in the box there and the setting text updates itself.
+
+To set it up by hand (replace `C:\Tools\fc.exe` and the collection path with your own):
 
 ```bash
 claude mcp add flashcard -- "C:\Tools\fc.exe" --db "C:\Users\<you>\AppData\Roaming\app.flashcard.desktop\collection.db" mcp serve
@@ -393,13 +505,13 @@ Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`; write `\` twice i
     "args": ["--db", "C:\\Users\\<you>\\AppData\\Roaming\\app.flashcard.desktop\\collection.db", "mcp", "serve"] } } }
 ```
 
-That path is the main profile's collection. For another profile, `--db` must point at that profile's file, `...\app.flashcard.desktop\profiles\<id>\collection.db` (see [Data folder](#data-folder)); `fc` then uses that profile's AI keys. The app lock does not apply to `fc` or the MCP server.
+That path is the main profile's collection. For another profile, `--db` must point at that profile's file, `...\app.flashcard.desktop\profiles\<id>\collection.db` (see [Data folder](#data-folder)); the ready text on the page already uses the open profile. `fc` then uses that profile's AI keys. The app lock does not apply to `fc` or the MCP server.
 
-**Tools:** **List decks**, **List note types**, **List classifications of a deck**, **Search cards**, **Read a note**, **Create a deck**, **Add notes**, **Edit a note**, **Set a classification (asks for confirmation)**. No tool deletes anything.
+**What the assistant can do.** **It can read**: **List decks**, **List note types**, **List classifications of a deck**, **Search cards**, **Read a note**. **It can change**: **Create a deck**, **Add notes**, **Edit a note**, **Set a classification (asks for confirmation)**. No tool deletes anything.
 
 - Every change an assistant makes is an ordinary step in the app; `Ctrl+Z` undoes it.
-- With **Let assistants make changes** off, assistants can only read. `mcp serve --read-only` does the same for one connection.
-- Under **External MCP servers**, **Add server** adds other servers whose tools the app's AI features may use. The app shows the program it will start and asks you to confirm.
+- With **Read only** on, the assistant can see your decks but cannot change anything: the tools that change things are not offered to it at all. `mcp serve --read-only` does the same for one connection.
+- The **External MCP servers** tab works the other way round: **Add server** adds other servers whose tools the app's AI features may use. The app shows the program it will start and asks you to confirm.
 
 ## Browser extension
 
@@ -408,7 +520,7 @@ For Chromium-based browsers such as Chrome, Edge and Brave. It sends a word or s
 **Setup:**
 
 1. Install the extension. Load the unpacked build via `chrome://extensions` → **Developer mode** → **Load unpacked** and choose the extension folder.
-2. In the app, turn on the **Local API** module (off by default): `Ctrl+K` → **Turn a module on/off** → `{"id": "local_api", "enabled": true}`. **Local API** appears in the menu. The default port is `28735`.
+2. In the app, turn on the **Local API** module (off by default): `Ctrl+K` → **Turn a module on/off** → `{"id": "local_api", "enabled": true}`. **Local API** appears under **Settings** → **Advanced**. The default port is `28735`.
 3. Extension button → **Connect**. The app opens a **Connection request** dialog; allow it.
 
 **Use:**
@@ -416,7 +528,9 @@ For Chromium-based browsers such as Chrome, Edge and Brave. It sends a word or s
 1. Select text on a page → right-click → **Add to deck** (or `Alt+Shift+A`, or the toolbar button).
 2. Fill in **Front**, **Back**, **Deck** and the deck's **Classifications** (for example Level).
 3. **Add to inbox**.
-4. In the app: **Inbox** → edit the suggestion → **Accept** or **Reject**. Nothing becomes a card until you accept it.
+4. In the app: **Inbox** → edit the suggestion → **Accept** or **Reject**. Nothing becomes a card until you accept it. A proposal without a deck asks for one first.
+
+**The captured sentence is kept.** Each row says which card type it becomes. If an item came with a sentence, the sentence goes into the note's example sentence field and the page into its source field; with no note type chosen, the item becomes a **Subtitle card**, which can hold the sentence ("Card type: Subtitle card (it came with a sentence, which stays on the card)"). When you edit before accepting, the sentence and the other fields are kept too.
 
 Items added while the app is closed wait in the extension and are sent when the app opens. The extension only connects to `127.0.0.1`. If you changed the port, enter the same value in **Local API port** in the extension's settings. You can see and revoke connected programs on the **Local API** screen.
 
@@ -434,9 +548,22 @@ The **Subtitle** browser extension turns a word you add with **+** in a video's 
 
 Words go to the deck picked in the extension, else the screen's **Deck**, else a **Subtitle** deck made with the first word. The same word from the same line twice is one card; from another line it is a new card. Each word is one undo step. While the app is closed the extension keeps words in its queue and sends them once the app is open. **Revoke** makes a key stop working at once.
 
+## Automation
+
+**Settings** → **Advanced** → **Automation**: let the app do repetitive jobs. **Start from a ready rule** offers six recipes, each with a live count of the cards it matches right now:
+
+- **Tag cards I keep forgetting** (a "difficult" tag on the 4th lapse)
+- **Pause cards that never stick** (after 8 lapses)
+- **Move learned cards to an archive deck** (cards you will remember for 90+ days)
+- **Tag new Subtitle cards**
+- **Pause red-flagged cards**
+- **Remove “difficult” once a card is easy** (once a day)
+
+A recipe opens filled in; you can change the tag, the deck or the number, and nothing happens until you save. Rules read as one editable sentence; the raw editor is under **Advanced**. The run history is a readable list.
+
 ## Profiles and app lock
 
-Both are on the **Profiles & lock** screen.
+Both are on the **Settings** → **General** → **Profiles & lock** screen (the profile menu also has **Switch profile** and **Lock now**).
 
 **Profiles.** Each profile is a separate collection with its own decks, media, settings and AI keys, for example one per person on a shared computer.
 
@@ -461,11 +588,11 @@ While the app is locked, the Local API, automation rules, plugins, the clipboard
 
 ## Reminders and tray
 
-On the **Reminders** screen:
+On **Settings** → **General** → **Reminders**:
 
-- **Remind me every day** turns on one OS notification a day ("… cards are waiting for you today"), off by default.
+- **Remind me every day** turns on one OS notification a day ("35 cards are waiting for you today (20 due, 15 new)."), off by default. The number is what **Start studying** would really serve: it follows the daily new-card and review limits instead of counting every card you have not started.
 - **Time** (default 19:00) and **Days** (default every day).
-- There is no reminder on a day you already studied or when no cards are waiting. If the app was closed or asleep at that time, the reminder still comes up to 3 hours later.
+- There is no reminder on a day you already studied (the day follows **Next day starts at**) or when no cards are waiting. If the app was closed or asleep at that time, the reminder still comes up to 3 hours later.
 - **Send a test notification** shows one now.
 - **Closing the window keeps the app in the tray**: closing the window only hides it, so reminders keep coming. Reminders come only while the app runs (window or tray).
 
@@ -475,7 +602,7 @@ The tray icon menu: **Open Flashcard**, **Lock** (locks the app if a lock is set
 
 **Recovery.** The app writes a run marker (`run.json`) at start and removes it on a normal exit. If it is still there at the next start (crash, killed process, power loss), the app checks the database (setting `maintenance.check_after_crash`, on by default) and shows **Flashcard did not close normally** (or **Flashcard closed unexpectedly** after a crash). It lists what can be picked up: the database check result, an unfinished study session (**Resume studying**), unsaved forms (restored when you open them again) and the crash report. **Open maintenance** goes to **Logs & updates**, **Continue** closes the dialog. Your collection is saved after every change, so nothing else is lost.
 
-**Logs & updates** screen: version, whether the last run closed normally, updates, **Log folder** and **Data folder**, **Check the database**, crash reports and **Delete crash reports**.
+**Logs & updates** screen (**Settings** → **Advanced**): version, whether the last run closed normally, updates, **Log folder** and **Data folder**, **Check the database**, crash reports and **Delete crash reports**.
 
 **Logs.** The app keeps a local log, `logs\flashcard.log`. It starts a new file at 1024 KiB and keeps 4 older files (settings `maintenance.log_max_kb`, `maintenance.log_files`; detail with `maintenance.log_level`). Crash reports go to the `crash` folder. Secrets are removed from every line before it is written.
 
@@ -498,7 +625,7 @@ The profile list is `profiles.json` in the app data folder. `<id>` is a long gen
 
 ## Backup and restore
 
-**Import / export** → **Backup**:
+**Settings** → **Data** → **Export & backup** → **Backup**:
 
 - **Create backup…** writes the whole collection to one `.fcbackup` file: notes, cards, history, classifications, settings and media.
 - **Restore backup…** asks for a backup, shows its date and note count and asks you to confirm. The current collection is backed up first, then replaced. The message shows where that safety backup went (the `backups` folder in the collection folder).
@@ -514,34 +641,46 @@ Good to know:
 ## Troubleshooting
 
 **Columns came out wrong on import.**
-In the preview, type the right separator in **Between term and definition** (`\t` for tab) and change **Between cards** if needed. If you already imported, use **Undo import** or `Ctrl+Z`.
+In the mapping step, pick the right field from each column's header; if the separators are wrong, press **Change** and fix **Between term and definition** (for example **Tab**). If you already imported, use **Undo** on the result or `Ctrl+Z`.
+
+**The example sentences of my imported list are gone.**
+If the chosen note type has no example sentence field, the sentence column goes nowhere; the app says so in the mapping step. Switch to a type with an example sentence field such as **Vocabulary**, or give a field of your own type the **An example sentence** role (**Note types** → **Contains:**).
+
+**Import is not in Settings any more.**
+It moved in v1.3: **Create** → **Add** → **From a file**. Export and backup are under **Settings** → **Data** → **Export & backup**.
+
+**I pressed Space but the card was not rated.**
+Right: `Space` only flips the card. To rate, press `1`–`2` (`1`–`4` with four buttons) or a button after you have seen the back.
+
+**I pressed `Esc`. Is my session gone?**
+No, you paused. **Continue** at the top of the launcher returns to the same session.
 
 **I deleted something by mistake.**
-Undo with `Ctrl+Z`. If a deck or note went to the trash, use **Maintenance** → **Trash** → **Restore**.
+Undo with `Ctrl+Z`. If a deck or note went to the trash, use **Settings** → **Advanced** → **Maintenance** → **Trash** → **Restore**.
 
 **It says "Undo stops here".**
 The collection was replaced from a backup or the trash was emptied for good. Earlier history cannot be undone.
 
-**"Nothing to study right now."**
-Today's cards are done. You can still study with **Practice mode** or by typing a query (`deck:English`) in **Custom session**.
+**"Nothing to study right now." / Today's cards is empty.**
+The launcher says why under the scope: nothing is due, the daily limit is reached, or the next card comes in a few minutes. To study anyway, pick **Studied today**, **Struggled with today** or **All cards** (practice, schedule unchanged), or type a query (`deck:English`) in **Options** → **Query**. Change the daily limit under **Planning** → **Plan your pace** or **Deck options**.
 
 **The browser extension says the app is not reachable.**
 Check that the app is open, the **Local API** module is on and the port matches the extension's. The item is not lost; it waits in the extension.
 
 **Claude cannot change my collection.**
-Turn on **Let assistants make changes** on the **MCP** screen and make sure you are not using `--read-only`. The server does not open a collection with an older schema: open the app once first.
+Turn off **Read only** on the **Assistants (MCP)** screen and make sure you are not using `--read-only`. The server does not open a collection with an older schema: open the app once first.
 
-**AI says the provider needs an API key.**
-Save the key under **AI** → **Providers**. If you see "No system keychain", keys cannot be stored on this system.
+**AI says "This provider needs an API key".**
+Under **AI** → **Providers**, save the key in the provider's row and press **Test connection**; the result says in plain words what is wrong. If you see "No system keychain", keys cannot be stored on this system.
 
 **A plugin shows "Switched off after errors".**
 Check its **Log** and **Last error**, then try **Turn on** again. If it keeps failing, uninstall it.
 
 **A menu is missing.**
-Its module may be off. Check with `Ctrl+K` → **List modules** and turn it on with **Turn a module on/off**.
+Its module may be off. Check with `Ctrl+K` → **List modules** and turn it on with **Turn a module on/off**. If you don't know where a setting is, type in **Search settings**.
 
 **I think the database has a problem.**
-**Maintenance** → **Database check** → **Check**. If it finds problems, press **Repair**; the repair can be undone too.
+**Settings** → **Advanced** → **Maintenance** → **Database check** → **Check**. If it finds problems, press **Repair**; the repair can be undone too.
 
 **Windows says "Windows protected your PC".**
 That is SmartScreen; the installer is not code-signed. Click **More info** → **Run anyway**. Download the installer only from the project's releases page.

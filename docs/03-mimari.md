@@ -41,13 +41,20 @@ crates/
                     oturum motoru, iş kuyruğu, olay yolu, modül kaydı, ayarlar.
   fc-api/           Sürümlü API sözleşmesi: DTO'lar, komut/sorgu tanımları, hata modeli,
                     TypeScript tip üretimi. Taşıma katmanından bağımsız.
-  fc-providers/     Sağlayıcı arayüzleri ve yerleşik uygulamalar: AI, TTS, STT, çeviri,
-                    sözlük, lemmatizasyon.
+  fc-study/         Saf çalışma mantığı: zamanlayıcılar (FSRS-6, SM-2), kuyruk kurma,
+                    cevap kontrolcüleri, ipuçları (v1.3: bağlam ipucu), çalışma günü,
+                    planlama (v1.3: iş yükü tahmini `planning::forecast`). I/O yok.
+  fc-providers/     Sağlayıcı ve strateji arayüzleri (AI, TTS, STT, çeviri, sözlük,
+                    lemmatizasyon; zamanlayıcı, kart türü, cevap kontrolcü, ipucu).
+  fc-ai/            Yerleşik AI sağlayıcıları (HTTP adaptörleri), v1.3 ön ayarlar
+                    (`presets`) ve bağlantı testi sınıflandırması (`diagnose`).
   fc-plugins/       Eklenti çalışma zamanı (WASM), host fonksiyonları, izinler, manifest.
   fc-interop/       Anki .apkg, deste paketi, yedek formatları.
   fc-http/          Yerel HTTP API sunucusu (axum).
   fc-mcp/           MCP sunucusu ve istemcisi.
-  fc-cli/           Geliştirme/otomasyon için CLI (çekirdeğin Tauri'siz çalıştığının kanıtı).
+  fc-cli/           Geliştirme/otomasyon için CLI (çekirdeğin Tauri'siz çalıştığının kanıtı);
+                    `fc mcp serve`, `fc api serve`, v1.3 `fc dev serve` (yalnız geliştirme
+                    derlemesi: dev köprüsü, docs/07 §3.1).
 apps/
   desktop/
     src-tauri/      Tauri kabuğu: IPC köprüsü, pencere, tepsi, derin bağlantı,
@@ -78,7 +85,7 @@ Tüm kimlikler **UUIDv7** (zamana göre sıralanabilir). Tüm tablolarda `create
 |---|---|---|
 | `decks` | id, parent_id, name, description, icon, color, preset_id, position | Hiyerarşi `parent_id` ile |
 | `presets` | id, name, config (JSON, şemalı) | Algoritma parametreleri, hedef hatırlama, gömme, sıralama… |
-| `notetypes` | id, name, kind, fields (JSON şema), templates (JSON), css, version | Alan şeması ve kart şablonları |
+| `notetypes` | id, name, kind, fields (JSON şema), templates (JSON), css, version | Alan şeması ve kart şablonları. v1.3: alan JSON'unda isteğe bağlı `role`, şablon JSON'unda isteğe bağlı `answer_field` (§4.1) |
 | `notes` | id, notetype_id, fields (JSON: alan_id → değer), sort_field, checksum, tags | `checksum` tekrar tespiti için (normalize edilmiş benzersiz alan) |
 | `cards` | id, note_id, deck_id, template_key, card_type, state (new/learning/review/relearning), due, stability, difficulty, reps, lapses, last_review, flags, suspended, buried_until, user_note | Zamanlama durumu burada |
 | `review_log` | id, card_id, session_id, rating, state_before, state_after, scheduled_days, elapsed_days, duration_ms, answer_duration_ms, hints_used, mode, created_at | **Değişmez.** İstatistik ve FSRS optimizasyonunun kaynağı |
@@ -118,7 +125,10 @@ Kullananlar (hepsi Rust'ta):
 | İçe aktarma (`io.import.*`) | Sütun hedefi `{kind: "role", role}` olabilir; rolü olan tiplerde varsayılan sıra term, meaning, example… olur; başlıklar ("sentence", "örnek", "definition"…) role göre eşlenir; JSON alan adı olarak rol adı kabul edilir. |
 | Yerleşik arka yüzler | Kelime/Cümle/Altyazı kartlarında üç etiketli parça: anlam (`.fc-part-meaning`, en büyük), örnek + çevirisi (`.fc-part-example`), kaynak (`.fc-part-source`, en küçük). Etiketler `span.fc-part-label[data-fc-part]` boş gelir, arayüz `cards.part.*` ile doldurur. Kullanıcı şablonları değiştirilmez. |
 
-Var olan koleksiyonlar **migration 1300** ile güncellenir: yerleşik bir not tipinin alanı, yerleşik anahtar ve türünü koruyorsa rolünü alır; şablon ön/arka/kart türü v1.2'de gönderildiği gibiyse yeni arka yüzü ve `answer_field`'ı alır; CSS hâlâ boşsa parça CSS'i eklenir. Düzenlenmiş her şey (şablon metni, alan türü, CSS) olduğu gibi kalır; adlar karşılaştırılmaz. Tekrar çalıştırmak hiçbir şeyi değiştirmez.
+Var olan koleksiyonlar **migration 1300** (`1300_vocabulary_roles`, yalnız veri, DDL yok) ile güncellenir: yerleşik bir not tipinin alanı, yerleşik anahtar ve türünü koruyorsa rolünü alır; şablon ön/arka/kart türü v1.2'de gönderildiği gibiyse yeni arka yüzü ve `answer_field`'ı alır; CSS hâlâ boşsa parça CSS'i eklenir. Düzenlenmiş her şey (şablon metni, alan türü, CSS) olduğu gibi kalır; adlar karşılaştırılmaz. Değişen satır `version + 1` ve yeni `updated_at` alır; notlara ve kartlara dokunulmaz. Tekrar çalıştırmak hiçbir şeyi değiştirmez. Test: `fc-storage/src/tests/vocab_roles.rs`, v1.2'nin her yerleşik not tipinin iki dildeki fikstürüne karşı (`tests/fixtures/builtin_notetypes_v1_2.json`).
+
+Bağlam ipucu kuralının son hâli (ipucu bağlamı gösterebilir ama cevabı asla): yerleşik kelime/altyazı ileri kartının ön yüzü yalnızca kelimeyi gösterir ve ilk ipucu kelimesi vurgulanmış örnek cümledir; ters kartın ilk ipucu terimin boşaltıldığı cümledir. Yerleşik şablonlar bunun için 1300'den sonraki yeni bir veri migration'ıyla, 1300 ile aynı "düzenlenmemişse" tespitini kullanarak güncellenir.
+<!-- v1.3: verify after X1/X2 -->
 
 ## 5. Olay kaydı ve geri al (hibrit yaklaşım)
 
@@ -151,12 +161,33 @@ trait Query   { type Output; fn run(&self, conn) -> Result<Self::Output>; }
 ### Örnek sorgular
 `deck.tree` · `deck.summary` · `note.get` · `card.search` · `card.info` · `study.next` · `stats.heatmap` · `stats.forecast` · `import.preview` · `settings.schema` · `modules.list` · `commands.list` …
 
+(Yukarıdakiler kavramsal adlardır; gerçek adlar `fc-api`'nin `v1/methods/*.rs` dosyalarındadır, ör. `decks.tree`, `decks.summaries`, `notes.create`.)
+
+### v1.3'te eklenen metotlar
+
+| Metot | Tür | Ne yapar |
+|---|---|---|
+| `study.options` | sorgu | Başlatıcının verisi: beş kapsamın tam sayısı, boşsa nedeni ve `next_available_at`, devam edilebilir oturumlar, açık modların türleri (§9.1) |
+| `modes.test.save_draft` | komut (geri al adımı değil) | Yarım test kâğıdının cevaplarını taslak olarak saklar; kâğıt (`TestPaperDto.draft`) devam edilince geri gelir |
+| `stats.today` | sorgu | "Bugün nasılım?": bugün / dün, 7 günlük ortalama, tempo yargısı (`ahead`/`same`/`behind`…), seri |
+| `stats.struggles` | sorgu | "Nelerde zorlanıyorum?": pencerede yanlış cevaplanan kartlar (her mod), terim/anlam rollerden, pratik için `cid:` sorgusu |
+| `planning.forecast` | sorgu | Bir yeni kart/gün temposunun gün gün iş yükü tahmini (`fc_study::planning::forecast`) |
+| `planning.apply_pace` | komut (geri alınabilir) | Tempoyu destenin şablonuna yazar (şablonu yoksa oluşturup atar), isteğe bağlı sınav tarihi; tek geri al adımı |
+| `ai.providers.test` | komut → iş | `ai.test` işi: tek küçük istek, sonuç `AiConnectionTest` (docs/06 §1.1) |
+| `mcp.setup` | sorgu | MCP istemci parçacığı için bu profilin `db_path`, `fc_path`, `platform` değerleri (yalnız kullanıcı/CLI) |
+
+Var olan metotlarda v1.3 değişiklikleri (eklemeli; eski istemciler kırılmaz): `study.start` isteğe bağlı `scope` alır; `SessionDto.next_due`; `decks.tree` / `decks.summaries` `today_due`, `today_learning`, `today_new`, `today_total` alanlarını taşır (eski `due`/`learning`/`new` aynı değerde); `study.hint` yanıtı `kind` (`context`/`letters`) ve `html` taşır; `notes.terms` satırı `term_field`, `definition_field`, `ambiguous` taşır; içe aktarma sütun hedefi `{kind: "role", role}` olabilir; `ai.providers.list` → `presets`, sağlayıcı DTO'su `preset`, `status`, `last_test`; `ai.models` işinin sonucu tipli `AiModelList`; hedef türü `daily_cards`. Ayar kitinin "Varsayılana dön"ü ve `?` kısayol sayfası var olan `settings.reset` ve `shortcuts.list` metotlarını kullanır.
+
+Yeni hata kodu: **`CONFLICT_NOTHING_TO_STUDY`**: `study.start` seçilen kapsamda kart bulamadı (`details.reason`: bir `StudyEmptyReason`; `details.next_available_at`: ms zaman damgası ya da `null`). Oturum oluşturulmaz, açık oturumlara dokunulmaz.
+
 ## 7. API sözleşmesi
 
 - `fc-api` tüm DTO'ları, komut/sorgu adlarını ve hata kodlarını tanımlar.
-- **TypeScript tipleri otomatik üretilir** (`specta` / `tauri-specta`). Frontend bu tiplerle derlenir. Backend'de bir tip değişirse frontend **derleme zamanında** kırılır, sessizce değil.
+- **TypeScript tipleri otomatik üretilir** (`ts-rs`; `fc-api`'nin `gen-ts` aracı `apps/desktop/src/lib/api/generated/`'a yazar, CI `gen-ts --check` ile eskimiş tipi yakalar). Frontend bu tiplerle derlenir. Backend'de bir tip değişirse frontend **derleme zamanında** kırılır, sessizce değil.
 - **Sürümleme:** Komutlar `v1.note.create` biçiminde ad alanlıdır. Kırıcı değişiklik yeni sürüm ister. Eski sürüm bir geçiş süresi boyunca adaptörle desteklenir.
 - **Taşıma bağımsızlığı:** Aynı sözleşme Tauri IPC, yerel HTTP (JSON), MCP (araç olarak) ve eklenti ABI üzerinden sunulur. Taşıma katmanları ince adaptörlerdir.
+- **Kullanıcı dağıtıcısı** (v1.3, `fc_app::transport::dispatch`): kullanıcı adına çağrının tek yolu. Kilit kapısı (kilitliyken yalnız kilit ekranının metotları, `PERMISSION_APP_LOCKED`), kullanıcı aktörü, `null` parametre = `{}`, iç metotların reddi burada. Masaüstü IPC komutu (`src-tauri/src/ipc.rs`) ve geliştirme köprüsü (`fc dev serve`, `crates/fc-cli/src/dev/`) bunu çağırır; ikisi uygulamaya aynı yoldan ulaşır, hata JSON'u ve commit sonrası olaylar aynıdır.
+- **Frontend'in üç taşıması** (`apps/desktop/src/lib/api/index.ts`): Tauri IPC (üretim); mock (`dev`, yalnız geliştirme: ekran görüntüleri ve birim testleri); **köprü** (v1.3, `vite --mode bridge`, `VITE_FC_BRIDGE_URL` + `VITE_FC_BRIDGE_TOKEN`: tarayıcıdaki arayüz `POST /rpc` + SSE `/events` ile gerçek çekirdeğe bağlanır). Mock ve köprü `import.meta.env.DEV` arkasındadır, üretim paketine girmez. Köprü, eklentilere açık kısıtlı yerel HTTP API'si (`fc-http`) **değildir**; ayrıntı docs/07 §3.1.
 - **Sözleşme testleri:** Her komut/sorgu için girdi/çıktı örnekleri (snapshot) tutulur. Beklenmeyen değişiklik CI'da yakalanır.
 
 ### Hata modeli
@@ -184,6 +215,27 @@ trait Query   { type Output; fn run(&self, conn) -> Result<Self::Output>; }
 - Oturum durumu `sessions` tablosunda kalıcıdır (çökme kurtarma).
 - Takvimi etkilemeyen oturumlar (deneme, test) `review_log`'a `mode` alanıyla yazar ama `cards` durumunu değiştirmez.
 - Zamanlı mod, ipucu sayacı, cevap süresi ölçümü oturum motorundadır. Frontend sadece "gösterildi / çevrildi" zamanlarını bildirir (backend kendi zamanıyla doğrular).
+- v1.3: **her türden bir açık oturum** (`study.start` yalnızca aynı türün açık oturumunu kapatır; test kâğıdı bir Kartlar oturumundan sağ çıkar). Kalan kartların hepsi öğrenme adımını bekleyen oturum açık kalır; `SessionDto.next_due` kartın gösterilebileceği anı verir. Öğrenme kartı vadesinden `LEARN_AHEAD_MS` (20 dk, `fc_study::session`) önce gösterilebilir; bu pencere bir ayar olacak ve `next_due` / `next_available_at` kartın gerçekten sunulacağı an olacak.
+  <!-- v1.3: verify after X1/X2 -->
+
+### 9.1 Kuyruk planlayıcısı (v1.3)
+
+"Bugün çalışılacak" her sayı **tek yerde** hesaplanır: `crates/fc-app/src/modules/study/plan.rs` (`Planner`, `PlanRequest`, `today_counts`). Bir istek (deste + alt deste ayarı, oturum türü, `StudyScope`, filtre/sorgu) bir kuyruğa çözülür: istemcinin saat dilimindeki çalışma günü (`study.day_start_hour`), deste şablonunun günlük sınırları eksi bugün çalışılanlar (yalnız takvimi değiştiren cevaplar, her mod), `study.new_per_session`, kardeş gömme, gömülü/askıdaki kartlar ve boş kartlar (kuyruktaki her kart denetlenir).
+
+| Kullanan | Ne alır |
+|---|---|
+| `study.start` | Oturumun kuyruğu; boşsa `CONFLICT_NOTHING_TO_STUDY` (hiçbir şey yazılmaz) |
+| `study.options` | Beş kapsamın sayısı (`Planner::count`: kart şimdi gösterilemiyorsa 0), boşluk nedeni ve `next_available_at` (`Planner::empty_reason`) |
+| `decks.tree` / `decks.summaries` | `today_*` alanları (`today_counts`, desteye ve koleksiyona) |
+| Hatırlatıcılar (`reminders`) | Bildirimdeki sayı (koleksiyonun bugünkü kuyruğu) |
+| Sorgu dili | `added:N` / `edited:N` / `reviewed:N` için çalışma gününün başı (`today_start`) |
+
+- Planlayıcı bir anda birden çok planı paylaşılan önbellekle (deste dizini, bugünün cevapları, boş kart denetimi) kurar; deste ağacının bütün sayıları tek planlayıcıya mal olur.
+- Saat dilimi verilmeyen sorgular (`decks.tree`, hatırlatıcı, sorgu dili) son `study.start`'ın kaydettiği istemci farkını (`ux_state`) kullanır, böylece aynı çalışma gününü paylaşırlar.
+- Pratik kapsamları (`studied_today`, `struggled_today`, `all`) sınırsızdır, kümeyi başta sabitler, gömülüleri de alır ve öğrenme adımı beklemez; oturum `trial` olur.
+- **Değişmez (Rust testi, `launcher_tests.rs`):** aynı saat ve deste için `study.options.scopes[due].count` = `study.start { kind: normal, scope: due }`'nun sunduğu kart sayısı.
+- Koleksiyon çapındaki kuyruk ("Tüm desteler", `deck_id: null`) her destenin kendi şablon sınırlarına uyar: deste kuyruklarının birleşimi, koleksiyon üst sınırı yalnızca ayarlanmışsa; değişmez: deste başına `today_*` toplamı = koleksiyonun `today_*`'ı.
+  <!-- v1.3: verify after X1/X2 -->
 
 ## 10. Takılabilir arayüzler (strateji deseni)
 
@@ -232,6 +284,8 @@ Her arayüzün bir **kimliği**, **yetenek bildirimi** (capabilities) ve **ayar 
 ## 15. Migration'lar
 
 - Her şema değişikliği numaralı ve **geri dönüşsüz ama test edilmiş** bir migration'dır.
+- Numaralar sürüm başına ayrılmış aralıklardadır (`fc-storage` `migrate::RELEASE_RANGES`; aralık dışı migration testleri kırar): v0.1 `1`–`99`, v0.2 `100`–`199` … v1.0 `1000`–`1099` (izlere bölünmüş, docs/07 §5.1), v1.1 `1100`–`1199` (migration yok), v1.2 `1200`–`1299` (`1200_subtitle`), **v1.3 `1300`–`1399`** (`1300_vocabulary_roles`: yalnız veri; v1.3'ün ikinci veri migration'ı, yerleşik kelime/altyazı şablonları için, bu aralıkta 1300'den sonra gelir). Dosyalar `crates/fc-storage/migrations/NNNN_ad.sql`; birleştikten sonra **asla düzenlenmez** (sağlama toplamı tutmazsa veritabanı açılmaz).
+  <!-- v1.3: verify after X1/X2 -->
 - Migration öncesi veritabanının otomatik anlık kopyası alınır (sadece migration sırasında, periyodik yedek değil).
 - CI'da: her migration boş veritabanında ve önceki sürümlerden üretilmiş örnek veritabanlarında çalıştırılır.
 - Veri formatları (deste paketi, yedek, eklenti manifesti) de sürüm numarası taşır.

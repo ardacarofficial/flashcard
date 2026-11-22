@@ -239,7 +239,7 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 
 **Kapsam:** Koyu öncelikli, sık, klavye öncelikli tasarım sistemi (tek kehribar vurgu, JetBrains Mono sayılar); her zaman görünen üst çubuk (arama/komut `Ctrl+K`, "Kart ekle" `N`); Hızlı Ekle penceresi; tablo benzeri toplu ekleme ızgarası; Ana sayfa → oturum (oturumda kabuk kaybolur); Kütüphane ağaç-tablosu → deste sayfası; İstatistik; tüm diğer ekranlar ve Ayarlar aynı sistemde. Ayrıca Subtitle tarayıcı eklentisinin sözleşmesini karşılayan `subtitle` modülü ve `/subtitle/v1` HTTP API'si. Davranış ve Rust API'si değişmez; hiçbir özellik kaldırılmaz.
 
-**Kabul kriterleri** (tam liste: [11 §6](11-tasarim.md))
+**Kabul kriterleri** (v1.2 listesi; docs/11 §6 artık v1.3 listesidir, v1.2 hâli git geçmişinde)
 - [x] Hiçbir özellik, ekran, ayar, kısayol ya da modül anahtarı kaldırılmadı; taşınan her şey paletten bulunur (`navigation.test.ts`, `module-switches.test.ts`).
 - [x] Kart eklemek tek tuş: `N` → alanlar → `Ctrl+Enter`, pencere açık kalır, Geri al (`quickadd.test.ts`).
 - [x] Çalışma oturumu pencerenin tamamını alır; 2'li ve 4'lü cevap düzeni korunur.
@@ -247,6 +247,21 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [x] Subtitle: eklentinin sözleşmesi değiştirilmeden karşılanır, migration `1200` testli, yakalama tek geri al adımı; sözleşme denetimi eklentinin kendi istemcisiyle (`tools/subtitle-contract/check.mjs`). Ayrıntı: [06 §5.1](06-ai-ve-entegrasyonlar.md).
 - [ ] Gerçek Tauri penceresinde (Windows) elle gezinti.
 - [ ] Subtitle eklentisi gerçek bir tarayıcıda denenecek.
+
+## 🧭 v1.3 · "Kullanılır": akışlar, kelime kartları, gerçek çekirdekte doğrulama
+
+*Proje sahibi v1.2'yi Windows'ta denedi: "Daha güzel ama kullanamıyorum." v1.2 sahte backend'e karşı ekran görüntüleriyle doğrulanmıştı. v1.3 yeni özellik için özellik eklemez; var olanı kullanılır, öngörülebilir ve kendini anlatan hâle getirir. Ayrıntı: [11](11-tasarim.md), [CHANGELOG](../CHANGELOG.md).*
+
+**Kapsam:** Tek çalışma başlatıcısı (`study.options`, beş kapsam, tam sayılar, boş nedenleri, devam et); her "bugün" sayısı tek kuyruk planlayıcısından; bir tuş = bir iş klavye modeli, `Esc` = ara ver, bekleme durumu; alan rolleri + kartın sorduğu alan (cevap anahtarı, bağlam ipucu, etiketli kart arkası, doğru alanı düzenleyen terim listesi, korunan cümle; migration 1300); kart eklemenin tek yeri (tek / toplu / yapıştır / dosya); kendini anlatan ayarlar (kit, not türleri, MCP kurulumu, otomasyon tarifleri); hazır AI sağlayıcıları (OpenRouter…), model listesi, bağlantı testi; üç soruyla İstatistik, tahminli Planlama, `?` yardımı; dev köprüsü + gerçek çekirdekte yolculuklar; Windows WebDriver pilotu. Tema değişmez; hiçbir özellik kaldırılmaz.
+
+**Kabul kriterleri** (tam liste: [11 §6](11-tasarim.md))
+- [x] Gösterilen sayı = verilen kart: `study.options` kapsam sayısı `study.start`'ın verdiğine eşit (Rust testi), Ana sayfa / Kütüphane / deste sayfası / hatırlatıcılar aynı kuyruktan (J5, S5).
+- [x] Boş başlatma `CONFLICT_NOTHING_TO_STUDY`: oturum açmaz, yarım oturumu kapatmaz; pratik kapsamları takvime dokunmaz (S3, S4, S5).
+- [x] `Space` asla puanlamaz, `Esc` ara verir ve Devam et aynı oturuma döner, yazı alanında `Ctrl+Z`/`Ctrl+A` metne aittir (S1, S2, J7, S12).
+- [x] Altyazı kartında doğru cevap yalnız anlam; "Tanım" anlamı düzenler; kart arkası etiketli parçalar; cümle içe aktarmada ve gelen kutusunda korunur (J6, S7a, S7b, S8, S9, S10; migration 1300 fikstür testleri).
+- [ ] İpucu kuralı iki yönde (S7c), "Tüm desteler" kuyruğu deste ayarlarına uyar, önden öğrenme penceresi ayar <!-- v1.3: verify after X1/X2 -->
+- [x] Yolculuklar gerçek çekirdekte, kaydedilen sonuç üzerinde (`pnpm -C apps/desktop e2e`, CI `journeys`).
+- [ ] Windows: kurulu uygulamada WebDriver pilotu (`windows-build.yml` → `webdriver-pilot`, kapıda değil) yeşil ve proje sahibinin elle koşusu.
 
 ## 🔮 v1.0 sonrası
 

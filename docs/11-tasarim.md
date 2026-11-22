@@ -1,28 +1,110 @@
-# 11 · Tasarım (v1.2)
+# 11 · Tasarım (v1.3)
 
-v1.2 arayüzü akışlardan başlayarak yeniden tasarlar. **Hiçbir özellik, ekran, ayar, kısayol ya da modül anahtarı kaldırılmadı; davranış ve Rust API'si değişmedi** (CLAUDE.md kural 1). Bağlayıcı tasarım yönergesi `.orchestra/DESIGN-BRIEF.md`'dir; bu doküman yönergenin değil, **koddaki gerçek hâlin** kaydıdır.
+v1.3 temayı değiştirmez; **akışları kullanılır kılar.** v1.2'nin tasarım sistemi (koyu öncelikli, sık, tek kehribar vurgu, sayılar mono, gölge yerine kenarlık) aynen geçerli (§4). Değişen şey düzenleyici fikir: bu doküman artık ekranlardan değil **akışlardan** (§1) başlar. Hiçbir özellik, ayar, kısayol ya da modül anahtarı kaldırılmadı; taşınanlar hâlâ ulaşılabilir (palet dahil). Bu doküman bir yönergenin değil, **koddaki gerçek hâlin** kaydıdır.
 
-## 0. v1.1 neden değişti
+## 0. Neden v1.3
 
-v1.1 Quizlet esinli, ferah bir arayüzdü: büyük yuvarlak kartlar, bol boşluk, açık gri + mor, kart eklemek için ağır bir form sayfası. Proje sahibi bunu açıkça reddetti: "kullanılmıyor, yapmış olmak için yapılmış, kart eklemek berbat, uygulamada rahat edemiyorum." Dürüst teşhis: v1.1 **ekranları süsledi ama akışları düşünmedi.** Her sayfa "buraya ne koyabiliriz" sorusuyla doldu; en sık iş olan kart eklemek tam bir sayfa ve fare gerektiriyordu.
+Proje sahibi v1.2'yi Windows'ta denedi: *"Daha güzel görünüyor, altyapı sağlam duruyor ama kullanamıyorum. Gerçek kullanıcı deneyimi istiyorum."* Şikâyetleri: "Çalış'a basıyorum başlayamıyorum; bazen soruyor bazen sormuyor; modu seçemiyorum", `Space` iki iş yapıyordu (çevir **ve** puanla), ipuçları anlamsızdı, örnek cümle cevabın parçası gibi görünüyordu, jargon (göm / askıya al / yeni), içe aktarma ayarların içinde saklıydı, "bugün çalıştıklarımı yeniden çalışayım", ayarlar ve not türleri kafa karıştırıcı, yalnız Claude vardı (OpenRouter yok), MCP ve otomasyon kullanılamıyordu.
 
-v1.2 aynı tema altyapısının üstünde koyu öncelikli, sık, klavye öncelikli bir araç: Linear / Raycast / iyi bir kod editörü gibi *içinde yaşanan* bir uygulama, kâğıt dizin kartlarının sıcaklığıyla. Sahibin diğer uygulaması (Kelime) bir referanstı; kopyası değil, ondan iyisi hedeflendi.
+Dürüst teşhis: v1.2 **sahte (mock) bir backend'e karşı ekran görüntüleriyle** doğrulandı. Görüntüler güzeldi; ama Ana sayfanın "Bugün 1 kart" dediği koleksiyonda `study.start` sıfır kart veriyordu, `Ctrl+Z` bir yazı alanında kayıtlı kartı siliyordu, altyazı kartının yazılı cevap anahtarı anlam + cümle + kaynaktı. Hiçbiri bir görüntüde görünmez. v1.3'ün iki dersi:
 
-## 1. İlkeler
+1. **Testin sorusu "güzel mi?" değil, "oturup klavyeyle tahmin etmeden işini yapabiliyor mu, ve KAYDEDİLEN sonuç yaptığıyla aynı mı?"** (§5).
+2. **Ekranın gösterdiği her sayı, düğmenin yapacağı işle aynı yerden gelir.** "Bugün 12 kart" yazıyorsa Başla 12 kart verir.
 
-1. **Önce akış.** Her ekranın testi: *kullanıcı buraya ne yapmaya geliyor ve bu kaç tuş/tıklama sürüyor?* "Bu sayfaya ne koyabiliriz" değil.
-2. **Klavye öncelikli, fare de tam çalışır.** Sık işlerin hepsi tek tuşla başlar (`N`, `Ctrl+K`, `/`, `Enter`); kısayollar ekranda küçük mono ipucu olarak görünür.
-3. **Sık ama sakin.** 13 px gövde, 34 px satır, 1 px kenarlık ve yüzey basamakları; gölge yok, gradyan yok, parıltı yok, krom içinde emoji yok.
-4. **Tek vurgu: kehribar.** Vurgu yalnız birincil eylemi, etkin öğeyi ve odağı işaretler. Anlamlı renkler (doğru/yanlış/uyarı) yalnız anlam taşıdıklarında.
-5. **Sade ≠ tasarımsız** (kural 9). Aşamalı gösterim: ikincil ayrıntılar "Diğer" altında, satır eylemleri üzerine gelince/odakta.
+v1.1 → v1.2 geçmişi (ferah Quizlet esinli arayüzün reddi, koyu sık araç) [CHANGELOG 1.2.0](../CHANGELOG.md)'dadır.
+
+## 1. İlkeler ve akışlar
+
+### İlkeler
+
+1. **Önce akış.** Her ekranın testi: *kullanıcı buraya ne yapmaya geliyor, bu kaç tuş sürüyor ve sonunda ne kaydedildi?*
+2. **Bir tuş = bir iş.** Hiçbir tuşa gizli bir duruma bağlı ikinci bir anlam verilmez (§1.2).
+3. **Tek doğru kaynak.** Sayılar, boş durumların nedenleri, cevap anahtarı, ipucu Rust'ta hesaplanır; ön yüz yalnız gösterir (kural 1). Aynı soruya iki yerde iki cevap olmaz.
+4. **Ekran ne için olduğunu söyler.** Her sayfa bir cümleyle açılır; boş durum sıradaki adımı söyler; ayar "bunu değiştirirsem ne olur?" sorusunu cevaplar; jargon yok (göm → "yarına bırak", askıya al → "durdur, sen açana kadar sorma").
+5. **Klavye öncelikli, fare de tam çalışır;** birincil eylem üzerine gelmeden görünür.
+6. **Sade ≠ tasarımsız** (kural 9). Aşamalı gösterim: ikincil ayrıntılar "Diğer" / "Gelişmiş" altında.
+
+### Akışlar
+
+Düzenleyici fikir: her ekran bir akışın parçasıdır. Ana akışlar ve tuş sayıları:
 
 | Akış | Ne yapılır | Tuş |
 |---|---|---|
-| Kart ekle | Herhangi bir yerde `N` → ön alan → `Tab` → arka alan → `Ctrl+Enter` (pencere açık kalır, sıradaki karta geçilir) | 1 + yazı + 2 |
-| Bugünü çalış | Ana sayfada `Enter` → başlatıcıda `Enter` (v1.3) → `Space` çevir → `1`/`2` (ya da `1`–`4`) | 2 + kart başına 2 |
-| Kartı bul ve düzelt | `Ctrl+K` ya da Ara'da `/` → sorgu → `↓` → `Enter` düzenle → `Ctrl+Enter` kaydet | 4 + yazı |
-| Toplu ekle | Oluştur → satırlarda `Tab`/`Enter` → `Ctrl+Enter` tek geri al adımı | yazı + 1 |
-| İlerlemeyi gör | Kenar çubuğunda İstatistik | 1 tıklama |
+| Bugünü çalış | Ana sayfada `Enter` → başlatıcı açılır (yarım oturum varsa "Devam et" odakta) → `Enter` → `Space` çevir → `1`/`2` (ya da `1`–`4`) | 2 + kart başına 2 |
+| Bugün zorlandıklarını yeniden çalış | Başlatıcıda `↓` ile "Bugün zorlandıklarım" → `Enter` (pratik, takvim değişmez); oturum sonunda "Tekrar çalış" bunu seçili açar | 3 |
+| Kelime ekle | Herhangi bir yerde `N` → terim → `Tab` → anlam → (`Tab` → örnek cümle) → `Ctrl+Enter` (pencere açık kalır) | 1 + yazı + 2–3 |
+| Çok kelime ekle | Oluştur → Toplu / Yapıştır / Dosyadan → sütunlar eşlenir, önizleme → ekle (tek geri al adımı) | yazı + 1 |
+| Kartı bul ve düzelt | `Ctrl+K` ya da Ara'da `/` → sorgu → `↓` → `Enter` düzenle → `Ctrl+Enter` kaydet; ya da deste sayfasının terim listesinde satır içi | 4 + yazı |
+| İlerlemeyi gör | İstatistik: "Bugün nasılım? / Önümde ne var? / Nelerde zorlanıyorum?" → "Bunları çalış" başlatıcıyı açar | 1–2 tıklama |
+| Bir sağlayıcı bağla | Ayarlar → Bağlantılar → Yapay zeka → "Sağlayıcı ekle" → hazır seçenek (ör. OpenRouter) → anahtar → model → Test <!-- v1.3: verify after X1/X2 --> | birkaç tıklama + anahtar |
+
+### 1.1 Çalışma başlatıcısı (`features/study/StudyLauncher.svelte`, `LauncherHost`)
+
+"Çalışmak istiyorum" demenin **tek** yolu. Her giriş aynı iletişim kutusunu açar: Ana sayfa (düğme, satırlar, `Enter`), Kütüphane satırı, deste sayfasının "Çalış"ı (`Enter`) ve mod düğmeleri (o mod seçili), palet (ekranlar ve ham `study.start` komutu), kendi başına açılan mod sayfaları, oturum sonundaki "Tekrar çalış", İstatistik'in "Bunları çalış"ı ve kart eklemenin "Şimdi çalış"ı. Eski mod başına kurulum panelleri kalktı.
+
+Yukarıdan aşağı, hepsi `study.options`'tan (Rust, yan etkisiz sorgu; docs/02):
+
+1. **Yarım kalanlar** — varsa ilk ve odakta: "Devam et · 7 cevaplandı · 13 kaldı". `Enter` aynı oturuma döner.
+2. **Mod** — Kartlar / Öğren / Test / Eşleştir (yalnız modülü açık olanlar), altında takvime ne yaptığını söyleyen tek satır ("Test … takvimi hiç değiştirmez").
+3. **Ne çalışayım?** — beş kapsam, **tam sayılarıyla**: Bugünün kartları · Yeni kartlar · Bugün çalıştıklarım · Bugün zorlandıklarım · Tüm kartlar. Son üçü "pratik · takvimi değiştirmez" etiketlidir ve başlarken kart kümesi dondurulur. Boş kapsam devre dışıdır ve nedenini söyler ("Bugünlük kart sınırın doldu", "Sıradaki kart 6 dk sonra", "Bugün henüz çalışmadın").
+4. **Kaç kart?** (Test'te "Kaç soru?"), kapalı **Seçenekler** (pratik, süre/güven, sınıflandırma, sorgu, kayıtlı sorgu, erteleme, test soru türleri).
+5. **Başla** — sayıyı üstünde taşır. Başlarken Rust yeniden doğrular; o an boşsa (`CONFLICT_NOTHING_TO_STUDY`) iletişim kutusu nedeniyle açık kalır, **hiçbir oturum açılmaz ve yarım oturum kapanmaz.**
+
+Klavye: `Enter` başlatır (odak "Devam et"te ya da kendi `Enter`'ı olan bir kontroldeyse o kontrol), `↑`/`↓`/`←`/`→` kapsamlar arasında, `Tab` sayı ve seçenekler, `Esc` kapatır. Son mod deste başına, son kapsam mod başına hatırlanır (cihazda). Ana sayfa sayısı sıfırken bile ölü bir "Başla" sunulmaz: başlatıcı pratik kapsamlarını gösterir.
+
+<!-- v1.3: verify after X1/X2 --> "Tüm desteler" (deste seçilmemiş) kuyruğu her destenin kendi günlük sınırlarına göre hesaplanacak; Ana sayfa ve başlatıcı sayıları buna göre.
+
+**Bekleme durumu.** Kalan kartların hepsi öğrenme adımında bekliyorsa oturum kapanmaz: "Sıradaki kart N dk sonra" + geri sayım, **Bekle** / **Başka bir şey çalış** (başlatıcı) / **Bitir**. <!-- v1.3: verify after X1/X2 --> Önden öğrenme penceresi ayar olacak; bekleme ekranı yalnız gerçekten beklemen gerektiğinde görünür.
+
+**Ara vermek.** Kartlar oturumunda `Esc` oturumu **duraklatır**: o ana kadarki özet ("Ara verdin — kaldığın yerden devam edebilirsin") ve **Devam et**; oturum açık kalır, başlatıcının ilk satırı da onu sunar. Tür başına tek açık oturum vardır (Kartlar, Öğren, Test, Eşleştir); Test kâğıdı cevaplarını taslak olarak saklar ve devam edince geri yükler.
+
+### 1.2 Klavye modeli: bir tuş, bir iş
+
+Kural: **bir tuşun anlamı gizli bir duruma bağlı olarak değişmez.** Uygulaması `features/study/keys.ts` (`keyAction`, saf fonksiyon, testli) ve `$lib/keyboard` (`isEditableTarget`).
+
+| Tuş | Tek işi | Neyi asla yapmaz |
+|---|---|---|
+| `Space` | Kartı çevirir, ön ⇄ arka, her basışta | Puanlamaz (v1.2'de ikinci basış "Biliyorum" sayıyordu) |
+| `1`–`4` (2'li düzende `1`/`2`) | Puanlar: Tekrar / Zor / İyi / Kolay (2'li: Hâlâ öğreniyorum / Biliyorum) | Arka yüz görülmeden hiçbir şey yapmaz; 2'li düzende `3`/`4` boş. Şıklı kartın sorusunda şık seçer (şıklar ekranda) |
+| `Enter` | Odaktaki kontrole basar | Sayfa kısayolu değildir; kartı odakta olmadan çevirmez/puanlamaz |
+| `H` | İpucu (yalnız soru yüzünde) | — |
+| `Z` | Son puanı geri alır | — |
+| `S` · `B` | Kartı durdur (sen açana kadar sorma) · yarına bırak (bugün bir daha sorma) | — |
+| `Esc` | Oturumdan çıkar = **ara verir** (oturum açık kalır, Devam et döner) | Oturumu bitirmez, kart silmez |
+| `Ctrl+Z` | Uygulamanın geri alması (`oplog.undo`) | **Yazı alanındayken** asla: orada metni geri alır (v1.2'de kayıtlı bir kartı siliyordu) |
+| `Ctrl+A` | Ara'da tüm satırları seçer | Yazı alanındayken metni seçer |
+| `N` | Hızlı Ekle | Yazı alanında, açık bir iletişim kutusunda, oturumda ve açık bir Select'te harf yazarken tetiklenmez |
+
+Ortak kurallar: **basılı tutulan tuş tek iş yapar** (`event.repeat` yok sayılır: Kartlar, Öğren, Test, Eşleştir, Ara, terim listesi, tablolar, düzenleyiciler, Gelen kutusu, Hızlı Ekle, Oluştur); **yazı alanında yerel düzenleme kazanır**, açık bir iletişim kutusu varken kabuk kısayolları çekilir; ok tuşları gezinme ve metin içindir. Kısayol düzenleyicisinde değiştirilen tuşlar ipucu satırına, `aria-keyshortcuts`'a ve `?` yardımına yansır; `study.reveal` eylem kimliği kayıtlı tercihler bozulmasın diye korundu, işi artık "çevir".
+
+### 1.3 Kart ekleme: tek yer (`features/notes/CreateScreen.svelte`, `add-way.svelte.ts`)
+
+Oluştur sayfası "Nasıl eklemek istersin?" diye açılır: **Tek kart** (Hızlı Ekle penceresi, `N`) · **Toplu** (ızgara) · **Yapıştır** · **Dosyadan**. Dördü aynı hedef seçiciyi (yeni / var olan deste, not türü) ve aynı onayı paylaşır: "12 kart eklendi · Geri al · Desteyi aç · Şimdi çalış", atlanan satırlar nedenleriyle. Sayfa son kullanılan yolla açılır.
+
+- **Hızlı Ekle:** önce terim / anlam / isteğe bağlı örnek (rollere göre, §1.5), diğer alanlar "Diğer" altında; yinelenen kart satır içinde açıklanır; altta aynı destede Toplu / Yapıştır / Dosyadan bağlantıları. `Ctrl+Enter` ekler, pencere açık kalır.
+- **Yapıştır ve Dosyadan** tek rehberli akış (`io.import.*`): kaynak → sütunlar not türünün alanlarına **rol adlarıyla** eşlenir (canlı ön/arka önizleme), ayırıcı algılanır ve değiştirilebilir, yinelenen kural düz cümleyle → içe aktarma işi, sonuç, geri al. Eşleme başlıktan (TR/EN rol kelimeleri: "sentence", "örnek", "definition"…), yoksa not türünün son eşlemesinden, yoksa rol sırasından (terim, anlam, örnek…) gelir. Sürükle-bırak çalışır.
+- İçe aktarma artık Ayarlar'da değil; **Ayarlar › Veri › Dışa aktar ve yedek** dışa aktarma, yedek ve yazdırmayı tutar ve içe aktarma için buraya bağlantı verir.
+- <!-- v1.3: verify after X1/X2 --> Yapay zekâ ile kart üretmek bir ekleme yolu olarak buraya taşınıyor; sağlayıcı kurulumu ve kullanım Ayarlar'da.
+
+### 1.4 Ayarlar kiti: ayar öğretir (`features/core/kit`)
+
+Kurallar (her ayar sayfası uyar):
+
+- **Sayfa bir cümleyle açılır:** bu sayfa ne için, ne zaman dokunursun (`SettingsPage`).
+- **Her satır sonucu söyler:** `FormRow` 14 px etiket + **gövde boyunda (13 px) açıklama** "bunu değiştirirsem ne olur?"; isteğe bağlı somut örnek ("Örnek: Günde 20 yeni kart → …"), "varsayılan" işareti, değişmiş değerde **"Varsayılana dön"** (`settings.reset`, geri alınabilir). ≤ 900 px pencerede ya da dar sütunda kontrol etiketin altına iner.
+- **Teknik olan "Gelişmiş" altında:** `SettingsAdvanced` sayfa başına kapalı başlar, durumu hatırlanır, arama sürerken kendiliğinden açılır. Not türlerinde şablon kodu/CSS/alan bayrakları, Planlama'da optimizasyon, Otomasyon'da ham kural düzenleyicisi, Yapay zeka sayfasında adres oradadır.
+- **Gruplar göreve göre**, en sık kullanılan önce: Genel · Çalışma ve kartlar · Bağlantılar · Veri · ayrı çizgiyle **Gelişmiş** ("çoğu zaman gerekmez"). Genel sayfası "Ne değiştirmek istiyorsun?" sorularıyla başlar. Solda üstte **arama** (yalnız sunum: sayfa adları + i18n alt ağaçları, `settings-index.ts`), eşleşen satır vurgulanır.
+- **Yıkıcı eylem** sayfanın sonunda `tone="danger"` bölümde ve onaydan önce mevcut kartlara tam olarak ne olacağını söyler.
+- Kit üstüne kurulu sayfalar: **Not türleri** öğrenen görünümüyle açılır (tür kutucukları, alan listesi "Bu alan ne içeriyor?" rol seçicisiyle, her kart şablonu için "Bu kart neyi soruyor?", çevrilebilir canlı önizleme; hazır başlangıç noktalarından "Yeni not türü"; şablon kodu Gelişmiş'te; kaydetmeden/silmeden önce tam veri kaybı uyarısı). **MCP** iki sekme: "Asistanını bağla" (istemci seçici, bu profilin gerçek `collection.db` ve `fc` yollarıyla parça, kopyala, test, salt okunur anahtarı; `mcp.setup`) ve "Dış MCP sunucuları". **Otomasyon** altı hazır tarifle (canlı etkilenen kart sayısı), kural tek düzenlenebilir cümle, okunur çalışma geçmişi. **Yapay zeka** sağlayıcısı hazır seçeneklerden üç adımla (anahtar → model → test), anlaşılır hata sınıflarıyla (docs/06 §1.1). Hazır ayarlar, hatırlatıcılar, profiller/kilit, eklentiler (sandbox sınırları görünür), Subtitle ve yerel API sayfaları da ne yaptıklarını söyler.
+
+### 1.5 Kelime kartları
+
+Bir alan **ne içerdiğini** (rol: terim, geçtiği hâli, anlam, örnek, örnek çevirisi, kaynak, not), bir kart şablonu **neyi sorduğunu** (`answer_field`) söyler (docs/02, docs/03). Arayüze etkisi:
+
+- **Kart arkası üç etiketli parça,** tipografi seviyesiyle: **anlam** (en büyük) › **örnek** (cümle + çevirisi, ayrı ve "Örnek" etiketli; cevabın parçası gibi görünmez) › **kaynak** (en küçük, "Kaynak" etiketli). Sınıflar Rust'tan gelir (`.fc-part-meaning`, `.fc-part-example`, `.fc-example-translation`, `.fc-part-source`, `.fc-blank`), renkleri `CardView`'de token'larla. Kullanıcının kendi şablonlarına dokunulmaz.
+- **İpucu** iki türlüdür (`HintDto.kind`): `context` — "Cümledeki boşluğu doldur" etiketiyle örnek cümle (kelime boşluklu ya da vurgulu), `letters` — harf ipucu. <!-- v1.3: verify after X1/X2 --> İleri kartın ön yüzü yalnız kelimeyi gösterecek, ilk ipucu cümleyi bağlam olarak; ters kartta ilk ipucu terimi boşluklu cümle. Kural: ipucu bağlamı gösterebilir, cevabı asla.
+- **Yazılı cevap ve Test** yalnız sorulan alanı bekler: "went" kartında "gitmek" doğrudur.
+- **Terim listesi** terim/tanım sütunlarını rollerden seçer, satır içi düzenleme doğru alana yazar; hangi alanın ne olduğu bilinmiyorsa kalem tam düzenleyiciyi açar.
 
 ## 2. Bilgi mimarisi
 
@@ -43,7 +125,7 @@ v1.2 aynı tema altyapısının üstünde koyu öncelikli, sık, klavye öncelik
    216 px (1024 px altında 56 px, yalnız simge)
 ```
 
-**Kenar çubuğu** (`shell/AppSidebar.svelte`, 216 px): uygulama işareti + ad; bölümler 30 px'lik sık satırlar: **Ana sayfa, Kütüphane, Oluştur, Ara, İstatistik**. "Oluştur" artık vurgulu bir blok değil, sıradan bir öğe (kart eklemek üst çubuğun işi). Altta **Gelen kutusu** (bekleyen öğe sayısı mono), **Ayarlar**, profil menüsü. Etkin öğe `--surface-3` zemin + vurgu renkli simge. Menüler hâlâ `modules.list`'ten gelir (kural 7); modül → bölüm/grup eşlemesi tek yerde: `shell/navigation.ts` (`PLACEMENTS`). Kapalı modül her yerden (palet dahil) kaybolur.
+**Kenar çubuğu** (`shell/AppSidebar.svelte`, 216 px): uygulama işareti + ad; bölümler 30 px'lik sık satırlar: **Ana sayfa, Kütüphane, Oluştur, Ara, İstatistik**. "Oluştur" kart eklemenin tek yeridir (§1.3; v1.3'te içe aktarma da burada). Altta **Gelen kutusu** (bekleyen öğe sayısı mono), **Ayarlar**, profil menüsü. Etkin öğe `--surface-3` zemin + vurgu renkli simge. Menüler hâlâ `modules.list`'ten gelir (kural 7); modül → bölüm/grup eşlemesi tek yerde: `shell/navigation.ts` (`PLACEMENTS`). Kapalı modül her yerden (palet dahil) kaybolur.
 
 **Üst çubuk** (`shell/TopBar.svelte`, 44 px, çalışma oturumu dışında **her zaman** görünür): solda iz (bölüm › sayfa, alt sayfada ekranın eklediği kırıntılar; `PageHeader` `back` ile otomatik), sağda:
 - **"Ara ya da komut çalıştır"** alanı (`Ctrl K` ipucu): komut paletini açar; palet modülü kapalıysa Ara sayfasına gider.
@@ -53,77 +135,56 @@ Bu girişler `shell/commands.svelte.ts`'te tek fonksiyondur: `openQuickAdd()` ve
 
 **Komut paleti** (`Ctrl+K`): önce Eylemler (Kart ekle, Ara, Geri al, Yinele), sonra ekranlar, sonra modüllere göre gruplu komutlar; kısayollar sağa hizalı. Taşınan her şey paletten bulunur.
 
-**Ayarlar** tek sayfa (v1.3): solda üstte **arama kutusu**, altında görev odaklı gruplar — en sık kullanılan önce: Genel (genel, hatırlatıcılar, kısayollar, profiller ve kilit) · Çalışma ve kartlar (deste ayarları, not türleri, modlar ve okuma) · Bağlantılar (yapay zeka, **Subtitle**) · Veri (içe/dışa aktarma, başlangıç desteleri) · ayrı çizgiyle **Gelişmiş** ("teknik ayarlar: çoğu zaman gerekmez": otomasyon, MCP, yerel API, eklentiler, bakım, günlükler ve güncellemeler). 1024 px altında alt menü tek bir Select olur, arama kutusu üstünde kalır; arama sürerken sonuçlar liste olarak görünür. Arama yalnız sunumdur: sayfa adları + her sayfanın gösterdiği i18n alt ağaçları (`core/kit/settings-index.ts`) içinde tüm kelimeleri aynı metinde arar, eşleşen sayfanın altında o metni gösterir; açık sayfada eşleşen `FormRow` vurgulanır, ilk eşleşmeye kaydırılır. Genel sayfası "Ne değiştirmek istiyorsun?" sorularıyla başlar (her biri ilgili sayfayı açar).
-
-Ayar sayfaları kutusuz (`features/core/kit`): `SettingsPage` (başlık + **tek düz cümle**: bu sayfa ne için, ne zaman dokunursun), `SettingsSection` (14 px başlık + gövde boyunda açıklama), `FormRow` (14 px etiket; **13 px açıklama** "bunu değiştirirsem ne olur?" sorusunu cevaplar; isteğe bağlı `example` → "Örnek: Günde 20 yeni kart → …"; `isDefault` → küçük "varsayılan" işareti; `onReset` + değişmiş değer → "Varsayılana dön" (`settings.reset`, geri alınabilir); ≤ 900 px pencerede ya da 560 px altı sütunda kontrol etiketin altına iner), `SettingsAdvanced` (sayfa başına "Gelişmiş" açılır bölüm: kapalı başlar, durumu cihazda hatırlanır, arama sürerken kendiliğinden açılır), `LoadState`; yıkıcı eylemler sayfanın sonunda `tone="danger"` bölümde ve onaydan önce mevcut kartlara tam olarak ne olacağını söyler.
+**Ayarlar** tek sayfa (v1.3, kurallar §1.4): solda üstte **arama kutusu**, altında görev odaklı gruplar — en sık kullanılan önce: Genel (genel, hatırlatıcılar, kısayollar, profiller ve kilit) · Çalışma ve kartlar (deste ayarları, not türleri, modlar ve okuma) · Bağlantılar (yapay zeka, **Subtitle**) · Veri (dışa aktarma ve yedek, başlangıç desteleri; içe aktarma Oluştur'da) · ayrı çizgiyle **Gelişmiş** ("teknik ayarlar: çoğu zaman gerekmez": otomasyon, MCP, yerel API, eklentiler, bakım, günlükler ve güncellemeler). 1024 px altında alt menü tek bir Select olur, arama kutusu üstünde kalır; arama sürerken sonuçlar liste olarak görünür. Arama yalnız sunumdur: sayfa adları + her sayfanın gösterdiği i18n alt ağaçları (`core/kit/settings-index.ts`) içinde tüm kelimeleri aynı metinde arar, eşleşen sayfanın altında o metni gösterir; açık sayfada eşleşen `FormRow` vurgulanır, ilk eşleşmeye kaydırılır. Genel sayfası "Ne değiştirmek istiyorsun?" sorularıyla başlar (her biri ilgili sayfayı açar).
 
 **Sayfa kabı:** tek kap (`App.svelte` `.page`), kenar çubuğunun yanında sola hizalı, `--content-max` 1120 px, `--content-pad-x` 24 px (1024 altında 16); tablo/grafik sayfaları (Ara, İstatistik) `ScreenDef.width: 'wide'` → 1440 px. Sayfa başlığı her zaman ilk satırdır; deste seçici ve bölüm sekmeleri kabuk tarafından ekranın `PageHeader`'ına verilir (`page-chrome.ts`).
 
-## 3. Dört temel akış (uygulandığı hâliyle)
+## 3. Ekranlar (uygulandığı hâliyle)
 
-### 3.1 Kart ekle — Hızlı Ekle ve toplu ızgara
+### 3.1 Ana sayfa ve çalışma oturumu
 
-**Hızlı Ekle** (`features/quickadd/`): `N` (yazı alanında değilken, açık bir iletişim kutusu yokken, oturum sürmüyorken), `Ctrl+N`, üst çubuktaki "Kart ekle", paletteki eylem ya da terim listesindeki "Kart ekle" açar. Pencerede:
-- Deste ve not türü seçicileri (ikisi de hatırlanır; deste sayfasında açılırsa o deste),
-- not türünün alanları sade girişler olarak `Tab` sırasıyla (zorunlu alan işaretli),
-- etiketler (virgül/boşlukla),
-- kapalı **"Diğer"**: sınıflandırma ve önizleme.
+**Ana sayfa** (`features/home/HomeScreen.svelte`) "şimdi ne yapayım" sorusunu cevaplar: ilk satırda "Bugün · **N** kart çalışılacak" ve mono kırılım (Vadeli · Öğreniliyor · Yeni), sağda birincil **"Çalışmaya başla"** (`Enter`, başlatıcıyı açar); gelen kutusunda bekleyen varsa tek ince satır; seri / bugün yanıtlanan / hedef şeridi; "Bugün çalışılacak desteler" sık tablosu, satır başına görünür "Çalış". Sırası gelen kart yoksa "Hepsi tamam" ve pratik önerisi; ölü düğme yok. **Bugünün sayıları başlatıcının kullandığı kuyruktan gelir** (`decks.summaries` / `decks.tree` içindeki `today_*` alanları, docs/03): Ana sayfa, Kütüphane ve deste sayfası aynı sayıyı söyler ve "Başla" o kadar kart verir. <!-- v1.3: verify after X1/X2 -->
 
-`Enter` sonraki alana geçer, son alanda ekler (`Shift+Enter` yeni satır); `Ctrl+Enter` her yerden ekler. Ekleme **pencereyi açık tutar**, alanları temizler, imleci ilk alana koyar ve "Eklendi · 3" sayacını **Geri al** ile gösterir (uygulamanın normal `oplog.undo`'su). Yinelenen kart uyarısında "Yine de ekle". `Esc` kapatır; yazılmış metin varsa ilk `Esc` sorar, ikincisi kapatır. Altta "Toplu ekle" Oluştur sayfasına geçer. Her kart sıradan bir `notes.create` komutudur. Pencerenin kodu ilk açılışta yüklenir (ilk paket bütçesi).
+**Çalışma oturumu:** oturum sürerken kabuk tamamen kaybolur (`ctx.setFocus(true)`). `features/modes/SessionFrame.svelte` tek ince üst satır çizer: menü düğmesi, mod ve deste, ilerleme çubuğu, mono "12 / 40", kalan kırılım, pratikse "pratik" çipi, çıkış (`Esc` = ara ver). Kart ortada (en çok 720 px, köşe 12), **cevap düğmeleri kart genişliğinde**: varsayılan 2'li (**Hâlâ öğreniyorum** `1`, **Biliyorum** `2`) ya da 4'lü (Tekrar/Zor/İyi/Kolay, mono sonraki aralıklarla; `study.answer_buttons`). Puan düğmeleri arka yüz görülene kadar pasif. Altında sessiz araç satırı (ipucu, geri al, bayrak, odak, daha fazla: "Durdur" ve "Yarına bırak" açıklamalarıyla) ve küçük mono kısayol ipuçları (kısayol düzenleyicisini izler). Öğren / Test / Eşleştir aynı çerçeveyi kullanır; Test kâğıdı açılınca ilk cevaba odaklanır. **Oturum özeti** sık; tamamlanmamışsa "Ara verdin" + Devam et, bitmişse "Tekrar çalış" (başlatıcı, bugün zorlandıkların seçili) ve "Yanlışları tekrar çalış" (`R`).
 
-**Toplu ekleme ızgarası** (`features/notes/CreateScreen.svelte`, Oluştur): satırlardan önce büyük form yok. Tek sık kurulum satırı (yeni/var olan deste, başlık ya da deste, üst deste, not türü; açıklama ve sınıflandırmalar "Diğer" altında), sonra numaralı **terim | tanım** satırlarından oluşan tablo benzeri ızgara. `Tab` satırlar boyunca alandan alana, son satırın son alanında `Enter` yeni satır, `Ctrl+Enter` kaydeder. Kaydet **tek bir `notes.create_many` komutu** = tek geri al adımı (yeni deste dahil). "Yapıştırarak içe aktar" penceresi (v0.5 ayırıcı algılama) ve "AI ile üret" (modül açıksa) aynı sayfadan.
+### 3.2 Kütüphane, deste sayfası, Ara
 
-### 3.2 Bugünü çalış — Ana sayfa → oturum
+**Kütüphane** (`features/decks/LibraryScreen.svelte`): sekmeler **Desteler | Notlar**; varsayılan sık **ağaç-tablo** (`ListRow`, 34 px; ad, kart, bugün, yeni, ustalık, sınıflandırma çipleri), ızgara ikincil görünüm (`fc.library.view`). Satırın "Çalış"ı başlatıcıyı o desteyle açar.
 
-**Ana sayfa** (`features/home/HomeScreen.svelte`) "şimdi ne yapayım" sorusunu cevaplar:
-- İlk satır: "Bugün · **141** kart" ve mono kırılım (Vadeli · Öğreniliyor · Yeni), sağda birincil **"Çalışmaya başla"** (`Enter`).
-- Gelen kutusunda bekleyen varsa tek ince satır.
-- Kompakt istatistik şeridi: seri, bugün cevaplanan, hedef.
-- "Bugün çalışılacak desteler": sık tablo (deste, vadeli / öğreniliyor / yeni mono, ustalık çubuğu + yüzde); satır deste sayfasını açar, satır başına "Çalış".
-Tüm sayılar backend'den (`decks.summaries`, `stats.overview`, `goals.list`, `inbox.count`); modülü kapalı parça çizilmez.
+**Deste sayfası** (`features/decks/DeckPage.svelte`): başlık + sayılar + çipler + ⋯; birincil **"Çalış"** (`Enter`) ve mod düğmeleri (Kartlar, Öğren, Test, Eşleştir başlatıcıyı o mod seçili açar; Okuma kendi ekranı); önizleme kartı (`←`/`→`, `Space`), ilerleme, bugünün sayıları, alt desteler. **Terim listesi** (`TermList.svelte`) gerçek bir tablo; satır içi düzenleme `notes.terms`'ün rollerden seçtiği alanlara yazar (`term_field`, `definition_field`), belirsiz not türlerinde tam düzenleyici açılır.
 
-**Çalışma oturumu:** oturum sürerken **kabuk tamamen kaybolur** (`ctx.setFocus(true)`): kenar çubuğu, üst çubuk, deste seçici ve sekmeler gizlenir. `features/modes/SessionFrame.svelte` tek ince üst satır çizer: menü düğmesi (kenar çubuğunu geri getirir, `html.fc-session-nav`), mod ve deste, ilerleme çubuğu, mono "12 / 40", kalan kırılım, ekstralar ve çıkış (`Esc`; Test atmadan önce sorar). Kartlar ekranında kart ortada (en çok 720 px, köşe 12), **cevap düğmeleri tam kart genişliğinde**: varsayılan 2'li (**Hâlâ öğreniyorum** = Tekrar `1`, **Biliyorum** = İyi `2`) ya da 4'lü (Tekrar/Zor/İyi/Kolay, mono sonraki aralıklarla; `study.answer_buttons`). Altında sessiz araç satırı (ipucu, geri al, bayrak, odak, daha fazla) ve küçük mono kısayol ipuçları. `F` odak modu tam ekran ve gizli sayaçlar ekler. Öğren / Test / Eşleştir aynı çerçeveyi kullanır: sık başlangıç panelleri (`SetupPanel`, `OptRow`), büyük seçenekler (`OptionTile`, `1`–`4`), renk + simge + metinle geri bildirim, Test sonunda puan halkası + yanlışlar tablosu, Eşleştir'de mono süre/en iyi süre. Oturum özeti sık, sayılar mono.
+**Ara** (`features/browse/BrowseScreen.svelte`, geniş): sorgu alanı (`/`), ince araç çubuğu, sık sanal tablo, kart bilgisi yan paneli; `↑`/`↓`, `Space`, `Shift+↑/↓`, `Enter` düzenle, `Esc`; seçim varken toplu işlem çubuğu. v1.3: `added:N` / `edited:N` / `reviewed:N` yerel çalışma günlerini sayar (`study.day_start_hour`), kayan 24 saati değil.
 
-### 3.3 Kartı bul ve düzelt — Kütüphane, deste sayfası, Ara
+### 3.3 İstatistik ve Planlama
 
-**Kütüphane** (`features/decks/LibraryScreen.svelte`): sekmeler **Desteler | Notlar**. Varsayılan görünüm sık **ağaç-tablo** (`ListRow`, 34 px): ad, kart, vadeli, yeni, ustalık, sınıflandırma çipleri; satır eylemleri (çalış, kart ekle, ⋯) üzerine gelince/odakta; ok tuşlarıyla gezinme, katlama hatırlanır. Eski kart ızgarası ikincil görünüm olarak kalır (`fc.library.view`). "Yeni deste". Deste açılınca deste sayfası Kütüphane içinde gösterilir; geri bağlantısı ve üst çubuk izi geri döner.
+`features/stats/` (geniş). İnce filtre satırından sonra üç soru sırayla: **Bugün nasılım?** (`stats.today`: tek satırlık yargı + mono rakamlar, hedef çubuğu), **Önümde ne var?** (7 günlük çubuk grafik, değer çubukta, en yoğun gün yazıyla da işaretli; 30 gün bir tık) ve **Nelerde zorlanıyorum?** (`stats.struggles`: kelime, anlam — rollerden —, yanlış/cevap, son görülme; birincil **"Bunları çalış · N"** başlatıcıyı pratik + bu kartlarla açar). Altında "Ayrıntılar": dönem özeti ve eski paneller, her biri tek satırlık anlamıyla. **Planlama** "Günde kaç yeni kart?" + "Sınav tarihim" ile açılır, canlı tahmin (`planning.forecast`, Rust'ta saf FSRS beklenen-değer modeli): büyük tek cümle, günlük iş yükü grafiği, haftalık tablo, ne değişeceğini söyleyen "Uygula" (`planning.apply_pace`, tek geri al adımı); sınavlar, yük dengeleme ve optimizasyon "Gelişmiş" altında. **Hedefler** boşluklu cümleler (yeni: "günde N kart"). **`?`** kısayol yardımını açar (canlı `shortcuts.list`, bağlama göre gruplu, aranabilir).
 
-**Deste sayfası** (`features/decks/DeckPage.svelte`), ekranın üst yarısında: başlık + sayılar + çipler + ⋯ menüsü; tek eylem çubuğu: birincil **"Çalış"** (`Enter`) ve çalışma modları kompakt düğmeler olarak (Kartlar, Öğren, Test, Eşleştir, Okuma; modülü kapalı olan yok). Altında daha küçük çevrilebilir önizleme kartı (`←`/`→`, `Space`), yanında Yeni / Öğreniliyor / Ustalaşıldı ilerlemesi, bugünün sayıları ve alt desteler. Aşağıda **terim listesi** (`TermList.svelte`) gerçek bir tablo: terim | tanım, seviye çipleri, ustalık, bayraklar; satır içi düzenleme (kalem ya da çift tıklama → iki alan, `Ctrl+Enter` kaydet, `Esc` vazgeç; `notes.update`), bayrak menüsü (`cards.set_flag`); "Kart ekle" bu destede Hızlı Ekle'yi açar.
+### 3.4 Diğer ekranlar
 
-**Ara** (`features/browse/BrowseScreen.svelte`, geniş): sayfanın kendisi sorgu alanıdır (gelince ve `/` ile odaklanır), sonra ince araç çubuğu, sık sanal tablo (34 px satır, mono sayılar, nokta durumlar, sütun seçici), kart bilgisi tabloyu kullanılır bırakan yan panel. Klavye: `↑`/`↓`, `Space` seç, `Shift+↑/↓` / `Shift+tık` genişlet, `Enter` notu düzenle, `Esc` paneli kapat / seçimi temizle; seçim varken yapışkan ince toplu işlem çubuğu. Sorgu dili, sıralama ve her değişiklik Rust'ta (`search.*`, `bulk.*`). Not düzenleyici: etiket üstte sıkı alanlar, sessiz biçim şeridi (`Ctrl+B`/`Ctrl+I`), `Ctrl+Enter` kaydeder.
+Gelen kutusu (sık inceleme listesi, `J`/`K`, `A`, `E`, `R`, `X`/`Space`, `Ctrl+Enter`; her satır neye dönüşeceğini söyler — cümle taşıyan öğe "Altyazı kartı" olur; destesiz satır göndermeden önce deste ister), ilk açılış rehberi (4 adımlı, kapatılabilir kontrol listesi: kelime ekle ya da başlangıç destesi, çalış, bugünün kartları ve ilerleme nerede, isteğe bağlı tarayıcı eklentisi; Başlangıç desteleri sayfasından yeniden açılır), başlangıç desteleri, kilit ekranı, eklentiler, okuma, yerel API ve Subtitle ayar sayfaları aynı sistemde. Subtitle bağlantısı: [06 §5.1](06-ai-ve-entegrasyonlar.md).
 
-### 3.4 İlerlemeyi gör — İstatistik
+### 3.5 Kısayollar (başvuru)
 
-`features/stats/` (geniş). **v1.3:** ince filtre satırından sonra üç soru sırayla: **Bugün nasılım?** (tek satırlık yargı cümlesi + mono rakamlar: cevap, doğruluk, süre, seri, hedef çubuğu), **Önümde ne var?** (7 günlük çubuk grafik: her çubukta doğrudan değer, gün adları, bugün kalın etiketli, en yoğun gün "▲ en yoğun" yazısı ve çerçeveyle — renk tek işaret değil; 30 gün bir tık) ve **Neyi unutuyorum?** (sık tablo: kelime, anlam, yanlış/cevap mono, son görülme; birincil "Bunları çalış · N", satır sonunda ⋯ menüsü: durdur, etiketle). Altında "Ayrıntılar" başlığıyla dönem özeti (dört `StatTile`) ve eski paneller (ısı haritası, bellek durumları + başarı oranları, gelişim + alışkanlıklar, deste karneleri, sınıflandırma kırılımı, sülükler), her biri bir satırlık açıklamayla. Grafikler mono eksenli, ekran okuyucu için gizli tablolu. **Planlama** iki kontrolle açılır ("Günde kaç yeni kart?" + hazır sayı çipleri, "Sınav tarihim") ve canlı sonucu: büyük tek cümle, kısa olgu listesi, günlük iş yükü grafiği, haftalık mono tablo, neyi değiştireceğini söyleyen "Uygula"; sınavlar ve yük dengeleme açıklamalı, optimizasyon + hatırlama/iş yükü tablosu "Gelişmiş" altında. **Hedefler** boşluklu cümle formu. **`?`** (yazı alanında değilken), üst çubuktaki "?" ya da paletten **kısayol yardımı**: canlı `shortcuts.list` tablosundan, bağlama göre gruplu, aranabilir, kısayol düzenleyicisine bağlantılı (`features/help/`). Her sayı backend'den.
-
-### 3.5 Diğer ekranlar
-
-Gelen kutusu: sık inceleme listesi, gezen odak ve klavye (`J`/`K`, `A` kabul, `E` düzenle, `R` reddet, `X`/`Space` seç, `Ctrl+Enter` seçimi kabul), görünür kısayol ipuçları. AI ile üret (kaynak | seçenekler, taslaklar yan panelde), başlangıç desteleri listesi, ilk açılış rehberi, kilit ekranı (kutusuz, uygulama işareti), not türleri (sık alan tablosu), eklentiler (tek sık liste), okuma (sık liste, rahat okuma sütunu), yerel API ve **Subtitle** ayar sayfaları da aynı sistemde. Subtitle bağlantısının kendisi: [06 §5.1](06-ai-ve-entegrasyonlar.md) ve kullanıcı rehberi.
-
-### 3.6 Kısayollar
-
-Değiştirilebilir olanlar Ayarlar → Genel → Kısayollar'da (`palette::UI_ACTIONS`); burada varsayılanlar.
+Değiştirilebilir olanlar Ayarlar → Genel → Kısayollar'da (`palette::UI_ACTIONS`), sabit olanlar da orada listelenir; `?` hepsini gösterir. Burada varsayılanlar. Kural §1.2.
 
 | Bağlam | Tuş | Eylem |
 |---|---|---|
-| Her yer | `N` | Hızlı Ekle (yazı alanında, iletişim kutusunda ve oturumda değil) |
-| Her yer | `Ctrl+N` | Hızlı Ekle (`ui.new_note`) |
-| Her yer | `Ctrl+K` | Komut paleti |
-| Her yer | `Ctrl+F` | Ara sayfası |
-| Her yer | `Ctrl+Z` / `Ctrl+Shift+Z` | Geri al / Yinele |
-| Ana sayfa | `Enter` | Çalışma başlatıcısını aç (v1.3) |
+| Her yer | `N` · `Ctrl+N` | Hızlı Ekle (`N`: yazı alanında, iletişim kutusunda, oturumda değil) |
+| Her yer | `Ctrl+K` · `Ctrl+F` · `?` | Komut paleti · Ara sayfası · kısayol yardımı |
+| Her yer | `Ctrl+Z` / `Ctrl+Shift+Z` | Geri al / Yinele — yazı alanında değilken |
+| Ana sayfa | `Enter` | Başlatıcıyı aç |
 | Deste sayfası | `Enter` · `←`/`→` · `Space` | Başlatıcıyı aç · önizlemede gez · önizlemeyi çevir |
-| Çalışma başlatıcısı (v1.3) | `Enter` · `←`/`→` · `↑`/`↓` · `Tab` · `Esc` | Başla (odak "Devam et"te ise devam) · mod · ne çalışılacak · sayı/seçenekler · kapat |
-| Hızlı Ekle | `Tab` · `Enter` · `Shift+Enter` | Sonraki alan · sonraki alan / son alanda ekle · yeni satır |
-| Hızlı Ekle | `Ctrl+Enter` · `Esc` | Ekle (pencere açık kalır) · kapat (metin varsa iki kez) |
-| Oluştur | `Tab` · `Enter` (son alan) · `Ctrl+Enter` | Sonraki alan · yeni satır · kaydet |
-| Terim listesi | çift tık / kalem · `Ctrl+Enter` · `Esc` | Satır içi düzenle · kaydet · vazgeç |
-| Kartlar | `Space` · `1`–`4` | Çevir (ön ⇄ arka, her basışta; asla puanlamaz) · Tekrar/Zor/İyi/Kolay, yalnız arka yüz görüldükten sonra (2'li düzende `1` Hâlâ öğreniyorum, `2` Biliyorum; `3`/`4` boş). `Enter` yalnız odaktaki düğmeye basar; basılı tutulan tuş tek işlem |
-| Kartlar | `H` · `S` · `B` · `Z` · `Esc` | İpucu · durdur (sen açana kadar) · yarına bırak · geri al · bitir |
+| Başlatıcı | `Enter` · ok tuşları · `Tab` · `Esc` | Başla (odaktaki kontrol kendi `Enter`'ını taşıyorsa o) · kapsam · sayı/seçenekler · kapat |
+| Kartlar | `Space` · `1`–`4` | Çevir (asla puanlamaz) · puanla, yalnız arka görüldükten sonra (2'li: `1` Hâlâ öğreniyorum, `2` Biliyorum) |
+| Kartlar | `H` · `S` · `B` · `Z` · `Esc` | İpucu · durdur (sen açana kadar) · yarına bırak · geri al · ara ver |
 | Kartlar | `Ctrl+1`–`7` · `F` | Bayrak · odak modu |
+| Kartlar (özet) | `R` | Yanlışları tekrar çalış |
 | Öğren / Test | `1`–`4` | Seçenek |
-| Ara | `/` · `↑`/`↓` · `Space` · `Shift+↑/↓` · `Enter` · `Esc` | Sorgu · gez · seç · seçimi genişlet · düzenle · kapat/temizle |
-| Ara | `Ctrl+A` · `Ctrl+J` · `Ctrl+I` · `Delete` | Tümünü seç · askıya al · kart bilgisi · sil |
+| Hızlı Ekle | `Tab` · `Enter` · `Shift+Enter` · `Ctrl+Enter` · `Esc` | Sonraki alan · sonraki alan / son alanda ekle · yeni satır · ekle (açık kalır) · kapat (metin varsa iki kez) |
+| Oluştur (Toplu) | `Tab` · `Enter` (son alan) · `Ctrl+Enter` | Sonraki alan · yeni satır · kaydet |
+| Terim listesi | çift tık / kalem · `Ctrl+Enter` · `Esc` | Satır içi düzenle · kaydet · vazgeç |
+| Ara | `/` · `↑`/`↓` · `Space` · `Shift+↑/↓` · `Enter` · `Esc` | Sorgu · gez · seç · genişlet · düzenle · kapat/temizle |
+| Ara | `Ctrl+A` · `Ctrl+J` · `Ctrl+I` · `Delete` | Tümünü seç · durdur · kart bilgisi · sil (yazı alanında değilken) |
 | Not düzenleyici | `Ctrl+B` · `Ctrl+I` · `Ctrl+Enter` | Kalın · italik · kaydet |
 | Gelen kutusu | `J`/`K` · `A` · `E` · `R` · `X` · `Ctrl+Enter` | Gez · kabul · düzenle · reddet · seç · seçimi kabul |
 
@@ -140,7 +201,7 @@ Değiştirilebilir olanlar Ayarlar → Genel → Kısayollar'da (`palette::UI_AC
 | `--surface-2` | `#1C1C20` | `#F3F3F0` | Yükseltilmiş: giriş, üzerine gelme |
 | `--surface-3` | `#25252B` | `#E9E9E4` | Etkin / seçili |
 | `--border` / `--border-strong` | `#2A2A31` / `#3A3A43` | `#E2E2DC` / `#CFCFC7` | 1 px ayırıcılar |
-| `--text-1` / `--text-2` / `--text-3` | `#EDEDEF` / `#A3A3AE` / `#74747F` | `#1A1A1C` / `#5C5C63` / `#85858C` | Birincil / ikincil / yer tutucu ve süs simgesi |
+| `--text-1` / `--text-2` / `--text-3` | `#EDEDEF` / `#A3A3AE` / `#74747F` | `#1A1A1C` / `#5C5C63` / `#85858C` | Birincil / ikincil (açıklamalar, ikincil sayılar) / **yalnız** yer tutucu ve süs simgesi — okunması gereken metin asla `--text-3` değil (v1.3 karşıtlık düzeltmesi) |
 | `--accent` + `--accent-fg` | `#F5B544` + `#17130A` | aynı | Dolgu (birincil düğme, çubuk, etkin sekme çizgisi) ve üstündeki metin |
 | `--accent-text` | `#F5B544` | `#9A5B00` | Yüzey üstünde vurgu metni/simgesi (AA) |
 | `--accent-soft` | vurgu %14 | vurgu %14 | Hafif vurgu zemini |
@@ -155,7 +216,7 @@ Anlamlı renklerin `-solid` (dolgu) + `-solid-fg` ve `-soft` (çip/şerit zemini
 
 - **Inter** (OFL, paketli, ağdan yüklenmez) arayüz için; Türkçe karakterler latin-ext dilimde.
 - **JetBrains Mono** (OFL, paketli, 400–600) **sayılar, sayımlar, süreler, kısayol ipuçları, tablo sayıları** için: `--font-mono`, `<span class="num">` = mono + tabular rakamlar. Ana sayfanın "141"i, oturumun "12 / 40"ı, tablo sütunları, `Kbd`.
-- Ölçek 11/12/13/14/16/20/24 (+32); **gövde 13 px**, vurgu 14, sayfa başlığı 20/600; çalışma kartı metni 28–40 (uzun metinde küçülür). Satır yüksekliği 1.45 (sıkı 1.3).
+- Ölçek 11/12/13/14/16/20/24 (+32); **gövde 13 px**, vurgu 14, sayfa başlığı 20/600; çalışma kartı metni 28–40 (uzun metinde küçülür). Satır yüksekliği 1.45 (sıkı 1.3). Ayar açıklamaları gövde boyunda (13 px; v1.2'de 12 idi). Kart arkasında üç seviye: anlam (kart metni) › örnek (gövde) › kaynak (küçük, ikincil).
 
 ### 4.3 Yoğunluk, şekil, derinlik, hareket, odak
 
@@ -177,7 +238,7 @@ Tüm ekranlar yalnız bunları kullanır; bileşenler kendini `data-fc-ui` ile i
 | Katmanlar | Dialog/Sheet (odak tuzağı, odak dönüşü), Tooltip, Toast/ToastHost (`toast.show`) |
 | Gezinme ve düzen | PageHeader (`back`, `meta`, `actions`, `tabs`, `chrome`), Tabs, Sidebar, NavItem (30 px, mono rozet) |
 | Kabuk (`src/lib/shell/`) | AppSidebar, TopBar, DeckPicker, ProfileMenu, SettingsLayout, `commands.svelte.ts`, `navigation.ts` |
-| Ekran kitleri | `features/core/kit` (SettingsPage, SettingsSection, FormRow, SettingsAdvanced, LoadState), `features/modes/SessionFrame` (+ SetupPanel, OptRow), `features/stats` (Panel, Heatmap, BarChart) |
+| Ekran kitleri | `features/core/kit` (SettingsPage, SettingsSection, FormRow, SettingsAdvanced, LoadState), `features/modes/SessionFrame` (+ OptRow), `features/study/StudyLauncher` (tüm modların tek başlangıcı; v1.3'te SetupPanel kalktı), `features/stats` (Panel, Heatmap, BarChart) |
 
 İlk yüklenen kod (`App.svelte`, `lib/shell/`, `*Host` bileşenleri) `$lib/ui`'yi dosya dosya alır, tembel ekranlar varilden (`tests/eager-imports.test.ts`). Sayılar/tarihler yalnız `$lib/format` (Intl, etkin dil; lint `tests/number-format.test.ts`).
 
@@ -189,60 +250,80 @@ Tüm ekranlar yalnız bunları kullanır; bileşenler kendini `data-fc-ui` ile i
 - Tüm metin çiftleri iki temada WCAG AA (testli); `prefers-reduced-motion` saygılı; 200% yakınlaştırmada taşma yok (900 px görüntülerinde denetlenir).
 - **Dil:** her metin i18n anahtarı (TR/EN, `tests/no-hardcoded-text.test.ts`); terimler tutarlı ("Öğreniliyor" her yerde). Varsayılan dil sistem dilinden; mock modunda da ayarlanan dil uygulanır.
 
-## 5. Görsel doğrulama
+## 5. Doğrulama
 
-`apps/desktop/scripts/screens.mjs`: mock modunda uygulamayı açıp her ekranın **açık/koyu × TR/EN × 1280 ve 900 genişlik** ekran görüntüsünü `apps/desktop/screens/` (git'e girmez) altına alır; CI'da artefakt olarak yüklenir. Görsel denetçiler kodu değil bu görüntüleri değerlendirir: hiyerarşi, hizalama, yoğunluk tutarlılığı, taşma, kontrast, boş durumlar, ham kontrol kalmış mı. **Görüntüler açılıp koyu ve açık temada gözle bakılır**; otomatik bulgu sayısı tek başına yetmez.
+v1.3'ün kuralı: **mock ekran görüntüleri yalnız görsel bir kontroldür; kabul, gerçek çekirdeğe karşı koşan yolculuklardır.** Bir akış "bitti" sayılmadan önce onu anlatan bir yolculuk yeşil olmalı ve yolculuk **kaydedilen sonucu** (not alanları, oturum satırları, cevap kayıtları, takvim) API'den geri okuyarak doğrulamalı; piksel ya da ekrandaki yazı tek başına kanıt değildir.
 
-### Nasıl çalıştırılır
+### 5.1 Yolculuklar: gerçek çekirdek, dev köprüsü (kabul)
+
+`fc --db <dosya> dev serve [--port N] [--token T]` (yalnız debug derlemelerinde ya da `dev-bridge` özelliğiyle; sürüm derlemesinde yok) loopback'te `POST /rpc { method, params }` ve `GET /events` (SSE) sunar; masaüstü IPC'siyle **aynı dağıtımı** kullanır (`fc_app::transport::dispatch`: zarf, hata biçimi, kilit). Ön yüz üçüncü taşıyıcıyla (`vite --mode bridge`, `VITE_FC_BRIDGE_URL` / `VITE_FC_BRIDGE_TOKEN`) tarayıcıda gerçek Rust çekirdeğine bağlanır. Ayrıntı: docs/07 §3.1, `apps/desktop/e2e/README.md`.
+
+```bash
+pnpm -C apps/desktop e2e                         # fc'yi derler, geçici profil, tohum, köprü + vite, tüm yolculuklar
+pnpm -C apps/desktop e2e -- --grep S2            # tek yolculuk (argümanlar playwright test'e gider)
+FC_BIN=target/debug/fc pnpm -C apps/desktop e2e  # cargo build'i atla
+FC_E2E_KEEP=1 pnpm -C apps/desktop e2e           # geçici profili sakla (yolu yazılır)
+```
+
+`e2e/run.mjs`: `fc`'yi derler (debug), geçici profil açar, köprüyü rastgele port + belirteçle başlatır, `seed.mjs` ile **yalnız gerçek komutlarla** tohumlar (İngilizce destesi: 30 Klasik not; Subtitle destesi: tarayıcı eklentisinin HTTP sözleşmesiyle `fc api serve` üzerinden 10 yakalama; ilk açılış rehberi atlanmış), vite'ı bridge modunda rastgele portta açar, Playwright'ı (başsız Chromium) koşar, her şeyi kapatıp profili siler. Hatalı yolculukların izleri `e2e/.results/`. CI: `ci.yml` içindeki `journeys` işi (ubuntu-24.04).
+
+**Yolculuk ekleme:** `journeys/<ad>.spec.ts`; yolculuklar tek profilde sırayla koşar, bu yüzden kendi destesini `uniq()` adıyla kurar ve başkasının verisine dayanmaz. Yardımcılar `../fixtures`: `rpc(method, params)` (kullanıcı olarak herhangi bir genel metot; durumu kurmak ve **sonucu doğrulamak** için), `seed()`, `makeDeck`, `notesIn`, `deckIdByPath`, `openApp(page, { lang })`, `press`, `focused`, `goToSection`, `choose` (`$lib/ui` Select), `t(key)` (kullanıcının okuduğu metni anahtardan: kelime sabitlenmez). Önce klavye; rol + `t()` + `data-testid` seçiciler. Önce tek başına (`--grep`), sonra tüm takım. Bilinen bir hatayı gösteren yolculuk **silinmez, atlanmaz**: hata iddiası, yolculuğun kendi ön koşulları geçtikten sonra `test.fail(true, '<hata>')` ile işaretlenir; hata düzelince Playwright "beklenen başarısızlık geçti" der ve işaret aynı commit'te kaldırılır.
+
+| Yolculuk | Ne yapılır → ne doğrulanır |
+|---|---|
+| J1 | Hızlı Ekle: `N`, yaz, `Ctrl+Enter` ×2 → seçilen destede iki not |
+| J2 | Oluştur › Toplu: 3 satır, `Ctrl+Enter` → deste + 3 not; tek `Ctrl+Z` hepsini kaldırır |
+| J3 | Ara, `↓ Enter`, arka yüzü düzenle, `Ctrl+Enter` → alan veritabanında değişmiş |
+| J4 | Oluştur › Dosyadan: CSV dosya seçiciyle → notlar var |
+| J5 | 21 yeni / sınır 20 / 20 çalışılmış: Ana sayfa `study.start`'ın veremeyeceğini vaat etmez |
+| J6 | Altyazı kartı yazılı test: yalnız anlam doğru cevaptır |
+| J7a/b | Ara'da yazı alanında `Ctrl+A` / `Ctrl+Z` metni düzenler (satır seçmez, `oplog.undo` çağırmaz) |
+| S1 | Ana sayfa → `Enter` → başlatıcı → `Enter`: `Space`×3 hiçbir şey puanlamaz, `2` bir kart puanlar, basılı `2` yine bir |
+| S2 | 3 kart cevapla, `Esc` (ara), başlatıcıyı aç: "Devam et" ilk sırada ve **aynı oturumu** sürdürür |
+| S3 | Deste sayfası → Test → 10 soru → gönder: puan görünür, hiçbir kartın takvimi değişmez |
+| S4 | İki kart "Tekrar" → "Bugün zorlandıklarım" 2 sayar; pratik (`trial`) satırları, takvim değişmez |
+| S5 | 21 yeni / sınır 20: başlatıcı ve Ana sayfa nedeniyle 0 gösterir; boş başlatma reddedilir, açık oturum korunur |
+| S6 | Bekleme: dakikalar içinde gösterilecek bir öğrenme kartı → "Sıradaki kart … sonra", oturum açık kalır <!-- v1.3: verify after X1/X2 --> |
+| S7a | Altyazı kartı go/went, başlatıcı → Test (yalnız yazılı): kâğıt cevap alanında açılır, "gitmek" doğru (kâğıt anahtarıyla geri okunur) |
+| S7b | Altyazı kartı arkası: anlam, örnek (+ çeviri), kaynak ayrı ve `cards.part.*` etiketli parçalar |
+| S7c | Altyazı kartı, `H`: ilk ipucu cevabı asla göstermez; kuralın iki yönü (ileri: cümle bağlam olarak, ters: terim boşluklu) <!-- v1.3: verify after X1/X2 --> |
+| S8 | Terim listesi: Altyazı notunun "Tanım"ını düzenlemek `meaning`'i değiştirir, `surface`'i asla |
+| S9 | Oluştur › Yapıştır `kelime⇥anlam⇥cümle` ×3 → Kelime not türünde örnek alanı cümleyi tutar; tek `Ctrl+Z` üçünü kaldırır |
+| S10 | Ayarlar › Not türleri: alan rolü ve kartın "neyi sorduğu" kaydet + yeniden yüklemeden sağ çıkar (`notetypes.get`) |
+| S11 | Ayarlar › Deste ayarları: 15 yeni kartlı destede günde 5 → başlatıcı ve `study.options` 5 sunar; varsayılana dön → 15 |
+| S12 | Hızlı Ekle: kayıttan sonra alanda `Ctrl+A` / `Ctrl+Z` metni düzenler; kayıtlı not ve oplog dokunulmamış |
+
+<!-- v1.3: verify after X1/X2 --> Liste v1.3 entegrasyonundaki hâldir; X1 (S1/S2 Ana sayfadan, S6 gerçekçi adım, S7c iki yön) ve X2'nin (düzelttiği akışlar için yeni yolculuklar) değişikliklerinden sonra `apps/desktop/e2e/README.md` ile eşitlenmeli.
+
+### 5.2 Windows: kurulu uygulamaya karşı WebDriver (pilot, kapıda değil)
+
+Linux'taki yolculuklar Windows'un üç sorusunu cevaplayamaz: kurulu NSIS paketi açılıyor mu, WebView2'de klavye aynı mı, gerçek IPC aynı sonucu kaydediyor mu. `.github/workflows/windows-build.yml` önce imzasız NSIS kurulumunu artefakt olarak üretir (`installer` işi; değişmedi), sonra **`continue-on-error: true`** ile ayrı bir `webdriver-pilot` işi (windows-2025) kurulumu sessizce yükler, `tauri-driver` + WebView2 sürümüne uyan `msedgedriver` ile **kurulu** uygulamaya bağlanır ve üç yolculuk koşar: uygulama açılır ve Ana sayfa çizilir; Hızlı Ekle (`N`, yaz, `Ctrl+Enter`) kütüphanede görünen bir not oluşturur; Ana sayfa → `Enter` → başlatıcı → `Enter` → `Space`, `Space`, `2` → oturum tam bir kart ilerler. Koşucu imajı, WebView2 ve sürücü sürümleri günlüğe yazılır. Kod `apps/desktop/e2e-windows/` (bağımlılıksız, W3C WebDriver HTTP). **Pilot, CI ilk kez koşana kadar denenmemiştir;** art arda temiz koşulardan sonra yayın kapısına yükseltilir. `windows-smoke` (`Flashcard.exe --smoke`) ucuz bir tanı olarak kalır.
+
+### 5.3 Görsel kontrol: mock ekran görüntüleri
+
+`apps/desktop/scripts/screens.mjs` mock modunda her ekranın **açık/koyu × TR/EN × 1280/900** görüntüsünü `apps/desktop/screens/` altına alır (git'e girmez; CI'da `screens` artefaktı). Bu **yalnız görseldir**: hiyerarşi, hizalama, yoğunluk, taşma, kontrast, boş durumlar. Görüntüler açılıp gözle bakılır; otomatik bulgu sayısı tek başına yetmez ve hiçbir akışın çalıştığını kanıtlamaz.
 
 ```bash
 pnpm -C apps/desktop screens            # tüm matris: --langs tr,en --themes light,dark --widths 1280,900
-pnpm -C apps/desktop screens --quick    # yalnız EN, açık, 1280 (açıkça verilen --langs/--themes/--widths yine geçerli)
-pnpm -C apps/desktop screens --strict   # bulgu varsa çıkış kodu 1 (varsayılan: yalnız raporla; betik çökerse 2)
-# diğer bayraklar: --langs tr --themes dark --widths 900 --port 23456 --url <çalışan dev:mock adresi>
-#                  --out <apps/desktop'a göreli klasör> --no-static
+pnpm -C apps/desktop screens --quick    # yalnız EN, açık, 1280
+pnpm -C apps/desktop screens --strict   # bulgu varsa çıkış kodu 1
+# diğer: --langs tr --themes dark --widths 900 --port 23456 --url <dev:mock adresi> --out <klasör> --no-static
 ```
 
-Çıktı `apps/desktop/screens/<dil>-<tema>-<genişlik>/<ad>.png`, `index.html` (yapılandırma başına küçük resim ızgarası, en üstte bulgu özeti) ve `report.json` (`configs`, `findings`, `static`, `totals`). Klasör her koşuda silinip yeniden yazılır. `--out` **`apps/desktop`'a göreli** bir yoldur (ör. `--out screens-dark`). Betik önce `merge-locales`'i çalıştırır, sonra vite'ı mock modunda betiğin seçtiği **rastgele bir portta** (20000–39999) `--strictPort` ile başlatır; böylece farklı worktree'lerde paralel koşular aynı geliştirme sunucusunu paylaşmaz. Sabit port için `--port N`, hazır bir sunucu için `--url` (o zaman sunucu başlatılmaz). Chromium `playwright-core` ile sürülür (`PLAYWRIGHT_CHROMIUM_EXECUTABLE`, yoksa playwright'ın kendi yolu, yoksa `~/.cache/ms-playwright` önbelleği; hiçbiri yoksa `npx playwright install chromium`). Görüntü penceresi `<genişlik> × 800`, tam sayfa değil; dil `localStorage` (`fc.locale`), tema `data-theme` ve `colorScheme` ile verilir.
+Çıktı `screens/<dil>-<tema>-<genişlik>/<ad>.png` + `index.html` + `report.json`. Vite mock modunda rastgele portta başlar (paralel worktree'ler çakışmaz). Ekranlar kenar çubuğundan, alt gezinmelerden (`subnav-item`, `settings-group*`, sekmeler; 1024 px altında `settings-select`) ve `open-dialog-*` kancalarından keşfedilir. Durumlar: deste sayfası ve terim listesi; her mod düğmesi **başlatıcıdan** (`launcher-start`) başlatılır → `state-<mod>`, `-active`, `-flipped`; Kartlar'da `state-cards-paused` (`Esc` = ara) ve kuyruğun tamamı cevaplandıktan sonra `state-cards-summary`; `state-test-result`, `state-match-finished`, Kütüphane ızgara/ağaç, Ara kart bilgisi / toplu çubuk / düzenleyici, Hızlı Ekle, palet; ayrı sayfada `?mock=fresh` (ilk açılış), `locked`, `update` ve `waiting` (`state-home-waiting` → `state-launcher` "Devam et" ile → `state-cards-waiting`). **Beklenen bir durum yakalanamazsa `state-missing` bulgusu** yazılır (`--strict` başarısız olur): kanca taşındıysa sessizce atlanmaz.
 
-**Bekleme:** her tıklamadan sonra betik ağ boşalmasını, kabuğun yükleniyor satırının (`p.loading[role=status]`, en çok 15 s) ve tembel yüklenen bir ekranın yer tutucusunun (`main .page > p.loading`, en çok 10 s) kaybolmasını, ardından 250 ms bekler. Böylece soğuk bir geliştirme sunucusunda kendi parçası (chunk) geç gelen ekranlar "Yükleniyor…" diye çekilmez ve alt gezinmeleri atlanmaz.
+Otomatik kontroller: `overflow-x`, `outside-viewport`, `text-clipped`, `raw-control` (+ kaynak taraması `raw-control-static`), `contrast` (WCAG AA), `i18n-raw-key`, `page-error`, `state-missing`. Mock verisi (`src/lib/api/mock/`, `features/*/mock.ts`) Rust'ın davranışını taklit eder (başlatıcı kapsamları, boş başlatma, bekleme, rolleri taşıyan yerleşik not türleri) ama **gerçek değildir**: bir mock'un doğru davranması çekirdeğin doğru davrandığını göstermez.
 
-**Keşif:** ekranlar sabit listelenmez. Kenar çubuğundaki her düğme (`[data-testid="nav-item"]`, yoksa `nav ul button`) sırayla açılıp çekilir; ad, sıra numarası + **ilk yapılandırmanın dilindeki** etiketin kısaltmasıdır ve diğer dil/tema/genişliklerde aynı kalır (varsayılan `--langs tr,en` ile TR: `01-ana-sayfa`, `07-ayarlar`, `06-gelen-kutusu-3`). Ekran içindeki alt gezinme öğeleri (`[data-testid="subnav-item"]`, `[data-testid^="settings-group"]`, `main [role=tab]`; en çok 30) tek tek tıklanır → `<ekran>--01`, `--02`…; 1024 px altında Ayarlar'ın alt menüsü bir Select olduğundan (`settings-select`) sayfalar oradan seçilir. Her sayfada `open-dialog-*` kancalı düğmeler (en çok 8, görünür ve etkinse) tıklanır, iletişim kutusu `<ekran>--dialog-<kanca>` olarak çekilir ve Esc ile kapatılır. Çalışan bir oturumdan başka ekrana geçmeden önce Esc ile (olmazsa sayfa yenilenerek) çıkılır; kabuk oturumda gizlidir.
+## 6. Kabul kriterleri (v1.3)
 
-**Durumlar** (nav ekranlarından sonra, bu sırayla; kanca yoksa o adım atlanır, v1.0 işaretlemesine düşülür):
-
-| Görüntü | Nasıl |
-|---|---|
-| `state-deck-page`, `state-deck-terms` | Ana sayfa → Kütüphane → ilk sekme → ilk `deck-row` (yoksa `.tree button.name` / `button.name`); terim listesine (`term-list`) kaydırılır |
-| `state-<mod>`, `state-<mod>-active`, `state-<mod>-flipped` | deste sayfasındaki her `deck-mode-<mod>` düğmesi (cards, learn, test, match, reading): boş hâli, `study-start` sonrası, varsa `flip` sonrası |
-| `state-cards-summary` | Kartlar oturumunda üç kart (Boşluk + `2`), sonra `study-end` |
-| `state-test-result` | her soruda ilk `option-*` seçilir, yazılı sorulara "—" yazılır, `test-submit` |
-| `state-match-finished` | `match-tile` (`data-side`) eşleşmeleri denenerek tahta çözülür, `match-result` beklenir |
-| `state-library-grid` | Kütüphane'nin varsayılan olmayan görünümü (`.view-toggle` içinde seçili olmayan radyo); v1.2'de ağaç varsayılan olduğundan ızgara. Ad gösterilen görünüme göre verilir (ızgara değilse `state-library-tree`), sonra eski görünüme dönülür |
-| `state-search-card-info`, `state-search-bulk` | Ara'da ilk `browse-row` tıklanır (kart bilgisi), Esc; ilk üç `browse-select` işaretlenir (toplu işlem çubuğu) |
-| `state-search-edit` | Esc, tabloya (`main [role=grid]`) odaklanıp Enter: not düzenleyici |
-| `state-quick-add` | Ana sayfada `N` |
-| `state-palette`, `state-palette-query` | `Ctrl+K`; ardından "kart" (EN: "card") yazılır |
-| `state-onboarding`, `state-lock`, `state-update`, `state-update-screen` | ayrı sayfada mock senaryoları: `?mock=fresh` (boş koleksiyon → ilk açılış rehberi), `?mock=locked` (kilit ekranı, PIN 1234), `?mock=update` (güncelleme bildirimi; `update-open` ile güncelleme ekranı) |
-
-Oluştur'un tüm alt sekmeleri (Ekle, Yapay zeka, İçe / dışa aktar, Başlangıç desteleri) ve Ayarlar'ın her sayfası (mock'ta Subtitle dahil 16) alt gezinme olarak çekilir; kenar çubuğundaki profil öğesi (`08-…`) Ayarlar → Profiller ve kilit'i açtığından Ayarlar'ın alt gezinmesi orada bir kez daha çekilir (sırayla, aynı sayfalar). Bugünkü mock verisiyle **her yapılandırma 82 görüntü** verir, tam matris (8 yapılandırma) **656**.
-
-**Otomatik kontroller (report.json):** `overflow-x` (sayfa yatay taşması), `outside-viewport` (görünür bir öğe yatayda pencere dışında ve kırpan bir atası yok; sabit konumlu öğeler dikeyde de), `text-clipped` (kendi metni olan öğede scrollWidth > clientWidth; `.sr-only` içindekiler sayılmaz), `raw-control` (DOM'da `[data-fc-ui]` içinde olmayan `<select>`/checkbox/radio; ayrıca `raw-control-static`: `src/lib/ui` ve `generated` dışındaki `.svelte` kaynak taraması, `--no-static` ile atlanır), `contrast` (WCAG AA — 24 px ya da 18,66 px kalın üstü 3:1, gerisi 4,5:1 — hesaplanmış renk ve birleşik arka plan; pasif öğeler ve gradyanlı zeminler atlanır), `i18n-raw-key` (ekranda ya da `placeholder`/`aria-label`/`title`'da ham `a.b.c` anahtarı), `page-error` (sayfa hatası, "Failed to load resource" dışındaki konsol hataları, başarısız istek ya da HTTP ≥ 400 — URL'siyle; `configs[].pageErrors` altında da).
-
-Mock verisi (`src/lib/api/mock/seed.ts` ve `features/*/mock.ts`) gerçekçi görünmesi için çok desteli, Seviye/Sınav sınıflandırmalı, vadeli kartlı, istatistik geçmişli ve gelen kutusu dolu tutulur. Subtitle modülü mock'ta (gerçeğin aksine) açık başlar; biri kullanılmış, biri iptal edilmiş iki anahtar ve 12 gelen kelimeyle.
-
-## 6. Kabul kriterleri (v1.2)
-
-- [x] Hiçbir özellik kaldırılmadı: Rust'ın kaydettiği her rota yerleşik ve ekranlı (`shell/navigation.test.ts`, `App.test.ts`); taşınan her şey paletten bulunur; modüller hâlâ kapatılabilir (`features/module-switches.test.ts`).
-- [x] Kabuk: 216 px kenar çubuğu (1024 px altında simge), oturum dışında her zaman görünen 44 px üst çubuk (iz, `Ctrl+K` arama/komut, `N` "Kart ekle"); giriş noktaları `shell/commands.svelte.ts`'te.
-- [x] Hızlı Ekle: `N` / `Ctrl+N` / üst çubuk; deste ve not türü hatırlanır, `Ctrl+Enter` ekler ve pencere açık kalır, sayaç + Geri al, `Esc` kapatır (`features/quickadd/quickadd.test.ts`).
-- [x] Oluştur bir ızgara: tek kurulum satırı + numaralı terim | tanım satırları, kaydet tek `notes.create_many` geri al adımı (`features/notes/create.test.ts`).
-- [x] Ana sayfa "Bugün · N kart" + kırılım + `Enter` ile başla; çalışma oturumunda kabuk kaybolur (`SessionFrame`), kart en çok 720 px, cevap düğmeleri kart genişliğinde, 2'li ve 4'lü düzen korunur.
-- [x] Kütüphane ağaç-tablo varsayılan, ızgara ikincil; deste sayfasında "Çalış" ve mod düğmeleri ilk ekranda, terim listesi satır içi düzenlemeli tablo.
-- [x] Token'lar tasarım yönergesindeki değerlerle (koyu öncelikli, tek kehribar vurgu, sıcak nötrler), JetBrains Mono paketli; tüm metin çiftleri iki temada AA (`tests/contrast.test.ts`).
-- [x] Hiçbir ekranda ham `<select>`/checkbox/radio yok (`tests/raw-controls.test.ts`, izin listesi yok); sabit metin yok (`tests/no-hardcoded-text.test.ts`); sayılar `$lib/format`'tan (`tests/number-format.test.ts`).
-- [x] Davranış değişmez: ön yüz testleri geçer (44 dosya / 365 test); Rust tarafında v1.2 yalnız varsayılan hazır temanın renklerini değiştirdi (+ ayrı Subtitle modülü), `cargo check` temiz. Tam `cargo test --workspace` birleştirmeden önce CI'da koşulur.
-- [x] Performans bütçesi (02 §34, ilk JS ≤ 320 kB) korunur — `pnpm build && pnpm bundle:check`: ilk JS 177,1 kB, CSS 50,0 kB (bütçe 52 kB); fontlar ve simgeler yerel.
-- [x] `pnpm screens --strict` tam matris (TR/EN × açık/koyu × 1280/900): 8 yapılandırma × 82 = **656 görüntü**, otomatik denetimde **0 bulgu**; `tr-dark-1280` baştan sona, `tr-light-1280` ana ekranlar, `en-dark-900` uzun EN etiketleri için gözle incelendi.
-- [ ] Gerçek Tauri penceresinde (Windows) elle gezinti — yalnız mock modunda doğrulandı.
-- [ ] Subtitle tarayıcı eklentisi gerçek bir tarayıcıda uygulamaya bağlanıp kelime gönderiyor — sözleşme testleri (`tools/subtitle-contract/check.mjs`, eklentinin kendi `api.ts`'i `fc api serve`'e karşı) geçiyor, gerçek tarayıcıda denenmedi.
+- [x] Tek başlatıcı: her çalışma girişi aynı iletişim kutusunu açar; "Devam et" ilk; beş kapsam tam sayılarıyla; boş kapsam nedenini söyler; boş başlatma oturum açmaz ve yarım oturumu kapatmaz (S1, S2, S5; Rust: `study.options` sayısı = `study.start`'ın verdiği).
+- [x] Bir tuş = bir iş: `Space` asla puanlamaz, puan yalnız arka görüldükten sonra, basılı tuş tek iş, `Esc` ara verir, yazı alanında `Ctrl+Z`/`Ctrl+A` metne aittir (S1, S2, J7, S12; `keys.test.ts`).
+- [x] Pratik kapsamları takvime dokunmaz (S3, S4).
+- [x] Kelime kartları: cevap anahtarı yalnız sorulan alan, kart arkası üç etiketli parça, "Tanım" doğru alanı düzenler, yakalanan cümle kaybolmaz (J6, S7a, S7b, S8, S9, S10).
+- [ ] İpucu kuralı iki yönde (S7c) <!-- v1.3: verify after X1/X2 -->
+- [ ] "Tüm desteler" kuyruğu deste ayarlarına uyar; S1/S2 Ana sayfadan sırasız koşar <!-- v1.3: verify after X1/X2 -->
+- [x] Kart ekleme tek yerde (Tek kart / Toplu / Yapıştır / Dosyadan), içe aktarma Ayarlar'dan çıktı (J1, J2, J4, S9).
+- [x] Ayarlar öğretir: açıklamalar gövde boyunda, örnek, varsayılan + "Varsayılana dön", Gelişmiş, arama (S11; `kit.test.ts`).
+- [x] Tasarım sistemi korunur: token'lar, mono sayılar, kenarlık; ham kontrol yok, sabit metin yok, sayılar `$lib/format`'tan (lint testleri).
+- [ ] Windows: kurulu uygulamada üç WebDriver yolculuğu yeşil (pilot, kapıda değil) ve gerçek bir Windows'ta elle koşu.
+- [ ] Subtitle tarayıcı eklentisi gerçek bir tarayıcıda (sözleşme testleri ve tohumdaki yakalamalar geçiyor).
