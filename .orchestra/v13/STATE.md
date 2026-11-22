@@ -15,7 +15,7 @@ refused by the safety layer: use `--permission-mode auto`.
 | b0 | dev bridge (real Rust core in browser) + journeys | running |
 | r1 | study backend: study.options, scopes, truthful counts, resume | running |
 | r2 | vocabulary: field roles, answer_field, context hint, card backs, context kept | running |
-| f1 | study launcher dialog + one-key-one-job keyboard model + plain words | running |
+| f1 | study launcher dialog + one-key-one-job keyboard model + plain words | MERGED (ed3209b). After r1 merge: bind `features/study/contract.ts` to generated types, drop `as never` casts. Leftovers: key repeat in BrowseScreen/TermList; 'zor kart/unutma' wording in stats/browse; S3 'Şimdi çalış' → launcher |
 | s1 | AI provider presets (OpenRouter…), model list, test connection | running |
 | s2 | settings kit that explains, note types, MCP, automation recipes | running |
 | s3 | add cards in one place: single/bulk/paste/file; first-run guide | MERGED (4d2105f). Notes: "Şimdi çalış" goes to /study (wire to launcher after f1); S4 help should call openGuide() |
