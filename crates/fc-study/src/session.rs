@@ -16,7 +16,9 @@ use fc_core::{CardId, NoteId, Timestamp};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-/// How long ahead a waiting learning card may be shown when nothing else is left, ms.
+/// How long ahead a waiting learning card may be shown when nothing else is left, ms: the
+/// default of the app's `study.learn_ahead_mins` setting (v1.3), which callers pass to
+/// [`next_entry`] / [`available_at`].
 pub const LEARN_AHEAD_MS: i64 = 20 * 60_000;
 
 /// Longest answer time recorded for one card, ms (longer = the user walked away).
@@ -296,6 +298,13 @@ pub fn next_entry(
                 .filter(|e| e.due.is_some_and(|d| d <= now.plus_millis(learn_ahead_ms)))
                 .min_by_key(|e| e.due)
         })
+}
+
+/// When a waiting learning entry due at `due` is shown by [`next_entry`] with nothing else
+/// left: `learn_ahead_ms` before its due time. A session's "next card at" and a launcher's
+/// "available at" are this moment, so a countdown ends exactly when the card comes.
+pub fn available_at(due: Timestamp, learn_ahead_ms: i64) -> Timestamp {
+    due.plus_millis(-learn_ahead_ms.max(0))
 }
 
 /// Earliest due time among waiting learning entries.

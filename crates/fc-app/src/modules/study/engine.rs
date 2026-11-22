@@ -30,7 +30,7 @@ use fc_storage::Reads;
 use fc_study::hint::{ContextSource, HintKind, HintShape, LeveledHint, MaskedSentence};
 use fc_study::text::html_to_text;
 use fc_study::scheduler::{self, RATINGS};
-use fc_study::session::{self as queue, SessionState, LEARN_AHEAD_MS};
+use fc_study::session::{self as queue, SessionState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeSet, HashMap};
@@ -174,6 +174,8 @@ pub(crate) struct Session {
     stored: Stored,
     /// The app's queue cache (saves update it).
     cache: Option<Arc<state_diff::QueueCache>>,
+    /// `study.learn_ahead_mins` in ms (v1.3), as read when the session was loaded.
+    pub learn_ahead_ms: i64,
 }
 
 /// The persisted state of a [`Session`].
@@ -193,6 +195,7 @@ impl Session {
         record: SessionRecord,
         config: SessionConfig,
         state: SessionState,
+        learn_ahead_ms: i64,
     ) -> Self {
         Self {
             record,
@@ -200,6 +203,7 @@ impl Session {
             state,
             stored: Stored::default(),
             cache: registry.extension::<state_diff::QueueCache>(),
+            learn_ahead_ms,
         }
     }
 
@@ -246,6 +250,7 @@ impl Session {
             state,
             record,
             cache,
+            learn_ahead_ms: super::plan::learn_ahead_ms(reads)?,
         })
     }
 
@@ -332,7 +337,7 @@ impl Session {
         if self.record.ended_at.is_some() {
             return None;
         }
-        queue::next_entry(&self.state.queue, now, LEARN_AHEAD_MS)
+        queue::next_entry(&self.state.queue, now, self.learn_ahead_ms)
     }
 
     /// Fails unless `card` can be answered now: it is queued and available (no due time, or
@@ -344,7 +349,7 @@ impl Session {
                 e.card_id == card
                     && e
                         .due
-                        .is_none_or(|d| d <= now.plus_millis(LEARN_AHEAD_MS))
+                        .is_none_or(|d| d <= now.plus_millis(self.learn_ahead_ms))
             });
         if !available {
             return Err(not_available(card));
@@ -555,10 +560,13 @@ fn answer_field_text(nt: &NoteType, note: &Note, template_key: &str) -> Option<S
     field_text(nt, note, key)
 }
 
-/// The v1.3 context hint of a rendered card: the note's example sentence with the term
-/// blanked, unless the question already shows that sentence (the hint would show nothing
-/// new) or the blanked sentence would still contain the answer, the term or the surface form.
-fn context_of(nt: &NoteType, note: &Note, r: &StudyRender) -> Option<MaskedSentence> {
+/// The v1.3 context hint of a rendered card (X1 rule: a hint may reveal context but never
+/// the answer). The note's example sentence: on a card asking for the word (reverse /
+/// production) its occurrence is blanked; on one asking for the meaning the word is
+/// highlighted and the meaning blanked only where it occurs. `None` when the question already
+/// shows that sentence (the hint would show nothing new) or the sentence would still give the
+/// answer away (letters then).
+fn context_of(nt: &NoteType, note: &Note, template_key: &str, r: &StudyRender) -> Option<MaskedSentence> {
     let example = role_html(nt, note, FieldRole::Example)?;
     let norm = |t: &str| t.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
     let sentence = norm(&html_to_text(&example));
@@ -566,16 +574,26 @@ fn context_of(nt: &NoteType, note: &Note, r: &StudyRender) -> Option<MaskedSente
         return None;
     }
     let text = |role| role_html(nt, note, role).map(|h| html_to_text(&h));
-    let candidates: Vec<String> = [text(FieldRole::Surface), text(FieldRole::Term)]
+    let word_forms: Vec<String> = [text(FieldRole::Surface), text(FieldRole::Term)]
         .into_iter()
         .flatten()
         .collect();
-    let mut forbidden = candidates.clone();
-    forbidden.push(r.expected.clone());
+    // What the card asks for: its answer field's role, else whether the expected answer is
+    // the word itself.
+    let answer_role = content::template_for(nt, template_key)
+        .and_then(|t| t.answer_field.as_ref())
+        .and_then(|k| nt.field(k))
+        .and_then(|f| f.role);
+    let asks_for_word = match answer_role {
+        Some(role) => matches!(role, FieldRole::Term | FieldRole::Surface),
+        None => word_forms.iter().any(|w| norm(w) == norm(&r.expected)),
+    };
+    let answer_forms = fc_study::hint::answer_forms(&r.expected);
     fc_study::hint::context_hint(&ContextSource {
         example_html: &example,
-        candidates: &candidates,
-        forbidden: &forbidden,
+        word_forms: &word_forms,
+        asks_for_word,
+        answer_forms: &answer_forms,
     })
 }
 
@@ -591,7 +609,7 @@ pub(crate) fn study_hint(
     let r = render_for_study(v, &card)?;
     let note = require_note(v.reads, card.note_id)?;
     let nt = require_notetype(v.reads, note.notetype_id)?;
-    let context = context_of(&nt, &note, &r);
+    let context = context_of(&nt, &note, &card.template_key, &r);
     Ok(fc_study::hint::leveled_hint(
         kind,
         &r.expected,
@@ -796,9 +814,11 @@ pub(crate) fn session_dto(v: View<'_>, s: &Session, now: Timestamp) -> AppResult
         answered: s.state.answered,
         correct: s.state.correct,
         mistakes: u32::try_from(s.state.again.len()).unwrap_or(u32::MAX),
-        // v1.3: when the first waiting card can be shown (learn-ahead), not its due time.
+        // v1.3: when the first waiting card is shown (its due time minus the learn-ahead
+        // window `study.learn_ahead_mins`), so the waiting screen's countdown ends exactly
+        // when the card comes.
         next_due: if current.is_none() && s.record.ended_at.is_none() {
-            queue::next_due(&s.state.queue).map(|d| d.plus_millis(-LEARN_AHEAD_MS))
+            queue::next_due(&s.state.queue).map(|d| queue::available_at(d, s.learn_ahead_ms))
         } else {
             None
         },

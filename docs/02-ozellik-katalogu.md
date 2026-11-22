@@ -51,7 +51,7 @@ Gösterim: `[v0.2]` = hedef sürüm · 🧱 = dayandığı yapı taşları
 - **Etiketli kart arkası** `[v1.3]`: Kelime, Cümle ve Altyazı kartlarının arkası üç ayrı parçadır: anlam (en büyük), örnek (cümle + çevirisi, "Örnek" etiketli), kaynak (en küçük, "Kaynak" etiketli).
 - `[v1.3]` Hazır not türleri roller ve cevap alanlarıyla gelir; var olan koleksiyonlarda **migration 1300** bunları yalnızca kullanıcının düzenlemediği yerleşik türlere ekler (düzenlenmiş şablon, alan ve CSS'e dokunulmaz). Ayrıntı: [03 §4.1](03-mimari.md).
 - **Not türleri ekranı (öğrenen görünümü)** `[v1.3]`: Ayarlar › Not türleri önce tür kutucuklarını, alan listesini ve çevrilebilen canlı kart önizlemesini gösterir. "Yeni not türü" hazır başlangıç noktalarından açılır; şablon kodu, CSS ve alan bayrakları "Gelişmiş: şablon kodu" altındadır. Kaydetmeden ya da silmeden önce hangi verinin kaybolacağı tam olarak söylenir.
-- Kart şablonları alanları yerleştiren bir şablon dili kullanır: `{{kelime}}`, `{{#ornek}}...{{/ornek}}` (koşullu), `{{tts:kelime}}` (sesli okuma), `{{type:anlam}}` (yazarak cevaplama), `{{hint:ornek}}` (ipucu).
+- Kart şablonları alanları yerleştiren bir şablon dili kullanır: `{{kelime}}`, `{{#ornek}}...{{/ornek}}` (koşullu), `{{tts:kelime}}` (sesli okuma), `{{type:anlam}}` (yazarak cevaplama), `{{hint:ornek}}` (ipucu), `{{unless_same:diger:alan}}` (alan, metni diğer alanınkiyle aynı değilse; v1.3).
 - Şablon dili saf bir fonksiyondur: `render(şablon, alanlar, bağlam) → içerik`. Frontend'den bağımsızdır.
 
 ## 4. 🧩 Kart türleri

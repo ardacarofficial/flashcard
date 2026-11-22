@@ -109,6 +109,14 @@ fn hint(t: &TestApp, s: &SessionDto, card: CardId) -> HintDto {
     })
 }
 
+fn suspend(t: &TestApp, card: CardId, suspended: bool) {
+    t.ok::<StudySuspend>(fc_api::v1::study::SuspendCards {
+        card_ids: vec![card],
+        suspended,
+        session_id: None,
+    });
+}
+
 fn terms(t: &TestApp, deck: DeckId) -> Vec<NoteTerm> {
     t.ok::<NotesTerms>(ListNotes {
         deck_id: Some(deck),
@@ -138,10 +146,13 @@ fn went_is_answered_with_its_meaning_only() {
     assert!(at("fc-part-source") > at("Eve gittim."));
     assert!(back.contains("data-fc-part=\"example\""));
 
-    // The front shows the line already: the hint is letters of the meaning.
+    // X1: the front asks with the word only, so the first hint is the line as context (the
+    // word highlighted), then letters of the meaning.
+    let h = hint(&t, &s, card);
+    assert_eq!((h.kind, h.text.as_deref()), (HintKind::Context, Some("I went home.")));
+    assert_eq!(h.level, 1);
     let h = hint(&t, &s, card);
     assert_eq!((h.kind, h.text.as_deref()), (HintKind::Letters, Some("g_____")));
-    assert_eq!(h.level, 1);
 }
 
 #[test]
@@ -216,6 +227,8 @@ fn the_term_list_edits_the_meaning_never_the_surface_form() {
     assert!(!rows.iter().find(|r| r.note_id == k.id).unwrap().ambiguous);
 }
 
+/// X1 hint rule: a hint may reveal context but never the answer. A card asking for the
+/// meaning shows the sentence with the word highlighted; one asking for the word blanks it.
 #[test]
 fn hints_start_with_the_sentence_and_never_leak_the_answer() {
     let t = TestApp::mem();
@@ -226,25 +239,14 @@ fn hints_start_with_the_sentence_and_never_leak_the_answer() {
         d.id,
         &[("word", "go"), ("meaning", "gitmek"), ("example", "I **went** home.")],
     );
-    let production = n
-        .cards
-        .iter()
-        .find(|c| c.template_key == "production")
-        .unwrap()
-        .id;
-    let recognition = n
-        .cards
-        .iter()
-        .find(|c| c.template_key == "recognition")
-        .unwrap()
-        .id;
-    let s = start(&t, d.id, "normal", serde_json::Value::Null);
-    // Both cards of the note are in the session (siblings are new: shown in order).
-    let shown = current(&s).card_id;
-    assert!(shown == production || shown == recognition);
-    let expected = if shown == production { "go" } else { "gitmek" };
+    let card = |key: &str| n.cards.iter().find(|c| c.template_key == key).unwrap().id;
+    let (production, recognition) = (card("production"), card("recognition"));
+    // One card of the note per session (siblings are buried): the other one suspended.
+    suspend(&t, recognition, true);
+    let s = session_on(&t, d.id, production);
 
-    let one = hint(&t, &s, shown);
+    // Production (meaning → word): the word is the answer, blanked.
+    let one = hint(&t, &s, production);
     assert_eq!(one.kind, HintKind::Context);
     assert_eq!(one.text.as_deref(), Some("I ___ home."));
     assert_eq!(
@@ -252,14 +254,29 @@ fn hints_start_with_the_sentence_and_never_leak_the_answer() {
         Some("I <span class=\"fc-blank\">___</span> home.")
     );
     assert_eq!(one.level, 1);
-    let two = hint(&t, &s, shown);
-    assert_eq!(two.kind, HintKind::Letters);
-    assert_eq!(two.level, 2);
-    let first: String = expected.chars().take(1).collect();
-    assert!(two.text.as_deref().unwrap().starts_with(&first));
-    assert_eq!(check(&t, &s, shown, expected), AnswerGrade::Correct);
+    let two = hint(&t, &s, production);
+    assert_eq!((two.kind, two.level), (HintKind::Letters, 2));
+    assert!(two.text.as_deref().unwrap().starts_with('g'));
+    assert_eq!(check(&t, &s, production, "go"), AnswerGrade::Correct);
 
-    // The sentence still holds the term elsewhere: no context hint, letters from level 1.
+    // Recognition (word → meaning): the sentence as context, the word highlighted; the
+    // meaning is not in it. Then letters of the meaning.
+    suspend(&t, recognition, false);
+    suspend(&t, production, true);
+    let s = session_on(&t, d.id, recognition);
+    let one = hint(&t, &s, recognition);
+    assert_eq!(one.kind, HintKind::Context);
+    assert_eq!(one.text.as_deref(), Some("I went home."));
+    assert_eq!(
+        one.html.as_deref(),
+        Some("I <b class=\"fc-context-word\">went</b> home.")
+    );
+    let two = hint(&t, &s, recognition);
+    assert_eq!((two.kind, two.text.as_deref()), (HintKind::Letters, Some("g_____")));
+    assert_eq!(check(&t, &s, recognition, "gitmek"), AnswerGrade::Correct);
+
+    // The sentence still holds the word elsewhere: asking for the word gives letters from
+    // level 1; asking for the meaning still shows the context.
     let d2 = deck(&t, "Leaky");
     let leaky = note(
         &t,
@@ -267,10 +284,53 @@ fn hints_start_with_the_sentence_and_never_leak_the_answer() {
         d2.id,
         &[("word", "run"), ("meaning", "koşmak"), ("example", "I run where you run.")],
     );
-    let s2 = start(&t, d2.id, "normal", serde_json::Value::Null);
-    let c2 = current(&s2).card_id;
-    assert!(leaky.cards.iter().any(|c| c.id == c2));
-    assert_eq!(hint(&t, &s2, c2).kind, HintKind::Letters);
+    let card = |key: &str| leaky.cards.iter().find(|c| c.template_key == key).unwrap().id;
+    suspend(&t, card("recognition"), true);
+    let s2 = session_on(&t, d2.id, card("production"));
+    assert_eq!(hint(&t, &s2, card("production")).kind, HintKind::Letters);
+    suspend(&t, card("recognition"), false);
+    suspend(&t, card("production"), true);
+    let s2 = session_on(&t, d2.id, card("recognition"));
+    let ctx = hint(&t, &s2, card("recognition"));
+    assert_eq!((ctx.kind, ctx.text.as_deref()), (HintKind::Context, Some("I run where you run.")));
+}
+
+/// The owner's Subtitle card (X1): the front asks with the word only (surface large, the
+/// dictionary form beside it), so the first hint is the line with the word highlighted —
+/// never the meaning.
+#[test]
+fn the_subtitle_card_asks_with_the_word_and_hints_with_its_line() {
+    let t = TestApp::mem();
+    let d = deck(&t, "Subtitle");
+    let n = went(&t, d.id);
+    let card = n.cards[0].id;
+    let s = session_on(&t, d.id, card);
+    let front = &current(&s).sides.question;
+    assert!(front.contains("went") && front.contains("fc-lemma"), "{front}");
+    assert!(front.contains(">go<"), "the dictionary form beside the surface: {front}");
+    assert!(!front.contains("home"), "the line is not on the front: {front}");
+    let one = hint(&t, &s, card);
+    assert_eq!(one.kind, HintKind::Context);
+    assert_eq!(one.text.as_deref(), Some("I went home."));
+    assert_eq!(
+        one.html.as_deref(),
+        Some("I <b class=\"fc-context-word\">went</b> home.")
+    );
+    assert!(!one.text.unwrap().contains("gitmek"));
+    let two = hint(&t, &s, card);
+    assert_eq!((two.kind, two.text.as_deref()), (HintKind::Letters, Some("g_____")));
+
+    // The same word as seen: no dictionary form beside it.
+    let d2 = deck(&t, "Subtitle 2");
+    let same = note(
+        &t,
+        nt(builtin::SUBTITLE),
+        d2.id,
+        &[("word", "home"), ("surface", "home"), ("meaning", "ev"), ("sentence", "I went <b>home</b>.")],
+    );
+    let s2 = session_on(&t, d2.id, same.cards[0].id);
+    let front = &current(&s2).sides.question;
+    assert!(!front.contains("fc-lemma\">home"), "{front}");
 }
 
 #[test]

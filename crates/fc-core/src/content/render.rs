@@ -233,6 +233,24 @@ impl Resolver for SideResolver<'_, '_> {
                     format!("<details class=\"fc-hint\"><summary></summary>{html}</details>")
                 }
             }
+            Some("unless_same") => {
+                // v1.3: `{{unless_same:other:field}}` — nothing when both show the same text.
+                let norm = |t: &str| {
+                    t.split_whitespace()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .to_lowercase()
+                };
+                let other = filters
+                    .get(1)
+                    .and_then(|o| self.raw(o))
+                    .map(|(raw, kind)| norm(&Self::plain(raw, kind)));
+                if other.is_some_and(|o| o == norm(&Self::plain(raw, kind))) {
+                    String::new()
+                } else {
+                    render_field(kind, raw, None, env.links)
+                }
+            }
             Some(_) => render_field(kind, raw, None, env.links),
         }
     }
@@ -370,6 +388,36 @@ mod tests {
         assert!(a.html.starts_with("dog <span"));
         assert!(a.html.ends_with("<hr><em>köpek</em>"));
         assert!(render_template("{{#x}}", &back_env).is_err());
+    }
+
+    #[test]
+    fn unless_same_shows_a_field_only_when_it_differs() {
+        let nt = crate::content::builtin::subtitle(Timestamp(1), crate::i18n::Locale::En);
+        let render = |pairs: &[(&str, &str)]| {
+            let fields = fv(pairs);
+            let env = RenderEnv {
+                notetype: &nt,
+                fields: &fields,
+                tags: &[],
+                deck: "D",
+                card_name: "1",
+                cloze: None,
+                reveal: false,
+                front_side: None,
+                links: &no_links,
+            };
+            render_template("[{{unless_same:surface:word}}]", &env)
+                .unwrap()
+                .html
+        };
+        assert_eq!(render(&[("word", "go"), ("surface", "went")]), "[go]");
+        // Case and spacing do not make a difference; an empty `other` does.
+        assert_eq!(
+            render(&[("word", "Pick  up"), ("surface", "pick up")]),
+            "[]"
+        );
+        assert_eq!(render(&[("word", "go")]), "[go]");
+        assert_eq!(render(&[("surface", "went")]), "[]");
     }
 
     #[test]

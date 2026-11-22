@@ -198,6 +198,18 @@
   .card :global(.fc-part-source .fc-part-label) {
     opacity: 1;
   }
+  /* v1.3 X1 Subtitle front: the dictionary form small beside the form as it appeared (empty
+     when they are the same; a space separates them in the text). */
+  .card :global(:where(.fc-lemma)) {
+    margin-inline-start: 0.25em;
+    font-size: 0.5em;
+    font-weight: var(--weight-regular);
+    color: var(--text-1);
+    opacity: 0.65;
+  }
+  .card :global(:where(.fc-lemma:empty)) {
+    display: none;
+  }
   /* A context hint's blank (`span.fc-blank`), wherever hint HTML is shown in a card. */
   .card :global(:where(.fc-blank)) {
     display: inline-block;

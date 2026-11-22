@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::modules::study::plan::SCOPES;
+use crate::modules::study::{LEARN_AHEAD_MINS, NEW_PER_SESSION};
 use fc_api::v1::decks::DeckTree;
 use fc_api::v1::modes::{SaveTestDraft, StartModes, TestAnswerDto, TestOptions, TestPaperRequest};
 
@@ -499,6 +500,185 @@ pub fn every_kind_resumes(f: &Factory) {
     assert_eq!(t.scope(&t.options(Some(deck.id)), StudyScope::StruggledToday).count, 4);
 }
 
+/// A preset with `new_per_day` new cards a day, assigned to `deck`.
+fn new_per_day(t: &T, deck: DeckId, n: u32) {
+    let preset = t.ok::<PresetsCreate>(fc_api::v1::presets::CreatePreset {
+        name: format!("new {n} {deck}"),
+        config: Some(fc_core::preset::PresetConfig {
+            new_per_day: n,
+            ..fc_core::preset::PresetConfig::default()
+        }),
+    });
+    t.ok::<PresetsAssign>(fc_api::v1::presets::AssignPreset {
+        deck_ids: vec![deck],
+        preset_id: Some(preset.id),
+    });
+}
+
+/// X1: the whole collection's queue (Home's headline, the launcher without a deck,
+/// `decks.summaries.today`) is the union of what each deck serves under its own options —
+/// not one built-in limit for all decks together.
+pub fn the_collection_queue_is_each_decks_own(f: &Factory) {
+    let t = T::new(f(), 110);
+    let a = t.deck("A");
+    let b = t.deck("B");
+    let p = t.deck("P");
+    let pc = t.deck("P::C");
+    let e = t.deck("E");
+    let ef = t.deck("E::F");
+    for i in 0..21 {
+        t.note(a.id, &format!("a{i}"), "x");
+    }
+    for (deck, n) in [(b.id, 3), (p.id, 2), (pc.id, 2), (e.id, 1), (ef.id, 2)] {
+        for i in 0..n {
+            t.note(deck, &format!("{deck}-{i}"), "x");
+        }
+    }
+    // E studies without its sub-deck: F counts on its own.
+    t.ok::<SettingsSet>(SetSetting {
+        scope: SettingScope::Deck(e.id),
+        key: "decks.include_subdecks".into(),
+        value: serde_json::json!(false),
+    });
+    // B allows only 2 new cards a day; A the default 20 (21 cards).
+    new_per_day(&t, b.id, 2);
+    let due = |o: &StudyOptions| t.scope(o, StudyScope::Due).count;
+    let per_deck = |tree: &DeckTree| {
+        // Every deck the collection is made of, once (E without F; F on its own).
+        [a.id, b.id, p.id, e.id, ef.id].map(|d| tree_counts(tree, d))
+    };
+    let check = |want: u32| {
+        let tree = t.tree();
+        let decks = per_deck(&tree);
+        let sum = |f: fn(&fc_api::v1::decks::DeckCounts) -> u32| decks.iter().map(f).sum::<u32>();
+        let today = t.ok::<DecksSummaries>(Empty {}).today;
+        assert_eq!(sum(|c| c.today_total), want, "sum of the decks");
+        assert_eq!(
+            (today.today_new, today.today_learning, today.today_due, today.today_total),
+            (sum(|c| c.today_new), sum(|c| c.today_learning), sum(|c| c.today_due), want),
+            "Home = the decks' sum"
+        );
+        assert_eq!(due(&t.options(None)), want, "the launcher without a deck");
+    };
+    assert_eq!(tree_counts(&t.tree(), a.id).today_total, 20);
+    assert_eq!(tree_counts(&t.tree(), b.id).today_total, 2);
+    assert_eq!(tree_counts(&t.tree(), p.id).today_total, 4, "P with its sub-deck");
+    assert_eq!(tree_counts(&t.tree(), e.id).today_total, 1);
+    assert_eq!(tree_counts(&t.tree(), ef.id).today_total, 2);
+    // 20 + 2 + 4 + 1 + 2: more than one built-in limit of 20 for everything.
+    check(29);
+
+    // Studying A to its limit leaves every other deck's count as it was.
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(a.id));
+    assert_eq!(T::served(&s), 20);
+    t.answer_all(s, Rating::Easy);
+    assert_eq!(tree_counts(&t.tree(), a.id).today_total, 0);
+    assert_eq!(tree_counts(&t.tree(), b.id).today_total, 2);
+    check(9);
+
+    // A collection session serves exactly that: cards of every deck, taken in turn.
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, None);
+    assert_eq!(T::served(&s), 9);
+    let mut decks = Vec::new();
+    let mut s = s;
+    while let Some(c) = s.current.clone() {
+        decks.push(t.card(c.card_id).deck_id);
+        s = t.answer(s.id, c.card_id, Rating::Easy);
+    }
+    assert_eq!(decks.len(), 9, "every card the launcher promised was served");
+    assert_ne!(decks[0], decks[1], "decks are interleaved");
+    check(0);
+    let o = t.options(None);
+    assert_eq!(t.scope(&o, StudyScope::Due).empty_reason, Some(StudyEmptyReason::DailyLimitReached));
+}
+
+/// X1: a collection-wide cap applies only when the user set one (`study.new_per_session`
+/// app-wide), and then the launcher and the session agree on it.
+pub fn a_collection_cap_only_when_set(f: &Factory) {
+    let t = T::new(f(), 111);
+    let a = t.deck("A");
+    let b = t.deck("B");
+    for i in 0..5 {
+        t.note(a.id, &format!("a{i}"), "x");
+        t.note(b.id, &format!("b{i}"), "x");
+    }
+    assert_eq!(t.scope(&t.options(None), StudyScope::Due).count, 10);
+    t.ok::<SettingsSet>(SetSetting {
+        scope: SettingScope::App,
+        key: NEW_PER_SESSION.into(),
+        value: serde_json::json!(6),
+    });
+    let o = t.options(None);
+    assert_eq!(t.scope(&o, StudyScope::Due).count, 6);
+    assert_eq!(t.scope(&o, StudyScope::New).count, 6);
+    assert_eq!(t.ok::<DecksSummaries>(Empty {}).today.today_total, 6);
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, None);
+    assert_eq!(T::served(&s), 6);
+    // Each deck alone still offers its own five.
+    assert_eq!(t.scope(&t.options(Some(a.id)), StudyScope::Due).count, 5);
+}
+
+/// X1: the learn-ahead window is a setting (`study.learn_ahead_mins`, default 20) and every
+/// "when" is the moment the card is really served — both sides of the boundary.
+pub fn learn_ahead_is_a_setting_and_the_wait_is_truthful(f: &Factory) {
+    let t = T::new(f(), 112);
+    let deck = t.deck("D");
+    let a = t.note(deck.id, "a", "1");
+    let due_at = t.now().plus_millis(10 * MIN);
+    t.put_card(a, |c| {
+        c.scheduling.state = CardState::Learning;
+        c.scheduling.due = Some(due_at);
+    });
+    // Default 20 minutes: a card due in 10 is served now, no waiting screen.
+    let o = t.options(Some(deck.id));
+    assert_eq!(t.scope(&o, StudyScope::Due).count, 1);
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(deck.id));
+    assert_eq!(s.current.as_ref().map(|c| c.card_id), Some(a));
+    assert_eq!(s.next_due, None);
+    t.ok::<StudyEnd>(SessionRef { session_id: s.id });
+
+    // 5 minutes: the card really waits, until due − 5 min.
+    t.ok::<SettingsSet>(SetSetting {
+        scope: SettingScope::App,
+        key: LEARN_AHEAD_MINS.into(),
+        value: serde_json::json!(5),
+    });
+    let available_at = due_at.plus_millis(-5 * MIN);
+    let o = t.options(Some(deck.id));
+    let due = t.scope(&o, StudyScope::Due);
+    assert_eq!(
+        (due.count, due.empty_reason, due.next_available_at),
+        (0, Some(StudyEmptyReason::Waiting), Some(available_at))
+    );
+    let (reason, next) = t.nothing(t.start_req(StudyKind::Normal, None, Some(deck.id)));
+    assert_eq!((reason.as_str(), next), ("waiting", serde_json::json!(available_at.0)));
+    // A session whose last card waits: its countdown ends exactly when the card comes.
+    let b = t.note(deck.id, "b", "2");
+    let s = t.start(StudyKind::Normal, StudyMode::Scheduled, Some(deck.id));
+    assert_eq!(s.current.as_ref().unwrap().card_id, b);
+    let s = t.answer(s.id, b, Rating::Easy);
+    assert_eq!((s.current.is_none(), s.ended_at, s.next_due), (true, None, Some(available_at)));
+    t.clock.set(available_at.plus_millis(-1));
+    assert!(t.session(s.id).current.is_none(), "one ms early: still waiting");
+    t.clock.set(available_at);
+    assert_eq!(t.session(s.id).current.unwrap().card_id, a, "on time: served");
+
+    // 0: always wait for the step itself.
+    t.ok::<SettingsSet>(SetSetting {
+        scope: SettingScope::App,
+        key: LEARN_AHEAD_MINS.into(),
+        value: serde_json::json!(0),
+    });
+    let o = t.options(Some(deck.id));
+    assert_eq!(t.scope(&o, StudyScope::Due).next_available_at, Some(due_at));
+    let e = t.err::<SettingsSet>(SetSetting {
+        scope: SettingScope::App,
+        key: LEARN_AHEAD_MINS.into(),
+        value: serde_json::json!(-1),
+    });
+    assert_eq!(e.code, ErrorCode::ValidationSettingValue);
+}
+
 macro_rules! launcher_suite {
     ($factory:expr) => {
         launcher_suite!(@tests $factory;
@@ -510,6 +690,9 @@ macro_rules! launcher_suite {
             empty_reasons_and_failed_starts,
             practice_scopes_use_the_local_study_day,
             every_kind_resumes,
+            the_collection_queue_is_each_decks_own,
+            a_collection_cap_only_when_set,
+            learn_ahead_is_a_setting_and_the_wait_is_truthful,
         );
     };
     (@tests $factory:expr; $($name:ident),* $(,)?) => {

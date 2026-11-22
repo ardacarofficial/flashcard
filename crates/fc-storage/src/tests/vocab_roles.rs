@@ -1,6 +1,7 @@
 //! v1.3 migration 1300: field roles, answer fields and labelled backs for the built-in note
-//! types of an existing collection. The fixture is every built-in exactly as v1.2 shipped it
-//! (both languages), written by the v1.2 builders.
+//! types of an existing collection; 1301 (X1): the Subtitle card's front asks with the word
+//! only. The fixture is every built-in exactly as v1.2 shipped it (both languages), written by
+//! the v1.2 builders.
 
 use crate::migrate::{self, MIGRATIONS};
 use crate::store::{SqliteStore, Store};
@@ -83,12 +84,18 @@ fn migration_1300_upgrades_untouched_builtins_to_the_v1_3_definitions() {
             assert_eq!(now.css, want.css, "{} css", b.key);
             assert_eq!(now.name, want.name);
             assert_eq!(now.sort_field, want.sort_field);
-            // Only what changed is a new version.
+            // Only what changed is a new version (one per migration that changed it: 1301
+            // changes the Subtitle front after 1300 changed its back).
             let before = old.iter().find(|o| o.id == b.id).unwrap();
             let changed = before.fields != want.fields
                 || before.templates != want.templates
                 || before.css != want.css;
-            assert_eq!(now.version, if changed { 2 } else { 1 }, "{}", b.key);
+            let versions = match (changed, b.key == builtin::SUBTITLE) {
+                (false, _) => 1,
+                (true, false) => 2,
+                (true, true) => 3,
+            };
+            assert_eq!(now.version, versions, "{}", b.key);
             assert_eq!(now.updated_at > Timestamp(1), changed, "{}", b.key);
         }
         let subtitle = get(&store, builtin::find(builtin::SUBTITLE).unwrap().id);
@@ -97,6 +104,7 @@ fn migration_1300_upgrades_untouched_builtins_to_the_v1_3_definitions() {
             Some(FieldKey::new("meaning"))
         );
         assert_eq!(subtitle.css, PARTS_CSS);
+        assert_eq!(subtitle.templates[0].front, builtin::SUBTITLE_FRONT);
     }
 }
 
@@ -133,6 +141,8 @@ fn migration_1300_leaves_customised_definitions_alone() {
 
     let st = get(&store, id_of(builtin::SUBTITLE));
     assert_eq!(st.templates[0].back, custom_back);
+    // 1301: an edited back keeps the v1.2 front too (with the line on it).
+    assert!(st.templates[0].front.contains("{{sentence}}"));
     assert_eq!(st.templates[0].answer_field, None);
     assert_eq!(st.fields[0].name, "Lemma");
     assert!(
@@ -228,4 +238,91 @@ fn migration_1300_on_a_fresh_collection_does_nothing() {
         .list_notetypes(true)
         .unwrap()
         .is_empty());
+}
+
+fn sql_1301() -> &'static str {
+    MIGRATIONS.iter().find(|m| m.version == 1301).unwrap().sql
+}
+
+/// The v1.3 Subtitle type as 1300 left it (a collection opened by the v1.3 build before X1).
+fn subtitle_at_1300(locale: Locale) -> NoteType {
+    let mut st = builtin::subtitle(Timestamp(1), locale);
+    st.templates[0].front = v1_2(locale)
+        .into_iter()
+        .find(|n| n.builtin.as_deref() == Some(builtin::SUBTITLE))
+        .unwrap()
+        .templates[0]
+        .front
+        .clone();
+    st
+}
+
+#[test]
+fn migration_1301_gives_the_subtitle_card_a_word_only_front() {
+    for locale in [Locale::En, Locale::Tr] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.db");
+        let at_1300 = subtitle_at_1300(locale);
+        assert!(at_1300.templates[0].front.contains("{{sentence}}"));
+        {
+            let upto = MIGRATIONS.iter().position(|m| m.version >= 1301).unwrap();
+            let old = SqliteStore::open_with_migrations(&path, &MIGRATIONS[..upto]).unwrap();
+            let mut tx = old.write().unwrap();
+            tx.upsert_notetype(&at_1300).unwrap();
+            tx.commit().unwrap();
+        }
+        let store = SqliteStore::open(&path).unwrap();
+        let now = get(&store, at_1300.id);
+        let want = builtin::subtitle(Timestamp(1), locale);
+        assert_eq!(now.templates, want.templates);
+        assert_eq!(now.templates[0].front, builtin::SUBTITLE_FRONT);
+        assert!(!now.templates[0].front.contains("sentence"));
+        assert_eq!((now.fields, now.css), (want.fields, want.css));
+        assert_eq!(now.version, at_1300.version + 1);
+        assert!(now.updated_at > Timestamp(1));
+    }
+}
+
+#[test]
+fn migration_1301_leaves_edited_subtitle_templates_alone_and_is_idempotent() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("collection.db");
+    // The user changed the front (kept the line, added something), and made a copy of the
+    // type (no built-in marker).
+    let mut edited = subtitle_at_1300(Locale::Tr);
+    edited.templates[0].front.push_str("<p>mine</p>");
+    let mut copy = subtitle_at_1300(Locale::Tr);
+    copy.id = NoteTypeId::from_str("01900000-0000-7000-8000-0000000000fd").unwrap();
+    copy.builtin = None;
+    copy.name = "Kopyam".into();
+    {
+        let upto = MIGRATIONS.iter().position(|m| m.version >= 1301).unwrap();
+        let old = SqliteStore::open_with_migrations(&path, &MIGRATIONS[..upto]).unwrap();
+        let mut tx = old.write().unwrap();
+        tx.upsert_notetype(&edited).unwrap();
+        tx.upsert_notetype(&copy).unwrap();
+        tx.commit().unwrap();
+    }
+    let store = SqliteStore::open(&path).unwrap();
+    assert_eq!(
+        get(&store, edited.id),
+        edited,
+        "an edited front is the user's"
+    );
+    assert_eq!(
+        get(&store, copy.id),
+        copy,
+        "a type without the built-in marker is the user's"
+    );
+    let after: Vec<NoteType> = store.read().unwrap().list_notetypes(true).unwrap();
+    drop(store);
+
+    // Upgrade the untouched one, then run the statements again: nothing changes.
+    let conn = Connection::open(&path).unwrap();
+    migrate::configure_connection(&conn).unwrap();
+    conn.execute_batch(sql_1301()).unwrap();
+    drop(conn);
+    let store = SqliteStore::open(&path).unwrap();
+    let again: Vec<NoteType> = store.read().unwrap().list_notetypes(true).unwrap();
+    assert_eq!(after, again);
 }

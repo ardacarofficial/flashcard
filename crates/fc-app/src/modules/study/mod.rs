@@ -59,6 +59,9 @@ pub const SCHEDULER: &str = "study.scheduler";
 pub const NEW_PER_SESSION: &str = "study.new_per_session";
 /// Local hour at which a study day starts.
 pub const DAY_START_HOUR: &str = "study.day_start_hour";
+/// v1.3: minutes before its step is due a waiting learning card is shown anyway when nothing
+/// else is left in the session (0 = always wait for the step).
+pub const LEARN_AHEAD_MINS: &str = "study.learn_ahead_mins";
 /// Show an input to type the answer.
 pub const TYPE_ANSWER: &str = "study.type_answer";
 /// Answer checker (`exact`, `normalized`, `tolerant`, `multi`).
@@ -73,6 +76,9 @@ pub const HINT_STRATEGY: &str = "study.hint_strategy";
 /// again, "I know it" = good) or `four` (again / hard / good / easy with next intervals).
 /// Presentation only: the ratings and the scheduler are the same either way.
 pub const ANSWER_BUTTONS: &str = "study.answer_buttons";
+
+/// Upper bound of [`LEARN_AHEAD_MINS`] (a day: learning steps are intraday).
+const MAX_LEARN_AHEAD_MINS: i64 = 24 * 60;
 
 fn int_setting(key: &str, default: i64, min: i64, max: i64, advanced: bool) -> SettingDef {
     SettingDef {
@@ -121,6 +127,13 @@ pub fn descriptor() -> ModuleDescriptor {
             advanced(bool_setting(FOLD_TURKISH, true, &[SettingScopeKind::App])),
             advanced(bool_setting(AUTO_GRADE, false, &[SettingScopeKind::App])),
             int_setting(DAY_START_HOUR, 4, 0, 23, true),
+            int_setting(
+                LEARN_AHEAD_MINS,
+                fc_study::session::LEARN_AHEAD_MS / 60_000,
+                0,
+                MAX_LEARN_AHEAD_MINS,
+                false,
+            ),
         ],
         ui: vec![
             main_menu("study.session", "nav.study", "study", "/study", 5),

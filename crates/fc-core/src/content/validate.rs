@@ -44,6 +44,23 @@ pub fn validate_templates(nt: &NoteType) -> CoreResult<()> {
                     if first == "cloze" && side == "front" {
                         front_has_cloze = true;
                     }
+                    if first == "unless_same" {
+                        let other = match r.filters.as_slice() {
+                            [_, other] => other,
+                            _ => {
+                                return Err(bad(format!(
+                                    "template {} {side}: unless_same takes one field: {{{{unless_same:other:field}}}}",
+                                    t.key
+                                )))
+                            }
+                        };
+                        if nt.field(&FieldKey::new(other.clone())).is_none() {
+                            return Err(bad(format!(
+                                "template {} {side}: unknown field '{other}'",
+                                t.key
+                            )));
+                        }
+                    }
                 }
             }
         }
@@ -153,6 +170,10 @@ mod tests {
         assert!(check("{{nope}}", "").is_err());
         assert!(check("{{FrontSide}}", "").is_err());
         assert!(check("{{bogus:front}}", "").is_err());
+        assert!(check("{{unless_same:back:front}}", "").is_ok());
+        assert!(check("{{unless_same:front}}", "").is_err());
+        assert!(check("{{unless_same:nope:front}}", "").is_err());
+        assert!(check("{{unless_same:a:back:front}}", "").is_err());
         assert!(check("{{#front}}", "").is_err());
         assert!(check(
             "{{front}}",
