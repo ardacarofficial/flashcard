@@ -5,15 +5,18 @@
 //!
 //! * [`learn`]: per-card stages (multiple choice → written); a card is **learned** once it was
 //!   answered correctly at every stage.
-//! * [`test`]: a test paper with mixed question types (multiple choice, written, true/false)
-//!   from a set of cards, and its scoring.
+//! * [`test`]: a test paper ("Exam" in the app since v1.4) with mixed question types
+//!   (multiple choice, written, matching, true/false) from a set of cards, and its scoring.
 //! * [`confidence`]: the 1–5 "how sure am I?" scale and its mapping onto the four ratings.
 //! * [`timed`]: the per-card time limit and what happens when it runs out.
 //! * [`matching`] (v1.1): match terms with definitions against the clock.
+//! * [`quiz`] (v1.4, "Test" in the app): one word, up to four meanings, the right one shown
+//!   at once; score and missed words at the end.
 
 pub mod confidence;
 pub mod learn;
 pub mod matching;
+pub mod quiz;
 pub mod test;
 pub mod timed;
 
@@ -41,6 +44,9 @@ pub struct ModesState {
     /// Match sessions (v1.1): the cards and the current round.
     #[serde(rename = "match", skip_serializing_if = "Option::is_none")]
     pub matching: Option<matching::MatchState>,
+    /// Quiz sessions (v1.4): the words, their options and the picks.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quiz: Option<quiz::QuizState>,
 }
 
 /// Mode options persisted with a session (`sessions.config.modes`; absent for plain

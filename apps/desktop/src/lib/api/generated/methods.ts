@@ -249,6 +249,10 @@ import type { PurgeResult } from "./PurgeResult";
 import type { PurgeTrash } from "./PurgeTrash";
 import type { QueryCheck } from "./QueryCheck";
 import type { QueryText } from "./QueryText";
+import type { QuizAnswer } from "./QuizAnswer";
+import type { QuizAnswerResult } from "./QuizAnswerResult";
+import type { QuizRef } from "./QuizRef";
+import type { QuizResultDto } from "./QuizResultDto";
 import type { ReadingItemDto } from "./ReadingItemDto";
 import type { ReadingItemList } from "./ReadingItemList";
 import type { ReadingItemRef } from "./ReadingItemRef";
@@ -597,6 +601,8 @@ export interface Methods {
   "tts.voices": { kind: "query"; request: ListVoices; response: VoiceList };
   "tts.synthesize": { kind: "query"; request: Synthesize; response: AudioDto };
   "modes.learn.answer": { kind: "command"; request: LearnAnswer; response: LearnAnswerResult };
+  "modes.quiz.answer": { kind: "command"; request: QuizAnswer; response: QuizAnswerResult };
+  "modes.quiz.result": { kind: "query"; request: QuizRef; response: QuizResultDto };
   "modes.confidence.answer": { kind: "command"; request: ConfidenceAnswer; response: SessionDto };
   "modes.timed.expire": { kind: "command"; request: ExpireCard; response: SessionDto };
   "modes.timed.start": { kind: "command"; request: StartTimer; response: SessionDto };
@@ -915,6 +921,8 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "tts.voices": "query",
   "tts.synthesize": "query",
   "modes.learn.answer": "command",
+  "modes.quiz.answer": "command",
+  "modes.quiz.result": "query",
   "modes.confidence.answer": "command",
   "modes.timed.expire": "command",
   "modes.timed.start": "command",

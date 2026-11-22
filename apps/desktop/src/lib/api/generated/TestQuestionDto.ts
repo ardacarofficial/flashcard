@@ -32,6 +32,11 @@ options: Array<string>,
  */
 statement: string | null, 
 /**
+ * v1.4 matching: the words to match (plain text; `options` are their meanings, shown
+ * as letters A–D).
+ */
+terms: Array<string>, 
+/**
  * Answer key (after submission, or with `with_key`).
  */
 key: TestKeyDto | null, };

@@ -57,6 +57,8 @@ pub enum TestQuestionKind {
     Written,
     /// Is the shown answer right?
     TrueFalse,
+    /// v1.4: match up to four words with their meanings (one question; a letter per word).
+    Matching,
 }
 
 /// Test options (`study.start.test`, kind `test`).
@@ -68,7 +70,8 @@ pub struct TestOptions {
     /// per card).
     #[serde(default)]
     pub questions: Option<u32>,
-    /// Question types, mixed in turn (default: all three).
+    /// Question types, mixed in turn (default since v1.4: multiple choice, written and
+    /// matching — true/false only when asked for).
     #[serde(default)]
     pub kinds: Option<Vec<TestQuestionKind>>,
 }
@@ -179,6 +182,115 @@ pub struct SessionModesDto {
     pub learn: Option<LearnDto>,
     /// Test sessions.
     pub test: Option<TestInfoDto>,
+    /// v1.4 quiz sessions (may be absent from clients/mocks written before v1.4).
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub quiz: Option<QuizDto>,
+}
+
+// ------------------------------------------------------------------ quiz (v1.4, "Test")
+
+/// Quiz progress.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+pub struct QuizProgressDto {
+    /// Words in the quiz.
+    pub total: u32,
+    /// Answered.
+    pub answered: u32,
+    /// Answered right.
+    pub correct: u32,
+}
+
+/// Quiz: how the shown word is asked (`SessionDto.modes.quiz`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct QuizDto {
+    /// The word asked (plain text of the note's `term` field; `null` when the note has no
+    /// field roles: the card's question side is the prompt).
+    pub term: Option<String>,
+    /// Options of the shown word (plain text, 2–4; empty when none is shown). Keys 1–4.
+    pub options: Vec<String>,
+    /// The shown word has fewer than four options: the deck has too few other meanings.
+    pub few_options: bool,
+    /// Progress.
+    pub progress: QuizProgressDto,
+    /// Answers change the schedule (`quiz.affects_schedule` when the quiz started).
+    pub affects_schedule: bool,
+}
+
+/// `modes.quiz.answer`: picks an option for the shown word. The backend judges it, logs it
+/// (`review_log.mode = trial_quiz`, or `quiz` when the quiz changes the schedule: right →
+/// good, wrong → again) and moves on; the word is not asked again in this quiz.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct QuizAnswer {
+    /// Session (kind `quiz`).
+    pub session_id: SessionId,
+    /// Shown card.
+    pub card_id: CardId,
+    /// Picked option (0-based).
+    pub choice: u32,
+    /// Show → pick, ms (capped by the backend clock).
+    pub duration_ms: u32,
+}
+
+/// Response of `modes.quiz.answer`: the verdict to show at once.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct QuizAnswerResult {
+    /// The pick was right.
+    pub correct: bool,
+    /// Option picked.
+    pub picked: u32,
+    /// The right option.
+    pub correct_option: u32,
+    /// The right meaning.
+    pub expected: String,
+    /// The session after the answer (`current` = the next word, `null` at the end).
+    pub session: SessionDto,
+}
+
+/// A word missed in a quiz.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct QuizMissDto {
+    /// Card.
+    pub card_id: CardId,
+    /// The word (plain; the card's question as text when the note has no roles).
+    pub term: String,
+    /// Its meaning.
+    pub expected: String,
+    /// The option picked.
+    pub picked: Option<String>,
+}
+
+/// `modes.quiz.result`: the score so far (final once every word is answered or the session
+/// ended) and the missed words.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct QuizResultDto {
+    /// Session.
+    pub session_id: SessionId,
+    /// Words in the quiz.
+    pub total: u32,
+    /// Answered.
+    pub answered: u32,
+    /// Right.
+    pub correct: u32,
+    /// Wrong.
+    pub wrong: u32,
+    /// Right answers of the answered words, 0–100 (0 before the first answer).
+    pub percent: u32,
+    /// Every word is answered.
+    pub finished: bool,
+    /// The answers changed the schedule.
+    pub affects_schedule: bool,
+    /// Wrong words, in quiz order (`study.start { kind: quiz, from_session }` asks them again).
+    pub missed: Vec<QuizMissDto>,
+}
+
+/// Names a quiz session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct QuizRef {
+    /// Session (kind `quiz`).
+    pub session_id: SessionId,
 }
 
 // ------------------------------------------------------------------ learn
@@ -286,6 +398,10 @@ pub struct TestKeyDto {
     pub truth: Option<bool>,
     /// Correct answer as text.
     pub expected: String,
+    /// v1.4 matching: for each word (`terms` order) the index of its meaning in `options`.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub pairs: Option<Vec<u32>>,
 }
 
 /// One question.
@@ -303,6 +419,10 @@ pub struct TestQuestionDto {
     pub options: Vec<String>,
     /// True/false: the proposed answer (plain text).
     pub statement: Option<String>,
+    /// v1.4 matching: the words to match (plain text; `options` are their meanings, shown
+    /// as letters A–D).
+    #[serde(default)]
+    pub terms: Vec<String>,
     /// Answer key (after submission, or with `with_key`).
     pub key: Option<TestKeyDto>,
 }
@@ -328,6 +448,10 @@ pub struct TestItemDto {
     pub index: u32,
     /// Verdict.
     pub verdict: TestVerdict,
+    /// v1.4 matching: words matched right (the question is right only when all are).
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub matched: Option<u32>,
 }
 
 /// Score of a submitted test.
@@ -396,6 +520,9 @@ pub struct TestAnswerDto {
     /// True/false.
     #[serde(default)]
     pub truth: Option<bool>,
+    /// v1.4 matching: for each word the option picked for it (`null` = left blank).
+    #[serde(default)]
+    pub pairs: Option<Vec<Option<u32>>>,
 }
 
 /// `modes.test.submit`: grades the paper, logs one review per question

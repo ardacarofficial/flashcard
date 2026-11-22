@@ -12,4 +12,8 @@ index: number,
 /**
  * Verdict.
  */
-verdict: TestVerdict, };
+verdict: TestVerdict, 
+/**
+ * v1.4 matching: words matched right (the question is right only when all are).
+ */
+matched?: number | null, };

@@ -6,11 +6,16 @@
    * study launcher (no setup panel here); the running session owns the window
    * (`SessionFrame`). Keys: 1–4 pick, Enter check/continue, Z undo, Esc end; a held key is one
    * press.
+   *
+   * v1.4: a quiz session ("Test": one word, four meanings, the answer at once) runs here too,
+   * as the multiple-choice step (`modes.quiz.answer`), until the approved prototype's own
+   * screen is built. Its end shows the score from `modes.quiz.result` and "study the missed
+   * ones again" (`study.start { kind: quiz, from_session }`).
    */
   import { formatCount } from '$lib/format';
   import { onMount, tick } from 'svelte';
   import { api } from '$lib/api';
-  import type { LearnAnswerResult, SessionDto } from '$lib/api/types';
+  import type { LearnAnswerResult, LearnDto, QuizResultDto, SessionDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import {
     Button,
@@ -34,6 +39,7 @@
   import type { ScreenCtx } from '../types';
   import { isEditableTarget } from '$lib/keyboard';
   import { plainKey } from './modes';
+  import { tzOffsetMins } from '../study/format';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -50,8 +56,11 @@
   /** The scope the session was started with ("Learn again" builds on it). */
   let startedScope = $state<StudyScope | null>(null);
 
-  // A session started (or continued) in the study launcher arrives here.
-  const initial = takeHandoff('learn');
+  /** v1.4 quiz: its result once it ended. */
+  let quizResult = $state<QuizResultDto | null>(null);
+
+  // A session started (or continued) in the study launcher arrives here (learn or quiz).
+  const initial = takeHandoff('learn') ?? takeHandoff('quiz');
   let accepting = $state(initial !== null);
   let hadSession = $state(false);
 
@@ -65,7 +74,7 @@
 
   $effect(() => {
     void handoffSeq();
-    const h = takeHandoff('learn');
+    const h = takeHandoff('learn') ?? takeHandoff('quiz');
     if (h) accept(h);
   });
 
@@ -87,10 +96,15 @@
   });
 
   const card = $derived(session?.current ?? null);
-  const learn = $derived(session?.modes?.learn ?? null);
+  const quiz = $derived(session?.modes?.quiz ?? null);
+  /** A quiz word drawn as Learn's multiple-choice step. */
+  const learn = $derived<LearnDto | null>(
+    session?.modes?.learn ??
+      (quiz ? { stage: 'choice', options: quiz.options, mistakes: 0, progress: { total: quiz.progress.total, learned: quiz.progress.answered, choice: quiz.progress.total - quiz.progress.answered, written: 0 } } : null),
+  );
   // A running session owns the window (v1.2); the end screen is a normal page again.
   $effect(() => ctx.setFocus?.(session !== null && card !== null && learn !== null));
-  const progress = $derived((feedback?.session ?? session ?? finished)?.modes?.learn?.progress ?? null);
+  const progress = $derived((feedback?.session ?? session ?? finished)?.modes?.learn?.progress ?? learn?.progress ?? null);
 
   function show(s: SessionDto) {
     session = s;
@@ -105,6 +119,7 @@
     if (s.current) show(s);
     else {
       await api.call('study.end', { session_id: s.id });
+      quizResult = s.kind === 'quiz' ? await api.call('modes.quiz.result', { session_id: s.id }) : null;
       finished = s;
       session = null;
       feedback = null;
@@ -117,10 +132,25 @@
     openLauncher({ deckId: finished?.deck_id ?? ctx.selectedDeck, kind: 'learn', scope: struggled ? 'struggled_today' : (startedScope ?? undefined) });
   }
 
+  /** v1.4: "study the missed ones again" — a quiz of the words this one missed. */
+  async function quizMissed() {
+    if (!finished) return;
+    const s = await api.call('study.start', { kind: 'quiz', deck_id: finished.deck_id, from_session: finished.id, tz_offset_mins: tzOffsetMins() });
+    quizResult = null;
+    accept({ kind: 'quiz', session: s, scope: null });
+  }
+
   async function answer(choice: number | null) {
     if (!session || !card || feedback) return;
     if (choice === null && typed.trim() === '') return;
     picked = choice;
+    if (session.kind === 'quiz') {
+      if (choice === null) return;
+      const r = await api.call('modes.quiz.answer', { session_id: session.id, card_id: card.card_id, choice, duration_ms: Math.max(0, Date.now() - shownAt) });
+      feedback = { grade: r.correct ? 'correct' : 'wrong', stage: 'choice', learned: false, expected: r.expected, diff: [], session: r.session };
+      queueMicrotask(() => continueBtn?.focus());
+      return;
+    }
     feedback = await api.call('modes.learn.answer', {
       session_id: session.id,
       card_id: card.card_id,
@@ -198,7 +228,7 @@
 
 {#if session && card && learn}
   <SessionFrame
-    title={t('modes.learn.heading')}
+    title={quiz ? t('study.mode.quiz.name') : t('modes.learn.heading')}
     subtitle={ctx.selectedPath ?? t('study.whole_collection')}
     progressLabel={t('modes.learn.progress_label')}
     max={progress?.total ?? 1}
@@ -231,8 +261,13 @@
         {#if learn.mistakes > 0}<span class="again">{t('modes.learn.missed', { n: learn.mistakes })}</span>{/if}
       </div>
       <div class="prompt">
-        <CardView sides={card.sides} showAnswer={false} interactive={false} testid="question" />
+        {#if quiz?.term}
+          <p class="term" data-testid="question">{quiz.term}</p>
+        {:else}
+          <CardView sides={card.sides} showAnswer={false} interactive={false} testid="question" />
+        {/if}
       </div>
+      {#if quiz?.few_options}<p class="few" role="note">{t('modes.quiz.few_options', { count: quiz.options.length })}</p>{/if}
     </div>
 
     {#if learn.stage === 'choice'}
@@ -295,10 +330,18 @@
       <span class="badge"><Icon icon={GraduationCap} size={20} /></span>
       <div>
         <h1>{t('modes.learn.done_heading')}</h1>
-        <p>{t('modes.learn.done', { total: finished.modes?.learn?.progress.total ?? 0 })}</p>
+        {#if quizResult}
+          <p data-testid="quiz-score">{t('modes.quiz.done', { correct: quizResult.correct, total: quizResult.total })}</p>
+          {#if !quizResult.affects_schedule}<p>{t('modes.quiz.practice')}</p>{/if}
+        {:else}
+          <p>{t('modes.learn.done', { total: finished.modes?.learn?.progress.total ?? 0 })}</p>
+        {/if}
       </div>
     </header>
     <div class="done-actions">
+      {#if quizResult && quizResult.missed.length > 0}
+        <Button variant="primary" icon={Repeat} data-testid="quiz-missed-again" onclick={() => void run(quizMissed)}>{t('modes.quiz.missed_again')} · {formatCount(quizResult.missed.length)}</Button>
+      {/if}
       {#if launcher.available}
         <Button variant="primary" icon={Repeat} bind:element={againBtn} title={t('study.summary.again_desc')} data-testid="learn-again" onclick={learnAgain}>{t('modes.learn.again')}</Button>
       {/if}
@@ -315,6 +358,16 @@
 {/if}
 
 <style>
+  .term {
+    margin: 0;
+    font-size: var(--text-xl);
+    font-weight: 600;
+  }
+  .few {
+    margin: 0;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
   .learn {
     display: flex;
     flex-direction: column;

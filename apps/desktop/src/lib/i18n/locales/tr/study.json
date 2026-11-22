@@ -140,14 +140,16 @@
       "kind": {
         "normal": "Kartlar",
         "learn": "Öğren",
-        "test": "Test",
-        "match": "Eşleştir"
+        "test": "Sınav",
+        "match": "Eşleştir",
+        "quiz": "Test"
       },
       "kind_desc": {
         "normal": "Kartı çevir, ne kadar bildiğini söyle; sıradaki tekrar zamanı buna göre belirlenir.",
         "learn": "Önce şıklı, sonra yazarak sorar; doğru bildiğin kartların takvimi ilerler.",
-        "test": "Karışık sorulu bir sınav kâğıdı, sonunda puanın. Takvimi hiç değiştirmez.",
-        "match": "Kelimeleri anlamlarıyla süreye karşı eşleştir. Takvimi değiştirmez."
+        "test": "Karışık sorulu bir kâğıt (çoktan seçmeli, yazılı, eşleştirme), sonunda puanın. Takvimi değiştirmez.",
+        "match": "Kelimeleri anlamlarıyla süreye karşı eşleştir. Takvimi değiştirmez.",
+        "quiz": "Bir kelime, dört şık; seçince doğrusunu hemen görürsün. Pratiktir, takvimi değiştirmez."
       },
       "scope_label": "Ne çalışayım?",
       "scope": {
@@ -191,6 +193,28 @@
       "no_modes": "Açık çalışma modu yok. Ayarlar › Modüller’den birini aç.",
       "deck_all": "Tüm desteler",
       "count_hint_test": "Boş bırakırsan {n}"
+    },
+    "mode": {
+      "normal": {
+        "name": "Kartlar",
+        "description": "Kartı çevir, ne kadar bildiğini söyle; sıradaki tekrar zamanı buna göre belirlenir."
+      },
+      "quiz": {
+        "name": "Test",
+        "description": "Bir kelime, dört şık; seçince doğrusunu hemen görürsün."
+      },
+      "learn": {
+        "name": "Öğren",
+        "description": "Adım adım: önce anlamını seç, sonra kendin yaz; bilene kadar geri gelir."
+      },
+      "test": {
+        "name": "Sınav",
+        "description": "Karışık sorulu bir kâğıt, sonunda puanın."
+      },
+      "match": {
+        "name": "Eşleştir",
+        "description": "Kelimeleri anlamlarıyla süreye karşı eşleştir."
+      }
     }
   },
   "settings": {

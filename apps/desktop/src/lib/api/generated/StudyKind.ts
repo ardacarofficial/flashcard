@@ -3,4 +3,4 @@
 /**
  * What a session studies.
  */
-export type StudyKind = "normal" | "custom" | "mistakes" | "learn" | "test" | "match";
+export type StudyKind = "normal" | "custom" | "mistakes" | "learn" | "test" | "match" | "quiz";

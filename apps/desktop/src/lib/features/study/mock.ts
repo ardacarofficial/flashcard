@@ -235,7 +235,9 @@ export default {
     /** A test paper: true/false, multiple choice, written, in turn. */
     const makePaper = (cards: MockCard[], count: number, kinds: TestQuestionDto['kind'][]): TestQuestionDto[] =>
       cards.slice(0, count).map((c, i) => {
-        const kind = kinds[i % kinds.length]!;
+        // The mock asks a matching question (v1.4) as a written one.
+        const asked = kinds[i % kinds.length]!;
+        const kind = asked === 'matching' ? 'written' : asked;
         const others = cards.filter((x) => back(x) !== back(c)).map(back);
         const options = kind === 'multiple_choice' ? shuffled([back(c), ...others.slice(0, 3)]) : [];
         const lie = i % 2 === 1 && others.length > 0;
@@ -246,6 +248,7 @@ export default {
           prompt_html: `<p>${esc(front(c))}</p>`,
           options,
           statement: kind === 'true_false' ? (lie ? others[0]! : back(c)) : null,
+          terms: [],
           key: {
             option: kind === 'multiple_choice' ? options.indexOf(back(c)) : null,
             truth: kind === 'true_false' ? !lie : null,
@@ -457,14 +460,23 @@ export default {
             scopes: SCOPES.map((sc) => scopeOption(sc, deck_id ?? null)),
             modes: (
               [
-                ['normal', 'study'],
-                ['learn', 'learn'],
-                ['test', 'practice_test'],
-                ['match', 'match'],
+                ['normal', 'study', true],
+                ['quiz', 'quiz', false],
+                ['learn', 'learn', true],
+                ['test', 'practice_test', false],
+                ['match', 'match', false],
               ] as const
             )
               .filter(([, m]) => modulesOn('study') && modulesOn(m))
-              .map(([k]) => k),
+              .map(([k, , affects]) => ({
+                kind: k,
+                name_key: `study.mode.${k}.name`,
+                description_key: `study.mode.${k}.description`,
+                affects_schedule: affects,
+                question_kinds: k === 'test' ? (['multiple_choice', 'written', 'matching', 'true_false'] as const).slice() : [],
+                default_question_kinds: k === 'test' ? (['multiple_choice', 'written', 'matching'] as const).slice() : [],
+                default_questions: k === 'test' ? 20 : null,
+              })),
           };
         },
       'study.start': (req: StartStudy) => {

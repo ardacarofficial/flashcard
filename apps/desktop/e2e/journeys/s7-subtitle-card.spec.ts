@@ -85,7 +85,9 @@ test('S7a subtitle card, written test question: "gitmek" for go/went is correct'
   await launcher.getByRole('button', { name: t('study.launcher.options') }).focus();
   await press(page, 'Enter');
   const kinds = launcher.getByRole('group', { name: t('modes.test.kinds') });
-  for (const k of ['true_false', 'multiple_choice'] as const) {
+  // v1.4: true/false starts switched off (guessing gets half right); only multiple choice to turn off.
+  await expect(kinds.getByRole('button', { name: t('modes.test.kind.true_false'), exact: true })).toHaveAttribute('aria-pressed', 'false');
+  for (const k of ['multiple_choice'] as const) {
     await kinds.getByRole('button', { name: t(`modes.test.kind.${k}`), exact: true }).focus();
     await press(page, 'Space');
     await expect(kinds.getByRole('button', { name: t(`modes.test.kind.${k}`), exact: true })).toHaveAttribute('aria-pressed', 'false');
