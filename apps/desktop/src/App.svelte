@@ -348,7 +348,7 @@
 <!-- First-run guide on a new, empty collection (v1.0). -->
 <!-- Loaded lazily (v1.1 bundle budget): they only matter once their check says so. -->
 {#await import('$lib/features/onboarding/OnboardingHost.svelte') then { default: OnboardingHost }}
-  <OnboardingHost ondone={() => void loadDecks()} />
+  <OnboardingHost ondone={() => void loadDecks()} {ctx} home={() => show(nav.all[0]!)} />
 {/await}
 
 <!-- Quick Add dialog (v1.2): the shell's "add a card"; its dialog chunk loads on first open. -->

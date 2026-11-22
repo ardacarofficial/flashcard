@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import type { ImportPreview, JobDto } from '$lib/api/types';
+import type { ImportPreview, JobDto, NoteTypeDto } from '$lib/api/types';
 import { i18n } from '$lib/i18n/index.svelte';
 import { decodeColumn, encodeColumn, escapeSeparator, unescapeSeparator } from './mapping';
 
@@ -50,6 +50,10 @@ const call = vi.fn(async (method: string, _params: unknown) => {
       return { ...done, status: 'queued', result: null };
     case 'jobs.get':
       return done;
+    case 'cards.preview':
+      return { cards: [] };
+    case 'oplog.undo':
+      return undo();
   }
   throw new Error(method);
 });
@@ -64,7 +68,7 @@ vi.mock('$lib/api', () => ({
   },
 }));
 
-import ImportPanel from './ImportPanel.svelte';
+import ImportFlow from './ImportFlow.svelte';
 
 describe('io mapping helpers', () => {
   it('round-trips column targets and separators', () => {
@@ -81,7 +85,8 @@ describe('io mapping helpers', () => {
   });
 });
 
-describe('<ImportPanel>', () => {
+// v1.3: the import lives on the add page (Paste / From a file); same flow, plainer words.
+describe('<ImportFlow> (was <ImportPanel>)', () => {
   const ctx = {
     decks: [],
     selectedDeck: 'd1',
@@ -89,22 +94,37 @@ describe('<ImportPanel>', () => {
     selectDeck: () => {},
     guarded: async () => true,
   };
+  const nt = {
+    id: 'classic',
+    name: 'Classic',
+    kind: 'standard',
+    fields: [
+      { key: 'front', name: 'Front', kind: 'rich_text', required: true, unique: true, searchable: true, default_value: null },
+      { key: 'back', name: 'Back', kind: 'rich_text', required: false, unique: false, searchable: true, default_value: null },
+    ],
+    templates: [],
+    css: '',
+    sort_field: 'front',
+    version: 1,
+    builtin: 'classic',
+    updated_at: 0,
+  } as NoteTypeDto;
+  const destination = { ready: true, deckId: 'd1', packageParent: 'd1', ensure: async () => ({ id: 'd1', created: false }) };
 
   it('previews pasted text, imports it as a job and offers undo', async () => {
-    render(ImportPanel, { ctx });
-    await fireEvent.input(screen.getByRole('textbox', { name: 'Paste text' }), {
+    render(ImportFlow, { ctx, kind: 'paste', nt, notetypes: [nt], onchoosetype: () => {}, destination });
+    await fireEvent.input(screen.getByRole('textbox', { name: 'Paste your list here' }), {
       target: { value: 'Arda: porsuk' },
     });
-    await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-    expect(await screen.findByText('porsuk')).toBeTruthy();
-    expect(screen.getByText(/Detected automatically \(93%\)/)).toBeTruthy();
+    expect(await screen.findByText('porsuk', {}, { timeout: 3000 })).toBeTruthy();
+    expect(screen.getByText(/detected, 93% sure/)).toBeTruthy();
     expect(call).toHaveBeenCalledWith(
       'io.import.preview',
-      expect.objectContaining({ source: { kind: 'text', text: 'Arda: porsuk' }, deck_id: 'd1' }),
+      expect.objectContaining({ source: { kind: 'text', text: 'Arda: porsuk' }, deck_id: 'd1', notetype_id: 'classic' }),
     );
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Import into Words' }));
-    expect(await screen.findByText('1 added, 0 updated, 0 skipped as duplicates.')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: /Add 1 card/ }));
+    expect(await screen.findByText('1 card added')).toBeTruthy();
     expect(call).toHaveBeenCalledWith(
       'io.import.start',
       expect.objectContaining({
@@ -114,9 +134,29 @@ describe('<ImportPanel>', () => {
         duplicates: 'skip',
       }),
     );
-    expect(screen.getByRole('listitem').textContent).toContain('Row 2: No deck given.');
+    // Why rows were not imported: the shared confirmation lists the backend's reasons.
+    expect(screen.getByText('Row 2: No deck given.')).toBeTruthy();
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Undo import' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
     expect(undo).toHaveBeenCalled();
+  });
+
+  it('a file is chosen, mapped and imported in three steps (browser: read as text)', async () => {
+    render(ImportFlow, { ctx, kind: 'file', nt, notetypes: [nt], onchoosetype: () => {}, destination });
+    expect(screen.getByText('Drop the file here')).toBeTruthy();
+    const file = new File(['Arda: porsuk'], 'words.csv', { type: 'text/csv' });
+    await fireEvent.change(screen.getByTestId('file-input'), { target: { files: [file] } });
+    expect(await screen.findByText('words.csv')).toBeTruthy();
+    expect(await screen.findByText('porsuk', {}, { timeout: 3000 })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Import 1 card/ })).toBeTruthy();
+    // The duplicate rule is explained in plain words (the unique field named).
+    expect(screen.getByText(/same Front already exists/)).toBeTruthy();
+  });
+
+  it('an Anki package picked in a browser says it needs the app', async () => {
+    render(ImportFlow, { ctx, kind: 'file', nt, notetypes: [nt], onchoosetype: () => {}, destination });
+    const file = new File(['x'], 'deck.apkg');
+    await fireEvent.change(screen.getByTestId('file-input'), { target: { files: [file] } });
+    expect(await screen.findByText(/only be opened in the app/)).toBeTruthy();
   });
 });

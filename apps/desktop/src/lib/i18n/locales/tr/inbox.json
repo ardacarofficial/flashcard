@@ -163,7 +163,9 @@
       "reject": "reddet",
       "select": "seç",
       "accept_selected": "seçilenleri kabul et"
-    }
+    },
+    "empty_action": "Tarayıcı eklentisini bağla",
+    "empty_example": "Örnek: serendipity — tesadüfen güzel bir şey bulmak · “It was pure serendipity.”"
   },
   "local_api": {
     "heading": "Yerel API",

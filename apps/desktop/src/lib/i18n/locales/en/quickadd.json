@@ -23,6 +23,10 @@
     "discard_confirm": "Discard and close",
     "keep_editing": "Keep editing",
     "keys_hint": "Enter moves to the next field and adds on the last one · Shift+Enter new line",
-    "loading": "Loading"
+    "loading": "Loading",
+    "optional": "{name} (optional)",
+    "duplicate": "“{term}” is already there: a card with the same {fields} exists in this note type. Adding it anyway makes a second, separate card.",
+    "more_hint_fields": "{fields}, classification and preview",
+    "other_ways": "Other ways:"
   }
 }

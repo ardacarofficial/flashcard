@@ -26,6 +26,35 @@ function classic(): NoteTypeDto {
   };
 }
 
+/**
+ * v1.3 (dev mock only, `pnpm dev:mock`): a vocabulary type with an example sentence, so the
+ * add page's role-aware mapping (word · meaning · sentence) can be tried without Rust.
+ */
+export const MOCK_VOCABULARY_ID = '01900000-0000-7000-8000-00000000000b';
+function vocabulary(): NoteTypeDto {
+  const f = (key: string, name: string, extra: Partial<NoteTypeDto['fields'][number]> = {}) => ({
+    key,
+    name,
+    kind: 'rich_text' as const,
+    required: false,
+    unique: false,
+    searchable: true,
+    default_value: null,
+    ...extra,
+  });
+  return {
+    ...classic(),
+    id: MOCK_VOCABULARY_ID,
+    name: 'Kelime',
+    fields: [f('word', 'Kelime', { unique: true }), f('meaning', 'Anlam', { required: true }), f('pronunciation', 'Telaffuz', { kind: 'text' }), f('example', 'Örnek cümle')],
+    templates: [
+      { key: 'recognition', name: 'Tanıma', front: '{{word}}', back: '{{FrontSide}}<hr>{{meaning}}<div class="fc-example">{{example}}</div>', card_type: 'classic' },
+    ],
+    sort_field: 'word',
+    builtin: 'vocabulary',
+  };
+}
+
 export default {
   modules: [
     module('cardtypes', [menu('cardtypes.notetypes', 'nav.notetypes', '/notetypes', 60)]),
@@ -37,7 +66,7 @@ export default {
     module('code_highlight', []),
   ],
   handlers: ({ notes, emit, cardFlags }: MockEnv) => {
-    const types: NoteTypeDto[] = [classic()];
+    const types: NoteTypeDto[] = import.meta.env.MODE === 'mock' ? [classic(), vocabulary()] : [classic()];
     const media = new Map<string, { dto: MediaDto; data: string }>();
     const flags: FlagDto[] = ['red', 'orange', 'green', 'blue', 'pink', 'turquoise', 'purple'].map((color, i) => ({
       flag: i + 1,

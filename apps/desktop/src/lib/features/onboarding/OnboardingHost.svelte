@@ -1,92 +1,142 @@
 <script lang="ts">
   /**
-   * First-run guide (v1.0, docs/02 §32): shown once on a new, empty collection. Two short
-   * steps — what you study, then the deck name and starter decks — and skippable at any
-   * time. The backend decides what each subject sets up (`onboarding.options`) and does it
-   * in one undo step (`onboarding.apply`).
+   * First-run guide. v1.0 (docs/02 §32): on a new, empty collection the backend decides what
+   * each subject sets up (`onboarding.options`) and does it in one undo step
+   * (`onboarding.apply`). v1.3: that setup is step 1 of a four-step "Getting started" guide
+   * where every step does the thing — add your first words (or start with a ready deck),
+   * study, see where today's cards and progress live, optionally connect the browser
+   * extension. After step 1 the guide is a small non-modal checklist (`GuidePanel`);
+   * skippable at any time, re-opened from Help (`openGuide`).
    */
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { api } from '$lib/api';
   import type { OnboardingChoices, OnboardingSubjectDto, StudyGoal } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
-  import { Button, Check, Checkbox, CircleCheck, Dialog, Icon, Input } from '$lib/ui';
+  import { formatCount } from '$lib/format';
+  import { Button, Check, Checkbox, Dialog, Icon, Input } from '$lib/ui';
+  import type { DeckTreeNode } from '$lib/api/types';
+  import type { ScreenCtx } from '../types';
+  import GuidePanel from './GuidePanel.svelte';
+  import { setGuideView, startGuide } from './guide.svelte';
 
   interface Props {
     /** Called after setup or skip (the shell re-reads decks). */
     ondone?: () => void;
+    /** The shell's context: the guide's steps select decks and open pages with it. */
+    ctx?: ScreenCtx;
+    /** Opens Home (step 3). */
+    home?: () => void;
   }
-  let { ondone }: Props = $props();
+  let { ondone, ctx, home }: Props = $props();
 
   const GOALS: StudyGoal[] = ['language', 'exam', 'school', 'general'];
+  /** Picked first: the app's main user learns English (any other subject is one click away). */
+  const PRESELECT = 'english';
 
   let open = $state(false);
+  /** Opened from the checklist (not the first run): closing it just goes back there. */
+  let fromGuide = $state(false);
   let choices = $state<OnboardingChoices | null>(null);
   let subject = $state<OnboardingSubjectDto | null>(null);
-  let step = $state<'subject' | 'details' | 'done'>('subject');
   let deckName = $state('');
+  /** The user typed a name: changing the subject no longer replaces it. */
+  let named = false;
   let picked = $state<Record<string, boolean>>({});
-  let created = $state(0);
+  let created = $state<number | null>(null);
   let error = $state<string | null>(null);
+  let busy = $state(false);
 
   const offered = $derived(
     subject && choices ? choices.starters.filter((s) => subject?.starters.includes(s.id)) : [],
   );
+  const chosenStarters = $derived(subject ? subject.starters.filter((id) => picked[id]) : []);
+  const all = $derived(choices ? GOALS.flatMap((g) => choices!.subjects.filter((s) => s.goal === g)) : []);
+
+  function choose(s: OnboardingSubjectDto) {
+    subject = s;
+    if (!named) deckName = s.deck_name;
+    picked = Object.fromEntries(s.starters.map((id) => [id, true]));
+  }
+
+  async function openSetup(first: boolean) {
+    error = null;
+    try {
+      choices = await api.call('onboarding.options', { locale: i18n.locale });
+    } catch {
+      return; // Module off, or the app is locked.
+    }
+    named = false;
+    const pre = choices.subjects.find((s) => s.subject === PRESELECT) ?? choices.subjects[0];
+    if (pre) choose(pre);
+    fromGuide = !first;
+    open = true;
+  }
 
   async function load() {
     try {
       const status = await api.call('onboarding.status', {});
-      if (!status.show) return;
-      choices = await api.call('onboarding.options', { locale: i18n.locale });
-      open = true;
+      if (status.show) await openSetup(true);
     } catch {
       // Module off, or the app is locked: no guide now.
     }
   }
 
-  let body = $state<HTMLDivElement | null>(null);
+  /** Waits (briefly) for the shell to know the new deck, then opens `route` on it. */
+  let pending = $state<{ deck: string; route: string } | null>(null);
+  let pendingTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /** Keeps the keyboard in the dialog when a step replaces its content. */
-  async function focusIn(selector: string) {
-    await tick();
-    body?.querySelector<HTMLElement>(selector)?.focus();
+  function contains(nodes: DeckTreeNode[], id: string): boolean {
+    return nodes.some((n) => n.deck.id === id || contains(n.children, id));
   }
 
-  function next() {
-    if (!subject) return;
-    deckName = subject.deck_name;
-    picked = Object.fromEntries(subject.starters.map((id) => [id, true]));
-    step = 'details';
-    void focusIn('.details input');
+  function flush() {
+    const p = pending;
+    if (!p || !ctx) return;
+    pending = null;
+    clearTimeout(pendingTimer);
+    ctx.selectDeck(p.deck);
+    ctx.navigate?.(p.route);
   }
 
-  function back() {
-    step = 'subject';
-    void focusIn('.choice[tabindex="0"]');
-  }
+  $effect(() => {
+    const p = pending;
+    const decks = ctx?.decks ?? [];
+    if (p && contains(decks, p.deck)) untrack(flush);
+  });
 
-  async function apply() {
-    if (!subject) return;
+  async function apply(withStarters: boolean) {
+    if (!subject || busy) return;
     error = null;
+    busy = true;
     try {
       const r = await api.call('onboarding.apply', {
         subject: subject.subject,
         deck_name: deckName,
-        starters: subject.starters.filter((id) => picked[id]),
+        starters: withStarters ? chosenStarters : [],
         locale: i18n.locale,
       });
       created = r.notes_created;
-      step = 'done';
-      await tick();
-      // The step's only action (in the footer, outside `body`).
-      body?.closest('[role=dialog]')?.querySelector<HTMLElement>('footer button')?.focus();
+      open = false;
+      startGuide(r.deck_id);
+      if (withStarters) {
+        ctx?.selectDeck(r.deck_id);
+      } else {
+        // The add page opens on the new deck once the shell has re-read the decks.
+        pending = { deck: r.deck_id, route: '/notes/new' };
+        pendingTimer = setTimeout(flush, 3000);
+      }
       ondone?.();
     } catch (e) {
       error = td((e as { messageKey?: string }).messageKey ?? 'errors.internal.unexpected');
+    } finally {
+      busy = false;
     }
   }
 
   async function skip() {
     open = false;
+    if (fromGuide) return;
+    setGuideView('closed');
     try {
       await api.call('onboarding.skip', {});
     } catch {
@@ -95,134 +145,117 @@
     ondone?.();
   }
 
-  const stepNo = $derived(step === 'subject' ? 1 : 2);
   let radios = $state<HTMLButtonElement[]>([]);
-  const all = $derived(choices ? GOALS.flatMap((g) => choices!.subjects.filter((s) => s.goal === g)) : []);
 
   /** Arrow keys move the choice through every subject (one radio group, one tab stop). */
   function onkey(e: KeyboardEvent, i: number) {
-    // Enter on the chosen subject goes on (keyboard-first: arrows, then Enter).
+    // Enter on the chosen subject is the main action (keyboard-first: arrows, then Enter).
     if (e.key === 'Enter' && subject?.subject === all[i]?.subject) {
       e.preventDefault();
-      next();
+      void apply(false);
       return;
     }
     const dir = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
     if (!dir || all.length === 0) return;
     e.preventDefault();
     const n = (i + dir + all.length) % all.length;
-    subject = all[n]!;
-    radios[n]?.focus();
+    choose(all[n]!);
+    void tick().then(() => radios[n]?.focus());
   }
 
-  onMount(() => void load());
+  onMount(() => {
+    void load();
+    return () => clearTimeout(pendingTimer);
+  });
 </script>
 
 {#if choices}
   <Dialog
     bind:open
     size="lg"
-    dismissible={false}
+    dismissible={fromGuide}
     title={t('onboarding.title')}
-    description={step === 'subject' ? t('onboarding.intro') : step === 'details' ? t('onboarding.details_intro') : undefined}
+    description={t('onboarding.intro')}
+    initialFocus={'.choice[tabindex="0"]'}
   >
-    <div class="ob" bind:this={body}>
-    {#if step !== 'done'}
-      <div class="steps" aria-label={t('onboarding.step', { n: stepNo, total: 2 })} role="img">
-        <span class="bar" class:on={stepNo >= 1}></span>
-        <span class="bar" class:on={stepNo >= 2}></span>
-        <span class="step-text" aria-hidden="true">{t('onboarding.step', { n: stepNo, total: 2 })}</span>
+    <form
+      class="ob"
+      onsubmit={(e) => {
+        e.preventDefault();
+        void apply(false);
+      }}
+    >
+      <div class="steps" aria-label={t('onboarding.step', { n: formatCount(1), total: formatCount(4) })} role="img">
+        <span class="bar on"></span>
+        <span class="bar"></span>
+        <span class="bar"></span>
+        <span class="bar"></span>
+        <span class="step-text" aria-hidden="true">{t('onboarding.step', { n: formatCount(1), total: formatCount(4) })} · {t('onboarding.guide.add')}</span>
       </div>
-    {/if}
-    {#if step === 'subject'}
-      <div class="goals" role="radiogroup" aria-label={t('onboarding.title')}>
-        {#each GOALS as goal (goal)}
-          {@const list = choices.subjects.filter((s) => s.goal === goal)}
-          {#if list.length > 0}
-            <div class="goal">
-              <h3>{td(`onboarding.goal.${goal}`)}</h3>
-              <div class="grid">
-                {#each list as s (s.subject)}
-                  {@const i = all.indexOf(s)}
-                  {@const chosen = subject?.subject === s.subject}
-                  <button
-                    type="button"
-                    role="radio"
-                    class="choice"
-                    class:chosen
-                    aria-checked={chosen}
-                    aria-labelledby="ob-{s.subject}"
-                    aria-describedby="ob-{s.subject}-d"
-                    tabindex={chosen || (!subject && i === 0) ? 0 : -1}
-                    bind:this={radios[i]}
-                    onclick={() => (subject = s)}
-                    onkeydown={(e) => onkey(e, i)}
-                  >
-                    <span class="choice-title" id="ob-{s.subject}">{td(`onboarding.subject.${s.subject}`)}</span>
-                    {#if chosen}<span class="tick" aria-hidden="true"><Icon icon={Check} size={14} /></span>{/if}
-                    <span class="choice-desc" id="ob-{s.subject}-d">
-                      {s.template_id
-                        ? t('onboarding.template', { name: td(`onboarding.templates.${s.template_id}`) })
-                        : t('onboarding.template_none')}
-                    </span>
-                  </button>
-                {/each}
-              </div>
-            </div>
-          {/if}
-        {/each}
-      </div>
-    {:else if step === 'details'}
-      <form
-        class="details"
-        onsubmit={(e) => {
-          e.preventDefault();
-          void apply();
-        }}
-      >
-        <Input label={t('onboarding.deck_name')} bind:value={deckName} />
-        <div class="starters">
-          <h3>{t('onboarding.starters')}</h3>
-          {#if offered.length === 0}
-            <p class="muted">{t('onboarding.starters_none')}</p>
-          {/if}
-          {#each offered as s (s.id)}
-            <Checkbox label={s.name} description={t('onboarding.notes', { count: s.note_count })} bind:checked={picked[s.id]} />
+
+      <section>
+        <h3 id="ob-subjects">{t('onboarding.subject_heading')}</h3>
+        <div class="grid" role="radiogroup" aria-labelledby="ob-subjects">
+          {#each all as s, i (s.subject)}
+            {@const chosen = subject?.subject === s.subject}
+            <button
+              type="button"
+              role="radio"
+              class="choice"
+              class:chosen
+              aria-checked={chosen}
+              aria-labelledby="ob-{s.subject}"
+              aria-describedby="ob-{s.subject}-d"
+              tabindex={chosen || (!subject && i === 0) ? 0 : -1}
+              bind:this={radios[i]}
+              onclick={() => choose(s)}
+              onkeydown={(e) => onkey(e, i)}
+            >
+              <span class="choice-title" id="ob-{s.subject}">{td(`onboarding.subject.${s.subject}`)}</span>
+              {#if chosen}<span class="tick" aria-hidden="true"><Icon icon={Check} size={12} /></span>{/if}
+              <span class="choice-desc" id="ob-{s.subject}-d">
+                {s.template_id
+                  ? t('onboarding.template', { name: td(`onboarding.templates.${s.template_id}`) })
+                  : t('onboarding.template_none')}
+              </span>
+            </button>
           {/each}
         </div>
-        {#if error}<p class="error" role="alert">{error}</p>{/if}
-      </form>
-    {:else}
-      <div class="done">
-        <span class="done-icon" aria-hidden="true"><Icon icon={CircleCheck} size={24} /></span>
-        <p role="status">{t('onboarding.done', { count: created })}</p>
-      </div>
-    {/if}
-    </div>
+      </section>
+
+      <Input label={t('onboarding.deck_name')} bind:value={deckName} oninput={() => (named = true)} />
+
+      <section class="starters">
+        <h3>{t('onboarding.starters')}</h3>
+        <p class="muted">{offered.length === 0 ? t('onboarding.starters_none') : t('onboarding.starters_hint')}</p>
+        {#each offered as s (s.id)}
+          <Checkbox label={s.name} description={t('onboarding.notes', { count: s.note_count })} bind:checked={picked[s.id]} />
+        {/each}
+      </section>
+      {#if error}<p class="error" role="alert">{error}</p>{/if}
+    </form>
     {#snippet footer()}
-      {#if step === 'subject'}
-        <Button variant="ghost" onclick={() => void skip()}>{t('onboarding.skip')}</Button>
-        <span class="spacer"></span>
-        <Button variant="primary" kbd="Enter" disabled={!subject} onclick={next}>{t('onboarding.next')}</Button>
-      {:else if step === 'details'}
-        <Button variant="ghost" onclick={() => void skip()}>{t('onboarding.skip')}</Button>
-        <span class="spacer"></span>
-        <Button onclick={back}>{t('onboarding.back')}</Button>
-        <Button variant="primary" kbd="Enter" onclick={() => void apply()}>{t('onboarding.apply')}</Button>
-      {:else}
-        <Button variant="primary" onclick={() => (open = false)}>{t('onboarding.close')}</Button>
-      {/if}
+      <Button variant="ghost" onclick={() => void skip()}>{fromGuide ? t('onboarding.cancel') : t('onboarding.skip')}</Button>
+      <span class="spacer"></span>
+      <Button disabled={chosenStarters.length === 0 || busy} onclick={() => void apply(true)}>{t('onboarding.apply_starters')}</Button>
+      <Button variant="primary" kbd="Enter" disabled={!subject} loading={busy} onclick={() => void apply(false)}>{t('onboarding.apply_own')}</Button>
     {/snippet}
   </Dialog>
 {/if}
 
+<GuidePanel {ctx} {home} {created} onsetup={() => void openSetup(false)} />
+
 <style>
+  .ob {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
   .steps {
     display: grid;
-    grid-template-columns: 1fr 1fr auto;
+    grid-template-columns: repeat(4, 1fr) auto;
     align-items: center;
     gap: var(--space-2);
-    margin-bottom: var(--space-4);
   }
   .bar {
     height: 4px;
@@ -235,28 +268,13 @@
   .step-text {
     margin-inline-start: var(--space-2);
     color: var(--text-2);
-    font-family: var(--font-mono);
     font-size: var(--text-xs);
     font-variant-numeric: tabular-nums;
   }
-  .goals {
-    display: flex;
-    flex-direction: column;
-  }
-  .goal {
+  section {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    padding: var(--space-3) 0;
-  }
-  .goal:first-child {
-    padding-top: 0;
-  }
-  .goal + .goal {
-    border-top: 1px solid var(--border);
-  }
-  .details h3 {
-    margin-bottom: var(--space-2);
   }
   h3 {
     margin: 0;
@@ -266,7 +284,7 @@
   }
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--space-2);
   }
   .choice {
@@ -316,41 +334,22 @@
     font-size: var(--text-xs);
     color: var(--text-2);
   }
-  .details {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-  .starters {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
   .muted {
     margin: 0;
     color: var(--text-2);
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
   }
   .error {
     margin: 0;
     color: var(--danger);
     font-size: var(--text-sm);
   }
-  .done {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) 0;
-  }
-  .done p {
-    margin: 0;
-  }
-  .done-icon {
-    display: inline-flex;
-    color: var(--success);
-  }
   .spacer {
     flex: 1;
+  }
+  @media (max-width: 640px) {
+    .grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 </style>

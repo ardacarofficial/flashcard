@@ -10,7 +10,7 @@ import { i18n } from '$lib/i18n/index.svelte';
 import App from '../../App.svelte';
 import BrowseScreen from './browse/BrowseScreen.svelte';
 import NoteEditor from './cards/NoteEditor.svelte';
-import ImportPanel from './io/ImportPanel.svelte';
+import ImportFlow from './io/ImportFlow.svelte';
 import type { ScreenCtx } from './types';
 
 const calls = vi.hoisted(() => [] as string[]);
@@ -93,10 +93,12 @@ describe('attributes module off', () => {
 
   it('import: no classification columns, no attributes calls, no error', async () => {
     const ctx = ctxWith({ selectedDeck: english, selectedPath: 'İngilizce' });
-    render(ImportPanel, { ctx });
-    await fireEvent.input(screen.getByRole('textbox', { name: 'Paste text' }), { target: { value: 'a: b' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-    const column = await screen.findByRole('combobox', { name: 'Column 1' });
+    // v1.3: importing is the add page's Paste / From a file flow.
+    const nt = (await api.call('notetypes.list', {})).notetypes[0]!;
+    const destination = { ready: true, deckId: english, packageParent: english, ensure: async () => ({ id: english, created: false }) };
+    render(ImportFlow, { ctx, kind: 'paste', nt, notetypes: [nt], onchoosetype: () => {}, destination });
+    await fireEvent.input(screen.getByRole('textbox', { name: 'Paste your list here' }), { target: { value: 'a: b' } });
+    const column = await screen.findByRole('combobox', { name: 'Column 1' }, { timeout: 3000 });
     await fireEvent.click(column);
     const options = screen.getAllByRole('option').map((o) => o.textContent?.trim());
     expect(options).toContain("Don't import");
