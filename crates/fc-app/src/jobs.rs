@@ -564,7 +564,8 @@ impl JobWorker {
 
 /// Starts the workers of `app`: one thread per lane ([`JobHandler::lane`]), each running its
 /// lane's queued jobs one at a time, waking up when a job is queued and every few seconds as
-/// a fallback.
+/// a fallback. While idle, the main lane queues automatic backups when due
+/// ([`crate::modules::io::auto_backup_tick`]).
 pub fn spawn_worker(app: Arc<App>) -> std::io::Result<JobWorker> {
     let stop = Arc::new(AtomicBool::new(false));
     let mut worker = JobWorker {
@@ -581,7 +582,14 @@ pub fn spawn_worker(app: Arc<App>) -> std::io::Result<JobWorker> {
                     let seen = a.job_runtime().generation();
                     match a.run_next_job_in(lane) {
                         Ok(Some(_)) => continue,
-                        Ok(None) | Err(_) => a.job_runtime().wait(seen, Duration::from_secs(5)),
+                        Ok(None) | Err(_) => {
+                            // Idle: queue an automatic backup if one is due (v1.4; it looks
+                            // at most every few minutes, best effort).
+                            if lane == MAIN_LANE {
+                                let _ = crate::modules::io::auto_backup_tick(&a, false);
+                            }
+                            a.job_runtime().wait(seen, Duration::from_secs(5));
+                        }
                     }
                 }
             })?;

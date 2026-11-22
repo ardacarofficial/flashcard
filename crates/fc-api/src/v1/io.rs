@@ -284,6 +284,127 @@ pub struct CreateBackup {
     pub path: String,
 }
 
+/// Result of a backup (`io.backup.create`, automatic backups; `JobDto.result`). The file is
+/// written to a temporary sibling, restored into a scratch profile and compared
+/// (`io.backup.verify`), and only then put in place: an existing file at `path` is replaced
+/// only by a verified backup.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct BackupReport {
+    /// Written file.
+    pub path: String,
+    /// File size.
+    pub bytes: u64,
+    /// Notes in it.
+    pub notes: u32,
+    /// Cards in it.
+    pub cards: u32,
+    /// Review history rows in it.
+    pub review_log: u32,
+    /// Media files in it.
+    pub media: u32,
+    /// Whether it was restored into a scratch profile and matched (always `true` for a
+    /// report of a finished backup; a failed check fails the job).
+    pub verified: bool,
+    /// Media the collection lists whose bytes are missing or damaged on disk: not in the
+    /// backup (empty = complete). The backup is written anyway, marked incomplete.
+    pub missing_media: Vec<String>,
+}
+
+/// `io.backup.verify`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct VerifyBackup {
+    /// `.fcbackup` file.
+    pub path: String,
+}
+
+/// Result of `io.backup.verify` (`JobDto.result`): the backup restored into a scratch profile
+/// (the live collection is not touched) and read back.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct BackupVerifyReport {
+    /// Checked file.
+    pub path: String,
+    /// When the backup was taken (`null` if its header is unreadable).
+    pub created_at: Option<Timestamp>,
+    /// Whether it restores completely and matches: `problems` is empty.
+    pub ok: bool,
+    /// Whether every media file of the collection is in it (see `missing_media`).
+    pub complete: bool,
+    /// Rows of the main tables (`decks`, `notetypes`, `notes`, `cards`, `review_log`,
+    /// `media`) as read back from the scratch profile.
+    pub counts: BTreeMap<String, u64>,
+    /// Media files restored and matching their hash.
+    pub media_files: u32,
+    /// Media missing when the backup was taken.
+    pub missing_media: Vec<String>,
+    /// What does not match (untranslated diagnostics; empty when `ok`).
+    pub problems: Vec<String>,
+}
+
+/// `io.auto_backup` setting values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoBackupSchedule {
+    /// No automatic backups.
+    Off,
+    /// One a day.
+    Daily,
+    /// One a week.
+    Weekly,
+}
+
+/// A verified backup on disk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct VerifiedBackup {
+    /// File.
+    pub path: String,
+    /// When it was taken.
+    pub created_at: Timestamp,
+    /// When it was last verified.
+    pub verified_at: Timestamp,
+    /// File size.
+    pub bytes: u64,
+    /// Whether every media file is in it.
+    pub complete: bool,
+    /// Whether the app made it on its own (kept in the automatic backup folder).
+    pub automatic: bool,
+}
+
+/// The last automatic backup that failed (cleared by the next success).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct BackupFailure {
+    /// When.
+    pub at: Timestamp,
+    /// Why (untranslated diagnostic).
+    pub message: String,
+}
+
+/// Response of `io.backup.status`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct BackupStatus {
+    /// `io.auto_backup`.
+    pub schedule: AutoBackupSchedule,
+    /// `io.auto_backup_keep`: verified automatic copies kept.
+    pub keep: u32,
+    /// Folder of the automatic backups (`null`: the collection has no folder, e.g. in memory).
+    pub folder: Option<String>,
+    /// The newest verified backup (automatic, `io.backup.create` or `io.backup.verify`).
+    pub last_verified: Option<VerifiedBackup>,
+    /// Automatic backups kept, newest first.
+    pub automatic: Vec<VerifiedBackup>,
+    /// When the next automatic backup is due (`null` = off or no folder).
+    pub next_due: Option<Timestamp>,
+    /// The last automatic backup that failed, if none succeeded since.
+    pub last_failure: Option<BackupFailure>,
+}
+
+/// Response of `io.backup.auto`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct AutoBackupStart {
+    /// The queued job (`null`: one is already queued or running, or there is no folder).
+    pub job: Option<super::jobs::JobDto>,
+}
+
 /// `io.backup.restore`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
@@ -305,6 +426,9 @@ pub struct RestoreReport {
     pub counts: BTreeMap<String, u64>,
     /// Media files restored.
     pub media: u32,
+    /// Media that were already missing when the backup was taken (not restored).
+    #[serde(default)]
+    pub missing_media: Vec<String>,
 }
 
 /// `io.backup.inspect`.
@@ -326,6 +450,9 @@ pub struct BackupInfo {
     pub media: u32,
     /// Whether this app version can restore it (no unknown schema migrations).
     pub compatible: bool,
+    /// Whether every media file of the collection is in it (backups before v1.4 do not
+    /// know: `true`).
+    pub complete: bool,
 }
 
 /// Print layouts.

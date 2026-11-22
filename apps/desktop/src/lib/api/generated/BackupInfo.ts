@@ -20,4 +20,9 @@ media: number,
 /**
  * Whether this app version can restore it (no unknown schema migrations).
  */
-compatible: boolean, };
+compatible: boolean, 
+/**
+ * Whether every media file of the collection is in it (backups before v1.4 do not
+ * know: `true`).
+ */
+complete: boolean, };

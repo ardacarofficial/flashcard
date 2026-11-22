@@ -39,8 +39,10 @@ import type { AttributeRef } from "./AttributeRef";
 import type { AttributeTemplateList } from "./AttributeTemplateList";
 import type { AttributeValues } from "./AttributeValues";
 import type { AudioDto } from "./AudioDto";
+import type { AutoBackupStart } from "./AutoBackupStart";
 import type { BacklinksOf } from "./BacklinksOf";
 import type { BackupInfo } from "./BackupInfo";
+import type { BackupStatus } from "./BackupStatus";
 import type { BatchResult } from "./BatchResult";
 import type { BulkResult } from "./BulkResult";
 import type { BuryCards } from "./BuryCards";
@@ -367,6 +369,7 @@ import type { UpdateReadingItem } from "./UpdateReadingItem";
 import type { UpdateRule } from "./UpdateRule";
 import type { UpdateSavedQuery } from "./UpdateSavedQuery";
 import type { UpdateStatus } from "./UpdateStatus";
+import type { VerifyBackup } from "./VerifyBackup";
 import type { VoiceList } from "./VoiceList";
 import type { WordInfo } from "./WordInfo";
 import type { WordMarksChanged } from "./WordMarksChanged";
@@ -474,6 +477,9 @@ export interface Methods {
   "io.backup.create": { kind: "command"; request: CreateBackup; response: JobDto };
   "io.backup.inspect": { kind: "query"; request: InspectBackup; response: BackupInfo };
   "io.backup.restore": { kind: "command"; request: RestoreBackup; response: JobDto };
+  "io.backup.verify": { kind: "command"; request: VerifyBackup; response: JobDto };
+  "io.backup.status": { kind: "query"; request: Empty; response: BackupStatus };
+  "io.backup.auto": { kind: "command"; request: Empty; response: AutoBackupStart };
   "io.print.render": { kind: "query"; request: RenderPrint; response: PrintDocument };
   "search.cards": { kind: "query"; request: SearchCards; response: CardSearchPage };
   "search.ids": { kind: "query"; request: QueryText; response: SearchIds };
@@ -778,6 +784,9 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "io.backup.create": "command",
   "io.backup.inspect": "query",
   "io.backup.restore": "command",
+  "io.backup.verify": "command",
+  "io.backup.status": "query",
+  "io.backup.auto": "command",
   "io.print.render": "query",
   "search.cards": "query",
   "search.ids": "query",

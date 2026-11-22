@@ -249,5 +249,20 @@
       "unsupported_version": "This file comes from a newer version of the app.",
       "job_cancelled": "The job was cancelled."
     }
+  },
+  "settings": {
+    "io": {
+      "auto_backup": {
+        "label": "Automatic backups",
+        "description": "Backs up the whole collection, media included, into the backups folder next to it and checks each copy by restoring it into a scratch copy. Only copies that pass are kept.",
+        "off": "Off",
+        "daily": "Daily",
+        "weekly": "Weekly"
+      },
+      "auto_backup_keep": {
+        "label": "Automatic copies to keep",
+        "description": "Older checked copies are removed once a new one has passed its check. The newest good copy is never deleted."
+      }
+    }
   }
 }

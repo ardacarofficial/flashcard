@@ -15,4 +15,8 @@ counts: { [key in string]: number },
 /**
  * Media files restored.
  */
-media: number, };
+media: number, 
+/**
+ * Media that were already missing when the backup was taken (not restored).
+ */
+missing_media: Array<string>, };
