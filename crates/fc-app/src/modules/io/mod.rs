@@ -18,9 +18,15 @@
 //!   state under the app data folder, then invokes `io.backup.load` (internal), which swaps
 //!   every table in one transaction (atomic on purpose: a half-restored collection must never
 //!   be visible). Media go through [`media::MediaStore`].
+//! * **Backups** (v1.4) stream file to file and are verified in a scratch profile before
+//!   they count ([`backup_file`]); automatic backups run on a schedule ([`backup_auto`]).
 
 mod apply;
 mod backup;
+mod backup_auto;
+mod backup_file;
+#[cfg(test)]
+mod backup_tests;
 mod export;
 mod import;
 mod media;
@@ -53,6 +59,9 @@ pub const JOB_EXPORT: &str = "io.export";
 pub const JOB_BACKUP: &str = "io.backup";
 /// Restore job kind.
 pub const JOB_RESTORE: &str = "io.restore";
+/// Backup verification job kind.
+pub const JOB_VERIFY: &str = "io.verify";
+pub use backup_auto::{tick as auto_backup_tick, JOB_AUTO_BACKUP};
 
 /// Descriptor.
 pub fn descriptor() -> ModuleDescriptor {
@@ -62,7 +71,7 @@ pub fn descriptor() -> ModuleDescriptor {
         description_key: "modules.io.description",
         enabled_by_default: true,
         can_disable: true,
-        settings: Vec::new(),
+        settings: backup_auto::settings(),
         ui: vec![main_menu("io.main", "nav.io", "io", "/io", 60)],
     }
 }
@@ -82,10 +91,15 @@ pub fn register(reg: &mut Registry) {
     reg.query::<IoBackupInspect>(backup::inspect);
     reg.command::<IoBackupRestore>(backup::restore);
     reg.command::<IoBackupLoad>(backup::LoadHandler(staging.clone()));
+    reg.command::<IoBackupVerify>(backup::verify);
+    reg.action::<IoBackupStatus>(backup_auto::status);
+    reg.command::<IoBackupAuto>(backup_auto::start);
     reg.query::<IoPrintRender>(print::render);
     reg.job(Arc::new(import::ImportJob(staging.clone())));
     reg.job(Arc::new(export::ExportJob));
     reg.job(Arc::new(backup::BackupJob));
+    reg.job(Arc::new(backup::VerifyJob));
+    reg.job(Arc::new(backup_auto::AutoBackupJob));
     reg.job(Arc::new(backup::RestoreJob(staging)));
 }
 

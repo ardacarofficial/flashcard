@@ -58,7 +58,10 @@
       "backup": {
         "create": "Yedek al",
         "inspect": "Yedeği incele",
-        "restore": "Yedekten geri yükle"
+        "restore": "Yedekten geri yükle",
+        "verify": "Yedeği dene",
+        "status": "Yedek durumu",
+        "auto": "Şimdi yedekle"
       },
       "print": {
         "render": "Kartları yazdır"

@@ -67,32 +67,51 @@ fn zstd_bomb_in_a_latest_apkg_stops_at_the_budget() {
 #[test]
 fn many_entries_share_one_total_budget() {
     // Each entry is under the per-entry cap; together they exceed the 64 MiB minimum budget.
-    let manifest = serde_json::to_vec(&fcbackup::Manifest {
-        format: fcbackup::FORMAT.into(),
-        version: fcbackup::VERSION,
-        created_at: fc_core::Timestamp(1),
-        schema_versions: vec![1],
-        counts: Default::default(),
-        media: 3,
-    })
-    .unwrap();
     // Valid names (sha256 of the content), so only the budget can stop the read.
     let names: Vec<String> = [30, 31, 32]
         .iter()
         .map(|mib| format!("media/{}", crate::media::sha256_hex(&vec![0u8; mib * MIB])))
         .collect();
     let bomb = zip(&[
+        Entry::Bytes("collection.anki2", b"x"),
+        Entry::Zeros(&names[0], 30),
+        Entry::Zeros(&names[1], 31),
+        Entry::Zeros(&names[2], 32),
+    ]);
+    // Each entry alone fits.
+    let mut z = ZipIn::open(&bomb, "apkg").unwrap();
+    assert_eq!(z.read(&names[2]).unwrap().unwrap().len(), 32 * MIB);
+    let mut z = ZipIn::open(&bomb, "apkg").unwrap();
+    z.read(&names[0]).unwrap();
+    z.read(&names[1]).unwrap();
+    let e = z.read(&names[2]).unwrap_err();
+    assert!(is_limit(&e), "{e}");
+}
+
+#[test]
+fn own_backups_have_no_total_ceiling() {
+    // v1.4 (deliberate change): the same 93 MiB of media in an `.fcbackup` — over the shared
+    // budget above — reads back, entry by entry: what the app can write it can read. Its
+    // guards are per entry (ratio, declared size, CRC, hash; see `fcbackup`).
+    let manifest = serde_json::json!({
+        "format": "fcbackup", "version": 1, "created_at": 1,
+        "schema_versions": [1], "counts": {}, "media": 3
+    });
+    let manifest = serde_json::to_vec(&manifest).unwrap();
+    let names: Vec<String> = [30, 31, 32]
+        .iter()
+        .map(|mib| format!("media/{}", crate::media::sha256_hex(&vec![0u8; mib * MIB])))
+        .collect();
+    let archive = zip(&[
         Entry::Bytes("manifest.json", &manifest),
         Entry::Bytes("collection.json", b"{}"),
         Entry::Zeros(&names[0], 30),
         Entry::Zeros(&names[1], 31),
         Entry::Zeros(&names[2], 32),
     ]);
-    // Each entry alone fits.
-    let mut z = ZipIn::open(&bomb, "fcbackup").unwrap();
-    assert_eq!(z.read(&names[2]).unwrap().unwrap().len(), 32 * MIB);
-    let e = fcbackup::read(&bomb).unwrap_err();
-    assert!(is_limit(&e), "{e}");
+    let mut r = fcbackup::BackupReader::open(Cursor::new(&archive)).unwrap();
+    r.check(|_, _| Ok(())).unwrap();
+    assert_eq!(r.media_list().len(), 3);
 }
 
 #[test]

@@ -33,6 +33,13 @@ methods! {
     /// Internal: replaces the collection with what a restore job staged (records no undo step:
     /// it has no inverse; the safety backup is the way back).
     IoBackupLoad = "io.backup.load", Command, "io", "io:write", Internal, undo: true (replay: false), StagedJob => Empty;
+    /// Starts a job that restores a backup into a scratch profile and compares it (the live
+    /// collection is not touched).
+    IoBackupVerify = "io.backup.verify", Command, "io", "io:write", Public, undo: false, VerifyBackup => JobDto;
+    /// Automatic backups: schedule, kept copies, the last verified backup, the last failure.
+    IoBackupStatus = "io.backup.status", Query, "io", "io:read", Public, undo: false, Empty => BackupStatus;
+    /// Starts an automatic backup now (rotation included) unless one is queued or running.
+    IoBackupAuto = "io.backup.auto", Command, "io", "io:write", Public, undo: false, Empty => AutoBackupStart;
     /// Printable HTML of a deck.
     IoPrintRender = "io.print.render", Query, "io", "io:read", Public, undo: false, RenderPrint => PrintDocument;
 }

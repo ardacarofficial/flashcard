@@ -1320,11 +1320,15 @@ fn restoring_an_older_schema_backup_migrates_it_forward() {
     // Tables and columns of later migrations do not exist in that schema (recreated empty by
     // the migrations on restore, as they are here): cut generically, whatever track adds them.
     let dump = fc_storage::fit_dump_to_schema(dump, &older).unwrap();
-    let mut manifest = b.manifest.clone();
-    manifest.schema_versions = older;
-    let w = fc_interop::fcbackup::BackupWriter::new(&manifest, &serde_json::to_vec(&dump).unwrap())
-        .unwrap();
-    let old = write_tmp(&dir, "old.fcbackup", &w.finish().unwrap());
+    let header = fc_interop::fcbackup::BackupHeader {
+        created_at: b.manifest.created_at,
+        schema_versions: older,
+        counts: dump.tables.iter().map(|t| (t.name.clone(), t.rows.len() as u64)).collect(),
+    };
+    let (bytes, _) =
+        fc_interop::fcbackup::write(header, &serde_json::to_vec(&dump).unwrap(), &b.media)
+            .unwrap();
+    let old = write_tmp(&dir, "old.fcbackup", &bytes);
     t.ok::<DecksDelete>(DeckRef { id: d.id });
     let job = t.ok::<IoBackupRestore>(RestoreBackup {
         path: old.to_string_lossy().into_owned(),

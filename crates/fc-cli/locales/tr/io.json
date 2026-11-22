@@ -7,5 +7,7 @@
   "oplog.summary.io.export.start": "Dışa aktarma başlatıldı",
   "oplog.summary.io.backup.create": "Yedekleme başlatıldı",
   "oplog.summary.io.backup.restore": "Geri yükleme başlatıldı",
-  "oplog.summary.io.backup.load": "Yedek geri yüklendi"
+  "oplog.summary.io.backup.load": "Yedek geri yüklendi",
+  "oplog.summary.io.backup.verify": "Yedek denemesi başlatıldı",
+  "oplog.summary.io.backup.auto": "Otomatik yedek başlatıldı"
 }

@@ -24,5 +24,8 @@ sha1.workspace = true
 sha2.workspace = true
 encoding_rs.workspace = true
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true
