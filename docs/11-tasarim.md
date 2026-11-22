@@ -68,14 +68,14 @@ Kural: **bir tuşun anlamı gizli bir duruma bağlı olarak değişmez.** Uygula
 | `1`–`4` (2'li düzende `1`/`2`) | Puanlar: Tekrar / Zor / İyi / Kolay (2'li: Hâlâ öğreniyorum / Biliyorum) | Arka yüz görülmeden hiçbir şey yapmaz; 2'li düzende `3`/`4` boş. Şıklı kartın sorusunda şık seçer (şıklar ekranda) |
 | `Enter` | Odaktaki kontrole basar | Sayfa kısayolu değildir; kartı odakta olmadan çevirmez/puanlamaz |
 | `H` | İpucu (yalnız soru yüzünde) | — |
-| `Z` | Son puanı geri alır | — |
+| `Z` | Son puanı geri alır (puan kaydedilirken basılırsa kaydı bekler, sonra geri alır) | — |
 | `S` · `B` | Kartı kenara koy (sen geri alana kadar sorma) · yarına bırak (bugün bir daha sorma) | — |
 | `Esc` | Oturumdan çıkar = **ara verir** (oturum açık kalır, Devam et döner) | Oturumu bitirmez, kart silmez |
 | `Ctrl+Z` | Uygulamanın geri alması (`oplog.undo`) | **Yazı alanındayken** asla: orada metni geri alır (v1.2'de kayıtlı bir kartı siliyordu) |
 | `Ctrl+A` | Ara'da tüm satırları seçer | Yazı alanındayken metni seçer |
 | `N` | Hızlı Ekle | Yazı alanında, açık bir iletişim kutusunda, oturumda ve açık bir Select'te harf yazarken tetiklenmez |
 
-Ortak kurallar: **basılı tutulan tuş tek iş yapar** (`event.repeat` yok sayılır: Kartlar, Öğren, Test, Eşleştir, Ara, terim listesi, tablolar, düzenleyiciler, Gelen kutusu, Hızlı Ekle, Oluştur); **yazı alanında yerel düzenleme kazanır**, açık bir iletişim kutusu varken kabuk kısayolları çekilir; ok tuşları gezinme ve metin içindir. Kısayol düzenleyicisinde değiştirilen tuşlar ipucu satırına, `aria-keyshortcuts`'a ve `?` yardımına yansır; `study.reveal` eylem kimliği kayıtlı tercihler bozulmasın diye korundu, işi artık "çevir".
+Ortak kurallar: **tuş yalnız ekranda gördüğüne etki eder** — puanlanan kart, cevabı kaydedilirken olduğu gibi (arka yüzü) ekranda kalır ve sonraki kartın ön yüzü gelene kadar `Space`, rakamlar, `H`, `S`, `B` ve bayraklar ona hiçbir şey yapmaz ve sonraki karta da **saklanmaz** (kart kendi kendine öne dönmez); yalnız `Z` (puanı geri alır) ve `Esc` (kayıttan sonra ara verir) işler (`keys.ts` `leaving` evresi, K1); **basılı tutulan tuş tek iş yapar** (`event.repeat` yok sayılır: Kartlar, Öğren, Test, Eşleştir, Ara, terim listesi, tablolar, düzenleyiciler, Gelen kutusu, Hızlı Ekle, Oluştur); **yazı alanında yerel düzenleme kazanır**, açık bir iletişim kutusu varken kabuk kısayolları çekilir; ok tuşları gezinme ve metin içindir. Kısayol düzenleyicisinde değiştirilen tuşlar ipucu satırına, `aria-keyshortcuts`'a ve `?` yardımına yansır; `study.reveal` eylem kimliği kayıtlı tercihler bozulmasın diye korundu, işi artık "çevir".
 
 ### 1.3 Kart ekleme: tek yer (`features/notes/CreateScreen.svelte`, `add-way.svelte.ts`)
 
@@ -179,6 +179,7 @@ Değiştirilebilir olanlar Ayarlar → Genel → Kısayollar'da (`palette::UI_AC
 | Başlatıcı | `Enter` · ok tuşları · `Tab` · `Esc` | Başla (odaktaki kontrol kendi `Enter`'ını taşıyorsa o) · kapsam · sayı/seçenekler · kapat |
 | Kartlar | `Space` · `1`–`4` | Çevir (asla puanlamaz) · puanla, yalnız arka görüldükten sonra (2'li: `1` Hâlâ öğreniyorum, `2` Biliyorum) |
 | Kartlar | `H` · `S` · `B` · `Z` · `Esc` | İpucu · kenara koy (sen geri alana kadar) · yarına bırak · geri al · ara ver |
+| Kartlar (puan kaydedilirken) | `Z` · `Esc` | Kayıttan sonra puanı geri al · kayıttan sonra ara ver; başka her tuş hiçbir şey yapmaz, sonraki karta saklanmaz |
 | Kartlar | `Ctrl+1`–`7` · `F` | Bayrak · odak modu |
 | Kartlar (özet) | `R` | Yanlışları tekrar çalış |
 | Öğren / Test | `1`–`4` (Test: `A`–`D` da) · `Enter` · `Ctrl+Enter` | Seçenek · (Test) yazılı cevaptan sonrakine · (Test) teslim et |
@@ -306,6 +307,7 @@ Hepsi **geçmek zorunda**; şu an hiçbir yolculukta `test.fail` yok (S7c, X1'in
 | C2 | Planlama'nın "bugün"ü başlatıcınınkidir: 25 yeni (günde 20), günde 5 tekrar → "Bugün ~20 kart" = `study.options`; sonraki hiçbir günde 20'den çok yeni ya da 5'ten çok tekrar planlanmaz |
 | C3 | Adımı 10 dk sonra dolan öğrenme kartı ekranda iken pencere 0'a indirilir: `Space` + `2` kaydedilir (tekrar kaydı geri okunur, "artık oturumda değil" yok); sonraki kart yeni değerle seçilir ve bekler |
 | C4 | Bir notun iki kartı iki destede: her deste tek başına kendi kartını sunar, "Tüm desteler" kuyruğu (Ana sayfa → başlatıcı) yalnız birini sayar ve sunar; kardeşlerini bırakmayan şablonlu deste kartını korur |
+| K1 | Puandan hemen sonra tuş: dört düğme, dört kart art arda `1`/`2`/`3`/`4` ve **beklemeden** `Space` (kayıt bilerek 400 ms yavaşlatılır; kart yarısında `Space`, yarısında tıklamayla — odak kartta — çevrilir): kayıt sürerken puanlanan kart arka yüzünde kalır, sonraki kart ön yüzüyle gelir; her kartın oturumda basılan puanla tam bir tekrarı vardır |
 
 ### 5.2 Windows: kurulu uygulamaya karşı WebDriver (pilot, kapıda değil)
 
@@ -329,7 +331,7 @@ Otomatik kontroller: `overflow-x`, `outside-viewport`, `text-clipped`, `raw-cont
 ## 6. Kabul kriterleri (v1.3)
 
 - [x] Tek başlatıcı: her çalışma girişi aynı iletişim kutusunu açar; "Devam et" ilk; beş kapsam tam sayılarıyla; boş kapsam nedenini söyler; boş başlatma oturum açmaz ve yarım oturumu kapatmaz (S1, S2, S5; Rust: `study.options` sayısı = `study.start`'ın verdiği).
-- [x] Bir tuş = bir iş: `Space` asla puanlamaz, puan yalnız arka görüldükten sonra, basılı tuş tek iş, `Esc` ara verir, yazı alanında `Ctrl+Z`/`Ctrl+A` metne aittir (S1, S2, J7, S12; `keys.test.ts`).
+- [x] Bir tuş = bir iş: `Space` asla puanlamaz, puan yalnız arka görüldükten sonra, basılı tuş tek iş, `Esc` ara verir, yazı alanında `Ctrl+Z`/`Ctrl+A` metne aittir, puan kaydedilirken basılan tuş eski karta da sonrakine de düşmez (S1, S2, J7, S12, K1; `keys.test.ts`).
 - [x] Pratik kapsamları takvime dokunmaz (S3, S4).
 - [x] Kelime kartları: cevap anahtarı yalnız sorulan alan, kart arkası üç etiketli parça, "Tanım" doğru alanı düzenler, yakalanan cümle kaybolmaz (J6, S7a, S7b, S8, S9, S10).
 - [x] İpucu kuralı: bağlam evet, cevap asla; ileri ve ters kartta (S7c).

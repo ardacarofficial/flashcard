@@ -7,7 +7,9 @@
    * it" = good) or the four ratings with their next intervals (`study.answer_buttons`).
    * Keys (keys.ts): Space flips front ⇄ back as often as you like and never grades; the rating
    * keys grade once the back has been seen; H hint, Z undo, Esc leave; Enter only presses the
-   * focused control. When every remaining card waits for its learning step the session stays
+   * focused control. A graded card stays on screen as it is (its back) until the next card's
+   * front is up, and a key pressed meanwhile never lands on it nor on the next card (only
+   * undo and leave act). When every remaining card waits for its learning step the session stays
    * open and says when the next one comes. The backend runs the session; this screen only
    * shows and reports.
    */
@@ -74,7 +76,17 @@
   let check = $state<AnswerCheckDto | null>(null);
   let composing = $state(false);
   let buttons = $state<'two' | 'four'>('two');
-  let busy = false;
+  /**
+   * A call of a key or button is in flight: other keys are dropped (never queued), and the
+   * card itself does not turn (it would turn on its own when it has the focus).
+   */
+  let busy = $state(false);
+  /**
+   * The card on screen was graded (or paused / left for tomorrow) and is on its way out while
+   * that is saved: it keeps showing what it showed; keys do nothing to it (`leaving` phase).
+   * Cleared when the next card (or the waiting page / summary) is up, or when saving failed.
+   */
+  let leaving = $state(false);
   let shownAt = 0;
   let revealedAt: number | null = null;
   let input = $state<HTMLInputElement | null>(null);
@@ -123,9 +135,11 @@
   });
 
   // The shell's global undo (Ctrl+Z, palette) or another screen may undo an answer: refresh.
+  // The same card stays as it is (Z here already showed what the undo brought back: the event
+  // arriving after it must not turn a card the learner has flipped since).
   $effect(() => {
     const unsub = api.on(['undone', 'redone', 'data_changed'], () => {
-      if (session && !busy) void ctx.guarded(reload);
+      if (session && !busy && !summary) void ctx.guarded(refresh);
     });
     return () => void unsub.then((u) => u());
   });
@@ -135,10 +149,12 @@
   const cardFlags = $derived(card && moduleOn('flags') ? flagDefs.filter((f) => hasFlag(card.flags, f.flag)) : []);
   /** Open, nothing to show now, a learning card due later: "next card in N min". */
   const waiting = $derived(!summary && !!session && !card && session.ended_at === null && session.next_due !== null);
-  const phase = $derived<StudyPhase>(summary ? 'done' : card ? (revealed ? 'answer' : 'question') : waiting ? 'waiting' : 'idle');
+  const phase = $derived<StudyPhase>(
+    summary ? 'done' : card ? (leaving ? 'leaving' : revealed ? 'answer' : 'question') : waiting ? 'waiting' : 'idle',
+  );
   // A running session owns the window (v1.2: no sidebar, no top bar); the summary is a
   // normal page again, so the learner can go anywhere from it.
-  $effect(() => ctx.setFocus?.(phase === 'question' || phase === 'answer' || phase === 'waiting'));
+  $effect(() => ctx.setFocus?.(phase === 'question' || phase === 'answer' || phase === 'leaving' || phase === 'waiting'));
   const twoButtons = $derived(buttons === 'two');
 
   // The launcher hands a started (or continued) session over: when the screen opens, and
@@ -201,6 +217,7 @@
   function show(s: SessionDto) {
     session = s;
     summary = null;
+    leaving = false;
     revealed = false;
     flipped = false;
     hint = null;
@@ -227,18 +244,21 @@
     else if (s.ended_at === null && s.next_due !== null) {
       session = s;
       summary = null;
+      leaving = false;
     } else await finish(s);
   }
 
   async function finish(s: SessionDto) {
     session = s;
     summary = await api.call('study.end', { session_id: s.id });
+    leaving = false;
   }
 
   /** "What you did so far" of a session that stays open (`study.summary` does not end it). */
   async function pause(s: SessionDto) {
     session = s;
     summary = await api.call('study.summary', { session_id: s.id });
+    leaving = false;
   }
 
   /** Back into a paused session, where it was. */
@@ -302,43 +322,50 @@
     flipped = !flipped;
   }
 
-  async function rate(rating: Rating) {
-    if (!session || !card || !revealed) return;
-    const at = Date.now();
+  /**
+   * Grades the card on screen (a rating, or a confidence level): from the moment the grade is
+   * sent the card is `leaving` — it stays as it is until the next card is up. Z pressed
+   * meanwhile takes the grade back as soon as it is saved: the next card is not shown at all.
+   */
+  async function grade(send: (s: SessionDto, c: NonNullable<typeof card>, at: number) => Promise<SessionDto>) {
+    if (!session || !card || !revealed || leaving) return;
+    leaving = true;
     try {
-      const next = await api.call('study.answer', {
-        session_id: session.id,
-        card_id: card.card_id,
-        rating,
-        duration_ms: Math.max(0, at - shownAt),
-        reveal_ms: revealedAt === null ? null : Math.max(0, revealedAt - shownAt),
-      });
+      const next = await send(session, card, Date.now());
+      if (pendingUndo) return;
       await settle(next);
     } catch (e) {
+      pendingUndo = false;
+      leaving = false;
       // Timed mode: the backend clock says the time ran out.
       if (e instanceof ApiError && e.code === 'CONFLICT_TIME_UP') await expire();
       else throw e;
     }
   }
 
+  function rate(rating: Rating) {
+    return grade((s, c, at) =>
+      api.call('study.answer', {
+        session_id: s.id,
+        card_id: c.card_id,
+        rating,
+        duration_ms: Math.max(0, at - shownAt),
+        reveal_ms: revealedAt === null ? null : Math.max(0, revealedAt - shownAt),
+      }),
+    );
+  }
+
   /** Confidence scale (v0.10): level 1–5, mapped onto a rating by the backend. */
-  async function rateConfidence(level: number) {
-    if (!session || !card || !revealed) return;
-    const at = Date.now();
-    try {
-      const next = await api.call('modes.confidence.answer', {
-        session_id: session.id,
-        card_id: card.card_id,
+  function rateConfidence(level: number) {
+    return grade((s, c, at) =>
+      api.call('modes.confidence.answer', {
+        session_id: s.id,
+        card_id: c.card_id,
         level,
         duration_ms: Math.max(0, at - shownAt),
         reveal_ms: revealedAt === null ? null : Math.max(0, revealedAt - shownAt),
-      });
-      await settle(next);
-    } catch (e) {
-      // Timed mode: the backend clock says the time ran out (as in `rate`).
-      if (e instanceof ApiError && e.code === 'CONFLICT_TIME_UP') await expire();
-      else throw e;
-    }
+      }),
+    );
   }
 
   /** Timed mode (v0.10): the card's time ran out. */
@@ -362,10 +389,14 @@
 
   /** Esc pressed while an answer was still being saved: leave right after it (never lost). */
   let pendingEnd = false;
+  /** Z pressed while a grade was being saved: take it back right after it (never lost). */
+  let pendingUndo = false;
 
   async function run(a: StudyAction) {
     if (busy) {
+      // Only leave and undo outlive a call in flight; every other key is dropped, not queued.
       if (a.kind === 'end') pendingEnd = true;
+      else if (a.kind === 'undo' && leaving) pendingUndo = true;
       return;
     }
     busy = true;
@@ -378,6 +409,8 @@
             return flip();
           case 'rate':
             return rate(a.rating);
+          case 'confidence':
+            return rateConfidence(a.level);
           case 'choose':
             return choose(a.index);
           case 'flag':
@@ -394,12 +427,14 @@
             return;
           case 'suspend':
             if (s && c) {
+              leaving = true;
               await api.call('study.suspend', { card_ids: [c.card_id], suspended: true, session_id: s.id });
               await reload();
             }
             return;
           case 'bury':
             if (s && c) {
+              leaving = true;
               await api.call('study.bury', {
                 card_ids: [c.card_id],
                 buried: true,
@@ -440,9 +475,17 @@
       });
     } finally {
       busy = false;
-      if (pendingEnd) {
-        pendingEnd = false;
-        void run({ kind: 'end' });
+      if (pendingUndo) {
+        // The grade was saved and the card is still on screen: take the grade back.
+        pendingUndo = false;
+        void run({ kind: 'undo' });
+      } else {
+        // Saved and shown, or refused (the card stays, to be graded again).
+        leaving = false;
+        if (pendingEnd) {
+          pendingEnd = false;
+          void run({ kind: 'end' });
+        }
       }
     }
   }
@@ -475,9 +518,9 @@
     const typing = isEditableTarget(el);
     const asButton = tag === 'BUTTON' || (el instanceof HTMLElement && el.getAttribute('role') === 'button');
     const flipKey = bindings ? keyFor('study.reveal', bindings) : 'Space';
-    if (asButton && e.key === ' ' && flipKey === 'Space' && el?.closest(ANSWER_BUTTON) && (phase === 'question' || phase === 'answer')) {
+    if (asButton && e.key === ' ' && flipKey === 'Space' && el?.closest(ANSWER_BUTTON) && (phase === 'question' || phase === 'answer' || phase === 'leaving')) {
       e.preventDefault();
-      if (!e.repeat) void run({ kind: 'flip' });
+      if (!e.repeat && phase !== 'leaving') void run({ kind: 'flip' });
       return;
     }
     // Buttons handle their own Enter/Space; keep shortcuts working everywhere else.
@@ -491,10 +534,7 @@
     }
     if (phase === 'answer' && confidence && plainKey(e) && /^[1-5]$/.test(e.key)) {
       e.preventDefault();
-      if (!busy) {
-        busy = true;
-        void ctx.guarded(() => rateConfidence(Number(e.key))).finally(() => (busy = false));
-      }
+      void run({ kind: 'confidence', level: Number(e.key) });
       return;
     }
     const action = keyAction(phase, e, typing, {
@@ -693,7 +733,9 @@
       <TimerBar timer={session.modes.timer} onexpire={() => void ctx.guarded(expire)} />
     {/if}
 
-    <Flashcard bind:flipped {onflip} fit={false} class="study-card">
+    <!-- Busy: the card does not turn by itself (Space/Enter/click on the focused card), so a
+         graded card never flips back to its front while it leaves. -->
+    <Flashcard bind:flipped {onflip} disabled={busy} fit={false} class="study-card">
       {#snippet front()}
         <div class="face-body">
           <CardView sides={card.sides} showAnswer={false} interactive={false} testid="question" />
@@ -751,9 +793,9 @@
       </div>
     {/if}
 
-    <div class="answer-bar">
+    <div class="answer-bar" aria-busy={leaving || undefined}>
       {#if revealed && confidence && session.modes}
-        <ConfidenceButtons levels={session.modes.confidence} onrate={(l) => void ctx.guarded(() => rateConfidence(l))} />
+        <ConfidenceButtons levels={session.modes.confidence} onrate={(l) => void run({ kind: 'confidence', level: l })} />
       {:else if revealed && twoButtons}
         <div class="answers two" role="group" aria-label={t('study.rate_label')}>
           <button type="button" class="ans again" aria-keyshortcuts={ariaKeys(keys.again)} data-testid="rate-again" onclick={() => void run({ kind: 'rate', rating: 'again' })}>
