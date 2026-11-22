@@ -65,6 +65,9 @@ pub struct TestSource {
     pub prompt_html: String,
     /// The word asked, as plain text (matching questions list it).
     pub term: String,
+    /// What the word means, whatever the card's direction (matching questions pair `term`
+    /// with it; v1.3 roles: the `meaning` field).
+    pub definition: String,
     /// Expected answer (plain text).
     pub answer: String,
     /// The card's own options and the correct index (choice card types).
@@ -238,7 +241,7 @@ fn written(s: &TestSource) -> Question {
 fn matching(s: &TestSource, sources: &[TestSource], rng: &mut dyn Rng) -> Option<Question> {
     use super::option_key;
     let mut words = vec![option_key(&s.term)];
-    let mut meanings = vec![option_key(&s.answer)];
+    let mut meanings = vec![option_key(&s.definition)];
     if words[0].is_empty() || meanings[0].is_empty() {
         return None;
     }
@@ -249,7 +252,7 @@ fn matching(s: &TestSource, sources: &[TestSource], rng: &mut dyn Rng) -> Option
         if set.len() == MATCH_PAIRS {
             break;
         }
-        let (w, m) = (option_key(&o.term), option_key(&o.answer));
+        let (w, m) = (option_key(&o.term), option_key(&o.definition));
         if w.is_empty() || m.is_empty() || words.contains(&w) || meanings.contains(&m) {
             continue;
         }
@@ -260,14 +263,14 @@ fn matching(s: &TestSource, sources: &[TestSource], rng: &mut dyn Rng) -> Option
     if set.len() < 2 {
         return None;
     }
-    let mut options: Vec<String> = set.iter().map(|x| x.answer.clone()).collect();
+    let mut options: Vec<String> = set.iter().map(|x| x.definition.clone()).collect();
     shuffle(&mut options, rng);
     let pairs: Vec<u32> = set
         .iter()
         .map(|x| {
             options
                 .iter()
-                .position(|o| *o == x.answer)
+                .position(|o| *o == x.definition)
                 .and_then(|i| u32::try_from(i).ok())
                 .unwrap_or(0)
         })
@@ -282,7 +285,7 @@ fn matching(s: &TestSource, sources: &[TestSource], rng: &mut dyn Rng) -> Option
         key: AnswerKey {
             option: None,
             truth: None,
-            expected: s.answer.clone(),
+            expected: s.definition.clone(),
             pairs: Some(pairs),
         },
     })
@@ -445,6 +448,7 @@ mod tests {
                 card_id: CardId(Uuid::from_u128(i)),
                 prompt_html: format!("<p>q{i}</p>"),
                 term: format!("q{i}"),
+                definition: format!("cevap {i}"),
                 answer: format!("cevap {i}"),
                 own_options: None,
             })
@@ -578,6 +582,7 @@ mod tests {
         // Three cards, two sharing a meaning: the pair is never on one board.
         let mut src = sources(3);
         src[2].answer = src[1].answer.clone();
+        src[2].definition = src[1].definition.clone();
         for seed in 0..20 {
             let paper = generate(
                 &src,

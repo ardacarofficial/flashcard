@@ -152,16 +152,20 @@ pub(super) fn init(
         if answer.trim().is_empty() {
             continue;
         }
-        // The word a matching question lists: the `term` field (v1.3 roles), else the
-        // question side as text.
+        // What a matching question pairs: the word and its meaning by field roles (v1.3),
+        // whatever the card's direction; else the question side and the answer.
         let note = crate::support::notes::require_note(v.reads, card.note_id)?;
         let nt = crate::support::notes::require_notetype(v.reads, note.notetype_id)?;
-        let term = crate::support::content::role_text(&nt, &note, fc_core::notetype::FieldRole::Term)
-            .unwrap_or_else(|| html_to_text(&r.card.sides.question).trim().to_owned());
+        let (term, definition) =
+            crate::support::content::term_and_definition(&nt, &note, &card.template_key)
+                .unwrap_or_else(|| {
+                    (html_to_text(&r.card.sides.question).trim().to_owned(), answer.clone())
+                });
         sources.push(TestSource {
             card_id: card.id,
             prompt_html: r.card.sides.question.clone(),
             term,
+            definition,
             answer,
             own_options: own,
         });
