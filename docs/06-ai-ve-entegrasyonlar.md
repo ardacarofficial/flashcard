@@ -93,7 +93,7 @@ claude mcp add flashcard-ro -- fc --db "/path/to/collection.db" mcp serve --read
 }
 ```
 
-Uygulamadaki **MCP** ekranı aynı parçacıkları, araç listesini ve yazma anahtarını gösterir.
+Uygulamadaki **MCP** ekranı (v1.3: "Asistanını bağla" ve "Dış MCP sunucuları" ayrı sekmeler) aynı parçacıkları **bu profilin gerçek yollarıyla** doldurur: `mcp.setup` sorgusu (yalnız kullanıcı/CLI; MCP, eklenti ve yerel API aktörlerine kapalı) `db_path` (masaüstünün açtığı profil klasöründeki `collection.db`; masaüstü başlatmadıysa `null`), `fc_path` (çalışan programın yanındaki, yoksa `PATH`'teki ilk `fc`/`fc.exe`; bulunamazsa `null` — ekran o zaman yolu kullanıcıya sordurur, Windows kurulum paketi şimdilik `fc.exe` içermez) ve `platform` döndürür. Ekran ayrıca araç listesini (okur/değiştirir) ve "Yalnızca okuyabilsin" anahtarını (`mcp.server.allow_writes`'un tersi) gösterir.
 
 ### 2.2 MCP istemcisi (uygulama → dış MCP sunucuları)
 - Kullanıcı MCP sunucusu ekler (komut veya URL).

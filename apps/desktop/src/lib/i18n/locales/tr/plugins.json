@@ -19,7 +19,7 @@
     "plugins": {
       "timeout_ms": {
         "label": "Çağrı başına süre sınırı (ms)",
-        "description": "Bundan uzun süren eklenti çağrısı durdurulur (uygulamaya yaptırdığı iş de sayılır)."
+        "description": "Bir eklenti çağrısı bundan uzun sürerse durdurulur (uygulamaya yaptırdığı iş de sayılır). Örnek: 3000 ms → 3 saniyede bitmeyen iş kesilir."
       },
       "fuel_millions": {
         "label": "Çağrı başına iş sınırı (milyon adım)",
@@ -31,7 +31,7 @@
       },
       "max_failures": {
         "label": "Kapatmadan önceki hata sayısı",
-        "description": "Art arda bu kadar hata veren eklenti kapatılır, sana haber verilir."
+        "description": "Art arda bu kadar hata veren eklenti kapatılır ve sana haber verilir. Sonra elle yeniden açabilirsin."
       },
       "before_hook_failure": {
         "label": "Eklenti kontrolü hata verirse",
@@ -75,7 +75,7 @@
   },
   "plugins": {
     "heading": "Eklentiler",
-    "intro": "Eklentiler korumalı alanda çalışır ve yalnızca izin verdiklerini yapabilir.",
+    "intro": "Eklentiler uygulamaya yeni kart türleri, çalışma modları ya da sesler ekler. Bir .fcplugin dosyası aldıysan onu buradan kurar, açıp kapatırsın.",
     "install": "Dosyadan kur…",
     "pick_prompt": ".fcplugin dosyasının yolu",
     "none": "Kurulu eklenti yok.",
@@ -105,7 +105,7 @@
     "install_confirm": "Kur",
     "update_confirm": "Güncelle",
     "cancel": "Vazgeç",
-    "grant_hint": "İzin vermek istemediklerinin işaretini kaldır. Sonra değiştirebilirsin.",
+    "grant_hint": "Eklenti yalnız işaretli olanları yapabilir. “Ayrıca sorulur” olanlar (internet, mikrofon, dosya, yapay zeka) kendiliğinden işaretli gelmez; gerekiyorsa sen işaretle. Sonra değiştirebilirsin.",
     "contributes": "Ekledikleri",
     "contrib": {
       "commands": "Komutlar",
@@ -145,7 +145,69 @@
     "empty_hint": "Eklentiler kart türleri, çalışma modları ve sesler ekler. Korumalı alanda çalışırlar.",
     "installed": "Kurulu eklentiler",
     "no_permissions": "Bu eklentinin izne ihtiyacı yok.",
-    "show_logs": "Günlüğü göster"
+    "show_logs": "Günlüğü göster",
+    "permissions_hint": "Eklenti yalnız işaretli olanları yapabilir. Bir izni kaldırırsan o özelliği çalışmaz ama eklentinin geri kalanı çalışır.",
+    "how": {
+      "title": "Eklenti nedir?",
+      "what": "Eklenti, başkasının yazdığı küçük bir programdır: uygulamaya yeni kart türleri, çalışma modları, sesler ya da komutlar ekler.",
+      "sandbox": "Korumalı bir alanda çalışır: kartlarına, dosyalarına ya da internete yalnız senin verdiğin izinler kadar erişebilir. Her çalışmasının süre, bellek ve iş sınırı vardır; art arda hata veren eklenti kendiliğinden kapatılır.",
+      "off": "Anahtarla kapatırsan eklenti hiç çalışmaz ama kurulu kalır. Kaldırırsan silinir; oluşturduğu kartlar yerinde kalır."
+    },
+    "limits": {
+      "summary": "Eklentilerin uyduğu süre, bellek ve depo sınırları. Bir eklenti “sınıra takıldı” diye duruyorsa buraya bak.",
+      "heading": "Kaynak sınırları",
+      "description": "Bu sınırlar her eklenti için geçerlidir. Bir eklenti sınırı aşınca o çalışması durdurulur; art arda hata verirse kapatılır. Yükseltmek yavaş bir eklentiye yer açar ama hatalı bir eklentinin uygulamayı daha uzun yormasına da izin verir.",
+      "range": "İzin verilen: {min}–{max}. Varsayılan: {default}.",
+      "none": "Sınır ayarları yüklenemedi ya da eklenti modülü kapalı."
+    },
+    "perm": {
+      "unknown": "Uygulamanın bir bölümüne erişir.",
+      "network": "İnternette yalnız {host} adresine bağlanabilir.",
+      "ui": "Arayüze ekler: {point}.",
+      "read": "{area} okuyabilir (değiştiremez).",
+      "write": "{area} değiştirebilir.",
+      "host": {
+        "ai_invoke": "Yapay zekayı senin anahtarınla kullanabilir (ücretli olabilir).",
+        "stt_invoke": "Konuşmayı yazıya çevirebilir.",
+        "translate_invoke": "Metin çevirtebilir.",
+        "audio_record": "Mikrofonla ses kaydedebilir.",
+        "fs_pick": "Yalnız senin seçtiğin bir dosyayı okuyabilir.",
+        "models_manage": "Çalışması için gereken model dosyalarını indirip silebilir.",
+        "tts_provide": "Kartları seslendiren bir ses sağlayıcısı ekler.",
+        "card_types_provide": "Yeni kart türleri ekler.",
+        "storage_kv": "Kendi küçük deposunda veri saklayabilir."
+      },
+      "point": {
+        "study_mode": "çalışma modu",
+        "view": "ayrı bir sayfa",
+        "menu": "menü öğesi",
+        "sidebar": "kenar çubuğu paneli",
+        "card_toolbar": "kart araç çubuğu düğmesi",
+        "command": "komut",
+        "settings": "ayarlar",
+        "notify": "bildirim"
+      },
+      "hook": {
+        "before": "Bir işlemden önce ({target}) araya girip onu değiştirebilir ya da durdurabilir.",
+        "after": "Bir işlemden sonra ({target}) haber alır.",
+        "event": "Uygulamada bir şey olunca ({target}) haber alır."
+      },
+      "area": {
+        "notes": "Notlarını",
+        "cards": "Kartlarını",
+        "decks": "Destelerini",
+        "tags": "Etiketleri",
+        "notetypes": "Not türlerini",
+        "media": "Medya dosyalarını",
+        "study": "Çalışma oturumlarını",
+        "stats": "İstatistiklerini",
+        "settings": "Ayarları",
+        "search": "Aramayı",
+        "presets": "Deste ayarlarını",
+        "attributes": "Sınıflandırmaları",
+        "inbox": "Gelen kutusunu"
+      }
+    }
   },
   "jobs": {
     "plugins": {

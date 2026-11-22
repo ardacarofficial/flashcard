@@ -14,13 +14,132 @@
     }
   },
   "notetype": {
-    "intro": "Bir notun içeriği (alanlar) ve ürettiği kartlar (şablonlar).",
+    "intro": "Not eklerken hangi kutuları dolduracağını ve bir notun hangi kartlara dönüşeceğini burada belirlersin; çoğu zaman hazır türler yeter.",
     "list": "Not türleri",
     "empty": "Henüz not türü yok.",
-    "field_actions": "İşlemler",
-    "sort_field_hint": "Listelerde ve arama sonuçlarında not için gösterilen alan.",
-    "syntax_intro": "Her şablon not başına bir kart üretir. Alanları çift süslü parantezle ekle.",
+    "sort_field_hint": "Kütüphanede ve arama sonuçlarında notun adı olarak bu alan görünür.",
+    "syntax_intro": "Her şablon, her nottan bir kart üretir. Bir alanı karta koymak için kodunu çift süslü paranteze yaz, örneğin {{word}}.",
     "remove_template": "“{name}” şablonunu kaldır",
-    "preview_heading": "Önizleme"
+    "preview_heading": "Önizleme",
+    "pick_title": "Bir not türü seç",
+    "pick_desc": "Her not bir türe aittir. Hazır türler uygulamayla gelir; kendine göre bir tür istersen “Yeni not türü” ile hazır bir başlangıçtan oluştur.",
+    "group_own": "Senin türlerin",
+    "group_builtin": "Hazır türler",
+    "field_count": "{fields, plural, other {# alan}}",
+    "copy_action": "Kopyasını oluştur",
+    "name_hint": "Not eklerken tür listesinde bu adı görürsün.",
+    "used_by": "{notes, plural, =0 {Henüz hiçbir not bu türde değil.} other {# not bu türde.}}",
+    "makes_cards": "{cards, plural, =1 {Her not 1 kart olur.} other {Her not en fazla # kart olur.}}",
+    "makes_cloze": "Bir notta işaretlediğin her boşluk ayrı bir kart olur.",
+    "fields_desc": "Not eklerken doldurduğun kutular, bu sırayla. Zorunlu bir alan boşken not kaydedilmez.",
+    "field_n": "{n}. alan",
+    "field_name_n": "{n}. alanın adı",
+    "contains_label": "İçerik:",
+    "contains": {
+      "rich_text": "Biçimli metin (kalın, liste, resim)",
+      "text": "Düz metin",
+      "image": "Bir resim",
+      "audio": "Ses kaydı",
+      "video": "Video",
+      "number": "Sayı",
+      "tag_list": "Etiket listesi",
+      "link": "Başka bir nota bağlantı"
+    },
+    "contains_pick": "“{name}” ne içerecek",
+    "required_of": "Zorunlu: {name}",
+    "move_field_up": "“{name}” alanını yukarı taşı",
+    "move_field_down": "“{name}” alanını aşağı taşı",
+    "remove_field": "“{name}” alanını sil",
+    "preview_desc": "Bu türün kartları böyle görünür. Örnek olsun diye her alanın yerinde kendi adı yazar.",
+    "preview_which": "Hangi kart",
+    "side_front": "Ön yüz (soru)",
+    "side_back": "Arka yüz (cevap)",
+    "flip_to_back": "Arka yüzü göster",
+    "flip_to_front": "Ön yüzü göster",
+    "preview_broken": "Şablon kodu bu hâliyle kart üretemiyor, bu yüzden kaydedilemez:",
+    "unsaved": "Kaydedilmemiş değişiklikler var.",
+    "discard": "Vazgeç",
+    "save_loses_field": "“{name}” alanı silinecek: {notes, plural, other {# nottaki}} içeriği gider.",
+    "save_new_cards": "Yeni “{name}” şablonu bu türdeki {notes, plural, other {# nota}} birer kart ekler (ön yüzü boş kalanlar hariç).",
+    "delete_classic": "Klasik tür uygulamanın temel türüdür, silinemez. Kullanmadığın diğer türleri silebilirsin.",
+    "delete_in_use": "{notes, plural, other {# not}} bu türü kullanıyor. Notları olan bir tür silinemez: önce Kütüphane'de bu notları seçip “Not türünü değiştir” ile başka bir türe taşı ya da notları sil.",
+    "delete_free": "Hiçbir not bu türü kullanmıyor; silmek hiçbir notu ya da kartı etkilemez. İstersen Geri al ile geri getirirsin.",
+    "delete_subtitle": "Subtitle eklentisi yakaladığı kelimeleri bu türe kaydeder; silersen eklentiden yeni kart gelmez.",
+    "remove_field_title": "“{name}” alanı silinsin mi?",
+    "remove_field_body": "Kaydettiğinde {notes, plural, other {# nottaki}} “{name}” içeriği silinir. Notların diğer alanları, kartları ve tekrar geçmişi olduğu gibi kalır; Geri al ile geri getirebilirsin.",
+    "remove_field_confirm": "Alanı sil",
+    "remove_template_title": "“{name}” şablonu kaldırılsın mı?",
+    "remove_template_body": "Bu şablondan henüz hiç kart üretilmedi; kaldırmak hiçbir kartı etkilemez. Kaydedene kadar Vazgeç ile geri getirebilirsin.",
+    "remove_template_confirm": "Şablonu kaldır",
+    "switch_title": "Kaydedilmemiş değişiklikler kaybolsun mu?",
+    "switch_body": "“{name}” üzerinde yaptığın değişiklikleri kaydetmedin. Başka bir türe geçersen kaybolurlar.",
+    "discard_confirm": "Değişiklikleri at",
+    "field_used_title": "“{name}” kartlarda kullanılıyor",
+    "field_used_body": "Bu alan {templates} şablonunda gösteriliyor. Önce aşağıdaki “Gelişmiş: şablon kodu” bölümünde {code} kodunu şablondan çıkar; sonra alanı silebilirsin.",
+    "template_in_use_title": "“{name}” şablonu kaldırılamaz",
+    "template_in_use_body": "Bu şablondan üretilmiş {cards, plural, other {# kart}} var (çöp kutusundakiler dahil). Kartları olan bir şablon kaldırılırsa o kartlar tekrar geçmişiyle birlikte sahipsiz kalır; bu yüzden uygulama buna izin vermez. Ön ve arka yüz kodunu yine de düzenleyebilirsin.",
+    "understood": "Anladım",
+    "code": {
+      "title": "Gelişmiş: şablon kodu",
+      "summary": "Kartların HTML şablonları, CSS görünümü ve alanların teknik ayarları. Kart tasarımını kendin yazmayacaksan açmana gerek yok.",
+      "fields_title": "Alanların teknik ayarları",
+      "fields_desc": "Her alanın türü (metin, resim, ses…), kopya notları yakalayan kontrol ve aramanın içine bakıp bakmadığı.",
+      "unique_hint": "işaretli alanların hepsi başka bir notla aynıysa yeni not kopya sayılır.",
+      "searchable_hint": "arama bu alanın içine de bakar.",
+      "codes_label": "Alan kodları",
+      "codes_new": "Yeni alanların kodu kaydedince belli olur.",
+      "syntax_label": "Söz dizimi",
+      "front_html": "Ön yüz (HTML)",
+      "back_html": "Arka yüz (HTML)",
+      "css_desc": "Sadece bu türün kartlarına uygulanan stil.",
+      "new_template_cards": "Kaydedince bu türdeki {notes, plural, other {# notun}} her birine bu şablondan bir kart eklenir (ön yüzü boş kalanlar hariç)."
+    },
+    "start": {
+      "intro": "Bir başlangıç noktası seç ve adını ver. Alanlarını ve görünüşünü sonra istediğin gibi değiştirebilirsin.",
+      "label": "Başlangıç noktası",
+      "missing": "Bu hazır tür silinmiş, bu yüzden kullanılamıyor.",
+      "name_label": "Adı",
+      "name_hint": "Not eklerken tür listesinde bu adı görürsün.",
+      "create": "Oluştur",
+      "word": {
+        "title": "Kelime",
+        "name": "Kelimelerim",
+        "desc": "Önde kelime, arkada anlamı. Her kelime 1 kart."
+      },
+      "word_example": {
+        "title": "Kelime + örnek cümle",
+        "name": "Kelime ve örnek",
+        "desc": "Önde kelime; arkada anlamı ve kelimenin geçtiği bir cümle."
+      },
+      "reverse": {
+        "title": "Ters yönlü (iki yönlü)",
+        "name": "İki yönlü",
+        "desc": "Her not 2 kart olur: ön→arka ve arka→ön. İki yönden de sorulur."
+      },
+      "cloze": {
+        "title": "Boşluk doldurma (cloze)",
+        "name": "Boşluk doldurma",
+        "desc": "Bir cümlede gizlediğin her kelime ayrı bir kart olur."
+      },
+      "subtitle": {
+        "title": "Subtitle",
+        "name": "Altyazı kelimeleri",
+        "desc": "Subtitle eklentisinin kartlarıyla aynı alanlar: kelime, altyazı cümlesi, anlam, çeviri, ekran görüntüsü. Eklenti yine kendi hazır türünü kullanır."
+      },
+      "blank": {
+        "title": "Sade: ön ve arka",
+        "name": "Yeni not türü",
+        "desc": "İki alan, bir kart. Kendin şekillendirmek istersen buradan başla."
+      },
+      "field": {
+        "word": "Kelime",
+        "meaning": "Anlam",
+        "example": "Örnek cümle"
+      },
+      "template": {
+        "recognition": "Tanıma"
+      }
+    },
+    "delete_row": "“{name}” türünü sil"
   }
 }

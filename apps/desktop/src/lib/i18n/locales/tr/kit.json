@@ -1,5 +1,40 @@
 {
   "kit": {
-    "retry": "Tekrar dene"
+    "retry": "Tekrar dene",
+    "default": "varsayılan",
+    "reset": "Varsayılana dön",
+    "example": "Örnek:",
+    "advanced": {
+      "title": "Gelişmiş ayarlar"
+    },
+    "search": {
+      "label": "Ayarlarda ara",
+      "placeholder": "Ayarlarda ara…",
+      "clear": "Aramayı temizle",
+      "none": "“{query}” hiçbir ayarda geçmiyor. Başka bir kelime dene.",
+      "results": "{count, plural, one {# sayfada bulundu} other {# sayfada bulundu}}"
+    }
+  },
+  "settings": {
+    "guide": {
+      "title": "Ne değiştirmek istiyorsun?",
+      "description": "En sık aranan ayarlar. Birine tıkla, doğru sayfa açılsın. Yukarıdaki arama kutusuna da yazabilirsin.",
+      "new_per_day": "Günde kaç yeni kelime gelsin?",
+      "reminder": "Her gün çalışmayı bana hatırlat",
+      "card_back": "Kartın önünde ve arkasında ne görünsün?",
+      "keys": "Klavye kısayollarını değiştir",
+      "ai": "Yapay zekayla kart üret (API anahtarı)",
+      "subtitle": "Tarayıcıda izlerken kelime yakala",
+      "backup": "Yedek al, dosyadan kart aktar",
+      "where": {
+        "presets": "Deste ayarları",
+        "reminders": "Hatırlatıcılar",
+        "notetypes": "Not türleri",
+        "shortcuts": "Kısayollar",
+        "ai": "Yapay zeka",
+        "subtitle": "Subtitle",
+        "io": "İçe / dışa aktar"
+      }
+    }
   }
 }

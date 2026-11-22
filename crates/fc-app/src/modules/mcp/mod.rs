@@ -1,5 +1,6 @@
 //! `mcp` module (v0.8, docs/06 §2): the MCP server's curated tool catalog ([`tools`]) and
-//! the external MCP servers the app may use as a client ([`servers`]).
+//! the external MCP servers the app may use as a client ([`servers`]), and the paths a client
+//! configuration needs ([`setup`]).
 //!
 //! The server transport lives in `fc-mcp` (`fc mcp serve`); it only lists [`tools::catalog`]
 //! and forwards calls to [`tools::call_tool`]. Every tool is a thin wrapper over **public**
@@ -13,6 +14,7 @@
 //! * every write is an ordinary undoable command, recorded in the oplog with actor `mcp`.
 
 pub mod servers;
+pub mod setup;
 pub mod tools;
 #[cfg(test)]
 mod tests;
@@ -64,6 +66,7 @@ pub fn register(reg: &mut Registry) {
     reg.module(descriptor());
     reg.query::<McpToolsList>(tools::list);
     reg.query::<McpServersList>(servers::list);
+    reg.query::<McpSetupGet>(setup::get);
     reg.command::<McpServersAdd>(servers::add);
     reg.command::<McpServersUpdate>(servers::update);
     reg.command::<McpServersRemove>(servers::remove);

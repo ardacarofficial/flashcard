@@ -16,12 +16,11 @@
     "section_nav": "{section} sayfaları",
     "group": {
       "general": "Genel",
-      "study": "Çalışma",
-      "reading": "Okuma ve modlar",
+      "study": "Çalışma ve kartlar",
       "connections": "Bağlantılar",
-      "plugins": "Eklentiler",
       "data": "Veri",
-      "profiles": "Profiller ve kilit",
+      "advanced": "Gelişmiş",
+      "advanced_hint": "Teknik ayarlar: çoğu zaman gerekmez.",
       "other": "Diğer"
     },
     "profile": {

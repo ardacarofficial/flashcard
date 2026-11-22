@@ -20,7 +20,7 @@ const DEFAULTS: PresetConfig = {
 
 export default {
   modules: [module('presets', [menu('presets.editor', 'nav.presets', '/presets', 15)])],
-  handlers: ({ now, id, emit, decks }: MockEnv) => {
+  handlers: ({ now, id, emit, decks, ancestors }: MockEnv) => {
     const presets: PresetDto[] = [];
     const withDecks = (p: PresetDto): PresetDto => ({
       ...p,
@@ -38,6 +38,17 @@ export default {
       emit({ type: 'presets_changed' });
       return withDecks(p);
     };
+    // The demo collection (`--mode mock`, screenshots): two presets, one shared by a deck and
+    // its subdecks; tests start with none.
+    if (import.meta.env.MODE === 'mock') {
+      const deck = (name: string) => decks.find((d) => d.name === name && d.parent_id === null);
+      const daily = add('Günlük İngilizce', { ...DEFAULTS, new_per_day: 15, learning_steps_mins: [1, 10, 60] });
+      const exam = add('Sınav hazırlığı', { ...DEFAULTS, new_per_day: 40, reviews_per_day: 400, desired_retention: 0.92 });
+      const en = deck('İngilizce');
+      const yks = deck('YKS');
+      if (en) en.preset_id = daily.id;
+      if (yks) yks.preset_id = exam.id;
+    }
     return {
       'presets.list': () => ({
         items: [...presets].sort((a, b) => a.name.localeCompare(b.name, 'tr')).map(withDecks),
@@ -45,8 +56,12 @@ export default {
       }),
       'presets.get': ({ id: pid }) => withDecks(find(pid)),
       'presets.for_deck': ({ deck_id }) => {
-        const p = presets.find((x) => x.id === decks.find((d) => d.id === deck_id)?.preset_id);
-        return { deck_id, preset_id: p?.id ?? null, assigned_on: p ? deck_id : null, config: p?.config ?? DEFAULTS };
+        // Like fc-app `presets::effective`: the nearest deck up the tree that has a preset.
+        for (const on of ancestors(deck_id)) {
+          const p = presets.find((x) => x.id === decks.find((d) => d.id === on)?.preset_id);
+          if (p) return { deck_id, preset_id: p.id, assigned_on: on, config: p.config };
+        }
+        return { deck_id, preset_id: null, assigned_on: null, config: DEFAULTS };
       },
       'presets.create': ({ name, config }) => add(name, config ?? DEFAULTS),
       'presets.clone': ({ id: pid, name }) => add(name, structuredClone(find(pid).config)),

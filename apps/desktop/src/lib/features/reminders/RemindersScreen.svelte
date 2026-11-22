@@ -1,7 +1,8 @@
 <!--
   Settings → General → Reminders: the daily study reminder and the tray (v1.0, docs/02 §19).
   The settings are ordinary app settings; the backend decides when a reminder is due and the
-  desktop shell shows it as an OS notification.
+  desktop shell shows it as an OS notification. v1.3: every row says what happens (with an
+  example built from today's numbers), marks its default and can put it back (`settings.reset`).
 -->
 <script lang="ts">
   import { formatDateTime } from '$lib/format';
@@ -10,7 +11,7 @@
   import type { ReminderStatus } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
   import { Bell, Button, Chip, Clock, Icon, Monitor, Switch, TimeField } from '$lib/ui';
-  import { FormRow, LoadState, SettingsPage, SettingsSection } from '../core/kit';
+  import { FormRow, LoadState, SettingsPage, SettingsSection, isDefault, loadDefaults, resetSetting } from '../core/kit';
   import type { ScreenCtx } from '../types';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -59,12 +60,30 @@
     await set('reminders.weekdays', status.weekdays);
   }
 
+  /** Puts a setting back to its default, then shows the state the backend now has. */
+  async function reset(key: string) {
+    if (await ctx.guarded(() => resetSetting(key))) await load();
+  }
+
+  const total = $derived(status ? status.counts.due + status.counts.new : 0);
+  /** The reminder time as the user's locale writes it (`19:00` / `7:00 PM`). */
+  const clock = $derived.by(() => {
+    if (!status) return '';
+    const d = new Date();
+    d.setHours(Math.floor(status.minute_of_day / 60), status.minute_of_day % 60, 0, 0);
+    return formatDateTime(d.getTime(), { hour: 'numeric', minute: '2-digit' });
+  });
+  const exampleEnabled = $derived(status ? t('reminders.example.enabled', { time: clock, total }) : '');
+
   async function test() {
     notice = null;
     if (await ctx.guarded(() => api.call('reminders.test', {}))) notice = t('reminders.sent');
   }
 
-  onMount(() => void load());
+  onMount(() => {
+    void load();
+    void loadDefaults();
+  });
 </script>
 
 <SettingsPage title={t('reminders.heading')} subtitle={t('reminders.intro')}>
@@ -81,16 +100,33 @@
       </p>
     </div>
 
-    <SettingsSection title={t('reminders.daily')} icon={Clock} body="rows">
-      <FormRow label={t('reminders.enabled')} description={t('settings.reminders.enabled.description')}>
+    <SettingsSection title={t('reminders.daily')} description={t('reminders.daily_desc')} icon={Clock} body="rows">
+      <FormRow
+        label={t('reminders.enabled')}
+        description={t('reminders.desc.enabled')}
+        example={exampleEnabled}
+        isDefault={isDefault('reminders.enabled', status.enabled)}
+        onReset={() => void reset('reminders.enabled')}
+      >
         <Switch checked={status.enabled} ariaLabel={t('reminders.enabled')} onchange={(v) => void toggle('enabled', v)} />
       </FormRow>
-      <FormRow label={t('reminders.time')} description={t('reminders.time_hint')}>
+      <FormRow
+        label={t('reminders.time')}
+        description={t('reminders.time_hint')}
+        isDefault={isDefault('reminders.minute_of_day', status.minute_of_day)}
+        onReset={() => void reset('reminders.minute_of_day')}
+      >
         <div class="time">
           <TimeField value={time} label={t('reminders.time')} onchange={(v) => void setTime(v)} />
         </div>
       </FormRow>
-      <FormRow label={t('reminders.days')} description={t('settings.reminders.weekdays.description')} stack>
+      <FormRow
+        label={t('reminders.days')}
+        description={t('reminders.desc.days')}
+        isDefault={isDefault('reminders.weekdays', status.weekdays)}
+        onReset={() => void reset('reminders.weekdays')}
+        stack
+      >
         <div class="days" role="group" aria-label={t('reminders.days')}>
           {#each DAYS as d (d)}
             {@const on = (status.weekdays & (1 << d)) !== 0}
@@ -109,8 +145,13 @@
       </FormRow>
     </SettingsSection>
 
-    <SettingsSection title={t('reminders.tray')} icon={Monitor} body="rows">
-      <FormRow label={t('reminders.keep_in_tray')} description={t('settings.reminders.keep_in_tray.description')}>
+    <SettingsSection title={t('reminders.tray')} description={t('reminders.tray_desc')} icon={Monitor} body="rows">
+      <FormRow
+        label={t('reminders.keep_in_tray')}
+        description={t('reminders.desc.keep_in_tray')}
+        isDefault={isDefault('reminders.keep_in_tray', status.keep_in_tray)}
+        onReset={() => void reset('reminders.keep_in_tray')}
+      >
         <Switch checked={status.keep_in_tray} ariaLabel={t('reminders.keep_in_tray')} onchange={(v) => void toggle('keep_in_tray', v)} />
       </FormRow>
     </SettingsSection>

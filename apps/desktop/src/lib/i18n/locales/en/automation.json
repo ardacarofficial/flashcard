@@ -5,40 +5,239 @@
   "modules": {
     "automation": {
       "name": "Automation rules",
-      "description": "“When … if … do …” rules: tag, suspend, move or classify cards automatically."
+      "description": "“When … for these cards … do …” rules: tag, suspend, move or classify cards automatically."
     }
   },
   "settings": {
     "automation": {
       "max_depth": {
-        "label": "Rule chain depth",
-        "description": "How many rules may trigger each other in a row (a rule never re-triggers itself)."
+        "label": "Longest chain of rules",
+        "description": "What one rule changes can start another rule (a rule that adds a tag starts a “when you edit a note” rule). This is how many rules may follow each other in one chain; a longer chain stops, so rules can never loop forever. A rule never starts itself again.",
+        "example": "3 → rule A may start B and B may start C; a fourth rule started by C is skipped (the history shows it)."
       },
       "max_runs_per_event": {
-        "label": "Rule runs per change",
-        "description": "At most this many rule runs follow one change."
+        "label": "Most rule runs after one change",
+        "description": "After one change (answering a card, an import, a scheduled run) at most this many rules run in total; the rest are skipped and the history says so.",
+        "example": "20 → even with 30 rules for answering a card, at most 20 run after each answer."
       }
     }
   },
   "automation": {
-    "heading": "Automation rules",
-    "intro": "When something happens and the cards match the query, the actions run. Each run is one undo step.",
-    "none": "No rules yet.",
-    "new": "New rule",
-    "edit_rule": "Edit rule",
-    "edit": "Edit",
-    "delete": "Delete",
-    "run_now": "Run now",
-    "up": "Move up",
-    "down": "Move down",
-    "name": "Name",
-    "enabled": "Enabled",
+    "heading": "Automation",
+    "intro": "Let the app do repetitive chores for you: when something happens (say, you forget a card again), it tags, moves or suspends the cards you chose.",
+    "new": "Write your own rule",
+    "recipes": {
+      "title": "Start from a ready rule",
+      "description": "Pick one: it opens filled in, you can change the tag, deck or number, and nothing happens until you save it.",
+      "matching": "{n, plural, =0 {No card matches yet} one {# card matches} other {# cards match}}",
+      "counting": "Counting…",
+      "no_count": "Count not available",
+      "exists": "Already in your rules",
+      "subtitle_type": "Subtitle card",
+      "tag_forgotten": {
+        "name": "Tag cards I keep forgetting",
+        "description": "When you forget a card for the 4th time, it gets the tag “difficult”, so you can study those cards separately.",
+        "tag": "difficult"
+      },
+      "suspend_leeches": {
+        "name": "Pause cards that never stick",
+        "description": "A card you have forgotten 8 times is suspended: it is not asked until you fix it and switch it back on."
+      },
+      "archive_learned": {
+        "name": "Move learned cards to an archive deck",
+        "description": "Cards you will remember for 90+ days move to the deck you choose, so your daily decks stay small."
+      },
+      "tag_subtitle": {
+        "name": "Tag new Subtitle cards",
+        "description": "Every word you catch with the Subtitle browser extension gets a tag (for example the name of the show).",
+        "tag": "subtitle"
+      },
+      "suspend_flagged": {
+        "name": "Pause red-flagged cards",
+        "description": "Put a red flag on a card with a mistake: it is suspended until you fix it and switch it back on."
+      },
+      "untag_learned": {
+        "name": "Remove “difficult” once a card is easy",
+        "description": "Once a day: “difficult” cards you now remember for 30+ days lose the tag."
+      }
+    },
+    "editor": {
+      "new_title": "New rule",
+      "edit_title": "Edit rule",
+      "name": "Name",
+      "name_hint": "Only for you, to recognise the rule in the list.",
+      "sentence_label": "What the rule does",
+      "sentence_hint": "Click an underlined part to change it.",
+      "part_when": "When should it run?",
+      "part_cards": "Which cards?",
+      "part_do": "What should happen?",
+      "done": "Done",
+      "enabled": "On after saving",
+      "enabled_hint": "Off: the rule is kept but only runs when you press Run now.",
+      "save": "Save rule",
+      "cancel": "Cancel",
+      "missing_deck": "Choose the deck the cards should go to.",
+      "missing_tags": "Type at least one tag.",
+      "missing_attr": "Choose a classification.",
+      "missing_name": "Give the rule a name."
+    },
+    "sentence": {
+      "pattern": "{when}, for {cards}, {action}.",
+      "or": " or ",
+      "and": " and ",
+      "list": ", ",
+      "when": {
+        "note_added": "When a new note is added",
+        "note_updated": "When you edit a note",
+        "card_answered": "When you answer a card",
+        "card_answered_with": "When you answer a card with {ratings}",
+        "card_flagged": "When you flag a card",
+        "card_flagged_with": "When you put a {flags} flag on a card",
+        "classification_changed": "When a card’s classification changes",
+        "imported": "When an import finishes",
+        "inbox_added": "When a proposal arrives in the inbox",
+        "schedule_minutes": "{n, plural, one {Every minute} other {Every # minutes}}",
+        "schedule_hours": "{n, plural, one {Every hour} other {Every # hours}}",
+        "schedule_days": "{n, plural, one {Once a day} other {Every # days}}"
+      },
+      "cards": {
+        "event": "the cards involved",
+        "all": "all cards",
+        "lapses": "cards you have forgotten {n}+ times",
+        "stability": "cards you will remember for {n}+ days",
+        "tag_stability": "cards tagged “{tag}” that you will remember for {n}+ days",
+        "tag": "cards tagged “{tag}”",
+        "notetype": "“{name}” cards",
+        "subtitle": "cards that came from Subtitle",
+        "deck": "cards in “{deck}”",
+        "flag": "cards with a {flag} flag",
+        "query": "cards matching “{query}”",
+        "inbox_all": "every proposal",
+        "inbox_query": "proposals matching “{query}”"
+      },
+      "action": {
+        "add_tags": "{n, plural, one {add the tag {tags}} other {add the tags {tags}}}",
+        "remove_tags": "{n, plural, one {remove the tag {tags}} other {remove the tags {tags}}}",
+        "no_tags": "add a tag (type one)",
+        "no_tags_remove": "remove a tag (type one)",
+        "suspend": "suspend them",
+        "unsuspend": "unsuspend them",
+        "bury": "bury them for today",
+        "unbury": "unbury them",
+        "flag_on": "put a {flag} flag on them",
+        "flag_off": "remove their {flag} flag",
+        "move": "move them to “{deck}”",
+        "move_none": "move them to a deck (choose one)",
+        "set_attribute": "set {attr} to {value}",
+        "clear_attribute": "clear {attr}",
+        "attribute_none": "set a classification (choose one)",
+        "reset_progress": "reset their progress",
+        "accept": "accept it as a note",
+        "accept_deck": "accept it as a note in “{deck}”",
+        "other": "{action}"
+      }
+    },
+    "kind": {
+      "label": "Cards",
+      "all": "All cards",
+      "event": "The cards involved",
+      "lapses": "Cards you keep forgetting",
+      "stability": "Cards you know well",
+      "tag_stability": "Tagged cards you now know well",
+      "tag": "Cards with a tag",
+      "notetype": "Cards of a note type",
+      "deck": "Cards in a deck",
+      "flag": "Flagged cards",
+      "query": "Write a search query…",
+      "lapses_n": "Forgotten at least (times)",
+      "stability_n": "Remembered for at least (days)",
+      "stability_hint": "The scheduler’s estimate of how long you will remember the card.",
+      "tag_name": "Tag",
+      "notetype_name": "Note type",
+      "deck_name": "Deck",
+      "flag_name": "Flag",
+      "query_hint": "The same search language as Browse, e.g. deck:English lapses>=3 tag:verb"
+    },
+    "schedule": {
+      "every": "Every",
+      "unit": "Unit",
+      "minutes": "minutes",
+      "hours": "hours",
+      "days": "days",
+      "hint": "At least 15 minutes. A new scheduled rule runs once right away."
+    },
+    "preview": {
+      "title": "Preview",
+      "counting": "Counting…",
+      "affected": "{n, plural, =0 {Right now no card would change} one {Right now # card would change} other {Right now # cards would change}}",
+      "items_affected": "{n, plural, =0 {Right now no proposal is waiting} one {Right now # proposal would become a note} other {Right now # proposals would become notes}}",
+      "matched": "{matched, plural, one {# card matches} other {# cards match}}, {same} already {same, plural, one {is} other {are}} like that.",
+      "samples": "For example",
+      "more": "{n, plural, one {and # more} other {and # more}}",
+      "event_note": "After you save, it runs by itself, only for the cards involved. To apply it to these cards as well, press Run now in the list.",
+      "schedule_note": "After you save, it runs once right away and then on its schedule.",
+      "dry_run": "The preview changes nothing.",
+      "error": "No preview: {error}",
+      "truncated": "One run handles at most 5000 cards; the rest follow on the next run."
+    },
+    "raw": {
+      "title": "Advanced: write the rule by hand",
+      "summary": "Every trigger, a search query instead of the ready choices, and up to 10 actions in one rule."
+    },
+    "rules": {
+      "title": "Your rules",
+      "description": "Rules run from top to bottom. Switch one off to keep it without it running.",
+      "none": "No rules yet.",
+      "none_hint": "Start from a ready rule below or write your own.",
+      "off": "Off",
+      "delete_title": "Delete “{name}”?",
+      "delete_body": "The rule stops and leaves the list. What it already changed stays. You can bring it back with Undo (Ctrl+Z).",
+      "ran": "{n, plural, =0 {Ran: no card matched} one {Ran on # card} other {Ran on # cards}}"
+    },
+    "runs": {
+      "title": "Recent runs",
+      "description": "What your rules did lately, newest first. Each run is one undo step.",
+      "none": "Nothing has run yet.",
+      "today": "Today {time}",
+      "yesterday": "Yesterday {time}",
+      "deleted_rule": "deleted rule",
+      "applied": "{n, plural, one {done for # card} other {done for # cards}}",
+      "applied_action": {
+        "add_tags": "{n, plural, one {tag added to # card} other {tag added to # cards}}",
+        "remove_tags": "{n, plural, one {tag removed from # card} other {tag removed from # cards}}",
+        "set_suspended": "{n, plural, one {# card suspended or unsuspended} other {# cards suspended or unsuspended}}",
+        "set_buried": "{n, plural, one {# card buried or unburied} other {# cards buried or unburied}}",
+        "set_flag": "{n, plural, one {flag changed on # card} other {flag changed on # cards}}",
+        "move_cards": "{n, plural, one {# card moved} other {# cards moved}}",
+        "set_attribute": "{n, plural, one {classification set on # card} other {classification set on # cards}}",
+        "reset_progress": "{n, plural, one {progress reset on # card} other {progress reset on # cards}}",
+        "accept": "{n, plural, one {# proposal accepted} other {# proposals accepted}}"
+      },
+      "no_match": "no card matched, nothing changed",
+      "skipped_cycle": "skipped: it would have started itself again",
+      "skipped_depth": "skipped: the chain of rules got too long (see Advanced below)",
+      "skipped_budget": "skipped: one change started too many rules (see Advanced below)",
+      "failed": "did not run: {error}",
+      "via": {
+        "manual": "run by hand",
+        "schedule": "on schedule",
+        "note_added": "after a note was added",
+        "note_updated": "after a note was edited",
+        "card_answered": "after an answer",
+        "card_flagged": "after a flag",
+        "classification_changed": "after a classification change",
+        "imported": "after an import",
+        "inbox_added": "after a proposal arrived"
+      }
+    },
+    "advanced": {
+      "title": "Advanced: rule chains",
+      "summary": "Limits that keep rules from starting each other endlessly. The defaults suit almost everyone."
+    },
     "when": "When",
-    "if": "If",
+    "if": "Which cards",
     "do": "Do",
     "condition": "Cards (query)",
-    "every_label": "Every (minutes)",
-    "every_mins": "every {n} min",
     "tags": "Tags (comma separated)",
     "on": "On",
     "flag": "Flag",
@@ -48,15 +247,11 @@
     "clear": "(clear)",
     "add_action": "Add action",
     "remove_action": "Remove",
-    "save": "Save rule",
-    "preview": "Preview",
-    "cancel": "Cancel",
-    "preview_summary": "{matched, plural, one {# card} other {# cards}} match, {changed} would change. Nothing has been changed.",
-    "truncated": "Only the first 5000 cards are handled in one run.",
-    "would_change": "would change",
-    "runs": "Recent runs",
-    "no_runs": "No runs yet.",
-    "matched": "{n, plural, one {# card} other {# cards}}",
+    "edit": "Edit",
+    "delete": "Delete",
+    "run_now": "Run now",
+    "up": "Move up",
+    "down": "Move down",
     "trigger": {
       "label": "Trigger",
       "note_added": "A note is added",
@@ -77,8 +272,8 @@
     },
     "status": {
       "applied": "applied",
-      "no_match": "no cards matched",
-      "skipped_cycle": "skipped (would trigger itself)",
+      "no_match": "no matching cards",
+      "skipped_cycle": "skipped (would re-trigger itself)",
       "skipped_depth": "skipped (chain too deep)",
       "skipped_budget": "skipped (too many runs for one change)",
       "failed": "failed"
@@ -99,12 +294,10 @@
         "accept": "Accept as a note"
       }
     },
-    "condition_example": "e.g. seviye:A1 lapses>=5",
-    "inbox_condition_hint": "For inbox rules the query is checked on the card the proposal would become (e.g. deck:English seviye:B1).",
-    "auto_accept_active": "Programs' proposals are accepted without your review by: {names}. Anything a paired program or a plugin proposes becomes a note at once (each program can propose at most its daily limit: Ctrl+K → setting local_api.inbox_daily_max).",
-    "auto_accept_warning": "This rule accepts proposals without your review: whatever a paired program or a plugin proposes becomes a note right away. Keep the condition narrow; each program is still held to its daily proposal limit (Ctrl+K → setting local_api.inbox_daily_max).",
-    "rules": "Rules",
-    "none_hint": "For example: tag cards you keep forgetting, or move finished cards to another deck."
+    "condition_example": "e.g. level:A1 lapses>=5",
+    "inbox_condition_hint": "For inbox rules the query is checked against the card the proposal would become (e.g. deck:English level:B1).",
+    "auto_accept_active": "Rules that accept programs’ proposals without your review: {names}. Anything a paired program or plugin proposes becomes a note at once (each program can propose at most its daily limit: Ctrl+K → local_api.inbox_daily_max setting).",
+    "auto_accept_warning": "This rule accepts proposals without your review: anything a paired program or plugin proposes becomes a note at once. Keep the condition narrow; each program is still bound by its daily proposal limit (Ctrl+K → local_api.inbox_daily_max setting)."
   },
   "errors": {
     "validation": {

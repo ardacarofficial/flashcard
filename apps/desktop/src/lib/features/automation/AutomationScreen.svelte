@@ -1,28 +1,37 @@
+<!--
+  Settings → Automation (v1.3). Starts from ready rules (recipes) that say how many cards they
+  would change right now; a rule reads as one sentence with editable parts (RuleEditor); the
+  raw trigger / query / actions editor stays under "Advanced". Rules list, readable run
+  history and the loop limits (`automation.max_depth`, `automation.max_runs_per_event`) under
+  the page's advanced disclosure. Everything a rule is and does is decided by fc-app.
+-->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
-  import type { ActionInfo, AttributeDefDto, DeckTreeNode, Rating, RuleDto, RulePreview, RunDto } from '$lib/api/types';
-  import { formatCount } from '$lib/format';
+  import type { ActionInfo, AttributeDefDto, DeckTreeNode, NoteTypeDto, RuleDto, RunDto, SettingDef } from '$lib/api/types';
+  import { formatDateTime } from '$lib/format';
   import { t, td } from '$lib/i18n/index.svelte';
   import type { ScreenCtx } from '../types';
+  import { fromAction, fromTrigger } from './actions';
+  import RuleEditor from './RuleEditor.svelte';
   import {
-    TRIGGER_KINDS,
-    emptyAction,
-    fromAction,
-    fitsTrigger,
-    fromTrigger,
-    toAction,
-    toTrigger,
-    type ActionForm,
-    type TriggerForm,
-  } from './actions';
+    RECIPES,
+    draftOf,
+    missing,
+    recipeEnv,
+    sentence,
+    type Recipe,
+    type RecipeId,
+    type RuleForm,
+    type SentenceEnv,
+  } from './recipes';
   import {
     Button,
-    Checkbox,
     ChevronDown,
-    ChevronRight,
     ChevronUp,
     Chip,
+    CircleCheck,
+    Dialog,
     EmptyState,
     History,
     Icon,
@@ -31,36 +40,31 @@
     Pencil,
     Play,
     Plus,
-    Select,
     Skeleton,
+    Sparkles,
     Switch,
     Trash2,
     TriangleAlert,
-    X,
     Zap,
+    toast,
   } from '$lib/ui';
   import type { Tone } from '$lib/ui';
-  import { SettingsPage, SettingsSection } from '../core/kit';
+  import { FormRow, SettingsAdvanced, SettingsPage, SettingsSection, isDefault, loadDefaults, resetSetting } from '../core/kit';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
-
-  const RATINGS: Rating[] = ['again', 'hard', 'good', 'easy'];
-  const FLAGS = [1, 2, 3, 4, 5, 6, 7];
 
   let rules = $state<RuleDto[]>([]);
   let loaded = $state(false);
   let runs = $state<RunDto[]>([]);
   let actionInfos = $state<ActionInfo[]>([]);
   let attrs = $state<AttributeDefDto[]>([]);
+  let notetypes = $state<NoteTypeDto[]>([]);
 
-  // Editor (null = closed; id null = new rule).
-  let editing = $state<{ id: string | null } | null>(null);
-  let name = $state('');
-  let enabled = $state(true);
-  let trigger = $state<TriggerForm>(fromTrigger({ kind: 'note_added' }));
-  let condition = $state('');
-  let actions = $state<ActionForm[]>([]);
-  let preview = $state<RulePreview | null>(null);
+  // Editor (null = closed).
+  let editing = $state<{ id: string | null; start?: 'do' | null } | null>(null);
+  let form = $state<RuleForm>({ name: '', enabled: true, trigger: fromTrigger({ kind: 'note_added' }), condition: '', actions: [] });
+
+  let confirmDelete = $state<RuleDto | null>(null);
 
   const decks = $derived.by(() => {
     const out: { id: string; path: string }[] = [];
@@ -73,23 +77,20 @@
     walk(ctx.decks);
     return out;
   });
-  // Actions that fit the chosen trigger (inbox rules accept inbox items; the rest act on cards).
-  const fitting = $derived(actionInfos.filter((i) => fitsTrigger(i.selection, trigger.kind)));
-  $effect(() => {
-    const ok = new Set(fitting.map((i) => i.method));
-    if (fitting.length > 0 && actions.some((a) => !ok.has(a.method))) {
-      actions = actions.map((a) => (ok.has(a.method) ? a : emptyAction(fitting[0]!.method)));
-    }
-  });
-  const choiceAttrs = $derived(attrs.filter((a) => a.kind === 'ordered_enum' || a.kind === 'enum'));
-  const ruleName = (id: string) => rules.find((r) => r.id === id)?.name ?? '';
+  const choiceAttrs = $derived(
+    attrs
+      .filter((a) => a.kind === 'ordered_enum' || a.kind === 'enum')
+      .map((a) => ({ id: a.id, name: a.name, options: a.options.map((o) => ({ id: o.id, label: o.label })) })),
+  );
+  const rEnv = $derived(recipeEnv(notetypes, decks));
+  const env = $derived<SentenceEnv>({ decks, attrs: choiceAttrs, subtitleType: rEnv.subtitleType });
+
   // Rules that accept inbox proposals without the user's review (integration round 1): a
   // program paired with the local API (or a plugin) then writes notes straight into the
   // collection, bounded only by its daily proposal limit.
   const autoAccepting = $derived(
     rules.filter((r) => r.enabled && r.trigger.kind === 'inbox_added' && r.actions.some((a) => a.method === 'inbox.accept')),
   );
-  const editingAutoAccept = $derived(trigger.kind === 'inbox_added' && actions.some((a) => a.method === 'inbox.accept'));
 
   async function load() {
     await ctx.guarded(async () => {
@@ -99,25 +100,88 @@
     loaded = true;
   }
 
-  function open(rule: RuleDto | null) {
-    preview = null;
-    editing = { id: rule?.id ?? null };
-    name = rule?.name ?? '';
-    enabled = rule?.enabled ?? true;
-    trigger = fromTrigger(rule?.trigger ?? { kind: 'note_added' });
-    condition = rule?.condition ?? '';
-    actions = rule ? rule.actions.map(fromAction) : [emptyAction(actionInfos[0]?.method ?? 'bulk.add_tags')];
+  // ---------------------------------------------------------------- recipes
+  type Count = { kind: 'affected' | 'matching'; n: number } | 'error';
+  let counts = $state<Partial<Record<RecipeId, Count>>>({});
+  let countRound = 0;
+
+  /** How many cards each recipe would change right now (dry runs, one after another). */
+  async function countRecipes() {
+    const round = ++countRound;
+    for (const r of RECIPES) {
+      const f = r.form(rEnv);
+      let c: Count;
+      try {
+        if (missing(f).length) {
+          c = { kind: 'matching', n: (await api.call('search.ids', { query: f.condition })).card_ids.length };
+        } else {
+          const p = await api.call('automation.preview', { rule_id: null, draft: $state.snapshot(draftOf(f)) });
+          c = { kind: 'affected', n: p.changed };
+        }
+      } catch {
+        c = 'error';
+      }
+      if (round !== countRound) return;
+      counts[r.id] = c;
+    }
   }
 
-  function draft() {
-    // Plain data (no reactive proxies) on the wire.
-    return $state.snapshot({ trigger: toTrigger(trigger), condition, actions: actions.map(toAction) });
+  /** Key-order independent JSON (rules come back from Rust, drafts from the form). */
+  const stable = (v: unknown): string =>
+    Array.isArray(v)
+      ? `[${v.map(stable).join(',')}]`
+      : v && typeof v === 'object'
+        ? `{${Object.keys(v)
+            .sort()
+            .map((k) => `${JSON.stringify(k)}:${stable((v as Record<string, unknown>)[k])}`)
+            .join(',')}}`
+        : JSON.stringify(v);
+  const saved = $derived(new Set(rules.map((r) => stable({ trigger: r.trigger, condition: r.condition, actions: r.actions }))));
+  /** A recipe the user already saved as it is. */
+  const inRules = (r: Recipe) => saved.has(stable($state.snapshot(draftOf(r.form(rEnv)))));
+
+  function countText(id: RecipeId): string {
+    const c = counts[id];
+    if (c === undefined) return t('automation.recipes.counting');
+    if (c === 'error') return t('automation.recipes.no_count');
+    return c.kind === 'affected' ? t('automation.preview.affected', { n: c.n }) : t('automation.recipes.matching', { n: c.n });
+  }
+
+  // ---------------------------------------------------------------- editor
+  function openRecipe(r: Recipe) {
+    form = r.form(rEnv);
+    // A recipe that still needs a choice (the archive deck) opens where it is made.
+    editing = { id: null, start: missing(form).some((k) => k !== 'missing_name') ? 'do' : null };
+  }
+
+  function openBlank() {
+    form = {
+      name: '',
+      enabled: true,
+      trigger: fromTrigger({ kind: 'card_answered', ratings: [] }),
+      condition: '',
+      actions: [fromAction({ method: actionInfos[0]?.method ?? 'bulk.add_tags', params: {} })],
+    };
+    editing = { id: null };
+  }
+
+  function openRule(rule: RuleDto) {
+    form = {
+      name: rule.name,
+      enabled: rule.enabled,
+      trigger: fromTrigger(rule.trigger),
+      condition: rule.condition,
+      actions: rule.actions.map(fromAction),
+    };
+    editing = { id: rule.id };
   }
 
   async function save() {
     if (!editing) return;
     const id = editing.id;
-    const d = draft();
+    const d = $state.snapshot(draftOf(form));
+    const name = form.name.trim();
+    const enabled = form.enabled;
     const ok = await ctx.guarded(() =>
       id
         ? api.call('automation.rules.update', { id, name, enabled, ...d })
@@ -127,12 +191,7 @@
     await load();
   }
 
-  async function runPreview() {
-    await ctx.guarded(async () => {
-      preview = await api.call('automation.preview', { rule_id: null, draft: draft() });
-    });
-  }
-
+  // ---------------------------------------------------------------- rules
   async function toggle(rule: RuleDto) {
     await ctx.guarded(() =>
       api.call('automation.rules.update', {
@@ -157,32 +216,118 @@
   }
 
   async function runNow(rule: RuleDto) {
-    await ctx.guarded(() => api.call('automation.rules.run', { id: rule.id }));
+    await ctx.guarded(async () => {
+      const res = await api.call('automation.rules.run', { id: rule.id });
+      const own = res.runs[0];
+      if (own) toast.show(t('automation.rules.ran', { n: own.matched }), { tone: own.status === 'failed' ? 'danger' : 'success' });
+    });
     await load();
+    void countRecipes();
   }
 
   async function remove(rule: RuleDto) {
+    confirmDelete = null;
     await ctx.guarded(() => api.call('automation.rules.delete', { id: rule.id }));
     await load();
   }
 
-  function triggerText(rule: RuleDto): string {
-    const tr = rule.trigger;
-    const base = t(`automation.trigger.${tr.kind}`);
-    if (tr.kind === 'schedule') return `${base} · ${t('automation.every_mins', { n: tr.every_mins })}`;
-    if (tr.kind === 'card_answered' && tr.ratings.length)
-      return `${base} · ${tr.ratings.map((r) => t(`automation.rating.${r}`)).join(', ')}`;
-    if (tr.kind === 'card_flagged' && tr.flags.length) return `${base} · ${tr.flags.join(', ')}`;
-    return base;
+  const ruleSentence = (r: RuleDto) =>
+    sentence({ trigger: fromTrigger(r.trigger), condition: r.condition, actions: r.actions.map(fromAction) }, env);
+
+  // ---------------------------------------------------------------- run history
+  const RUN_TONE: Record<string, Tone> = { applied: 'success', no_match: 'neutral', failed: 'danger' };
+  const ACTION_KEYS = new Set(['add_tags', 'remove_tags', 'set_suspended', 'set_buried', 'set_flag', 'move_cards', 'set_attribute', 'reset_progress', 'accept']);
+
+  function runWhen(at: number): string {
+    const d = new Date(at);
+    const today = new Date();
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    const time = formatDateTime(at, { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === today.toDateString()) return t('automation.runs.today', { time });
+    if (d.toDateString() === yesterday.toDateString()) return t('automation.runs.yesterday', { time });
+    return formatDateTime(at);
   }
 
-  function toggleIn<T>(list: T[], v: T): T[] {
-    return list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
+  function errorText(r: RunDto): string {
+    if (!r.error) return '';
+    const s = td(r.error.message_key);
+    return s === r.error.message_key ? r.error.message : s;
   }
+
+  function runOutcome(r: RunDto): string {
+    const n = r.matched;
+    switch (r.status) {
+      case 'applied': {
+        const rule = rules.find((x) => x.id === r.rule_id);
+        const key = rule?.actions.length === 1 ? rule.actions[0]!.method.split('.').pop()! : '';
+        return ACTION_KEYS.has(key) ? td(`automation.runs.applied_action.${key}`, { n }) : t('automation.runs.applied', { n });
+      }
+      case 'failed':
+        return t('automation.runs.failed', { error: errorText(r) });
+      case 'no_match':
+      case 'skipped_cycle':
+      case 'skipped_depth':
+      case 'skipped_budget':
+        return td(`automation.runs.${r.status}`);
+      default:
+        return td(`automation.status.${r.status}`);
+    }
+  }
+
+  const ruleName = (id: string) => rules.find((r) => r.id === id)?.name ?? t('automation.runs.deleted_rule');
+
+  // ---------------------------------------------------------------- loop limits (settings)
+  const SETTING_KEYS = ['automation.max_depth', 'automation.max_runs_per_event'];
+  let settingDefs = $state<SettingDef[]>([]);
+  let values = $state<Record<string, number>>({});
+
+  async function loadSettings() {
+    try {
+      const schema = (await api.call('settings.schema', {})).settings.map((e) => e.def);
+      const defs = SETTING_KEYS.map((k) => schema.find((d) => d.key === k)).filter((d): d is SettingDef => !!d);
+      const got = defs.length ? (await api.call('settings.get', { scope: { kind: 'app' }, keys: defs.map((d) => d.key) })).values : [];
+      const next: Record<string, number> = {};
+      for (const d of defs) next[d.key] = Number(d.default);
+      for (const v of got) if (typeof v.value === 'number') next[v.key] = v.value;
+      values = next;
+      settingDefs = defs;
+    } catch {
+      settingDefs = [];
+    }
+  }
+
+  async function commitSetting(def: SettingDef, raw: string) {
+    const n = Math.round(Number(raw));
+    if (raw.trim() === '' || !Number.isFinite(n) || n === values[def.key]) return;
+    const before = values[def.key];
+    values[def.key] = n;
+    const ok = await ctx.guarded(() => api.call('settings.set', { scope: { kind: 'app' }, key: def.key, value: n }));
+    if (!ok && before !== undefined) values[def.key] = before;
+  }
+
+  async function resetValue(def: SettingDef) {
+    await ctx.guarded(async () => {
+      const v = await resetSetting(def.key);
+      values[def.key] = typeof v === 'number' ? v : Number(def.default);
+    });
+  }
+
+  const bounds = (d: SettingDef) => (d.kind.type === 'integer' ? { min: d.kind.min ?? undefined, max: d.kind.max ?? undefined } : {});
+  const exampleKey = (d: SettingDef) => d.label_key.replace(/\.label$/, '.example');
 
   onMount(() => {
     void load();
-    void ctx.guarded(async () => (actionInfos = (await api.call('automation.actions', {})).actions));
+    void loadDefaults();
+    void loadSettings();
+    // Recipes are counted once the collection's note types are known (the Subtitle recipe
+    // names the built-in Subtitle note type). Note types are optional: a module may be off.
+    void Promise.all([
+      ctx.guarded(async () => (actionInfos = (await api.call('automation.actions', {})).actions)),
+      api.call('notetypes.list', {}).then(
+        (r) => (notetypes = r.notetypes),
+        () => (notetypes = []),
+      ),
+    ]).then(() => countRecipes());
     // Classifications are optional (module may be off): no error if unavailable.
     api.call('attributes.list', { scope_deck_id: null, include_deleted: false }).then(
       (r) => (attrs = r.defs),
@@ -191,27 +336,73 @@
     const unsub = api.on(['automation_changed', 'undone', 'redone', 'collection_replaced', 'data_changed'], () => void load());
     return () => void unsub.then((u) => u());
   });
-
-  const triggerOptions = $derived(TRIGGER_KINDS.map((k) => ({ value: k, label: t(`automation.trigger.${k}`) })));
-  const actionOptions = $derived(fitting.map((info) => ({ value: info.method, label: td(info.label_key) })));
-  const flagOptions = $derived(FLAGS.map((f) => ({ value: f, label: td(`browse.flags.${f}`) })));
-  const deckOptions = $derived([{ value: '', label: '—' }, ...decks.map((d) => ({ value: d.id, label: d.path }))]);
-  const attrOptions = $derived([{ value: '', label: '—' }, ...choiceAttrs.map((d) => ({ value: d.id, label: d.name }))]);
-  const valueOptions = (attrId: string) => [
-    { value: '', label: t('automation.clear') },
-    ...(choiceAttrs.find((d) => d.id === attrId)?.options ?? []).map((o) => ({ value: o.id, label: o.label })),
-  ];
-  const RUN_TONE: Record<string, Tone> = { applied: 'success', no_match: 'neutral', failed: 'danger' };
 </script>
 
 {#snippet headerActions()}
   {#if !editing}
-    <Button variant="primary" icon={Plus} onclick={() => open(null)}>{t('automation.new')}</Button>
+    <Button variant="secondary" icon={Plus} onclick={openBlank}>{t('automation.new')}</Button>
   {/if}
 {/snippet}
 
-<SettingsPage title={t('automation.heading')} subtitle={t('automation.intro')} actions={headerActions}>
+{#snippet recipesSection()}
+  <SettingsSection title={t('automation.recipes.title')} description={t('automation.recipes.description')} icon={Sparkles}>
+    <ul class="recipes">
+      {#each RECIPES as r (r.id)}
+        <li>
+          <button type="button" class="recipe" data-testid="recipe-{r.id}" onclick={() => openRecipe(r)}>
+            <span class="r-icon"><Icon icon={r.icon} size={18} /></span>
+            <span class="r-body">
+              <span class="r-name">{r.name()}</span>
+              <span class="r-desc">{r.description()}</span>
+              {#if inRules(r)}<span class="r-exists"><Icon icon={CircleCheck} size={14} />{t('automation.recipes.exists')}</span>{/if}
+              <span class="r-count" class:zero={counts[r.id] !== undefined && counts[r.id] !== 'error' && (counts[r.id] as { n: number }).n === 0}>
+                {countText(r.id)}
+              </span>
+            </span>
+          </button>
+        </li>
+      {/each}
+    </ul>
+  </SettingsSection>
+{/snippet}
 
+{#snippet rulesSection()}
+  <SettingsSection title={t('automation.rules.title')} description={rules.length ? t('automation.rules.description') : undefined} icon={Zap} body="rows">
+    {#if !loaded}
+      <div class="pad"><Skeleton lines={3} /></div>
+    {:else if rules.length === 0}
+      <div class="empty-rows">
+        <EmptyState size="sm" icon={Zap} title={t('automation.rules.none')} description={t('automation.rules.none_hint')} />
+      </div>
+    {:else}
+      <ol class="rules">
+        {#each rules as rule, i (rule.id)}
+          <li class:off={!rule.enabled} data-testid="rule-row">
+            <div class="rule-text">
+              <span class="rule-head">
+                <span class="rule-name">{rule.name}</span>
+                {#if !rule.enabled}<Chip size="sm" label={t('automation.rules.off')} />{/if}
+              </span>
+              <span class="rule-sentence">{ruleSentence(rule)}</span>
+            </div>
+            <div class="rule-actions">
+              {#if rules.length > 1}
+                <IconButton size="sm" icon={ChevronUp} label={t('automation.up')} disabled={i === 0} onclick={() => move(i, -1)} />
+                <IconButton size="sm" icon={ChevronDown} label={t('automation.down')} disabled={i === rules.length - 1} onclick={() => move(i, 1)} />
+              {/if}
+              <IconButton size="sm" icon={Play} label={t('automation.run_now')} onclick={() => runNow(rule)} />
+              <IconButton size="sm" icon={Pencil} label={t('automation.edit')} onclick={() => openRule(rule)} />
+              <IconButton size="sm" icon={Trash2} label={t('automation.delete')} onclick={() => (confirmDelete = rule)} />
+              <Switch ariaLabel={rule.name} checked={rule.enabled} onchange={() => toggle(rule)} />
+            </div>
+          </li>
+        {/each}
+      </ol>
+    {/if}
+  </SettingsSection>
+{/snippet}
+
+<SettingsPage title={t('automation.heading')} subtitle={t('automation.intro')} actions={headerActions}>
   {#if autoAccepting.length > 0}
     <p class="banner" role="note">
       <Icon icon={TriangleAlert} size={16} />
@@ -220,170 +411,92 @@
   {/if}
 
   {#if editing}
-    <SettingsSection title={editing.id ? t('automation.edit_rule') : t('automation.new')} icon={Pencil}>
-      <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-        <div class="name-row">
-          <Input label={t('automation.name')} bind:value={name} />
-          <Switch label={t('automation.enabled')} bind:checked={enabled} />
-        </div>
-
-        <fieldset class="step">
-          <legend><span class="num" aria-hidden="true">1</span>{t('automation.when')}</legend>
-          <Select label={t('automation.trigger.label')} options={triggerOptions} bind:value={trigger.kind} />
-          {#if trigger.kind === 'card_answered'}
-            <div class="checks">
-              {#each RATINGS as r (r)}
-                <Checkbox
-                  label={t(`automation.rating.${r}`)}
-                  checked={trigger.ratings.includes(r)}
-                  onchange={() => (trigger.ratings = toggleIn(trigger.ratings, r))}
-                />
-              {/each}
-            </div>
-          {:else if trigger.kind === 'card_flagged'}
-            <div class="checks">
-              {#each FLAGS as f (f)}
-                <Checkbox
-                  label={td(`browse.flags.${f}`)}
-                  checked={trigger.flags.includes(f)}
-                  onchange={() => (trigger.flags = toggleIn(trigger.flags, f))}
-                />
-              {/each}
-            </div>
-          {:else if trigger.kind === 'schedule'}
-            <Input type="number" min="15" label={t('automation.every_label')} bind:value={trigger.everyMins} />
-          {/if}
-        </fieldset>
-
-        <fieldset class="step">
-          <legend><span class="num" aria-hidden="true">2</span>{t('automation.if')}</legend>
-          <Input
-            label={t('automation.condition')}
-            placeholder={t('automation.condition_example')}
-            hint={trigger.kind === 'inbox_added' ? t('automation.inbox_condition_hint') : undefined}
-            bind:value={condition}
-          />
-        </fieldset>
-
-        <fieldset class="step">
-          <legend><span class="num" aria-hidden="true">3</span>{t('automation.do')}</legend>
-          {#each actions as a, i (i)}
-            <div class="action">
-              <Select label={t('automation.action.label')} hideLabel options={actionOptions} bind:value={a.method} />
-              {#if a.method === 'bulk.add_tags' || a.method === 'bulk.remove_tags'}
-                <Input label={t('automation.tags')} hideLabel placeholder={t('automation.tags')} bind:value={a.tags} />
-              {:else if a.method === 'bulk.set_suspended' || a.method === 'bulk.set_buried'}
-                <Checkbox label={t('automation.on')} bind:checked={a.on} />
-              {:else if a.method === 'bulk.set_flag'}
-                <Select label={t('automation.flag')} hideLabel options={flagOptions} bind:value={a.flag} />
-                <Checkbox label={t('automation.on')} bind:checked={a.on} />
-              {:else if a.method === 'bulk.move_cards' || a.method === 'inbox.accept'}
-                <Select label={t('automation.deck')} hideLabel options={deckOptions} bind:value={a.deckId} />
-              {:else if a.method === 'bulk.set_attribute'}
-                <Select label={t('automation.classification')} hideLabel options={attrOptions} bind:value={a.attrId} />
-                <Select label={t('automation.value')} hideLabel options={valueOptions(a.attrId)} bind:value={a.optionId} />
-              {/if}
-              <IconButton
-                icon={X}
-                label={t('automation.remove_action')}
-                onclick={() => (actions = actions.filter((_, j) => j !== i))}
-              />
-            </div>
-          {/each}
-          <div>
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={Plus}
-              onclick={() => (actions = [...actions, emptyAction(fitting[0]?.method ?? 'bulk.add_tags')])}
-            >
-              {t('automation.add_action')}
-            </Button>
-          </div>
-        </fieldset>
-
-        {#if editingAutoAccept}
-          <p class="banner" role="note"><Icon icon={TriangleAlert} size={16} /><span>{t('automation.auto_accept_warning')}</span></p>
-        {/if}
-
-        {#if preview}
-          <section class="preview" aria-label={t('automation.preview')}>
-            <p class="summary" role="status">{t('automation.preview_summary', { matched: preview.matched, changed: preview.changed })}</p>
-            {#if preview.truncated}<p class="muted">{t('automation.truncated')}</p>{/if}
-            <ul>
-              {#each preview.cards as c (c.card_id)}
-                <li class:changes={c.changes}>
-                  <span class="text">{c.text}</span>
-                  <span class="muted">{c.deck}</span>
-                  {#if c.changes}<Chip size="sm" tone="accent" label={t('automation.would_change')} />{/if}
-                </li>
-              {/each}
-            </ul>
-          </section>
-        {/if}
-
-        <div class="buttons">
-          <Button size="sm" variant="ghost" onclick={() => (editing = null)}>{t('automation.cancel')}</Button>
-          <Button size="sm" onclick={runPreview}>{t('automation.preview')}</Button>
-          <Button size="sm" type="submit" variant="primary">{t('automation.save')}</Button>
-        </div>
-      </form>
-    </SettingsSection>
+    <RuleEditor
+      bind:form
+      ruleId={editing.id}
+      startPart={editing.start ?? null}
+      {actionInfos}
+      {notetypes}
+      {env}
+      onsave={() => void save()}
+      oncancel={() => (editing = null)}
+    />
+    {@render rulesSection()}
+  {:else if !loaded}
+    <div class="pad"><Skeleton lines={4} /></div>
+  {:else if rules.length > 0}
+    {@render rulesSection()}
+    {@render recipesSection()}
+  {:else}
+    {@render recipesSection()}
+    {@render rulesSection()}
   {/if}
 
-  <SettingsSection title={t('automation.rules')} icon={Zap} body="rows">
-    {#if !loaded}
-      <div class="pad"><Skeleton lines={3} /></div>
-    {:else if rules.length === 0}
-      <div class="empty-rows"><EmptyState size="sm" icon={Zap} title={t('automation.none')} description={t('automation.none_hint')} /></div>
-    {:else}
-      <ol class="rules">
-        {#each rules as rule, i (rule.id)}
-          <li class:off={!rule.enabled}>
-            <span class="idx num" aria-hidden="true">{formatCount(i + 1)}</span>
-            <div class="rule-text">
-              <span class="rule-name">{rule.name}</span>
-              <span class="detail">
-                <span>{triggerText(rule)}</span>
-                {#if rule.condition}<code>{rule.condition}</code>{/if}
-                <span class="acts"><Icon icon={ChevronRight} size={12} />{rule.actions.map((a) => td(`automation.action.${a.method}`)).join(' · ')}</span>
-              </span>
-            </div>
-            <div class="rule-actions">
-              <IconButton size="sm" icon={ChevronUp} label={t('automation.up')} disabled={i === 0} onclick={() => move(i, -1)} />
-              <IconButton size="sm" icon={ChevronDown} label={t('automation.down')} disabled={i === rules.length - 1} onclick={() => move(i, 1)} />
-              <IconButton size="sm" icon={Play} label={t('automation.run_now')} onclick={() => runNow(rule)} />
-              <IconButton size="sm" icon={Pencil} label={t('automation.edit')} onclick={() => open(rule)} />
-              <IconButton size="sm" icon={Trash2} label={t('automation.delete')} onclick={() => remove(rule)} />
-              <Switch ariaLabel={rule.name} checked={rule.enabled} onchange={() => toggle(rule)} />
-            </div>
-          </li>
-        {/each}
-      </ol>
-    {/if}
-  </SettingsSection>
-
-  <SettingsSection title={t('automation.runs')} icon={History} body="rows">
+  <SettingsSection title={t('automation.runs.title')} description={t('automation.runs.description')} icon={History} body="rows">
     {#if !loaded}
       <div class="pad"><Skeleton lines={2} /></div>
     {:else if runs.length === 0}
-      <p class="muted row">{t('automation.no_runs')}</p>
+      <p class="muted row">{t('automation.runs.none')}</p>
     {:else}
       <ul class="runs">
         {#each runs as r (r.seq)}
-          <li>
+          <li data-testid="run-row">
             <span class="dot {RUN_TONE[r.status] ?? 'warning'}" aria-hidden="true"></span>
             <span class="run-text">
-              <strong>{ruleName(r.rule_id)}</strong> · {td(`automation.status.${r.status}`)} · {td(`automation.trigger.${r.trigger}`)}
-              · {t('automation.matched', { n: r.matched })}
+              <span class="when">{runWhen(r.at)}</span>
+              · <strong>“{ruleName(r.rule_id)}”</strong>
+              · <span class:err={r.status === 'failed'}>{runOutcome(r)}</span>
+              {#if r.trigger}<span class="via"> · {td(`automation.runs.via.${r.trigger}`)}</span>{/if}
             </span>
-            {#if r.error}<span class="muted err">{r.error.message}</span>{/if}
           </li>
         {/each}
       </ul>
     {/if}
   </SettingsSection>
+
+  {#if settingDefs.length}
+    <SettingsAdvanced id="automation" title={t('automation.advanced.title')} summary={t('automation.advanced.summary')}>
+      <SettingsSection body="rows">
+        {#each settingDefs as d (d.key)}
+          {@const id = `automation-setting-${d.key.replaceAll('.', '-')}`}
+          <FormRow
+            label={td(d.label_key)}
+            description={d.description_key ? td(d.description_key) : undefined}
+            example={td(exampleKey(d))}
+            labelFor={id}
+            isDefault={isDefault(d.key, values[d.key])}
+            onReset={() => void resetValue(d)}
+          >
+            <Input
+              {id}
+              type="number"
+              size="sm"
+              hideLabel
+              label={td(d.label_key)}
+              {...bounds(d)}
+              value={values[d.key]}
+              onchange={(e) => void commitSetting(d, e.currentTarget.value)}
+            />
+          </FormRow>
+        {/each}
+      </SettingsSection>
+    </SettingsAdvanced>
+  {/if}
 </SettingsPage>
+
+<Dialog
+  open={confirmDelete !== null}
+  role="alertdialog"
+  size="sm"
+  title={t('automation.rules.delete_title', { name: confirmDelete?.name ?? '' })}
+  description={t('automation.rules.delete_body')}
+  onclose={() => (confirmDelete = null)}
+>
+  {#snippet footer()}
+    <Button variant="ghost" onclick={() => (confirmDelete = null)}>{t('automation.editor.cancel')}</Button>
+    <Button variant="danger" onclick={() => confirmDelete && void remove(confirmDelete)}>{t('automation.delete')}</Button>
+  {/snippet}
+</Dialog>
 
 <style>
   .banner {
@@ -420,108 +533,88 @@
   .empty-rows {
     border-bottom: 1px solid var(--border);
   }
-  .editor {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-  .name-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--space-4);
-    align-items: end;
-  }
-  .name-row :global(.fc-switch) {
-    padding-bottom: var(--space-1);
-  }
-  .step {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    margin: 0;
-    padding: var(--space-3) 0 0 28px;
-    border: none;
-    border-top: 1px solid var(--border);
-    min-width: 0;
-  }
-  .step legend {
-    float: left;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-inline-start: -28px;
-    padding: 0;
-    font-size: var(--text-sm);
-    font-weight: var(--weight-semibold);
-  }
-  .step legend + :global(*) {
-    clear: both;
-  }
-  .step .num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-pill);
-    color: var(--accent-text);
-    font-size: var(--text-2xs);
-  }
-  .checks {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2) var(--space-4);
-  }
-  .action {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .action :global(.fc-field) {
-    flex: 1 1 11rem;
-    min-width: 0;
-  }
-  .buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-    padding-top: var(--space-3);
-    border-top: 1px solid var(--border);
-  }
-  .preview {
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-control);
-    background: var(--surface-1);
-  }
-  .summary {
-    margin: 0 0 var(--space-2);
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-  }
-  .preview ul {
+  /* Recipes: a two-column grid of cards (one column when narrow). */
+  .recipes {
     list-style: none;
     margin: 0;
     padding: 0;
-    max-height: 16rem;
-    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    gap: var(--space-3);
   }
-  .preview li {
+  .recipe {
     display: flex;
+    gap: var(--space-3);
+    align-items: flex-start;
+    width: 100%;
+    height: 100%;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    color: var(--text-1);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+    transition: border-color var(--motion-fast) var(--ease), background-color var(--motion-fast) var(--ease);
+  }
+  .recipe:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+  }
+  .recipe:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .r-icon {
+    display: inline-flex;
+    flex: none;
     align-items: center;
-    gap: var(--space-2);
-    min-height: 28px;
-    font-size: var(--text-sm);
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-2);
+    color: var(--accent-text);
   }
-  .preview li + li {
-    border-top: 1px solid var(--border);
+  .r-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
   }
-  .preview li.changes .text {
+  .r-name {
+    font-size: var(--text-md);
     font-weight: var(--weight-semibold);
+    line-height: var(--leading-tight);
+  }
+  .r-desc {
+    font-size: var(--text-sm);
+    color: var(--text-2);
+    line-height: var(--leading);
+  }
+  .r-exists {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--text-sm);
+    color: var(--text-2);
+  }
+  .r-exists :global(svg) {
+    color: var(--success);
+  }
+  .r-count {
+    margin-top: auto;
+    padding-top: var(--space-1);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    font-variant-numeric: tabular-nums;
+    color: var(--accent-text);
+  }
+  .r-count.zero {
+    color: var(--text-3);
   }
   .rules,
   .runs {
@@ -533,52 +626,35 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    min-height: 48px;
-    padding: var(--space-1) 0;
+    min-height: 56px;
+    padding: var(--space-2) 0;
     border-bottom: 1px solid var(--border);
-  }
-  .rules li.off .rule-name {
-    color: var(--text-2);
-  }
-  .idx {
-    flex: none;
-    width: 1.25rem;
-    color: var(--text-2);
-    font-size: var(--text-xs);
-    text-align: end;
   }
   .rule-text {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    flex: 1 1 14rem;
+    flex: 1 1 16rem;
     min-width: 0;
   }
+  .rule-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
   .rule-name {
-    font-size: var(--text-sm);
+    font-size: var(--text-md);
     font-weight: var(--weight-medium);
     color: var(--text-1);
   }
-  .detail {
-    display: flex;
-    gap: var(--space-2);
-    align-items: baseline;
-    flex-wrap: wrap;
+  .rules li.off .rule-name,
+  .rules li.off .rule-sentence {
+    color: var(--text-3);
+  }
+  .rule-sentence {
+    font-size: var(--text-sm);
     color: var(--text-2);
-    font-size: var(--text-xs);
-  }
-  .acts {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-  code {
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
-    padding: 0 var(--space-1);
-    border-radius: 4px;
-    background: var(--surface-2);
-    color: var(--text-1);
+    line-height: var(--leading);
   }
   .rule-actions {
     display: flex;
@@ -591,17 +667,30 @@
   }
   .runs li {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: var(--space-3);
     min-height: var(--row-h);
-    padding: var(--space-1) 0;
+    padding: var(--space-2) 0;
     border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
     font-size: var(--text-sm);
   }
   .run-text {
     flex: 1 1 14rem;
     min-width: 0;
+    line-height: var(--leading);
+  }
+  .run-text strong {
+    font-weight: var(--weight-medium);
+  }
+  .when {
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .via {
+    color: var(--text-3);
+  }
+  .err {
+    color: var(--danger);
   }
   .dot {
     width: 8px;
@@ -609,6 +698,7 @@
     border-radius: var(--radius-pill);
     background: var(--warning-solid);
     flex: none;
+    align-self: center;
   }
   .dot.success {
     background: var(--success-solid);
@@ -618,11 +708,6 @@
   }
   .dot.danger {
     background: var(--danger-solid);
-  }
-  .err {
-    flex-basis: 100%;
-    padding-inline-start: calc(8px + var(--space-3));
-    font-size: var(--text-xs);
   }
   @media (max-width: 639.98px) {
     .rules li {

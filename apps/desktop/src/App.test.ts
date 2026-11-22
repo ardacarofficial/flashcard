@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { configure, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { api, CLASSIC_NOTETYPE_ID } from '$lib/api';
 import { i18n } from '$lib/i18n/index.svelte';
 import App from './App.svelte';
 
 i18n.locale = 'en';
+// The whole mock app boots per test: on a loaded machine that takes longer than the 1 s default.
+configure({ asyncUtilTimeout: 10_000 });
 
-describe('<App> on the dev mock transport', () => {
+describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
   it('draws the 5 sections + Inbox + Settings + profile from modules.list; section pages are tabs', async () => {
     render(App);
     const nav = await screen.findByRole('navigation', { name: 'Main navigation' });
@@ -43,10 +45,11 @@ describe('<App> on the dev mock transport', () => {
     await fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
     const sub = await screen.findByRole('navigation', { name: 'Settings sections' });
     const groups = Array.from(sub.querySelectorAll('h2'), (h) => h.textContent?.trim());
-    expect(groups).toEqual(['General', 'Study', 'Reading and modes', 'Connections', 'Plugins', 'Data', 'Profiles and lock']);
+    // v1.3: grouped by task, technical pages apart under "Advanced".
+    expect(groups).toEqual(['General', 'Studying and cards', 'Connections', 'Data', 'Advanced']);
     const pages = Array.from(sub.querySelectorAll('button'), (b) => b.textContent?.trim());
     // Subtitle: off by default in the app, on in the dev mock (its settings page gets screenshots).
-    expect(pages).toEqual(['General', 'Shortcuts', 'Reminders', 'Deck options', 'Note types', 'Modes and reading', 'AI', 'MCP', 'Subtitle', 'Automation', 'Plugins', 'Import / export', 'Starter decks', 'Maintenance', 'Logs & updates', 'Profiles & lock']);
+    expect(pages).toEqual(['General', 'Reminders', 'Shortcuts', 'Profiles & lock', 'Deck options', 'Note types', 'Modes and reading', 'AI', 'Subtitle', 'Import / export', 'Starter decks', 'Automation', 'Assistants (MCP)', 'Plugins', 'Maintenance', 'Logs & updates']);
     await fireEvent.click(screen.getByRole('button', { name: 'Reminders' }));
     expect(sub.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Reminders');
 

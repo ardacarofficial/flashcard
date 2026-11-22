@@ -167,7 +167,7 @@
   },
   "local_api": {
     "heading": "Local API",
-    "intro": "Programs on this computer can propose cards and read your decks through the local API. Only this computer can connect, at 127.0.0.1:{port}. Each program asks once; you decide what it may do.",
+    "intro": "Lets other programs on this computer, such as the Flashcard browser extension, propose cards to you; you come here when a program asks to connect or when you want to take a program's permission back.",
     "clients": "Connected programs",
     "none": "No programs yet.",
     "status": {
@@ -208,7 +208,28 @@
       "script": "Script"
     },
     "waiting": "Waiting for approval",
-    "none_allowed": "No program has been allowed yet."
+    "none_allowed": "No program has been allowed yet.",
+    "how": {
+      "title": "How it works",
+      "ask_label": "Every program asks first",
+      "ask": "The first time a program wants to connect, the app asks you and shows what it wants to do (for example \"Propose cards to the inbox\"). It can do nothing beyond what you allow.",
+      "cards_label": "Where its cards go",
+      "cards": "Proposed cards wait in the Inbox and only reach your decks once you accept them. Only a program you allowed to \"Add notes directly\" skips the inbox.",
+      "safe_label": "Who can connect",
+      "safe": "Only programs on this computer, at 127.0.0.1:{port}; nobody can reach it from the internet or your network. You can take any permission back here at any time."
+    },
+    "waiting_hint": "These programs want to connect. Untick anything you don't want to allow, then choose Allow or Refuse.",
+    "clients_hint": "Each row shows what the program may do and when it last connected. Revoke cuts it off at once; to connect again it has to ask you anew.",
+    "advanced": {
+      "summary": "Port, permissions and methods: for when you write or debug a program yourself.",
+      "port": "Port",
+      "port_hint": "Programs connect to this port on this computer only. You can change it, and each program's proposal limits, from the command palette (Ctrl+K); a new port takes effect when the module is switched on again.",
+      "scopes": "Permissions a program can get",
+      "scopes_hint": "The program says which of these it needs; you decide which it gets.",
+      "methods": "What a program can call",
+      "methods_hint": "This is the complete list. Each is called as POST /v1/<name> and needs the permission shown next to it; deleting is never possible.",
+      "none": "No methods listed."
+    }
   },
   "clipboard": {
     "suggest": "Add “{text}” as a card?",

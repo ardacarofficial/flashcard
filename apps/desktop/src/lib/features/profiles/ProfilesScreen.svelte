@@ -25,7 +25,7 @@
     Trash2,
     Users,
   } from '$lib/ui';
-  import { FormRow, LoadState, SettingsPage, SettingsSection } from '../core/kit';
+  import { FormRow, LoadState, SettingsAdvanced, SettingsPage, SettingsSection } from '../core/kit';
   import type { ScreenCtx } from '../types';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -127,6 +127,10 @@
     await load();
   }
 
+  const idleExample = $derived(
+    idle === 0 ? t('lock.example.idle_never') : t('lock.example.idle', { count: idle }),
+  );
+
   onMount(() => void load());
 </script>
 
@@ -140,7 +144,7 @@
       <EmptyState size="sm" icon={Users} title={t('profiles.unavailable')} />
     </SettingsSection>
   {:else}
-    <SettingsSection title={t('profiles.heading')} icon={Users} body="rows">
+    <SettingsSection title={t('profiles.heading')} description={t('profiles.what')} icon={Users} body="rows">
       {#if switching}<p class="status" role="status">{t('profiles.switching')}</p>{/if}
       <ul class="profiles">
         {#each list.profiles as p (p.id)}
@@ -200,7 +204,7 @@
           <Button size="sm" icon={Lock} onclick={() => void ctx.guarded(() => api.call('lock.lock', {}))}>{t('lock.lock_now')}</Button>
         {/if}
       </div>
-      <FormRow label={t('lock.idle')} description={t('lock.idle_hint')}>
+      <FormRow label={t('lock.idle')} description={t('lock.idle_hint')} example={idleExample}>
         <Select
           size="sm"
           label={t('lock.idle')}
@@ -211,7 +215,7 @@
         />
       </FormRow>
       <form onsubmit={setLock}>
-        <FormRow label={t('lock.kind_label')} description={t('lock.kind_hint')}>
+        <FormRow label={t('lock.kind_label')} description={t('lock.kind_hint')} example={t('lock.example.kind')}>
           <SegmentedControl size="sm" label={t('lock.kind_label')} options={kinds} bind:value={kind} />
         </FormRow>
         {#if lock.enabled}
@@ -219,7 +223,7 @@
             <Input size="sm" type="password" autocomplete="current-password" label={t('lock.current_secret')} hideLabel bind:value={current} />
           </FormRow>
         {/if}
-        <FormRow label={t('lock.new_secret')}>
+        <FormRow label={t('lock.new_secret')} description={lock.enabled ? t('lock.new_hint_change') : t('lock.new_hint')}>
           <Input
             size="sm"
             type="password"
@@ -234,13 +238,22 @@
           <Button size="sm" type="submit" variant="primary" disabled={secret === ''}>{lock.enabled ? t('lock.change') : t('lock.set')}</Button>
         </div>
       </form>
-      {#if lock.enabled}
-        <div class="notes">
-          <p>{lock.secure_storage ? t('lock.storage_secure') : t('lock.storage_file')}</p>
-          <p>{t('lock.scope_note')}</p>
-        </div>
-      {/if}
+      <FormRow label={t('lock.forgot')} description={t('lock.forgot_desc')} stack>
+        <p class="forgot">
+          {lock.secure_storage
+            ? t('lock.forgot_keychain', { account: `lock.profile.${lock.profile_id ?? 'default'}` })
+            : t('lock.forgot_file', { account: `lock.profile.${lock.profile_id ?? 'default'}` })}
+        </p>
+      </FormRow>
     </SettingsSection>
+
+    <SettingsAdvanced id="profiles" summary={t('lock.advanced_summary')}>
+      <SettingsSection title={t('lock.storage_heading')} body="rows">
+        <FormRow label={t('lock.storage_label')} description={lock.secure_storage ? t('lock.storage_secure') : t('lock.storage_file')} />
+        <FormRow label={t('lock.scope_label')} description={t('lock.scope_note')} />
+        <FormRow label={t('lock.attempts_label')} description={t('lock.attempts_note')} />
+      </SettingsSection>
+    </SettingsAdvanced>
 
     {#if lock.enabled}
       <SettingsSection title={t('lock.danger_heading')} tone="danger" body="rows">
@@ -362,13 +375,11 @@
     flex-wrap: wrap;
     padding-top: var(--space-3);
   }
-  .notes {
-    padding-top: var(--space-3);
+  .forgot {
+    margin: 0;
+    max-width: 68ch;
     color: var(--text-2);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     line-height: var(--leading);
-  }
-  .notes p {
-    margin: 0 0 var(--space-1);
   }
 </style>

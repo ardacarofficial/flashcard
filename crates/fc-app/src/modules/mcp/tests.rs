@@ -858,3 +858,62 @@ fn serving_attaches_without_startup_work() {
     let j = tx.get_job(job.id).unwrap().unwrap();
     assert_eq!(j.status, "queued", "the app's job is untouched");
 }
+
+/// `mcp.setup`: no collection path outside the desktop start (CLI, tests); the profile's
+/// `collection.db` once the desktop recorded its folder. Every caller but the user's own is
+/// refused (it reveals local paths).
+#[test]
+fn setup_reports_the_desktop_collection_path() {
+    use crate::modules::maintenance::run::RunGuard;
+    use fc_core::Timestamp;
+    let t = TestApp::mem();
+    let bare = t.ok::<McpSetupGet>(Empty {});
+    assert_eq!(bare.db_path, None);
+    assert_eq!(bare.platform, std::env::consts::OS);
+
+    let dir = tempfile::tempdir().unwrap();
+    let (_guard, start) = RunGuard::begin(dir.path(), "1.3.0", Timestamp(1_000)).unwrap();
+    t.app.start_maintenance(dir.path(), None, start);
+    let set = t.ok::<McpSetupGet>(Empty {});
+    assert_eq!(
+        set.db_path.as_deref(),
+        Some(dir.path().join("collection.db").to_string_lossy().as_ref())
+    );
+
+    let d = t.app.registry().descriptor(McpSetupGet::NAME).unwrap();
+    assert_eq!(d.visibility, Visibility::Public);
+    let e = t
+        .app
+        .invoke("v1.mcp.setup", json!({}), &Actor::Mcp(CLIENT.into()))
+        .unwrap_err();
+    assert_eq!(e.code, ErrorCode::PermissionDenied);
+}
+
+/// The `fc` program is found next to the executable first, then on `PATH`; `None` otherwise.
+#[test]
+fn setup_finds_the_fc_program() {
+    use super::setup::find_fc;
+    let app_dir = tempfile::tempdir().unwrap();
+    let path_dir = tempfile::tempdir().unwrap();
+    let exe = app_dir.path().join("flashcard");
+    let path_var = std::env::join_paths([path_dir.path()]).unwrap();
+    assert_eq!(find_fc(Some(&exe), Some(&path_var), "fc"), None);
+    assert_eq!(find_fc(None, None, "fc"), None);
+
+    std::fs::write(path_dir.path().join("fc"), b"").unwrap();
+    assert_eq!(
+        find_fc(Some(&exe), Some(&path_var), "fc"),
+        Some(path_dir.path().join("fc"))
+    );
+    std::fs::write(app_dir.path().join("fc"), b"").unwrap();
+    assert_eq!(
+        find_fc(Some(&exe), Some(&path_var), "fc"),
+        Some(app_dir.path().join("fc")),
+        "the program shipped with the app wins"
+    );
+    // A folder named like the program is not the program.
+    let other = tempfile::tempdir().unwrap();
+    std::fs::create_dir(other.path().join("fc")).unwrap();
+    let only_dir = std::env::join_paths([other.path()]).unwrap();
+    assert_eq!(find_fc(None, Some(&only_dir), "fc"), None);
+}

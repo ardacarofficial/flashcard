@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import { resetDefaultsCache } from '../core/kit/defaults.svelte';
 import { api } from '$lib/api';
 import { i18n } from '$lib/i18n/index.svelte';
 import RemindersScreen from './RemindersScreen.svelte';
@@ -28,7 +29,7 @@ const setting = async (key: string) =>
 describe('reminders screen (dev mock)', () => {
   it('turns the daily reminder on, picks a time and days, and sends a test', async () => {
     render(RemindersScreen, { ctx });
-    expect(await screen.findByText('Today: 12 due, 20 new.')).toBeTruthy();
+    expect(await screen.findByText('Today: 12 due, 20 new.', {}, { timeout: 5000 })).toBeTruthy();
     await fireEvent.click(screen.getByRole('switch', { name: 'Remind me every day' }));
     expect(await setting('reminders.enabled')).toBe(true);
     const [hour, minute, period] = screen.getAllByRole('combobox', { name: 'Time' });
@@ -48,5 +49,37 @@ describe('reminders screen (dev mock)', () => {
     expect(await screen.findByText('Test reminder sent.')).toBeTruthy();
     expect(due).toEqual([{ type: 'reminder_due', data: { counts: { due: 12, new: 20 }, test: true } }]);
     off();
+  });
+
+  it('marks a changed setting and puts its default back with settings.reset', async () => {
+    resetDefaultsCache();
+    const real = api.call.bind(api);
+    const reset: unknown[] = [];
+    const spy = vi.spyOn(api, 'call').mockImplementation(((method: string, params: never) => {
+      if (method === 'settings.schema') {
+        const def = (key: string, d: unknown) => ({
+          module: 'reminders',
+          def: { key, kind: { type: 'bool' }, default: d, label_key: `settings.${key}.label`, description_key: null, advanced: false, scopes: ['app'] },
+        });
+        return Promise.resolve({ settings: [def('reminders.enabled', false), def('reminders.keep_in_tray', false)] });
+      }
+      if (method === 'settings.reset') {
+        reset.push(params);
+        return Promise.resolve({ key: 'reminders.keep_in_tray', value: false, source: null });
+      }
+      return (real as (m: string, p: unknown) => Promise<unknown>)(method, params);
+    }) as typeof api.call);
+    try {
+      render(RemindersScreen, { ctx });
+      const sw = await screen.findByRole('switch', { name: 'Closing the window keeps the app in the tray' }, { timeout: 5000 });
+      const row = sw.closest('.fc-form-row') as HTMLElement;
+      await waitFor(() => expect(within(row).getByText('default')).toBeTruthy());
+      await fireEvent.click(sw);
+      await fireEvent.click(await within(row).findByRole('button', { name: 'Reset to default' }));
+      await waitFor(() => expect(reset).toEqual([{ scope: { kind: 'app' }, key: 'reminders.keep_in_tray' }]));
+    } finally {
+      spy.mockRestore();
+      resetDefaultsCache();
+    }
   });
 });

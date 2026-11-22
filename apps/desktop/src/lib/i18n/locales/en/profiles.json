@@ -10,7 +10,7 @@
   },
   "profiles": {
     "heading": "Profiles",
-    "intro": "Each profile is a separate collection with its own decks, media and settings.",
+    "intro": "Come here to open a separate collection on the same computer (e.g. for a sibling) or to lock the app with a PIN.",
     "unavailable": "Profiles are only available in the desktop app.",
     "default_name": "Main profile",
     "active": "In use",
@@ -25,11 +25,12 @@
     "delete": "Delete",
     "confirm_delete": "Delete profile “{name}” and all its cards? This cannot be undone.",
     "delete_secret": "PIN/password of that profile",
-    "delete_title": "Delete profile?"
+    "delete_title": "Delete profile?",
+    "what": "Each profile is a separate collection: its own decks, cards, media, settings and AI keys; profiles can't see each other's cards. Opening another profile restarts the app with that profile."
   },
   "lock": {
     "heading": "App lock",
-    "intro": "Locks the window, not the files: anyone who can use your computer account can still copy the collection.",
+    "intro": "When on, the app asks for a PIN or password at start and after a while unused. Cards are not encrypted: this only stops someone at your computer from opening the window.",
     "off": "No lock is set for this profile.",
     "on_pin": "Locked with a PIN.",
     "on_password": "Locked with a password.",
@@ -63,12 +64,29 @@
     "held_title": "Links waiting for unlock",
     "held_body": "These flashcard:// links arrived while the app was locked. They run after you unlock, unless you drop them.",
     "held_discard": "Don't open them",
-    "idle_hint": "Locks the window when you have not used the app for this long.",
+    "idle_hint": "If you don't touch the app for this long, the window locks. Unlock it and you carry on where you left off.",
     "current_hint": "Needed to change or remove the lock.",
     "kind_label": "Lock type",
     "kind_hint": "A PIN is 4–12 digits; a password 6–128 characters.",
     "danger_heading": "Remove the app lock",
-    "clear_desc": "The window opens without a PIN or password again. Enter the current one to confirm."
+    "clear_desc": "The window opens without a PIN or password again. Enter the current one to confirm.",
+    "new_hint": "Enter it and press “Set lock”; from then on it is asked at start.",
+    "new_hint_change": "To change it, type the current one above and the new one here.",
+    "forgot": "What if I forget my PIN?",
+    "forgot_desc": "There is no “forgot my PIN” reset inside the app. Your cards are not deleted and not encrypted; from the lock screen you can still open another profile.",
+    "forgot_keychain": "To remove this profile's lock, delete the “{account}” entry under “app.flashcard” in your system keychain (Credential Manager on Windows). On its next start Flashcard says “The lock's data is missing” and offers to remove the lock; then you can set a new PIN.",
+    "forgot_file": "On this computer the lock's hash is kept in the profile list file (profiles.json). To remove the lock, delete the “hash” field of this profile's lock in that file; on its next start Flashcard says “The lock's data is missing” and offers to remove the lock ({account}).",
+    "advanced_summary": "How the PIN is stored and what the lock does not protect.",
+    "storage_heading": "How the lock works",
+    "storage_label": "Where the PIN is kept",
+    "scope_label": "What the lock does not protect",
+    "attempts_label": "Wrong tries",
+    "attempts_note": "The first 5 wrong tries are free; then you wait 1 s, 2 s, 4 s… up to 5 min. The count is kept on disk, so restarting the app gives no fresh tries.",
+    "example": {
+      "idle": "{count} min → if you don't touch the app for {count} minutes, the lock screen comes up.",
+      "idle_never": "Never → it only locks at start and when you press “Lock now”.",
+      "kind": "PIN: 4821 · Password: blue-cat-42"
+    }
   },
   "commands": {
     "profiles": {

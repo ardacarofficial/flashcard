@@ -16,12 +16,11 @@
     "section_nav": "Pages in {section}",
     "group": {
       "general": "General",
-      "study": "Study",
-      "reading": "Reading and modes",
+      "study": "Studying and cards",
       "connections": "Connections",
-      "plugins": "Plugins",
       "data": "Data",
-      "profiles": "Profiles and lock",
+      "advanced": "Advanced",
+      "advanced_hint": "Technical settings: you rarely need these.",
       "other": "More"
     },
     "profile": {

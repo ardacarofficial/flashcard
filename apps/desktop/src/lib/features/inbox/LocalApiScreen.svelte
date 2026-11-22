@@ -1,23 +1,26 @@
 <!--
-  Settings → Connections → Local API (v1.2): settings-style rows. Programs waiting for
-  approval come first (what they ask for as checkboxes, Refuse / Allow); then every known
-  program as one row: name, kind, origin, permissions, last use, status, Revoke / Remove.
-  Port and per-program quotas are the module's settings.
+  Settings → Local API (v1.2, explained in v1.3): what it is for and how approval works in
+  plain words first; programs waiting for approval (what they ask for as checkboxes, Refuse /
+  Allow); then every known program as one row: name, kind, origin, permissions, last use,
+  status, Revoke / Remove. Technical details (port, grantable scopes, callable methods) sit
+  under "Advanced". Port and per-program quotas are the module's settings (command palette).
 -->
 <script lang="ts">
   import { formatDateTime } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
-  import type { ApiClientDto, ApiClientList } from '$lib/api/types';
+  import type { ApiClientDto, ApiClientList, LocalApiMethod } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import type { ScreenCtx } from '../types';
-  import { Button, Checkbox, Chip, Clock, EmptyState, Plug, Skeleton } from '$lib/ui';
+  import { Button, Checkbox, Chip, CircleHelp, Clock, EmptyState, Icon, Inbox, Plug, Shield, Skeleton } from '$lib/ui';
   import type { Tone } from '$lib/ui';
-  import { SettingsPage, SettingsSection } from '../core/kit';
+  import { FormRow, SettingsAdvanced, SettingsPage, SettingsSection } from '../core/kit';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
   let list = $state<ApiClientList | null>(null);
+  /** What a program may call (technical details, under Advanced). */
+  let methods = $state<LocalApiMethod[] | null>(null);
   /** Scopes ticked for each pending client (default: everything it asked for). */
   let grant = $state<Record<string, Record<string, boolean>>>({});
 
@@ -48,18 +51,40 @@
     await load();
   }
 
+  async function loadMethods() {
+    try {
+      methods = (await api.call('local_api.methods', {})).methods;
+    } catch {
+      methods = [];
+    }
+  }
+
   onMount(() => {
     void load();
+    void loadMethods();
     const unsub = api.on(['local_api_', 'data_changed'], () => void load());
     return () => void unsub.then((u) => u());
   });
+  /** How a program calls method `name` over HTTP (code, not UI text). */
+  const endpoint = (name: string) => `POST /v1/${name}`;
   const TONE: Record<string, Tone> = { pending: 'warning', approved: 'success', denied: 'neutral', revoked: 'neutral' };
   const who = (c: ApiClientDto) => [t(`local_api.kind.${c.kind}`), c.origin ? t('local_api.origin', { origin: c.origin }) : ''].filter(Boolean).join(' · ');
 </script>
 
-<SettingsPage title={t('local_api.heading')} subtitle={list ? t('local_api.intro', { port: list.port }) : undefined}>
+<SettingsPage title={t('local_api.heading')} subtitle={t('local_api.intro')}>
+  <SettingsSection title={t('local_api.how.title')} icon={CircleHelp}>
+    <dl class="how">
+      <dt><Icon icon={CircleHelp} size={14} />{t('local_api.how.ask_label')}</dt>
+      <dd>{t('local_api.how.ask')}</dd>
+      <dt><Icon icon={Inbox} size={14} />{t('local_api.how.cards_label')}</dt>
+      <dd>{t('local_api.how.cards')}</dd>
+      <dt><Icon icon={Shield} size={14} />{t('local_api.how.safe_label')}</dt>
+      <dd>{t('local_api.how.safe', { port: list?.port ?? '…' })}</dd>
+    </dl>
+  </SettingsSection>
+
   {#if waiting.length > 0}
-    <SettingsSection title={t('local_api.waiting')} icon={Clock} body="rows">
+    <SettingsSection title={t('local_api.waiting')} description={t('local_api.waiting_hint')} icon={Clock} body="rows">
       {#each waiting as c (c.id)}
         <div class="row pending">
           <div class="text">
@@ -84,7 +109,7 @@
     </SettingsSection>
   {/if}
 
-  <SettingsSection title={t('local_api.clients')} icon={Plug} body="rows">
+  <SettingsSection title={t('local_api.clients')} description={t('local_api.clients_hint')} icon={Plug} body="rows">
     {#if !list}
       <div class="pad"><Skeleton lines={3} /></div>
     {:else if list.clients.length === 0}
@@ -116,6 +141,34 @@
       {/each}
     {/if}
   </SettingsSection>
+
+  <SettingsAdvanced id="local_api" summary={t('local_api.advanced.summary')}>
+    <SettingsSection body="rows">
+      <FormRow label={t('local_api.advanced.port')} description={t('local_api.advanced.port_hint')}>
+        <code class="value" data-testid="local-api-port">{list?.port ?? '…'}</code>
+      </FormRow>
+      <FormRow label={t('local_api.advanced.scopes')} description={t('local_api.advanced.scopes_hint')} stack>
+        <ul class="tech">
+          {#each list?.grantable_scopes ?? [] as s (s)}
+            <li><code>{s}</code><span>{td(`local_api.scope.${s}`)}</span></li>
+          {/each}
+        </ul>
+      </FormRow>
+      <FormRow label={t('local_api.advanced.methods')} description={t('local_api.advanced.methods_hint')} stack>
+        {#if methods === null}
+          <Skeleton lines={2} />
+        {:else if methods.length === 0}
+          <p class="desc">{t('local_api.advanced.none')}</p>
+        {:else}
+          <ul class="tech">
+            {#each methods as m (m.name)}
+              <li><code>{endpoint(m.name)}</code><span>{td(`local_api.scope.${m.permission}`)}</span></li>
+            {/each}
+          </ul>
+        {/if}
+      </FormRow>
+    </SettingsSection>
+  </SettingsAdvanced>
 </SettingsPage>
 
 <style>
@@ -179,6 +232,54 @@
     font-size: var(--text-xs);
     font-weight: var(--weight-medium);
     color: var(--text-2);
+  }
+  .how {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-3) var(--space-4);
+    margin: 0;
+    font-size: var(--text-sm);
+    line-height: var(--leading);
+  }
+  .how dt {
+    align-self: start;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-weight: var(--weight-medium);
+    color: var(--text-1);
+  }
+  .how dd {
+    margin: 0;
+    color: var(--text-2);
+  }
+  .value {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+  .tech {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-1) var(--space-6);
+    font-size: var(--text-sm);
+    color: var(--text-2);
+  }
+  .tech li {
+    display: contents;
+  }
+  .tech code {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: 20px;
+    color: var(--text-1);
+  }
+  @media (max-width: 639.98px) {
+    .how {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
   .actions {
     grid-column: 1 / -1;

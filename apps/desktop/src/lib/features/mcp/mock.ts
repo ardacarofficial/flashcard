@@ -33,6 +33,12 @@ export default {
     };
     return {
       'mcp.tools.list': () => ({ tools: TOOLS, writes_allowed: true }),
+      // What a Windows install reports today: the installer ships no `fc.exe` (fc_path null).
+      'mcp.setup': () => ({
+        db_path: 'C:\\Users\\Deniz\\AppData\\Roaming\\app.flashcard.desktop\\collection.db',
+        fc_path: null,
+        platform: 'windows',
+      }),
       'mcp.servers.list': () => ({
         servers: [...servers].sort((a, b) => a.name.localeCompare(b.name, 'tr')),
       }),

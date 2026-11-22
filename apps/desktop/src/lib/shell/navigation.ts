@@ -15,7 +15,7 @@ import type { MessageKey } from '$lib/i18n/index.svelte';
 import type { ScreenDef } from '$lib/features';
 
 export type SectionId = 'home' | 'library' | 'create' | 'search' | 'stats';
-export type SettingsGroupId = 'general' | 'study' | 'reading' | 'connections' | 'plugins' | 'data' | 'profiles' | 'other';
+export type SettingsGroupId = 'general' | 'study' | 'connections' | 'data' | 'advanced' | 'other';
 
 /** Where an entry is shown. */
 export type Place = { kind: 'section'; id: SectionId } | { kind: 'settings'; id: SettingsGroupId } | { kind: 'inbox' };
@@ -32,15 +32,17 @@ export const SECTIONS: readonly { id: SectionId; label_key: MessageKey; icon: st
   { id: 'stats', label_key: 'shell.section.stats', icon: 'chart' },
 ];
 
-/** Settings groups, in order (docs/11 §2). */
-export const SETTINGS_GROUPS: readonly { id: SettingsGroupId; label_key: MessageKey }[] = [
+/**
+ * Settings groups, in order (v1.3): by what the user is trying to do, most used first; the
+ * technical destinations (MCP, local API, automation, plugins, maintenance, logs) sit apart
+ * under "Advanced" (`hint_key`: the line the sub-navigation shows under its heading).
+ */
+export const SETTINGS_GROUPS: readonly { id: SettingsGroupId; label_key: MessageKey; hint_key?: MessageKey }[] = [
   { id: 'general', label_key: 'shell.group.general' },
   { id: 'study', label_key: 'shell.group.study' },
-  { id: 'reading', label_key: 'shell.group.reading' },
   { id: 'connections', label_key: 'shell.group.connections' },
-  { id: 'plugins', label_key: 'shell.group.plugins' },
   { id: 'data', label_key: 'shell.group.data' },
-  { id: 'profiles', label_key: 'shell.group.profiles' },
+  { id: 'advanced', label_key: 'shell.group.advanced', hint_key: 'shell.group.advanced_hint' },
   { id: 'other', label_key: 'shell.group.other' },
 ];
 
@@ -70,23 +72,28 @@ export const PLACEMENTS: readonly { route: string; place: Place; also?: Place[];
   { route: '/goals', place: section('stats') },
   // Inbox (sidebar footer).
   { route: '/inbox', place: { kind: 'inbox' } },
-  // Settings groups.
+  // Settings groups (v1.3: by task, most used first; technical pages under "Advanced").
+  // General: how the app looks and behaves for you.
   { route: '/settings/*', place: settings('general') },
-  { route: '/shortcuts', place: settings('general') },
   { route: '/reminders', place: settings('general') },
+  { route: '/shortcuts', place: settings('general') },
+  { route: '/profiles', place: settings('general') },
+  // Studying and cards: how cards are scheduled, what they look like, the study modes.
   { route: '/presets', place: settings('study') },
   { route: '/notetypes', place: settings('study') },
-  { route: '/mode-settings', place: settings('reading') },
-  { route: '/mcp', place: settings('connections') },
-  { route: '/local-api', place: settings('connections') },
+  { route: '/mode-settings', place: settings('study') },
+  // Connections: AI (also under Create) and the Subtitle browser extension.
   { route: '/subtitle', place: settings('connections') },
-  { route: '/automation', place: settings('connections') },
-  { route: '/plugins', place: settings('plugins') },
+  // Data.
   { route: '/io', place: settings('data'), also: [section('create')] },
   { route: '/starters', place: settings('data'), also: [section('create')] },
-  { route: '/maintenance', place: settings('data') },
-  { route: '/app-maintenance', place: settings('data') },
-  { route: '/profiles', place: settings('profiles') },
+  // Advanced: rarely needed, technical.
+  { route: '/automation', place: settings('advanced') },
+  { route: '/mcp', place: settings('advanced') },
+  { route: '/local-api', place: settings('advanced') },
+  { route: '/plugins', place: settings('advanced') },
+  { route: '/maintenance', place: settings('advanced') },
+  { route: '/app-maintenance', place: settings('advanced') },
 ];
 
 const routeMatches = (pattern: string, route: string) =>

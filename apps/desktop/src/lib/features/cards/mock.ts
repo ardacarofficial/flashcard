@@ -26,6 +26,103 @@ function classic(): NoteTypeDto {
   };
 }
 
+/** Well-known id of a built-in note type (`fc_core::content::builtin`, `id(n)`). */
+const builtinId = (n: number) => `01900000-0000-7000-8000-${n.toString(16).padStart(12, '0')}`;
+type MockField = [key: string, name: string, kind: NoteTypeDto['fields'][number]['kind'], required?: boolean, unique?: boolean];
+const ANSWER = '{{FrontSide}}\n<hr class="fc-answer">\n';
+
+/** A few more built-ins (TR names, as the app seeds them) so the note type screen has choices. */
+function builtins(): NoteTypeDto[] {
+  const make = (
+    n: number,
+    builtin: string,
+    name: string,
+    kind: NoteTypeDto['kind'],
+    fields: MockField[],
+    templates: NoteTypeDto['templates'],
+  ): NoteTypeDto => ({
+    id: builtinId(n),
+    name,
+    kind,
+    fields: fields.map(([key, name, kind, required = false, unique = false]) => ({
+      key,
+      name,
+      kind,
+      required: required || unique,
+      unique,
+      searchable: kind === 'text' || kind === 'rich_text',
+      default_value: null,
+    })),
+    templates,
+    css: '',
+    sort_field: fields[0]![0],
+    version: 1,
+    builtin,
+    updated_at: 0,
+  });
+  return [
+    make(2, 'classic_reverse', 'Klasik + ters', 'standard', [['front', 'Ön', 'rich_text', true, true], ['back', 'Arka', 'rich_text', true]], [
+      { key: 'forward', name: 'İleri', front: '{{front}}', back: `${ANSWER}{{back}}`, card_type: 'classic' },
+      { key: 'reverse', name: 'Ters', front: '{{back}}', back: `${ANSWER}{{front}}`, card_type: 'classic' },
+    ]),
+    make(5, 'cloze', 'Boşluk doldurma', 'cloze', [['text', 'Metin', 'rich_text', true, true], ['extra', 'Ek bilgi', 'rich_text']], [
+      { key: 'cloze', name: 'Cloze', front: '{{cloze:text}}', back: '{{cloze:text}}{{#extra}}\n<hr class="fc-answer">\n{{extra}}{{/extra}}', card_type: 'cloze' },
+    ]),
+    make(
+      10,
+      'vocabulary',
+      'Kelime kartı',
+      'standard',
+      [
+        ['word', 'Kelime', 'rich_text', true, true],
+        ['meaning', 'Anlam', 'rich_text', true],
+        ['pronunciation', 'Telaffuz', 'text'],
+        ['example', 'Örnek cümle', 'rich_text'],
+        ['audio', 'Ses', 'audio'],
+        ['image', 'Resim', 'image'],
+      ],
+      [
+        { key: 'recognition', name: 'Tanıma', front: '{{word}}', back: `${ANSWER}{{meaning}}{{#example}}<div class="fc-example">{{example}}</div>{{/example}}`, card_type: 'classic' },
+        { key: 'production', name: 'Üretme', front: '{{meaning}}', back: `${ANSWER}{{word}}{{#example}}<div class="fc-example">{{example}}</div>{{/example}}`, card_type: 'classic' },
+      ],
+    ),
+    make(
+      12,
+      'subtitle',
+      'Altyazı kartı',
+      'standard',
+      [
+        ['word', 'Kelime', 'rich_text', true],
+        ['surface', 'Geçtiği hâli', 'text'],
+        ['pos', 'Sözcük türü', 'text'],
+        ['meaning', 'Anlam', 'rich_text'],
+        ['sentence', 'Cümle', 'rich_text'],
+        ['translation', 'Çeviri', 'rich_text'],
+        ['image', 'Ekran görüntüsü', 'image'],
+        ['audio', 'Ses', 'audio'],
+        ['source', 'Kaynak', 'rich_text'],
+      ],
+      [
+        {
+          key: 'recognition',
+          name: 'Tanıma',
+          front: '<div class="fc-word">{{word}}</div>{{#sentence}}<div class="fc-example">{{sentence}}</div>{{/sentence}}',
+          back: `${ANSWER}{{meaning}}{{#translation}}<div class="fc-example">{{translation}}</div>{{/translation}}{{#source}}<div class="fc-source">{{source}}</div>{{/source}}`,
+          card_type: 'classic',
+        },
+      ],
+    ),
+  ];
+}
+
+/** Just enough of the template language for a believable preview (the real one is fc-core). */
+function renderSide(src: string, fields: Record<string, string>, front = ''): string {
+  return src
+    .replace(/\{\{FrontSide\}\}/g, front)
+    .replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_m, k: string, inner: string) => (fields[k]?.trim() ? inner : ''))
+    .replace(/\{\{(?:[\w-]+:)*(\w+)\}\}/g, (_m, k: string) => esc(fields[k] ?? '').replace(/\{\{c\d+::([^}]*)\}\}/g, '<b>[…]</b>'));
+}
+
 export default {
   modules: [
     module('cardtypes', [menu('cardtypes.notetypes', 'nav.notetypes', '/notetypes', 60)]),
@@ -37,7 +134,7 @@ export default {
     module('code_highlight', []),
   ],
   handlers: ({ notes, emit, cardFlags }: MockEnv) => {
-    const types: NoteTypeDto[] = [classic()];
+    const types: NoteTypeDto[] = [classic(), ...builtins()];
     const media = new Map<string, { dto: MediaDto; data: string }>();
     const flags: FlagDto[] = ['red', 'orange', 'green', 'blue', 'pink', 'turquoise', 'purple'].map((color, i) => ({
       flag: i + 1,
@@ -82,12 +179,23 @@ export default {
     return {
       'notetypes.list': () => ({ notetypes: types }),
       'notetypes.get': ({ id }) => requireType(id),
-      'notetypes.usage': ({ id }) => ({
-        notes: notes.filter((n) => n.notetype_id === id).length,
-        cards_by_template: {},
-      }),
-      'notetypes.create': ({ name }) => {
-        const nt = { ...classic(), id: `nt-${types.length + 1}`, name: name ?? 'Note type', builtin: null };
+      'notetypes.usage': ({ id }) => {
+        const of = notes.filter((n) => n.notetype_id === id);
+        const cards_by_template: Record<string, number> = {};
+        for (const c of of.flatMap((n) => n.cards)) cards_by_template[c.template_key] = (cards_by_template[c.template_key] ?? 0) + 1;
+        return { notes: of.length, cards_by_template };
+      },
+      'notetypes.create': ({ name, copy_from, definition }) => {
+        const src = copy_from ? requireType(copy_from) : null;
+        const base: NoteTypeDto = src ? structuredClone(src) : definition ? { ...classic(), ...structuredClone(definition) } : classic();
+        const nt: NoteTypeDto = {
+          ...base,
+          id: `nt-${types.length + 1}`,
+          name: name ?? (src ? `${src.name} (2)` : 'Note type'),
+          fields: base.fields.map((f, i) => ({ ...f, key: f.key || `field_${i + 1}` })),
+          version: 1,
+          builtin: null,
+        };
         types.push(nt);
         emit({ type: 'note_type_changed', data: { notetype_id: nt.id } });
         return nt;
@@ -103,7 +211,10 @@ export default {
       },
       'notetypes.delete': ({ id }) => {
         const nt = requireType(id);
+        if (id === CLASSIC_NOTETYPE_ID) throw err('CONFLICT_NOTE_TYPE_REQUIRED', 'errors.conflict.note_type_required', id);
+        if (notes.some((n) => n.notetype_id === id)) throw err('CONFLICT_NOTE_TYPE_IN_USE', 'errors.conflict.note_type_in_use', id);
         types.splice(types.indexOf(nt), 1);
+        emit({ type: 'note_type_changed', data: { notetype_id: id } });
         return nt;
       },
       'cardtypes.list': () => ({
@@ -112,7 +223,14 @@ export default {
           name_key: `cardtypes.engine.${id}`,
         })),
       }),
-      'cards.preview': ({ fields }) => ({ cards: Object.values(fields).some((v) => v.trim()) ? [side(fields)] : [] }),
+      'cards.preview': ({ fields, definition }) => {
+        if (!definition) return { cards: Object.values(fields).some((v) => v.trim()) ? [side(fields)] : [] };
+        const cards = definition.templates.map((t): RenderedSides => {
+          const question = renderSide(t.front, fields);
+          return { ...side(fields), template_key: t.key, template_name: t.name, card_type: t.card_type, question, answer: renderSide(t.back, fields, question) };
+        });
+        return { cards: cards.filter((c) => c.question.trim()) };
+      },
       'cards.meta': ({ note_id }) => ({ items: requireNote(note_id).cards.map(metaOf) }),
       'cards.set_flag': ({ ids, flag, on }) => {
         const items = ids.map((id) => {

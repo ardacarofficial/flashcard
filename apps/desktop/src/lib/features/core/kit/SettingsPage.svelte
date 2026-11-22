@@ -1,6 +1,6 @@
 <!--
-  Frame of one Settings (or Statistics) page (v1.2): the PageHeader (title + one-line
-  description) and the page's sections stacked with even gaps — no boxes. Every settings
+  Frame of one Settings (or Statistics) page (v1.2): the PageHeader (title + one plain
+  sentence: what this page is for and when you would touch it) and the page's sections stacked with even gaps — no boxes. Every settings
   screen starts with it so titles, widths, row heights and gaps match. Destructive sections
   (`SettingsSection tone="danger"`) go last.
 -->
@@ -27,6 +27,10 @@
 </div>
 
 <style>
+  .fc-settings-page {
+    /* Rows stack their controls under the text when this column is narrow (FormRow). */
+    container: fc-settings / inline-size;
+  }
   .fc-settings-page.narrow {
     max-width: 720px;
   }

@@ -294,6 +294,7 @@ export type * from "./McpServerDto";
 export type * from "./McpServerId";
 export type * from "./McpServerList";
 export type * from "./McpServerRef";
+export type * from "./McpSetup";
 export type * from "./McpToolAccess";
 export type * from "./McpToolInfo";
 export type * from "./McpToolList";

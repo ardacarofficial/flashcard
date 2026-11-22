@@ -12,25 +12,25 @@
     "reminders": {
       "enabled": {
         "label": "Günlük hatırlatıcı",
-        "description": "Bugün bekleyen kart varsa bildirim göster."
+        "description": "Açıksa, seçtiğin saatte bekleyen kart varsa bir bildirim gelir; o gün zaten çalıştıysan gelmez."
       },
       "minute_of_day": {
         "label": "Hatırlatma saati",
-        "description": "Yerel saat, gece yarısından sonraki dakika."
+        "description": "Bildirimin geleceği saat (bu bilgisayarın saatiyle)."
       },
       "weekdays": {
         "label": "Hatırlatma günleri",
-        "description": "Hatırlatıcının gelebileceği günler."
+        "description": "Yalnız seçili günlerde hatırlatılır."
       },
       "keep_in_tray": {
         "label": "Tepside çalışmaya devam et",
-        "description": "Pencereyi kapatmak onu gizler; uygulama sistem tepsisinde kalır ve hatırlatıcılar gelmeye devam eder."
+        "description": "Açıksa pencereyi kapatmak onu yalnız gizler: uygulama sistem tepsisinde çalışmaya devam eder ve hatırlatıcılar gelir. Kapalıysa pencereyi kapatınca uygulama da kapanır."
       }
     }
   },
   "reminders": {
     "heading": "Hatırlatıcılar",
-    "intro": "Seçtiğin saatte günde bir bildirim; yalnız bekleyen kart varsa ve o gün henüz çalışmadıysan.",
+    "intro": "Çalışmayı unutmamak için günde bir bildirim: hangi saatte ve hangi günlerde geleceğini buradan seçersin.",
     "enabled": "Her gün hatırlat",
     "time": "Saat",
     "days": "Günler",
@@ -52,10 +52,20 @@
     "sent": "Deneme hatırlatması gönderildi.",
     "notification": "Bugün {total} kart seni bekliyor ({due} tekrar, {new} yeni).",
     "daily": "Günlük hatırlatıcı",
-    "time_hint": "Bildirimin yerel saati.",
-    "test_hint": "Bildirimlerin sana ulaştığını dene.",
+    "time_hint": "Bildirimin geleceği saat (bu bilgisayarın saatiyle). Uygulama o saatte açık değilse, sonraki 3 saat içinde açtığında yine hatırlatır.",
+    "test_hint": "Bildirimlerin sana ulaşıyor mu, hemen dene. Gelmiyorsa işletim sisteminin bildirim ayarlarında Flashcard'a izin ver.",
     "tray": "Sistem tepsisi",
-    "test_row": "Deneme bildirimi"
+    "test_row": "Deneme bildirimi",
+    "daily_desc": "Bildirim yalnız bekleyen kart varsa ve o gün henüz çalışmadıysan gelir; günde en fazla bir kez.",
+    "tray_desc": "Hatırlatıcının gelebilmesi için uygulamanın arka planda açık kalması gerekir.",
+    "desc": {
+      "enabled": "Açıksa, seçtiğin saatte bekleyen kart varsa bir bildirim gelir. O gün zaten çalıştıysan ya da bekleyen kart yoksa gelmez.",
+      "days": "Yalnız seçili günlerde hatırlatılır. Hafta sonu dinlenmek istiyorsan Cmt ve Paz'ı kapat.",
+      "keep_in_tray": "Açıksa pencereyi kapatmak onu yalnız gizler; uygulama saatin yanındaki tepside çalışmaya devam eder, hatırlatıcılar gelir. Kapalıysa pencereyi kapatınca uygulama da kapanır ve o gün hatırlatma gelmez."
+    },
+    "example": {
+      "enabled": "Saat {time} olunca “Bugün {total, plural, other {# kart}} seni bekliyor” diye bir bildirim gelir."
+    }
   },
   "commands": {
     "reminders": {

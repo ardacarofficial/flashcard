@@ -7,6 +7,8 @@ methods! {
     // ---- mcp ----
     /// Tools the MCP server exposes (and whether writes are allowed).
     McpToolsList = "mcp.tools.list", Query, "mcp", "mcp:read", Public, undo: false, Empty => McpToolList;
+    /// Paths an MCP client configuration needs (collection file, `fc` program, OS).
+    McpSetupGet = "mcp.setup", Query, "mcp", "mcp:read", Public, undo: false, Empty => McpSetup;
     /// Registered external MCP servers.
     McpServersList = "mcp.servers.list", Query, "mcp", "mcp:read", Public, undo: false, Empty => McpServerList;
     /// Registers an external MCP server.
