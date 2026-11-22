@@ -44,7 +44,7 @@ Gösterim: `[v0.2]` = hedef sürüm · 🧱 = dayandığı yapı taşları
   - Resim üzerinde gizleme
   - Kelime kartı (kelime, anlam, telaffuz, örnek cümle, ses, resim)
 - Kullanıcı kendi not türünü oluşturabilir, alan ekleyip çıkarabilir.
-- Kart şablonları alanları yerleştiren bir şablon dili kullanır: `{{kelime}}`, `{{#ornek}}...{{/ornek}}` (koşullu), `{{tts:kelime}}` (sesli okuma), `{{type:anlam}}` (yazarak cevaplama), `{{hint:ornek}}` (ipucu).
+- Kart şablonları alanları yerleştiren bir şablon dili kullanır: `{{kelime}}`, `{{#ornek}}...{{/ornek}}` (koşullu), `{{tts:kelime}}` (sesli okuma), `{{type:anlam}}` (yazarak cevaplama), `{{hint:ornek}}` (ipucu), `{{unless_same:diger:alan}}` (alan, metni diğer alanınkiyle aynı değilse; v1.3).
 - Şablon dili saf bir fonksiyondur: `render(şablon, alanlar, bağlam) → içerik`. Frontend'den bağımsızdır.
 
 ## 4. 🧩 Kart türleri

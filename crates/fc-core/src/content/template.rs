@@ -8,6 +8,7 @@
 //! | `{{type:field}}` | Typed-answer box; the field's text is the expected answer |
 //! | `{{hint:field}}` | Collapsed hint |
 //! | `{{cloze:field}}` | Cloze deletions of the field for the current card |
+//! | `{{unless_same:other:field}}` | The field, unless its text is the same as `other`'s (case and spacing ignored) — e.g. a dictionary form shown only when it differs from the form as seen (v1.3) |
 //! | `{{#field}}…{{/field}}` | Shown only if the field is non-empty |
 //! | `{{^field}}…{{/field}}` | Shown only if the field is empty |
 //! | `{{FrontSide}}`, `{{Deck}}`, `{{Tags}}`, `{{Card}}`, `{{Type}}` | Special values |
@@ -22,7 +23,7 @@ use std::fmt;
 pub const SPECIAL_NAMES: &[&str] = &["FrontSide", "Deck", "Tags", "Card", "Type"];
 
 /// Filters understood by the built-in renderer.
-pub const KNOWN_FILTERS: &[&str] = &["text", "tts", "type", "hint", "cloze"];
+pub const KNOWN_FILTERS: &[&str] = &["text", "tts", "type", "hint", "cloze", "unless_same"];
 
 /// A template node.
 #[derive(Debug, Clone, PartialEq, Eq)]

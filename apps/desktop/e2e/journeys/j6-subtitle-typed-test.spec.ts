@@ -26,11 +26,13 @@ test('J6 subtitle card typed test: typing the meaning only is correct', async ()
   const paper = await rpc<Paper>('modes.test.paper', { session_id: s.id });
   expect(paper.questions).toHaveLength(subtitle.length);
 
-  // Each question shows the word in its subtitle line: answer with that capture's meaning.
+  // Each question shows the word (v1.3 X1: as heard, its dictionary form beside it — not the
+  // line): answer with that capture's meaning.
   const answers = paper.questions.map((q) => {
     expect(q.kind).toBe('written');
     const shown = text(q.prompt_html);
-    const capture = subtitle.find((c) => shown.includes(c.sentence));
+    const words = shown.trim().split(' ');
+    const capture = subtitle.find((c) => words[0] === c.surface);
     expect(capture, `no seeded capture in prompt: ${shown}`).toBeTruthy();
     return { index: q.index, text: capture?.meaning ?? '' };
   });

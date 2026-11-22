@@ -240,6 +240,10 @@
       "day_start_hour": {
         "label": "Next day starts at",
         "description": "Local hour when a new study day begins."
+      },
+      "learn_ahead_mins": {
+        "label": "Show learning cards early (minutes)",
+        "description": "When nothing else is left, a learning card whose step is almost up comes up to this many minutes early, so you don't wait for nothing. If you would have to wait longer, you see \"Next card in …\". 0: always wait until the step is up."
       }
     }
   },

@@ -7,16 +7,12 @@ import { endOpenSessions, expect, goToSection, makeDeck, openApp, press, session
 
 test('S2 answer 3, Esc, reopen the launcher: Continue is first and resumes the same session', async ({ page }) => {
   await endOpenSessions();
-  // Enough new cards of its own that the session cannot run dry in 3 answers.
+  // Enough new cards of its own that the collection's queue cannot run dry in 4 answers.
   const name = uniq('S2');
   await makeDeck(name, Array.from({ length: 8 }, (_, i): [string, string] => [`${name} w${i}`, `anlam ${i}`]));
   await openApp(page);
 
-  // Started from its own deck (the whole collection's queue may be used up by earlier
-  // journeys today); the launcher is reopened from Home below.
-  await goToSection(page, 'shell.section.library');
-  await page.getByTestId('deck-row').filter({ hasText: name }).first().click();
-  await page.getByTestId('deck-study').focus();
+  // Home → Enter: the launcher on the whole collection (each deck's own queue, X1).
   await press(page, 'Enter');
   await expect(page.getByTestId('launcher-start')).toBeEnabled();
   await press(page, 'Enter');

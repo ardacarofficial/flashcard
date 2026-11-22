@@ -92,6 +92,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         return Err(nothing_to_study(reason, next));
     }
     let day_start_hour = planner.day_start_hour();
+    let learn_ahead_ms = planner.learn_ahead_ms();
     drop(planner);
     let config = SessionConfig {
         kind: req.kind,
@@ -133,6 +134,7 @@ pub(super) fn start(req: StartSession, ctx: &mut CommandCtx<'_>) -> AppResult<Co
         },
         config,
         state,
+        learn_ahead_ms,
     );
     session.save(ctx.tx)?;
     Ok(CommandOutcome {

@@ -139,7 +139,8 @@ function builtins(): NoteTypeDto[] {
         {
           key: 'recognition',
           name: 'Tanıma',
-          front: '<div class="fc-word">{{word}}</div>{{#sentence}}<div class="fc-example">{{sentence}}</div>{{/sentence}}',
+          // v1.3 X1 (migration 1301): the word only — the line is the first hint.
+          front: '<div class="fc-word">{{#surface}}{{surface}} <span class="fc-lemma">{{unless_same:surface:word}}</span>{{/surface}}{{^surface}}{{word}}{{/surface}}</div>',
           back:
             '<div class="fc-word">{{word}}</div>\n<hr class="fc-answer">\n<div class="fc-part fc-part-meaning">{{meaning}}</div>{{#pos}}<div class="fc-pron">{{pos}}</div>{{/pos}}' +
             examplePart('sentence', 'translation') +

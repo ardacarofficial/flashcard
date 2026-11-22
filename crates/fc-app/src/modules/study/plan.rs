@@ -22,7 +22,7 @@ use fc_core::{CardId, DeckId, SessionId, Timestamp};
 use fc_storage::repo::{NewCardsFirst, ReviewLogRecord, StudyCardFilter, REVIEW_MODE_IMPORTED};
 use fc_storage::Reads;
 use fc_study::day::{StudyDay, MAX_TZ_OFFSET_MINS};
-use fc_study::session::{self as queue, BuildOptions, Order, QueueEntry, LEARN_AHEAD_MS};
+use fc_study::session::{self as queue, BuildOptions, Order, QueueEntry, QueueKind};
 use std::collections::{HashMap, HashSet};
 
 /// `ux_state` key of the client's UTC offset as last given to `study.start`: queries without
@@ -61,6 +61,12 @@ pub(crate) fn client_tz(reads: &dyn Reads, given: Option<i32>) -> AppResult<i32>
         .and_then(|v| i32::try_from(v).ok())
         .filter(|v| v.abs() <= MAX_TZ_OFFSET_MINS)
         .unwrap_or(0))
+}
+
+/// `study.learn_ahead_mins` in ms (v1.3 X1): how long before its step is due a waiting learning
+/// card is shown when nothing else is left.
+pub(crate) fn learn_ahead_ms(reads: &dyn Reads) -> AppResult<i64> {
+    Ok(i64::from(setting_u32(reads, &SettingScope::App, LEARN_AHEAD_MINS)?) * 60_000)
 }
 
 /// `study.day_start_hour`.
@@ -143,6 +149,8 @@ pub(crate) struct Planner<'a> {
     now: Timestamp,
     tz: i32,
     day_start_hour: u8,
+    /// `study.learn_ahead_mins` in ms.
+    learn_ahead_ms: i64,
     index: DeckIndex,
     empty: EmptyCards<'a>,
     /// Reviews since the study day began, any mode (loaded on first use).
@@ -163,6 +171,7 @@ impl<'a> Planner<'a> {
             now,
             tz,
             day_start_hour: day_start_hour(v.reads)?,
+            learn_ahead_ms: learn_ahead_ms(v.reads)?,
             index: DeckIndex::load(v.reads)?,
             empty: EmptyCards::new(v),
             today: None,
@@ -177,6 +186,11 @@ impl<'a> Planner<'a> {
 
     pub fn index(&self) -> &DeckIndex {
         &self.index
+    }
+
+    /// The learn-ahead window (`study.learn_ahead_mins`), ms.
+    pub fn learn_ahead_ms(&self) -> i64 {
+        self.learn_ahead_ms
     }
 
     fn day(&self) -> StudyDay {
@@ -201,19 +215,24 @@ impl<'a> Planner<'a> {
         self.index.require_live(d)?;
         let subdecks = match include_subdecks {
             Some(b) => b,
-            None => crate::settings::resolve_stored(
-                self.v.reads,
-                &SettingScope::Deck(d),
-                "decks.include_subdecks",
-            )?
-            .and_then(|(v, _)| v.as_bool())
-            .unwrap_or(true),
+            None => self.includes_subdecks(d)?,
         };
         Ok(Some(if subdecks {
             self.index.live_subtree(d)
         } else {
             vec![d]
         }))
+    }
+
+    /// The deck's `decks.include_subdecks` setting (default on).
+    fn includes_subdecks(&self, deck: DeckId) -> AppResult<bool> {
+        Ok(crate::settings::resolve_stored(
+            self.v.reads,
+            &SettingScope::Deck(deck),
+            "decks.include_subdecks",
+        )?
+        .and_then(|(v, _)| v.as_bool())
+        .unwrap_or(true))
     }
 
     fn today_reviews(&mut self) -> AppResult<&[ReviewLogRecord]> {
@@ -311,15 +330,112 @@ impl<'a> Planner<'a> {
         })
     }
 
-    /// Plans the queue of `req`.
+    /// Plans the queue of `req`. Today's queue of the whole collection (no deck, daily
+    /// limits) is the union of what each deck serves under its own options
+    /// ([`Planner::plan_collection`]).
     pub fn plan(&mut self, req: &PlanRequest<'_>) -> AppResult<Plan> {
+        if req.deck_id.is_none() && is_limited(req) {
+            return self.plan_collection(req);
+        }
         self.plan_inner(req, false)
+    }
+
+    /// The decks whose own plans make up the whole collection's (v1.3 X1): every top-level
+    /// deck, and below a deck that does not include its sub-decks, those sub-decks (the same
+    /// rule further down). Together they cover every live deck exactly once, so the sum of
+    /// their today counts is the collection's.
+    pub fn collection_roots(&self) -> AppResult<Vec<DeckId>> {
+        let mut roots = Vec::new();
+        let mut pending: Vec<Option<DeckId>> = vec![None];
+        while let Some(parent) = pending.pop() {
+            let mut below = Vec::new();
+            for d in self.index.children(parent) {
+                roots.push(d.id);
+                if !self.includes_subdecks(d.id)? {
+                    below.push(Some(d.id));
+                }
+            }
+            pending.extend(below.into_iter().rev());
+        }
+        Ok(roots)
+    }
+
+    /// Today's queue of the whole collection (v1.3 X1): the union of the plans of
+    /// [`Planner::collection_roots`] — each deck with its own preset (new/reviews a day,
+    /// order, sibling burying), sub-deck setting and `study.new_per_session` — interleaved:
+    /// learning cards by due time, then reviews and new cards taken in turn from each deck.
+    /// A collection-wide cap applies only when one is asked for (`new_limit`) or the user
+    /// set `study.new_per_session` app-wide.
+    fn plan_collection(&mut self, req: &PlanRequest<'_>) -> AppResult<Plan> {
+        let roots = self.collection_roots()?;
+        let filter = StudyFilter {
+            limit: None,
+            ..req.filter.clone()
+        };
+        let mut learning: Vec<QueueEntry> = Vec::new();
+        let mut reviews: Vec<Vec<QueueEntry>> = Vec::new();
+        let mut new: Vec<Vec<QueueEntry>> = Vec::new();
+        let mut query = None;
+        let mut rng = SplitMix64::new(req.seed);
+        for root in roots {
+            let plan = self.plan_inner(
+                &PlanRequest {
+                    kind: req.kind,
+                    scope: req.scope,
+                    deck_id: Some(root),
+                    include_subdecks: None,
+                    filter: &filter,
+                    from_session: req.from_session,
+                    new_limit: req.new_limit,
+                    order: req.order,
+                    seed: req.seed,
+                },
+                false,
+            )?;
+            query = plan.query;
+            rng = plan.rng;
+            let (mut r, mut n) = (Vec::new(), Vec::new());
+            for e in plan.queue {
+                match e.kind {
+                    QueueKind::Learning => learning.push(e),
+                    QueueKind::Review => r.push(e),
+                    QueueKind::New => n.push(e),
+                }
+            }
+            reviews.push(r);
+            new.push(n);
+        }
+        // Learning cards shown now (no due time) first, then by due time (stable: each
+        // deck's own order otherwise).
+        learning.sort_by_key(|e| e.due.map_or((0, 0), |d| (1, d.0)));
+        let cap = match req.new_limit {
+            Some(n) => Some(n),
+            None => crate::settings::resolve_stored(self.v.reads, &SettingScope::App, NEW_PER_SESSION)?
+                .and_then(|(v, _)| v.as_u64())
+                .map(|n| u32::try_from(n).unwrap_or(u32::MAX)),
+        };
+        let mut new = interleave(new);
+        if let Some(cap) = cap {
+            new.truncate(cap as usize);
+        }
+        let mut queue = learning;
+        queue.extend(interleave(reviews));
+        queue.extend(new);
+        if let Some(limit) = req.filter.limit {
+            queue.truncate(limit as usize);
+        }
+        Ok(Plan {
+            queue,
+            rng,
+            query,
+            practice: false,
+        })
     }
 
     /// Whether a card of `queue` can be shown now (a learning card counts within the
     /// learn-ahead window, as the session shows it).
     pub fn available(&self, queue: &[QueueEntry]) -> bool {
-        queue::next_entry(queue, self.now, LEARN_AHEAD_MS).is_some()
+        queue::next_entry(queue, self.now, self.learn_ahead_ms).is_some()
     }
 
     /// The number a launcher shows for a plan: its cards when one can be shown now, else 0
@@ -339,8 +455,12 @@ impl<'a> Planner<'a> {
         queue: &[QueueEntry],
     ) -> AppResult<(StudyEmptyReason, Option<Timestamp>)> {
         if let Some(due) = queue::next_due(queue) {
-            // Every card waits for its learning step: shown from `due - learn-ahead`.
-            return Ok((StudyEmptyReason::Waiting, Some(due.plus_millis(-LEARN_AHEAD_MS))));
+            // Every card waits for its learning step: served from `due - learn-ahead` (the
+            // moment a session shows it).
+            return Ok((
+                StudyEmptyReason::Waiting,
+                Some(queue::available_at(due, self.learn_ahead_ms)),
+            ));
         }
         let decks = self.decks(req.deck_id, req.include_subdecks)?;
         if self.inventory(decks.as_deref())? == 0 {
@@ -429,12 +549,7 @@ impl<'a> Planner<'a> {
         // today); hand-picked sets (custom, mistakes, learn/test/match without a scope,
         // practice scopes) are not limited — their schedule-changing answers still count
         // towards later sessions (docs/10 §24).
-        let limited = !lift_limits
-            && match req.scope {
-                Some(StudyScope::Due | StudyScope::New) => true,
-                Some(_) => false,
-                None => req.kind == StudyKind::Normal,
-            };
+        let limited = !lift_limits && is_limited(req);
         let daily = if limited {
             Some(self.daily_left(req.deck_id, deck_ids.as_deref())?)
         } else {
@@ -584,6 +699,32 @@ impl<'a> Planner<'a> {
             practice,
         })
     }
+}
+
+/// Whether `req` is today's queue under the daily limits (scopes `due`/`new`, a normal
+/// session without a scope); hand-picked sets (custom, mistakes, learn/test/match without a
+/// scope, practice scopes) are not limited.
+fn is_limited(req: &PlanRequest<'_>) -> bool {
+    match req.scope {
+        Some(StudyScope::Due | StudyScope::New) => true,
+        Some(_) => false,
+        None => req.kind == StudyKind::Normal,
+    }
+}
+
+/// Takes one entry from each list in turn (lists keep their own order).
+fn interleave(lists: Vec<Vec<QueueEntry>>) -> Vec<QueueEntry> {
+    let total = lists.iter().map(Vec::len).sum();
+    let mut out = Vec::with_capacity(total);
+    let mut iters: Vec<_> = lists.into_iter().map(Vec::into_iter).collect();
+    while out.len() < total {
+        for it in &mut iters {
+            if let Some(e) = it.next() {
+                out.push(e);
+            }
+        }
+    }
+    out
 }
 
 fn order_of(o: StudyOrder) -> Order {

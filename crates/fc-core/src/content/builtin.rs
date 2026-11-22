@@ -680,8 +680,14 @@ pub fn sentence(now: Timestamp, locale: Locale) -> NoteType {
     )
 }
 
+/// Front of the Subtitle card (v1.3): the surface form large (else the dictionary form), the
+/// dictionary form small beside it when it differs (`unless_same`).
+pub const SUBTITLE_FRONT: &str = "<div class=\"fc-word\">{{#surface}}{{surface}} <span class=\"fc-lemma\">{{unless_same:surface:word}}</span>{{/surface}}{{^surface}}{{word}}{{/surface}}</div>";
+
 /// Subtitle card (v1.2, docs/06 §5.1): a word picked in a video subtitle by the Subtitle
-/// browser extension. The front shows the word in its line (the term in bold); the back
+/// browser extension. The front (v1.3, migration 1301) shows the word only: the form as it
+/// appeared large, the dictionary form small beside it when different — the line itself is
+/// the first hint (the word highlighted), not part of the question. The back
 /// (v1.3) shows the word, then three labelled parts: the meaning (with the part of speech),
 /// the example — the line and its translation — and where it came from (title · time, a link
 /// to that moment), with the screenshot and the audio clip between. No field is unique: the
@@ -696,7 +702,8 @@ pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
             f("word", "Word", "Kelime", FieldKind::RichText)
                 .req()
                 .role(FieldRole::Term),
-            f("surface", "As it appeared", "Geçtiği hâli", FieldKind::Text).role(FieldRole::Surface),
+            f("surface", "As it appeared", "Geçtiği hâli", FieldKind::Text)
+                .role(FieldRole::Surface),
             f("pos", "Part of speech", "Sözcük türü", FieldKind::Text),
             f("meaning", "Meaning", "Anlam", FieldKind::RichText).role(FieldRole::Meaning),
             f("sentence", "Sentence", "Cümle", FieldKind::RichText).role(FieldRole::Example),
@@ -712,7 +719,7 @@ pub fn subtitle(now: Timestamp, locale: Locale) -> NoteType {
                 en: "Recognition",
                 tr: "Tanıma",
             },
-            front: "<div class=\"fc-word\">{{word}}</div>{{#sentence}}<div class=\"fc-example\">{{sentence}}</div>{{/sentence}}",
+            front: SUBTITLE_FRONT,
             back: concat!(
                 "<div class=\"fc-word\">{{word}}</div>\n<hr class=\"fc-answer\">\n",
                 "<div class=\"fc-part fc-part-meaning\">{{meaning}}</div>",
@@ -784,7 +791,11 @@ mod tests {
         assert!(at("fc-example-translation") < at("fc-part-source"));
         assert!(back.contains("data-fc-part=\"example\""));
         assert!(back.contains("data-fc-part=\"source\""));
-        // The line is on the front already; the back does not repeat the whole front.
+        // v1.3 X1: the front asks with the word only (the line is the first hint, so it is
+        // not on the front); the back does not repeat the front.
+        let front = &st.templates[0].front;
+        assert!(!front.contains("sentence"));
+        assert!(front.contains("{{surface}}") && front.contains("{{unless_same:surface:word}}"));
         assert!(!back.contains("{{FrontSide}}"));
         assert!(st.css.contains(".fc-part-example"));
 

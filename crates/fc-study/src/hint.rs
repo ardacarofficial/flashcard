@@ -83,103 +83,200 @@ pub fn hint(kind: HintKind, answer: &str, level: u32) -> Option<String> {
     (hidden > 0).then_some(out)
 }
 
-/// What replaces the term in a context hint.
+/// What replaces the answer in a context hint.
 pub const BLANK: &str = "___";
 
-/// Stand-in for the blanked occurrence while the sentence is turned into text (a private-use
-/// character no real sentence contains).
-const SENTINEL: char = '\u{E000}';
+/// Stand-ins while the sentence is turned into text (private-use characters no real sentence
+/// contains): the word's occurrence between [`OPEN`] and [`CLOSE`], the blank as [`HOLE`].
+const OPEN: char = '\u{E000}';
+const CLOSE: char = '\u{E001}';
+const HOLE: char = '\u{E002}';
 
-/// An example sentence with the term blanked.
+/// A context hint: the example sentence, the answer blanked where it occurs, the card's word
+/// highlighted when it is not the answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MaskedSentence {
-    /// Plain text, the occurrence replaced by [`BLANK`].
+    /// Plain text, the blank as [`BLANK`].
     pub text: String,
-    /// The same as safe HTML: escaped text, the blank as `<span class="fc-blank">___</span>`.
+    /// The same as safe HTML: escaped text, the blank as `<span class="fc-blank">___</span>`,
+    /// the highlighted word as `<b class="fc-context-word">…</b>`.
     pub html: String,
 }
 
-/// What a context hint is made from.
+/// What a context hint is made from (v1.3 rule: a hint may reveal context but never the
+/// answer — blank exactly the answer where it occurs in the example; where it does not, the
+/// example is shown as context).
 #[derive(Debug, Clone, Copy)]
 pub struct ContextSource<'a> {
     /// The example sentence as rendered HTML. Its first bold element (`<b>`/`<strong>`: the
     /// occurrence a capture marked from its UTF-16 offsets, or one the user marked) is the
-    /// occurrence to blank.
+    /// card's word.
     pub example_html: &'a str,
-    /// Without a marked occurrence: forms to look for, in order (surface, then term); the
-    /// first whole-word, case-insensitive match is blanked.
-    pub candidates: &'a [String],
-    /// Texts the masked sentence must not contain anywhere (the expected answer, the term,
-    /// the surface form): if one is still there, no context hint is given.
-    pub forbidden: &'a [String],
+    /// The card's word without a marked occurrence: forms to look for, in order (surface,
+    /// then term); the first whole-word, case-insensitive match is the occurrence.
+    pub word_forms: &'a [String],
+    /// The card asks for the word (a reverse / production card): its occurrence is the
+    /// answer and is blanked. Otherwise (it asks for the meaning) the word is highlighted.
+    pub asks_for_word: bool,
+    /// The expected answer and its alternatives: blanked where they occur (a card asking for
+    /// the meaning), and never shown anywhere in the hint.
+    pub answer_forms: &'a [String],
 }
 
-/// The example sentence with the term's occurrence blanked, or `None` when there is no
-/// usable occurrence or the rest of the sentence would still give the answer away.
+/// The context hint of `src`, or `None` when the sentence is unusable (nothing but the word,
+/// no text) or would still give the answer away after blanking.
 pub fn context_hint(src: &ContextSource<'_>) -> Option<MaskedSentence> {
-    let with_sentinel = match marked_range(src.example_html) {
-        Some((s, e)) => html_to_text(&format!(
-            "{}{SENTINEL}{}",
+    let text = match marked_range(src.example_html) {
+        Some((s, e, inner)) => html_to_text(&format!(
+            "{}{OPEN}{}{CLOSE}{}",
             &src.example_html[..s],
+            &src.example_html[inner.0..inner.1],
             &src.example_html[e..]
         )),
         None => {
             let text = html_to_text(src.example_html);
-            let (s, e) = src.candidates.iter().find_map(|c| find_word(&text, c))?;
-            format!("{}{SENTINEL}{}", &text[..s], &text[e..])
+            match src.word_forms.iter().find_map(|w| find_word(&text, w)) {
+                Some((s, e)) => format!("{}{OPEN}{}{CLOSE}{}", &text[..s], &text[s..e], &text[e..]),
+                None => text,
+            }
         }
     };
-    let collapsed = with_sentinel
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    if collapsed.matches(SENTINEL).count() != 1 {
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let (opens, closes) = (text.matches(OPEN).count(), text.matches(CLOSE).count());
+    if opens > 1 || opens != closes || text.contains(HOLE) {
         return None;
     }
-    let (before, after) = collapsed.split_once(SENTINEL)?;
-    // Something besides the blank: a sentence that is only the term is no hint.
-    if !before
+    let word = match (text.find(OPEN), text.find(CLOSE)) {
+        (Some(s), Some(e)) if s < e => Some((s, e + CLOSE.len_utf8())),
+        (None, None) => None,
+        _ => return None,
+    };
+    let text = if src.asks_for_word {
+        // The word is the answer: blank its occurrence (none: the sentence is context).
+        match word {
+            Some((s, e)) => format!("{}{HOLE}{}", &text[..s], &text[e..]),
+            None => text,
+        }
+    } else {
+        // The answer (the meaning) is blanked where it occurs, outside the word.
+        match src.answer_forms.iter().find_map(|a| find_word(&text, a)) {
+            Some((s, e)) if word.is_none_or(|(ws, we)| e <= ws || s >= we) => {
+                format!("{}{HOLE}{}", &text[..s], &text[e..])
+            }
+            Some(_) => return None,
+            None => text,
+        }
+    };
+    // Something besides the word and the blank: a sentence that is only the term is no hint.
+    let mut rest = String::with_capacity(text.len());
+    let mut inside = false;
+    for c in text.chars() {
+        match c {
+            OPEN => inside = true,
+            CLOSE => inside = false,
+            HOLE => {}
+            c if !inside => rest.push(c),
+            _ => {}
+        }
+    }
+    if !rest.chars().any(char::is_alphanumeric) {
+        return None;
+    }
+    let visible: String = text
         .chars()
-        .chain(after.chars())
-        .any(char::is_alphanumeric)
-    {
-        return None;
+        .filter(|c| *c != OPEN && *c != CLOSE)
+        .collect::<String>()
+        .replace(HOLE, BLANK);
+    // Never the answer: not its text, nor (asking for the word) any form of the word.
+    let mut forbidden: Vec<&str> = src.answer_forms.iter().map(String::as_str).collect();
+    if src.asks_for_word {
+        forbidden.extend(src.word_forms.iter().map(String::as_str));
     }
-    let text = format!("{before}{BLANK}{after}");
-    if src
-        .forbidden
+    if forbidden
         .iter()
-        .any(|f| find_word(&text, &html_to_text(f)).is_some())
+        .any(|f| leaks(&visible, f, src.asks_for_word))
     {
         return None;
     }
+    let mut html = String::with_capacity(text.len() + 64);
+    let mut run = String::new();
+    for c in text.chars() {
+        let tag = match c {
+            OPEN => "<b class=\"fc-context-word\">",
+            CLOSE => "</b>",
+            HOLE => "<span class=\"fc-blank\">___</span>",
+            c => {
+                run.push(c);
+                continue;
+            }
+        };
+        html.push_str(&escape_html(&run));
+        run.clear();
+        html.push_str(tag);
+    }
+    html.push_str(&escape_html(&run));
     Some(MaskedSentence {
-        html: format!(
-            "{}<span class=\"fc-blank\">{BLANK}</span>{}",
-            escape_html(before),
-            escape_html(after)
-        ),
-        text,
+        text: visible,
+        html,
     })
 }
 
+/// Whether `text` gives `answer` away: the answer as whole words; when the answer is the
+/// card's word (`inflected`), also its inflections — every word of the answer starting a
+/// word of the text ("goes" for "go", "picked it up" for "pick up").
+fn leaks(text: &str, answer: &str, inflected: bool) -> bool {
+    let answer = html_to_text(answer);
+    if find_word(text, answer.trim()).is_some() {
+        return true;
+    }
+    let parts: Vec<String> = answer.split_whitespace().map(str::to_lowercase).collect();
+    if !inflected || parts.is_empty() || parts.iter().any(|p| p.chars().count() < 2) {
+        return false;
+    }
+    let words: Vec<String> = text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    parts
+        .iter()
+        .all(|p| words.iter().any(|w| w.starts_with(p.as_str())))
+}
+
+/// The forms an expected answer is accepted in: the whole text and each alternative
+/// separated by `,` `;` `|` `/` or a line break (trimmed, empty ones left out).
+pub fn answer_forms(expected: &str) -> Vec<String> {
+    let whole = expected.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut out = Vec::new();
+    if !whole.is_empty() {
+        out.push(whole);
+    }
+    for part in expected.split([',', ';', '|', '/', '\n']) {
+        let part = part.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !part.is_empty() && !out.contains(&part) {
+            out.push(part);
+        }
+    }
+    out
+}
+
 /// Byte range of the first `<b>…</b>` / `<strong>…</strong>` element of `html` with visible
-/// text inside.
-fn marked_range(html: &str) -> Option<(usize, usize)> {
+/// text inside, and the range of its inner HTML.
+fn marked_range(html: &str) -> Option<(usize, usize, (usize, usize))> {
     let lower = html.to_ascii_lowercase();
-    let mut best: Option<(usize, usize)> = None;
+    let mut best: Option<(usize, usize, (usize, usize))> = None;
     for (open, close) in [("<b>", "</b>"), ("<strong>", "</strong>")] {
         let Some(s) = lower.find(open) else { continue };
         let Some(len) = lower[s + open.len()..].find(close) else {
             continue;
         };
-        let inner = &html[s + open.len()..s + open.len() + len];
-        if html_to_text(inner).trim().is_empty() {
+        let inner = (s + open.len(), s + open.len() + len);
+        if html_to_text(&html[inner.0..inner.1]).trim().is_empty() {
             continue;
         }
-        let e = s + open.len() + len + close.len();
-        if best.is_none_or(|(bs, _)| s < bs) {
-            best = Some((s, e));
+        let e = inner.1 + close.len();
+        if best.is_none_or(|(bs, _, _)| s < bs) {
+            best = Some((s, e, inner));
         }
     }
     best
@@ -359,11 +456,19 @@ mod tests {
         assert_eq!(HintKind::parse("ai"), None);
     }
 
-    fn src<'a>(html: &'a str, cands: &'a [String], forbidden: &'a [String]) -> ContextSource<'a> {
+    fn reverse<'a>(html: &'a str, words: &'a [String], answers: &'a [String]) -> ContextSource<'a> {
         ContextSource {
             example_html: html,
-            candidates: cands,
-            forbidden,
+            word_forms: words,
+            asks_for_word: true,
+            answer_forms: answers,
+        }
+    }
+
+    fn forward<'a>(html: &'a str, words: &'a [String], answers: &'a [String]) -> ContextSource<'a> {
+        ContextSource {
+            asks_for_word: false,
+            ..reverse(html, words, answers)
         }
     }
 
@@ -372,61 +477,161 @@ mod tests {
     }
 
     #[test]
-    fn context_hint_blanks_the_marked_occurrence() {
+    fn reverse_card_blanks_the_marked_occurrence() {
         // A capture: the occurrence in bold (from its UTF-16 offsets).
-        let cands = strs(&["went", "go"]);
-        let forb = strs(&["gitmek", "go", "went"]);
-        let m = context_hint(&src("<p>I <b>went</b> home.</p>", &cands, &forb)).unwrap();
+        let words = strs(&["went", "go"]);
+        let m = context_hint(&reverse(
+            "<p>I <b>went</b> home.</p>",
+            &words,
+            &strs(&["go"]),
+        ))
+        .unwrap();
         assert_eq!(m.text, "I ___ home.");
         assert_eq!(m.html, "I <span class=\"fc-blank\">___</span> home.");
-        // The marked occurrence wins over an earlier plain match of a candidate.
-        let m = context_hint(&src("Go! I <strong>went</strong>.", &strs(&["go"]), &[])).unwrap();
+        // The marked occurrence wins over an earlier plain match of a form.
+        let m = context_hint(&reverse(
+            "Go! I <strong>went</strong>.",
+            &strs(&["went"]),
+            &[],
+        ))
+        .unwrap();
         assert_eq!(m.text, "Go! I ___.");
         // Escaped text stays escaped.
-        let m = context_hint(&src("a &lt;b&gt; <b>x</b>", &[], &[])).unwrap();
+        let m = context_hint(&reverse("a &lt;b&gt; <b>x</b>", &[], &[])).unwrap();
         assert_eq!(m.html, "a &lt;b&gt; <span class=\"fc-blank\">___</span>");
     }
 
     #[test]
-    fn context_hint_finds_the_surface_then_the_term() {
-        let forb = strs(&["gitmek"]);
+    fn reverse_card_finds_the_surface_then_the_term() {
         // Whole word, case-insensitive: the surface first.
-        let m = context_hint(&src("<p>We WENT home.</p>", &strs(&["went", "go"]), &forb)).unwrap();
+        let m = context_hint(&reverse(
+            "<p>We WENT home.</p>",
+            &strs(&["went", "go"]),
+            &strs(&["go"]),
+        ))
+        .unwrap();
         assert_eq!(m.text, "We ___ home.");
-        // Not inside another word ("going" is not "go"), then the term.
-        let m = context_hint(&src("Going? Let's go now.", &strs(&["gone", "go"]), &[])).unwrap();
-        assert_eq!(m.text, "Going? Let's ___ now.");
+        // Not inside another word, then the term.
+        let m = context_hint(&reverse("Let's go now.", &strs(&["gone", "go"]), &[])).unwrap();
+        assert_eq!(m.text, "Let's ___ now.");
         // Phrases match across any whitespace; Turkish letters fold.
-        let m = context_hint(&src("I must pick\n up my keys", &strs(&["pick up"]), &[])).unwrap();
+        let m = context_hint(&reverse(
+            "I must pick\n up my keys",
+            &strs(&["pick up"]),
+            &[],
+        ))
+        .unwrap();
         assert_eq!(m.text, "I must ___ my keys");
-        let m = context_hint(&src("Çiçek ÇOK güzel.", &strs(&["çok"]), &[])).unwrap();
+        let m = context_hint(&reverse("Çiçek ÇOK güzel.", &strs(&["çok"]), &[])).unwrap();
         assert_eq!(m.text, "Çiçek ___ güzel.");
+        // The word does not occur: the sentence is context as it is.
+        let m = context_hint(&reverse(
+            "We left early.",
+            &strs(&["went", "go"]),
+            &strs(&["go"]),
+        ))
+        .unwrap();
+        assert_eq!(
+            (m.text.as_str(), m.html.as_str()),
+            ("We left early.", "We left early.")
+        );
     }
 
     #[test]
-    fn context_hint_never_leaks_the_answer() {
-        // The answer is still in the sentence elsewhere → no context hint.
-        let cands = strs(&["went", "go"]);
-        let forb = strs(&["go", "went"]);
+    fn reverse_card_never_leaks_the_word() {
+        let words = strs(&["went", "go"]);
+        let answers = strs(&["go"]);
+        // Still in the sentence elsewhere, or an inflection of it → no context hint.
         assert_eq!(
-            context_hint(&src("I <b>went</b> where you go.", &cands, &forb)),
+            context_hint(&reverse("I <b>went</b> where you go.", &words, &answers)),
             None
         );
-        assert_eq!(context_hint(&src("I went and went.", &cands, &forb)), None);
-        // No occurrence, nothing but the term, empty sentences → none.
-        assert_eq!(context_hint(&src("Nothing here.", &cands, &forb)), None);
-        assert_eq!(context_hint(&src("<b>went</b>!", &cands, &[])), None);
-        assert_eq!(context_hint(&src("", &cands, &[])), None);
-        assert_eq!(context_hint(&src("<b> </b> x", &[], &[])), None);
-        // A forbidden text given as HTML is compared as text.
         assert_eq!(
-            context_hint(&src(
+            context_hint(&reverse("I went and went.", &words, &answers)),
+            None
+        );
+        assert_eq!(
+            context_hint(&reverse("I <b>went</b>; she goes.", &words, &answers)),
+            None
+        );
+        assert_eq!(
+            context_hint(&reverse("She is going.", &words, &answers)),
+            None
+        );
+        assert_eq!(
+            context_hint(&reverse(
+                "I picked it up.",
+                &strs(&["pick up"]),
+                &strs(&["pick up"])
+            )),
+            None
+        );
+        // Nothing but the term, empty sentences → none.
+        assert_eq!(context_hint(&reverse("<b>went</b>!", &words, &[])), None);
+        assert_eq!(context_hint(&reverse("", &words, &[])), None);
+        assert_eq!(context_hint(&reverse("<b> </b> went", &words, &[])), None);
+        // An answer given as HTML is compared as text.
+        assert_eq!(
+            context_hint(&reverse(
                 "I <b>went</b> to Gitmek.",
                 &[],
                 &strs(&["<p>gitmek</p>"])
             )),
             None
         );
+    }
+
+    #[test]
+    fn forward_card_highlights_the_word_and_blanks_only_the_answer() {
+        let words = strs(&["went", "go"]);
+        // The meaning is not in the sentence: the sentence as context, the word highlighted.
+        let m = context_hint(&forward(
+            "I <b>went</b> home.",
+            &words,
+            &answer_forms("gitmek"),
+        ))
+        .unwrap();
+        assert_eq!(m.text, "I went home.");
+        assert_eq!(m.html, "I <b class=\"fc-context-word\">went</b> home.");
+        // Without a marked occurrence the surface (then the term) is found and highlighted.
+        let m = context_hint(&forward("We WENT home.", &words, &answer_forms("gitmek"))).unwrap();
+        assert_eq!(m.html, "We <b class=\"fc-context-word\">WENT</b> home.");
+        // No occurrence: the sentence alone.
+        let m = context_hint(&forward("Home at last.", &words, &[])).unwrap();
+        assert_eq!(m.html, "Home at last.");
+        // The answer occurs in the example: exactly it is blanked, the word stays.
+        let m = context_hint(&forward(
+            "Le <b>chat</b> dort, the cat sleeps.",
+            &strs(&["chat"]),
+            &answer_forms("cat, kitty"),
+        ))
+        .unwrap();
+        assert_eq!(m.text, "Le chat dort, the ___ sleeps.");
+        assert_eq!(
+            m.html,
+            "Le <b class=\"fc-context-word\">chat</b> dort, the <span class=\"fc-blank\">___</span> sleeps."
+        );
+        // Twice, or inside the word → never shown.
+        assert_eq!(
+            context_hint(&forward("cat and cat", &[], &strs(&["cat"]))),
+            None
+        );
+        assert_eq!(
+            context_hint(&forward("a <b>cat</b> b", &[], &strs(&["cat"]))),
+            None
+        );
+        // Only the word → no hint.
+        assert_eq!(context_hint(&forward("<b>went</b>.", &words, &[])), None);
+    }
+
+    #[test]
+    fn answer_forms_split_alternatives() {
+        assert_eq!(answer_forms(" gitmek "), strs(&["gitmek"]));
+        assert_eq!(
+            answer_forms("gitmek, yürümek; ayrılmak"),
+            strs(&["gitmek, yürümek; ayrılmak", "gitmek", "yürümek", "ayrılmak"])
+        );
+        assert!(answer_forms("  ").is_empty());
     }
 
     #[test]

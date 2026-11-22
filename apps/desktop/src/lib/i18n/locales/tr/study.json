@@ -240,6 +240,10 @@
       "day_start_hour": {
         "label": "Yeni gün şu saatte başlar",
         "description": "Yeni çalışma gününün başladığı yerel saat."
+      },
+      "learn_ahead_mins": {
+        "label": "Öğrenme kartını erken göster (dakika)",
+        "description": "Başka kart kalmadığında, adımı dolmak üzere olan öğrenme kartı en çok bu kadar dakika erken gelir; boş yere beklemezsin. Daha uzun beklemen gerekirse \"Sıradaki kart … sonra\" görürsün. 0: adım dolana kadar hep bekle."
       }
     }
   },

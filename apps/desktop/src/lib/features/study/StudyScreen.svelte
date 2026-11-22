@@ -927,6 +927,11 @@
     font-size: var(--text-lg);
     color: var(--text-1);
   }
+  /* v1.3 X1: a card asking for the meaning shows its word highlighted in the sentence. */
+  .hint-sentence :global(.fc-context-word) {
+    color: var(--accent-text);
+    font-weight: var(--weight-semibold);
+  }
   .hint-sentence :global(.fc-blank),
   .hint-sentence :global(mark),
   .hint-sentence :global(u) {
