@@ -1057,6 +1057,7 @@ impl Cx<'_> {
                 status: a.status,
                 cursor: a.cursor,
                 limit: Some(limit),
+                ..ListWords::default()
             })?;
             return Ok(json!({
                 "words": page.words.iter().map(word_view).collect::<Vec<_>>(),
