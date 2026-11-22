@@ -79,6 +79,7 @@
   let revealedAt: number | null = null;
   let input = $state<HTMLInputElement | null>(null);
   let doneBtn = $state<HTMLButtonElement | null>(null);
+  let continueBtn = $state<HTMLButtonElement | null>(null);
   let waitBtn = $state<HTMLButtonElement | null>(null);
   /** Flag names/colors (`flags.list`, Anki numbering from `card_flag_defs`). */
   let flagDefs = $state<FlagDto[]>([]);
@@ -192,8 +193,9 @@
   $effect(() => {
     if (waiting) void tick().then(() => waitBtn?.focus());
   });
+  // The summary's first key stop is its primary action: "Continue" after a pause, else "Done".
   $effect(() => {
-    if (phase === 'done') void tick().then(() => doneBtn?.focus());
+    if (phase === 'done') void tick().then(() => (continueBtn ?? doneBtn)?.focus());
   });
 
   function show(s: SessionDto) {
@@ -409,7 +411,7 @@
             // Nothing answered yet: no "0 of 0" summary.
             if (s.answered === 0) {
               await api.call('study.end', { session_id: s.id });
-              session = null;
+              leave();
               return;
             }
             // v1.3: leaving with cards left is a pause — the session stays open (the launcher
@@ -435,9 +437,20 @@
     }
   }
 
-  function back() {
+  /**
+   * Leaving the session (v1.3: "Done", Esc before any answer): back where the session's cards
+   * live — the deck page for a deck, Home for every deck — not to an empty study page.
+   * Without a shell to navigate (component tests) the page shows its idle state.
+   */
+  function leave() {
+    const deck = session?.deck_id ?? null;
     summary = null;
     session = null;
+    if (!ctx.navigate) return;
+    if (deck) {
+      ctx.selectDeck(deck);
+      ctx.navigate('/decks');
+    } else ctx.navigate('/');
   }
 
   /** Space on an answer button would press it: here Space only ever flips the card. */
@@ -594,9 +607,9 @@
     </dl>
     <div class="sum-actions">
       {#if summary.ended_at === null}
-        <Button variant="primary" icon={Play} data-testid="study-continue" onclick={() => void ctx.guarded(resumePaused)}>{t('study.summary.continue')}</Button>
+        <Button variant="primary" icon={Play} data-testid="study-continue" bind:element={continueBtn} onclick={() => void ctx.guarded(resumePaused)}>{t('study.summary.continue')}</Button>
       {/if}
-      <Button variant={summary.ended_at === null ? 'secondary' : 'primary'} bind:element={doneBtn} onclick={back}>
+      <Button variant={summary.ended_at === null ? 'secondary' : 'primary'} bind:element={doneBtn} onclick={leave}>
         {t('study.summary.back')}
       </Button>
       {#if launcher.available}

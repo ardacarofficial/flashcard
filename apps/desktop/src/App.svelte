@@ -79,7 +79,8 @@
     selectDeck: (id) => (selectedDeck = id),
     guarded: (fn) => guarded(fn),
     route: current?.route ?? null,
-    navigate: (route) => openRoute(route),
+    place: current?.place.kind ?? null,
+    navigate: (route, where) => openRoute(route, where),
     setFocus: (on) => (focusOn = on),
   });
   /** Section pages drawn as tabs (study modes are opened from the deck page instead). */
@@ -179,8 +180,10 @@
    * Opens the entry with `route` (flashcard:// links, v0.9; `ctx.navigate`). v1.3: a route no
    * enabled module offers says so instead of silently staying put.
    */
-  function openRoute(route: string) {
-    const item = nav.all.find((m) => m.route === route);
+  function openRoute(route: string, where?: 'settings') {
+    // `/` = Home (the shell's own page has no module route).
+    if (route === '/') return show(nav.all[0]!);
+    const item = (where ? entries.find((m) => m.route === route && m.place.kind === where) : null) ?? nav.all.find((m) => m.route === route);
     if (item) show(item);
     else if (modules.length > 0) error = t('shell.route_off');
   }

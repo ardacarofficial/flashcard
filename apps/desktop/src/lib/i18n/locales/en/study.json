@@ -162,7 +162,8 @@
         "new": "Cards you have never studied, within the daily limit",
         "studied_today": "Every card you answered today",
         "struggled_today": "Cards you rated “Again” or got wrong today",
-        "all": "Every card in the deck"
+        "all": "Every card in the deck",
+        "all_decks": "Every card in all your decks"
       },
       "practice_tag": "practice · schedule unchanged",
       "empty": {

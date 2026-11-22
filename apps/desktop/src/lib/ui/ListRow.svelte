@@ -6,7 +6,9 @@
   - `onclick` makes the label area a button (Enter/Space; the row's main action).
   - `cells` are the right-hand columns (counts, bars); `cellColumns` is their CSS grid track
     list so every row of a list lines up (`'56px 56px 120px'`). Numbers inside: `.num`.
-  - `actions` show on hover and keyboard focus (row actions: start, menu).
+  - `primary`: the row's main action button (e.g. "Study"), ALWAYS visible (v1.3: the primary
+    action never hides behind hover); `actions` show on hover and keyboard focus (secondary
+    row actions: add, menu).
   - `depth` indents a tree level; `expanded` (true/false) draws a chevron toggled by `ontoggle`.
   - `header` draws the column header row instead (no hover, small secondary text).
 -->
@@ -40,6 +42,8 @@
     /** Replaces `label`/`sub` (rich label content). */
     children?: Snippet;
     cells?: Snippet;
+    /** Always-visible main action (before `actions`). */
+    primary?: Snippet;
     actions?: Snippet;
     testid?: string;
     class?: string;
@@ -61,6 +65,7 @@
     leading,
     children,
     cells,
+    primary,
     actions,
     testid,
     class: klass = '',
@@ -102,6 +107,7 @@
     <span class="main">{@render text()}</span>
   {/if}
   {#if cells}<span class="cells" style:grid-template-columns={cellColumns}>{@render cells()}</span>{/if}
+  {#if primary}<span class="primary">{@render primary()}</span>{/if}
   {#if actions}<span class="actions">{@render actions()}</span>{/if}
 </li>
 
@@ -219,6 +225,11 @@
     color: var(--text-2);
     font-size: var(--text-xs);
     text-align: end;
+  }
+  .primary {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
   }
   .actions {
     display: inline-flex;

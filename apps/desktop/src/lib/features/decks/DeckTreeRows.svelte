@@ -10,7 +10,7 @@
   import { formatCount } from '$lib/format';
   import type { DeckId, DeckSummary, DeckTreeNode } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
-  import { Chip, IconButton, ListRow, Menu, Play, Plus, type MenuItem } from '$lib/ui';
+  import { Button, Chip, IconButton, ListRow, Menu, Play, Plus, type MenuItem } from '$lib/ui';
   import MasteryBar from './MasteryBar.svelte';
   import { todayCounts } from './library';
 
@@ -120,6 +120,7 @@
       <span class="h start">{t('library.col_mastery')}</span>
       <span class="h start chips">{t('library.col_class')}</span>
     {/snippet}
+    {#snippet primary()}<span class="study-space"></span>{/snippet}
     {#snippet actions()}<span class="actions-space"></span>{/snippet}
   </ListRow>
   {#each rows as { node, depth } (node.deck.id)}
@@ -141,10 +142,14 @@
         {/if}
       </span>
       {#snippet cells()}{@render cols(node)}{/snippet}
-      {#snippet actions()}
+      {#snippet primary()}
         {#if onstudy}
-          <IconButton size="sm" icon={Play} label={t('library.study', { name: node.deck.name })} onclick={() => onstudy(node)} />
+          <Button size="sm" variant="secondary" icon={Play} aria-label={t('library.study', { name: node.deck.name })} onclick={() => onstudy(node)}>
+            {t('library.study_short')}
+          </Button>
         {/if}
+      {/snippet}
+      {#snippet actions()}
         {#if onadd}
           <IconButton size="sm" icon={Plus} label={t('library.add_card', { name: node.deck.name })} onclick={() => onadd(node)} />
         {/if}
@@ -156,7 +161,7 @@
 
 <style>
   .tree-table {
-    --deck-cols: 64px 56px 56px 132px 176px;
+    --deck-cols: 64px 88px 56px 132px 176px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -210,10 +215,18 @@
   }
   .actions-space {
     display: block;
-    width: calc(var(--control-h-sm) * 3 + 4px);
+    width: calc(var(--control-h-sm) * 2 + 2px);
   }
   :global(.tree-table .fc-list-row .actions) {
-    min-width: calc(var(--control-h-sm) * 3 + 4px);
+    min-width: calc(var(--control-h-sm) * 2 + 2px);
+    justify-content: flex-end;
+  }
+  .study-space {
+    display: block;
+    width: 72px;
+  }
+  :global(.tree-table .fc-list-row .primary) {
+    min-width: 72px;
     justify-content: flex-end;
   }
   :global(.tree-table .row-menu) {
@@ -222,7 +235,7 @@
   }
   @media (max-width: 1023.98px) {
     .tree-table {
-      --deck-cols: 56px 48px 48px 112px;
+      --deck-cols: 56px 80px 48px 112px;
     }
     .chips {
       display: none;

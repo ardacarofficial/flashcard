@@ -71,6 +71,7 @@
     "col_mastery": "Mastery",
     "col_class": "Classification",
     "study": "Study {name}",
+    "study_short": "Study",
     "add_card": "Add a card to {name}",
     "keys_hint": "↑ ↓ move between rows, → ← expand and collapse sub-decks, Enter opens the deck."
   },

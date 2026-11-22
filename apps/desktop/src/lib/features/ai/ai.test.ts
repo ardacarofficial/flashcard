@@ -7,8 +7,9 @@ import type { ScreenCtx } from '../types';
 
 i18n.locale = 'en';
 
-const ctx = (selectedDeck: string | null): ScreenCtx => ({
+const ctx = (selectedDeck: string | null, place: ScreenCtx['place'] = 'section'): ScreenCtx => ({
   decks: [],
+  place,
   selectedDeck,
   selectedPath: null,
   selectDeck: () => {},
@@ -25,15 +26,18 @@ const ctx = (selectedDeck: string | null): ScreenCtx => ({
 describe('<AiScreen> on the dev mock', () => {
   it('previews before sending, then adds the reviewed drafts', async () => {
     const deck = (await api.deck.tree()).roots[0]!.deck.id;
-    render(AiScreen, { ctx: ctx(deck) });
 
     // A provider first (v1.3: "Add provider" opens the preset gallery, covered in
     // providers.test.ts; here Claude is made directly): without a key nothing can be sent.
+    // v1.3: providers are set up on the Settings place of the page, cards made on Create's.
     await api.call('ai.providers.create', { kind: 'anthropic', name: null, base_url: null, default_model: null, is_default: null });
-    await fireEvent.click(screen.getByRole('tab', { name: 'Providers' }));
+    const settings = render(AiScreen, { ctx: ctx(deck, 'settings') });
     expect(await screen.findByText('No API key yet.')).toBeTruthy();
+    expect(screen.queryByLabelText('Source')).toBeNull();
+    settings.unmount();
 
-    await fireEvent.click(screen.getByRole('tab', { name: 'Make cards' }));
+    render(AiScreen, { ctx: ctx(deck) });
+    expect(screen.queryByRole('tab', { name: 'Providers' })).toBeNull();
     await fireEvent.input(await screen.findByLabelText('Source'), {
       target: { value: 'Plants turn light into sugar.' },
     });
@@ -62,7 +66,7 @@ describe('<AiScreen> on the dev mock', () => {
   });
 
   it('shows usage and the budget state', async () => {
-    render(AiScreen, { ctx: ctx(null) });
+    render(AiScreen, { ctx: ctx(null, 'settings') });
     await fireEvent.click(screen.getByRole('tab', { name: 'Usage' }));
     expect(await screen.findByText('This month')).toBeTruthy();
     expect(screen.getByText('No monthly budget set (Settings → AI).')).toBeTruthy();

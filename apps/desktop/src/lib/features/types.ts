@@ -16,7 +16,13 @@ export interface ScreenCtx {
    * Opens the page of a `main_menu` route (`'/study'`, `'/decks'`), wherever navigation.ts
    * places it. Does nothing if that module is off. v1.1: screens link to each other with it.
    */
-  navigate?: (route: string) => void;
+  navigate?: (route: string, where?: 'settings') => void;
+  /**
+   * Where the page is shown (v1.3): a sidebar section, Settings or the Inbox — a page placed
+   * in two places (AI: Create and Settings) shows the part that belongs there. `where:
+   * 'settings'` in {@link navigate} opens a route's Settings place.
+   */
+  place?: 'section' | 'settings' | 'inbox' | null;
   /**
    * A study screen says a session is running. The shell then switches to the focus layout —
    * v1.2: no sidebar, no top bar, no deck picker or tabs; the screen draws its own session bar

@@ -282,6 +282,20 @@ export default {
       const nodes = deckId ? [find(top)].filter((n): n is DeckTreeNode => n !== null) : top;
       return nodes.reduce((a, n) => ({ due: a.due + n.counts.due, learning: a.learning + n.counts.learning, new: a.new + n.counts.new }), { due: 0, learning: 0, new: 0 });
     };
+    /** Every card of a deck (or all decks) as the deck tree counts them (demo seed). */
+    const totalOf = (deckId: string | null): number => {
+      const find = (ns: DeckTreeNode[]): DeckTreeNode | null => {
+        for (const n of ns) {
+          if (n.deck.id === deckId) return n;
+          const hit = find(n.children);
+          if (hit) return hit;
+        }
+        return null;
+      };
+      const top = tree(null);
+      const nodes = deckId ? [find(top)].filter((n): n is DeckTreeNode => n !== null) : top;
+      return nodes.reduce((a, n) => a + n.counts.total, 0);
+    };
     /**
      * A Cards session over the demo collection: the few mock notes repeat until the queue
      * matches the deck tree's numbers (due, then learning, then new), so the start panel,
@@ -361,8 +375,14 @@ export default {
           const cards = base.filter((c) => today.get(c.card_id)?.struggled);
           return cards.length ? { cards, reason: null, next: null } : none('none_struggled_today');
         }
-        case 'all':
+        case 'all': {
+          // The demo's decks carry inventory numbers (seed.ts) larger than the few mock notes:
+          // "every card" must never be fewer than "today's cards" — repeat the notes up to the
+          // deck's total, as the today queue does.
+          const total = hasDemoCounts(deckId) ? totalOf(deckId) : 0;
+          if (total > base.length) return { cards: Array.from({ length: total }, (_, i) => base[i % base.length]!), reason: null, next: null };
           return { cards: base, reason: null, next: null };
+        }
       }
     };
     const scopeOption = (scope: StudyScope, deckId: string | null): StudyScopeOption => {

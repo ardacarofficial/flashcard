@@ -14,6 +14,7 @@
   import { api } from '$lib/api';
   import type { TestAnswerDto, TestPaperDto, TestQuestionDto, TestVerdict } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
+  import { usePageKeys } from '$lib/shell/page-keys.svelte';
   import {
     Button,
     CircleAlert,
@@ -40,6 +41,17 @@
   import { emptyInput, testAnswers, type PaperInput } from './modes';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
+
+  usePageKeys(() =>
+    paper && !result
+      ? [
+          { keys: 'A–D', label_key: 'help.page.pick' },
+          { keys: 'Enter', label_key: 'help.page.next_question' },
+          { keys: 'Mod+Enter', label_key: 'help.page.submit' },
+          { keys: 'Escape', label_key: 'help.page.leave' },
+        ]
+      : null,
+  );
 
   let paper = $state<TestPaperDto | null>(null);
   let input = $state<PaperInput>(emptyInput());
@@ -190,6 +202,53 @@
     }
   }
 
+  /**
+   * Keyboard on the paper (v1.3, keyboard first): in a question, A–D (or 1–4) picks that
+   * option, Enter / Space picks the focused one, ↑ ↓ ← → move between its options; a pick —
+   * or Enter in a written answer — moves on to the next question (the last one: to "Submit").
+   * Ctrl+Enter submits (window handler). The mouse never moves the focus.
+   */
+  let submitBtn = $state<HTMLButtonElement | null>(null);
+  function nextQuestion(from: HTMLElement) {
+    const items = [...(sheet?.querySelectorAll<HTMLElement>('li.question') ?? [])];
+    const at = items.findIndex((li) => li.contains(from));
+    const next = items[at + 1];
+    const target = next?.querySelector<HTMLElement>('input:not(:disabled), [role=radio]') ?? submitBtn;
+    target?.focus();
+  }
+  function onPaperKey(e: KeyboardEvent) {
+    if (result || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    const el = e.target as HTMLElement | null;
+    const li = el?.closest<HTMLElement>('li.question');
+    if (!el || !li) return;
+    if (el instanceof HTMLInputElement) {
+      if (e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault();
+        nextQuestion(li);
+      }
+      return;
+    }
+    const radios = [...li.querySelectorAll<HTMLElement>('[role=radio]')];
+    if (radios.length === 0) return;
+    const at = radios.indexOf(el);
+    const k = e.key.length === 1 ? e.key.toLocaleUpperCase('en') : e.key;
+    let pick = -1;
+    if (/^[1-9]$/.test(k)) pick = Number(k) - 1;
+    else if (LETTERS.includes(k)) pick = LETTERS.indexOf(k);
+    else if ((k === 'Enter' || k === ' ') && at >= 0) pick = at;
+    else if ((k === 'ArrowDown' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowLeft') && at >= 0) {
+      e.preventDefault();
+      const step = k === 'ArrowDown' || k === 'ArrowRight' ? 1 : -1;
+      radios[(at + step + radios.length) % radios.length]?.focus();
+      return;
+    }
+    if (pick < 0 || pick >= radios.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    radios[pick]!.click();
+    nextQuestion(li);
+  }
+
   const truthText = (b: boolean | null | undefined) => (b ? t('modes.test.true') : t('modes.test.false'));
   const keyText = (q: TestQuestionDto) => (q.kind === 'true_false' ? truthText(q.key?.truth) : (q.key?.expected ?? ''));
   const given = (q: TestQuestionDto): string => {
@@ -214,7 +273,8 @@
 <svelte:window onkeydown={onKey} />
 
 {#snippet questions()}
-  <ol class="paper" bind:this={sheet}>
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <ol class="paper" bind:this={sheet} onkeydown={onPaperKey}>
     {#each paper!.questions as q, n (q.index)}
       {@const v = verdict(q.index)}
       <li class="question {v ?? ''}" data-testid="question-{q.index}">
@@ -299,7 +359,8 @@
     {@render questions()}
     <div class="submit no-print">
       <span class="answered">{t('modes.test.answered', { n: answered, total: paper.questions.length })}</span>
-      <Button variant="primary" size="lg" kbd="Mod+Enter" aria-keyshortcuts="Control+Enter" data-testid="test-submit" onclick={() => void ctx.guarded(submit)}>
+      <span class="keys">{t('modes.test.keys_hint')}</span>
+      <Button variant="primary" size="lg" kbd="Mod+Enter" aria-keyshortcuts="Control+Enter" data-testid="test-submit" bind:element={submitBtn} onclick={() => void ctx.guarded(submit)}>
         {t('modes.test.submit')}
       </Button>
     </div>
@@ -475,6 +536,12 @@
   }
   .answered {
     font-size: var(--text-sm);
+    color: var(--text-2);
+  }
+  .keys {
+    margin-inline-end: auto;
+    order: -1;
+    font-size: var(--text-xs);
     color: var(--text-2);
   }
   /* Result. */

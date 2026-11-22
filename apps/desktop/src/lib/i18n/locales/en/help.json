@@ -12,6 +12,23 @@
     "palette": "Keyboard shortcuts help",
     "context": {
       "editor": "Editor"
+    },
+    "on_this_page": "On this page",
+    "page": {
+      "start": "Start studying (you choose what to study)",
+      "add": "Add a card",
+      "rows": "Move between rows",
+      "subdecks": "Open / close sub-decks",
+      "open_deck": "Open the deck",
+      "study_deck": "Study this deck",
+      "preview": "Preview: flip the card · previous / next card",
+      "next_field": "Next field",
+      "new_row": "On the last row: a new row",
+      "save": "Save",
+      "pick": "Pick an option",
+      "next_question": "Next question",
+      "submit": "Hand in the test",
+      "leave": "Leave the test"
     }
   }
 }

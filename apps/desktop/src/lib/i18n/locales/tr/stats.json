@@ -162,9 +162,9 @@
     "forecast": {
       "heading": "Gelecek tahmini",
       "overdue": "{n} gecikmiş (bugüne sayıldı)",
-      "intro": "Önümüzdeki 30 günde vadesi gelecek kartlar.",
+      "intro": "Önümüzdeki 30 günde sırası gelecek kartlar.",
       "day": "{date}: {n} kart",
-      "meaning": "Her çubuk o gün tekrarı gelecek kart sayısı."
+      "meaning": "Her çubuk o gün sırası gelecek kart sayısı."
     },
     "states": {
       "heading": "Hafıza durumu",
@@ -300,7 +300,7 @@
     },
     "ahead": {
       "heading": "Önümde ne var?",
-      "intro": "Önümüzdeki günlerde tekrarı gelecek kartlar. Gecikmişler bugüne sayılır.",
+      "intro": "Önümüzdeki günlerde sırası gelecek kartlar. Gecikmişler bugüne sayılır.",
       "range": "Görünüm",
       "week": "7 gün",
       "month": "30 gün",

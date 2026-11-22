@@ -9,8 +9,9 @@ import type { ScreenCtx } from '../types';
 
 i18n.locale = 'en';
 
-const ctx = (selectedDeck: string | null): ScreenCtx => ({
+const ctx = (selectedDeck: string | null, place: ScreenCtx['place'] = 'section'): ScreenCtx => ({
   decks: [],
+  place,
   selectedDeck,
   selectedPath: null,
   selectDeck: () => {},
@@ -109,7 +110,7 @@ describe('AI screen: sources and providers', () => {
       const r = await (real as (m: string, p: unknown) => Promise<unknown>)(method, params);
       return method === 'ai.providers.list' ? { ...(r as object), keychain_session_only: true } : r;
     }) as typeof api.call);
-    render(AiScreen, { ctx: ctx(null) });
+    render(AiScreen, { ctx: ctx(null, 'settings') });
     await fireEvent.click(screen.getByRole('tab', { name: 'Providers' }));
     expect(await screen.findByText(/only for this session/)).toBeTruthy();
     spy.mockRestore();

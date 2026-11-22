@@ -12,6 +12,23 @@
     "palette": "Klavye kısayolları (yardım)",
     "context": {
       "editor": "Düzenleyici"
+    },
+    "on_this_page": "Bu sayfada",
+    "page": {
+      "start": "Çalışmaya başla (ne çalışacağını seçersin)",
+      "add": "Kart ekle",
+      "rows": "Satırlar arasında gez",
+      "subdecks": "Alt desteleri aç / kapat",
+      "open_deck": "Desteyi aç",
+      "study_deck": "Bu desteyi çalış",
+      "preview": "Önizleme: kartı çevir · önceki / sonraki kart",
+      "next_field": "Sonraki alan",
+      "new_row": "Son satırda: yeni satır",
+      "save": "Kaydet",
+      "pick": "Şık seç",
+      "next_question": "Sonraki soru",
+      "submit": "Testi teslim et",
+      "leave": "Testten çık"
     }
   }
 }

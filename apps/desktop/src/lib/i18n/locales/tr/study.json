@@ -72,7 +72,7 @@
     "choice_right": "Doğru seçenek",
     "choice_wrong": "Senin seçimin",
     "start_heading": "Bugünkü tekrar",
-    "start_intro": "Vadesi gelen ve birkaç yeni kart.",
+    "start_intro": "Sırası gelen ve birkaç yeni kart.",
     "custom_heading": "Özel oturum",
     "custom_intro": "Filtrenin seçtiği kartları çalışır.",
     "options": "Seçenekler",
@@ -162,7 +162,8 @@
         "new": "Henüz hiç çalışmadığın kartlar, günlük sınır içinde",
         "studied_today": "Bugün cevapladığın her kart",
         "struggled_today": "Bugün “Tekrar” dediğin ya da yanlış cevapladığın kartlar",
-        "all": "Destedeki her kart"
+        "all": "Destedeki her kart",
+        "all_decks": "Tüm destelerindeki her kart"
       },
       "practice_tag": "pratik · takvimi değiştirmez",
       "empty": {

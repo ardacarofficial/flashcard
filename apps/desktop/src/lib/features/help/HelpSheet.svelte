@@ -12,6 +12,7 @@
   import { Button, Dialog, EmptyState, Input, Kbd, Keyboard, Search } from '$lib/ui';
   import { LoadState } from '../core/kit';
   import { boundCount, helpGroups } from './help';
+  import { pageKeys } from '$lib/shell/page-keys.svelte';
 
   interface Props {
     open: boolean;
@@ -39,6 +40,12 @@
   }
 
   const groups = $derived(list ? helpGroups(list, label, query) : []);
+  /** The page's own keys (Home's Enter, Create's Ctrl+Enter …), filtered by the search too. */
+  const pageRows = $derived(
+    pageKeys.list
+      .map((k) => ({ ...k, text: t(k.label_key) }))
+      .filter((k) => !query.trim() || k.text.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())),
+  );
   const anyBound = $derived(!!list && boundCount(list) > 0);
 
   async function load() {
@@ -76,10 +83,23 @@
       <LoadState state={failed ? 'error' : 'loading'} retry={() => void load()} lines={6} />
     {:else if !anyBound}
       <EmptyState size="sm" icon={Keyboard} title={t('help.none')} />
-    {:else if groups.length === 0}
+    {:else if groups.length === 0 && pageRows.length === 0}
       <EmptyState size="sm" icon={Search} title={t('help.empty')} action={{ label: t('help.clear'), onclick: () => (query = '') }} />
     {:else}
       <div class="groups" data-testid="help-groups">
+        {#if pageRows.length}
+          <section aria-labelledby="fc-help-page" data-testid="help-page-keys">
+            <h3 id="fc-help-page">{t('help.on_this_page')}</h3>
+            <ul>
+              {#each pageRows as r (r.label_key)}
+                <li>
+                  <span class="label">{r.text}</span>
+                  <Kbd keys={r.keys} size="sm" />
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
         {#each groups as g (g.context)}
           <section aria-labelledby="fc-help-{g.context}">
             <h3 id="fc-help-{g.context}">{contextTitle(g.context)}</h3>

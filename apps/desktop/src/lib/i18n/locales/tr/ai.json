@@ -65,7 +65,11 @@
       "drafts": "{count} öneri",
       "spent": "Bu istek yaklaşık {cost} tuttu.",
       "keep": "Ekle",
-      "add": "{count} notu ekle"
+      "add": "{count} notu ekle",
+      "deck": "Kartlar hangi desteye?",
+      "no_deck": "Kartların gideceği bir deste yok: önce Oluştur › Ekle'de bir deste kur.",
+      "no_provider": "Kart üretmek için önce bir yapay zeka sağlayıcısı bağla (bir kez; ücretsiz seçenekler var).",
+      "connect": "Sağlayıcı bağla"
     },
     "providers": {
       "heading": "Sağlayıcılar",
@@ -270,7 +274,11 @@
       "provider_says": "Sağlayıcının mesajı:",
       "job_failed": "Deneme çalıştırılamadı.",
       "http": "HTTP {status}"
-    }
+    },
+    "settings_subtitle": "Yapay zeka sağlayıcını bağla ve ne kadar kullandığını gör. Kart üretmek Oluştur › Yapay zeka'da; kart yazarken ve çalışırken de kullanılır.",
+    "make_cards": "Kart üret",
+    "generate_title": "Yapay zekayla kart üret",
+    "generate_subtitle": "Bir metni yapıştır ya da dosyadan al; yapay zeka kart önerir, beğendiklerini seçip eklersin."
   },
   "errors": {
     "validation": {
