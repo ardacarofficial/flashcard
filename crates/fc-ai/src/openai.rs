@@ -29,7 +29,7 @@ impl OpenAi {
         }
     }
 
-    fn body(&self, request: &CompletionRequest) -> ProviderResult<Value> {
+    pub(crate) fn body(&self, request: &CompletionRequest) -> ProviderResult<Value> {
         let mut messages = Vec::new();
         if let Some(system) = request.system.as_deref().filter(|s| !s.is_empty()) {
             messages.push(json!({"role": "system", "content": system}));
@@ -218,8 +218,10 @@ impl AiProvider for OpenAi {
     async fn list_models(&self) -> ProviderResult<Vec<String>> {
         let auth = self.auth()?;
         let v = self.http.get("/models", &Self::headers(&auth))?;
+        // `{"data": [...]}`; some compatible servers answer with the bare array.
         Ok(v.get("data")
             .and_then(Value::as_array)
+            .or_else(|| v.as_array())
             .map(|d| {
                 d.iter()
                     .filter_map(|m| m.get("id").and_then(Value::as_str).map(str::to_owned))

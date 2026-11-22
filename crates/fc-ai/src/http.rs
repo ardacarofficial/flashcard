@@ -166,6 +166,45 @@ impl Http {
         self.finish(response)
     }
 
+    /// One request whose outcome is returned raw — status and body text, or the transport
+    /// failure — for the connection test, which explains failures instead of mapping them to
+    /// a [`ProviderError`]. Nothing here is retried.
+    pub(crate) fn exchange(
+        &self,
+        post: bool,
+        path: &str,
+        headers: &[(&str, &str)],
+        body: Option<&Value>,
+    ) -> Result<(u16, String), ureq::Error> {
+        let url = format!("{}{path}", self.base);
+        let mut response = if post {
+            let mut req = self
+                .agent
+                .post(&url)
+                .header("content-type", "application/json");
+            for (k, v) in headers {
+                req = req.header(*k, *v);
+            }
+            let text = body
+                .map(Value::to_string)
+                .unwrap_or_else(|| "{}".to_owned());
+            req.send(text.as_str())?
+        } else {
+            let mut req = self.agent.get(&url);
+            for (k, v) in headers {
+                req = req.header(*k, *v);
+            }
+            req.call()?
+        };
+        let status = response.status().as_u16();
+        let text = response
+            .body_mut()
+            .with_config()
+            .limit(MAX_BODY)
+            .read_to_string()?;
+        Ok((status, text))
+    }
+
     fn finish(&self, mut response: ureq::http::Response<ureq::Body>) -> ProviderResult<Value> {
         let status = response.status().as_u16();
         let retry_after = retry_after_ms(response.headers());
@@ -252,8 +291,13 @@ pub(crate) fn retry_after_ms(headers: &ureq::http::HeaderMap) -> Option<u64> {
 
 /// The human-readable part of a provider error body: `error.message` (Anthropic, OpenAI),
 /// `error` (Ollama), else the body itself — truncated.
-fn error_message(body: &str) -> String {
+pub(crate) fn error_message(body: &str) -> String {
     let parsed: Option<Value> = serde_json::from_str(body).ok();
+    // Google's endpoints wrap the error object in a one-element array.
+    let parsed = match parsed {
+        Some(Value::Array(mut items)) if !items.is_empty() => Some(items.swap_remove(0)),
+        other => other,
+    };
     let text = parsed
         .as_ref()
         .and_then(|v| {

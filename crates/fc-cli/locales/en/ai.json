@@ -4,6 +4,7 @@
   "oplog.summary.ai.providers.delete": "Removed AI provider {name}",
   "oplog.summary.ai.providers.set_key": "Changed the API key of {name}",
   "oplog.summary.ai.providers.refresh_models": "Refreshing the model list",
+  "oplog.summary.ai.providers.test": "Testing the connection",
   "oplog.summary.ai.providers.restore": "Restored AI provider {name}",
   "oplog.summary.ai.providers.set_models": "Updated the model list",
   "oplog.summary.ai.routes.set": "Changed the AI model of {feature}",

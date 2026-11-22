@@ -7,6 +7,11 @@
 //! * [`ProviderKind`] + [`ProviderConfig`] → [`build`]: Anthropic Claude (Messages API, the
 //!   first-class default), OpenAI (Chat Completions), any OpenAI-compatible endpoint
 //!   (OpenRouter, LM Studio, …) and Ollama (local, native `/api/chat`).
+//! * [`presets`]: named starting points (Claude, OpenAI, OpenRouter, Gemini, Groq, Mistral,
+//!   DeepSeek, Ollama, LM Studio, a custom endpoint) — data over the four protocols, not
+//!   engines; a provider's preset and key rule are recognised from its kind and address.
+//! * [`diagnose`]: "test the connection" — one minimal request, classified in plain
+//!   categories (wrong key, no credit, model not found, cannot reach, TLS, …).
 //! * [`secrets`]: where API keys live. [`secrets::SecretStore`] with the OS keychain
 //!   (`keychain` feature) and an in-memory store for tests. Keys are [`secrets::Secret`]s:
 //!   no `Display`, no `Serialize`, a redacted `Debug`, and provider errors are scrubbed of
@@ -20,10 +25,12 @@
 #![forbid(unsafe_code)]
 
 mod anthropic;
+pub mod diagnose;
 mod executor;
 mod http;
 mod ollama;
 mod openai;
+pub mod presets;
 pub mod secrets;
 pub mod sources;
 
@@ -32,6 +39,8 @@ pub mod mock;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_presets;
 #[cfg(test)]
 mod tests_v2;
 
@@ -77,7 +86,8 @@ impl ProviderKind {
         }
     }
 
-    /// Whether requests need an API key.
+    /// Whether requests need an API key at the kind's default address. A configured provider's
+    /// rule depends on its address too: see [`presets::needs_key`].
     pub fn needs_key(self) -> bool {
         matches!(self, Self::Anthropic | Self::Openai)
     }

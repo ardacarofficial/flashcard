@@ -2,9 +2,9 @@
 
 use super::context::{build, require_provider, Built, Target};
 use super::prompts::{parse, repair_message, OutputSpec, Parsed};
-use super::providers::{dto, has_key, keychain_error, kind_of, parse_kind};
+use super::providers::{dto, has_key, keychain_error, kind_of, needs_key, parse_kind};
 use super::usage::{budget, cost};
-use super::{key_account, AiServices, ID, LANE, MODELS_JOB, REQUEST_JOB, RETRIES, TIMEOUT};
+use super::{key_account, AiServices, ID, LANE, MODELS_JOB, REQUEST_JOB, RETRIES, TEST_JOB, TIMEOUT};
 use crate::error::{AppError, AppResult};
 use crate::handler::{CommandCtx, CommandOutcome, QueryCtx};
 use crate::jobs::{JobContext, JobHandler};
@@ -35,6 +35,9 @@ use std::time::{Duration, Instant};
 /// Longest `Retry-After` a job waits for; a longer one fails the job ("try again later").
 const MAX_HONOURED_RETRY_AFTER_MS: u64 = 60_000;
 
+/// Longest wait of a connection test.
+const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Least time between two `ai_partial` events of a streaming job.
 const PARTIAL_EVERY: Duration = Duration::from_millis(60);
 
@@ -47,6 +50,7 @@ pub(super) fn register(reg: &mut Registry, services: &Arc<AiServices>) {
     reg.command::<AiRun>(move |req: RunAi, ctx: &mut CommandCtx<'_>| run(&s, req, ctx));
     reg.job(Arc::new(RequestJob(Arc::clone(services))));
     reg.job(Arc::new(ModelsJob(Arc::clone(services))));
+    reg.job(Arc::new(TestJob(Arc::clone(services))));
 }
 
 /// Hash of exactly what will be sent and where: the provider, its protocol and address, the
@@ -180,7 +184,7 @@ fn run(services: &AiServices, req: RunAi, ctx: &mut CommandCtx<'_>) -> AppResult
     if request_hash(&built.provider, &built.request)? != req.preview_hash {
         return Err(stale("the request changed since it was previewed"));
     }
-    if kind_of(parse_kind(&built.provider.kind)?).needs_key() && !has_key(services, built.provider.id) {
+    if needs_key(&built.provider)? && !has_key(services, built.provider.id) {
         return Err(AppError::Api(
             ApiError::new(ErrorCode::ProviderAiUnauthorized, "no API key is set for this provider")
                 .with_detail("provider", built.provider.name.clone()),
@@ -247,6 +251,8 @@ fn provider_error(e: ProviderError, provider: &str, key: Option<&Secret>) -> App
 /// The provider of a job: row, key (from the keychain), timeout.
 struct Connection {
     provider: Arc<dyn AiProvider>,
+    config: ProviderConfig,
+    record: AiProviderRecord,
     id: AiProviderId,
     name: String,
     key: Option<Secret>,
@@ -284,20 +290,23 @@ fn connect(
     // missing/unusable keychain: no key is the normal case there.
     let key = match services.secrets().get(&key_account(id)) {
         Ok(key) => key,
-        Err(_) if !kind.needs_key() => None,
+        Err(_) if !needs_key(&record)? => None,
         Err(e) => return Err(keychain_error(e)),
     };
-    let provider = fc_ai::build(ProviderConfig {
+    let config = ProviderConfig {
         kind,
         base_url: record.base_url.clone(),
         api_key: key.clone(),
         timeout: Duration::from_secs(timeout),
         media: Some(Arc::new(Images(media))),
-    });
+    };
+    let provider = fc_ai::build(config.clone());
     Ok(Connection {
         provider,
+        config,
         id,
-        name: record.name,
+        name: record.name.clone(),
+        record,
         key,
         retries,
     })
@@ -595,6 +604,72 @@ impl JobHandler for ModelsJob {
             id: conn.id,
             models: models.clone(),
         })?;
-        Ok(serde_json::json!({ "models": models }))
+        // The list as stored (sorted, deduplicated): what the picker will show.
+        let stored = require_provider(&*ctx.read()?, conn.id)?.models;
+        serde_json::to_value(AiModelList {
+            provider_id: conn.id,
+            models: stored,
+        })
+        .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))
+    }
+}
+
+/// Tests a provider's connection: one minimal request ([`fc_ai::diagnose`]), explained. The
+/// result is the job's result and the provider's `last_test` for this app run. Its few tokens
+/// are not recorded as usage (no feature asked for them; the probe is capped at
+/// [`fc_ai::diagnose::PROBE_MAX_TOKENS`] output tokens).
+struct TestJob(Arc<AiServices>);
+
+impl JobHandler for TestJob {
+    fn kind(&self) -> &'static str {
+        TEST_JOB
+    }
+
+    fn lane(&self) -> &'static str {
+        LANE
+    }
+
+    fn run(&self, payload: Value, ctx: &JobContext<'_>) -> AppResult<Value> {
+        use fc_ai::diagnose::{test_connection, Outcome};
+        let payload: ModelsPayload = crate::support::from_json(&payload)?;
+        ctx.ensure_module_enabled(ID)?;
+        ctx.report(None, "ai.job.connecting");
+        let conn = connect(&self.0, ctx, payload.provider_id, &[], None)?;
+        ctx.cancel.check()?;
+        let model = Some(conn.record.default_model.trim())
+            .filter(|m| !m.is_empty())
+            .map(str::to_owned);
+        // A test answers quickly or not at all: do not wait the full request timeout.
+        let mut config = conn.config.clone();
+        config.timeout = config.timeout.min(TEST_TIMEOUT);
+        let d = test_connection(&config, model.as_deref());
+        ctx.cancel.check()?;
+        let outcome = match d.outcome {
+            Outcome::Ok => AiTestOutcome::Ok,
+            Outcome::NoKey => AiTestOutcome::NoKey,
+            Outcome::WrongKey => AiTestOutcome::WrongKey,
+            Outcome::NoCredit => AiTestOutcome::NoCredit,
+            Outcome::ModelNotFound => AiTestOutcome::ModelNotFound,
+            Outcome::WrongAddress => AiTestOutcome::WrongAddress,
+            Outcome::RateLimited => AiTestOutcome::RateLimited,
+            Outcome::ServiceDown => AiTestOutcome::ServiceDown,
+            Outcome::CannotReach => AiTestOutcome::CannotReach,
+            Outcome::Tls => AiTestOutcome::Tls,
+            Outcome::Failed => AiTestOutcome::Failed,
+        };
+        let result = AiConnectionTest {
+            provider_id: conn.id,
+            outcome,
+            model,
+            answered_model: d.model,
+            http_status: d.status,
+            message: d.message,
+            latency_ms: u32::try_from(d.latency_ms).unwrap_or(u32::MAX),
+            checked_at: ctx.now(),
+        };
+        self.0.remember_test(&conn.record, result.clone());
+        // The provider list shows the new status.
+        ctx.publish(vec![DomainEvent::AiConfigChanged]);
+        serde_json::to_value(result).map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))
     }
 }

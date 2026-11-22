@@ -1,12 +1,18 @@
 /**
  * Dev-only stand-in for the ai module (the real providers, prompts, preview hashing, jobs and
  * keychain live in fc-app/fc-ai): one canned answer per feature, jobs that finish at once.
- * Keys are kept only as "set / not set" — even the mock never stores them.
+ * Keys are kept only as "set / not set" — even the mock never stores them. Presets mirror
+ * fc-ai's registry (`crates/fc-ai/src/presets.rs`); a key containing "wrong" makes the
+ * connection test fail as a rejected key, so every step of the setup can be seen.
  */
 import { err, menu, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
 import type {
+  AiConnectionTest,
   AiFeature,
   AiJobResult,
+  AiModelList,
+  AiProviderPreset,
+  AiProviderStatus,
   AiOutput,
   AiPreview,
   AiPriceDto,
@@ -45,6 +51,89 @@ const KINDS = [
   { kind: 'openai_compatible' as AiProviderKind, default_base_url: 'http://localhost:1234/v1', default_model: '', suggested_models: [], needs_key: false, local: false },
   { kind: 'ollama' as AiProviderKind, default_base_url: 'http://localhost:11434', default_model: '', suggested_models: [], needs_key: false, local: true },
 ];
+
+const preset = (
+  id: string,
+  kind: AiProviderKind,
+  name: string,
+  base_url: string,
+  o: Partial<AiProviderPreset> = {},
+): AiProviderPreset => ({
+  id,
+  kind,
+  name,
+  base_url,
+  needs_key: true,
+  key_url: null,
+  setup_url: null,
+  local: false,
+  free: false,
+  default_model: '',
+  suggested_models: [],
+  ...o,
+});
+
+const PRESETS: AiProviderPreset[] = [
+  preset('anthropic', 'anthropic', 'Claude', 'https://api.anthropic.com', {
+    key_url: 'https://platform.claude.com/settings/keys',
+    default_model: 'claude-sonnet-5-5',
+    suggested_models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
+  }),
+  preset('openai', 'openai', 'OpenAI', 'https://api.openai.com/v1', { key_url: 'https://platform.openai.com/api-keys' }),
+  preset('openrouter', 'openai_compatible', 'OpenRouter', 'https://openrouter.ai/api/v1', {
+    key_url: 'https://openrouter.ai/keys',
+    free: true,
+    default_model: 'openrouter/auto',
+    suggested_models: ['openrouter/auto', 'openrouter/free'],
+  }),
+  preset('gemini', 'openai_compatible', 'Google Gemini', 'https://generativelanguage.googleapis.com/v1beta/openai', {
+    key_url: 'https://aistudio.google.com/apikey',
+    free: true,
+  }),
+  preset('groq', 'openai_compatible', 'Groq', 'https://api.groq.com/openai/v1', { key_url: 'https://console.groq.com/keys', free: true }),
+  preset('mistral', 'openai_compatible', 'Mistral', 'https://api.mistral.ai/v1', {
+    key_url: 'https://console.mistral.ai/api-keys',
+    default_model: 'mistral-small-latest',
+    suggested_models: ['mistral-small-latest', 'mistral-large-latest'],
+  }),
+  preset('deepseek', 'openai_compatible', 'DeepSeek', 'https://api.deepseek.com', { key_url: 'https://platform.deepseek.com/api_keys' }),
+  preset('ollama', 'ollama', 'Ollama', 'http://localhost:11434', {
+    needs_key: false,
+    setup_url: 'https://ollama.com/download',
+    local: true,
+    free: true,
+  }),
+  preset('lmstudio', 'openai_compatible', 'LM Studio', 'http://localhost:1234/v1', {
+    needs_key: false,
+    setup_url: 'https://lmstudio.ai/download',
+    local: true,
+    free: true,
+  }),
+  preset('custom', 'openai_compatible', '', '', { needs_key: false }),
+];
+
+const host = (url: string) => url.replace(/^https?:\/\//, '').split(/[/?#]/)[0]!.toLowerCase();
+const isPrivate = (url: string) =>
+  /^(localhost|127\.|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host(url)) || !host(url).split(':')[0]!.includes('.');
+
+/** As fc-ai's `presets::detect`: native kinds by kind, compatible ones by address. */
+function detect(kind: AiProviderKind, url: string): AiProviderPreset {
+  const native = { anthropic: 'anthropic', openai: 'openai', ollama: 'ollama' } as Record<string, string>;
+  const id = native[kind] ?? PRESETS.find((p) => p.kind === 'openai_compatible' && p.base_url && host(p.base_url) === host(url))?.id ?? 'custom';
+  return PRESETS.find((p) => p.id === id)!;
+}
+
+const needsKey = (kind: AiProviderKind, url: string) => {
+  const p = detect(kind, url);
+  return p.id === 'custom' ? !isPrivate(url) : p.needs_key;
+};
+
+/** Model lists the mock "fetches" per preset. */
+const FETCHED: Record<string, string[]> = {
+  anthropic: ['claude-haiku-5-5', 'claude-opus-5-5', 'claude-sonnet-5-5'],
+  openrouter: ['anthropic/claude-sonnet-5.5', 'google/gemini-flash', 'meta-llama/llama-3.3-70b-instruct:free', 'openrouter/auto', 'openrouter/free'],
+  ollama: ['llama3.2:3b', 'qwen3:8b'],
+};
 
 const NAMES: Record<AiProviderKind, string> = {
   anthropic: 'Claude',
@@ -88,6 +177,19 @@ export default {
   modules: [module('ai', [menu('ai.main', 'nav.ai', '/ai', 45)])],
   handlers: ({ now, id, emit, notes, requireDeck }: MockEnv) => {
     const providers: AiProviderDto[] = [];
+    /** Providers whose (mock) key contains "wrong". */
+    const wrongKeys = new Set<string>();
+    /** Recomputes what Rust derives: key rule, preset, status. */
+    const refresh = (p: AiProviderDto) => {
+      p.needs_key = needsKey(p.kind, p.base_url);
+      p.preset = detect(p.kind, p.base_url).id;
+      p.local = p.kind === 'ollama' || /^(localhost|127\.|\[::1\])/.test(host(p.base_url));
+      const failed = p.last_test !== null && p.last_test.outcome !== 'ok';
+      const status: AiProviderStatus =
+        p.needs_key && !p.has_key ? 'needs_key' : !p.default_model ? 'needs_model' : failed ? 'test_failed' : 'ready';
+      p.status = status;
+      return p;
+    };
     const routes = new Map<AiFeature, AiRouteDto>();
     let prices: AiPriceDto[] = [
       { model: 'claude-haiku-5-5', input_per_mtok: 1, output_per_mtok: 5 },
@@ -131,24 +233,29 @@ export default {
       };
     };
     return {
-      'ai.providers.list': () => ({ providers, kinds: KINDS, keychain: true, keychain_session_only: false }),
+      'ai.providers.list': () => ({ providers, kinds: KINDS, presets: PRESETS, keychain: true, keychain_session_only: false }),
       'ai.providers.create': (req) => {
         const info = KINDS.find((k) => k.kind === req.kind)!;
+        const base_url = (req.base_url ?? info.default_base_url).replace(/\/+$/, '');
+        const pre = detect(req.kind, base_url);
         const t = now();
-        const p: AiProviderDto = {
+        const p: AiProviderDto = refresh({
           id: id('aiprov'),
           kind: req.kind,
-          name: req.name ?? NAMES[req.kind],
-          base_url: req.base_url ?? info.default_base_url,
-          default_model: req.default_model ?? info.default_model,
-          models: info.suggested_models,
+          name: req.name ?? (pre.name || NAMES[req.kind]),
+          base_url,
+          default_model: req.default_model ?? pre.default_model,
+          models: pre.suggested_models,
           is_default: (req.is_default ?? false) || !providers.some((x) => x.is_default),
           has_key: false,
-          needs_key: info.needs_key,
-          local: info.local,
+          needs_key: false,
+          local: false,
+          preset: pre.id,
+          status: 'ready',
+          last_test: null,
           created_at: t,
           updated_at: t,
-        };
+        });
         if (p.is_default) for (const x of providers) x.is_default = false;
         providers.push(p);
         changed();
@@ -159,14 +266,17 @@ export default {
         if (req.is_default) for (const x of providers) x.is_default = false;
         // As in fc-app: a key never follows the provider to a new address unconfirmed.
         if (req.base_url.replace(/\/+$/, '') !== p.base_url && req.keep_key !== true) p.has_key = false;
+        // As in fc-app: a test verdict is for one address and model.
+        if (req.base_url.replace(/\/+$/, '') !== p.base_url || req.default_model !== p.default_model) p.last_test = null;
         Object.assign(p, {
           name: req.name,
-          base_url: req.base_url,
+          base_url: req.base_url.replace(/\/+$/, ''),
           default_model: req.default_model,
           models: req.models,
           is_default: p.is_default || req.is_default,
           updated_at: now(),
         });
+        refresh(p);
         changed();
         return p;
       },
@@ -183,12 +293,20 @@ export default {
           throw err('VALIDATION_AI_KEY', 'errors.validation.ai_key', 'bad key');
         }
         p.has_key = req.key !== null;
+        if (req.key?.includes('wrong')) wrongKeys.add(p.id);
+        else wrongKeys.delete(p.id);
+        p.last_test = null;
+        refresh(p);
         changed();
         return p;
       },
       'ai.providers.refresh_models': (req) => {
         const p = find(req.id);
         const t = now();
+        const fetched = FETCHED[p.preset] ?? (p.models.length ? p.models : ['model-a', 'model-b']);
+        p.models = [...new Set([...fetched])].sort();
+        const result: AiModelList = { provider_id: p.id, models: p.models };
+        changed();
         return {
           id: id('job'),
           kind: 'ai.models',
@@ -196,7 +314,38 @@ export default {
           progress: 1,
           message: null,
           error: null,
-          result: { models: p.models } as JsonValue,
+          result: result as unknown as JsonValue,
+          created_at: t,
+          updated_at: t,
+        } satisfies JobDto;
+      },
+      'ai.providers.test': (req) => {
+        const p = find(req.id);
+        const t = now();
+        const model = p.default_model || null;
+        const outcome: AiConnectionTest['outcome'] =
+          p.needs_key && !p.has_key ? 'no_key' : wrongKeys.has(p.id) ? 'wrong_key' : 'ok';
+        const result: AiConnectionTest = {
+          provider_id: p.id,
+          outcome,
+          model,
+          answered_model: outcome === 'ok' ? model : null,
+          http_status: outcome === 'no_key' ? null : outcome === 'ok' ? 200 : 401,
+          message: null,
+          latency_ms: outcome === 'no_key' ? 0 : 420,
+          checked_at: t,
+        };
+        p.last_test = result;
+        refresh(p);
+        changed();
+        return {
+          id: id('job'),
+          kind: 'ai.test',
+          status: 'succeeded',
+          progress: 1,
+          message: null,
+          error: null,
+          result: result as unknown as JsonValue,
           created_at: t,
           updated_at: t,
         } satisfies JobDto;

@@ -114,6 +114,8 @@ describe('AI screen: sources and providers', () => {
     expect(await screen.findByText(/only for this session/)).toBeTruthy();
     spy.mockRestore();
 
+    // v1.3: the address lives in the provider's settings, under "Advanced".
+    await fireEvent.click((await screen.findAllByRole('button', { name: 'Claude' }))[0]!);
     const address = (await screen.findAllByLabelText('Address'))[0] as HTMLInputElement;
     expect(screen.getAllByText('An API key is stored in the system keychain.').length).toBeGreaterThan(0);
     await fireEvent.change(address, { target: { value: 'https://proxy.example.org' } });

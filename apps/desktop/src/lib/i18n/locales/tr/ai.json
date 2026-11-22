@@ -69,7 +69,7 @@
     },
     "providers": {
       "heading": "Sağlayıcılar",
-      "none": "Henüz sağlayıcı yok. Claude, OpenAI ya da yerel bir model ekle.",
+      "none": "Henüz sağlayıcı yok.",
       "no_keychain": "Sistem anahtar zinciri yok: API anahtarları burada saklanamaz.",
       "default": "varsayılan",
       "local": "yerel",
@@ -93,7 +93,24 @@
       "move_keep_key": "Değiştir, anahtarı koru",
       "intro": "Her istek gönderilmeden önce sana gösterilir. Anahtarlar sistem anahtar zincirinde kalır.",
       "more": "{name} için diğer işlemler",
-      "load_failed": "Sağlayıcılar yüklenemedi."
+      "load_failed": "Sağlayıcılar yüklenemedi.",
+      "what_for": "AI ile bir metinden kart üretebilir, kart yazarken boş alanları doldurtabilir, çalışırken açıklama ya da ipucu isteyebilirsin. Tamamen isteğe bağlı: bir sağlayıcı kurana kadar kapalıdır ve hiçbir şey gönderilmez.",
+      "none_hint": "“Sağlayıcı ekle”ye bas: Claude, OpenRouter, Gemini ya da bilgisayarında çalışan Ollama…",
+      "status": {
+        "ready": "hazır",
+        "needs_key": "anahtar gerekli",
+        "needs_model": "model seçilmedi",
+        "test_failed": "deneme başarısız"
+      },
+      "test": "Bağlantıyı dene",
+      "key_optional": "API anahtarı (isteğe bağlı)",
+      "key_not_needed": "Anahtar gerekmez (sunucun istiyorsa girebilirsin).",
+      "advanced": "Gelişmiş",
+      "advanced_note": "Adres değişirse kayıtlı anahtar yeni adrese gönderilmeden önce sorulur.",
+      "name": "Ad",
+      "default_heading": "Varsayılan sağlayıcı",
+      "default_intro": "Bir özellik için aşağıda ayrı bir sağlayıcı seçmediysen bu kullanılır.",
+      "default_label": "Varsayılan"
     },
     "routes": {
       "heading": "Özellik başına model",
@@ -159,7 +176,101 @@
         "wrong": "Pek değil"
       }
     },
-    "subtitle": "Metinden kart üret; uygulamanın kullanabileceği sağlayıcıları ve modelleri seç."
+    "subtitle": "Metinden kart üret; uygulamanın kullanabileceği sağlayıcıları ve modelleri seç.",
+    "setup": {
+      "title": "Sağlayıcı ekle",
+      "title_preset": "{name} ekle",
+      "gallery_intro": "Hangisini kullanmak istiyorsun? Ücretsiz başlamak için Gemini, Groq ya da OpenRouter; internete hiçbir şey göndermemek için Ollama ya da LM Studio.",
+      "steps": "Kurulum adımları",
+      "step1_key": "Anahtarı yapıştır",
+      "step1_local": "Sunucuyu bağla",
+      "step1_custom": "Adres ve anahtar",
+      "step2": "Model seç",
+      "step3": "Bağlantıyı dene",
+      "key_intro": "{name} hesabında bir API anahtarı oluştur ve buraya yapıştır.",
+      "key_here": "Anahtarı buradan alırsın:",
+      "key_hint": "Yalnızca sistemin anahtar zincirine kaydedilir; uygulama onu bir daha göstermez.",
+      "local_intro": "{name} bilgisayarında açık olmalı ve sunucusu çalışmalı. Anahtar gerekmez.",
+      "download_here": "Kurulu değilse buradan indir:",
+      "custom_intro": "OpenAI uyumlu servisin adresini gir (sonuna /chat/completions ekleme). Kendi bilgisayarındaki ya da ev ağındaki sunucular için anahtar gerekmez.",
+      "address_hint": "Ör. http://localhost:8000/v1 — sonuna /chat/completions eklenmez.",
+      "model_intro": "Listeden bir model seç ya da adını yaz. Liste sağlayıcıdan alınır.",
+      "test_intro": "{model} modeline çok kısa bir istek gönderilir (birkaç token) ve sonucu burada görürsün.",
+      "back": "Geri",
+      "next": "Devam",
+      "done": "Bitti",
+      "model_search": "Model",
+      "model_placeholder": "Ara ya da model adını yaz",
+      "refresh_models": "Listeyi yenile",
+      "models_loading": "Model listesi alınıyor…",
+      "models_failed": "Liste alınamadı: {reason}. Model adını elle yazabilirsin.",
+      "models_unknown_error": "bilinmeyen hata",
+      "models_count": "{count, plural, one {# model} other {# model}}",
+      "more_models": "{count, plural, one {# model daha: aramayı daralt} other {# model daha: aramayı daralt}}",
+      "chosen": "seçilen: {model}",
+      "use_typed": "“{model}” kullan",
+      "no_match": "Eşleşen model yok.",
+      "copy_link": "Bağlantıyı kopyala",
+      "copied": "Kopyalandı"
+    },
+    "preset": {
+      "anthropic": {
+        "description": "Anthropic'in Claude modelleri. Kart üretmede çok iyi; ücretli."
+      },
+      "openai": {
+        "description": "OpenAI'nin GPT modelleri; ücretli."
+      },
+      "openrouter": {
+        "description": "Tek anahtarla yüzlerce modele erişim; bazı modeller ücretsiz."
+      },
+      "gemini": {
+        "description": "Google'ın Gemini modelleri; ücretsiz kullanım kotası var."
+      },
+      "groq": {
+        "description": "Açık modeller, çok hızlı yanıt; ücretsiz kotası var."
+      },
+      "mistral": {
+        "description": "Mistral'in modelleri; ücretli."
+      },
+      "deepseek": {
+        "description": "DeepSeek modelleri; ucuz, ücretli."
+      },
+      "ollama": {
+        "description": "Modeller kendi bilgisayarında çalışır; hiçbir şey dışarı çıkmaz."
+      },
+      "lmstudio": {
+        "description": "Modelleri indirip kendi bilgisayarında çalıştıran uygulama."
+      },
+      "custom": {
+        "name": "Özel (OpenAI uyumlu)",
+        "description": "OpenAI uyumlu herhangi bir adres: kendi sunucun ya da başka bir servis."
+      }
+    },
+    "preset_tag": {
+      "local": "yerel · ücretsiz",
+      "free": "ücretsiz seçenek"
+    },
+    "test": {
+      "outcome": {
+        "ok": "Bağlantı çalışıyor.",
+        "no_key": "Anahtar yok: önce API anahtarını kaydet.",
+        "wrong_key": "Anahtar kabul edilmedi. Tam kopyaladığından emin ol ya da yeni bir anahtar oluştur.",
+        "no_credit": "Hesapta kredi ya da kota kalmamış. Sağlayıcının sitesinden bakiye ekle ya da ücretsiz bir model seç.",
+        "model_not_found": "Bu model bulunamadı ya da bu anahtarla kullanılamıyor. Listeden başka bir model seç.",
+        "wrong_address": "Bu adreste beklenen servis yok. Adresi kontrol et (Gelişmiş).",
+        "rate_limited": "Şu an çok fazla istek var. Biraz sonra yeniden dene.",
+        "service_down": "Sağlayıcı tarafında bir sorun var. Biraz sonra yeniden dene.",
+        "cannot_reach": "Sunucuya ulaşılamadı. İnternet bağlantını ve adresi kontrol et.",
+        "cannot_reach_local": "{name} sunucusuna ulaşılamadı. Uygulama açık ve sunucusu çalışıyor mu?",
+        "tls": "Güvenli bağlantı kurulamadı (sertifika). Bir vekil sunucu ya da antivirüs bağlantıya karışıyor olabilir.",
+        "failed": "Deneme başarısız oldu."
+      },
+      "answered": "{model} yanıt verdi · {ms} ms",
+      "list_only": "Model listesi alındı. Bir model seçince ona da kısa bir istek gönderilir.",
+      "provider_says": "Sağlayıcının mesajı:",
+      "job_failed": "Deneme çalıştırılamadı.",
+      "http": "HTTP {status}"
+    }
   },
   "errors": {
     "validation": {
@@ -243,7 +354,8 @@
         "update": "AI sağlayıcısını düzenle",
         "delete": "AI sağlayıcısını kaldır",
         "set_key": "AI API anahtarını ayarla",
-        "refresh_models": "AI modellerini yenile"
+        "refresh_models": "AI modellerini yenile",
+        "test": "AI bağlantısını dene"
       },
       "routes": {
         "list": "Özellik başına AI modeli",

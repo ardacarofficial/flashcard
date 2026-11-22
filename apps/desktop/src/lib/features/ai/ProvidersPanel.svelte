@@ -1,6 +1,12 @@
+<!--
+  AI providers (v1.3): what AI is for, the configured providers as dense rows with their status
+  (ready / needs a key / needs a model / test failed), "add provider" (preset gallery + three
+  steps, `AddProviderDialog`), the default provider, per-feature routing and prices. Every rule
+  (which presets exist, whether a key is needed, the status, the test verdict) comes from Rust.
+-->
 <script lang="ts">
   import { api, type ApiError } from '$lib/api';
-  import type { AiFeature, AiPriceDto, AiProviderDto, AiProviderList, AiProviderKind, AiRouteDto } from '$lib/api/types';
+  import type { AiConnectionTest, AiFeature, AiPriceDto, AiProviderDto, AiProviderList, AiProviderStatus, AiRouteDto } from '$lib/api/types';
   import { t, td } from '$lib/i18n/index.svelte';
   import type { ScreenCtx } from '../types';
   import {
@@ -19,8 +25,16 @@
     Trash2,
     Save,
     CircleCheck,
+    ChevronDown,
+    ChevronRight,
+    type Tone,
   } from '$lib/ui';
   import { SettingsSection, FormRow } from '../core/kit';
+  import { fetchModels, jobErrorText, testConnection } from './ai';
+  import AddProviderDialog from './AddProviderDialog.svelte';
+  import KeyLink from './KeyLink.svelte';
+  import ModelPicker from './ModelPicker.svelte';
+  import TestResult from './TestResult.svelte';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -28,13 +42,20 @@
   let loadFailed = $state(false);
   let routes = $state.raw<AiRouteDto[]>([]);
   let prices = $state.raw<AiPriceDto[]>([]);
-  let newKind = $state<AiProviderKind>('anthropic');
   let keys = $state<Record<string, string>>({});
   let notice = $state<string | null>(null);
   let error = $state<string | null>(null);
   let price = $state<AiPriceDto>({ model: '', input_per_mtok: 0, output_per_mtok: 0 });
   /** A new address typed for a provider with a stored key: waits for keep/remove. */
   let moving = $state<Record<string, string>>({});
+  let adding = $state(false);
+  /** Providers whose settings are open. */
+  let open = $state<Record<string, boolean>>({});
+  /** Per provider: a test or model fetch is running / its last failure / the test just run. */
+  let testing = $state<Record<string, boolean>>({});
+  let fetching = $state<Record<string, boolean>>({});
+  let fetchError = $state<Record<string, string | null>>({});
+  let lastTest = $state<Record<string, AiConnectionTest | null>>({});
 
   function fail(e: unknown) {
     error = td((e as ApiError).messageKey ?? 'errors.internal.unexpected');
@@ -68,8 +89,6 @@
       await load();
     }
   }
-
-  const add = () => act(() => api.call('ai.providers.create', { kind: newKind }));
 
   function update(p: AiProviderDto, patch: Partial<AiProviderDto>, keepKey: boolean | null = null) {
     const next = { ...p, ...patch };
@@ -109,8 +128,40 @@
   const removeKey = (p: AiProviderDto) =>
     act(() => api.call('ai.providers.set_key', { provider_id: p.id, key: null }));
 
-  const refresh = (p: AiProviderDto) =>
-    act(() => api.call('ai.providers.refresh_models', { id: p.id }), t('ai.providers.refreshing'));
+  async function refresh(p: AiProviderDto) {
+    fetching[p.id] = true;
+    fetchError[p.id] = null;
+    try {
+      const { job, list: models } = await fetchModels(p.id);
+      if (!models) fetchError[p.id] = jobErrorText(job, t('ai.setup.models_unknown_error'));
+      await load();
+    } catch (e) {
+      fetchError[p.id] = td((e as ApiError).messageKey ?? 'errors.internal.unexpected');
+    } finally {
+      fetching[p.id] = false;
+    }
+  }
+
+  async function runTest(p: AiProviderDto) {
+    testing[p.id] = true;
+    error = null;
+    try {
+      const r = await testConnection(p.id);
+      lastTest[p.id] = r.test;
+      if (!r.test) error = jobErrorText(r.job, t('ai.test.job_failed'));
+      await load();
+    } catch (e) {
+      fail(e);
+    } finally {
+      testing[p.id] = false;
+    }
+  }
+
+  function pickModel(p: AiProviderDto, model: string) {
+    if (model === p.default_model) return;
+    const models = p.models.includes(model) ? p.models : [...p.models, model];
+    void update(p, { default_model: model, models });
+  }
 
   const remove = (p: AiProviderDto) => act(() => api.call('ai.providers.delete', { id: p.id }));
 
@@ -121,14 +172,27 @@
   const savePrice = (p: AiPriceDto) => act(() => api.call('ai.prices.set', p));
   const deletePrice = (model: string) => act(() => api.call('ai.prices.delete', { model }));
 
-  const kindOptions = $derived((list?.kinds ?? []).map((k) => ({ value: k.kind, label: td(`ai.kind.${k.kind}`) })));
+  const STATUS_TONE: Record<AiProviderStatus, Tone> = {
+    ready: 'success',
+    needs_key: 'warning',
+    needs_model: 'warning',
+    test_failed: 'danger',
+  };
+
+  const presetOf = (p: AiProviderDto) => list?.presets.find((x) => x.id === p.preset) ?? null;
+  /** The test to show: the one just run here, else the provider's last one (this app run). */
+  const testOf = (p: AiProviderDto) => lastTest[p.id] ?? p.last_test;
+
   const routeProviders = $derived([
     { value: '', label: t('ai.routes.default') },
     ...(list?.providers ?? []).map((p) => ({ value: p.id, label: p.name })),
   ]);
+  const providerOptions = $derived((list?.providers ?? []).map((p) => ({ value: p.id, label: p.name })));
+  const defaultId = $derived(list?.providers.find((p) => p.is_default)?.id ?? null);
 </script>
 
 <div class="panel">
+  <p class="lead" data-testid="ai-what-for">{t('ai.providers.what_for')}</p>
   {#if error}
     <p class="banner danger" role="alert"><Icon icon={TriangleAlert} size={16} /><span>{error}</span></p>
   {/if}
@@ -144,10 +208,9 @@
   <SettingsSection title={t('ai.providers.heading')} description={t('ai.providers.intro')} icon={Bot}>
     {#snippet actions()}
       {#if list}
-        <div class="add">
-          <Select label={t('ai.providers.kind')} hideLabel size="sm" options={kindOptions} bind:value={newKind} />
-          <Button size="sm" variant="primary" icon={Plus} onclick={() => void add()}>{t('ai.providers.add')}</Button>
-        </div>
+        <Button size="sm" variant="primary" icon={Plus} onclick={() => (adding = true)} data-testid="open-dialog-add-provider">
+          {t('ai.providers.add')}
+        </Button>
       {/if}
     {/snippet}
     {#if !list}
@@ -157,71 +220,108 @@
         <Skeleton shape="card" height="120px" />
       {/if}
     {:else if list.providers.length === 0}
-      <EmptyState size="sm" icon={Bot} title={t('ai.providers.none')} />
+      <EmptyState size="sm" icon={Bot} title={t('ai.providers.none')} description={t('ai.providers.none_hint')} />
     {:else}
       <ul class="providers">
         {#each list.providers as p (p.id)}
-          <li class="provider">
+          {@const preset = presetOf(p)}
+          {@const test = testOf(p)}
+          <li class="provider" data-testid="ai-provider-row" data-status={p.status}>
             <div class="head">
-              <div class="who">
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={open[p.id] ? ChevronDown : ChevronRight}
+                aria-expanded={open[p.id] ?? false}
+                onclick={() => (open[p.id] = !open[p.id])}
+              >
                 <strong>{p.name}</strong>
-                <span class="muted">{td(`ai.kind.${p.kind}`)}</span>
+              </Button>
+              <span class="model">{p.default_model || '—'}</span>
+              <div class="chips">
+                <Chip size="sm" tone={STATUS_TONE[p.status]} label={td(`ai.providers.status.${p.status}`)} />
                 {#if p.is_default}<Chip size="sm" tone="accent" label={t('ai.providers.default')} />{/if}
-                {#if p.local}<Chip size="sm" tone="success" label={t('ai.providers.local')} />{/if}
+                {#if p.local}<Chip size="sm" label={t('ai.providers.local')} />{/if}
               </div>
-              <Menu
-                label={t('ai.providers.more', { name: p.name })}
-                items={[
-                  { id: 'refresh', label: t('ai.providers.refresh'), onselect: () => void refresh(p) },
-                  ...(p.is_default ? [] : [{ id: 'default', label: t('ai.providers.make_default'), onselect: () => void update(p, { is_default: true }) }]),
-                  { id: 'sep', separator: true as const },
-                  { id: 'delete', label: t('ai.providers.delete'), icon: Trash2, danger: true, onselect: () => void remove(p) },
-                ]}
-              />
-            </div>
-            <div class="fields">
-              <Input
-                type="url"
-                label={t('ai.providers.base_url')}
-                value={moving[p.id] ?? p.base_url}
-                onchange={(e: Event) => changeUrl(p, (e.currentTarget as HTMLInputElement).value)}
-              />
-              <Input
-                label={t('ai.providers.model')}
-                list={`models-${p.id}`}
-                value={p.default_model}
-                onchange={(e: Event) => void update(p, { default_model: (e.currentTarget as HTMLInputElement).value })}
-              />
-              <datalist id={`models-${p.id}`}>
-                {#each p.models as m (m)}<option value={m}></option>{/each}
-              </datalist>
-            </div>
-            {#if moving[p.id] !== undefined}
-              <div class="banner warning move" role="alert">
-                <p>{t('ai.providers.move_key', { url: moving[p.id] ?? '' })}</p>
-                <div class="actions">
-                  <Button size="sm" onclick={() => void confirmMove(p, false)}>{t('ai.providers.move_remove_key')}</Button>
-                  <Button size="sm" onclick={() => void confirmMove(p, true)}>{t('ai.providers.move_keep_key')}</Button>
-                  <Button size="sm" variant="ghost" onclick={() => delete moving[p.id]}>{t('ai.preview.cancel')}</Button>
-                </div>
+              <div class="row-actions">
+                <Button size="sm" loading={testing[p.id] ?? false} disabled={testing[p.id] ?? false} onclick={() => void runTest(p)}>
+                  {t('ai.providers.test')}
+                </Button>
+                <Menu
+                  label={t('ai.providers.more', { name: p.name })}
+                  items={[
+                    { id: 'refresh', label: t('ai.providers.refresh'), onselect: () => void refresh(p) },
+                    ...(p.is_default ? [] : [{ id: 'default', label: t('ai.providers.make_default'), onselect: () => void update(p, { is_default: true }) }]),
+                    { id: 'sep', separator: true as const },
+                    { id: 'delete', label: t('ai.providers.delete'), icon: Trash2, danger: true, onselect: () => void remove(p) },
+                  ]}
+                />
               </div>
+            </div>
+            {#if test && (test.outcome !== 'ok' || lastTest[p.id])}
+              <TestResult {test} provider={p} />
             {/if}
-            {#if p.needs_key || p.has_key}
-              <div class="key">
-                <p class="key-status" class:ok={p.has_key}>
-                  <Icon icon={p.has_key ? CircleCheck : KeyRound} size={16} />
-                  <span>{p.has_key ? t('ai.providers.key_set') : t('ai.providers.key_missing')}</span>
-                </p>
-                <div class="key-row">
-                  <Input type="password" autocomplete="off" label={t('ai.providers.key')}
-                    value={keys[p.id] ?? ''}
-                    oninput={(e: Event) => (keys[p.id] = (e.currentTarget as HTMLInputElement).value)}
-                  />
-                  <Button icon={Save} disabled={!keys[p.id]?.trim()} onclick={() => void saveKey(p)}>{t('ai.providers.save_key')}</Button>
-                  {#if p.has_key}
-                    <Button variant="ghost" onclick={() => void removeKey(p)}>{t('ai.providers.remove_key')}</Button>
-                  {/if}
+            {#if open[p.id] || p.status === 'needs_key'}
+              <div class="details">
+                <div class="key">
+                  <p class="key-status" class:ok={p.has_key}>
+                    <Icon icon={p.has_key ? CircleCheck : KeyRound} size={16} />
+                    <span>
+                      {p.has_key ? t('ai.providers.key_set') : p.needs_key ? t('ai.providers.key_missing') : t('ai.providers.key_not_needed')}
+                    </span>
+                  </p>
+                  {#if preset?.key_url && !p.has_key}<KeyLink url={preset.key_url} label={t('ai.setup.key_here')} />{/if}
+                  <div class="key-row">
+                    <Input type="password" autocomplete="off" label={p.needs_key ? t('ai.providers.key') : t('ai.providers.key_optional')}
+                      value={keys[p.id] ?? ''}
+                      oninput={(e: Event) => (keys[p.id] = (e.currentTarget as HTMLInputElement).value)}
+                    />
+                    <Button icon={Save} disabled={!keys[p.id]?.trim()} onclick={() => void saveKey(p)}>{t('ai.providers.save_key')}</Button>
+                    {#if p.has_key}
+                      <Button variant="ghost" onclick={() => void removeKey(p)}>{t('ai.providers.remove_key')}</Button>
+                    {/if}
+                  </div>
                 </div>
+                {#if open[p.id]}
+                  <div class="field">
+                    <ModelPicker
+                      models={p.models}
+                      value={p.default_model}
+                      onpick={(m) => pickModel(p, m)}
+                      onrefresh={() => void refresh(p)}
+                      loading={fetching[p.id] ?? false}
+                      error={fetchError[p.id] ?? null}
+                    />
+                  </div>
+                  <details class="advanced">
+                    <summary>{t('ai.providers.advanced')}</summary>
+                    <div class="fields">
+                      <Input
+                        type="url"
+                        label={t('ai.providers.base_url')}
+                        hint={t('ai.setup.address_hint')}
+                        value={moving[p.id] ?? p.base_url}
+                        onchange={(e: Event) => changeUrl(p, (e.currentTarget as HTMLInputElement).value)}
+                      />
+                      <Input
+                        label={t('ai.providers.name')}
+                        value={p.name}
+                        onchange={(e: Event) => void update(p, { name: (e.currentTarget as HTMLInputElement).value })}
+                      />
+                    </div>
+                    <p class="muted">{t('ai.providers.advanced_note')}</p>
+                  </details>
+                  {#if moving[p.id] !== undefined}
+                    <div class="banner warning move" role="alert">
+                      <p>{t('ai.providers.move_key', { url: moving[p.id] ?? '' })}</p>
+                      <div class="actions">
+                        <Button size="sm" onclick={() => void confirmMove(p, false)}>{t('ai.providers.move_remove_key')}</Button>
+                        <Button size="sm" onclick={() => void confirmMove(p, true)}>{t('ai.providers.move_keep_key')}</Button>
+                        <Button size="sm" variant="ghost" onclick={() => delete moving[p.id]}>{t('ai.preview.cancel')}</Button>
+                      </div>
+                    </div>
+                  {/if}
+                {/if}
               </div>
             {/if}
           </li>
@@ -229,6 +329,24 @@
       </ul>
     {/if}
   </SettingsSection>
+
+  {#if (list?.providers.length ?? 0) > 1}
+    <SettingsSection title={t('ai.providers.default_heading')} description={t('ai.providers.default_intro')} body="rows">
+      <FormRow label={t('ai.providers.default_label')}>
+        <Select
+          label={t('ai.providers.default_label')}
+          hideLabel
+          size="sm"
+          options={providerOptions}
+          value={defaultId}
+          onchange={(id: string) => {
+            const p = list?.providers.find((x) => x.id === id);
+            if (p && !p.is_default) void update(p, { is_default: true });
+          }}
+        />
+      </FormRow>
+    </SettingsSection>
+  {/if}
 
   {#if (list?.providers.length ?? 0) > 0}
     <SettingsSection title={t('ai.routes.heading')} description={t('ai.routes.intro')} body="rows">
@@ -285,9 +403,69 @@
       </div>
     </div>
   </SettingsSection>
+
+  {#if list}
+    <AddProviderDialog bind:open={adding} presets={list.presets} keychain={list.keychain} onclose={() => void load()} />
+  {/if}
 </div>
 
 <style>
+  .lead {
+    margin: 0;
+    max-width: 70ch;
+    color: var(--text-2);
+    font-size: var(--text-sm);
+  }
+  .provider .head {
+    flex-wrap: wrap;
+  }
+  .head .model {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-2);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chips {
+    display: flex;
+    gap: var(--space-1);
+    flex-wrap: wrap;
+    margin-inline-end: auto;
+  }
+  .row-actions {
+    display: flex;
+    gap: var(--space-1);
+    align-items: center;
+  }
+  .details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+  .details .key {
+    padding-top: 0;
+    border-top: 0;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .advanced summary {
+    cursor: pointer;
+    font-size: var(--text-sm);
+    color: var(--text-2);
+  }
+  .advanced[open] summary {
+    margin-bottom: var(--space-3);
+  }
+  .advanced .muted {
+    margin: var(--space-2) 0 0;
+  }
   .panel {
     display: flex;
     flex-direction: column;
@@ -327,7 +505,6 @@
   .move p {
     margin: 0;
   }
-  .add,
   .actions,
   .key-row,
   .route {
@@ -336,38 +513,27 @@
     align-items: flex-end;
     flex-wrap: wrap;
   }
-  .add :global(.fc-field) {
-    min-width: 11rem;
-  }
   .providers {
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-2);
   }
   .provider {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
-    padding: var(--space-4);
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
     background: var(--surface-0);
   }
   .head {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .who {
-    display: flex;
     align-items: center;
     gap: var(--space-2);
-    flex-wrap: wrap;
-    min-width: 0;
   }
   .muted {
     color: var(--text-2);

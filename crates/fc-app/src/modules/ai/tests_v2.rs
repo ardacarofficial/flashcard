@@ -541,7 +541,8 @@ fn ai_jobs_run_on_their_own_lane() {
     assert!(only);
     let mut ai_kinds = ai_kinds;
     ai_kinds.sort_unstable();
-    assert_eq!(ai_kinds, [MODELS_JOB, REQUEST_JOB, SOURCE_JOB]);
+    // v1.3: the connection test (`ai.test`) runs on the AI lane too.
+    assert_eq!(ai_kinds, [MODELS_JOB, REQUEST_JOB, SOURCE_JOB, TEST_JOB]);
 
     // A slow AI request (≈1.5 s of streaming) does not hold up an export queued after it.
     let server = MockServer::start(|_| claude_stream(&["a", "b", "c"], 500));
