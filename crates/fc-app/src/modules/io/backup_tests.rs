@@ -116,7 +116,7 @@ fn fill(t: &TestApp, scratch: &Path) {
     result::<ImportReport>(&finish(t, &job));
 }
 
-fn table(d: &CollectionDump, name: &str) -> Vec<Vec<fc_storage::repo::SqlValue>> {
+fn table(d: &CollectionDump, name: &str) -> Rows {
     d.tables
         .iter()
         .find(|t| t.name == name)
@@ -128,15 +128,18 @@ fn dump(t: &TestApp) -> CollectionDump {
     t.store.read().unwrap().dump_collection().unwrap()
 }
 
+type Rows = Vec<Vec<fc_storage::repo::SqlValue>>;
+type MediaFiles = Vec<(MediaRecord, Vec<u8>)>;
+
 /// What must survive a backup → restore, byte for byte.
-fn essentials(t: &TestApp) -> (Vec<Vec<Vec<fc_storage::repo::SqlValue>>>, Vec<(MediaRecord, Vec<u8>)>) {
+fn essentials(t: &TestApp) -> (Vec<Rows>, MediaFiles) {
     let d = dump(t);
     let rows = ["decks", "notetypes", "notes", "cards", "review_log", "media"]
         .iter()
         .map(|n| table(&d, n))
         .collect();
     let tx = t.store.read().unwrap();
-    let mut media: Vec<(MediaRecord, Vec<u8>)> = tx
+    let mut media: MediaFiles = tx
         .list_media()
         .unwrap()
         .into_iter()

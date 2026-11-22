@@ -4,6 +4,9 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## [Unreleased]
 
+### Unreleased (v1.4)
+- **A1 — Her zaman geri dönen yedek:** `.fcbackup` v2 dosyadan dosyaya akışla yazılır/okunur (1 GiB okuma tavanı kalktı, eski yedekler okunur), manifest her medyayı boyut + SHA-256 ile listeler, eksik medya `missing_media` ile raporlanıp yedek "eksik" işaretlenir, yedek geçici profile geri yüklenip doğrulanmadan yerine konmaz; yeni `io.backup.verify`, `io.backup.status`, `io.backup.auto`, ayarlar `io.auto_backup` (kapalı/günlük/haftalık, varsayılan günlük) ve `io.auto_backup_keep` (7).
+
 ## [1.3.0] — v1.3 "kullanılır": akışlar, kelime kartları, gerçek çekirdekte doğrulama
 
 Workspace sürümü `1.3.0`. Proje sahibi v1.2'yi Windows'ta denedi: "Daha güzel ama kullanamıyorum." v1.2 sahte bir backend'e karşı ekran görüntüleriyle doğrulanmıştı; kullanılamaz akışlar böyle geçti. v1.3 yeni özellik için özellik eklemez: var olanı **kullanılır, öngörülebilir ve kendini anlatan** hâle getirir. Tema aynı (docs/11 §4); düzenleyici fikir artık akışlar (docs/11 §1). Hiçbir özellik, ayar ya da kısayol kaldırılmadı; taşınanlar ulaşılabilir. Migration'lar `1300_vocabulary_roles` ve `1301_subtitle_word_front` (v1.3 aralığı 1300–1399).

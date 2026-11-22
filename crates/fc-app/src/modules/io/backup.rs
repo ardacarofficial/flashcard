@@ -284,6 +284,14 @@ impl JobHandler for RestoreJob {
             }
         };
         let safety_path = PathBuf::from(&safety);
+        // The media are streamed from the backup during the swap: it must not be replaced.
+        let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => a == b,
+        };
+        if same(&safety_path, &path) {
+            return Err(invalid("the safety backup would overwrite the backup being restored"));
+        }
         write_backup_file(
             &|| ctx.read(),
             ctx.now(),
