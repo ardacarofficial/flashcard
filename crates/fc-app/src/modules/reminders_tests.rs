@@ -158,3 +158,23 @@ fn keep_in_tray_follows_its_setting() {
     fx.set(KEEP_IN_TRAY, json!(true));
     assert!(keeps_running_in_tray(&fx.t.app));
 }
+
+/// v1.3: the reminder's numbers are today's study queue (daily new-card limit included), the
+/// same numbers Home's Start shows (`decks.summaries`), not every unseen card.
+#[test]
+fn counts_are_todays_queue_with_daily_limits() {
+    let fx = Fx::new();
+    let st = fx.t.ok::<RemindersStatus>(ReminderStatusRequest {
+        tz_offset_mins: Some(IST),
+    });
+    let home = fx.t.ok::<DecksSummaries>(Empty {}).today;
+    assert_eq!(st.counts.new, home.today_new);
+    assert_eq!(st.counts.due, home.today_due + home.today_learning);
+    let unseen: u32 = {
+        let reads = fx.t.app.store().read().unwrap();
+        reads.card_counts_by_deck(fx.t.app.now()).unwrap().into_iter().map(|(_, c)| c.new).sum()
+    };
+    assert!(st.counts.new > 0, "the starter deck has new cards today");
+    assert!(st.counts.new < unseen, "limited: {} of {unseen}", st.counts.new);
+    assert_eq!(fx.t.ok::<RemindersTest>(Empty {}), st.counts);
+}

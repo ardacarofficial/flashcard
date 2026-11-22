@@ -65,6 +65,8 @@ const SETTINGS: &[Domain] = &["settings"];
 const JOBS: &[Domain] = &["jobs"];
 const STUDY: &[Domain] = &["study"];
 const STUDY_CARDS: &[Domain] = &["study", "notes"];
+/// v1.3 launcher: sessions with card text and deck paths.
+const STUDY_DECKS: &[Domain] = &["study", "notes", "decks"];
 const TAGS: &[Domain] = &["tags"];
 const TRASH: &[Domain] = &["notes", "decks"];
 const TTS: &[Domain] = &["tts"];
@@ -149,11 +151,12 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "search.ids" | "search.check" | "saved_queries.list" | "saved_queries.create"
         | "saved_queries.update" | "saved_queries.delete" => Reads(SEARCH),
         "study.start" | "study.session" | "study.active" | "study.answer" | "study.hint"
-        | "study.check_answer" | "study.suspend" | "study.bury" | "study.postpone"
-        // v1.3: the launcher lists open sessions (their current cards) and card counts.
-        | "study.options" => {
+        | "study.check_answer" | "study.suspend" | "study.bury" | "study.postpone" => {
             Reads(STUDY_CARDS)
         }
+        // v1.3: the launcher lists open sessions (their current cards, their decks' full
+        // paths) and card counts.
+        "study.options" => Reads(STUDY_DECKS),
         "study.end" | "study.summary" | "study.card_history" => Reads(STUDY),
         "tags.list" | "tags.rename" | "tags.merge" | "tags.set_color" => Reads(TAGS),
         "tts.providers" | "tts.voices" | "tts.synthesize" => Reads(TTS),
@@ -366,6 +369,9 @@ fn job_domains(kind: &str) -> &'static [Domain] {
         k if k.starts_with("plugins.") => PLUGINS,
         // AI requests and model lists; extracted sources come from files and the web (io).
         "ai.request" | "ai.models" => AI_NOTES,
+        // v1.3 connection test: outcome, models, HTTP status, the provider's scrubbed message
+        // (what `ai.providers.list` shows as `last_test`): AI configuration, no note text.
+        "ai.test" => AI,
         "optimizer.run" => &["decks", "stats"],
         // Reading imports (files, web pages) and ffmpeg clips: like imports.
         "reading.import" | "reading.clip" => IO,
@@ -674,6 +680,12 @@ mod tests {
         domain_case("study", d, json!({ "id": 1, "current": { "card_id": 2, "sides": "SECRET" } }), "SECRET");
         let d = exposure("study.card_history").domains();
         domain_case("study", d, json!({ "reviews": [{ "id": 1, "rating": "SECRET" }] }), "SECRET");
+        // v1.3 launcher: open sessions carry card text and their deck's full path.
+        let d = exposure("study.options").domains();
+        let resumable = json!({ "resumable": [{ "session": { "id": 1, "current": { "sides": "SECRET" } }, "deck_name": "SECRET" }] });
+        for domain in ["study", "notes", "decks"] {
+            domain_case(domain, d, resumable.clone(), "SECRET");
+        }
     }
 
     #[test]
@@ -773,6 +785,10 @@ mod tests {
         domain_case("notes", d, json!({ "items": [{ "card_id": 1, "sort_field": "SECRET" }] }), "SECRET");
         let d = exposure("stats.breakdown").domains();
         domain_case("attributes", d, json!({ "rows": [{ "option_id": 1, "label": "SECRET" }] }), "SECRET");
+        // v1.3: missed words are card and note text.
+        let d = exposure("stats.struggles").domains();
+        domain_case("notes", d, json!({ "items": [{ "card_id": 1, "front": "SECRET" }] }), "SECRET");
+        assert_eq!(exposure("stats.today"), Exposure::Reads(STATS));
         // Whole-history work is the user's.
         for m in ["stats.refresh_cache", "optimizer.run"] {
             assert!(matches!(exposure(m), Exposure::Refused(_)), "{m}");
@@ -789,6 +805,12 @@ mod tests {
         assert_eq!(event_domains(&DomainEvent::ExamsChanged), PLANNING);
         assert!(!event_delivered(&grants(&["planning:write"]), &DomainEvent::ExamsChanged));
         assert!(event_delivered(&grants(&["planning:read"]), &DomainEvent::ExamsChanged));
+        // v1.3 forecast and pace: deck and preset names next to the plan.
+        for m in ["planning.forecast", "planning.apply_pace"] {
+            assert_eq!(exposure(m), Exposure::Reads(PLANNING_DECKS), "{m}");
+        }
+        let d = exposure("planning.apply_pace").domains();
+        domain_case("decks", d, json!({ "deck_id": 1, "preset_name": "SECRET" }), "SECRET");
     }
 
     #[test]
@@ -824,6 +846,13 @@ mod tests {
         assert!(text(&jobs(&g, "jobs.get", job)).contains("SECRET"));
         let source = json!({ "id": 2, "kind": "ai.source", "result": { "text": "SECRET" } });
         assert!(!text(&jobs(&g, "jobs.get", source)).contains("SECRET"));
+        // v1.3 connection test: AI configuration (like a provider's `last_test`), not io.
+        assert_eq!(job_domains("ai.test"), AI);
+        let test = json!({ "id": 3, "kind": "ai.test", "result": { "message": "SECRET", "outcome": "ok" } });
+        assert!(!text(&jobs(&grants(&["jobs:read"]), "jobs.get", test.clone())).contains("SECRET"));
+        assert!(text(&jobs(&grants(&["jobs:read", "ai:read"]), "jobs.get", test)).contains("SECRET"));
+        // Starting a test sends a request: `ai_requests:write`, never a plugin's.
+        assert!(matches!(exposure("ai.providers.test"), Exposure::Refused(_)));
     }
 
     #[test]
@@ -843,7 +872,7 @@ mod tests {
     #[test]
     fn domain_modes() {
         // Learn/confidence/timed/test results are sessions with card content.
-        for m in ["modes.confidence.answer", "modes.timed.start", "modes.timed.expire", "modes.test.paper"] {
+        for m in ["modes.confidence.answer", "modes.timed.start", "modes.timed.expire", "modes.test.paper", "modes.test.save_draft"] {
             assert_eq!(exposure(m), Exposure::Reads(STUDY_CARDS), "{m}");
         }
         let d = exposure("modes.test.paper").domains();

@@ -118,15 +118,29 @@ fn settings(reads: &dyn Reads) -> AppResult<Settings> {
     })
 }
 
-/// What waits today over the whole collection, and whether anything was reviewed in the
-/// study day (rollover 04:00 local) containing `now`.
-fn today(reads: &dyn Reads, now: Timestamp, tz_offset_mins: i32) -> AppResult<(ReminderCounts, bool)> {
-    let mut counts = ReminderCounts::default();
-    for (_, c) in reads.card_counts_by_deck(now)? {
-        counts.due = counts.due.saturating_add(c.review_due).saturating_add(c.learning);
-        counts.new = counts.new.saturating_add(c.new);
-    }
-    let day = fc_study::day::StudyDay::new(tz_offset_mins, fc_study::day::DEFAULT_ROLLOVER_HOUR);
+/// What waits today over the whole collection — the queue `study.start { kind: normal }`
+/// serves now, daily limits included (the numbers Home's Start and the deck list show) — and
+/// whether anything was reviewed in the study day containing `now`.
+fn today(
+    reads: &dyn Reads,
+    registry: &Registry,
+    locale: Locale,
+    now: Timestamp,
+    tz_offset_mins: i32,
+) -> AppResult<(ReminderCounts, bool)> {
+    use crate::modules::study::today::{today_counts, Planner};
+    let view = crate::modules::study::ext::View {
+        reads,
+        registry,
+        locale,
+    };
+    let mut planner = Planner::new(view, now, tz_offset_mins)?;
+    let (new, learning, review) = today_counts(&mut planner, None)?;
+    let counts = ReminderCounts {
+        due: review.saturating_add(learning),
+        new,
+    };
+    let day = fc_study::day::StudyDay::new(tz_offset_mins, planner.day_start_hour());
     let start = day.start(day.index(now));
     let studied = !reads.review_logs_since(start, "normal")?.is_empty();
     Ok((counts, studied))
@@ -139,7 +153,7 @@ fn last_day(reads: &dyn Reads) -> AppResult<Option<i64>> {
 fn status(req: ReminderStatusRequest, ctx: &QueryCtx<'_>) -> AppResult<ReminderStatus> {
     let tz = req.tz_offset_mins.unwrap_or(0);
     let s = settings(ctx.tx)?;
-    let (counts, studied_today) = today(ctx.tx, ctx.now, tz)?;
+    let (counts, studied_today) = today(ctx.tx, ctx.registry, ctx.locale, ctx.now, tz)?;
     let next = next_at(s.schedule, ctx.now.as_millis(), tz, last_day(ctx.tx)?);
     Ok(ReminderStatus {
         enabled: s.schedule.enabled,
@@ -154,7 +168,9 @@ fn status(req: ReminderStatusRequest, ctx: &QueryCtx<'_>) -> AppResult<ReminderS
 
 fn test(_: Empty, app: &App, _actor: &Actor) -> AppResult<ReminderCounts> {
     let reads = app.store().read()?;
-    let (counts, _) = today(&*reads, app.now(), 0)?;
+    // The offset the window last gave `study.start` (the study day's daily limits).
+    let tz = crate::modules::study::today::client_tz(&*reads, None)?;
+    let (counts, _) = today(&*reads, app.registry(), app.locale(), app.now(), tz)?;
     drop(reads);
     app.publish(vec![DomainEvent::ReminderDue { counts, test: true }], None);
     Ok(counts)
@@ -175,7 +191,7 @@ pub fn check(app: &App, tz_offset_mins: i32) -> AppResult<Option<ReminderCounts>
         if !s.schedule.enabled {
             return Ok(None);
         }
-        let (counts, studied) = today(&*reads, now, tz_offset_mins)?;
+        let (counts, studied) = today(&*reads, app.registry(), app.locale(), now, tz_offset_mins)?;
         let decision = decide(
             s.schedule,
             now.as_millis(),
