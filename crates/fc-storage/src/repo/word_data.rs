@@ -82,6 +82,9 @@ pub const NO_BAND: &str = "Z";
 /// Sort value of a missing rank (after every rank).
 pub const NO_RANK: u32 = u32::MAX;
 
+/// `(language, band or None, status, words)`: one row of [`WordDataRead::word_index_band_counts`].
+pub type BandCount = (String, Option<String>, String, u32);
+
 /// A word of the index with its word data (if the pack has its key).
 pub type WordWithData = (WordIndexRecord, Option<WordDataRecord>);
 
@@ -110,7 +113,7 @@ pub trait WordDataRead {
     fn word_index_band_counts(
         &self,
         threshold_days: u32,
-    ) -> StorageResult<Vec<(String, Option<String>, String, u32)>>;
+    ) -> StorageResult<Vec<BandCount>>;
 }
 
 /// Writes of the word data.

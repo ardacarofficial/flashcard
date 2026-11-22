@@ -187,7 +187,7 @@ impl<M: Mode> WordDataRead for SqliteTx<'_, M> {
     fn word_index_band_counts(
         &self,
         threshold_days: u32,
-    ) -> StorageResult<Vec<(String, Option<String>, String, u32)>> {
+    ) -> StorageResult<Vec<crate::repo::BandCount>> {
         all(
             self.conn(),
             DATA,

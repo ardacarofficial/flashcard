@@ -199,8 +199,11 @@ fn sorted_cursor_of(language: &str, key: &str, band: &str, rank: u32) -> String 
         .encode(format!("{language}\u{1f}{key}\u{1f}{band}\u{1f}{rank}"))
 }
 
+/// `(language, key, (band, rank) sort values)` of a page cursor.
+type SortedCursor = (String, String, Option<(String, u32)>);
+
 /// `(language, key, sort values)` of a cursor (sort values only in sorted cursors).
-fn parse_sorted_cursor(cursor: &str) -> Option<(String, String, Option<(String, u32)>)> {
+fn parse_sorted_cursor(cursor: &str) -> Option<SortedCursor> {
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(cursor.trim())
         .ok()?;

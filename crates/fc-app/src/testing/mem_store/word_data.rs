@@ -105,7 +105,7 @@ impl WordDataRead for MemTx<'_> {
     fn word_index_band_counts(
         &self,
         threshold_days: u32,
-    ) -> StorageResult<Vec<(String, Option<String>, String, u32)>> {
+    ) -> StorageResult<Vec<fc_storage::repo::BandCount>> {
         let s = self.s();
         let rows = &s.domains.word_data.rows;
         let mut counts: BTreeMap<(String, Option<String>, String), u32> = BTreeMap::new();
