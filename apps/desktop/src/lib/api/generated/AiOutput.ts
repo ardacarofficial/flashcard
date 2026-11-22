@@ -83,4 +83,42 @@ items: Array<string>,
  * The note's field that holds wrong options, one per line (`distractors` of the
  * multiple-choice type); `null` = the note type has none.
  */
-field: string | null, };
+field: string | null, } | { "feature": "meaning_in_context", 
+/**
+ * Note it can be applied to (`null` = the task named none).
+ */
+note_id: NoteId | null, 
+/**
+ * The note's meaning field (`null` = no note, or its type has no meaning field).
+ */
+field: string | null, 
+/**
+ * The meaning that fits this sentence.
+ */
+meaning: string, 
+/**
+ * The words of the sentence it rests on ("pick up the kids").
+ */
+phrase: string, 
+/**
+ * The phrase is an expression / phrasal verb, not the word alone.
+ */
+expression: boolean, 
+/**
+ * Other correct translations of the same meaning (they become accepted answers
+ * when applied).
+ */
+also_correct: Array<string>, 
+/**
+ * Up to 3 other meanings of the word that do NOT fit this sentence.
+ */
+not_this: Array<string>, 
+/**
+ * The model's confidence, 0–1.
+ */
+confidence: number, 
+/**
+ * The meaning the note (the source: dictionary, capture, the user) has now — kept
+ * as it is; `""` = none.
+ */
+original: string, };

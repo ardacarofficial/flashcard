@@ -3,4 +3,4 @@
 /**
  * An AI feature (docs/06 §1.4). Each can use its own provider/model (`ai.routes.set`).
  */
-export type AiFeature = "generate_cards" | "fill_fields" | "explain" | "hint" | "check_answer" | "improve" | "rewrite_leech" | "distractors";
+export type AiFeature = "generate_cards" | "fill_fields" | "explain" | "hint" | "check_answer" | "improve" | "rewrite_leech" | "distractors" | "meaning_in_context";
