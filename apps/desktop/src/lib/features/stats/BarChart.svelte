@@ -2,7 +2,10 @@
   Calm single-series bar chart (HTML/CSS, no chart library). Draws numbers the backend
   computed; only scales them to the tallest bar. Recessive grid (baseline, middle and top
   lines with mono value labels), accent bars with rounded tops and a 2px gap, a hover / focus
-  tooltip per bar, mono x labels (first / middle / last) and a screen-reader table of every bar.
+  tooltip per bar, mono x labels (first / middle / last, or every bar with `labels="all"`),
+  optional direct value labels over each bar (`values`), an emphasised bar (`highlight`,
+  e.g. today: stronger colour + bold label) and a called-out bar (`peak`: a text marker, so
+  colour is never the only cue), and a screen-reader table of every bar.
 -->
 <script lang="ts">
   import type { Bar } from './format';
@@ -15,9 +18,26 @@
     highlight?: number | null;
     /** Value labels of the y axis (default: the rounded number). */
     formatMax?: (n: number) => string;
+    /** X labels: first / middle / last (`ends`, default) or under every bar (`all`, ≤ 14 bars). */
+    labels?: 'ends' | 'all';
+    /** Direct value label over every bar (few bars only). */
+    values?: boolean;
+    /** Index of a bar to call out (e.g. the busiest day), with `peakLabel` as its text marker. */
+    peak?: number | null;
+    peakLabel?: string;
   }
 
-  let { bars, label, height = 132, highlight = null, formatMax = (n) => String(Math.round(n)) }: Props = $props();
+  let {
+    bars,
+    label,
+    height = 132,
+    highlight = null,
+    formatMax = (n) => String(Math.round(n)),
+    labels = 'ends',
+    values = false,
+    peak = null,
+    peakLabel = '',
+  }: Props = $props();
 
   let hover = $state<number | null>(null);
   const max = $derived(Math.max(1, ...bars.map((b) => b.value)));
@@ -28,13 +48,17 @@
   const tip = $derived(hover === null ? null : { i: hover, bar: bars[hover]! });
 </script>
 
-<figure class="chart" style:--h="{height}px">
+<figure class="chart" class:roomy={values || peak !== null} class:direct={values} style:--h="{height}px">
   <div class="plot" class:dense={bars.length > 45} role="img" aria-label={label} onmouseleave={() => (hover = null)}>
     <span class="grid top" aria-hidden="true"><span class="yl">{formatMax(max)}</span></span>
     <span class="grid mid" aria-hidden="true"><span class="yl">{formatMax(max / 2)}</span></span>
     {#each bars as b, i (i)}
       <span class="slot" aria-hidden="true" onmouseenter={() => (hover = i)}>
-        <span class="bar" class:hi={i === highlight} class:on={i === hover} style:height="{pctOf(b.value)}%"></span>
+        <span class="bar" class:hi={i === highlight} class:on={i === hover} class:peak={i === peak} style:height="{pctOf(b.value)}%">
+          {#if values || i === peak}
+            <span class="val" class:peak-val={i === peak}>{#if i === peak && peakLabel}<span class="mark">▲ {peakLabel}</span>{/if}{formatMax(b.value)}</span>
+          {/if}
+        </span>
       </span>
     {/each}
     {#if tip}
@@ -48,7 +72,11 @@
       >
     {/if}
   </div>
-  {#if ticks.length > 0}
+  {#if labels === 'all' && bars.length > 0}
+    <figcaption aria-hidden="true" class="all">
+      {#each bars as b, i (i)}<span class:hi={i === highlight}>{b.label}</span>{/each}
+    </figcaption>
+  {:else if ticks.length > 0}
     <figcaption aria-hidden="true" class:single={ticks.length === 1}>
       {#each ticks as tk (tk.i)}<span>{tk.label}</span>{/each}
     </figcaption>
@@ -69,6 +97,13 @@
     margin: 0;
     padding-top: var(--space-3);
     min-width: 0;
+  }
+  .chart.roomy {
+    padding-top: 30px;
+  }
+  /* Direct labels make the y-axis values redundant. */
+  .chart.direct .yl {
+    display: none;
   }
   .plot {
     position: relative;
@@ -122,9 +157,40 @@
     background: var(--bar);
     transition: background var(--motion-fast) var(--ease);
   }
+  .bar {
+    position: relative;
+  }
   .bar.hi,
   .bar.on {
     background: var(--bar-hi);
+  }
+  .bar.peak {
+    outline: 1px solid var(--text-1);
+    outline-offset: 1px;
+  }
+  .val {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 2px);
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    line-height: 1.2;
+  }
+  .val.peak-val {
+    color: var(--text-1);
+    font-weight: var(--weight-semibold);
+  }
+  .mark {
+    font-family: var(--font-sans, inherit);
+    font-weight: var(--weight-medium);
+    color: var(--accent-text);
   }
   .tip {
     position: absolute;
@@ -158,5 +224,20 @@
   }
   figcaption.single {
     justify-content: center;
+  }
+  figcaption.all {
+    gap: 2px;
+  }
+  figcaption.all span {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  figcaption.all span.hi {
+    color: var(--text-1);
+    font-weight: var(--weight-semibold);
   }
 </style>

@@ -1,7 +1,8 @@
 <!--
-  Statistics → Goals (v1.2): the goals as dense rows (kind, deadline / query, mono progress
-  with a thin bar, the backend's pace forecast with an icon), and the "new goal" form as one
-  compact row under them.
+  Statistics → Goals (v1.3): every goal reads as a sentence ("Her gün 50 kart çalış",
+  "20 Haz tarihine kadar İngilizce destesini bitir") with mono progress, a thin bar and the
+  backend's pace forecast; a new goal is the same sentence with blanks to fill. Home's goal
+  tile reads the same `goals.list` data.
 -->
 <script lang="ts">
   import { formatPercent100 } from '$lib/format';
@@ -9,12 +10,14 @@
   import type { IconNode } from 'lucide';
   import { api } from '$lib/api';
   import type { GoalItem, GoalKind, GoalList } from '$lib/api/types';
-  import { t } from '$lib/i18n/index.svelte';
+  import { i18n, t, td } from '$lib/i18n/index.svelte';
   import {
     Button,
     Calendar,
     Chip,
     CircleCheck,
+    ChevronDown,
+    ChevronRight,
     Clock,
     Flame,
     GraduationCap,
@@ -34,12 +37,14 @@
   import type { ScreenCtx } from '../types';
   import { LoadState } from '../core/kit';
   import Panel from './Panel.svelte';
-  import { num, tzOffset } from './format';
+  import { num, shortDate, tzOffset } from './format';
+  import { TEMPLATES, deckQuery, hasDeck, kindOf, sentenceKey, sentenceParts, type Template } from './goals';
+  import type { DeckTreeNode } from '$lib/api/types';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
-  const KINDS: GoalKind[] = ['cards_learned', 'study_minutes', 'streak', 'deck_completion'];
   const KIND_ICON: Record<GoalKind, IconNode> = {
+    daily_cards: Target,
     cards_learned: GraduationCap,
     study_minutes: Clock,
     streak: Flame,
@@ -48,12 +53,45 @@
 
   let goals = $state<GoalList | null>(null);
   let failed = $state(false);
-  let kind = $state<GoalKind>('cards_learned');
-  let target = $state(100);
+  let template = $state<Template>('daily_cards');
+  let target = $state(50);
   let deadline = $state('');
+  let deck = $state('');
   let query = $state('');
+  let more = $state(false);
+  /** Unstarted cards of the chosen deck ("finish a deck" sets its target to them). */
+  let unseen = $state<number | null>(null);
 
-  const kindOptions = $derived(KINDS.map((k) => ({ value: k, label: t(`goals.kind.${k}`) })));
+  const templateOptions = $derived(TEMPLATES.map((k) => ({ value: k, label: t(`goals.template.${k}`) })));
+  const flatten = (nodes: DeckTreeNode[]): { id: string; path: string }[] =>
+    nodes.flatMap((n) => [{ id: n.deck.id, path: n.deck.path }, ...flatten(n.children)]);
+  const decks = $derived(flatten(ctx.decks));
+  const deckOptions = $derived([{ value: '', label: t('goals.pick_deck') }, ...decks.map((d) => ({ value: d.id, label: d.path }))]);
+  const deckPath = $derived(decks.find((d) => d.id === deck)?.path ?? '');
+  const parts = $derived(sentenceParts(t(`goals.s.${template}` as never)));
+  const ready = $derived(
+    (!hasDeck(template) || deck !== '') &&
+      (template !== 'finish_deck' || (deadline !== '' && (unseen ?? 0) > 0)) &&
+      (template === 'finish_deck' || Number(target) > 0),
+  );
+
+  /** Unstarted cards of the deck, from the planning forecast (Rust), else a card search. */
+  async function loadUnseen() {
+    unseen = null;
+    if (template !== 'finish_deck' || !deck) return;
+    const id = deck;
+    try {
+      const r = await api.call('planning.forecast', { deck_id: id, new_per_day: null, exam_date: null, days: 1, tz_offset_mins: tzOffset() });
+      if (deck === id) unseen = r.unseen;
+    } catch {
+      try {
+        const r = await api.call('search.ids', { query: `${deckQuery(deckPath)} is:new` });
+        if (deck === id) unseen = r.card_ids.length;
+      } catch {
+        unseen = null;
+      }
+    }
+  }
 
   async function load() {
     const ok = await ctx.guarded(async () => {
@@ -63,14 +101,27 @@
   }
 
   async function add() {
+    if (!ready) return;
+    const scope = [hasDeck(template) && deckPath ? deckQuery(deckPath) : '', query.trim()].filter(Boolean).join(' ');
+    const goalTarget = template === 'finish_deck' ? (unseen ?? 0) : Number(target);
     const ok = await ctx.guarded(() =>
-      api.call('goals.create', { kind, target: Number(target), deadline: deadline || null, query: query.trim() || null }),
+      api.call('goals.create', { kind: kindOf(template), target: goalTarget, deadline: deadline || null, query: scope || null }),
     );
     if (ok) {
       deadline = '';
       query = '';
     }
     await load();
+  }
+
+  /** A stored goal as its sentence (values filled in). */
+  function sentence(g: GoalItem): string {
+    const d = g.goal.deadline;
+    return td(sentenceKey(g.goal), {
+      n: num(g.goal.target),
+      date: d ? shortDate(d, i18n.locale) : '',
+      deck: g.goal.query ?? t('goals.all_decks'),
+    });
   }
 
   /** The pace forecast the backend computed, as text + tone (+ icon: colour is never the only cue). */
@@ -110,11 +161,12 @@
           <li>
             <span class="ico" aria-hidden="true"><Icon icon={KIND_ICON[g.goal.kind]} size={16} /></span>
             <div class="titles">
-              <h3>{t(`goals.kind.${g.goal.kind}`)}</h3>
+              <h3>{sentence(g)}</h3>
               <p class="meta">
+                <span>{t(`goals.kind.${g.goal.kind}`)}</span>
                 {#if g.progress.daily}<Chip size="sm" label={t('goals.daily')} />{/if}
                 {#if g.goal.deadline}<span class="dl"><Icon icon={Calendar} size={14} />{t('goals.deadline')}: <span class="num">{g.goal.deadline}</span></span>{/if}
-                {#if g.goal.query}<code>{g.goal.query}</code>{/if}
+                {#if g.goal.query && g.goal.kind !== 'deck_completion'}<code>{t('goals.scope', { query: g.goal.query })}</code>{/if}
               </p>
             </div>
             <div class="progress">
@@ -135,7 +187,7 @@
             <IconButton
               size="sm"
               icon={Trash2}
-              label={t('goals.delete_named', { name: t(`goals.kind.${g.goal.kind}`) })}
+              label={t('goals.delete_named', { name: sentence(g) })}
               onclick={() => ctx.guarded(() => api.call('goals.delete', { id: g.goal.id }))}
             />
           </li>
@@ -146,18 +198,49 @@
     <form
       class="add"
       aria-label={t('goals.new')}
+      data-testid="goal-form"
       onsubmit={(e) => {
         e.preventDefault();
         void add();
       }}
     >
-      <Select size="sm" label={t('goals.kind.label')} options={kindOptions} bind:value={kind} />
-      <Input size="sm" label={t('goals.target')} type="number" min="1" bind:value={target} />
-      <Input size="sm" label={t('goals.deadline')} type="date" bind:value={deadline} />
-      <Input size="sm" label={t('goals.query')} bind:value={query} />
-      <Button type="submit" size="sm" variant="primary" icon={Plus}>{t('goals.add')}</Button>
+      <div class="add-head">
+        <Select size="sm" label={t('goals.template.label')} options={templateOptions} bind:value={template} onchange={() => void loadUnseen()} />
+      </div>
+      <p class="sentence-form">
+        {#each parts as p, i (i)}
+          {#if 'text' in p}
+            <span>{p.text}</span>
+          {:else if p.slot === 'n'}
+            <span class="slot n"><Input size="sm" type="number" min="1" hideLabel label={t('goals.slot.n')} bind:value={target} /></span>
+          {:else if p.slot === 'date'}
+            <span class="slot date"><Input size="sm" type="date" hideLabel label={t('goals.slot.date')} bind:value={deadline} /></span>
+          {:else}
+            <span class="slot deck"><Select size="sm" hideLabel label={t('goals.slot.deck')} options={deckOptions} bind:value={deck} onchange={() => void loadUnseen()} /></span>
+          {/if}
+        {/each}
+        <Button type="submit" size="sm" variant="primary" icon={Plus} disabled={!ready}>{t('goals.add')}</Button>
+      </p>
+      {#if template === 'finish_deck' && deck && unseen !== null}
+        <p class="hint-line">{unseen > 0 ? t('goals.finish_hint', { deck: deckPath, n: unseen }) : t('goals.finish_empty')}</p>
+      {/if}
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={more ? ChevronDown : ChevronRight}
+        aria-expanded={more}
+        onclick={() => (more = !more)}>{t('goals.more')}</Button
+      >
+      {#if more}
+        <div class="extras">
+          {#if template !== 'finish_deck'}
+            <Input size="sm" label={t('goals.deadline')} type="date" bind:value={deadline} />
+          {/if}
+          <Input size="sm" label={t('goals.query')} bind:value={query} />
+        </div>
+      {/if}
     </form>
-    <p class="hint">{t('goals.new_hint')}</p>
+    <p class="hint">{t('goals.new_hint')} {t('goals.home_hint')}</p>
   </Panel>
 </div>
 
@@ -292,12 +375,42 @@
     grid-area: del;
   }
   .add {
-    display: grid;
-    grid-template-columns: minmax(9rem, 1.3fr) 6rem 9.5rem minmax(8rem, 1fr) auto;
-    align-items: end;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     gap: var(--space-2);
     padding: var(--space-3) var(--space-4) var(--space-1);
     background: var(--surface-0);
+  }
+  .add-head {
+    width: 14rem;
+  }
+  .sentence-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    font-size: var(--text-md);
+  }
+  .slot.n {
+    width: 6rem;
+  }
+  .slot.date {
+    width: 10rem;
+  }
+  .slot.deck {
+    width: 14rem;
+  }
+  .hint-line {
+    margin: 0;
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .extras {
+    display: grid;
+    grid-template-columns: 10rem minmax(12rem, 22rem);
+    gap: var(--space-2);
   }
   .hint {
     margin: 0;
@@ -316,9 +429,6 @@
       grid-template-areas:
         'ico title progress del'
         '. forecast forecast forecast';
-    }
-    .add {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

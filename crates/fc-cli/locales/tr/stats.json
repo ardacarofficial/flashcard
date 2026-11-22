@@ -9,5 +9,6 @@
   "oplog.summary.goals.update": "Hedef düzenlendi",
   "oplog.summary.goals.delete": "Hedef kaldırıldı",
   "oplog.summary.goals.restore": "Hedef geri getirildi",
-  "oplog.summary.optimizer.run": "FSRS optimizasyonu başlatıldı"
+  "oplog.summary.optimizer.run": "FSRS optimizasyonu başlatıldı",
+  "oplog.summary.planning.apply_pace": "{deck}: günde {count} yeni kart"
 }

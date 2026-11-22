@@ -88,7 +88,9 @@
       "leeches": "Zor kartlar",
       "deck_reports": "Deste karneleri",
       "refresh_cache": "İstatistik önbelleğini güncelle",
-      "apply_to_leeches": "Tüm zor kartlara uygula"
+      "apply_to_leeches": "Tüm zor kartlara uygula",
+      "today": "Bugün nasılım?",
+      "struggles": "Neyi unutuyorum?"
     },
     "planning": {
       "exams": {
@@ -96,7 +98,9 @@
         "create": "Sınav tarihi ekle",
         "update": "Sınav tarihini düzenle",
         "delete": "Sınav tarihini kaldır"
-      }
+      },
+      "forecast": "İş yükü tahmini",
+      "apply_pace": "Günlük yeni kart tempomu uygula"
     },
     "goals": {
       "list": "Hedefler",
@@ -159,7 +163,8 @@
       "heading": "Gelecek tahmini",
       "overdue": "{n} gecikmiş (bugüne sayıldı)",
       "intro": "Önümüzdeki 30 günde vadesi gelecek kartlar.",
-      "day": "{date}: {n} kart"
+      "day": "{date}: {n} kart",
+      "meaning": "Her çubuk o gün tekrarı gelecek kart sayısı."
     },
     "states": {
       "heading": "Hafıza durumu",
@@ -170,7 +175,8 @@
       "mature": "Olgun",
       "suspended": "Askıda",
       "buried": "Gömülü",
-      "total": "Toplam"
+      "total": "Toplam",
+      "meaning": "Kartların hangi aşamada: yeni → öğreniliyor → genç → olgun (21+ gün aralık)."
     },
     "success": {
       "heading": "Başarı oranı",
@@ -182,12 +188,14 @@
       "all": "Hepsi",
       "answers": "Cevap",
       "rate": "Başarı",
-      "answers_n": "{n} cevap"
+      "answers_n": "{n} cevap",
+      "meaning": "Cevapların ne kadarı doğruydu; ince çizgi hedef hatırlaman."
     },
     "trend": {
       "heading": "Gelişim",
       "weekly": "Haftalık",
-      "monthly": "Aylık"
+      "monthly": "Aylık",
+      "meaning": "Hafta ya da ay başına tekrar sayın."
     },
     "hours": {
       "heading": "En verimli saatler",
@@ -200,12 +208,14 @@
       "card": "Kart",
       "up_to": "≤ {s} sn",
       "over": "> {s} sn",
-      "seconds": "{s} sn"
+      "seconds": "{s} sn",
+      "meaning": "Bir karta cevap vermen ne kadar sürüyor."
     },
     "memory": {
       "heading": "Stabilite ve zorluk",
       "stability": "Stabilite (gün)",
-      "difficulty": "Zorluk"
+      "difficulty": "Zorluk",
+      "meaning": "Stabilite: hatırlamanın %90'a inmesi için geçen gün. Zorluk: 1 (kolay) – 10 (zor)."
     },
     "breakdown": {
       "heading": "Sınıflandırmaya göre",
@@ -259,7 +269,82 @@
       "fri": "Cum"
     },
     "more": {
-      "heading": "Alışkanlıklar ve hafıza"
+      "heading": "Alışkanlıklar ve hafıza",
+      "meaning": "Ne zaman daha iyi hatırladığın, ne kadar hızlı cevapladığın, hafızanın ne kadar sağlam olduğu."
+    },
+    "questions": "Üç soru",
+    "today": {
+      "heading": "Bugün nasılım?",
+      "intro": "Bugün cevapladıkların, dünle karşılaştırması ve hedefin.",
+      "answered": "Cevap",
+      "correct": "Doğru",
+      "time": "Süre",
+      "streak": "Seri",
+      "goal": "Hedef",
+      "no_goal": "Henüz hedefin yok.",
+      "set_goal": "Hedef koy",
+      "correct_of": "{n} cevabın {correct} tanesi",
+      "minutes": "{n} dk",
+      "days": "{n} gün",
+      "pace": {
+        "not_started": "Bugün henüz çalışmadın.",
+        "not_started_ref": "Bugün henüz çalışmadın; dün {ref} kart cevaplamıştın.",
+        "first_day": "İlk çalışma günün, böyle devam!",
+        "ahead_yesterday": "Dünden hızlısın: dün {ref} kart, bugün şimdiden {n}.",
+        "same_yesterday": "Dün ile aynı tempodasın: dün {ref} kart, bugün {n}.",
+        "behind_yesterday": "Dünün biraz gerisindesin: dün {ref} kart, bugün şimdilik {n}.",
+        "ahead_week": "Son 7 günün ortalamasından hızlısın: günde ~{ref} kart, bugün şimdiden {n}.",
+        "same_week": "Son 7 günün temposundasın: günde ~{ref} kart, bugün {n}.",
+        "behind_week": "Son 7 günün ortalamasının gerisindesin: günde ~{ref} kart, bugün şimdilik {n}."
+      }
+    },
+    "ahead": {
+      "heading": "Önümde ne var?",
+      "intro": "Önümüzdeki günlerde tekrarı gelecek kartlar. Gecikmişler bugüne sayılır.",
+      "range": "Görünüm",
+      "week": "7 gün",
+      "month": "30 gün",
+      "chart": "Önümüzdeki {n} günün tekrarları",
+      "peak": "En yoğun gün: {date} · {n} kart",
+      "peak_mark": "en yoğun",
+      "today": "bugün",
+      "total": "{days} günde toplam {n} kart",
+      "empty": "Önümüzdeki günlerde tekrar yok.",
+      "plan": "Temponu planla"
+    },
+    "struggles": {
+      "heading": "Neyi unutuyorum?",
+      "intro": "Yakın zamanda yanlış cevapladığın kelimeler; en çok yanlış yapılan üstte. Pratik, testler dahil.",
+      "window": "Dönem",
+      "w1": "Bugün",
+      "w7": "7 gün",
+      "w30": "30 gün",
+      "study": "Bunları çalış",
+      "study_n": "Bunları çalış · {n}",
+      "study_hint": "Pratik oturumu açar: takvimin değişmez.",
+      "term": "Kelime",
+      "meaning": "Anlam",
+      "misses": "Yanlış",
+      "last": "Son görülme",
+      "misses_title": "{answers} cevabın {misses} tanesi yanlış",
+      "none_today": "Bugün yanlış cevapladığın kelime yok.",
+      "none": "Son {n} günde yanlış cevapladığın kelime yok.",
+      "more": "ve {n} kelime daha (en çok yanlış yapılan {shown} gösteriliyor)",
+      "actions": "{term}: diğer işlemler",
+      "suspend": "Durdur (sen açana kadar sorma)",
+      "tag": "“zor” etiketi ekle",
+      "tag_name": "zor",
+      "paused": "durduruldu",
+      "nothing": "Çalışılacak kart kalmadı (hepsi durdurulmuş olabilir).",
+      "started": "Pratik oturumu hazır: Çalış ekranında “Devam et”."
+    },
+    "details": {
+      "heading": "Ayrıntılar",
+      "intro": "Seçili döneme ve desteye göre geçmişin ve hafızan."
+    },
+    "summary": {
+      "heading": "Dönem özeti",
+      "meaning": "Seçili dönemdeki seri, tekrar, süre ve gerçek hatırlama oranın."
     }
   },
   "planning": {
@@ -267,7 +352,8 @@
     "balance": {
       "heading": "Yük dengeleme ve kolay günler",
       "toggle": "Tekrarları dengeli dağıt",
-      "easy_days": "Kolay günler"
+      "easy_days": "Kolay günler",
+      "meaning": "Tekrarları aynı derecede uygun günler arasında en boş güne kaydırır; kolay günlere daha az tekrar düşer."
     },
     "exams": {
       "heading": "Sınav tarihleri",
@@ -312,7 +398,59 @@
       "basis": "{n} tekrar kartına ve günde {new} yeni karta göre.",
       "intro": "Her hedef hatırlama oranının günde kaç tekrar gerektireceği."
     },
-    "subtitle": "Tekrarların ne zaman yapılacağını ayarla: hafif günler, sınav tarihleri ve hedef hatırlama."
+    "subtitle": "Tekrarların ne zaman yapılacağını ayarla: hafif günler, sınav tarihleri ve hedef hatırlama.",
+    "pace": {
+      "heading": "Temponu planla",
+      "intro": "Günde kaç yeni kartla başlarsan önümüzdeki haftalarda ne kadar çalışacağını gör.",
+      "deck": "Deste",
+      "all_decks": "Tüm desteler (uygulamak için bir deste seç)",
+      "new_per_day": "Günde kaç yeni kart?",
+      "current": "şu an {n}",
+      "exam": "Sınav tarihim (isteğe bağlı)",
+      "clear_exam": "Sınav tarihini temizle",
+      "sentence": "Bu tempoyla {weeks} hafta sonra günde ~{cards} kart, ~{min} dk.",
+      "sentence_days": "Bu tempoyla {days} gün sonra günde ~{cards} kart, ~{min} dk.",
+      "today": "Bugün ~{cards} kart, ~{min} dk.",
+      "peak": "En yoğun gün {date}: ~{cards} kart.",
+      "new_done": "Başlanmamış {n} yeni kartın {date} tarihinde biter.",
+      "new_none": "Başlanmamış yeni kart yok: yük yalnız tekrarlardan gelir.",
+      "new_later": "{n} yeni kart bekliyor; bu tempoyla bu dönemde bitmez.",
+      "new_zero": "Günde 0 yeni kart: yalnız tekrar yaparsın, {n} yeni kart bekler.",
+      "exam_left": "Sınava {days} gün var: o gün {left} yeni kart hâlâ başlanmamış olur.",
+      "exam_ok": "Sınava {days} gün var: bütün yeni kartlara önceden başlamış olursun.",
+      "exam_need": "Hepsine yetişmek için günde {n} yeni kart gerekir.",
+      "exam_use": "{n} yap",
+      "exam_week": "Sınavdan önceki hafta: günde ~{cards} kart, ~{min} dk.",
+      "exam_past": "Bu tarih geçti.",
+      "time_measured": "Dakikalar, son 30 günde kart başına ortalama {s} sn'ne göre.",
+      "time_default": "Henüz süre ölçümü yok; kart başına {s} sn varsayıldı.",
+      "chart": "Günlük iş yükü tahmini",
+      "chart_day": "{date}: ~{cards} kart, ~{min} dk",
+      "weeks": "Haftalara göre",
+      "week_n": "{n}. hafta",
+      "col_week": "Hafta",
+      "col_cards": "Kart / gün",
+      "col_minutes": "Dakika / gün",
+      "col_new": "Yeni kart",
+      "meaning": "Tahmin, kartlarının hafıza durumundan ve şablonundaki hedef hatırlamadan hesaplanır; yükü gösterir, günlük tekrar sınırını uygulamaz.",
+      "apply": "Uygula",
+      "apply_preset": "Uygularsan “{preset}” şablonunda günde {n} yeni kart olur (şu an {current}).",
+      "apply_create": "Bu destenin şablonu yok: uygularsan günde {n} yeni kartlık “{deck}” şablonu oluşturulur.",
+      "apply_decks": "Etkilenen desteler: {decks}",
+      "apply_exam": "Ayrıca {date} için sınav tarihi eklenir.",
+      "applied": "Uygulandı. Geri almak için Ctrl+Z.",
+      "unchanged": "Değişiklik yok: bu zaten şu anki tempon.",
+      "pick_deck": "Uygulamak için bir deste seç.",
+      "presets_off": "Deste ayarları modülü kapalı; tempoyu değiştirmek için aç.",
+      "exam_name": "Sınav",
+      "quick": "Hazır sayılar"
+    },
+    "advanced": {
+      "heading": "Gelişmiş",
+      "intro": "FSRS optimizasyonu ve hedef hatırlamaya göre iş yükü: çoğu zaman dokunman gerekmez.",
+      "show": "Gelişmiş ayarları göster",
+      "hide": "Gelişmiş ayarları gizle"
+    }
   },
   "optimizer": {
     "progress": {
@@ -328,7 +466,8 @@
       "cards_learned": "Öğrenilen kart",
       "study_minutes": "Çalışma dakikası",
       "streak": "Seri (gün)",
-      "deck_completion": "Oturmuş kart (%)"
+      "deck_completion": "Oturmuş kart (%)",
+      "daily_cards": "Günlük kart"
     },
     "target": "Hedef değer",
     "deadline": "Son gün",
@@ -347,7 +486,42 @@
     "none_hint": "Aşağıdan bir hedef koy, örneğin ay sonuna kadar 500 kart.",
     "delete_named": "Hedefi kaldır: {name}",
     "new": "Yeni hedef",
-    "new_hint": "Günlük hedef için son tarihi boş bırak."
+    "new_hint": "Cümledeki boşlukları doldur. Günlük hedefler her gün sıfırdan sayılır.",
+    "template": {
+      "label": "Hedef türü",
+      "daily_cards": "Her gün kart",
+      "finish_deck": "Desteyi bitir",
+      "study_minutes": "Her gün dakika",
+      "streak": "Seri",
+      "deck_completion": "Oturmuş kart",
+      "cards_learned": "Yeni kart öğren"
+    },
+    "s": {
+      "daily_cards": "Her gün {n} kart çalış",
+      "finish_deck": "{date} tarihine kadar {deck} destesini bitir",
+      "study_minutes": "Her gün {n} dakika çalış",
+      "streak": "{n} gün üst üste çalış",
+      "deck_completion": "{deck} destesinde oturmuş kart oranını %{n} yap",
+      "cards_learned": "{n} yeni kart öğren",
+      "cards_learned_by": "{date} tarihine kadar {n} yeni kart öğren",
+      "study_minutes_by": "{date} tarihine kadar toplam {n} dakika çalış",
+      "daily_cards_by": "{date} tarihine kadar toplam {n} kart cevapla",
+      "streak_by": "{date} tarihine kadar {n} gün üst üste çalış",
+      "deck_completion_by": "{date} tarihine kadar {deck} destesinde oturmuş kart oranını %{n} yap"
+    },
+    "slot": {
+      "n": "Sayı",
+      "date": "Tarih",
+      "deck": "Deste"
+    },
+    "all_decks": "tüm desteler",
+    "finish_hint": "{deck} destesinde başlanmamış {n} kart var; hedef hepsini öğrenmek.",
+    "finish_empty": "Bu destede başlanmamış kart yok.",
+    "pick_deck": "Bir deste seç",
+    "scope": "Kapsam: {query}",
+    "today_of": "bugün {current} / {target}",
+    "home_hint": "Ana sayfadaki hedef kutucuğu, bitmemiş ilk hedefini gösterir.",
+    "more": "Diğer seçenekler"
   },
   "errors": {
     "validation": {

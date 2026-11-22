@@ -8,6 +8,8 @@
  *   with `setQuickAddHandler` (and gives it back with the returned function).
  * - `openPalette()` — the command palette (ShortcutHost registers it while the `palette`
  *   module is on).
+ * - `openHelp()` — the keyboard shortcuts help sheet (`?`, the top bar's "?", the palette;
+ *   HelpHost registers it).
  */
 
 type Handler = () => void;
@@ -15,11 +17,12 @@ type Handler = () => void;
 export type QuickAddOptions = { deckId?: string | null };
 type QuickAddHandler = (options?: QuickAddOptions) => void;
 
-const state = $state<{ quickAdd: QuickAddHandler | null; fallback: Handler | null; palette: Handler | null; paletteKeys: string }>({
+const state = $state<{ quickAdd: QuickAddHandler | null; fallback: Handler | null; palette: Handler | null; paletteKeys: string; help: Handler | null }>({
   quickAdd: null,
   fallback: null,
   palette: null,
   paletteKeys: 'Mod+K',
+  help: null,
 });
 
 /** Reactive availability and key hints for the shell's buttons. */
@@ -31,6 +34,10 @@ export const shellCommands = {
   /** The palette is available (`palette` module on). */
   get canPalette(): boolean {
     return state.palette !== null;
+  },
+  /** The shortcuts help sheet is available (HelpHost registered it). */
+  get canHelp(): boolean {
+    return state.help !== null;
   },
   /** The palette's key combination as `Kbd` takes it (`Ctrl+K` from `shortcuts.list`). */
   get paletteKeys(): string {
@@ -84,6 +91,22 @@ export function setPaletteKeys(keys: string | null): void {
 /** Opens the command palette. `false` when the palette module is off. */
 export function openPalette(): boolean {
   const fn = state.palette;
+  if (!fn) return false;
+  fn();
+  return true;
+}
+
+/** Registers the shortcuts help sheet; returns the unregister function. */
+export function setHelpHandler(fn: Handler | null): () => void {
+  state.help = fn;
+  return () => {
+    if (state.help === fn) state.help = null;
+  };
+}
+
+/** Opens the shortcuts help sheet. `false` when nothing registered it. */
+export function openHelp(): boolean {
+  const fn = state.help;
   if (!fn) return false;
   fn();
   return true;

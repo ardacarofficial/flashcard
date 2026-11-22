@@ -1,0 +1,17 @@
+{
+  "help": {
+    "title": "Klavye kısayolları",
+    "search": "Kısayol ara",
+    "search_placeholder": "Ad, eylem ya da tuş ara",
+    "empty": "Aramanla eşleşen kısayol yok.",
+    "clear": "Aramayı temizle",
+    "none": "Henüz atanmış kısayol yok.",
+    "note": "bu listeyi açar (yazı yazmıyorken).",
+    "edit": "Kısayolları değiştir",
+    "open": "Klavye kısayolları",
+    "palette": "Klavye kısayolları (yardım)",
+    "context": {
+      "editor": "Düzenleyici"
+    }
+  }
+}

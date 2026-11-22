@@ -3,8 +3,8 @@
 //! a query (tags, classifications, …) and a date range, and broken down by classification.
 
 use crate::v1::search::CardRow;
-use fc_core::stats::{CardStats, ReportCard, ReviewStats, StateCounts, SuccessRates};
-use fc_core::{AttributeDefId, AttributeOptionId, DeckId};
+use fc_core::stats::{CardStats, ReportCard, ReviewStats, StateCounts, Streak, SuccessRates};
+use fc_core::{AttributeDefId, AttributeOptionId, CardId, DeckId, NoteId, Timestamp};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -248,4 +248,138 @@ pub struct StatsCacheInfo {
     pub days: u32,
     /// Reviews folded in by this call.
     pub folded: u32,
+}
+
+// ------------------------------------------------------------------ v1.3: three questions
+
+/// `stats.today`: "how am I doing today?" — today's answers next to yesterday's and the
+/// recent average, with a plain verdict the UI words.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct TodayRequest {
+    /// Scope.
+    #[serde(default)]
+    pub scope: StatsScope,
+    /// Client UTC offset in minutes (study-day boundary).
+    #[serde(default)]
+    pub tz_offset_mins: Option<i32>,
+}
+
+/// One study day's answers.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+pub struct DayFigures {
+    /// Answers (scheduled and imported; practice answers are not statistics).
+    pub answered: u32,
+    /// Of which correct (anything but "Again").
+    pub correct: u32,
+    /// `correct / answered` (`None` without answers).
+    pub rate: Option<f64>,
+    /// Time spent, ms.
+    pub time_ms: u64,
+    /// New cards started.
+    pub new_cards: u32,
+}
+
+/// Today's pace compared with yesterday (or, without answers yesterday, with the mean of
+/// the last 7 study days before today).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum TodayPace {
+    /// No answers today yet.
+    NotStarted,
+    /// No earlier answers to compare with.
+    FirstDay,
+    /// Clearly more than the reference (> +15 %).
+    Ahead,
+    /// About the same (±15 %).
+    Same,
+    /// Clearly fewer so far (< −15 %).
+    Behind,
+}
+
+/// Response of `stats.today`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct TodayStats {
+    /// `YYYY-MM-DD` of today.
+    pub today_date: String,
+    /// Today.
+    pub today: DayFigures,
+    /// Yesterday.
+    pub yesterday: DayFigures,
+    /// Mean answers per day over the 7 days before today (days without answers count as 0).
+    pub week_mean_answered: f64,
+    /// Verdict.
+    pub pace: TodayPace,
+    /// What `pace` compared with (answers): yesterday's, or the week mean.
+    pub reference_answered: f64,
+    /// Whether the reference is yesterday (`false`: the 7-day mean).
+    pub reference_is_yesterday: bool,
+    /// Streak.
+    pub streak: Streak,
+}
+
+/// `stats.struggles`: "what am I forgetting?" — cards answered wrong ("Again", any study
+/// mode) in the last `days` study days, most misses first, then most recent.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct StrugglesRequest {
+    /// Scope.
+    #[serde(default)]
+    pub scope: StatsScope,
+    /// Window in study days, today included (default 7; 1 = today only; at most 365).
+    #[serde(default)]
+    pub days: Option<u32>,
+    /// At most this many items (default 20, at most 200).
+    #[serde(default)]
+    pub limit: Option<u32>,
+    /// Client UTC offset in minutes.
+    #[serde(default)]
+    pub tz_offset_mins: Option<i32>,
+}
+
+/// A card answered wrong in the window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct StruggleItem {
+    /// Card.
+    pub card_id: CardId,
+    /// Note.
+    pub note_id: NoteId,
+    /// Deck.
+    pub deck_id: DeckId,
+    /// Deck path.
+    pub deck_path: String,
+    /// The word / prompt (plain text of the note's term field).
+    pub term: String,
+    /// Its meaning (plain text of the note's meaning field; may be empty).
+    pub meaning: String,
+    /// Wrong answers in the window.
+    pub misses: u32,
+    /// All answers in the window.
+    pub answers: u32,
+    /// Last wrong answer.
+    pub last_miss_at: Timestamp,
+    /// Last answer of any kind.
+    pub last_seen_at: Timestamp,
+    /// Lapses (forgotten after graduating), all time.
+    pub lapses: u32,
+    /// Suspended now.
+    pub suspended: bool,
+}
+
+/// Response of `stats.struggles`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct StruggleList {
+    /// Window used (study days).
+    pub days: u32,
+    /// Live cards answered wrong in the window (may be more than `items`).
+    pub total: u32,
+    /// Of which answered wrong today.
+    pub today: u32,
+    /// Items, most misses first, then most recent.
+    pub items: Vec<StruggleItem>,
+    /// Query that selects exactly the listed, not suspended cards (`cid:…`), for a practice
+    /// session (`study.start` kind `custom`, mode `trial`); `None` when there are none.
+    pub study_query: Option<String>,
 }

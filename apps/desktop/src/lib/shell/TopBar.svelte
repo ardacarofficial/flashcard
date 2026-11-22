@@ -2,14 +2,15 @@
   The 44 px top bar (v1.2 brief "Shell"), always present except in a running study session:
   where you are (section › page › what the screen appended, `PageChrome.setTrail`) on the
   left; the search-or-command field (opens the command palette) and "Add card" (Quick Add,
-  `N`) on the right. It only draws: App.svelte decides what the parts do.
+  `N`) and the shortcuts help ("?") on the right. It only draws: App.svelte decides what the parts do.
 -->
 <script lang="ts">
   import { t } from '$lib/i18n/index.svelte';
   import Button from '$lib/ui/Button.svelte';
   import Icon from '$lib/ui/Icon.svelte';
+  import IconButton from '$lib/ui/IconButton.svelte';
   import Kbd from '$lib/ui/Kbd.svelte';
-  import { ChevronRight, Plus, Search } from '$lib/ui/icons';
+  import { ChevronRight, CircleHelp, Plus, Search } from '$lib/ui/icons';
   import type { Crumb } from '$lib/ui/types';
 
   interface Props {
@@ -20,9 +21,11 @@
     searchKeys: string;
     /** Opens Quick Add; `null` hides the button (nothing can add cards). */
     onadd: (() => void) | null;
+    /** Opens the keyboard shortcuts help (`?`); `null` hides the button. */
+    onhelp?: (() => void) | null;
   }
 
-  let { trail, onsearch, searchKeys, onadd }: Props = $props();
+  let { trail, onsearch, searchKeys, onadd, onhelp = null }: Props = $props();
 </script>
 
 <header class="fc-topbar" data-testid="top-bar">
@@ -48,6 +51,9 @@
         <span class="placeholder" aria-hidden="true">{t('shell.topbar.search')}</span>
         <Kbd keys={searchKeys} size="sm" />
       </button>
+    {/if}
+    {#if onhelp}
+      <IconButton icon={CircleHelp} size="sm" label={t('help.open')} aria-keyshortcuts="?" onclick={onhelp} data-testid="help-open" />
     {/if}
     {#if onadd}
       <Button variant="primary" size="sm" icon={Plus} kbd="N" aria-keyshortcuts="N" title={t('shell.topbar.add_card_hint')} onclick={onadd} data-testid="quick-add-open">

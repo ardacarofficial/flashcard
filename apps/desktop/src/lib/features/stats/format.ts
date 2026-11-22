@@ -2,7 +2,7 @@
  * Display formatting of numbers the backend computed (rates, durations). Presentation only:
  * no statistic is derived here. Thin names over `$lib/format` (the one locale-aware helper).
  */
-import { formatDecimal, formatNumber, formatPercent, formatPercent100, formatShortDate, formatShortMonth } from '$lib/format';
+import { formatDecimal, formatNumber, formatPercent, formatPercent100, formatShortDate, formatShortMonth, localeTag } from '$lib/format';
 
 /** `0.873` → `87%` (`–` when there is no rate). */
 export function pct(rate: number | null | undefined, digits = 0): string {
@@ -62,4 +62,9 @@ export function weekdayMon0(date: string): number {
 export function level(value: number, max: number): 0 | 1 | 2 | 3 | 4 {
   if (value <= 0 || max <= 0) return 0;
   return Math.min(4, Math.max(1, Math.ceil((value / max) * 4))) as 1 | 2 | 3 | 4;
+}
+
+/** `2025-11-04` → `Tue` / `Sal` (labels of a week chart; the date comes from the backend). */
+export function shortWeekday(date: string, locale: string): string {
+  return new Intl.DateTimeFormat(localeTag(locale), { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`));
 }

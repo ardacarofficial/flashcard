@@ -76,6 +76,8 @@ const STATS_DECKS: &[Domain] = &["stats", "search", "decks"];
 const STATS_ROWS: &[Domain] = &["stats", "search", "cards", "notes"];
 const STATS_CARDS: &[Domain] = &["cards", "stats", "search"];
 const PLANNING: &[Domain] = &["planning"];
+/// v1.3 forecast / pace: deck paths and preset names next to the plan.
+const PLANNING_DECKS: &[Domain] = &["planning", "decks"];
 const GOALS: &[Domain] = &["goals"];
 const AI: &[Domain] = &["ai"];
 /// AI requests and outputs hold note and source text.
@@ -161,6 +163,9 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         // v1.1: per-deck progress and classification chips (what the deck report says).
         "decks.summaries" => Reads(STATS_DECKS),
         "stats.leeches" => Reads(STATS_ROWS),
+        // v1.3: today's figures; the missed words (card and note text).
+        "stats.today" => Reads(STATS),
+        "stats.struggles" => Reads(STATS_ROWS),
         // Which cards it changes says which cards are leeches.
         "stats.apply_to_leeches" => Oracle(STATS_CARDS),
         // Whole-history work (cache rebuild, FSRS training): the user's, never a plugin's.
@@ -168,6 +173,7 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "optimizer.workload" => Reads(DECKS),
         "planning.exams.list" | "planning.exams.create" | "planning.exams.update"
         | "planning.exams.delete" => Reads(PLANNING),
+        "planning.forecast" | "planning.apply_pace" => Reads(PLANNING_DECKS),
         "goals.list" | "goals.create" | "goals.update" | "goals.delete" => Reads(GOALS),
         "ai.providers.list" | "ai.routes.list" | "ai.prices.list" | "ai.usage.summary" => Reads(AI),
         "ai.preview" => Reads(AI_NOTES),

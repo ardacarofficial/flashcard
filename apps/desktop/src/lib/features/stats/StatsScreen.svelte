@@ -1,24 +1,32 @@
 <!--
-  Statistics → Overview (v1.2): one slim filter row, four compact figures, then dense panels
-  (activity heatmap + forecast, memory states + success rates, progress + habits, deck report
-  cards, classification breakdown, leeches). Every number comes from the backend.
+  Statistics → Overview (v1.3): one slim filter row, then three questions in order —
+  "how am I doing today?" (`stats.today` + the first unfinished goal), "what's ahead?" (the
+  next 7 / 30 days of `stats.overview`'s forecast, today and the busiest day called out) and
+  "what am I forgetting?" (`stats.struggles`, whose primary action practises exactly those
+  cards) — then the details of the selected range under one heading (summary figures,
+  activity heatmap, memory states + success rates, progress + habits, deck report cards,
+  classification breakdown, leeches), each with a one-line meaning. Every number comes from
+  the backend; this screen only words and draws them.
 -->
 <script lang="ts">
-  import { formatCount, formatPercent100 } from '$lib/format';
+  import { formatCount, formatPercent100, formatRelative } from '$lib/format';
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type {
     AttributeDefDto,
     DeckReports,
     DeckTreeNode,
+    GoalItem,
     LeechAction,
     LeechActionResult,
     LeechList,
     StatsBreakdown,
     StatsOverview,
     StatsScope,
+    StruggleList,
+    TodayStats,
   } from '$lib/api/types';
-  import { i18n, t } from '$lib/i18n/index.svelte';
+  import { i18n, t, td } from '$lib/i18n/index.svelte';
   import {
     Button,
     Chip,
@@ -26,9 +34,12 @@
     EmptyState,
     Flame,
     GraduationCap,
+    Icon,
     Input,
     Layers,
+    Menu,
     PageHeader,
+    Play,
     ProgressBar,
     Search,
     SegmentedControl,
@@ -42,10 +53,11 @@
   } from '$lib/ui';
   import type { ScreenCtx } from '../types';
   import { LoadState } from '../core/kit';
+  import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
   import BarChart from './BarChart.svelte';
   import Heatmap from './Heatmap.svelte';
   import Panel from './Panel.svelte';
-  import { minutes, num, pct, pct100, seconds, shortDate, tzOffset, type Bar } from './format';
+  import { minutes, num, pct, pct100, seconds, shortDate, shortWeekday, tzOffset, type Bar } from './format';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -72,6 +84,15 @@
   let breakdown = $state<StatsBreakdown | null>(null);
   let trend = $state<'weekly' | 'monthly'>('weekly');
   let more = $state('hours');
+  // v1.3: the three questions.
+  let today = $state<TodayStats | null>(null);
+  let goal = $state<GoalItem | null>(null);
+  let goalsLoaded = $state(false);
+  let ahead = $state<'7' | '30'>('7');
+  let window_ = $state<'1' | '7' | '30'>('7');
+  let struggles = $state<StruggleList | null>(null);
+  let notice = $state<string | null>(null);
+  let starting = $state(false);
 
   const flatten = (nodes: DeckTreeNode[]): { id: string; path: string }[] =>
     nodes.flatMap((n) => [{ id: n.deck.id, path: n.deck.path }, ...flatten(n.children)]);
@@ -97,6 +118,7 @@
         forecast_days: 30,
         fresh: null,
       });
+      today = await api.call('stats.today', { scope: scope(), tz_offset_mins: tz });
       leeches = await api.call('stats.leeches', { scope: scope(), threshold: null, limit: 50 });
       reports = await api.call('stats.deck_reports', { tz_offset_mins: tz });
       attrs = (await api.call('attributes.list', { scope_deck_id: null, include_deleted: null })).defs.filter((a) =>
@@ -105,8 +127,103 @@
     });
     status = ok ? 'ready' : overview ? 'ready' : 'error';
     if (!attrId && attrs.length > 0) attrId = attrs[0]!.id;
-    await loadBreakdown();
+    await Promise.all([loadStruggles(), loadGoal(), loadBreakdown()]);
   }
+
+  async function loadStruggles() {
+    await ctx.guarded(async () => {
+      struggles = await api.call('stats.struggles', {
+        scope: scope(),
+        days: Number(window_),
+        limit: 20,
+        tz_offset_mins: tzOffset(),
+      });
+    });
+  }
+
+  // The goal Home shows too: the first unfinished one (best-effort; the module may be off).
+  async function loadGoal() {
+    if (!moduleKnownOn('goals')) {
+      goal = null;
+      goalsLoaded = false;
+      return;
+    }
+    try {
+      const g = await api.call('goals.list', { tz_offset_mins: tzOffset() });
+      goal = g.items.find((i) => !i.progress.done) ?? g.items[0] ?? null;
+    } catch {
+      goal = null;
+    }
+    goalsLoaded = true;
+  }
+
+  /**
+   * "Study these": a practice session (schedule untouched) of exactly the listed cards — the
+   * query comes from Rust with the list. The Study screen offers to continue it.
+   */
+  async function practise() {
+    const query = struggles?.study_query;
+    if (!query || starting) return;
+    starting = true;
+    notice = null;
+    await ctx.guarded(async () => {
+      const s = await api.call('study.start', {
+        kind: 'custom',
+        mode: 'trial',
+        deck_id: null,
+        include_subdecks: null,
+        filter: { attributes: [], states: null, due_only: false, limit: null, query, saved_query_id: null },
+        from_session: null,
+        new_limit: null,
+        order: null,
+        tz_offset_mins: tzOffset(),
+        modes: null,
+      });
+      if (!s.current) {
+        await api.call('study.end', { session_id: s.id });
+        notice = t('stats.struggles.nothing');
+        return;
+      }
+      if (ctx.navigate) ctx.navigate('/study');
+      else notice = t('stats.struggles.started');
+    });
+    starting = false;
+  }
+
+  async function suspend(cardId: string) {
+    await ctx.guarded(() => api.call('bulk.set_suspended', { card_ids: [cardId], suspended: true }));
+    await loadStruggles();
+  }
+
+  async function tagHard(noteId: string) {
+    await ctx.guarded(() => api.call('bulk.add_tags', { note_ids: [noteId], tags: [t('stats.struggles.tag_name')] }));
+  }
+
+  /** The pace sentence of "how am I doing today?" (the verdict is Rust's). */
+  function paceLine(s: TodayStats): string {
+    const ref = num(s.reference_answered, 0);
+    const n = s.today.answered;
+    const by = s.reference_is_yesterday ? 'yesterday' : 'week';
+    switch (s.pace) {
+      case 'not_started':
+        return s.yesterday.answered > 0 ? t('stats.today.pace.not_started_ref', { ref: s.yesterday.answered }) : t('stats.today.pace.not_started');
+      case 'first_day':
+        return t('stats.today.pace.first_day');
+      default:
+        return td(`stats.today.pace.${s.pace}_${by}`, { ref, n });
+    }
+  }
+
+  const forecastDays = $derived(overview ? overview.cards.forecast.slice(0, ahead === '7' ? 7 : 30) : []);
+  const peakIndex = $derived.by(() => {
+    let best = -1;
+    forecastDays.forEach((f, i) => {
+      if (f.due > 0 && (best < 0 || f.due > forecastDays[best]!.due)) best = i;
+    });
+    return best;
+  });
+  const aheadTotal = $derived(forecastDays.reduce((n, f) => n + f.due, 0));
+  const studyable = $derived(struggles ? struggles.items.filter((i) => !i.suspended).length : 0);
 
   async function loadBreakdown() {
     if (!attrId) {
@@ -145,8 +262,9 @@
   const w = (rate: number | null | undefined) => `calc(${Math.max(0, Math.min(1, rate ?? 0))} * 100%)`;
 
   onMount(() => {
+    trackModules();
     void load();
-    const unsub = api.on(['study_', 'cards_', 'undone', 'redone', 'collection_replaced', 'data_changed'], () => void load());
+    const unsub = api.on(['study_', 'cards_', 'goals_', 'undone', 'redone', 'collection_replaced', 'data_changed'], () => void load());
     return () => void unsub.then((u) => u());
   });
 </script>
@@ -187,7 +305,185 @@
     {@const r = overview.reviews}
     {@const c = overview.cards}
     {@const target = overview.target_retention}
-    <section class="tiles" aria-label={t('stats.overview')}>
+    <!-- 1 · How am I doing today? -->
+    <Panel class="q-today" testid="stats-today" title={t('stats.today.heading')} description={t('stats.today.intro')}>
+      {#if today}
+        <p class="verdict" data-testid="today-verdict">{paceLine(today)}</p>
+        <dl class="figs">
+          <div>
+            <dt>{t('stats.today.answered')}</dt>
+            <dd class="num big">{formatCount(today.today.answered)}</dd>
+          </div>
+          <div>
+            <dt>{t('stats.today.correct')}</dt>
+            <dd>
+              <span class="num big">{pct(today.today.rate)}</span>
+              {#if today.today.answered > 0}<span class="sub-fig">{t('stats.today.correct_of', { correct: today.today.correct, n: today.today.answered })}</span>{/if}
+            </dd>
+          </div>
+          <div>
+            <dt>{t('stats.today.time')}</dt>
+            <dd class="num big">{t('stats.today.minutes', { n: minutes(today.today.time_ms) })}</dd>
+          </div>
+          <div>
+            <dt>{t('stats.today.streak')}</dt>
+            <dd class="num big streak-fig"><Icon icon={Flame} size={14} />{t('stats.today.days', { n: today.streak.current })}</dd>
+          </div>
+          {#if moduleKnownOn('goals')}
+            <div class="goal-fig">
+              <dt>{t('stats.today.goal')}{#if goal} · {td(`goals.kind.${goal.goal.kind}`)}{/if}</dt>
+              <dd>
+                {#if goal}
+                  <span class="num big">{formatCount(goal.progress.current)} / {formatCount(goal.progress.target)}</span>
+                  <ProgressBar
+                    size="sm"
+                    label={td(`goals.kind.${goal.goal.kind}`)}
+                    value={Math.min(goal.progress.current, goal.progress.target)}
+                    max={Math.max(1, goal.progress.target)}
+                    tone={goal.progress.done ? 'success' : 'accent'}
+                  />
+                {:else if goalsLoaded}
+                  <span class="sub-fig">{t('stats.today.no_goal')}</span>
+                  {#if ctx.navigate}<Button size="sm" variant="ghost" icon={Target} onclick={() => ctx.navigate?.('/goals')}>{t('stats.today.set_goal')}</Button>{/if}
+                {/if}
+              </dd>
+            </div>
+          {/if}
+        </dl>
+      {:else}
+        <LoadState state="loading" lines={2} />
+      {/if}
+    </Panel>
+
+    <div class="q-row">
+      <!-- 2 · What's ahead? -->
+      <Panel class="q-ahead" testid="stats-ahead" title={t('stats.ahead.heading')} description={t('stats.ahead.intro')}>
+        {#snippet actions()}
+          {#if c.overdue > 0}<Chip size="sm" tone="warning" icon={TriangleAlert} label={t('stats.forecast.overdue', { n: c.overdue })} />{/if}
+          <SegmentedControl
+            size="sm"
+            label={t('stats.ahead.range')}
+            options={[
+              { value: '7', label: t('stats.ahead.week') },
+              { value: '30', label: t('stats.ahead.month') },
+            ]}
+            bind:value={ahead}
+          />
+        {/snippet}
+        {#if aheadTotal === 0}
+          <p class="muted">{t('stats.ahead.empty')}</p>
+        {:else}
+          <p class="lead-line">
+            {#if peakIndex >= 0}<strong data-testid="ahead-peak">{t('stats.ahead.peak', { date: d(forecastDays[peakIndex]!.date), n: forecastDays[peakIndex]!.due })}</strong> · {/if}
+            <span class="muted-inline">{t('stats.ahead.total', { n: aheadTotal, days: forecastDays.length })}</span>
+          </p>
+        {/if}
+        <BarChart
+          label={t('stats.ahead.chart', { n: forecastDays.length })}
+          highlight={0}
+          peak={peakIndex >= 0 ? peakIndex : null}
+          peakLabel={t('stats.ahead.peak_mark')}
+          height={ahead === '7' ? 112 : 104}
+          labels={ahead === '7' ? 'all' : 'ends'}
+          values={ahead === '7'}
+          bars={bars(
+            forecastDays,
+            (f) => (ahead === '7' ? (f === forecastDays[0] ? t('stats.ahead.today') : shortWeekday(f.date, i18n.locale)) : d(f.date)),
+            (f) => f.due,
+            (f) => t('stats.forecast.day', { date: d(f.date), n: f.due }),
+          )}
+        />
+        {#if ctx.navigate && moduleKnownOn('planning')}
+          <div class="q-foot">
+            <span class="muted">{t('stats.forecast.meaning')}</span>
+            <Button size="sm" variant="ghost" onclick={() => ctx.navigate?.('/planning')}>{t('stats.ahead.plan')}</Button>
+          </div>
+        {:else}
+          <p class="muted q-foot">{t('stats.forecast.meaning')}</p>
+        {/if}
+      </Panel>
+
+      <!-- 3 · What am I forgetting? -->
+      <Panel class="q-struggles" testid="stats-struggles" title={t('stats.struggles.heading')} description={t('stats.struggles.intro')} body="rows">
+        {#snippet actions()}
+          <SegmentedControl
+            size="sm"
+            label={t('stats.struggles.window')}
+            options={[
+              { value: '1', label: t('stats.struggles.w1') },
+              { value: '7', label: t('stats.struggles.w7') },
+              { value: '30', label: t('stats.struggles.w30') },
+            ]}
+            bind:value={window_}
+            onchange={() => void loadStruggles()}
+          />
+        {/snippet}
+        {#if !struggles}
+          <div class="pad"><LoadState state="loading" lines={3} /></div>
+        {:else if struggles.items.length === 0}
+          <p class="pad muted">{struggles.days === 1 ? t('stats.struggles.none_today') : t('stats.struggles.none', { n: struggles.days })}</p>
+        {:else}
+          <div class="study-bar">
+            <Button
+              variant="primary"
+              size="sm"
+              icon={Play}
+              loading={starting}
+              disabled={studyable === 0}
+              onclick={() => void practise()}
+              data-testid="struggles-study">{t('stats.struggles.study_n', { n: studyable })}</Button
+            >
+            <span class="muted">{t('stats.struggles.study_hint')}</span>
+          </div>
+          {#if notice}<p class="pad muted status" role="status">{notice}</p>{/if}
+          <div class="table-wrap">
+            <table class="dt struggles">
+              <thead>
+                <tr>
+                  <th scope="col">{t('stats.struggles.term')}</th>
+                  <th scope="col">{t('stats.struggles.meaning')}</th>
+                  <th scope="col" class="n">{t('stats.struggles.misses')}</th>
+                  <th scope="col" class="n">{t('stats.struggles.last')}</th>
+                  <th scope="col" class="act"><span class="sr-only">{t('stats.struggles.actions', { term: '' })}</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each struggles.items as it (it.card_id)}
+                  <tr class:paused={it.suspended}>
+                    <th scope="row" class="term">
+                      {it.term}
+                      {#if it.suspended}<Chip size="sm" label={t('stats.struggles.paused')} />{/if}
+                    </th>
+                    <td class="meaning">{it.meaning}</td>
+                    <td class="n num miss" title={t('stats.struggles.misses_title', { misses: it.misses, answers: it.answers })}>{it.misses}<span class="of">/{it.answers}</span></td>
+                    <td class="n when">{formatRelative(it.last_seen_at)}</td>
+                    <td class="act">
+                      <Menu
+                        label={t('stats.struggles.actions', { term: it.term })}
+                        items={[
+                          { id: 'suspend', label: t('stats.struggles.suspend'), disabled: it.suspended, onselect: () => void suspend(it.card_id) },
+                          { id: 'tag', label: t('stats.struggles.tag'), onselect: () => void tagHard(it.note_id) },
+                        ]}
+                      />
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+          {#if struggles.total > struggles.items.length}
+            <p class="pad muted">{t('stats.struggles.more', { n: struggles.total - struggles.items.length, shown: struggles.items.length })}</p>
+          {/if}
+        {/if}
+      </Panel>
+    </div>
+
+    <!-- Details of the selected range -->
+    <header class="details-head">
+      <h2>{t('stats.details.heading')}</h2>
+      <p>{t('stats.details.intro')}</p>
+    </header>
+    <section class="tiles" aria-label={t('stats.summary.heading')}>
       <StatTile
         testid="stat-streak"
         icon={Flame}
@@ -243,21 +539,10 @@
           <Heatmap days={r.heatmap} label={t('stats.heatmap.heading')} />
         {/if}
       </Panel>
-      <Panel class="p-forecast" title={t('stats.forecast.heading')} description={t('stats.forecast.intro')}>
-        {#snippet actions()}
-          {#if c.overdue > 0}<Chip size="sm" tone="warning" icon={TriangleAlert} label={t('stats.forecast.overdue', { n: c.overdue })} />{/if}
-        {/snippet}
-        <BarChart
-          label={t('stats.forecast.heading')}
-          highlight={0}
-          height={104}
-          bars={bars(c.forecast, (f) => d(f.date), (f) => f.due, (f) => t('stats.forecast.day', { date: d(f.date), n: f.due }))}
-        />
-      </Panel>
     </div>
 
     <div class="grid2">
-      <Panel title={t('stats.states.heading')}>
+      <Panel title={t('stats.states.heading')} description={t('stats.states.meaning')}>
         <ProgressBar
           size="sm"
           label={t('stats.states.heading')}
@@ -283,7 +568,7 @@
         </dl>
       </Panel>
 
-      <Panel title={t('stats.success.heading')} description={t('stats.retention.target', { target: pct(target) })}>
+      <Panel title={t('stats.success.heading')} description={`${t('stats.success.meaning')} ${t('stats.retention.target', { target: pct(target) })}.`}>
         <ul class="rows rates">
           {#each ['learn', 'young', 'mature', 'relearn', 'all'] as const as k (k)}
             {@const s = r.success[k]}
@@ -302,7 +587,7 @@
     </div>
 
     <div class="grid2">
-      <Panel title={t('stats.trend.heading')}>
+      <Panel title={t('stats.trend.heading')} description={t('stats.trend.meaning')}>
         {#snippet actions()}
           <SegmentedControl
             size="sm"
@@ -321,7 +606,7 @@
         />
       </Panel>
 
-      <Panel title={t('stats.more.heading')}>
+      <Panel title={t('stats.more.heading')} description={t('stats.more.meaning')}>
         <Tabs
           label={t('stats.more.heading')}
           tabs={[
@@ -342,7 +627,7 @@
                   bars={bars(r.hours, (h) => `${h.hour}:00`, (h) => (h.stat.rate ?? 0) * 100, (h) => `${h.hour}:00 · ${h.stat.count} · ${pct(h.stat.rate)}`)}
                 />
               {:else if id === 'times'}
-                <p class="muted">{t('stats.times.mean', { s: seconds(r.answer_times.mean_ms) })}</p>
+                <p class="muted">{t('stats.times.meaning')} {t('stats.times.mean', { s: seconds(r.answer_times.mean_ms) })}</p>
                 <BarChart
                   label={t('stats.times.heading')}
                   height={112}
@@ -357,6 +642,7 @@
                   </ul>
                 {/if}
               {:else}
+                <p class="muted">{t('stats.memory.meaning')}</p>
                 <div class="pair">
                   <div>
                     <h3 class="sub">{t('stats.memory.stability')}</h3>
@@ -575,11 +861,144 @@
     gap: var(--space-3);
   }
   .wrap-row > :global(.p-activity) {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     max-width: 100%;
   }
-  .wrap-row > :global(.p-forecast) {
-    flex: 1 1 22rem;
+  /* --- the three questions --- */
+  .verdict {
+    margin: 0 0 var(--space-3);
+    font-size: var(--text-md);
+    font-weight: var(--weight-medium);
+    color: var(--text-1);
+  }
+  .figs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-6);
+    margin: 0;
+  }
+  .figs > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 6rem;
+  }
+  .figs dt {
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .figs dd {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+  }
+  .figs .big {
+    font-size: var(--text-xl);
+    font-weight: var(--weight-semibold);
+    line-height: 1.2;
+  }
+  .streak-fig {
+    flex-direction: row !important;
+    align-items: center;
+    gap: var(--space-1) !important;
+  }
+  .streak-fig :global(svg) {
+    color: var(--warning);
+  }
+  .goal-fig {
+    flex: 1 1 12rem;
+    max-width: 22rem;
+  }
+  .goal-fig dd {
+    align-items: flex-start;
+  }
+  .sub-fig {
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .q-row {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: var(--space-3);
+    align-items: start;
+  }
+  .lead-line {
+    margin: 0;
+    font-size: var(--text-sm);
+  }
+  .lead-line strong {
+    font-weight: var(--weight-semibold);
+  }
+  .muted-inline {
+    color: var(--text-2);
+  }
+  .q-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+  .study-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    border-bottom: 1px solid var(--border);
+  }
+  .struggles .term {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .struggles .term :global(.fc-chip) {
+    margin-inline-start: var(--space-1);
+  }
+  .struggles .meaning {
+    white-space: normal;
+    color: var(--text-2);
+    overflow-wrap: anywhere;
+  }
+  .struggles .miss {
+    color: var(--danger);
+  }
+  .struggles .of {
+    color: var(--text-3);
+  }
+  .struggles .when {
+    color: var(--text-2);
+    font-size: var(--text-xs);
+  }
+  .struggles .act {
+    width: 1%;
+    padding-inline: var(--space-1) var(--space-3) !important;
+  }
+  .struggles tr.paused > * {
+    color: var(--text-3);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .details-head {
+    margin-top: var(--space-4);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+  .details-head h2 {
+    margin: 0;
+    font-size: var(--text-md);
+    font-weight: var(--weight-semibold);
+  }
+  .details-head p {
+    margin: 2px 0 0;
+    font-size: var(--text-xs);
+    color: var(--text-2);
   }
   .grid2 {
     display: grid;
@@ -787,6 +1206,11 @@
   @media (max-width: 1100px) {
     .rates {
       grid-template-columns: max-content minmax(2rem, 1fr) 3.25rem 4.75rem;
+    }
+  }
+  @media (max-width: 1100px) {
+    .q-row {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
   @media (max-width: 899.98px) {

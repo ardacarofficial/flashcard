@@ -9,5 +9,6 @@
   "oplog.summary.goals.update": "Edited a goal",
   "oplog.summary.goals.delete": "Removed a goal",
   "oplog.summary.goals.restore": "Restored a goal",
-  "oplog.summary.optimizer.run": "Started FSRS optimization"
+  "oplog.summary.optimizer.run": "Started FSRS optimization",
+  "oplog.summary.planning.apply_pace": "{deck}: {count} new cards a day"
 }

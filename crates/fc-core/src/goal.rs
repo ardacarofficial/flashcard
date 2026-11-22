@@ -18,6 +18,9 @@ pub enum GoalKind {
     Streak,
     /// Share of settled (mature) cards in the scope, 0–100.
     DeckCompletion,
+    /// v1.3: cards answered every day ("her gün 50 kart"): today's answers; with a deadline,
+    /// the answers since the goal was set.
+    DailyCards,
 }
 
 impl GoalKind {
@@ -28,6 +31,7 @@ impl GoalKind {
             Self::StudyMinutes => "study_minutes",
             Self::Streak => "streak",
             Self::DeckCompletion => "deck_completion",
+            Self::DailyCards => "daily_cards",
         }
     }
 
@@ -38,6 +42,7 @@ impl GoalKind {
             "study_minutes" => Self::StudyMinutes,
             "streak" => Self::Streak,
             "deck_completion" => Self::DeckCompletion,
+            "daily_cards" => Self::DailyCards,
             _ => return None,
         })
     }
@@ -65,7 +70,8 @@ pub struct GoalProgress {
     pub percent: f64,
     /// Target reached.
     pub done: bool,
-    /// A per-day goal (study minutes without a deadline): `current` is today's value.
+    /// A per-day goal (study minutes or daily cards without a deadline): `current` is today's
+    /// value.
     pub daily: bool,
     /// Day the target is reached at the current pace (`None`: done, no pace yet, or not
     /// forecastable).
@@ -141,6 +147,19 @@ pub fn goal_progress(
             (c, false, projected)
         }
         GoalKind::DeckCompletion => (inputs.settled_pct, false, None),
+        GoalKind::DailyCards if deadline.is_none() => {
+            let today_n: u32 = inputs
+                .days
+                .iter()
+                .filter(|d| d.day == today)
+                .map(|d| d.reviews)
+                .sum();
+            (f64::from(today_n), true, None)
+        }
+        GoalKind::DailyCards => {
+            let c = since(&|d| f64::from(d.reviews));
+            (c, false, paced(c))
+        }
     };
     let done = current >= target;
     let projected = if done { None } else { projected };
@@ -223,6 +242,31 @@ mod tests {
         assert_eq!(
             GoalKind::parse(GoalKind::Streak.as_str()),
             Some(GoalKind::Streak)
+        );
+    }
+
+    #[test]
+    fn daily_cards_goal() {
+        let days = vec![
+            DayAggregate {
+                reviews: 70,
+                ..DayAggregate::empty(8)
+            },
+            DayAggregate {
+                reviews: 30,
+                ..DayAggregate::empty(9)
+            },
+        ];
+        // "Every day 50 cards": today's 30 answers.
+        let p = goal_progress(GoalKind::DailyCards, 50.0, 0, None, 9, inputs(&days));
+        assert!(p.daily && !p.done && p.current == 30.0 && p.days_late.is_none());
+        assert!((p.percent - 60.0).abs() < 1e-9);
+        // With a deadline: the answers since the goal was set.
+        let p = goal_progress(GoalKind::DailyCards, 100.0, 8, Some(20), 9, inputs(&days));
+        assert!(!p.daily && p.done && p.current == 100.0);
+        assert_eq!(
+            GoalKind::parse(GoalKind::DailyCards.as_str()),
+            Some(GoalKind::DailyCards)
         );
     }
 }

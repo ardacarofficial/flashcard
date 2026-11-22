@@ -78,6 +78,7 @@ Kart türü motorunun üç işi vardır: **kart üret**, **soruyu sun**, **cevab
 - **Yük dengeleme** `[v0.6]`: Tekrarlar eşdeğer aralıktaki günlere dağıtılır, bir gün 300 bir gün 10 kart olmaz.
 - **Kolay günler** `[v0.6]`: Haftanın belirli günleri (ör. hafta sonu) daha az kart planlanır.
 - **Sınav tarihi modu** `[v0.6]`: Bir deste için sınav tarihi verilir. Algoritma kartların o tarihte hatırlanma olasılığını en üst düzeye çıkaracak şekilde planlar, sınav öncesi yoğunlaştırır.
+- **Tempo planlayıcı** `[v1.3]`: "Günde kaç yeni kart?" ve isteğe bağlı "Sınav tarihim" seçildikçe önümüzdeki haftaların günlük iş yükü (kart/gün, dk/gün) canlı tahmin edilir: "Bu tempoyla 3 hafta sonra günde ~85 kart, ~14 dk". Model saf Rust'tadır (`fc_study::planning::forecast`): kartların bugünkü FSRS durumundan, şablonun ağırlıkları ve hedef hatırlamasından **beklenen değer** simülasyonu (rastgelelik yok; kart sayısı korunur; yeni kart temposunda monoton). Dakikalar son 30 günün ortalama cevap süresinden. Sorgu `planning.forecast`; "Uygula" (`planning.apply_pace`) destenin şablonundaki günlük yeni kart sınırını yazar (şablonu yoksa deste adıyla bir şablon oluşturup atar), istenirse sınav tarihini ekler — tek geri al adımı; önce hangi şablonun ve destelerin değişeceğini söyler.
 - **Günlük limit yok.** Kullanıcı istediği kadar çalışır. (Yeni kartların "tanıtım sırası" ayarlanabilir: rastgele, ekleme sırası.)
 
 ## 6. ✅ Çalışma modu
@@ -285,6 +286,7 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 | 🎯 Gerçekleşen vs hedef hatırlama | Hedef %90 ise gerçekte kaç |
 | 📈 Deste karnesi | Destenin ne kadarının "oturduğu" yüzde olarak |
 
+- **Genel bakış üç soruyla açılır** `[v1.3]`: **Bugün nasılım?** (`stats.today`: bugün / dün cevaplar, doğruluk, süre, seri, hedef; Rust'ın "dün ile aynı tempodasın / gerisindesin / öndesin" yargısı), **Önümde ne var?** (gelecek tahmininin 7 günü — bugün ve en yoğun gün yazıyla işaretli — bir tıkla 30 gün), **Neyi unutuyorum?** (`stats.struggles`: son 1 / 7 / 30 günde "Tekrar" ya da yanlış cevaplanan kartlar, her modda, pratik ve test dahil; kelime, anlam, yanlış/cevap, son görülme). Birincil eylem **"Bunları çalış"**: Rust'ın listeyle verdiği `cid:` sorgusuyla tam o kartlardan bir **pratik** oturumu (`study.start` custom + trial: takvim değişmez). Askıya al / etiketle satır eylemi olarak kalır. Diğer tüm istatistikler altta "Ayrıntılar" başlığında, her biri bir satırlık "bu ne anlama geliyor" açıklamasıyla.
 - İstatistikler olaylardan hesaplanır. Yeni istatistik eklemek şema değişikliği gerektirmez.
 - Büyük koleksiyonlar için ön hesaplanmış özet tabloları (olaylardan türetilir, her an yeniden üretilebilir).
 
@@ -293,7 +295,8 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 `[v0.6]`
 
 - "Ay sonuna kadar 500 kelime öğren", "Her gün 30 dk çalış" gibi hedefler.
-- Hedef türleri: öğrenilen kart sayısı, çalışma süresi, seri, deste tamamlama yüzdesi.
+- Hedef türleri: öğrenilen kart sayısı, çalışma süresi, seri, deste tamamlama yüzdesi, **günlük kart** `[v1.3]` (`daily_cards`: son tarih yoksa bugünkü cevap sayısı, varsa hedef konduğundan beri toplam).
+- `[v1.3]` Hedef koymak boşluklu bir cümledir: "Her gün __ kart çalış", "__ tarihine kadar __ destesini bitir" (destenin başlanmamış kartlarını öğrenmek: son tarihli öğrenilen kart hedefi), "Her gün __ dakika", "__ gün üst üste", "__ destesinde oturmuş kart oranını %__ yap"; listelenen hedefler de aynı cümleyle okunur. Ana sayfanın hedef kutucuğu aynı `goals.list` verisini gösterir.
 - İlerleme çubuğu, gidişata göre tahmin ("Bu hızla 3 gün geç kalırsın").
 
 ## 19. 🔔 Hatırlatıcılar

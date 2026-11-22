@@ -3,4 +3,4 @@
 /**
  * What a goal measures.
  */
-export type GoalKind = "cards_learned" | "study_minutes" | "streak" | "deck_completion";
+export type GoalKind = "cards_learned" | "study_minutes" | "streak" | "deck_completion" | "daily_cards";
