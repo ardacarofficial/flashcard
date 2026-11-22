@@ -469,7 +469,7 @@ async function main() {
                   await settle(page);
                 }
                 // answer the rest: the queue runs out and the session ends with its summary
-                for (let k = 0; k < 40 && (await page.locator('[data-testid="study-end"]').count()); k++) {
+                for (let k = 0; k < 200 && (await page.locator('[data-testid="study-end"]').count()); k++) {
                   if (await page.locator('[data-testid="study-finish"]').count()) {
                     await page.locator('[data-testid="study-finish"]').first().click().catch(() => {});
                     break;
