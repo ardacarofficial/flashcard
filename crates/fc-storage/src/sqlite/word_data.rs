@@ -2,7 +2,7 @@
 
 use super::{all, exec, opt_ts, ts};
 use super::{Mode, SqliteTx, WriteMode};
-use crate::error::{in_table, StorageResult};
+use crate::error::StorageResult;
 use crate::repo::{
     WordDataPackRecord, WordDataQuery, WordDataRead, WordDataRecord, WordDataSort, WordDataWrite,
     WordIndexQuery, WordIndexRecord, WordWithData, NO_BAND, NO_RANK,
@@ -239,31 +239,30 @@ impl WordDataWrite for SqliteTx<'_, WriteMode> {
                 pack.installed_at.0,
             ],
         )?;
-        let conn = self.conn();
-        let mut st = conn
-            .prepare_cached(
-                "INSERT INTO word_data (language, form, lemma, rank, band, band_origin)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            )
-            .map_err(|e| in_table(e, DATA))?;
-        for r in rows {
-            st.execute(params![
-                pack.language,
-                r.form,
-                r.lemma,
-                r.rank.map(i64::from),
-                r.band,
-                r.band_origin
-            ])
-            .map_err(|e| in_table(e, DATA))?;
-        }
-        let mut st = conn
-            .prepare_cached("INSERT INTO word_family (language, lemma, head) VALUES (?1, ?2, ?3)")
-            .map_err(|e| in_table(e, FAMILY))?;
-        for (lemma, head) in families {
-            st.execute(params![pack.language, lemma, head])
-                .map_err(|e| in_table(e, FAMILY))?;
-        }
+        // One statement per table: the rows travel as one JSON array (a pack is ~60 000 rows;
+        // a statement per row costs far more, above all in debug builds).
+        let rows_json = serde_json::Value::Array(
+            rows.iter()
+                .map(|r| serde_json::json!([r.form, r.lemma, r.rank, r.band, r.band_origin]))
+                .collect(),
+        )
+        .to_string();
+        exec(
+            self.conn(),
+            DATA,
+            "INSERT INTO word_data (language, form, lemma, rank, band, band_origin)
+             SELECT ?1, j.value ->> 0, j.value ->> 1, j.value ->> 2, j.value ->> 3, j.value ->> 4
+             FROM json_each(?2) j",
+            params![pack.language, rows_json],
+        )?;
+        let families_json = serde_json::to_string(families).unwrap_or_else(|_| "[]".into());
+        exec(
+            self.conn(),
+            FAMILY,
+            "INSERT INTO word_family (language, lemma, head)
+             SELECT ?1, j.value ->> 0, j.value ->> 1 FROM json_each(?2) j",
+            params![pack.language, families_json],
+        )?;
         Ok(())
     }
 

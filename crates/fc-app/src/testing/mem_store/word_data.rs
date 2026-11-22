@@ -10,6 +10,13 @@ pub struct WordDataState {
     families: BTreeMap<(String, String), String>,
 }
 
+impl WordDataState {
+    /// The pack row of `form` in `language` (the `word_frequency` view of the SQLite store).
+    pub(super) fn row(&self, language: &str, form: &str) -> Option<&WordDataRecord> {
+        self.rows.get(&(language.to_owned(), form.to_owned()))
+    }
+}
+
 fn status(w: &WordIndexRecord, threshold: u32) -> String {
     if let Some(m) = &w.mark {
         return m.clone();

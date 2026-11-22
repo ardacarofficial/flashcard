@@ -8,13 +8,22 @@
 //! * `words.list` sorts/filters by rank and band, paging included — `list_by_frequency_*`.
 //! * The module switch — `switched_off_*`; import / reset — `import_and_reset`.
 //! * Performance: a 50 000-word pack loads and 500 forms are looked up —
-//!   `a_50k_pack_loads_and_500_forms_look_up_fast`.
+//!   `a_50k_pack_loads_and_500_forms_look_up_fast`; start-up with an up-to-date shipped pack
+//!   costs one small read — `start_up_with_an_up_to_date_pack_is_cheap`.
+//! * The language queries' `sıklık`/`freq` and `cefr`/`level` read the pack through the
+//!   `word_frequency` view — `frequency_and_level_queries_*` (count = list = study).
+//! * Backups carry imported packs only — `backups_carry_imported_packs_not_the_shipped_one`.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use crate::testing::{MemStore, TempSqlite, TestApp};
 use fc_api::v1::common::Empty;
 use fc_api::v1::decks::CreateDeck;
-use fc_api::v1::io::ImportSource;
+use fc_api::v1::io::{
+    BackupReport, BackupVerifyReport, CreateBackup, ImportSource, RestoreBackup, RestoreReport,
+    VerifyBackup,
+};
+use fc_api::v1::search::{QueryText, SearchCards};
+use fc_api::v1::study::{StartSession, StudyFilter, StudyKind, StudyMode};
 use fc_api::v1::methods::*;
 use fc_api::v1::modules::SetModuleEnabled;
 use fc_api::v1::notes::CreateNote;
@@ -25,6 +34,7 @@ use fc_api::ErrorCode;
 use fc_core::notetype::builtin::CLASSIC_ID;
 use fc_core::reading::{WordMark, WordStatus};
 use fc_core::settings::SettingScope;
+use fc_core::NoteId;
 use fc_core::word_data::{BandOrigin, CefrBand};
 use fc_storage::Store;
 use std::collections::BTreeMap;
@@ -107,7 +117,7 @@ fn switch(t: &TestApp, on: bool) {
 #[test]
 fn the_shipped_pack_is_installed_once_with_its_sources() {
     let store: Arc<dyn Store> = Arc::new(TempSqlite::new());
-    let t = TestApp::new(store.clone());
+    let t = TestApp::with_shipped_word_data(store.clone());
     let s = t.ok::<WordsDataSources>(Empty {});
     assert_eq!(s.packs.len(), 1);
     let en = &s.packs[0];
@@ -119,7 +129,7 @@ fn the_shipped_pack_is_installed_once_with_its_sources() {
     assert_eq!(s.bundled.len(), 1);
     assert_eq!(s.bundled[0].version, en.version);
     // A second start leaves the installed pack alone (same bytes).
-    let again = TestApp::new(store);
+    let again = TestApp::with_shipped_word_data(store);
     let s2 = again.ok::<WordsDataSources>(Empty {});
     assert_eq!(s2.packs[0].installed_at, en.installed_at);
     // And the real pack answers: `went` has `go`'s rank, `actor` its own.
@@ -368,4 +378,277 @@ fn a_50k_pack_loads_and_500_forms_look_up_fast() {
     // Generous bounds (debug build, shared machine).
     assert!(load.as_secs() < 30, "load took {load:?}");
     assert!(look.as_secs() < 5, "lookup took {look:?}");
+}
+
+// ------------------------------------------------------------------ start-up cost
+
+#[test]
+fn start_up_with_an_up_to_date_pack_is_cheap() {
+    use fc_providers::word_data::BUNDLED;
+    let store: Arc<dyn Store> = Arc::new(TempSqlite::new());
+    // First start: the shipped pack is installed (one bulk statement per table).
+    let start = Instant::now();
+    let t = TestApp::with_shipped_word_data(store.clone());
+    println!("first start with the shipped pack: {:?}", start.elapsed());
+    let installed = t.ok::<WordsDataSources>(Empty {}).packs[0].installed_at;
+    // Up to date: one read of the pack table, nothing written.
+    let mut best = std::time::Duration::MAX;
+    for _ in 0..5 {
+        let mut tx = store.write().unwrap();
+        let start = Instant::now();
+        super::install_shipped(&mut *tx, fc_core::Timestamp(9), BUNDLED).unwrap();
+        best = best.min(start.elapsed());
+        drop(tx);
+    }
+    println!("start-up check with an up-to-date pack: {best:?}");
+    assert!(best.as_millis() < 5, "up-to-date check took {best:?}");
+    let again = TestApp::with_shipped_word_data(store);
+    assert_eq!(again.ok::<WordsDataSources>(Empty {}).packs[0].installed_at, installed);
+}
+
+// ------------------------------------------------------------------ language queries (B3)
+
+fn search_count(t: &TestApp, q: &str) -> u32 {
+    t.ok::<SearchCardsMethod>(SearchCards {
+        query: q.into(),
+        sort: None,
+        descending: None,
+        notes_only: None,
+        offset: None,
+        limit: Some(500),
+    })
+    .total
+}
+
+fn search_notes(t: &TestApp, q: &str) -> Vec<NoteId> {
+    let mut n = t.ok::<SearchIdsMethod>(QueryText { query: q.into() }).note_ids;
+    n.sort();
+    n
+}
+
+/// Cards a custom study session over `q` holds (every card answered).
+fn study_cards(t: &TestApp, q: &str) -> Vec<fc_core::CardId> {
+    let s = t.ok::<StudyStart>(StartSession {
+        kind: StudyKind::Custom,
+        mode: Some(StudyMode::Trial),
+        deck_id: None,
+        include_subdecks: None,
+        filter: Some(StudyFilter {
+            attributes: vec![],
+            states: None,
+            due_only: None,
+            limit: None,
+            query: Some(q.into()),
+            saved_query_id: None,
+        }),
+        from_session: None,
+        new_limit: Some(1000),
+        order: None,
+        tz_offset_mins: Some(0),
+        modes: None,
+        scope: None,
+    });
+    let mut ids = Vec::new();
+    let mut c = s;
+    while let Some(cur) = c.current.clone() {
+        ids.push(cur.card_id);
+        c = t.ok::<StudyAnswer>(fc_api::v1::study::AnswerCard {
+            session_id: c.id,
+            card_id: cur.card_id,
+            rating: fc_core::card::Rating::Easy,
+            duration_ms: 1000,
+            reveal_ms: None,
+        });
+    }
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+fn frequency_and_level_queries(t: TestApp) {
+    let d = t
+        .ok::<DecksCreate>(CreateDeck {
+            path: "English".into(),
+            parent_id: None,
+            description: None,
+            icon: None,
+            color: None,
+        })
+        .id;
+    t.ok::<SettingsSet>(SetSetting {
+        scope: SettingScope::Deck(d),
+        key: crate::modules::words::LANGUAGE.into(),
+        value: serde_json::json!("en"),
+    });
+    let words = ["go", "went", "house", "january", "actor", "negotiate", "ubiquitous", "zzqx"];
+    let mut ids = BTreeMap::new();
+    for w in words {
+        let mut fields = BTreeMap::new();
+        fields.insert("front".to_owned(), w.to_owned());
+        fields.insert("back".to_owned(), "x".to_owned());
+        let id = t
+            .ok::<NotesCreate>(CreateNote {
+                notetype_id: CLASSIC_ID,
+                deck_id: d,
+                fields,
+                tags: vec![],
+                attributes: vec![],
+                allow_duplicate: Some(true),
+            })
+            .id;
+        ids.insert(w, id);
+    }
+    // What the pack says of each note's key (the language queries read the same rows).
+    let levels: BTreeMap<&str, (Option<u32>, Option<CefrBand>)> = words
+        .iter()
+        .map(|w| {
+            let f = &lookup(&t, &[w])[0];
+            let key = f.key.clone().unwrap();
+            let l = lookup(&t, &[key.as_str()])[0].level.clone();
+            (*w, l.map_or((None, None), |l| (l.rank, l.band)))
+        })
+        .collect();
+    assert!(levels["go"].0.unwrap() < 100, "{levels:?}");
+    assert_eq!(levels["went"], levels["go"], "inflection joins the lemma");
+    assert_eq!(levels["january"].1, Some(CefrBand::A1));
+    assert_eq!(levels["zzqx"], (None, None));
+    let expect = |keep: &dyn Fn(Option<u32>, Option<CefrBand>) -> bool| -> Vec<NoteId> {
+        let mut v: Vec<NoteId> = words
+            .iter()
+            .filter(|w| keep(levels[*w].0, levels[*w].1))
+            .map(|w| ids[w])
+            .collect();
+        v.sort();
+        v
+    };
+    let cases: Vec<(&str, Vec<NoteId>)> = vec![
+        ("sıklık<1000", expect(&|r, _| r.is_some_and(|r| r < 1000))),
+        ("freq<=5000", expect(&|r, _| r.is_some_and(|r| r <= 5000))),
+        ("-sıklık<1000", expect(&|r, _| !r.is_some_and(|r| r < 1000))),
+        ("cefr:B1", expect(&|_, b| b == Some(CefrBand::B1))),
+        ("level:A1", expect(&|_, b| b == Some(CefrBand::A1))),
+        ("cefr>=B2", expect(&|_, b| b.is_some_and(|b| b >= CefrBand::B2))),
+    ];
+    for (q, want) in &cases {
+        let notes = search_notes(&t, q);
+        assert_eq!(&notes, want, "{q}: list ({levels:?})");
+        assert_eq!(search_count(&t, q) as usize, notes.len(), "{q}: count = list");
+        assert_eq!(study_cards(&t, q).len(), notes.len(), "{q}: study = list");
+    }
+    // The examples are not all empty or all full.
+    assert!(cases.iter().any(|(_, w)| !w.is_empty() && w.len() < words.len()));
+    assert!(search_notes(&t, "sıklık<1000").contains(&ids["went"]));
+    assert!(!search_notes(&t, "sıklık<1000").contains(&ids["zzqx"]));
+}
+
+#[test]
+fn frequency_and_level_queries_sqlite() {
+    frequency_and_level_queries(TestApp::with_shipped_word_data(Arc::new(TempSqlite::new())));
+}
+
+#[test]
+fn frequency_and_level_queries_mem() {
+    frequency_and_level_queries(TestApp::with_shipped_word_data(Arc::new(MemStore::new())));
+}
+
+// ------------------------------------------------------------------ backups
+
+fn backup_counts(path: &std::path::Path) -> BTreeMap<String, u64> {
+    let file = std::fs::File::open(path).unwrap();
+    fc_interop::fcbackup::BackupReader::open(std::io::BufReader::new(file))
+        .unwrap()
+        .manifest()
+        .counts
+        .clone()
+}
+
+fn backup_job<T: serde::de::DeserializeOwned>(t: &TestApp, job: &fc_api::v1::jobs::JobDto) -> T {
+    t.app.run_pending_jobs().unwrap();
+    let job = t.ok::<JobsGet>(fc_api::v1::jobs::JobRef { id: job.id });
+    assert_eq!(job.status, fc_api::v1::jobs::JobStatus::Succeeded, "{:?}", job.error);
+    serde_json::from_value(job.result.unwrap()).unwrap()
+}
+
+#[test]
+fn backups_carry_imported_packs_not_the_shipped_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let t = app_with_shipped(&["go"]);
+    let s = |p: &std::path::Path| p.to_string_lossy().into_owned();
+    // Shipped pack only: the backup has no word-data rows.
+    let shipped = dir.path().join("shipped.fcbackup");
+    let rep: BackupReport = backup_job(&t, &t.ok::<IoBackupCreate>(CreateBackup { path: s(&shipped) }));
+    assert!(rep.verified, "verify-by-restore");
+    let counts = backup_counts(&shipped);
+    for table in ["word_data_packs", "word_data", "word_family"] {
+        assert_eq!(counts.get(table).copied().unwrap_or(0), 0, "{table} in {counts:?}");
+    }
+    assert_eq!(counts["notes"], 1);
+    // An imported pack (another language) is backed up with its rows.
+    let mut de = serde_json::from_str::<serde_json::Value>(FIXTURE).unwrap();
+    de["language"] = "de".into();
+    t.ok::<WordsDataImport>(ImportWordData {
+        source: ImportSource::Text { text: de.to_string() },
+    });
+    let imported = dir.path().join("imported.fcbackup");
+    let rep: BackupReport = backup_job(&t, &t.ok::<IoBackupCreate>(CreateBackup { path: s(&imported) }));
+    assert!(rep.verified);
+    let counts = backup_counts(&imported);
+    assert_eq!(counts["word_data_packs"], 1);
+    assert_eq!(counts["word_data"], 19, "14 words + 1 profile headword + 4 forms");
+    assert_eq!(counts["word_family"], 2);
+    let v: BackupVerifyReport = backup_job(&t, &t.ok::<IoBackupVerify>(VerifyBackup { path: s(&imported) }));
+    assert!(v.ok, "{:?}", v.problems);
+    // Restored elsewhere: the imported pack comes back, the shipped one is reinstalled.
+    let b = TestApp::with_shipped_word_data(Arc::new(TempSqlite::new()));
+    let rr: RestoreReport = backup_job(
+        &b,
+        &b.ok::<IoBackupRestore>(RestoreBackup {
+            path: s(&imported),
+            safety_backup_path: None,
+        }),
+    );
+    assert!(rr.missing_media.is_empty());
+    let packs = b.ok::<WordsDataSources>(Empty {}).packs;
+    let by: BTreeMap<&str, (&str, u32)> = packs
+        .iter()
+        .map(|p| (p.language.as_str(), (p.origin.as_str(), p.words)))
+        .collect();
+    assert_eq!(by["de"], ("imported", 14));
+    assert_eq!(by["en"].0, "bundled");
+    assert!(by["en"].1 > 30_000, "the shipped pack is back");
+    let f = b
+        .ok::<WordsLookup>(LookupWords {
+            language: "de".into(),
+            forms: vec!["went".into()],
+        })
+        .forms;
+    assert_eq!(f[0].level.as_ref().unwrap().rank, Some(1));
+}
+
+/// An app on SQLite with the shipped pack and an English deck holding `words`.
+fn app_with_shipped(words: &[&str]) -> TestApp {
+    let t = TestApp::with_shipped_word_data(Arc::new(TempSqlite::new()));
+    let d = t
+        .ok::<DecksCreate>(CreateDeck {
+            path: "English".into(),
+            parent_id: None,
+            description: None,
+            icon: None,
+            color: None,
+        })
+        .id;
+    for w in words {
+        let mut fields = BTreeMap::new();
+        fields.insert("front".to_owned(), (*w).to_owned());
+        fields.insert("back".to_owned(), "x".to_owned());
+        t.ok::<NotesCreate>(CreateNote {
+            notetype_id: CLASSIC_ID,
+            deck_id: d,
+            fields,
+            tags: vec![],
+            attributes: vec![],
+            allow_duplicate: Some(true),
+        });
+    }
+    t
 }

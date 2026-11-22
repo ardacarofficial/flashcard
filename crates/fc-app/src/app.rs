@@ -77,6 +77,9 @@ pub struct App {
     oplog_seen: Mutex<Option<i64>>,
     /// Plugin runtime: loaded plugins, hooks, UI sessions (v0.7).
     plugins: PluginHost,
+    /// Word-data packs `load_state` installs (v1.4 B2): the shipped ones; tests swap in a tiny
+    /// fixture ([`App::set_shipped_word_data`]).
+    shipped_word_data: RwLock<&'static [fc_providers::word_data::ShippedPack]>,
 }
 
 /// Where a command's oplog entries go.
@@ -215,6 +218,7 @@ impl App {
             data_dir: OnceLock::new(),
             oplog_seen: Mutex::new(None),
             plugins: PluginHost::default(),
+            shipped_word_data: RwLock::new(fc_providers::word_data::BUNDLED),
         })
     }
 
@@ -240,8 +244,9 @@ impl App {
         tx.delete_orphan_media_files()?;
         // The word index (v1.4): builds what a migration or another writer queued.
         crate::modules::words::index::drain(&mut *tx)?;
-        // Word data (v1.4): installs the shipped packs once (and again when they change).
-        crate::modules::word_data::install_bundled(&mut *tx, now)?;
+        // Word data (v1.4): installs the shipped packs once (and again when they change); one
+        // small read when they are up to date.
+        crate::modules::word_data::install_shipped(&mut *tx, now, self.shipped_word_data())?;
         tx.commit()?;
         self.reload_cached_state()?;
         self.roll_back_unfinished_groups()?;
@@ -253,6 +258,20 @@ impl App {
         // Position from which other processes' commits count as news.
         self.poll_external_changes()?;
         Ok(())
+    }
+
+    /// The word-data packs [`App::load_state`] installs: the shipped ones unless a test chose
+    /// others. A swap takes effect at the next `load_state`.
+    pub fn set_shipped_word_data(&self, packs: &'static [fc_providers::word_data::ShippedPack]) {
+        if let Ok(mut p) = self.shipped_word_data.write() {
+            *p = packs;
+        }
+    }
+
+    pub(crate) fn shipped_word_data(&self) -> &'static [fc_providers::word_data::ShippedPack] {
+        self.shipped_word_data
+            .read()
+            .map_or(fc_providers::word_data::BUNDLED, |p| *p)
     }
 
     /// Startup: undoes what undo groups left unfinished by a crash wrote (see [`UndoGroup`]).
@@ -426,6 +445,27 @@ impl App {
             // A failed reload keeps the previous cache; the next start reloads anyway.
             let _ = self.reload_cached_state();
         }
+        if events
+            .iter()
+            .any(|e| matches!(e, DomainEvent::CollectionReplaced))
+        {
+            // A backup holds only imported word-data packs (v1.4 B2): put the shipped ones
+            // back. Best effort: the next start does it anyway.
+            let _ = self.install_shipped_word_data();
+        }
+    }
+
+    /// Installs the shipped word-data packs that are missing or out of date (one small read
+    /// when they are up to date), in its own transaction: reference data, no oplog entry.
+    fn install_shipped_word_data(&self) -> AppResult<()> {
+        let mut tx = self.store.write()?;
+        crate::modules::word_data::install_shipped(
+            &mut *tx,
+            self.clock.now(),
+            self.shipped_word_data(),
+        )?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// Current time from the injected clock.

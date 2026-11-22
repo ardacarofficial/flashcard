@@ -24,14 +24,21 @@ impl SearchState {
 }
 
 impl MemTx<'_> {
-    /// What the language predicates see of a note (word index, origin; media files and the
-    /// word-data pack are not modelled here: no media, no rank or band).
+    /// What the language predicates see of a note (word index, origin, the word-data pack's
+    /// rank and band of its key; media files are not modelled here: no media).
     fn lang_facts(&self, note: &Note) -> LangFacts {
         let s = self.s();
         let mut f = LangFacts::default();
         if let Some(n) = s.domains.words.notes.get(&note.id) {
             f.language = n.language.clone();
             f.key = Some(n.key.clone());
+            if let Some(d) = s.domains.word_data.row(&n.language, &n.key) {
+                f.rank = d.rank;
+                f.band = d
+                    .band
+                    .as_deref()
+                    .and_then(fc_core::query::lang::cefr_ordinal);
+            }
             if !n.language.is_empty() {
                 f.word = s
                     .domains

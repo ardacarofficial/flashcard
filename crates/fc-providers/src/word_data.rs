@@ -7,15 +7,29 @@
 //! forms, the Octanove C1/C2 profile) and cites the CEFR-J Wordlist 1.5, as its terms ask;
 //! its `sources` carry the attributions, shown by `words.data.sources`.
 
-/// `(language, pack bytes)` of every shipped pack.
-pub const BUNDLED: &[(&str, &[u8])] = &[("en", include_bytes!("../data/word-data/en.json"))];
+/// A pack compiled into the binary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShippedPack {
+    /// Language (primary subtag).
+    pub language: &'static str,
+    /// FNV-1a 64 of `bytes` (16 hex digits), fixed at build time so start-up compares one
+    /// stored value instead of hashing the pack; `every_shipped_pack_is_valid_and_attributed`
+    /// fails (and prints the new value) when the bytes change without it.
+    pub checksum: &'static str,
+    /// The pack (JSON, `fc_core::word_data::WordPack::parse`).
+    pub bytes: &'static [u8],
+}
+
+/// Every shipped pack.
+pub const BUNDLED: &[ShippedPack] = &[ShippedPack {
+    language: "en",
+    checksum: "ae5bcd53e9fdd43e",
+    bytes: include_bytes!("../data/word-data/en.json"),
+}];
 
 /// The shipped pack of `language` (primary subtag), if any.
-pub fn bundled(language: &str) -> Option<&'static [u8]> {
-    BUNDLED
-        .iter()
-        .find(|(l, _)| *l == language)
-        .map(|(_, b)| *b)
+pub fn bundled(language: &str) -> Option<&'static ShippedPack> {
+    BUNDLED.iter().find(|p| p.language == language)
 }
 
 #[cfg(test)]
@@ -24,9 +38,15 @@ mod tests {
 
     #[test]
     fn every_shipped_pack_is_valid_and_attributed() {
-        for (language, bytes) in super::BUNDLED {
-            let pack = WordPack::parse(bytes).unwrap();
-            assert_eq!(pack.language, *language);
+        for shipped in super::BUNDLED {
+            let sum = format!("{:016x}", fc_core::note::fnv1a64(shipped.bytes));
+            assert_eq!(
+                shipped.checksum, sum,
+                "update the checksum of the {} pack",
+                shipped.language
+            );
+            let pack = WordPack::parse(shipped.bytes).unwrap();
+            assert_eq!(pack.language, shipped.language);
             assert!(pack.words.len() > 30_000, "{}", pack.words.len());
             assert!(pack.sources.len() >= 3);
             assert!(pack
@@ -34,7 +54,7 @@ mod tests {
                 .iter()
                 .all(|s| !s.licence.is_empty() && !s.name.is_empty()));
         }
-        let en = WordPack::parse(super::bundled("en").unwrap()).unwrap();
+        let en = WordPack::parse(super::bundled("en").unwrap().bytes).unwrap();
         let rank = |w: &str| en.words.iter().position(|x| x == w).map(|i| i + 1);
         assert!(rank("go").unwrap() < 100);
         assert_eq!(en.forms.get("went").map(String::as_str), Some("go"));

@@ -3,7 +3,7 @@
 //! spend time first on the words he will hear most.
 //!
 //! * Packs: the app ships the English one (`fc_providers::word_data`, CC BY-SA 4.0 with the
-//!   CEFR-J citation) and installs it at start-up ([`install_bundled`]: once, and again only
+//!   CEFR-J citation) and installs it at start-up ([`install_shipped`]: once, and again only
 //!   when the shipped bytes change). `words.data.import` replaces a language's pack with one
 //!   from a file or text; a shipped pack never overwrites an imported one, and
 //!   `words.data.reset` puts the shipped one back. `words.data.sources` lists the installed
@@ -39,8 +39,9 @@ use fc_core::words::index_language;
 use fc_core::Timestamp;
 use fc_storage::repo::{WordDataPackRecord, WordDataRecord};
 use fc_storage::{Reads, WriteTx};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::sync::OnceLock;
+use std::collections::{BTreeSet, HashMap};
+use fc_providers::word_data::ShippedPack;
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// Module id.
 pub const ID: &str = "word_data";
@@ -75,16 +76,21 @@ fn checksum(bytes: &[u8]) -> String {
     format!("{:016x}", fnv1a64(bytes))
 }
 
-/// The shipped packs, parsed once per process (a shipped pack that does not parse is a build
-/// error caught by `fc_providers::word_data`'s test; here it is simply skipped).
-fn bundled_packs() -> &'static BTreeMap<&'static str, (WordPack, String)> {
-    static PACKS: OnceLock<BTreeMap<&'static str, (WordPack, String)>> = OnceLock::new();
-    PACKS.get_or_init(|| {
-        fc_providers::word_data::BUNDLED
-            .iter()
-            .filter_map(|(l, bytes)| Some((*l, (WordPack::parse(bytes).ok()?, checksum(bytes)))))
-            .collect()
-    })
+/// A shipped pack, parsed once per process (by checksum). A shipped pack that does not parse
+/// is a build error caught by `fc_providers::word_data`'s test; here it is an internal error.
+fn parsed(p: &ShippedPack) -> AppResult<Arc<WordPack>> {
+    static PACKS: OnceLock<Mutex<HashMap<&'static str, Arc<WordPack>>>> = OnceLock::new();
+    let cache = PACKS.get_or_init(Default::default);
+    if let Some(pack) = cache.lock().ok().and_then(|c| c.get(p.checksum).cloned()) {
+        return Ok(pack);
+    }
+    let pack = Arc::new(
+        WordPack::parse(p.bytes).map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?,
+    );
+    if let Ok(mut c) = cache.lock() {
+        c.insert(p.checksum, pack.clone());
+    }
+    Ok(pack)
 }
 
 /// Writes `pack` as `language`'s installed pack.
@@ -127,24 +133,27 @@ fn install(
     Ok(record)
 }
 
-/// Start-up: installs each shipped pack whose language has no pack yet, or whose installed
-/// shipped pack has other bytes (a new app version). An imported pack is left alone. One
-/// cheap read when nothing changed.
-pub(crate) fn install_bundled(tx: &mut dyn WriteTx, now: Timestamp) -> AppResult<()> {
-    let installed: HashMap<String, WordDataPackRecord> = tx
+/// Start-up: installs each of `packs` whose language has no pack yet, or whose installed
+/// shipped pack has another checksum (a new app version). An imported pack is left alone.
+/// Up to date, this is one read of the (one row per language) pack table: no hashing, no
+/// parsing (`fc_providers::word_data::ShippedPack::checksum` is fixed at build time).
+pub(crate) fn install_shipped(
+    tx: &mut dyn WriteTx,
+    now: Timestamp,
+    packs: &[ShippedPack],
+) -> AppResult<()> {
+    let installed: HashMap<String, (String, String)> = tx
         .word_data_packs()?
         .into_iter()
-        .map(|p| (p.language.clone(), p))
+        .map(|p| (p.language, (p.origin, p.checksum)))
         .collect();
-    for (language, bytes) in fc_providers::word_data::BUNDLED {
-        let stale = match installed.get(*language) {
+    for shipped in packs {
+        let stale = match installed.get(shipped.language) {
             None => true,
-            Some(p) => p.origin == "bundled" && p.checksum != checksum(bytes),
+            Some((origin, sum)) => origin == "bundled" && sum != shipped.checksum,
         };
         if stale {
-            if let Some((pack, sum)) = bundled_packs().get(language) {
-                install(tx, pack, "bundled", sum.clone(), now)?;
-            }
+            install(tx, &*parsed(shipped)?, "bundled", shipped.checksum.to_owned(), now)?;
         }
     }
     Ok(())
@@ -169,13 +178,15 @@ fn pack_dto(p: WordDataPackRecord) -> WordDataPackDto {
 fn sources_of(reads: &dyn Reads) -> AppResult<WordDataSources> {
     Ok(WordDataSources {
         packs: reads.word_data_packs()?.into_iter().map(pack_dto).collect(),
-        bundled: bundled_packs()
+        bundled: fc_providers::word_data::BUNDLED
             .iter()
-            .map(|(l, (p, _))| BundledPackDto {
-                language: (*l).to_owned(),
-                version: p.version.clone(),
+            .map(|p| {
+                Ok(BundledPackDto {
+                    language: p.language.to_owned(),
+                    version: parsed(p)?.version.clone(),
+                })
             })
-            .collect(),
+            .collect::<AppResult<_>>()?,
     })
 }
 
@@ -209,9 +220,9 @@ fn reset(req: ResetWordData, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutco
     if language.is_empty() {
         return Err(crate::support::invalid("language is not a BCP-47 tag"));
     }
-    match bundled_packs().get(language.as_str()) {
-        Some((pack, sum)) => {
-            install(ctx.tx, pack, "bundled", sum.clone(), ctx.now)?;
+    match fc_providers::word_data::bundled(&language) {
+        Some(shipped) => {
+            install(ctx.tx, &*parsed(shipped)?, "bundled", shipped.checksum.to_owned(), ctx.now)?;
         }
         None => ctx.tx.remove_word_data(&language)?,
     }
