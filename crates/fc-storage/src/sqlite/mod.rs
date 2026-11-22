@@ -19,6 +19,7 @@ mod local_api;
 mod maintenance;
 mod mcp;
 mod meanings;
+mod media_origins;
 mod notes;
 mod notetypes;
 mod oplog;

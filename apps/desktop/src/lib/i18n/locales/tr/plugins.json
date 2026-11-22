@@ -10,6 +10,10 @@
     "tts": {
       "name": "Seslendirme",
       "description": "Kartları kurulu ses sağlayıcılarıyla okur."
+    },
+    "audio_fill": {
+      "name": "Eksik sesler",
+      "description": "Her karta ses verir: filmin kendi repliği, yoksa yerel video dosyandan kesit, yoksa kelimeyi okuyan bir ses."
     }
   },
   "settings": {
@@ -70,6 +74,12 @@
       "provider": {
         "label": "Ses sağlayıcısı",
         "description": "Boş = kullanılabilen ilk sağlayıcı."
+      }
+    },
+    "audio_fill": {
+      "clip_offset_ms": {
+        "label": "Kesit kaydırma (ms)",
+        "description": "Video dosyanın zamanlaması izlediğinden farklıysa kesitleri bu kadar kaydır (eksi = daha erken)."
       }
     }
   },
@@ -213,6 +223,9 @@
   "jobs": {
     "plugins": {
       "model_download": "Model indiriliyor"
+    },
+    "audio_fill": {
+      "fill": "Eksik sesler tamamlanıyor"
     }
   },
   "commands": {
@@ -249,6 +262,18 @@
       "providers": "Ses sağlayıcıları",
       "voices": "Sesler",
       "synthesize": "Metni seslendir"
+    },
+    "media": {
+      "origins": "Ses ve görselin kaynağı",
+      "origin": {
+        "record": "Dosyanın kaynağını kaydet"
+      },
+      "audio": {
+        "fill_preview": "Eksik sesleri tamamlama önizlemesi",
+        "fill": "Eksik sesleri tamamla",
+        "attach": "Karta ses ekle",
+        "fill_rollback": "Yarım kalan ses tamamlamayı geri al"
+      }
     }
   },
   "errors": {
@@ -271,6 +296,12 @@
     },
     "provider": {
       "plugin_failed": "Bir eklenti hata verdi ({kind})."
+    }
+  },
+  "audio_fill": {
+    "job": {
+      "planning": "Hangi kartların sesi yok, bakılıyor…",
+      "filling": "Kartlara ses ekleniyor…"
     }
   }
 }

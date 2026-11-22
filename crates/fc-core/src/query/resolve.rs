@@ -33,6 +33,7 @@ use super::lang::{cefr_ordinal, word_key, MediaFrom, MediaKind, NoteOrigin};
 use super::text::{compile_regex, fold, tokens, Glob};
 use crate::attribute::{AttributeDef, AttributeKind};
 use crate::card::CardState;
+use crate::content::media::MediaOrigin;
 use crate::deck::{Deck, PATH_SEPARATOR};
 use crate::id::{CardId, DeckId, NoteId};
 use crate::notetype::NoteType;
@@ -569,9 +570,13 @@ impl<'a> Resolver<'a> {
                             MediaFrom::Any,
                         )))))
                     }
-                    "video" | "altyazi" | "subtitle" | "klip" | "clip" => MediaFrom::Video,
-                    "dosya" | "file" => MediaFrom::File,
+                    "video" | "altyazi" | "subtitle" => MediaFrom::Video,
+                    "ozgun" | "original" | "orijinal" => MediaFrom::Origin(MediaOrigin::Original),
+                    "klip" | "clip" | "kesit" => MediaFrom::Origin(MediaOrigin::Clip),
+                    "dosya" | "file" | "kullanici" | "user" => MediaFrom::Origin(MediaOrigin::User),
                     "tts" if kind == MediaKind::Audio => {
+                        // Synthesised sound stored with the note, or a note type that speaks
+                        // its text when the card is shown.
                         let ids: Vec<_> = self
                             .cat
                             .notetypes
@@ -579,10 +584,14 @@ impl<'a> Resolver<'a> {
                             .filter(|n| n.deleted_at.is_none() && speaks(n))
                             .map(|n| n.id)
                             .collect();
+                        let stored = Filter::Pred(Pred::Media(
+                            MediaKind::Audio,
+                            MediaFrom::Origin(MediaOrigin::Tts),
+                        ));
                         return Ok(Some(if ids.is_empty() {
-                            Filter::Nothing
+                            stored
                         } else {
-                            Filter::Pred(Pred::NoteTypes(ids))
+                            Filter::or(vec![Filter::Pred(Pred::NoteTypes(ids)), stored])
                         }));
                     }
                     _ => return Err(bad()),

@@ -16,6 +16,7 @@ mod interop;
 mod maintenance;
 mod mcp;
 mod meanings;
+mod media_origins;
 mod migrations;
 mod misc;
 mod notes;

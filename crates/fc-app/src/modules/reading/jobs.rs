@@ -510,6 +510,10 @@ impl JobHandler for ClipJob {
         } else {
             None
         };
+        // v1.4 W4: both were cut from the video.
+        for m in std::iter::once(&audio).chain(image.as_ref()) {
+            crate::modules::audio_fill::record_clip(ctx, &m.hash, &input)?;
+        }
         serde_json::to_value(ReadingClip {
             audio,
             image,

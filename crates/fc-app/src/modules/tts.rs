@@ -107,7 +107,12 @@ fn pick(ctx: &QueryCtx<'_>, requested: Option<String>) -> AppResult<Arc<dyn TtsP
 }
 
 fn providers(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<TtsProviderList> {
-    Ok(TtsProviderList {
+    Ok(provider_list(ctx))
+}
+
+/// The registered providers (`tts.providers`).
+pub(crate) fn provider_list(ctx: &QueryCtx<'_>) -> TtsProviderList {
+    TtsProviderList {
         providers: ctx
             .registry
             .tts_providers()
@@ -129,11 +134,16 @@ fn providers(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<TtsProviderList> {
                 }
             })
             .collect(),
-    })
+    }
 }
 
 fn voices(req: ListVoices, ctx: &QueryCtx<'_>) -> AppResult<VoiceList> {
-    let p = pick(ctx, req.provider)?;
+    voice_list(ctx, req.provider)
+}
+
+/// Voices of a provider (`tts.voices`).
+pub(crate) fn voice_list(ctx: &QueryCtx<'_>, provider: Option<String>) -> AppResult<VoiceList> {
+    let p = pick(ctx, provider)?;
     let id = p.info().id;
     let voices = block_on(p.voices()).map_err(|e| provider_error(&id, e))?;
     Ok(VoiceList {

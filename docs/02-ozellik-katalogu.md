@@ -245,13 +245,13 @@ sayılır (koşullar küme üyeliğidir, birleştirme yapmaz). Her kavram bir ke
 | `karşılaşma` | `seen` | aynı kelimenin karşılaşma sayısı: her not bir, Subtitle notu yakalanan her sahne için bir (v1.4 W1, `subtitle_encounter_counts`): `karşılaşma>=2` |
 | `nereden:` | `from:` | `altyazı`/`subtitle`, `okuma`/`reading`, `anki`, `içe_aktarma`/`import`, `elle`/`manual` |
 | `kaynak:` | `source:` | kaynak başlığı (video + bölüm, okuma metni), site ya da video kimliği; joker (`kaynak:"The Night Train*"`) |
-| `ses:` | `audio:` | `var`/`yes`, `yok`/`none`, `video` (videodan kesilen ses), `dosya`/`file`, `tts` (not türü seslendirir) |
-| `görsel:` | `image:` | `var`/`yes`, `yok`/`none`, `video` (ekran görüntüsü), `dosya`/`file` |
+| `ses:` | `audio:` | `var`/`yes`, `yok`/`none`, `video` (filmden: `özgün` ya da `klip`), `özgün`/`original` (Subtitle eklentisinin yakaladığı), `klip`/`clip` (yerel video dosyasından kesilen), `tts` (seslendirilmiş dosya ya da not türü seslendirir), `dosya`/`file`/`kullanıcı`/`user` (senin eklediğin / kökeni bilinmeyen) |
+| `görsel:` | `image:` | `var`/`yes`, `yok`/`none`, `video`, `özgün`/`original` (ekran görüntüsü), `klip`/`clip` (yerel videodan kare), `dosya`/`file` |
 | `sıklık` | `freq` | kelimenin sıklık sırası (`sıklık<=2000`), kelime verisi paketi gerekir |
 | `cefr:` | `level:` | CEFR bandı, sıralı (`cefr>=B1`); paket gerekir |
 
 - Aynı adlı bir **sınıflandırma** her zaman kazanır (v1.4 öncesi kayıtlı sorgular anlamını korur; `seviye>=B1` sizin sınıflandırmanızsa o kalır).
-- Köken ve kaynak `note_origins` tablosundadır (migration `1460_language_queries`): Subtitle yakalaması ve okuma modu notu yaparken yazar; eski Subtitle/okuma notları migration'da `source` alanından doldurulur, eski içe aktarmalar "elle" sayılır. "Videodan" = Subtitle eklentisinin yüklediği dosya (`subtitle-…` adı).
+- Köken ve kaynak `note_origins` tablosundadır (migration `1460_language_queries`): Subtitle yakalaması ve okuma modu notu yaparken yazar; eski Subtitle/okuma notları migration'da `source` alanından doldurulur, eski içe aktarmalar "elle" sayılır. Ses/görsel kökeni `media_origins` tablosundadır (v1.4 W4, migration `1420_media_origins`, docs/03 §13): `original`, `clip`, `tts`, `user`; satırı olmayan dosya `subtitle-…` adlıysa `original` (Subtitle eklentisinin yüklediği), değilse `user` sayılır. `klip`/`clip` v1.4 W4'ten önce `video`nun eş anlamlısıydı; artık yalnız yerel videodan kesileni bulur.
 - `sıklık`/`cefr`, kelime verisinin `word_frequency(language, key, rank, band)` görünümünü okur (migration `1441_word_frequency_view`, iz B2; uygulamayla gelen İngilizce paket hep kuruludur): notun dizin anahtarının paketteki satırı (lemma, çekimli biçim ya da CEFR profil başlığı; `went` → `go`'nun sırası). Paketin bilmediği kelimenin ve kendi satırı olmayan ifadenin sırası/bandı yoktur: `sıklık<1000` onlarla eşleşmez, `-sıklık<1000` eşleşir. Bant, profil listesinde varsa profilin seviyesi, yoksa sıradan tahmindir (docs/03 §4.3). Görünüm yoksa (eski şema) bu koşullar hiçbir şeyle eşleşmez.
 - Hız: 100 000 notta her koşul dizinlidir (`word_index_notes_key_only`, `word_index_notes_key`, `note_origins_origin`, `media_mime`); ölçüm ve plan `fc-storage` testi `language_predicates_at_100k`.
 

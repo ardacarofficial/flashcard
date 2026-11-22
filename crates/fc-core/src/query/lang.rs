@@ -13,8 +13,8 @@
 //! | `karşılaşma` `seen` | encounters of the same word (v1.4 W1: each note once, a Subtitle note once per captured scene), `karşılaşma>=2` |
 //! | `nereden:` `from:` | `altyazı`/`subtitle`, `okuma`/`reading`, `elle`/`manual`, `anki`, `içe_aktarma`/`import` |
 //! | `kaynak:` `source:` | source title (video/episode, reading text), site or video id; glob |
-//! | `ses:` `audio:` | `var`/`yes`, `yok`/`none`, `video` (clip from the video), `dosya`/`file`, `tts` |
-//! | `görsel:` `image:` | `var`/`yes`, `yok`/`none`, `video` (screenshot), `dosya`/`file` |
+//! | `ses:` `audio:` | `var`/`yes`, `yok`/`none`, `video` (from the film: `özgün` or `klip`), `özgün`/`original` (captured by the Subtitle extension), `klip`/`clip` (cut from a local video file), `tts` (synthesised, or the note type speaks), `dosya`/`file`/`kullanıcı`/`user` (added by the user / unknown) |
+//! | `görsel:` `image:` | `var`/`yes`, `yok`/`none`, `video`, `özgün`/`original`, `klip`/`clip`, `dosya`/`file` (same origins as `ses:`) |
 //! | `sıklık` `freq` | frequency rank of the word (`freq<=2000`), needs a word-data pack |
 //! | `cefr:` (`level:`, `seviye:` when no classification has that name) | CEFR band, ordered (`cefr>=B1`) |
 //!
@@ -23,6 +23,7 @@
 
 use super::ast::{Expr, Term};
 use super::text::fold;
+use crate::content::media::MediaOrigin;
 use crate::reading::WordStatus;
 use crate::words::WordEvidence;
 use serde::{Deserialize, Serialize};
@@ -102,19 +103,22 @@ impl MediaKind {
     }
 }
 
-/// Which media files count.
+/// Which media files count (v1.4 W4: by their recorded origin, `media_origins`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MediaFrom {
     /// Any stored file of the kind.
     Any,
-    /// Taken from the video by the Subtitle extension (audio clip, screenshot).
+    /// From the film: captured by the Subtitle extension or cut from a local video
+    /// ([`MediaOrigin::from_video`]).
     Video,
-    /// Any other file (imported, added by hand).
-    File,
+    /// Of exactly this origin.
+    Origin(MediaOrigin),
 }
 
 /// File-name prefix of media the Subtitle extension uploaded (`subtitle-audio-<capture>.mp3`,
-/// `subtitle-screenshot-<capture>.jpg`): what makes a file "from the video".
+/// `subtitle-screenshot-<capture>.jpg`): a file without a `media_origins` row whose name
+/// starts with it is [`MediaOrigin::Original`] (anything else without a row is
+/// [`MediaOrigin::User`]).
 pub const VIDEO_MEDIA_PREFIX: &str = "subtitle-";
 
 /// Whether a media file's original name marks it as taken from a video.
@@ -210,8 +214,8 @@ pub struct LangFacts {
     pub origin: NoteOrigin,
     /// Source title, site and video id (the non-empty ones).
     pub source: Vec<String>,
-    /// Stored media files the note references: kind and whether taken from a video.
-    pub media: Vec<(MediaKind, bool)>,
+    /// Stored media files the note references: kind and origin.
+    pub media: Vec<(MediaKind, MediaOrigin)>,
     /// Frequency rank of the word (word-data pack).
     pub rank: Option<u32>,
     /// CEFR band ordinal (1–6) of the word (word-data pack).

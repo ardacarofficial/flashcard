@@ -787,6 +787,8 @@ fn media_upload(
         mime,
         Some(format!("subtitle-{kind}-{}.{ext}", req.capture_id)),
     )?;
+    // v1.4 W4: the film's own picture/sound.
+    crate::modules::audio_fill::record_original(ctx, &media.hash)?;
     let id = existing
         .map(|u| u.id)
         .unwrap_or_else(|| format!("up_{}", ctx.ids.next_uuid().simple()));

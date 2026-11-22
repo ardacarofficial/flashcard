@@ -34,6 +34,63 @@ pub enum MediaKind {
     Video,
 }
 
+/// Where a stored audio or image file came from (v1.4 W4, `media_origins`, docs/03 §13).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub enum MediaOrigin {
+    /// Captured from the film by the Subtitle extension.
+    Original,
+    /// Cut from a local video file (`reading.clips.extract`, `media.audio.fill`).
+    Clip,
+    /// Synthesised by a TTS provider.
+    Tts,
+    /// Added by the user (or of unknown origin).
+    #[default]
+    User,
+}
+
+impl MediaOrigin {
+    /// Every origin.
+    pub const ALL: [Self; 4] = [Self::Original, Self::Clip, Self::Tts, Self::User];
+
+    /// Storage string.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Original => "original",
+            Self::Clip => "clip",
+            Self::Tts => "tts",
+            Self::User => "user",
+        }
+    }
+
+    /// From the storage string.
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|o| o.as_str() == s)
+    }
+
+    /// Whether the sound/picture is the film's own (captured or cut from the video).
+    pub const fn from_video(self) -> bool {
+        matches!(self, Self::Original | Self::Clip)
+    }
+}
+
+/// Text hash of a TTS cache entry: SHA-256 of the text with whitespace collapsed (case kept:
+/// a voice may read "US" and "us" differently). The cache key is (provider, language, voice,
+/// speed, this hash), so the same word is synthesised once.
+pub fn tts_text_hash(text: &str) -> String {
+    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    media_hash(collapsed.as_bytes())
+}
+
+/// A TTS speed as an integer key (per mille: 1.0 → 1000), so equal speeds compare equal.
+pub fn tts_rate_key(rate: f32) -> i64 {
+    // Rates are validated to 0.25–4 before they get here.
+    (f64::from(rate) * 1000.0).round() as i64
+}
+
 /// Detects the MIME type from the content (magic bytes), falling back to the file extension.
 /// Returns `None` for unsupported content (only images, audio and video are stored).
 pub fn detect_mime(bytes: &[u8], file_name: Option<&str>) -> Option<&'static str> {
@@ -100,6 +157,18 @@ pub fn media_kind(mime: &str) -> Option<MediaKind> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn origins_round_trip_and_tts_keys_are_stable() {
+        for o in MediaOrigin::ALL {
+            assert_eq!(MediaOrigin::parse(o.as_str()), Some(o));
+        }
+        assert!(MediaOrigin::Clip.from_video() && !MediaOrigin::Tts.from_video());
+        assert_eq!(tts_text_hash("pick  up\n"), tts_text_hash("pick up"));
+        assert_ne!(tts_text_hash("Pick up"), tts_text_hash("pick up"));
+        assert_eq!(tts_rate_key(1.0), 1000);
+        assert_eq!(tts_rate_key(0.85), 850);
+    }
 
     #[test]
     fn hash_is_sha256_hex() {

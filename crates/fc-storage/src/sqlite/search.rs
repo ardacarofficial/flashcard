@@ -561,10 +561,16 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
                 VIDEO_MEDIA_PREFIX.len(),
                 VIDEO_MEDIA_PREFIX
             );
+            // v1.4 W4: the file's recorded origin (`media_origins`, migration 1420); a file
+            // without a row is `original` by the Subtitle upload name rule, else `user`.
+            let file_origin = format!(
+                "coalesce((SELECT o.origin FROM media_origins o WHERE o.hash = m.hash), \
+                 CASE WHEN {video} THEN 'original' ELSE 'user' END)"
+            );
             let origin = match from {
                 MediaFrom::Any => String::new(),
-                MediaFrom::Video => format!(" AND {video}"),
-                MediaFrom::File => format!(" AND NOT {video}"),
+                MediaFrom::Video => format!(" AND {file_origin} IN ('original', 'clip')"),
+                MediaFrom::Origin(o) => format!(" AND {file_origin} = '{}'", o.as_str()),
             };
             note_in(
                 out,

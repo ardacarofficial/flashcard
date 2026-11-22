@@ -266,6 +266,13 @@ pub struct SubtitleEncounterFacts {
     /// Media hash of the audio clip.
     #[serde(default)]
     pub audio_hash: Option<String>,
+    /// v1.4 W4: where the screenshot came from (filled by the encounter reads; ignored on
+    /// writes).
+    #[serde(default)]
+    pub screenshot_origin: Option<fc_core::content::media::MediaOrigin>,
+    /// v1.4 W4: where the audio came from (filled by the encounter reads; ignored on writes).
+    #[serde(default)]
+    pub audio_origin: Option<fc_core::content::media::MediaOrigin>,
     /// The note fields this encounter shows when it is the primary one (`surface`,
     /// `sentence`, `translation`, `image`, `audio`, `source`).
     #[serde(default)]

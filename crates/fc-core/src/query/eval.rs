@@ -161,12 +161,12 @@ fn pred(p: &Pred, f: &CardFacts<'_>, now: Timestamp) -> bool {
             let g = Glob::new(src);
             f.lang.source.iter().any(|s| g.matches(s))
         }
-        Pred::Media(kind, from) => f.lang.media.iter().any(|(k, video)| {
+        Pred::Media(kind, from) => f.lang.media.iter().any(|(k, origin)| {
             k == kind
                 && match from {
                     MediaFrom::Any => true,
-                    MediaFrom::Video => *video,
-                    MediaFrom::File => !*video,
+                    MediaFrom::Video => origin.from_video(),
+                    MediaFrom::Origin(o) => origin == o,
                 }
         }),
         Pred::FreqRank(op, n) => f.lang.rank.is_some_and(|r| op.holds(f64::from(r), *n)),

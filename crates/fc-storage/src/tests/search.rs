@@ -928,6 +928,7 @@ const SOURCES: &[&str] = &["The Night Train · S1E2", "The Night Train · S1E3",
 /// and the word data behind the `word_frequency` view when `with_freq`), mirrored in each row's
 /// [`fc_core::query::LangFacts`].
 fn lang_world(n_notes: u128, seed: u64, with_freq: bool) -> World {
+    use fc_core::content::media::MediaOrigin;
     use fc_core::query::{MediaKind, NoteOrigin};
     use fc_core::reading::WordMark;
     use fc_core::words::WordEvidence;
@@ -958,29 +959,89 @@ fn lang_world(n_notes: u128, seed: u64, with_freq: bool) -> World {
             _ => (None, None),
         }
     };
-    let media: Vec<(String, &str, Option<&str>, MediaKind, bool)> = (0..6u8)
+    // (hash, mime, name, kind, origin as the predicates see it, `media_origins` row).
+    #[allow(clippy::type_complexity)]
+    let media: Vec<(
+        String,
+        &str,
+        Option<&str>,
+        MediaKind,
+        MediaOrigin,
+        Option<&str>,
+    )> = (0..10u8)
         .map(|i| {
-            let (mime, name, kind, video) = match i {
+            let (mime, name, kind, origin, row) = match i {
+                // No row: the Subtitle upload name rule (original), else user.
                 0 => (
                     "audio/mpeg",
                     Some("subtitle-audio-1.mp3"),
                     MediaKind::Audio,
-                    true,
+                    MediaOrigin::Original,
+                    None,
                 ),
-                1 => ("audio/ogg", Some("voice.ogg"), MediaKind::Audio, false),
-                2 => ("audio/mpeg", None, MediaKind::Audio, false),
+                1 => (
+                    "audio/ogg",
+                    Some("voice.ogg"),
+                    MediaKind::Audio,
+                    MediaOrigin::User,
+                    None,
+                ),
+                2 => (
+                    "audio/mpeg",
+                    None,
+                    MediaKind::Audio,
+                    MediaOrigin::User,
+                    None,
+                ),
                 3 => (
                     "image/jpeg",
                     Some("SUBTITLE-screenshot-1.jpg"),
                     MediaKind::Image,
-                    true,
+                    MediaOrigin::Original,
+                    None,
                 ),
-                4 => ("image/png", Some("pic.png"), MediaKind::Image, false),
-                _ => (
+                4 => (
+                    "image/png",
+                    Some("pic.png"),
+                    MediaKind::Image,
+                    MediaOrigin::User,
+                    None,
+                ),
+                5 => (
                     "video/mp4",
                     Some("subtitle-clip.mp4"),
                     MediaKind::Audio,
-                    false,
+                    MediaOrigin::Original,
+                    None,
+                ),
+                // Recorded origins (v1.4 W4, `media_origins`); a row beats the name rule.
+                6 => (
+                    "audio/mpeg",
+                    Some("Show-3.mp3"),
+                    MediaKind::Audio,
+                    MediaOrigin::Clip,
+                    Some("clip"),
+                ),
+                7 => (
+                    "audio/wav",
+                    Some("go.wav"),
+                    MediaKind::Audio,
+                    MediaOrigin::Tts,
+                    Some("tts"),
+                ),
+                8 => (
+                    "audio/mpeg",
+                    Some("subtitle-mine.mp3"),
+                    MediaKind::Audio,
+                    MediaOrigin::User,
+                    Some("user"),
+                ),
+                _ => (
+                    "image/jpeg",
+                    Some("Show-3.jpg"),
+                    MediaKind::Image,
+                    MediaOrigin::Clip,
+                    Some("clip"),
                 ),
             };
             (
@@ -988,11 +1049,21 @@ fn lang_world(n_notes: u128, seed: u64, with_freq: bool) -> World {
                 mime,
                 name,
                 kind,
-                video,
+                origin,
+                row,
             )
         })
         .collect();
-    for (hash, mime, name, _, _) in &media {
+    for (hash, _, _, _, _, row) in &media {
+        if let Some(origin) = row {
+            conn.execute(
+                "INSERT INTO media_origins (hash, origin, created_at) VALUES (?1, ?2, 0)",
+                rusqlite::params![hash, origin],
+            )
+            .unwrap();
+        }
+    }
+    for (hash, mime, name, _, _, _) in &media {
         conn.execute(
             "INSERT INTO media (hash, mime, size, original_name, ref_count, created_at)
              VALUES (?1, ?2, 1, ?3, 0, 0)",
@@ -1053,7 +1124,7 @@ fn lang_world(n_notes: u128, seed: u64, with_freq: bool) -> World {
         }
         // Up to two media files (two from the video = one match, never two).
         for _ in 0..(rng.next_u64() % 3) {
-            let (hash, _, _, kind, video) = pick(&mut rng, &media);
+            let (hash, _, _, kind, origin, _) = pick(&mut rng, &media);
             let n = conn
                 .execute(
                     "INSERT OR IGNORE INTO note_media (note_id, hash) VALUES (?1, ?2)",
@@ -1061,7 +1132,7 @@ fn lang_world(n_notes: u128, seed: u64, with_freq: bool) -> World {
                 )
                 .unwrap();
             if n > 0 && !hash.ends_with('6') {
-                r.lang.media.push((*kind, *video));
+                r.lang.media.push((*kind, *origin));
             }
         }
     }
@@ -1143,6 +1214,14 @@ const LANG_ATOMS: &[&str] = &[
     "audio:video",
     "ses:dosya",
     "ses:yok",
+    "ses:özgün",
+    "audio:clip",
+    "ses:klip",
+    "ses:tts",
+    "audio:user",
+    "görsel:klip",
+    "image:original",
+    "görsel:dosya",
     "görsel:var",
     "image:video",
     "gorsel:file",
@@ -1155,6 +1234,8 @@ const LANG_ATOMS: &[&str] = &[
     "kaynak:\"*S1E2\" ses:video karşılaşma>=2 durum:öğreniyorum",
     "-durum:biliyorum dil:en",
     "(nereden:altyazı OR nereden:okuma) -görsel:var",
+    "ses:tts OR ses:özgün",
+    "-ses:klip ses:var",
     "kelime:go OR kelime:run -ses:var",
 ];
 

@@ -88,4 +88,5 @@ domains! {
     word_data: WordDataRead, WordDataWrite;
     capture_log: CaptureLogRead, CaptureLogWrite;
     meanings: MeaningRead, MeaningWrite;
+    media_origins: MediaOriginRead, MediaOriginWrite;
 }

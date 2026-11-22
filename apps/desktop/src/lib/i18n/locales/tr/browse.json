@@ -166,7 +166,7 @@
       "from_q": "nereden:altyazı",
       "from_d": "Kartın geldiği yer: altyazı, okuma, anki, içe_aktarma, elle; kaynak:\"*S1E2\" bölüm ya da video adı",
       "media_q": "ses:video",
-      "media_d": "Videodan alınmış sesi olanlar; ayrıca ses:var / yok / dosya / tts, görsel:var"
+      "media_d": "Videodan alınmış sesi olanlar; ayrıca ses:var / yok / özgün / klip / tts / dosya, görsel:var"
     },
     "saved_short": "Kayıtlı",
     "keys": {
