@@ -25,7 +25,8 @@ use fc_core::rng::Rng;
 use fc_core::settings::{SettingDef, SettingKind, SettingScope, SettingScopeKind};
 use fc_core::ReviewLogId;
 use fc_storage::repo::ReviewLogRecord;
-use fc_study::answer::{check, CheckOptions, CheckerKind};
+use crate::modules::accepted_answers::alternatives_for;
+use fc_study::answer::{check_accepting, CheckOptions, CheckerKind};
 use fc_study::modes::test::{self as pure, Question, QuestionKind, Response, TestSource, TestState, Verdict};
 use fc_study::modes::ModesState;
 use fc_study::session::{self as queue, SessionState};
@@ -161,6 +162,11 @@ pub(super) fn init(
                 .unwrap_or_else(|| {
                     (html_to_text(&r.card.sides.question).trim().to_owned(), answer.clone())
                 });
+        // v1.4 accepted answers of the answer and of the meaning: never a wrong option.
+        let mut accepted = alternatives_for(v.reads, v.registry, card.note_id, &answer)?;
+        if definition != answer {
+            accepted.extend(alternatives_for(v.reads, v.registry, card.note_id, &definition)?);
+        }
         sources.push(TestSource {
             card_id: card.id,
             prompt_html: r.card.sides.question.clone(),
@@ -168,6 +174,7 @@ pub(super) fn init(
             definition,
             answer,
             own_options: own,
+            accepted,
         });
     }
     let questions = pure::generate(&sources, &kinds, count as usize, rng);
@@ -394,7 +401,22 @@ fn submit(req: SubmitTest, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
         fold_turkish: setting_bool(ctx.reads(), &SettingScope::App, FOLD_TURKISH)?,
         ..CheckOptions::default()
     };
-    let graded = pure::grade(&t.questions, &responses, |e, g| check(kind, e, g, &opts).grade);
+    // v1.4: a written answer is judged like Cards' typed answer — the card's accepted answers
+    // (offline, `accepted_answers`) count as right.
+    let mut also: std::collections::HashMap<usize, Vec<String>> = std::collections::HashMap::new();
+    for (i, q) in t.questions.iter().enumerate() {
+        if q.kind != QuestionKind::Written {
+            continue;
+        }
+        if let Some(card) = ctx.reads().get_card(q.card_id)? {
+            also.insert(i, alternatives_for(ctx.reads(), ctx.registry, card.note_id, &q.key.expected)?);
+        }
+    }
+    let index_of = |q: &Question| t.questions.iter().position(|x| std::ptr::eq(x, q));
+    let graded = pure::grade(&t.questions, &responses, |q, g| {
+        let alts = index_of(q).and_then(|i| also.get(&i)).map_or(&[][..], Vec::as_slice);
+        check_accepting(kind, &q.key.expected, alts, g, &opts).grade
+    });
     // One review per question on a live card: the card's state as it is (a test never
     // changes the schedule).
     let duration = queue::clamp_duration(req.duration_ms, session.state.last_event_at, ctx.now);

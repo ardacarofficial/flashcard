@@ -448,3 +448,150 @@ fn exam_defaults_and_matching_questions() {
         let _: Vec<CardId> = paper.questions.iter().map(|q| q.card_id).collect();
     }
 }
+
+/// "give up" means `vazgeçmek` and also accepts `bırakmak` (v1.4 accepted answers, offline):
+/// every mode judges by the same truth as Cards. Typing the alternative is right in Learn's
+/// written stage and in an Exam written question; it is never a WRONG option in Test, in an
+/// Exam multiple-choice or true/false question, and never another word's meaning on the
+/// same matching board.
+#[test]
+fn accepted_answers_are_one_truth_in_every_mode() {
+    use fc_api::v1::accepted_answers::EditAcceptedAnswers;
+    for t in apps() {
+        let accept = |n: &NoteDto| {
+            t.ok::<AcceptedAnswersAdd>(EditAcceptedAnswers {
+                note_id: n.id,
+                field: None,
+                answers: vec!["bırakmak".into()],
+            });
+        };
+        // A deck with only "give up": Learn asks it written; the Exam writes it.
+        let solo = deck(&t, "Solo");
+        let n = word(&t, solo.id, "give up", "vazgeçmek");
+        accept(&n);
+        // Learn: the meaning card picks first, then is typed — "bırakmak" is right there.
+        let recognition = n.cards.iter().find(|c| c.template_key == "recognition").unwrap().id;
+        let mut s = start(&t, StudyKind::Learn, solo.id, None, None).unwrap();
+        let mut judged = None;
+        while let (Some(card), None) = (s.current.clone(), judged) {
+            let learn = s.modes.as_ref().unwrap().learn.clone().unwrap();
+            let right = if card.card_id == recognition { "vazgeçmek" } else { "give up" };
+            let (choice, given) = match learn.stage {
+                Some(LearnStage::Choice) => {
+                    (Some(learn.options.iter().position(|o| o == right).unwrap() as u32), None)
+                }
+                _ if card.card_id == recognition => (None, Some("bırakmak".to_owned())),
+                _ => (None, Some(right.to_owned())),
+            };
+            let r = t.ok::<ModesLearnAnswer>(LearnAnswer {
+                session_id: s.id,
+                card_id: card.card_id,
+                choice,
+                given: given.clone(),
+                duration_ms: 1_000,
+            });
+            if given.as_deref() == Some("bırakmak") {
+                judged = Some(r.grade);
+            }
+            s = r.session;
+        }
+        assert_eq!(judged, Some(AnswerGrade::Correct), "Learn: the accepted answer is right");
+        t.ok::<StudyEnd>(SessionRef { session_id: s.id });
+        let exam = |deck: DeckId, kinds: Vec<TestQuestionKind>, n: u32| {
+            start(
+                &t,
+                StudyKind::Test,
+                deck,
+                None,
+                Some(StartModes {
+                    timed: None,
+                    rating_scale: None,
+                    test: Some(TestOptions {
+                        questions: Some(n),
+                        kinds: Some(kinds),
+                    }),
+                }),
+            )
+            .unwrap()
+        };
+        let s = exam(solo.id, vec![TestQuestionKind::Written], 2);
+        let paper = t.ok::<ModesTestPaper>(TestPaperRequest {
+            session_id: s.id,
+            with_key: None,
+        });
+        let answers = paper
+            .questions
+            .iter()
+            .map(|q| TestAnswerDto {
+                index: q.index,
+                text: Some("bırakmak".into()),
+                ..TestAnswerDto::default()
+            })
+            .collect();
+        let graded = t.ok::<ModesTestSubmit>(SubmitTest {
+            session_id: s.id,
+            answers,
+            duration_ms: 1_000,
+        });
+        // The recognition card (asks the meaning) takes it; the production card asks the word.
+        let items = graded.result.clone().unwrap().items;
+        let rec = graded
+            .questions
+            .iter()
+            .find(|q| q.key.as_ref().unwrap().expected == "vazgeçmek")
+            .unwrap();
+        assert_eq!(items[rec.index as usize].verdict, TestVerdict::Correct, "Exam written");
+
+        // A deck where "bırakmak" is another word's meaning: never a wrong option for "give up".
+        let en = deck(&t, "English");
+        let n = word(&t, en.id, "give up", "vazgeçmek");
+        accept(&n);
+        word(&t, en.id, "leave", "bırakmak");
+        for (w, m) in &WORDS[..4] {
+            word(&t, en.id, w, m);
+        }
+        for _ in 0..5 {
+            // Test (quiz).
+            let mut s = start(&t, StudyKind::Quiz, en.id, None, None).unwrap();
+            while s.current.is_some() {
+                let q = quiz_of(&s);
+                if q.term.as_deref() == Some("give up") {
+                    assert!(!q.options.iter().any(|o| o == "bırakmak"), "Test: {:?}", q.options);
+                    assert!(q.options.iter().any(|o| o == "vazgeçmek"));
+                }
+                s = pick(&t, &s, 0).session;
+            }
+            // Exam: multiple choice, true/false and matching.
+            let s = exam(
+                en.id,
+                vec![
+                    TestQuestionKind::MultipleChoice,
+                    TestQuestionKind::TrueFalse,
+                    TestQuestionKind::Matching,
+                ],
+                12,
+            );
+            let paper = t.ok::<ModesTestPaper>(TestPaperRequest {
+                session_id: s.id,
+                with_key: Some(true),
+            });
+            for q in &paper.questions {
+                let asks_give_up = q.key.as_ref().unwrap().expected == "vazgeçmek";
+                match q.kind {
+                    TestQuestionKind::MultipleChoice if asks_give_up => {
+                        assert!(!q.options.iter().any(|o| o == "bırakmak"), "Exam choice: {q:?}");
+                    }
+                    TestQuestionKind::TrueFalse if asks_give_up => {
+                        assert_ne!(q.statement.as_deref(), Some("bırakmak"), "Exam true/false");
+                    }
+                    TestQuestionKind::Matching => {
+                        let has = |w: &str| q.terms.iter().any(|x| x == w);
+                        assert!(!(has("give up") && has("leave")), "Exam matching: {q:?}");
+                    }
+                    _ => {}
+                }
+            }
+            t.ok::<StudyEnd>(SessionRef { session_id: s.id });
+        }
+    }
+}
