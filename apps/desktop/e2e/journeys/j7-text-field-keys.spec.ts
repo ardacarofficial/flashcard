@@ -1,13 +1,11 @@
 /**
  * J7 Text-field keys belong to the field (found while writing J3, v1.3 bridge work).
  *
- * KNOWN BUG, expected to FAIL until fixed: the shell's shortcut host
- * (`apps/desktop/src/lib/features/browse/ShortcutHost.svelte` `onKey`) lets every Ctrl
- * combination through while a text field has focus, so the app-wide bindings
+ * Fixed in v1.3: the shell's shortcut host (`apps/desktop/src/lib/features/browse/ShortcutHost.svelte`
+ * `onKey`, helper `$lib/keyboard` `isEditableTarget`) lets no app-wide binding
  * (`crates/fc-app/src/modules/palette.rs` `UI_ACTIONS`: `Ctrl+A` = select all rows,
- * `Ctrl+Z` = `oplog.undo`) win over the field: Ctrl+A in the note editor does not select the
- * text, and Ctrl+Z while typing undoes the last SAVED change instead of the typing. One key =
- * one job (COMMON.md): inside a text field these keys must edit text. Remove `test.fail` when fixed.
+ * `Ctrl+Z` = `oplog.undo`) run while a text field has focus — only the palette key, on a combo
+ * that edits nothing. One key = one job (COMMON.md): inside a text field these keys edit text.
  */
 import { discardDrafts, expect, goToSection, makeDeck, notesIn, openApp, press, test, uniq } from '../fixtures';
 
@@ -27,7 +25,6 @@ test('J7a Ctrl+A in the note editor selects the field text', async ({ page }) =>
   await back.focus();
   await expect(back).toHaveValue('kurşun kalem');
 
-  test.fail(true, 'Known bug: Ctrl+A in a text field runs "select all rows" (ShortcutHost)');
   await press(page, 'Control+a');
   const selected = await back.evaluate((el) => {
     const t = el as HTMLTextAreaElement;
@@ -58,7 +55,6 @@ test('J7b Ctrl+Z while typing in Quick Add does not undo the card saved before',
   await expect(term).toBeFocused();
   await page.keyboard.type('mapx');
 
-  test.fail(true, 'Known bug: Ctrl+Z in a text field runs oplog.undo (deletes the saved card)');
   await press(page, 'Control+z');
   await page.waitForTimeout(1000);
   expect((await notesIn(deckId)).length, 'the saved card must survive a Ctrl+Z typed in a field').toBe(1);

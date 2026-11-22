@@ -1,5 +1,6 @@
 /** Presentation helpers of the v0.10 mode screens (all decisions are the backend's). */
 import type { StartModes, TestAnswerDto, TestQuestionDto, TimedOptions, RatingScale } from '$lib/api/types';
+import { isEditableTarget } from '$lib/keyboard';
 
 /** Whole seconds left until `deadline` (never negative). */
 export function secondsLeft(deadline: number, now: number): number {
@@ -40,8 +41,7 @@ export function testAnswers(questions: TestQuestionDto[], input: PaperInput): Te
   });
 }
 
-/** Whether a key event is a plain letter/digit press outside text inputs. */
+/** Whether a key event is a plain letter/digit press outside text fields (`$lib/keyboard`). */
 export function plainKey(e: KeyboardEvent): boolean {
-  const tag = (e.target as HTMLElement | null)?.tagName ?? '';
-  return !e.ctrlKey && !e.metaKey && !e.altKey && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT';
+  return !e.ctrlKey && !e.metaKey && !e.altKey && !isEditableTarget(e.target);
 }

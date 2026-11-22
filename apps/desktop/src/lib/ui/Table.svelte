@@ -89,7 +89,8 @@
       setActive(f());
     } else if (e.key === 'Enter' && at >= 0) {
       e.preventDefault();
-      onrowclick?.(rows[at]!);
+      // A held Enter opens the row once; the moves above may repeat.
+      if (!e.repeat) onrowclick?.(rows[at]!);
     }
   }
 

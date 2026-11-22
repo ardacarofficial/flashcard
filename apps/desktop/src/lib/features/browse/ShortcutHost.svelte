@@ -20,7 +20,8 @@
   import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
   import { openLauncher } from '../study/launcher.svelte';
   import type { LaunchKind } from '../study/contract';
-  import { bindingMap, comboOf, filterItems, groupItems, paletteItems, typingTarget, type PaletteAction, type PaletteItem } from './palette';
+  import { isEditableTarget, textEditingCombo } from '$lib/keyboard';
+  import { bindingMap, comboOf, filterItems, groupItems, paletteItems, type PaletteAction, type PaletteItem } from './palette';
 
   interface ScreenLink {
     id: string;
@@ -211,19 +212,20 @@
     if (e.repeat || e.defaultPrevented) return;
     const combo = comboOf(e);
     if (!combo) return;
-    const typing = typingTarget(e.target);
-    // Plain keys typed into a field belong to the field.
-    if (typing && !e.ctrlKey && !e.metaKey && !e.altKey) return;
-    const actions = bindings.get(combo);
-    if (!actions?.length) return;
-    // In a field, text editing keeps its own keys (Ctrl+Z undoes typing, Ctrl+A selects text).
-    if (typing && TEXT_EDITING.has(actions[0]!)) return;
+    const action = bindings.get(combo)?.[0];
+    if (!action) return;
+    // v1.3 (J7): keys typed into a text field belong to the field — letters type, Ctrl+A
+    // selects the text, Ctrl+Z undoes the typing (never `oplog.undo`). Only the palette key
+    // still opens from a field, and only on a combo that edits nothing.
+    if (isEditableTarget(e.target) && !(FROM_FIELDS.has(action) && !textEditingCombo(combo))) return;
+    // An open dialog (Quick Add, a confirmation, the lock screen) owns its keys.
+    if (document.querySelector('[aria-modal="true"]')) return;
     e.preventDefault();
-    void act(actions[0]!);
+    void act(action);
   }
 
-  /** Actions whose usual combos are text-editing keys inside a field. */
-  const TEXT_EDITING = new Set(['ui.undo', 'ui.redo', 'browse.select_all', 'browse.delete']);
+  /** Shell actions that also run from inside a text field (they change no data and edit no text). */
+  const FROM_FIELDS = new Set(['ui.palette']);
 
   function onListKey(e: KeyboardEvent) {
     if (e.key === 'ArrowDown') {

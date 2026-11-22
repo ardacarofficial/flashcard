@@ -37,7 +37,8 @@
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !busy) {
       e.preventDefault();
       e.stopPropagation();
-      form?.requestSubmit();
+      // A held Ctrl+Enter saves once (v1.3).
+      if (!e.repeat) form?.requestSubmit();
     }
   }
 

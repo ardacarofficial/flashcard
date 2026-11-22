@@ -4,6 +4,7 @@
  * (`shortcuts.list`); this file only turns that into UI items and maps key events.
  */
 import type { PaletteEntry, ShortcutDto } from '$lib/api/types';
+import { isEditableTarget } from '$lib/keyboard';
 
 /** One palette row: a shell action (add a card, undo…), a screen of the menu or a backend method. */
 export type PaletteItem =
@@ -142,8 +143,5 @@ export function bindingMap(items: readonly ShortcutDto[], contexts: readonly str
   return map;
 }
 
-/** Whether a key event targets a text input (plain keys then belong to the input). */
-export function typingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
-}
+/** Whether a key event targets a text field (its keys then belong to the field): `$lib/keyboard`. */
+export const typingTarget = isEditableTarget;

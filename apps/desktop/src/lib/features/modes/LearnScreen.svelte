@@ -32,6 +32,7 @@
   import LaunchIdle from '../study/LaunchIdle.svelte';
   import { handoffSeq, launcher, openLauncher, takeHandoff, type Handoff } from '../study/launcher.svelte';
   import type { ScreenCtx } from '../types';
+  import { isEditableTarget } from '$lib/keyboard';
   import { plainKey } from './modes';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -166,7 +167,8 @@
       return;
     }
     if (feedback) {
-      if (e.key === 'Enter' || e.key === ' ') {
+      // Enter goes on from the answer field too; Space only outside text fields (it types there).
+      if (e.key === 'Enter' || (e.key === ' ' && !isEditableTarget(e.target))) {
         e.preventDefault();
         void run(next);
       } else if (e.key.toLowerCase() === 'z' && plainKey(e)) {

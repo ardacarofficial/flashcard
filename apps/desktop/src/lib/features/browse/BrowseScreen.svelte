@@ -353,14 +353,13 @@
     if (target?.getAttribute('role') !== 'grid' || e.ctrlKey || e.metaKey || e.altKey) return;
     const at = indexOf(activeKey);
     const row = at >= 0 ? rows[at] : undefined;
-    if (e.key === 'Enter' && row) {
+    if ((e.key === 'Enter' || e.key === ' ') && row) {
       e.preventDefault();
       e.stopPropagation();
-      edit(row);
-    } else if (e.key === ' ' && row) {
-      e.preventDefault();
-      e.stopPropagation();
-      toggle(row, e.shiftKey);
+      // A held key is one edit / one toggle (v1.3); only the arrows repeat.
+      if (e.repeat) return;
+      if (e.key === 'Enter') edit(row);
+      else toggle(row, e.shiftKey);
     } else if (e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && row) {
       // Extend: the current and the next row join the selection; the table then moves.
       const next = rows[at + (e.key === 'ArrowDown' ? 1 : -1)];
@@ -375,7 +374,7 @@
   }
 
   function onWindowKey(e: KeyboardEvent) {
-    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
     if (document.querySelector('[aria-modal="true"]')) return;
     if (e.key === '/' && !typingTarget(e.target)) {
       e.preventDefault();

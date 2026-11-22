@@ -49,8 +49,8 @@
 
   function onKey(e: KeyboardEvent) {
     if (e.defaultPrevented || e.repeat || !moduleOn('focus') || !plainKey(e) || e.key.toLowerCase() !== 'f') return;
-    const el = e.target as HTMLElement | null;
-    if (el?.isContentEditable || document.querySelector('[aria-modal="true"]')) return;
+    // (`plainKey` already leaves text fields alone, contenteditable included.)
+    if (document.querySelector('[aria-modal="true"]')) return;
     e.preventDefault();
     active = !active;
   }

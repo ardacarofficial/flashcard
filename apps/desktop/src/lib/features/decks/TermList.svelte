@@ -109,7 +109,8 @@
       editing = null;
     } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      void save(row);
+      // A held Ctrl+Enter saves once (v1.3).
+      if (!e.repeat) void save(row);
     }
   }
 
