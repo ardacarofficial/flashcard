@@ -1232,3 +1232,107 @@ fn language_predicates_at_100k() {
     // Debug builds on a shared 4-core machine: generous (the docs/04 budget is 100 ms).
     assert!(worst < 1_500_000, "slowest language query took {worst} µs");
 }
+
+/// Migration 1460 on an existing collection: Subtitle notes (a capture row) and reading notes
+/// (`word_note_language`) get their origin, the title from the `source` field without the
+/// time; other notes stay "manual"; the new indexes exist; writes round-trip.
+#[test]
+fn migration_1460_backfills_origins_of_an_existing_collection() {
+    use crate::migrate::MIGRATIONS;
+    use crate::repo::NoteOriginRecord;
+    use fc_core::query::NoteOrigin;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("collection.db");
+    let upto = MIGRATIONS.iter().position(|m| m.version >= 1460).unwrap();
+    {
+        let old = SqliteStore::open_with_migrations(&path, &MIGRATIONS[..upto]).unwrap();
+        let mut tx = old.write().unwrap();
+        tx.upsert_notetype(&classic()).unwrap();
+        for i in 1..=3 {
+            put_note(&mut *tx, &note(i, "went", "gitti", &[], 5), "went").unwrap();
+            tx.insert_card(&card(i, i, HOME)).unwrap();
+        }
+        tx.commit().unwrap();
+        let conn = Connection::open(&path).unwrap();
+        conn.execute(
+            "UPDATE notes SET fields = json_set(fields, '$.source', ?2) WHERE id = ?1",
+            rusqlite::params![
+                nid(1).to_string(),
+                "<a href=\"https://x.test/?v=1&amp;t=83s\">The Night Train · S1E2 · 1:23</a>"
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO subtitle_captures (capture_id, dedup_key, lang, lemma, note_id, card_id,
+               key_id, created_at) VALUES ('c1', 'en|go|x', 'en', 'go', ?1, ?2, NULL, 9)",
+            rusqlite::params![nid(1).to_string(), cid(1).to_string()],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO word_note_language (note_id, language) VALUES (?1, 'en')",
+            [nid(2).to_string()],
+        )
+        .unwrap();
+    }
+    let store = SqliteStore::open(&path).unwrap();
+    let fx = Fx { store, dir };
+    let rows = fx.read(|r| r.note_origins_of(&[nid(1), nid(2), nid(3)]).unwrap());
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].note_id, nid(1));
+    assert_eq!(rows[0].origin, NoteOrigin::Subtitle);
+    assert_eq!(rows[0].source, "The Night Train · S1E2");
+    assert_eq!(rows[0].created_at, Timestamp(9));
+    assert_eq!(
+        (rows[1].note_id, rows[1].origin),
+        (nid(2), NoteOrigin::Reading)
+    );
+    let conn = fx.raw();
+    for index in [
+        "note_origins_origin",
+        "word_index_notes_key_only",
+        "media_mime",
+    ] {
+        let n: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                [index],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1, "{index}");
+    }
+    // Writes: replace, and "manual" removes the row.
+    fx.write(|tx| {
+        tx.set_note_origin(&NoteOriginRecord {
+            note_id: nid(3),
+            origin: NoteOrigin::Anki,
+            source: String::new(),
+            site: String::new(),
+            video_id: String::new(),
+            created_at: Timestamp(1),
+        })
+        .unwrap();
+        tx.set_note_origin(&NoteOriginRecord {
+            note_id: nid(2),
+            origin: NoteOrigin::Manual,
+            source: String::new(),
+            site: String::new(),
+            video_id: String::new(),
+            created_at: Timestamp(1),
+        })
+        .unwrap();
+    });
+    let rows = fx.read(|r| r.note_origins_of(&[nid(1), nid(2), nid(3)]).unwrap());
+    let got: Vec<_> = rows.iter().map(|r| (r.note_id, r.origin)).collect();
+    assert_eq!(
+        got,
+        [(nid(1), NoteOrigin::Subtitle), (nid(3), NoteOrigin::Anki)]
+    );
+    // Unknown origins are refused by the table.
+    assert!(conn
+        .execute(
+            "INSERT INTO note_origins (note_id, origin, created_at) VALUES ('x', 'manual', 0)",
+            [],
+        )
+        .is_err());
+}
