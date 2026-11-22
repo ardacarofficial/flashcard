@@ -27,6 +27,8 @@
     "optional": "{name} (isteğe bağlı)",
     "duplicate": "“{term}” zaten var: bu not türünde aynı {fields} ile bir kart var. Yine de eklersen ikinci, ayrı bir kart olur.",
     "more_hint_fields": "{fields}, sınıflandırma ve önizleme",
-    "other_ways": "Başka yol:"
+    "other_ways": "Başka yol:",
+    "example_hint": "Örnek cümle de yazmak mı istiyorsun? “{name}” türünde kelime, anlam ve cümle ayrı kutulardır.",
+    "example_switch": "“{name}” kullan"
   }
 }

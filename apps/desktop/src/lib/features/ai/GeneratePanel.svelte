@@ -13,7 +13,8 @@
   import AttributeField from '$lib/components/AttributeField.svelte';
   import { initialValue, toAssignments, type FieldValue } from '$lib/components/attribute-field';
   import { t, td } from '$lib/i18n/index.svelte';
-  import { Button, Checkbox, EmptyState, FileText, Input, Library, SegmentedControl, Select, Sparkles, Textarea } from '$lib/ui';
+  import { Button, Checkbox, EmptyState, FileText, Input, Library, SegmentedControl, Select, Settings, Sparkles, Textarea } from '$lib/ui';
+  import { deckPaths } from '$lib/components/deck-paths';
   import type { ScreenCtx } from '../types';
   import JobProgress from '../io/JobProgress.svelte';
   import { pickFile } from '../io/files';
@@ -21,6 +22,22 @@
   import PreviewPanel from './PreviewPanel.svelte';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
+
+  /**
+   * The deck the cards go to (v1.3: chosen here, next to the other options — never an empty
+   * page that only says "choose a deck first"): the selected deck, else the first one.
+   */
+  const paths = $derived(deckPaths(ctx.decks));
+  const deckOptions = $derived(paths.map((p) => ({ value: p.id, label: p.path })));
+  const deckId = $derived(ctx.selectedDeck ?? paths[0]?.id ?? null);
+  /** No provider set up yet: say so first, with the way to the settings (null = not known yet). */
+  let providers = $state<number | null>(null);
+  $effect(() => {
+    void api.call('ai.providers.list', {}).then(
+      (r) => (providers = r.providers.length),
+      () => (providers = null),
+    );
+  });
 
   let notetypes = $state<NoteTypeDto[]>([]);
   let notetypeId = $state<string>(CLASSIC_NOTETYPE_ID);
@@ -68,7 +85,7 @@
   });
 
   $effect(() => {
-    const deck = ctx.selectedDeck;
+    const deck = deckId;
     defs = [];
     if (!deck) return;
     void api.attribute.effective(deck).then((r) => {
@@ -124,7 +141,7 @@
     error = null;
     notice = null;
     drafts = [];
-    const deck = ctx.selectedDeck;
+    const deck = deckId;
     if (!deck) return;
     const next: AiTask = {
       feature: 'generate_cards',
@@ -180,7 +197,7 @@
   }
 
   async function add() {
-    const deck = ctx.selectedDeck;
+    const deck = deckId;
     if (!deck) return;
     const notes = drafts.filter((d) => d.keep).map((d) => $state.snapshot(d.draft));
     const ok = await ctx.guarded(async () => {
@@ -198,8 +215,16 @@
 </script>
 
 <section class="generate">
-  {#if !ctx.selectedDeck}
-    <EmptyState icon={Library} title={t('ai.generate.pick_deck')} />
+  {#if providers === 0}
+    <div class="setup-note" role="note">
+      <p>{t('ai.generate.no_provider')}</p>
+      {#if ctx.navigate}
+        <Button size="sm" icon={Settings} onclick={() => ctx.navigate?.('/ai', 'settings')}>{t('ai.generate.connect')}</Button>
+      {/if}
+    </div>
+  {/if}
+  {#if !deckId}
+    <EmptyState icon={Library} title={t('ai.generate.no_deck')} />
   {:else}
     <div class="compose">
       <div class="source">
@@ -263,6 +288,7 @@
       </div>
 
       <aside class="options" aria-label={t('ai.tabs.generate')}>
+        <Select size="sm" label={t('ai.generate.deck')} options={deckOptions} value={deckId} onchange={(id) => ctx.selectDeck(id)} />
         <Select size="sm" label={t('ai.generate.notetype')} options={notetypeOptions} bind:value={notetypeId} />
         {#each defs as a (a.def.id)}
           <AttributeField size="sm" def={a.def} bind:value={attrs[a.def.id]!} />
@@ -334,6 +360,20 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+  }
+  .setup-note {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    font-size: var(--text-sm);
+  }
+  .setup-note p {
+    margin: 0;
   }
   /* Source on the left (what you paste), the few options and the action on the right. */
   .compose {

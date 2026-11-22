@@ -117,7 +117,7 @@
       });
       created = r.notes_created;
       open = false;
-      startGuide(r.deck_id);
+      startGuide(r.deck_id, r.notes_created > 0);
       if (withStarters) {
         ctx?.selectDeck(r.deck_id);
       } else {

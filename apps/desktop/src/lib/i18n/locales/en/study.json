@@ -29,7 +29,7 @@
     "show_answer": "Show answer",
     "type_placeholder": "Type the answer",
     "hint": "Hint",
-    "suspend": "Pause",
+    "suspend": "Set aside",
     "bury": "Leave for tomorrow",
     "undo": "Undo",
     "end": "Pause",
@@ -102,7 +102,7 @@
       "new_desc": "Cards you have never studied"
     },
     "flag_menu": "Flag",
-    "suspend_desc": "Don’t ask this card again until you turn it back on",
+    "suspend_desc": "Don’t ask this card again until you bring it back",
     "bury_desc": "Don’t ask this card again today",
     "flip": "Flip",
     "flip_label": "Flip the card",
@@ -162,7 +162,8 @@
         "new": "Cards you have never studied, within the daily limit",
         "studied_today": "Every card you answered today",
         "struggled_today": "Cards you rated “Again” or got wrong today",
-        "all": "Every card in the deck"
+        "all": "Every card in the deck",
+        "all_decks": "Every card in all your decks"
       },
       "practice_tag": "practice · schedule unchanged",
       "empty": {

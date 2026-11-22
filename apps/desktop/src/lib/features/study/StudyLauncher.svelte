@@ -79,9 +79,12 @@
         kind = k;
         if (k) scope = pickScope(o.scopes, k, request.scope, prefs);
         // The dialog focused its first control while loading: move to the real first stop —
-        // "Continue" when something is unfinished, else the chosen mode.
+        // "Continue" when something is unfinished, else the chosen mode. Opened for one mode
+        // (the deck page's Learn / Test / Match): only an unfinished session OF THAT MODE comes
+        // first — Enter never resumes a Test when Learn was asked for.
         await tick();
-        root?.querySelector<HTMLElement>(o.resumable.length ? '[data-resume]' : '.fc-seg [aria-checked="true"]')?.focus();
+        const resumeSel = request.kind ? `[data-resume][data-kind="${request.kind}"]` : '[data-resume]';
+        (root?.querySelector<HTMLElement>(resumeSel) ?? root?.querySelector<HTMLElement>('.fc-seg [aria-checked="true"]'))?.focus();
       }
       now = Date.now();
     } catch (e) {
@@ -306,7 +309,7 @@
           <div class="resume-list">
             {#each resumable as r (r.session.id)}
               {@const k = launchKindOf(r.session.kind)}
-              <button type="button" class="resume" data-resume data-enter-self data-testid="launcher-resume" onclick={() => resume(r)}>
+              <button type="button" class="resume" data-resume data-kind={k} data-enter-self data-testid="launcher-resume" onclick={() => resume(r)}>
                 <Icon icon={Play} size={14} />
                 <span class="r-main"><strong>{t('study.launcher.resume')}</strong> · {r.deck_name ?? t('study.launcher.deck_all')} · {t(`study.launcher.kind.${k}`)}</span>
                 <span class="r-meta num">{t('study.launcher.resume_meta', { answered: formatCount(r.answered), remaining: formatCount(r.remaining) })}</span>
@@ -340,7 +343,7 @@
                     <!-- Test and Match never change the schedule: the tag only matters for Cards / Learn. -->
                     {#if PRACTICE_SCOPES.includes(s.scope) && (kind === 'normal' || kind === 'learn')}<span class="tag">{t('study.launcher.practice_tag')}</span>{/if}
                   </span>
-                  <span class="s-desc" class:reason={empty}>{empty ? reasonText(s) : t(`study.launcher.scope_desc.${s.scope}`)}</span>
+                  <span class="s-desc" class:reason={empty}>{empty ? reasonText(s) : t(!deckId && s.scope === 'all' ? 'study.launcher.scope_desc.all_decks' : `study.launcher.scope_desc.${s.scope}`)}</span>
                 </span>
                 <span class="s-count num" class:zero={empty}>{formatCount(s.count)}</span>
               </OptionTile>

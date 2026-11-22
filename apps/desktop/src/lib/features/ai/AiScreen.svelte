@@ -1,10 +1,13 @@
 <!--
-  AI (Create section and Settings → Connections): make cards, providers, usage — one page with
-  tabs. Lane S3 owns the "Make cards" panel; this container and the two settings panels are S4's.
+  AI, shown in two places (v1.3) — each shows the part that belongs there:
+  * Create › AI: making cards from a text (an add-cards path; the deck is chosen in the form).
+  * Settings › Connections › AI: setting up providers and seeing what they cost (usage).
+  Every part stays reachable: Create links to the provider setup when none is set up yet, and
+  the settings page says where AI is used.
 -->
 <script lang="ts">
   import { t } from '$lib/i18n/index.svelte';
-  import { Activity, Bot, PageHeader, Sparkles, Tabs } from '$lib/ui';
+  import { Activity, Bot, Button, PageHeader, Sparkles, Tabs } from '$lib/ui';
   import type { ScreenCtx } from '../types';
   import GeneratePanel from './GeneratePanel.svelte';
   import ProvidersPanel from './ProvidersPanel.svelte';
@@ -12,29 +15,38 @@
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
-  let tab = $state<string>('generate');
+  const inSettings = $derived(ctx.place === 'settings');
+  let tab = $state<string>('providers');
   const tabs = $derived([
-    { id: 'generate', label: t('ai.tabs.generate'), icon: Sparkles },
     { id: 'providers', label: t('ai.tabs.providers'), icon: Bot },
     { id: 'usage', label: t('ai.tabs.usage'), icon: Activity },
   ]);
 </script>
 
 <div class="ai">
-  <PageHeader title={t('nav.ai')} subtitle={t('ai.subtitle')} />
-  <Tabs variant="pill" label={t('nav.ai')} {tabs} bind:value={tab}>
-    {#snippet children(id)}
-      <div class="panel">
-        {#if id === 'generate'}
-          <GeneratePanel {ctx} />
-        {:else if id === 'providers'}
-          <ProvidersPanel {ctx} />
-        {:else}
-          <UsagePanel />
+  {#if inSettings}
+    <PageHeader title={t('nav.ai')} subtitle={t('ai.settings_subtitle')}>
+      {#snippet actions()}
+        {#if ctx.navigate}
+          <Button variant="ghost" icon={Sparkles} onclick={() => ctx.navigate?.('/ai')}>{t('ai.make_cards')}</Button>
         {/if}
-      </div>
-    {/snippet}
-  </Tabs>
+      {/snippet}
+    </PageHeader>
+    <Tabs variant="pill" label={t('nav.ai')} {tabs} bind:value={tab}>
+      {#snippet children(id)}
+        <div class="panel">
+          {#if id === 'providers'}
+            <ProvidersPanel {ctx} />
+          {:else}
+            <UsagePanel />
+          {/if}
+        </div>
+      {/snippet}
+    </Tabs>
+  {:else}
+    <PageHeader title={t('ai.generate_title')} subtitle={t('ai.generate_subtitle')} />
+    <GeneratePanel {ctx} />
+  {/if}
 </div>
 
 <style>

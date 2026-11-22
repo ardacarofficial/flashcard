@@ -37,6 +37,12 @@
   const current = $derived<GuideStep | null>(GUIDE_STEPS.find((s) => !guide.done.includes(s)) ?? null);
   const variant = (s: GuideStep) => (current === s ? 'primary' : 'ghost');
 
+  // Step 1 ticks itself as soon as the collection holds a card (however it was added).
+  const hasCards = (nodes: DeckTreeNode[]): boolean => nodes.some((n) => n.counts.total > 0 || hasCards(n.children));
+  $effect(() => {
+    if (!done('add') && hasCards(ctx?.decks ?? [])) markStep('add');
+  });
+
   let panel = $state<HTMLElement | null>(null);
   let pill = $state<HTMLButtonElement | null>(null);
 

@@ -65,7 +65,11 @@
       "drafts": "{count, plural, one {# suggestion} other {# suggestions}}",
       "spent": "This request cost about {cost}.",
       "keep": "Add",
-      "add": "Add {count, plural, one {# note} other {# notes}}"
+      "add": "Add {count, plural, one {# note} other {# notes}}",
+      "deck": "Add to deck",
+      "no_deck": "There is no deck for the cards yet: make one first in Create › Add.",
+      "no_provider": "To make cards, connect an AI provider first (once; there are free options).",
+      "connect": "Connect a provider"
     },
     "providers": {
       "heading": "Providers",
@@ -270,7 +274,11 @@
       "provider_says": "The provider says:",
       "job_failed": "The test could not run.",
       "http": "HTTP {status}"
-    }
+    },
+    "settings_subtitle": "Connect an AI provider and see what it has used. Making cards lives in Create › AI; AI also helps while you write and study cards.",
+    "make_cards": "Make cards",
+    "generate_title": "Make cards with AI",
+    "generate_subtitle": "Paste a text or take it from a file; the AI suggests cards and you add the ones you like."
   },
   "errors": {
     "validation": {

@@ -650,7 +650,11 @@ async function main() {
                 if (!(await openDeck())) break;
                 await page.locator(`[data-testid="${id}"]`).click().catch(() => {});
                 await settle(page);
-                // v1.3: a mode button opens the study launcher with that mode preselected.
+                // v1.3: a mode button opens the study launcher with that mode preselected. Under
+                // load it can open after `settle`: wait for it (and its options) before the shot,
+                // or it opens later over the next click.
+                await page.locator('[data-testid="launcher-start"]').first().waitFor({ timeout: 10000 }).catch(() => {});
+                await settle(page);
                 await snap(`state-${mode}`);
                 const launch = page.locator('[data-testid="launcher-start"]:not([disabled])').first();
                 const start = (await launch.count()) ? launch : page.locator('[data-testid="study-start"]').first();

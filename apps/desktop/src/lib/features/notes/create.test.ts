@@ -76,6 +76,8 @@ describe('<CreateScreen> on the dev mock', () => {
     const decks = (await api.deck.tree()).roots;
     const selectDeck = vi.fn();
     render(CreateScreen, { ctx: ctxWith({ decks, selectDeck }) });
+    // v1.3: with decks the page starts on "Existing deck"; a new deck is an explicit choice.
+    await fireEvent.click(await screen.findByRole('radio', { name: 'New deck' }));
     await fireEvent.input(await screen.findByLabelText(/^Title/), { target: { value: 'Animals' } });
     const terms = await screen.findAllByLabelText(/^Term \d/);
     await fireEvent.input(terms[0]!, { target: { value: 'cat' } });
@@ -106,6 +108,7 @@ describe('<CreateScreen> on the dev mock', () => {
     const decks = (await api.deck.tree()).roots;
     const selectDeck = vi.fn();
     render(CreateScreen, { ctx: ctxWith({ decks, selectDeck }) });
+    await fireEvent.click(await screen.findByRole('radio', { name: 'New deck' }));
     const terms = await screen.findAllByLabelText(/^Term \d/);
     await fireEvent.input(terms[0]!, { target: { value: 'owl' } });
     await fireEvent.keyDown(terms[0]!, { key: 'Enter', ctrlKey: true });
@@ -116,6 +119,24 @@ describe('<CreateScreen> on the dev mock', () => {
     await fireEvent.keyDown(screen.getByLabelText('Term 1'), { key: 'Enter', ctrlKey: true });
     await waitFor(() => expect(spy.mock.calls.some(([m]) => m === 'notes.create_many')).toBe(true));
     spy.mockRestore();
+  });
+});
+
+describe('<CreateScreen> default destination (v1.3)', () => {
+  it('with decks: "Existing deck" and a deck already chosen, so Ctrl+Enter saves at once', async () => {
+    const decks = (await api.deck.tree()).roots;
+    render(CreateScreen, { ctx: ctxWith({ decks }) });
+    expect((await screen.findByRole('radio', { name: 'Existing deck' })).getAttribute('aria-checked')).toBe('true');
+    const terms = await screen.findAllByLabelText(/^Term \d/);
+    await fireEvent.input(terms[0]!, { target: { value: 'heron' } });
+    const spy = vi.spyOn(api, 'call');
+    await fireEvent.keyDown(terms[0]!, { key: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(spy.mock.calls.some(([m]) => m === 'notes.create_many')).toBe(true));
+    const req = spy.mock.calls.find(([m]) => m === 'notes.create_many')![1] as { target: { kind: string; id: string } };
+    expect(req.target.kind).toBe('deck');
+    expect(decks.some((n) => n.deck.id === req.target.id)).toBe(true);
+    spy.mockRestore();
+    expect(screen.queryByText('Give the new deck a title.')).toBeNull();
   });
 });
 

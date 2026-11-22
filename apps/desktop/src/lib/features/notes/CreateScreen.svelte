@@ -18,6 +18,7 @@
   import { initialValue, toAssignments, type FieldValue } from '$lib/components/attribute-field';
   import { deckPaths } from '$lib/components/deck-paths';
   import { t, td } from '$lib/i18n/index.svelte';
+  import { usePageKeys } from '$lib/shell/page-keys.svelte';
   import {
     Button,
     ChevronDown,
@@ -55,6 +56,16 @@
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
+  usePageKeys(() =>
+    way === 'bulk' && !rich
+      ? [
+          { keys: 'Tab', label_key: 'help.page.next_field' },
+          { keys: 'Enter', label_key: 'help.page.new_row' },
+          { keys: 'Mod+Enter', label_key: 'help.page.save' },
+        ]
+      : null,
+  );
+
   const LAST_TYPE = 'fc.cards.last_notetype';
   const TOP = '';
   type Mode = 'new' | 'existing';
@@ -62,7 +73,11 @@
   let notetypes = $state<NoteTypeDto[] | null>(null);
   let loadError = $state<string | null>(null);
   let ntId = $state<string>(lastType());
-  let mode = $state<Mode>(untrack(() => (ctx.selectedDeck ? 'existing' : 'new')));
+  // v1.3: with decks the cards go to an existing one by default (the selected deck, else the
+  // first); "New deck" is the user's explicit choice — never a title error on Ctrl+Enter.
+  let mode = $state<Mode>(untrack(() => (ctx.selectedDeck || ctx.decks.length > 0 ? 'existing' : 'new')));
+  /** The user picked "New deck" / "Existing deck" themselves (the defaults stop adjusting). */
+  let modeChosen = false;
   let title = $state('');
   let description = $state('');
   let parent = $state<string>(TOP);
@@ -73,6 +88,7 @@
   let busy = $state(false);
   let error = $state<string | null>(null);
   let titleError = $state<string | null>(null);
+  let deckError = $state<string | null>(null);
   let rowErrors = $state<Record<number, string>>({});
   /** The way in shown below the tabs (a request from Quick Add / elsewhere, else the last one). */
   const asked = takeAddWay();
@@ -219,17 +235,23 @@
     void loadTypes();
   });
 
-  // No decks yet: only "New deck" makes sense; the full editor needs an existing one.
+  // No decks yet: only "New deck" makes sense; the full editor needs an existing one. Decks
+  // that arrive after the page opened (the shell loads them) make "Existing deck" the default.
   $effect(() => {
     if (ctx.decks.length === 0) mode = 'new';
     else if (rich && way === 'bulk') mode = 'existing';
+    else if (!modeChosen && untrack(() => mode === 'new' && !title.trim())) mode = 'existing';
   });
 
-  // "Existing deck" without a choice yet: the selected deck (the shell's picker, the last save).
+  // "Existing deck" without a choice yet: the selected deck (the shell's picker, the last
+  // save), else the first deck — never an empty "Choose a deck" that makes Ctrl+Enter a no-op.
   $effect(() => {
-    if (mode === 'existing' && !deckId && ctx.selectedDeck && paths.some((p) => p.id === ctx.selectedDeck)) {
-      deckId = ctx.selectedDeck;
-    }
+    if (mode !== 'existing' || (deckId && paths.some((p) => p.id === deckId))) return;
+    const sel = ctx.selectedDeck;
+    deckId = sel && paths.some((p) => p.id === sel) ? sel : (paths[0]?.id ?? null);
+  });
+  $effect(() => {
+    if (deckId) deckError = null;
   });
 
   // Classifications of the target deck (a new deck gets its parent's, or the collection's).
@@ -270,6 +292,8 @@
     void draft.restore().then((d) => {
       if (d && Array.isArray(d.rows) && d.rows.length > 0) {
         title = d.title ?? '';
+        // A kept draft was going into a new deck: show its title again.
+        if (title.trim()) mode = 'new';
         description = d.description ?? '';
         if (d.notetype_id) ntId = d.notetype_id;
         rows = d.rows.map((r) => ({ ...blankRow(), fields: { ...r.fields }, image: r.image ?? null }));
@@ -310,6 +334,18 @@
     await tick();
     fieldEl(row, col)?.focus();
   }
+
+  // v1.3: the page is for typing — once loaded, the cursor waits in the first empty term
+  // (unless the user already put it somewhere: a field, the setup row).
+  let autofocused = false;
+  $effect(() => {
+    if (autofocused || !notetypes || !restored || !list || way !== 'bulk' || rich) return;
+    autofocused = true;
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.closest('input, textarea, select, [role="combobox"], [role="dialog"], .create .setup')) return;
+    const row = untrack(() => rows.findIndex((r) => isBlank(r)));
+    void focusCell(row >= 0 ? row : 0, 0);
+  });
 
   function addRow(focus = true) {
     rows = [...rows, blankRow()];
@@ -446,6 +482,10 @@
       e.preventDefault();
       titleError = t('create.title_required');
       document.querySelector<HTMLInputElement>('.create .setup .title input')?.focus();
+    } else if (nt && !busy && filled > 0 && mode === 'existing' && !deckId) {
+      e.preventDefault();
+      deckError = t('create.choose_deck');
+      document.querySelector<HTMLElement>('.create .setup .title button')?.focus();
     }
   }
 </script>
@@ -483,6 +523,7 @@
               { value: 'existing', label: t('create.mode_existing'), disabled: ctx.decks.length === 0 },
             ]}
             bind:value={mode}
+            onchange={() => (modeChosen = true)}
           />
         </div>
         {#if mode === 'new'}
@@ -498,7 +539,7 @@
           />
           <Select class="deck" size="sm" label={t('create.parent')} options={parentOptions} bind:value={parent} />
         {:else}
-          <Select class="title" size="sm" label={t('create.deck')} options={deckOptions} bind:value={deckId} placeholder={t('create.choose_deck')} />
+          <Select class="title" size="sm" label={t('create.deck')} options={deckOptions} bind:value={deckId} placeholder={t('create.choose_deck')} error={deckError} />
         {/if}
         <Select class="type" size="sm" label={t('create.notetype')} options={typeOptions} value={ntId} onchange={chooseType} />
         {#if mode === 'new' || defs.length > 0}

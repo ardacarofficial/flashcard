@@ -10,7 +10,7 @@
       "check_answer": "Check an answer",
       "end": "End the session",
       "summary": "Session summary",
-      "suspend": "Pause cards (study)",
+      "suspend": "Set cards aside (study)",
       "bury": "Leave cards for tomorrow (study)",
       "postpone": "Postpone today's cards",
       "card_history": "Card review history"
@@ -82,7 +82,7 @@
       "good": "Rate: Good (four buttons)",
       "easy": "Rate: Easy (four buttons)",
       "hint": "Hint",
-      "suspend": "Pause the card (until you turn it back on)",
+      "suspend": "Set the card aside (until you bring it back)",
       "bury": "Leave the card for tomorrow (not again today)",
       "undo": "Undo last answer",
       "end": "End session"

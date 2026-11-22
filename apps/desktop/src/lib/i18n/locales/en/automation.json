@@ -5,7 +5,7 @@
   "modules": {
     "automation": {
       "name": "Automation rules",
-      "description": "“When … for these cards … do …” rules: tag, suspend, move or classify cards automatically."
+      "description": "“When … for these cards … do …” rules: tag, set aside, move or classify cards automatically."
     }
   },
   "settings": {
@@ -24,7 +24,7 @@
   },
   "automation": {
     "heading": "Automation",
-    "intro": "Let the app do repetitive chores for you: when something happens (say, you forget a card again), it tags, moves or suspends the cards you chose.",
+    "intro": "Let the app do repetitive chores for you: when something happens (say, you forget a card again), it tags, moves or sets aside the cards you chose.",
     "new": "Write your own rule",
     "recipes": {
       "title": "Start from a ready rule",
@@ -40,8 +40,8 @@
         "tag": "difficult"
       },
       "suspend_leeches": {
-        "name": "Pause cards that never stick",
-        "description": "A card you have forgotten 8 times is suspended: it is not asked until you fix it and switch it back on."
+        "name": "Set aside cards that never stick",
+        "description": "A card you have forgotten 8 times is set aside: it is not asked until you fix it and bring it back."
       },
       "archive_learned": {
         "name": "Move learned cards to an archive deck",
@@ -53,8 +53,8 @@
         "tag": "subtitle"
       },
       "suspend_flagged": {
-        "name": "Pause red-flagged cards",
-        "description": "Put a red flag on a card with a mistake: it is suspended until you fix it and switch it back on."
+        "name": "Set aside red-flagged cards",
+        "description": "Put a red flag on a card with a mistake: it stays aside until you fix it and bring it back."
       },
       "untag_learned": {
         "name": "Remove “difficult” once a card is easy",
@@ -120,10 +120,10 @@
         "remove_tags": "{n, plural, one {remove the tag {tags}} other {remove the tags {tags}}}",
         "no_tags": "add a tag (type one)",
         "no_tags_remove": "remove a tag (type one)",
-        "suspend": "suspend them",
-        "unsuspend": "unsuspend them",
-        "bury": "bury them for today",
-        "unbury": "unbury them",
+        "suspend": "set them aside",
+        "unsuspend": "bring them back",
+        "bury": "leave them for tomorrow",
+        "unbury": "bring them back today",
         "flag_on": "put a {flag} flag on them",
         "flag_off": "remove their {flag} flag",
         "move": "move them to “{deck}”",
@@ -205,8 +205,8 @@
       "applied_action": {
         "add_tags": "{n, plural, one {tag added to # card} other {tag added to # cards}}",
         "remove_tags": "{n, plural, one {tag removed from # card} other {tag removed from # cards}}",
-        "set_suspended": "{n, plural, one {# card suspended or unsuspended} other {# cards suspended or unsuspended}}",
-        "set_buried": "{n, plural, one {# card buried or unburied} other {# cards buried or unburied}}",
+        "set_suspended": "{n, plural, one {# card set aside or brought back} other {# cards set aside or brought back}}",
+        "set_buried": "{n, plural, one {# card left for tomorrow or brought back} other {# cards left for tomorrow or brought back}}",
         "set_flag": "{n, plural, one {flag changed on # card} other {flag changed on # cards}}",
         "move_cards": "{n, plural, one {# card moved} other {# cards moved}}",
         "set_attribute": "{n, plural, one {classification set on # card} other {classification set on # cards}}",
@@ -283,8 +283,8 @@
       "bulk": {
         "add_tags": "Add tags",
         "remove_tags": "Remove tags",
-        "set_suspended": "Suspend / unsuspend",
-        "set_buried": "Bury / unbury",
+        "set_suspended": "Set aside / bring back",
+        "set_buried": "Leave for tomorrow / bring back",
         "set_flag": "Set / clear a flag",
         "move_cards": "Move to deck",
         "set_attribute": "Set a classification",

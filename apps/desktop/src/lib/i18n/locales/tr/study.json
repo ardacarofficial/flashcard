@@ -29,7 +29,7 @@
     "show_answer": "Cevabı göster",
     "type_placeholder": "Cevabı yaz",
     "hint": "İpucu",
-    "suspend": "Durdur",
+    "suspend": "Kenara koy",
     "bury": "Yarına bırak",
     "undo": "Geri al",
     "end": "Ara ver",
@@ -72,7 +72,7 @@
     "choice_right": "Doğru seçenek",
     "choice_wrong": "Senin seçimin",
     "start_heading": "Bugünkü tekrar",
-    "start_intro": "Vadesi gelen ve birkaç yeni kart.",
+    "start_intro": "Sırası gelen ve birkaç yeni kart.",
     "custom_heading": "Özel oturum",
     "custom_intro": "Filtrenin seçtiği kartları çalışır.",
     "options": "Seçenekler",
@@ -102,7 +102,7 @@
       "new_desc": "Henüz hiç çalışmadığın kartlar"
     },
     "flag_menu": "Bayrak",
-    "suspend_desc": "Sen yeniden açana kadar bu kartı sorma",
+    "suspend_desc": "Sen geri alana kadar bu kartı sorma",
     "bury_desc": "Bugün bu kartı bir daha sorma",
     "flip": "Çevir",
     "flip_label": "Kartı çevir",
@@ -162,7 +162,8 @@
         "new": "Henüz hiç çalışmadığın kartlar, günlük sınır içinde",
         "studied_today": "Bugün cevapladığın her kart",
         "struggled_today": "Bugün “Tekrar” dediğin ya da yanlış cevapladığın kartlar",
-        "all": "Destedeki her kart"
+        "all": "Destedeki her kart",
+        "all_decks": "Tüm destelerindeki her kart"
       },
       "practice_tag": "pratik · takvimi değiştirmez",
       "empty": {

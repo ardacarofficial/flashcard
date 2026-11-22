@@ -79,6 +79,7 @@
   let revealedAt: number | null = null;
   let input = $state<HTMLInputElement | null>(null);
   let doneBtn = $state<HTMLButtonElement | null>(null);
+  let continueBtn = $state<HTMLButtonElement | null>(null);
   let waitBtn = $state<HTMLButtonElement | null>(null);
   /** Flag names/colors (`flags.list`, Anki numbering from `card_flag_defs`). */
   let flagDefs = $state<FlagDto[]>([]);
@@ -192,8 +193,9 @@
   $effect(() => {
     if (waiting) void tick().then(() => waitBtn?.focus());
   });
+  // The summary's first key stop is its primary action: "Continue" after a pause, else "Done".
   $effect(() => {
-    if (phase === 'done') void tick().then(() => doneBtn?.focus());
+    if (phase === 'done') void tick().then(() => (continueBtn ?? doneBtn)?.focus());
   });
 
   function show(s: SessionDto) {
@@ -358,8 +360,14 @@
     openLauncher({ deckId, kind: 'normal', scope: struggled ? 'struggled_today' : (startedScope ?? undefined) });
   }
 
+  /** Esc pressed while an answer was still being saved: leave right after it (never lost). */
+  let pendingEnd = false;
+
   async function run(a: StudyAction) {
-    if (busy) return;
+    if (busy) {
+      if (a.kind === 'end') pendingEnd = true;
+      return;
+    }
     busy = true;
     try {
       await ctx.guarded(async () => {
@@ -409,7 +417,7 @@
             // Nothing answered yet: no "0 of 0" summary.
             if (s.answered === 0) {
               await api.call('study.end', { session_id: s.id });
-              session = null;
+              leave();
               return;
             }
             // v1.3: leaving with cards left is a pause — the session stays open (the launcher
@@ -432,12 +440,27 @@
       });
     } finally {
       busy = false;
+      if (pendingEnd) {
+        pendingEnd = false;
+        void run({ kind: 'end' });
+      }
     }
   }
 
-  function back() {
+  /**
+   * Leaving the session (v1.3: "Done", Esc before any answer): back where the session's cards
+   * live — the deck page for a deck, Home for every deck — not to an empty study page.
+   * Without a shell to navigate (component tests) the page shows its idle state.
+   */
+  function leave() {
+    const deck = session?.deck_id ?? null;
     summary = null;
     session = null;
+    if (!ctx.navigate) return;
+    if (deck) {
+      ctx.selectDeck(deck);
+      ctx.navigate('/decks');
+    } else ctx.navigate('/');
   }
 
   /** Space on an answer button would press it: here Space only ever flips the card. */
@@ -594,9 +617,9 @@
     </dl>
     <div class="sum-actions">
       {#if summary.ended_at === null}
-        <Button variant="primary" icon={Play} data-testid="study-continue" onclick={() => void ctx.guarded(resumePaused)}>{t('study.summary.continue')}</Button>
+        <Button variant="primary" icon={Play} data-testid="study-continue" bind:element={continueBtn} onclick={() => void ctx.guarded(resumePaused)}>{t('study.summary.continue')}</Button>
       {/if}
-      <Button variant={summary.ended_at === null ? 'secondary' : 'primary'} bind:element={doneBtn} onclick={back}>
+      <Button variant={summary.ended_at === null ? 'secondary' : 'primary'} bind:element={doneBtn} onclick={leave}>
         {t('study.summary.back')}
       </Button>
       {#if launcher.available}
@@ -910,6 +933,18 @@
   .face-body :global(.fc-part-source .fc-part-label) {
     display: inline;
     margin: 0 var(--space-1) 0 0;
+  }
+  /* The note type's CSS (`.fc-card-… .fc-part-source { font-size: 0.8em }`) is scoped to the
+     card and would size the source relative to the 32 px face — larger than the example. The
+     study face fixes the three levels (meaning > example > source) one step more specifically.
+     A part of speech under the meaning (Subtitle card: `.fc-pron` after it) is a quiet note. */
+  .face-body :global(.card .fc-part-source) {
+    font-size: var(--text-xs);
+  }
+  .face-body :global(.card .fc-part-meaning + .fc-pron) {
+    margin-top: var(--space-1);
+    font-size: var(--text-md);
+    color: var(--text-2);
   }
   /* Context hint: the example sentence with a visible blank. */
   .hint.context {

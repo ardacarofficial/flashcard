@@ -14,6 +14,7 @@
   import type { ScreenCtx } from '$lib/features';
   import { formatCount, formatDuration } from '$lib/format';
   import { t, td } from '$lib/i18n/index.svelte';
+  import { usePageKeys } from '$lib/shell/page-keys.svelte';
   import {
     Button,
     ChevronRight,
@@ -39,6 +40,11 @@
   import { moduleOn, nodesById, summariesById, todayCounts } from '../decks/library';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
+
+  usePageKeys(() => [
+    ...(canStudy ? [{ keys: 'Enter', label_key: 'help.page.start' as const }] : []),
+    { keys: 'N', label_key: 'help.page.add' as const },
+  ]);
 
   /** Decks listed when nothing is due (recently studied first). */
   const RECENT = 6;
@@ -301,7 +307,7 @@
               <span>{t('home.count_new')}</span>
               <span class="start">{t('home.col_mastery')}</span>
             {/snippet}
-            {#snippet actions()}<span class="actions-space"></span>{/snippet}
+            {#snippet primary()}<span class="actions-space"></span>{/snippet}
           </ListRow>
           {#each rows as { node, depth } (node.deck.id)}
             <ListRow depth={depth} onclick={() => openDeck(node.deck.id)} buttonLabel={t('home.deck_open', { name: node.deck.name })} cellColumns="var(--home-cols)">
@@ -316,9 +322,9 @@
                 <span class="num n" class:zero={c.new === 0}>{formatCount(c.new)}</span>
                 <MasteryBar summary={byId.get(node.deck.id) ?? null} name={node.deck.name} />
               {/snippet}
-              {#snippet actions()}
+              {#snippet primary()}
                 {#if canStudy}
-                  <Button size="sm" variant="ghost" icon={Play} aria-label={t('home.study_deck', { name: node.deck.name })} onclick={() => openLauncher({ deckId: node.deck.id })}>
+                  <Button size="sm" variant="secondary" icon={Play} aria-label={t('home.study_deck', { name: node.deck.name })} onclick={() => openLauncher({ deckId: node.deck.id })}>
                     {t('home.study')}
                   </Button>
                 {/if}
@@ -519,7 +525,7 @@
     padding: var(--space-8) var(--space-4);
   }
   .deck-list {
-    --home-cols: 64px 88px 56px 132px;
+    --home-cols: 88px 88px 56px 132px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -559,7 +565,7 @@
     display: block;
     width: 72px;
   }
-  .deck-list :global(.fc-list-row .actions) {
+  .deck-list :global(.fc-list-row .primary) {
     min-width: 72px;
     justify-content: flex-end;
   }
@@ -580,7 +586,7 @@
   }
   @media (max-width: 1023.98px) {
     .deck-list {
-      --home-cols: 48px 80px 48px 96px;
+      --home-cols: 80px 80px 48px 96px;
     }
   }
 </style>

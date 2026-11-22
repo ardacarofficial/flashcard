@@ -27,6 +27,8 @@
     "optional": "{name} (optional)",
     "duplicate": "“{term}” is already there: a card with the same {fields} exists in this note type. Adding it anyway makes a second, separate card.",
     "more_hint_fields": "{fields}, classification and preview",
-    "other_ways": "Other ways:"
+    "other_ways": "Other ways:",
+    "example_hint": "Want to add an example sentence too? The “{name}” type has separate boxes for the word, its meaning and the sentence.",
+    "example_switch": "Use “{name}”"
   }
 }

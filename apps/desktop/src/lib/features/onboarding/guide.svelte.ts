@@ -71,11 +71,16 @@ export function openGuide(): void {
   save();
 }
 
-/** Shows the checklist without taking focus (right after the first-run setup). */
-export function startGuide(deck: string | null): void {
-  state.view = 'panel';
+/**
+ * Shows the checklist without taking focus (right after the first-run setup). `added`: the
+ * setup put cards in (a starter deck) — step 1 is done; an empty deck ("my own words") leaves
+ * it open (it ticks itself once the collection has cards) and the checklist starts folded,
+ * so it never covers the add page the user is about to type on.
+ */
+export function startGuide(deck: string | null, added = true): void {
+  state.view = added ? 'panel' : 'pill';
   state.deck = deck;
-  if (!state.done.includes('add')) state.done = [...state.done, 'add'];
+  if (added && !state.done.includes('add')) state.done = [...state.done, 'add'];
   save();
 }
 

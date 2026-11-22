@@ -10,6 +10,7 @@
   import { api } from '$lib/api';
   import type { DeckId, DeckSummaries, ModuleDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
+  import { usePageKeys } from '$lib/shell/page-keys.svelte';
   import { Button, EmptyState, LayoutGrid, Library, List, PageHeader, Plus, SegmentedControl, Skeleton } from '$lib/ui';
   import type { ScreenCtx } from '../types';
   import DeckCard from './DeckCard.svelte';
@@ -21,6 +22,13 @@
   import { nodesById, summariesById, todayCounts } from './library';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
+
+  usePageKeys([
+    { keys: ['ArrowUp', 'ArrowDown'], label_key: 'help.page.rows' },
+    { keys: ['ArrowRight', 'ArrowLeft'], label_key: 'help.page.subdecks' },
+    { keys: 'Enter', label_key: 'help.page.open_deck' },
+    { keys: 'N', label_key: 'help.page.add' },
+  ]);
 
   type View = 'grid' | 'tree';
   let summaries = $state<DeckSummaries | null>(null);

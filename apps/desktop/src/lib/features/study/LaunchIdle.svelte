@@ -4,7 +4,7 @@
   one button. With the study module off it says so instead.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { t } from '$lib/i18n/index.svelte';
   import { Button, Icon, Layers, PageHeader, Play, Skeleton } from '$lib/ui';
   import type { ScreenCtx } from '../types';
@@ -21,11 +21,18 @@
   let { ctx, kind, title, auto = true }: Props = $props();
 
   let ready = $state(false);
+  let startBtn = $state<HTMLButtonElement | null>(null);
 
   const open = () => openLauncher({ deckId: ctx.selectedDeck, kind });
 
   onMount(() => {
     ready = true;
+    // Keyboard: the page's one action holds the focus (Enter opens the launcher; when the
+    // launcher opens on its own it takes the focus and gives it back here on close).
+    void tick().then(() => {
+      const a = document.activeElement;
+      if (!a || a === document.body) startBtn?.focus();
+    });
     // After the screen took a handed-over session (same tick) there is nothing to ask.
     if (auto) queueMicrotask(() => void open());
   });
@@ -43,7 +50,7 @@
         <p>{launcher.available ? t('study.idle.body') : t('study.idle.off')}</p>
       </div>
       {#if launcher.available}
-        <Button variant="primary" icon={Play} data-testid="study-start" onclick={open}>{t('study.idle.open')}</Button>
+        <Button variant="primary" icon={Play} data-testid="study-start" bind:element={startBtn} onclick={open}>{t('study.idle.open')}</Button>
       {/if}
     </div>
   {/if}

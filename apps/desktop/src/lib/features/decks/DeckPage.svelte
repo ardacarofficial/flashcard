@@ -12,6 +12,7 @@
   import type { DeckSummary, DeckTreeNode, FlagDto, ModuleDto, NoteTerm } from '$lib/api/types';
   import { formatCount, formatPercent100 } from '$lib/format';
   import { t } from '$lib/i18n/index.svelte';
+  import { usePageKeys } from '$lib/shell/page-keys.svelte';
   import {
     BookOpen,
     Button,
@@ -51,6 +52,12 @@
     onback: () => void;
   }
   let { ctx, node, summary, modules, onback }: Props = $props();
+
+  usePageKeys(() => [
+    ...(canStudy ? [{ keys: 'Enter', label_key: 'help.page.study_deck' as const }] : []),
+    { keys: ['Space', 'ArrowLeft', 'ArrowRight'], label_key: 'help.page.preview' as const },
+    { keys: 'N', label_key: 'help.page.add' as const },
+  ]);
 
   const PAGE = 100;
   const deck = $derived(node.deck);
