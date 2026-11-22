@@ -145,6 +145,8 @@ Var olan koleksiyonlar **migration 1300** ile güncellenir: yerleşik bir not ti
 - **Performans:** okuma tarafı yalnız birincil anahtar/dizin aramaları yapar (500 anahtarlık parçalar); 50 000 notta 500 biçimlik `words.lookup` debug derlemede ~35 ms. `reading.vocabulary_query` dolu ise yalnız ilgili kelimelerin kartları kapsamla süzülür.
 - **Yüzeyler ve izin (v1.4 B4):** `words.lookup/list/stats` kendi iznini ister (`words:read`); aynı metotlar MCP araçları (`words_lookup`, `words_list`, `words_stats`), eklenti host çağrıları (kullanıcı destelere sınırlayabilir: `plugins.word_decks.set`, kesme `plugins::word_scope`'ta) ve `fc call` ile okunur. Subtitle uç noktası dizini yalnız `subtitle.share_known_words` açıkken okur (varsayılan kapalı; docs/06 §5.1).
 
+- **Sorgular (v1.4 B3):** `durum:`, `dil:`, `kelime:`, `karşılaşma` koşulları bu dizini okur (`word_index_notes` + `word_index`, docs/02 §9.1); notun kökeni/kaynağı `note_origins` tablosunda (migration `1460_language_queries`), üreticiler (Subtitle yakalaması, okuma modu) notla birlikte yazar — `word_note_language` gibi türetilmiş üst veri.
+
 ## 5. Olay kaydı ve geri al (hibrit yaklaşım)
 
 Saf "event sourcing" (durumu her seferinde olaylardan yeniden üretmek) yerine **hibrit** bir model kullanılır: güncel durum normal tablolarda tutulur, her değişiklik **aynı transaction** içinde değişmez kayıtlara yazılır. Bu hem hızlı okuma hem tam geçmiş sağlar.

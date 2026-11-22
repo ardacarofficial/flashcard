@@ -3,7 +3,7 @@
 
 use super::*;
 use fc_core::query::eval::{matches, AttrFact, CardFacts};
-use fc_core::query::{Filter, SavedQuery};
+use fc_core::query::{Filter, LangFacts, NoteOrigin, SavedQuery};
 use fc_core::SavedQueryId;
 use std::cmp::Ordering;
 
@@ -11,9 +11,58 @@ use std::cmp::Ordering;
 #[derive(Debug, Clone, Default)]
 pub struct SearchState {
     saved: BTreeMap<SavedQueryId, SavedQuery>,
+    /// v1.4 `note_origins`.
+    origins: BTreeMap<NoteId, NoteOriginRecord>,
+}
+
+impl SearchState {
+    /// A note deleted for good takes its origin with it (SQLite: trigger
+    /// `note_origins_note_del`).
+    pub(super) fn forget_origin(&mut self, note: &NoteId) {
+        self.origins.remove(note);
+    }
 }
 
 impl MemTx<'_> {
+    /// What the language predicates see of a note (word index, origin; media files and the
+    /// word-data pack are not modelled here: no media, no rank or band).
+    fn lang_facts(&self, note: &Note) -> LangFacts {
+        let s = self.s();
+        let mut f = LangFacts::default();
+        if let Some(n) = s.domains.words.notes.get(&note.id) {
+            f.language = n.language.clone();
+            f.key = Some(n.key.clone());
+            if !n.language.is_empty() {
+                f.word = s
+                    .domains
+                    .words
+                    .words
+                    .get(&(n.language.clone(), n.key.clone()))
+                    .map(|w| fc_core::words::WordEvidence {
+                        mark: w
+                            .mark
+                            .as_deref()
+                            .and_then(fc_core::reading::WordMark::parse)
+                            .map(|m| (m, w.mark_at.unwrap_or(Timestamp(0)))),
+                        notes: w.notes,
+                        cards: w.cards,
+                        max_interval_days: w.max_interval_days,
+                        last_review: w.last_review,
+                        first_seen: w.first_seen,
+                    });
+            }
+        }
+        if let Some(o) = s.domains.search.origins.get(&note.id) {
+            f.origin = o.origin;
+            f.source = [&o.source, &o.site, &o.video_id]
+                .into_iter()
+                .filter(|x| !x.is_empty())
+                .cloned()
+                .collect();
+        }
+        f
+    }
+
     /// Live (card, note) pairs matching `filter`, in creation order.
     fn matching(&self, filter: &Filter, now: Timestamp) -> Vec<(&Card, &Note)> {
         let s = self.s();
@@ -41,12 +90,14 @@ impl MemTx<'_> {
                 })
                 .collect();
             let text = s.search_text.get(&note.id).map_or("", String::as_str);
+            let lang = self.lang_facts(note);
             let facts = CardFacts {
                 card,
                 note,
                 tag_ids: &tag_ids,
                 attrs: &attrs,
                 search_text: text,
+                lang: &lang,
             };
             if matches(filter, &facts, now) {
                 out.push((card, note));
@@ -192,6 +243,14 @@ impl SearchRead for MemTx<'_> {
         Ok(Vec::new())
     }
 
+    fn note_origins_of(&self, notes: &[NoteId]) -> StorageResult<Vec<NoteOriginRecord>> {
+        let o = &self.s().domains.search.origins;
+        let mut ids = notes.to_vec();
+        ids.sort();
+        ids.dedup();
+        Ok(ids.iter().filter_map(|n| o.get(n).cloned()).collect())
+    }
+
     fn integrity_report(&self) -> StorageResult<IntegrityReport> {
         let s = self.s();
         let live_cards = || s.cards.values().filter(|c| c.deleted_at.is_none());
@@ -250,6 +309,16 @@ impl SearchWrite for MemTx<'_> {
         Ok(self.m().domains.search.saved.remove(&id).is_some())
     }
 
+    fn set_note_origin(&mut self, o: &NoteOriginRecord) -> StorageResult<()> {
+        let origins = &mut self.m().domains.search.origins;
+        if o.origin == NoteOrigin::Manual {
+            origins.remove(&o.note_id);
+        } else {
+            origins.insert(o.note_id, o.clone());
+        }
+        Ok(())
+    }
+
     fn purge_trash(&mut self, before: Timestamp) -> StorageResult<PurgeCounts> {
         let old = |d: Option<Timestamp>| d.is_some_and(|d| d < before);
         let s = self.m();
@@ -262,6 +331,7 @@ impl SearchWrite for MemTx<'_> {
         for id in &gone {
             s.notes.remove(id);
             s.search_text.remove(id);
+            s.domains.search.forget_origin(id);
         }
         // Cards of purged notes cascade (not counted), then cards trashed on their own.
         s.cards.retain(|_, c| !gone.contains(&c.note_id));

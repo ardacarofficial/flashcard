@@ -662,3 +662,56 @@ pub(super) fn restoring_a_backup_brings_no_capture_diagnostics(f: Factory) {
     forget_keys(&mut dump);
     assert_eq!(log(&dump), Some(0));
 }
+
+/// v1.4 (B3): a capture records where its note came from, so the language queries find it —
+/// the persisted result read back through `search.cards`. Media origin only where stored
+/// media exists (SQLite; the in-memory store does not model media files).
+fn captures_are_found_by_language_queries(f: Factory, with_media: bool) {
+    use fc_api::v1::search::SearchCards;
+    let (t, key) = setup(f);
+    let mut v = example(1, "key", LINE);
+    if with_media {
+        let shot = upload_of(&t, &key, 1, "screenshot", "image/jpeg", JPEG).unwrap();
+        let audio = upload_of(&t, &key, 1, "audio", "audio/wav", WAV).unwrap();
+        v["media"] = json!({
+            "screenshot": {"upload_id": shot, "mime": "image/jpeg"},
+            "audio": {"upload_id": audio, "mime": "audio/wav"},
+        });
+    }
+    capture(&t.app, &key, &v).unwrap();
+    let count = |q: &str| {
+        t.ok::<SearchCardsMethod>(SearchCards {
+            query: q.into(),
+            sort: None,
+            descending: None,
+            notes_only: None,
+            offset: None,
+            limit: None,
+        })
+        .total
+    };
+    for q in [
+        "nereden:altyazı",
+        "from:subtitle kaynak:\"Never Gonna Give You Up\"",
+        "source:youtube",
+        "kaynak:dQw4w9WgXcQ",
+        "kelime:keys dil:en durum:öğreniyorum",
+    ] {
+        assert_eq!(count(q), 1, "{q}");
+    }
+    assert_eq!(count("nereden:elle"), 0);
+    if with_media {
+        assert_eq!(count("ses:video görsel:video"), 1);
+        assert_eq!(count("ses:dosya"), 0);
+    }
+}
+
+#[test]
+fn captures_are_found_by_language_queries_sqlite() {
+    captures_are_found_by_language_queries(|| Arc::new(TempSqlite::new()), true);
+}
+
+#[test]
+fn captures_are_found_by_language_queries_mem() {
+    captures_are_found_by_language_queries(|| Arc::new(MemStore::new()), false);
+}

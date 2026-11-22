@@ -3,6 +3,7 @@
 
 use super::ast::CmpOp;
 use super::filter::{AttrTest, CardNum, Filter, Pred, TimeCol};
+use super::lang::{LangFacts, MediaFrom};
 use super::text::{
     compile_regex, field_glob_matches, fields_text, fold, phrase_matches, regex_matches, Glob,
 };
@@ -39,6 +40,8 @@ pub struct CardFacts<'a> {
     pub attrs: &'a [AttrFact<'a>],
     /// The note's indexed text (`fc_core::note::searchable_text`).
     pub search_text: &'a str,
+    /// v1.4: what the language predicates look at ([`LangFacts::NONE`] when unknown).
+    pub lang: &'a LangFacts,
 }
 
 /// Whether the card matches.
@@ -130,6 +133,41 @@ fn pred(p: &Pred, f: &CardFacts<'_>, now: Timestamp) -> bool {
         }),
         Pred::NoteIds(ids) => ids.contains(&f.note.id),
         Pred::CardIds(ids) => ids.contains(&c.id),
+        Pred::WordStatus {
+            statuses,
+            known_days,
+        } => f
+            .lang
+            .status(*known_days)
+            .is_some_and(|s| statuses.contains(&s)),
+        Pred::Language(Some(l)) => !f.lang.language.is_empty() && f.lang.language == *l,
+        Pred::Language(None) => f.lang.language.is_empty(),
+        Pred::WordKeys(keys) => f.lang.key.as_ref().is_some_and(|k| keys.contains(k)),
+        Pred::WordKeyGlob(src) => f
+            .lang
+            .key
+            .as_ref()
+            .is_some_and(|k| Glob::new(src).matches(k)),
+        Pred::Encounters(op, n) => f
+            .lang
+            .word
+            .as_ref()
+            .is_some_and(|w| op.holds(f64::from(w.notes), *n)),
+        Pred::Origins(list) => list.contains(&f.lang.origin),
+        Pred::Source(src) => {
+            let g = Glob::new(src);
+            f.lang.source.iter().any(|s| g.matches(s))
+        }
+        Pred::Media(kind, from) => f.lang.media.iter().any(|(k, video)| {
+            k == kind
+                && match from {
+                    MediaFrom::Any => true,
+                    MediaFrom::Video => *video,
+                    MediaFrom::File => !*video,
+                }
+        }),
+        Pred::FreqRank(op, n) => f.lang.rank.is_some_and(|r| op.holds(f64::from(r), *n)),
+        Pred::Band(bands) => f.lang.band.is_some_and(|b| bands.contains(&b)),
     }
 }
 

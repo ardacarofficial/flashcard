@@ -96,12 +96,14 @@ fn make(req: MakeReadingCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutc
     };
     // Where it came from: "Title · 1:02" (subtitle cue time).
     let mut source = String::new();
+    let mut source_title: Option<String> = None;
     // The language the word was read in (v1.4 word index).
     let mut language = None;
     if let Some(id) = req.item_id {
         let item = require_item(ctx.reads(), id)?;
         language = Some(item.language.clone());
         source = item.title.clone();
+        source_title = Some(item.title.clone());
         if let Some(i) = req.cue_index {
             let cues: Vec<CueDto> = item
                 .cues
@@ -155,6 +157,15 @@ fn make(req: MakeReadingCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutc
         .map(|(k, v)| (k.to_owned(), v))
         .collect();
     let note = create_note(ctx, notetype, req.deck_id, fields, req.tags)?;
+    // v1.4 (B3): made in reading mode, from this text (`nereden:okuma`, `kaynak:`).
+    ctx.tx.set_note_origin(&fc_storage::repo::NoteOriginRecord {
+        note_id: note.id,
+        origin: fc_core::query::NoteOrigin::Reading,
+        source: source_title.unwrap_or_default(),
+        site: String::new(),
+        video_id: String::new(),
+        created_at: ctx.now,
+    })?;
     // Made from a text: the word index (v1.4) knows its language. Without a text the deck's
     // `words.language` decides (never guessed). Derived data like the index itself: an undone
     // note is simply not indexed.

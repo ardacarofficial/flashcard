@@ -1389,3 +1389,34 @@ fn restoring_a_backup_forgets_mcp_server_approvals() {
     let servers = t.ok::<fc_api::v1::methods::McpServersList>(Empty {}).servers;
     assert!(!servers[0].approved);
 }
+
+/// v1.4 (B3): imported notes record their origin — `nereden:anki` for an Anki package,
+/// `nereden:içe_aktarma` for text — read back through `search.cards`.
+#[test]
+fn imports_record_the_note_origin() {
+    use fc_api::v1::search::SearchCards;
+    let count = |t: &TestApp, q: &str| {
+        t.ok::<SearchCardsMethod>(SearchCards {
+            query: q.into(),
+            sort: None,
+            descending: None,
+            notes_only: Some(true),
+            offset: None,
+            limit: None,
+        })
+        .total
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let t = sqlite();
+    let path = write_tmp(
+        &dir,
+        "in.apkg",
+        &fc_interop::anki::write_package(&anki_fx::sample(), anki_fx::NOW).unwrap(),
+    );
+    assert_eq!(import(&t, file_import(&path, None)).added_notes, 4);
+    let d = deck(&t, "Text");
+    assert_eq!(import(&t, text_import("kedi\tcat\nköpek\tdog\n", d.id)).added_notes, 2);
+    assert_eq!(count(&t, "nereden:anki"), 4);
+    assert_eq!(count(&t, "from:import"), 2);
+    assert_eq!(count(&t, "nereden:elle"), 0);
+}

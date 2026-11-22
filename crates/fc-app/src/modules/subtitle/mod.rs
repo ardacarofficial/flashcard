@@ -558,6 +558,20 @@ fn captures_create(
         created_at: ctx.now,
     };
     ctx.tx.insert_subtitle_capture(&row)?;
+    // v1.4 (B3): where the note came from, for `nereden:`/`kaynak:` queries.
+    ctx.tx.set_note_origin(&fc_storage::repo::NoteOriginRecord {
+        note_id: note.id,
+        origin: fc_core::query::NoteOrigin::Subtitle,
+        source: c
+            .source
+            .title
+            .as_deref()
+            .map(fc_core::subtitle::collapse_spaces)
+            .unwrap_or_default(),
+        site: c.source.site.trim().to_owned(),
+        video_id: c.source.video_id.clone().unwrap_or_default(),
+        created_at: ctx.now,
+    })?;
     let mut inverse = vec![inverse_call::<SubtitleCapturesForget>(&SubtitleCaptureIds {
         capture_ids: vec![row.capture_id.clone()],
     })?];

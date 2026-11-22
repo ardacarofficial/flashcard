@@ -158,7 +158,15 @@
       "or_q": "(kedi OR köpek)",
       "or_d": "İkisinden biri",
       "phrase_q": "\"tam ifade\"",
-      "phrase_d": "Tırnak kelimeleri bir arada tutar"
+      "phrase_d": "Tırnak kelimeleri bir arada tutar",
+      "word_q": "kelime:went",
+      "word_d": "Kelimenin tüm halleri (went → go) ve ifadeler; ayrıca durum:öğreniyorum / biliyorum / yeni / yoksay, dil:en",
+      "seen_q": "karşılaşma>=2",
+      "seen_d": "Aynı kelimeyi en az iki sahnede (notta) gördüklerin",
+      "from_q": "nereden:altyazı",
+      "from_d": "Kartın geldiği yer: altyazı, okuma, anki, içe_aktarma, elle; kaynak:\"*S1E2\" bölüm ya da video adı",
+      "media_q": "ses:video",
+      "media_d": "Videodan alınmış sesi olanlar; ayrıca ses:var / yok / dosya / tts, görsel:var"
     },
     "saved_short": "Kayıtlı",
     "keys": {

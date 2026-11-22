@@ -35,6 +35,8 @@ pub(crate) struct PackImport {
     pub include_history: bool,
     /// Conversion warnings.
     pub issues: Vec<ImportIssue>,
+    /// v1.4 (B3): origin recorded for each note it adds (`anki` / `import`).
+    pub origin: fc_core::query::NoteOrigin,
 }
 
 /// What a job stages for `io.import.apply`.
@@ -154,22 +156,29 @@ impl ImportJob {
                         issues.push(warn(key, n));
                     }
                 }
-                self.pack(req, pack, issues)
+                self.pack(req, pack, issues, fc_core::query::NoteOrigin::Anki)
             }
             ImportFormat::Fcpack => {
                 let (_, pack) = fcpack::read(&bytes).map_err(interop_err)?;
-                self.pack(req, pack, Vec::new())
+                self.pack(req, pack, Vec::new(), fc_core::query::NoteOrigin::Import)
             }
         })
     }
 
-    fn pack(&self, req: &StartImport, pack: Pack, issues: Vec<ImportIssue>) -> Staged {
+    fn pack(
+        &self,
+        req: &StartImport,
+        pack: Pack,
+        issues: Vec<ImportIssue>,
+        origin: fc_core::query::NoteOrigin,
+    ) -> Staged {
         Staged::Pack(Box::new(PackImport {
             pack,
             parent: req.deck_id,
             duplicates: req.duplicates.unwrap_or_default(),
             include_history: req.include_history.unwrap_or(true),
             issues,
+            origin,
         }))
     }
 }
