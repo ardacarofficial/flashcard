@@ -2,7 +2,7 @@
 
 Bu klasör, uygulamanın **tam planını** içerir. Geliştirme boyunca pusulamız budur. Bir şey burada yazmıyorsa ya henüz karar verilmemiştir ya da kapsam dışıdır.
 
-> **Durum:** **v1.3.0** — "kullanılır" sürümü: tek çalışma başlatıcısı ve bir tuş = bir iş klavye modeli, alan rolleriyle doğru davranan kelime kartları, kart eklemenin tek yeri, kendini anlatan ayarlar, hazır AI sağlayıcıları (OpenRouter…), ve gerçek Rust çekirdeğine karşı koşan yolculuklar ([11](11-tasarim.md)). v1.0 (Windows sürümü), v1.1 ve v1.2 (arayüz, Subtitle bağlantısı) tamam; bekleyen: Windows WebDriver pilotunun CI'da ilk koşusu, Windows'ta elle koşu ([07 §8](07-gelistirme-sureci.md)) ve Subtitle eklentisinin gerçek bir tarayıcıda denenmesi. Ayrıntı: [04](04-yol-haritasi.md), [CHANGELOG](../CHANGELOG.md), kullanıcı rehberi [guide/](guide/README.md) (v1.3'te ne değişti: [TR](guide/v1.3-tr.md) · [EN](guide/v1.3-en.md)).
+> **Durum:** **v1.3.0** — "kullanılır" sürümü: tek çalışma başlatıcısı ve bir tuş = bir iş klavye modeli, alan rolleriyle doğru davranan kelime kartları, kart eklemenin tek yeri, kendini anlatan ayarlar, hazır AI sağlayıcıları (OpenRouter…), ve gerçek Rust çekirdeğine karşı koşan yolculuklar ([11](11-tasarim.md)). v1.0 (Windows sürümü), v1.1 ve v1.2 (arayüz, Subtitle bağlantısı) tamam; bekleyen: Windows WebDriver pilotunun CI'da yeşil koşusu (ilk koşu oturum açamadı; WebView2 politikası düzeltmesi Windows'ta denenmedi), Windows'ta elle koşu ([07 §8](07-gelistirme-sureci.md)) ve Subtitle eklentisinin gerçek bir tarayıcıda denenmesi. Ayrıntı: [04](04-yol-haritasi.md), [CHANGELOG](../CHANGELOG.md), kullanıcı rehberi [guide/](guide/README.md) (v1.3'te ne değişti: [TR](guide/v1.3-tr.md) · [EN](guide/v1.3-en.md)).
 
 ## 🗂️ Dokümanlar
 
