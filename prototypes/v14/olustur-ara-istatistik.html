@@ -1,0 +1,1597 @@
+<!doctype html>
+<html lang="tr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taslak · Ekle, Kelimelerim, İlerleme (v1.4 D3)</title>
+<style>
+/* Tokens: docs/11-tasarim.md §4.1 (same values as apps/desktop/src/lib/theme/tokens.css). */
+:root, :root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0:#0E0E10; --surface-1:#151518; --surface-2:#1C1C20; --surface-3:#25252B;
+  --border:#2A2A31; --border-strong:#3A3A43;
+  --text-1:#EDEDEF; --text-2:#A3A3AE; --text-3:#74747F;
+  --accent:#F5B544; --accent-fg:#17130A; --accent-text:#F5B544; --accent-soft:rgba(245,181,68,.14);
+  --focus-ring:#F5B544;
+  --success:#3DD68C; --success-soft:rgba(61,214,140,.14);
+  --danger:#FF6369; --danger-soft:rgba(255,99,105,.14);
+  --warning:#FF9D4D; --warning-soft:rgba(255,157,77,.14);
+  --neutral-dot:#74747F;
+  --shadow-float:0 8px 28px rgba(0,0,0,.45);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --surface-0:#FAFAF8; --surface-1:#FFFFFF; --surface-2:#F3F3F0; --surface-3:#E9E9E4;
+  --border:#E2E2DC; --border-strong:#CFCFC7;
+  --text-1:#1A1A1C; --text-2:#5C5C63; --text-3:#85858C;
+  --accent:#F5B544; --accent-fg:#17130A; --accent-text:#9A5B00; --accent-soft:rgba(245,181,68,.18);
+  --focus-ring:#9A5B00;
+  --success:#147A4B; --success-soft:rgba(20,122,75,.12);
+  --danger:#C8323B; --danger-soft:rgba(200,50,59,.10);
+  --warning:#B4520A; --warning-soft:rgba(180,82,10,.12);
+  --neutral-dot:#85858C;
+  --shadow-float:0 8px 28px rgba(0,0,0,.14);
+}
+:root {
+  --font: Inter, "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  --r-ctl:6px; --r-panel:8px; --row-h:34px;
+  --motion:120ms ease-out;
+  --proto-h:44px;
+}
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; }
+body { background:var(--surface-0); color:var(--text-1); font:13px/1.45 var(--font); -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+button, input, select, textarea { font:inherit; color:inherit; }
+.num, kbd, .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+:focus-visible { outline:2px solid var(--focus-ring); outline-offset:2px; border-radius:4px; }
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
+svg.i { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+.sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+
+/* ------------------------------------------------ prototype bar (not part of the app) */
+#proto { position:fixed; inset:0 0 auto 0; min-height:var(--proto-h); z-index:50; display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; padding:6px 12px;
+  background:repeating-linear-gradient(135deg, var(--surface-1) 0 10px, var(--surface-2) 10px 20px); border-bottom:1px dashed var(--border-strong); font-size:12px; }
+#proto .tag { font-family:var(--mono); font-size:11px; padding:2px 6px; border:1px dashed var(--accent-text); color:var(--accent-text); border-radius:4px; }
+#proto .grp { display:flex; align-items:center; gap:6px; }
+#proto .lbl { color:var(--text-2); }
+#proto .sp { flex:1; }
+.seg { display:inline-flex; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface-1); padding:2px; gap:2px; }
+.seg button { border:0; background:transparent; padding:3px 9px; border-radius:4px; cursor:pointer; color:var(--text-2); white-space:nowrap; }
+.seg button[aria-pressed="true"] { background:var(--surface-3); color:var(--text-1); font-weight:550; }
+.seg button:hover { color:var(--text-1); }
+.seg.sm button { padding:2px 8px; font-size:12px; }
+
+/* ------------------------------------------------ app shell */
+#app { position:fixed; inset:var(--proto-h) 0 0 0; display:flex; }
+.side { width:216px; flex:none; background:var(--surface-1); border-right:1px solid var(--border); display:flex; flex-direction:column; padding:10px 8px; gap:2px; }
+.brand { display:flex; align-items:center; gap:8px; font-weight:600; padding:4px 8px 12px; }
+.brand .logo { width:18px; height:18px; border-radius:5px; background:var(--accent); position:relative; flex:none; }
+.brand .logo::after { content:""; position:absolute; left:5px; top:4px; width:8px; height:10px; border-radius:2px; background:var(--accent-fg); opacity:.75; }
+.nav { display:flex; align-items:center; gap:10px; height:30px; padding:0 10px; border-radius:var(--r-ctl); border:0; background:transparent; color:var(--text-2); cursor:pointer; text-align:left; width:100%; font-size:13px; }
+.nav:hover { background:var(--surface-2); color:var(--text-1); }
+.nav[aria-current="page"] { background:var(--surface-3); color:var(--text-1); font-weight:550; }
+.nav[aria-current="page"] svg { color:var(--accent-text); }
+.nav .badge { margin-left:auto; }
+.side .fill { flex:1; }
+.side hr { border:0; border-top:1px solid var(--border); margin:6px 4px; width:calc(100% - 8px); }
+.profile { display:flex; align-items:center; gap:8px; padding:6px 10px; color:var(--text-2); }
+.avatar { width:22px; height:22px; border-radius:50%; background:var(--surface-3); display:grid; place-items:center; font-size:10px; font-weight:600; color:var(--text-1); }
+.main { flex:1; min-width:0; display:flex; flex-direction:column; }
+.top { height:44px; flex:none; display:flex; align-items:center; gap:10px; padding:0 12px 0 24px; border-bottom:1px solid var(--border); }
+.crumbs { display:flex; align-items:center; gap:6px; color:var(--text-2); min-width:0; white-space:nowrap; overflow:hidden; }
+.crumbs b { color:var(--text-1); font-weight:550; }
+.crumbs svg { width:12px; height:12px; }
+.top .sp { flex:1; }
+.topsearch { display:flex; align-items:center; gap:8px; width:280px; height:28px; padding:0 6px 0 9px; border:1px solid var(--border); border-radius:var(--r-ctl); background:var(--surface-1); color:var(--text-3); cursor:text; }
+.topsearch input { border:0; outline:0; background:transparent; flex:1; min-width:0; color:var(--text-1); }
+.topsearch input::placeholder { color:var(--text-3); }
+.page { flex:1; overflow:auto; position:relative; }
+.page-in { max-width:1120px; padding:24px 24px 64px; }
+.page-in.wide { max-width:1440px; }
+h1 { font-size:20px; font-weight:600; margin:0; letter-spacing:-.01em; }
+.lead { color:var(--text-2); margin:4px 0 0; font-size:13px; }
+.ph { display:flex; align-items:flex-start; gap:16px; margin-bottom:16px; }
+.ph .grow { flex:1; min-width:0; }
+
+/* ------------------------------------------------ controls */
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 12px; border-radius:var(--r-ctl); border:1px solid var(--border-strong); background:var(--surface-2); color:var(--text-1); cursor:pointer; white-space:nowrap; font-weight:500; transition:background var(--motion); }
+.btn:hover { background:var(--surface-3); }
+.btn.sm { height:28px; padding:0 10px; font-size:12px; }
+.btn.lg { height:36px; padding:0 16px; font-size:14px; }
+.btn.primary { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); font-weight:600; }
+.btn.primary:hover { filter:brightness(1.06); }
+.btn.ghost { background:transparent; border-color:transparent; color:var(--text-2); }
+.btn.ghost:hover { background:var(--surface-2); color:var(--text-1); }
+.btn.danger { color:var(--danger); }
+.btn[disabled] { opacity:.45; cursor:not-allowed; }
+.btn kbd, .kbd { font-size:10.5px; padding:0 4px; min-width:16px; height:16px; line-height:16px; border-radius:3px; border:1px solid currentColor; opacity:.7; display:inline-block; text-align:center; }
+.btn.primary kbd { border-color:rgba(23,19,10,.45); }
+.iconbtn { width:28px; height:28px; display:inline-grid; place-items:center; border-radius:var(--r-ctl); border:0; background:transparent; color:var(--text-2); cursor:pointer; }
+.iconbtn:hover { background:var(--surface-2); color:var(--text-1); }
+.input, .select, .textarea { height:32px; border:1px solid var(--border-strong); background:var(--surface-2); border-radius:var(--r-ctl); padding:0 10px; color:var(--text-1); width:100%; min-width:0; }
+.textarea { height:auto; padding:8px 10px; resize:vertical; line-height:1.5; }
+.input::placeholder, .textarea::placeholder { color:var(--text-3); }
+.input:focus, .select:focus, .textarea:focus { outline:2px solid var(--focus-ring); outline-offset:0; border-color:transparent; }
+.select { appearance:none; padding-right:28px; background-image:linear-gradient(45deg, transparent 50%, var(--text-2) 50%), linear-gradient(135deg, var(--text-2) 50%, transparent 50%); background-position:calc(100% - 14px) 14px, calc(100% - 10px) 14px; background-size:4px 4px; background-repeat:no-repeat; cursor:pointer; }
+.field { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.field > span { font-size:12px; color:var(--text-2); font-weight:500; }
+.field > span i { font-style:normal; color:var(--text-3); font-weight:400; }
+.chip { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 10px; border-radius:999px; border:1px solid var(--border); background:transparent; color:var(--text-2); cursor:pointer; white-space:nowrap; font-size:12px; }
+.chip:hover { color:var(--text-1); border-color:var(--border-strong); }
+.chip[aria-pressed="true"] { background:var(--surface-3); color:var(--text-1); border-color:var(--border-strong); font-weight:550; }
+.chip .num { color:var(--text-2); }
+.badge { font-family:var(--mono); font-size:11px; padding:0 6px; height:18px; line-height:18px; border-radius:999px; background:var(--accent-soft); color:var(--accent-text); }
+.dot { width:7px; height:7px; border-radius:50%; display:inline-block; flex:none; }
+.st { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-size:12px; color:var(--text-2); }
+.st.new .dot { background:var(--neutral-dot); }
+.st.learning .dot { background:var(--warning); }
+.st.known .dot { background:var(--success); }
+.st.susp { color:var(--text-2); }
+.st.susp .dot { background:transparent; border:1.5px solid var(--neutral-dot); }
+.pill { font-size:11px; padding:1px 7px; border-radius:999px; border:1px solid var(--border); color:var(--text-2); white-space:nowrap; }
+.switch { position:relative; width:30px; height:18px; border-radius:999px; background:var(--surface-3); border:1px solid var(--border-strong); cursor:pointer; flex:none; padding:0; }
+.switch::after { content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--text-2); transition:transform var(--motion); }
+.switch[aria-checked="true"] { background:var(--accent); border-color:var(--accent); }
+.switch[aria-checked="true"]::after { transform:translateX(12px); background:var(--accent-fg); }
+.panel { border:1px solid var(--border); border-radius:var(--r-panel); background:var(--surface-1); }
+.muted { color:var(--text-2); }
+.small { font-size:12px; }
+.hl { color:var(--accent-text); font-weight:600; }
+.row-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.hint-line { display:flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--border); border-radius:var(--r-panel); background:var(--surface-1); margin-bottom:12px; }
+.hint-line .sp { flex:1; }
+.link { background:none; border:0; padding:0; color:var(--accent-text); cursor:pointer; font-weight:500; display:inline-flex; align-items:center; gap:4px; }
+.link:hover { text-decoration:underline; }
+.empty { border:1px dashed var(--border-strong); border-radius:var(--r-panel); padding:32px 24px; text-align:center; color:var(--text-2); }
+.empty h3 { margin:0 0 6px; color:var(--text-1); font-size:14px; font-weight:600; }
+.empty p { margin:0 auto 14px; max-width:460px; }
+.empty .row-actions { justify-content:center; }
+.adv-mark { font-size:10.5px; font-family:var(--mono); color:var(--accent-text); border:1px solid var(--accent-soft); background:var(--accent-soft); padding:0 5px; border-radius:3px; margin-left:6px; vertical-align:1px; white-space:nowrap; }
+
+/* ------------------------------------------------ Kelimelerim */
+.toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+.bigsearch { flex:1; min-width:240px; display:flex; align-items:center; gap:8px; height:36px; padding:0 10px; border:1px solid var(--border-strong); border-radius:var(--r-ctl); background:var(--surface-2); }
+.bigsearch:focus-within { outline:2px solid var(--focus-ring); border-color:transparent; }
+.bigsearch input { flex:1; border:0; outline:0; background:transparent; font-size:14px; min-width:0; }
+.bigsearch input::placeholder { color:var(--text-3); }
+.bigsearch svg { color:var(--text-3); }
+.filters { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+.filters .sp { flex:1; }
+.deckstrip { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:var(--r-panel); background:var(--surface-1); margin-bottom:12px; flex-wrap:wrap; }
+.deckstrip .name { font-weight:600; font-size:14px; }
+.deckstrip .sp { flex:1; }
+.split { display:flex; gap:16px; align-items:flex-start; }
+.split > .list-wrap { flex:1; min-width:0; }
+.wl { border:1px solid var(--border); border-radius:var(--r-panel); background:var(--surface-1); overflow:hidden; }
+.wl-head, .wl-row { display:grid; align-items:center; gap:12px; padding:0 12px; min-height:var(--row-h); }
+.wl-head { color:var(--text-2); font-size:12px; border-bottom:1px solid var(--border); background:var(--surface-1); position:sticky; top:0; }
+.wl-head button { background:none; border:0; padding:0; color:inherit; cursor:pointer; font:inherit; text-align:left; display:inline-flex; gap:4px; align-items:center; }
+.wl-head button:hover { color:var(--text-1); }
+.wl-row { border-bottom:1px solid var(--border); cursor:pointer; }
+.wl-row:last-child { border-bottom:0; }
+.wl-row:hover { background:var(--surface-2); }
+.wl-row[aria-selected="true"] { background:var(--surface-3); box-shadow:inset 2px 0 0 var(--accent); }
+.wl-row .term { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.wl-row .mean, .wl-row .src, .wl-row .cell { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text-2); }
+.wl-row .mean { color:var(--text-1); }
+.wl-row.addrow { color:var(--accent-text); font-weight:550; grid-template-columns:1fr auto !important; }
+.wl-row.fresh { animation:fresh 1.2s ease-out; }
+@keyframes fresh { from { background:var(--accent-soft); } to { background:transparent; } }
+.cb { width:15px; height:15px; accent-color:var(--accent); cursor:pointer; margin:0; }
+.listfoot { display:flex; gap:12px; align-items:center; padding:8px 2px; color:var(--text-2); font-size:12px; flex-wrap:wrap; }
+.listfoot .sp { flex:1; }
+.keys { display:inline-flex; gap:10px; flex-wrap:wrap; }
+.keys kbd { font-size:10.5px; border:1px solid var(--border-strong); border-radius:3px; padding:0 4px; color:var(--text-2); margin-right:3px; }
+.bulk { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:6px 8px; border:1px solid var(--accent-soft); background:var(--accent-soft); border-radius:var(--r-panel); margin-bottom:10px; }
+.bulk b { margin-right:6px; }
+.detail { width:360px; flex:none; position:sticky; top:0; max-height:calc(100vh - var(--proto-h) - 44px - 48px); overflow:auto; }
+.detail .dh { display:flex; align-items:flex-start; gap:8px; padding:14px 14px 10px; border-bottom:1px solid var(--border); }
+.detail .dh .grow { flex:1; min-width:0; }
+.detail .word { font-size:20px; font-weight:600; letter-spacing:-.01em; overflow-wrap:anywhere; }
+.detail .meaning { font-size:15px; margin-top:2px; }
+.detail section { padding:12px 14px; border-bottom:1px solid var(--border); }
+.detail section:last-child { border-bottom:0; }
+.detail .lab { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-2); margin-bottom:4px; font-weight:600; }
+.example { font-size:13.5px; }
+.example mark { background:var(--accent-soft); color:var(--text-1); border-radius:3px; padding:0 2px; }
+.kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:12.5px; }
+.kv dt { color:var(--text-2); }
+.kv dd { margin:0; text-align:right; }
+.minitable { width:100%; border-collapse:collapse; font-size:12px; }
+.minitable th { text-align:left; color:var(--text-2); font-weight:500; padding:4px 0; border-bottom:1px solid var(--border); }
+.minitable td { padding:4px 0; border-bottom:1px solid var(--border); }
+.minitable td.r, .minitable th.r { text-align:right; }
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; }
+.form-grid .full { grid-column:1 / -1; }
+.inline-add { border:1px solid var(--accent); border-radius:var(--r-panel); background:var(--surface-1); padding:12px; margin-bottom:10px; }
+.inline-add .form-grid { grid-template-columns:1.1fr 1.3fr 2fr 1.1fr 1.2fr; align-items:end; }
+.menu { position:absolute; z-index:30; min-width:240px; background:var(--surface-1); border:1px solid var(--border-strong); border-radius:var(--r-panel); box-shadow:var(--shadow-float); padding:4px; }
+.menu button { display:flex; align-items:center; gap:10px; width:100%; border:0; background:transparent; padding:7px 10px; border-radius:var(--r-ctl); cursor:pointer; text-align:left; color:var(--text-1); }
+.menu button:hover, .menu button:focus-visible { background:var(--surface-2); outline:0; }
+.menu button .d { color:var(--text-2); font-size:12px; display:block; }
+.menu button svg { color:var(--text-2); }
+.menu .sep { border-top:1px solid var(--border); margin:4px 0; }
+.rel { position:relative; }
+.qhelp { border:1px solid var(--border); border-radius:var(--r-panel); background:var(--surface-1); padding:10px 12px; margin-bottom:10px; display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:4px 16px; font-size:12px; }
+.qhelp code { font-family:var(--mono); color:var(--accent-text); }
+
+/* ------------------------------------------------ Ekle */
+.add-layout { display:grid; grid-template-columns:240px 1fr; gap:20px; align-items:start; }
+.ways { display:flex; flex-direction:column; gap:2px; }
+.way { display:flex; align-items:flex-start; gap:10px; padding:8px 10px; border:1px solid transparent; border-radius:var(--r-panel); background:transparent; cursor:pointer; text-align:left; color:var(--text-1); width:100%; }
+.way:hover { background:var(--surface-2); }
+.way[aria-current="true"] { background:var(--surface-1); border-color:var(--border-strong); }
+.way[aria-current="true"] svg { color:var(--accent-text); }
+.way svg { margin-top:2px; color:var(--text-2); }
+.way .t { font-weight:550; display:flex; align-items:center; gap:6px; }
+.way .d { color:var(--text-2); font-size:12px; line-height:1.35; }
+.ways .cap { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-2); padding:12px 10px 4px; font-weight:600; }
+.card { border:1px solid var(--border); border-radius:var(--r-panel); background:var(--surface-1); padding:16px; }
+.card h2 { font-size:15px; font-weight:600; margin:0; }
+.card .lead { margin-bottom:14px; }
+.dup { margin-top:6px; font-size:12px; color:var(--text-2); padding:6px 8px; border-radius:var(--r-ctl); background:var(--warning-soft); border:1px solid transparent; }
+.dup b { color:var(--text-1); }
+.formfoot { display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap; }
+.formfoot .sp { flex:1; }
+.recent { margin-top:16px; }
+.recent .rr { display:flex; gap:10px; align-items:center; padding:6px 0; border-top:1px solid var(--border); }
+.recent .rr .sp { flex:1; }
+.cap2 { font-size:12px; color:var(--text-2); font-weight:600; margin:0 0 6px; }
+.prev { width:100%; border-collapse:collapse; margin-top:10px; font-size:12.5px; }
+.prev th { text-align:left; color:var(--text-2); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--border); }
+.prev td { padding:6px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+.prev tr.skip td { color:var(--text-2); }
+.prev td.n { width:28px; color:var(--text-2); font-family:var(--mono); }
+.drop { border:1.5px dashed var(--border-strong); border-radius:var(--r-panel); padding:28px; text-align:center; color:var(--text-2); }
+.drop b { color:var(--text-1); }
+.inbox-item { display:grid; grid-template-columns:1fr auto; gap:6px 16px; padding:12px 0; border-top:1px solid var(--border); }
+.inbox-item:first-of-type { border-top:0; }
+.inbox-item .w { font-weight:600; font-size:14px; }
+.inbox-item .w small { font-weight:400; color:var(--text-2); font-size:12px; margin-left:6px; }
+.inbox-item .row-actions { align-self:start; }
+.inbox-item .mrow { display:flex; gap:8px; align-items:center; grid-column:1 / -1; flex-wrap:wrap; }
+.inbox-item .mrow .input { max-width:260px; height:28px; }
+.inbox-item .mrow .select { max-width:200px; height:28px; }
+.reader { font-size:15px; line-height:2; padding:14px 16px; border:1px solid var(--border); border-radius:var(--r-panel); background:var(--surface-0); }
+.reader .sub { display:block; color:var(--text-2); font-size:11px; font-family:var(--mono); line-height:1.6; margin-top:6px; }
+.rw { border-radius:3px; padding:1px 1px; cursor:pointer; }
+.rw.u { border-bottom:1.5px dotted var(--text-2); }
+.rw.u:hover { background:var(--surface-3); }
+.rw.l { background:var(--warning-soft); }
+.rw.k { color:var(--text-2); }
+.rw.picked, .rw.picked:hover { background:var(--accent); color:var(--accent-fg); border-bottom-color:transparent; }
+.legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--text-2); margin:8px 0 0; align-items:center; }
+.legend .sw { display:inline-block; width:18px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+.ai-sugg { display:grid; grid-template-columns:auto 1fr; gap:4px 10px; padding:8px 0; border-top:1px solid var(--border); align-items:start; }
+.ai-sugg .ex { grid-column:2; color:var(--text-2); font-size:12px; }
+.starter { display:flex; gap:12px; align-items:center; padding:12px 0; border-top:1px solid var(--border); }
+.starter:first-of-type { border-top:0; }
+.starter .grow { flex:1; min-width:0; }
+.spinner { width:14px; height:14px; border:2px solid var(--border-strong); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; display:inline-block; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* sheet (Ekleme B) and overlay detail (narrow) */
+.scrim { position:fixed; inset:var(--proto-h) 0 0 0; background:rgba(0,0,0,.35); z-index:35; }
+.sheet { position:fixed; top:var(--proto-h); right:0; bottom:0; width:min(620px, 100vw); z-index:36; background:var(--surface-0); border-left:1px solid var(--border-strong); box-shadow:var(--shadow-float); display:flex; flex-direction:column; }
+.sheet .sh { display:flex; align-items:center; gap:8px; padding:10px 12px 10px 16px; border-bottom:1px solid var(--border); }
+.sheet .sh .grow { flex:1; min-width:0; }
+.sheet .sb { flex:1; overflow:auto; padding:16px; }
+.sheet .wayrow { display:flex; gap:6px; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--border); }
+
+/* ------------------------------------------------ İlerleme */
+.answers { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; }
+.ans { border:1px solid var(--border); border-radius:var(--r-panel); background:var(--surface-1); padding:16px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+.ans .q { font-size:12px; color:var(--text-2); font-weight:600; text-transform:uppercase; letter-spacing:.04em; display:flex; align-items:center; gap:8px; }
+.ans .q .sp { flex:1; }
+.ans .say { font-size:16px; line-height:1.4; font-weight:500; }
+.ans .say .num { font-weight:600; }
+.ans .sub { color:var(--text-2); font-size:12.5px; }
+.ans .foot { margin-top:auto; padding-top:10px; border-top:1px solid var(--border); font-size:12.5px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.bars { display:flex; align-items:flex-end; gap:6px; height:84px; }
+.bars .b { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; height:100%; justify-content:flex-end; min-width:0; }
+.bars .b i { display:block; width:100%; max-width:30px; background:var(--surface-3); border-radius:3px 3px 0 0; min-height:2px; }
+.bars .b.on i { background:var(--accent); }
+.bars .b span { font-family:var(--mono); font-size:10.5px; color:var(--text-2); }
+.bars .b em { font-style:normal; font-family:var(--mono); font-size:10.5px; color:var(--text-1); }
+.bars .b.on span { color:var(--accent-text); font-weight:600; }
+.line { width:100%; height:90px; display:block; }
+.line .area { fill:var(--accent-soft); }
+.line .stroke { fill:none; stroke:var(--accent); stroke-width:2; vector-effect:non-scaling-stroke; }
+.line .grid { stroke:var(--border); stroke-width:1; vector-effect:non-scaling-stroke; }
+.axis { display:flex; justify-content:space-between; font-family:var(--mono); font-size:10.5px; color:var(--text-2); }
+.more-toggle { display:flex; align-items:center; gap:10px; width:100%; margin:20px 0 12px; padding:10px 12px; border:1px solid var(--border); border-radius:var(--r-panel); background:var(--surface-1); cursor:pointer; text-align:left; }
+.more-toggle:hover { background:var(--surface-2); }
+.more-toggle b { font-size:14px; }
+.more-toggle .muted { flex:1; }
+.more-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+.mp { border:1px solid var(--border); border-radius:var(--r-panel); background:var(--surface-1); padding:14px; min-width:0; }
+.mp h3 { margin:0; font-size:13.5px; font-weight:600; }
+.mp .why { color:var(--text-2); font-size:12.5px; margin:2px 0 12px; }
+.mp.wide { grid-column:1 / -1; }
+.heat { display:grid; grid-auto-flow:column; grid-template-rows:repeat(7, 11px); grid-auto-columns:11px; justify-content:start; gap:3px; overflow:hidden; }
+.heat i { width:11px; height:11px; border-radius:2px; background:var(--surface-3); display:block; }
+.heat i.l1 { background:rgba(245,181,68,.30); } .heat i.l2 { background:rgba(245,181,68,.55); } .heat i.l3 { background:rgba(245,181,68,.8); } .heat i.l4 { background:var(--accent); }
+.stack { display:flex; height:22px; border-radius:4px; overflow:hidden; border:1px solid var(--border); }
+.stack i { display:block; height:100%; }
+.filterrow { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; padding:8px; border:1px dashed var(--border-strong); border-radius:var(--r-panel); }
+.tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); margin:-4px 0 16px; }
+.tabs button { border:0; background:none; padding:8px 10px; color:var(--text-2); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+.tabs button[aria-selected="true"] { color:var(--text-1); border-bottom-color:var(--accent); font-weight:550; }
+
+/* ------------------------------------------------ home / settings / decks */
+.today { display:flex; align-items:center; gap:16px; padding-bottom:18px; border-bottom:1px solid var(--border); margin-bottom:16px; flex-wrap:wrap; }
+.today .big { font-family:var(--mono); font-size:40px; font-weight:600; line-height:1; }
+.today .grow { flex:1; }
+.dtable { width:100%; border-collapse:collapse; border:1px solid var(--border); border-radius:var(--r-panel); overflow:hidden; background:var(--surface-1); }
+.dtable th { text-align:left; font-weight:500; color:var(--text-2); font-size:12px; padding:0 12px; height:34px; border-bottom:1px solid var(--border); }
+.dtable td { padding:0 12px; height:var(--row-h); border-bottom:1px solid var(--border); }
+.dtable tr:last-child td { border-bottom:0; }
+.dtable tbody tr { cursor:pointer; }
+.dtable tbody tr:hover { background:var(--surface-2); }
+.dtable .r { text-align:right; }
+.meter { display:inline-block; width:80px; height:5px; border-radius:3px; background:var(--surface-3); vertical-align:middle; overflow:hidden; margin-right:8px; }
+.meter i { display:block; height:100%; background:var(--success); }
+.setrow { display:flex; gap:16px; align-items:flex-start; padding:14px 0; border-top:1px solid var(--border); }
+.setrow:first-of-type { border-top:0; }
+.setrow .grow { flex:1; }
+.setrow .t { font-size:14px; font-weight:550; }
+.setrow .d { color:var(--text-2); margin-top:2px; }
+.placeholder-note { font-size:12px; color:var(--text-2); border:1px dashed var(--border-strong); padding:8px 10px; border-radius:var(--r-ctl); margin-top:16px; }
+
+/* ------------------------------------------------ toast, notes drawer */
+#toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:60; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; }
+.toast { pointer-events:auto; display:flex; gap:12px; align-items:center; padding:8px 8px 8px 14px; background:var(--surface-1); border:1px solid var(--border-strong); border-radius:var(--r-panel); box-shadow:var(--shadow-float); max-width:min(560px, 92vw); }
+.toast .link { white-space:nowrap; }
+#drawer { position:fixed; top:var(--proto-h); right:0; bottom:0; width:min(480px, 100vw); z-index:55; background:var(--surface-1); border-left:1px solid var(--border-strong); box-shadow:var(--shadow-float); overflow:auto; padding:16px 18px 40px; transform:translateX(105%); transition:transform 160ms ease-out; }
+#drawer.open { transform:none; }
+#drawer h2 { font-size:16px; margin:0; }
+#drawer h3 { font-size:13px; margin:20px 0 8px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-2); }
+#drawer ol, #drawer ul { padding-left:18px; margin:0; }
+#drawer li { margin:0 0 8px; }
+#drawer .qa { border:1px solid var(--border); border-radius:var(--r-panel); padding:10px 12px; margin-bottom:8px; background:var(--surface-0); }
+#drawer .qa .qt { font-weight:600; margin-bottom:4px; }
+#drawer .qa .opt { color:var(--text-2); font-size:12.5px; margin:2px 0; }
+#drawer .qa .opt b { color:var(--text-1); }
+#drawer .qa .row-actions { margin-top:6px; }
+#drawer table { width:100%; border-collapse:collapse; font-size:12px; }
+#drawer td, #drawer th { text-align:left; padding:5px 6px 5px 0; border-bottom:1px solid var(--border); vertical-align:top; }
+#drawer th { color:var(--text-2); font-weight:500; }
+
+/* ------------------------------------------------ narrow (≤ 1024: icon sidebar; ≤ 1000: overlay detail) */
+@media (max-width: 1024px) {
+  .side { width:56px; padding:10px 6px; }
+  .side .brand span, .nav .lbl, .nav .badge, .profile span { display:none; }
+  .nav { justify-content:center; padding:0; position:relative; }
+  .nav .badge-dot { position:absolute; right:8px; top:5px; width:7px; height:7px; border-radius:50%; background:var(--accent); }
+  .brand { justify-content:center; padding:4px 0 12px; }
+  .profile { justify-content:center; padding:6px 0; }
+  .page-in { padding:16px 16px 64px; }
+  .top { padding-left:16px; }
+  .topsearch { width:200px; }
+  .answers { grid-template-columns:1fr; }
+  .ans { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:20px; }
+  .ans > .q, .ans > .foot { grid-column:1 / -1; }
+  .ans > .chartbox { grid-column:2; grid-row:2 / span 2; align-self:center; }
+  .more-grid { grid-template-columns:1fr; }
+  .add-layout { grid-template-columns:1fr; }
+  .ways { flex-direction:row; flex-wrap:wrap; gap:6px; }
+  .ways .cap { display:none; }
+  .way { width:auto; padding:6px 10px; border-color:var(--border); }
+  .way .d { display:none; }
+  .inline-add .form-grid { grid-template-columns:1fr 1fr; }
+  .inline-add .form-grid .ex { grid-column:1 / -1; }
+}
+@media (min-width: 1025px) { .nav .badge-dot { display:none; } }
+@media (max-width: 1000px) {
+  .detail { position:fixed; top:var(--proto-h); right:0; bottom:0; width:min(380px, 100vw); max-height:none; z-index:36; border-radius:0; box-shadow:var(--shadow-float); }
+  .wl .hide-n { display:none !important; }
+}
+@media (max-width: 760px) { .topsearch { display:none; } .form-grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div id="proto" role="region" aria-label="Taslak seçenekleri"></div>
+<div id="app"></div>
+<aside id="drawer" aria-label="Taslak notları" aria-hidden="true"></aside>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+'use strict';
+/* =====================================================================================
+ * v1.4 D3 prototype: Ekle (Oluştur + Kart ekle + Gelen kutusu), Kelimelerim (Ara),
+ * İlerleme (İstatistik) and the left navigation. Stand-alone: no network, no app code.
+ * Every number on screen is computed from the same in-memory word list (one truth).
+ * ===================================================================================== */
+
+const P = {
+  home:'<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+  words:'<path d="M2 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H2z"/><path d="M22 4h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8z"/>',
+  decks:'<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
+  chart:'<path d="M3 3v18h18"/><path d="M7 16v-4"/><path d="M12 16V8"/><path d="M17 16v-7"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/>',
+  clip:'<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+  spark:'<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 3v4M17 5h4"/>',
+  text:'<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>',
+  box:'<path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/>',
+  pen:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  play:'<path d="m6 3 14 9-14 9z"/>',
+  down:'<path d="m6 9 6 6 6-6"/>',
+  right:'<path d="m9 18 6-6-6-6"/>',
+  left:'<path d="m15 18-6-6 6-6"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  trash:'<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
+  pause:'<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
+  more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  help:'<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  cols:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/>',
+  star:'<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>',
+  flame:'<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3.3.4 1.6 1.3 2.8 2.5 2.8z"/>',
+  undo:'<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+};
+const ic = (n, extra = '') => `<svg class="i" ${extra} viewBox="0 0 24 24" aria-hidden="true">${P[n] || ''}</svg>`;
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const nf = new Intl.NumberFormat('tr-TR');
+const n = (x) => `<span class="num">${nf.format(x)}</span>`;
+const pct = (x) => `<span class="num">%${nf.format(Math.round(x))}</span>`;
+const $ = (s, r = document) => r.querySelector(s);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('fc.proto.d3.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('fc.proto.d3.' + k, JSON.stringify(v)); } catch { /* private mode */ } },
+};
+
+/* ----------------------------------------------------------------- data (one truth) */
+const DECKS = [
+  { id: 'bb', name: 'Breaking Bad' },
+  { id: 'fr', name: 'Friends' },
+  { id: 'of', name: 'The Office' },
+  { id: 'du', name: 'Dune' },
+  { id: 'me', name: 'Kendi eklediklerim' },
+];
+const deckName = (id) => (DECKS.find((d) => d.id === id) || { name: id }).name;
+// st: new | learning | known. due: days from today (0 = today). ivl: current interval in days.
+// knownSince: days ago the word became "known" (interval passed 21 days, or marked by hand).
+const FULL_WORDS = [
+  ['give up', 'vazgeçmek', "You can't give up now, Jesse.", 'Şimdi vazgeçemezsin, Jesse.', 'Breaking Bad S1E3', 'bb', 'learning', 1, 6, 1, 6, 12],
+  ['reluctant', 'isteksiz, gönülsüz', 'He was reluctant to take the money.', 'Parayı almaya gönülsüzdü.', 'Breaking Bad S2E1', 'bb', 'known', 28, 34, 0, 7, 40, 18],
+  ['figure out', 'çözmek, anlamak', "We'll figure it out.", 'Bir yolunu buluruz.', 'Breaking Bad S1E5', 'bb', 'known', 19, 26, 0, 6, 45, 9],
+  ['get rid of', 'kurtulmak, başından atmak', 'We have to get rid of the RV.', 'Karavandan kurtulmamız lazım.', 'Breaking Bad S2E9', 'bb', 'learning', 0, 3, 2, 5, 9],
+  ['leverage', 'koz, avantaj', 'Now we have leverage.', 'Artık elimizde koz var.', 'Breaking Bad S3E2', 'bb', 'new', 0, 0, 0, 0, 2],
+  ['bluff', 'blöf yapmak', "He's bluffing.", 'Blöf yapıyor.', 'Breaking Bad S4E10', 'bb', 'learning', 2, 4, 1, 4, 8],
+  ['tempt', 'cezbetmek, ayartmak', "Don't tempt me.", 'Beni ayartma.', 'Breaking Bad S1E6', 'bb', 'new', 0, 0, 0, 0, 1],
+  ['on a break', 'ara vermiş (ilişkiye)', 'We were on a break!', 'Ara vermiştik!', 'Friends S3E15', 'fr', 'known', 41, 52, 0, 7, 70, 33],
+  ['hang out', 'takılmak, vakit geçirmek', 'Do you wanna hang out tonight?', 'Bu akşam takılmak ister misin?', 'Friends S1E2', 'fr', 'known', 12, 30, 0, 6, 66, 40],
+  ['awkward', 'tuhaf, utandırıcı', 'Well, this is awkward.', 'Eh, bu biraz tuhaf oldu.', 'Friends S2E7', 'fr', 'known', 33, 45, 1, 8, 61, 22],
+  ['grumpy', 'huysuz', 'Why are you so grumpy today?', 'Bugün neden bu kadar huysuzsun?', 'Friends S4E10', 'fr', 'learning', 1, 2, 1, 3, 6],
+  ['pivot', 'çevirmek, yön değiştirmek', 'Pivot! Pivot!', 'Çevir! Çevir!', 'Friends S5E16', 'fr', 'known', 22, 38, 0, 6, 58, 27],
+  ['overwhelmed', 'bunalmış', "I'm a little overwhelmed.", 'Biraz bunaldım.', 'Friends S6E3', 'fr', 'new', 0, 0, 0, 0, 3],
+  ['sneaky', 'sinsi, gizli iş çeviren', "That's sneaky.", 'Bu sinsice.', 'Friends S2E19', 'fr', 'new', 0, 0, 0, 0, 1],
+  ['eventually', 'sonunda, eninde sonunda', "Eventually you'll get used to it.", 'Eninde sonunda alışırsın.', 'The Office S2E4', 'of', 'learning', 1, 2, 2, 6, 14],
+  ['thorough', 'titiz, eksiksiz', "I'm very thorough.", 'Çok titizimdir.', 'The Office S3E1', 'of', 'learning', 0, 1, 4, 8, 20],
+  ['although', '-e rağmen, -se de', 'Although it was late, he stayed.', 'Geç olmasına rağmen kaldı.', 'The Office S1E2', 'of', 'learning', 0, 1, 3, 7, 18],
+  ['bring up', 'gündeme getirmek', "Don't bring that up again.", 'Bunu bir daha açma.', 'The Office S4E2', 'of', 'learning', 3, 5, 2, 6, 16],
+  ['went', 'gitmek (geçmiş hâli, go)', 'I went home after the party.', 'Partiden sonra eve gittim.', 'The Office S1E4', 'of', 'learning', 0, 1, 4, 9, 25],
+  ['take for granted', 'hafife almak, kanıksamak', "Don't take her for granted.", 'Onu kanıksama.', 'The Office S5E1', 'of', 'new', 0, 0, 0, 0, 4],
+  ['spice', 'baharat; (Dune) melanj', 'The spice must flow.', 'Baharat akmalı.', 'Dune', 'du', 'known', 9, 24, 0, 5, 30, 5],
+  ['prophecy', 'kehanet', 'The prophecy is real.', 'Kehanet gerçek.', 'Dune', 'du', 'new', 0, 0, 0, 0, 5],
+  ['ruthless', 'acımasız', 'You will have to be ruthless.', 'Acımasız olman gerekecek.', 'Dune', 'du', 'new', 0, 0, 0, 0, 5],
+  ['heir', 'varis', 'He is the heir of House Atreides.', 'Atreides Hanesi’nin varisi o.', 'Dune', 'du', 'learning', 2, 3, 0, 2, 5],
+  ['fear', 'korku', 'Fear is the mind-killer.', 'Korku zihni öldürür.', 'Dune', 'du', 'known', 50, 63, 0, 7, 90, 50],
+  ['ubiquitous', 'her yerde olan', 'Smartphones are ubiquitous.', 'Akıllı telefonlar her yerde.', '', 'me', 'new', 0, 0, 0, 0, 10],
+  ['borrow', 'ödünç almak', 'Can I borrow your pen?', 'Kalemini ödünç alabilir miyim?', '', 'me', 'known', 60, 80, 0, 6, 120, 70],
+  ['a piece of cake', 'çok kolay, çocuk oyuncağı', 'The test was a piece of cake.', 'Sınav çocuk oyuncağıydı.', '', 'me', 'known', 44, 70, 0, 6, 110, 60],
+  ['come across', 'rastlamak', 'I came across an old photo.', 'Eski bir fotoğrafa rastladım.', '', 'me', 'learning', 4, 9, 1, 5, 30],
+  ['deadline', 'son teslim tarihi', '', '', '', 'me', 'known', 0, 0, 0, 0, 100, 2, true],
+];
+const FULL_INBOX = [
+  { id: 'i1', term: 'came up with', lemma: 'come up with', mean: 'düşünüp bulmak, akıl etmek', ex: 'He came up with the whole plan.', src: 'Breaking Bad S1E6', deck: 'bb' },
+  { id: 'i2', term: 'sketchy', lemma: '', mean: 'şüpheli, güven vermeyen', ex: 'This place is sketchy.', src: 'Breaking Bad S2E2', deck: 'bb' },
+  { id: 'i3', term: 'nailed it', lemma: 'nail it', mean: 'tam isabet, başardın', ex: 'You nailed it!', src: 'Friends S7E1', deck: 'fr' },
+];
+let uid = 100;
+function makeWords() {
+  return FULL_WORDS.map((r, i) => ({
+    id: 'w' + i, term: r[0], mean: r[1], ex: r[2], exTr: r[3], src: r[4], deck: r[5], st: r[6], due: r[7], ivl: r[8], lapses: r[9],
+    reps: r[10], added: r[11], knownSince: r[12] ?? null, manual: !!r[13], susp: false, tags: i % 5 === 0 ? ['fiil'] : [],
+  }));
+}
+const DB = {
+  full: { words: makeWords(), inbox: FULL_INBOX.map((x) => ({ ...x })), studied: true },
+  empty: { words: [], inbox: [], studied: false },
+};
+const db = () => DB[S.data];
+const live = () => db().words.filter((w) => !w.deleted);
+const findTerm = (t) => live().find((w) => w.term.toLowerCase() === t.trim().toLowerCase());
+const STATUS = { new: 'Yeni', learning: 'Öğreniyorum', known: 'Biliyorum' };
+const stKey = (w) => (w.susp ? 'susp' : w.st);
+const stHtml = (w) => w.susp ? `<span class="st susp"><span class="dot"></span>Kenarda</span>` : `<span class="st ${w.st}"><span class="dot"></span>${STATUS[w.st]}</span>`;
+const dueText = (d) => (d <= 0 ? 'bugün' : d === 1 ? 'yarın' : `${d} gün sonra`);
+
+/* ----------------------------------------------------------------- state */
+const S = {
+  nav: store.get('nav', 'A'), add: store.get('add', 'A'), adv: store.get('adv', false), theme: store.get('theme', 'dark'),
+  data: 'full', route: 'home', way: 'single', sheet: null, menu: null,
+  q: '', status: 'all', deck: 'all', sel: null, edit: null, selIds: new Set(), qhelp: false,
+  cols: { deck: true, due: true, lapses: false, added: false }, sort: { k: 'added', dir: 1 },
+  inlineAdd: null, form: { term: '', mean: '', ex: '', src: '', deck: 'me', tags: '' }, formErr: '', recent: [],
+  paste: '', pasteDeck: 'me', file: null, fileCols: false, fileDeck: 'fr',
+  ai: { topic: '', count: '10', state: 'idle', picked: new Set() }, picked: new Map(), pickedDeck: 'bb',
+  more: store.get('more', false), range: 90, statTab: 'overview', fresh: null, starters: new Set(), knownAfter: '21',
+};
+const undoStack = [];
+
+/* ----------------------------------------------------------------- derived numbers */
+function counts(list = live()) {
+  const c = { all: list.length, new: 0, learning: 0, known: 0, susp: 0 };
+  list.forEach((w) => { c[stKey(w)]++; });
+  return c;
+}
+function todayQueue() {
+  const l = live().filter((w) => !w.susp);
+  const due = l.filter((w) => w.st !== 'new' && w.due <= 0).length;
+  const fresh = Math.min(5, l.filter((w) => w.st === 'new').length);
+  return { due, fresh, total: due + fresh };
+}
+function knownSeries(days) {
+  const k = live().filter((w) => w.st === 'known');
+  const out = [];
+  for (let d = days - 1; d >= 0; d--) out.push(k.filter((w) => (w.knownSince ?? 0) >= d).length);
+  return out; // oldest → today
+}
+function dueByDay(days) {
+  const out = new Array(days).fill(0);
+  live().filter((w) => !w.susp && w.st !== 'new').forEach((w) => {
+    const d = Math.max(0, w.due);
+    if (d < days) out[d]++;
+  });
+  // known words come back for a check after their interval: spread the long ones
+  return out;
+}
+const TODAY = new Date(2026, 10, 22); // Pazar 22 Kasım 2026
+const DOW = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+const DOW_LONG = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+const dayLabel = (offset) => DOW[(TODAY.getDay() + offset + 700) % 7];
+const TODAY_STATS = { answered: 18, correct: 15, minutes: 9, started: 3, last7: [12, 15, 0, 20, 14, 22, 18], goal: 15, streak: 4 };
+const hardToday = () => live().filter((w) => ['thorough', 'although', 'went'].includes(w.term) && !w.susp);
+</script>
+<script>
+'use strict';
+/* ----------------------------------------------------------------- shell */
+function protoBar() {
+  const seg = (key, opts) => `<span class="seg sm" role="group">${opts.map(([v, l, t]) => `<button type="button" data-act="proto" data-k="${key}" data-v="${v}" aria-pressed="${S[key] === v}" title="${esc(t || '')}">${l}</button>`).join('')}</span>`;
+  return `<span class="tag">TASLAK v1.4 · D3</span>
+  <span class="grp"><span class="lbl">Gezinme</span>${seg('nav', [['A', 'A · 4 yer', 'Desteler Kelimelerim içinde bir süzgeç'], ['B', 'B · 5 yer', 'Desteler ayrı bir yer']])}</span>
+  <span class="grp"><span class="lbl">Ekleme</span>${seg('add', [['A', 'A · Ekle sayfası', 'Her şey tek Ekle sayfasında'], ['B', 'B · Kelimelerim’de', 'Ara kutusuna yaz, yoksa ekle']])}</span>
+  <span class="grp"><span class="lbl">Gelişmiş</span><button type="button" class="switch" role="switch" aria-checked="${S.adv}" aria-label="Gelişmiş özellikleri göster" data-act="adv"></button></span>
+  <span class="grp"><span class="lbl">Veri</span>${seg('data', [['full', 'Dolu'], ['empty', 'Boş (ilk gün)']])}</span>
+  <span class="grp"><span class="lbl">Tema</span>${seg('theme', [['dark', 'Koyu'], ['light', 'Açık']])}</span>
+  <span class="sp"></span>
+  <button type="button" class="btn sm" data-act="notes" aria-expanded="${!!S.notes}">Taslak notları</button>`;
+}
+
+function navItems() {
+  const inbox = db().inbox.length;
+  const items = [{ id: 'home', icon: 'home', label: 'Ana sayfa' }];
+  if (S.nav === 'B') items.push({ id: 'decks', icon: 'decks', label: 'Desteler' });
+  items.push({ id: 'words', icon: 'words', label: 'Kelimelerim' });
+  items.push({ id: 'progress', icon: 'chart', label: 'İlerleme' });
+  return { items, inbox };
+}
+function sidebar() {
+  const { items } = navItems();
+  const btn = (it) => `<button type="button" class="nav" data-act="go" data-r="${it.id}" title="${it.label}" ${S.route === it.id ? 'aria-current="page"' : ''}>${ic(it.icon)}<span class="lbl">${it.label}</span>${it.badge ? `<span class="badge">${it.badge}</span><span class="badge-dot"></span>` : ''}</button>`;
+  return `<nav class="side" aria-label="Ana gezinme">
+    <div class="brand"><span class="logo"></span><span>Flashcard</span></div>
+    ${items.map(btn).join('')}
+    <div class="fill"></div><hr>
+    ${btn({ id: 'settings', icon: 'gear', label: 'Ayarlar' })}
+    <div class="profile"><span class="avatar">AP</span><span>Ana profil</span></div>
+  </nav>`;
+}
+function crumbs() {
+  const c = [];
+  if (S.route === 'home') c.push('Ana sayfa');
+  if (S.route === 'decks') c.push('Desteler');
+  if (S.route === 'words') { c.push('Kelimelerim'); if (S.deck !== 'all') c.push(deckName(S.deck)); }
+  if (S.route === 'add') { c.push('Ekle'); c.push(WAYS.find((w) => w.id === S.way).t); }
+  if (S.route === 'progress') { c.push('İlerleme'); if (S.statTab !== 'overview') c.push(S.statTab === 'planning' ? 'Planlama' : 'Hedefler'); }
+  if (S.route === 'settings') c.push('Ayarlar');
+  return c.map((x, i) => (i === c.length - 1 ? `<b>${esc(x)}</b>` : `<span>${esc(x)}</span>${ic('right')}`)).join('');
+}
+function topbar() {
+  const inbox = db().inbox.length;
+  return `<header class="top">
+    <div class="crumbs">${crumbs()}</div><span class="sp"></span>
+    <button type="button" class="topsearch" data-act="topsearch" aria-label="${S.adv ? 'Ara ya da komut çalıştır' : 'Kelime ara'}">${ic('search')}<span style="flex:1;text-align:left">${S.adv ? 'Ara ya da komut çalıştır' : 'Kelime ara'}</span><kbd class="kbd">Ctrl K</kbd></button>
+    <button type="button" class="btn primary sm" data-act="openadd" title="Ekle (N)" aria-keyshortcuts="N">${ic('plus')}Ekle${inbox ? `<span class="badge" style="background:rgba(23,19,10,.16);color:var(--accent-fg)" title="${inbox} yakalanan kelime onay bekliyor">${inbox}</span>` : ''}<kbd>N</kbd></button>
+  </header>`;
+}
+
+/* ----------------------------------------------------------------- Ana sayfa (placeholder for the nav) */
+function pageHome() {
+  const q = todayQueue();
+  const c = counts();
+  const inbox = db().inbox.length;
+  if (!live().length) {
+    return `<div class="page-in">
+      <div class="ph"><div class="grow"><h1>Hoş geldin!</h1><p class="lead">Önce birkaç kelime ekle; sonra her gün burada “Çalışmaya başla”ya basman yeter.</p></div></div>
+      <div class="empty"><h3>Henüz kelimen yok</h3><p>Bir kelime yaz, bir liste yapıştır ya da dizi izlerken Subtitle eklentisiyle yakala. Hepsi <b>Ekle</b>’de.</p>
+      <div class="row-actions"><button class="btn primary" data-act="openadd">${ic('plus')}İlk kelimeni ekle <kbd>N</kbd></button><button class="btn" data-act="way" data-w="starters">${ic('box')}Hazır bir desteyle başla</button></div></div>
+      <p class="placeholder-note">Ana sayfa bu taslağın konusu değil; yalnız gezinme bütün görünsün diye burada.</p></div>`;
+  }
+  return `<div class="page-in">
+    <div class="today"><div class="grow"><div class="small hl">Bugün</div><div><span class="big">${nf.format(q.total)}</span> <span class="muted" style="font-size:16px">kelime çalışılacak</span></div>
+      <div class="small muted" style="margin-top:6px"><span class="st learning"><span class="dot"></span>Sırası gelen ${n(q.due)}</span> &nbsp; <span class="st new"><span class="dot"></span>Yeni ${n(q.fresh)}</span></div></div>
+      <button class="btn primary lg" data-act="study">${ic('play')}Çalışmaya başla <kbd>↵</kbd></button></div>
+    ${inbox ? `<div class="hint-line">${ic('inbox')}<span><b>${n(inbox)}</b> yakaladığın kelime onayını bekliyor</span><span class="sp"></span><button class="link" data-act="way" data-w="inbox">Bak ${ic('right')}</button></div>` : ''}
+    <div class="hint-line">${ic('chart')}<span>${n(c.known)} kelimeyi biliyorsun · ${n(c.learning)} kelimeyi öğreniyorsun</span><span class="sp"></span><button class="link" data-act="go" data-r="progress">İlerleme ${ic('right')}</button></div>
+    <h2 style="font-size:14px;margin:20px 0 8px">Desteler</h2>
+    ${deckTable()}
+    <p class="placeholder-note">Ana sayfa bu taslağın konusu değil (çalışma D1’de); yalnız gezinme bütün görünsün diye sade hâliyle burada.</p>
+  </div>`;
+}
+function deckTable() {
+  const rows = DECKS.map((d) => {
+    const ws = live().filter((w) => w.deck === d.id);
+    const c = counts(ws);
+    const today = ws.filter((w) => !w.susp && w.st !== 'new' && w.due <= 0).length;
+    const k = ws.length ? (c.known / ws.length) * 100 : 0;
+    return `<tr data-act="deck" data-d="${d.id}" tabindex="0"><td><b>${esc(d.name)}</b></td><td class="r">${n(ws.length)}</td><td class="r">${today ? `<span class="hl num">${today}</span>` : n(0)}</td>
+      <td><span class="meter"><i style="width:${k}%"></i></span>${pct(k)}</td>
+      ${S.adv ? `<td class="small muted">Varsayılan</td>` : ''}
+      <td class="r"><button class="btn sm" data-act="study" data-stop="1">${ic('play')}Çalış</button></td></tr>`;
+  }).join('');
+  return `<table class="dtable"><thead><tr><th>Deste</th><th class="r">Kelime</th><th class="r">Bugün</th><th>Biliyorum</th>${S.adv ? '<th>Ayar şablonu</th>' : ''}<th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function pageDecks() {
+  return `<div class="page-in">
+    <div class="ph"><div class="grow"><h1>Desteler</h1><p class="lead">Kelimelerin hangi gruplarda. Bir desteye tıkla, kelimelerini gör; “Çalış” ile o desteyi çalış.</p></div>
+    <button class="btn" data-act="toast" data-m="Yeni deste: ad sorulur, boş deste oluşur (değişmedi).">${ic('plus')}Yeni deste</button></div>
+    ${live().length ? deckTable() : `<div class="empty"><h3>Henüz deste yok</h3><p>Kelime eklediğinde destesi de oluşur. Dizi başına bir deste iyi bir başlangıç.</p><div class="row-actions"><button class="btn primary" data-act="openadd">${ic('plus')}Ekle</button></div></div>`}
+  </div>`;
+}
+
+/* ----------------------------------------------------------------- Kelimelerim */
+function matches(w, q) {
+  if (!q) return true;
+  const toks = q.toLowerCase().match(/"[^"]+"|\S+/g) || [];
+  return toks.every((t) => {
+    const neg = t.startsWith('-') && t.length > 1; if (neg) t = t.slice(1);
+    let ok;
+    const m = S.adv && t.match(/^(deck|is|tag|src):(.+)$/);
+    if (m) {
+      const v = m[2].replace(/"/g, '');
+      if (m[1] === 'deck') ok = deckName(w.deck).toLowerCase().includes(v);
+      else if (m[1] === 'is') ok = v === 'due' ? w.st !== 'new' && w.due <= 0 : v === 'new' ? w.st === 'new' : v === 'known' ? w.st === 'known' : v === 'learning' ? w.st === 'learning' : v === 'kenarda' ? w.susp : false;
+      else if (m[1] === 'tag') ok = w.tags.includes(v);
+      else ok = (w.src || '').toLowerCase().includes(v);
+    } else {
+      const s = t.replace(/"/g, '');
+      ok = [w.term, w.mean, w.ex, w.src, deckName(w.deck)].some((f) => (f || '').toLowerCase().includes(s));
+    }
+    return neg ? !ok : ok;
+  });
+}
+function filtered() {
+  let l = live().filter((w) => (S.deck === 'all' || w.deck === S.deck) && (S.status === 'all' || stKey(w) === S.status) && matches(w, S.q.trim()));
+  const ord = { new: 0, learning: 1, known: 2 };
+  const k = S.adv ? S.sort.k : 'added';
+  const dir = S.adv ? S.sort.dir : 1;
+  l = l.slice().sort((a, b) => {
+    let r = 0;
+    if (k === 'term') r = a.term.localeCompare(b.term, 'en');
+    else if (k === 'st') r = ord[a.st] - ord[b.st];
+    else if (k === 'due') r = (a.st === 'new' ? 999 : a.due) - (b.st === 'new' ? 999 : b.due);
+    else if (k === 'lapses') r = b.lapses - a.lapses;
+    else r = a.added - b.added;
+    return r * dir;
+  });
+  // exact term match first: typing a word finds THAT word
+  const q = S.q.trim().toLowerCase();
+  if (q) l.sort((a, b) => (b.term.toLowerCase() === q) - (a.term.toLowerCase() === q));
+  return l;
+}
+function gridCols() {
+  const panel = !!S.sel && !!live().find((w) => w.id === S.sel);
+  if (!S.adv) return panel ? 'minmax(110px,1fr) minmax(120px,1.4fr) 112px' : 'minmax(130px,1.1fr) minmax(150px,1.5fr) minmax(0,1.2fr) 120px';
+  const c = ['24px', 'minmax(110px,1fr)', 'minmax(120px,1.4fr)'];
+  if (S.cols.deck && !panel) c.push('minmax(0,.9fr)');
+  c.push('112px');
+  if (S.cols.due) c.push('96px');
+  if (S.cols.lapses && !panel) c.push('56px');
+  if (S.cols.added && !panel) c.push('88px');
+  return c.join(' ');
+}
+function pageWords() {
+  const all = live();
+  const inbox = db().inbox.length;
+  const head = `<div class="ph"><div class="grow"><h1>Kelimelerim</h1><p class="lead">${S.add === 'B' ? 'Bir kelime yaz: varsa bulursun, yoksa hemen eklersin. Tıkla: anlamı, cümlesi, durumu.' : 'Bir kelime yaz, bul; tıkla: anlamını, cümlesini, ne kadar bildiğini gör ve düzelt.'}</p></div>
+    ${S.add === 'B' ? `<div class="rel"><button class="btn" data-act="menu" data-m="addmenu" aria-haspopup="menu" aria-expanded="${S.menu === 'addmenu'}">${ic('plus')}Toplu ekle${inbox ? ` <span class="badge">${inbox}</span>` : ''}${ic('down')}</button>${S.menu === 'addmenu' ? addMenu() : ''}</div>` : ''}</div>`;
+  if (!all.length) {
+    return `<div class="page-in wide">${head}
+      <div class="empty"><h3>Kelime listen boş</h3><p>Eklediğin her kelime burada durur: anlamı, dizideki cümlesi ve ne kadar bildiğin. Aradığını bulmak için yazman yeter.</p>
+      <div class="row-actions">${S.add === 'B' ? `<button class="btn primary" data-act="focusq">${ic('plus')}İlk kelimeni yaz</button><button class="btn" data-act="sheet" data-w="paste">${ic('clip')}Liste yapıştır</button>` : `<button class="btn primary" data-act="openadd">${ic('plus')}Ekle <kbd>N</kbd></button>`}</div></div>
+      ${S.add === 'B' ? searchBox() + inlineAddHtml() : ''}</div>`;
+  }
+  const c = counts(all.filter((w) => S.deck === 'all' || w.deck === S.deck));
+  const chip = (k, l) => `<button type="button" class="chip" data-act="status" data-s="${k}" aria-pressed="${S.status === k}">${k !== 'all' && k !== 'susp' ? `<span class="st ${k}"><span class="dot"></span></span>` : ''}${l} ${n(c[k])}</button>`;
+  const deckSel = `<select class="select" style="width:auto;height:28px" data-bind="deck" aria-label="Deste">
+      <option value="all" ${S.deck === 'all' ? 'selected' : ''}>Tüm desteler</option>
+      ${DECKS.map((d) => `<option value="${d.id}" ${S.deck === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}
+      ${S.nav === 'A' ? '<option value="__new">+ Yeni deste…</option>' : ''}</select>`;
+  const list = filtered();
+  const sel = all.find((w) => w.id === S.sel);
+  return `<div class="page-in wide">${head}
+    ${S.add === 'B' && inbox ? `<div class="hint-line">${ic('inbox')}<span><b>${n(inbox)}</b> yakaladığın kelime onayını bekliyor</span><span class="sp"></span><button class="link" data-act="sheet" data-w="inbox">Bak ${ic('right')}</button></div>` : ''}
+    ${searchBox()}
+    ${S.adv && S.qhelp ? queryHelp() : ''}
+    <div class="filters">${chip('all', 'Hepsi')}${chip('new', 'Yeni')}${chip('learning', 'Öğreniyorum')}${chip('known', 'Biliyorum')}${c.susp || S.status === 'susp' ? chip('susp', 'Kenarda') : ''}
+      <span class="sp"></span>${deckSel}
+      ${S.adv ? `<span class="seg sm" role="group" aria-label="Göster"><button aria-pressed="true">Kelime</button><button data-act="toast" data-m="Not başına satır: bir notun kartları tek satırda (v1.3 “Notlar”).">Kart</button></span>
+      <div class="rel"><button class="btn sm" data-act="menu" data-m="cols" aria-haspopup="menu">${ic('cols')}Sütunlar</button>${S.menu === 'cols' ? colsMenu() : ''}</div>` : ''}</div>
+    ${S.deck !== 'all' ? deckStrip() : ''}
+    ${S.adv && S.selIds.size ? bulkBar() : ''}
+    ${inlineAddHtml()}
+    <div class="split ${sel ? 'has-panel' : ''}"><div class="list-wrap">${wordList(list)}</div>${sel ? detailHtml(sel) : ''}</div>
+  </div>`;
+}
+function searchBox() {
+  const ph = S.add === 'B' ? 'Kelime ara ya da yeni kelime yaz' : S.adv ? 'Ara: kelime, anlam, cümle… ya da deck:Friends is:new' : 'Kelime ara: İngilizce ya da Türkçe';
+  return `<div class="toolbar"><label class="bigsearch">${ic('search')}<span class="sr">Ara</span><input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="${esc(ph)}" value="${esc(S.q)}" data-bind="q" aria-keyshortcuts="/" aria-controls="wordlist">
+    ${S.q ? `<button class="iconbtn" data-act="clearq" aria-label="Aramayı temizle">${ic('x')}</button>` : '<kbd class="kbd" style="color:var(--text-3)">/</kbd>'}</label>
+    ${S.adv ? `<button class="btn" data-act="qhelp" aria-pressed="${S.qhelp}" title="Arama dili">${ic('help')}<span class="sr">Arama dili</span></button>
+    <div class="rel"><button class="btn" data-act="menu" data-m="saved">${ic('star')}Kayıtlı${ic('down')}</button>${S.menu === 'saved' ? savedMenu() : ''}</div>` : ''}</div>`;
+}
+function queryHelp() {
+  const r = [['give up', 'Kelimede, anlamda, cümlede geçenler'], ['deck:Friends', 'Bir destedekiler'], ['is:new · is:learning · is:known', 'Duruma göre'], ['is:due', 'Bugün sırası gelenler'], ['is:kenarda', 'Kenara koyduğun'], ['tag:fiil', 'Etiketliler'], ['src:"S1E3"', 'Kaynağa göre'], ['-is:known', 'Eksi: hariç tut']];
+  return `<div class="qhelp" role="note">${r.map(([a, b]) => `<div><code>${esc(a)}</code> <span class="muted">${b}</span></div>`).join('')}</div>`;
+}
+function savedMenu() {
+  const s = [['Bugün sırası gelen', 'is:due'], ['Breaking Bad · yeni', 'deck:"breaking bad" is:new'], ['Fiiller', 'tag:fiil']];
+  return `<div class="menu" role="menu" style="right:0;top:36px">${s.map(([l, q]) => `<button role="menuitem" data-act="setq" data-q="${esc(q)}">${ic('star')}<span>${l}<span class="d mono">${esc(q)}</span></span></button>`).join('')}<div class="sep"></div><button role="menuitem" data-act="toast" data-m="Bu arama kaydedildi (taslak).">${ic('plus')}Bu aramayı kaydet</button></div>`;
+}
+function colsMenu() {
+  const c = [['deck', 'Deste'], ['due', 'Sıradaki tekrar'], ['lapses', 'Kaç kez unuttun'], ['added', 'Eklenme']];
+  return `<div class="menu" role="menu" style="right:0;top:32px">${c.map(([k, l]) => `<button role="menuitemcheckbox" aria-checked="${S.cols[k]}" data-act="col" data-c="${k}">${S.cols[k] ? ic('check') : '<span style="width:16px"></span>'}${l}</button>`).join('')}</div>`;
+}
+function addMenu() {
+  return `<div class="menu" role="menu" style="right:0;top:36px;width:300px">${WAYS.filter((w) => w.id !== 'single').map((w) => `<button role="menuitem" data-act="sheet" data-w="${w.id}">${ic(w.icon)}<span>${w.t}${w.id === 'inbox' && db().inbox.length ? ` <span class="badge">${db().inbox.length}</span>` : ''}<span class="d">${w.d}</span></span></button>`).join('')}</div>`;
+}
+function deckStrip() {
+  const ws = live().filter((w) => w.deck === S.deck);
+  const c = counts(ws);
+  const today = ws.filter((w) => !w.susp && w.st !== 'new' && w.due <= 0).length;
+  return `<div class="deckstrip"><span class="name">${esc(deckName(S.deck))}</span><span class="muted small">${n(ws.length)} kelime · bugün ${n(today)} sırası gelen · ${n(c.known)} biliyorsun</span><span class="sp"></span>
+    <button class="btn primary sm" data-act="study">${ic('play')}Çalış</button>
+    <div class="rel"><button class="iconbtn" data-act="menu" data-m="deckmenu" aria-label="Deste işlemleri">${ic('more')}</button>${S.menu === 'deckmenu' ? `<div class="menu" role="menu" style="right:0;top:32px">
+      <button role="menuitem" data-act="toast" data-m="Yeniden adlandır (taslak).">${ic('pen')}Yeniden adlandır</button>
+      <button role="menuitem" data-act="toast" data-m="Deste ayarları: Ayarlar › Çalışma (D2 taslağı).">${ic('gear')}Bu destenin ayarları</button>
+      <button role="menuitem" data-act="toast" data-m="Deste sayfası (önizleme, Okuma) v1.3’teki gibi açılır.">${ic('decks')}Deste sayfasını aç</button>
+      <div class="sep"></div><button role="menuitem" data-act="toast" data-m="Sil: önce ne olacağını söyleyen onay (değişmedi).">${ic('trash')}Desteyi sil</button></div>` : ''}</div>
+    <button class="iconbtn" data-act="deck" data-d="all" aria-label="Deste süzgecini kaldır" title="Tüm desteler">${ic('x')}</button></div>`;
+}
+function bulkBar() {
+  const k = S.selIds.size;
+  return `<div class="bulk" role="toolbar" aria-label="Seçimi değiştir"><b>${n(k)} seçili</b>
+    <select class="select" style="width:auto;height:28px" data-bind="bulkmove" aria-label="Desteye taşı"><option value="">Desteye taşı…</option>${DECKS.map((d) => `<option value="${d.id}">${esc(d.name)}</option>`).join('')}</select>
+    <button class="btn sm" data-act="bulk" data-b="susp">${ic('pause')}Kenara koy</button>
+    <button class="btn sm" data-act="bulk" data-b="bury">Yarına bırak</button>
+    <button class="btn sm" data-act="bulk" data-b="tag">Etiket ekle</button>
+    <div class="rel"><button class="btn sm" data-act="menu" data-m="bulkmore">Diğer${ic('down')}</button>${S.menu === 'bulkmore' ? `<div class="menu" role="menu" style="top:32px">
+      <button role="menuitem" data-act="toast" data-m="Bul ve değiştir (v1.3’teki gibi).">Bul ve değiştir</button>
+      <button role="menuitem" data-act="toast" data-m="Not türünü değiştir (v1.3’teki gibi).">Not türünü değiştir</button>
+      <button role="menuitem" data-act="toast" data-m="Bayrak (v1.3’teki gibi).">Bayrak</button>
+      <button role="menuitem" data-act="bulk" data-b="reset">Yeniden öğren (sıfırla)</button></div>` : ''}</div>
+    <button class="btn sm danger" data-act="bulk" data-b="del">${ic('trash')}Sil</button>
+    <span style="flex:1"></span><button class="iconbtn" data-act="clearsel" aria-label="Seçimi temizle">${ic('x')}</button></div>`;
+}
+function wordList(list) {
+  const cols = gridCols();
+  const panel = !!S.sel && !!live().find((w) => w.id === S.sel);
+  const q = S.q.trim();
+  const exact = q && findTerm(q);
+  const showAdd = S.add === 'B' && q && !exact && !/:/.test(q) && !S.inlineAdd;
+  const sortBtn = (k, l) => S.adv ? `<button data-act="sort" data-k="${k}">${l}${S.sort.k === k ? (S.sort.dir > 0 ? ' ↑' : ' ↓') : ''}</button>` : l;
+  let head = `<div class="wl-head" style="grid-template-columns:${cols}">`;
+  if (S.adv) head += `<input type="checkbox" class="cb" data-act="selall" aria-label="Hepsini seç" ${list.length && list.every((w) => S.selIds.has(w.id)) ? 'checked' : ''}>`;
+  head += `<span>${sortBtn('term', 'Kelime')}</span><span>Anlamı</span>`;
+  if (!S.adv && !panel) head += '<span class="hide-n">Nereden</span>';
+  if (S.adv && S.cols.deck && !panel) head += '<span class="hide-n">Deste</span>';
+  head += `<span>${sortBtn('st', 'Durum')}</span>`;
+  if (S.adv && S.cols.due) head += `<span>${sortBtn('due', 'Sıradaki')}</span>`;
+  if (S.adv && S.cols.lapses && !panel) head += `<span class="hide-n">${sortBtn('lapses', 'Unuttun')}</span>`;
+  if (S.adv && S.cols.added && !panel) head += `<span class="hide-n">${sortBtn('added', 'Eklenme')}</span>`;
+  head += '</div>';
+  const rows = list.map((w) => {
+    let r = `<div class="wl-row ${S.fresh === w.id ? 'fresh' : ''}" role="option" id="row-${w.id}" aria-selected="${S.sel === w.id}" data-act="sel" data-id="${w.id}" style="grid-template-columns:${cols}">`;
+    if (S.adv) r += `<input type="checkbox" class="cb" data-act="tick" data-id="${w.id}" aria-label="${esc(w.term)} seç" ${S.selIds.has(w.id) ? 'checked' : ''}>`;
+    r += `<span class="term">${esc(w.term)}</span><span class="mean">${esc(w.mean)}</span>`;
+    if (!S.adv && !panel) r += `<span class="src small hide-n">${esc(w.src || deckName(w.deck))}</span>`;
+    if (S.adv && S.cols.deck && !panel) r += `<span class="cell small hide-n">${esc(deckName(w.deck))}</span>`;
+    r += stHtml(w);
+    if (S.adv && S.cols.due) r += `<span class="cell small num">${w.st === 'new' || w.susp || w.manual ? '–' : dueText(w.due)}</span>`;
+    if (S.adv && S.cols.lapses && !panel) r += `<span class="cell small num hide-n">${w.lapses}</span>`;
+    if (S.adv && S.cols.added && !panel) r += `<span class="cell small num hide-n">${w.added} g önce</span>`;
+    return r + '</div>';
+  }).join('');
+  const addRow = showAdd ? `<div class="wl-row addrow" role="option" data-act="inlineadd" id="row-add">${ic('plus')}<span>“${esc(q)}” kelimelerinde yok. <b>Ekle</b></span><kbd class="kbd">Enter</kbd></div>` : '';
+  let body;
+  if (!list.length && S.inlineAdd) return '';
+  if (!list.length && !addRow) {
+    body = `<div class="empty" style="border:0">${q ? `<h3>“${esc(q)}” bulunamadı</h3><p>${S.status !== 'all' || S.deck !== 'all' ? 'Süzgeçleri kaldırıp yeniden bak ya da ' : 'Yazımına bak ya da '}bu kelimeyi ekle.</p>
+      <div class="row-actions">${S.status !== 'all' || S.deck !== 'all' ? '<button class="btn" data-act="clearfilters">Süzgeçleri kaldır</button>' : ''}<button class="btn primary" data-act="addterm">${ic('plus')}“${esc(q)}” ekle</button></div>` : `<h3>Bu süzgeçte kelime yok</h3><p>${S.status === 'known' ? 'Bir kelime, üç hafta sonra hâlâ hatırladığında “biliyorum” olur. Çalıştıkça burası dolar.' : 'Başka bir durum ya da deste seç.'}</p><div class="row-actions"><button class="btn" data-act="clearfilters">Süzgeçleri kaldır</button></div>`}</div>`;
+  } else body = addRow + rows;
+  const total = live().length;
+  return `<div class="wl" id="wordlist" role="listbox" aria-label="Kelimeler">${head}${body}</div>
+    <div class="listfoot"><span>${list.length === total ? `${n(total)} kelime` : `${n(total)} kelimeden ${n(list.length)} tanesi`}</span><span class="sp"></span>
+    <span class="keys"><span><kbd>/</kbd>ara</span><span><kbd>↑</kbd><kbd>↓</kbd>gez</span><span><kbd>Enter</kbd>düzenle</span>${S.adv ? '<span><kbd>Space</kbd>seç</span>' : ''}<span><kbd>Esc</kbd>kapat</span></span></div>`;
+}
+function detailHtml(w) {
+  const close = `<button class="iconbtn" data-act="closesel" aria-label="Kapat">${ic('x')}</button>`;
+  if (S.edit === w.id) {
+    const f = (id, label, val, opt) => `<label class="field ${opt?.full ? 'full' : ''}"><span>${label}${opt?.o ? ' <i>(isteğe bağlı)</i>' : ''}</span>${opt?.area ? `<textarea class="textarea" rows="2" id="${id}">${esc(val)}</textarea>` : `<input class="input" id="${id}" value="${esc(val)}">`}</label>`;
+    return `<aside class="panel detail" aria-label="Kelimeyi düzenle"><div class="dh"><div class="grow"><div class="lab">Düzenle</div><div class="word">${esc(w.term)}</div></div>${close}</div>
+      <section><div class="form-grid">
+        ${f('e-term', 'Kelime', w.term, { full: true })}${f('e-mean', 'Anlamı', w.mean, { full: true })}
+        ${f('e-ex', 'Örnek cümle', w.ex, { full: true, o: true, area: true })}${f('e-extr', 'Cümlenin çevirisi', w.exTr, { full: true, o: true })}
+        ${f('e-src', 'Nereden', w.src, { o: true })}
+        <label class="field"><span>Deste</span><select class="select" id="e-deck">${DECKS.map((d) => `<option value="${d.id}" ${d.id === w.deck ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>
+        ${S.adv ? `${f('e-tags', 'Etiketler', w.tags.join(' '), { o: true })}<label class="field"><span>Not türü</span><select class="select" disabled><option>Kelime</option></select></label>` : ''}
+      </div>
+      <div class="formfoot"><button class="btn primary" data-act="save" data-id="${w.id}">Kaydet <kbd>Ctrl ↵</kbd></button><button class="btn ghost" data-act="canceledit">Vazgeç</button></div></section></aside>`;
+  }
+  const rx = (t) => esc(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const exEsc = esc(w.ex || '');
+  const full = new RegExp(rx(w.term), 'i');
+  const ex = !w.ex ? '' : full.test(exEsc) ? exEsc.replace(full, (m) => `<mark>${m}</mark>`) : exEsc.replace(new RegExp(rx(w.term.split(' ')[0]) + '\\w*', 'i'), (m) => `<mark>${m}</mark>`);
+  let say;
+  if (w.susp) say = 'Kenara koydun: sen geri alana kadar sorulmayacak.';
+  else if (w.st === 'new') say = 'Henüz çalışmadın. Bir sonraki çalışmada karşına çıkacak.';
+  else if (w.st === 'learning') say = `Öğreniyorsun: <b>${dueText(w.due)}</b> yeniden sorulacak. ${n(w.reps)} kez gördün, ${n(w.lapses)} kez unuttun.`;
+  else if (w.manual) say = 'Bunu bildiğini sen söyledin; sorulmayacak. İstersen “Yeniden öğren”.';
+  else say = `Biliyorsun: ${n(w.ivl)} gündür aklında. <b>${dueText(w.due)}</b> kontrol için bir kez sorulacak.`;
+  const hist = S.adv && w.reps ? `<section><div class="lab">Tekrar geçmişi</div><table class="minitable"><thead><tr><th>Ne zaman</th><th>Cevap</th><th class="r">Sonraki</th></tr></thead><tbody>
+      ${Array.from({ length: Math.min(w.reps, 5) }, (_, i) => { const miss = i < w.lapses && i % 2 === 1; const ago = Math.max(1, Math.round(w.added * (1 - (i + 1) / (Math.min(w.reps, 5) + 1)))); return `<tr><td class="num">${ago} g önce</td><td>${miss ? '<span style="color:var(--danger)">Hâlâ öğreniyorum</span>' : 'Biliyorum'}</td><td class="r num">${miss ? '10 dk' : Math.max(1, Math.round(w.ivl * (i + 1) / Math.min(w.reps, 5))) + ' g'}</td></tr>`; }).join('')}
+    </tbody></table></section>` : '';
+  return `<aside class="panel detail" aria-label="Kelime: ${esc(w.term)}">
+    <div class="dh"><div class="grow"><div class="word">${esc(w.term)}</div><div class="meaning">${esc(w.mean)}</div></div>${close}</div>
+    ${w.ex ? `<section><div class="lab">Örnek</div><div class="example">${ex}</div>${w.exTr ? `<div class="muted small" style="margin-top:2px">${esc(w.exTr)}</div>` : ''}${w.src ? `<div class="small muted" style="margin-top:8px">Kaynak · ${esc(w.src)}</div>` : ''}</section>` : ''}
+    <section><div class="lab">Durum</div><div style="margin-bottom:4px">${stHtml(w)}</div><div class="small">${say}</div></section>
+    <section><div class="row-actions">
+      <button class="btn sm" data-act="edit" data-id="${w.id}">${ic('pen')}Düzenle <kbd>↵</kbd></button>
+      ${w.st === 'known' ? `<button class="btn sm" data-act="mark" data-id="${w.id}" data-to="learning">${ic('undo')}Yeniden öğren</button>` : `<button class="btn sm" data-act="mark" data-id="${w.id}" data-to="known">${ic('check')}Zaten biliyorum</button>`}
+      <button class="btn sm" data-act="susp" data-id="${w.id}">${ic('pause')}${w.susp ? 'Kenardan çıkar' : 'Kenara koy'}</button>
+      <button class="btn sm ghost danger" data-act="del" data-id="${w.id}">${ic('trash')}Sil</button></div></section>
+    ${S.adv ? `<section><div class="lab">Kart bilgisi</div><dl class="kv">
+      <dt>Deste</dt><dd>${esc(deckName(w.deck))}</dd><dt>Not türü</dt><dd>Kelime (ileri + ters)</dd><dt>Eklenme</dt><dd class="num">${w.added} gün önce</dd>
+      <dt>Sıradaki tekrar</dt><dd class="num">${w.st === 'new' ? '–' : dueText(w.due)}</dd><dt>Stabilite</dt><dd class="num">${w.st === 'new' ? '–' : (w.ivl * 1.1).toFixed(1).replace('.', ',') + ' g'}</dd>
+      <dt>Zorluk</dt><dd class="num">${w.st === 'new' ? '–' : (3 + w.lapses * 1.4).toFixed(1).replace('.', ',') + ' / 10'}</dd><dt>Şu an hatırlama</dt><dd class="num">${w.st === 'new' ? '–' : '%' + Math.max(62, 97 - w.lapses * 7)}</dd>
+      <dt>Etiketler</dt><dd>${w.tags.length ? w.tags.map(esc).join(', ') : '–'}</dd></dl></section>${hist}` : ''}
+  </aside>`;
+}
+function inlineAddHtml() {
+  const a = S.inlineAdd;
+  if (!a) return '';
+  const dup = a.term && findTerm(a.term);
+  return `<div class="inline-add" role="group" aria-label="Yeni kelime">
+    <div class="form-grid">
+      <label class="field"><span>Kelime</span><input class="input" id="ia-term" value="${esc(a.term)}" data-bind="inlineAdd.term"></label>
+      <label class="field"><span>Anlamı</span><input class="input" id="ia-mean" value="${esc(a.mean)}" data-bind="inlineAdd.mean" placeholder="ör. son teslim tarihi"></label>
+      <label class="field ex"><span>Örnek cümle <i>(isteğe bağlı)</i></span><input class="input" id="ia-ex" value="${esc(a.ex)}" data-bind="inlineAdd.ex" placeholder="Dizideki cümle"></label>
+      <label class="field"><span>Nereden <i>(isteğe bağlı)</i></span><input class="input" id="ia-src" value="${esc(a.src)}" data-bind="inlineAdd.src" placeholder="ör. Friends S1E2"></label>
+      <label class="field"><span>Deste</span><select class="select" id="ia-deck" data-bind="inlineAdd.deck">${DECKS.map((d) => `<option value="${d.id}" ${d.id === a.deck ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>
+    </div>
+    ${dup ? `<div class="dup">“<b>${esc(dup.term)}</b>” zaten var: ${esc(dup.mean)} · ${STATUS[dup.st]}. Yine de eklersen ikinci, ayrı bir kart olur.</div>` : ''}
+    ${S.formErr ? `<div class="dup" role="alert">${S.formErr}</div>` : ''}
+    <div class="formfoot"><button class="btn primary" data-act="inlinesave">Ekle <kbd>Ctrl ↵</kbd></button><button class="btn ghost" data-act="inlinecancel">Vazgeç <kbd>Esc</kbd></button><span class="sp"></span><span class="small muted">Yalnız kelime ve anlamı yeter. Destesi bir sonraki kelime için aklımda kalır.</span></div>
+  </div>`;
+}
+</script>
+<script>
+'use strict';
+/* ----------------------------------------------------------------- Ekle */
+const WAYS = [
+  { id: 'single', icon: 'plus', t: 'Tek kelime', d: 'Yaz, Ctrl+Enter. En hızlısı; pencere açık kalır.', g: 'yaz' },
+  { id: 'paste', icon: 'clip', t: 'Liste yapıştır', d: 'Bir listeyi yapıştır ya da tablo gibi satır satır yaz.', g: 'yaz' },
+  { id: 'inbox', icon: 'inbox', t: 'Yakalananlar', d: 'Subtitle eklentisinden gelen kelimeler onayını bekliyor.', g: 'getir' },
+  { id: 'text', icon: 'text', t: 'Bir metinden seç', d: 'Altyazı ya da paragraf yapıştır, bilmediğine tıkla.', g: 'getir' },
+  { id: 'file', icon: 'file', t: 'Dosyadan', d: 'CSV, metin ya da Anki dosyası.', g: 'getir' },
+  { id: 'ai', icon: 'spark', t: 'Yapay zekayla', d: 'Bir konu ver, kelime önersin; beğendiklerini seç.', g: 'getir' },
+  { id: 'starters', icon: 'box', t: 'Hazır desteler', d: 'Sıfırdan başlamak istemezsen.', g: 'getir' },
+];
+function pageAdd() {
+  const inbox = db().inbox.length;
+  const way = (w) => `<button type="button" class="way" data-act="way" data-w="${w.id}" aria-current="${S.way === w.id}">${ic(w.icon)}<span><span class="t">${w.t}${w.id === 'inbox' && inbox ? `<span class="badge">${inbox}</span>` : ''}</span><span class="d">${w.d}</span></span></button>`;
+  return `<div class="page-in">
+    <div class="ph"><div class="grow"><h1>Ekle</h1><p class="lead">Yeni kelime yaz ya da bir yerden getir. Nasıl eklersen ekle, hepsi <b>Kelimelerim</b>’e gider.</p></div></div>
+    <div class="add-layout">
+      <nav class="ways" aria-label="Ekleme yolları"><div class="cap">Kendin yaz</div>${WAYS.filter((w) => w.g === 'yaz').map(way).join('')}
+        <div class="cap">Bir yerden getir</div>${WAYS.filter((w) => w.g === 'getir').map(way).join('')}</nav>
+      <div>${wayHtml(S.way)}</div>
+    </div></div>`;
+}
+function deckSelect(id, val, bind) {
+  return `<select class="select" id="${id}" data-bind="${bind}">${DECKS.map((d) => `<option value="${d.id}" ${d.id === val ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}<option value="__new">+ Yeni deste…</option></select>`;
+}
+function wayHtml(id) {
+  const fn = { single: waySingle, paste: wayPaste, inbox: wayInbox, text: wayText, file: wayFile, ai: wayAi, starters: wayStarters }[id];
+  return fn();
+}
+function waySingle() {
+  const f = S.form;
+  const dup = f.term && findTerm(f.term);
+  return `<div class="card"><h2>Tek kelime</h2><p class="lead">Kelimeyi ve anlamını yaz; gerisi isteğe bağlı. Ekledikten sonra imleç yine “Kelime”de: sıradakini yaz.</p>
+    <div class="form-grid">
+      <label class="field"><span>Kelime</span><input class="input" id="f-term" autocomplete="off" placeholder="ör. give up" value="${esc(f.term)}" data-bind="form.term" data-live="1"></label>
+      <label class="field"><span>Anlamı</span><input class="input" id="f-mean" autocomplete="off" placeholder="ör. vazgeçmek" value="${esc(f.mean)}" data-bind="form.mean"></label>
+      <label class="field full"><span>Örnek cümle <i>(isteğe bağlı, sorulmaz; ipucu olur)</i></span><input class="input" id="f-ex" placeholder="ör. You can't give up now." value="${esc(f.ex)}" data-bind="form.ex"></label>
+      <label class="field"><span>Nereden <i>(isteğe bağlı)</i></span><input class="input" id="f-src" placeholder="ör. Breaking Bad S1E3" value="${esc(f.src)}" data-bind="form.src"></label>
+      <label class="field"><span>Deste</span>${deckSelect('f-deck', f.deck, 'form.deck')}</label>
+      ${S.adv ? `<label class="field"><span>Not türü <span class="adv-mark">Gelişmiş</span></span><select class="select"><option>Kelime (ileri + ters)</option><option>Kelime (yalnız ileri)</option><option>Altyazı</option><option>Klasik</option></select></label>
+      <label class="field"><span>Etiketler <span class="adv-mark">Gelişmiş</span></span><input class="input" placeholder="virgülle ayır" value="${esc(f.tags)}" data-bind="form.tags"></label>` : ''}
+    </div>
+    <div id="dupbox">${dupHtml(dup)}</div>
+    ${S.formErr ? `<div class="dup" role="alert">${S.formErr}</div>` : ''}
+    <div class="formfoot"><button class="btn primary" data-act="addsingle">Ekle <kbd>Ctrl ↵</kbd></button><span class="small muted">Tab: sonraki kutu · Enter (son kutuda): ekle</span><span class="sp"></span></div>
+    ${S.recent.length ? `<div class="recent"><p class="cap2">Az önce eklediklerin</p>${S.recent.slice(0, 5).map((r) => { const w = live().find((x) => x.id === r); return w ? `<div class="rr"><b>${esc(w.term)}</b><span class="muted">${esc(w.mean)}</span><span class="small muted">· ${esc(deckName(w.deck))}</span><span class="sp"></span><button class="link" data-act="undoadd" data-id="${w.id}">Geri al</button></div>` : ''; }).join('')}
+      <div class="row-actions" style="margin-top:10px"><button class="btn sm" data-act="study">${ic('play')}Şimdi çalış</button><button class="btn sm ghost" data-act="go" data-r="words">Kelimelerim’de gör</button></div></div>` : ''}
+  </div>`;
+}
+function dupHtml(dup) {
+  return dup ? `<div class="dup">“<b>${esc(dup.term)}</b>” zaten Kelimelerim’de: ${esc(dup.mean)} · ${STATUS[dup.st]}. <button class="link" data-act="openword" data-id="${dup.id}">Aç</button> · Yine de eklersen ikinci, ayrı bir kart olur.</div>` : '';
+}
+function parsePaste(txt) {
+  return txt.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const parts = l.split(/\t| — | – | - |;|,(?=\s*[^\s])/).map((x) => x.trim());
+    const term = parts[0] || ''; const mean = parts[1] || ''; const ex = parts.slice(2).join(', ');
+    const dup = findTerm(term);
+    return { term, mean, ex, dup, bad: !mean };
+  });
+}
+function wayPaste() {
+  const rows = parsePaste(S.paste);
+  const ok = rows.filter((r) => !r.dup && !r.bad);
+  return `<div class="card"><h2>Liste yapıştır</h2><p class="lead">Her satıra bir kelime: önce kelime, sonra anlamı; arada sekme, tire ya da noktalı virgül. Üçüncü parça varsa örnek cümle olur. Excel’den, Notlar’dan, bir siteden kopyala.</p>
+    <label class="field"><span>Liste</span><textarea class="textarea mono" id="paste" rows="6" placeholder="give up	vazgeçmek&#10;sketchy - şüpheli&#10;deadline; son teslim tarihi; The deadline is Friday." data-bind="paste" data-live="1">${esc(S.paste)}</textarea></label>
+    <div class="row-actions" style="margin-top:8px">${!S.paste ? `<button class="btn sm" data-act="samplepaste">Örnek listeyi koy</button>` : `<button class="btn sm ghost" data-act="clearpaste">Temizle</button>`}
+      ${S.adv ? `<span class="small muted">Ayırıcı <span class="adv-mark">Gelişmiş</span></span><select class="select" style="width:auto;height:28px"><option>Kendin bul</option><option>Sekme</option><option>Tire</option><option>Noktalı virgül</option></select>` : ''}</div>
+    ${rows.length ? `<table class="prev" aria-label="Önizleme"><thead><tr><th></th><th>Kelime</th><th>Anlamı</th><th>Örnek</th><th></th></tr></thead><tbody>
+      ${rows.map((r, i) => `<tr class="${r.dup || r.bad ? 'skip' : ''}"><td class="n">${i + 1}</td><td><b>${esc(r.term)}</b></td><td>${esc(r.mean) || '<span class="muted">—</span>'}</td><td class="small">${esc(r.ex)}</td><td class="small">${r.dup ? 'zaten var · atlanır' : r.bad ? 'anlamı yok · atlanır' : '<span class="st new"><span class="dot"></span>yeni</span>'}</td></tr>`).join('')}
+    </tbody></table>` : ''}
+    <div class="formfoot"><label class="field" style="min-width:200px"><span>Deste</span>${deckSelect('paste-deck', S.pasteDeck, 'pasteDeck')}</label><span class="sp"></span>
+      <button class="btn primary" data-act="addpaste" ${ok.length ? '' : 'disabled'}>${ok.length ? `${ok.length} kelimeyi ekle` : 'Ekle'} <kbd>Ctrl ↵</kbd></button></div>
+    ${rows.length && rows.length !== ok.length ? `<p class="small muted" style="margin:8px 0 0">${rows.length - ok.length} satır atlanacak; nedeni satırın yanında.</p>` : ''}
+  </div>`;
+}
+function wayInbox() {
+  const items = db().inbox;
+  if (!items.length) {
+    return `<div class="card"><h2>Yakalananlar</h2><p class="lead">Dizi izlerken Subtitle eklentisinde bir kelimeye tıklarsan cümlesi ve bölümüyle buraya düşer. Sen “Ekle” deyince kelimelerine katılır.</p>
+      <div class="empty"><h3>Bekleyen kelime yok</h3><p>Hepsini işledin. Yeni yakaladıkların burada görünür; Ana sayfa da haber verir.</p><div class="row-actions"><button class="btn" data-act="toast" data-m="Ayarlar › Bağlantılar › Subtitle (D2 taslağı).">Eklentiyi bağla</button></div></div></div>`;
+  }
+  return `<div class="card"><div class="ph" style="margin-bottom:6px"><div class="grow"><h2>Yakalananlar</h2><p class="lead" style="margin-bottom:0">Subtitle eklentisinden geldiler. Anlamına bir bak, “Ekle” de. İstemediğini sil.</p></div>
+    <button class="btn primary" data-act="inboxall">${ic('check')}Hepsini ekle (${items.length})</button></div>
+    ${items.map((it) => `<div class="inbox-item"><div><div class="w">${esc(it.term)}${it.lemma ? `<small>sözlük hâli: ${esc(it.lemma)}</small>` : ''}</div>
+      <div class="example" style="margin-top:2px">${esc(it.ex).replace(esc(it.term), `<mark>${esc(it.term)}</mark>`)}</div><div class="small muted">${esc(it.src)}</div></div>
+      <div class="row-actions"><button class="btn sm primary" data-act="inboxadd" data-id="${it.id}">Ekle</button><button class="btn sm ghost" data-act="inboxdel" data-id="${it.id}" aria-label="${esc(it.term)}: sil">${ic('trash')}</button></div>
+      <div class="mrow"><span class="small muted">Anlamı</span><input class="input" value="${esc(it.mean)}" data-bind="inbox.${it.id}.mean" aria-label="${esc(it.term)}: anlamı"><span class="small muted">Deste</span>
+      <select class="select" data-bind="inbox.${it.id}.deck" aria-label="${esc(it.term)}: deste">${DECKS.map((d) => `<option value="${d.id}" ${d.id === it.deck ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div></div>`).join('')}
+    ${S.adv ? `<p class="small muted" style="margin:10px 0 0">Gelişmiş: <span class="mono">J/K</span> gez · <span class="mono">A</span> ekle · <span class="mono">R</span> sil · <span class="mono">X</span> seç (v1.3 Gelen kutusu kısayolları).</p>` : ''}
+  </div>`;
+}
+const READ_TEXT = "Yo, this whole scheme is sketchy. I'm not gonna give up, but I'm reluctant to trust him. We'll figure it out. He's stubborn, but eventually he'll come around. Just don't bring it up again.";
+const READ_DICT = { scheme: 'plan, düzen (çoğu zaman sinsi)', sketchy: 'şüpheli, güven vermeyen', stubborn: 'inatçı', 'come around': 'ikna olmak, fikrini değiştirmek' };
+function readTokens() {
+  const raw = READ_TEXT.match(/[A-Za-z']+|[^A-Za-z']+/g);
+  const toks = raw.map((t) => ({ t, w: /[A-Za-z]/.test(t) ? t.toLowerCase() : null }));
+  const words = toks.filter((x) => x.w);
+  // phrases from my words and the dictionary
+  const phrases = [...live().map((w) => w.term.toLowerCase()), ...Object.keys(READ_DICT)].filter((p) => p.includes(' '));
+  for (let i = 0; i < words.length; i++) {
+    for (const p of phrases) {
+      const parts = p.split(' ');
+      if (parts.every((pp, j) => words[i + j] && words[i + j].w.replace(/'.*/, '') === pp)) parts.forEach((_, j) => { words[i + j].phrase = p; });
+    }
+  }
+  words.forEach((x) => {
+    const key = x.phrase || x.w;
+    const mine = findTerm(key);
+    if (mine) x.kind = mine.st === 'known' ? 'k' : 'l';
+    else if (READ_DICT[key]) x.kind = 'u';
+    else x.kind = 'b'; // basic word you know (marked known once, A3 word index)
+    x.key = key;
+  });
+  return toks;
+}
+function wayText() {
+  const toks = readTokens();
+  const words = toks.filter((x) => x.w);
+  const known = words.filter((x) => x.kind === 'k' || x.kind === 'b').length;
+  const html = toks.map((x) => {
+    if (!x.w) return esc(x.t);
+    if (x.kind === 'u') return `<span class="rw u ${S.picked.has(x.key) ? 'picked' : ''}" role="button" tabindex="0" data-act="pick" data-k="${esc(x.key)}" title="${esc(x.key)}: ekle">${esc(x.t)}</span>`;
+    if (x.kind === 'l') return `<span class="rw l" title="${esc(x.key)}: öğreniyorsun">${esc(x.t)}</span>`;
+    return `<span class="rw k">${esc(x.t)}</span>`;
+  }).join('');
+  const picked = [...S.picked.entries()];
+  return `<div class="card"><h2>Bir metinden seç</h2><p class="lead">Bir altyazıyı ya da paragrafı yapıştır. Bilmediğin kelimeye tıkla; anlamı ve cümlesiyle hazır olsun. Bildiklerin sade, öğrendiklerin sarı.</p>
+    <div class="reader" aria-label="Metin">${html}<span class="sub">Breaking Bad S2E4 · örnek metin</span></div>
+    <div class="legend"><span><span class="sw" style="border-bottom:1.5px dotted var(--text-2)"></span>yeni: tıkla, ekle</span><span><span class="sw" style="background:var(--warning-soft)"></span>öğreniyorsun</span><span>sade: biliyorsun</span><span class="sp" style="flex:1"></span><span>Bu metnin ${pct((known / words.length) * 100)} kadarını biliyorsun</span></div>
+    <div class="row-actions" style="margin-top:10px"><button class="btn sm" data-act="toast" data-m="Kendi metnini yapıştırma kutusu (taslakta örnek metin hazır).">${ic('clip')}Başka metin yapıştır</button>${S.adv ? `<button class="btn sm ghost" data-act="toast" data-m="Okuma ekranı v1.3’teki gibi kalır.">Okuma ekranında aç <span class="adv-mark">Gelişmiş</span></button>` : ''}</div>
+    ${picked.length ? `<table class="prev" aria-label="Seçtiklerin"><thead><tr><th>Kelime</th><th>Anlamı</th><th>Cümle</th></tr></thead><tbody>
+      ${picked.map(([k, m]) => `<tr><td><b>${esc(k)}</b></td><td>${esc(m)}</td><td class="small muted">${esc(sentenceOf(k))}</td></tr>`).join('')}</tbody></table>
+      <div class="formfoot"><label class="field" style="min-width:200px"><span>Deste</span>${deckSelect('pick-deck', S.pickedDeck, 'pickedDeck')}</label><span class="sp"></span><button class="btn primary" data-act="addpicked">${picked.length} kelimeyi ekle</button></div>` : `<p class="small muted" style="margin:12px 0 0">Henüz seçmedin. Noktalı çizgili bir kelimeye tıkla.</p>`}
+  </div>`;
+}
+function sentenceOf(k) {
+  const first = k.split(' ')[0];
+  return (READ_TEXT.match(/[^.]+\./g) || []).map((s) => s.trim()).find((s) => s.toLowerCase().includes(first)) || '';
+}
+const FILE_ROWS = [['hang out', 'takılmak', 'Do you wanna hang out?'], ['how you doin', 'nasılsın (flörtöz)', 'How you doin?'], ['freak out', 'paniklemek', "Don't freak out."], ['stuck', 'sıkışmış, takılı kalmış', "I'm stuck."], ['messed up', 'berbat, karışık', 'That is so messed up.'], ['grab', 'kapmak, hızlıca almak', "Let's grab a coffee."]];
+function wayFile() {
+  if (!S.file) {
+    return `<div class="card"><h2>Dosyadan</h2><p class="lead">Elinde bir kelime listesi dosyası varsa: CSV, metin ya da başka bir uygulamadan dışa aktarılmış Anki paketi (.apkg). Sütunları biz anlarız, sen kontrol edersin.</p>
+      <div class="drop">${ic('file')}<p><b>Dosyayı buraya sürükle</b> ya da</p><button class="btn" data-act="pickfile">Dosya seç…</button><p class="small" style="margin:10px 0 0">.csv · .txt · .tsv · .apkg</p></div>
+      <p class="small muted" style="margin:10px 0 0">Taslakta “Dosya seç” örnek bir dosya açar.</p></div>`;
+  }
+  const dup = FILE_ROWS.filter((r) => findTerm(r[0])).length;
+  const ok = FILE_ROWS.length - dup;
+  return `<div class="card"><div class="ph" style="margin-bottom:8px"><div class="grow"><h2>Dosyadan · <span class="mono" style="font-weight:500">friends-s1.csv</span></h2><p class="lead" style="margin-bottom:0">${FILE_ROWS.length} satır bulduk.</p></div><button class="btn sm ghost" data-act="nofile">Başka dosya</button></div>
+    <div class="hint-line" style="margin:8px 0">${ic('check')}<span>Sütunları şöyle anladık: 1. sütun <b>Kelime</b>, 2. sütun <b>Anlamı</b>, 3. sütun <b>Örnek cümle</b>.</span><span class="sp"></span><button class="link" data-act="filecols">${S.fileCols ? 'Tamam' : 'Değiştir'}</button></div>
+    ${S.fileCols ? `<div class="form-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px">${['Kelime', 'Anlamı', 'Örnek cümle'].map((l, i) => `<label class="field"><span>${i + 1}. sütun</span><select class="select">${['Kelime', 'Anlamı', 'Örnek cümle', 'Nereden', 'Kullanma'].map((o) => `<option ${o === l ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`).join('')}</div>` : ''}
+    <table class="prev" aria-label="Önizleme"><thead><tr><th></th><th>Kelime</th><th>Anlamı</th><th>Örnek</th><th></th></tr></thead><tbody>
+      ${FILE_ROWS.map((r, i) => { const d = findTerm(r[0]); return `<tr class="${d ? 'skip' : ''}"><td class="n">${i + 1}</td><td><b>${esc(r[0])}</b></td><td>${esc(r[1])}</td><td class="small">${esc(r[2])}</td><td class="small">${d ? 'zaten var · atlanır' : '<span class="st new"><span class="dot"></span>yeni</span>'}</td></tr>`; }).join('')}
+    </tbody></table>
+    ${S.adv ? `<div class="form-grid" style="grid-template-columns:repeat(3,1fr);margin-top:12px"><label class="field"><span>Ayırıcı <span class="adv-mark">Gelişmiş</span></span><select class="select"><option>Virgül (bulundu)</option><option>Sekme</option><option>Noktalı virgül</option></select></label>
+      <label class="field"><span>Not türü <span class="adv-mark">Gelişmiş</span></span><select class="select"><option>Kelime (ileri + ters)</option><option>Klasik</option></select></label>
+      <label class="field"><span>Aynısı varsa <span class="adv-mark">Gelişmiş</span></span><select class="select"><option>Atla</option><option>Güncelle</option><option>Yine de ekle</option></select></label></div>` : ''}
+    <div class="formfoot"><label class="field" style="min-width:200px"><span>Deste</span>${deckSelect('file-deck', S.fileDeck, 'fileDeck')}</label><span class="sp"></span>
+      ${dup ? `<span class="small muted">${dup} tanesi zaten var, atlanacak</span>` : ''}<button class="btn primary" data-act="addfile" ${ok ? '' : 'disabled'}>${ok} kelimeyi ekle</button></div></div>`;
+}
+const AI_SUGG = [['scheme', 'plan, entrika', 'This whole scheme is sketchy.'], ['cook', '(argo) üretmek', 'We need to cook.'], ['partner', 'ortak', "You're my partner."], ['heat', '(argo) polis baskısı', 'The heat is on us.'], ['reluctant', 'isteksiz', 'He was reluctant.'], ['stash', 'zula, saklanan şey', 'Where is the stash?']];
+function wayAi() {
+  const a = S.ai;
+  return `<div class="card"><div class="ph" style="margin-bottom:8px"><div class="grow"><h2>Yapay zekayla</h2><p class="lead" style="margin-bottom:0">Bir konu, bir dizi ya da bir metin ver; kelime önersin. Sen beğendiklerini seçersin, hiçbiri sormadan eklenmez.</p></div>
+    <span class="pill">OpenRouter · bağlı</span></div>
+    <div class="form-grid" style="grid-template-columns:1fr 140px">
+      <label class="field"><span>Ne hakkında?</span><input class="input" id="ai-topic" placeholder="ör. Breaking Bad’deki argo kelimeler" value="${esc(a.topic)}" data-bind="ai.topic"></label>
+      <label class="field"><span>Kaç kelime?</span><select class="select" data-bind="ai.count">${['5', '10', '20'].map((x) => `<option ${x === a.count ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+      ${S.adv ? `<label class="field"><span>Ek talimat <span class="adv-mark">Gelişmiş</span></span><input class="input" placeholder="ör. yalnız fiiller, B1 seviyesi"></label><label class="field"><span>Model <span class="adv-mark">Gelişmiş</span></span><select class="select"><option>ücretsiz model</option><option>daha iyi model</option></select></label>` : ''}
+    </div>
+    <div class="formfoot"><button class="btn primary" data-act="aisuggest" ${a.state === 'loading' ? 'disabled' : ''}>${a.state === 'loading' ? '<span class="spinner"></span>Düşünüyor…' : `${ic('spark')}Öner`}</button>${S.adv ? '<span class="small muted">Tahmini maliyet: ~0,01 $</span>' : ''}</div>
+    ${a.state === 'done' ? `<div style="margin-top:14px"><p class="cap2">Öneriler · yapay zeka yanılabilir, eklemeden önce anlamlara bak</p>
+      ${AI_SUGG.map((s, i) => { const d = findTerm(s[0]); return `<label class="ai-sugg"><input type="checkbox" class="cb" data-act="aipick" data-i="${i}" ${d ? 'disabled' : a.picked.has(i) ? 'checked' : ''}><span><b>${esc(s[0])}</b> — ${esc(s[1])} ${d ? '<span class="pill">zaten var</span>' : ''}</span><span class="ex">${esc(s[2])}</span></label>`; }).join('')}
+      <div class="formfoot"><label class="field" style="min-width:200px"><span>Deste</span>${deckSelect('ai-deck', 'bb', 'aiDeck')}</label><span class="sp"></span><button class="btn primary" data-act="aiadd" ${a.picked.size ? '' : 'disabled'}>Seçilenleri ekle (${a.picked.size})</button></div></div>` : ''}
+  </div>`;
+}
+const STARTERS = [['top1000', 'En sık 1000 İngilizce kelime', '1.000 kelime · A1–B1 · cümleleriyle'], ['phrasal', 'En sık 150 phrasal verb', '150 kelime · give up, figure out, bring up…'], ['slang', 'Dizi ve film argosu', '120 kelime · gonna, freak out, nailed it…'], ['yds', 'YDS / YÖKDİL akademik kelimeler', '800 kelime']];
+function wayStarters() {
+  return `<div class="card"><h2>Hazır desteler</h2><p class="lead">Sıfırdan yazmak istemezsen bir desteyle başla. Bildiklerini ilk çalışmada “Zaten biliyorum” deyip geçersin.</p>
+    ${STARTERS.map(([id, t, d]) => `<div class="starter">${ic('box')}<div class="grow"><b>${t}</b><div class="small muted">${d}</div></div>${S.starters.has(id) ? `<span class="st known"><span class="dot"></span>Eklendi</span>` : `<button class="btn sm" data-act="starter" data-id="${id}" data-t="${esc(t)}">Ekle</button>`}</div>`).join('')}</div>`;
+}
+function sheetHtml() {
+  if (!S.sheet) return '';
+  const w = WAYS.find((x) => x.id === S.sheet);
+  return `<div class="scrim" data-act="closesheet"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="Toplu ekle: ${w.t}">
+    <div class="sh"><div class="grow"><b>Toplu ekle</b> <span class="muted">› ${w.t}</span></div><button class="iconbtn" data-act="closesheet" aria-label="Kapat (Esc)">${ic('x')}</button></div>
+    <div class="wayrow">${WAYS.filter((x) => x.id !== 'single').map((x) => `<button class="chip" data-act="sheet" data-w="${x.id}" aria-pressed="${x.id === S.sheet}">${x.t}${x.id === 'inbox' && db().inbox.length ? ` <span class="badge">${db().inbox.length}</span>` : ''}</button>`).join('')}</div>
+    <div class="sb">${wayHtml(S.sheet)}</div></div>`;
+}
+
+/* ----------------------------------------------------------------- İlerleme */
+function bars(vals, opt = {}) {
+  const max = Math.max(1, ...vals);
+  return `<div class="bars" role="img" aria-label="${esc(opt.label || '')}" style="${opt.h ? `height:${opt.h}px` : ''}">${vals.map((v, i) => `<div class="b ${i === opt.on ? 'on' : ''}">${opt.values !== false ? `<em>${v}</em>` : ''}<i style="height:${Math.max(2, (v / max) * 100 * (opt.values !== false ? 0.72 : 0.85))}%"></i>${opt.labels ? `<span>${opt.labels[i] ?? ''}</span>` : ''}</div>`).join('')}</div>`;
+}
+function lineChart(vals, label) {
+  const W = 300, H = 90, max = Math.max(1, ...vals), min = 0;
+  const x = (i) => (i / Math.max(1, vals.length - 1)) * W;
+  const y = (v) => H - 6 - ((v - min) / (max - min || 1)) * (H - 14);
+  const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  return `<svg class="line" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">
+    <line class="grid" x1="0" x2="${W}" y1="${H - 6}" y2="${H - 6}"/><line class="grid" x1="0" x2="${W}" y1="${y(max)}" y2="${y(max)}" stroke-dasharray="3 4"/>
+    <path class="area" d="M0,${H - 6} L${pts.join(' L')} L${W},${H - 6} Z"/><path class="stroke" d="M${pts.join(' L')}"/></svg>`;
+}
+function pageProgress() {
+  const tabs = S.adv ? `<div class="tabs" role="tablist">${[['overview', 'Genel bakış'], ['planning', 'Planlama'], ['goals', 'Hedefler']].map(([k, l]) => `<button role="tab" aria-selected="${S.statTab === k}" data-act="stattab" data-t="${k}">${l}</button>`).join('')}</div>` : '';
+  if (S.statTab !== 'overview') {
+    const what = S.statTab === 'planning' ? ['Planlama', 'Günde kaç yeni kelime? Sınav tarihin var mı? Canlı tahminle (v1.3’teki gibi; bu taslakta çizilmedi).'] : ['Hedefler', 'Günde kaç kelime çalışmak istiyorsun? Boşluklu cümlelerle (v1.3’teki gibi; bu taslakta çizilmedi).'];
+    return `<div class="page-in wide"><div class="ph"><div class="grow"><h1>İlerleme</h1></div></div>${tabs}
+      ${S.adv ? '' : `<button class="link" data-act="stattab" data-t="overview">${ic('left')}İlerleme’ye dön</button>`}
+      <div class="card" style="margin-top:12px"><h2>${what[0]}</h2><p class="lead">${what[1]}</p></div></div>`;
+  }
+  const filt = S.adv ? `<div class="filterrow" aria-label="İstatistikleri süz"><span class="small muted">Süz <span class="adv-mark">Gelişmiş</span></span>
+    <select class="select" style="width:auto;height:28px" aria-label="Deste"><option>Tüm desteler</option>${DECKS.map((d) => `<option>${esc(d.name)}</option>`).join('')}</select>
+    <span class="seg sm"><button aria-pressed="true">30 gün</button><button>90 gün</button><button>Yıl</button><button>Tümü</button></span>
+    <input class="input" style="flex:1;min-width:180px;height:28px" placeholder="ör. tag:fiil ya da src:Friends"><button class="btn sm">Göster</button></div>` : '';
+  return `<div class="page-in wide">
+    <div class="ph"><div class="grow"><h1>İlerleme</h1><p class="lead">Üç soru, üç kısa cevap. Daha ayrıntılısı en altta, “Daha fazla”da.</p></div></div>
+    ${tabs}${filt}
+    <div class="answers">${ansToday()}${ansGrowing()}${ansTomorrow()}</div>
+    <button class="more-toggle" data-act="more" aria-expanded="${S.more}">${ic(S.more ? 'down' : 'right')}<b>Daha fazla</b><span class="muted">Çalışma takvimi, hatırlama oranı, kelimelerin aşamaları ve ${S.adv ? 8 : 6} grafik daha. Her birinin altında ne anlattığı yazıyor.</span></button>
+    ${S.more ? moreGrid() : ''}
+  </div>`;
+}
+function ansToday() {
+  const has = db().studied;
+  const t = TODAY_STATS;
+  const hard = hardToday();
+  const labels = Array.from({ length: 7 }, (_, i) => (i === 6 ? 'bugün' : dayLabel(i - 6)));
+  if (!has) return `<section class="ans" aria-labelledby="q1"><div class="q" id="q1">Bugün ne yaptım?</div><div class="say">Bugün henüz çalışmadın.</div><div class="sub">İlk çalışmandan sonra burada kaç kelimeye baktığını ve kaçını bildiğini görürsün.</div><div class="foot"><button class="btn sm primary" data-act="study">${ic('play')}Çalışmaya başla</button></div></section>`;
+  return `<section class="ans" aria-labelledby="q1"><div class="q" id="q1">Bugün ne yaptım?</div>
+    <div class="say">Bugün ${n(t.answered)} kelime çalıştın, ${n(t.correct)} tanesini bildin.</div>
+    <div class="sub">${n(t.minutes)} dakika · ${n(t.started)} yeni kelimeye başladın · ${ic('flame', 'style="width:12px;height:12px;vertical-align:-1px;color:var(--warning)"')} ${n(t.streak)} gündür her gün</div>
+    <div class="chartbox">${bars(t.last7, { on: 6, labels, label: 'Son 7 gün, gün başına çalışılan kelime: ' + t.last7.join(', ') })}</div>
+    <div class="foot">${hard.length ? `<span>Zorlandıkların: <b>${hard.map((w) => esc(w.term)).join(', ')}</b></span><span class="sp" style="flex:1"></span><button class="btn sm" data-act="study">${ic('play')}Bunları çalış · ${hard.length}</button>` : '<span class="muted">Bugün zorlandığın kelime yok.</span>'}</div></section>`;
+}
+function ansGrowing() {
+  const days = S.range;
+  const s = knownSeries(days);
+  const now = s[s.length - 1], then = s[0];
+  const ranges = `<span class="sp"></span><span class="seg sm" role="group" aria-label="Dönem">${[[30, '30 g'], [90, '90 g'], [365, '1 yıl']].map(([v, l]) => `<button data-act="range" data-v="${v}" aria-pressed="${S.range === v}">${l}</button>`).join('')}</span>`;
+  if (!now) return `<section class="ans" aria-labelledby="q2"><div class="q" id="q2">İlerliyor muyum?${ranges}</div><div class="say">Henüz “biliyorum” dediğin kelime yok.</div><div class="sub">Bir kelime, üç hafta sonra hâlâ hatırladığında “biliyorum” sayılır. İlk kelimelerin birkaç hafta içinde burada yükselmeye başlar.</div><div class="chartbox">${lineChart(new Array(10).fill(0), 'Bildiğin kelime sayısı: henüz yok')}</div><div class="foot"><span class="muted">Bildiklerini kendin işaretleyebilirsin: Kelimelerim › kelime › “Zaten biliyorum”.</span></div></section>`;
+  const diff = now - then;
+  const span = days === 365 ? '1 yıl' : `${days} gün`;
+  return `<section class="ans" aria-labelledby="q2"><div class="q" id="q2">İlerliyor muyum?${ranges}</div>
+    <div class="say">${diff > 0 ? 'Evet.' : 'Yerinde sayıyorsun.'} ${n(now)} kelimeyi biliyorsun; ${span} önce ${then ? `${n(then)} taneydi` : 'hiç yoktu'}${diff > 0 ? ` (<span class="hl num">+${diff}</span>)` : ''}.</div>
+    <div class="sub">${n(counts().learning)} kelimeyi de öğreniyorsun; onlar oturdukça çizgi yükselir.</div>
+    <div class="chartbox">${lineChart(s, `Bildiğin kelime sayısı, son ${span}: ${then} → ${now}`)}<div class="axis"><span>${span} önce</span><span>bugün</span></div></div>
+    <div class="foot"><span class="muted">Biliyorum = üç hafta sonra hâlâ hatırladığın ya da “zaten biliyorum” dediğin kelime.</span></div></section>`;
+}
+function ansTomorrow() {
+  const d = dueByDay(8);
+  const next7 = d.slice(1, 8);
+  const tomorrow = next7[0];
+  if (!live().length) return `<section class="ans" aria-labelledby="q3"><div class="q" id="q3">Yarın ne var?</div><div class="say">Yarın için bir şey yok.</div><div class="sub">Kelime ekleyip çalışmaya başlayınca, hangi gün kaç kelimenin sırası geleceği burada görünür.</div><div class="foot"><button class="btn sm" data-act="openadd">${ic('plus')}Ekle</button></div></section>`;
+  const peakI = next7.indexOf(Math.max(...next7));
+  const labels = next7.map((_, i) => (i === 0 ? 'yarın' : dayLabel(i + 1)));
+  const newPerDay = Math.min(5, live().filter((w) => w.st === 'new').length);
+  return `<section class="ans" aria-labelledby="q3"><div class="q" id="q3">Yarın ne var?</div>
+    <div class="say">Yarın ${n(tomorrow + newPerDay)} kelime seni bekliyor, yaklaşık ${n(Math.max(1, Math.round((tomorrow + newPerDay) * 0.4)))} dakika.</div>
+    <div class="sub">${n(tomorrow)} tekrar + ${n(newPerDay)} yeni. ${peakI === 0 ? 'Bu haftanın en yoğun günü yarın.' : `Bu hafta en yoğun gün ${DOW_LONG[(TODAY.getDay() + peakI + 1) % 7]}: ${n(next7[peakI])} tekrar.`}</div>
+    <div class="chartbox">${bars(next7, { on: 0, labels, label: 'Önümüzdeki 7 gün, gün başına sırası gelen kelime: ' + next7.join(', ') })}</div>
+    <div class="foot"><span class="muted">Çok mu, az mı?</span><span class="sp" style="flex:1"></span><button class="link" data-act="stattab" data-t="planning">Günde kaç yeni kelime? ${ic('right')}</button></div></section>`;
+}
+function moreGrid() {
+  if (!db().studied) return `<div class="empty"><h3>Burada henüz anlatacak bir şey yok</h3><p>Birkaç gün çalıştıktan sonra çalışma takvimin, hatırlama oranın ve kelimelerinin aşamaları burada görünür.</p></div>`;
+  const mp = (title, why, body, wide) => `<section class="mp ${wide ? 'wide' : ''}"><h3>${title}</h3><p class="why">${why}</p>${body}</section>`;
+  // heatmap: 26 weeks
+  let seed = 7; const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+  const cells = Array.from({ length: 52 * 7 }, (_, i) => { const r = rnd(); const recent = i > 52 * 7 - 60; return !recent && r < 0.55 ? 0 : r < 0.2 ? 0 : r < 0.45 ? 1 : r < 0.7 ? 2 : r < 0.9 ? 3 : 4; });
+  const heat = `<div class="heat" role="img" aria-label="Son 52 hafta, gün başına çalışma yoğunluğu">${cells.map((l) => `<i class="${l ? 'l' + l : ''}"></i>`).join('')}</div><div class="legend"><span>Az</span>${[0, 1, 2, 3, 4].map((l) => `<span class="sw" style="background:${l ? `var(--accent);opacity:${0.25 + l * 0.18}` : 'var(--surface-3)'}"></span>`).join('')}<span>Çok</span><span style="flex:1"></span><span>Son 60 günün <span class="num">47</span> gününde çalıştın</span></div>`;
+  const ret = [82, 85, 88, 84, 90, 91, 89, 92];
+  const c = counts();
+  const tot = Math.max(1, c.all);
+  const stages = `<div class="stack" role="img" aria-label="Yeni ${c.new}, öğreniyorum ${c.learning}, biliyorum ${c.known}"><i style="width:${(c.new / tot) * 100}%;background:var(--neutral-dot)"></i><i style="width:${(c.learning / tot) * 100}%;background:var(--warning)"></i><i style="width:${(c.known / tot) * 100}%;background:var(--success)"></i></div>
+    <div class="legend"><span class="st new"><span class="dot"></span>Yeni ${n(c.new)}</span><span class="st learning"><span class="dot"></span>Öğreniyorum ${n(c.learning)}</span><span class="st known"><span class="dot"></span>Biliyorum ${n(c.known)}</span>${c.susp ? `<span class="st susp"><span class="dot"></span>Kenarda ${n(c.susp)}</span>` : ''}</div>`;
+  const buckets = [['1 g', 0, 1], ['2–3', 2, 3], ['4–7', 4, 7], ['8–14', 8, 14], ['15–30', 15, 30], ['1–3 ay', 31, 90], ['3+ ay', 91, 9999]];
+  const iv = buckets.map(([, a, b]) => live().filter((w) => w.st !== 'new' && w.ivl >= a && w.ivl <= b).length);
+  const f30 = dueByDay(30);
+  const hours = [0, 0, 0, 0, 0, 0, 0, 78, 81, 85, 0, 0, 88, 86, 0, 0, 0, 84, 90, 92, 89, 83, 76, 0];
+  const leeches = live().filter((w) => w.lapses >= 3).sort((a, b) => b.lapses - a.lapses);
+  const times = [3, 9, 7, 4, 2, 1];
+  let out = mp('Çalışma takvimi', 'Her kare bir gün. Renk koyulaştıkça o gün daha çok kelime çalışmışsın; boş kareler ara verdiğin günler.', heat, true)
+    + mp('Hatırlama oranı', 'Sırası gelen kelimelerin yüzde kaçını hatırladın, hafta hafta. %85–95 arası sağlıklı; çok düşerse yeni kelimeyi azalt.', `${bars(ret, { labels: ret.map((_, i) => (i === 7 ? 'bu hafta' : new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short' }).format(new Date(TODAY.getTime() - (7 - i) * 7 * 864e5)))), on: 7, label: 'Haftalık hatırlama oranı: ' + ret.join(', ') })}`)
+    + mp('Kelimelerin hangi aşamada', 'Her kelime yeni → öğreniyorum → biliyorum yolundan geçer. Yeşil büyüdükçe kelime dağarcığın büyüyor.', stages)
+    + mp('Ne kadar süre aklında kalıyor', 'Bir kelimeyi bir sonraki görüşüne kadar kaç gün var. Çubuklar sağa kaydıkça kelimeler oturuyor.', bars(iv, { labels: buckets.map((b) => b[0]), label: 'Tekrar aralıkları: ' + iv.join(', ') }))
+    + mp('Önümüzdeki 30 gün', 'Hangi gün kaç kelimenin sırası gelecek. Gecikenler bugüne sayılır; yeni kelimeler dahil değil.', bars(f30, { values: false, on: 0, label: '30 günlük tahmin: ' + f30.join(', ') }) + '<div class="axis"><span>bugün</span><span>+10 gün</span><span>+20 gün</span><span>+30 gün</span></div>')
+    + mp('Günün hangi saatinde', 'Saatlere göre doğru cevap oranın. Akşam 18–20 arası en iyi saatlerin gibi duruyor.', bars(hours.slice(7, 23), { values: false, on: 12, label: 'Saat başına doğru oranı, 07–22: ' + hours.slice(7, 23).join(', ') }) + '<div class="axis"><span>07:00</span><span>12:00</span><span>17:00</span><span>22:00</span></div>')
+    + mp('Sürekli unuttukların', 'Üç ya da daha çok kez unuttuğun kelimeler. Cümlesini yeniden oku, anlamını netleştir ya da bir süre kenara koy.', leeches.length ? `<table class="minitable"><thead><tr><th>Kelime</th><th>Anlamı</th><th class="r">Unuttun</th></tr></thead><tbody>${leeches.map((w) => `<tr><td><button class="link" data-act="openword" data-id="${w.id}">${esc(w.term)}</button></td><td>${esc(w.mean)}</td><td class="r num">${w.lapses} kez</td></tr>`).join('')}</tbody></table><div class="row-actions" style="margin-top:10px"><button class="btn sm" data-act="study">${ic('play')}Bunları çalış · ${leeches.length}</button></div>` : '<p class="muted">Sürekli unuttuğun kelime yok.</p>')
+    + mp('Cevap süren', 'Bir kelimeye cevap vermen kaç saniye sürüyor. Uzun süreler çoğu zaman “emin değilim” demek.', `${bars(times, { labels: ['≤2 sn', '≤4', '≤6', '≤10', '≤20', '>20'], label: 'Cevap süreleri dağılımı' })}<p class="small muted" style="margin:8px 0 0">Ortalama <span class="num">6,2</span> sn</p>`)
+    + mp('Deste karneleri', 'Her destede kaç kelimen var ve kaçını biliyorsun.', `<table class="minitable"><thead><tr><th>Deste</th><th class="r">Kelime</th><th class="r">Biliyorum</th></tr></thead><tbody>${DECKS.map((d) => { const ws = live().filter((w) => w.deck === d.id); const k = ws.filter((w) => w.st === 'known').length; return `<tr><td>${esc(d.name)}</td><td class="r num">${ws.length}</td><td class="r num">${k} · %${ws.length ? Math.round((k / ws.length) * 100) : 0}</td></tr>`; }).join('')}</tbody></table>`);
+  if (S.adv) {
+    out += mp('Stabilite ve zorluk <span class="adv-mark">Gelişmiş</span>', 'Zamanlayıcının (FSRS) her kelime için tuttuğu iki sayı: hatırlaman %90’a inene kadar kaç gün geçer ve kelime senin için ne kadar zor (1–10).', bars([4, 6, 5, 3, 2, 1], { labels: ['≤1g', '≤7', '≤21', '≤60', '≤180', '180+'], label: 'Stabilite dağılımı' }))
+      + mp('Sınıflandırmaya göre <span class="adv-mark">Gelişmiş</span>', 'Etiket ya da seviye gibi bir sınıflandırmanın değerleri arasında ilerlemeyi karşılaştır.', `<table class="minitable"><thead><tr><th>Etiket</th><th class="r">Kelime</th><th class="r">Biliyorum</th></tr></thead><tbody><tr><td>fiil</td><td class="r num">${live().filter((w) => w.tags.includes('fiil')).length}</td><td class="r num">${live().filter((w) => w.tags.includes('fiil') && w.st === 'known').length}</td></tr><tr><td>(etiketsiz)</td><td class="r num">${live().filter((w) => !w.tags.length).length}</td><td class="r num">${live().filter((w) => !w.tags.length && w.st === 'known').length}</td></tr></tbody></table>`);
+  }
+  return `<div class="more-grid">${out}</div>`;
+}
+
+/* ----------------------------------------------------------------- Ayarlar (only the one switch this prototype needs) */
+function pageSettings() {
+  return `<div class="page-in"><div class="ph"><div class="grow"><h1>Ayarlar</h1><p class="lead">Ayarların tamamı ayrı taslakta (D2). Burada yalnız bu taslağı etkileyen iki satır var.</p></div></div>
+    <div class="card">
+      <div class="setrow"><div class="grow"><div class="t">Gelişmiş özellikleri göster</div><div class="d">Açınca: arama dili, sütunlar ve toplu işlemler, kart bilgisi, ayrıntılı istatistik süzgeçleri, not türü ve etiket alanları, komut paleti. Kapalıyken hiçbiri silinmez, yalnız yoldan çekilir.</div></div>
+        <button type="button" class="switch" role="switch" aria-checked="${S.adv}" aria-label="Gelişmiş özellikleri göster" data-act="adv"></button></div>
+      <div class="setrow"><div class="grow"><div class="t">Bir kelimeyi ne zaman “biliyorum” sayalım?</div><div class="d">Kelimelerim, İlerleme ve Subtitle eklentisi aynı cevabı kullanır. Örnek: 3 hafta seçiliyken, 3 hafta sonra hâlâ hatırladığın kelime “biliyorum” olur.</div></div>
+        <select class="select" style="width:auto" data-bind="knownAfter"><option value="14" ${S.knownAfter === '14' ? 'selected' : ''}>2 hafta sonra</option><option value="21" ${S.knownAfter === '21' ? 'selected' : ''}>3 hafta sonra (varsayılan)</option><option value="30" ${S.knownAfter === '30' ? 'selected' : ''}>1 ay sonra</option></select></div>
+    </div></div>`;
+}
+</script>
+<script>
+'use strict';
+/* ----------------------------------------------------------------- Taslak notları */
+const QUESTIONS = [
+  { k: 'nav', t: '1 · Gezinme: kaç yer?', a: '<b>A · 4 yer:</b> Ana sayfa, Kelimelerim, İlerleme, Ayarlar. Deste, Kelimelerim’de bir süzgeç; bir deste seçince üstte “Çalış” şeridi çıkar.', b: '<b>B · 5 yer:</b> aynısı + ayrı bir “Desteler” sayfası (tablo, satırda Çalış). Desteleri sık değiştiriyorsan daha tanıdık.', pick: 'A', why: 'Sen dizi başına kelime topluyorsun; “hangi deste” çoğu zaman “hangi dizi” demek. Süzgeç yetiyor, bir yer daha az.' },
+  { k: 'add', t: '2 · Kelime nerede eklenir?', a: '<b>A · Tek “Ekle” sayfası:</b> üstteki Ekle düğmesi (ya da N) hep aynı sayfayı açar; solda yedi yol (tek kelime, liste, yakalananlar, metinden, dosya, yapay zeka, hazır deste).', b: '<b>B · Kelimelerim’de ara-ya-da-ekle:</b> arama kutusuna yazarsın; kelime yoksa ilk satır “Ekle” der, Enter. Diğer yollar “Toplu ekle” menüsünde, yandan açılan panelde.', pick: 'A', why: 'A’da “nereye eklerim?” sorusunun tek cevabı var. B daha hızlı ama ekleme ile aramayı aynı kutuya yüklüyor; ikisini de dene.' },
+  { t: '3 · Ad: “İlerleme” mi “İstatistik” mi?', a: '<b>İlerleme</b> (taslakta bu): sayfa “ilerliyor muyum?” sorusunu cevaplıyor.', b: '<b>İstatistik</b>: v1.3’teki ad; grafik deposu gibi duruyor.', pick: 'A' },
+  { t: '4 · Ad: “Kelimelerim” mi “Ara” mı?', a: '<b>Kelimelerim</b> (taslakta bu): bir liste; içinde arıyorsun.', b: '<b>Ara</b>: v1.3’teki ad; boş bir arama kutusu gibi.', pick: 'A' },
+  { t: '5 · “Hızlı Ekle” penceresi kalksın mı?', a: '<b>Kalksın</b> (taslakta bu): N tuşu ve Ekle düğmesi doğrudan Ekle sayfasını açar, imleç “Kelime”de. Tek yer.', b: '<b>Kalsın</b>: N küçük bir pencere açar (bulunduğun ekran arkada kalır), “Başka yollar” bağlantısı Ekle sayfasına götürür.', pick: 'A' },
+  { t: '6 · Gelen kutusu nerede?', a: '<b>Ekle › Yakalananlar</b> (taslakta bu) + Ana sayfada tek satır + Ekle düğmesinde sayı.', b: '<b>Kenar çubuğunda ayrı yer</b> (v1.3 gibi), yalnız içinde bir şey varken görünür.', pick: 'A' },
+  { t: '7 · “Biliyorum” ne zaman?', a: '<b>3 hafta sonra hâlâ hatırlıyorsan</b> (taslakta bu; Ayarlar’dan 2 hafta / 1 ay). Subtitle eklentisinin “bilinen kelime”siyle aynı sayı (A3).', b: '<b>Hatırlama olasılığı %90’ın üstündeyse</b>: daha “doğru” ama her gün oynar; sayı geri de düşebilir.', pick: 'A' },
+  { t: '8 · Toplu ızgara ayrı bir yol mu?', a: '<b>Hayır</b> (taslakta bu): “Liste yapıştır” hem yapıştırmayı hem satır satır yazmayı karşılıyor; önizleme tablo gibi.', b: '<b>Evet</b>: v1.3’teki Toplu ızgara (görsel ekleme dahil) ayrı bir yol olarak kalsın.', pick: 'A' },
+  { t: '9 · İlerleme’de deste süzgeci', a: '<b>Yalnız Gelişmiş’te</b> (taslakta bu): ilk bakış tüm kelimelerin.', b: '<b>Her zaman</b>: üstte küçük bir “Tüm desteler” seçici.', pick: 'A' },
+  { t: '10 · Komut paleti (Ctrl+K)', a: '<b>Gelişmiş’te</b> (taslakta bu): kapalıyken üstteki kutu yalnız “Kelime ara”.', b: '<b>Her zaman</b>: “Ara ya da komut çalıştır” (v1.3).', pick: 'A' },
+];
+const MOVED = [
+  ['Kenar çubuğu: Ana sayfa, Kütüphane, Oluştur, Ara, İstatistik, Gelen kutusu, Ayarlar + “Kart ekle”', 'Ana sayfa, Kelimelerim, İlerleme, Ayarlar (+ B’de Desteler) + tek “Ekle” düğmesi'],
+  ['Kütüphane › Desteler', 'A: Kelimelerim’de deste süzgeci + şerit (Çalış, ⋯). B: Desteler'],
+  ['Kütüphane › Notlar', 'Kelimelerim (Gelişmiş: Kelime/Kart görünümü)'],
+  ['Deste sayfası (mod düğmeleri, önizleme, terim listesi)', 'Şeritteki “Çalış” başlatıcıyı açar; terim listesi = süzülmüş Kelimelerim; deste sayfası ⋯ menüsünden açılır'],
+  ['“Kart ekle” düğmesi + Hızlı Ekle penceresi (N)', 'Ekle düğmesi (N) → Ekle › Tek kelime (A) ya da Kelimelerim kutusu (B)'],
+  ['Oluştur › Ekle › Toplu', 'Ekle › Liste yapıştır (satır satır yazılabilir)'],
+  ['Oluştur › Ekle › Yapıştır', 'Ekle › Liste yapıştır'],
+  ['Oluştur › Ekle › Dosyadan', 'Ekle › Dosyadan (ayırıcı, not türü, yinelenen kuralı Gelişmiş’te)'],
+  ['Oluştur › Yapay zeka', 'Ekle › Yapay zekayla (model, ek talimat, maliyet Gelişmiş’te)'],
+  ['Oluştur › Başlangıç desteleri', 'Ekle › Hazır desteler'],
+  ['Okuma (deste sayfasından)', 'Ekle › Bir metinden seç; Okuma ekranı Gelişmiş bağlantısıyla aynen duruyor'],
+  ['Gelen kutusu (kenar çubuğu)', 'Ekle › Yakalananlar (+ Ana sayfa satırı, Ekle düğmesinde sayı); J/K/A/R/X kısayolları aynı'],
+  ['Ara: sorgu dili, kayıtlı sorgular', 'Kelimelerim, Gelişmiş: arama dili yardımı (?) ve “Kayıtlı”'],
+  ['Ara: sütunlar, sıralama, Kart/Not görünümü', 'Kelimelerim, Gelişmiş: Sütunlar menüsü, başlığa tıklayıp sırala'],
+  ['Ara: toplu işlem çubuğu (taşı, kenara koy, yarına bırak, etiket, bul-değiştir, not türü, bayrak, sıfırla, sil)', 'Kelimelerim, Gelişmiş: satır kutucukları + aynı çubuk'],
+  ['Ara: kart bilgisi (Ctrl+I), not düzenleyici (Enter)', 'Kelime paneli: herkes için anlam/cümle/durum + Düzenle; Gelişmiş: kart bilgisi ve tekrar geçmişi'],
+  ['İstatistik › Genel bakış (Bugün nasılım? / Önümde ne var? / Nelerde zorlanıyorum?)', 'İlerleme: Bugün ne yaptım? (zorlandıkların içinde) / İlerliyor muyum? (yeni) / Yarın ne var?'],
+  ['İstatistik › Ayrıntılar (ısı haritası, başarı, hafıza durumu, gelişim, saatler, süreler, stabilite, sınıflandırma, sürekli zorlandıkların, deste karneleri)', 'İlerleme › Daha fazla, her grafiğin altında tek cümlelik anlamı; stabilite ve sınıflandırma Gelişmiş’te'],
+  ['İstatistik: deste / dönem / sorgu süzgeci', 'İlerleme, Gelişmiş'],
+  ['İstatistik › Planlama, Hedefler (sekmeler)', '“Yarın ne var?” kartındaki “Günde kaç yeni kelime?” bağlantısı; Gelişmiş’te sekmeler'],
+  ['Komut paleti “Ara ya da komut çalıştır”', 'Gelişmiş; kapalıyken üst kutu “Kelime ara”'],
+];
+const TOURS = [
+  ['t1', 'Tek kelime ekle', 'Ekle (N) → kelime → Enter → anlam → Enter. İmleç yeniden “Kelime”de.'],
+  ['t2', 'Var olan kelimeyi yaz', 'Ekle’de “reluctant” yazınca zaten var uyarısı ve “Aç”.'],
+  ['t3', 'Yakalananları onayla', 'Subtitle’dan gelen 3 kelime: anlamına bak, Ekle ya da Hepsini ekle.'],
+  ['t4', 'Liste yapıştır', 'Örnek liste: canlı önizleme, zaten var olan atlanır, tek düğme.'],
+  ['t5', 'Dosyadan', 'Sütunları bizim anladığımız cümle; Değiştir ile düzelt.'],
+  ['t6', 'Yapay zekayla', 'Konu → Öner → seç → ekle.'],
+  ['t7', 'Bir metinden seç', 'Noktalı kelimelere tıkla; bildiklerin sade, öğrendiklerin sarı.'],
+  ['t8', 'Kelimeni bul ve düzelt', 'Kelimelerim’de “give” → satır → Düzenle → Kaydet (Ctrl+Enter).'],
+  ['t9', 'Ekleme B: ara-ya-da-ekle', 'Kelimelerim’de “resilient” yaz → Enter → anlamı yaz → Ctrl+Enter.'],
+  ['t10', 'İlerleme', 'Üç soru; “Daha fazla” altında 9 grafik, her biri tek cümleyle.'],
+  ['t11', 'Gelişmiş açık', 'Kelimelerim: arama dili, sütunlar, satır seçimi ve toplu işlem; kelime panelinde kart bilgisi.'],
+  ['t12', 'İlk gün (boş)', 'Her ekranın boş hâli ne yapacağını söylüyor.'],
+];
+function notesHtml() {
+  return `<div style="display:flex;align-items:center;gap:8px"><h2 style="flex:1">Taslak notları</h2><button class="iconbtn" data-act="notes" aria-label="Kapat">${ic('x')}</button></div>
+  <p class="muted" style="margin:6px 0 0">Ekle (eski Oluştur + Kart ekle + Gelen kutusu), Kelimelerim (eski Ara) ve İlerleme (eski İstatistik) için öneri. Uygulama kodu değil: tıkla, dene, her soruya “A” ya da “B” de. Üstteki kesikli çubuk taslağın kendisi; uygulamada yok. Sayıların hepsi aynı kelime listesinden hesaplanıyor: bir kelime eklersen her yerde değişir.</p>
+  <h3>Dene</h3><ol>${TOURS.map(([id, t, d]) => `<li><button class="link" data-act="tour" data-t="${id}">${t}</button> <span class="muted">— ${d}</span></li>`).join('')}</ol>
+  <h3>Sorular (A/B)</h3>${QUESTIONS.map((q) => `<div class="qa"><div class="qt">${q.t}</div><div class="opt">${q.a}</div><div class="opt">${q.b}</div>${q.why ? `<div class="opt" style="margin-top:4px">Neden ${q.pick}? ${q.why}</div>` : `<div class="opt" style="margin-top:4px">Taslakta: ${q.pick}. Reddettiğim: ${q.pick === 'A' ? 'B' : 'A'}.</div>`}
+    ${q.k ? `<div class="row-actions">${['A', 'B'].map((v) => `<button class="btn sm ${S[q.k] === v ? 'primary' : ''}" data-act="proto" data-k="${q.k}" data-v="${v}">${v}’yı göster</button>`).join('')}</div>` : ''}</div>`).join('')}
+  <h3>Neden böyle</h3><ul>
+    <li><b>Bir yer, bir iş.</b> v1.3’te ekleme üç yerdeydi (Kart ekle, Oluştur, Gelen kutusu) ve iki farklı adla (“kart”, “not”). Şimdi tek fiil: <b>Ekle</b>; tek isim: <b>kelime</b>.</li>
+    <li><b>Ara, aslında “kelimelerim”.</b> Sorgu dili, sütunlar, toplu işlem ve kart bilgisi sana her gün lazım değil; Gelişmiş’e çekildiler, silinmediler.</li>
+    <li><b>İstatistik üç soruya cevap.</b> Her biri bir cümle + bir küçük grafik. “İlerliyor muyum?” yeni: bildiğin kelime sayısı zamanla. Gerisi “Daha fazla”da, her grafiğin altında ne anlattığı yazıyor.</li>
+    <li><b>Sade ≠ boş.</b> Tasarım sistemi aynı: koyu, kehribar vurgu, mono sayılar, gölge yerine kenarlık.</li>
+  </ul>
+  <h3>v1.3’ten ne nereye taşındı</h3><table><thead><tr><th>v1.3</th><th>Bu taslak</th></tr></thead><tbody>${MOVED.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table>
+  <p class="muted small" style="margin-top:8px">Hiçbir özellik silinmedi. Kısayollar aynı: N ekle, / ara, ↑↓ gez, Enter düzenle, Ctrl+Enter kaydet, Esc kapat; Gelişmiş’te Space seç, Ctrl+K palet.</p>
+  <h3>Bu taslakta olmayanlar</h3><ul><li>Ana sayfa ve çalışma (D1) ile Ayarlar (D2) yalnız gezinme görünsün diye sade yer tutucu.</li><li>Planlama ve Hedefler sayfaları v1.3’teki gibi kalır, burada çizilmedi.</li><li>Sayılar örnek veri: küçük bir koleksiyon (30 kelime) ama birbirini tutuyor.</li></ul>`;
+}
+
+/* ----------------------------------------------------------------- render */
+function page() {
+  if (S.route === 'home') return pageHome();
+  if (S.route === 'decks') return pageDecks();
+  if (S.route === 'words') return pageWords();
+  if (S.route === 'add') return pageAdd();
+  if (S.route === 'progress') return pageProgress();
+  return pageSettings();
+}
+let lastRoute = null;
+function render() {
+  const a = document.activeElement;
+  const fid = a && a.id && a !== document.body ? a.id : null;
+  let ss = null, se = null;
+  try { if (a && typeof a.selectionStart === 'number') { ss = a.selectionStart; se = a.selectionEnd; } } catch { /* not a text field */ }
+  document.documentElement.dataset.theme = S.theme;
+  $('#proto').innerHTML = protoBar();
+  document.documentElement.style.setProperty('--proto-h', $('#proto').offsetHeight + 'px');
+  const keep = lastRoute === S.route ? ($('#page')?.scrollTop || 0) : 0;
+  const sheetScroll = $('.sheet .sb')?.scrollTop || 0;
+  $('#app').innerHTML = sidebar() + `<div class="main">${topbar()}<main class="page" id="page">${page()}</main></div>${sheetHtml()}`;
+  $('#page').scrollTop = keep;
+  if ($('.sheet .sb')) $('.sheet .sb').scrollTop = sheetScroll;
+  lastRoute = S.route;
+  const dr = $('#drawer');
+  dr.classList.toggle('open', !!S.notes);
+  dr.setAttribute('aria-hidden', String(!S.notes));
+  if (S.notes) dr.innerHTML = notesHtml();
+  if (fid) {
+    const el = document.getElementById(fid);
+    if (el) { el.focus({ preventScroll: true }); try { if (ss != null) el.setSelectionRange(ss, se); } catch { /* select */ } }
+  }
+  if (S.sel) document.getElementById('row-' + S.sel)?.scrollIntoView({ block: 'nearest' });
+}
+function focus(id) {
+  // Synchronous when the element is already there (typing right after a key must land in it), else next frame.
+  const go = () => { const el = document.getElementById(id); if (el) { el.focus(); try { el.select(); } catch { /* no select */ } } return !!el; };
+  if (!go()) requestAnimationFrame(go);
+}
+
+/* ----------------------------------------------------------------- toast + undo */
+let toastTimer = null;
+function toast(msg, undo) {
+  const box = $('#toast');
+  box.innerHTML = `<div class="toast"><span>${msg}</span>${undo ? '<button class="link" data-act="undo">Geri al</button>' : ''}<button class="iconbtn" data-act="closetoast" aria-label="Kapat">${ic('x')}</button></div>`;
+  toast.undo = undo || null;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { box.innerHTML = ''; toast.undo = null; }, 6000);
+}
+
+/* ----------------------------------------------------------------- mutations */
+function addWord(o) {
+  const w = { id: 'w' + uid++, term: o.term.trim(), mean: (o.mean || '').trim(), ex: (o.ex || '').trim(), exTr: '', src: (o.src || '').trim(), deck: o.deck && o.deck !== '__new' ? o.deck : 'me', st: 'new', due: 0, ivl: 0, lapses: 0, reps: 0, added: 0, knownSince: null, manual: false, susp: false, tags: o.tags ? o.tags.split(/[\s,]+/).filter(Boolean) : [] };
+  db().words.unshift(w);
+  return w;
+}
+function removeWords(ids) { ids.forEach((id) => { const w = db().words.find((x) => x.id === id); if (w) w.deleted = true; }); }
+function restoreWords(ids) { ids.forEach((id) => { const w = db().words.find((x) => x.id === id); if (w) w.deleted = false; }); }
+function addMany(list, deck, label) {
+  const ws = list.map((o) => addWord({ ...o, deck }));
+  const ids = ws.map((w) => w.id);
+  toast(`${ws.length} kelime eklendi · ${esc(deckName(deck))}. <button class="link" data-act="go" data-r="words">Kelimelerim’de gör</button>`, () => removeWords(ids));
+  return ws;
+}
+function moveSel(delta) {
+  const l = filtered();
+  if (!l.length) return;
+  let i = l.findIndex((w) => w.id === S.sel);
+  i = i < 0 ? (delta > 0 ? 0 : l.length - 1) : Math.min(l.length - 1, Math.max(0, i + delta));
+  S.sel = l[i].id; S.edit = null;
+  render();
+}
+function openAdd(term) {
+  S.menu = null;
+  if (S.add === 'A') {
+    S.route = 'add'; S.way = 'single'; S.sheet = null;
+    if (term != null) S.form.term = term;
+    render(); focus(term ? 'f-mean' : 'f-term');
+  } else {
+    S.route = 'words'; S.sheet = null;
+    if (term) { S.inlineAdd = { term, mean: '', ex: '', src: '', deck: S.form.deck }; render(); focus('ia-mean'); }
+    else { render(); focus('q'); }
+  }
+}
+function openWay(w) {
+  S.menu = null;
+  if (w === 'single') return openAdd();
+  if (S.add === 'A') { S.route = 'add'; S.way = w; S.sheet = null; }
+  else { S.route = 'words'; S.sheet = w; }
+  render();
+}
+function submitSingle() {
+  const f = S.form;
+  f.term = $('#f-term')?.value ?? f.term; f.mean = $('#f-mean')?.value ?? f.mean;
+  if (!f.term.trim() || !f.mean.trim()) { S.formErr = !f.term.trim() ? 'Önce kelimeyi yaz.' : 'Anlamını da yaz; kart onu soracak.'; render(); focus(!f.term.trim() ? 'f-term' : 'f-mean'); return; }
+  S.formErr = '';
+  const w = addWord(f);
+  S.recent.unshift(w.id);
+  toast(`“${esc(w.term)}” eklendi · ${esc(deckName(w.deck))}`, () => { removeWords([w.id]); S.recent = S.recent.filter((x) => x !== w.id); });
+  S.form = { term: '', mean: '', ex: '', src: f.src, deck: f.deck, tags: f.tags };
+  render(); focus('f-term');
+}
+function submitInline() {
+  const a = S.inlineAdd;
+  if (!a) return;
+  ['term', 'mean', 'ex', 'src'].forEach((k) => { const el = $('#ia-' + k); if (el) a[k] = el.value; });
+  if (!a.term.trim() || !a.mean.trim()) { S.formErr = !a.term.trim() ? 'Önce kelimeyi yaz.' : 'Anlamını da yaz; kart onu soracak.'; render(); focus(!a.term.trim() ? 'ia-term' : 'ia-mean'); return; }
+  S.formErr = '';
+  const w = addWord(a);
+  S.form.deck = a.deck;
+  S.inlineAdd = null; S.q = w.term; S.status = 'all'; S.sel = w.id; S.fresh = w.id;
+  toast(`“${esc(w.term)}” eklendi · ${esc(deckName(w.deck))}`, () => removeWords([w.id]));
+  render(); focus('q');
+  setTimeout(() => { S.fresh = null; }, 50);
+}
+function saveEdit(id) {
+  const w = live().find((x) => x.id === id);
+  if (!w) return;
+  const before = { ...w, tags: [...w.tags] };
+  w.term = $('#e-term').value.trim() || w.term; w.mean = $('#e-mean').value.trim() || w.mean; w.ex = $('#e-ex').value.trim(); w.exTr = $('#e-extr').value.trim(); w.src = $('#e-src').value.trim(); w.deck = $('#e-deck').value;
+  if ($('#e-tags')) w.tags = $('#e-tags').value.split(/[\s,]+/).filter(Boolean);
+  S.edit = null;
+  toast(`“${esc(w.term)}” kaydedildi`, () => Object.assign(w, before));
+  render();
+}
+
+/* ----------------------------------------------------------------- actions */
+const A = {
+  proto(d) {
+    S[d.k] = d.v; store.set(d.k, d.v);
+    if (d.k === 'add') { S.sheet = null; S.inlineAdd = null; if (d.v === 'B' && S.route === 'add') { S.route = 'words'; } }
+    if (d.k === 'nav' && d.v === 'A' && S.route === 'decks') S.route = 'words';
+    if (d.k === 'data') { S.sel = null; S.edit = null; S.selIds.clear(); S.inlineAdd = null; S.q = ''; S.deck = 'all'; S.status = 'all'; S.recent = []; S.picked.clear(); }
+  },
+  adv() { S.adv = !S.adv; store.set('adv', S.adv); if (!S.adv) { S.selIds.clear(); S.qhelp = false; S.statTab = 'overview'; S.menu = null; if (/\w:/.test(S.q)) S.q = ''; } toast(S.adv ? 'Gelişmiş açık: ek araçlar yerinde göründü.' : 'Gelişmiş kapalı: ek araçlar yoldan çekildi, hiçbiri silinmedi.'); },
+  notes() { S.notes = !S.notes; },
+  go(d) { S.route = d.r; S.menu = null; S.sheet = null; S.statTab = 'overview'; if (d.r !== 'words') { S.edit = null; } },
+  deck(d) { S.deck = d.d; S.route = 'words'; S.sel = null; S.edit = null; S.menu = null; },
+  status(d) { S.status = d.s; },
+  sel(d) { S.sel = d.id; S.edit = null; S.menu = null; },
+  tick(d, e) { e.stopPropagation(); S.selIds.has(d.id) ? S.selIds.delete(d.id) : S.selIds.add(d.id); },
+  selall() { const l = filtered(); const all = l.every((w) => S.selIds.has(w.id)); l.forEach((w) => (all ? S.selIds.delete(w.id) : S.selIds.add(w.id))); },
+  clearsel() { S.selIds.clear(); },
+  closesel() { S.sel = null; S.edit = null; },
+  edit(d) { S.sel = d.id; S.edit = d.id; render(); focus('e-mean'); return false; },
+  canceledit() { S.edit = null; },
+  save(d) { saveEdit(d.id); return false; },
+  mark(d) {
+    const w = live().find((x) => x.id === d.id); const before = { ...w };
+    if (d.to === 'known') Object.assign(w, { st: 'known', manual: true, knownSince: 0, susp: false });
+    else Object.assign(w, { st: 'learning', manual: false, due: 0, ivl: 1, knownSince: null });
+    toast(d.to === 'known' ? `“${esc(w.term)}” artık “biliyorum”: sorulmayacak.` : `“${esc(w.term)}” yeniden öğreniliyor: bugün sorulacak.`, () => Object.assign(w, before));
+  },
+  susp(d) { const w = live().find((x) => x.id === d.id); w.susp = !w.susp; toast(w.susp ? `“${esc(w.term)}” kenara kondu: sen geri alana kadar sorulmayacak.` : `“${esc(w.term)}” kenardan çıktı.`, () => { w.susp = !w.susp; }); },
+  del(d) { const w = live().find((x) => x.id === d.id); removeWords([w.id]); S.sel = null; S.edit = null; toast(`“${esc(w.term)}” silindi.`, () => restoreWords([w.id])); },
+  clearq() { S.q = ''; S.inlineAdd = null; render(); focus('q'); return false; },
+  focusq() { focus('q'); return false; },
+  setq(d) { S.q = d.q; S.menu = null; S.status = 'all'; },
+  qhelp() { S.qhelp = !S.qhelp; },
+  menu(d, e) { e.stopPropagation(); S.menu = S.menu === d.m ? null : d.m; },
+  col(d) { S.cols[d.c] = !S.cols[d.c]; },
+  sort(d) { S.sort = S.sort.k === d.k ? { k: d.k, dir: -S.sort.dir } : { k: d.k, dir: 1 }; },
+  bulk(d) {
+    const ids = [...S.selIds]; const ws = ids.map((id) => live().find((w) => w.id === id)).filter(Boolean); S.menu = null;
+    if (d.b === 'susp') { ws.forEach((w) => (w.susp = true)); toast(`${ws.length} kelime kenara kondu.`, () => ws.forEach((w) => (w.susp = false))); }
+    else if (d.b === 'del') { removeWords(ids); S.selIds.clear(); S.sel = null; toast(`${ws.length} kelime silindi.`, () => restoreWords(ids)); }
+    else if (d.b === 'reset') { const b = ws.map((w) => ({ ...w })); ws.forEach((w) => Object.assign(w, { st: 'new', manual: false, ivl: 0, due: 0, knownSince: null })); toast(`${ws.length} kelime sıfırlandı: yeniden öğrenilecek.`, () => ws.forEach((w, i) => Object.assign(w, b[i]))); }
+    else if (d.b === 'tag') { ws.forEach((w) => w.tags.includes('fiil') || w.tags.push('fiil')); toast(`${ws.length} kelimeye “fiil” etiketi eklendi (taslakta etiket adı sorulmuyor).`); }
+    else toast(`${ws.length} kelime yarına bırakıldı.`);
+  },
+  clearfilters() { S.status = 'all'; S.deck = 'all'; },
+  addterm() { openAdd(S.q.trim()); return false; },
+  inlineadd() { S.inlineAdd = { term: S.q.trim(), mean: '', ex: '', src: '', deck: S.form.deck }; S.formErr = ''; render(); focus('ia-mean'); return false; },
+  inlinesave() { submitInline(); return false; },
+  inlinecancel() { S.inlineAdd = null; S.formErr = ''; render(); focus('q'); return false; },
+  openadd() { openAdd(); return false; },
+  way(d) { openWay(d.w); return false; },
+  sheet(d) { S.sheet = d.w; S.menu = null; S.route = 'words'; },
+  closesheet() { S.sheet = null; },
+  addsingle() { submitSingle(); return false; },
+  undoadd(d) { removeWords([d.id]); S.recent = S.recent.filter((x) => x !== d.id); toast('Geri alındı.'); },
+  openword(d) { S.route = 'words'; S.sheet = null; S.q = ''; S.status = 'all'; S.deck = 'all'; S.sel = d.id; S.edit = null; },
+  samplepaste() { S.paste = 'sketchy\tşüpheli, güven vermeyen\ncome up with\tdüşünüp bulmak\nreluctant\tisteksiz\ndeadline - son teslim tarihi\nget along; iyi geçinmek; We get along really well.\nstubborn'; },
+  clearpaste() { S.paste = ''; },
+  addpaste() { const ok = parsePaste(S.paste).filter((r) => !r.dup && !r.bad); if (!ok.length) return; addMany(ok, S.pasteDeck, 'paste'); S.paste = ''; },
+  inboxadd(d) { const box = db().inbox; const it = box.find((x) => x.id === d.id); db().inbox = box.filter((x) => x.id !== d.id); const w = addWord({ term: it.lemma || it.term, mean: it.mean, ex: it.ex, src: it.src, deck: it.deck }); toast(`“${esc(w.term)}” eklendi · ${esc(deckName(w.deck))}`, () => { removeWords([w.id]); db().inbox.unshift(it); }); },
+  inboxdel(d) { const box = db().inbox; const it = box.find((x) => x.id === d.id); db().inbox = box.filter((x) => x.id !== d.id); toast(`“${esc(it.term)}” silindi.`, () => db().inbox.unshift(it)); },
+  inboxall() { const items = db().inbox; db().inbox = []; const ws = items.map((it) => addWord({ term: it.lemma || it.term, mean: it.mean, ex: it.ex, src: it.src, deck: it.deck })); toast(`${ws.length} kelime eklendi.`, () => { removeWords(ws.map((w) => w.id)); db().inbox = items; }); },
+  pick(d) { S.picked.has(d.k) ? S.picked.delete(d.k) : S.picked.set(d.k, READ_DICT[d.k] || ''); },
+  addpicked() { const list = [...S.picked.entries()].map(([k, m]) => ({ term: k, mean: m, ex: sentenceOf(k), src: 'Breaking Bad S2E4' })); addMany(list, S.pickedDeck); S.picked.clear(); },
+  pickfile() { S.file = 'friends-s1.csv'; },
+  nofile() { S.file = null; S.fileCols = false; },
+  filecols() { S.fileCols = !S.fileCols; },
+  addfile() { const ok = FILE_ROWS.filter((r) => !findTerm(r[0])).map((r) => ({ term: r[0], mean: r[1], ex: r[2], src: 'friends-s1.csv' })); addMany(ok, S.fileDeck); S.file = null; },
+  aisuggest() { S.ai.topic = $('#ai-topic')?.value ?? S.ai.topic; S.ai.state = 'loading'; S.ai.picked = new Set(AI_SUGG.map((_, i) => i).filter((i) => !findTerm(AI_SUGG[i][0]))); setTimeout(() => { S.ai.state = 'done'; render(); }, 700); },
+  aipick(d, e) { e.stopPropagation(); const i = Number(d.i); S.ai.picked.has(i) ? S.ai.picked.delete(i) : S.ai.picked.add(i); },
+  aiadd() { const list = [...S.ai.picked].map((i) => ({ term: AI_SUGG[i][0], mean: AI_SUGG[i][1], ex: AI_SUGG[i][2] })); addMany(list, S.aiDeck || 'bb'); S.ai = { topic: '', count: '10', state: 'idle', picked: new Set() }; },
+  starter(d) { S.starters.add(d.id); toast(`“${esc(d.t)}” destesi eklendi. Kelimeleri Kelimelerim’de “${esc(d.t)}” süzgecinde (taslakta listeye eklenmedi).`, () => S.starters.delete(d.id)); },
+  study() { toast('Çalışma başlatıcısı açılır (çalışma akışı D1 taslağında).'); return false; },
+  toast(d) { S.menu = null; toast(esc(d.m)); },
+  topsearch() { if (S.adv) { toast('Komut paleti açılır (v1.3’teki gibi: eylemler, ekranlar, komutlar).'); return false; } S.route = 'words'; S.sheet = null; render(); focus('q'); return false; },
+  more() { S.more = !S.more; store.set('more', S.more); },
+  range(d) { S.range = Number(d.v); },
+  stattab(d) { S.statTab = d.t; S.route = 'progress'; },
+  undo() { if (toast.undo) { toast.undo(); toast('Geri alındı.'); } },
+  closetoast() { $('#toast').innerHTML = ''; return false; },
+  tour(d) {
+    S.notes = false; S.menu = null; S.sheet = null; S.edit = null; S.inlineAdd = null; S.formErr = '';
+    if (S.data !== 'full' && d.t !== 't12') A.proto({ k: 'data', v: 'full' });
+    const t = d.t;
+    if (['t1', 't2', 't3', 't4', 't5', 't6', 't7'].includes(t) && S.add !== 'A') A.proto({ k: 'add', v: 'A' });
+    if (t === 't1') { openAdd(); return false; }
+    if (t === 't2') { S.route = 'add'; S.way = 'single'; S.form.term = 'reluctant'; render(); focus('f-term'); return false; }
+    if (t === 't3') { openWay('inbox'); return false; }
+    if (t === 't4') { S.route = 'add'; S.way = 'paste'; A.samplepaste(); }
+    if (t === 't5') { S.route = 'add'; S.way = 'file'; S.file = 'friends-s1.csv'; }
+    if (t === 't6') { S.route = 'add'; S.way = 'ai'; S.ai.topic = 'Breaking Bad’deki argo kelimeler'; }
+    if (t === 't7') { S.route = 'add'; S.way = 'text'; }
+    if (t === 't8') { S.route = 'words'; S.q = 'give'; S.status = 'all'; S.deck = 'all'; S.sel = (findTerm('give up') || {}).id; }
+    if (t === 't9') { A.proto({ k: 'add', v: 'B' }); S.route = 'words'; S.q = 'resilient'; S.status = 'all'; S.sel = null; render(); focus('q'); return false; }
+    if (t === 't10') { S.route = 'progress'; S.statTab = 'overview'; S.more = true; }
+    if (t === 't11') { S.adv = true; store.set('adv', true); S.route = 'words'; S.q = ''; S.selIds = new Set([live()[0].id, live()[1].id]); S.sel = live()[2].id; }
+    if (t === 't12') { A.proto({ k: 'data', v: 'empty' }); S.route = 'words'; }
+  },
+};
+
+/* ----------------------------------------------------------------- events */
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) { if (S.menu && !e.target.closest('.menu')) { S.menu = null; render(); } return; }
+  const act = el.dataset.act;
+  if (el.dataset.stop) e.stopPropagation();
+  if (act === 'deck' && e.target.closest('[data-act="study"]')) return;
+  if (!A[act]) return;
+  if (S.menu && act !== 'menu' && !el.closest('.menu')) S.menu = null;
+  const r = A[act](el.dataset, e);
+  if (r !== false) render();
+});
+document.addEventListener('input', (e) => {
+  const el = e.target.closest('[data-bind]');
+  if (!el) return;
+  const path = el.dataset.bind; const v = el.value;
+  if (path === 'q') { S.q = v; S.inlineAdd = null; S.formErr = ''; render(); return; }
+  if (path.startsWith('inbox.')) { const [, id, k] = path.split('.'); const it = db().inbox.find((x) => x.id === id); if (it) it[k] = v; return; }
+  const parts = path.split('.');
+  let o = S; for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]];
+  o[parts[parts.length - 1]] = v;
+  if (path === 'form.term') { const box = $('#dupbox'); if (box) box.innerHTML = dupHtml(v && findTerm(v)); return; }
+  if (el.dataset.live) render();
+});
+document.addEventListener('change', (e) => {
+  const el = e.target.closest('select[data-bind]');
+  if (!el) return;
+  const path = el.dataset.bind; const v = el.value;
+  if (v === '__new') { toast('Yeni deste: adını sorar, sonra seçili olur (taslakta sorulmuyor).'); render(); return; }
+  if (path === 'deck') { S.deck = v; S.sel = null; S.edit = null; render(); return; }
+  if (path === 'bulkmove') { const ws = [...S.selIds].map((id) => live().find((w) => w.id === id)).filter(Boolean); const before = ws.map((w) => w.deck); ws.forEach((w) => (w.deck = v)); toast(`${ws.length} kelime “${esc(deckName(v))}” destesine taşındı.`, () => ws.forEach((w, i) => (w.deck = before[i]))); render(); return; }
+  if (path.startsWith('inbox.')) { const [, id, k] = path.split('.'); const it = db().inbox.find((x) => x.id === id); if (it) it[k] = v; return; }
+  const parts = path.split('.');
+  let o = S; for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]];
+  o[parts[parts.length - 1]] = v;
+  if (path === 'knownAfter') toast(`“Biliyorum” artık ${v === '14' ? '2 hafta' : v === '30' ? '1 ay' : '3 hafta'} sonra. Kelimelerim, İlerleme ve Subtitle aynı sayıyı kullanır (taslakta örnek veri değişmez).`);
+});
+document.addEventListener('keydown', (e) => {
+  const t = e.target;
+  const typing = t.matches && t.matches('input, textarea, select');
+  const mod = e.ctrlKey || e.metaKey;
+  if (e.key === 'Escape') {
+    if (S.menu) S.menu = null;
+    else if (S.sheet) S.sheet = null;
+    else if (S.edit) S.edit = null;
+    else if (S.inlineAdd) { S.inlineAdd = null; S.formErr = ''; render(); focus('q'); return; }
+    else if (t.id === 'q' && S.q) S.q = '';
+    else if (S.sel) S.sel = null;
+    else if (S.notes) S.notes = false;
+    else return;
+    e.preventDefault(); render(); return;
+  }
+  if (mod && e.key === 'Enter') {
+    const id = t.id || '';
+    if (id.startsWith('f-')) { e.preventDefault(); submitSingle(); }
+    else if (id.startsWith('ia-') || (id === 'q' && S.inlineAdd)) { e.preventDefault(); submitInline(); }
+    else if (id.startsWith('e-') && S.edit) { e.preventDefault(); saveEdit(S.edit); }
+    else if (id === 'paste') { e.preventDefault(); A.addpaste(); render(); }
+    return;
+  }
+  if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); A.topsearch(); return; }
+  if (typing) {
+    if (t.id === 'q') {
+      if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(1); focus('q'); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-1); focus('q'); }
+      else if (e.key === 'Enter' && !e.repeat) {
+        e.preventDefault();
+        const q = S.q.trim();
+        if (S.add === 'B' && q && !findTerm(q) && !/:/.test(q)) { A.inlineadd(); return; }
+        const l = filtered(); const w = l.find((x) => x.id === S.sel) || l[0];
+        if (w) { S.sel = w.id; S.edit = w.id; render(); focus('e-mean'); }
+      }
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey && t.tagName === 'INPUT') {
+      if (t.id === 'f-term') { e.preventDefault(); focus('f-mean'); }
+      else if (['f-mean', 'f-ex', 'f-src'].includes(t.id)) { e.preventDefault(); submitSingle(); }
+      else if (t.id === 'ia-term') { e.preventDefault(); focus('ia-mean'); }
+      else if (t.id && t.id.startsWith('ia-')) { e.preventDefault(); submitInline(); }
+    }
+    return;
+  }
+  if (e.repeat || mod || e.altKey) return;
+  if ((e.key === 'n' || e.key === 'N') && !S.sheet) { e.preventDefault(); openAdd(); return; }
+  if (e.key === '/' && S.route === 'words') { e.preventDefault(); focus('q'); return; }
+  if (S.route === 'words' && !S.sheet) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); moveSel(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); moveSel(-1); }
+    else if (e.key === 'Enter' && S.sel && !S.edit && !t.closest('button')) { e.preventDefault(); A.edit({ id: S.sel }); }
+    else if (e.key === ' ' && S.adv && S.sel && !t.closest('button')) { e.preventDefault(); S.selIds.has(S.sel) ? S.selIds.delete(S.sel) : S.selIds.add(S.sel); render(); }
+  }
+  if ((e.key === 'Enter' || e.key === ' ') && t.matches('[data-act="pick"], tr[data-act="deck"]')) { e.preventDefault(); t.click(); }
+});
+window.addEventListener('resize', () => document.documentElement.style.setProperty('--proto-h', $('#proto').offsetHeight + 'px'));
+render();
+</script>
+</body>
+</html>

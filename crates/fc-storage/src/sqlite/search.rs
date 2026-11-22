@@ -50,7 +50,9 @@ fn keys_arg(ctx: &Context<'_>, i: usize) -> rusqlite::Result<Option<Vec<String>>
 /// * `fc_text_glob(fields_json, glob)` — glob over all fields' text;
 /// * `fc_field_glob(fields_json, keys_json, glob)` — some field matches as a whole;
 /// * `fc_html_glob(glob, html)` — stripped HTML matches as a whole (one extracted field);
-/// * `fc_regex(fields_json, keys_json | NULL, pattern)` — case-insensitive regex.
+/// * `fc_regex(fields_json, keys_json | NULL, pattern)` — case-insensitive regex;
+/// * `fc_recall(stability, last_review, day_start, decay)` — recall probability
+///   ([`fc_core::recall::retrievability_at`], the formula card info shows), `NULL` without one.
 pub(crate) fn register_functions(conn: &Connection) -> rusqlite::Result<()> {
     let flags = FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC;
     conn.create_scalar_function("fc_fold", 1, flags, |ctx| {
@@ -101,6 +103,22 @@ pub(crate) fn register_functions(conn: &Connection) -> rusqlite::Result<()> {
         })?;
         let keys = keys_arg(ctx, 1)?;
         Ok(regex_matches(&fields_arg(ctx, 0)?, keys.as_deref(), &re))
+    })?;
+    conn.create_scalar_function("fc_recall", 4, flags, |ctx| {
+        let (Some(stability), Some(last), Some(day_start), Some(decay)) = (
+            ctx.get::<Option<f64>>(0)?,
+            ctx.get::<Option<i64>>(1)?,
+            ctx.get::<Option<i64>>(2)?,
+            ctx.get::<Option<f64>>(3)?,
+        ) else {
+            return Ok(None);
+        };
+        Ok(fc_core::recall::retrievability_at(
+            stability,
+            fc_core::Timestamp(last),
+            fc_core::Timestamp(day_start),
+            decay,
+        ))
     })?;
     Ok(())
 }
@@ -315,12 +333,17 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
             };
             format!("{col} {} {}", sql_op(*op), out.param(*v))
         }
-        Pred::Elapsed(op, th) => {
-            let n = out.param(now.0);
-            let t = out.param(*th);
+        Pred::Recall {
+            op,
+            value,
+            decay,
+            day_start,
+        } => {
+            let d = out.param(day_start.0);
+            let k = out.param(*decay);
+            let v = out.param(*value);
             format!(
-                "c.stability > 0 AND c.last_review IS NOT NULL AND \
-                 ((({n} - c.last_review) / 86400000.0) / c.stability) {} {t}",
+                "c.state <> 'new' AND fc_recall(c.stability, c.last_review, {d}, {k}) {} {v}",
                 sql_op(*op)
             )
         }

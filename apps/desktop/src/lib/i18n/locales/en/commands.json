@@ -58,7 +58,10 @@
       "backup": {
         "create": "Create a backup",
         "inspect": "Inspect a backup",
-        "restore": "Restore a backup"
+        "restore": "Restore a backup",
+        "verify": "Check a backup",
+        "status": "Backup status",
+        "auto": "Back up now"
       },
       "print": {
         "render": "Print cards"

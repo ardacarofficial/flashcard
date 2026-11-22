@@ -10,7 +10,7 @@ use crate::attribute::AttributeTarget;
 use crate::card::{Card, CardState};
 use crate::id::{AttributeDefId, TagId};
 use crate::note::Note;
-use crate::time::{Timestamp, MILLIS_PER_DAY};
+use crate::time::Timestamp;
 use std::collections::BTreeMap;
 
 /// One stored classification value row of the card or its note.
@@ -72,15 +72,6 @@ fn scheduled_due(card: &Card) -> Option<Timestamp> {
     }
 }
 
-/// `elapsed_days / stability` (`None` without a review or a positive stability).
-pub fn elapsed_ratio(card: &Card, now: Timestamp) -> Option<f64> {
-    let s = card.scheduling.stability.filter(|s| *s > 0.0)?;
-    let last = card.scheduling.last_review?;
-    #[allow(clippy::cast_precision_loss)]
-    let days = (now.0 - last.0) as f64 / MILLIS_PER_DAY as f64;
-    Some(days / s)
-}
-
 fn pred(p: &Pred, f: &CardFacts<'_>, now: Timestamp) -> bool {
     let c = f.card;
     let s = &c.scheduling;
@@ -115,7 +106,13 @@ fn pred(p: &Pred, f: &CardFacts<'_>, now: Timestamp) -> bool {
             };
             v.is_some_and(|v| op.holds(v, *n))
         }
-        Pred::Elapsed(op, th) => elapsed_ratio(c, now).is_some_and(|x| op.holds(x, *th)),
+        Pred::Recall {
+            op,
+            value,
+            decay,
+            day_start,
+        } => crate::recall::card_retrievability(s, *day_start, *decay)
+            .is_some_and(|r| op.holds(r, *value)),
         Pred::Time(col, op, at) => {
             let v = match col {
                 TimeCol::CardCreated => Some(c.created_at),

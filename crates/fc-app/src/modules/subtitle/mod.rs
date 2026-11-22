@@ -29,6 +29,7 @@
 //! reaches nothing but these internal commands.
 
 pub(crate) mod capture;
+pub(crate) mod diagnostics;
 #[cfg(test)]
 mod tests;
 
@@ -131,6 +132,8 @@ pub fn register(reg: &mut Registry) {
     reg.command::<SubtitleCapturesRestore>(captures_restore);
     reg.command::<SubtitleMediaUpload>(media_upload);
     reg.command::<SubtitleKeysTouch>(keys_touch);
+    reg.query::<SubtitleCapturesRecent>(diagnostics::recent);
+    reg.command::<SubtitleCapturesLog>(diagnostics::log);
 }
 
 // ------------------------------------------------------------------ keys
@@ -844,15 +847,17 @@ pub fn capture(
     key: &SubtitleKeyDto,
     value: &Value,
 ) -> Result<SubtitleCaptureOutcome, ApiError> {
-    let capture = capture::parse(value)?;
-    invoke::<SubtitleCapturesCreate>(
-        app,
-        key,
-        &RecordSubtitleCapture {
-            key_id: Some(key.id),
-            capture,
-        },
-    )
+    // v1.4: every attempt leaves a privacy-safe diagnostic row (`diagnostics`).
+    diagnostics::observe(app, key, value, |capture| {
+        invoke::<SubtitleCapturesCreate>(
+            app,
+            key,
+            &RecordSubtitleCapture {
+                key_id: Some(key.id),
+                capture,
+            },
+        )
+    })
 }
 
 /// `POST /subtitle/v1/captures:batch`: `{ "captures": [...] }`, 1–[`MAX_BATCH`]; each judged

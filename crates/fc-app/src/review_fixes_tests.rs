@@ -192,6 +192,8 @@ fn replayable_methods_are_undoable_commands_without_side_channels() {
                 SubtitleCapturesCreate::NAME,
                 SubtitleMediaUpload::NAME,
                 SubtitleKeysTouch::NAME,
+                // v1.4: capture diagnostics, never in the oplog.
+                SubtitleCapturesLog::NAME,
             ]
             .contains(&d.name)
         {

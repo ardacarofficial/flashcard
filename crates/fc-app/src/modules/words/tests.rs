@@ -394,3 +394,132 @@ fn lookup_500_forms_among_50k_notes() {
     assert!(r.forms.iter().all(|f| f.status == WordStatus::Learning), "every form found");
     assert!(took.as_millis() < 3_000, "lookup took {took:?}");
 }
+
+// ------------------------------------------------------------------ backups (A1 v2)
+
+/// An app on a fresh SQLite file whose collection folder is set (backups need one).
+fn backup_profile() -> TestApp {
+    let db = TempSqlite::new();
+    let data = db.path().parent().unwrap().to_path_buf();
+    let t = TestApp::new(Arc::new(db));
+    t.app.set_data_dir(data);
+    t
+}
+
+fn finished<T: serde::de::DeserializeOwned>(t: &TestApp, job: &fc_api::v1::jobs::JobDto) -> T {
+    t.app.run_pending_jobs().unwrap();
+    let job = t.ok::<JobsGet>(fc_api::v1::jobs::JobRef { id: job.id });
+    assert_eq!(job.status, fc_api::v1::jobs::JobStatus::Succeeded, "{:?}", job.error);
+    serde_json::from_value(job.result.unwrap()).unwrap()
+}
+
+/// A restored backup (streaming v2, verified by restore into a scratch profile) leaves an index
+/// that equals a fresh rebuild and says what it said when the backup was made — in the same
+/// profile after later changes and in a brand-new one. The transient queues are not in the
+/// backup; the index tables are, and the restore's own writes queue every note again.
+#[test]
+fn a_restored_backup_has_a_correct_word_index() {
+    use fc_api::v1::io::{BackupReport, CreateBackup, RestoreBackup};
+    let t = backup_profile();
+    let d = deck(&t, "English");
+    deck_language(&t, d, "en");
+    let key = note(&t, d, "key");
+    note(&t, d, "went");
+    let gone = note(&t, d, "house");
+    set_interval(&t, key, 30);
+    mark(&t, &["door"], Some(WordMark::Known));
+    let stats_then = t.ok::<WordsStats>(Empty {});
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("words.fcbackup");
+    let path_s = path.to_string_lossy().into_owned();
+    let job = t.ok::<IoBackupCreate>(CreateBackup {
+        path: path_s.clone(),
+    });
+    let rep: BackupReport = finished(&t, &job);
+    assert!(rep.verified, "verify-by-restore passed");
+    let dump = t.store.read().unwrap().dump_collection().unwrap();
+    let names: Vec<&str> = dump.tables.iter().map(|x| x.name.as_str()).collect();
+    assert!(names.contains(&"word_index") && names.contains(&"word_index_notes"));
+    assert!(!names.iter().any(|n| n.starts_with("word_index_dirty")));
+
+    // Later changes, then the restore puts the old state back.
+    t.ok::<NotesDelete>(NoteIds { ids: vec![gone] });
+    note(&t, d, "actor");
+    mark(&t, &["door"], None);
+    deck_language(&t, d, "de");
+    assert_ne!(t.ok::<WordsStats>(Empty {}), stats_then);
+    let job = t.ok::<IoBackupRestore>(RestoreBackup {
+        path: path_s.clone(),
+        safety_backup_path: Some(dir.path().join("safety.fcbackup").to_string_lossy().into_owned()),
+    });
+    let _: serde_json::Value = finished(&t, &job);
+    assert_eq!(t.ok::<WordsStats>(Empty {}), stats_then);
+    assert_eq!(status(&t, "goes"), WordStatus::Learning);
+    assert_eq!(t.store.read().unwrap().word_index_dirty_count().unwrap(), 0);
+    assert_rebuild_equal(&t, "restore");
+    let fresh = {
+        let mut tx = t.store.write().unwrap();
+        super::index::rebuild(&mut *tx).unwrap();
+        tx.commit().unwrap();
+        t.ok::<WordsStats>(Empty {})
+    };
+    assert_eq!(fresh, stats_then, "words.stats equals a fresh rebuild");
+
+    // A brand-new profile.
+    let b = backup_profile();
+    let job = b.ok::<IoBackupRestore>(RestoreBackup {
+        path: path_s,
+        safety_backup_path: Some(dir.path().join("safety-b.fcbackup").to_string_lossy().into_owned()),
+    });
+    let _: serde_json::Value = finished(&b, &job);
+    assert_eq!(b.ok::<WordsStats>(Empty {}), stats_then);
+    assert_rebuild_equal(&b, "restore into a new profile");
+}
+
+/// Subtitle capture diagnostics (A5, `subtitle_capture_log`) and the index triggers stay
+/// apart: a capture logs an attempt and indexes its note under the capture's language; a
+/// resend logs a `duplicate` attempt and changes nothing in the index; no queue is left over.
+#[test]
+fn capture_diagnostics_and_the_index_do_not_interfere() {
+    use crate::modules::subtitle::{authenticate, capture, key_hash};
+    use fc_api::v1::modules::SetModuleEnabled;
+    use fc_api::v1::subtitle::{CreateSubtitleKey, RecentSubtitleCaptures, SubtitleAttemptResult};
+    let t = TestApp::new(Arc::new(TempSqlite::new()));
+    t.ok::<ModulesSetEnabled>(SetModuleEnabled {
+        id: crate::modules::subtitle::ID.into(),
+        enabled: true,
+    });
+    let secret = t
+        .ok::<SubtitleKeysCreate>(CreateSubtitleKey {
+            name: "Chrome".into(),
+        })
+        .secret;
+    let key = authenticate(&t.app, &key_hash(&secret)).unwrap();
+    let c = serde_json::json!({
+      "schema": 1,
+      "capture_id": "0192812a-6f3c-7a41-9c2e-000000000001",
+      "kind": "word",
+      "lang": { "target": "en-US", "native": "tr" },
+      "term": { "surface": "picked up", "lemma": "pick up", "pos": "verb" },
+      "definition": { "text": "almak", "source": "dict" },
+      "context": { "sentence": "He picked up the keys.", "translation": "", "term_offset": null },
+      "source": { "type": "video", "url": "https://example.test/v", "title": "T", "site": "x",
+                  "video_id": "v", "t_start_ms": 1, "t_end_ms": 2 },
+      "media": {}, "deck_id": null, "tags": [],
+      "created_at": "2026-10-12T10:00:00.000Z",
+      "client": { "name": "subtitle-extension", "ext_version": "3.1.3" }
+    });
+    capture(&t.app, &key, &c).unwrap();
+    let index_after_first = t.store.read().unwrap().word_index_dump().unwrap();
+    capture(&t.app, &key, &c).unwrap();
+    let log = t.ok::<SubtitleCapturesRecent>(RecentSubtitleCaptures { limit: None });
+    let results: Vec<_> = log.attempts.iter().map(|a| a.result).collect();
+    assert!(results.contains(&SubtitleAttemptResult::Created));
+    assert!(results.contains(&SubtitleAttemptResult::Duplicate));
+    assert_eq!(t.store.read().unwrap().word_index_dump().unwrap(), index_after_first);
+    assert_eq!(t.store.read().unwrap().word_index_dirty_count().unwrap(), 0);
+    let w = lookup(&t, &["picks up"]);
+    assert_eq!((w[0].key.as_deref(), w[0].status), (Some("pick up"), WordStatus::Learning));
+    assert_eq!(w[0].word.as_ref().unwrap().language, "en");
+    assert_rebuild_equal(&t, "captures");
+}

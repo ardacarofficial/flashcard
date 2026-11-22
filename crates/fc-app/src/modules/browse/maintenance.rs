@@ -12,8 +12,6 @@ use fc_api::v1::common::Empty;
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::methods::*;
 use fc_api::ErrorCode;
-use fc_core::query::eval::elapsed_ratio;
-use fc_core::query::filter::FSRS_FACTOR;
 use fc_core::CardId;
 use fc_storage::repo::CardHit;
 
@@ -25,7 +23,12 @@ pub(super) fn card_info(req: CardInfoRef, ctx: &QueryCtx<'_>) -> AppResult<CardI
         .ok_or_else(|| err_id(ErrorCode::NotFoundCard, format!("card {id} not found"), id))?;
     let note = require_note(ctx.tx, card.note_id)?;
     let index = DeckIndex::load(ctx.tx)?;
-    let retrievability = elapsed_ratio(&card, ctx.now).map(|x| (1.0 + FSRS_FACTOR * x).powf(-0.5));
+    // v1.4: the one recall formula (the preset's decay, whole study days) stats and search use.
+    let retrievability = {
+        use crate::modules::stats::facts::{calendar, card_retrievability, Presets};
+        let cal = calendar(ctx.tx, None)?;
+        card_retrievability(&card, cal, ctx.now, &mut Presets::new(ctx.tx))?
+    };
     let last_review = card.scheduling.last_review;
     let reviews = ctx
         .tx

@@ -238,7 +238,7 @@ Etiketler serbesttir. Sınıflandırma ise **kullanıcının tanımladığı yap
 `[v0.2, v0.4]` · 🧱 Olay kaydı
 
 - Kartın tüm geçmişi: her tekrarın tarihi, puanı, süresi, o andaki stabilite/zorluk, kullanılan ipucu, oturum türü.
-- Eklenme tarihi, son değişiklik, bir sonraki vade, mevcut hatırlama olasılığı.
+- Eklenme tarihi, son değişiklik, bir sonraki vade, mevcut hatırlama olasılığı (v1.4: istatistik ve `retrievability<…` sorgusuyla aynı sayı — hazır ayarın kişisel sönümü, tam çalışma günü; `fc_core::recall`).
 - Hafıza grafiği (zamana göre stabilite).
 - Notun düzenleme geçmişi (eski alan değerleri).
 
@@ -323,6 +323,8 @@ Etiketler serbesttir. Sınıflandırma ise **kullanıcının tanımladığı yap
 
 - **Deste paketi:** Tek dosya (`.fcpack`, zip tabanlı): notlar, kartlar, not türleri, medya, isteğe bağlı öğrenme geçmişi. Sürüm bilgisi taşır. Paylaşılabilir.
 - **Tam koleksiyon yedeği:** Tüm koleksiyon tek dosya (`.fcbackup`). Elle alınır ("Yedek al" butonu). Geri yükleme önce mevcut durumun yedeğini alır.
+- `[v1.4]` **Her zaman geri dönen yedek.** Yedek dosyadan dosyaya **akışla** yazılır ve okunur (bellek en büyük tek medya dosyası kadar; uygulamanın yazabildiği her yedeği geri okuyabilmesi için toplam boyut tavanı yok). Dosya önce `.part` olarak yazılır, **geçici bir profile geri yüklenip** sayılar (deste, not türü, not, kart, tekrar geçmişi, medya) ve her medyanın SHA-256'sı karşılaştırılır; ancak geçerse yerine konur. Eksik (diskten silinmiş ya da bozulmuş) bir medya yedeği durdurmaz: yedek yazılır, **eksik** olarak işaretlenir ve `missing_media` listesinde söylenir. Geri yükleme, manifestteki her girdinin var olduğunu ve eşleştiğini canlı veriye dokunmadan önce denetler.
+- `[v1.4]` **Otomatik yedek:** `io.auto_backup` (kapalı / her gün / her hafta, varsayılan her gün) ve `io.auto_backup_keep` (saklanan doğrulanmış kopya, varsayılan 7). Kopyalar koleksiyonun yanındaki `backups/auto/` klasörüne gider; yeni kopya doğrulanmadan eskiler silinmez, en yeni sağlam kopya hiç silinmez. `io.backup.verify` herhangi bir yedeği geçici profilde dener; `io.backup.status` son doğrulanmış yedeği, sıradaki zamanı ve son hatayı söyler; `io.backup.auto` hemen bir tane başlatır. İptal edilebilir iş.
 - **Yazdırma / PDF:** Desteyi kâğıt kart düzeninde (ön yüzler bir sayfa, arka yüzler ayna sıralı) veya liste halinde yazdırma.
 - `[v1.3]` Dışa aktarma, yedek ve yazdırma Ayarlar › Veri › **Dışa aktar ve yedekle** sayfasındadır, her biri bir satırlık amaç cümlesiyle; içe aktarma oradan Kart ekle › Dosyadan'a bağlanır (§15.4).
 

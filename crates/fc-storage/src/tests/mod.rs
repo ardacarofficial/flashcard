@@ -7,6 +7,7 @@
 mod ai;
 mod attributes;
 mod automation;
+mod capture_log;
 mod content;
 mod decks;
 mod inbox;

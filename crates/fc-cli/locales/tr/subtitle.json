@@ -6,5 +6,6 @@
   "oplog.summary.subtitle.captures.create": "Subtitle: {word} eklendi",
   "oplog.summary.subtitle.captures.forget": "Subtitle kayıtları unutuldu",
   "oplog.summary.subtitle.captures.restore": "Subtitle kayıtları geri getirildi",
-  "oplog.summary.subtitle.media.upload": "Subtitle: bir resim ya da ses geldi"
+  "oplog.summary.subtitle.media.upload": "Subtitle: bir resim ya da ses geldi",
+  "oplog.summary.subtitle.captures.log": "Subtitle: bir yakalama denemesi kaydedildi"
 }

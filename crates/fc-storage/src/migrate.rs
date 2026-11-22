@@ -67,7 +67,8 @@ pub const RELEASE_RANGES: &[(&str, std::ops::RangeInclusive<u32>)] = &[
     ("v1.2", 1200..=1299),
     // v1.3 ("usable"): 1300–1329 vocabulary field roles (R2); the rest by worker brief.
     ("v1.3", 1300..=1399),
-    // v1.4: 1410–1429 word index (A3); the rest by worker brief.
+    // v1.4: 1410–1429 word index (A3), 1430–1439 subtitle capture diagnostics (A5); the rest
+    // by worker brief.
     ("v1.4", 1400..=1499),
 ];
 

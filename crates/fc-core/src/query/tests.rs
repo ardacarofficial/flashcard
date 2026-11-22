@@ -215,6 +215,7 @@ impl World {
             flag_names: &[],
             now: NOW,
             day_start: None,
+            deck_decay: &[],
         }
     }
 
@@ -556,7 +557,7 @@ fn scheduling_predicates() {
         ("difficulty>7", [false, true]),
         ("lapses>=5", [false, true]),
         ("reps<3", [true, true]),
-        // R(10d, S=10) = (1 + 19/81)^-0.5 ≈ 0.9.
+        // R(10 study days, S=10) = 0.9 for every decay (v1.4: `fc_core::recall`).
         ("retrievability<0.95", [false, true]),
         ("retrievability<0.85", [false, false]),
         ("retrievability>0", [false, true]),

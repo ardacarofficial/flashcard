@@ -5,6 +5,10 @@
 //! *actually produced* (headers can lie), plus a per-entry cap. Zstd payloads inside the archive are decoded through [`ZipIn::zstd`] and
 //! charged to the same budget. Buffers are never pre-allocated from a claimed size beyond
 //! [`MAX_PREALLOC`].
+//!
+//! This budget is for foreign packages read whole into memory (`.apkg`, `.colpkg`, `.fcpack`).
+//! The app's own `.fcbackup` streams entry by entry with per-entry guards and no total
+//! ceiling ([`crate::fcbackup`], v1.4).
 
 use crate::error::{InteropError, InteropResult};
 use std::io::{Cursor, Read, Write};
@@ -77,14 +81,6 @@ impl<'a> ZipIn<'a> {
             format,
             budget,
         })
-    }
-
-    pub(crate) fn names(&self) -> Vec<String> {
-        self.zip
-            .file_names()
-            .filter_map(Result::ok)
-            .map(|n| n.into_owned())
-            .collect()
     }
 
     #[cfg(test)]

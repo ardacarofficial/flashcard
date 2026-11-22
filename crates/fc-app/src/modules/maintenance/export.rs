@@ -84,6 +84,10 @@ fn collect(svc: &MaintenanceServices, ctx: &CommandCtx<'_>) -> AppResult<Vec<(St
             files.push((format!("logs/{name}"), read_tail(&path).map_err(|e| io_error(&path, e))?));
         }
     }
+    // v1.4: what happened to the latest Subtitle captures (ids, codes and times only).
+    if let Some(text) = crate::modules::subtitle::diagnostics::export_text(ctx.reads())? {
+        files.push(("subtitle_captures.txt".to_owned(), text));
+    }
     if let Some(dir) = svc.data_dir().map(|d| d.join(CRASH_DIR)) {
         for r in crash::list_reports(&dir) {
             let path = dir.join(&r.file);

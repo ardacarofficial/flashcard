@@ -147,6 +147,7 @@ export default {
         counts: { notes: notes.length },
         media: 0,
         compatible: true,
+        complete: true,
       }),
       'io.backup.restore': (req) =>
         finished('io.restore', { safety_backup_path: `${req.path}.pre`, counts: {}, media: 0 }),

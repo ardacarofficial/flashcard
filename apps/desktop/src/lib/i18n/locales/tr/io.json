@@ -249,5 +249,20 @@
       "unsupported_version": "Bu dosya uygulamanın daha yeni bir sürümünden.",
       "job_cancelled": "İş iptal edildi."
     }
+  },
+  "settings": {
+    "io": {
+      "auto_backup": {
+        "label": "Otomatik yedek",
+        "description": "Medyalar dahil tüm koleksiyonu yanındaki yedek klasörüne alır ve her kopyayı geçici bir kopyaya geri yükleyerek dener. Yalnız denemeyi geçen kopyalar saklanır.",
+        "off": "Kapalı",
+        "daily": "Her gün",
+        "weekly": "Her hafta"
+      },
+      "auto_backup_keep": {
+        "label": "Saklanacak otomatik kopya",
+        "description": "Yeni kopya denemeyi geçince eski kopyalar silinir. En yeni sağlam kopya hiçbir zaman silinmez."
+      }
+    }
   }
 }
