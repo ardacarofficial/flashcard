@@ -7,5 +7,7 @@
   "oplog.summary.io.export.start": "Started an export",
   "oplog.summary.io.backup.create": "Started a backup",
   "oplog.summary.io.backup.restore": "Started a restore",
-  "oplog.summary.io.backup.load": "Restored a backup"
+  "oplog.summary.io.backup.load": "Restored a backup",
+  "oplog.summary.io.backup.verify": "Started a backup check",
+  "oplog.summary.io.backup.auto": "Started an automatic backup"
 }
