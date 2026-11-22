@@ -2,7 +2,8 @@
 // Contract check (v1.2, docs/06 §5.1): drives the Subtitle extension's **own** HTTP client
 // (`src/flashcards/api.ts` of the extension's repository, unchanged) against a real
 // `fc --db <tmp> api serve`, the way the extension's background does: connection test, decks,
-// media upload (and its retry), a capture (and its resend), a batch, known words, a wrong key.
+// media upload (and its retry), a capture (and its resend), a batch, known words (not shared by
+// default, then shared after `subtitle.share_known_words`), a wrong key.
 // Then (v1.4, `interrupted.mjs`) the release acceptance: the extension's own outbox and client
 // through broken exchanges (line dropped, answer lost, server killed mid-batch and restarted,
 // undo then resend), a backup restored into a fresh profile, and `subtitle.captures.recent`
@@ -59,7 +60,8 @@ try {
 
   const me = await api.me();
   assert.equal(me.user.name, 'contract check');
-  assert.deepEqual(me.features, { media: true, batch: true, known_words: true });
+  // v1.4: known words are not shared unless the user turns `subtitle.share_known_words` on.
+  assert.deepEqual(me.features, { media: true, batch: true, known_words: false });
   console.log('ok  GET /v1/me', JSON.stringify(me));
 
   const deck = fc('call', 'decks.create', JSON.stringify({ path: 'Diziler' }));
@@ -116,6 +118,18 @@ try {
   assert.equal(results[2].error.retryable, false);
   console.log('ok  POST /v1/captures:batch', JSON.stringify(results.map((r) => r.status)));
 
+  // Not shared (the default): the client reads the documented "not shared" answer as an
+  // empty last page — no error, no retry.
+  const notShared = await api.knownWords('en');
+  assert.deepEqual(notShared, { words: [], next_cursor: null });
+  const raw = await fetch(`${url}/v1/known-words?lang=en`, { headers: { Authorization: `Bearer ${secret}` } });
+  assert.equal(raw.status, 200);
+  assert.deepEqual(await raw.json(), { words: [], next_cursor: null, shared: false });
+  console.log('ok  GET /v1/known-words while not shared', JSON.stringify(notShared));
+
+  fc('call', 'settings.set', JSON.stringify({ scope: { kind: 'app' }, key: 'subtitle.share_known_words', value: true }));
+  assert.equal(fc('call', 'subtitle.status', '{}').share_known_words, true);
+  assert.equal((await api.me()).features.known_words, true);
   const known = await api.knownWords('en');
   assert.deepEqual(known.words.map((w) => [w.lemma, w.status]), [['key', 'learning'], ['pick up', 'learning']]);
   assert.equal(known.next_cursor, null);

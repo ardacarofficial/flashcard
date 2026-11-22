@@ -11,6 +11,7 @@ pub(crate) mod engines;
 pub(crate) mod host;
 pub(crate) mod redact;
 mod ui;
+pub(crate) mod word_scope;
 
 #[cfg(test)]
 mod tests;
@@ -122,6 +123,8 @@ pub fn register(reg: &mut Registry) {
     reg.command::<PluginsSetPermissions>(set_permissions);
     reg.query::<PluginsSettingsGet>(settings_get);
     reg.command::<PluginsSettingsSet>(settings_set);
+    reg.query::<PluginsWordDecksGet>(word_scope::get);
+    reg.command::<PluginsWordDecksSet>(word_scope::set);
     reg.query::<PluginsLocales>(locales);
     reg.action::<PluginsLogs>(logs);
     reg.action::<PluginsRun>(ui::run);

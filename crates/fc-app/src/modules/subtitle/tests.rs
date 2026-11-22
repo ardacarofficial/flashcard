@@ -68,6 +68,14 @@ fn new_key(t: &TestApp, name: &str) -> (SubtitleKeyDto, String) {
     (key, c.secret)
 }
 
+fn share_known_words(t: &TestApp, on: bool) {
+    t.ok::<SettingsSet>(SetSetting {
+        scope: SettingScope::App,
+        key: SHARE_KNOWN_WORDS.into(),
+        value: json!(on),
+    });
+}
+
 fn setup(f: Factory) -> (TestApp, SubtitleKeyDto) {
     let t = TestApp::new(f());
     enable(&t);
@@ -466,7 +474,20 @@ pub(super) fn known_words_follow_the_cards_intervals(f: Factory) {
     de["lang"]["target"] = json!("DE");
     capture(&t.app, &key, &de).unwrap();
 
+    // v1.4: not shared by default — an empty last page that says so, and `/me` agrees.
+    assert!(!t.ok::<SubtitleStatusGet>(Empty {}).share_known_words);
+    let off = known_words(&t.app, Some("en"), None).unwrap();
+    assert_eq!(
+        (off.words.len(), off.next_cursor.clone(), off.shared),
+        (0, None, false)
+    );
+    assert!(!me(&t.app, &key).unwrap().features.known_words);
+    share_known_words(&t, true);
+    assert!(t.ok::<SubtitleStatusGet>(Empty {}).share_known_words);
+    assert!(me(&t.app, &key).unwrap().features.known_words);
+
     let all = known_words(&t.app, Some("en"), None).unwrap();
+    assert!(all.shared);
     let lemmas: Vec<_> = all.words.iter().map(|w| w.lemma.as_str()).collect();
     assert_eq!(lemmas, ["key", "pick up"]);
     assert!(all.words.iter().all(|w| w.status == SubtitleWordStatus::Learning));
@@ -514,6 +535,10 @@ pub(super) fn known_words_follow_the_cards_intervals(f: Factory) {
     });
     let words = known_words(&t.app, Some("en"), None).unwrap().words;
     assert_eq!(words.iter().map(|w| w.lemma.as_str()).collect::<Vec<_>>(), ["pick up"]);
+
+    // Switched off again: nothing more is shared.
+    share_known_words(&t, false);
+    assert!(known_words(&t.app, Some("en"), None).unwrap().words.is_empty());
 }
 
 pub(super) fn a_capture_is_one_undo_step(f: Factory) {

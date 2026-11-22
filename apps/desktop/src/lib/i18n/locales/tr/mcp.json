@@ -108,7 +108,10 @@
       "create_deck": "Deste oluştur",
       "add_notes": "Not ekle",
       "update_note": "Notu düzenle",
-      "set_classification": "Sınıflandırma ata (önce onay ister)"
+      "set_classification": "Sınıflandırma ata (önce onay ister)",
+      "words_lookup": "Kelimelere bak (hangileri senin için yeni)",
+      "words_list": "Kelimelerini listele (duruma ya da desteye göre)",
+      "words_stats": "Kelimelerini say"
     },
     "client": {
       "heading": "Dış MCP sunucuları",

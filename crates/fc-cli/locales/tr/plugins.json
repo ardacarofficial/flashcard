@@ -4,6 +4,7 @@
   "oplog.summary.plugins.set_enabled": "Eklenti açıldı/kapatıldı: {name}",
   "oplog.summary.plugins.set_permissions": "Eklenti izinleri değişti: {name}",
   "oplog.summary.plugins.settings.set": "Eklenti ayarı değişti: {name} / {key}",
+  "oplog.summary.plugins.word_decks.set": "Eklentinin kelime öğrenebileceği desteler değişti: {name}",
   "oplog.summary.plugins.run": "Eklenti: {plugin}",
   "oplog.summary.plugins.ui.open": "Eklenti görünümü açıldı",
   "oplog.summary.plugins.ui.act": "Eklenti görünümünde işlem",

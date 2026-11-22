@@ -89,6 +89,8 @@ const AI_NOTES: &[Domain] = &["ai", "notes"];
 const READING: &[Domain] = &["reading"];
 const READING_CARDS: &[Domain] = &["reading", "cards", "notes"];
 const READING_NOTES: &[Domain] = &["notes", "reading"];
+/// v1.4: the word index (words, their status and the ids of the notes/cards behind them).
+const WORDS: &[Domain] = &["words"];
 /// Never readable by a plugin.
 const PLUGINS: &[Domain] = &["plugins"];
 const IO: &[Domain] = &["io"];
@@ -203,9 +205,10 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         | "reading.queue.set" | "reading.queue.read" | "reading.queue.postpone"
         | "reading.extracts.create" | "reading.words.mark" => Reads(READING),
         "reading.analyze" | "reading.words.lookup" => Reads(READING_CARDS),
-        // v1.4 word index: words and the notes/cards behind them.
-        "words.lookup" | "words.list" | "words.stats" => Reads(READING_CARDS),
-        "words.index.rebuild" | "words.index.rebuild_now" => Reads(READING),
+        // v1.4 word index: its own explicit permission (`words:read`); the user may limit it
+        // to some decks (`word_scope`). Rebuilding it is whole-collection work.
+        "words.lookup" | "words.list" | "words.stats" => Reads(WORDS),
+        "words.index.rebuild" | "words.index.rebuild_now" => Refused(UNBOUNDED),
         "reading.extracts.cloze" | "reading.cards.make" => Oracle(READING_NOTES),
         // Imports read any file or web page; clips run ffmpeg on a file.
         "reading.items.import" => Refused(FREE_PATHS),

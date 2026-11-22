@@ -1,0 +1,58 @@
+{
+  "method": "v1.words.lookup",
+  "kind": "query",
+  "permission": "words:read",
+  "note": "Forms as they appear in a text; each comes back with its key (lemma) and status. A word the plugin may not see (deck limit) comes back as new with word: null.",
+  "input": {
+    "language": "en",
+    "forms": ["went", "keys", "zebra"]
+  },
+  "output": {
+    "language": "en",
+    "lemmatizer": "builtin-en",
+    "threshold_days": 21,
+    "forms": [
+      {
+        "form": "went",
+        "key": "go",
+        "status": "known",
+        "word": {
+          "language": "en",
+          "key": "go",
+          "status": "known",
+          "mark": null,
+          "mark_at": null,
+          "notes": 1,
+          "cards": 1,
+          "max_interval_days": 30,
+          "known_by_maturity": true,
+          "last_review": 1767225600000,
+          "first_seen": 1767139200000,
+          "note_ids": ["0192812a-6f3c-7a41-9c2e-000000000001"],
+          "card_ids": ["0192812a-6f3c-7a41-9c2e-000000000101"]
+        }
+      },
+      {
+        "form": "keys",
+        "key": "key",
+        "status": "learning",
+        "word": {
+          "language": "en",
+          "key": "key",
+          "status": "learning",
+          "mark": null,
+          "mark_at": null,
+          "notes": 1,
+          "cards": 1,
+          "max_interval_days": null,
+          "known_by_maturity": false,
+          "last_review": null,
+          "first_seen": 1767139200000,
+          "note_ids": ["0192812a-6f3c-7a41-9c2e-000000000002"],
+          "card_ids": ["0192812a-6f3c-7a41-9c2e-000000000102"]
+        }
+      },
+      { "form": "zebra", "key": "zebra", "status": "new", "word": null }
+    ]
+  }
+}

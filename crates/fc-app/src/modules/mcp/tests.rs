@@ -59,6 +59,7 @@ suite!(
     set_classification_refuses_selections_over_the_limit,
     foreign_commits_are_noticed_and_announced,
     mcp_writes_are_ordinary_undo_steps_behind_barriers,
+    word_tools_answer_from_the_word_index,
 );
 
 // ------------------------------------------------------------------ helpers
@@ -916,4 +917,138 @@ fn setup_finds_the_fc_program() {
     std::fs::create_dir(other.path().join("fc")).unwrap();
     let only_dir = std::env::join_paths([other.path()]).unwrap();
     assert_eq!(find_fc(None, Some(&only_dir), "fc"), None);
+}
+
+/// A Classic note (`front` has the `term` role) in `d`.
+fn word_note(t: &TestApp, d: DeckId, front: &str) -> fc_core::NoteId {
+    let mut fields = std::collections::BTreeMap::new();
+    fields.insert("front".to_owned(), front.to_owned());
+    fields.insert("back".to_owned(), "m".to_owned());
+    t.ok::<NotesCreate>(fc_api::v1::notes::CreateNote {
+        notetype_id: fc_core::notetype::builtin::CLASSIC_ID,
+        deck_id: d,
+        fields,
+        tags: vec![],
+        attributes: vec![],
+        allow_duplicate: Some(true),
+    })
+    .id
+}
+
+/// Every card of `note` becomes a review card with a `days` interval (behind the commands'
+/// back, then the index drains as a command would).
+fn word_interval(t: &TestApp, note: fc_core::NoteId, days: i64) {
+    use fc_core::card::CardState;
+    let mut tx = t.store.write().unwrap();
+    let ids: Vec<_> = tx
+        .word_card_rows(&[note])
+        .unwrap()
+        .into_iter()
+        .map(|c| c.card_id)
+        .collect();
+    for id in ids {
+        let mut card = tx.get_card(id).unwrap().unwrap();
+        let last = fc_core::Timestamp(1_767_225_600_000);
+        card.scheduling.state = CardState::Review;
+        card.scheduling.last_review = Some(last);
+        card.scheduling.due = Some(fc_core::Timestamp(
+            last.0 + days * fc_core::time::MILLIS_PER_DAY,
+        ));
+        tx.update_card(&card).unwrap();
+    }
+    crate::modules::words::index::drain(&mut *tx).unwrap();
+    tx.commit().unwrap();
+}
+
+/// v1.4: "which words in this text are new to me?" and "what am I learning from Breaking
+/// Bad?" through the read-only word tools, which call only `words.*` (and deck/search
+/// queries) as the MCP actor.
+pub(super) fn word_tools_answer_from_the_word_index(f: Factory) {
+    let t = TestApp::new(f());
+    let bb = deck(&t, "Breaking Bad");
+    let friends = deck(&t, "Friends");
+    for d in [bb, friends] {
+        t.ok::<SettingsSet>(SetSetting {
+            scope: SettingScope::Deck(d),
+            key: "words.language".into(),
+            value: json!("en"),
+        });
+    }
+    let go = word_note(&t, bb, "go");
+    word_note(&t, bb, "pick up");
+    word_note(&t, bb, "keys");
+    word_note(&t, friends, "apple");
+    word_interval(&t, go, 30);
+
+    // Read tools, listed even when writes are off.
+    let read_only: Vec<_> = list_tools(&t.app, true).unwrap().iter().map(|s| s.name).collect();
+    for n in ["words_lookup", "words_list", "words_stats"] {
+        assert!(read_only.contains(&n), "{n}");
+    }
+
+    // A text: split, lemmatized (went → go), one row per word.
+    let r = tool(
+        &t,
+        "words_lookup",
+        json!({ "text": "He went to get the keys. Keys! An apple?", "language": "en" }),
+    );
+    let status = |key: &str| {
+        r["words"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|w| w["key"] == key)
+            .map(|w| w["status"].as_str().unwrap().to_owned())
+    };
+    assert_eq!(status("go").as_deref(), Some("known"));
+    assert_eq!(status("key").as_deref(), Some("learning"));
+    assert_eq!(status("apple").as_deref(), Some("learning"));
+    assert_eq!(status("get").as_deref(), Some("new"));
+    let key_row = r["words"].as_array().unwrap().iter().find(|w| w["key"] == "key").unwrap();
+    assert_eq!(key_row["forms"], json!(["keys"]), "case-insensitive: one form");
+    let new_words: Vec<&str> = r["new_words"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
+    assert!(new_words.contains(&"get") && !new_words.contains(&"go") && !new_words.contains(&"key"));
+    assert_eq!(r["counts"]["known"], 1);
+    assert_eq!(r["counts"]["learning"], 2);
+    // Forms: an expression as it appears.
+    let r = tool(&t, "words_lookup", json!({ "forms": ["picked up"], "language": "en" }));
+    assert_eq!(r["words"][0]["key"], "pick up");
+    assert_eq!(r["words"][0]["status"], "learning");
+    for bad in [json!({}), json!({ "text": "a", "forms": ["a"] }), json!({ "text": "123 !!" })] {
+        assert_eq!(tool_err(&t, "words_lookup", bad).code, ErrorCode::ValidationInvalidParams);
+    }
+
+    // What am I learning from Breaking Bad? (not Friends' apple, not the known go)
+    let r = tool(&t, "words_list", json!({ "deck": "breaking bad", "status": "learning" }));
+    let keys: Vec<&str> = r["words"].as_array().unwrap().iter().map(|w| w["key"].as_str().unwrap()).collect();
+    assert_eq!(keys, ["key", "pick up"]);
+    assert_eq!(r["deck"], "Breaking Bad");
+    assert_eq!(r["counts"]["known"], 1);
+    assert_eq!(r["truncated"], false);
+    // Whole index, paged.
+    let r = tool(&t, "words_list", json!({ "status": "known" }));
+    assert_eq!(r["words"][0]["key"], "go");
+    assert_eq!(r["words"][0]["max_interval_days"], 30);
+    let p1 = tool(&t, "words_list", json!({ "limit": 2 }));
+    assert_eq!(p1["words"].as_array().unwrap().len(), 2);
+    let p2 = tool(&t, "words_list", json!({ "limit": 2, "cursor": p1["next_cursor"] }));
+    assert_eq!(p2["words"].as_array().unwrap().len(), 2);
+    assert_eq!(p2["next_cursor"], Value::Null);
+    assert_eq!(
+        tool_err(&t, "words_list", json!({ "deck": "Nope" })).code,
+        ErrorCode::NotFoundDeck
+    );
+
+    let r = tool(&t, "words_stats", json!({}));
+    assert_eq!(r["known_interval_days"], 21);
+    assert_eq!(r["languages"][0]["language"], "en");
+    assert_eq!(r["languages"][0]["counts"], json!({ "new": 0, "learning": 3, "known": 1, "ignored": 0 }));
+
+    // Nothing was written; the words module switch hides them like any method.
+    assert!(newest(&t, 50).iter().all(|e| !matches!(e.actor, Actor::Mcp(_))));
+    t.ok::<ModulesSetEnabled>(SetModuleEnabled {
+        id: "words".into(),
+        enabled: false,
+    });
+    assert!(call_tool(&t.app, CLIENT, false, "words_stats", json!({})).is_err());
 }

@@ -30,22 +30,30 @@ use fc_api::v1::notes::{CreateNote, NoteDto, NoteRef, UpdateNote};
 use fc_api::v1::notetypes::NoteTypeDto;
 use fc_api::v1::oplog::{Actor, ExecuteBatch};
 use fc_api::v1::search::{QueryText, SearchCards};
+use fc_api::v1::words::{ListWords, LookupWords, WordEntryDto};
 use fc_api::{ApiError, ApiMethod, ErrorCode};
 use fc_core::attribute::{AttributeTarget, AttributeValue};
 use fc_core::deck::DeckPath;
 use fc_core::notetype::builtin::CLASSIC_ID;
 use fc_core::query::text::fold;
+use fc_core::reading::{WordCounts, WordStatus};
 use fc_core::settings::SettingScope;
 use fc_core::{CardId, DeckId, NoteId};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 /// Most notes one `add_notes` call may create.
 pub const MAX_NOTES_PER_CALL: usize = 100;
 /// Most rows one `search_cards` call returns.
 pub const MAX_SEARCH_ROWS: u32 = 100;
+/// Most distinct word forms one `words_lookup` call looks up (`words.lookup`'s own limit).
+pub const MAX_LOOKUP_FORMS: usize = 2000;
+/// Most words one `words_list` call returns.
+pub const MAX_WORD_ROWS: u32 = 500;
+/// Most notes of a deck `words_list` reads to find the deck's words.
+pub const MAX_DECK_NOTES: u32 = 5000;
 
 /// One tool of the catalog.
 #[derive(Debug, Clone, Copy)]
@@ -85,8 +93,10 @@ pub const INSTRUCTIONS: &str = "Flashcard collection tools. Start with list_deck
 addressed by path like 'English::Verbs' or by id), list_note_types (default note type: \
 Classic with fields front/back) and list_classifications (user-defined dimensions such as \
 Seviye/Level with options A1..C2). search_cards takes the app's query language, e.g. \
-'deck:English seviye>=B1 tag:verbs is:due'. Writes are normal undoable operations in the \
-app; nothing here deletes.";
+'deck:English seviye>=B1 tag:verbs is:due'. The word index says which words the user knows: \
+words_lookup (a text or word forms → new/learning/known/ignored), words_list (by status, \
+language or deck), words_stats. Writes are normal undoable operations in the app; nothing \
+here deletes.";
 
 fn schema_empty() -> Value {
     json!({ "type": "object", "properties": {}, "additionalProperties": false })
@@ -231,6 +241,43 @@ exact arguments; refused when the matching cards changed since." }
     })
 }
 
+fn status_schema() -> Value {
+    json!({ "type": "string", "enum": ["new", "learning", "known", "ignored"] })
+}
+
+fn schema_words_lookup() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "text": { "type": "string", "description": "Free text (a subtitle line, a \
+paragraph): split into words, each looked up once. Give text or forms." },
+            "forms": { "type": "array", "items": { "type": "string" }, "maxItems": MAX_LOOKUP_FORMS,
+                       "description": "Word forms or short expressions as they appear: \
+'went', 'picked up'." },
+            "language": { "type": "string", "description": "BCP-47 language, e.g. 'en' \
+(default: the app's reading language)." }
+        },
+        "additionalProperties": false
+    })
+}
+
+fn schema_words_list() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "status": status_schema(),
+            "language": { "type": "string", "description": "Only this language, e.g. 'en'." },
+            "deck": { "type": "string", "description": "Only words with a note in this deck \
+(path or id; sub-decks included), e.g. 'Breaking Bad'." },
+            "limit": { "type": "integer", "minimum": 1, "maximum": MAX_WORD_ROWS,
+                       "description": "Words to return (default 100)." },
+            "cursor": { "type": "string", "description": "next_cursor of the previous page \
+(not with deck)." }
+        },
+        "additionalProperties": false
+    })
+}
+
 /// The catalog, in listing order.
 pub fn catalog() -> &'static [ToolSpec] {
     use McpToolAccess::{Read, Write};
@@ -295,6 +342,48 @@ and its cards.",
                 m::AttributesList::NAME,
             ],
             input_schema: schema_get_note,
+        },
+        ToolSpec {
+            name: "words_lookup",
+            title: "Look up words",
+            description: "Which of these words does the user know? Give a text (split into \
+words) or word forms; each comes back with its dictionary key (lemma: went → go) and status: \
+new (no card), learning (has cards), known (a card reached the known interval, or marked \
+known), ignored. Answers 'which words in this text are new to me?'.",
+            access: Read,
+            destructive: false,
+            idempotent: true,
+            methods: &[m::WordsLookup::NAME],
+            input_schema: schema_words_lookup,
+        },
+        ToolSpec {
+            name: "words_list",
+            title: "List words",
+            description: "The user's words from the word index with status, card count and \
+longest interval, filtered by status, language or deck (e.g. 'what am I learning from \
+Breaking Bad?' = deck 'Breaking Bad', status learning). Paged with cursor.",
+            access: Read,
+            destructive: false,
+            idempotent: true,
+            methods: &[
+                m::WordsList::NAME,
+                m::DecksList::NAME,
+                m::DecksGet::NAME,
+                m::SearchCardsMethod::NAME,
+                m::WordsLookup::NAME,
+            ],
+            input_schema: schema_words_list,
+        },
+        ToolSpec {
+            name: "words_stats",
+            title: "Count words",
+            description: "How many words the user has per language and status (new, \
+learning, known, ignored), the known interval in days, and notes without a language.",
+            access: Read,
+            destructive: false,
+            idempotent: true,
+            methods: &[m::WordsStats::NAME],
+            input_schema: schema_empty,
         },
         ToolSpec {
             name: "create_deck",
@@ -450,6 +539,9 @@ pub fn call_tool(
         "list_classifications" => cx.list_classifications(parse(args)?),
         "search_cards" => cx.search_cards(parse(args)?),
         "get_note" => cx.get_note(parse(args)?),
+        "words_lookup" => cx.words_lookup(parse(args)?),
+        "words_list" => cx.words_list(parse(args)?),
+        "words_stats" => parse::<NoArgs>(args).and_then(|_| cx.words_stats()),
         "create_deck" => cx.create_deck(parse(args)?),
         "add_notes" => cx.add_notes(parse(args)?),
         "update_note" => cx.update_note(parse(args)?),
@@ -551,6 +643,72 @@ struct SetClassificationArgs {
     value: Value,
     confirm: Option<bool>,
     confirm_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WordsLookupArgs {
+    text: Option<String>,
+    forms: Option<Vec<String>>,
+    language: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WordsListArgs {
+    status: Option<WordStatus>,
+    language: Option<String>,
+    deck: Option<String>,
+    limit: Option<u32>,
+    cursor: Option<String>,
+}
+
+/// The words of a free text, in order, each once (case-insensitive): runs of letters, with
+/// inner apostrophes and hyphens (`don't`, `well-known`). The index's own lemmatizer turns
+/// each into its key (`words.lookup`).
+pub(crate) fn text_forms(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    let mut push = |w: &str| {
+        let w = w.trim_matches(|c: char| !c.is_alphanumeric());
+        if !w.is_empty() && w.chars().any(char::is_alphabetic) && seen.insert(w.to_lowercase()) {
+            out.push(w.to_owned());
+        }
+    };
+    let mut start = None;
+    for (i, c) in text.char_indices() {
+        let inner = c.is_alphanumeric() || matches!(c, '\'' | '’' | '-');
+        match (inner, start) {
+            (true, None) => start = Some(i),
+            (false, Some(s)) => {
+                push(&text[s..i]);
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(s) = start {
+        push(&text[s..]);
+    }
+    out
+}
+
+/// What a tool shows of a word (no note/card ids: `get_note`/`search_cards` give those).
+fn word_view(w: &WordEntryDto) -> Value {
+    json!({
+        "key": w.key,
+        "language": w.language,
+        "status": kind_str(&w.status),
+        "marked": w.mark.map(|m| kind_str(&m)),
+        "notes": w.notes,
+        "cards": w.cards,
+        "max_interval_days": w.max_interval_days,
+        "last_review": w.last_review,
+    })
+}
+
+fn counts_view(c: &WordCounts) -> Value {
+    json!({ "new": c.new, "learning": c.learning, "known": c.known, "ignored": c.ignored })
 }
 
 /// Most cards one confirmed `set_classification` may change; bigger selections are narrowed
@@ -824,6 +982,162 @@ impl Cx<'_> {
             })?
             .defs;
         Ok(note_view(&note, &deck.path, &defs))
+    }
+
+    fn words_lookup(&self, a: WordsLookupArgs) -> Result<Value, ApiError> {
+        let (forms, from_text) = match (a.text, a.forms) {
+            (Some(text), None) => (text_forms(&text), true),
+            (None, Some(forms)) => (forms, false),
+            _ => return Err(invalid("give text or forms (one of them)")),
+        };
+        if forms.is_empty() {
+            return Err(invalid("no words in the given text or forms"));
+        }
+        let truncated = forms.len() > MAX_LOOKUP_FORMS;
+        let forms: Vec<String> = forms.into_iter().take(MAX_LOOKUP_FORMS).collect();
+        let r = self.call::<m::WordsLookup>(&LookupWords {
+            language: a.language.unwrap_or_default(),
+            forms,
+        })?;
+        // One row per word (key); the forms that led to it.
+        let mut order: Vec<String> = Vec::new();
+        let mut by_key: BTreeMap<String, (Vec<String>, WordStatus, Option<&WordEntryDto>)> =
+            BTreeMap::new();
+        let mut no_key = Vec::new();
+        for f in &r.forms {
+            let Some(key) = &f.key else {
+                no_key.push(f.form.clone());
+                continue;
+            };
+            let e = by_key.entry(key.clone()).or_insert_with(|| {
+                order.push(key.clone());
+                (Vec::new(), f.status, f.word.as_ref())
+            });
+            if !e.0.contains(&f.form) {
+                e.0.push(f.form.clone());
+            }
+        }
+        let mut counts = WordCounts::default();
+        let mut new_words = Vec::new();
+        let words: Vec<Value> = order
+            .iter()
+            .filter_map(|k| by_key.get(k).map(|v| (k, v)))
+            .map(|(key, (forms, status, word))| {
+                counts.add(*status);
+                if *status == WordStatus::New {
+                    new_words.push(key.clone());
+                }
+                let mut v = match word {
+                    Some(w) => word_view(w),
+                    None => json!({ "key": key, "language": r.language, "status": "new",
+                                    "notes": 0, "cards": 0 }),
+                };
+                v["forms"] = json!(forms);
+                v
+            })
+            .collect();
+        Ok(json!({
+            "language": r.language,
+            "known_interval_days": r.threshold_days,
+            "counts": counts_view(&counts),
+            "new_words": new_words,
+            "words": words,
+            "not_words": no_key,
+            "truncated": truncated,
+            "split_from_text": from_text,
+        }))
+    }
+
+    fn words_list(&self, a: WordsListArgs) -> Result<Value, ApiError> {
+        let limit = a.limit.unwrap_or(100).clamp(1, MAX_WORD_ROWS);
+        let language = a.language.map(|l| l.trim().to_owned()).filter(|l| !l.is_empty());
+        let Some(deck) = a.deck else {
+            let page = self.call::<m::WordsList>(&ListWords {
+                language,
+                status: a.status,
+                cursor: a.cursor,
+                limit: Some(limit),
+            })?;
+            return Ok(json!({
+                "words": page.words.iter().map(word_view).collect::<Vec<_>>(),
+                "next_cursor": page.next_cursor,
+            }));
+        };
+        if a.cursor.is_some() {
+            return Err(invalid("cursor does not work with deck: narrow by status or language"));
+        }
+        // A deck's words: the terms of its notes (sort field, sub-decks included), looked up
+        // in the index; a word counts when one of its notes is in the deck.
+        let deck = self.deck(&deck)?;
+        let query = format!("deck:\"{}\"", deck.path.replace('\\', "\\\\").replace('"', "\\\""));
+        let mut notes = BTreeSet::new();
+        let mut texts = Vec::new();
+        let mut seen_text = HashSet::new();
+        let mut offset = 0;
+        let mut total = 0;
+        while offset < MAX_DECK_NOTES {
+            let page = self.call::<m::SearchCardsMethod>(&SearchCards {
+                query: query.clone(),
+                sort: None,
+                descending: None,
+                notes_only: Some(true),
+                offset: Some(offset),
+                limit: Some(500),
+            })?;
+            total = page.total;
+            if page.items.is_empty() {
+                break;
+            }
+            for row in &page.items {
+                notes.insert(row.note_id);
+                let t = row.sort_field.trim();
+                if !t.is_empty() && seen_text.insert(t.to_owned()) {
+                    texts.push(t.to_owned());
+                }
+            }
+            offset += u32::try_from(page.items.len()).unwrap_or(u32::MAX);
+        }
+        let mut counts = WordCounts::default();
+        let mut words: Vec<WordEntryDto> = Vec::new();
+        let mut keys = HashSet::new();
+        for chunk in texts.chunks(MAX_LOOKUP_FORMS) {
+            let r = self.call::<m::WordsLookup>(&LookupWords {
+                language: language.clone().unwrap_or_default(),
+                forms: chunk.to_vec(),
+            })?;
+            for w in r.forms.into_iter().filter_map(|f| f.word) {
+                if w.note_ids.iter().any(|n| notes.contains(n)) && keys.insert(w.key.clone()) {
+                    counts.add(w.status);
+                    words.push(w);
+                }
+            }
+        }
+        words.sort_by(|x, y| x.key.cmp(&y.key));
+        let matching: Vec<&WordEntryDto> = words
+            .iter()
+            .filter(|w| a.status.is_none_or(|s| w.status == s))
+            .collect();
+        Ok(json!({
+            "deck": deck.path,
+            "counts": counts_view(&counts),
+            "total": matching.len(),
+            "words": matching.iter().take(limit as usize).map(|w| word_view(w)).collect::<Vec<_>>(),
+            "notes_read": notes.len(),
+            "deck_notes": total,
+            "truncated": u64::from(total) > notes.len() as u64 || matching.len() > limit as usize,
+        }))
+    }
+
+    fn words_stats(&self) -> Result<Value, ApiError> {
+        let s = self.call::<m::WordsStats>(&Empty {})?;
+        Ok(json!({
+            "known_interval_days": s.threshold_days,
+            "languages": s.languages.iter().map(|l| json!({
+                "language": l.language,
+                "counts": counts_view(&l.counts),
+            })).collect::<Vec<_>>(),
+            "notes_without_language": s.unassigned_notes,
+        }))
     }
 
     fn create_deck(&self, a: CreateDeckArgs) -> Result<Value, ApiError> {

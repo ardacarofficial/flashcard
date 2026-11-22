@@ -275,6 +275,9 @@ pub(crate) async fn route(
             let decks = blocking(move || subtitle::decks(&app)).await?;
             Ok(json(StatusCode::OK, &decks))
         }
+        // The gate (`subtitle.share_known_words`, off by default) is the service's: off →
+        // `{"words": [], "next_cursor": null, "shared": false}`, still a 200 (a 4xx/5xx would
+        // read as an error or a reason to retry).
         "known-words" => {
             let lang = query_param(query, "lang");
             let cursor = query_param(query, "cursor");

@@ -328,6 +328,8 @@ fn reading_and_subtitle_read_the_same_index() {
     assert_eq!(of("door"), WordStatus::Known);
     assert_eq!(of("john"), WordStatus::Ignored);
     // The Subtitle endpoint (same shape as v1.2): hand-made and marked words too.
+    // v1.4 B4: the extension is sent known words only when the user shares them.
+    set(&t, SettingScope::App, crate::modules::subtitle::SHARE_KNOWN_WORDS, serde_json::json!(true));
     let k = crate::modules::subtitle::known_words(&t.app, Some("en"), None).unwrap();
     let got: Vec<_> = k.words.iter().map(|w| (w.lemma.as_str(), w.status)).collect();
     assert_eq!(

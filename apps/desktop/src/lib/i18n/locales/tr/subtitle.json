@@ -13,6 +13,10 @@
       "default_deck": {
         "label": "Subtitle kartlarının destesi",
         "description": "Eklenti deste söylemezse kelimelerin gideceği destenin kimliği. Boş: ilk kullanımda oluşturulan Subtitle destesi. Subtitle sayfasından seçmek daha kolay."
+      },
+      "share_known_words": {
+        "label": "Bildiğin kelimeleri Subtitle ile paylaş",
+        "description": "Kapalı: eklenti yalnız buraya kelime gönderir. Açık: hangi kelimeleri bildiğini ya da öğrendiğini de okuyup altyazıyı renklendirebilir."
       }
     }
   },

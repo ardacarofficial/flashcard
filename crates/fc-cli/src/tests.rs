@@ -578,3 +578,22 @@ fn plugin_subcommands() {
         serde_json::json!("com.example.v1")
     );
 }
+
+/// v1.4: `fc call --help` shows the word index calls.
+#[test]
+fn call_help_shows_the_word_index() {
+    let mut cmd = Cli::command();
+    let help = cmd
+        .find_subcommand_mut("call")
+        .unwrap()
+        .render_long_help()
+        .to_string();
+    for m in [
+        "words.lookup",
+        "words.list",
+        "words.stats",
+        "subtitle.share_known_words",
+    ] {
+        assert!(help.contains(m), "{m} missing from:\n{help}");
+    }
+}
