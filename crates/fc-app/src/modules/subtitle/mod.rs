@@ -254,9 +254,18 @@ fn keys_touch(req: SubtitleKeyRef, ctx: &mut CommandCtx<'_>) -> AppResult<Comman
 }
 
 /// Restoring a backup revokes every Subtitle key (a crafted backup must not bring a working
-/// key with it): an active key is marked revoked as of its creation time.
+/// key with it): an active key is marked revoked as of its creation time. The capture
+/// diagnostics are dropped too (v1.4: not user data; a restored profile's
+/// `subtitle.captures.recent` starts empty — docs/06 §5.1).
 pub(crate) fn forget_keys(dump: &mut fc_storage::repo::CollectionDump) {
     use fc_storage::repo::SqlValue;
+    for t in dump
+        .tables
+        .iter_mut()
+        .filter(|t| t.name == "subtitle_capture_log")
+    {
+        t.rows.clear();
+    }
     for t in dump.tables.iter_mut().filter(|t| t.name == "subtitle_keys") {
         let col = |n: &str| t.columns.iter().position(|c| c == n);
         let (Some(revoked), Some(created)) = (col("revoked_at"), col("created_at")) else {
