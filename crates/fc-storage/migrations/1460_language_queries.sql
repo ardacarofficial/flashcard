@@ -8,6 +8,7 @@
 --   by those producers next to the note they make; a note without a row was made by hand (or
 --   its origin is unknown). Derived metadata like `word_note_language`: an undone note keeps
 --   its row harmlessly (queries only look at live notes) and a redo finds it again.
+--   A note deleted for good takes its row with it (trigger `note_origins_note_del`).
 -- * `word_index_notes_key_only`: `kelime:`/`word:` matches a lemma key in any language.
 -- * `media_mime`: `ses:`/`görsel:` start from the audio / image files (a `mime` range).
 --
@@ -24,6 +25,12 @@ CREATE TABLE note_origins (
     created_at INTEGER NOT NULL
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX note_origins_origin ON note_origins (origin);
+
+-- A note deleted for good (trash purge, a cancelled or crashed import's discard) takes its
+-- origin with it; trashing keeps it (the note may come back).
+CREATE TRIGGER note_origins_note_del AFTER DELETE ON notes BEGIN
+    DELETE FROM note_origins WHERE note_id = OLD.id;
+END;
 
 CREATE INDEX word_index_notes_key_only ON word_index_notes (key);
 CREATE INDEX media_mime ON media (mime);

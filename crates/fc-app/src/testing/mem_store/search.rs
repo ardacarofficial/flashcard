@@ -15,6 +15,14 @@ pub struct SearchState {
     origins: BTreeMap<NoteId, NoteOriginRecord>,
 }
 
+impl SearchState {
+    /// A note deleted for good takes its origin with it (SQLite: trigger
+    /// `note_origins_note_del`).
+    pub(super) fn forget_origin(&mut self, note: &NoteId) {
+        self.origins.remove(note);
+    }
+}
+
 impl MemTx<'_> {
     /// What the language predicates see of a note (word index, origin; media files and the
     /// word-data pack are not modelled here: no media, no rank or band).
@@ -323,6 +331,7 @@ impl SearchWrite for MemTx<'_> {
         for id in &gone {
             s.notes.remove(id);
             s.search_text.remove(id);
+            s.domains.search.forget_origin(id);
         }
         // Cards of purged notes cascade (not counted), then cards trashed on their own.
         s.cards.retain(|_, c| !gone.contains(&c.note_id));

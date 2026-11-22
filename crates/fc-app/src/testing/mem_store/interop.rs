@@ -57,6 +57,7 @@ impl InteropWrite for MemTx<'_> {
                 tag_names.extend(n.tags.iter().map(|t| t.as_str().to_lowercase()));
             }
             s.search_text.remove(id);
+            s.domains.search.forget_origin(id);
         }
         for id in &cards {
             s.cards.remove(id);

@@ -1336,3 +1336,39 @@ fn migration_1460_backfills_origins_of_an_existing_collection() {
         )
         .is_err());
 }
+
+/// A note deleted for good takes its origin row with it; a trashed one keeps it.
+#[test]
+fn hard_deleted_notes_take_their_origin_along() {
+    use crate::repo::NoteOriginRecord;
+    use fc_core::query::NoteOrigin;
+    let fx = Fx::seeded();
+    fx.write(|tx| {
+        tx.upsert_notetype(&classic()).unwrap();
+        for i in 1..=2 {
+            put_note(tx, &note(i, "go", "git", &[], 1), "go").unwrap();
+            tx.insert_card(&card(i, i, HOME)).unwrap();
+            tx.set_note_origin(&NoteOriginRecord {
+                note_id: nid(i),
+                origin: NoteOrigin::Anki,
+                source: String::new(),
+                site: String::new(),
+                video_id: String::new(),
+                created_at: Timestamp(1),
+            })
+            .unwrap();
+        }
+        tx.set_notes_deleted(&[nid(1), nid(2)], Some(Timestamp(2)))
+            .unwrap();
+    });
+    assert_eq!(
+        fx.read(|r| r.note_origins_of(&[nid(1), nid(2)]).unwrap())
+            .len(),
+        2
+    );
+    fx.raw()
+        .execute("DELETE FROM notes WHERE id = ?1", [nid(1).to_string()])
+        .unwrap();
+    let left = fx.read(|r| r.note_origins_of(&[nid(1), nid(2)]).unwrap());
+    assert_eq!(left.iter().map(|o| o.note_id).collect::<Vec<_>>(), [nid(2)]);
+}
