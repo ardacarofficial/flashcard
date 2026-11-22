@@ -11,13 +11,22 @@ publish.workspace = true
 name = "fc"
 path = "src/main.rs"
 
+[features]
+# Compiles `fc dev serve` (the development bridge) into an optimized build. Debug builds always
+# have it; a plain release build never does.
+dev-bridge = []
+
 [dependencies]
 fc-api.workspace = true
 fc-core.workspace = true
 fc-app = { path = "../fc-app" }
 fc-mcp = { path = "../fc-mcp" }
 fc-http = { path = "../fc-http" }
-tokio = { version = "1", features = ["rt-multi-thread"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros"] }
+# The dev bridge (`fc dev serve`, v1.3; debug builds or the `dev-bridge` feature only).
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+futures-util = { version = "0.3", default-features = false }
+getrandom.workspace = true
 # OS keychain for AI provider keys (v0.8).
 fc-ai = { workspace = true, features = ["keychain"] }
 fc-plugins.workspace = true

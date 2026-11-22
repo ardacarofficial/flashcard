@@ -171,6 +171,10 @@ pub fn run(ctx: &Ctx<'_>, command: &Command, stdin: &mut dyn Read) -> Result<Str
         Command::Api(crate::api::ApiCommand::Serve { .. }) => {
             Err(invalid("fc api serve runs before the collection is opened"))
         }
+        #[cfg(any(feature = "dev-bridge", debug_assertions))]
+        Command::Dev(crate::dev::DevCommand::Serve { .. }) => {
+            Err(invalid("fc dev serve runs before the collection is opened"))
+        }
         Command::Call { method, params } => {
             let raw = match params.as_deref() {
                 Some("-") => {

@@ -1706,6 +1706,7 @@ dependencies = [
 name = "fc-cli"
 version = "1.2.0"
 dependencies = [
+ "axum",
  "clap",
  "fc-ai",
  "fc-api",
@@ -1714,6 +1715,8 @@ dependencies = [
  "fc-http",
  "fc-mcp",
  "fc-plugins",
+ "futures-util",
+ "getrandom 0.3.4",
  "rusqlite",
  "serde",
  "serde_json",

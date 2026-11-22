@@ -1,0 +1,4 @@
+{
+  "cli.dev.listening": "fc dev serve: GELİŞTİRME ARACI (gerçek koleksiyonunla kullanma), dinlenen adres {url}",
+  "cli.dev.weak_token": "fc dev serve: anahtar en az {min} karakter olmalı"
+}

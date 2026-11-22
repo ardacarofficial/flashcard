@@ -1,0 +1,4 @@
+{
+  "cli.dev.listening": "fc dev serve: DEVELOPMENT TOOL (never point it at your real collection), listening on {url}",
+  "cli.dev.weak_token": "fc dev serve: the token must be at least {min} characters"
+}

@@ -6,7 +6,6 @@
 //! only public `fc-api` methods are reachable from the webview.
 
 use fc_api::v1::events::EventEnvelope;
-use fc_api::v1::oplog::Actor;
 use fc_api::{ApiError, ErrorCode};
 use fc_app::App;
 use serde_json::Value;
@@ -21,14 +20,10 @@ pub type SharedApp = Arc<App>;
 
 /// Dispatches a qualified method (`v1.decks.create`) with its params. A missing payload
 /// (`null`) means "no params" (`{}`). While the app is locked only the lock screen's methods
-/// get through (`PERMISSION_APP_LOCKED`, v1.0).
+/// get through (`PERMISSION_APP_LOCKED`, v1.0). Shared with the dev bridge (`fc dev serve`,
+/// v1.3) through [`fc_app::transport::dispatch`], so both reach the app the same way.
 pub fn dispatch(app: &App, command: &str, payload: Value) -> Result<Value, ApiError> {
-    fc_app::modules::profiles::gate(app, command)?;
-    let params = match payload {
-        Value::Null => Value::Object(serde_json::Map::new()),
-        other => other,
-    };
-    app.invoke(command, params, &Actor::User)
+    fc_app::transport::dispatch(app, command, payload)
 }
 
 /// The single generic IPC entry point. Runs the (blocking, SQLite) call off the async

@@ -8,13 +8,15 @@
     "i18n": "node scripts/merge-locales.mjs",
     "dev": "node scripts/merge-locales.mjs && vite",
     "dev:mock": "node scripts/merge-locales.mjs && vite --mode mock",
+    "dev:bridge": "node scripts/merge-locales.mjs && vite --mode bridge",
     "build": "node scripts/merge-locales.mjs && vite build",
     "bundle:check": "node scripts/check-bundle.mjs",
     "preview": "vite preview",
-    "check": "node scripts/merge-locales.mjs && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tsconfig.node.json --noEmit",
+    "check": "node scripts/merge-locales.mjs && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tsconfig.node.json --noEmit && tsc -p e2e/tsconfig.json --noEmit",
     "test": "node scripts/merge-locales.mjs && vitest run",
     "tauri": "tauri",
-    "screens": "node scripts/screens.mjs"
+    "screens": "node scripts/screens.mjs",
+    "e2e": "node scripts/merge-locales.mjs && node e2e/run.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.5",
@@ -24,6 +26,7 @@
     "lucide": "0.460.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@sveltejs/vite-plugin-svelte": "^5.1.1",
     "@tauri-apps/cli": "^2.12.6",
     "@testing-library/svelte": "^5.4.2",
