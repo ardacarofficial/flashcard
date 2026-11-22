@@ -7,6 +7,11 @@
 //! and, for cards of an upcoming exam, into the days right before the exam. Interval previews
 //! on the buttons show the scheduler's interval (the plan only shifts it within its range, or
 //! pulls it before an exam). Switching the module off restores plain scheduling.
+//!
+//! v1.3: `planning.forecast` answers "how much will I study a day at this pace?" with the pure
+//! `fc_study::planning::forecast` model (the scope's cards, preset weights and retention, the
+//! answer time of the last 30 days), and `planning.apply_pace` writes the chosen pace into the
+//! deck's preset (one undo step; the forecast's `target` names the preset and decks first).
 
 use crate::error::{AppError, AppResult};
 use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
@@ -90,6 +95,8 @@ pub fn register(reg: &mut Registry) {
     reg.command::<PlanningExamsUpdate>(update);
     reg.command::<PlanningExamsDelete>(delete);
     reg.command::<PlanningExamsRestore>(restore);
+    reg.query::<PlanningForecast>(forecast);
+    reg.command::<PlanningApplyPace>(apply_pace);
 }
 
 // ------------------------------------------------------------------ planning hook
@@ -375,5 +382,401 @@ fn restore(req: RestoreExam, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutco
         inverse: vec![inverse],
         summary: summary::<PlanningExamsRestore>().param("name", &e.name),
         events: vec![DomainEvent::ExamsChanged],
+    })
+}
+
+// ------------------------------------------------------------------ v1.3 forecast + pace
+
+/// Default forecast length (days): four weeks.
+const FORECAST_DAYS: u32 = 28;
+/// Longest forecast (days).
+const MAX_FORECAST_DAYS: u32 = 365;
+/// "In 3 weeks": the outlook week ends on this day offset.
+const OUTLOOK_DAY: u32 = 21;
+/// Window of the measured answer time (study days).
+const TIME_WINDOW_DAYS: i64 = 30;
+
+/// Live decks whose effective preset is `preset` (`None`: decks of `root`'s subtree using the
+/// built-in defaults, which a preset assigned to `root` would reach).
+fn decks_with_preset(
+    reads: &dyn Reads,
+    index: &DeckIndex,
+    preset: Option<fc_core::PresetId>,
+    root: fc_core::DeckId,
+) -> AppResult<Vec<DeckBrief>> {
+    let candidates: Vec<fc_core::DeckId> = match preset {
+        Some(_) => index.live().map(|d| d.id).collect(),
+        None => index.live_subtree(root),
+    };
+    let mut out = Vec::new();
+    for id in candidates {
+        if crate::modules::presets::effective(reads, id)?.preset_id == preset {
+            out.push(DeckBrief {
+                id,
+                path: index.path(id),
+            });
+        }
+    }
+    out.sort_by_key(|a| a.path.to_lowercase());
+    Ok(out)
+}
+
+/// What `planning.apply_pace` on `deck` changes.
+fn pace_target(reads: &dyn Reads, index: &DeckIndex, deck: fc_core::DeckId) -> AppResult<PaceTarget> {
+    index.require_live(deck)?;
+    let eff = crate::modules::presets::effective(reads, deck)?;
+    let preset_name = match eff.preset_id {
+        Some(p) => reads.get_preset(p)?.map(|p| p.name),
+        None => None,
+    };
+    Ok(PaceTarget {
+        deck: DeckBrief {
+            id: deck,
+            path: index.path(deck),
+        },
+        preset_id: eff.preset_id,
+        preset_name,
+        current_new_per_day: eff.config.new_per_day,
+        decks: decks_with_preset(reads, index, eff.preset_id, deck)?,
+    })
+}
+
+fn validate_pace(n: u32) -> AppResult<()> {
+    if n > fc_core::preset::MAX_NEW_PER_DAY {
+        return Err(crate::support::invalid("new_per_day must be 0–9999"));
+    }
+    Ok(())
+}
+
+/// A card as the forecast model sees it (suspended cards are left out by the caller).
+fn forecast_card(
+    c: &Card,
+    cal: StudyDay,
+    today: i64,
+) -> fc_study::planning::forecast::ForecastCard {
+    use fc_study::planning::forecast::{ForecastCard, ForecastState};
+    let s = &c.scheduling;
+    let state = match s.state {
+        CardState::New => ForecastState::New,
+        CardState::Learning | CardState::Relearning => ForecastState::Learning,
+        CardState::Review => ForecastState::Review,
+    };
+    ForecastCard {
+        state,
+        due_in: s.due.map_or(0, |d| cal.index(d) - today),
+        stability: s.stability,
+        difficulty: s.difficulty,
+        elapsed: s.last_review.map(|l| today - cal.index(l)),
+    }
+}
+
+fn forecast(req: ForecastRequest, ctx: &QueryCtx<'_>) -> AppResult<WorkloadForecast> {
+    use crate::modules::stats::facts::scope_days;
+    use fc_core::stats::iso_date;
+    use fc_study::planning::forecast::{self as model, ForecastParams};
+    let reads = ctx.tx;
+    let cal = calendar(reads, req.tz_offset_mins)?;
+    let today = cal.index(ctx.now);
+    let index = DeckIndex::load(reads)?;
+    if let Some(n) = req.new_per_day {
+        validate_pace(n)?;
+    }
+    let exam_day = match req.exam_date.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+        Some(d) => Some((d.to_owned(), parse_date("exam_date", d)?)),
+        None => None,
+    };
+
+    // Scope: cards, options and the current pace.
+    let (cards, config, current, target) = match req.deck_id {
+        Some(d) => {
+            let target = pace_target(reads, &index, d)?;
+            let cards = reads.study_cards(&fc_storage::repo::StudyCardFilter {
+                deck_ids: Some(index.live_subtree(d)),
+                ..Default::default()
+            })?;
+            let config = crate::modules::presets::effective(reads, d)?.config;
+            let current = config.new_per_day;
+            (cards, config, current, Some(target))
+        }
+        None => {
+            let cards = crate::modules::stats::facts::scope_card_rows(reads, None)?
+                .into_iter()
+                .filter(|c| !c.suspended)
+                .collect::<Vec<_>>();
+            let mut current = 0u32;
+            for root in index.children(None) {
+                current = current.saturating_add(
+                    crate::modules::presets::effective(reads, root.id)?.config.new_per_day,
+                );
+            }
+            let config = fc_core::preset::PresetConfig {
+                desired_retention: crate::modules::stats::target_retention(reads, None, &cards)?,
+                ..fc_core::preset::PresetConfig::default()
+            };
+            (cards, config, current, None)
+        }
+    };
+    let new_per_day = req.new_per_day.unwrap_or(current);
+
+    // Answer time and today's new cards, from the scope's history.
+    let ids: Option<Vec<fc_core::CardId>> = req.deck_id.map(|_| cards.iter().map(|c| c.id).collect());
+    let (days_hist, _) = scope_days(reads, cal, ids.as_deref(), false)?;
+    let (mut ms, mut answers, mut new_today) = (0u64, 0u64, 0u32);
+    for d in &days_hist {
+        if d.day > today - TIME_WINDOW_DAYS && d.day <= today {
+            ms += d.time_ms;
+            answers += u64::from(d.reviews);
+        }
+        if d.day == today {
+            new_today = d.new_cards;
+        }
+    }
+    let measured = answers > 0 && ms > 0;
+    #[allow(clippy::cast_precision_loss)] // answer counts and ms totals are far below 2^52
+    let secs = if measured {
+        ms as f64 / answers as f64 / 1000.0
+    } else {
+        model::DEFAULT_SECS_PER_ANSWER
+    };
+
+    let days_left = exam_day.as_ref().map(|(_, d)| d - today);
+    let horizon = req
+        .days
+        .unwrap_or(FORECAST_DAYS)
+        .max(days_left.map_or(0, |l| u32::try_from(l + 1).unwrap_or(0)))
+        .clamp(1, MAX_FORECAST_DAYS);
+    let fc_cards: Vec<_> = cards.iter().map(|c| forecast_card(c, cal, today)).collect();
+    let result = model::forecast(
+        &fc_cards,
+        &ForecastParams {
+            weights: config.fsrs_weights.clone(),
+            desired_retention: config.desired_retention,
+            max_interval: config.maximum_interval_days,
+            learning_steps: u32::try_from(config.learning_steps_mins.len()).unwrap_or(0),
+            relearning_steps: u32::try_from(config.relearning_steps_mins.len()).unwrap_or(0),
+            new_per_day,
+            new_done_today: new_today,
+            days: horizon,
+            secs_per_answer: secs,
+        },
+    );
+    let day_dto = |p: &model::ForecastPoint| ForecastDayDto {
+        offset: p.offset,
+        date: iso_date(today + i64::from(p.offset)),
+        cards: p.answers,
+        reviews: p.reviews,
+        new_cards: p.introduced,
+        minutes: p.minutes,
+    };
+    let outlook = |offset: u32| {
+        let last = u32::try_from(result.days.len().saturating_sub(1)).unwrap_or(0);
+        let offset = offset.min(last);
+        let (cards_per_day, minutes_per_day) = result.week_ending(offset);
+        ForecastOutlook {
+            offset,
+            date: iso_date(today + i64::from(offset)),
+            cards_per_day,
+            minutes_per_day,
+        }
+    };
+    let days: Vec<ForecastDayDto> = result.days.iter().map(day_dto).collect();
+    #[allow(clippy::cast_precision_loss)] // at most 7 days a chunk
+    let weeks: Vec<ForecastWeek> = result
+        .days
+        .chunks(7)
+        .enumerate()
+        .map(|(i, w)| {
+            let n = w.len().max(1) as f64;
+            let first = w.first().map_or(0, |p| p.offset);
+            let last = w.last().map_or(0, |p| p.offset);
+            ForecastWeek {
+                week: u32::try_from(i + 1).unwrap_or(u32::MAX),
+                start_date: iso_date(today + i64::from(first)),
+                end_date: iso_date(today + i64::from(last)),
+                cards_per_day: w.iter().map(|p| p.answers).sum::<f64>() / n,
+                minutes_per_day: w.iter().map(|p| p.minutes).sum::<f64>() / n,
+                new_cards: w.iter().map(|p| p.introduced).sum(),
+            }
+        })
+        .collect();
+    let peak = result
+        .days
+        .iter()
+        .fold(None::<&model::ForecastPoint>, |best, p| match best {
+            Some(b) if b.answers >= p.answers => Some(b),
+            _ => Some(p),
+        })
+        .map(day_dto)
+        .unwrap_or_else(|| day_dto(&model::ForecastPoint::default()));
+    let unseen = cards.iter().filter(|c| c.scheduling.state == CardState::New).count();
+    let exam = match (exam_day, days_left) {
+        (Some((date, _)), Some(left)) => {
+            let before = u32::try_from((left - 1).max(0)).unwrap_or(0);
+            let new_left = result.days.get(before as usize).map_or(0.0, |p| p.unseen);
+            // A count of cards: finite, ≥ 0 and far below u32::MAX.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let new_left = new_left.round().max(0.0) as u32;
+            let needed = (left >= 1).then(|| {
+                let total = unseen as u64 + u64::from(new_today);
+                let per = total.div_ceil(u64::try_from(left).unwrap_or(1));
+                u32::try_from(per)
+                    .unwrap_or(u32::MAX)
+                    .min(fc_core::preset::MAX_NEW_PER_DAY)
+            });
+            Some(ExamOutlook {
+                date,
+                days_left: left,
+                new_left,
+                new_per_day_needed: needed,
+                last_week: outlook(before),
+            })
+        }
+        _ => None,
+    };
+    Ok(WorkloadForecast {
+        deck_id: req.deck_id,
+        new_per_day,
+        current_new_per_day: current,
+        new_done_today: new_today,
+        unseen: u32::try_from(unseen).unwrap_or(u32::MAX),
+        started: u32::try_from(cards.len() - unseen).unwrap_or(u32::MAX),
+        secs_per_answer: secs,
+        measured_time: measured,
+        retention: config.desired_retention,
+        outlook: outlook(OUTLOOK_DAY),
+        peak,
+        new_finished_on: result
+            .new_finished_on
+            .map(|d| iso_date(today + i64::from(d))),
+        days,
+        weeks,
+        exam,
+        target,
+    })
+}
+
+/// Runs `M` inside the current transaction and batch (its own oplog entry and events).
+fn call<M: fc_api::ApiMethod>(ctx: &mut CommandCtx<'_>, req: &M::Request) -> AppResult<M::Response> {
+    let v = ctx.call(&inverse_call::<M>(req)?)?;
+    crate::support::from_json(&v)
+}
+
+/// `base`, or `base 2`, `base 3`… — the first name no preset has (case-insensitive).
+fn free_preset_name(reads: &dyn Reads, base: &str) -> AppResult<String> {
+    use fc_core::query::text::fold;
+    let taken: Vec<String> = reads.list_presets()?.iter().map(|p| fold(&p.name)).collect();
+    let base = base.trim();
+    let base = if base.is_empty() { "Plan" } else { base };
+    let mut name = base.to_owned();
+    let mut n = 2;
+    while taken.contains(&fold(&name)) {
+        name = format!("{base} {n}");
+        n += 1;
+    }
+    Ok(name)
+}
+
+fn apply_pace(req: ApplyPace, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<PaceApplied>> {
+    use fc_api::v1::presets::{AssignPreset, CreatePreset, PresetDto, UpdatePreset};
+    validate_pace(req.new_per_day)?;
+    let index = DeckIndex::load(ctx.reads())?;
+    let before = pace_target(ctx.reads(), &index, req.deck_id)?;
+    let deck_name = index
+        .get(req.deck_id)
+        .map(|d| d.name.clone())
+        .unwrap_or_default();
+    let exam_date = match req.exam_date.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+        Some(d) => {
+            parse_date("exam_date", d)?;
+            Some(d.to_owned())
+        }
+        None => None,
+    };
+    let mark = ctx.oplog_mark();
+    let mut created_preset = false;
+    match before.preset_id {
+        Some(id) => {
+            let preset = ctx
+                .reads()
+                .get_preset(id)?
+                .ok_or_else(|| err_id(ErrorCode::NotFoundPreset, format!("preset {id} not found"), id))?;
+            if preset.config.new_per_day != req.new_per_day {
+                call::<PresetsUpdate>(
+                    ctx,
+                    &UpdatePreset {
+                        id,
+                        name: preset.name,
+                        config: fc_core::preset::PresetConfig {
+                            new_per_day: req.new_per_day,
+                            ..preset.config
+                        },
+                    },
+                )?;
+            }
+        }
+        None => {
+            let base = req.preset_name.clone().unwrap_or_else(|| deck_name.clone());
+            let name = free_preset_name(ctx.reads(), &base)?;
+            let p: PresetDto = call::<PresetsCreate>(
+                ctx,
+                &CreatePreset {
+                    name,
+                    config: Some(fc_core::preset::PresetConfig {
+                        new_per_day: req.new_per_day,
+                        ..fc_core::preset::PresetConfig::default()
+                    }),
+                },
+            )?;
+            call::<PresetsAssign>(
+                ctx,
+                &AssignPreset {
+                    deck_ids: vec![req.deck_id],
+                    preset_id: Some(p.id),
+                },
+            )?;
+            created_preset = true;
+        }
+    }
+    let mut exam = None;
+    if let Some(date) = exam_date {
+        let exists = ctx
+            .reads()
+            .list_exams()?
+            .iter()
+            .any(|e| e.deck_id == Some(req.deck_id) && e.date == date);
+        if !exists {
+            let name = req
+                .exam_name
+                .clone()
+                .filter(|n| !n.trim().is_empty())
+                .unwrap_or_else(|| deck_name.clone());
+            exam = Some(call::<PlanningExamsCreate>(
+                ctx,
+                &CreateExam {
+                    name,
+                    date,
+                    deck_id: Some(req.deck_id),
+                    query: None,
+                },
+            )?);
+        }
+    }
+    let named = summary::<PlanningApplyPace>()
+        .param("deck", &before.deck.path)
+        .param("count", req.new_per_day);
+    ctx.name_nested_since(mark, named.clone());
+    let index = DeckIndex::load(ctx.reads())?;
+    let target = pace_target(ctx.reads(), &index, req.deck_id)?;
+    Ok(CommandOutcome {
+        response: PaceApplied {
+            target,
+            previous_new_per_day: before.current_new_per_day,
+            created_preset,
+            exam,
+        },
+        // Undone through the nested entries (same batch).
+        inverse: Vec::new(),
+        summary: named,
+        events: Vec::new(),
     })
 }

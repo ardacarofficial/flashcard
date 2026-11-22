@@ -28,6 +28,7 @@ import type { ApiClientDto } from "./ApiClientDto";
 import type { ApiClientList } from "./ApiClientList";
 import type { ApiClientRef } from "./ApiClientRef";
 import type { ApplyOnboarding } from "./ApplyOnboarding";
+import type { ApplyPace } from "./ApplyPace";
 import type { ApplyToLeeches } from "./ApplyToLeeches";
 import type { ApproveApiClient } from "./ApproveApiClient";
 import type { AssignPreset } from "./AssignPreset";
@@ -119,6 +120,7 @@ import type { ExtractClip } from "./ExtractClip";
 import type { FindReplace } from "./FindReplace";
 import type { FlagDto } from "./FlagDto";
 import type { FlagList } from "./FlagList";
+import type { ForecastRequest } from "./ForecastRequest";
 import type { GetAttributeValues } from "./GetAttributeValues";
 import type { GetPluginLocales } from "./GetPluginLocales";
 import type { GetSettings } from "./GetSettings";
@@ -212,6 +214,7 @@ import type { OpenPluginUi } from "./OpenPluginUi";
 import type { OplogPage } from "./OplogPage";
 import type { OptimizerStarted } from "./OptimizerStarted";
 import type { OptionChangeResult } from "./OptionChangeResult";
+import type { PaceApplied } from "./PaceApplied";
 import type { PackageInfo } from "./PackageInfo";
 import type { PaletteList } from "./PaletteList";
 import type { PluginCommandResult } from "./PluginCommandResult";
@@ -315,6 +318,8 @@ import type { StatsBreakdownRequest } from "./StatsBreakdownRequest";
 import type { StatsCacheInfo } from "./StatsCacheInfo";
 import type { StatsOverview } from "./StatsOverview";
 import type { StatsRequest } from "./StatsRequest";
+import type { StruggleList } from "./StruggleList";
+import type { StrugglesRequest } from "./StrugglesRequest";
 import type { StudyCardsChanged } from "./StudyCardsChanged";
 import type { SubmitTest } from "./SubmitTest";
 import type { SubtitleKeyDto } from "./SubtitleKeyDto";
@@ -334,6 +339,8 @@ import type { TestPaperRequest } from "./TestPaperRequest";
 import type { TextAnalysis } from "./TextAnalysis";
 import type { ThemeDto } from "./ThemeDto";
 import type { ThemePresetList } from "./ThemePresetList";
+import type { TodayRequest } from "./TodayRequest";
+import type { TodayStats } from "./TodayStats";
 import type { TrashList } from "./TrashList";
 import type { TtsProviderList } from "./TtsProviderList";
 import type { UiSession } from "./UiSession";
@@ -360,6 +367,7 @@ import type { VoiceList } from "./VoiceList";
 import type { WordInfo } from "./WordInfo";
 import type { WordMarksChanged } from "./WordMarksChanged";
 import type { WorkloadEstimate } from "./WorkloadEstimate";
+import type { WorkloadForecast } from "./WorkloadForecast";
 import type { WorkloadRequest } from "./WorkloadRequest";
 
 /** API version prefix of qualified method names (`v1.decks.create`). */
@@ -506,12 +514,16 @@ export interface Methods {
   "stats.breakdown": { kind: "query"; request: StatsBreakdownRequest; response: StatsBreakdown };
   "stats.leeches": { kind: "query"; request: LeechRequest; response: LeechList };
   "stats.apply_to_leeches": { kind: "command"; request: ApplyToLeeches; response: LeechActionResult };
+  "stats.today": { kind: "query"; request: TodayRequest; response: TodayStats };
+  "stats.struggles": { kind: "query"; request: StrugglesRequest; response: StruggleList };
   "stats.deck_reports": { kind: "query"; request: DeckReportsRequest; response: DeckReports };
   "stats.refresh_cache": { kind: "command"; request: RefreshStatsCache; response: StatsCacheInfo };
   "planning.exams.list": { kind: "query"; request: ListExams; response: ExamList };
   "planning.exams.create": { kind: "command"; request: CreateExam; response: ExamDto };
   "planning.exams.update": { kind: "command"; request: UpdateExam; response: ExamDto };
   "planning.exams.delete": { kind: "command"; request: ExamRef; response: Empty };
+  "planning.forecast": { kind: "query"; request: ForecastRequest; response: WorkloadForecast };
+  "planning.apply_pace": { kind: "command"; request: ApplyPace; response: PaceApplied };
   "goals.list": { kind: "query"; request: ListGoals; response: GoalList };
   "goals.create": { kind: "command"; request: CreateGoal; response: GoalDto };
   "goals.update": { kind: "command"; request: UpdateGoal; response: GoalDto };
@@ -802,12 +814,16 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "stats.breakdown": "query",
   "stats.leeches": "query",
   "stats.apply_to_leeches": "command",
+  "stats.today": "query",
+  "stats.struggles": "query",
   "stats.deck_reports": "query",
   "stats.refresh_cache": "command",
   "planning.exams.list": "query",
   "planning.exams.create": "command",
   "planning.exams.update": "command",
   "planning.exams.delete": "command",
+  "planning.forecast": "query",
+  "planning.apply_pace": "command",
   "goals.list": "query",
   "goals.create": "command",
   "goals.update": "command",

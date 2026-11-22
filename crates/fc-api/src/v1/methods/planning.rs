@@ -15,6 +15,10 @@ methods! {
     PlanningExamsDelete = "planning.exams.delete", Command, "planning", "planning:write", Public, undo: true, ExamRef => Empty;
     /// Internal inverse of delete.
     PlanningExamsRestore = "planning.exams.restore", Command, "planning", "planning:write", Internal, undo: true, RestoreExam => ExamDto;
+    /// v1.3: day-by-day workload (cards, minutes) of a new-cards-per-day pace.
+    PlanningForecast = "planning.forecast", Query, "planning", "planning:read", Public, undo: false, ForecastRequest => WorkloadForecast;
+    /// v1.3: sets a deck's new cards per day (its preset; one undo step), optionally with an exam.
+    PlanningApplyPace = "planning.apply_pace", Command, "planning", "decks:write", Public, undo: true, ApplyPace => PaceApplied;
 
     // ---- goals ----
     /// Goals with progress and pace forecast.

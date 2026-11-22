@@ -9,9 +9,10 @@
   import PluginPanels from '$lib/features/plugins/PluginPanels.svelte';
   import OutsideHost from '$lib/features/inbox/OutsideHost.svelte';
   import LockHost from '$lib/features/profiles/LockHost.svelte';
+  import HelpHost from '$lib/features/help/HelpHost.svelte';
   import { buildNavigation, samePlace, type NavEntry, type SectionId } from '$lib/shell/navigation';
   import AppSidebar from '$lib/shell/AppSidebar.svelte';
-  import { openPalette, openQuickAdd, setQuickAddFallback, shellCommands } from '$lib/shell/commands.svelte';
+  import { openHelp, openPalette, openQuickAdd, setQuickAddFallback, shellCommands } from '$lib/shell/commands.svelte';
   import TopBar from '$lib/shell/TopBar.svelte';
   import { typingTarget } from '$lib/features/browse/palette';
   import DeckPicker from '$lib/shell/DeckPicker.svelte';
@@ -300,7 +301,7 @@
 
   <div class="column">
   {#if !(focusOn && !locked)}
-    <TopBar {trail} {onsearch} searchKeys={shellCommands.paletteKeys} onadd={shellCommands.canQuickAdd && !locked ? () => void openQuickAdd() : null} />
+    <TopBar {trail} {onsearch} searchKeys={shellCommands.paletteKeys} onadd={shellCommands.canQuickAdd && !locked ? () => void openQuickAdd() : null} onhelp={shellCommands.canHelp && !locked ? () => void openHelp() : null} />
   {/if}
   <main id="fc-main" tabindex="-1">
     <div class="page" class:focus={focusOn && !locked} class:wide={screen?.width === 'wide' && where !== 'settings'}>
@@ -377,10 +378,17 @@
 
 <!-- Keyboard shortcuts + command palette (v0.4); inert when the palette module is off. -->
 <ShortcutHost
-  screens={nav.all.map((m) => ({ id: m.screen.id, label: td(m.label_key), hint: placeHint(m), open: () => show(m) }))}
+  screens={[
+    ...nav.all.map((m) => ({ id: m.screen.id, label: td(m.label_key), hint: placeHint(m), open: () => show(m) })),
+    // Not a screen: the shortcuts help sheet (HelpHost), listed so the palette finds it.
+    ...(shellCommands.canHelp ? [{ id: 'shell.help', label: t('help.palette'), hint: null, open: () => void openHelp() }] : []),
+  ]}
   activeScreen={screen?.id ?? null}
   {guarded}
 />
+
+<!-- Keyboard shortcuts help (v1.3): `?`, the top bar's "?", the palette. After ShortcutHost: a key it handled stays handled. -->
+<HelpHost openShortcuts={nav.all.some((e) => e.route === '/shortcuts') ? () => openRoute('/shortcuts') : null} />
 
 <style>
   .shell {

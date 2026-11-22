@@ -88,7 +88,9 @@
       "leeches": "Leeches",
       "deck_reports": "Deck report cards",
       "refresh_cache": "Refresh the statistics cache",
-      "apply_to_leeches": "Act on every leech"
+      "apply_to_leeches": "Act on every leech",
+      "today": "How am I doing today?",
+      "struggles": "What am I forgetting?"
     },
     "planning": {
       "exams": {
@@ -96,7 +98,9 @@
         "create": "Add an exam date",
         "update": "Edit an exam date",
         "delete": "Remove an exam date"
-      }
+      },
+      "forecast": "Workload forecast",
+      "apply_pace": "Apply my new-cards-a-day pace"
     },
     "goals": {
       "list": "Goals",
@@ -159,7 +163,8 @@
       "heading": "Forecast",
       "overdue": "{n} overdue (counted today)",
       "intro": "Cards due in the next 30 days.",
-      "day": "{date}: {n} due"
+      "day": "{date}: {n} due",
+      "meaning": "Each bar is the number of cards due that day."
     },
     "states": {
       "heading": "Memory states",
@@ -170,7 +175,8 @@
       "mature": "Mature",
       "suspended": "Suspended",
       "buried": "Buried",
-      "total": "Total"
+      "total": "Total",
+      "meaning": "Where your cards are: new → learning → young → mature (21+ day interval)."
     },
     "success": {
       "heading": "Success rate",
@@ -182,12 +188,14 @@
       "all": "All",
       "answers": "Answers",
       "rate": "Success",
-      "answers_n": "{n, plural, one {# answer} other {# answers}}"
+      "answers_n": "{n, plural, one {# answer} other {# answers}}",
+      "meaning": "How many of your answers were right; the thin line is your target recall."
     },
     "trend": {
       "heading": "Progress",
       "weekly": "Weekly",
-      "monthly": "Monthly"
+      "monthly": "Monthly",
+      "meaning": "Your reviews per week or month."
     },
     "hours": {
       "heading": "Best hours",
@@ -200,12 +208,14 @@
       "card": "Card",
       "up_to": "≤ {s} s",
       "over": "> {s} s",
-      "seconds": "{s} s"
+      "seconds": "{s} s",
+      "meaning": "How long you take to answer a card."
     },
     "memory": {
       "heading": "Stability and difficulty",
       "stability": "Stability (days)",
-      "difficulty": "Difficulty"
+      "difficulty": "Difficulty",
+      "meaning": "Stability: days until recall drops to 90%. Difficulty: 1 (easy) – 10 (hard)."
     },
     "breakdown": {
       "heading": "By classification",
@@ -259,7 +269,82 @@
       "fri": "Fri"
     },
     "more": {
-      "heading": "Habits and memory"
+      "heading": "Habits and memory",
+      "meaning": "When you remember best, how fast you answer, how solid your memory is."
+    },
+    "questions": "Three questions",
+    "today": {
+      "heading": "How am I doing today?",
+      "intro": "What you answered today, next to yesterday, and your goal.",
+      "answered": "Answered",
+      "correct": "Correct",
+      "time": "Time",
+      "streak": "Streak",
+      "goal": "Goal",
+      "no_goal": "No goal yet.",
+      "set_goal": "Set a goal",
+      "correct_of": "{correct} of {n} answers",
+      "minutes": "{n} min",
+      "days": "{n} days",
+      "pace": {
+        "not_started": "You haven't studied today yet.",
+        "not_started_ref": "You haven't studied today yet; yesterday you answered {ref} cards.",
+        "first_day": "Your first day of studying — keep going!",
+        "ahead_yesterday": "Ahead of yesterday: {ref} cards then, {n} already today.",
+        "same_yesterday": "Same pace as yesterday: {ref} cards then, {n} today.",
+        "behind_yesterday": "A bit behind yesterday: {ref} cards then, {n} so far today.",
+        "ahead_week": "Ahead of your 7-day average: ~{ref} cards a day, {n} already today.",
+        "same_week": "At your 7-day pace: ~{ref} cards a day, {n} today.",
+        "behind_week": "Behind your 7-day average: ~{ref} cards a day, {n} so far today."
+      }
+    },
+    "ahead": {
+      "heading": "What's ahead?",
+      "intro": "Cards coming up for review in the next days. Overdue cards count for today.",
+      "range": "Range",
+      "week": "7 days",
+      "month": "30 days",
+      "chart": "Reviews in the next {n} days",
+      "peak": "Busiest day: {date} · {n} cards",
+      "peak_mark": "busiest",
+      "today": "today",
+      "total": "{n} cards over {days} days",
+      "empty": "No reviews coming up.",
+      "plan": "Plan your pace"
+    },
+    "struggles": {
+      "heading": "What am I forgetting?",
+      "intro": "Words you got wrong recently, most misses first. Practice and tests included.",
+      "window": "Window",
+      "w1": "Today",
+      "w7": "7 days",
+      "w30": "30 days",
+      "study": "Study these",
+      "study_n": "Study these · {n}",
+      "study_hint": "Opens a practice session: your schedule stays as it is.",
+      "term": "Word",
+      "meaning": "Meaning",
+      "misses": "Misses",
+      "last": "Last seen",
+      "misses_title": "{misses} wrong of {answers} answers",
+      "none_today": "No wrong answers today.",
+      "none": "No wrong answers in the last {n} days.",
+      "more": "and {n} more (showing the {shown} most missed)",
+      "actions": "More actions for {term}",
+      "suspend": "Pause (don't ask until you resume it)",
+      "tag": "Tag “hard”",
+      "tag_name": "hard",
+      "paused": "paused",
+      "nothing": "Nothing to study (they may all be paused).",
+      "started": "Practice session ready: “Continue” on the Study screen."
+    },
+    "details": {
+      "heading": "Details",
+      "intro": "Your history and memory for the selected range and deck."
+    },
+    "summary": {
+      "heading": "Range summary",
+      "meaning": "Streak, reviews, time and true recall in the selected range."
     }
   },
   "planning": {
@@ -267,7 +352,8 @@
     "balance": {
       "heading": "Load balancing and easy days",
       "toggle": "Spread reviews evenly",
-      "easy_days": "Easy days"
+      "easy_days": "Easy days",
+      "meaning": "Moves reviews to the least busy of equally good days; easy days get fewer reviews."
     },
     "exams": {
       "heading": "Exam dates",
@@ -312,7 +398,59 @@
       "basis": "Based on {n} review cards and {new} new cards per day.",
       "intro": "How many reviews a day each desired retention would cost."
     },
-    "subtitle": "Shape when reviews happen: lighter days, exam dates and your target retention."
+    "subtitle": "Shape when reviews happen: lighter days, exam dates and your target retention.",
+    "pace": {
+      "heading": "Plan your pace",
+      "intro": "See how much you'll study in the coming weeks for each number of new cards a day.",
+      "deck": "Deck",
+      "all_decks": "All decks (pick a deck to apply)",
+      "new_per_day": "New cards a day?",
+      "current": "now {n}",
+      "exam": "My exam date (optional)",
+      "clear_exam": "Clear the exam date",
+      "sentence": "At this pace, in {weeks} weeks: ~{cards} cards and ~{min} min a day.",
+      "sentence_days": "At this pace, in {days} days: ~{cards} cards and ~{min} min a day.",
+      "today": "Today ~{cards} cards, ~{min} min.",
+      "peak": "Busiest day {date}: ~{cards} cards.",
+      "new_done": "Your {n} unstarted new cards run out on {date}.",
+      "new_none": "No unstarted new cards: the load is reviews only.",
+      "new_later": "{n} new cards are waiting; at this pace they last beyond this view.",
+      "new_zero": "0 new cards a day: reviews only, {n} new cards keep waiting.",
+      "exam_left": "{days} days to the exam: {left} new cards will still be unstarted then.",
+      "exam_ok": "{days} days to the exam: you'll have started every new card before it.",
+      "exam_need": "To start them all, you need {n} new cards a day.",
+      "exam_use": "Use {n}",
+      "exam_week": "The week before the exam: ~{cards} cards and ~{min} min a day.",
+      "exam_past": "This date has passed.",
+      "time_measured": "Minutes use your average of {s} s per card over the last 30 days.",
+      "time_default": "No timing yet; {s} s per card assumed.",
+      "chart": "Daily workload forecast",
+      "chart_day": "{date}: ~{cards} cards, ~{min} min",
+      "weeks": "By week",
+      "week_n": "Week {n}",
+      "col_week": "Week",
+      "col_cards": "Cards / day",
+      "col_minutes": "Minutes / day",
+      "col_new": "New cards",
+      "meaning": "Computed from your cards' memory and your preset's target recall; it shows the load and does not apply the daily review limit.",
+      "apply": "Apply",
+      "apply_preset": "Applying sets {n} new cards a day in preset “{preset}” (now {current}).",
+      "apply_create": "This deck has no preset: applying creates preset “{deck}” with {n} new cards a day.",
+      "apply_decks": "Decks affected: {decks}",
+      "apply_exam": "An exam date for {date} is added too.",
+      "applied": "Applied. Ctrl+Z undoes it.",
+      "unchanged": "Nothing to apply: this is already your pace.",
+      "pick_deck": "Pick a deck to apply.",
+      "presets_off": "The deck options module is off; turn it on to change your pace.",
+      "exam_name": "Exam",
+      "quick": "Quick picks"
+    },
+    "advanced": {
+      "heading": "Advanced",
+      "intro": "FSRS optimization and workload by target recall: usually nothing to touch.",
+      "show": "Show advanced settings",
+      "hide": "Hide advanced settings"
+    }
   },
   "optimizer": {
     "progress": {
@@ -328,7 +466,8 @@
       "cards_learned": "Cards learned",
       "study_minutes": "Minutes studied",
       "streak": "Streak (days)",
-      "deck_completion": "Settled cards (%)"
+      "deck_completion": "Settled cards (%)",
+      "daily_cards": "Cards a day"
     },
     "target": "Target",
     "deadline": "Deadline",
@@ -347,7 +486,42 @@
     "none_hint": "Set one below, e.g. 500 cards by the end of the month.",
     "delete_named": "Remove goal: {name}",
     "new": "New goal",
-    "new_hint": "Leave the deadline empty for a daily goal."
+    "new_hint": "Fill in the blanks. Daily goals start from zero every day.",
+    "template": {
+      "label": "Kind of goal",
+      "daily_cards": "Cards every day",
+      "finish_deck": "Finish a deck",
+      "study_minutes": "Minutes every day",
+      "streak": "Streak",
+      "deck_completion": "Settled cards",
+      "cards_learned": "New cards"
+    },
+    "s": {
+      "daily_cards": "Study {n} cards every day",
+      "finish_deck": "Finish {deck} by {date}",
+      "study_minutes": "Study {n} minutes every day",
+      "streak": "Study {n} days in a row",
+      "deck_completion": "Get {deck} to {n}% settled cards",
+      "cards_learned": "Learn {n} new cards",
+      "cards_learned_by": "Learn {n} new cards by {date}",
+      "study_minutes_by": "Study {n} minutes in total by {date}",
+      "daily_cards_by": "Answer {n} cards in total by {date}",
+      "streak_by": "Study {n} days in a row by {date}",
+      "deck_completion_by": "Get {deck} to {n}% settled cards by {date}"
+    },
+    "slot": {
+      "n": "Number",
+      "date": "Date",
+      "deck": "Deck"
+    },
+    "all_decks": "all decks",
+    "finish_hint": "{deck} has {n} unstarted cards; the goal is to learn them all.",
+    "finish_empty": "This deck has no unstarted cards.",
+    "pick_deck": "Pick a deck",
+    "scope": "Scope: {query}",
+    "today_of": "today {current} / {target}",
+    "home_hint": "The goal tile on Home shows your first unfinished goal.",
+    "more": "More options"
   },
   "errors": {
     "validation": {

@@ -21,7 +21,8 @@ percent: number,
  */
 done: boolean, 
 /**
- * A per-day goal (study minutes without a deadline): `current` is today's value.
+ * A per-day goal (study minutes or daily cards without a deadline): `current` is today's
+ * value.
  */
 daily: boolean, 
 /**

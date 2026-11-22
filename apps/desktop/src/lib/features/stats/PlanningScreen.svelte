@@ -1,11 +1,22 @@
+<!--
+  Statistics → Planning (v1.3): leads with two controls and their live consequence — "how many
+  new cards a day?" and an optional exam date — the daily workload forecast for the next weeks
+  (`planning.forecast`, a Rust model of the cards' memory) in one sentence, a chart and a week
+  table, and an "Apply" that says which preset and decks it changes (`planning.apply_pace`,
+  one undo step). Below: exam dates and load balancing, explained; the optimizer and the
+  retention/workload table under "Advanced".
+-->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
-  import type { DeckTreeNode, ExamList, JobDto, ModuleDto, OptimizerResult, PresetDto, WorkloadEstimate } from '$lib/api/types';
+  import type { DeckTreeNode, ExamList, JobDto, ModuleDto, OptimizerResult, PresetDto, WorkloadEstimate, WorkloadForecast } from '$lib/api/types';
   import { i18n, t } from '$lib/i18n/index.svelte';
   import {
     Button,
     Calendar,
+    Check,
+    ChevronDown,
+    ChevronRight,
     Chip,
     Icon,
     IconButton,
@@ -16,8 +27,11 @@
     Select,
     Switch,
     Trash2,
+    X,
     type Tone,
   } from '$lib/ui';
+  import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
+  import BarChart from './BarChart.svelte';
   import type { ScreenCtx } from '../types';
   import JobProgress from '../io/JobProgress.svelte';
   import { followJob } from '../io/job';
@@ -47,12 +61,82 @@
   let outcome = $state<{ text: string; tone: Tone } | null>(null);
   let workloadDeck = $state('');
   let workload = $state<WorkloadEstimate | null>(null);
+  let advanced = $state(false);
+
+  // v1.3 pace planner.
+  let paceDeck = $state('');
+  let pace = $state<number | null>(null);
+  let examDate = $state('');
+  let fc = $state<WorkloadForecast | null>(null);
+  let fcFailed = $state(false);
+  let applying = $state(false);
+  let applied = $state(false);
+  let seq = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
 
   const flatten = (nodes: DeckTreeNode[]): { id: string; path: string }[] =>
     nodes.flatMap((n) => [{ id: n.deck.id, path: n.deck.path }, ...flatten(n.children)]);
   const decks = $derived(flatten(ctx.decks));
   const examDeckOptions = $derived([{ value: '', label: t('planning.exams.any_deck') }, ...decks.map((d) => ({ value: d.id, label: d.path }))]);
   const workloadDeckOptions = $derived([{ value: '', label: t('stats.scope.all_decks') }, ...decks.map((d) => ({ value: d.id, label: d.path }))]);
+  const paceDeckOptions = $derived([{ value: '', label: t('planning.pace.all_decks') }, ...decks.map((d) => ({ value: d.id, label: d.path }))]);
+  const QUICK = [5, 10, 20, 30] as const;
+
+  /** Fetches the forecast for the controls (the latest call wins). */
+  async function loadForecast() {
+    const mine = ++seq;
+    const n = pace === null || Number.isNaN(Number(pace)) ? null : Math.max(0, Math.min(9999, Math.round(Number(pace))));
+    try {
+      const r = await api.call('planning.forecast', {
+        deck_id: paceDeck || null,
+        new_per_day: n,
+        exam_date: examDate || null,
+        days: 28,
+        tz_offset_mins: tzOffset(),
+      });
+      if (mine !== seq) return;
+      fc = r;
+      fcFailed = false;
+      if (pace === null) pace = r.new_per_day;
+    } catch {
+      if (mine === seq) fcFailed = !fc;
+    }
+  }
+
+  /** Controls changed: refresh shortly (typing in the number field stays smooth). */
+  function changed() {
+    applied = false;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => void loadForecast(), 150);
+  }
+
+  function pickDeck() {
+    pace = null;
+    changed();
+  }
+
+  async function applyPace() {
+    if (!fc || !paceDeck) return;
+    applying = true;
+    const ok = await ctx.guarded(() =>
+      api.call('planning.apply_pace', {
+        deck_id: paceDeck,
+        new_per_day: fc!.new_per_day,
+        preset_name: null,
+        exam_date: examDate || null,
+        exam_name: null,
+      }),
+    );
+    applying = false;
+    applied = ok;
+    await Promise.all([loadForecast(), loadExams()]);
+  }
+
+  const r0 = (x: number) => num(x, 0);
+  const weeksAhead = $derived(fc ? Math.max(1, Math.round((fc.outlook.offset + 1) / 7)) : 0);
+  const peakIndex = $derived(fc ? fc.days.findIndex((d) => d.offset === fc!.peak.offset && fc!.peak.cards > 0) : -1);
+  const canApply = $derived(!!fc && !!paceDeck && moduleKnownOn('presets') && (fc.new_per_day !== fc.current_new_per_day || !!examDate));
+  const exam = $derived(fc?.exam ?? null);
 
   // Settings are read best-effort: without them (e.g. the dev mock) the defaults show.
   async function loadSettings() {
@@ -139,14 +223,21 @@
   const maxPerDay = $derived(workload ? Math.max(1, ...workload.points.map((p) => p.reviews_per_day)) : 1);
 
   onMount(() => {
+    trackModules();
+    paceDeck = ctx.selectedDeck ?? ctx.decks[0]?.deck.id ?? '';
+    void loadForecast();
     void loadSettings();
     void loadExams();
     void loadOptimizer();
-    const unsub = api.on(['exams_changed', 'presets_changed', 'undone', 'redone', 'collection_replaced', 'data_changed'], () => {
+    const unsub = api.on(['exams_changed', 'presets_changed', 'study_', 'deck_', 'undone', 'redone', 'collection_replaced', 'data_changed'], () => {
       void loadExams();
       void loadOptimizer();
+      void loadForecast();
     });
-    return () => void unsub.then((u) => u());
+    return () => {
+      if (timer) clearTimeout(timer);
+      void unsub.then((u) => u());
+    };
   });
 </script>
 
@@ -154,7 +245,158 @@
 <div class="planning">
   <PageHeader title={t('planning.heading')} subtitle={t('planning.subtitle')} />
 
-  <Panel title={t('planning.balance.heading')} body="rows">
+  <Panel class="pace" testid="planning-pace" title={t('planning.pace.heading')} description={t('planning.pace.intro')}>
+    <div class="controls">
+      <Select size="sm" label={t('planning.pace.deck')} options={paceDeckOptions} bind:value={paceDeck} onchange={pickDeck} />
+      <div class="pace-field">
+        <Input
+          size="sm"
+          type="number"
+          min="0"
+          max="9999"
+          label={t('planning.pace.new_per_day')}
+          bind:value={pace}
+          oninput={changed}
+          data-testid="pace-input"
+        />
+        <div class="quick" role="group" aria-label={t('planning.pace.quick')}>
+          {#each QUICK as q (q)}
+            <Chip
+              size="sm"
+              label={String(q)}
+              selected={Number(pace) === q}
+              onclick={() => {
+                pace = q;
+                changed();
+              }}
+            />
+          {/each}
+          {#if fc}<span class="cur num">{t('planning.pace.current', { n: fc.current_new_per_day })}</span>{/if}
+        </div>
+      </div>
+      <div class="exam-field">
+        <Input size="sm" type="date" label={t('planning.pace.exam')} bind:value={examDate} oninput={changed} onchange={changed} />
+        {#if examDate}
+          <IconButton
+            size="sm"
+            icon={X}
+            label={t('planning.pace.clear_exam')}
+            onclick={() => {
+              examDate = '';
+              changed();
+            }}
+          />
+        {/if}
+      </div>
+    </div>
+
+    {#if fcFailed && !fc}
+      <LoadState state="error" retry={() => void loadForecast()} />
+    {:else if !fc}
+      <LoadState state="loading" lines={3} />
+    {:else}
+      <p class="sentence" data-testid="pace-sentence" aria-live="polite">
+        {fc.outlook.offset >= 6
+          ? t('planning.pace.sentence', { weeks: weeksAhead, cards: r0(fc.outlook.cards_per_day), min: r0(fc.outlook.minutes_per_day) })
+          : t('planning.pace.sentence_days', { days: fc.outlook.offset, cards: r0(fc.outlook.cards_per_day), min: r0(fc.outlook.minutes_per_day) })}
+      </p>
+      <ul class="facts">
+        {#if fc.days[0]}<li>{t('planning.pace.today', { cards: r0(fc.days[0].cards), min: r0(fc.days[0].minutes) })}</li>{/if}
+        {#if fc.peak.cards > 0}<li>{t('planning.pace.peak', { date: shortDate(fc.peak.date, i18n.locale), cards: r0(fc.peak.cards) })}</li>{/if}
+        <li>
+          {#if fc.unseen === 0}
+            {t('planning.pace.new_none')}
+          {:else if fc.new_per_day === 0}
+            {t('planning.pace.new_zero', { n: fc.unseen })}
+          {:else if fc.new_finished_on}
+            {t('planning.pace.new_done', { n: fc.unseen, date: shortDate(fc.new_finished_on, i18n.locale) })}
+          {:else}
+            {t('planning.pace.new_later', { n: fc.unseen })}
+          {/if}
+        </li>
+        {#if exam}
+          {#if exam.days_left < 0}
+            <li class="warn">{t('planning.pace.exam_past')}</li>
+          {:else}
+            <li class:warn={exam.new_left > 0}>
+              {exam.new_left > 0 ? t('planning.pace.exam_left', { days: exam.days_left, left: exam.new_left }) : t('planning.pace.exam_ok', { days: exam.days_left })}
+              {#if exam.new_left > 0 && exam.new_per_day_needed !== null}
+                {t('planning.pace.exam_need', { n: exam.new_per_day_needed })}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onclick={() => {
+                    pace = exam!.new_per_day_needed;
+                    changed();
+                  }}>{t('planning.pace.exam_use', { n: exam.new_per_day_needed })}</Button
+                >
+              {/if}
+            </li>
+            <li>{t('planning.pace.exam_week', { cards: r0(exam.last_week.cards_per_day), min: r0(exam.last_week.minutes_per_day) })}</li>
+          {/if}
+        {/if}
+      </ul>
+      <BarChart
+        label={t('planning.pace.chart')}
+        highlight={0}
+        peak={peakIndex >= 0 ? peakIndex : null}
+        peakLabel={t('stats.ahead.peak_mark')}
+        height={120}
+        formatMax={(n) => r0(n)}
+        bars={fc.days.map((d) => ({
+          label: shortDate(d.date, i18n.locale),
+          value: d.cards,
+          title: t('planning.pace.chart_day', { date: shortDate(d.date, i18n.locale), cards: r0(d.cards), min: r0(d.minutes) }),
+        }))}
+      />
+      <table class="dt weeks">
+        <caption class="cap">{t('planning.pace.weeks')}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{t('planning.pace.col_week')}</th>
+            <th scope="col" class="n">{t('planning.pace.col_cards')}</th>
+            <th scope="col" class="n">{t('planning.pace.col_minutes')}</th>
+            <th scope="col" class="n">{t('planning.pace.col_new')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each fc.weeks as w (w.week)}
+            <tr>
+              <th scope="row">{t('planning.pace.week_n', { n: w.week })} <span class="range num">{shortDate(w.start_date, i18n.locale)}–{shortDate(w.end_date, i18n.locale)}</span></th>
+              <td class="n num">~{r0(w.cards_per_day)}</td>
+              <td class="n num">~{r0(w.minutes_per_day)}</td>
+              <td class="n num">{r0(w.new_cards)}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      <p class="basis">
+        {t('planning.pace.meaning')}
+        {fc.measured_time ? t('planning.pace.time_measured', { s: num(fc.secs_per_answer, 1) }) : t('planning.pace.time_default', { s: num(fc.secs_per_answer, 0) })}
+      </p>
+      <div class="apply" data-testid="pace-apply">
+        <div class="apply-text">
+          {#if !paceDeck}
+            <p>{t('planning.pace.pick_deck')}</p>
+          {:else if !moduleKnownOn('presets')}
+            <p>{t('planning.pace.presets_off')}</p>
+          {:else if fc.target}
+            <p>
+              {fc.target.preset_id
+                ? t('planning.pace.apply_preset', { preset: fc.target.preset_name ?? '', n: fc.new_per_day, current: fc.target.current_new_per_day })
+                : t('planning.pace.apply_create', { deck: fc.target.deck.path.split('::').at(-1) ?? '', n: fc.new_per_day })}
+              {#if examDate && exam && exam.days_left >= 0}{t('planning.pace.apply_exam', { date: shortDate(examDate, i18n.locale) })}{/if}
+            </p>
+            <p class="muted">{t('planning.pace.apply_decks', { decks: fc.target.decks.map((d) => d.path).join(', ') })}</p>
+          {/if}
+          {#if applied}<p class="ok" role="status"><Icon icon={Check} size={14} />{t('planning.pace.applied')}</p>{/if}
+        </div>
+        <Button variant="primary" size="sm" loading={applying} disabled={!canApply || applying} onclick={() => void applyPace()}>{t('planning.pace.apply')}</Button>
+      </div>
+    {/if}
+  </Panel>
+
+  <Panel title={t('planning.balance.heading')} description={t('planning.balance.meaning')} body="rows">
     <FormRow label={t('settings.planning.load_balance.label')} description={t('settings.planning.load_balance.description')}>
       <Switch ariaLabel={t('planning.balance.toggle')} bind:checked={balance} onchange={() => void set('planning.load_balance', balance)} />
     </FormRow>
@@ -223,7 +465,20 @@
     </form>
   </Panel>
 
-  {#if optimizerOn}
+  <div class="advanced">
+    <Button
+      variant="ghost"
+      size="sm"
+      icon={advanced ? ChevronDown : ChevronRight}
+      aria-expanded={advanced}
+      aria-controls="planning-advanced"
+      onclick={() => (advanced = !advanced)}>{advanced ? t('planning.advanced.hide') : t('planning.advanced.show')}</Button
+    >
+    <span class="muted">{t('planning.advanced.intro')}</span>
+  </div>
+
+  {#if optimizerOn && advanced}
+    <div id="planning-advanced" class="adv-body">
     <Panel title={t('planning.optimizer.heading')} description={t('planning.optimizer.intro')} body="rows">
       {#if presets.length === 0}
         <FormRow label={t('planning.optimizer.preset')} description={t('planning.optimizer.none')} />
@@ -276,6 +531,7 @@
         <p class="basis">{t('planning.workload.basis', { n: workload.review_cards, new: workload.new_per_day })}</p>
       {/if}
     </Panel>
+    </div>
   {/if}
 </div>
 
@@ -468,9 +724,120 @@
   .add > :global(.fc-btn) {
     justify-self: start;
   }
+  /* --- pace planner --- */
+  .controls {
+    display: grid;
+    grid-template-columns: minmax(10rem, 1fr) minmax(12rem, 1.2fr) minmax(10rem, 1fr);
+    gap: var(--space-3);
+    align-items: start;
+  }
+  .pace-field,
+  .exam-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .exam-field {
+    flex-direction: row;
+    align-items: end;
+  }
+  .exam-field > :global(:first-child) {
+    flex: 1;
+  }
+  .quick {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  .cur {
+    margin-inline-start: var(--space-1);
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .sentence {
+    margin: var(--space-4) 0 var(--space-1);
+    font-size: var(--text-lg, 16px);
+    font-weight: var(--weight-semibold);
+    color: var(--text-1);
+  }
+  .facts {
+    margin: 0;
+    padding: 0 0 0 var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--text-2);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .facts li.warn {
+    color: var(--warning);
+  }
+  .weeks {
+    margin-top: var(--space-3);
+  }
+  .cap {
+    caption-side: top;
+    text-align: start;
+    padding: 0 0 var(--space-1) var(--space-4);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    color: var(--text-2);
+  }
+  .range {
+    margin-inline-start: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--text-3);
+  }
+  :global(.pace) .basis {
+    border-top: none;
+    padding-inline: 0;
+  }
+  .apply {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-top: var(--space-2);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+  .apply-text p {
+    margin: 0;
+    font-size: var(--text-sm);
+  }
+  .apply-text .muted {
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .apply-text .ok {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-top: var(--space-1);
+    color: var(--success);
+  }
+  .advanced {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .advanced .muted {
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .adv-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
   @media (max-width: 1023.98px) {
     .add {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .controls {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
   }
 </style>

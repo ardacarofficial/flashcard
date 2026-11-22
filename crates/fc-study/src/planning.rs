@@ -1,5 +1,6 @@
-//! Smart planning (docs/02 §5, v0.6): **load balancing**, **easy days**, **exam-date mode** and
-//! the **workload estimate** of a desired retention. Pure: loads, calendars and weights come in
+//! Smart planning (docs/02 §5, v0.6): **load balancing**, **easy days**, **exam-date mode**,
+//! the **workload estimate** of a desired retention and (v1.3) the day-by-day workload
+//! [`forecast`] of a new-cards-per-day pace. Pure: loads, calendars and weights come in
 //! as arguments.
 //!
 //! [`plan_interval`] post-processes the interval a [`Scheduler`](fc_providers::strategy::Scheduler)
@@ -20,6 +21,8 @@
 //! Deterministic (no fuzz randomness), so undo/redo and tests replay exactly.
 
 use fc_core::stats::weekday;
+
+pub mod forecast;
 
 /// Easy-day weight of a "reduced" weekday.
 pub const REDUCED_WEIGHT: f64 = 0.5;

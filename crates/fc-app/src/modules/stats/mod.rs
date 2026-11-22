@@ -17,6 +17,7 @@
 
 mod breakdown;
 pub(crate) mod facts;
+mod questions;
 #[cfg(test)]
 mod tests;
 
@@ -81,6 +82,8 @@ pub fn register(reg: &mut Registry) {
     reg.query::<StatsGetBreakdown>(breakdown::breakdown);
     reg.query::<StatsLeeches>(leeches);
     reg.command::<StatsApplyToLeeches>(apply_to_leeches);
+    reg.query::<StatsToday>(questions::today);
+    reg.query::<StatsStruggles>(questions::struggles);
     reg.query::<StatsDeckReports>(deck_reports);
     reg.command::<StatsRefreshCache>(refresh);
 }

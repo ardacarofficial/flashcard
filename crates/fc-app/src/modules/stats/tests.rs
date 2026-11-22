@@ -1200,6 +1200,262 @@ pub fn modules_can_be_switched_off(f: &Factory) {
     });
 }
 
+// ------------------------------------------------------------------ v1.3
+
+fn forecast(t: &T, deck: Option<DeckId>, pace: Option<u32>, exam: Option<String>) -> WorkloadForecast {
+    t.ok::<PlanningForecast>(ForecastRequest {
+        deck_id: deck,
+        new_per_day: pace,
+        exam_date: exam,
+        days: Some(14),
+        tz_offset_mins: Some(0),
+    })
+}
+
+fn pace_of(t: &T, deck: DeckId) -> u32 {
+    t.ok::<PresetsForDeck>(fc_api::v1::presets::PresetForDeck { deck_id: deck })
+        .config
+        .new_per_day
+}
+
+/// `planning.forecast` reads the deck's cards and preset; `planning.apply_pace` writes the pace
+/// into the preset it names (creating one when the deck has none), adds the exam, and is one
+/// undo step.
+pub fn forecast_and_apply_pace(f: &Factory) {
+    let t = T::new(f);
+    let today = T0.div_euclid(DAY);
+    let d = t.deck("Eng");
+    for i in 0..30 {
+        t.note(d.id, &format!("w{i}"), None);
+    }
+    let fc = forecast(&t, Some(d.id), None, None);
+    assert_eq!((fc.current_new_per_day, fc.new_per_day), (20, 20));
+    assert_eq!((fc.unseen, fc.started, fc.new_done_today), (30, 0, 0));
+    assert_eq!(fc.days.len(), 14);
+    assert_eq!(fc.days[0].date, fc_core::stats::iso_date(today));
+    assert_eq!((fc.days[0].new_cards, fc.days[1].new_cards), (20.0, 10.0));
+    // 3 answers per new card on its first day (2 learning steps + 1).
+    assert!((fc.days[0].cards - 60.0).abs() < 1e-9);
+    assert_eq!(fc.new_finished_on, Some(fc_core::stats::iso_date(today + 1)));
+    assert!(!fc.measured_time && (fc.secs_per_answer - 8.0).abs() < 1e-9);
+    assert_eq!(fc.peak.offset, 0);
+    assert_eq!(fc.weeks.len(), 2);
+    assert!((fc.weeks[0].new_cards - 30.0).abs() < 1e-9);
+    assert_eq!(fc.weeks[1].start_date, fc_core::stats::iso_date(today + 7));
+    let target = fc.target.clone().unwrap();
+    assert_eq!(target.preset_id, None);
+    assert_eq!(target.decks.iter().map(|d| d.path.as_str()).collect::<Vec<_>>(), ["Eng"]);
+    // A slower pace never asks for more up to any day; the whole collection works too.
+    let slow = forecast(&t, Some(d.id), Some(5), None);
+    let sum = |f: &WorkloadForecast, n: usize| f.days[..n].iter().map(|d| d.cards).sum::<f64>();
+    for n in 1..=14 {
+        assert!(sum(&slow, n) <= sum(&fc, n) + 1e-9);
+    }
+    assert_eq!(forecast(&t, None, None, None).unseen, 30);
+    assert!(forecast(&t, None, None, None).target.is_none());
+    // An exam in 10 days: 3 new cards a day start all 30 the day before.
+    let exam_date = fc_core::stats::iso_date(today + 10);
+    let ex = forecast(&t, Some(d.id), Some(2), Some(exam_date.clone()));
+    let e = ex.exam.clone().unwrap();
+    assert_eq!((e.days_left, e.new_per_day_needed), (10, Some(3)));
+    assert_eq!(e.new_left, 10); // 2 a day for 10 days
+    assert!(ex.days.len() >= 11);
+    assert_eq!(
+        t.err::<PlanningForecast>(ForecastRequest {
+            deck_id: Some(d.id),
+            new_per_day: Some(10_000),
+            ..ForecastRequest::default()
+        })
+        .code,
+        ErrorCode::ValidationInvalidParams
+    );
+
+    // Apply: the deck has no preset → one is created and assigned; the exam is added.
+    let applied = t.ok::<PlanningApplyPace>(ApplyPace {
+        deck_id: d.id,
+        new_per_day: 7,
+        preset_name: None,
+        exam_date: Some(exam_date.clone()),
+        exam_name: Some("TOEFL".into()),
+    });
+    assert!(applied.created_preset);
+    assert_eq!(applied.previous_new_per_day, 20);
+    assert_eq!(applied.target.current_new_per_day, 7);
+    assert_eq!(applied.target.preset_name.as_deref(), Some("Eng"));
+    assert_eq!(applied.exam.as_ref().unwrap().name, "TOEFL");
+    assert_eq!(pace_of(&t, d.id), 7);
+    assert_eq!(forecast(&t, Some(d.id), None, None).current_new_per_day, 7);
+    let exams = || t.ok::<PlanningExamsList>(ListExams::default()).items.len();
+    assert_eq!(exams(), 1);
+    // One undo step takes everything back; redo brings it again.
+    t.undo();
+    assert_eq!(pace_of(&t, d.id), 20);
+    assert_eq!(exams(), 0);
+    assert!(t.ok::<PresetsList>(Empty {}).items.is_empty());
+    t.redo();
+    assert_eq!(pace_of(&t, d.id), 7);
+    assert_eq!(exams(), 1);
+    // With a preset shared by two decks: the forecast names both, apply updates the preset.
+    let other = t.deck("Fr");
+    let p = t.ok::<PresetsForDeck>(fc_api::v1::presets::PresetForDeck { deck_id: d.id }).preset_id;
+    t.ok::<PresetsAssign>(AssignPreset {
+        deck_ids: vec![other.id],
+        preset_id: p,
+    });
+    let target = forecast(&t, Some(d.id), Some(12), None).target.unwrap();
+    assert_eq!(target.decks.iter().map(|d| d.path.as_str()).collect::<Vec<_>>(), ["Eng", "Fr"]);
+    let again = t.ok::<PlanningApplyPace>(ApplyPace {
+        deck_id: d.id,
+        new_per_day: 12,
+        preset_name: None,
+        exam_date: Some(exam_date),
+        exam_name: None,
+    });
+    assert!(!again.created_preset && again.exam.is_none(), "same exam not added twice");
+    assert_eq!((again.previous_new_per_day, pace_of(&t, other.id)), (7, 12));
+    assert_eq!(t.ok::<PresetsList>(Empty {}).items.len(), 1);
+    t.undo();
+    assert_eq!(pace_of(&t, other.id), 7);
+
+    // Studying today (the helper's session takes up to 100 new cards): started cards leave the
+    // pool, today's new cards are counted and the started ones come back as reviews.
+    let n = t.study(StudyMode::Scheduled, Some(d.id), 0);
+    assert!(n >= 30);
+    let after = forecast(&t, Some(d.id), None, None);
+    assert_eq!(after.new_done_today, 30);
+    assert_eq!((after.unseen, after.started), (0, 30));
+    assert_eq!(after.days[0].new_cards, 0.0);
+    assert!(after.days.iter().skip(1).map(|d| d.reviews).sum::<f64>() > 0.0);
+    assert!(after.new_finished_on.is_none());
+    assert!(after.measured_time);
+    t.ok::<ModulesSetEnabled>(SetModuleEnabled {
+        id: crate::modules::planning::ID.into(),
+        enabled: false,
+    });
+    assert_eq!(
+        t.err::<PlanningForecast>(ForecastRequest::default()).code,
+        ErrorCode::ConflictModuleDisabled
+    );
+}
+
+/// `stats.today` compares today with yesterday; `stats.struggles` lists the cards answered
+/// wrong in the window (any mode), most misses first, with a query that studies exactly them.
+pub fn today_and_struggles(f: &Factory) {
+    let t = T::new(f);
+    let d = t.deck("D");
+    let other = t.deck("Other");
+    let a = t.note(d.id, "<b>go</b>", None);
+    let b = t.note(d.id, "see", None);
+    let c = t.note(d.id, "eat", None);
+    let old = t.note(d.id, "run", None);
+    let elsewhere = t.note(other.id, "fly", None);
+    let today_req = || TodayRequest {
+        scope: StatsScope::default(),
+        tz_offset_mins: Some(0),
+    };
+    let r = t.ok::<StatsToday>(today_req());
+    assert_eq!((r.pace, r.today.answered), (TodayPace::NotStarted, 0));
+    // Yesterday: 4 answers; today: a missed (normal), b right; earlier: b missed in a test,
+    // `a` missed in practice, `old` missed 10 days ago, `elsewhere` missed today.
+    let mut n = 0;
+    let mut add = |card, at: i64, rating, mode: &str| {
+        n += 1;
+        t.add_review(n, card, at, rating, CardState::Review, mode);
+    };
+    for card in [a, b, c, c] {
+        add(card, T0 - DAY, Rating::Good, "normal");
+    }
+    add(a, T0 - DAY + 60_000, Rating::Again, "trial");
+    add(b, T0 - 3 * DAY, Rating::Again, "test");
+    add(old, T0 - 10 * DAY, Rating::Again, "normal");
+    add(a, T0 - 60_000, Rating::Again, "normal");
+    add(b, T0 - 30_000, Rating::Good, "normal");
+    add(elsewhere, T0 - 20_000, Rating::Again, "normal");
+    let r = t.ok::<StatsToday>(today_req());
+    assert_eq!((r.today.answered, r.today.correct), (3, 1));
+    assert_eq!(r.yesterday.answered, 4);
+    assert!(r.reference_is_yesterday);
+    assert_eq!(r.pace, TodayPace::Behind, "3 so far vs 4 yesterday");
+    add(c, T0 - 10_000, Rating::Good, "normal");
+    let r = t.ok::<StatsToday>(today_req());
+    assert_eq!((r.pace, r.today.answered, r.streak.current), (TodayPace::Same, 4, 2));
+    let list = |days: Option<u32>, deck: Option<DeckId>| {
+        t.ok::<StatsStruggles>(StrugglesRequest {
+            scope: StatsScope {
+                deck_id: deck,
+                ..StatsScope::default()
+            },
+            days,
+            limit: None,
+            tz_offset_mins: Some(0),
+        })
+    };
+    let s = list(None, Some(d.id));
+    assert_eq!((s.days, s.total, s.today), (7, 2, 1));
+    let ids: Vec<CardId> = s.items.iter().map(|i| i.card_id).collect();
+    assert_eq!(ids, [a, b], "a: 2 misses (practice counts), b: 1");
+    assert_eq!((s.items[0].term.as_str(), s.items[0].meaning.as_str()), ("go", "x"));
+    assert_eq!((s.items[0].misses, s.items[0].answers), (2, 3));
+    assert_eq!(s.items[0].deck_path, "D");
+    assert_eq!(s.study_query.as_deref(), Some(format!("cid:{a},{b}").as_str()));
+    // Today only; the whole collection; another deck; a wider window.
+    assert_eq!(list(Some(1), Some(d.id)).items.iter().map(|i| i.card_id).collect::<Vec<_>>(), [a]);
+    assert_eq!(list(None, None).total, 3);
+    assert_eq!(list(Some(30), Some(d.id)).total, 3);
+    let none = list(Some(1), Some(t.deck("Empty").id));
+    assert!(none.items.is_empty() && none.study_query.is_none());
+    // The query practises exactly those cards (a practice session: schedule untouched).
+    let before = (t.card(a), t.card(b));
+    let start: StartSession = serde_json::from_value(serde_json::json!({
+        "kind": "custom",
+        "mode": "trial",
+        "deck_id": null,
+        "filter": { "query": s.study_query, "due_only": false },
+        "tz_offset_mins": 0,
+    }))
+    .unwrap();
+    let session = t.ok::<StudyStart>(start);
+    let mut seen = std::collections::BTreeSet::new();
+    let mut cur = session.clone();
+    while let Some(card) = cur.current.clone() {
+        seen.insert(card.card_id);
+        cur = t.ok::<StudyAnswer>(AnswerCard {
+            session_id: cur.id,
+            card_id: card.card_id,
+            rating: Rating::Good,
+            duration_ms: 1_000,
+            reveal_ms: None,
+        });
+    }
+    assert_eq!(seen, [a, b].into_iter().collect());
+    assert_eq!((t.card(a), t.card(b)), before);
+    // Suspended cards stay listed but are not studied.
+    t.set_card(b, |c| c.suspended = true);
+    let s = list(None, Some(d.id));
+    assert!(s.items[1].suspended);
+    assert_eq!(s.study_query.as_deref(), Some(format!("cid:{a}").as_str()));
+}
+
+/// "Her gün 50 kart": today's answers.
+pub fn daily_cards_goal(f: &Factory) {
+    let t = T::new(f);
+    let d = t.deck("D");
+    let card = t.note(d.id, "x", None);
+    t.ok::<GoalsCreate>(CreateGoal {
+        kind: GoalKind::DailyCards,
+        target: 2.0,
+        deadline: None,
+        query: None,
+    });
+    let progress = || t.ok::<GoalsList>(ListGoals::default()).items[0].progress.clone();
+    assert!(progress().daily && progress().current == 0.0);
+    t.add_review(1, card, T0 - DAY, Rating::Good, CardState::Review, "normal");
+    t.add_review(2, card, T0 - 1_000, Rating::Good, CardState::Review, "normal");
+    assert_eq!(progress().current, 1.0);
+    t.add_review(3, card, T0 - 500, Rating::Again, CardState::Review, "normal");
+    assert!(progress().done);
+}
+
 macro_rules! v06_suite {
     ($factory:expr) => {
         v06_suite!(@tests $factory;
@@ -1215,6 +1471,9 @@ macro_rules! v06_suite {
             optimizer_job_saves_weights,
             optimizer_job_cancelled_before_it_runs,
             modules_can_be_switched_off,
+            forecast_and_apply_pace,
+            today_and_struggles,
+            daily_cards_goal,
         );
     };
     (@tests $factory:expr; $($name:ident),* $(,)?) => {

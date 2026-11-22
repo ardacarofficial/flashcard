@@ -1,0 +1,17 @@
+{
+  "help": {
+    "title": "Keyboard shortcuts",
+    "search": "Search shortcuts",
+    "search_placeholder": "Search by name, action or key",
+    "empty": "No shortcut matches your search.",
+    "clear": "Clear search",
+    "none": "No shortcuts are bound yet.",
+    "note": "opens this list (when you're not typing).",
+    "edit": "Change shortcuts",
+    "open": "Keyboard shortcuts",
+    "palette": "Keyboard shortcuts help",
+    "context": {
+      "editor": "Editor"
+    }
+  }
+}
