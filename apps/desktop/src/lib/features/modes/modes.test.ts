@@ -268,6 +268,22 @@ describe('test screen', () => {
     expect((await screen.findByTestId('test-score')).textContent).toContain('correct');
     expect(screen.getByText(/Answer: a3/)).toBeTruthy();
   });
+
+  it('opens a paper with the first answer focused, so the keyboard can answer at once (journey S7a)', async () => {
+    const questions = [
+      { index: 0, card_id: 'c1', kind: 'written', prompt_html: '<p>go</p>', options: [], statement: null, key: null },
+      { index: 1, card_id: 'c2', kind: 'written', prompt_html: '<p>take</p>', options: [], statement: null, key: null },
+    ];
+    call.mockImplementation(async (m) => {
+      if (m === 'study.start') return session({ kind: 'test', current: null, modes: { test: { questions: 2, submitted: false, percent: null } } });
+      if (m === 'modes.test.paper') return { session_id: 's-1', questions, answers: null, result: null };
+      return base(m);
+    });
+    await launch('test', { scope: null, modes: { timed: null, rating_scale: null, test: { questions: 2, kinds: ['written'] } } });
+    render(TestScreen, { ctx: ctx() });
+    const first = (await screen.findByTestId('question-0')).querySelector('input');
+    await waitFor(() => expect(document.activeElement).toBe(first));
+  });
 });
 
 describe('study screen modes', () => {

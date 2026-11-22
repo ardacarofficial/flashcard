@@ -45,6 +45,14 @@ journey returns the ids and the data (`e2e/seed.json` in the profile).
 | S4 | Two cards Again → "struggled today" counts 2, practice (`trial`) rows, schedule untouched | must pass |
 | S5 | 21 new / limit 20: launcher and Home show 0 with the reason; empty start refused, open session kept | must pass |
 | S6 | Waiting state: a learning card showable in minutes → "Sıradaki kart … sonra", session stays open | must pass |
+| S7a | Subtitle card go/went, launcher → Test (written only): the paper opens in the answer field, "gitmek" is graded correct (paper read back with the key) | must pass |
+| S7b | Subtitle card back (Cards, Space): meaning, example (+ translation), source as separate parts, labelled by `cards.part.*` | must pass |
+| S7c | Subtitle card, H: the first hint never shows word/surface/meaning, and is the sentence with a blank | `test.fail` (open question: the Subtitle front already shows the sentence, so `engine::context_of` gives letters) |
+| S8 | Deck page term list: editing "Definition" of a Subtitle note changes `meaning`, never `surface` | must pass |
+| S9 | Create › Paste `word⇥meaning⇥sentence` ×3 into Vocabulary → example field holds the sentence; one Ctrl+Z removes all three | must pass |
+| S10 | Settings › Note types: a field's role and a card's "asks for" field survive save + reload (`notetypes.get`) | must pass |
+| S11 | Settings › Deck options: 5 new a day on a 15-new deck → launcher and `study.options` offer 5; reset to default → 15 | must pass |
+| S12 | Quick Add: after a save, Ctrl+A / Ctrl+Z inside the field edit the text; the saved note and the oplog are untouched | must pass |
 
 A journey that shows a known bug is **never deleted or skipped**: the bug assertion comes after
 `test.fail(true, '<bug>')`, called only once the journey's own preconditions have passed (so a

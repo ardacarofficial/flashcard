@@ -87,7 +87,7 @@ test('S7a subtitle card, written test question: "gitmek" for go/went is correct'
     await expect(kinds.getByRole('button', { name: t(`modes.test.kind.${k}`), exact: true })).toHaveAttribute('aria-pressed', 'false');
   }
   await expect(kinds.getByRole('button', { name: t('modes.test.kind.written'), exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await launcher.getByTestId('launcher-start').focus();
+  await page.getByTestId('launcher-start').focus();
   // The session the UI starts (its own `study.start` call through the bridge).
   const started = page.waitForResponse((r) => r.url().endsWith('/rpc') && /(^|\.)study\.start$/.test(r.request().postDataJSON()?.method ?? ''));
   await press(page, 'Enter');

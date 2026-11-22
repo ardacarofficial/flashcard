@@ -50,6 +50,8 @@
   /** "Leave the test?" — an unfinished paper with answers is only discarded on confirmation. */
   let confirmOpen = $state(false);
   let newBtn = $state<HTMLButtonElement | null>(null);
+  /** The question list of the shown paper. */
+  let sheet = $state<HTMLElement | null>(null);
 
   // The graded paper: "New test" has the focus (Enter presses it).
   $effect(() => {
@@ -108,6 +110,8 @@
     input = fresh;
     savedDraft = JSON.stringify(paper.draft ?? []);
     startedAt = Date.now();
+    // Keyboard first (v1.3): an open paper starts in its first answer (type or pick at once).
+    if (!paper.result) void tick().then(() => sheet?.querySelector<HTMLElement>('input:not(:disabled), [role=radio]')?.focus());
   }
 
   /** The answers last saved with `modes.test.save_draft` (JSON), so a pause loses nothing. */
@@ -210,7 +214,7 @@
 <svelte:window onkeydown={onKey} />
 
 {#snippet questions()}
-  <ol class="paper">
+  <ol class="paper" bind:this={sheet}>
     {#each paper!.questions as q, n (q.index)}
       {@const v = verdict(q.index)}
       <li class="question {v ?? ''}" data-testid="question-{q.index}">
