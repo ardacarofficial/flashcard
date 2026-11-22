@@ -406,16 +406,13 @@
       "meaning": {
         "get": "Bu cümledeki anlam",
         "apply": "Anlamı uygula",
-        "suggest": "Anlam öner",
-        "restore": "Anlamı geri yükle",
-        "store_suggestion": "Anlam önerisini sakla"
+        "suggest": "Anlam öner"
       }
     },
     "accepted_answers": {
       "list": "Kabul edilen cevaplar",
       "add": "Kabul edilen cevap ekle",
-      "remove": "Kabul edilen cevabı kaldır",
-      "restore": "Kabul edilen cevapları geri yükle"
+      "remove": "Kabul edilen cevabı kaldır"
     }
   }
 }

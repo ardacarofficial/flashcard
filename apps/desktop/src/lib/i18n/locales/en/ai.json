@@ -406,16 +406,13 @@
       "meaning": {
         "get": "Meaning in this sentence",
         "apply": "Apply meaning",
-        "suggest": "Suggest meaning",
-        "restore": "Restore meaning",
-        "store_suggestion": "Keep meaning suggestion"
+        "suggest": "Suggest meaning"
       }
     },
     "accepted_answers": {
       "list": "Accepted answers",
       "add": "Add accepted answers",
-      "remove": "Remove accepted answers",
-      "restore": "Restore accepted answers"
+      "remove": "Remove accepted answers"
     }
   }
 }
