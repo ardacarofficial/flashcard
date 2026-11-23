@@ -6,6 +6,9 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 Sürüm numarası değişmedi (tasarım izi henüz uygulanmadı). Arka uç üç dalgada "kelime uygulamasının temeli" oldu: kaybolamayan veri, "hangi kelimeleri biliyorum" sorusuna tek cevap, ölçülmüş hız. Migration'lar 1410–1490 aralığında; yeni modüller (`words`, `word_data`, `quiz`, `accepted_answers`, `examples`, `audio_fill`) varsayılan açık ve her biri kapatılabilir; yeni ayarların hepsi `settings.schema`'da TR/EN ad ve tek satırlık açıklamayla.
 
+### Ekranlar (tasarım izi)
+- **Çalışma modları ekranları (taslak `modlar.html`):** başlatıcı iki sütun — mod listesi (simge, ad, tek satır "ne yapar", "takvimi etkiler"/"pratik" etiketi; hepsi `study.options.modes`'tan), aşamalı "Hangi kartlar?", Sınav'ın soru türleri onay kutusu + "Kaç soru?" (doğru/yanlış kapalı), kalan her şey tek "Gelişmiş" anahtarının ardında, altbilgide "mod · kartlar · sayı" + takvime ne olacağı; Test kendi ekranında (1–4 seç, cevap ve kartın arkası hemen, `Enter`/kendiliğinden sonraki, `Esc` ara ver), ortak oturum sonu (puan, kaçırdıkların, `R` = yanlışları tekrar, takvim satırı); Öğren'de `Space` artık "devam" değil; eski Test her yerde Sınav; yolculuklar E1a/E1b, C5 yenilendi. _(E1)_
+
 ### Veri güvenliği
 - **Her zaman geri dönen yedek:** `.fcbackup` v2 dosyadan dosyaya akışla yazılır/okunur (1 GiB okuma tavanı kalktı, eski yedekler okunur), manifest her medyayı boyut + SHA-256 ile listeler, eksik medya `missing_media` ile raporlanıp yedek "eksik" işaretlenir, yedek geçici profile geri yüklenip doğrulanmadan yerine konmaz; yeni `io.backup.verify`, `io.backup.status`, `io.backup.auto`, ayarlar `io.auto_backup` (kapalı/günlük/haftalık, varsayılan günlük) ve `io.auto_backup_keep` (7). _(A1)_
 
