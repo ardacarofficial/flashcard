@@ -77,6 +77,14 @@ pub enum StorageError {
         /// OS error text.
         message: String,
     },
+    /// The disk is full (SQLite `SQLITE_FULL`, or a media file write hit `ENOSPC` / Windows
+    /// `ERROR_DISK_FULL`): the transaction is rolled back (v1.4.1; `fc-app` maps it to
+    /// `IO_DISK_FULL`).
+    #[error("disk full{}", path.as_deref().map(|p| format!(": {p}")).unwrap_or_default())]
+    DiskFull {
+        /// The file being written, when known.
+        path: Option<String>,
+    },
     /// A statement was stopped because the caller's deadline passed
     /// ([`crate::interrupt::deadline`]); its transaction is rolled back.
     #[error("interrupted: deadline passed")]
@@ -101,6 +109,7 @@ pub(crate) fn in_table(e: rusqlite::Error, table: &'static str) -> StorageError 
         rusqlite::Error::SqliteFailure(f, msg) => match f.code {
             C::DatabaseBusy | C::DatabaseLocked => StorageError::Busy,
             C::OperationInterrupted => StorageError::Interrupted,
+            C::DiskFull => StorageError::DiskFull { path: None },
             C::ConstraintViolation => StorageError::Constraint {
                 constraint: constraint_name(msg.as_deref().unwrap_or_default()),
             },
@@ -138,4 +147,21 @@ pub(crate) fn constraint_name(msg: &str) -> String {
         return format!("check: {tail}");
     }
     tail.to_owned()
+}
+
+/// Whether an I/O error means "the disk is full" (or the quota is used up), on any platform.
+pub fn is_disk_full(e: &std::io::Error) -> bool {
+    use std::io::ErrorKind as K;
+    if matches!(e.kind(), K::StorageFull | K::QuotaExceeded) {
+        return true;
+    }
+    // ENOSPC / EDQUOT (Linux, macOS); ERROR_HANDLE_DISK_FULL, ERROR_DISK_FULL (Windows).
+    let codes: &[i32] = if cfg!(windows) {
+        &[39, 112]
+    } else if cfg!(target_os = "macos") {
+        &[28, 69]
+    } else {
+        &[28, 122]
+    };
+    e.raw_os_error().is_some_and(|c| codes.contains(&c))
 }

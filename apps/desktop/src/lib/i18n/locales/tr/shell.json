@@ -84,7 +84,8 @@
     },
     "io": {
       "database": "Veritabanı hatası.",
-      "file": "Dosya hatası."
+      "file": "Dosya hatası.",
+      "disk_full": "Diskte yer kalmadı; bu işlem kaydedilmedi. Biraz yer açıp tekrar dene, uygulama çalışmaya devam ediyor."
     },
     "internal": {
       "unexpected": "Bir şeyler ters gitti.",

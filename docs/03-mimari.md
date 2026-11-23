@@ -246,6 +246,11 @@ Yeni hata kodu: **`CONFLICT_NOTHING_TO_STUDY`**: `study.start` seçilen kapsamda
 
 - `code` sabit ve belgelenmiştir. Frontend davranışını koda göre belirler, mesaja göre değil.
 - Kategoriler: `VALIDATION_*`, `NOT_FOUND_*`, `CONFLICT_*`, `PERMISSION_*`, `PROVIDER_*`, `IO_*`, `INTERNAL`.
+- **Disk dolu (v1.4.1):** SQLite `SQLITE_FULL` (veritabanı/WAL) ve dosya yazımında `ENOSPC`/`ERROR_DISK_FULL` (medya, yedek) tek koda iner: `IO_DISK_FULL` ("Diskte yer kalmadı; bu işlem kaydedilmedi…"). Komut geri alınır, yarım medya `.part`'ı hemen silinir, yarım yedek hedefe hiç konmaz (önceki sağlam kopya yerinde kalır); yer açılınca uygulama kaldığı yerden yazar. Test: gerçek küçük bir tmpfs'te (`rescue_tests::disk_full_*`, yalnız mount izni olan Linux'ta; eşleme her platformda).
+
+### Bozuk koleksiyon kurtarma (v1.4.1)
+
+Açılmayan ya da bütünlük denetiminden geçemeyen koleksiyonda **hiçbir şey silinmez, yerinde onarılmaz.** `fc_app::modules::maintenance::rescue`: veritabanı + `-wal`/`-shm` + `media/` olduğu gibi `<veri klasörü>/damaged/<zaman>/` içine taşınır (aynı düzen: kopya hâlâ koleksiyon olarak açılır; `README.txt` TR/EN), sonra yerine taze koleksiyon konur: **yedekten** (o an doğrulanan en yeni yedek: `backups/auto/`, `backups/*.fcbackup`, `status.json`'daki son doğrulanmış; geçici profilde geri yüklenip okunarak) ya da **okunabileni** (`fc_storage::rescue::salvage_into`: dosyanın şema sürümünde taze dosya, tablo tablo kopya; okunamayan tabloda `rowid` aralıkları yarıya bölünerek yalnız bozuk satırlar atlanır; yabancı anahtarı kopan satırlar sayılarak çıkar; kalan migration'lar koşar; satırların andığı medya bozuk klasörden kopyalanır). İkinci adım başarısızsa taze dosyalar silinip bozuklar geri taşınır. Doğrulanan yedek yoksa `CONFLICT_NO_VERIFIED_BACKUP`, hiçbir şey değişmez. Giriş noktaları: masaüstünde açılış hatasında dosya bozuksa yerli diyalog (iki dilli: "Yedekten geri yükle / Okunabileni kurtar / Çık"), CLI'de `fc rescue [--from backup|readable]` (seçeneksiz: salt okunur denetim + aday yedekler).
 
 ## 8. Olay yolu (event bus) ve kancalar
 

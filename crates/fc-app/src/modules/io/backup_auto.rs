@@ -139,6 +139,13 @@ pub(crate) struct StatusFile {
     /// The last copy to the mirror folder that failed (cleared by the next good one).
     #[serde(default)]
     pub mirror_failure: Option<BackupFailure>,
+    /// Whether that failure was a full disk.
+    #[serde(default)]
+    pub mirror_disk_full: bool,
+    /// The mirror folder last copied to: kept beside the backups (not only in the
+    /// collection's settings) so the rescue of a damaged collection finds it too.
+    #[serde(default)]
+    pub mirror_dir: Option<String>,
 }
 
 fn status_path(data_dir: &Path) -> PathBuf {
@@ -162,6 +169,17 @@ pub(crate) fn update_status(data_dir: &Path, f: impl FnOnce(&mut StatusFile)) {
         // Best effort: the backups themselves are the truth, this is a summary of them.
         let _ = super::write_file(&path.to_string_lossy(), &bytes);
     }
+}
+
+/// Path of the last verified backup recorded in `status.json` (the rescue of a damaged
+/// collection looks there too, v1.4.1).
+pub(crate) fn last_verified_path(data_dir: &Path) -> Option<String> {
+    load_status(data_dir).last_verified.map(|v| v.path)
+}
+
+/// The mirror folder recorded in `status.json` (the rescue looks for backups there too).
+pub(crate) fn last_mirror_dir(data_dir: &Path) -> Option<PathBuf> {
+    load_status(data_dir).mirror_dir.map(PathBuf::from)
 }
 
 /// Records a verified backup as the last one (best effort; no folder: nothing to record).

@@ -322,6 +322,9 @@ pub struct MirrorCopy {
     pub path: Option<String>,
     /// Why it could not be written (untranslated diagnostic); `null` = written and verified.
     pub error: Option<String>,
+    /// The mirror's disk is full (said on its own; the backup at home is not affected).
+    #[serde(default)]
+    pub disk_full: bool,
 }
 
 /// `io.backup.verify`.
@@ -433,6 +436,9 @@ pub struct BackupMirrorStatus {
     pub copies: Vec<VerifiedBackup>,
     /// The last copy that failed, if none succeeded since.
     pub last_failure: Option<BackupFailure>,
+    /// That failure was a full disk in the mirror folder.
+    #[serde(default)]
+    pub disk_full: bool,
 }
 
 /// State of the mirror folder.

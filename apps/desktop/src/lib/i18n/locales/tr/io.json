@@ -96,7 +96,8 @@
       "create_hint": "İstediğin yerde saklayabileceğin tek bir .fcbackup dosyası kaydeder.",
       "restore_title": "Yedekten geri yükle",
       "restore_hint": "Mevcut koleksiyonun yerini alır; önce o yedeklenir.",
-      "mirror_failed": "Yedek alındı ama ikinci yere kopyalanamadı: {error}"
+      "mirror_failed": "Yedek alındı ama ikinci yere kopyalanamadı: {error}",
+      "mirror_disk_full": "Yedek alındı ama ikinci yere kopyalanamadı: ikinci yedek diski dolu. Orada yer aç ya da başka bir klasör seç."
     },
     "print": {
       "layout": "Düzen",
@@ -260,7 +261,8 @@
       "mirror_unwritable": "İkinci yedek klasörüne yazılamıyor: {folder}. İzinleri ve boş yeri kontrol et.",
       "mirror_inside_collection": "İkinci yedek klasörü koleksiyon klasörünün içinde: {folder}. Başka bir diske koy.",
       "mirror_failed": "İkinci yere son kopya alınamadı ({date}).",
-      "mirror_off": "İkinci bir yedek yeri yok; aşağıdan başka bir disk seçebilirsin."
+      "mirror_off": "İkinci bir yedek yeri yok; aşağıdan başka bir disk seçebilirsin.",
+      "mirror_disk_full": "İkinci yedek diski dolu ({date}): {folder}. Asıl yedeğin sağlam; orada yer aç ya da başka bir klasör seç."
     }
   },
   "errors": {

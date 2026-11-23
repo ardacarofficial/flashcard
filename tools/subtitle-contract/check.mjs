@@ -121,7 +121,9 @@ try {
   // Not shared (the default): the client reads the documented "not shared" answer as an
   // empty last page — no error, no retry.
   const notShared = await api.knownWords('en');
-  assert.deepEqual(notShared, { words: [], next_cursor: null });
+  assert.deepEqual({ words: notShared.words, next_cursor: notShared.next_cursor }, { words: [], next_cursor: null });
+  // The client with "Flashcard'dan oku" (tools/subtitle-patches/0001) also reports the page's `shared`
+  if ('shared' in notShared) assert.equal(notShared.shared, false);
   const raw = await fetch(`${url}/v1/known-words?lang=en`, { headers: { Authorization: `Bearer ${secret}` } });
   assert.equal(raw.status, 200);
   assert.deepEqual(await raw.json(), { words: [], next_cursor: null, shared: false });
@@ -133,6 +135,7 @@ try {
   const known = await api.knownWords('en');
   assert.deepEqual(known.words.map((w) => [w.lemma, w.status]), [['key', 'learning'], ['pick up', 'learning']]);
   assert.equal(known.next_cursor, null);
+  if ('shared' in known) assert.equal(known.shared, true);
   console.log('ok  GET /v1/known-words', JSON.stringify(known.words));
 
   // The cards are in the app: the example in the Subtitle deck, the second one in Diziler.

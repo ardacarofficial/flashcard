@@ -27,6 +27,14 @@ mod backup;
 mod backup_auto;
 mod backup_file;
 mod backup_mirror;
+/// What the maintenance rescue of a damaged collection (v1.4.1) uses of the backup code.
+pub(crate) mod rescue_support {
+    pub(crate) use super::backup_auto::{
+        auto_dir, backups_dir, last_mirror_dir, last_verified_path,
+    };
+    pub(crate) use super::backup_file::{open_backup, restore_into, verify_file};
+    pub(crate) use super::disk_full;
+}
 #[cfg(test)]
 mod backup_tests;
 mod export;
@@ -159,6 +167,8 @@ pub(crate) fn interop_err(e: InteropError) -> AppError {
                 .with_detail("format", format)
                 .with_detail("version", version)
         }
+        InteropError::DiskFull { reason, .. } => ApiError::new(ErrorCode::IoDiskFull, msg)
+            .with_detail("reason", reason),
         InteropError::Options(reason) => {
             ApiError::new(ErrorCode::ValidationTextOptions, msg).with_detail("reason", reason)
         }
@@ -173,11 +183,47 @@ pub(crate) fn interop_err(e: InteropError) -> AppError {
 
 /// `IO_FILE` with the path.
 pub(crate) fn file_err(path: &str, e: std::io::Error) -> AppError {
+    if fc_storage::is_disk_full(&e) {
+        return disk_full(path, &e.to_string());
+    }
     AppError::Api(
         ApiError::new(ErrorCode::IoFile, format!("{path}: {e}"))
             .with_detail("path", path)
             .with_detail("reason", e.to_string()),
     )
+}
+
+/// `IO_DISK_FULL` for a write to `path` (v1.4.1).
+pub(crate) fn disk_full(path: &str, reason: &str) -> AppError {
+    AppError::Api(
+        ApiError::new(ErrorCode::IoDiskFull, format!("{path}: {reason}"))
+            .with_detail("path", path)
+            .with_detail("reason", reason),
+    )
+}
+
+/// Whether `e` or one of its sources is an I/O error meaning "disk full" (errors that went
+/// through an archive writer or a buffered writer keep the `io::Error` as a source).
+pub(crate) fn caused_by_disk_full(e: &(dyn std::error::Error + 'static)) -> bool {
+    let mut cur = Some(e);
+    while let Some(err) = cur {
+        if let Some(InteropError::DiskFull { .. }) = err.downcast_ref::<InteropError>() {
+            return true;
+        }
+        if let Some(io) = err.downcast_ref::<std::io::Error>() {
+            if fc_storage::is_disk_full(io) {
+                return true;
+            }
+            // `io::Error::other(inner)` keeps `inner` as its payload.
+            if let Some(inner) = io.get_ref() {
+                if caused_by_disk_full(inner) {
+                    return true;
+                }
+            }
+        }
+        cur = err.source();
+    }
+    false
 }
 
 /// Reads a whole file.

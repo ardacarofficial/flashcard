@@ -14,3 +14,6 @@ ProviderUpdateUnsupported => Provider, "errors.provider.update_unsupported";
 ProviderUpdateNetwork => Provider, "errors.provider.update_network";
 /// The downloaded update's signature does not match the app's update key: it was refused.
 ProviderUpdateSignature => Provider, "errors.provider.update_signature";
+/// A damaged collection was to be replaced by its newest verified backup, but no backup
+/// verifies (v1.4.1): nothing was changed.
+ConflictNoVerifiedBackup => Conflict, "errors.conflict.no_verified_backup";

@@ -11,4 +11,8 @@ path: string | null,
 /**
  * Why it could not be written (untranslated diagnostic); `null` = written and verified.
  */
-error: string | null, };
+error: string | null, 
+/**
+ * The mirror's disk is full (said on its own; the backup at home is not affected).
+ */
+disk_full: boolean, };

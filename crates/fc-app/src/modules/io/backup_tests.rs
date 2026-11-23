@@ -803,6 +803,14 @@ fn every_backup_is_also_copied_to_the_mirror_verified_there_and_rotated() {
     assert_eq!(st.copies.len(), 3);
     assert!(st.last_failure.is_none());
     assert!(st.copies[0].automatic && !st.copies[2].automatic, "newest first");
+    // The rescue of a damaged collection (H2) looks in the mirror too: the folder is
+    // remembered beside the backups, not only in the (possibly damaged) collection.
+    let candidates = crate::modules::maintenance::rescue::backup_candidates(&p.data);
+    assert!(
+        autos.iter().all(|a| candidates.contains(a)),
+        "{candidates:?}"
+    );
+    assert!(!st.disk_full);
     // No probe file or `.part` is left behind.
     let names: Vec<String> = std::fs::read_dir(m)
         .unwrap()

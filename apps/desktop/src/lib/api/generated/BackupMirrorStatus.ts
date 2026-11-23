@@ -22,4 +22,8 @@ copies: Array<VerifiedBackup>,
 /**
  * The last copy that failed, if none succeeded since.
  */
-last_failure: BackupFailure | null, };
+last_failure: BackupFailure | null, 
+/**
+ * That failure was a full disk in the mirror folder.
+ */
+disk_full: boolean, };

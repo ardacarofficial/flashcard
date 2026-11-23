@@ -124,7 +124,20 @@ pub struct BackupHeader {
     pub counts: BTreeMap<String, u64>,
 }
 
-fn write_err(e: impl ToString) -> InteropError {
+fn write_err<E: ToString + 'static>(e: E) -> InteropError {
+    let any: &dyn std::any::Any = &e;
+    let io = any.downcast_ref::<std::io::Error>().or_else(|| {
+        match any.downcast_ref::<zip::result::ZipError>() {
+            Some(zip::result::ZipError::Io(io)) => Some(io),
+            _ => None,
+        }
+    });
+    if io.is_some_and(crate::error::is_disk_full) {
+        return InteropError::DiskFull {
+            format: FORMAT,
+            reason: e.to_string(),
+        };
+    }
     InteropError::invalid(FORMAT, format!("write: {}", e.to_string()))
 }
 

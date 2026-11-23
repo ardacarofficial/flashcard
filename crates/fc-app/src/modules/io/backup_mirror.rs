@@ -111,8 +111,37 @@ fn copy_synced(src: &Path, part: &Path) -> std::io::Result<u64> {
     Ok(n)
 }
 
+/// Why a copy to the mirror failed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MirrorError {
+    /// In words, for the log and the status.
+    pub message: String,
+    /// The mirror's disk is full (`IO_DISK_FULL` at home; reported on its own here).
+    pub disk_full: bool,
+}
+
+impl From<String> for MirrorError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            disk_full: false,
+        }
+    }
+}
+
+fn io_failed(shown: &str, e: &std::io::Error) -> MirrorError {
+    if fc_storage::is_disk_full(e) {
+        MirrorError {
+            message: format!("{shown}: the mirror disk is full ({e})"),
+            disk_full: true,
+        }
+    } else {
+        format!("{shown}: {e}").into()
+    }
+}
+
 /// Copies the verified backup `src` into `dir` as `<prefix><now>.fcbackup`, re-reads it there
-/// and rotates (see the module docs). `Err`: why not, in words for the log and the status.
+/// and rotates (see the module docs). `Err`: why not.
 pub(crate) fn copy_to_mirror(
     src: &Path,
     dir: &Path,
@@ -121,10 +150,10 @@ pub(crate) fn copy_to_mirror(
     now: Timestamp,
     keep: u32,
     cancel: &CancelToken,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf, MirrorError> {
     let s = state(dir, data_dir);
     if s != MirrorState::Ok {
-        return Err(describe(s, dir));
+        return Err(describe(s, dir).into());
     }
     // A backup written straight into the mirror folder is its own copy.
     if src.parent().map(canonical) == Some(canonical(dir)) {
@@ -134,16 +163,17 @@ pub(crate) fn copy_to_mirror(
     let target = fresh_copy_name(dir, prefix, now);
     let part = part_path(&target);
     let shown = target.to_string_lossy().into_owned();
-    let run = || -> Result<(), String> {
-        let n = copy_synced(src, &part).map_err(|e| format!("{shown}: {e}"))?;
+    let run = || -> Result<(), MirrorError> {
+        let n = copy_synced(src, &part).map_err(|e| io_failed(&shown, &e))?;
         let want = std::fs::metadata(src).map(|m| m.len()).unwrap_or(n);
         let got = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
         if got != want {
-            return Err(format!("{shown}: {got} bytes written, {want} expected"));
+            return Err(format!("{shown}: {got} bytes written, {want} expected").into());
         }
         // Re-read on the mirror's disk: every entry's size and hash.
-        check_archive(&part, cancel).map_err(|e| format!("{shown}: {}", e.into_api().message))?;
-        std::fs::rename(&part, &target).map_err(|e| format!("{shown}: {e}"))
+        check_archive(&part, cancel)
+            .map_err(|e| MirrorError::from(format!("{shown}: {}", e.into_api().message)))?;
+        std::fs::rename(&part, &target).map_err(|e| io_failed(&shown, &e))
     };
     if let Err(e) = run() {
         let _ = std::fs::remove_file(&part);
@@ -170,13 +200,20 @@ pub(crate) fn mirror_backup(
     let outcome = copy_to_mirror(src, &dir, data_dir, automatic, ctx.now(), keep, &ctx.cancel);
     if let Some(home) = data_dir {
         let at = ctx.now();
+        let shown = dir.to_string_lossy().into_owned();
         match &outcome {
-            Ok(_) => update_status(home, |s| s.mirror_failure = None),
-            Err(message) => update_status(home, |s| {
+            Ok(_) => update_status(home, |s| {
+                s.mirror_failure = None;
+                s.mirror_disk_full = false;
+                s.mirror_dir = Some(shown);
+            }),
+            Err(e) => update_status(home, |s| {
                 s.mirror_failure = Some(BackupFailure {
                     at,
-                    message: message.clone(),
+                    message: e.message.clone(),
                 });
+                s.mirror_disk_full = e.disk_full;
+                s.mirror_dir = Some(shown);
             }),
         }
     }
@@ -184,10 +221,12 @@ pub(crate) fn mirror_backup(
         Ok(path) => MirrorCopy {
             path: Some(path.to_string_lossy().into_owned()),
             error: None,
+            disk_full: false,
         },
-        Err(error) => MirrorCopy {
+        Err(e) => MirrorCopy {
             path: None,
-            error: Some(error),
+            error: Some(e.message),
+            disk_full: e.disk_full,
         },
     })
 }
@@ -213,11 +252,27 @@ pub(crate) fn status(
         }
     }
     copies.sort_by_key(|c| std::cmp::Reverse(c.verified_at.0));
-    let last_failure = data_dir.and_then(|d| load_status(d).mirror_failure);
+    let file = data_dir.map(load_status).unwrap_or_default();
     Ok(Some(BackupMirrorStatus {
         folder: dir.to_string_lossy().into_owned(),
         state,
         copies,
-        last_failure,
+        disk_full: file.mirror_failure.is_some() && file.mirror_disk_full,
+        last_failure: file.mirror_failure,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_full_mirror_disk_is_said_plainly() {
+        let full = std::io::Error::from(std::io::ErrorKind::StorageFull);
+        let e = io_failed("E:\\yedek\\auto-1.fcbackup", &full);
+        assert!(e.disk_full);
+        assert!(e.message.contains("mirror disk is full"), "{}", e.message);
+        let other = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        assert!(!io_failed("x", &other).disk_full);
+    }
 }

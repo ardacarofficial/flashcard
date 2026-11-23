@@ -96,7 +96,8 @@
       "create_hint": "Saves one .fcbackup file you can keep anywhere.",
       "restore_title": "Restore from a backup",
       "restore_hint": "Replaces the current collection; it is backed up first.",
-      "mirror_failed": "Backed up, but the copy to the second location failed: {error}"
+      "mirror_failed": "Backed up, but the copy to the second location failed: {error}",
+      "mirror_disk_full": "The backup was made, but the second location's disk is full. Free some space there or pick another folder."
     },
     "print": {
       "layout": "Layout",
@@ -260,7 +261,8 @@
       "mirror_unwritable": "Cannot write to the second backup folder: {folder}. Check permissions and free space.",
       "mirror_inside_collection": "The second backup folder is inside the collection folder: {folder}. Put it on another drive.",
       "mirror_failed": "The last copy to the second location failed ({date}).",
-      "mirror_off": "No second backup location; you can set another drive below."
+      "mirror_off": "No second backup location; you can set another drive below.",
+      "mirror_disk_full": "The second backup disk is full ({date}): {folder}. Your main backup is fine; free some space there or pick another folder."
     }
   },
   "errors": {

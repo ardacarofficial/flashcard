@@ -69,7 +69,8 @@
       () => api.call('io.backup.create', { path }),
       (r) => {
         // v1.4.1: the backup itself is fine; a second location that failed is said next to it.
-        if (r.mirror?.error) error = t('io.backup.mirror_failed', { error: r.mirror.error });
+        if (r.mirror?.disk_full) error = t('io.backup.mirror_disk_full');
+        else if (r.mirror?.error) error = t('io.backup.mirror_failed', { error: r.mirror.error });
         return t('io.backup.created', { path: r.path });
       },
     );
@@ -123,7 +124,9 @@
       {:else}
         <p class="note bad" role="alert"><Icon icon={CircleAlert} size={16} /><span>{td(`io.status.mirror_${mirror.state}`, { folder: mirror.folder })}</span></p>
       {/if}
-      {#if mirror.last_failure}
+      {#if mirror.last_failure && mirror.disk_full}
+        <p class="note bad" role="alert"><Icon icon={CircleAlert} size={16} /><span>{t('io.status.mirror_disk_full', { folder: mirror.folder, date: formatDateTime(mirror.last_failure.at) })}</span></p>
+      {:else if mirror.last_failure}
         <p class="note bad" role="alert"><Icon icon={CircleAlert} size={16} /><span>{t('io.status.mirror_failed', { date: formatDateTime(mirror.last_failure.at) })}</span></p>
       {/if}
     {:else if status}

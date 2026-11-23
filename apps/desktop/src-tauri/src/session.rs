@@ -45,10 +45,22 @@ pub fn open_profile(
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
-    let collection = fc_app::App::open_sqlite(&path).map_err(|e| {
-        let e = e.into_api();
-        format!("{}\n{}: {}", path.display(), e.code, e.message)
-    })?;
+    let open = |path: &Path| {
+        fc_app::App::open_sqlite(path).map_err(|e| {
+            let e = e.into_api();
+            format!("{}\n{}: {}", path.display(), e.code, e.message)
+        })
+    };
+    // v1.4.1: a collection that does not open because the file is damaged is offered the
+    // rescue (the damaged files are kept), then opened again.
+    let collection = match open(&path) {
+        Ok(c) => c,
+        Err(e) if fc_app::modules::maintenance::rescue::needs_rescue(&path) => {
+            crate::maintenance::offer_rescue(&path, &e)?;
+            open(&path)?
+        }
+        Err(e) => return Err(e),
+    };
     collection.set_secret_store(session.profile_secrets());
     collection.install_session(session.clone());
     Ok((Arc::new(collection), session))

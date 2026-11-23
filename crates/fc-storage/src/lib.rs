@@ -13,15 +13,18 @@
 //! Storage holds no business rules: it persists and loads `fc-core` models faithfully.
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "crash-points")]
+pub mod crash_points;
 pub mod error;
 pub mod interrupt;
 pub mod media;
 pub mod migrate;
 pub mod repo;
+pub mod rescue;
 mod sqlite;
 pub mod store;
 
-pub use error::{StorageError, StorageResult};
+pub use error::{is_disk_full, StorageError, StorageResult};
 pub use repo::{Reads, Writes};
 pub use sqlite::{fit_dump_to_schema, upgrade_dump, upgrade_dump_with};
 pub use store::{ReadTx, SqliteStore, Store, WriteTx};

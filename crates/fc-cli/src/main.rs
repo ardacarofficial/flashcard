@@ -61,6 +61,15 @@ pub struct Cli {
     command: Command,
 }
 
+/// What `fc rescue --from` puts in place of a damaged collection.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum RescueFrom {
+    /// The newest backup that verifies.
+    Backup,
+    /// The rows still readable in the damaged file.
+    Readable,
+}
+
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Deck operations.
@@ -90,6 +99,15 @@ enum Command {
     #[cfg(any(feature = "dev-bridge", debug_assertions))]
     #[command(subcommand)]
     Dev(dev::DevCommand),
+    /// A collection that does not open or fails its integrity check (v1.4.1): without
+    /// `--from`, checks the file (read-only) and lists the backups a rescue may use; with it,
+    /// moves the damaged files into `damaged/<time>/` (kept, never deleted) and puts a fresh
+    /// collection in their place. Run it while the desktop app is closed.
+    Rescue {
+        /// `backup`: the newest backup that verifies; `readable`: what is still readable.
+        #[arg(long, value_enum)]
+        from: Option<RescueFrom>,
+    },
     /// Invoke any public API method with JSON params, e.g.
     /// `fc call decks.rename '{"id":"…","name":"X"}'`. Prints the JSON response.
     #[command(after_long_help = CALL_EXAMPLES)]
@@ -501,6 +519,7 @@ impl Command {
             #[cfg(any(feature = "dev-bridge", debug_assertions))]
             Command::Dev(dev::DevCommand::Serve { .. }) => "dev.serve",
             Command::Call { method, .. } => method,
+            Command::Rescue { .. } => "maintenance.rescue",
         }
     }
 }
@@ -560,6 +579,9 @@ fn main() -> ExitCode {
             }
         };
     }
+    if let Command::Rescue { from } = &cli.command {
+        return rescue(&cli.db, *from, cli.json, &early);
+    }
     // Next to a running desktop app: an existing current collection is only attached (its
     // jobs and import groups stay untouched); an old schema is refused unless `--migrate`.
     let app = match App::open_sqlite_shared(&cli.db, cli.migrate) {
@@ -595,6 +617,56 @@ fn main() -> ExitCode {
         },
         Err(e) => {
             report(cli.command.method(), &e, cli.json, &ctx.text);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `fc rescue` (v1.4.1): prints JSON (the check, or the rescue's report).
+fn rescue(
+    db: &std::path::Path,
+    from: Option<RescueFrom>,
+    json: bool,
+    text: &i18n::Catalog,
+) -> ExitCode {
+    use fc_app::modules::maintenance::rescue as r;
+    let out = match from {
+        None => {
+            let data = db.parent().unwrap_or_else(|| std::path::Path::new("."));
+            let health = r::check(db).map(|h| {
+                serde_json::json!({"opens": h.opens, "ok": h.ok, "schema_version": h.schema_version,
+                                   "problems": h.problems})
+            });
+            let backups: Vec<String> = r::backup_candidates(data)
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect();
+            Ok(
+                serde_json::json!({"file": db.display().to_string(), "health": health,
+                                  "backups": backups}),
+            )
+        }
+        Some(from) => {
+            let mode = match from {
+                RescueFrom::Backup => r::RescueMode::Backup,
+                RescueFrom::Readable => r::RescueMode::Readable,
+            };
+            let now = fc_core::Clock::now(&fc_app::system::SystemClock);
+            r::rescue(db, mode, now)
+                .map(|rep| serde_json::to_value(rep).unwrap_or_default())
+                .map_err(|e| e.into_api())
+        }
+    };
+    match out {
+        Ok(v) => {
+            let text = serde_json::to_string_pretty(&v).unwrap_or_default();
+            match write_line(std::io::stdout().lock(), &text) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(_) => ExitCode::FAILURE,
+            }
+        }
+        Err(e) => {
+            report("maintenance.rescue", &e, json, text);
             ExitCode::FAILURE
         }
     }

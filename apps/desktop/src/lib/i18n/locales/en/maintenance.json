@@ -75,7 +75,8 @@
     },
     "conflict": {
       "update_not_available": "There is no update to install. Check for updates first.",
-      "update_not_ready": "The update has not been downloaded yet."
+      "update_not_ready": "The update has not been downloaded yet.",
+      "no_verified_backup": "No backup could be verified, so nothing was changed. You can still save what is readable."
     },
     "provider": {
       "update_unsupported": "This build cannot update itself.",
