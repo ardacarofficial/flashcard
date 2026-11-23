@@ -35,7 +35,8 @@ test('E3W my words: find a captured word, Enter, "Zaten biliyorum" → known by 
   await expect(main.getByTestId('word-row').first()).toBeVisible();
   await page.locator('body').click({ position: { x: 1, y: 1 } });
   await press(page, '/');
-  const box = main.getByRole('searchbox');
+  // (Under Settings › Other the settings search is a second searchbox: take ours by name.)
+  const box = main.getByRole('searchbox', { name: t('words.screen.search_label') });
   await expect(box).toBeFocused();
   await page.keyboard.type(word.lemma);
   await expect(main.getByTestId('word-row')).toHaveCount(1);
