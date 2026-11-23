@@ -57,7 +57,7 @@ fix).
 | S9 | Create › Paste `word⇥meaning⇥sentence` ×3 into Vocabulary → example field holds the sentence; one Ctrl+Z removes all three | must pass |
 | S10 | Settings › Note types: a field's role and a card's "asks for" field survive save + reload (`notetypes.get`) | must pass |
 | S11 | Settings › Daily pace → "Set per deck" → Deck options (v1.4: Advanced › Studying): 5 new a day on a 15-new deck → launcher and `study.options` offer 5; reset to default → 15 | must pass |
-| P1 | v1.4 Settings › Daily pace: pick the deck, "5 · Easy", 150 reviews, Strict → `presets.for_deck` reads 5 / 150 / 0.95, `study.options` offers 5 new; the toast's Undo takes back only the last change | must pass (v1.4) |
+| P1 | v1.4 Settings › Daily pace: pick the deck, "5 · Easy", 150 reviews, Strict → `presets.for_deck` reads 5 / 150 / 0.95, `study.options` offers 5 new; the toast's Undo takes back only the last change. Runs twice: as is and with a slow bridge (reads 1.2 s late), which catches out-of-order saves | must pass (v1.4) |
 | S12 | Quick Add: after a save, Ctrl+A / Ctrl+Z inside the field edit the text; the saved note, the deck's note count and the oplog are untouched | must pass |
 | O1 | Library → a deck → Create: "Existing deck" with that deck preselected, cursor in the first term; Ctrl+Enter saves the note in THAT deck, no deck created | must pass (fixed in v1.3) |
 | O1b | Create from the sidebar: the cursor is in the first term | must pass (fixed in v1.3) |
