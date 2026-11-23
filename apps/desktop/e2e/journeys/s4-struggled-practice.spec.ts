@@ -3,7 +3,7 @@
  * launcher offers that scope with count 2 → the session it starts is practice (`trial`):
  * its review-log rows say so, and the cards' scheduling rows are unchanged afterwards.
  */
-import { cardHistory, cardsIn, endOpenSessions, expect, goToSection, makeDeck, openApp, press, rpc, scheduling, sessionNow, studyOptions, test, tz, uniq, type SessionRow } from '../fixtures';
+import { cardHistory, cardsIn, endOpenSessions, expect, goToSection, makeDeck, openApp, press, rpc, scheduling, sessionNow, showAllScopes, studyOptions, test, type SessionRow, tz, uniq } from '../fixtures';
 
 test('S4 struggled today: count 2, practice session, schedule untouched', async ({ page }) => {
   await endOpenSessions();
@@ -34,6 +34,7 @@ test('S4 struggled today: count 2, practice session, schedule untouched', async 
   await page.getByTestId('deck-study').click();
   const launcher = page.getByTestId('study-launcher');
   await expect(launcher).toBeVisible();
+  await showAllScopes(page);
   const row = page.getByTestId('launcher-scope-struggled_today');
   await expect(row).toContainText('2');
   expect((await studyOptions(deckId)).scopes.find((o) => o.scope === 'struggled_today')).toMatchObject({ count: 2, mode: 'trial' });

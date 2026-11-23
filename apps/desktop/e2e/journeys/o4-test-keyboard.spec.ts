@@ -3,7 +3,7 @@
  * A–D picks (and moves on), a typed answer + Enter moves on, the last one lands on "Submit",
  * Ctrl+Enter hands it in → every question was answered (no blanks in the graded paper).
  */
-import { endOpenSessions, expect, focused, goToSection, makeDeck, openApp, press, rpc, studyOptions, test, uniq } from '../fixtures';
+import { endOpenSessions, expect, focused, goToSection, makeDeck, openApp, press, rpc, studyOptions, t, test, uniq } from '../fixtures';
 
 interface Paper {
   questions: { index: number; kind: string }[];
@@ -24,6 +24,8 @@ test('O4 test paper: A–D / typing + Enter answer and move on; Ctrl+Enter submi
   await page.getByTestId('deck-mode-test').click();
   const launcher = page.getByTestId('study-launcher');
   await expect(launcher).toBeVisible();
+  // v1.4: matching is on by default in the Exam (E1a covers it); this paper keeps v1.3's types.
+  await launcher.getByRole('group', { name: t('modes.test.kinds') }).getByRole('checkbox', { name: new RegExp(`^${t('modes.test.kind.matching')}`) }).uncheck();
   await launcher.locator('#launch-count').fill('6');
   await press(page, 'Enter');
   await expect(launcher).toBeHidden();

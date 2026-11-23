@@ -37,9 +37,12 @@
   let paused = $state(false);
   let continueBtn = $state<HTMLButtonElement | null>(null);
   let resumeBtn = $state<HTMLButtonElement | null>(null);
+  let questionEl = $state<HTMLElement | null>(null);
   let busy = false;
   let shownAt = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  /** Answers given (a pending auto-next only goes on from the answer it was set for). */
+  let answerSeq = 0;
 
   const card = $derived(session?.current ?? null);
   const quiz = $derived(session?.modes?.quiz ?? null);
@@ -59,6 +62,8 @@
     session = s;
     feedback = null;
     shownAt = Date.now();
+    // Keys act on the word, never on a button that happened to keep the focus.
+    void tick().then(() => questionEl?.focus({ preventScroll: true }));
   }
 
   async function settle(s: SessionDto) {
@@ -77,10 +82,11 @@
     if (!session || !card || feedback || paused) return;
     const r = await api.call('modes.quiz.answer', { session_id: session.id, card_id: card.card_id, choice, duration_ms: Math.max(0, Date.now() - shownAt) });
     feedback = r;
+    const seq = ++answerSeq;
     if (r.correct && QUIZ_AUTO_NEXT_MS > 0) {
-      const shown = r;
       timer = setTimeout(() => {
-        if (feedback === shown) void run(next);
+        timer = null;
+        if (seq === answerSeq && feedback && !paused) void run(next);
       }, QUIZ_AUTO_NEXT_MS);
     }
     void tick().then(() => continueBtn?.focus());
@@ -233,7 +239,7 @@
     {/snippet}
 
     <p class="how">{t('modes.quiz.how')} <span class="muted">{t('modes.quiz.how_keys', { n: quiz.options.length })}</span></p>
-    <div class="question">
+    <div class="question" tabindex="-1" bind:this={questionEl}>
       {#if quiz.term}
         <p class="term" data-testid="question">{quiz.term}</p>
       {:else}
@@ -301,6 +307,9 @@
     border-radius: var(--radius-flashcard);
     background: var(--surface-1);
     text-align: center;
+  }
+  .question:focus {
+    outline: none;
   }
   .term {
     margin: 0;

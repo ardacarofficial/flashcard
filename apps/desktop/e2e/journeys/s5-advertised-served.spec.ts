@@ -53,6 +53,8 @@ test('S5 21 new / limit 20: launcher and Home show 0 with the reason; empty star
   const dueRow = page.getByTestId('launcher-scope-due');
   await expect(dueRow).toContainText(t('study.launcher.empty.daily_limit'));
   await expect(dueRow.getByRole('radio')).toBeDisabled();
+  // Today is empty: the other scopes are open already (v1.4: otherwise one click away).
+  await expect(page.getByTestId('launcher-more-scopes')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByTestId('launcher-scope-new').getByRole('radio')).toBeDisabled();
   // What is preselected can be started and serves what it says.
   const opts = await studyOptions(deckId);

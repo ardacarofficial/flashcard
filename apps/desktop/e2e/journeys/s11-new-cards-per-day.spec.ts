@@ -6,7 +6,7 @@
  * Own deck and own preset (other decks keep the defaults: the preset is used only here).
  */
 import type { Page } from '@playwright/test';
-import { choose, expect, goToSection, makeDeck, openApp, press, rpc, t, test, uniq } from '../fixtures';
+import { choose, expect, goToSection, makeDeck, openApp, press, rpc, showAllScopes, t, test, uniq } from '../fixtures';
 
 interface Scope {
   scope: string;
@@ -27,11 +27,13 @@ async function launcherShows(page: Page, deckName: string): Promise<{ due: strin
   await press(page, 'Enter');
   const launcher = page.getByTestId('study-launcher');
   await expect(launcher.getByTestId('launcher-scope-due')).toBeVisible();
+  await showAllScopes(page);
   const read = async (id: string) => ((await launcher.getByTestId(id).innerText()).match(/\d+\s*$/)?.[0] ?? '').trim();
   const shown = {
     due: await read('launcher-scope-due'),
     fresh: await read('launcher-scope-new'),
-    start: (await page.getByTestId('launcher-start').innerText()).trim(),
+    // v1.4: the footer says "mode · cards · N kart" (the Start button is just "Başla").
+    start: (await page.getByTestId('launcher-summary').innerText()).split('\n')[0]!.trim(),
   };
   await press(page, 'Escape');
   await expect(launcher).toBeHidden();

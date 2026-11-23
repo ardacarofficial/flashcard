@@ -26,6 +26,8 @@ test('S3 deck page → Test → 10 questions → answer → submit: score, sched
   await expect(launcher).toBeVisible();
   // v1.4: the paper (kind `test`) is called "Sınav" ("Test" is the four-option quiz).
   await expect(launcher.getByRole('radio', { name: t('study.launcher.kind.test'), exact: true })).toHaveAttribute('aria-checked', 'true');
+  // v1.4: matching is on by default in the Exam (E1a covers it); this paper keeps v1.3's types.
+  await launcher.getByRole('group', { name: t('modes.test.kinds') }).getByRole('checkbox', { name: new RegExp(`^${t('modes.test.kind.matching')}`) }).uncheck();
   const count = launcher.locator('input[type=number], input[inputmode=numeric]').first();
   await count.fill('10');
   await press(page, 'Enter');
