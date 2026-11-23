@@ -4,7 +4,7 @@
  * is computed in fc-core / fc-app.
  */
 import { err, menu, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
-import type { CardStats, ExamDto, GoalDto, ReviewStats, StatsOverview, StruggleItem, WorkloadForecast } from '$lib/api/types';
+import type { CardRow, CardStats, ExamDto, GoalDto, LeechRepairDto, LeechRepairPlan, ReviewStats, StatsOverview, StruggleItem, WorkloadForecast } from '$lib/api/types';
 
 const rate = (count: number, pass: number) => ({ count, pass, rate: count ? pass / count : null });
 
@@ -149,6 +149,34 @@ const STRUGGLES: StruggleItem[] = [
   suspended: false,
 }));
 
+/** The first leech rows (the rest exist only as a count). */
+const LEECH_ROWS: CardRow[] = [
+  ['give up', 11],
+  ['although', 9],
+  ['thorough', 8],
+].map(([term, lapses], i) => ({
+  card_id: `card-leech-${i}`,
+  note_id: `note-leech-${i}`,
+  deck_id: 'deck-1',
+  deck_path: 'İngilizce',
+  notetype_id: 'nt-vocab',
+  sort_field: term as string,
+  template_key: 'recognition',
+  card_type: 'Tanıma',
+  state: 'review',
+  due: null,
+  stability: 3.2,
+  difficulty: 8.1,
+  reps: 20,
+  lapses: lapses as number,
+  flags: 0,
+  suspended: false,
+  buried: false,
+  tags: [],
+  created_at: Date.UTC(2025, 8, 1),
+  note_updated_at: Date.UTC(2025, 8, 1),
+}));
+
 export default {
   modules: [
     module('stats', [menu('stats.overview', 'nav.stats', '/stats', 40)]),
@@ -162,6 +190,7 @@ export default {
     const settings = new Map<string, unknown>();
     // Leeches exist only as a count here (rows come from the real search in Rust).
     let leeches = 60;
+    const repairs: LeechRepairDto[] = [];
     let suspended = 0;
     // Pace planner: the preset's new cards a day (null preset until applied once).
     let presetPace = 20;
@@ -186,7 +215,71 @@ export default {
       'stats.refresh_cache': () => ({ rebuilt: false, days: 3, folded: 0 }),
       'stats.overview': () => overview(),
       'stats.breakdown': ({ attr_id }) => ({ attr_id, name: 'Seviye', rows: [] }),
-      'stats.leeches': () => ({ threshold: 8, total: leeches, items: [] }),
+      'stats.leeches': () => ({ threshold: 8, total: leeches, items: LEECH_ROWS }),
+      'stats.leech_repairs.plan': ({ card_id }): LeechRepairPlan => {
+        const row = LEECH_ROWS.find((r) => r.card_id === card_id) ?? LEECH_ROWS[0]!;
+        const done = repairs.filter((r) => r.card_id === row.card_id);
+        const accepted = done.length ? ['pes etmek', 'bırakmak'] : [];
+        return {
+          card_id: row.card_id,
+          note_id: row.note_id,
+          lapses: row.lapses,
+          threshold: 8,
+          is_leech: true,
+          failed_reviews: [
+            { at: Date.UTC(2025, 10, 4, 9), mode: 'learn', duration_ms: 9000, answer_duration_ms: 7000, hints_used: 0, typed_answer: 'pes etmek' },
+            { at: Date.UTC(2025, 10, 2, 20), mode: 'normal', duration_ms: 6000, answer_duration_ms: null, hints_used: 1, typed_answer: null },
+          ],
+          typed_answers_recorded: true,
+          answer_field: 'meaning',
+          answer: 'vazgeçmek; pes etmek, bırakmak',
+          senses: ['vazgeçmek', 'pes etmek', 'bırakmak'],
+          accepted_answers: accepted,
+          examples: null,
+          confusables: [],
+          proposals: done.length
+            ? []
+            : [
+                {
+                  repair: { kind: 'add_accepted_answers', field: null, answers: ['pes etmek', 'bırakmak'] },
+                  method: 'accepted_answers.add',
+                  why: 'senses_not_accepted',
+                  preview: [{ field: 'accepted_answers', before: '', after: 'pes etmek, bırakmak' }],
+                  ai_preview: null,
+                },
+                { repair: { kind: 'ai_rewrite', fields: {} }, method: 'ai.notes.update', why: 'fresh_angle', preview: [], ai_preview: null },
+              ],
+          repairs: done,
+        };
+      },
+      'stats.leech_repairs.apply': ({ card_id, repair }): LeechRepairDto => {
+        const row = LEECH_ROWS.find((r) => r.card_id === card_id) ?? LEECH_ROWS[0]!;
+        const rec: LeechRepairDto = { id: repairs.length + 1, card_id, note_id: row.note_id, kind: repair.kind, repair, lapses: row.lapses, applied_at: now() };
+        repairs.push(rec);
+        return rec;
+      },
+      'stats.leech_repairs.list': ({ card_id }) => ({
+        items: repairs
+          .filter((r) => !card_id || r.card_id === card_id)
+          .map((repair) => ({
+            repair,
+            before: { reviews: 10, passed: 4, rate: 0.4 },
+            after: { reviews: 3, passed: 3, rate: 1 },
+            next_reviews: [],
+            small_sample: true,
+          })),
+      }),
+      'words.stats': () => ({
+        threshold_days: 21,
+        languages: [
+          {
+            language: 'en',
+            counts: { new: 140, learning: 234, known: 312, ignored: 4 },
+            bands: [],
+          },
+        ],
+        unassigned_notes: 12,
+      }),
       'stats.apply_to_leeches': ({ threshold, action }) => {
         const changed = action === 'suspend' ? leeches - suspended : leeches;
         if (action === 'suspend') suspended = leeches;

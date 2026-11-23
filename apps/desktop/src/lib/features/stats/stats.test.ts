@@ -29,14 +29,17 @@ const ctx: ScreenCtx = {
 describe('v0.6 screens on the dev mock', () => {
   it('statistics show the numbers the backend computed', async () => {
     render(StatsScreen, { ctx });
+    // v1.4 (deliberate): the detail figures moved under "More"; the three answers come first.
+    await fireEvent.click(await screen.findByTestId('stats-more-toggle', {}, { timeout: 5000 }));
     // Streak, true retention and its target come straight from `stats.overview`.
     // v1.2: the figure and its unit are separate (big mono number, small unit).
     expect((await screen.findByTestId('stat-streak', {}, { timeout: 5000 })).textContent).toMatch(/4\s*days/);
     expect(screen.getByText('Longest: 12 days')).toBeTruthy();
     expect(screen.getByText('88.6%')).toBeTruthy();
     expect(screen.getAllByText('Target 90%').length).toBeGreaterThan(0);
-    // v1.3: the forecast is the "what's ahead?" chart (7 days by default).
+    // v1.4: "what's coming tomorrow?" draws the next 7 days; "More" the next 30.
     expect(screen.getByRole('img', { name: 'Reviews in the next 7 days' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Reviews in the next 30 days' })).toBeTruthy();
     // Leech actions cover every leech of the scope: one Rust command, no ids from here.
     // v1.3 (deliberate wording change): plain words, as in the study launcher.
     expect(await screen.findByText('60 cards you got wrong at least 8 times')).toBeTruthy();
@@ -98,12 +101,26 @@ describe('v0.6 screens on the dev mock', () => {
     const opened = vi.fn();
     const unregister = setLauncherHandler(opened);
     const navigate = vi.fn();
+    localStorage.setItem('fc.stats.more', '0');
     render(StatsScreen, { ctx: { ...ctx, navigate } });
-    // 1 · today, with the verdict Rust computed.
-    expect(await screen.findByText('Same pace as yesterday: 45 cards then, 42 today.', {}, { timeout: 5000 })).toBeTruthy();
-    // 2 · what's ahead: the busiest day is named in words (not only by colour).
-    expect((await screen.findByTestId('ahead-peak')).textContent).toMatch(/Busiest day: .* · \d+ cards/);
-    // 3 · what am I forgetting: dense list, primary action first.
+    // 1 · what did I do today: one sentence from `stats.today`, the verdict Rust computed.
+    expect((await screen.findByTestId('today-say', {}, { timeout: 5000 })).textContent).toBe('Today you studied 42 words and knew 37.');
+    expect(await screen.findByText('Same pace as yesterday: 45 cards then, 42 today.')).toBeTruthy();
+    // … with today's hard words and "Study these" on exactly them.
+    const hard = await screen.findByTestId('today-hard');
+    expect(await within(hard).findByText('Hard ones: went, although')).toBeTruthy();
+    // 2 · am I getting better: the word index's one truth (`words.stats`), linking to My words.
+    expect((await screen.findByTestId('growing-say')).textContent).toBe('You know 312 words.');
+    expect(screen.getByTestId('growing-unassigned').textContent).toMatch(/^12 notes have no language/);
+    await fireEvent.click(screen.getByTestId('growing-words'));
+    expect(navigate).toHaveBeenCalledWith('/words');
+    navigate.mockClear();
+    // 3 · what's coming tomorrow: tomorrow's count in words, the busiest day named.
+    expect((await screen.findByTestId('tomorrow-say')).textContent).toMatch(/^Tomorrow \d+ words are due for review\.$/);
+    expect((await screen.findByTestId('ahead-peak')).textContent).toMatch(/busiest day/i);
+    // v1.4 (deliberate): the recent struggles list moved under "More".
+    expect(screen.queryByTestId('stats-struggles')).toBeNull();
+    await fireEvent.click(screen.getByTestId('stats-more-toggle'));
     const panel = await screen.findByTestId('stats-struggles');
     expect(await within(panel).findByText('went')).toBeTruthy();
     expect(within(panel).getByText('gitmek (geçmiş)')).toBeTruthy();
@@ -125,6 +142,42 @@ describe('v0.6 screens on the dev mock', () => {
     await waitFor(() => expect(call.mock.calls.some(([m, b]) => m === 'stats.struggles' && (b as { days: number }).days === 1)).toBe(true));
     expect(await within(panel).findByRole('button', { name: 'Study these · 2' })).toBeTruthy();
     call.mockRestore();
+  });
+
+  it('a leech opens a guided repair: evidence with the typed answer, a previewed fix, applied and recorded', async () => {
+    const call = vi.spyOn(api, 'call');
+    render(StatsScreen, { ctx });
+    const toggle = await screen.findByTestId('stats-more-toggle', {}, { timeout: 5000 });
+    if (toggle.getAttribute('aria-expanded') !== 'true') await fireEvent.click(toggle);
+    const leeches = await screen.findByTestId('stats-leeches');
+    await fireEvent.click((await within(leeches).findAllByTestId('leech-fix'))[0]!);
+    const dialog = await screen.findByTestId('leech-repair');
+    expect(within(dialog).getByText('You forgot this word 11 times.')).toBeTruthy();
+    expect(within(dialog).getByTestId('leech-typed').textContent).toBe('pes etmek');
+    const prop = within(dialog).getAllByTestId('leech-proposal')[0]!;
+    expect(within(prop).getByText('Accept other right answers too')).toBeTruthy();
+    expect(within(prop).getByText('pes etmek, bırakmak')).toBeTruthy();
+    await fireEvent.click(within(prop).getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(call.mock.calls.some(([m]) => m === 'stats.leech_repairs.apply')).toBe(true));
+    expect(await screen.findByTestId('leech-repair-done')).toBeTruthy();
+    const applied = call.mock.calls.find(([m]) => m === 'stats.leech_repairs.apply');
+    expect(applied?.[1]).toEqual({ card_id: 'card-leech-0', repair: { kind: 'add_accepted_answers', field: null, answers: ['pes etmek', 'bırakmak'] } });
+    // Read back: the repair is listed with its before/after.
+    expect(await within(dialog).findByText('Earlier fixes')).toBeTruthy();
+    call.mockRestore();
+  });
+
+  it('Advanced shows the filter row; switched off it is not there', async () => {
+    const { setAdvanced } = await import('./advanced.svelte');
+    setAdvanced(false);
+    const a = render(StatsScreen, { ctx });
+    await screen.findByTestId('stats-today', {}, { timeout: 5000 });
+    expect(screen.queryByTestId('stats-filters')).toBeNull();
+    a.unmount();
+    setAdvanced(true);
+    render(StatsScreen, { ctx });
+    expect(await screen.findByTestId('stats-filters', {}, { timeout: 5000 })).toBeTruthy();
+    setAdvanced(false);
   });
 
   it('planning: the pace drives a live forecast and Apply names what it changes', async () => {
