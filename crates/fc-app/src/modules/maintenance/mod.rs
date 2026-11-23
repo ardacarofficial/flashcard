@@ -28,6 +28,7 @@ pub mod drafts;
 pub mod export;
 pub mod logging;
 pub mod recovery;
+pub mod rescue;
 pub mod run;
 pub mod smoke;
 
@@ -35,6 +36,8 @@ pub mod smoke;
 mod tests;
 #[cfg(test)]
 mod kill_tests;
+#[cfg(test)]
+mod rescue_tests;
 
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::registry::Registry;

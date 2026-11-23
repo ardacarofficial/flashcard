@@ -84,7 +84,8 @@
     },
     "io": {
       "database": "Database error.",
-      "file": "File error."
+      "file": "File error.",
+      "disk_full": "The disk is full, so this was not saved. Free up some space and try again; the app keeps working."
     },
     "internal": {
       "unexpected": "Something went wrong.",

@@ -2,6 +2,10 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## Unreleased (v1.4.1)
+
+- **Çökme ve bozulma dayanıklılığı (H2):** yazma işleminin ortasında öldürülen gerçek süreçler (cevap, medyalı yakalama, içe aktarma, geri al/yinele, yedek, kelime dizini, migration) sonrası koleksiyon tutarlı ve son onaylanan yazma yerinde; WAL checkpoint sırasında çökme hiçbir şey kaybettirmez, kapanan depo bütün dosya tutamaçlarını bırakır; disk dolunca komut temizce geri alınır ve `IO_DISK_FULL` sade TR/EN cümleyle söylenir (yarım yedek/medya kalmaz); bozuk ya da kesik koleksiyon dosyası silinmeden `damaged/<zaman>/`'a taşınır ve doğrulanan en yeni yedekten ya da okunabilen satırlardan taze koleksiyon kurulur (masaüstü açılış diyaloğu, `fc rescue`). _(H2)_
+
 ## Unreleased (v1.4)
 
 - **Subtitle eklentisi gerçek tarayıcıda (G2):** derlenmiş eklenti gerçek Chromium'da gerçek `fc api serve`'e karşı sahibin akışıyla denendi (eşleştirme, **+**, aynı kelime ikinci sahneden → aynı notun karşılaşması, deyim, uygulama kapalı/yeniden başlamış, yanlış/iptal anahtar, bilinen kelimeler eklentinin kökeninden); hepsi geçti, Flashcard tarafında hata çıkmadı; betik `tools/subtitle-real-browser/run.mjs`, rapor ve eklentide gereken değişiklik `docs/14-subtitle-gercek-tarayici.md`.

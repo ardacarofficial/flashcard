@@ -29,6 +29,11 @@ fn db_file(conn: &Connection) -> Option<PathBuf> {
 }
 
 fn file_err(path: &Path, e: &std::io::Error) -> StorageError {
+    if crate::error::is_disk_full(e) {
+        return StorageError::DiskFull {
+            path: Some(path.display().to_string()),
+        };
+    }
     StorageError::File {
         path: path.display().to_string(),
         message: e.to_string(),
@@ -273,8 +278,14 @@ impl ContentWrite for SqliteTx<'_, WriteMode> {
                 }
                 // Write then rename: a crash never leaves a truncated file under the hash.
                 let part = path.with_extension("part");
-                std::fs::write(&part, bytes).map_err(|e| file_err(&part, &e))?;
-                std::fs::rename(&part, &path).map_err(|e| file_err(&path, &e))
+                // A failed write (disk full) removes its partial file right away (v1.4.1).
+                let written = std::fs::write(&part, bytes)
+                    .map_err(|e| file_err(&part, &e))
+                    .and_then(|()| std::fs::rename(&part, &path).map_err(|e| file_err(&path, &e)));
+                if written.is_err() {
+                    let _ = std::fs::remove_file(&part);
+                }
+                written
             }
             None => {
                 ensure_blob_table(self.conn())?;

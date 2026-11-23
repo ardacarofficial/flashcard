@@ -16,6 +16,10 @@ uuid.workspace = true
 rusqlite = { workspace = true, features = ["functions", "hooks"] }
 regex = { version = "1", default-features = false, features = ["std", "unicode"] }
 
+[features]
+## Kill-test hooks (`crash_points`): abort the process inside a write transaction. Tests only.
+crash-points = []
+
 [dev-dependencies]
 tempfile.workspace = true
 proptest = { version = "1", default-features = false, features = ["std"] }

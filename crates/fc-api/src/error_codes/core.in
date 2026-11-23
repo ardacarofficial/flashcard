@@ -36,6 +36,9 @@ ProviderFailed => Provider, "errors.provider.failed";
 IoDatabase => Io, "errors.io.database";
 /// File system error.
 IoFile => Io, "errors.io.file";
+/// The disk is full (or the user's quota is used up): nothing of the command was saved
+/// (`details.path` when a file is known). v1.4.1.
+IoDiskFull => Io, "errors.io.disk_full";
 /// Unexpected internal error (a bug).
 Internal => Internal, "errors.internal.unexpected";
 /// The method exists in the contract but is not implemented yet.

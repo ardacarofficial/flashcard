@@ -213,6 +213,8 @@ impl SqliteStore {
         let mut conn = Connection::open(path)?;
         migrate::configure_connection(&conn)?;
         crate::interrupt::install(&mut conn)?;
+        #[cfg(feature = "crash-points")]
+        crate::crash_points::install(&mut conn);
         let backup = snapshot_before_migrating(&mut conn, path, migrations)?;
         crate::media::export_legacy_blobs(&conn, path)?;
         migrate::migrate_with(&mut conn, migrations)?;
@@ -248,6 +250,8 @@ impl SqliteStore {
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
         migrate::configure_connection(&conn)?;
+        #[cfg(feature = "crash-points")]
+        crate::crash_points::install(&mut conn);
         let latest = migrate::latest_version();
         let found = migrate::current_version(&conn)?;
         if found > latest {
