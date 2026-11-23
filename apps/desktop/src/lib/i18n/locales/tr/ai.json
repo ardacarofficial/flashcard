@@ -366,7 +366,7 @@
       "meaning": {
         "auto_suggest": {
           "label": "Yakalanan kelimelere anlam öner",
-          "description": "Varsayılan olarak kapalı. Açınca yakalanan kelimenin cümlesi önizlemesiz AI sağlayıcına gönderilir, cevap öneri olarak saklanır; kartın ancak sen uygularsan değişir. Aylık bütçe dolunca durur."
+          "description": "Açınca yakalanan kelimenin cümlesi önizlemesiz AI sağlayıcına gider ve cevap yalnız öneri olarak saklanır (kartın sen uygulayınca değişir, aylık bütçede durur)."
         }
       }
     }

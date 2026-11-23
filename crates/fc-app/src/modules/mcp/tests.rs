@@ -519,6 +519,21 @@ pub(super) fn writes_switch_read_only_flag_and_module_switch(f: Factory) {
         .unwrap()
         .is_empty());
 
+    // v1.4 Z1: a switched-off module takes its tools with it (the word tools with `words`).
+    assert!(names(true).contains(&"words_lookup"));
+    t.ok::<ModulesSetEnabled>(SetModuleEnabled {
+        id: crate::modules::words::ID.into(),
+        enabled: false,
+    });
+    let without_words = names(true);
+    assert!(!without_words.iter().any(|n| n.starts_with("words_")));
+    assert!(without_words.contains(&"list_decks"));
+    t.ok::<ModulesSetEnabled>(SetModuleEnabled {
+        id: crate::modules::words::ID.into(),
+        enabled: true,
+    });
+    assert_eq!(names(true), read);
+
     // Module off: no tools at all.
     t.ok::<ModulesSetEnabled>(SetModuleEnabled {
         id: super::ID.into(),

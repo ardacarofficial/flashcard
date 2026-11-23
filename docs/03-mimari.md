@@ -106,6 +106,11 @@ Tüm kimlikler **UUIDv7** (zamana göre sıralanabilir). Tüm tablolarda `create
 | `goals` | id, kind, target, deadline, query | Hedefler |
 | `ai_usage` | id, provider, model, feature, input_tokens, output_tokens, cost_estimate, created_at | Harcama takibi |
 | `notes_fts` | FTS5 sanal tablo | Tam metin arama |
+| v1.4 kelime dizini | `word_index`, `word_index_notes`, `word_note_language`, `word_index_dirty(_keys)` | Kalıcı kelime dizini (§4.2, migration 1410) |
+| v1.4 kelime verisi | `word_data_packs`, `word_data`, `word_family`; görünüm `word_frequency` | Sıklık/CEFR paketi, yedeğe girmez (§4.3, 1440/1441) |
+| v1.4 Subtitle | `subtitle_capture_log` (karşılaşmalar + tanı), görünüm `subtitle_encounter_counts`, `note_origins` | Yakalama = karşılaşma (docs/06 §5.1, 1430/1460/1490) |
+| v1.4 medya kökeni | `media_origins` | `original`/`clip`/`tts`/`user` + TTS önbelleği (§13, 1420) |
+| v1.4 anlam ve cevaplar | `note_meanings`, `note_accepted_answers`, `leech_repairs` | Bağlamdaki anlam, kabul edilen cevaplar, zor kart onarımları (1450/1470) |
 
 ### 4.1 Alan rolleri ve cevap alanı (v1.3)
 
@@ -346,6 +351,7 @@ Her arayüzün bir **kimliği**, **yetenek bildirimi** (capabilities) ve **ayar 
 - Büyük listeler sayfalıdır (cursor tabanlı). Frontend sanal kaydırma kullanır.
 - İstatistik özetleri önbelleklenir, olaylarla geçersiz kılınır.
 - Kıyaslama (benchmark) testleri: 100k not / 200k kart / 2M tekrar kaydı üzerinde, CI'da regresyon kontrolü.
+- `[v1.4]` Film izleme yükü (20k Subtitle karşılaşması / 6k kelime, binlerce küçük WAV/JPEG, ~1 GiB medya, İngilizce kelime paketi) aynı takımda; ölçümler, makine ve debug/release farkı [12-performans.md](12-performans.md)'de.
 
 ## 18. Gözlemlenebilirlik
 

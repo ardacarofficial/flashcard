@@ -366,7 +366,7 @@
       "meaning": {
         "auto_suggest": {
           "label": "Suggest meanings for captured words",
-          "description": "Off by default. When on, a captured word's sentence is sent to your AI provider without a preview and the answer is kept as a suggestion; your card changes only when you apply it. Stops when the monthly budget is spent."
+          "description": "When on, a captured word's sentence goes to your AI provider without a preview and the answer is kept only as a suggestion (your card changes when you apply it; stops at the monthly budget)."
         }
       }
     }

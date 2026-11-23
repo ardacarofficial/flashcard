@@ -91,6 +91,22 @@ fn walk(v: &Value, field: &str, keys: &mut BTreeSet<String>, idents: &mut BTreeS
 /// Keys the registry advertises and the identifiers next to them.
 fn advertised() -> (BTreeSet<String>, BTreeSet<String>) {
     let t = TestApp::mem();
+    // v1.4 Z1: every module on (Subtitle, local API… are off by default), so the settings
+    // and texts of modules that start switched off are checked too.
+    let ids: Vec<String> = t
+        .app
+        .registry()
+        .modules()
+        .iter()
+        .map(|m| m.id.to_owned())
+        .collect();
+    for id in ids {
+        let _ = t.app.invoke(
+            &format!("{}.modules.set_enabled", fc_api::API_VERSION),
+            json!({ "id": id, "enabled": true }),
+            &Actor::User,
+        );
+    }
     let mut keys = BTreeSet::new();
     let mut idents: BTreeSet<String> = BTreeSet::new();
     let mut answered = 0;
