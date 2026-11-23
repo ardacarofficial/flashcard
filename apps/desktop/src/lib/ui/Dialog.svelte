@@ -68,6 +68,23 @@
     };
   });
 
+  // A clicked action that removes itself (Apply, Add this…) drops focus to <body>, out of
+  // the panel's own key handling: Esc and the Tab trap must still work (F1, journeys F1a/F1c).
+  // Only the topmost dialog takes such keys back.
+  $effect(() => {
+    if (!open) return;
+    const lost = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      if (!panel || (active && active !== document.body)) return;
+      const overlays = document.querySelectorAll('.fc-overlay');
+      if (overlays[overlays.length - 1] !== panel.parentElement) return;
+      panel.focus();
+      onkeydown(e);
+    };
+    window.addEventListener('keydown', lost, true);
+    return () => window.removeEventListener('keydown', lost, true);
+  });
+
   function onkeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && dismissible) {
       e.preventDefault();

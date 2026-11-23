@@ -184,7 +184,8 @@
     const days = forecast?.days ?? [];
     if (days.length < 2) return null;
     const max = Math.max(1, ...days.map((d) => d.minutes));
-    const pts = days.map((d, i) => `${((i / (days.length - 1)) * W).toFixed(1)},${(H - 4 - (d.minutes / max) * (H - 8)).toFixed(1)}`).join(' ');
+    const r1 = (n: number) => Math.round(n * 10) / 10; // SVG coordinates, not shown numbers
+    const pts = days.map((d, i) => `${r1((i / (days.length - 1)) * W)},${r1(H - 4 - (d.minutes / max) * (H - 8))}`).join(' ');
     return { pts, from: days[0]!.minutes, to: days[days.length - 1]!.minutes };
   });
 
