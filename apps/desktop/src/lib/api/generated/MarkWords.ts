@@ -2,7 +2,7 @@
 import type { WordMark } from "./WordMark";
 
 /**
- * `reading.words.mark`: marks words without cards as known / ignored, or clears the mark.
+ * `reading.words.mark` and `words.mark` (v1.4): marks words as known / ignored, or clears the mark.
  */
 export type MarkWords = { 
 /**

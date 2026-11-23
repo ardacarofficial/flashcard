@@ -44,7 +44,10 @@
             "band": "A1",
             "band_origin": "profile",
             "estimated": false
-          }
+          },
+          "meanings": [
+            "gitmek"
+          ]
         },
         "level": {
           "lemma": "go",
@@ -83,7 +86,10 @@
             "band": "A1",
             "band_origin": "profile",
             "estimated": false
-          }
+          },
+          "meanings": [
+            "anahtar"
+          ]
         },
         "level": {
           "lemma": "key",

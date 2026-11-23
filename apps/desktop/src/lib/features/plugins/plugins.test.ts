@@ -114,7 +114,7 @@ describe('plugins (declarative UI on the dev mock)', () => {
       render(PluginsScreen, { ctx });
       await screen.findByRole('button', { name: 'Demo' });
       expect(screen.queryByText('Time limit per call (ms)')).toBeNull();
-      await fireEvent.click(screen.getByRole('button', { name: /Advanced settings/ }));
+      await fireEvent.click(screen.getByRole('button', { name: /More settings/ }));
       const limits = await screen.findByTestId('plugin-limits');
       expect(((await within(limits).findByLabelText('Time limit per call (ms)')) as HTMLInputElement).value).toBe('5000');
       await fireEvent.click(await within(limits).findByRole('button', { name: 'Reset to default' }));

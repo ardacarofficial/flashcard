@@ -162,6 +162,36 @@
         "media_missing": "medya eksik",
         "attached": "var olan karta eklendi"
       }
+    },
+    "encounter_panel": {
+      "title": "Bu kelimeyi nerede gördün",
+      "primary": "Ana örnek",
+      "make_primary": "Bunu ana örnek yap",
+      "move": "Başka karta taşı",
+      "merge": "Bir kartla birleştir",
+      "unknown_source": "Bilinmeyen kaynak",
+      "better": "Daha iyi bir örnek var: {sentence}",
+      "better_use": "Ana örnek yap",
+      "move_title": "Bu örnek hangi karta ait?",
+      "merge_title": "Hangi kartla birleştirelim?",
+      "search": "Kart ara",
+      "search_hint": "Kelimeyi yaz, eşleşen kartlar aşağıda çıkar.",
+      "no_match": "Eşleşen kart yok.",
+      "pick_move": "Buraya taşı",
+      "pick_merge": "Bu kartla birleştir",
+      "force_title": "Bu iki kart aynı kelime gibi durmuyor",
+      "force_hint": "Yine de birleştirirsen örnekler tek kartta toplanır, öteki kart çöpe gider. İstersen geri alabilirsin.",
+      "force_confirm": "Yine de birleştir",
+      "primary_set": "Ana örnek değişti.",
+      "moved": "Örnek taşındı.",
+      "merged": "Kartlar birleşti.",
+      "audio": "Ses: {origin}",
+      "origin": {
+        "original": "özgün",
+        "clip": "klip",
+        "tts": "tts",
+        "user": "dosya"
+      }
     }
   }
 }

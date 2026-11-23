@@ -55,7 +55,8 @@ test('C5 Test (quiz): keys 1–4 pick, the answer shows at once, the score is pe
     const options = page.getByTestId('quiz-options').getByRole('button');
     await expect(options).toHaveCount(4);
     const texts = (await options.allTextContents()).map((x) => x.trim());
-    const at = texts.findIndex((x) => x.includes(meaning.get(word)!));
+    // Exact meaning (the option text starts with its key number): "porsuk" must not match "porsuk kurdu".
+    const at = texts.findIndex((x) => x.replace(/^\d+\s*/, '') === meaning.get(word)!);
     expect(at, texts.join(' | ')).toBeGreaterThanOrEqual(0);
     // Space never answers here (Space only flips cards).
     await press(page, 'Space');

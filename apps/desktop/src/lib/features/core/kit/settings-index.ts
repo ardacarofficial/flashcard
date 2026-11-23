@@ -28,6 +28,7 @@ export const PAGE_TEXTS: Record<string, readonly string[]> = {
   '/app-maintenance': ['app_maintenance', 'settings.updates'],
   // v1.4: the shell's own pages of rows from several modules' settings.
   '/settings/words': ['settings_pages.words', 'settings.words'],
+  '/settings/pace': ['presets.pace'],
   '/settings/adding': ['settings_pages.adding', 'settings.quick_add', 'settings.clipboard', 'settings.attributes'],
 };
 

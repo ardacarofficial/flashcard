@@ -1,46 +1,16 @@
 /**
- * The one "Gelişmiş" switch (v1.4, D3 principle 1), as İlerleme reads it. The switch itself
- * lives in Settings (the shell's; E2). Until the shell exposes a shared store, this reads the
- * value the switch remembers — `localStorage['fc.ui.advanced'] = '1'` — and follows changes
- * made in another window (`storage`) or in this one (`fc:advanced` event). A per-viewer view
- * preference, not data: nothing is hidden for good, only moved out of the way.
- *
- * To flip the default or rewire to the shell's store: change {@link KEY} / {@link readAdvanced}.
+ * The one "Gelişmiş" switch (v1.4, D3 principle 1), as İlerleme reads it: the app-wide switch
+ * of the shell (`$lib/shell/advanced.svelte`, core setting `app.show_advanced`), which Settings,
+ * the sidebar and the study launcher share. A view preference, not data: nothing is hidden
+ * for good, only moved out of the way.
  */
-export const KEY = 'fc.ui.advanced';
-export const EVENT = 'fc:advanced';
+import { advanced } from '$lib/shell/advanced.svelte';
 
-function readAdvanced(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(KEY) === '1';
-  } catch {
-    return false;
-  }
-}
+export { advanced };
 
-class Advanced {
-  on = $state(readAdvanced());
-}
-
-export const advanced = new Advanced();
-
-if (typeof window !== 'undefined') {
-  const sync = () => (advanced.on = readAdvanced());
-  window.addEventListener('storage', (e) => {
-    if (e.key === KEY) sync();
-  });
-  window.addEventListener(EVENT, sync);
-}
-
-/** Sets the switch (Settings, tests). */
+/** Sets the switch for this window only (tests); Settings saves it through `advanced.set`. */
 export function setAdvanced(on: boolean): void {
-  try {
-    globalThis.localStorage?.setItem(KEY, on ? '1' : '0');
-  } catch {
-    /* private window: the value still applies to this page */
-  }
   advanced.on = on;
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event(EVENT));
 }
 
 /** Per-viewer: whether "Daha fazla" is open (remembered; a convenience only). */

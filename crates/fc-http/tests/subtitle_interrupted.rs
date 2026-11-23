@@ -168,6 +168,7 @@ impl Fx {
             notes_only: None,
             offset: None,
             limit: None,
+            cursor: None,
         })
     }
 

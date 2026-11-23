@@ -108,6 +108,18 @@ describe('Checkbox and Switch', () => {
 });
 
 describe('Dialog', () => {
+  it('Esc still closes it after the focused action removed itself (focus on <body>)', async () => {
+    const onclose = vi.fn();
+    render(Dialog, { open: true, title: 'Fix it', onclose, children: html('<div><button>Apply</button></div>') });
+    const apply = screen.getByRole('button', { name: 'Apply' });
+    apply.focus();
+    apply.remove();
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement === document.body || document.activeElement === null).toBe(true);
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onclose).toHaveBeenCalledOnce();
+  });
+
   it('moves focus in, traps Tab, closes on Esc and returns focus', async () => {
     const opener = document.createElement('button');
     document.body.appendChild(opener);

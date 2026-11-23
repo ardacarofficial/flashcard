@@ -58,7 +58,7 @@ describe('<PresetsScreen> v1.3: explained, defaults marked, rarely used rows tuc
     // Everyday rows are visible; the rest is behind the closed disclosure.
     expect(screen.getByLabelText('Desired retention')).toBeTruthy();
     expect(screen.getByLabelText('Learning steps (minutes)')).toBeTruthy();
-    const toggle = screen.getByRole('button', { name: /Advanced settings/ });
+    const toggle = screen.getByRole('button', { name: /More settings/ });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     for (const label of ['Maximum interval (days)', 'FSRS parameters', 'New card order', 'Review order']) {
       expect(screen.queryByLabelText(label)).toBeNull();

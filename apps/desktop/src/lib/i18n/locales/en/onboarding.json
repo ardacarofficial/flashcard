@@ -63,8 +63,8 @@
       "where": "Where today’s cards and your progress live",
       "home_hint": "Home shows the cards due today.",
       "home_action": "Home",
-      "stats_hint": "Statistics shows how much you learned, day by day.",
-      "stats_action": "Statistics",
+      "stats_hint": "Progress shows how much you learned, day by day.",
+      "stats_action": "Progress",
       "extension": "Connect the browser extension",
       "extension_hint": "Save a word with its subtitle sentence in one click while you watch.",
       "extension_action": "Connect"

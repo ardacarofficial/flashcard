@@ -291,14 +291,14 @@ fn lookup(req: LookupWord, ctx: &QueryCtx<'_>) -> AppResult<WordInfo> {
 
 // ------------------------------------------------------------------ marks
 
-fn changed_event(language: &str) -> DomainEvent {
+pub(crate) fn changed_event(language: &str) -> DomainEvent {
     DomainEvent::WordMarksChanged {
         language: language.to_owned(),
     }
 }
 
 /// Applies `marks`; returns the previous marks of the lemmas that changed.
-fn apply(
+pub(crate) fn apply(
     ctx: &mut CommandCtx<'_>,
     language: &str,
     marks: &[(String, Option<WordMark>)],
@@ -329,7 +329,12 @@ fn apply(
     Ok(previous)
 }
 
-fn mark(req: MarkWords, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<WordMarksChanged>> {
+/// Validates and applies a `MarkWords` request (`reading.words.mark`, `words.mark`): the
+/// mark language and the previous marks of the lemmas that changed (the inverse's input).
+pub(crate) fn mark_words(
+    req: MarkWords,
+    ctx: &mut CommandCtx<'_>,
+) -> AppResult<(String, Vec<WordMarkEntry>)> {
     let language = mark_language(&language_or_default(ctx.reads(), &req.language)?);
     let lemmas: Vec<String> = req
         .lemmas
@@ -344,6 +349,11 @@ fn mark(req: MarkWords, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Wo
     let marks: Vec<(String, Option<WordMark>)> =
         lemmas.into_iter().map(|l| (l, req.mark)).collect();
     let previous = apply(ctx, &language, &marks)?;
+    Ok((language, previous))
+}
+
+fn mark(req: MarkWords, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<WordMarksChanged>> {
+    let (language, previous) = mark_words(req, ctx)?;
     let changed = u32::try_from(previous.len()).unwrap_or(u32::MAX);
     Ok(CommandOutcome {
         response: WordMarksChanged { changed },

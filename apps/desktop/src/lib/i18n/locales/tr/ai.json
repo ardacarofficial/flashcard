@@ -287,6 +287,36 @@
     "auto": {
       "title": "Kendiliğinden yardım",
       "description": "Yapay zekanın sen sormadan çalıştığı yerler. Hepsi kapalı başlar."
+    },
+    "meaning": {
+      "title": "Bu cümledeki anlam",
+      "menu": "Bu cümledeki anlam",
+      "lead": "AI, kelimenin bu karttaki cümlede hangi anlamda geçtiğini söyler. Sen uygulamadan kartın değişmez.",
+      "ask": "Öner",
+      "ask_again": "Yeniden öner",
+      "current": "Bu cümlede:",
+      "expression": "Deyim",
+      "phrase": "Dayandığı yer: “{phrase}”",
+      "also_accepted": "Yazılı cevapta bunlar da kabul: {list}",
+      "original": "Kaynağın anlamı: {original}",
+      "suggestion": "AI önerisi",
+      "in_sentence": "Uyan anlam",
+      "confidence": "Emin: {value}",
+      "also_correct": "Bunlar da doğru (yazılı cevapta kabul edilir): {list}",
+      "not_this": "Bu cümlede değil: {list}",
+      "source": "Kartında şu an: {original}",
+      "replace_field": "Kartın anlamına da yaz",
+      "apply": "Uygula",
+      "dismiss": "Yoksay",
+      "applied": "Anlam uygulandı.",
+      "undo": "Geri al",
+      "failed": "Öneri gelmedi. Bir daha dene.",
+      "reason": {
+        "no_sentence": "Bu kartta kelimeyi okuyacak bir cümle yok.",
+        "no_word": "Bu kartta açıklanacak bir kelime yok.",
+        "no_meaning_field": "Bu kart türünde anlam alanı yok.",
+        "no_cards": "Bu notun kartı yok."
+      }
     }
   },
   "errors": {

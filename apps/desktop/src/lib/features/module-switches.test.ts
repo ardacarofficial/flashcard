@@ -130,10 +130,12 @@ describe('palette module off', () => {
     expect(settings.textContent).toContain('Reminders');
     expect(settings.textContent).not.toContain('Shortcuts');
 
-    // Ctrl+F (ui.search) opens the browser (the Search section).
+    // Ctrl+F (ui.search) opens the browser (the Search section). v1.4 (F1): with "Advanced"
+    // off Search has no sidebar place (My words has), so the page itself is checked.
+    void nav;
     await waitFor(async () => {
       await fireEvent.keyDown(window, { key: 'f', code: 'KeyF', ctrlKey: true });
-      expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Search');
+      expect(document.querySelector('[data-testid="browse-summary"]')).not.toBeNull();
     });
     // Ctrl+K (ui.palette) is still bound but opens nothing.
     await fireEvent.keyDown(window, { key: 'k', code: 'KeyK', ctrlKey: true });

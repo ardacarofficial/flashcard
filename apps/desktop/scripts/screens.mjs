@@ -369,6 +369,28 @@ async function main() {
             sheet.push({ cfg, name });
             shots++;
           };
+          // v1.4 (F1): the app opens with the "Advanced" switch off. Shoot that basic view
+          // (sidebar + Settings), then turn the one switch on so the sweep below reaches every
+          // place (Library, Add, Search) and every settings group.
+          await snap('00-basic-home');
+          const settingsNav = page.locator('nav').getByRole('button', { name: /^(Ayarlar|Settings)$/ }).first();
+          await settingsNav.click().catch(() => {});
+          await settle(page);
+          await snap('00-basic-settings');
+          const advSwitch = page.getByRole('switch', { name: /^(Advanced|Gelişmiş)$/ }).first();
+          if (await advSwitch.count()) {
+            if ((await advSwitch.getAttribute('aria-checked')) !== 'true') await advSwitch.click().catch(() => {});
+            await settle(page);
+          }
+          await page.locator(NAV).first().click().catch(() => {});
+          await settle(page);
+          /** A dialog that opened late (under load) must not block the next click. */
+          const closeOverlays = async () => {
+            for (let e = 0; e < 4 && (await page.locator('.fc-overlay').count()); e++) {
+              await page.keyboard.press('Escape');
+              await settle(page);
+            }
+          };
           const items = page.locator(NAV);
           const count = await items.count();
           if (!navNames) {
@@ -397,12 +419,17 @@ async function main() {
                 await btn.click().catch(() => {});
                 await settle(page);
                 await snap(`${name}--dialog-${slug(id.replace('open-dialog-', '')) || seenDialogs.size}`);
-                await page.keyboard.press('Escape');
-                await settle(page);
+                // Esc closes it (a field inside may take the first Esc: press until it is gone)
+                for (let e = 0; e < 3; e++) {
+                  await page.keyboard.press('Escape');
+                  await settle(page);
+                  if (!(await page.locator('.fc-overlay').count())) break;
+                }
                 await reopen();
               }
             };
             await dialogs(async () => {
+              await closeOverlays();
               await page.locator(NAV).nth(i).click();
               await settle(page);
             });
@@ -414,11 +441,17 @@ async function main() {
             const narrowSettings = sn > 0 && !(await subs.first().isVisible()) && (await picker.isVisible().catch(() => false));
             for (let j = 0; j < sn; j++) {
               const openSub = async () => {
+                await closeOverlays();
                 await page.locator(NAV).nth(i).click();
                 await settle(page);
                 if (narrowSettings) {
                   await page.locator('[data-testid="settings-select"] button').first().click();
-                  await page.locator('[data-testid="settings-select"] [role=option]').nth(j).click();
+                  const option = page.locator('[data-testid="settings-select"] [role=option]').nth(j);
+                  if (!(await option.count())) {
+                    await page.keyboard.press('Escape');
+                    return false;
+                  }
+                  await option.click();
                   await settle(page);
                   return true;
                 }
@@ -553,9 +586,10 @@ async function main() {
               await settle(page);
             }
             // Search: card info sheet, then the bulk bar
-            const search = navNames.findIndex((n) => /^04-/.test(n));
-            if (search >= 0) {
-              await page.locator(NAV).nth(search).click();
+            // (v1.4 F1: found by its name, its position moved with My words and Add)
+            const searchNav = page.locator('nav').getByRole('button', { name: /^(Ara|Search)$/ }).first();
+            if (await searchNav.count()) {
+              await searchNav.click();
               await settle(page);
               const row = page.locator('[data-testid="browse-row"]').first();
               if (await row.count()) {

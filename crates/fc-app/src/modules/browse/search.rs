@@ -12,8 +12,9 @@ use fc_api::v1::search::*;
 use fc_api::{ApiError, ErrorCode};
 use fc_core::query::canonical::{canonicalize, render};
 use fc_core::query::{normalize_saved_query_name, parse_query, SavedQuery};
-use fc_core::{NoteId, SavedQueryId};
-use fc_storage::repo::{CardSearch, CardSort};
+use base64::Engine as _;
+use fc_core::{CardId, NoteId, SavedQueryId};
+use fc_storage::repo::{CardCursor, CardSearch, CardSort, SortValue};
 use fc_storage::Reads;
 
 /// Default and maximum page size.
@@ -35,16 +36,45 @@ fn sort_of(k: CardSortKey) -> CardSort {
 
 pub(super) fn cards(req: SearchCards, ctx: &QueryCtx<'_>) -> AppResult<CardSearchPage> {
     let filter = compile(ctx.tx, &req.query, ctx.now)?;
+    let sort = sort_of(req.sort.unwrap_or_default());
+    let descending = req.descending.unwrap_or(false);
+    let notes_only = req.notes_only.unwrap_or(false);
     let offset = req.offset.unwrap_or(0);
+    let scope = CursorScope {
+        query: &req.query,
+        sort,
+        descending,
+        notes_only,
+    };
+    let after = match &req.cursor {
+        Some(c) => {
+            if offset > 0 {
+                return Err(ApiError::new(
+                    ErrorCode::ValidationInvalidParams,
+                    "offset and cursor are exclusive",
+                )
+                .with_detail("field", "cursor")
+                .into());
+            }
+            Some(scope.parse(c).ok_or_else(bad_cursor)?)
+        }
+        None => None,
+    };
     let page = ctx.tx.search_cards(&CardSearch {
         filter,
         now: ctx.now,
-        sort: sort_of(req.sort.unwrap_or_default()),
-        descending: req.descending.unwrap_or(false),
-        notes_only: req.notes_only.unwrap_or(false),
+        sort,
+        descending,
+        notes_only,
         offset,
         limit: req.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT),
+        after,
     })?;
+    let next_cursor = page
+        .more
+        .then(|| page.hits.last())
+        .flatten()
+        .map(|h| scope.encode(&sort.cursor_after(h)));
     let index = DeckIndex::load(ctx.tx)?;
     Ok(CardSearchPage {
         items: page
@@ -54,7 +84,82 @@ pub(super) fn cards(req: SearchCards, ctx: &QueryCtx<'_>) -> AppResult<CardSearc
             .collect(),
         total: page.total,
         offset,
+        next_cursor,
     })
+}
+
+// ------------------------------------------------------------------ keyset cursor (v1.4)
+
+/// What a `search.cards` cursor belongs to: a cursor only continues the search that issued it.
+struct CursorScope<'a> {
+    query: &'a str,
+    sort: CardSort,
+    descending: bool,
+    notes_only: bool,
+}
+
+const CURSOR_VERSION: &str = "c1";
+const SEP: char = '\u{1f}';
+
+impl CursorScope<'_> {
+    /// FNV-1a of the query text and the order (binds a cursor to its search).
+    fn tag(&self) -> String {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        let order = format!("{:?}/{}/{}", self.sort, self.descending, self.notes_only);
+        for b in self.query.bytes().chain([0]).chain(order.bytes()) {
+            h ^= u64::from(b);
+            h = h.wrapping_mul(0x0100_0000_01b3);
+        }
+        format!("{h:016x}")
+    }
+
+    /// `c1 · tag · card id · kind+value` (the value last: a sort field may hold anything).
+    fn encode(&self, c: &CardCursor) -> String {
+        let key = match &c.key {
+            SortValue::Null => "n".to_owned(),
+            SortValue::Int(v) => format!("i{v}"),
+            SortValue::Real(v) => format!("r{:016x}", v.to_bits()),
+            SortValue::Text(v) => format!("t{v}"),
+        };
+        let text = format!("{CURSOR_VERSION}{SEP}{}{SEP}{}{SEP}{key}", self.tag(), c.card_id);
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(text)
+    }
+
+    fn parse(&self, cursor: &str) -> Option<CardCursor> {
+        let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(cursor.trim())
+            .ok()?;
+        let text = String::from_utf8(bytes).ok()?;
+        let mut parts = text.splitn(4, SEP);
+        let (version, tag, id, key) = (parts.next()?, parts.next()?, parts.next()?, parts.next()?);
+        if version != CURSOR_VERSION || tag != self.tag() {
+            return None;
+        }
+        let card_id: CardId = id.parse().ok()?;
+        let (kind, value) = key.split_at_checked(1)?;
+        let key = match (kind, self.sort) {
+            ("n", s) if s.nullable() => SortValue::Null,
+            ("t", CardSort::SortField) => SortValue::Text(value.to_owned()),
+            ("i", CardSort::Created | CardSort::Modified | CardSort::Due | CardSort::Lapses | CardSort::Reps) => {
+                SortValue::Int(value.parse().ok()?)
+            }
+            ("r", CardSort::Stability | CardSort::Difficulty) => {
+                let v = f64::from_bits(u64::from_str_radix(value, 16).ok()?);
+                if v.is_nan() {
+                    return None;
+                }
+                SortValue::Real(v)
+            }
+            _ => return None,
+        };
+        Some(CardCursor { key, card_id })
+    }
+}
+
+fn bad_cursor() -> crate::error::AppError {
+    ApiError::new(ErrorCode::ValidationInvalidParams, "cursor is not valid")
+        .with_detail("field", "cursor")
+        .into()
 }
 
 pub(super) fn ids(req: QueryText, ctx: &QueryCtx<'_>) -> AppResult<SearchIds> {

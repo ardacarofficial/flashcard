@@ -65,7 +65,7 @@ describe('v0.6 screens on the dev mock', () => {
     const s = await api.call('settings.get', { scope: { kind: 'app' }, keys: ['planning.easy_days.sun'] });
     expect(s.values[0]!.value).toBe('minimum');
     // Optimizer and workload (optimizer module on in the mock): v1.3 keeps them under "Advanced".
-    await fireEvent.click(screen.getByRole('button', { name: 'Show advanced settings' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Show more settings' }));
     expect(await screen.findByText('Desired retention and workload')).toBeTruthy();
     expect(await screen.findByText(/90%\s*\(current\)/)).toBeTruthy();
   });
@@ -112,6 +112,11 @@ describe('v0.6 screens on the dev mock', () => {
     // 2 · am I getting better: the word index's one truth (`words.stats`), linking to My words.
     expect((await screen.findByTestId('growing-say')).textContent).toBe('You know 312 words.');
     expect(screen.getByTestId('growing-unassigned').textContent).toMatch(/^12 notes have no language/);
+    // … and how that number grew (`words.history`): a line ending at today's count.
+    const history = await screen.findByTestId('growing-history');
+    expect(history.textContent).toContain('Known words over time');
+    expect(within(history).getByRole('img', { name: 'Known words over time' })).toBeTruthy();
+    expect(screen.getByTestId('growing-history-change').textContent).toMatch(/^\+\d+ words in 90 days$/);
     await fireEvent.click(screen.getByTestId('growing-words'));
     expect(navigate).toHaveBeenCalledWith('/words');
     navigate.mockClear();

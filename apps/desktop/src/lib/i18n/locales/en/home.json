@@ -53,7 +53,7 @@
       "never": "You have no backup yet. Make one so your words are safe.",
       "old": "Your last backup is old. Make a new one.",
       "failed": "The last automatic backup failed. Check the backup settings.",
-      "open": "Backups"
+      "open": "Backup"
     }
   }
 }

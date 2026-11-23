@@ -120,6 +120,7 @@ fn total(t: &TestApp, query: &str) -> u32 {
         notes_only: None,
         offset: None,
         limit: None,
+        cursor: None,
     })
     .total
 }

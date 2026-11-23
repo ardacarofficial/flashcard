@@ -46,6 +46,8 @@ const CUT: &[&str] = &[WordsLookup::NAME, WordsList::NAME];
 /// Methods refused under a limit (they answer about every deck at once).
 const REFUSED: &[&str] = &[
     WordsStats::NAME,
+    WordsLanguages::NAME,
+    WordsHistory::NAME,
     ReadingAnalyze::NAME,
     ReadingWordsLookup::NAME,
 ];

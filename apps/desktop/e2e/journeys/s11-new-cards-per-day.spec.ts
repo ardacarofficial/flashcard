@@ -1,5 +1,6 @@
 /**
- * S11 "How many new words a day?" (Settings › Deck options): a deck with 15 new cards; a preset
+ * S11 "How many new words a day?" (Settings › Daily pace → "Set per deck" → the full Deck options
+ * editor, v1.4 in Advanced › Studying): a deck with 15 new cards; a preset
  * with 5 new cards a day, saved and used on that deck → the study launcher (and `study.options`,
  * the queue it shows) offers 5; "Reset to default" + Save → 20 a day again → it offers all 15.
  *
@@ -41,18 +42,21 @@ async function launcherShows(page: Page, deckName: string): Promise<{ due: strin
 }
 
 /**
- * Settings › deck options. The first time Settings opens straight on it (v1.4: Basic › "Daily
- * pace", what the owner would look for); Settings reopens on the last page, so later through
- * the settings navigation.
+ * Settings › deck options (the full preset editor). v1.4: Settings opens on Basic › "Daily
+ * pace" (the simple page, what the owner would look for); its "Set per deck" opens the full
+ * editor, which now sits in Advanced › Studying. Settings reopens on the last page, so later
+ * through the settings navigation (Advanced is on by then: the launcher turned it on).
  */
 async function openDeckOptions(page: Page, via: 'guide' | 'nav') {
   await goToSection(page, 'shell.settings');
   const main = page.locator('#fc-main');
+  const settingsNav = main.getByRole('navigation', { name: t('shell.settings_nav') });
   if (via === 'guide') {
-    // v1.4: Settings opens on the first Basic page, "Daily pace" — the everyday question itself.
-    await expect(main.getByRole('navigation', { name: t('shell.settings_nav') }).getByRole('button', { name: t('shell.page.pace'), exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(settingsNav.getByRole('button', { name: t('shell.page.pace'), exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(main.getByRole('heading', { level: 1, name: t('presets.pace.title') })).toBeVisible();
+    await main.getByRole('button', { name: t('presets.pace.scope_action'), exact: true }).click();
   } else {
-    await main.getByRole('navigation', { name: t('shell.settings_nav') }).getByRole('button', { name: t('shell.page.pace'), exact: true }).click();
+    await settingsNav.getByRole('button', { name: t('nav.presets'), exact: true }).click();
   }
   await expect(main.getByRole('heading', { level: 1, name: t('presets.heading') })).toBeVisible();
 }

@@ -6,7 +6,7 @@
       "home": "Ana sayfa",
       "library": "Kütüphane",
       "words": "Kelimelerim",
-      "create": "Oluştur",
+      "create": "Ekle",
       "search": "Ara",
       "stats": "İlerleme"
     },
@@ -48,10 +48,10 @@
       "adding": "Kart ekleme"
     },
     "advanced": {
-      "label": "Gelişmiş ayarlar",
+      "label": "Gelişmiş",
       "tag": "Gelişmiş’te",
       "off_hint": "Kapalı: {count} sayfa daha gizli. Hiçbiri silinmedi; arama hepsini bulur.",
-      "on_hint": "Açık: nadiren gereken sayfalar da görünüyor, menüde Kütüphane, Oluştur ve Ara da var.",
+      "on_hint": "Açık: nadiren gereken sayfalar da görünüyor, menüde Kütüphane, Ekle ve Ara da var.",
       "one_off": "Bu sayfa Gelişmiş’te. Bir kereliğine açtın; Gelişmiş kapalı kalıyor.",
       "turn_on": "Gelişmiş’i aç"
     }

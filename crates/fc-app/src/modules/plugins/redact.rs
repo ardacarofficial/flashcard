@@ -226,7 +226,9 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "reading.analyze" | "reading.words.lookup" => Reads(READING_CARDS),
         // v1.4 word index: its own explicit permission (`words:read`); the user may limit it
         // to some decks (`word_scope`). Rebuilding it is whole-collection work.
-        "words.lookup" | "words.list" | "words.stats" => Reads(WORDS),
+        "words.lookup" | "words.list" | "words.stats" | "words.languages" | "words.history" => Reads(WORDS),
+        // v1.4 F1: the words-module door of `reading.words.mark` (same rows, same exposure).
+        "words.mark" => Reads(READING),
         "words.index.rebuild" | "words.index.rebuild_now" => Refused(UNBOUNDED),
         // v1.4 word data: packs, sources and licences (reference data, no user text); an
         // import reads a free path, and replacing the packs is the user's decision.

@@ -45,7 +45,7 @@ describe('profiles and app lock (dev mock)', () => {
     // v1.3: how the secret is stored moved under the page's "Advanced" disclosure.
     expect(screen.getByText('What if I forget my PIN?')).toBeTruthy();
     expect(screen.queryByText(/salted Argon2id hash/)).toBeNull();
-    await fireEvent.click(screen.getByRole('button', { name: /Advanced settings/ }));
+    await fireEvent.click(screen.getByRole('button', { name: /More settings/ }));
     expect(screen.getByText(/salted Argon2id hash/)).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Lock now' }));

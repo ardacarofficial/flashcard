@@ -99,6 +99,7 @@ fn count(t: &TestApp, q: &str) -> u32 {
         notes_only: None,
         offset: None,
         limit: Some(500),
+        cursor: None,
     })
     .total
 }

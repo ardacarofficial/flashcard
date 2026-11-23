@@ -525,3 +525,208 @@ fn capture_diagnostics_and_the_index_do_not_interfere() {
     assert_eq!(w[0].word.as_ref().unwrap().language, "en");
     assert_rebuild_equal(&t, "captures");
 }
+
+// ------------------------------------------------------------------ v1.4 F1: the words front door
+
+/// `words.mark` writes the marks reading mode writes, is undone and redone in one step, and
+/// works with the reading module switched off.
+fn words_mark_is_undoable(store: Arc<dyn Store>) {
+    use fc_api::v1::modules::SetModuleEnabled;
+    let t = TestApp::new(store);
+    let en = deck(&t, "English");
+    deck_language(&t, en, "en");
+    note(&t, en, "go");
+    t.ok::<ModulesSetEnabled>(SetModuleEnabled {
+        id: "reading".into(),
+        enabled: false,
+    });
+    let r = t.ok::<WordsMark>(MarkWords {
+        language: "en".into(),
+        lemmas: vec!["door".into(), "go".into(), "door".into()],
+        mark: Some(WordMark::Known),
+    });
+    assert_eq!(r.changed, 2);
+    assert_eq!((status(&t, "door"), status(&t, "went")), (WordStatus::Known, WordStatus::Known));
+    let word = lookup(&t, &["door"])[0].word.clone().unwrap();
+    assert_eq!(word.mark, Some(WordMark::Known));
+    assert!(word.mark_at.is_some());
+    t.ok::<OplogUndo>(Empty {});
+    assert_eq!((status(&t, "door"), status(&t, "go")), (WordStatus::New, WordStatus::Learning));
+    t.ok::<OplogRedo>(Empty {});
+    assert_eq!(status(&t, "door"), WordStatus::Known);
+    // Clearing goes back to what the cards say.
+    t.ok::<WordsMark>(MarkWords {
+        language: "en".into(),
+        lemmas: vec!["go".into()],
+        mark: None,
+    });
+    assert_eq!(status(&t, "go"), WordStatus::Learning);
+    let e = t.err::<WordsMark>(MarkWords {
+        language: "en".into(),
+        lemmas: vec![" ".into()],
+        mark: Some(WordMark::Known),
+    });
+    assert_eq!(e.code, fc_api::ErrorCode::ValidationInvalidParams);
+    assert_rebuild_equal(&t, "words.mark");
+}
+
+#[test]
+fn words_mark_is_undoable_sqlite() {
+    words_mark_is_undoable(Arc::new(TempSqlite::new()));
+}
+
+#[test]
+fn words_mark_is_undoable_mem() {
+    words_mark_is_undoable(Arc::new(MemStore::new()));
+}
+
+/// `words.lookup` carries the meanings of the notes behind a word (by field role), `words.stats`
+/// a total over languages, `words.languages` the languages with their notes and words.
+fn meanings_total_and_languages(store: Arc<dyn Store>) {
+    let t = TestApp::new(store);
+    let en = deck(&t, "English");
+    let de = deck(&t, "German");
+    deck_language(&t, en, "en-GB");
+    deck_language(&t, de, "de");
+    let mut fields = BTreeMap::new();
+    fields.insert("front".to_owned(), "go".to_owned());
+    fields.insert("back".to_owned(), "<b>gitmek</b>".to_owned());
+    for (front, back) in [("go", "<b>gitmek</b>"), ("went", "gitmek"), ("goes", "yürümek")] {
+        fields.insert("front".to_owned(), front.to_owned());
+        fields.insert("back".to_owned(), back.to_owned());
+        t.ok::<NotesCreate>(CreateNote {
+            notetype_id: CLASSIC_ID,
+            deck_id: en,
+            fields: fields.clone(),
+            tags: vec![],
+            attributes: vec![],
+            allow_duplicate: Some(true),
+        });
+    }
+    note(&t, en, "house");
+    note(&t, de, "Haus");
+    note(&t, de, "gehen");
+    note(&t, d_none(&t), "orphan");
+    let go = lookup(&t, &["went"])[0].word.clone().unwrap();
+    assert_eq!(go.meanings, vec!["gitmek".to_owned(), "yürümek".to_owned()]);
+    let house = lookup(&t, &["house"])[0].word.clone().unwrap();
+    assert_eq!(house.meanings, vec!["m".to_owned()]);
+    // Listings leave them out.
+    let page = t.ok::<WordsList>(ListWords::default());
+    assert!(page.words.iter().all(|w| w.meanings.is_empty()));
+
+    mark(&t, &["door"], Some(WordMark::Ignored));
+    let s = t.ok::<WordsStats>(Empty {});
+    assert_eq!(
+        (s.total.new, s.total.learning, s.total.known, s.total.ignored),
+        (0, 4, 0, 1)
+    );
+    let sum = |f: fn(&fc_core::reading::WordCounts) -> u32| s.languages.iter().map(|l| f(&l.counts)).sum::<u32>();
+    assert_eq!(sum(|c| c.learning), s.total.learning);
+
+    let langs = t.ok::<WordsLanguages>(Empty {}).languages;
+    let got: Vec<(&str, u32, u32)> = langs.iter().map(|l| (l.code.as_str(), l.notes, l.words)).collect();
+    assert_eq!(got, vec![("de", 2, 2), ("en", 4, 3)]);
+}
+
+/// A deck without a language.
+fn d_none(t: &TestApp) -> DeckId {
+    deck(t, "Elsewhere")
+}
+
+#[test]
+fn meanings_total_and_languages_sqlite() {
+    meanings_total_and_languages(Arc::new(TempSqlite::new()));
+}
+
+#[test]
+fn meanings_total_and_languages_mem() {
+    meanings_total_and_languages(Arc::new(MemStore::new()));
+}
+
+/// `words.history`: known words at the end of each study day, from the review log (interval
+/// ≥ the threshold) and manual marks.
+fn known_words_history(store: Arc<dyn Store>) {
+    use fc_core::card::Rating;
+    use fc_core::ReviewLogId;
+    use fc_storage::repo::ReviewLogRecord;
+    let t = TestApp::new(store);
+    let en = deck(&t, "English");
+    deck_language(&t, en, "en");
+    let go = note(&t, en, "go");
+    let run = note(&t, en, "run");
+    let house = note(&t, en, "house");
+    let now = 1_767_225_600_000_i64;
+    let card_of = |n: NoteId| t.store.read().unwrap().word_card_rows(&[n]).unwrap()[0].card_id;
+    let mut seq = 0u128;
+    let mut review = |n: NoteId, days_ago: i64, state: CardState, scheduled: u32| {
+        seq += 1;
+        // The card first: the store's read lock must not be taken under its write lock.
+        let card_id = card_of(n);
+        let mut tx = t.store.write().unwrap();
+        tx.insert_review_log(&ReviewLogRecord {
+            id: ReviewLogId(uuid::Uuid::from_u128(0x0190_0000_0000_7000_8000_0000_0002_0000 | seq)),
+            card_id,
+            session_id: None,
+            rating: Rating::Good,
+            state_before: CardState::Review,
+            state_after: state,
+            scheduled_days: scheduled,
+            elapsed_days: 1,
+            duration_ms: 5_000,
+            answer_duration_ms: None,
+            hints_used: 0,
+            mode: "normal".into(),
+            stability_after: None,
+            difficulty_after: None,
+            created_at: Timestamp(now - days_ago * MILLIS_PER_DAY),
+        })
+        .unwrap();
+        tx.commit().unwrap();
+    };
+    review(go, 10, CardState::Review, 30);
+    review(go, 3, CardState::Relearning, 0);
+    review(run, 5, CardState::Review, 25);
+    review(house, 8, CardState::Review, 5);
+    // A word without a card, marked known today.
+    mark(&t, &["door"], Some(WordMark::Known));
+    let h = t.ok::<WordsHistory>(WordHistoryRequest {
+        days: Some(15),
+        language: None,
+        tz_offset_mins: Some(0),
+    });
+    assert_eq!(h.threshold_days, 21);
+    let known: Vec<u32> = h.points.iter().map(|p| p.known).collect();
+    assert_eq!(known, vec![0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 1, 1, 1, 2]);
+    assert_eq!(h.points.len(), 15);
+    assert!(h.points.windows(2).all(|w| w[0].day < w[1].day));
+    // Another language has none; a lower threshold counts `house` too.
+    let de = t.ok::<WordsHistory>(WordHistoryRequest {
+        days: Some(3),
+        language: Some("de-AT".into()),
+        tz_offset_mins: Some(0),
+    });
+    assert!(de.points.iter().all(|p| p.known == 0));
+    set(&t, SettingScope::App, super::KNOWN_INTERVAL, serde_json::json!(5));
+    let low = t.ok::<WordsHistory>(WordHistoryRequest {
+        days: Some(1),
+        language: Some("en".into()),
+        tz_offset_mins: Some(0),
+    });
+    assert_eq!(low.points[0].known, 3);
+    let e = t.err::<WordsHistory>(WordHistoryRequest {
+        days: Some(0),
+        ..Default::default()
+    });
+    assert_eq!(e.code, fc_api::ErrorCode::ValidationInvalidParams);
+}
+
+#[test]
+fn known_words_history_sqlite() {
+    known_words_history(Arc::new(TempSqlite::new()));
+}
+
+#[test]
+fn known_words_history_mem() {
+    known_words_history(Arc::new(MemStore::new()));
+}

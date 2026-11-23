@@ -384,6 +384,7 @@ pub(super) fn local_api_writes_are_ordinary_undo_steps(f: Factory) {
         notes_only: None,
         offset: None,
         limit: None,
+        cursor: None,
     });
     assert_eq!(live.total, 0, "undo took the note back");
     // `notes.delete` stays out of reach even with `notes:write`.

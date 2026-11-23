@@ -159,13 +159,16 @@ describe('settings groups (v1.4)', () => {
   it('Basic pages first (the everyday questions); every other group is Advanced', () => {
     const routes = ['/reminders', '/shortcuts', '/profiles', '/presets', '/notetypes', '/mode-settings', '/ai', '/subtitle', '/io', '/starters', '/automation', '/mcp', '/local-api', '/plugins', '/maintenance', '/app-maintenance'];
     const nav = buildNavigation(
-      routes.map((r, i) => route(`m${i}`, r, 100 - i)),
+      // `planning`: the Daily pace page (v1.4) writes through it, so it shows while it is on.
+      [...routes.map((r, i) => route(`m${i}`, r, 100 - i)), route('planning', '/planning')],
       SCREENS,
       HOME,
     );
+    // v1.4: Basic starts with the simple Daily pace page; the full preset editor moved to
+    // Advanced › Studying (nothing removed).
     expect(nav.settings.map((g) => [g.id, g.entries.map((e) => e.route)])).toEqual([
-      ['basic', ['/presets', '/notetypes', '/reminders', '/subtitle', '/io']],
-      ['study', ['/mode-settings']],
+      ['basic', ['/settings/pace', '/notetypes', '/reminders', '/subtitle', '/io']],
+      ['study', ['/presets', '/mode-settings']],
       ['app', ['/shortcuts', '/profiles']],
       ['connections', ['/ai', '/mcp', '/local-api', '/automation', '/plugins']],
       ['data', ['/starters', '/maintenance', '/app-maintenance']],
@@ -173,6 +176,6 @@ describe('settings groups (v1.4)', () => {
     expect(nav.settings.map((g) => g.advanced)).toEqual([false, true, true, true, true]);
     expect(nav.settings[0]!.entries.length).toBeLessThanOrEqual(6);
     // Fewer groups than pages, and nothing lost: every page is reachable from Settings once.
-    expect(nav.settings.flatMap((g) => g.entries).filter((e) => e.primary || e.route === '/ai')).toHaveLength(routes.length);
+    expect(nav.settings.flatMap((g) => g.entries).filter((e) => e.primary || e.route === '/ai')).toHaveLength(routes.length + 1);
   });
 });

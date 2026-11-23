@@ -112,7 +112,7 @@ describe('first-run guide (dev mock)', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Home' }));
     expect(home).toHaveBeenCalled();
     await reopen();
-    await fireEvent.click(screen.getByRole('button', { name: 'Statistics' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Progress' }));
     expect(navigate).toHaveBeenLastCalledWith('/stats');
     await reopen();
     await fireEvent.click(screen.getByRole('button', { name: 'Connect' }));

@@ -264,6 +264,21 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [x] Yolculuklar gerçek çekirdekte, kaydedilen sonuç üzerinde (`pnpm -C apps/desktop e2e`, CI `journeys`).
 - [ ] Windows: kurulu uygulamada WebDriver pilotu (`windows-build.yml` → `webdriver-pilot`, kapıda değil) yeşil ve proje sahibinin elle koşusu.
 
+## 📖 v1.4 · "Kelime uygulaması": kaybolmayan veri, tek kelime doğrusu, sade ekranlar
+
+*Sahibi v1.3'ü kullandı: "çekirdek sağlam ama kullanırken hâlâ kafam karışıyor." v1.4 iki izde ilerledi: arka uç (A/B/C/W/Z izleri) kelime uygulamasının temelini kurdu; tasarım izi önce tıklanabilir taslaklar (`prototypes/v14/`), sonra uygulamada ekranlar (E1–E4), en son toparlama (F1). Ayrıntı: [11](11-tasarim.md), [12](12-performans.md), [CHANGELOG](../CHANGELOG.md).*
+
+**Kapsam:** doğrulanan akışlı yedek ve otomatik yedek; ortak kelime dizini (`words.*`: durum, sıklık/CEFR, diller, bilinen kelimeler zamanla, elle işaret) ve dil sorguları; Subtitle yakalaması = karşılaşma (en öğretici sahne, zor kart onarımı, eksik ses); Test (bir kelime, dört anlam) ve Sınav; bu cümledeki anlam; ölçülmüş hız; arayüzde dört yerli kenar çubuğu, tek "Gelişmiş" anahtarı, Ekle/Ara/Kelimelerim/İlerleme, soru soru Temel ayarlar ve sade Günlük tempo.
+
+**Kabul kriterleri**
+- [x] Yedek geçici profile geri yüklenip doğrulanmadan yerine konmaz; eksik medya raporlanır (Rust testleri).
+- [x] "Kaç kelime biliyorum" her yüzeyde aynı sayı: Ana sayfa, İlerleme, Kelimelerim, Subtitle `known-words` aynı dizinden (E4b, E3W, Rust testleri).
+- [x] Tam ölçek bütçeleri tutuyor (docs/12).
+- [x] Her yeni yetenek bir modül/ayar arkasında, kapatınca ölü giriş kalmıyor (`module_switch_tests`, mock ekran turu).
+- [x] Yolculuklar gerçek çekirdekte kaydedilen sonucu geri okuyor (E1a/b, E2, E3a/W/N, E4a/b, P1, F1a–c).
+- [ ] Sahibin taslaklardaki A/B sorularına cevabı (şimdilik her taslağın ilk açılış varyantı; her biri tek sabitle çevrilir).
+- [ ] Windows'ta elle koşu, Subtitle eklentisi gerçek tarayıcıda.
+
 ## 🔮 v1.0 sonrası
 
 macOS · Linux · senkronizasyon · mobil · erişilebilirlik · oyunlaştırma · eklenti mağazası kaynağının işletilmesi · isteğe bağlı veritabanı şifreleme.

@@ -108,7 +108,7 @@ describe('v1.1 Library, deck page and Home on the dev mock', () => {
     expect(launched).toHaveBeenCalledWith({ deckId: null });
   });
 
-  it('Home: the words you know lead to Progress; a stale backup shows one line to Settings › Data', async () => {
+  it('Home: the words you know lead to Progress; a stale backup shows one line to Settings › Backup', async () => {
     const decks = (await api.deck.tree()).roots;
     const navigate = vi.fn();
     render(HomeScreen, { ctx: ctx({ decks, navigate }) });

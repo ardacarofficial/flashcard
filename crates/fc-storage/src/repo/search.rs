@@ -60,10 +60,96 @@ pub struct CardSearch {
     pub descending: bool,
     /// One row per note (its first matching card) instead of one per card.
     pub notes_only: bool,
-    /// Rows to skip.
+    /// Rows to skip (ignored with `after`).
     pub offset: u32,
     /// Maximum rows.
     pub limit: u32,
+    /// Keyset paging (v1.4): the page starts right after this row of the same search (same
+    /// filter, sort, direction and `notes_only`) instead of at `offset`.
+    pub after: Option<CardCursor>,
+}
+
+/// A value of a sort column, as the browser orders it (NULL first ascending, last descending;
+/// text compared ASCII-case-insensitively like SQLite `NOCASE`).
+#[derive(Debug, Clone, PartialEq)]
+pub enum SortValue {
+    /// No value (a new card's due, stability, difficulty).
+    Null,
+    /// Integer columns and times (ms).
+    Int(i64),
+    /// Stability, difficulty.
+    Real(f64),
+    /// Sort field.
+    Text(String),
+}
+
+impl SortValue {
+    /// The browser order of two values of one column.
+    pub fn cmp_sorted(&self, other: &SortValue) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+        match (self, other) {
+            (SortValue::Null, SortValue::Null) => Ordering::Equal,
+            (SortValue::Null, _) => Ordering::Less,
+            (_, SortValue::Null) => Ordering::Greater,
+            (SortValue::Int(a), SortValue::Int(b)) => a.cmp(b),
+            (SortValue::Real(a), SortValue::Real(b)) => a.partial_cmp(b).unwrap_or(Ordering::Equal),
+            (SortValue::Text(a), SortValue::Text(b)) => a
+                .bytes()
+                .map(|c| c.to_ascii_lowercase())
+                .cmp(b.bytes().map(|c| c.to_ascii_lowercase())),
+            // One column never mixes kinds; a stable answer all the same.
+            (a, b) => a.rank().cmp(&b.rank()),
+        }
+    }
+
+    fn rank(&self) -> u8 {
+        match self {
+            SortValue::Null => 0,
+            SortValue::Int(_) => 1,
+            SortValue::Real(_) => 2,
+            SortValue::Text(_) => 3,
+        }
+    }
+}
+
+/// Keyset position (v1.4): the sort value and card id of the last row of the previous page.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CardCursor {
+    /// Sort column value of that row ([`CardSort::key`]).
+    pub key: SortValue,
+    /// Its card (ties are ordered by card id).
+    pub card_id: CardId,
+}
+
+impl CardSort {
+    /// Whether the column can be NULL (then NULL sorts first ascending, last descending).
+    pub fn nullable(self) -> bool {
+        matches!(self, CardSort::Due | CardSort::Stability | CardSort::Difficulty)
+    }
+
+    /// The value a row is ordered by.
+    pub fn key(self, card: &Card, sort_field: &str, note_updated_at: Timestamp) -> SortValue {
+        let s = &card.scheduling;
+        let real = |v: Option<f64>| v.map_or(SortValue::Null, SortValue::Real);
+        match self {
+            CardSort::SortField => SortValue::Text(sort_field.to_owned()),
+            CardSort::Created => SortValue::Int(card.created_at.0),
+            CardSort::Modified => SortValue::Int(note_updated_at.0),
+            CardSort::Due => s.due.map_or(SortValue::Null, |d| SortValue::Int(d.0)),
+            CardSort::Stability => real(s.stability),
+            CardSort::Difficulty => real(s.difficulty),
+            CardSort::Lapses => SortValue::Int(i64::from(s.lapses)),
+            CardSort::Reps => SortValue::Int(i64::from(s.reps)),
+        }
+    }
+
+    /// The cursor of the page after `hit`.
+    pub fn cursor_after(self, hit: &CardHit) -> CardCursor {
+        CardCursor {
+            key: self.key(&hit.card, &hit.sort_field, hit.note_updated_at),
+            card_id: hit.card.id,
+        }
+    }
 }
 
 /// One matching card with the note data a browser row needs.
@@ -88,6 +174,8 @@ pub struct SearchPage {
     pub hits: Vec<CardHit>,
     /// Matches in total (cards, or notes with `notes_only`).
     pub total: u32,
+    /// More rows follow this page.
+    pub more: bool,
 }
 
 /// One `review_log` row (card history).

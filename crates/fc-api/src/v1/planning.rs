@@ -436,9 +436,10 @@ pub struct WorkloadForecast {
 }
 
 /// `planning.apply_pace`: sets the new-card limit of a deck's preset (creating and assigning a
-/// preset when the deck has none) and optionally adds an exam date for the deck. One undo
+/// preset when the deck has none), v1.4 also its review limit and desired retention (the
+/// "Daily pace" settings page), and optionally adds an exam date for the deck. One undo
 /// step; the forecast's `target` says beforehand what it touches.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 #[ts(optional_fields = nullable)]
 pub struct ApplyPace {
@@ -455,6 +456,12 @@ pub struct ApplyPace {
     /// The exam's name (default: the deck's name).
     #[serde(default)]
     pub exam_name: Option<String>,
+    /// v1.4: also set the preset's review limit (0–99999; `None` = unchanged).
+    #[serde(default)]
+    pub reviews_per_day: Option<u32>,
+    /// v1.4: also set the preset's desired retention (0.70–0.99; `None` = unchanged).
+    #[serde(default)]
+    pub desired_retention: Option<f64>,
 }
 
 /// Response of `planning.apply_pace`.

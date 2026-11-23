@@ -6,7 +6,7 @@
   },
   "modules": {
     "stats": {
-      "name": "İstatistikler",
+      "name": "İlerleme",
       "description": "Seri, başarı oranları, ısı haritası, tahmin, sürekli zorlandığın kartlar ve karneler — deste, etiket, sorgu veya sınıflandırma bazında."
     },
     "planning": {
@@ -83,7 +83,7 @@
   },
   "commands": {
     "stats": {
-      "overview": "İstatistikler",
+      "overview": "İlerleme",
       "breakdown": "Sınıflandırmaya göre istatistik",
       "leeches": "Sürekli zorlandığım kartlar",
       "deck_reports": "Deste karneleri",
@@ -376,12 +376,15 @@
         "learning_label": "Öğreniyorum",
         "new": "Yeni",
         "other": "{lang}: {n} kelime",
-        "unassigned": "{n, plural, one {# notun} other {# notun}} dili belli değil; onlar sayılmadı. Destesine bir dil ver (Kütüphane › deste).",
+        "unassigned": "{n, plural, one {# notun} other {# notun}} dili belli değil; onlar sayılmadı. Dilini Ayarlar › Kelimeler'de seç.",
         "meaning": "Biliyorum = {days} gün sonra hâlâ hatırladığın ya da “zaten biliyorum” dediğin kelime.",
         "open": "Kelimelerim",
         "empty": "Kelime ekleyip çalıştıkça bildiğin kelimeler burada sayılır.",
         "cards": "{n} kartın oturdu ({pct}).",
-        "cards_sub": "Oturmuş kart: aralığı üç haftayı geçmiş kart."
+        "cards_sub": "Oturmuş kart: aralığı üç haftayı geçmiş kart.",
+        "history": "Zaman içinde bildiğin kelimeler",
+        "history_point": "{date}: {n} kelime",
+        "history_change": "{days} günde +{n} kelime"
       },
       "tomorrow": {
         "heading": "Yarın ne var?",
@@ -545,8 +548,8 @@
     "advanced": {
       "heading": "Gelişmiş",
       "intro": "FSRS optimizasyonu ve hedef hatırlamaya göre iş yükü: çoğu zaman dokunman gerekmez.",
-      "show": "Gelişmiş ayarları göster",
-      "hide": "Gelişmiş ayarları gizle"
+      "show": "Daha fazla ayar göster",
+      "hide": "Daha fazla ayarı gizle"
     }
   },
   "optimizer": {

@@ -6,7 +6,7 @@
       "home": "Home",
       "library": "Library",
       "words": "My words",
-      "create": "Create",
+      "create": "Add",
       "search": "Search",
       "stats": "Progress"
     },
@@ -48,10 +48,10 @@
       "adding": "Adding cards"
     },
     "advanced": {
-      "label": "Advanced settings",
+      "label": "Advanced",
       "tag": "In Advanced",
       "off_hint": "Off: {count} more pages are hidden. Nothing is deleted; search finds them all.",
-      "on_hint": "On: rarely needed pages show too, and the menu also has Library, Create and Search.",
+      "on_hint": "On: rarely needed pages show too, and the menu also has Library, Add and Search.",
       "one_off": "This page is in Advanced. You opened it once; Advanced stays off.",
       "turn_on": "Turn Advanced on"
     }

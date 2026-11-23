@@ -7,10 +7,13 @@
  */
 import { err, menu, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
 import type {
+  AcceptedAnswers,
   AiConnectionTest,
   AiFeature,
   AiJobResult,
   AiModelList,
+  AiNoteMeaning,
+  AiNoteMeaningState,
   AiProviderPreset,
   AiProviderStatus,
   AiOutput,
@@ -145,7 +148,10 @@ const NAMES: Record<AiProviderKind, string> = {
 
 const zero = (): AiUsageTotals => ({ requests: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 });
 
-function output(task: AiTask): AiOutput {
+/** The meaning a mock note has now (the `meaning` role, else the classic back). */
+const meaningOf = (n: NoteDto | undefined) => (n ? (n.fields.meaning ?? n.fields.back ?? '') : '');
+
+function output(task: AiTask, notes: NoteDto[] = []): AiOutput {
   switch (task.feature) {
     case 'generate_cards':
       return {
@@ -182,14 +188,14 @@ function output(task: AiTask): AiOutput {
         also_correct: ['okuldan almak'],
         not_this: ['kaldırmak'],
         confidence: 0.9,
-        original: '',
+        original: meaningOf(notes.find((n) => n.id === task.note_id)),
       };
   }
 }
 
 export default {
   modules: [module('ai', [menu('ai.main', 'nav.ai', '/ai', 45)])],
-  handlers: ({ now, id, emit, notes, requireDeck }: MockEnv) => {
+  handlers: ({ now, id, emit, notes, requireDeck, undoLog }: MockEnv) => {
     const providers: AiProviderDto[] = [];
     /** Providers whose (mock) key contains "wrong". */
     const wrongKeys = new Set<string>();
@@ -205,6 +211,21 @@ export default {
       return p;
     };
     const routes = new Map<AiFeature, AiRouteDto>();
+    /** v1.4: stored meanings in context and the answers an apply added, per note. */
+    const meanings = new Map<string, AiNoteMeaning>();
+    const accepted = new Map<string, string[]>();
+    const requireNote = (noteId: string) => {
+      const n = notes.find((x) => x.id === noteId);
+      if (!n) throw err('NOT_FOUND_NOTE', 'errors.not_found.note', noteId);
+      return n;
+    };
+    const meaningState = (noteId: string): AiNoteMeaningState => {
+      const n = requireNote(noteId);
+      const list = accepted.get(noteId) ?? [];
+      const field = 'meaning' in n.fields ? 'meaning' : 'back';
+      const answers: AcceptedAnswers[] = list.length ? [{ field, answers: [...list] }] : [];
+      return { note_id: noteId, meaning: meanings.get(noteId) ?? null, accepted: answers };
+    };
     let prices: AiPriceDto[] = [
       { model: 'claude-haiku-5-5', input_per_mtok: 1, output_per_mtok: 5 },
       { model: 'claude-opus-5-5', input_per_mtok: 5, output_per_mtok: 25 },
@@ -404,7 +425,7 @@ export default {
         month.requests += 1;
         month.input_tokens += p.estimated_input_tokens;
         const result: AiJobResult = {
-          output: output(req.task),
+          output: output(req.task, notes),
           provider_id: p.provider.id,
           model: p.model,
           input_tokens: p.estimated_input_tokens,
@@ -434,6 +455,74 @@ export default {
           created_at: t,
           updated_at: t,
         };
+      },
+      // v1.4 meaning in this sentence (the real rules: fc-app `modules/ai/meaning.rs`).
+      'ai.meaning.get': ({ note_id }) => meaningState(note_id),
+      'ai.meaning.suggest': ({ note_id }) => {
+        const n = requireNote(note_id);
+        const out = output({ feature: 'meaning_in_context', note_id, sentence: null, lemma: null, surface: null, position: null, target_language: null, candidates: [] }, notes);
+        const t = now();
+        // As in fc-app: a suggestion never replaces an applied meaning, and changes no note.
+        if (out.feature === 'meaning_in_context' && meanings.get(note_id)?.status !== 'applied') {
+          meanings.set(note_id, {
+            note_id,
+            field: 'meaning' in n.fields ? 'meaning' : 'back',
+            status: 'suggested',
+            meaning: out.meaning,
+            phrase: out.phrase,
+            expression: out.expression,
+            also_correct: out.also_correct,
+            not_this: out.not_this,
+            confidence: out.confidence,
+            edited: false,
+            original: out.original,
+            model: 'claude-sonnet-5-5',
+            created_at: t,
+            updated_at: t,
+          });
+        }
+        return { id: id('job'), kind: 'ai.request', status: 'succeeded', progress: 1, message: null, error: null, result: null, created_at: t, updated_at: t };
+      },
+      'ai.meaning.apply': (req) => {
+        const n = requireNote(req.note_id);
+        if (!req.meaning.trim() || req.meaning.length > 300) throw err('VALIDATION_AI_TASK', 'errors.validation.ai_task', 'meaning');
+        const field = 'meaning' in n.fields ? 'meaning' : 'back';
+        const before = { meaning: meanings.get(n.id), accepted: [...(accepted.get(n.id) ?? [])], fields: { ...n.fields } };
+        const t = now();
+        meanings.set(n.id, {
+          note_id: n.id,
+          field,
+          status: 'applied',
+          meaning: req.meaning,
+          phrase: req.phrase,
+          expression: req.expression,
+          also_correct: req.also_correct,
+          not_this: req.not_this,
+          confidence: req.confidence ?? null,
+          edited: req.edited,
+          original: before.meaning?.original || (n.fields[field] ?? ''),
+          model: req.model ?? '',
+          created_at: before.meaning?.created_at ?? t,
+          updated_at: t,
+        });
+        const list = accepted.get(n.id) ?? [];
+        for (const a of req.accepted) if (a.trim() && !list.includes(a.trim())) list.push(a.trim());
+        accepted.set(n.id, list);
+        if (req.replace_field) {
+          n.fields = { ...n.fields, [field]: req.meaning };
+          n.updated_at = t;
+          emit({ type: 'note_updated', data: { note_id: n.id } });
+        }
+        undoLog.push({
+          summary: 'commands.ai.meaning.apply',
+          revert: () => {
+            if (before.meaning) meanings.set(n.id, before.meaning);
+            else meanings.delete(n.id);
+            accepted.set(n.id, before.accepted);
+            n.fields = before.fields;
+          },
+        });
+        return meaningState(n.id);
       },
       'ai.sources.extract': (req) => {
         const t = now();

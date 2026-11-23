@@ -3,6 +3,7 @@
 
 use crate::v1::common::Empty;
 use crate::v1::jobs::JobDto;
+use crate::v1::reading::{MarkWords, RestoreWordMarks, WordMarksChanged};
 use crate::v1::words::*;
 
 methods! {
@@ -10,8 +11,17 @@ methods! {
     WordsLookup = "words.lookup", Query, "words", "words:read", Public, undo: false, LookupWords => WordsLookupResult;
     /// Index rows, filtered by language and status, paged.
     WordsList = "words.list", Query, "words", "words:read", Public, undo: false, ListWords => WordList;
-    /// Words per status per language.
+    /// Words per status per language (and over all of them).
     WordsStats = "words.stats", Query, "words", "words:read", Public, undo: false, Empty => WordStats;
+    /// The languages of the collection with their notes and words (v1.4).
+    WordsLanguages = "words.languages", Query, "words", "words:read", Public, undo: false, Empty => WordLanguages;
+    /// Words known at the end of each recent study day (v1.4).
+    WordsHistory = "words.history", Query, "words", "words:read", Public, undo: false, WordHistoryRequest => WordHistory;
+    /// Marks words as known / ignored or clears the mark (v1.4): the words module's front
+    /// door to the marks `reading.words.mark` writes (same storage, same undo).
+    WordsMark = "words.mark", Command, "words", "reading:write", Public, undo: true, MarkWords => WordMarksChanged;
+    /// Internal inverse of `words.mark`.
+    WordsRestore = "words.restore", Command, "words", "reading:write", Internal, undo: true, RestoreWordMarks => WordMarksChanged;
     /// Rebuilds the whole index in a background job (`words.index.rebuild`).
     WordsIndexRebuild = "words.index.rebuild", Command, "words", "reading:write", Public, undo: false, Empty => JobDto;
     /// Empties the index and builds it again in one transaction (the job's step; derived

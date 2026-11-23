@@ -1300,6 +1300,8 @@ pub fn forecast_and_apply_pace(f: &Factory) {
         preset_name: None,
         exam_date: Some(exam_date.clone()),
         exam_name: Some("TOEFL".into()),
+        reviews_per_day: None,
+        desired_retention: None,
     });
     assert!(applied.created_preset);
     assert_eq!(applied.previous_new_per_day, 20);
@@ -1333,12 +1335,46 @@ pub fn forecast_and_apply_pace(f: &Factory) {
         preset_name: None,
         exam_date: Some(exam_date),
         exam_name: None,
+        reviews_per_day: None,
+        desired_retention: None,
     });
     assert!(!again.created_preset && again.exam.is_none(), "same exam not added twice");
     assert_eq!((again.previous_new_per_day, pace_of(&t, other.id)), (7, 12));
     assert_eq!(t.ok::<PresetsList>(Empty {}).items.len(), 1);
     t.undo();
     assert_eq!(pace_of(&t, other.id), 7);
+    // v1.4 "Daily pace" page: the review limit and retention go into the same preset (left
+    // out = unchanged), validated by the preset rules, one undo step.
+    let cfg = |deck| t.ok::<PresetsForDeck>(fc_api::v1::presets::PresetForDeck { deck_id: deck }).config;
+    let pace = |reviews_per_day, desired_retention| ApplyPace {
+        deck_id: d.id,
+        new_per_day: 7,
+        preset_name: None,
+        exam_date: None,
+        exam_name: None,
+        reviews_per_day,
+        desired_retention,
+    };
+    t.ok::<PlanningApplyPace>(pace(Some(150), Some(0.85)));
+    let c = cfg(other.id);
+    assert_eq!((c.new_per_day, c.reviews_per_day, c.desired_retention), (7, 150, 0.85));
+    assert_eq!(
+        t.err::<PlanningApplyPace>(pace(None, Some(0.5))).code,
+        ErrorCode::ValidationPresetConfig
+    );
+    t.undo();
+    assert_eq!((cfg(d.id).reviews_per_day, cfg(d.id).desired_retention), (200, 0.9));
+    t.ok::<PlanningApplyPace>(pace(Some(300), None));
+    assert_eq!((cfg(d.id).reviews_per_day, cfg(d.id).desired_retention), (300, 0.9));
+    // A deck without a preset gets one with the given limits.
+    let solo = t.deck("Solo");
+    let applied = t.ok::<PlanningApplyPace>(ApplyPace {
+        deck_id: solo.id,
+        ..pace(Some(80), Some(0.95))
+    });
+    assert!(applied.created_preset);
+    let c = cfg(solo.id);
+    assert_eq!((c.new_per_day, c.reviews_per_day, c.desired_retention), (7, 80, 0.95));
 
     // Studying today (the helper's session takes up to 100 new cards): started cards leave the
     // pool, today's new cards are counted and the started ones come back as reviews.

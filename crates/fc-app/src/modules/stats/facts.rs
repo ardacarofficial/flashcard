@@ -544,6 +544,7 @@ mod recall_tests {
                 notes_only: None,
                 offset: None,
                 limit: None,
+                cursor: None,
             })
             .items
             .into_iter()

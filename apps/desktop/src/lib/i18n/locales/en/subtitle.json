@@ -162,6 +162,36 @@
         "media_missing": "media missing",
         "attached": "added to an existing card"
       }
+    },
+    "encounter_panel": {
+      "title": "Where you saw this word",
+      "primary": "Main example",
+      "make_primary": "Make this the main example",
+      "move": "Move to another card",
+      "merge": "Merge with a card",
+      "unknown_source": "Unknown source",
+      "better": "There is a better example: {sentence}",
+      "better_use": "Make it the main example",
+      "move_title": "Which card does this example belong to?",
+      "merge_title": "Which card should this one merge with?",
+      "search": "Find a card",
+      "search_hint": "Type the word; matching cards show up below.",
+      "no_match": "No matching card.",
+      "pick_move": "Move here",
+      "pick_merge": "Merge with this card",
+      "force_title": "These two cards do not look like the same word",
+      "force_hint": "If you merge anyway, the examples end up on one card and the other card goes to the trash. You can undo it.",
+      "force_confirm": "Merge anyway",
+      "primary_set": "Main example changed.",
+      "moved": "Example moved.",
+      "merged": "Cards merged.",
+      "audio": "Sound: {origin}",
+      "origin": {
+        "original": "original",
+        "clip": "clip",
+        "tts": "TTS",
+        "user": "file"
+      }
     }
   }
 }

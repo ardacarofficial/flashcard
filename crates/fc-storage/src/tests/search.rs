@@ -477,6 +477,7 @@ fn paging_sorting_and_notes_mode() {
                 notes_only,
                 offset,
                 limit,
+                after: None,
             })
             .unwrap()
         })
@@ -708,6 +709,7 @@ fn timed_search(w: &World, f: &Filter) -> (u128, u32) {
             notes_only: false,
             offset: 0,
             limit: 50,
+            after: None,
         })
         .unwrap()
     });
@@ -844,6 +846,7 @@ fn ordered_scan_pages_match_a_full_sort() {
                             notes_only: false,
                             offset,
                             limit,
+                            after: None,
                         })
                         .unwrap()
                     });
@@ -856,6 +859,116 @@ fn ordered_scan_pages_match_a_full_sort() {
                         .copied()
                         .collect();
                     assert_eq!(got, want, "{q} {sort:?} desc={descending} offset={offset}");
+                }
+            }
+        }
+    }
+}
+
+const ALL_SORTS: [CardSort; 8] = [
+    CardSort::SortField,
+    CardSort::Created,
+    CardSort::Modified,
+    CardSort::Due,
+    CardSort::Stability,
+    CardSort::Difficulty,
+    CardSort::Lapses,
+    CardSort::Reps,
+];
+
+fn page(
+    w: &World,
+    f: &Filter,
+    (sort, descending, notes_only): (CardSort, bool, bool),
+    offset: u32,
+    limit: u32,
+    after: Option<crate::repo::CardCursor>,
+) -> crate::repo::SearchPage {
+    w.fx.read(|r| {
+        r.search_cards(&CardSearch {
+            filter: f.clone(),
+            now: NOW,
+            sort,
+            descending,
+            notes_only,
+            offset,
+            limit,
+            after,
+        })
+        .unwrap()
+    })
+}
+
+/// v1.4 keyset paging: walking the whole list cursor by cursor gives exactly the rows, in the
+/// order, of offset paging — every sort column both ways, with ties (12 words, 20 creation
+/// days, 10 due days), NULLs (new cards: due, stability, difficulty), a filter and `notes_only`.
+#[test]
+fn keyset_pages_equal_offset_pages() {
+    let w = world(400, 21);
+    for q in ["", "tag:fiil -is:suspended", "seviye>=B1"] {
+        let f = w.filter(q);
+        for sort in ALL_SORTS {
+            for descending in [false, true] {
+                for notes_only in [false, true] {
+                    let all = page(&w, &f, (sort, descending, notes_only), 0, 10_000, None);
+                    let want: Vec<CardId> = all.hits.iter().map(|h| h.card.id).collect();
+                    assert!(!all.more);
+                    let mut got: Vec<CardId> = Vec::new();
+                    let mut after = None;
+                    loop {
+                        let p = page(&w, &f, (sort, descending, notes_only), 0, 7, after.clone());
+                        assert_eq!(p.total, all.total);
+                        got.extend(p.hits.iter().map(|h| h.card.id));
+                        if !p.more {
+                            break;
+                        }
+                        after = Some(sort.cursor_after(p.hits.last().unwrap()));
+                    }
+                    assert_eq!(
+                        got, want,
+                        "{q:?} {sort:?} desc={descending} notes={notes_only}"
+                    );
+                    // Offset paging reports `more` the same way.
+                    let first = page(&w, &f, (sort, descending, notes_only), 0, 7, None);
+                    assert_eq!(first.more, want.len() > 7);
+                }
+            }
+        }
+    }
+}
+
+/// Big result sets walk the sort index (`ORDERED_SCAN_MIN`); a cursor taken anywhere gives
+/// the next offset page.
+#[test]
+fn keyset_pages_equal_offset_pages_on_the_index_walk() {
+    let w = world(20_400, 5);
+    for q in ["", "-zor:yes app"] {
+        let f = w.filter(q);
+        for sort in ALL_SORTS {
+            for descending in [false, true] {
+                let total = page(&w, &f, (sort, descending, false), 0, 1, None).total;
+                for offset in [0, 37, total / 2, total.saturating_sub(60)] {
+                    let p = page(&w, &f, (sort, descending, false), offset, 50, None);
+                    let Some(last) = p.hits.last() else { continue };
+                    let next = page(&w, &f, (sort, descending, false), offset + 50, 50, None);
+                    let keyed = page(
+                        &w,
+                        &f,
+                        (sort, descending, false),
+                        0,
+                        50,
+                        Some(sort.cursor_after(last)),
+                    );
+                    let ids = |p: &crate::repo::SearchPage| -> Vec<CardId> {
+                        p.hits.iter().map(|h| h.card.id).collect()
+                    };
+                    assert_eq!(
+                        ids(&keyed),
+                        ids(&next),
+                        "{q:?} {sort:?} desc={descending} @{offset}"
+                    );
+                    assert_eq!(keyed.more, next.more);
+                    assert_eq!(keyed.total, total);
                 }
             }
         }
@@ -1266,6 +1379,7 @@ fn language_atoms_agree_with_the_reference_evaluator() {
                     notes_only: false,
                     offset: 0,
                     limit: 10_000,
+                    after: None,
                 })
                 .unwrap()
             });
@@ -1318,6 +1432,7 @@ fn language_predicates_at_100k() {
                     notes_only: false,
                     offset: 0,
                     limit: 50,
+                    after: None,
                 })
                 .unwrap()
             });

@@ -99,6 +99,21 @@ pub struct WordCardRow {
     pub last_review: Option<Timestamp>,
 }
 
+/// A review of a card of an indexed note (`words.history`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WordReviewEvent {
+    /// Index language.
+    pub language: String,
+    /// Word key.
+    pub key: String,
+    /// Card.
+    pub card_id: CardId,
+    /// When.
+    pub at: Timestamp,
+    /// The review left the card in state `review` with a scheduled interval ≥ the threshold.
+    pub known: bool,
+}
+
 /// The dirty queues: notes, then `(language, key)` pairs.
 pub type WordIndexDirty = (Vec<NoteId>, Vec<(String, String)>);
 
@@ -133,6 +148,17 @@ pub trait WordIndexRead {
     fn word_marks_of(&self, language: &str, keys: &[String]) -> StorageResult<Vec<WordMarkRecord>>;
     /// Notes and keys waiting in the dirty queues.
     fn word_index_dirty_count(&self) -> StorageResult<u32>;
+    /// `(language, notes, words)` of every known language (not `""`), by language.
+    fn word_index_languages(&self) -> StorageResult<Vec<(String, u32, u32)>>;
+    /// Rows with a manual mark (of `language`, or all).
+    fn word_index_marked(&self, language: Option<&str>) -> StorageResult<Vec<WordIndexRecord>>;
+    /// Reviews of the live cards of indexed notes with a known language (of `language`, or
+    /// all), in time order.
+    fn word_review_events(
+        &self,
+        language: Option<&str>,
+        threshold_days: u32,
+    ) -> StorageResult<Vec<WordReviewEvent>>;
 }
 
 /// Writes of the word index.

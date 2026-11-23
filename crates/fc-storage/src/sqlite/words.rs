@@ -5,7 +5,7 @@ use super::{Mode, SqliteTx, WriteMode};
 use crate::error::StorageResult;
 use crate::repo::{
     WordCardRow, WordIndexNoteRecord, WordIndexQuery, WordIndexRead, WordIndexRecord,
-    WordIndexWrite, WordMarkRecord, WordNoteSource,
+    WordIndexWrite, WordMarkRecord, WordNoteSource, WordReviewEvent,
 };
 use fc_core::NoteId;
 use rusqlite::{params, Row};
@@ -249,6 +249,63 @@ impl<M: Mode> WordIndexRead for SqliteTx<'_, M> {
             |r| r.get(0),
         )?;
         Ok(u32::try_from(n).unwrap_or(u32::MAX))
+    }
+
+    fn word_index_languages(&self) -> StorageResult<Vec<(String, u32, u32)>> {
+        all(
+            self.conn(),
+            NOTES,
+            "SELECT n.language, count(*),
+                    (SELECT count(*) FROM word_index w WHERE w.language = n.language)
+             FROM word_index_notes n WHERE n.language <> ''
+             GROUP BY n.language ORDER BY n.language",
+            [],
+            |r| Ok((r.get(0)?, u32_col(r, 1)?, u32_col(r, 2)?)),
+        )
+    }
+
+    fn word_index_marked(&self, language: Option<&str>) -> StorageResult<Vec<WordIndexRecord>> {
+        all(
+            self.conn(),
+            WORDS,
+            &format!(
+                "SELECT {WORD_COLS} FROM word_index
+                 WHERE mark IS NOT NULL AND (?1 IS NULL OR language = ?1)
+                 ORDER BY language, key"
+            ),
+            [language],
+            word_row,
+        )
+    }
+
+    fn word_review_events(
+        &self,
+        language: Option<&str>,
+        threshold_days: u32,
+    ) -> StorageResult<Vec<WordReviewEvent>> {
+        // One pass over the log in time order (`review_log_time`), each review joined to its
+        // card (primary key) and the card's note row (primary key).
+        all(
+            self.conn(),
+            "review_log",
+            "SELECT w.language, w.key, r.card_id, r.created_at,
+                    r.state_after = 'review' AND r.scheduled_days >= ?2
+             FROM review_log r
+             JOIN cards c ON c.id = r.card_id AND c.deleted_at IS NULL
+             JOIN word_index_notes w ON w.note_id = c.note_id AND w.language <> ''
+             WHERE (?1 IS NULL OR w.language = ?1)
+             ORDER BY r.created_at, r.id",
+            params![language, i64::from(threshold_days)],
+            |r| {
+                Ok(WordReviewEvent {
+                    language: r.get(0)?,
+                    key: r.get(1)?,
+                    card_id: id(r, 2)?,
+                    at: ts(r, 3)?,
+                    known: r.get::<_, i64>(4)? != 0,
+                })
+            },
+        )
     }
 }
 

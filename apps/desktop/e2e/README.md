@@ -56,7 +56,8 @@ fix).
 | S8 | Deck page term list: editing "Definition" of a Subtitle note changes `meaning`, never `surface` | must pass |
 | S9 | Create › Paste `word⇥meaning⇥sentence` ×3 into Vocabulary → example field holds the sentence; one Ctrl+Z removes all three | must pass |
 | S10 | Settings › Note types: a field's role and a card's "asks for" field survive save + reload (`notetypes.get`) | must pass |
-| S11 | Settings › Deck options: 5 new a day on a 15-new deck → launcher and `study.options` offer 5; reset to default → 15 | must pass |
+| S11 | Settings › Daily pace → "Set per deck" → Deck options (v1.4: Advanced › Studying): 5 new a day on a 15-new deck → launcher and `study.options` offer 5; reset to default → 15 | must pass |
+| P1 | v1.4 Settings › Daily pace: pick the deck, "5 · Easy", 150 reviews, Strict → `presets.for_deck` reads 5 / 150 / 0.95, `study.options` offers 5 new; the toast's Undo takes back only the last change | must pass (v1.4) |
 | S12 | Quick Add: after a save, Ctrl+A / Ctrl+Z inside the field edit the text; the saved note, the deck's note count and the oplog are untouched | must pass |
 | O1 | Library → a deck → Create: "Existing deck" with that deck preselected, cursor in the first term; Ctrl+Enter saves the note in THAT deck, no deck created | must pass (fixed in v1.3) |
 | O1b | Create from the sidebar: the cursor is in the first term | must pass (fixed in v1.3) |
@@ -71,6 +72,12 @@ fix).
 | E1a | v1.4 Sınav: question types are check boxes from `study.options` (true/false off), none checked → Start off with the reason, only matching + 2 questions → `modes.test.paper` has exactly two matching questions; the result says the schedule did not change | must pass (v1.4) |
 | E1b | v1.4 Test: `Esc` on the feedback pauses — the session stays open in the core (`ended_at` null, `modes.quiz.result` answered 1, not finished), `Enter` continues with the next word | must pass (v1.4) |
 | K1 | A key right after a grade: four buttons, four cards in a row graded `1`/`2`/`3`/`4` with `Space` pressed at once (saving is held back 400 ms on purpose; half the cards turned with Space, half by clicking the card so it has the focus): while saving, the graded card stays on its back; the next card comes up on its front; each card has exactly one review in the session, with the pressed grade | must pass (fixed in v1.3) |
+| E3a | v1.4 Search chips: "Nereden → Altyazıdan" writes `nereden:altyazı` in the box; the count and the rows equal `search.cards` read back; × removes the token | must pass (v1.4) |
+| E3W | v1.4 My words: `/`, type a captured word, ↓ Enter, "Zaten biliyorum" → `words.lookup` reads status known with a manual mark (mark cleared after) | must pass (v1.4) |
+| E3N | v1.4 Note editor extras: a Subtitle note's encounters show; an accepted answer added in the editor is read back with `accepted_answers.list` | must pass (v1.4) |
+| F1a | v1.4 Leech repair: a card lapsed 8× through `study.start`/`study.answer` (cramming sessions, typed wrong answer kept) → İlerleme › Daha fazla › "Düzelt": lapses and the typed answer shown; "Uygula" on "accept the other meanings" → `stats.leech_repairs.list` has it, `accepted_answers.list` both senses, note fields unchanged; one Ctrl+Z removes both | must pass (v1.4) |
+| F1b | v1.4 Encounters (note editor): two Subtitle notes from real captures; "Başka karta taşı" + note picker moves one encounter (`subtitle.encounters.list` on both notes); "Bir kartla birleştir" with a different word → "Yine de birleştir" → one note keeps all three encounters, the other is in `browse.trash` | must pass (v1.4) |
+| F1c | v1.4 Audio fill (note editor › Ses): a capture's own WAV, audio field emptied → "Ses bul" previews the original, "Bunu ekle" puts the same media back (`notes.get`, `media.origins` = original); a note without sound and no TTS provider shows the reason and writes nothing (a real TTS fill is not covered) | must pass (v1.4) |
 
 A journey that shows a known bug is **never deleted or skipped**: the bug assertion comes after
 `test.fail(true, '<bug>')`, called only once the journey's own preconditions have passed (so a
@@ -93,6 +100,9 @@ but passed": remove the `test.fail` line in the same commit as the fix.
    - `t(key, params, lang)` — the UI text of an i18n key: select by what the user reads
      without hard-coding words (`page.getByRole('button', { name: t('io.choose_file') })`).
    - `env.profile` (write fixture files there), `env.fc`, `env.db`.
+   - `captureSubtitle(deckId, specs)` — Subtitle captures through the real endpoint
+     (`fc api serve`, `POST /subtitle/v1/captures`, optional WAV via `/subtitle/v1/media`);
+     `noteByWord(deckId, word)`; `openNoteFromSearch(page, query, rowText)` — the note editor.
 3. Drive the UI by keyboard where the UI allows; prefer roles + `t()` and `data-testid` hooks.
 4. Assert on what was stored (`rpc`), and where it matters on what the screen tells the user.
 5. Run it alone (`pnpm e2e -- --grep JN`), then the whole suite.

@@ -17,9 +17,12 @@
 
   const languages = $derived(LOCALES.map((l) => ({ value: l, label: t(`lang.${l}`) })));
 
-  /** Everyday questions → the page that answers them (shown when that page exists). */
+  /**
+   * Everyday questions → the page that answers them (shown when that page exists). v1.4: "How
+   * many new words a day?" is gone from here — Basic › Daily pace, the page Settings opens on,
+   * is that question itself.
+   */
   const QUESTIONS: { id: string; route: string; q: MessageKey; where: MessageKey }[] = [
-    { id: 'new_per_day', route: '/presets', q: 'settings.guide.new_per_day', where: 'settings.guide.where.presets' },
     { id: 'reminder', route: '/reminders', q: 'settings.guide.reminder', where: 'settings.guide.where.reminders' },
     { id: 'card_back', route: '/notetypes', q: 'settings.guide.card_back', where: 'settings.guide.where.notetypes' },
     { id: 'keys', route: '/shortcuts', q: 'settings.guide.keys', where: 'settings.guide.where.shortcuts' },

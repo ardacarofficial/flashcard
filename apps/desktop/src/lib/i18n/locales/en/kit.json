@@ -5,7 +5,7 @@
     "reset": "Reset to default",
     "example": "Example:",
     "advanced": {
-      "title": "Advanced settings"
+      "title": "More settings"
     },
     "search": {
       "label": "Search settings",
@@ -19,7 +19,6 @@
     "guide": {
       "title": "What do you want to change?",
       "description": "The settings people look for most. Click one to open the right page, or type in the search box above.",
-      "new_per_day": "How many new words a day?",
       "reminder": "Remind me to study every day",
       "card_back": "What shows on the front and back of a card?",
       "keys": "Change keyboard shortcuts",
@@ -27,7 +26,6 @@
       "subtitle": "Catch words while watching in the browser",
       "backup": "Back up, export your cards",
       "where": {
-        "presets": "Deck options",
         "reminders": "Reminders",
         "notetypes": "Note types",
         "shortcuts": "Shortcuts",

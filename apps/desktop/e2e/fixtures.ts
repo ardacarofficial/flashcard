@@ -4,8 +4,10 @@
  * dispatch the desktop app uses — never pixels.
  */
 import { expect, type Page } from '@playwright/test';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
 export { expect, test } from '@playwright/test';
@@ -304,4 +306,152 @@ export async function showAllScopes(page: Page): Promise<void> {
   const more = page.getByTestId('launcher-more-scopes');
   if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
   await expect(more).toHaveAttribute('aria-expanded', 'true');
+}
+
+// ------------------------------------------------------------------ Subtitle captures (F1)
+
+/** One capture as the Subtitle extension sends it (`seed.mjs` makes the same body). */
+export interface CaptureSpec {
+  lemma: string;
+  /** As heard; must occur in `sentence` (it is marked there). */
+  surface: string;
+  meaning: string;
+  sentence: string;
+  translation?: string;
+  /** Upload a short WAV first (`POST /subtitle/v1/media`, kind audio): the film's own sound. */
+  audio?: boolean;
+}
+
+/** A UUIDv7 (the contract wants one per capture). */
+function uuid7(): string {
+  const ms = Date.now().toString(16).padStart(12, '0');
+  const r = crypto.randomUUID().replace(/-/g, '');
+  const variant = (8 | (parseInt(r[16]!, 16) & 3)).toString(16);
+  return `${ms.slice(0, 8)}-${ms.slice(8)}-7${r.slice(13, 16)}-${variant}${r.slice(17, 20)}-${r.slice(20, 32)}`;
+}
+
+/** 0.1 s of a quiet tone, 8 kHz mono PCM: a real `audio/wav` the core accepts. */
+function tinyWav(): Buffer {
+  const n = 800;
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write('RIFF', 0);
+  buf.writeUInt32LE(36 + n * 2, 4);
+  buf.write('WAVE', 8);
+  buf.write('fmt ', 12);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(8000, 24);
+  buf.writeUInt32LE(16000, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write('data', 36);
+  buf.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) buf.writeInt16LE(Math.round(3000 * Math.sin(i / 5)), 44 + i * 2);
+  return buf;
+}
+
+/** `fc --db <db> api serve --port 0` → its address (first stderr line), as `seed.mjs` does. */
+function startLocalApi(): Promise<{ child: ChildProcess; url: string }> {
+  return new Promise((resolve, reject) => {
+    const childEnv = { ...process.env };
+    delete childEnv.FC_DB;
+    const child = spawn(env.fc, ['--db', env.db, 'api', 'serve', '--port', '0'], { stdio: ['ignore', 'ignore', 'pipe'], env: childEnv });
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error('fc api serve did not start'));
+    }, 60_000);
+    child.once('exit', (code) => reject(new Error(`fc api serve exited (${code})`)));
+    createInterface({ input: child.stderr! }).once('line', (line) => {
+      clearTimeout(timer);
+      resolve({ child, url: `http://${line.trim().split('http://').pop()}` });
+    });
+  });
+}
+
+/**
+ * Sends `specs` to the real Subtitle endpoint (`POST /subtitle/v1/captures` on `fc api serve`,
+ * with a fresh access key from `subtitle.keys.create`) into `deckId`, in order: captures of one
+ * word and meaning become encounters of one note, exactly as in the app. Returns the capture ids.
+ */
+export async function captureSubtitle(deckId: string, specs: CaptureSpec[]): Promise<string[]> {
+  await rpc('modules.set_enabled', { id: 'subtitle', enabled: true });
+  const key = await rpc<{ secret: string }>('subtitle.keys.create', { name: uniq('e2e') });
+  const auth = { authorization: `Bearer ${key.secret}` };
+  const api = await startLocalApi();
+  const ids: string[] = [];
+  try {
+    for (const [i, c] of specs.entries()) {
+      const id = uuid7();
+      const media: Record<string, unknown> = {};
+      if (c.audio) {
+        const up = await fetch(`${api.url}/subtitle/v1/media`, {
+          method: 'POST',
+          headers: { ...auth, 'content-type': 'audio/wav', 'x-capture-id': id, 'x-media-kind': 'audio' },
+          body: tinyWav(),
+        });
+        const body = (await up.json().catch(() => null)) as { upload_id?: string } | null;
+        if (!up.ok || !body?.upload_id) throw new Error(`audio upload: HTTP ${up.status} ${JSON.stringify(body)}`);
+        media.audio = { upload_id: body.upload_id, mime: 'audio/wav' };
+      }
+      const start = c.sentence.indexOf(c.surface);
+      const res = await fetch(`${api.url}/subtitle/v1/captures`, {
+        method: 'POST',
+        headers: { ...auth, 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({
+          schema: 1,
+          capture_id: id,
+          kind: 'word',
+          lang: { target: 'en', native: 'tr' },
+          term: { surface: c.surface, lemma: c.lemma, pos: 'verb' },
+          definition: { text: c.meaning, source: 'dict' },
+          context: { sentence: c.sentence, translation: c.translation ?? null, term_offset: start >= 0 ? [start, start + c.surface.length] : null },
+          source: {
+            type: 'video',
+            url: 'https://www.youtube.com/watch?v=e2e-f1',
+            title: 'F1 fixture',
+            site: 'youtube',
+            video_id: 'e2e-f1',
+            t_start_ms: 30_000 + i * 2000,
+            t_end_ms: 31_500 + i * 2000,
+          },
+          media,
+          deck_id: deckId,
+          tags: ['subtitle'],
+          created_at: new Date().toISOString(),
+          client: { name: 'subtitle-extension', ext_version: 'e2e' },
+        }),
+      });
+      const body = (await res.json().catch(() => null)) as { status?: string } | null;
+      if (!res.ok || body?.status !== 'created') throw new Error(`capture ${c.lemma}: HTTP ${res.status} ${JSON.stringify(body)}`);
+      ids.push(id);
+    }
+  } finally {
+    api.child.removeAllListeners('exit');
+    api.child.kill('SIGTERM');
+  }
+  return ids;
+}
+
+/** The note (in `deckId`) whose Subtitle `word` field is `word`. */
+export async function noteByWord(deckId: string, word: string): Promise<NoteRow> {
+  const note = (await notesIn(deckId)).find((n) => n.fields.word === word);
+  if (!note) throw new Error(`no note of "${word}" in deck ${deckId}`);
+  return note;
+}
+
+/** Opens a note's editor the way J3/E3N do: Search, type, Enter, ↓ Enter. */
+export async function openNoteFromSearch(page: Page, query: string, rowText: RegExp | string) {
+  await goToSection(page, 'shell.section.search');
+  const box = page.getByRole('searchbox').first();
+  // Opening Search puts the cursor in the box; already there (a second note), clear it first.
+  if (await box.inputValue()) await box.fill('');
+  await expect(box).toBeFocused();
+  await page.keyboard.type(query);
+  await press(page, 'Enter');
+  await expect(page.getByTestId('browse-row').first()).toContainText(rowText);
+  await press(page, 'ArrowDown', 'Enter');
+  const editor = page.getByRole('dialog').filter({ has: page.getByTestId('note-extras') });
+  await expect(editor).toBeVisible();
+  return editor;
 }

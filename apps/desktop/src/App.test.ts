@@ -21,13 +21,13 @@ describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
     const nav = await screen.findByRole('navigation', { name: 'Main navigation' });
     await screen.findByRole('button', { name: 'Settings' });
     const labels = () => Array.from(nav.querySelectorAll('li > button'), (b) => b.getAttribute('aria-label') ?? b.textContent?.trim());
-    // v1.4: the few places a daily user needs (no My words screen in the mock yet: Search).
-    await waitFor(() => expect(labels()).toEqual(['Home', 'Search', 'Progress', expect.stringMatching(/^Inbox/), 'Settings']));
+    // v1.4: the few places a daily user needs (F1: the mock registers My words, E3).
+    await waitFor(() => expect(labels()).toEqual(['Home', 'My words', 'Progress', expect.stringMatching(/^Inbox/), 'Settings']));
     // The switch at the bottom of Settings brings back every v1.3 place.
     await fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     await fireEvent.click(within(await screen.findByTestId('advanced-switch')).getByRole('switch'));
     await waitFor(() =>
-      expect(labels()).toEqual(['Home', 'Library', 'Create', 'Search', 'Progress', expect.stringMatching(/^Inbox/), 'Settings']),
+      expect(labels()).toEqual(['Home', 'Library', 'My words', 'Add', 'Search', 'Progress', expect.stringMatching(/^Inbox/), 'Settings']),
     );
     await waitFor(async () => expect((await api.call('settings.get', { scope: { kind: 'app' }, keys: ['app.show_advanced'] })).values[0]?.value).toBe(true));
     await fireEvent.click(screen.getByRole('button', { name: 'Home' }));
@@ -35,11 +35,11 @@ describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
     // Home opens first (bundled) and is built from $lib/ui.
     expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeTruthy();
 
-    // Create: Add + the pages placed there, as tabs.
-    await fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-    const tabs = await screen.findByRole('tablist', { name: 'Pages in Create' });
+    // Add (v1.4 F1: one word, the sidebar place was "Create"): the pages placed there, as tabs.
+    await fireEvent.click(within(nav).getByRole('button', { name: 'Add' }));
+    const tabs = await screen.findByRole('tablist', { name: 'Pages in Add' });
     expect(Array.from(tabs.querySelectorAll('[role=tab]'), (t) => t.textContent?.trim())).toEqual(['Add', 'AI', 'Starter decks']);
-    expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Create');
+    expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Add');
 
     // v1.1 Create: a new deck or an existing one (design-system Select); classifications
     // follow the target deck — "Seviye" (A1–C2) is inherited from the parent deck.
@@ -67,7 +67,7 @@ describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
     // The one "Advanced" switch shows every other v1.3 page, grouped.
     await fireEvent.click(within(screen.getByTestId('advanced-switch')).getByRole('switch'));
     await waitFor(() => expect(groups()).toEqual(['Basics', 'Studying', 'App', 'Connections (details)', 'Data and upkeep']));
-    expect(pages()).toEqual(['Daily pace', 'How cards look', 'Reminders', 'Subtitle and connections', 'Backup', 'Language and look', 'Modes and reading', 'Shortcuts', 'Adding cards', 'Profiles & lock', 'AI', 'Assistants (MCP)', 'Automation', 'Plugins', 'Starter decks', 'Maintenance', 'Logs & updates']);
+    expect(pages()).toEqual(['Daily pace', 'How cards look', 'Reminders', 'Subtitle and connections', 'Backup', 'Language and look', 'Deck options', 'Modes and reading', 'Words', 'Shortcuts', 'Adding cards', 'Profiles & lock', 'AI', 'Assistants (MCP)', 'Automation', 'Plugins', 'Starter decks', 'Maintenance', 'Logs & updates']);
     await fireEvent.click(screen.getByRole('button', { name: 'Reminders' }));
     expect(sub.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Reminders');
 

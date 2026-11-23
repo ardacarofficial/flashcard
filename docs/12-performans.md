@@ -126,10 +126,17 @@ senkronu yine yazma yolunun dışında.
 
 ## Bilinen sınırlar
 
-- **Tarayıcı sayfası sınırda (97 / 100 ms).** Z2 bu yola dokunmadı; en kötü sayfa 200k kartın ortasındaki
-  sayfa (sıralama indeksinde ~100k girdi yürüme, `OFFSET`). Önceki iki koşu 88 ve 108 ms: makine yüküyle bütçenin
-  iki yanına düşebilir. Kalıcı çözüm, sanal kaydırmanın ofset yerine sıralama anahtarıyla (keyset) sayfa istemesi
-  (API değişikliği; arayüz izine bağlı).
+- **Tarayıcı sayfası sınırda (97 / 100 ms), ofsetle.** En kötü ofset sayfası 200k kartın ortasındaki sayfa (sıralama
+  indeksinde ~100k girdi yürüme, `OFFSET`). Önceki iki koşu 88 ve 108 ms: makine yüküyle bütçenin iki yanına düşebilir.
+  **v1.4 (F1): keyset sayfalama.** `search.cards` artık isteğe bağlı `cursor` alır, `next_cursor` döner (docs/02 §9);
+  imleçle sayfa `OFFSET` saymadan sıralama indeksinde son satırın ardından başlar. Ara ekranının "Daha fazla"sı imleci
+  kullanır (ofset yalnız imleç yoksa). Perf takımı aynı sayfaları imleçle de ölçer: `… by keyset cursor` satırı
+  (aynı 100 ms bütçesi; ofset satırı ve bütçesi değişmedi, ofsetle rastgele erişim isteyen çağıranlar için). Profil:
+  `FC_PERF_HOT_OP=keyset`. Tam ölçek sonucu (release, 2026-11-23, aynı koşu,
+  makinede başka derlemeler de koşuyordu): en kötü sayfa **ofsetle 74,2 ms → imleçle 29,9 ms** (üç sıralama ×
+  dört konum, 200k kartın ortası ve sonu dahil; imleçli sayfanın kalan maliyeti çoğunlukla eşleşme sayımı `total`).
+  Aynı koşuda `study.start` 663 ms ile bütçeyi aştı (yüklü makine; bu iz o yola dokunmadı), bu yüzden üst tablo
+  güncellenmedi.
 - **Eski şemalı yedekler** (bu derlemeden eski `schema_versions`) hâlâ bütün döküm bellekte okunur (`upgrade_dump`
   bütün dökümü ister); bugünkü şemayla alınan yedekler akışla.
 - **Deste kapsamlı istatistik** 3,3 s (bütçe 10 s): önbellek bütün koleksiyon içindir, kapsamlı istek her seferinde

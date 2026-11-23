@@ -22,6 +22,7 @@
     ChevronRight,
     ClipboardCheck,
     Chip,
+    FileText,
     Flashcard,
     IconButton,
     Layers,
@@ -222,8 +223,9 @@
     (
       [
         { id: 'cards', kind: 'normal', icon: Layers, route: menuRoute(modules, { route: '/study' }), title: t('deck_page.mode_cards'), desc: t('deck_page.mode_cards_desc') },
+        { id: 'quiz', kind: 'quiz', icon: ClipboardCheck, route: moduleOn(modules, 'quiz') ? menuRoute(modules, { route: '/learn' }) : null, title: t('deck_page.mode_quiz'), desc: t('deck_page.mode_quiz_desc') },
         { id: 'learn', kind: 'learn', icon: Repeat, route: menuRoute(modules, { route: '/learn' }), title: t('deck_page.mode_learn'), desc: t('deck_page.mode_learn_desc') },
-        { id: 'test', kind: 'test', icon: ClipboardCheck, route: menuRoute(modules, { route: '/test' }), title: t('deck_page.mode_test'), desc: t('deck_page.mode_test_desc') },
+        { id: 'test', kind: 'test', icon: FileText, route: menuRoute(modules, { route: '/test' }), title: t('deck_page.mode_test'), desc: t('deck_page.mode_test_desc') },
         { id: 'match', kind: 'match', icon: Shuffle, route: menuRoute(modules, { id: 'study.match' }), title: t('deck_page.mode_match'), desc: t('deck_page.mode_match_desc') },
         { id: 'reading', kind: null, icon: BookOpen, route: menuRoute(modules, { route: '/reading' }), title: t('deck_page.mode_reading'), desc: t('deck_page.mode_reading_desc') },
       ] as { id: string; kind: LaunchKind | null; icon: typeof Layers; route: string | null; title: string; desc: string }[]
