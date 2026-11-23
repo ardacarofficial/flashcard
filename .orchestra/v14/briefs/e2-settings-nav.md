@@ -1,0 +1,7 @@
+# E2 — Ayarlar + gezinme (prototype: ayarlar.html)
+Read e-common.md first.
+Own: `apps/desktop/src/lib/shell/**`, `features/core/**`, the settings pages of every feature (the `*Screen`/panel files that render under Settings: io/BackupPanel, profiles, themes, reminders, mcp, plugins, presets, subtitle settings, ai providers panel layout only), `features/onboarding/**`, `features/help/**`.
+Build what `prototypes/v14/ayarlar.html` shows:
+- Settings in two states: the few everyday settings first; everything else behind ONE "Gelişmiş" switch (remembered). Search in settings. Each setting one sentence, no jargon.
+- Navigation reduced as the prototype shows (the few places a daily user needs; the rest reachable from there and from Ctrl K). Siblings add screens "Kelimelerim" (E3, feature folder `words`) and "İlerleme" (E4, existing `stats`): give them their entries from `modules.list` so they appear when the sibling's module/screen registers; agree on route ids `words` and `stats`.
+- New backend settings get their place: backup status and auto-backup (`io.backup.status/verify`, `io.auto_backup`, keep count), "Bildiğim kelimeleri Subtitle ile paylaş" (`subtitle.share_known_words`, default off), "aynı kelime tekrar gelirse" (`subtitle.same_word`), best-example auto pick, `study.keep_typed_answers`, `words.known_interval_days`, deck language (`words.language`, with the unassigned-notes hint), word data sources (`words.data.sources/import/reset`), recent captures diagnostics (`subtitle.captures.recent`), AI auto-suggest meaning.
