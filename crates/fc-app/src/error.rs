@@ -139,6 +139,14 @@ pub fn storage_to_api(e: StorageError) -> ApiError {
         StorageError::File { path, .. } => {
             ApiError::new(ErrorCode::IoFile, msg).with_detail("path", path)
         }
+        // v1.4.1: said in plain words; the command was rolled back, the app stays usable.
+        StorageError::DiskFull { path } => {
+            let e = ApiError::new(ErrorCode::IoDiskFull, msg);
+            match path {
+                Some(p) => e.with_detail("path", p),
+                None => e,
+            }
+        }
         StorageError::NotImplemented(op) => {
             ApiError::new(ErrorCode::InternalNotImplemented, msg).with_detail("operation", op)
         }

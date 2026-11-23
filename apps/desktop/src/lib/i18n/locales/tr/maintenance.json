@@ -75,7 +75,8 @@
     },
     "conflict": {
       "update_not_available": "Kurulacak güncelleme yok. Önce güncellemeleri denetle.",
-      "update_not_ready": "Güncelleme henüz indirilmedi."
+      "update_not_ready": "Güncelleme henüz indirilmedi.",
+      "no_verified_backup": "Doğrulanabilen bir yedek bulunamadı; hiçbir şey değiştirilmedi. Okunabilen kısmı kurtarmayı deneyebilirsin."
     },
     "provider": {
       "update_unsupported": "Bu derleme kendini güncelleyemez.",

@@ -8,6 +8,7 @@ mod ai;
 mod attributes;
 mod automation;
 mod capture_log;
+mod checkpoint_crash;
 mod content;
 mod decks;
 mod encounters;

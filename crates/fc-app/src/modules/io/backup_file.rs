@@ -80,7 +80,10 @@ fn shown(path: &Path) -> String {
 }
 
 /// A writer error on `path` (disk full, removed folder…) as `IO_FILE`.
-fn write_failed(path: &Path, e: impl ToString) -> AppError {
+fn write_failed(path: &Path, e: impl std::error::Error + 'static) -> AppError {
+    if super::caused_by_disk_full(&e) {
+        return super::disk_full(&shown(path), &e.to_string());
+    }
     file_err(&shown(path), std::io::Error::other(e.to_string()))
 }
 
@@ -236,7 +239,7 @@ fn verify_into(
     cancel: &CancelToken,
     report: &mut BackupVerifyReport,
 ) -> AppResult<()> {
-    let mut r = open_backup(path)?;
+    let r = open_backup(path)?;
     let manifest = r.manifest().clone();
     report.created_at = Some(manifest.created_at);
     report.complete = manifest.is_complete();
@@ -252,7 +255,24 @@ fn verify_into(
         .prefix(".verify-")
         .tempdir_in(scratch)
         .map_err(|e| file_err(&shown(scratch), e))?;
-    let store = SqliteStore::open(&dir.path().join("collection.db"))?;
+    restore_into(r, &dir.path().join("collection.db"), cancel, report)?;
+    // Best effort: the folder is removed on drop too.
+    let _ = dir.close();
+    Ok(())
+}
+
+/// Restores the backup open in `r` into a NEW collection at `db_file` (media into its
+/// `media/` folder), then reads it back and compares (`report.problems`). The verification
+/// of [`verify_file`] does it in a scratch folder; the rescue of a damaged collection (v1.4.1)
+/// does it at the collection's own place and keeps the result.
+pub(crate) fn restore_into(
+    mut r: BackupReader<BufReader<File>>,
+    db_file: &Path,
+    cancel: &CancelToken,
+    report: &mut BackupVerifyReport,
+) -> AppResult<()> {
+    let manifest = r.manifest().clone();
+    let store = SqliteStore::open(db_file)?;
     let media = r.media_list();
     // The dump is what the manifest says it is.
     let mut compare = |counts: &BTreeMap<String, u64>| {
@@ -341,7 +361,5 @@ fn verify_into(
     report.media_files = restored;
     drop(tx);
     drop(store);
-    // Best effort: the folder is removed on drop too.
-    let _ = dir.close();
     Ok(())
 }

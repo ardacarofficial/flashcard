@@ -158,6 +158,12 @@ fn update_status(data_dir: &Path, f: impl FnOnce(&mut StatusFile)) {
     }
 }
 
+/// Path of the last verified backup recorded in `status.json` (the rescue of a damaged
+/// collection looks there too, v1.4.1).
+pub(crate) fn last_verified_path(data_dir: &Path) -> Option<String> {
+    load_status(data_dir).last_verified.map(|v| v.path)
+}
+
 /// Records a verified backup as the last one (best effort; no folder: nothing to record).
 pub(crate) fn record_verified(data_dir: Option<&Path>, backup: VerifiedBackup) {
     if let Some(d) = data_dir {

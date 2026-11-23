@@ -100,6 +100,9 @@ struct CheckpointState {
     stop: bool,
     /// Checkpoints run (tests).
     runs: u64,
+    /// The thread is inside `PRAGMA wal_checkpoint` (tests: crash/close during a checkpoint).
+    #[cfg(test)]
+    in_progress: bool,
 }
 
 /// The WAL checkpoint thread of a file-backed store (see the module docs).
@@ -167,6 +170,39 @@ impl Checkpointer {
     fn runs(&self) -> u64 {
         self.state.0.lock().map_or(0, |s| s.runs)
     }
+
+    #[cfg(test)]
+    fn probe(&self) -> CheckpointProbe {
+        CheckpointProbe(Arc::downgrade(&self.state))
+    }
+}
+
+/// Watches a store's checkpoint thread without borrowing the store (tests).
+#[cfg(test)]
+#[derive(Clone)]
+pub(crate) struct CheckpointProbe(std::sync::Weak<(Mutex<CheckpointState>, Condvar)>);
+
+#[cfg(test)]
+impl CheckpointProbe {
+    /// The thread is inside `PRAGMA wal_checkpoint` now (`false` once the store is closed).
+    pub(crate) fn in_progress(&self) -> bool {
+        self.0
+            .upgrade()
+            .is_some_and(|st| st.0.lock().is_ok_and(|s| s.in_progress))
+    }
+
+    /// Checkpoints completed so far (0 once the store is closed).
+    pub(crate) fn runs(&self) -> u64 {
+        self.0
+            .upgrade()
+            .map_or(0, |st| st.0.lock().map_or(0, |s| s.runs))
+    }
+
+    /// Nothing holds the state any more: the store, the thread (its closure owned a clone)
+    /// and the writer connection (its WAL hook owned one, freed when it closes) are all gone.
+    pub(crate) fn released(&self) -> bool {
+        self.0.strong_count() == 0
+    }
 }
 
 /// Waits for the writer's signal, checkpoints (`PASSIVE`: copies what no reader still needs,
@@ -186,12 +222,20 @@ fn checkpoint_loop(conn: &Connection, state: &(Mutex<CheckpointState>, Condvar))
                 return;
             }
             s.dirty = false;
+            #[cfg(test)]
+            {
+                s.in_progress = true;
+            }
         }
         // A failure (busy, I/O) is retried at the next commit; the writer's safety net
         // bounds the WAL meanwhile.
         let _ = conn.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |_| Ok(()));
         if let Ok(mut s) = m.lock() {
             s.runs += 1;
+            #[cfg(test)]
+            {
+                s.in_progress = false;
+            }
         }
     }
 }
@@ -213,6 +257,8 @@ impl SqliteStore {
         let mut conn = Connection::open(path)?;
         migrate::configure_connection(&conn)?;
         crate::interrupt::install(&mut conn)?;
+        #[cfg(feature = "crash-points")]
+        crate::crash_points::install(&mut conn);
         let backup = snapshot_before_migrating(&mut conn, path, migrations)?;
         crate::media::export_legacy_blobs(&conn, path)?;
         migrate::migrate_with(&mut conn, migrations)?;
@@ -248,6 +294,8 @@ impl SqliteStore {
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
         migrate::configure_connection(&conn)?;
+        #[cfg(feature = "crash-points")]
+        crate::crash_points::install(&mut conn);
         let latest = migrate::latest_version();
         let found = migrate::current_version(&conn)?;
         if found > latest {
@@ -312,6 +360,13 @@ impl SqliteStore {
     /// Background checkpoints run so far (`None` without the thread; tests).
     pub fn checkpoints_run(&self) -> Option<u64> {
         self.checkpointer.as_ref().map(Checkpointer::runs)
+    }
+
+    /// A handle on the checkpoint thread's state that outlives a borrow of the store (`None`
+    /// without the thread; tests).
+    #[cfg(test)]
+    pub(crate) fn checkpoint_probe(&self) -> Option<CheckpointProbe> {
+        self.checkpointer.as_ref().map(Checkpointer::probe)
     }
 
     fn reader(&self) -> StorageResult<MutexGuard<'_, Connection>> {
