@@ -27,4 +27,10 @@ duration_ms: number,
 /**
  * Time from showing the card to revealing the answer, ms (capped by `duration_ms`).
  */
-reveal_ms?: number | null, };
+reveal_ms?: number | null, 
+/**
+ * v1.4: what the user typed when the card was answered by typing (Cards type-in). Kept
+ * with the review (`typed_answers`, newest 20 per card) while `study.keep_typed_answers`
+ * is on, so a leech's evidence can show it; never logged. Blank = not typed.
+ */
+typed_answer?: string | null, };

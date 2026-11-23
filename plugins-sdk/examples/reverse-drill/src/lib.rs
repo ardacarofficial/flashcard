@@ -162,6 +162,7 @@ impl Plugin for Reverse {
             rating: if right { Rating::Good } else { Rating::Again },
             duration_ms: 0,
             reveal_ms: None,
+            typed_answer: None,
         })?;
         let feedback = if right {
             ui::feedback(true, ui::key("right"))

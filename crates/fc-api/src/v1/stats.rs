@@ -408,8 +408,10 @@ pub struct LeechFailedReview {
     pub answer_duration_ms: Option<u32>,
     /// Hints used.
     pub hints_used: u32,
-    /// The typed answer. Always `null` today: the study flow does not keep typed answers
-    /// (see `typed_answers_recorded`).
+    /// What the user typed for this review (Cards type-in, Learn's written stage, the
+    /// Exam's written questions; `typed_answers`, newest 20 per card). `null` when the card
+    /// was not answered by typing, the text was not kept (`study.keep_typed_answers` off) or
+    /// it was pruned.
     pub typed_answer: Option<String>,
 }
 
@@ -585,7 +587,8 @@ pub struct LeechRepairPlan {
     pub is_leech: bool,
     /// The latest failed reviews, newest first (at most 5; practice reviews included).
     pub failed_reviews: Vec<LeechFailedReview>,
-    /// Whether typed answers are kept (`false` today).
+    /// Whether typed answers are kept: the setting `study.keep_typed_answers` (on by
+    /// default). Off: new answers are not stored; rows kept before still show.
     pub typed_answers_recorded: bool,
     /// The field the card asks for (the note type's meaning field).
     pub answer_field: Option<String>,

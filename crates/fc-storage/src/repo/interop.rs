@@ -69,6 +69,16 @@ pub trait InteropRead {
     fn review_logs_for_cards(&self, cards: &[CardId]) -> StorageResult<Vec<ReviewLogRecord>>;
     /// Dumps every table (see [`CollectionDump`]). SQLite only.
     fn dump_collection(&self) -> StorageResult<CollectionDump>;
+    /// Rows per table as [`Self::dump_collection`] would dump them, without reading them
+    /// (v1.4 Z1: backup verification counts what it restored; SQLite counts in place).
+    fn dump_row_counts(&self) -> StorageResult<std::collections::BTreeMap<String, u64>> {
+        Ok(self
+            .dump_collection()?
+            .tables
+            .iter()
+            .map(|t| (t.name.clone(), t.rows.len() as u64))
+            .collect())
+    }
 }
 
 /// Import/export writes.

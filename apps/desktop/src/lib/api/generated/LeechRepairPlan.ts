@@ -36,7 +36,8 @@ is_leech: boolean,
  */
 failed_reviews: Array<LeechFailedReview>, 
 /**
- * Whether typed answers are kept (`false` today).
+ * Whether typed answers are kept: the setting `study.keep_typed_answers` (on by
+ * default). Off: new answers are not stored; rows kept before still show.
  */
 typed_answers_recorded: boolean, 
 /**

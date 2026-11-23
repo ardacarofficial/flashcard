@@ -113,6 +113,7 @@ fn no_reminder_after_studying_or_on_other_days() {
         rating: Rating::Good,
         duration_ms: 3_000,
         reveal_ms: None,
+        typed_answer: None,
     });
     fx.clock.set(at(0, 19, 0));
     assert_eq!(check(&fx.t.app, IST).unwrap(), None, "already studied today");

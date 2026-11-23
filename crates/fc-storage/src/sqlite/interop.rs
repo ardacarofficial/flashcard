@@ -220,6 +220,20 @@ impl<M: Mode> InteropRead for SqliteTx<'_, M> {
             tables,
         })
     }
+    fn dump_row_counts(&self) -> StorageResult<std::collections::BTreeMap<String, u64>> {
+        let conn = self.conn();
+        let mut counts = std::collections::BTreeMap::new();
+        for t in user_tables(conn)? {
+            let filter = dump_filter(&t.name).map_or(String::new(), |w| format!(" WHERE {w}"));
+            let n: i64 = conn.query_row(
+                &format!("SELECT COUNT(*) FROM {}{filter}", quote(&t.name)),
+                [],
+                |r| r.get(0),
+            )?;
+            counts.insert(t.name, u64::try_from(n).unwrap_or(0));
+        }
+        Ok(counts)
+    }
 }
 
 impl InteropWrite for SqliteTx<'_, WriteMode> {

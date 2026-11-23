@@ -67,7 +67,9 @@ enum RuleKind {
     User,
 }
 
-const SECRET_KEYS: &str = "api[_-]?key|apikey|x-api-key|access[_-]?token|refresh[_-]?token|auth[_-]?token|id[_-]?token|client[_-]?secret|secret[_-]?key|secret|password|passwd|pwd|passphrase|token|authorization|private[_-]?key|session[_-]?id|cookie|signature";
+/// Keys whose value is masked. v1.4: `typed_answer(s)` too — what the user typed while
+/// studying is user history (kept in `typed_answers`), never a log line.
+const SECRET_KEYS: &str = "api[_-]?key|apikey|x-api-key|access[_-]?token|refresh[_-]?token|auth[_-]?token|id[_-]?token|client[_-]?secret|secret[_-]?key|secret|password|passwd|pwd|passphrase|token|authorization|private[_-]?key|session[_-]?id|cookie|signature|typed[_-]?answers?";
 
 impl Default for Redactor {
     fn default() -> Self {
@@ -99,7 +101,7 @@ impl Redactor {
             ),
             (
                 &format!(
-                    r#"(?i)((?:{SECRET_KEYS})["']?\s*[:=]\s*)(?:"[^"\n]+"|'[^'\n]+'|[^"'\s,;&}}<>\[\]]+)"#
+                    r#"(?i)((?:{SECRET_KEYS})["']?\s*[:=]\s*(?:Some\()?)(?:"[^"\n]+"|'[^'\n]+'|[^"'\s,;&}}<>\[\]]+)"#
                 ),
                 RuleKind::KeepPrefix,
             ),
@@ -283,6 +285,19 @@ mod tests {
                 "Authorization: [REDACTED] [REDACTED]",
             ),
             ("token=t0k3n&x=1", "token=[REDACTED]&x=1"),
+            // v1.4: typed answers (JSON params and Rust `Debug` output).
+            (
+                r#"{"rating":"again","typed_answer":"the cat sat"}"#,
+                r#"{"rating":"again","typed_answer":[REDACTED]}"#,
+            ),
+            (
+                r#"AnswerCard { typed_answer: Some("kedi") }"#,
+                r#"AnswerCard { typed_answer: Some([REDACTED]) }"#,
+            ),
+            (
+                "typed_answers_recorded: true",
+                "typed_answers_recorded: true",
+            ),
             (
                 "GET https://bob:s3cret@example.com/v1",
                 "GET https://[REDACTED]@example.com/v1",

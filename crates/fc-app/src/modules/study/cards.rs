@@ -108,6 +108,7 @@ fn change_cards<M: fc_api::ApiMethod>(
             session: session_before,
             remove_reviews: Vec::new(),
             add_reviews: Vec::new(),
+            ..Default::default()
         })?]
     };
     Ok(CommandOutcome {
@@ -261,6 +262,17 @@ pub(super) fn restore(
     for r in &req.add_reviews {
         ctx.tx.insert_review_log(&review_record(r))?;
         inverse.remove_reviews.push(r.id);
+    }
+    // v1.4: typed answers of the undone/redone answer (and the rows it pruned).
+    for id in &req.remove_typed_answers {
+        if let Some(r) = ctx.reads().get_typed_answer(*id)? {
+            ctx.tx.delete_typed_answer(*id)?;
+            inverse.add_typed_answers.push(super::typed::dto(&r));
+        }
+    }
+    for t in &req.add_typed_answers {
+        let id = ctx.tx.insert_typed_answer(&super::typed::record_of(t))?;
+        inverse.remove_typed_answers.push(id);
     }
     let n = u32::try_from(changed.len()).unwrap_or(u32::MAX);
     Ok(CommandOutcome {

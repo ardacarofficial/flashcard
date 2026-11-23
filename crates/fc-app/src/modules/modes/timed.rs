@@ -154,6 +154,7 @@ fn expire(req: ExpireCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
                     rating: Rating::Again,
                     duration_ms: limit_ms,
                     reveal_ms: None,
+                    typed_answer: None,
                 },
                 AnswerHooks {
                     after: Some(Box::new(|state, _, _, _| {
@@ -190,6 +191,7 @@ fn expire(req: ExpireCard, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
                     session: Some(before),
                     remove_reviews: Vec::new(),
                     add_reviews: Vec::new(),
+                    ..Default::default()
                 })?],
                 summary: summary::<ModesTimedExpire>(),
                 events: Vec::new(),

@@ -396,6 +396,11 @@ pub struct AnswerCard {
     /// Time from showing the card to revealing the answer, ms (capped by `duration_ms`).
     #[serde(default)]
     pub reveal_ms: Option<u32>,
+    /// v1.4: what the user typed when the card was answered by typing (Cards type-in). Kept
+    /// with the review (`typed_answers`, newest 20 per card) while `study.keep_typed_answers`
+    /// is on, so a leech's evidence can show it; never logged. Blank = not typed.
+    #[serde(default)]
+    pub typed_answer: Option<String>,
 }
 
 /// `study.hint`.
@@ -676,6 +681,36 @@ pub struct RestoreStudy {
     /// Review log rows to insert.
     #[serde(default)]
     pub add_reviews: Vec<ReviewLogDto>,
+    /// v1.4: typed answer rows to delete (by id).
+    #[serde(default)]
+    pub remove_typed_answers: Vec<i64>,
+    /// v1.4: typed answer rows to insert (with their ids).
+    #[serde(default)]
+    pub add_typed_answers: Vec<TypedAnswerDto>,
+}
+
+/// v1.4: what the user typed for a written answer (one `typed_answers` row). Internal: it
+/// travels only inside `study.restore` (undo/redo of an answer).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct TypedAnswerDto {
+    /// Row id.
+    pub id: i64,
+    /// The answered card.
+    pub card_id: CardId,
+    /// The review the answer was rated with.
+    #[serde(default)]
+    pub review_log_id: Option<ReviewLogId>,
+    /// The review's mode (`normal`, `learn`, `test`, …).
+    pub mode: String,
+    /// What the user typed.
+    pub typed: String,
+    /// Judged right (`null` = rated by the user).
+    #[serde(default)]
+    pub correct: Option<bool>,
+    /// When.
+    pub created_at: Timestamp,
 }
 
 /// `study.card_history`.

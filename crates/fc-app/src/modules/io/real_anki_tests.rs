@@ -169,6 +169,7 @@ fn real_anki_packages_import_draw_and_study() {
             rating: Rating::Good,
             duration_ms: 1_000,
             reveal_ms: Some(400),
+            typed_answer: None,
         });
         let logs = t
             .store

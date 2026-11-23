@@ -492,13 +492,30 @@ fn ensure_enabled(app: &App) -> Result<(), ApiError> {
 }
 
 /// Tools an MCP client may see now: none when the module is off, read tools only when writes
-/// are off.
+/// are off, and (v1.4 Z1) none whose methods belong to a module the user switched off (the
+/// `words_*` tools vanish with the `words` module instead of failing when called).
 pub fn list_tools(app: &App, read_only: bool) -> Result<Vec<&'static ToolSpec>, ApiError> {
     ensure_enabled(app)?;
     let writes = writes_allowed(app, read_only)?;
+    let switched_off = |module: &str| {
+        app.registry()
+            .modules()
+            .iter()
+            .any(|m| m.id == module && m.can_disable)
+            && !app.is_module_enabled(module)
+    };
+    let available = |t: &ToolSpec| {
+        t.methods.iter().all(|name| {
+            fc_api::v1::catalog()
+                .iter()
+                .find(|d| d.name == *name)
+                .is_none_or(|d| !switched_off(d.module))
+        })
+    };
     Ok(catalog()
         .iter()
         .filter(|t| writes || t.access == McpToolAccess::Read)
+        .filter(|t| available(t))
         .collect())
 }
 

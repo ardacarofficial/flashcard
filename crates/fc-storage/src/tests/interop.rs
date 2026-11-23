@@ -185,6 +185,15 @@ fn dump_then_load_is_bit_exact() {
             .unwrap();
     });
     let before = fx.read(|r| r.dump_collection().unwrap());
+    // v1.4 Z1: counting in place agrees with the dump (filtered tables included).
+    let counted = fx.read(|r| r.dump_row_counts().unwrap());
+    let dumped: std::collections::BTreeMap<String, u64> = before
+        .tables
+        .iter()
+        .map(|t| (t.name.clone(), t.rows.len() as u64))
+        .collect();
+    assert_eq!(counted, dumped);
+    assert!(counted["review_log"] == 1 && counted["notes"] == 1);
     assert!(before.schema_versions.contains(&1) && before.schema_versions.contains(&402));
     let names: Vec<&str> = before.tables.iter().map(|t| t.name.as_str()).collect();
     assert!(names.contains(&"notes") && names.contains(&"notes_fts") && names.contains(&"oplog"));

@@ -24,6 +24,7 @@
 //! CI size: 10k notes / 20k cards / 200k reviews (`perf_suite_scaled`, debug build).
 //! Last measurements: docs/10 §36.
 
+use crate::perf_film::{self, FilmBuild, FilmMeasured, FilmScale};
 use crate::App;
 use fc_api::v1::oplog::Actor;
 use fc_core::attribute::{AttributeValue, EntityRef};
@@ -49,6 +50,8 @@ const PERF_DIR: &str = "FC_PERF_DIR";
 const PERF_KEEP: &str = "FC_PERF_KEEP";
 /// Import rows for the probe.
 const PROBE_IMPORT_ROWS: &str = "FC_PERF_PROBE_IMPORT_ROWS";
+/// The film layer's scale (JSON) for the probe.
+const PROBE_FILM: &str = "FC_PERF_PROBE_FILM";
 /// Marker of the probe's result line on stdout.
 const RESULT_MARKER: &str = "FC_PERF_RESULT ";
 
@@ -114,6 +117,20 @@ struct Scale {
     stats_breakdown: f64,
     stats_deck: f64,
     peak_rss_mb: f64,
+    /// v1.4 film-watching layer (docs/12-performans.md) and its budgets.
+    film: FilmScale,
+    film_capture_p95: f64,
+    busy_answer_p95: f64,
+    busy_capture_p95: f64,
+    film_first_card: f64,
+    lookup_500_p95: f64,
+    words_list: f64,
+    lang_query: f64,
+    rank_p95: f64,
+    index_rebuild: f64,
+    backup_create: f64,
+    backup_verify: f64,
+    backup_peak_mb: f64,
 }
 
 /// docs/03 §17 size, docs/02 §34 targets (release build).
@@ -131,6 +148,26 @@ const FULL: Scale = Scale {
     stats_breakdown: 1_500.0,
     stats_deck: 10_000.0,
     peak_rss_mb: 400.0,
+    film: FilmScale {
+        encounters: 20_000,
+        notes: 6_000,
+        with_media: 3_000,
+        bulk_media_mib: 1_024,
+    },
+    film_capture_p95: 50.0,
+    busy_answer_p95: 60.0,
+    busy_capture_p95: 100.0,
+    // Film budgets: ~2× the first release measurement on a 4-core 2.1 GHz Xeon (docs/12).
+    film_first_card: 1_500.0,
+    lookup_500_p95: 100.0,
+    words_list: 200.0,
+    lang_query: 300.0,
+    rank_p95: 50.0,
+    index_rebuild: 5_000.0,
+    backup_create: 150_000.0,
+    backup_verify: 120_000.0,
+    // The collection dump is held in memory (docs/12 "Bilinen sınır"); this catches growth.
+    backup_peak_mb: 4_000.0,
 };
 
 /// CI regression check: 1/10 size in a debug build on shared runners, so the budgets are
@@ -150,6 +187,24 @@ const SCALED: Scale = Scale {
     stats_breakdown: 10_000.0,
     stats_deck: 10_000.0,
     peak_rss_mb: 400.0,
+    film: FilmScale {
+        encounters: 1_000,
+        notes: 300,
+        with_media: 100,
+        bulk_media_mib: 32,
+    },
+    film_capture_p95: 300.0,
+    busy_answer_p95: 400.0,
+    busy_capture_p95: 600.0,
+    film_first_card: 3_000.0,
+    lookup_500_p95: 600.0,
+    words_list: 1_000.0,
+    lang_query: 1_000.0,
+    rank_p95: 300.0,
+    index_rebuild: 20_000.0,
+    backup_create: 60_000.0,
+    backup_verify: 30_000.0,
+    backup_peak_mb: 800.0,
 };
 
 /// What the probe measured (ms; memory in MB, `None` where the platform cannot tell).
@@ -169,6 +224,8 @@ struct Measured {
     import: f64,
     imported: u64,
     peak_rss_mb: Option<f64>,
+    /// v1.4 film-watching workload.
+    film: FilmMeasured,
 }
 
 fn invoke(app: &App, method: &str, params: Value) -> Value {
@@ -438,14 +495,11 @@ fn build_world(path: &Path, notes: usize, reviews: usize) {
 
 /// Peak resident set (MB) of this process, where the platform reports it.
 fn peak_rss_mb() -> Option<f64> {
-    let status = std::fs::read_to_string("/proc/self/status").ok()?;
-    let line = status.lines().find(|l| l.starts_with("VmHWM:"))?;
-    let kb: f64 = line.split_whitespace().nth(1)?.parse().ok()?;
-    Some(kb / 1024.0)
+    perf_film::peak_rss_mb()
 }
 
 /// What the desktop app does, timed. Runs in its own process (see [`run_suite`]).
-fn measure(path: &Path, import_rows: usize) -> Measured {
+fn measure(path: &Path, import_rows: usize, film: Option<FilmScale>) -> Measured {
     let mut m = Measured::default();
 
     // Startup: open (+ migration check, seeding, recovery, trash purge, plugins) and the
@@ -599,6 +653,11 @@ fn measure(path: &Path, import_rows: usize) -> Measured {
     m.imported = report["result"]["added_notes"].as_u64().unwrap_or(0);
 
     m.peak_rss_mb = peak_rss_mb();
+
+    // v1.4: the film-watching workload (its backup measures its own memory peak).
+    if let Some(film) = film {
+        m.film = perf_film::measure(&app, path.parent().unwrap(), film);
+    }
     m
 }
 
@@ -614,7 +673,10 @@ fn probe() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(1_000);
-    let m = measure(Path::new(&path), rows);
+    let film = std::env::var(PROBE_FILM)
+        .ok()
+        .and_then(|v| serde_json::from_str(&v).ok());
+    let m = measure(Path::new(&path), rows, film);
     println!("{RESULT_MARKER}{}", serde_json::to_string(&m).unwrap());
 }
 
@@ -631,6 +693,7 @@ fn run_suite(scale: Scale) -> Measured {
     };
     let path = dir.path().join("collection.db");
     let (setup, ()) = time(|| build_world(&path, scale.notes, scale.reviews));
+    let (film_setup, built) = time(|| perf_film::build(&path, scale.film));
     // `FC_PERF_KEEP=<file>`: a copy of the freshly built collection, for profiling the
     // probe on its own (`FC_PERF_PROBE_DB=<copy> cargo test … perf_tests::probe -- --ignored`).
     if let Some(keep) = std::env::var_os(PERF_KEEP) {
@@ -652,6 +715,7 @@ fn run_suite(scale: Scale) -> Measured {
         ])
         .env(PROBE_DB, &path)
         .env(PROBE_IMPORT_ROWS, scale.import_rows.to_string())
+        .env(PROBE_FILM, serde_json::to_string(&scale.film).unwrap())
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -710,6 +774,7 @@ fn run_suite(scale: Scale) -> Measured {
         scale.import,
         scale.peak_rss_mb,
     );
+    print_film(&scale, &built, film_setup, &m.film);
     assert_eq!(m.imported, scale.import_rows as u64, "{m:?}");
     let checks = [
         ("startup", m.startup, scale.startup),
@@ -721,6 +786,61 @@ fn run_suite(scale: Scale) -> Measured {
         ("stats breakdown", m.stats_breakdown, scale.stats_breakdown),
         ("stats deck scope", m.stats_deck, scale.stats_deck),
         ("import", m.import, scale.import),
+        (
+            "film capture p95",
+            built.capture_p95,
+            scale.film_capture_p95,
+        ),
+        (
+            "answer p95 while capturing",
+            m.film.busy_answer_p95,
+            scale.busy_answer_p95,
+        ),
+        (
+            "capture p95 while answering",
+            m.film.busy_capture_p95,
+            scale.busy_capture_p95,
+        ),
+        (
+            "study.options + first Subtitle card",
+            m.film.study_options + m.film.subtitle_first_card,
+            scale.film_first_card,
+        ),
+        (
+            "words.lookup 500 p95",
+            m.film.lookup_p95,
+            scale.lookup_500_p95,
+        ),
+        (
+            "words.list by frequency",
+            m.film.words_list_rank,
+            scale.words_list,
+        ),
+        (
+            "language queries",
+            m.film.lang_query_worst,
+            scale.lang_query,
+        ),
+        (
+            "subtitle.encounters.rank p95",
+            m.film.rank_p95,
+            scale.rank_p95,
+        ),
+        (
+            "words.index.rebuild_now",
+            m.film.index_rebuild,
+            scale.index_rebuild,
+        ),
+        (
+            "io.backup.create",
+            m.film.backup_create,
+            scale.backup_create,
+        ),
+        (
+            "io.backup.verify",
+            m.film.backup_verify,
+            scale.backup_verify,
+        ),
     ];
     for (name, got, budget) in checks {
         assert!(
@@ -735,7 +855,96 @@ fn run_suite(scale: Scale) -> Measured {
             scale.peak_rss_mb
         );
     }
+    assert!(m.film.busy_answers >= 20, "{:?}", m.film);
+    assert!(m.film.busy_captures >= 20, "{:?}", m.film);
+    // The backup carries the large media folder (and every small file).
+    assert!(
+        m.film.backup_media >= built.media_files as u64,
+        "backup has {} media, the layer made {}",
+        m.film.backup_media,
+        built.media_files
+    );
+    for (name, peak) in [
+        ("backup create", m.film.backup_create_peak_mb),
+        ("backup verify", m.film.backup_verify_peak_mb),
+    ] {
+        if let Some(mb) = peak {
+            assert!(
+                mb < scale.backup_peak_mb,
+                "{name}: peak memory {mb:.0} MB ≥ {} MB",
+                scale.backup_peak_mb
+            );
+        }
+    }
     m
+}
+
+/// The film layer's table (docs/12-performans.md).
+fn print_film(scale: &Scale, built: &FilmBuild, setup: f64, f: &FilmMeasured) {
+    let mb = |v: Option<f64>| v.map_or_else(|| "n/a".to_owned(), |v| format!("{v:.0} MB"));
+    println!(
+        "film layer: {} encounters / {} words / {} media files ({:.0} MiB large) (setup {:.1} s)\n\
+         | capture (build, {} sent)      | p50 {:.1} / p95 {:.1} / max {:.1} ms | budget p95 {:.0} ms |\n\
+         | answer while capturing ({})    | p50 {:.1} / p95 {:.1} / max {:.1} ms | budget p95 {:.0} ms |\n\
+         | capture while answering ({})   | p50 {:.1} / p95 {:.1} / max {:.1} ms | budget p95 {:.0} ms |\n\
+         | study.options / first card     | {:.1} / {:.1} ms | budget sum {:.0} ms |\n\
+         | words.lookup 500 forms         | p50 {:.1} / p95 {:.1} / max {:.1} ms | budget p95 {:.0} ms |\n\
+         | words.list by frequency        | {:.1} ms | budget {:.0} ms |\n\
+         | language queries (worst {:?}) | {:.1} ms | budget {:.0} ms |\n\
+         | subtitle.encounters.rank       | p50 {:.1} / p95 {:.1} / max {:.1} ms | budget p95 {:.0} ms |\n\
+         | words.index.rebuild_now ({} w) | {:.1} ms | budget {:.0} ms |\n\
+         | io.backup.create ({:.0} MiB, {} media) | {:.1} ms, peak {} | budget {:.0} ms / {:.0} MB |\n\
+         | io.backup.verify               | {:.1} ms, peak {} | budget {:.0} ms / {:.0} MB |",
+        scale.film.encounters,
+        scale.film.notes,
+        built.media_files,
+        built.media_bytes as f64 / 1_048_576.0,
+        setup / 1000.0,
+        built.captures,
+        built.capture_p50,
+        built.capture_p95,
+        built.capture_max,
+        scale.film_capture_p95,
+        f.busy_answers,
+        f.busy_answer_p50,
+        f.busy_answer_p95,
+        f.busy_answer_max,
+        scale.busy_answer_p95,
+        f.busy_captures,
+        f.busy_capture_p50,
+        f.busy_capture_p95,
+        f.busy_capture_max,
+        scale.busy_capture_p95,
+        f.study_options,
+        f.subtitle_first_card,
+        scale.film_first_card,
+        f.lookup_p50,
+        f.lookup_p95,
+        f.lookup_max,
+        scale.lookup_500_p95,
+        f.words_list_rank,
+        scale.words_list,
+        f.lang_query_worst_query,
+        f.lang_query_worst,
+        scale.lang_query,
+        f.rank_p50,
+        f.rank_p95,
+        f.rank_max,
+        scale.rank_p95,
+        f.index_words,
+        f.index_rebuild,
+        scale.index_rebuild,
+        f.backup_bytes as f64 / 1_048_576.0,
+        f.backup_media,
+        f.backup_create,
+        mb(f.backup_create_peak_mb),
+        scale.backup_create,
+        scale.backup_peak_mb,
+        f.backup_verify,
+        mb(f.backup_verify_peak_mb),
+        scale.backup_verify,
+        scale.backup_peak_mb,
+    );
 }
 
 /// docs/02 §34 targets at docs/03 §17 size. Release build:

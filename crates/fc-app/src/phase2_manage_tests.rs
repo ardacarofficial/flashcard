@@ -142,6 +142,7 @@ fn by_query(query: &str) -> StudyFilter {
 
 fn answer(t: &TestApp, s: &SessionDto, card: CardId, rating: Rating) -> SessionDto {
     t.ok::<StudyAnswer>(AnswerCard {
+        typed_answer: None,
         session_id: s.id,
         card_id: card,
         rating,

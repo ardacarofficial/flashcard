@@ -181,6 +181,7 @@ impl T {
             rating,
             duration_ms: 1_000,
             reveal_ms: None,
+            typed_answer: None,
         })
     }
 
@@ -253,6 +254,7 @@ pub fn answer_undo_redo_is_exact(f: &Factory) {
         rating: Rating::Good,
         duration_ms: 9_000, // more than really passed: capped at 5 s
         reveal_ms: Some(2_000),
+        typed_answer: None,
     });
     assert_eq!(after.answered, 1);
     assert_eq!(after.current.as_ref().unwrap().card_id, other);
@@ -903,6 +905,7 @@ pub fn study_errors(f: &Factory) {
         rating: Rating::Good,
         duration_ms: 1,
         reveal_ms: None,
+        typed_answer: None,
     });
     assert_eq!(e.code, ErrorCode::ConflictNotCurrentCard);
     let e = t.err::<StudySession>(SessionRef {
@@ -916,6 +919,7 @@ pub fn study_errors(f: &Factory) {
         rating: Rating::Good,
         duration_ms: 1,
         reveal_ms: None,
+        typed_answer: None,
     });
     assert_eq!(e.code, ErrorCode::ConflictSessionEnded);
     assert!(t.session(s.id).current.is_none());

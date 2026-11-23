@@ -351,6 +351,8 @@
         rating,
         duration_ms: Math.max(0, at - shownAt),
         reveal_ms: revealedAt === null ? null : Math.max(0, revealedAt - shownAt),
+        // v1.4: what was typed goes with the review (kept per `study.keep_typed_answers`).
+        typed_answer: c.type_answer && typed.trim() !== '' ? typed : null,
       }),
     );
   }

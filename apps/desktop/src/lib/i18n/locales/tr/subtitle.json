@@ -24,13 +24,13 @@
       },
       "same_word": {
         "label": "Zaten olan bir kelime tekrar gelince",
-        "description": "Başka bir örnek: kartı olan bir kelimenin aynı anlamdaki yeni sahnesi o karta başka bir örnek olarak eklenir (yeni kart yok, planı değişmez). Farklı bir anlam kendi kartını alır ve sana bir kez sorulur. Yeni kart: her replik yeni bir kart olur (v1.4 öncesi gibi).",
+        "description": "Aynı anlamdaki yeni sahne var olan karta örnek olarak eklenir (yeni kart yok, planı değişmez); \"Yeni kart\" seçilirse her replik ayrı kart olur.",
         "add_example": "Başka bir örnek",
         "always_new_card": "Yeni kart"
       },
       "auto_best_example": {
         "label": "En iyi örneği kendiliğinden göster",
-        "description": "Kapalı: bir kelimenin yeni sahnesi yalnızca başka bir örnek olarak eklenir; kart gösterdiği örneği korur. Açık: yeni sahne açıkça daha kolay öğretiyorsa (daha az bilinmeyen kelime, tam cümle, ses ve resim) kart onu gösterir. Geri al eskisini getirir; kartın takvimi hiç değişmez."
+        "description": "Açıkken yeni sahne açıkça daha kolay öğretiyorsa (daha az bilinmeyen kelime, tam cümle, ses ve resim) kart onu gösterir; takvim değişmez, geri alınabilir."
       }
     }
   },

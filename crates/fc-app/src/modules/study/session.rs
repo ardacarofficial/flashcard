@@ -213,6 +213,9 @@ pub(crate) struct AnswerHooks<'a> {
     /// logged with the practice variant of its mode (`trial_<mode>`; learn mode's
     /// multiple-choice answers on cards already in review).
     pub practice: bool,
+    /// v1.4: the verdict on `req.typed_answer` kept with it (`typed_answers.correct`); `None`
+    /// = the user rated it himself (Cards type-in).
+    pub typed_correct: Option<bool>,
     /// Runs on the session state after the answer is recorded, before it is saved: the
     /// answered card, its note and queue category.
     #[allow(clippy::type_complexity)]
@@ -340,6 +343,20 @@ pub(crate) fn answer_core(
         created_at: ctx.now,
     };
     ctx.tx.insert_review_log(&review)?;
+    // v1.4: what was typed, with the review (part of this undo step).
+    let typed = match req.typed_answer.as_deref() {
+        Some(text) => super::typed::record(
+            ctx,
+            &super::typed::TypedAnswer {
+                card_id: card.id,
+                review_log_id: Some(review.id),
+                mode: &review.mode,
+                typed: text,
+                correct: hooks.typed_correct,
+            },
+        )?,
+        None => super::typed::TypedUndo::default(),
+    };
     drop_dead_ahead(View::cmd(ctx), &mut session, ctx.now)?;
     let undo = session.save(ctx.tx)?;
     let rating = serde_json::to_value(req.rating)
@@ -353,6 +370,8 @@ pub(crate) fn answer_core(
             session: Some(undo.snapshot()?),
             remove_reviews: vec![review.id],
             add_reviews: Vec::new(),
+            remove_typed_answers: typed.remove,
+            add_typed_answers: typed.add,
         })?],
         summary: summary::<StudyAnswer>().param("rating", rating),
         events: if changed.is_empty() {

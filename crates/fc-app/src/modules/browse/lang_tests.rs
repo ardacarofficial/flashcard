@@ -142,6 +142,7 @@ fn study(t: &TestApp, q: &str) -> Vec<fc_core::CardId> {
             rating: fc_core::card::Rating::Easy,
             duration_ms: 1000,
             reveal_ms: None,
+            typed_answer: None,
         });
     }
     ids.sort();

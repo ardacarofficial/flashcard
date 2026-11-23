@@ -24,13 +24,13 @@
       },
       "same_word": {
         "label": "When a word you already have comes again",
-        "description": "Another example: a new scene of a word you already have a card for, with the same meaning, is added to that card as another example (no new card; its schedule stays). A different meaning gets its own card and asks you once. New card: every line is a new card (as before v1.4).",
+        "description": "A new scene with the same meaning is added to the existing card as another example (no new card, schedule unchanged); \"New card\" makes every line its own card.",
         "add_example": "Another example",
         "always_new_card": "New card"
       },
       "auto_best_example": {
         "label": "Show the best example by itself",
-        "description": "Off: a new scene of a word is only added as another example; the card keeps showing the one it has. On: when the new scene is clearly easier to learn from (fewer unknown words, a whole sentence, sound and picture), the card shows it instead. Undo brings the old one back; the card's schedule never changes."
+        "description": "When on, a new scene that is clearly easier to learn from (fewer unknown words, a whole sentence, sound and picture) becomes the shown example; schedule unchanged, undoable."
       }
     }
   },

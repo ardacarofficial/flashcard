@@ -120,6 +120,7 @@ fn study_as(t: &TestApp, actor: &Actor) -> usize {
             t,
             actor,
             AnswerCard {
+                typed_answer: None,
                 session_id: s.id,
                 card_id: c.card_id,
                 rating: Rating::Good,
