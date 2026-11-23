@@ -6,7 +6,7 @@ Bu dosya, bu repoda çalışan AI ajanları için başlangıç bağlamıdır.
 
 Rust + Tauri 2 ile masaüstü flash kart uygulaması. Tüm plan `docs/` klasöründedir. **Bir işe başlamadan önce `docs/README.md` ve ilgili dokümanları oku.**
 
-- Durum: **v1.4.0: "kelime uygulaması" sürümü** (kaybolmayan yedek, tek kelime doğrusu `words.*`, Subtitle yakalaması = karşılaşma, Test/Sınav modları, dört yerli kenar çubuğu + tek "Gelişmiş" anahtarı, Kelimelerim, İlerleme, Günlük tempo) — bkz. `docs/11-tasarim.md`, `CHANGELOG.md`. Windows WebDriver pilotu CI'da yeşil (kurulu uygulamada P, J1–J3; engellemeyen iş). Bekleyen: Windows'ta elle koşu, Subtitle eklentisinin gerçek bir tarayıcıda denenmesi.
+- Durum: **v1.4.0: "kelime uygulaması" sürümü** (kaybolmayan yedek, tek kelime doğrusu `words.*`, Subtitle yakalaması = karşılaşma, Test/Sınav modları, dört yerli kenar çubuğu + tek "Gelişmiş" anahtarı, Kelimelerim, İlerleme, Günlük tempo) — bkz. `docs/11-tasarim.md`, `CHANGELOG.md`. Windows WebDriver pilotu CI'da yeşil (kurulu uygulamada P, J1–J3; engellemeyen iş). Yapay zekâ gerçek sağlayıcıyla (OpenRouter) ve Subtitle eklentisi gerçek Chromium'da denendi (`docs/13`, `docs/14`). Bekleyen: Windows'ta elle koşu, Subtitle'ın gerçek YouTube/Netflix hesabıyla denenmesi.
 - Öncelikli platform: **Windows** (macOS/Linux sonra).
 
 ## İletişim
