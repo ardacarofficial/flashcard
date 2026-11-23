@@ -5,9 +5,10 @@
     "section": {
       "home": "Home",
       "library": "Library",
+      "words": "My words",
       "create": "Create",
       "search": "Search",
-      "stats": "Statistics"
+      "stats": "Progress"
     },
     "inbox": "Inbox",
     "inbox_count": "Inbox, {count} waiting",
@@ -15,13 +16,12 @@
     "settings_nav": "Settings sections",
     "section_nav": "Pages in {section}",
     "group": {
-      "general": "General",
-      "study": "Studying and cards",
-      "connections": "Connections",
-      "data": "Data",
-      "advanced": "Advanced",
-      "advanced_hint": "Technical settings: you rarely need these.",
-      "other": "More"
+      "basic": "Basics",
+      "study": "Studying",
+      "app": "App",
+      "connections": "Connections (details)",
+      "data": "Data and upkeep",
+      "other": "Other"
     },
     "profile": {
       "menu": "Profile: {name}",
@@ -36,6 +36,24 @@
       "search": "Search or run a command",
       "add_card": "Add card",
       "add_card_hint": "Add a card (N)"
+    },
+    "page": {
+      "pace": "Daily pace",
+      "cards": "How cards look",
+      "reminders": "Reminders",
+      "subtitle": "Subtitle and connections",
+      "backup": "Backup",
+      "look": "Language and look",
+      "words": "Words",
+      "adding": "Adding cards"
+    },
+    "advanced": {
+      "label": "Advanced settings",
+      "tag": "In Advanced",
+      "off_hint": "Off: {count} more pages are hidden. Nothing is deleted; search finds them all.",
+      "on_hint": "On: rarely needed pages show too, and the menu also has Library, Create and Search.",
+      "one_off": "This page is in Advanced. You opened it once; Advanced stays off.",
+      "turn_on": "Turn Advanced on"
     }
   }
 }

@@ -141,6 +141,27 @@
       "sent": "The extension sends the word and the subtitle sentence it appeared in to this app, plus, when it has them, the meaning, a translation of the sentence, a screenshot and the audio of that moment, and a link to that second of the video.",
       "card": "It becomes a card in your chosen deck: the word and the sentence on the front (the word in bold), meaning, translation, picture and audio on the back. It goes straight into the deck, not through the inbox.",
       "repeat": "Adding the same word from the same sentence again makes no second card. The same word from another sentence makes a new card."
+    },
+    "words": {
+      "title": "Incoming words",
+      "description": "What happens with a word from Subtitle, and what the extension may see here."
+    },
+    "captures": {
+      "title": "Recent captures (troubleshooting)",
+      "summary": "If a word did not arrive: the latest attempts and their results. Only times and results are kept, never the sentence or the word.",
+      "load": "Show recent captures",
+      "none": "No capture attempts yet.",
+      "when": "When",
+      "result": "Result",
+      "took": "Took",
+      "kept": "The last {n} attempts are kept.",
+      "results": {
+        "created": "card made",
+        "duplicate": "already there",
+        "rejected": "refused",
+        "media_missing": "media missing",
+        "attached": "added to an existing card"
+      }
     }
   }
 }

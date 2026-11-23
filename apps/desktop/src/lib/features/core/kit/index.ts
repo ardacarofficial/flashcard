@@ -10,3 +10,4 @@ export { default as LoadState } from './LoadState.svelte';
 export { default as SettingsAdvanced } from './SettingsAdvanced.svelte';
 export { settingsSearch, matchesQuery } from './search.svelte';
 export { defaultOf, isDefault, loadDefaults, resetSetting } from './defaults.svelte';
+export { default as SchemaRows } from './SchemaRows.svelte';

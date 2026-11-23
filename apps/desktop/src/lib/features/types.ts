@@ -46,6 +46,11 @@ interface ScreenBase {
   /** Slot whose mere presence adds one menu entry for this screen (e.g. `settings_page`). */
   slot?: { name: string; label_key: string; order: number };
   /**
+   * v1.4: a Settings page of the shell's own (rows from several modules' settings), placed by
+   * `route` (navigation.ts) and shown while at least one of `modules` is enabled.
+   */
+  settingsPage?: { route: string; label_key: string; modules: string[] };
+  /**
    * Shell adds the deck picker to the screen's header (PageHeader actions). `'all'`: no
    * selection means every deck (study sessions), so the empty choice reads "All decks".
    */

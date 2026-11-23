@@ -1,0 +1,27 @@
+{
+  "settings_pages": {
+    "words": {
+      "title": "Kelimeler",
+      "intro": "Bir kelimeyi ne zaman “biliyorum” sayalım, kartların hangi dilde ve kelime sıklığı bilgisi nereden geliyor.",
+      "known": "Bildiğin kelimeler",
+      "unassigned": "{n} notun destesinde dil seçili değil; bu notlardaki kelimeler sayılmıyor.",
+      "open_decks": "Destelere git",
+      "data": "Kelime sıklığı ve seviyesi",
+      "data_hint": "Kelimenin ne sık duyulduğu ve tahmini seviyesi bu listelerden gelir. İnternet gerekmez.",
+      "pack": "{words} kelime · {origin} · {date}",
+      "origin": {
+        "bundled": "uygulamayla geldi",
+        "imported": "sen ekledin"
+      },
+      "reset": "Uygulamanınkine dön",
+      "no_packs": "Kurulu kelime listesi yok."
+    },
+    "adding": {
+      "title": "Kart eklerken",
+      "intro": "Hızlı ekleme kısayolu, panodan öneriler ve sınıflandırmalar.",
+      "quick": "Hızlı ekleme",
+      "clipboard": "Panodan öneriler",
+      "attributes": "Sınıflandırmalar"
+    }
+  }
+}

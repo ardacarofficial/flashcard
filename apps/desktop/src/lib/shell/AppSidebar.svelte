@@ -1,7 +1,8 @@
 <!--
-  The app sidebar (docs/11 §2, v1.2 brief "Shell"): 216 px, the sections as compact rows
-  (Create is an ordinary item: adding a card is the top bar's "Add card"), then Inbox (mono
-  count when items wait), Settings and the profile menu. Narrow (< 1024 px): icons only.
+  The app sidebar (docs/11 §2, v1.2 brief "Shell"): 216 px, the sections as compact rows,
+  then Inbox (mono count when items wait), Settings and the profile menu. Narrow (< 1024 px):
+  icons only. v1.4: only the basic sections (Home, My words, Progress) unless the "Advanced"
+  switch is on (`visibleSections`); adding a card is the top bar's "Add".
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
@@ -9,7 +10,8 @@
   import NavItem from '$lib/ui/NavItem.svelte';
   import Sidebar from '$lib/ui/Sidebar.svelte';
   import { Settings, iconFor, Inbox } from '$lib/ui/icons';
-  import type { Navigation, SectionId } from './navigation';
+  import { advanced } from './advanced.svelte';
+  import { visibleSections, type Navigation, type SectionId } from './navigation';
 
   interface Props {
     nav: Navigation;
@@ -26,6 +28,8 @@
   }
 
   let { nav, current, inboxCount, openSection, openInbox, openSettings, profile, panels }: Props = $props();
+  // v1.4: the few places a daily user needs; the rest with the "Advanced" switch (and Ctrl K).
+  const sections = $derived(visibleSections(nav, advanced.on));
 </script>
 
 <Sidebar label={t('shell.nav_label')}>
@@ -44,7 +48,7 @@
       <span class="name">{t('app.title')}</span>
     </div>
   {/snippet}
-  {#each nav.sections as s (s.id)}
+  {#each sections as s (s.id)}
     <NavItem
       label={t(s.label_key)}
       icon={iconFor(s.icon)}

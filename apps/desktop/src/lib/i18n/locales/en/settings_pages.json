@@ -1,0 +1,27 @@
+{
+  "settings_pages": {
+    "words": {
+      "title": "Words",
+      "intro": "When a word counts as known, which language your cards are in and where word frequency comes from.",
+      "known": "Words you know",
+      "unassigned": "{n} notes are in decks with no language set; their words are not counted.",
+      "open_decks": "Go to decks",
+      "data": "Word frequency and level",
+      "data_hint": "How often a word is heard and its estimated level come from these lists. No internet needed.",
+      "pack": "{words} words · {origin} · {date}",
+      "origin": {
+        "bundled": "came with the app",
+        "imported": "added by you"
+      },
+      "reset": "Back to the app’s list",
+      "no_packs": "No word list installed."
+    },
+    "adding": {
+      "title": "Adding cards",
+      "intro": "The quick-add shortcut, suggestions from the clipboard and classifications.",
+      "quick": "Quick add",
+      "clipboard": "Clipboard suggestions",
+      "attributes": "Classifications"
+    }
+  }
+}

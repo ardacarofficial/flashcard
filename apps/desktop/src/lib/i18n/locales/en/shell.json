@@ -44,6 +44,10 @@
       "theme": {
         "label": "Theme",
         "description": "Light, dark, or follow the system setting."
+      },
+      "show_advanced": {
+        "label": "Show advanced features",
+        "description": "When on, settings and menus also show the rarely needed pages. When off nothing is deleted; search still finds them."
       }
     },
     "general_intro": "Pick the app's language and look here. Not sure where a setting lives? Start with the questions below."

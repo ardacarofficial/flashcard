@@ -283,7 +283,11 @@
     "settings_subtitle": "Connect an AI provider and see what it has used. Making cards lives in Create › AI; AI also helps while you write and study cards.",
     "make_cards": "Make cards",
     "generate_title": "Make cards with AI",
-    "generate_subtitle": "Paste a text or take it from a file; the AI suggests cards and you add the ones you like."
+    "generate_subtitle": "Paste a text or take it from a file; the AI suggests cards and you add the ones you like.",
+    "auto": {
+      "title": "Help that runs by itself",
+      "description": "Where AI works without you asking. All start off."
+    }
   },
   "errors": {
     "validation": {

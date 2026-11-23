@@ -7,7 +7,30 @@
   import { followJob, resultOf } from './job';
   import JobProgress from './JobProgress.svelte';
   import { Button, CircleAlert, CircleCheck, Dialog, HardDrive, Icon, RotateCcw, Save } from '$lib/ui';
-  import { FormRow, SettingsSection } from '../core/kit';
+  import { FormRow, SchemaRows, SettingsSection } from '../core/kit';
+  import type { BackupStatus, BackupVerifyReport } from '$lib/api/types';
+  import type { ScreenCtx } from '../types';
+  import { onMount } from 'svelte';
+
+  let { ctx }: { ctx?: ScreenCtx } = $props();
+
+  // v1.4: "are my cards safe?" — the core's backup status (last verified copy, next automatic
+  // one, last failure) and the automatic-backup settings.
+  let status = $state<BackupStatus | null>(null);
+  const loadStatus = async () => {
+    status = await api.call('io.backup.status', {}).catch(() => null);
+  };
+  onMount(() => void loadStatus());
+
+  async function verifyLast() {
+    const path = status?.last_verified?.path;
+    if (!path) return;
+    await run<BackupVerifyReport>(
+      () => api.call('io.backup.verify', { path }),
+      (r) => (r.ok ? t('io.status.verified_ok') : t('io.status.verified_bad', { problems: r.problems.length })),
+    );
+    void loadStatus();
+  }
 
   const FILTER = [{ name: 'Flashcard', extensions: ['fcbackup'] }];
 
@@ -71,6 +94,27 @@
   }
 </script>
 
+<SettingsSection title={t('io.status.title')} description={t('io.status.hint')} icon={CircleCheck} body="rows">
+  <div class="status" data-testid="backup-status">
+    {#if status?.last_failure}
+      <p class="note bad" role="alert"><Icon icon={CircleAlert} size={16} /><span>{t('io.status.failed', { date: formatDateTime(status.last_failure.at) })}</span></p>
+    {/if}
+    {#if status?.last_verified}
+      <p class="line">{t('io.status.last', { date: formatDateTime(status.last_verified.verified_at) })}</p>
+    {:else if status}
+      <p class="line">{t('io.status.never')}</p>
+    {/if}
+    {#if status?.next_due}<p class="line muted">{t('io.status.next', { date: formatDateTime(status.next_due) })}</p>{/if}
+    {#if status?.folder}<p class="line muted">{t('io.status.folder', { folder: status.folder })}</p>{/if}
+  </div>
+  <SchemaRows keys={['io.auto_backup', 'io.auto_backup_keep']} guarded={ctx?.guarded} onsaved={() => void loadStatus()} />
+  {#if status?.last_verified && !job}
+    <FormRow label={t('io.status.verify_title')} description={t('io.status.verify_hint')}>
+      <Button onclick={verifyLast}>{t('io.status.verify')}</Button>
+    </FormRow>
+  {/if}
+</SettingsSection>
+
 <SettingsSection title={t('io.tabs.backup')} description={t('io.backup.hint')} icon={HardDrive} body="rows">
   {#if job}
     <div class="job"><JobProgress {job} /></div>
@@ -106,6 +150,13 @@
 </Dialog>
 
 <style>
+  .status .line {
+    margin: 0 0 var(--space-1);
+    font-size: var(--text-sm);
+  }
+  .status .muted {
+    color: var(--text-2);
+  }
   .job {
     padding: var(--space-3) 0;
     border-bottom: 1px solid var(--border);

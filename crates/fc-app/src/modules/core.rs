@@ -2,7 +2,7 @@
 
 use crate::error::{AppError, AppResult};
 use crate::handler::{CommandCtx, CommandOutcome, PendingOplogEntry, QueryCtx};
-use crate::module::{choice_setting, settings_page, ModuleDescriptor};
+use crate::module::{bool_setting, choice_setting, settings_page, ModuleDescriptor};
 use crate::registry::{ensure_invocable, unknown_method, Registry};
 use crate::settings::{chain_for, resolve_setting, stored_chain, SettingsSchema as Schema};
 use crate::support::history::{display_summary, scan};
@@ -17,7 +17,7 @@ use fc_api::v1::oplog::*;
 use fc_api::v1::settings::*;
 use fc_api::{ApiError, ApiMethod, ErrorCode, InvokeRequest, Visibility};
 use fc_core::error::CoreError;
-use fc_core::settings::validate_setting_value;
+use fc_core::settings::{validate_setting_value, SettingScopeKind};
 use fc_storage::repo::{JobRecord, OplogBatch, OplogRecordKind};
 use serde_json::Value;
 
@@ -26,6 +26,10 @@ pub const ID: &str = "core";
 
 /// Setting: UI locale.
 pub const LOCALE: &str = "app.locale";
+
+/// Setting (v1.4): the one "Advanced" switch of the app (settings pages and navigation show
+/// their advanced parts while it is on). Presentation only: no rule of the core reads it.
+pub const SHOW_ADVANCED: &str = "app.show_advanced";
 
 /// Descriptor.
 pub fn descriptor() -> ModuleDescriptor {
@@ -38,6 +42,7 @@ pub fn descriptor() -> ModuleDescriptor {
         settings: vec![
             choice_setting(LOCALE, &["tr", "en"], "tr"),
             choice_setting("app.theme", &["system", "light", "dark"], "system"),
+            bool_setting(SHOW_ADVANCED, false, &[SettingScopeKind::App]),
         ],
         ui: vec![settings_page(
             "core.general",

@@ -237,6 +237,20 @@
       "export_hint": "Bir desteyi ya da tüm koleksiyonu başka bir uygulamaya veya cihaza taşımak için.",
       "backup_hint": "Her şeyin tek dosyalık kopyası: bilgisayar değiştirirken ya da bir şey ters giderse diye.",
       "print_hint": "Kartları kâğıda basmak ya da PDF almak için."
+    },
+    "status": {
+      "title": "Kartların güvende mi?",
+      "hint": "Uygulama kartlarını kendiliğinden yedekler ve her yedeğin geri açılabildiğini denetler.",
+      "last": "Son sağlam yedek: {date}",
+      "never": "Henüz denetlenmiş bir yedek yok.",
+      "next": "Sıradaki otomatik yedek: {date}",
+      "folder": "Klasör: {folder}",
+      "failed": "Son otomatik yedek alınamadı ({date}). Klasörü ve boş yeri kontrol et.",
+      "verify_title": "Son yedeği denetle",
+      "verify_hint": "Yedeği ayrı bir yerde geri açıp okur; kartlarına dokunmaz.",
+      "verify": "Şimdi denetle",
+      "verified_ok": "Yedek sağlam: tamamen geri açılabiliyor.",
+      "verified_bad": "Yedekte {problems} sorun bulundu. Yeni bir yedek al."
     }
   },
   "errors": {
