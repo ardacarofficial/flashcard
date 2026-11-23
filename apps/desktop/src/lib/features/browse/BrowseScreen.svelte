@@ -146,15 +146,20 @@
     timer = setTimeout(() => void check(), 250);
   }
 
+  /** Only the newest search may fill the list (F1: the opening search's late answer replaced
+   * the results of the query typed after it). */
+  let runSeq = 0;
   async function run(append = false) {
     // "Load more" continues the list on screen: keyset cursor of its last page when the core
     // gave one (v1.4), else by offset.
+    const mine = ++runSeq;
     const q = append ? ran : query;
     const at = append && nextCursor ? { cursor: nextCursor } : { offset: append ? rows.length : 0 };
     loading = true;
     loadError = null;
     try {
       const page = await api.call('search.cards', { query: q, sort, descending, notes_only: notesOnly, ...at, limit: PAGE });
+      if (mine !== runSeq) return;
       rows = append ? [...rows, ...page.items] : page.items;
       total = page.total;
       nextCursor = page.next_cursor;
@@ -167,6 +172,7 @@
         if (activeKey !== null && indexOf(activeKey) < 0) activeKey = null;
       }
     } catch (e) {
+      if (mine !== runSeq) return;
       const err = e as ApiError;
       if (err.code === 'VALIDATION_QUERY') {
         queryError = {
@@ -184,8 +190,10 @@
         await ctx.guarded(() => Promise.reject(e));
       }
     } finally {
-      loaded = true;
-      loading = false;
+      if (mine === runSeq) {
+        loaded = true;
+        loading = false;
+      }
     }
   }
 

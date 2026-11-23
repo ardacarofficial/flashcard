@@ -14,10 +14,21 @@ class AdvancedState {
   on = $state(false);
   loaded = $state(false);
 
+  /**
+   * A read must never undo the user's flip (F1, seen with a slowed bridge: the sidebar lost
+   * Search): its answer is dropped when a flip started after it, or when a save was still
+   * on its way while it read (the read may have reached the core first).
+   */
+  #flips = 0;
+  #saving = 0;
+
   /** Reads the remembered value (keeps `false` when the backend is unreachable). */
   async load(): Promise<void> {
+    const flips = this.#flips;
+    const racing = this.#saving > 0;
     try {
       const r = await api.call('settings.get', { scope: { kind: 'app' }, keys: [SHOW_ADVANCED] });
+      if (racing || this.#saving > 0 || flips !== this.#flips) return;
       this.on = r.values.find((v) => v.key === SHOW_ADVANCED)?.value === true;
     } catch {
       /* stays off */
@@ -29,13 +40,18 @@ class AdvancedState {
   /** Flips the switch at once and saves it; a failed save puts it back. */
   async set(on: boolean): Promise<boolean> {
     const before = this.on;
+    const flip = ++this.#flips;
     this.on = on;
+    this.#saving++;
     try {
       await api.call('settings.set', { scope: { kind: 'app' }, key: SHOW_ADVANCED, value: on });
       return true;
     } catch {
-      this.on = before;
+      // (a later flip wins over this failed one)
+      if (flip === this.#flips) this.on = before;
       return false;
+    } finally {
+      this.#saving--;
     }
   }
 }

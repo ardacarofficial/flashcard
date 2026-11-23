@@ -6,6 +6,7 @@
   import AttributeField from '$lib/components/AttributeField.svelte';
   import { initialValue, toAssignments, type FieldValue } from '$lib/components/attribute-field';
   import { t, td } from '$lib/i18n/index.svelte';
+  import { isEditableTarget } from '$lib/keyboard';
   import CardMetaPanel from './CardMetaPanel.svelte';
   import CardPreview from './CardPreview.svelte';
   import FieldInput from './FieldInput.svelte';
@@ -70,12 +71,19 @@
   });
   const nt = $derived(notetypes.find((n) => n.id === ntId) ?? null);
 
-  // Keyboard flow (v1.2): the edit dialog opens with the caret in the first field, once.
+  // Keyboard flow (v1.2): the edit dialog opens with the caret in the first field, once —
+  // unless the user is already typing in the editor (F1: the fields appear when the note
+  // type arrives, which can be late; the caret must not jump out of a field they chose).
+  let root = $state<HTMLElement | null>(null);
   let focused = false;
   $effect(() => {
     if (!autofocus || focused || !nt || !form) return;
     focused = true;
-    queueMicrotask(() => form?.querySelector<HTMLElement>('textarea:not([disabled]), input:not([disabled]):not([type=hidden]), [contenteditable=true]')?.focus());
+    queueMicrotask(() => {
+      const active = document.activeElement;
+      if (active && root?.contains(active) && isEditableTarget(active)) return;
+      form?.querySelector<HTMLElement>('textarea:not([disabled]), input:not([disabled]):not([type=hidden]), [contenteditable=true]')?.focus();
+    });
   });
   const typeOptions = $derived(notetypes.map((n) => ({ value: n.id, label: n.name })));
   const engines = $derived(nt ? nt.templates.map((x) => x.card_type) : []);
@@ -251,7 +259,7 @@
   }
 </script>
 
-<section class="editor" class:compact>
+<section class="editor" class:compact bind:this={root}>
   <div class="form-col">
     {#if !fixedType && !bare}
       <header class="head">
