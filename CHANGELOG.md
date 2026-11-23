@@ -2,6 +2,10 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## Unreleased (v1.4)
+
+- **Subtitle eklentisi gerçek tarayıcıda (G2):** derlenmiş eklenti gerçek Chromium'da gerçek `fc api serve`'e karşı sahibin akışıyla denendi (eşleştirme, **+**, aynı kelime ikinci sahneden → aynı notun karşılaşması, deyim, uygulama kapalı/yeniden başlamış, yanlış/iptal anahtar, bilinen kelimeler eklentinin kökeninden); hepsi geçti, Flashcard tarafında hata çıkmadı; betik `tools/subtitle-real-browser/run.mjs`, rapor ve eklentide gereken değişiklik `docs/14-subtitle-gercek-tarayici.md`.
+
 ## [1.4.0] — v1.4 "kelime uygulaması": kaybolmayan veri, tek kelime doğrusu, sade ekranlar
 
 Workspace sürümü `1.4.0`. Sahibi v1.3'ü kullandı: "çekirdek sağlam ama kullanırken hâlâ kafam karışıyor." v1.4 iki izde ilerledi: arka uç kelime uygulamasının temeli oldu (kaybolamayan veri, "hangi kelimeleri biliyorum" sorusuna tek cevap, ölçülmüş hız), tasarım izi önce tıklanabilir taslaklarla (`prototypes/v14/`) sonra uygulamada ekranları sadeleştirdi: dört yerli kenar çubuğu (Ana sayfa · Kelimelerim · İlerleme · Ayarlar), tek "Gelişmiş" anahtarı, Temel ayarlar soru soru. Hiçbir özellik silinmedi; taşınanlar Gelişmiş'te ya da Ctrl K'da. Migration'lar 1410–1499 aralığında; yeni modüller (`words`, `word_data`, `quiz`, `accepted_answers`, `examples`, `audio_fill`) varsayılan açık ve her biri kapatılabilir.

@@ -20,6 +20,7 @@ Bu klasör, uygulamanın **tam planını** içerir. Geliştirme boyunca pusulam�
 | 10 | [Sözleşme ve sürüm kayıtları](10-v0.1-sozlesme.md) | v0.1 sözleşmesi ve sonraki sürümlerin uygulama/doğrulama kayıtları |
 | 11 | [Tasarım (v1.4)](11-tasarim.md) | Akışlar (başlatıcı, klavye modeli, kart ekleme, ayar kiti, kelime kartları), bilgi mimarisi, tasarım sistemi, doğrulama (yolculuklar, Windows pilotu, ekran görüntüleri) |
 | 12 | [Performans (v1.4)](12-performans.md) | Ölçülmüş hız: 100k not / 2M tekrar + film izleme yükü (20k karşılaşma, ~1 GiB medya), makine, debug/release, düzeltilenler ve bilinen sınırlar |
+| 14 | [Subtitle gerçek tarayıcıda (v1.4)](14-subtitle-gercek-tarayici.md) | Derlenmiş Subtitle eklentisi gerçek Chromium'da gerçek `fc`'ye karşı: kurulum, geçen adımlar, eklentide gereken değişiklik, sahibin tarayıcısını isteyenler |
 
 ## ⚡ Tek cümlede
 
