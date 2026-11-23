@@ -263,7 +263,7 @@ fn verify_into(
     }
     // Read back what the scratch profile holds.
     let tx = store.read()?;
-    let back = row_counts(&tx.dump_collection()?);
+    let back = tx.dump_row_counts()?;
     let mut counts = BTreeMap::new();
     for table in CHECKED_TABLES {
         let want = expected.get(table).copied().unwrap_or(0);

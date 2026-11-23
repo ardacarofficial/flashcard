@@ -46,6 +46,10 @@ mod cards_tests;
 #[cfg(test)]
 mod i18n_lint_tests;
 #[cfg(test)]
+mod module_switch_tests;
+#[cfg(test)]
+mod perf_film;
+#[cfg(test)]
 mod perf_tests;
 #[cfg(test)]
 mod phase2_io_tests;

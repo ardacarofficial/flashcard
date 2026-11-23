@@ -170,7 +170,13 @@ impl<W: Write + Seek> BackupWriter<W> {
 
     /// Serializes the table dump straight into `collection.json` (no intermediate buffer).
     pub fn write_collection<T: Serialize + ?Sized>(&mut self, dump: &T) -> InteropResult<()> {
-        self.collection_entry(|w| serde_json::to_writer(w, dump).map_err(io::Error::other))
+        // Buffered: serde_json writes token by token, and every write would otherwise go
+        // through the hasher and the deflater on its own (v1.4 Z1: 12 s → ~1 s on 200k rows).
+        self.collection_entry(|w| {
+            let mut b = io::BufWriter::with_capacity(1 << 16, w);
+            serde_json::to_writer(&mut b, dump).map_err(io::Error::other)?;
+            b.flush()
+        })
     }
 
     /// Writes `collection.json` from bytes already serialized (fixtures, forged backups).
@@ -411,7 +417,10 @@ impl<R: Read + Seek> BackupReader<R> {
                 inner: f,
                 hasher: Sha256::new(),
             };
-            let value: T = serde_json::from_reader(&mut h).map_err(io::Error::other)?;
+            // Buffered: serde_json reads byte by byte (see `write_collection`). What the buffer
+            // read ahead is hashed already; the rest is drained below.
+            let value: T = serde_json::from_reader(io::BufReader::with_capacity(1 << 16, &mut h))
+                .map_err(io::Error::other)?;
             io::copy(&mut h, &mut io::sink())?;
             Ok((value, hex(&h.hasher.finalize())))
         })?;
