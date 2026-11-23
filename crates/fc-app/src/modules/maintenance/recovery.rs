@@ -175,7 +175,46 @@ pub(super) fn status(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<MaintenanceStatu
         crash_reports,
         previous_run: svc.previous_run(),
         integrity: state.integrity.clone(),
+        rescue: state.rescue.clone(),
     })
+}
+
+/// `maintenance.rescue.request` (v1.4.1): only for a collection whose latest integrity check
+/// of this run failed, in the desktop app (it knows the data folder and restarts on
+/// `rescue_requested`). A backup rescue needs at least one backup to try; whether it verifies
+/// is checked again when the rescue runs (nothing changes if none does).
+pub(super) fn request_rescue(
+    req: RequestRescue,
+    ctx: &mut CommandCtx<'_>,
+) -> AppResult<CommandOutcome<RescueRequestDto>> {
+    let svc = services(ctx.registry)?;
+    let state = svc.read();
+    let unavailable = |why: &str| {
+        AppError::Api(
+            fc_api::ApiError::new(ErrorCode::ConflictRescueUnavailable, why.to_owned())
+                .with_detail("reason", why.to_owned()),
+        )
+    };
+    let Some(data_dir) = state.data_dir else {
+        return Err(unavailable("no_data_dir"));
+    };
+    if !state.integrity.as_ref().is_some_and(|i| !i.ok) {
+        return Err(unavailable("integrity_ok"));
+    }
+    if req.mode == RescueChoice::Backup && super::rescue::backup_candidates(&data_dir).is_empty() {
+        return Err(AppError::Api(fc_api::ApiError::new(
+            ErrorCode::ConflictNoVerifiedBackup,
+            "there is no backup to restore: nothing was changed",
+        )));
+    }
+    super::rescue::request(&data_dir, req.mode)?;
+    log::warn!(target: "fc_app::maintenance", "rescue requested ({:?}); restarting", req.mode);
+    let mut outcome =
+        super::done::<fc_api::v1::methods::MaintenanceRescueRequest, _>(RescueRequestDto {
+            mode: req.mode,
+        });
+    outcome.events = vec![fc_api::v1::events::DomainEvent::RescueRequested { mode: req.mode }];
+    Ok(outcome)
 }
 
 pub(super) fn clear_crash_reports(

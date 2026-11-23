@@ -59,6 +59,9 @@
         "get": "Form taslağı",
         "list": "Form taslakları",
         "discard": "Form taslağını at"
+      },
+      "rescue": {
+        "request": "Bozuk koleksiyonu kurtar"
       }
     },
     "updates": {
@@ -76,7 +79,8 @@
     "conflict": {
       "update_not_available": "Kurulacak güncelleme yok. Önce güncellemeleri denetle.",
       "update_not_ready": "Güncelleme henüz indirilmedi.",
-      "no_verified_backup": "Doğrulanabilen bir yedek bulunamadı; hiçbir şey değiştirilmedi. Okunabilen kısmı kurtarmayı deneyebilirsin."
+      "no_verified_backup": "Doğrulanabilen bir yedek bulunamadı; hiçbir şey değiştirilmedi. Okunabilen kısmı kurtarmayı deneyebilirsin.",
+      "rescue_unavailable": "Koleksiyon bütünlük denetiminden geçti; kurtarılacak bir şey yok."
     },
     "provider": {
       "update_unsupported": "Bu derleme kendini güncelleyemez.",
@@ -103,7 +107,7 @@
       "heading": "Veritabanı",
       "check": "Veritabanını denetle",
       "ok": "Sorun bulunmadı ({ms} ms).",
-      "problems": "{count} sorun bulundu. İçe ve dışa aktar bölümünden bir yedeği geri yükle.",
+      "problems": "{count} sorun bulundu. Aşağıdan bir kurtarma yolu seç.",
       "never": "Bu çalıştırmada denetlenmedi.",
       "status": "Bütünlük denetimi"
     },
@@ -149,6 +153,21 @@
     "size": {
       "kb": "{n} KB",
       "mb": "{n} MB"
+    },
+    "rescue": {
+      "label": "Kurtarma",
+      "intro": "Koleksiyon bozuk. Nasıl kurtarılacağını seç: hiçbir şey silinmez, bozuk dosyalar damaged klasörüne taşınıp saklanır.",
+      "backup": "En yeni yedeği geri yükle",
+      "readable": "Okunabileni kurtar",
+      "confirm_backup": "Uygulama yeniden başlar ve doğrulanan en yeni yedeği koleksiyonun yerine koyar. O yedekten sonraki değişiklikler yalnız saklanan bozuk dosyalarda kalır.",
+      "confirm_readable": "Uygulama yeniden başlar ve hâlâ okunabilen her satırı yeni bir koleksiyona kopyalar. Okunamayanlar yalnız saklanan bozuk dosyalarda kalır.",
+      "restart": "Yeniden başlat ve kurtar",
+      "cancel": "Vazgeç",
+      "restarting": "Koleksiyonu kurtarmak için yeniden başlatılıyor…",
+      "last": "Son kurtarma",
+      "done_backup": "Koleksiyon doğrulanan en yeni yedekten geri yüklendi. Bozuk dosyalar burada saklanıyor:",
+      "done_readable": "Koleksiyonun okunabilen kısmı kurtarıldı. Bozuk dosyalar burada saklanıyor:",
+      "failed": "Kurtarma işe yaramadı, hiçbir şey değişmedi."
     }
   },
   "maintenance": {

@@ -57,14 +57,15 @@ export interface MockFeature {
  * Mock-mode scenario from the URL, for screenshot states that need a different start
  * (`?mock=fresh` empty collection → first-run guide, `?mock=update` an update is out,
  * `?mock=locked` the app starts locked, PIN 1234, `?mock=waiting` the open study session only
- * has cards waiting for their learning step). Only `pnpm dev:mock` reads it.
+ * has cards waiting for their learning step, `?mock=damaged` the database check fails and the
+ * rescue is offered). Only `pnpm dev:mock` reads it.
  */
-export type MockScenario = 'fresh' | 'update' | 'locked' | 'waiting';
+export type MockScenario = 'fresh' | 'update' | 'locked' | 'waiting' | 'damaged';
 export function mockScenario(): MockScenario | null {
   if (import.meta.env.MODE !== 'mock') return null;
   try {
     const v = new URLSearchParams(globalThis.location?.search ?? '').get('mock');
-    return v === 'fresh' || v === 'update' || v === 'locked' || v === 'waiting' ? v : null;
+    return v === 'fresh' || v === 'update' || v === 'locked' || v === 'waiting' || v === 'damaged' ? v : null;
   } catch {
     return null;
   }

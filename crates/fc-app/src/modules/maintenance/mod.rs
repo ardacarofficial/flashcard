@@ -44,7 +44,7 @@ mod kill_matrix_tests;
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::registry::Registry;
 use crate::App;
-use fc_api::v1::maintenance::{CrashReportDto, IntegrityDto, RunInfoDto};
+use fc_api::v1::maintenance::{CrashReportDto, IntegrityDto, RescueOutcomeDto, RunInfoDto};
 use fc_api::v1::methods::*;
 use fc_core::settings::{SettingDef, SettingKind, SettingScopeKind};
 use logging::FileLog;
@@ -140,6 +140,7 @@ pub fn register(reg: &mut Registry) {
     reg.query::<MaintenanceRecovery>(recovery::recovery);
     reg.command::<MaintenanceRecoveryDismiss>(recovery::dismiss);
     reg.query::<MaintenanceIntegrityCheck>(recovery::integrity_check);
+    reg.command::<MaintenanceRescueRequest>(recovery::request_rescue);
     reg.command::<MaintenanceLogsExport>(export::export_logs);
     reg.command::<MaintenanceCrashReportsClear>(recovery::clear_crash_reports);
     reg.command::<MaintenanceDraftsSave>(drafts::save);
@@ -164,6 +165,8 @@ struct State {
     /// Crash reports written during the previous run (newest first).
     crashes: Vec<CrashReportDto>,
     integrity: Option<IntegrityDto>,
+    /// The rescue run on request at this start (v1.4.1).
+    rescue: Option<RescueOutcomeDto>,
 }
 
 impl MaintenanceServices {
@@ -243,7 +246,9 @@ impl App {
             _ => Vec::new(),
         };
         let unclean = run.previous_unclean();
+        let rescued = rescue::take_outcome(data_dir);
         svc.update(|s| {
+            s.rescue = rescued;
             s.data_dir = Some(data_dir.to_path_buf());
             s.log = log;
             s.run = Some(run);

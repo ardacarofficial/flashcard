@@ -349,3 +349,125 @@ fn big_png() -> Vec<u8> {
     b.resize(512 * 1024, 0);
     b
 }
+
+// ------------------------------------------------------------------ in-app rescue (v1.4.1 I1)
+
+/// The desktop start in `dir`: the run marker, then [`App::start_maintenance`].
+fn desktop_start(db: &Path) -> (App, super::run::RunGuard) {
+    let dir = db.parent().unwrap();
+    let (guard, start) = super::run::RunGuard::begin(dir, "test", Timestamp(1_700_000_000_000)).unwrap();
+    let app = App::open_sqlite(db).unwrap();
+    app.start_maintenance(dir, None, start);
+    (app, guard)
+}
+
+fn rescue_events(app: &App) -> std::sync::Arc<std::sync::Mutex<Vec<String>>> {
+    use fc_api::v1::events::{DomainEvent, EventEnvelope};
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = seen.clone();
+    app.events().subscribe(std::sync::Arc::new(move |e: &EventEnvelope| {
+        if let DomainEvent::RescueRequested { mode } = &e.event {
+            sink.lock().unwrap().push(format!("{mode:?}"));
+        }
+    }));
+    seen
+}
+
+/// A collection that opens but fails the integrity check: the Bakım page's choice is recorded,
+/// the shell restarts, the rescue runs before the collection opens again, and the app shows
+/// its outcome once.
+#[test]
+fn a_damaged_collection_that_opens_is_rescued_from_the_app_after_a_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let (db, _) = collection(dir.path(), 200, 0);
+    let pages = std::fs::metadata(&db).unwrap().len() / 4096;
+    corrupt_pages(&db, pages / 2, pages / 2 + 3);
+    let damaged = file_bytes(&db);
+
+    let (app, guard) = desktop_start(&db);
+    let events = rescue_events(&app);
+    // No failed check yet: nothing to rescue.
+    let e = try_call(&app, "maintenance.rescue.request", json!({"mode": "readable"})).unwrap_err();
+    assert_eq!(e.code, ErrorCode::ConflictRescueUnavailable, "{e:?}");
+    let check = call(&app, "maintenance.integrity.check", json!({"quick": false}));
+    assert_eq!(check["ok"], false, "{check}");
+    let status = call(&app, "maintenance.status", json!({}));
+    assert_eq!(status["integrity"]["ok"], false);
+    assert_eq!(status["rescue"], Value::Null);
+
+    let r = call(&app, "maintenance.rescue.request", json!({"mode": "readable"}));
+    assert_eq!(r["mode"], "readable");
+    assert_eq!(*events.lock().unwrap(), vec!["Readable".to_owned()], "the shell is told to restart");
+    assert!(dir.path().join(rescue::REQUEST_FILE).is_file());
+    assert_eq!(file_bytes(&db), damaged, "nothing changes before the restart");
+    guard.finish().unwrap();
+    drop(app);
+
+    // The restart: the shell runs the request before it opens the collection.
+    let report = rescue::run_requested(&db, Timestamp(1_700_000_100_000)).unwrap().unwrap();
+    assert!(!dir.path().join(rescue::REQUEST_FILE).exists(), "a request runs once");
+    assert!(rescue::run_requested(&db, Timestamp(1_700_000_200_000)).is_none());
+    assert_eq!(file_bytes(&PathBuf::from(&report.kept_in).join("collection.db")), damaged);
+
+    let (app, guard) = desktop_start(&db);
+    integrity_ok(&app);
+    assert!(rows(&app, "notes") > 0);
+    let status = call(&app, "maintenance.status", json!({}));
+    assert_eq!(status["rescue"]["ok"], true, "{status}");
+    assert_eq!(status["rescue"]["mode"], "readable");
+    assert_eq!(status["rescue"]["kept_in"], json!(report.kept_in));
+    guard.finish().unwrap();
+    drop(app);
+    // Shown once.
+    let (app, guard) = desktop_start(&db);
+    assert_eq!(call(&app, "maintenance.status", json!({}))["rescue"], Value::Null);
+    guard.finish().unwrap();
+}
+
+#[test]
+fn a_requested_backup_rescue_that_finds_no_verified_backup_changes_nothing_and_says_so() {
+    let dir = tempfile::tempdir().unwrap();
+    let (db, _) = collection(dir.path(), 200, usize::MAX);
+    let pages = std::fs::metadata(&db).unwrap().len() / 4096;
+    corrupt_pages(&db, pages / 2, pages / 2 + 3);
+    let (app, guard) = desktop_start(&db);
+    let check = call(&app, "maintenance.integrity.check", json!({"quick": false}));
+    assert_eq!(check["ok"], false, "{check}");
+    // No backup at all: refused at once, nothing recorded.
+    let e = try_call(&app, "maintenance.rescue.request", json!({"mode": "backup"})).unwrap_err();
+    assert_eq!(e.code, ErrorCode::ConflictNoVerifiedBackup);
+    assert!(!dir.path().join(rescue::REQUEST_FILE).exists());
+    // A backup that does not verify: accepted (verified at the restart), then refused there.
+    std::fs::create_dir_all(dir.path().join("backups")).unwrap();
+    std::fs::write(dir.path().join("backups").join("broken.fcbackup"), b"PK\x03\x04 broken").unwrap();
+    call(&app, "maintenance.rescue.request", json!({"mode": "backup"}));
+    guard.finish().unwrap();
+    drop(app);
+    let before = file_bytes(&db);
+    let e = rescue::run_requested(&db, Timestamp(5)).unwrap().unwrap_err().into_api();
+    assert_eq!(e.code, ErrorCode::ConflictNoVerifiedBackup);
+    assert_eq!(file_bytes(&db), before, "the damaged file is where it was");
+    let (app, guard) = desktop_start(&db);
+    let status = call(&app, "maintenance.status", json!({}));
+    assert_eq!(status["rescue"]["ok"], false, "{status}");
+    assert_eq!(status["rescue"]["error"]["code"], "CONFLICT_NO_VERIFIED_BACKUP");
+    guard.finish().unwrap();
+}
+
+#[test]
+fn a_healthy_collection_is_not_offered_the_rescue() {
+    let dir = tempfile::tempdir().unwrap();
+    let (db, _) = collection(dir.path(), 3, 0);
+    let (app, guard) = desktop_start(&db);
+    integrity_ok(&app);
+    for mode in ["backup", "readable"] {
+        let e = try_call(&app, "maintenance.rescue.request", json!({ "mode": mode })).unwrap_err();
+        assert_eq!(e.code, ErrorCode::ConflictRescueUnavailable, "{mode}");
+    }
+    assert!(!dir.path().join(rescue::REQUEST_FILE).exists());
+    // Without the desktop start (CLI, tests) the app cannot restart into a rescue.
+    let plain = App::open_sqlite(&dir.path().join("other.db")).unwrap();
+    let e = try_call(&plain, "maintenance.rescue.request", json!({"mode": "readable"})).unwrap_err();
+    assert_eq!(e.code, ErrorCode::ConflictRescueUnavailable);
+    guard.finish().unwrap();
+}

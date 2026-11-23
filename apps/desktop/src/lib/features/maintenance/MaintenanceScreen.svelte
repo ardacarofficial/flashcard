@@ -5,13 +5,13 @@
    */
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
-  import type { IntegrityDto, MaintenanceStatus, ModuleDto, UpdateStatus } from '$lib/api/types';
+  import type { IntegrityDto, MaintenanceStatus, ModuleDto, RescueChoice, UpdateStatus } from '$lib/api/types';
   import { formatDateTime } from '$lib/format';
   import { t, td } from '$lib/i18n/index.svelte';
   import { pickSavePath } from '../io/files';
   import type { ScreenCtx } from '../types';
   import { bundleName, formatSize } from './format';
-  import { Button, CircleAlert, CircleCheck, Chip, Database, Download, Icon, RefreshCw, ScrollText, Trash2, TriangleAlert } from '$lib/ui';
+  import { Button, CircleAlert, CircleCheck, Chip, Database, Download, Icon, LifeBuoy, RefreshCw, ScrollText, Trash2, TriangleAlert } from '$lib/ui';
   import { FormRow, LoadState, SettingsPage, SettingsSection } from '../core/kit';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -25,6 +25,9 @@
   let upToDate = $state(false);
   let failed = $state(false);
   let checkingUpdate = $state(false);
+  /** v1.4.1: the rescue choice waiting for confirmation, and whether it was sent. */
+  let rescueAsk = $state<RescueChoice | null>(null);
+  let rescueSent = $state(false);
 
   /** Crash time (RFC 3339 from the backend) in the user's locale; the raw text if unparsable. */
   const when = (iso: string) => {
@@ -61,6 +64,13 @@
       integrity = await api.call('maintenance.integrity.check', { quick: false });
     });
     checking = false;
+  }
+
+  /** The app restarts and the shell rescues before the collection opens again. */
+  async function requestRescue(mode: RescueChoice) {
+    const ok = await ctx.guarded(() => api.call('maintenance.rescue.request', { mode }));
+    rescueAsk = null;
+    rescueSent = ok;
   }
 
   async function clearCrashes() {
@@ -177,6 +187,34 @@
             </ul>
           {/if}
         </FormRow>
+        {#if !integrity.ok}
+          <FormRow label={t('app_maintenance.rescue.label')} description={t('app_maintenance.rescue.intro')} stack>
+            {#if rescueSent}
+              <p class="ok" role="status"><Icon icon={RefreshCw} size={16} /><span>{t('app_maintenance.rescue.restarting')}</span></p>
+            {:else if rescueAsk}
+              <p class="ask" role="alert"><Icon icon={TriangleAlert} size={16} /><span>{rescueAsk === 'backup' ? t('app_maintenance.rescue.confirm_backup') : t('app_maintenance.rescue.confirm_readable')}</span></p>
+              <div class="actions">
+                <Button size="sm" variant="primary" onclick={() => void requestRescue(rescueAsk!)}>{t('app_maintenance.rescue.restart')}</Button>
+                <Button size="sm" variant="ghost" onclick={() => (rescueAsk = null)}>{t('app_maintenance.rescue.cancel')}</Button>
+              </div>
+            {:else}
+              <div class="actions">
+                <Button size="sm" icon={LifeBuoy} onclick={() => (rescueAsk = 'backup')}>{t('app_maintenance.rescue.backup')}</Button>
+                <Button size="sm" onclick={() => (rescueAsk = 'readable')}>{t('app_maintenance.rescue.readable')}</Button>
+              </div>
+            {/if}
+          </FormRow>
+        {/if}
+      {/if}
+      {#if status.rescue}
+        <FormRow label={t('app_maintenance.rescue.last')} stack>
+          {#if status.rescue.ok}
+            <p class="ok"><Icon icon={CircleCheck} size={16} /><span>{status.rescue.mode === 'backup' ? t('app_maintenance.rescue.done_backup') : t('app_maintenance.rescue.done_readable')}</span></p>
+            {#if status.rescue.kept_in}<code class="path kept">{status.rescue.kept_in}</code>{/if}
+          {:else}
+            <p class="bad"><Icon icon={CircleAlert} size={16} /><span>{t('app_maintenance.rescue.failed')}{#if status.rescue.error} {td(status.rescue.error.message_key)}{/if}</span></p>
+          {/if}
+        </FormRow>
       {/if}
     </SettingsSection>
 
@@ -248,6 +286,25 @@
   }
   .ok {
     color: var(--success);
+  }
+  .ask {
+    display: flex;
+    gap: var(--space-2);
+    margin: 0;
+    color: var(--warning);
+    font-size: var(--text-sm);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+  .kept {
+    display: block;
+    margin-top: var(--space-1);
+    font-size: var(--text-xs);
+    overflow-wrap: anywhere;
   }
   .bad {
     color: var(--danger);

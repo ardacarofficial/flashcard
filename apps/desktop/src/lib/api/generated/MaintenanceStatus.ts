@@ -2,6 +2,7 @@
 import type { CrashReportDto } from "./CrashReportDto";
 import type { IntegrityDto } from "./IntegrityDto";
 import type { LogFileDto } from "./LogFileDto";
+import type { RescueOutcomeDto } from "./RescueOutcomeDto";
 import type { RunInfoDto } from "./RunInfoDto";
 
 /**
@@ -35,4 +36,8 @@ previous_run: RunInfoDto | null,
 /**
  * Latest integrity check of this run, if any.
  */
-integrity: IntegrityDto | null, };
+integrity: IntegrityDto | null, 
+/**
+ * The rescue run on request at this start (v1.4.1), if any.
+ */
+rescue: RescueOutcomeDto | null, };

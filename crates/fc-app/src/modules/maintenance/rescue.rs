@@ -24,6 +24,7 @@ use crate::error::{AppError, AppResult};
 use crate::jobs::CancelToken;
 use crate::modules::io::rescue_support as io;
 use fc_api::v1::io::BackupVerifyReport;
+use fc_api::v1::maintenance::{RequestRescue, RescueChoice, RescueOutcomeDto};
 use fc_api::{ApiError, ErrorCode};
 use fc_core::Timestamp;
 use fc_storage::rescue::{inspect_file, FileHealth, SalvageReport};
@@ -302,4 +303,99 @@ fn salvage(folder: &Path, db: &Path, report: &mut RescueReport) -> AppResult<()>
         report.media_files += 1;
     }
     Ok(())
+}
+
+// ------------------------------------------------------------------ in-app request (v1.4.1)
+
+/// File (in the data dir) holding the rescue the user chose in the app; the desktop shell
+/// runs it at the next start, before the collection opens ([`run_requested`]).
+pub const REQUEST_FILE: &str = "rescue-request.json";
+/// File (in the data dir) holding the outcome of that rescue until the app shows it
+/// ([`take_outcome`]).
+pub const OUTCOME_FILE: &str = "rescue-outcome.json";
+
+impl From<RescueChoice> for RescueMode {
+    fn from(c: RescueChoice) -> Self {
+        match c {
+            RescueChoice::Backup => Self::Backup,
+            RescueChoice::Readable => Self::Readable,
+        }
+    }
+}
+
+fn choice(mode: RescueMode) -> RescueChoice {
+    match mode {
+        RescueMode::Backup => RescueChoice::Backup,
+        RescueMode::Readable => RescueChoice::Readable,
+    }
+}
+
+/// Writes `value` as JSON to `path` through a temporary file (never half a file).
+fn write_json<T: Serialize>(path: &Path, value: &T) -> AppResult<()> {
+    let bytes = serde_json::to_vec_pretty(value)
+        .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+    let part = path.with_extension("json.part");
+    std::fs::write(&part, bytes).map_err(|e| file_err(&part, &e))?;
+    std::fs::rename(&part, path).map_err(|e| {
+        let _ = std::fs::remove_file(&part);
+        file_err(path, &e)
+    })
+}
+
+/// Records the user's rescue choice in `data_dir` (`maintenance.rescue.request`).
+pub fn request(data_dir: &Path, mode: RescueChoice) -> AppResult<()> {
+    write_json(&data_dir.join(REQUEST_FILE), &RequestRescue { mode })
+}
+
+/// The rescue waiting in `data_dir`, removed from disk (a request runs at most once, even if
+/// it fails). An unreadable request file is removed too and counts as none.
+pub fn take_request(data_dir: &Path) -> Option<RescueChoice> {
+    let path = data_dir.join(REQUEST_FILE);
+    let bytes = std::fs::read(&path).ok()?;
+    let _ = std::fs::remove_file(&path);
+    serde_json::from_slice::<RequestRescue>(&bytes)
+        .ok()
+        .map(|r| r.mode)
+}
+
+/// Desktop start, before the collection at `db` opens: runs the rescue the user chose in the
+/// app (if any) and records its outcome for [`take_outcome`]. `None` = nothing was asked.
+/// The previous process may still hold the file for a moment after its restart: a move that
+/// fails is tried again for a few seconds (a failed attempt changes nothing).
+pub fn run_requested(db: &Path, now: Timestamp) -> Option<AppResult<RescueReport>> {
+    let data_dir = db.parent().unwrap_or_else(|| Path::new("."));
+    let mode: RescueMode = take_request(data_dir)?.into();
+    let mut attempt = 0;
+    let result = loop {
+        let r = rescue(db, mode, now).map_err(|e| AppError::Api(e.into_api()));
+        let busy = matches!(&r, Err(AppError::Api(e)) if e.code == ErrorCode::IoFile);
+        attempt += 1;
+        if !busy || attempt >= 20 {
+            break r;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    };
+    let outcome = RescueOutcomeDto {
+        mode: choice(mode),
+        at: now,
+        ok: result.is_ok(),
+        kept_in: result.as_ref().ok().map(|r| r.kept_in.clone()),
+        error: match &result {
+            Err(AppError::Api(e)) => Some(e.clone()),
+            _ => None,
+        },
+    };
+    if let Err(e) = &result {
+        log::error!(target: "fc_app::maintenance", "requested rescue ({mode:?}) failed: {e:?}");
+    }
+    let _ = write_json(&data_dir.join(OUTCOME_FILE), &outcome);
+    Some(result)
+}
+
+/// The outcome [`run_requested`] recorded in `data_dir`, removed from disk (shown once).
+pub fn take_outcome(data_dir: &Path) -> Option<RescueOutcomeDto> {
+    let path = data_dir.join(OUTCOME_FILE);
+    let bytes = std::fs::read(&path).ok()?;
+    let _ = std::fs::remove_file(&path);
+    serde_json::from_slice(&bytes).ok()
 }

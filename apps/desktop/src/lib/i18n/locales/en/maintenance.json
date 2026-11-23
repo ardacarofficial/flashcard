@@ -59,6 +59,9 @@
         "get": "Form draft",
         "list": "Form drafts",
         "discard": "Discard a form draft"
+      },
+      "rescue": {
+        "request": "Rescue the damaged collection"
       }
     },
     "updates": {
@@ -76,7 +79,8 @@
     "conflict": {
       "update_not_available": "There is no update to install. Check for updates first.",
       "update_not_ready": "The update has not been downloaded yet.",
-      "no_verified_backup": "No backup could be verified, so nothing was changed. You can still save what is readable."
+      "no_verified_backup": "No backup could be verified, so nothing was changed. You can still save what is readable.",
+      "rescue_unavailable": "The collection passed its integrity check, so there is nothing to rescue."
     },
     "provider": {
       "update_unsupported": "This build cannot update itself.",
@@ -103,7 +107,7 @@
       "heading": "Database",
       "check": "Check the database",
       "ok": "No problems found ({ms} ms).",
-      "problems": "Problems found: {count}. Restore a backup from Import & export.",
+      "problems": "Problems found: {count}. Choose a rescue below.",
       "never": "Not checked during this run.",
       "status": "Integrity check"
     },
@@ -149,6 +153,21 @@
     "size": {
       "kb": "{n} KB",
       "mb": "{n} MB"
+    },
+    "rescue": {
+      "label": "Rescue",
+      "intro": "The collection is damaged. Choose how to rescue it: nothing is deleted, the damaged files are moved to the damaged folder and kept.",
+      "backup": "Restore the newest backup",
+      "readable": "Keep what is readable",
+      "confirm_backup": "The app restarts and puts the newest backup that verifies in place of the collection. Changes made after that backup are only in the kept damaged files.",
+      "confirm_readable": "The app restarts and copies every row that can still be read into a new collection. What cannot be read is only in the kept damaged files.",
+      "restart": "Restart and rescue",
+      "cancel": "Cancel",
+      "restarting": "Restarting to rescue the collection…",
+      "last": "Last rescue",
+      "done_backup": "The collection was restored from the newest verified backup. The damaged files are kept here:",
+      "done_readable": "The readable part of the collection was rescued. The damaged files are kept here:",
+      "failed": "The rescue did not work, nothing was changed."
     }
   },
   "maintenance": {

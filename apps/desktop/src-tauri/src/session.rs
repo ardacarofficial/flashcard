@@ -51,6 +51,19 @@ pub fn open_profile(
             format!("{}\n{}: {}", path.display(), e.code, e.message)
         })
     };
+    // v1.4.1: a rescue the user chose in the app (a collection that opened but failed its
+    // integrity check, `maintenance.rescue.request`) runs now, before the collection opens;
+    // the maintenance page shows its outcome. A failed rescue changes nothing.
+    let now = fc_core::Clock::now(&fc_app::system::SystemClock);
+    match fc_app::modules::maintenance::rescue::run_requested(&path, now) {
+        Some(Ok(report)) => {
+            log::warn!(target: "fc_desktop", "collection rescued; damaged files kept in {}", report.kept_in);
+        }
+        Some(Err(e)) => {
+            log::error!(target: "fc_desktop", "requested rescue failed: {}", e.into_api().code);
+        }
+        None => {}
+    }
     // v1.4.1: a collection that does not open because the file is damaged is offered the
     // rescue (the damaged files are kept), then opened again.
     let collection = match open(&path) {
@@ -118,7 +131,9 @@ fn on_event<R: Runtime>(handle: &AppHandle<R>, app: &fc_app::App, event: &Domain
                 eprintln!("fc-desktop: notification: {e}");
             }
         }
-        DomainEvent::ProfileSwitched { .. } => {
+        // v1.4.1: a rescue chosen on the maintenance page restarts the same way; the new
+        // process runs it before it opens the collection (`open_profile`).
+        DomainEvent::ProfileSwitched { .. } | DomainEvent::RescueRequested { .. } => {
             // Off the event thread: the IPC reply of `profiles.switch` goes out first.
             let h = handle.clone();
             std::thread::spawn(move || {
