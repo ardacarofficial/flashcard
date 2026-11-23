@@ -455,7 +455,8 @@ fn live_ids(dump: &CollectionDump, table: &str) -> BTreeSet<String> {
 
 /// What the user would see: every user-data table, soft-deleted rows and the rows that hang
 /// off them (a trashed note's tags and keys) left out, tags no live note uses and nobody
-/// coloured left out (undoing the last note with a tag keeps the tag row, unseen), edit
+/// coloured left out (undoing the last note with a tag keeps the tag row, unseen), media
+/// rows no note references left out (the media check removes them), edit
 /// times blanked (an undone edit is the same data at a later time), rows sorted.
 fn user_data(store: &dyn Store) -> BTreeMap<String, Vec<Vec<SqlValue>>> {
     let dump: CollectionDump = store.read().unwrap().dump_collection().unwrap();
@@ -482,7 +483,7 @@ fn user_data(store: &dyn Store) -> BTreeMap<String, Vec<Vec<SqlValue>>> {
         }
         let col = |name: &str| t.columns.iter().position(|c| c == name);
         let (del, note, card) = (col("deleted_at"), col("note_id"), col("card_id"));
-        let (id, color) = (col("id"), col("color"));
+        let (id, color, refs) = (col("id"), col("color"), col("ref_count"));
         let blank: Vec<usize> = t
             .columns
             .iter()
@@ -501,6 +502,8 @@ fn user_data(store: &dyn Store) -> BTreeMap<String, Vec<Vec<SqlValue>>> {
                     || id.is_some_and(|i| used_tags.contains(&key(&r[i])))
                     || color.is_some_and(|c| r[c] != SqlValue::Null)
             })
+            // Media no note uses (an undone import's files) wait for the media check.
+            .filter(|r| t.name != "media" || refs.is_none_or(|c| r[c] != SqlValue::Integer(0)))
             .map(|r| {
                 let mut r = r.clone();
                 for &i in &blank {
@@ -725,4 +728,95 @@ fn undoing_a_merge_of_a_renamed_coloured_tag_restores_the_start() {
     {}
     let again = user_data(&*t.store);
     assert!(again == end, "{}", diff(&end, &again));
+}
+
+// ------------------------------------------------------------------ imports (brief item 1)
+
+/// Runs a file import job to its end.
+fn import_file(t: &TestApp, path: &Path, format: Option<&str>) -> fc_api::v1::jobs::JobDto {
+    let job = call(
+        t,
+        "io.import.start",
+        json!({"source": {"kind": "file", "path": path.to_string_lossy()},
+               "format": format, "deck_id": null, "notetype_id": null, "columns": null,
+               "text_options": null, "skip_first_row": null, "duplicates": null,
+               "create_missing_options": null, "include_history": null}),
+    );
+    t.app.run_pending_jobs().unwrap();
+    serde_json::from_value(call(t, "jobs.get", json!({"id": job["id"]}))).unwrap()
+}
+
+/// Hostile Anki packages and broken text through the real import job: it either succeeds
+/// (one undo step that gives back the collection) or fails with a code the app translates
+/// (`errors.validation.import_format` …), and then nothing of it is left.
+#[test]
+fn hostile_imports_finish_cleanly_or_leave_nothing() {
+    use fc_api::v1::jobs::JobStatus;
+    let t = TestApp::new(Arc::new(crate::testing::TempSqlite::new()));
+    let dir = tempfile::tempdir().unwrap();
+    let mut files: Vec<(String, Vec<u8>, Option<&str>)> = fc_interop::anki::hostile::cases()
+        .into_iter()
+        .map(|c| (c.name.to_owned(), c.bytes, Some("anki")))
+        .collect();
+    files.push((
+        "csv: quotes, BOMs, mixed line ends".into(),
+        "\u{feff}a,\"b\r\nc\"\r\n\"unclosed,x\rq,\"\"\"\n\u{feff}k,v\n".into(),
+        Some("text"),
+    ));
+    files.push((
+        "csv: a million columns".into(),
+        "a\t".repeat(1_000_000).into_bytes(),
+        Some("text"),
+    ));
+    files.push((
+        "csv: invalid UTF-8".into(),
+        b"\xff\xfe\x00a,b\n\xc3(,x\n".to_vec(),
+        Some("text"),
+    ));
+    files.push((
+        "json: wrong shape".into(),
+        b"{\"notes\": 5}".to_vec(),
+        Some("json"),
+    ));
+    for (i, (name, bytes, format)) in files.iter().enumerate() {
+        let path = dir.path().join(format!("in{i}.bin"));
+        std::fs::write(&path, bytes).unwrap();
+        let before = user_data(&*t.store);
+        let started = std::time::Instant::now();
+        let job = import_file(&t, &path, *format);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(30),
+            "{name}: slow"
+        );
+        match job.status {
+            JobStatus::Succeeded => {
+                // An import that added nothing (all duplicates) is no undo step.
+                if let Err(e) = t.app.invoke("v1.oplog.undo", json!({}), &Actor::User) {
+                    assert_eq!(e.code, ErrorCode::ConflictNothingToUndo, "{name}");
+                }
+                let back = user_data(&*t.store);
+                assert!(back == before, "{name}: undo left:{}", diff(&before, &back));
+            }
+            JobStatus::Failed => {
+                let e = job.error.unwrap();
+                assert!(
+                    matches!(
+                        e.code,
+                        ErrorCode::ValidationImportFormat
+                            | ErrorCode::ConflictUnsupportedVersion
+                            | ErrorCode::ValidationTextOptions
+                    ),
+                    "{name}: {e:?}"
+                );
+                assert!(!e.message.trim().is_empty(), "{name}");
+                let after = user_data(&*t.store);
+                assert!(
+                    after == before,
+                    "{name}: a failed import left:{}",
+                    diff(&before, &after)
+                );
+            }
+            other => panic!("{name}: {other:?}"),
+        }
+    }
 }

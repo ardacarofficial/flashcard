@@ -68,6 +68,7 @@ Gerçek kullanıcının dosyalarının ve tarayıcı eklentisinin uygulamaya gir
 | `fc-http/tests/fuzz_capture.rs` | Bozuk/rastgele JSON, yanlış içerik türü, sınırı aşan gövde ve medya, kesik/bozuk chunked gövde, tekrar, sırasız ve eşzamanlı yinelenen yakalamalar | Reddedilen istek hiçbir şey yazmaz (tüm tablolar + diskteki medya); idempotentlik; her yanıt sözleşme biçiminde |
 | `fc-storage/src/tests/search_fuzz.rs` | Rastgele dünyalar (özel karakterli notlar) üzerinde ATOMS ∪ LANG_ATOMS birleşimleri ve üretilmiş anahtar × işleç × düşmanca değer | SQL sonucu = başvuru değerlendiricisi (`fc_core::query::eval`); derlenmeyen sorgu konumlu hata verir |
 | `fc-app/src/undo_fuzz_tests.rs` | Kayıt defterinden türetilen geri alınabilir komutların rastgele dizisi, gerçek SQLite dosyasında, ortada yeniden başlatma | Hepsi geri alınınca kullanıcı verisi başlangıca, hepsi yinelenince sona eşit; reddedilen komut yazmaz. Üreticisi olmayan her komut `NOT_GENERATED`'da gerekçesiyle listelenir, yeni komut unutulamaz |
+| `fc-app/src/undo_fuzz_tests.rs` (içe aktarma) | `anki::hostile` paketleri, bozuk CSV/JSON, 1 milyon sütun gerçek içe aktarma işinden | İş ya başarılı olur ve tek geri alma başlangıca döndürür ya da çevrilen bir kodla (`import_format` …) başarısız olur ve geride hiçbir şey kalmaz |
 
 
 ### 3.1 Gerçek çekirdeğe karşı yolculuklar (v1.3: dev köprüsü)
