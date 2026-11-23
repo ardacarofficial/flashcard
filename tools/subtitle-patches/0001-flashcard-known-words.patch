@@ -1,0 +1,918 @@
+From bfc7867afacbe91680334e8fe011ed46d38bb1c3 Mon Sep 17 00:00:00 2001
+From: h4 <h4@localhost>
+Date: Mon, 23 Nov 2026 12:03:29 +0000
+Subject: [PATCH] Flashcard'dan oku: read the known and learning words from the
+ flashcard app
+
+---
+ CLAUDE.md                                     |   1 +
+ docs/flashcards-api.md                        |  16 +-
+ playground/src/mockFlashcards.ts              |  20 ++-
+ src/flashcards/api.ts                         |  18 ++-
+ src/flashcards/background.ts                  |  38 ++++-
+ src/flashcards/knownWords.test.ts             | 144 +++++++++++++++++
+ src/flashcards/messages.ts                    |   7 +-
+ src/models/types.d.ts                         |   2 +
+ src/models/words/index.ts                     | 153 +++++++++++++-----
+ src/models/words/words.test.ts                |  92 ++++++++++-
+ .../Settings/FlashcardsRow.test.tsx           |  61 +++++++
+ .../content/components/Settings/Words.tsx     |  48 +++++-
+ src/pages/options/sections.tsx                |   7 +-
+ src/utils/words.ts                            |   3 +-
+ 14 files changed, 554 insertions(+), 56 deletions(-)
+ create mode 100644 src/flashcards/knownWords.test.ts
+ create mode 100644 src/pages/content/components/Settings/FlashcardsRow.test.tsx
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 48eefc2..0721aeb 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -184,6 +184,7 @@ Every word of the subtitles is new, learning, known or rare to the user, by the
+ - `src/models/words` keeps the user's marks on the device (`$words`, saved as `persist:words`, synced between tabs through `chrome.storage.onChanged`), keyed by the subtitles' base language and the dictionary form (`wordKey`, `viewWord` in `src/utils/words.ts`); a mark wins over the level. The popover's foot (`WordStatus.tsx`) shows the CEFR level that covers the rank on every word ("B1 · İlk 3,5k"; for a word the list lacks by its base's rank, `estimateRank` in `src/utils/frequency/lookup.ts`, which colors nothing, else C1/C2 by its length, `levelBadge`; none for names) and "+ Learn" / "✓ Know", pressed only for the user's own marks and Anki's (`markedStatus`), not for words known by the level; Learn and "+" save the word as learning with the meaning on top, its part of speech and up to 3 lines it was said in, and "+" also adds it to the learning service when one is picked. Expressions are saved the same way from their popover, under their dictionary form ("pick up"), and color their words while learned (`learningExpressionWords`). Nothing turns known on its own
+ - The subtitles color learning words orange and underline new ones (`$wordColoring`: Off / Learning / New and learning). `$episodeScore` counts every ranked word as often as it's said; "All are known" marks the episode's remaining words known, like finishing a LingQ lesson
+ - With Anki as the learning service, "Read from Anki" reads the Easysubs cards back (`readWords`, `syncAnkiFx`): a card Anki shows 21 days apart or more is a known word, others learning, and Anki does the reviews
++- With Subtitle Kartları as the learning service, "Flashcard'dan oku" (`FlashcardsRow` in `Words.tsx`, in the Words tab and the settings page's Öğrenme servisi section) reads the words the user's flashcard app knows and learns (`syncFlashcardsFx`): the background's `knownWords` message (`readKnownWords` in `src/flashcards/background.ts`) asks `/v1/me` and then every page of `GET /v1/known-words` by its cursor with the saved server and key; the app decides known and learning and answers only when its owner shares them (`features.known_words`, `shared`), else the row says sharing is off there. Merged like Anki's (`mergeReadWords`): known words stay known, the others are flagged `flashcards`. Read for the subtitles' language, or on the settings page for every language with a level or saved words
+ - The Saved words sheet (`Words.tsx`) lists the words with their lines linked back to the moment, reviews the due learning words as flashcards (`reviewWord`: 1, 3, 7, 16 and 35 days, known after the last), exports a CSV file and imports one, or a plain list of words as known in the subtitles' language
+ 
+ ### Expressions
+diff --git a/docs/flashcards-api.md b/docs/flashcards-api.md
+index 10b239a..44a28a5 100644
+--- a/docs/flashcards-api.md
++++ b/docs/flashcards-api.md
+@@ -344,10 +344,17 @@ POST /v1/captures:batch
+ Each capture is judged on its own; one per `capture_id` in the request. A missing result or `"retryable": true` is
+ retried later, an `error` without it is shown as failed. `404`/`405`/`501` makes the extension send one by one.
+ 
+-### `GET /v1/known-words` — later: reading status back
++### `GET /v1/known-words` — reading status back ("Flashcard'dan oku")
+ 
+-Not used by the extension yet (`FlashcardsApi.knownWords` exists). Meant to color the subtitles from the app's
+-reviews, like "Anki'den oku": a card reviewed at intervals of 21 days or more is a known word, others learning.
++Read by the background when the user presses **Flashcard'dan oku** (Words tab, or the settings page's Öğrenme servisi
++section with Subtitle Kartları picked), like "Anki'den oku": the app decides which words are known (e.g. a card
++reviewed at intervals of 21 days or more) and which learning, and the subtitles color them. `new` words are ignored;
++a word the user marked known in the extension stays known.
++
++The extension asks `GET /v1/me` first: `features.known_words: false` means the app doesn't share the words (the row
++says so and nothing is asked). Each page may also say `"shared": false` (an empty last page), taken the same way. A
++server that says neither is taken to share. Pages are followed by `next_cursor` until it's `null` (at most 200 pages;
++a cursor seen before stops it).
+ 
+ ```http
+ GET /v1/known-words?lang=en&cursor=…
+@@ -360,7 +367,8 @@ GET /v1/known-words?lang=en&cursor=…
+     { "lemma": "key", "lang": "en", "status": "known", "interval_days": 34, "updated_at": "2026-10-01T08:00:00Z" },
+     { "lemma": "pick up", "lang": "en", "status": "learning", "interval_days": 3, "updated_at": "2026-10-11T19:12:00Z" }
+   ],
+-  "next_cursor": null
++  "next_cursor": null,
++  "shared": true
+ }
+ ```
+ 
+diff --git a/playground/src/mockFlashcards.ts b/playground/src/mockFlashcards.ts
+index c9fc1f9..de4ea02 100644
+--- a/playground/src/mockFlashcards.ts
++++ b/playground/src/mockFlashcards.ts
+@@ -4,7 +4,8 @@ import type { TCapture } from "@src/flashcards/types";
+ 
+ // Subtitle Kartları in the mock background: the real outbox (src/flashcards) on the playground's storage, sending to
+ // a fake server of the API in docs/flashcards-api.md. Any address works; the key "playground" is accepted, others get
+-// 401. What the server took is in `mockFlashcardsServer` for the tests.
++// 401. What the server took is in `mockFlashcardsServer` for the tests; with `shareKnownWords` its captured words are
++// read back as learning.
+ 
+ export const MOCK_FLASHCARDS_TOKEN = "playground";
+ 
+@@ -13,6 +14,8 @@ export const mockFlashcardsServer = {
+   media: [] as { upload_id: string; mime: string; capture_id: string }[],
+   // The status the next requests get, to test failures (0: answer normally)
+   failWith: 0,
++  // Whether the app shares the words it knows and learns ("Flashcard'dan oku"): its captured words, learning
++  shareKnownWords: false,
+ };
+ 
+ const json = (status: number, body?: unknown) =>
+@@ -41,7 +44,20 @@ const mockFetch: typeof fetch = async (input, init: RequestInit = {}) => {
+     return json(200, {
+       user: { id: "u_playground", name: "Playground" },
+       decks: 2,
+-      features: { media: true, batch: true, known_words: false },
++      features: { media: true, batch: true, known_words: mockFlashcardsServer.shareKnownWords },
++    });
++  }
++  if (method === "GET" && path === "/v1/known-words") {
++    const lang = url.searchParams.get("lang");
++    const lemmas = new Set(
++      mockFlashcardsServer.captures.filter((capture) => capture.lang.target === lang).map((c) => c.term.lemma),
++    );
++    return json(200, {
++      words: mockFlashcardsServer.shareKnownWords
++        ? [...lemmas].map((lemma) => ({ lemma, lang, status: "learning" }))
++        : [],
++      next_cursor: null,
++      shared: mockFlashcardsServer.shareKnownWords,
+     });
+   }
+   if (method === "GET" && path === "/v1/decks") {
+diff --git a/src/flashcards/api.ts b/src/flashcards/api.ts
+index f756e74..094aebb 100644
+--- a/src/flashcards/api.ts
++++ b/src/flashcards/api.ts
+@@ -195,11 +195,21 @@ export class FlashcardsApi {
+     return answer.upload_id;
+   }
+ 
+-  // Later: the words' status in the app, like Anki's "Read from Anki"
+-  async knownWords(lang: string, cursor?: string): Promise<{ words: TKnownWord[]; next_cursor: string | null }> {
++  // One page of the words' status in the app ("Flashcard'dan oku", like Anki's "Read from Anki"). `shared` is false
++  // when the app doesn't share them (its answer is then an empty last page); servers that don't say are taken to share
++  async knownWords(
++    lang: string,
++    cursor?: string,
++  ): Promise<{ words: TKnownWord[]; next_cursor: string | null; shared: boolean }> {
+     const query = new URLSearchParams({ lang, ...(cursor && { cursor }) });
+-    const answer = await this.json<{ words?: TKnownWord[]; next_cursor?: string | null }>(`/v1/known-words?${query}`);
+-    return { words: answer.words ?? [], next_cursor: answer.next_cursor ?? null };
++    const answer = await this.json<{ words?: TKnownWord[]; next_cursor?: string | null; shared?: boolean }>(
++      `/v1/known-words?${query}`,
++    );
++    return {
++      words: Array.isArray(answer.words) ? answer.words : [],
++      next_cursor: answer.next_cursor ?? null,
++      shared: answer.shared !== false,
++    };
+   }
+ }
+ 
+diff --git a/src/flashcards/background.ts b/src/flashcards/background.ts
+index 8a21d02..0099cf9 100644
+--- a/src/flashcards/background.ts
++++ b/src/flashcards/background.ts
+@@ -1,8 +1,8 @@
+-import { FlashcardsApi, FlashcardsApiError } from "./api";
++import { FlashcardsApi, FlashcardsApiError, type TKnownWord } from "./api";
+ import { capturesToCsv, capturesToJson } from "./export";
+-import { Outbox, type TStorage } from "./outbox";
++import { KEYS, Outbox, parseServer, type TStorage } from "./outbox";
+ import type { TCapture, TCaptureMedia } from "./types";
+-import { FLASHCARDS_MESSAGE, type TFlashcardsRequest } from "./messages";
++import { FLASHCARDS_MESSAGE, type TFlashcardsRequest, type TKnownWordsAnswer } from "./messages";
+ 
+ // The background's side of Subtitle Kartları: one outbox, woken by adding, by going online, by the browser's start
+ // and by an alarm at the next retry. The service worker may stop between them; the queue is in chrome.storage.
+@@ -22,7 +22,31 @@ export function scheduleAlarm(when: number | null) {
+   else chrome.alarms.create(OUTBOX_ALARM, { when });
+ }
+ 
++// Pages of 500 words: 200 of them are far more words than anyone learns; a server whose cursor never ends stops there
++export const KNOWN_WORDS_MAX_PAGES = 200;
++
++// "Flashcard'dan oku": the words the app knows and learns in a language, every page of them. The app says first
++// whether it shares them at all (`features.known_words` of /v1/me), and again on each page (`shared`), so the
++// settings can tell "sharing is off in the app" from "no words yet". Only known and learning words are taken.
++export async function readKnownWords(api: FlashcardsApi, lang: string): Promise<TKnownWordsAnswer> {
++  const me = await api.me();
++  if (me.features?.known_words === false) return { shared: false, words: [] };
++  const words: TKnownWord[] = [];
++  const seen = new Set<string>();
++  let cursor: string | undefined;
++  for (let page = 0; page < KNOWN_WORDS_MAX_PAGES; page++) {
++    const answer = await api.knownWords(lang, cursor);
++    if (!answer.shared) return { shared: false, words: [] };
++    words.push(...answer.words.filter((word) => word.status === "known" || word.status === "learning"));
++    if (!answer.next_cursor || seen.has(answer.next_cursor)) break;
++    seen.add(answer.next_cursor);
++    cursor = answer.next_cursor;
++  }
++  return { shared: true, words };
++}
++
+ export function createFlashcards(deps: Partial<ConstructorParameters<typeof Outbox>[0]> = {}) {
++  const storage = deps.storage ?? chromeStorage;
+   const outbox = new Outbox({ storage: chromeStorage, schedule: scheduleAlarm, ...deps });
+   const apiOf = deps.api ?? ((server: { url: string; token: string }) => new FlashcardsApi(server.url, server.token));
+ 
+@@ -64,6 +88,14 @@ export function createFlashcards(deps: Partial<ConstructorParameters<typeof Outb
+       }
+       case "decks":
+         return { decks: await apiOf({ url: request.url ?? "", token: request.token ?? "", deckId: null }).decks() };
++      // With the saved server and key: the request needs them, and the server lets the background in (CORS)
++      case "knownWords": {
++        const server = parseServer((await storage.get([KEYS.server]))[KEYS.server]);
++        if (!server?.url) {
++          throw new FlashcardsApiError("rejected", "Önce Subtitle Kartları'nın sunucu adresini ve anahtarını kaydet");
++        }
++        return readKnownWords(apiOf(server), request.lang);
++      }
+     }
+   }
+ 
+diff --git a/src/flashcards/knownWords.test.ts b/src/flashcards/knownWords.test.ts
+new file mode 100644
+index 0000000..7c702c6
+--- /dev/null
++++ b/src/flashcards/knownWords.test.ts
+@@ -0,0 +1,144 @@
++import { describe, expect, it, vi } from "vitest";
++
++import { FlashcardsApi, type TKnownWord } from "./api";
++import { KNOWN_WORDS_MAX_PAGES, createFlashcards, readKnownWords } from "./background";
++import { KEYS, type TStorage } from "./outbox";
++
++// "Flashcard'dan oku" in the background: every page of GET /v1/known-words, with the saved server and key, and
++// whether the app shares the words at all
++
++const SERVER = "http://127.0.0.1:28735/subtitle";
++
++const word = (lemma: string, status: TKnownWord["status"]): TKnownWord => ({ lemma, lang: "en", status });
++
++type TServer = {
++  shared?: boolean;
++  // /v1/me's features.known_words; undefined: an older server that doesn't say
++  feature?: boolean;
++  pages?: { words: TKnownWord[]; next_cursor: string | null }[];
++  status?: number;
++};
++
++function fakeServer({ shared = true, feature = shared, pages = [], status = 200 }: TServer) {
++  const requests: string[] = [];
++  const fetchMock = vi.fn(async (input: string | URL | Request, init: RequestInit = {}) => {
++    const url = new URL(String(input));
++    requests.push(`${url.pathname}${url.search}`);
++    const headers = init.headers as Record<string, string>;
++    const json = (code: number, body: unknown) =>
++      new Response(JSON.stringify(body), { status: code, headers: { "Content-Type": "application/json" } });
++    if (headers.Authorization !== "Bearer secret") {
++      return json(401, { error: { code: "unauthorized", message: "the access key is not valid (invalid)" } });
++    }
++    if (status !== 200) return json(status, { error: { message: "down" } });
++    if (url.pathname.endsWith("/v1/me")) {
++      return json(200, { user: { id: "u1" }, features: feature === undefined ? {} : { known_words: feature } });
++    }
++    if (url.pathname.endsWith("/v1/known-words")) {
++      if (!shared) return json(200, { words: [], next_cursor: null, shared: false });
++      const index = Number(url.searchParams.get("cursor") ?? 0);
++      return json(200, { ...pages[index], shared: true });
++    }
++    return json(404, {});
++  });
++  const api = new FlashcardsApi(SERVER, "secret", fetchMock as unknown as typeof fetch);
++  return { api, requests, fetchMock };
++}
++
++function memoryStorage(initial: Record<string, unknown>): TStorage {
++  const data = new Map(Object.entries(initial));
++  return {
++    get: async (keys) => Object.fromEntries(keys.filter((key) => data.has(key)).map((key) => [key, data.get(key)])),
++    set: async (items) => {
++      for (const [key, value] of Object.entries(items)) data.set(key, value);
++    },
++    remove: async (keys) => keys.forEach((key) => data.delete(key)),
++  };
++}
++
++describe("known words from Flashcard", () => {
++  it("reads every page by its cursor and keeps the known and learning words", async () => {
++    const { api, requests } = fakeServer({
++      pages: [
++        { words: [word("key", "known"), word("pick up", "learning")], next_cursor: "1" },
++        { words: [word("train", "learning"), word("seven", "new")], next_cursor: "2" },
++        { words: [word("station", "learning")], next_cursor: null },
++      ],
++    });
++
++    expect(await readKnownWords(api, "en")).toEqual({
++      shared: true,
++      words: [
++        word("key", "known"),
++        word("pick up", "learning"),
++        word("train", "learning"),
++        word("station", "learning"),
++      ],
++    });
++    expect(requests).toEqual([
++      "/subtitle/v1/me",
++      "/subtitle/v1/known-words?lang=en",
++      "/subtitle/v1/known-words?lang=en&cursor=1",
++      "/subtitle/v1/known-words?lang=en&cursor=2",
++    ]);
++  });
++
++  it("says when Flashcard doesn't share the words, without asking for them", async () => {
++    const { api, requests } = fakeServer({ shared: false });
++    expect(await readKnownWords(api, "en")).toEqual({ shared: false, words: [] });
++    expect(requests).toEqual(["/subtitle/v1/me"]);
++  });
++
++  it("takes a page's shared: false as not shared, from a server whose /me doesn't say", async () => {
++    const { api } = fakeServer({ shared: false, feature: undefined });
++    expect(await readKnownWords(api, "en")).toEqual({ shared: false, words: [] });
++  });
++
++  it("stops at a cursor it has seen and after the last page it reads", async () => {
++    const looping = fakeServer({
++      pages: [
++        { words: [word("key", "learning")], next_cursor: "1" },
++        { words: [word("train", "learning")], next_cursor: "1" },
++      ],
++    });
++    expect(await readKnownWords(looping.api, "en")).toEqual({
++      shared: true,
++      words: [word("key", "learning"), word("train", "learning")],
++    });
++    expect(looping.requests).toHaveLength(3);
++
++    const endless = fakeServer({
++      pages: Array.from({ length: KNOWN_WORDS_MAX_PAGES + 5 }, (_, index) => ({
++        words: [word(`w${index}`, "learning")],
++        next_cursor: String(index + 1),
++      })),
++    });
++    expect((await readKnownWords(endless.api, "en")).words).toHaveLength(KNOWN_WORDS_MAX_PAGES);
++  });
++
++  it("asks with the saved server and key, and says what's wrong in Turkish", async () => {
++    const pages = [{ words: [word("key", "learning")], next_cursor: null }];
++    const saved = { [KEYS.server]: JSON.stringify({ url: SERVER, token: "secret", deckId: null }) };
++    const { fetchMock } = fakeServer({ pages });
++    const flashcards = (storage: TStorage) =>
++      createFlashcards({
++        storage,
++        schedule: () => {},
++        api: (server) => new FlashcardsApi(server.url, server.token, fetchMock as unknown as typeof fetch),
++      });
++
++    expect(await flashcards(memoryStorage(saved)).handle({ action: "knownWords", lang: "en" })).toEqual({
++      shared: true,
++      words: [word("key", "learning")],
++    });
++
++    await expect(flashcards(memoryStorage({})).handle({ action: "knownWords", lang: "en" })).rejects.toThrow(
++      "Önce Subtitle Kartları'nın sunucu adresini ve anahtarını kaydet",
++    );
++
++    const wrongKey = { [KEYS.server]: JSON.stringify({ url: SERVER, token: "wrong", deckId: null }) };
++    await expect(
++      flashcards(memoryStorage(wrongKey)).handle({ action: "knownWords", lang: "en" }),
++    ).rejects.toMatchObject({ kind: "auth", message: expect.stringMatching(/^Erişim anahtarı geçersiz/) });
++  });
++});
+diff --git a/src/flashcards/messages.ts b/src/flashcards/messages.ts
+index e0beb80..8cd0a54 100644
+--- a/src/flashcards/messages.ts
++++ b/src/flashcards/messages.ts
+@@ -1,5 +1,5 @@
+ import type { TAddResult, TCapture, TCaptureMedia, TOutboxStatus } from "./types";
+-import type { TApiDeck, TApiMe } from "./api";
++import type { TApiDeck, TApiMe, TKnownWord } from "./api";
+ 
+ // The messages pages send the background's outbox (src/flashcards/background.ts)
+ 
+@@ -12,8 +12,12 @@ export type TFlashcardsRequest = { type?: typeof FLASHCARDS_MESSAGE } & (
+   | { action: "remove"; ids: string[] }
+   | { action: "export"; format: "json" | "csv" }
+   | { action: "test" | "decks"; url: string; token: string }
++  | { action: "knownWords"; lang: string }
+ );
+ 
++// The app's known and learning words in a language; shared is false when the app keeps them to itself
++export type TKnownWordsAnswer = { shared: boolean; words: TKnownWord[] };
++
+ export type TQueueStatus = TOutboxStatus & { unsent: number };
+ 
+ type TAnswers = {
+@@ -26,6 +30,7 @@ type TAnswers = {
+   export: { text: string; count: number };
+   test: { me: TApiMe; decks: TApiDeck[] | null };
+   decks: { decks: TApiDeck[] };
++  knownWords: TKnownWordsAnswer;
+ };
+ 
+ export class FlashcardsMessageError extends Error {
+diff --git a/src/models/types.d.ts b/src/models/types.d.ts
+index cb970eb..65c44da 100644
+--- a/src/models/types.d.ts
++++ b/src/models/types.d.ts
+@@ -273,6 +273,8 @@ export type TSavedWord = {
+   review?: { step: number; due: number };
+   // Read from the user's Anki cards, which review it there
+   anki?: boolean;
++  // Read from the user's flashcard app (Subtitle Kartları, "Flashcard'dan oku"), which reviews it there
++  flashcards?: boolean;
+ };
+ // Which words the subtitles color: none, the learning ones, or new ones too
+ export type TWordColoring = "off" | "learning" | "all";
+diff --git a/src/models/words/index.ts b/src/models/words/index.ts
+index c537c5c..d5dd68b 100644
+--- a/src/models/words/index.ts
++++ b/src/models/words/index.ts
+@@ -40,13 +40,15 @@ import {
+ import { frequencyLanguage, type TWordRank } from "@src/utils/frequency/lookup";
+ import { timedUrl, titleLabel } from "@src/utils/wordContext";
+ import { Anki } from "@src/learning-service/anki";
++import { flashcardsRequest } from "@src/flashcards/messages";
+ 
+ // The words the user knows and learns, kept on the device by language and dictionary form (src/utils/words.ts). A
+ // word is known when the user marked it known or, unless they marked it otherwise, when it's within their level: a
+ // rank in the language's frequency list (src/utils/frequency), set once by the level check or a CEFR level. The
+ // subtitles color their words by it, the settings' Words tab tells how much of the episode is known, and the Saved
+ // words sheet lists the words with a review and a CSV file. With Anki as the learning service, the Easysubs cards are
+-// read back: a card Anki shows three weeks apart or more is a known word.
++// read back: a card Anki shows three weeks apart or more is a known word; with Subtitle Kartları, the words the
++// user's flashcard app knows and learns, when it shares them.
+ 
+ export const $words = withPersist(createStore<Record<string, TSavedWord>>({}, { name: "words" }));
+ export const $wordColoring = withPersist(createStore<TWordColoring>("all", { name: "wordColoring" }));
+@@ -329,57 +331,132 @@ $wordLevels.on([levelSet, levelEstimated], (levels, { language, rank }) => ({
+   [wordsLanguage(language)]: rank,
+ }));
+ 
+-// ---- Anki ----
++// ---- Anki and Flashcard ----
+ 
+ // Three weeks between reviews: Anki calls such a card mature
+ export const MATURE_INTERVAL_DAYS = 21;
+ 
++type TReadWord = { word: string; status: "learning" | "known"; translation?: string };
++type TReadSource = "anki" | "flashcards";
++
++// Merges words read back from a learning service into the saved ones, under their dictionary form as the subtitles
++// look them up: a word the user knows stays known whatever the service says, the others take its status and are
++// flagged as the service's. Returns the words and how many changed.
++async function mergeReadWords(
++  words: Record<string, TSavedWord>,
++  language: string,
++  read: TReadWord[],
++  source: TReadSource,
++): Promise<{ words: Record<string, TSavedWord>; changed: number }> {
++  const forms = read.map((item) => normalizeWord(item.word, language)).filter((word): word is string => !!word);
++  const ranks = frequencyLanguage(language)
++    ? await requestWordRanks({ language, words: [...new Set(forms)] }).catch(() => ({}))
++    : {};
++  const next = { ...words };
++  const now = Date.now();
++  let changed = 0;
++  for (const item of read) {
++    const form = normalizeWord(item.word, language);
++    if (!form) continue;
++    const word = (ranks as Record<string, TWordRank | null>)[form]?.[0] ?? form;
++    const key = wordKey(language, word);
++    const { status } = item;
++    const saved = next[key];
++    // A word the user knows stays known whatever the service says
++    if (saved?.status === "known" || (saved?.status === status && saved[source])) continue;
++    next[key] = {
++      ...saved,
++      word,
++      language,
++      status,
++      ...((saved?.translation ?? item.translation) && { translation: saved?.translation ?? item.translation }),
++      added: saved?.added ?? now,
++      [source]: true,
++      review: undefined,
++    };
++    changed += 1;
++  }
++  return { words: next, changed };
++}
++
++// Sync can take several requests. Preserve words edited, added or removed while those requests were pending.
++function keepEditsWhileReading(
++  current: Record<string, TSavedWord>,
++  { words, before }: { words: Record<string, TSavedWord>; before: Record<string, TSavedWord> },
++) {
++  const next = { ...current };
++  for (const [key, word] of Object.entries(words)) {
++    if (word !== before[key] && current[key] === before[key]) next[key] = word;
++  }
++  return next;
++}
++
+ export const ankiSyncRequested = createEvent();
+ export const syncAnkiFx = attach({
+   source: { words: $words, language: $wordsLanguage },
+   effect: createEffect(async ({ words, language }: { words: Record<string, TSavedWord>; language: string | null }) => {
+     if (!language) throw "Önce altyazıları aç: kartların kelimeleri kendi dillerinde tutulur";
+     const cards = await new Anki().readWords();
+-    const forms = cards.map((card) => normalizeWord(card.word, language)).filter((word): word is string => !!word);
+-    const ranks = frequencyLanguage(language)
+-      ? await requestWordRanks({ language, words: [...new Set(forms)] }).catch(() => ({}))
+-      : {};
+-    const next = { ...words };
+-    const now = Date.now();
+-    let changed = 0;
+-    for (const card of cards) {
+-      const form = normalizeWord(card.word, language);
+-      if (!form) continue;
+-      const word = (ranks as Record<string, TWordRank | null>)[form]?.[0] ?? form;
+-      const key = wordKey(language, word);
+-      const status = card.interval >= MATURE_INTERVAL_DAYS ? "known" : "learning";
+-      const saved = next[key];
+-      // A word the user knows stays known whatever Anki says
+-      if (saved?.status === "known" || (saved?.status === status && saved.anki)) continue;
+-      next[key] = {
+-        ...saved,
+-        word,
+-        language,
+-        status,
+-        ...((saved?.translation ?? card.translation) && { translation: saved?.translation ?? card.translation }),
+-        added: saved?.added ?? now,
+-        anki: true,
+-        review: undefined,
+-      };
+-      changed += 1;
+-    }
+-    return { words: next, before: words, cards: cards.length, changed };
++    const read = cards.map((card): TReadWord => ({
++      word: card.word,
++      status: card.interval >= MATURE_INTERVAL_DAYS ? "known" : "learning",
++      translation: card.translation,
++    }));
++    const merged = await mergeReadWords(words, language, read, "anki");
++    return { words: merged.words, before: words, cards: cards.length, changed: merged.changed };
+   }),
+ });
+ sample({ clock: ankiSyncRequested, target: syncAnkiFx });
+-$words.on(syncAnkiFx.doneData, (current, { words, before }) => {
+-  const next = { ...current };
+-  for (const [key, word] of Object.entries(words)) {
+-    // Sync can take several requests. Preserve words edited, added or removed while those requests were pending.
+-    if (word !== before[key] && current[key] === before[key]) next[key] = word;
+-  }
+-  return next;
++$words.on(syncAnkiFx.doneData, keepEditsWhileReading);
++
++// "Flashcard'dan oku": with Subtitle Kartları as the learning service, the words the user's flashcard app knows and
++// learns (GET /v1/known-words, read by the background with the saved server and key, src/flashcards/background.ts).
++// The app decides known (a card shown three weeks apart or more, or marked known there) and learning; it only answers
++// when its owner shares them, `shared: false` otherwise. Read for the subtitles' language, or, where no subtitles
++// play (the settings page), for every language with a level or saved words.
++export const flashcardsSyncRequested = createEvent();
++export const syncFlashcardsFx = attach({
++  source: { words: $words, language: $wordsLanguage, levels: $wordLevels },
++  effect: createEffect(
++    async ({
++      words,
++      language,
++      levels,
++    }: {
++      words: Record<string, TSavedWord>;
++      language: string | null;
++      levels: Record<string, number>;
++    }) => {
++      const languages = language
++        ? [language]
++        : [...new Set([...Object.keys(levels), ...Object.values(words).map((word) => word.language)])];
++      if (!languages.length) throw "Önce altyazıları aç: kelimeler kendi dillerinde tutulur";
++      let next = words;
++      let read = 0;
++      let changed = 0;
++      for (const lang of languages) {
++        const answer = await flashcardsRequest({ action: "knownWords", lang });
++        // Sharing is the app's setting, the same for every language
++        if (!answer.shared) return { shared: false, words, before: words, read: 0, changed: 0 };
++        const merged = await mergeReadWords(
++          next,
++          lang,
++          answer.words.map((item): TReadWord => ({ word: item.lemma, status: item.status as TReadWord["status"] })),
++          "flashcards",
++        );
++        next = merged.words;
++        read += answer.words.length;
++        changed += merged.changed;
++      }
++      return { shared: true, words: next, before: words, read, changed };
++    },
++  ),
+ });
++sample({ clock: flashcardsSyncRequested, target: syncFlashcardsFx });
++$words.on(syncFlashcardsFx.doneData, keepEditsWhileReading);
++
++// Flashcard's words are read back when it's the learning service
++export const $flashcardsReads = $learningService.map((service) => service === "subtitle-cards");
+ 
+ // Anki reviews the words when it's the learning service
+ export const $ankiReviews = $learningService.map((service) => service === "anki");
+diff --git a/src/models/words/words.test.ts b/src/models/words/words.test.ts
+index 792583e..071ed03 100644
+--- a/src/models/words/words.test.ts
++++ b/src/models/words/words.test.ts
+@@ -10,12 +10,14 @@ import {
+   $wordLevels,
+   $wordRanks,
+   $words,
++  $wordsState,
+   episodeWordsMarkedKnown,
+   fetchWordRanksFx,
+   levelEstimated,
+   levelSet,
+   levelSetupOpened,
+   syncAnkiFx,
++  syncFlashcardsFx,
+   savedWordsClosed,
+   savedWordsOpened,
+   wordReviewed,
+@@ -27,9 +29,10 @@ import {
+ import { $rawSubs, $subsLanguage } from "../subs";
+ import { $markNewWords } from "../settings";
+ import { captions } from "@root/test/fixtures";
+-import { answerNextMessage } from "@root/test/chrome";
++import { answerNextMessage, sentMessages } from "@root/test/chrome";
+ import type { TSavedWord } from "../types";
+ import type { TWordRank } from "@src/utils/frequency/lookup";
++import { viewWord } from "@src/utils/words";
+ import { Anki } from "@src/learning-service/anki";
+ 
+ const NOW = Date.parse("2026-10-11T12:00:00Z");
+@@ -184,6 +187,93 @@ describe("words", () => {
+     });
+   });
+ 
++  it("reads Flashcard's words: its known and learning words, known words stay known", async () => {
++    const scope = scopeWith({
++      "en:need": { word: "need", language: "en", status: "known", added: 1 },
++      "en:pick": { word: "pick", language: "en", status: "learning", translation: "выбирать", added: 1 },
++    });
++    answerNextMessage("flashcards", {
++      shared: true,
++      words: [
++        { lemma: "key", lang: "en", status: "learning", interval_days: 3 },
++        { lemma: "pick", lang: "en", status: "known", interval_days: 30 },
++        { lemma: "need", lang: "en", status: "learning", interval_days: 1 },
++      ],
++    });
++    answerNextMessage("wordRanks", { ranks: ranksOf({ words: ["key", "pick", "need"] }) });
++
++    const result = await allSettled(syncFlashcardsFx, { scope });
++
++    expect(result).toMatchObject({ status: "done", value: { shared: true, read: 3, changed: 2 } });
++    expect(scope.getState($words)).toEqual({
++      "en:need": { word: "need", language: "en", status: "known", added: 1 },
++      "en:key": { word: "key", language: "en", status: "learning", added: NOW, flashcards: true },
++      "en:pick": {
++        word: "pick",
++        language: "en",
++        status: "known",
++        translation: "выбирать",
++        added: 1,
++        flashcards: true,
++      },
++    });
++    // The subtitles color "keys" as a learning word now
++    expect(viewWord(scope.getState($wordsState)!, "keys")).toMatchObject({ lemma: "key", status: "learning" });
++
++    // Read again: nothing new
++    answerNextMessage("flashcards", {
++      shared: true,
++      words: [{ lemma: "key", lang: "en", status: "learning" }],
++    });
++    answerNextMessage("wordRanks", { ranks: ranksOf({ words: ["key"] }) });
++    expect(await allSettled(syncFlashcardsFx, { scope })).toMatchObject({ value: { read: 1, changed: 0 } });
++  });
++
++  it("changes nothing when Flashcard doesn't share its words", async () => {
++    const words = { "en:pick": { word: "pick", language: "en", status: "learning", added: 1 } } as const;
++    const scope = scopeWith(words);
++    answerNextMessage("flashcards", { shared: false, words: [] });
++
++    const result = await allSettled(syncFlashcardsFx, { scope });
++
++    expect(result).toMatchObject({ status: "done", value: { shared: false, changed: 0 } });
++    expect(scope.getState($words)).toEqual(words);
++  });
++
++  it("passes on what went wrong in the background", async () => {
++    const scope = scopeWith();
++    answerNextMessage("flashcards", { error: "Erişim anahtarı geçersiz ya da süresi dolmuş (401)", kind: "auth" });
++
++    const result = await allSettled(syncFlashcardsFx, { scope });
++
++    expect(result).toMatchObject({
++      status: "fail",
++      value: { message: "Erişim anahtarı geçersiz ya da süresi dolmuş (401)" },
++    });
++    expect(scope.getState($words)).toEqual({});
++  });
++
++  it("reads Flashcard's words for every language with a level where no subtitles play (the settings page)", async () => {
++    const scope = fork({
++      values: [
++        [$subsLanguage, ""],
++        [$words, { "de:haus": { word: "haus", language: "de", status: "learning", added: 1 } }],
++        [$wordLevels, { en: 1000 }],
++      ],
++    });
++    // Answers stack: the last one set up answers first, so the second language's go in first
++    answerNextMessage("flashcards", { shared: true, words: [{ lemma: "katze", lang: "de", status: "learning" }] });
++    answerNextMessage("wordRanks", { ranks: {} });
++    answerNextMessage("flashcards", { shared: true, words: [{ lemma: "key", lang: "en", status: "learning" }] });
++    answerNextMessage("wordRanks", { ranks: {} });
++
++    const result = await allSettled(syncFlashcardsFx, { scope });
++
++    expect(sentMessages("flashcards").map((message) => message.lang)).toEqual(["en", "de"]);
++    expect(result).toMatchObject({ value: { shared: true, read: 2, changed: 2 } });
++    expect(Object.keys(scope.getState($words)).sort()).toEqual(["de:haus", "de:katze", "en:key"]);
++  });
++
+   it("has no score until the language is known", () => {
+     expect(scopeWith({}, "auto").getState($episodeScore)).toBeNull();
+   });
+diff --git a/src/pages/content/components/Settings/FlashcardsRow.test.tsx b/src/pages/content/components/Settings/FlashcardsRow.test.tsx
+new file mode 100644
+index 0000000..064497e
+--- /dev/null
++++ b/src/pages/content/components/Settings/FlashcardsRow.test.tsx
+@@ -0,0 +1,61 @@
++import { act } from "react";
++import { createRoot } from "react-dom/client";
++import { Provider } from "effector-react";
++import { fork } from "effector";
++import { afterEach, expect, it, vi } from "vitest";
++import "@src/models/init";
++import { $subsLanguage } from "@src/models/subs";
++import { $words } from "@src/models/words";
++import { answerNextMessage } from "@root/test/chrome";
++import { FLASHCARDS_NOT_SHARED, FlashcardsRow } from "./Words";
++
++// "Flashcard'dan oku": what the row says after reading, in its status line
++
++async function pressRead() {
++  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
++  const scope = fork({ values: [[$subsLanguage, "en"]] });
++  const node = document.createElement("div");
++  document.body.appendChild(node);
++  const root = createRoot(node);
++  await act(async () =>
++    root.render(
++      <Provider value={scope}>
++        <FlashcardsRow />
++      </Provider>,
++    ),
++  );
++  const button = node.querySelector("button")!;
++  expect(button.textContent).toBe("Flashcard'dan oku");
++  await act(async () => button.click());
++  await act(async () => {
++    await new Promise((resolve) => setTimeout(resolve, 0));
++  });
++  const status = node.querySelector('[role="status"]')!.textContent;
++  const words = scope.getState($words);
++  root.unmount();
++  node.remove();
++  return { status, words };
++}
++
++afterEach(() => vi.unstubAllGlobals());
++
++it("says when Flashcard doesn't share its words", async () => {
++  answerNextMessage("flashcards", { shared: false, words: [] });
++  const { status, words } = await pressRead();
++  expect(status).toBe(FLASHCARDS_NOT_SHARED);
++  expect(words).toEqual({});
++});
++
++it("says how many words it read", async () => {
++  answerNextMessage("flashcards", { shared: true, words: [{ lemma: "seven", lang: "en", status: "learning" }] });
++  answerNextMessage("wordRanks", { ranks: {} });
++  const { status, words } = await pressRead();
++  expect(status).toBe("1 kelime okundu, 1 değişti");
++  expect(words["en:seven"]).toMatchObject({ status: "learning", flashcards: true });
++});
++
++it("says what went wrong", async () => {
++  answerNextMessage("flashcards", { error: "Önce Subtitle Kartları'nın sunucu adresini ve anahtarını kaydet" });
++  const { status } = await pressRead();
++  expect(status).toBe("Önce Subtitle Kartları'nın sunucu adresini ve anahtarını kaydet");
++});
+diff --git a/src/pages/content/components/Settings/Words.tsx b/src/pages/content/components/Settings/Words.tsx
+index f2b2990..e55193c 100644
+--- a/src/pages/content/components/Settings/Words.tsx
++++ b/src/pages/content/components/Settings/Words.tsx
+@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
+ 
+ import {
+   $ankiReviews,
++  $flashcardsReads,
+   $episodeScore,
+   $wordLevel,
+   $wordLevels,
+@@ -21,6 +22,7 @@ import {
+   savedWordsClosed,
+   savedWordsOpened,
+   syncAnkiFx,
++  syncFlashcardsFx,
+   wordReviewed,
+   wordsImported,
+   wordsRemoved,
+@@ -147,8 +149,50 @@ export const AnkiRow: FC = () => {
+   );
+ };
+ 
++// What reading Flashcard's words came to, for the toast and the row's status line
++export const FLASHCARDS_NOT_SHARED =
++  "Flashcard kelimelerini paylaşmıyor. Flashcard'da Subtitle ekranında “Bildiğin kelimeleri Subtitle ile paylaş”ı aç, sonra yeniden oku.";
++export function flashcardsReadMessage({ shared, read, changed }: { shared: boolean; read: number; changed: number }) {
++  if (!shared) return FLASHCARDS_NOT_SHARED;
++  return read
++    ? `${count(read, "kelime")} okundu, ${changed} değişti`
++    : "Flashcard'da henüz bilinen ya da öğrenilen kelime yok";
++}
++
++// Reads the words the user's flashcard app knows and learns (Subtitle Kartları), like "Anki'den oku"
++export const FlashcardsRow: FC = () => {
++  const [sync, syncing] = useUnit([syncFlashcardsFx, syncFlashcardsFx.pending]);
++  const [notice, setNotice] = useState<string | null>(null);
++  const read = () =>
++    sync()
++      .then((result) => {
++        const message = flashcardsReadMessage(result);
++        setNotice(message);
++        if (result.shared) toast.success(message);
++        else toast.error(message);
++      })
++      .catch((error) => {
++        const message = String(error?.message ?? error);
++        setNotice(message);
++        toast.error(message);
++      });
++  return (
++    <div className="es-settings-content__item es-flashcards-read">
++      <Row label="Flashcard kelimeleri" description="Flashcard'ın bildiğin ve öğrendiğin kelimelerini buraya aktarır.">
++        <button type="button" className="es-found__button" disabled={syncing} onClick={read}>
++          {syncing ? "Okunuyor…" : "Flashcard'dan oku"}
++        </button>
++      </Row>
++      <p className="es-settings-content__status" role="status">
++        {notice ??
++          "Flashcard'da öğrendiğin kelimeler altyazıda öğreniliyor diye renklenir, bildiklerin bilinen sayılır. Senin “Biliyorum” işaretin değişmez."}
++      </p>
++    </div>
++  );
++};
++
+ export const WordsTab: FC = () => {
+-  const [words, score, state, level, openSaved, openLevel, markKnown, ankiReviews] = useUnit([
++  const [words, score, state, level, openSaved, openLevel, markKnown, ankiReviews, flashcardsReads] = useUnit([
+     $words,
+     $episodeScore,
+     $wordsState,
+@@ -157,6 +201,7 @@ export const WordsTab: FC = () => {
+     levelSetupOpened,
+     episodeWordsMarkedKnown,
+     $ankiReviews,
++    $flashcardsReads,
+   ]);
+   const [confirming, setConfirming] = useState(false);
+   const learning = Object.values(words).filter((word) => word.status === "learning").length;
+@@ -189,6 +234,7 @@ export const WordsTab: FC = () => {
+         </Row>
+       </div>
+       {ankiReviews && <AnkiRow />}
++      {flashcardsReads && <FlashcardsRow />}
+       {!needsLevel && (
+         <div className="es-settings-content__item">
+           <Row label="Bu bölümün kelimeleri">
+diff --git a/src/pages/options/sections.tsx b/src/pages/options/sections.tsx
+index c17d73a..13beb22 100644
+--- a/src/pages/options/sections.tsx
++++ b/src/pages/options/sections.tsx
+@@ -64,7 +64,7 @@ import {
+ } from "@pages/content/components/Settings/PopoverSettings";
+ import { KeyCombo } from "@pages/content/components/ui/Shortcuts/KeyCombo";
+ import { AnkiContext, LearningService } from "@pages/content/components/Settings/LearningService";
+-import { AnkiRow, LevelPanel } from "@pages/content/components/Settings/Words";
++import { AnkiRow, FlashcardsRow, LevelPanel } from "@pages/content/components/Settings/Words";
+ import { DownloadCatalog } from "@pages/content/components/Settings/Downloads";
+ import { SpokenWord } from "@pages/content/components/Settings/SpokenWord";
+ import { SettingRow } from "@pages/content/components/Settings/SettingRow";
+@@ -398,6 +398,11 @@ export const LearningSection: FC = () => {
+         {learningService === "anki" && <AnkiRow />}
+       </Card>
+       {learningService === "subtitle-cards" && <SubtitleCardsSettings />}
++      {learningService === "subtitle-cards" && (
++        <Card>
++          <FlashcardsRow />
++        </Card>
++      )}
+       {learningService === "anki" && (
+         <PlayerNote>
+           Anki kartları Easysubs not türüyle eklenir: kelime, anlamı, geçtiği satır, satırın çevirisi, videodan bir kare
+diff --git a/src/utils/words.ts b/src/utils/words.ts
+index ed9511a..0cff28f 100644
+--- a/src/utils/words.ts
++++ b/src/utils/words.ts
+@@ -100,7 +100,8 @@ export function viewWord(state: TWordsState, text: string): TWordView | null {
+   return { ...view, status: "rare", marked: false };
+ }
+ 
+-// The word's state as its popover shows it on Learn and Know: only what the user marked (or Anki's cards read back).
++// The word's state as its popover shows it on Learn and Know: only what the user marked (or what Anki's cards and the
++// flashcard app's words read back say).
+ // A word known by the level isn't shown as known there, so pressing Know marks it for good.
+ export const markedStatus = (view: TWordView): "learning" | "known" | null =>
+   view.marked && (view.status === "learning" || view.status === "known") ? view.status : null;
+-- 
+2.43.0
+
