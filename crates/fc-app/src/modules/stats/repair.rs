@@ -1,4 +1,4 @@
-//! v1.4 (W3, docs/02 §17.4): **repairing a leech** instead of only setting it aside.
+//! v1.4 (W3, docs/03 §4.4): **repairing a leech** instead of only setting it aside.
 //!
 //! * `stats.leech_repairs.plan`: the evidence — the latest failed reviews (time, hints; typed
 //!   answers are not kept by the study flow), the example on the card and its score

@@ -1,4 +1,4 @@
-//! The most teachable scene (v1.4 W3, docs/02 §24.3): a word's example sentences ranked, each
+//! The most teachable scene (v1.4 W3, docs/03 §4.4): a word's example sentences ranked, each
 //! with the reasons for its place (`fc_core::encounter_score`). Queries only: switching the
 //! example on the card is `subtitle.encounters.set_primary` (undoable; the schedule stays).
 

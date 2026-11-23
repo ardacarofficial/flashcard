@@ -1,4 +1,4 @@
-//! `examples` module (v1.4 W3, docs/02 §24.3): **the most teachable scene.**
+//! `examples` module (v1.4 W3, docs/03 §4.4): **the most teachable scene.**
 //!
 //! Ranks a word's example sentences with the pure scoring of [`fc_core::encounter_score`]: the
 //! words of each sentence come from the language provider (`reading` lemmatizers), their

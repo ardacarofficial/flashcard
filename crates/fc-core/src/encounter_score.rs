@@ -1,4 +1,4 @@
-//! v1.4 (W3, docs/02 §24.3): **the most teachable scene.** Ranks the example sentences of one
+//! v1.4 (W3, docs/03 §4.4): **the most teachable scene.** Ranks the example sentences of one
 //! word (the encounters of a note, or the candidate sentences of reading mode) and says *why*.
 //!
 //! Pure: the caller tokenizes the sentences (the language provider), looks every word up in the

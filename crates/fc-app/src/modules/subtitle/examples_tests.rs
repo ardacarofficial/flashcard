@@ -40,6 +40,7 @@ suite!(
     encounters_are_ranked_with_reasons_and_nothing_switches_by_itself,
     auto_best_example_switches_on_capture_and_undo_restores,
     a_leech_gets_evidence_repairs_and_an_honest_report,
+    a_scene_of_another_meaning_is_proposed_to_move_out,
 );
 
 /// A cut line with a dangling dash: the worst scene.
@@ -413,4 +414,66 @@ fn a_leech_gets_evidence_repairs_and_an_honest_report(f: Factory) {
             .len(),
         2
     );
+}
+
+fn a_scene_of_another_meaning_is_proposed_to_move_out(f: Factory) {
+    let (t, key) = setup(f);
+    let first = capture(&t.app, &key, &scene(1, WHOLE, "anahtar")).unwrap();
+    // Another meaning: its own note, flagged; the user merges them anyway (a mistake).
+    let piano = "She played the keys of the old piano.";
+    let other = capture(&t.app, &key, &scene(2, piano, "tuş")).unwrap();
+    assert!(other.needs_review && other.note_id != first.note_id);
+    let merged = t.ok::<SubtitleEncountersMergeNotes>(MergeSubtitleNotes {
+        a: first.note_id,
+        b: other.note_id,
+        force: None,
+    });
+    assert_eq!(merged.kept_note_id, first.note_id);
+    let moved = encounters(&t, first.note_id)
+        .into_iter()
+        .find(|r| r.facts.sentence.as_deref() == Some(piano))
+        .unwrap()
+        .capture_id;
+    let plan = t.ok::<StatsLeechesRepairPlan>(LeechCardRef {
+        card_id: first.card_id,
+    });
+    let p = plan
+        .proposals
+        .iter()
+        .find(|p| p.why == LeechRepairWhy::MixedMeanings)
+        .expect("the other meaning's scene is proposed to move out");
+    assert_eq!(
+        p.repair,
+        LeechRepair::MoveMeaning {
+            capture_id: moved.clone(),
+            to_note_id: None
+        }
+    );
+    assert_eq!(p.method, "subtitle.encounters.move");
+    t.ok::<StatsLeechesRepair>(ApplyLeechRepair {
+        card_id: first.card_id,
+        repair: p.repair.clone(),
+    });
+    let left = encounters(&t, first.note_id);
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0].facts.sentence.as_deref(), Some(WHOLE));
+    let word = t.ok::<SubtitleEncountersList>(ListSubtitleEncounters {
+        lang: Some("en".into()),
+        lemma: Some("key".into()),
+        ..Default::default()
+    });
+    let new_note = word
+        .encounters
+        .iter()
+        .find(|r| r.capture_id == moved)
+        .unwrap()
+        .note_id;
+    assert_ne!(new_note, first.note_id);
+    assert!(note(&t, new_note).fields["meaning"].contains("tuş"));
+    t.ok::<OplogUndo>(Empty {});
+    assert_eq!(encounters(&t, first.note_id).len(), 2);
+    assert!(t
+        .ok::<StatsLeechesRepairs>(LeechRepairsRequest::default())
+        .items
+        .is_empty());
 }
