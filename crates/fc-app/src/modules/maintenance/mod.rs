@@ -38,6 +38,8 @@ mod tests;
 mod kill_tests;
 #[cfg(test)]
 mod rescue_tests;
+#[cfg(test)]
+mod kill_matrix_tests;
 
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::registry::Registry;
