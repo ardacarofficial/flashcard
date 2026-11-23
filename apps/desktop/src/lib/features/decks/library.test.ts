@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { i18n } from '$lib/i18n/index.svelte';
 import { api } from '$lib/api';
 import LibraryScreen from './LibraryScreen.svelte';
@@ -106,6 +106,34 @@ describe('v1.1 Library, deck page and Home on the dev mock', () => {
     expect(await screen.findByText('Today')).toBeTruthy();
     await fireEvent.click(start);
     expect(launched).toHaveBeenCalledWith({ deckId: null });
+  });
+
+  it('Home: the words you know lead to Progress; a stale backup shows one line to Settings › Data', async () => {
+    const decks = (await api.deck.tree()).roots;
+    const navigate = vi.fn();
+    render(HomeScreen, { ctx: ctx({ decks, navigate }) });
+    // The mock's `words.stats` (312 known, 234 learning) and `io.backup.status` (stale: old).
+    const words = await screen.findByTestId('home-words', {}, { timeout: 5000 });
+    expect(words.textContent).toMatch(/You know 312 words · learning 234/);
+    await fireEvent.click(words);
+    expect(navigate).toHaveBeenCalledWith('/stats');
+    const backup = await screen.findByTestId('home-backup');
+    expect(backup.textContent).toMatch(/Your last backup is old/);
+    await fireEvent.click(backup);
+    expect(navigate).toHaveBeenCalledWith('/io', 'settings');
+  });
+
+  it('Home with a fresh backup: no backup line', async () => {
+    const call = api.call.bind(api);
+    const spy = vi.spyOn(api, 'call').mockImplementation(((m: string, p: unknown) =>
+      m === 'io.backup.status' ? call(m as never, p as never).then((b) => ({ ...(b as object), stale: null })) : call(m as never, p as never)) as never);
+    const decks = (await api.deck.tree()).roots;
+    render(HomeScreen, { ctx: ctx({ decks }) });
+    await screen.findByTestId('home-words', {}, { timeout: 5000 });
+    await waitFor(() => expect(spy.mock.calls.some(([m]) => m === 'io.backup.status')).toBe(true));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('home-backup')).toBeNull();
+    spy.mockRestore();
   });
 
   it('Home without the study module: no dead Start button, a line that explains', async () => {

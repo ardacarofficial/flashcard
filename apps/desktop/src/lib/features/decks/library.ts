@@ -36,16 +36,12 @@ export function menuRoute(modules: ModuleDto[], match: { id?: string; route?: st
 }
 
 /**
- * "To study today" numbers of a deck (or `decks.summaries.today`). v1.3 (CONTRACT §1): when
- * the backend sends the queue-based `today_*` fields next to the inventory counts, those are
- * what a session would serve and win; otherwise the counts themselves are the queue's.
+ * "To study today" numbers of a deck (or `decks.summaries.today`), exactly as the core sends
+ * them: the queue-based `today_*` fields — what a session would serve (v1.4: no fallback, no
+ * sum here).
  */
 export function todayCounts(c: DeckCounts): { due: number; learning: number; new: number; total: number } {
-  const q = c as DeckCounts & { today_due?: number; today_learning?: number; today_new?: number; today_total?: number };
-  const due = q.today_due ?? c.due;
-  const learning = q.today_learning ?? c.learning;
-  const fresh = q.today_new ?? c.new;
-  return { due, learning, new: fresh, total: q.today_total ?? due + learning + fresh };
+  return { due: c.today_due, learning: c.today_learning, new: c.today_new, total: c.today_total };
 }
 
 /** Whether module `id` is enabled. */

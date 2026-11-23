@@ -45,6 +45,15 @@
     "study": "Study",
     "study_deck": "Study {name}",
     "practice": "Practice",
-    "study_off": "The study module is off; turn it on in Settings › Modules."
+    "study_off": "The study module is off; turn it on in Settings › Modules.",
+    "words_line": "You know {known} words · learning {learning}",
+    "words_progress": "Progress",
+    "words_open": "My words",
+    "backup": {
+      "never": "You have no backup yet. Make one so your words are safe.",
+      "old": "Your last backup is old. Make a new one.",
+      "failed": "The last automatic backup failed. Check the backup settings.",
+      "open": "Backups"
+    }
   }
 }

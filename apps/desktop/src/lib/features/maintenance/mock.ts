@@ -4,7 +4,7 @@
  * signature check live in fc-app and the desktop shell.
  */
 import { err, menu, mockScenario, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
-import type { DraftDto, IntegrityDto, UpdateStatus } from '$lib/api/types';
+import type { BackupStatus, DraftDto, IntegrityDto, UpdateStatus } from '$lib/api/types';
 
 export default {
   modules: [
@@ -53,6 +53,17 @@ export default {
     };
     const noOffer = () => ({ reason: null, previous_run: status().previous_run, crash: null, integrity: null, session: null, drafts: [] });
     return {
+      // v1.4: Home's "son yedek" line (E4). The io feature's mock may override it (same shape).
+      'io.backup.status': (): BackupStatus => ({
+        schedule: 'off',
+        keep: 7,
+        folder: '/home/demo/.flashcard/backups/auto',
+        last_verified: { path: '/home/demo/yedek.fcbackup', created_at: now() - 12 * 86_400_000, verified_at: now() - 12 * 86_400_000, bytes: 2_400_000, complete: true, automatic: false },
+        automatic: [],
+        next_due: null,
+        last_failure: null,
+        stale: 'old',
+      }),
       'maintenance.status': () => status(),
       'maintenance.recovery.get': () => noOffer(),
       'maintenance.recovery.dismiss': () => noOffer(),
