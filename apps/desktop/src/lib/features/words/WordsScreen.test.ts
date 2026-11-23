@@ -34,16 +34,21 @@ describe('<WordsScreen> on the dev mock', () => {
     expect(screen.getByTestId('words-count-ignored').textContent).toBe(String(c.ignored));
     expect(screen.getByTestId('words-count-all').textContent).toBe(String(c.new + c.learning + c.known + c.ignored));
     // Notes without a language are named, not counted.
-    expect(screen.getByTestId('words-unassigned').textContent).toContain('3 cards have no language');
+    expect(screen.getByTestId('words-unassigned').textContent).toContain('12 cards have no language');
     expect((await screen.findAllByTestId('word-row')).length).toBeGreaterThan(5);
   });
 
-  it('opens a word: status sentence, level and where it was seen', async () => {
+  it('opens a word: status sentence, meanings, level and where it was seen', async () => {
+    const spy = vi.spyOn(api, 'call');
     render(WordsScreen, { ctx });
     const row = (await screen.findAllByTestId('word-row')).find((r) => r.textContent?.includes('give up'))!;
     await fireEvent.click(row);
     const panel = await screen.findByTestId('word-detail');
     expect(within(panel).getByTestId('word-say').textContent).toBe("You're learning it: it becomes known as you study its card.");
+    // Meanings come from words.lookup (field roles); nothing from reading mode.
+    expect((await within(panel).findByTestId('word-meanings')).textContent).toContain('vazgeçmek');
+    expect(spy.mock.calls.map((c) => c[0]).filter((m) => String(m).startsWith('reading.'))).toEqual([]);
+    spy.mockRestore();
     expect(await within(panel).findByText('Level B1')).toBeTruthy();
     expect((await within(panel).findByTestId('word-encounter')).textContent).toContain('Breaking Bad · S1E3');
     // Esc closes the panel.
@@ -62,7 +67,7 @@ describe('<WordsScreen> on the dev mock', () => {
     expect((await screen.findByTestId('word-detail')).textContent).toContain('deadline');
   });
 
-  it('"I already know it" calls reading.words.mark and reads list and stats again', async () => {
+  it('"I already know it" calls words.mark and reads list and stats again', async () => {
     const spy = vi.spyOn(api, 'call');
     render(WordsScreen, { ctx });
     const row = (await screen.findAllByTestId('word-row')).find((r) => r.textContent?.includes('deadline'))!;
@@ -71,13 +76,18 @@ describe('<WordsScreen> on the dev mock', () => {
     spy.mockClear();
     await fireEvent.click(within(panel).getByRole('button', { name: 'I already know it' }));
     await waitFor(() =>
-      expect(spy).toHaveBeenCalledWith('reading.words.mark', { language: 'en', lemmas: ['deadline'], mark: 'known' }),
+      expect(spy).toHaveBeenCalledWith('words.mark', { language: 'en', lemmas: ['deadline'], mark: 'known' }),
     );
     await waitFor(() => {
       const methods = spy.mock.calls.map((c) => c[0]);
       expect(methods).toContain('words.stats');
       expect(methods).toContain('words.list');
     });
+    // The row now says "known" (the mock's words.mark changes it).
+    await waitFor(() => expect(within(screen.getByTestId('word-detail')).getByTestId('word-say').textContent).toBe(
+      "You said you know it; if it has a card, it's still asked.",
+    ));
+    await api.call('words.mark', { language: 'en', lemmas: ['deadline'], mark: null });
     spy.mockRestore();
   });
 });

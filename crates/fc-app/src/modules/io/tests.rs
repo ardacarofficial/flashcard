@@ -1403,6 +1403,7 @@ fn imports_record_the_note_origin() {
             notes_only: Some(true),
             offset: None,
             limit: None,
+            cursor: None,
         })
         .total
     };

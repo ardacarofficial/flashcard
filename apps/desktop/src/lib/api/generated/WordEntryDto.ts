@@ -63,6 +63,11 @@ note_ids: Array<NoteId>,
  */
 card_ids: Array<CardId>, 
 /**
+ * What it means: the `meaning`-role field of each note behind it, as plain text, in
+ * note order, duplicates dropped (`words.lookup` only, v1.4; empty in listings).
+ */
+meanings: Array<string>, 
+/**
  * Frequency rank and CEFR band (`None` = the word-data module is off or the pack does
  * not know the word).
  */

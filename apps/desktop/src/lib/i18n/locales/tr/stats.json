@@ -381,7 +381,10 @@
         "open": "Kelimelerim",
         "empty": "Kelime ekleyip çalıştıkça bildiğin kelimeler burada sayılır.",
         "cards": "{n} kartın oturdu ({pct}).",
-        "cards_sub": "Oturmuş kart: aralığı üç haftayı geçmiş kart."
+        "cards_sub": "Oturmuş kart: aralığı üç haftayı geçmiş kart.",
+        "history": "Zaman içinde bildiğin kelimeler",
+        "history_point": "{date}: {n} kelime",
+        "history_change": "{days} günde +{n} kelime"
       },
       "tomorrow": {
         "heading": "Yarın ne var?",

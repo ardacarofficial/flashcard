@@ -130,9 +130,143 @@ impl WordEvidence {
     }
 }
 
+// ------------------------------------------------------------------ history (v1.4 F1)
+
+/// A review as the known-words history reads it: the word it counts for (an index into the
+/// caller's word list), the card (an index into the caller's card list), the study day it
+/// was given on and whether it left the card *known by maturity* (state `review` with a
+/// scheduled interval ≥ the threshold).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KnownEvent {
+    /// Word (caller's index).
+    pub word: u32,
+    /// Card (caller's index).
+    pub card: u32,
+    /// Study day of the review.
+    pub day: i64,
+    /// The review left the card known by maturity.
+    pub known: bool,
+}
+
+/// A word's current manual mark and the study day it was set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MarkEvent {
+    /// Word (caller's index).
+    pub word: u32,
+    /// The mark.
+    pub mark: WordMark,
+    /// Study day it was set.
+    pub day: i64,
+}
+
+/// Words known at the end of each study day `from..=to` (`words.history`).
+///
+/// Definition (docs/03 §4.2): a word is known at the end of day *d* when its manual mark
+/// set on or before *d* is `known`; when that mark is `ignored` it is not; otherwise when
+/// one of its cards' latest review on or before *d* left that card known by maturity.
+/// Only the **current** mark is stored (with its time), so before it was set the word counts
+/// by its cards alone. `events` must be sorted by day (ties in any order: one day's last
+/// review per card wins, as it does in the log's time order when the caller sorts by time).
+pub fn known_history(
+    words: usize,
+    cards: usize,
+    events: &[KnownEvent],
+    marks: &[MarkEvent],
+    from: i64,
+    to: i64,
+) -> Vec<u32> {
+    let mut card_known = vec![false; cards];
+    let mut known_cards = vec![0u32; words];
+    let mut forced: Vec<Option<bool>> = vec![None; words];
+    let mut marks: Vec<MarkEvent> = marks.to_vec();
+    marks.sort_by_key(|m| m.day);
+    let mut known: u32 = 0;
+    let is_known = |kc: u32, f: Option<bool>| f.unwrap_or(kc > 0);
+    let (mut e, mut m) = (0, 0);
+    let mut out = Vec::with_capacity(usize::try_from((to - from + 1).max(0)).unwrap_or(0));
+    for day in from..=to {
+        while let Some(ev) = events.get(e).filter(|ev| ev.day <= day) {
+            e += 1;
+            let (w, c) = (ev.word as usize, ev.card as usize);
+            if w >= words || c >= cards || card_known[c] == ev.known {
+                continue;
+            }
+            let before = is_known(known_cards[w], forced[w]);
+            card_known[c] = ev.known;
+            if ev.known {
+                known_cards[w] += 1;
+            } else {
+                known_cards[w] = known_cards[w].saturating_sub(1);
+            }
+            let after = is_known(known_cards[w], forced[w]);
+            known = adjust(known, before, after);
+        }
+        while let Some(mk) = marks.get(m).filter(|mk| mk.day <= day) {
+            m += 1;
+            let w = mk.word as usize;
+            if w >= words {
+                continue;
+            }
+            let before = is_known(known_cards[w], forced[w]);
+            forced[w] = Some(mk.mark == WordMark::Known);
+            let after = is_known(known_cards[w], forced[w]);
+            known = adjust(known, before, after);
+        }
+        out.push(known);
+    }
+    out
+}
+
+fn adjust(n: u32, before: bool, after: bool) -> u32 {
+    match (before, after) {
+        (false, true) => n.saturating_add(1),
+        (true, false) => n.saturating_sub(1),
+        _ => n,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ev(word: u32, card: u32, day: i64, known: bool) -> KnownEvent {
+        KnownEvent {
+            word,
+            card,
+            day,
+            known,
+        }
+    }
+
+    #[test]
+    fn known_history_counts_cards_and_marks() {
+        // Word 0: card 0 matures on day 2, lapses on day 4. Word 1: two cards, one matures
+        // on day 1 (before the window). Word 2: marked known on day 3. Word 3: card mature
+        // from day 0, marked ignored on day 5.
+        let events = [
+            ev(3, 3, 0, true),
+            ev(1, 1, 1, true),
+            ev(0, 0, 2, false),
+            ev(0, 0, 2, true),
+            ev(1, 2, 3, true),
+            ev(0, 0, 4, false),
+        ];
+        let marks = [
+            MarkEvent {
+                word: 2,
+                mark: WordMark::Known,
+                day: 3,
+            },
+            MarkEvent {
+                word: 3,
+                mark: WordMark::Ignored,
+                day: 5,
+            },
+        ];
+        let h = known_history(4, 4, &events, &marks, 1, 6);
+        assert_eq!(h, vec![2, 3, 4, 3, 2, 2]);
+        assert!(known_history(0, 0, &[], &[], 3, 2).is_empty());
+    }
 
     fn note(cards: u32, interval: Option<u32>, created: i64) -> NoteWordFacts {
         NoteWordFacts {

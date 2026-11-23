@@ -57,9 +57,13 @@ test('E3W my words: find a captured word, Enter, "Zaten biliyorum" → known by 
     .toEqual(['known', 'known']);
   // The screen says so in one sentence, and the chip count came from words.stats again.
   await expect(panel.getByTestId('word-say')).toHaveText(t('words.screen.detail.say.known_manual'));
-  const stats = await rpc<{ languages: { language: string; counts: { known: number } }[] }>('words.stats', {});
+  const stats = await rpc<{ total: { known: number }; languages: { language: string; counts: { known: number } }[] }>('words.stats', {});
   const known = stats.languages.find((l) => l.language === 'en')!.counts.known;
+  expect(stats.total.known).toBeGreaterThanOrEqual(known);
   await expect(main.getByTestId('words-count-known')).toHaveText(String(known));
 
-  await rpc('reading.words.mark', { language: 'en', lemmas: [word.lemma], mark: null });
+  // Cleared through the words module's own front door (`words.mark`, v1.4 F1) and read back.
+  await rpc('words.mark', { language: 'en', lemmas: [word.lemma], mark: null });
+  const after = await rpc<Lookup>('words.lookup', { language: 'en', forms: [word.lemma] });
+  expect(after.forms[0]?.word?.mark).toBeNull();
 });

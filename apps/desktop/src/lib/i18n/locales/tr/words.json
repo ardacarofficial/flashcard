@@ -37,7 +37,10 @@
         "sources": "Kelime verisi kaynakları",
         "import": "Kelime verisi içe aktar",
         "reset": "Yerleşik kelime verisine dön"
-      }
+      },
+      "mark": "Kelimeleri işaretle",
+      "languages": "Koleksiyonun dilleri",
+      "history": "Zaman içinde bilinen kelimeler"
     }
   },
   "words": {
@@ -78,7 +81,7 @@
         "open": "aç",
         "close": "kapat"
       },
-      "unassigned": "{count, plural, other {# kartın}} dili belli değil: Ayarlar'da destenin dilini seç, o kartlar da burada sayılsın.",
+      "unassigned": "{count, plural, other {# kartın}} dili belli değil: dilini Ayarlar › Kelimeler'de seç, o kartlar da burada sayılsın.",
       "empty": {
         "title": "Kelime listen boş",
         "body": "Eklediğin her kelime burada durur: anlamı, dizideki cümlesi ve ne kadar bildiğin. Ekle'den ilk kelimeni ekle.",
@@ -109,10 +112,10 @@
         "mark_known": "Zaten biliyorum",
         "relearn": "Yeniden öğren",
         "ignore": "Yok say",
-        "cards": "Kartları",
+        "meaning": "Anlamı",
+        "no_meaning": "Notlarında henüz anlamı yazmıyor.",
         "open_note": "Arama'da aç",
         "no_cards": "Bu kelimenin kartı yok.",
-        "interval": "{days} gün aralık",
         "level": "Sıklık ve seviye",
         "rank_line": "Film ve dizilerde en sık duyulan {rank}. kelime",
         "band_line": "Seviye {band}",

@@ -6,6 +6,12 @@
   "input": {},
   "output": {
     "threshold_days": 21,
+    "total": {
+      "new": 0,
+      "learning": 2,
+      "known": 1,
+      "ignored": 0
+    },
     "languages": [
       {
         "language": "en",

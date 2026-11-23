@@ -333,6 +333,7 @@ fn the_contract_example_becomes_a_card_once() {
             notes_only: None,
             offset: None,
             limit: None,
+            cursor: None,
         });
     assert_eq!(found.total, 1);
     let note = fx.t.ok::<NotesGet>(NoteRef {

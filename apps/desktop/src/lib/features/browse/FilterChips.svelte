@@ -5,6 +5,7 @@
   running the query stay in Rust.
 -->
 <script lang="ts">
+  import { api } from '$lib/api';
   import { i18n, t } from '$lib/i18n/index.svelte';
   import { Check, Chip, ChevronDown, Icon, IconButton, Menu, X, type MenuItem } from '$lib/ui';
   import { moduleKnownOn } from '../cards/modules.svelte';
@@ -22,7 +23,17 @@
     ontext: (query: string, caret: number) => void;
   } = $props();
 
-  const defs = $derived(chipDefs(i18n.locale).filter((d) => !d.module || moduleKnownOn(d.module)));
+  /** Languages of the collection (`words.languages`) for the language chip. */
+  let langs = $state<string[]>([]);
+  $effect(() => {
+    if (!moduleKnownOn('words')) return;
+    api
+      .call('words.languages', {})
+      .then((r) => (langs = r.languages.map((l) => l.code)))
+      .catch(() => (langs = []));
+  });
+
+  const defs = $derived(chipDefs(i18n.locale, langs).filter((d) => !d.module || moduleKnownOn(d.module)));
 
   const valueLabel = (v: ChipValue) => (typeof v.label === 'string' ? t(v.label) : v.label.raw);
 

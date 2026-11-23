@@ -13,7 +13,7 @@
 //! | Next card < 20 ms | `study.answer` round trip that returns the next card (p95 of 40) | 20 ms | 120 ms |
 //! | Study start | `study.start` over the whole collection (normal session) | 500 ms | 3 000 ms |
 //! | Search 100k < 100 ms | slowest browser query (count + page of 100), classification queries included | 100 ms | 300 ms |
-//! | Browser scroll | one 100-row page anywhere in the full list, three sort orders | 100 ms | 300 ms |
+//! | Browser scroll | one 100-row page anywhere in the full list, three sort orders (by offset; v1.4: also the next page by keyset cursor, what "load more" asks) | 100 ms | 300 ms |
 //! | Import 10k | 10 000-row text import job, start to finished | 10 000 ms | 20 000 ms (2 000 rows) |
 //! | Stats on 2M reviews | cached overview, breakdown by classification (cached day counts + appended rows), deck scope | 1 000 / 1 500 / 10 000 ms | 3 000 / 10 000 / 10 000 ms |
 //! | Memory | peak resident set of the probe process (Linux) | 400 MB | 400 MB |
@@ -218,6 +218,8 @@ struct Measured {
     search_worst: f64,
     search_worst_query: String,
     scroll_worst: f64,
+    /// v1.4: the same pages asked by keyset cursor (`next_cursor` of the page before).
+    scroll_keyset_worst: f64,
     stats_cached: f64,
     stats_breakdown: f64,
     stats_deck: f64,
@@ -544,6 +546,27 @@ fn measure(path: &Path, import_rows: usize, film: Option<FilmScale>) -> Measured
             m.scroll_worst = m.scroll_worst.max(ms);
         }
     }
+    // v1.4: the same pages by keyset cursor (the cursor comes from the page before, untimed).
+    for sort in ["sort_field", "due", "modified"] {
+        for offset in [100, total / 3, total / 2, total.saturating_sub(100)] {
+            let before = invoke(
+                &app,
+                "search.cards",
+                json!({ "query": "", "sort": sort, "offset": offset - 100, "limit": 100 }),
+            );
+            let cursor = before["next_cursor"].clone();
+            assert!(cursor.is_string(), "{sort} @{offset}");
+            let ms = best(2, || {
+                let page = invoke(
+                    &app,
+                    "search.cards",
+                    json!({ "query": "", "sort": sort, "cursor": cursor, "limit": 100 }),
+                );
+                assert!(!page["items"].as_array().unwrap().is_empty());
+            });
+            m.scroll_keyset_worst = m.scroll_keyset_worst.max(ms);
+        }
+    }
 
     // Study: start a session over the whole collection, then answer; every answer returns
     // the next card (that round trip is "next card").
@@ -741,6 +764,7 @@ fn run_suite(scale: Scale) -> Measured {
          | next card p50 / p95    | {:>4.1} / {:>4.1} ms | budget p95 {:>2.0} ms |\n\
          | search (worst: {:?}) | {:>8.1} ms | budget {:>6.0} ms |\n\
          | browser page (worst)   | {:>8.1} ms | budget {:>6.0} ms |\n\
+         | … by keyset cursor     | {:>8.1} ms | budget {:>6.0} ms |\n\
          | stats cached overview  | {:>8.1} ms | budget {:>6.0} ms |\n\
          | stats by classification| {:>8.1} ms | budget {:>6.0} ms |\n\
          | stats deck scope       | {:>8.1} ms | budget {:>6.0} ms |\n\
@@ -763,6 +787,8 @@ fn run_suite(scale: Scale) -> Measured {
         scale.search,
         m.scroll_worst,
         scale.scroll,
+        m.scroll_keyset_worst,
+        scale.scroll,
         m.stats_cached,
         scale.stats_cached,
         m.stats_breakdown,
@@ -782,6 +808,7 @@ fn run_suite(scale: Scale) -> Measured {
         ("study.start", m.study_start, scale.study_start),
         ("search", m.search_worst, scale.search),
         ("browser page", m.scroll_worst, scale.scroll),
+        ("browser page (keyset)", m.scroll_keyset_worst, scale.scroll),
         ("stats cached", m.stats_cached, scale.stats_cached),
         ("stats breakdown", m.stats_breakdown, scale.stats_breakdown),
         ("stats deck scope", m.stats_deck, scale.stats_deck),
@@ -963,7 +990,7 @@ fn perf_suite_scaled() {
 
 /// Profiling helper (v1.4 Z2): times one hot path of a kept collection (`FC_PERF_KEEP`)
 /// `FC_PERF_HOT_N` times, so a sampler (gdb, perf) can attach to a steady loop:
-/// `FC_PERF_HOT_DB=<copy> FC_PERF_HOT_OP=tree|start|breakdown|page|options cargo test -p fc-app
+/// `FC_PERF_HOT_DB=<copy> FC_PERF_HOT_OP=tree|start|breakdown|page|keyset|options cargo test -p fc-app
 /// --release --lib perf_tests::hot -- --ignored --nocapture`. The collection is written to
 /// (sessions are started and ended): give it a copy.
 #[test]
@@ -1025,6 +1052,27 @@ fn hot() {
                             )
                         });
                         println!("  page {sort} @{offset}: {ms:.1} ms");
+                    }
+                }
+            }
+            // v1.4: the same pages by keyset cursor.
+            "keyset" => {
+                for sort in ["sort_field", "due", "modified"] {
+                    for offset in [100, total / 3, total / 2, total.saturating_sub(100)] {
+                        let before = invoke(
+                            &app,
+                            "search.cards",
+                            json!({ "query": "", "sort": sort, "offset": offset - 100, "limit": 100 }),
+                        );
+                        let cursor = before["next_cursor"].clone();
+                        let (ms, _) = time(|| {
+                            invoke(
+                                &app,
+                                "search.cards",
+                                json!({ "query": "", "sort": sort, "cursor": cursor, "limit": 100 }),
+                            )
+                        });
+                        println!("  keyset {sort} @{offset}: {ms:.1} ms");
                     }
                 }
             }

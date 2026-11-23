@@ -211,9 +211,29 @@ impl SearchRead for MemTx<'_> {
             }
         });
         let total = u32::try_from(rows.len()).unwrap_or(u32::MAX);
+        // Keyset (v1.4): the first row after the cursor in this order.
+        let start = match &q.after {
+            Some(after) => rows
+                .iter()
+                .position(|(c, n)| {
+                    let o = q
+                        .sort
+                        .key(c, &n.sort_field, n.updated_at)
+                        .cmp_sorted(&after.key)
+                        .then(c.id.cmp(&after.card_id));
+                    if q.descending {
+                        o.is_lt()
+                    } else {
+                        o.is_gt()
+                    }
+                })
+                .unwrap_or(rows.len()),
+            None => q.offset as usize,
+        };
+        let more = start.saturating_add(q.limit as usize) < rows.len();
         let hits = rows
             .into_iter()
-            .skip(q.offset as usize)
+            .skip(start)
             .take(q.limit as usize)
             .map(|(card, note)| CardHit {
                 card: card.clone(),
@@ -223,7 +243,7 @@ impl SearchRead for MemTx<'_> {
                 note_updated_at: note.updated_at,
             })
             .collect();
-        Ok(SearchPage { hits, total })
+        Ok(SearchPage { hits, total, more })
     }
 
     fn search_card_ids(&self, filter: &Filter, now: Timestamp) -> StorageResult<Vec<CardId>> {

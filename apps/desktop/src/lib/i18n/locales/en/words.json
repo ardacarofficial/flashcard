@@ -37,7 +37,10 @@
         "sources": "Word data sources",
         "import": "Import word data",
         "reset": "Restore the built-in word data"
-      }
+      },
+      "mark": "Mark words",
+      "languages": "Languages of the collection",
+      "history": "Known words over time"
     }
   },
   "words": {
@@ -78,7 +81,7 @@
         "open": "open",
         "close": "close"
       },
-      "unassigned": "{count, plural, one {# card has} other {# cards have}} no language: pick the deck's language in Settings so they count here too.",
+      "unassigned": "{count, plural, one {# card has} other {# cards have}} no language: pick their language in Settings › Words so they count here too.",
       "empty": {
         "title": "Your word list is empty",
         "body": "Every word you add lives here: its meaning, its line from the show and how well you know it. Add your first word from Add.",
@@ -109,10 +112,10 @@
         "mark_known": "I already know it",
         "relearn": "Learn it again",
         "ignore": "Ignore",
-        "cards": "Cards",
+        "meaning": "What it means",
+        "no_meaning": "No meaning written on its notes yet.",
         "open_note": "Open in Search",
         "no_cards": "This word has no cards.",
-        "interval": "{days} day interval",
         "level": "Frequency and level",
         "rank_line": "Number {rank} among the words heard most in films and shows",
         "band_line": "Level {band}",

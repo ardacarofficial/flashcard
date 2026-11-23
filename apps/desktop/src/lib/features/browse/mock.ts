@@ -95,10 +95,13 @@ export default {
     return {
       // Read-only; the attributes feature owns the real handlers.
       'attributes.list': () => ({ defs: attrs }),
-      'search.cards': ({ query, offset, limit }) => {
+      // v1.4 keyset paging: the mock's cursor is the next row's position (opaque to the screen).
+      'search.cards': ({ query, offset, limit, cursor }) => {
         const all = rows(query);
-        const from = offset ?? 0;
-        return { items: all.slice(from, from + (limit ?? 100)), total: all.length, offset: from };
+        const from = cursor ? Number(cursor.slice(1)) : (offset ?? 0);
+        const end = from + (limit ?? 100);
+        const next_cursor = end < all.length ? `@${end}` : null;
+        return { items: all.slice(from, end), total: all.length, offset: cursor ? 0 : from, next_cursor };
       },
       // v1.1 Search: the card info side sheet.
       'browse.card_info': ({ card_id }) => {

@@ -742,6 +742,7 @@ pub fn search_index_is_folded_plain_text(f: &Factory) {
         notes_only: Some(true),
         offset: None,
         limit: None,
+        cursor: None,
     });
     assert_eq!(found.total, 1);
     // Imported (v0.5 text import) notes go through the same path.

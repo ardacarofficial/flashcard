@@ -41,6 +41,10 @@ pub struct WordEntryDto {
     pub note_ids: Vec<NoteId>,
     /// Their live cards (`words.lookup` only; empty in listings).
     pub card_ids: Vec<CardId>,
+    /// What it means: the `meaning`-role field of each note behind it, as plain text, in
+    /// note order, duplicates dropped (`words.lookup` only, v1.4; empty in listings).
+    #[serde(default)]
+    pub meanings: Vec<String>,
     /// Frequency rank and CEFR band (`None` = the word-data module is off or the pack does
     /// not know the word).
     pub level: Option<WordLevelDto>,
@@ -193,6 +197,9 @@ pub struct BandWordCounts {
 pub struct WordStats {
     /// Known-by-maturity threshold in force.
     pub threshold_days: u32,
+    /// Words per status over every language (v1.4).
+    #[serde(default)]
+    pub total: WordCounts,
     /// Per language.
     pub languages: Vec<LanguageWordCounts>,
     /// Notes with a term whose language is not known (no capture language and no
@@ -270,4 +277,61 @@ pub struct ImportWordData {
 pub struct ResetWordData {
     /// Language (BCP-47 or primary subtag).
     pub language: String,
+}
+
+/// One language of the collection (`words.languages`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct WordLanguageDto {
+    /// Language (primary subtag: `en`).
+    pub code: String,
+    /// Notes whose word is in this language.
+    pub notes: u32,
+    /// Words of the index in it.
+    pub words: u32,
+}
+
+/// `words.languages` result: the languages the collection's notes are in (the ones the
+/// word index knows; notes without a known language are left out), by code.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct WordLanguages {
+    /// Languages.
+    pub languages: Vec<WordLanguageDto>,
+}
+
+/// `words.history`: words known at the end of each of the last `days` study days.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct WordHistoryRequest {
+    /// Study days, today included (1–730, default 90).
+    #[serde(default)]
+    pub days: Option<u32>,
+    /// Only this language (BCP-47 or primary subtag; `None` = all).
+    #[serde(default)]
+    pub language: Option<String>,
+    /// Client UTC offset in minutes (study-day boundary).
+    #[serde(default)]
+    pub tz_offset_mins: Option<i32>,
+}
+
+/// Words known at the end of one study day.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct WordHistoryPoint {
+    /// `YYYY-MM-DD` of the study day.
+    pub day: String,
+    /// Words known at its end.
+    pub known: u32,
+}
+
+/// `words.history` result. A word counts as known at the end of a day when its manual mark
+/// (set on or before that day) is `known`, or — without a mark then — when one of its cards'
+/// latest review by then left it in review with a scheduled interval ≥ `threshold_days`.
+/// Only the current mark is stored, so a word marked `ignored` counts by its cards until the
+/// day it was marked (docs/03 §4.2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct WordHistory {
+    /// Known-by-maturity threshold in force.
+    pub threshold_days: u32,
+    /// One point per study day, oldest first, today last.
+    pub points: Vec<WordHistoryPoint>,
 }

@@ -44,10 +44,15 @@ pub struct SearchCards {
     pub descending: Option<bool>,
     /// One row per note (default `false`).
     pub notes_only: Option<bool>,
-    /// Rows to skip (default 0).
+    /// Rows to skip (default 0). Not with `cursor`.
     pub offset: Option<u32>,
     /// Page size (default 100, max 500).
     pub limit: Option<u32>,
+    /// v1.4, keyset paging: `next_cursor` of the previous page of the same search (same query,
+    /// sort, direction and `notes_only`); the page starts right after that page's last row
+    /// without counting rows to skip. Opaque. A cursor of another search or a damaged one is
+    /// `VALIDATION_INVALID_PARAMS` (`details.field = "cursor"`).
+    pub cursor: Option<String>,
 }
 
 /// One browser row.
@@ -102,8 +107,11 @@ pub struct CardSearchPage {
     pub items: Vec<CardRow>,
     /// Matches in total.
     pub total: u32,
-    /// Offset of the first row.
+    /// Offset of the first row (the request's `offset`; 0 with a `cursor`: the position is
+    /// not counted).
     pub offset: u32,
+    /// v1.4: cursor of the next page (pass as `cursor`); `null` = this is the last page.
+    pub next_cursor: Option<String>,
 }
 
 /// `search.ids` / `search.check`: just a query.

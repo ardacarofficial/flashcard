@@ -412,8 +412,11 @@ import type { VerifyBackup } from "./VerifyBackup";
 import type { VoiceList } from "./VoiceList";
 import type { WordDataPackDto } from "./WordDataPackDto";
 import type { WordDataSources } from "./WordDataSources";
+import type { WordHistory } from "./WordHistory";
+import type { WordHistoryRequest } from "./WordHistoryRequest";
 import type { WordIndexRebuilt } from "./WordIndexRebuilt";
 import type { WordInfo } from "./WordInfo";
+import type { WordLanguages } from "./WordLanguages";
 import type { WordList } from "./WordList";
 import type { WordMarksChanged } from "./WordMarksChanged";
 import type { WordStats } from "./WordStats";
@@ -741,6 +744,9 @@ export interface Methods {
   "words.lookup": { kind: "query"; request: LookupWords; response: WordsLookupResult };
   "words.list": { kind: "query"; request: ListWords; response: WordList };
   "words.stats": { kind: "query"; request: Empty; response: WordStats };
+  "words.languages": { kind: "query"; request: Empty; response: WordLanguages };
+  "words.history": { kind: "query"; request: WordHistoryRequest; response: WordHistory };
+  "words.mark": { kind: "command"; request: MarkWords; response: WordMarksChanged };
   "words.index.rebuild": { kind: "command"; request: Empty; response: JobDto };
   "words.index.rebuild_now": { kind: "command"; request: Empty; response: WordIndexRebuilt };
   "words.data.sources": { kind: "query"; request: Empty; response: WordDataSources };
@@ -1081,6 +1087,9 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "words.lookup": "query",
   "words.list": "query",
   "words.stats": "query",
+  "words.languages": "query",
+  "words.history": "query",
+  "words.mark": "command",
   "words.index.rebuild": "command",
   "words.index.rebuild_now": "command",
   "words.data.sources": "query",

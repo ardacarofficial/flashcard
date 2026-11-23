@@ -8,8 +8,8 @@
 use super::{all, exec, id, json_list, one, ts, Mode, SqliteTx, WriteMode};
 use crate::error::StorageResult;
 use crate::repo::{
-    CardHit, CardSearch, CardSort, IntegrityReport, NoteOriginRecord, PurgeCounts, ReviewEntry,
-    SearchPage, SearchRead, SearchWrite,
+    CardCursor, CardHit, CardSearch, CardSort, IntegrityReport, NoteOriginRecord, PurgeCounts,
+    ReviewEntry, SearchPage, SearchRead, SearchWrite, SortValue,
 };
 use fc_core::attribute::AttributeTarget;
 use fc_core::card::Card;
@@ -759,6 +759,80 @@ fn order_by(sort: CardSort, desc: bool) -> String {
     format!("ORDER BY {col} {dir}, c.id {dir}")
 }
 
+/// Sort column without collation (for `IS NULL`).
+fn sort_column(sort: CardSort) -> &'static str {
+    match sort {
+        CardSort::SortField => "n.sort_field",
+        CardSort::Created => "c.created_at",
+        CardSort::Modified => "n.updated_at",
+        CardSort::Due => "c.due",
+        CardSort::Stability => "c.stability",
+        CardSort::Difficulty => "c.difficulty",
+        CardSort::Lapses => "c.lapses",
+        CardSort::Reps => "c.reps",
+    }
+}
+
+/// One contiguous range of the sort order after a keyset cursor.
+enum KeysetSegment<'a> {
+    /// Rows with the cursor's (non-NULL) value and a later id, then later values: `col >= k
+    /// AND (col > k OR id > i)` (mirrored descending): a range seek on the sort index.
+    After(&'a SortValue, CardId),
+    /// NULL rows with a later id.
+    NullAfter(CardId),
+    /// Every NULL row.
+    Nulls,
+    /// Every non-NULL row.
+    NotNulls,
+}
+
+impl KeysetSegment<'_> {
+    /// The condition (aliases `c`, `n`); its parameters are appended to `params`.
+    fn sql(&self, sort: CardSort, desc: bool, params: &mut Vec<SqlValue>) -> String {
+        let raw = sort_column(sort);
+        let gt = if desc { "<" } else { ">" };
+        let mut param = |v: SqlValue| {
+            params.push(v);
+            format!("?{}", params.len())
+        };
+        match self {
+            KeysetSegment::After(k, id) => {
+                let col = if sort == CardSort::SortField {
+                    "n.sort_field COLLATE NOCASE"
+                } else {
+                    raw
+                };
+                let k = param(match k {
+                    SortValue::Null => SqlValue::Null,
+                    SortValue::Int(v) => SqlValue::Integer(*v),
+                    SortValue::Real(v) => SqlValue::Real(*v),
+                    SortValue::Text(v) => SqlValue::Text(v.clone()),
+                });
+                let id = param(SqlValue::Text(id.to_string()));
+                format!("({col} {gt}= {k} AND ({col} {gt} {k} OR c.id {gt} {id}))")
+            }
+            KeysetSegment::NullAfter(id) => {
+                let id = param(SqlValue::Text(id.to_string()));
+                format!("({raw} IS NULL AND c.id {gt} {id})")
+            }
+            KeysetSegment::Nulls => format!("{raw} IS NULL"),
+            KeysetSegment::NotNulls => format!("{raw} IS NOT NULL"),
+        }
+    }
+}
+
+/// The ranges after `cursor`, in sort order. NULL sorts first ascending and last descending
+/// (SQLite), so a nullable column may need a second range; ties are ordered by card id.
+fn keyset_segments(sort: CardSort, desc: bool, cursor: &CardCursor) -> Vec<KeysetSegment<'_>> {
+    let id = cursor.card_id;
+    match (&cursor.key, desc) {
+        (SortValue::Null, false) => vec![KeysetSegment::NullAfter(id), KeysetSegment::NotNulls],
+        (SortValue::Null, true) => vec![KeysetSegment::NullAfter(id)],
+        (k, true) if sort.nullable() => vec![KeysetSegment::After(k, id), KeysetSegment::Nulls],
+        (k, _) => vec![KeysetSegment::After(k, id)],
+    }
+}
+
 fn card_ids(conn: &Connection, sql: &str, params: &[SqlValue]) -> StorageResult<Vec<CardId>> {
     all(conn, "cards", sql, params_from_iter(params.iter()), |r| {
         id(r, 0)
@@ -884,10 +958,11 @@ impl<M: Mode> SearchRead for SqliteTx<'_, M> {
             indexed.then_some(ORDERED_SCAN_MIN),
         )?;
         let total = u32::try_from(matched).unwrap_or(u32::MAX);
-        if s.offset >= total {
+        if total == 0 || (s.after.is_none() && s.offset >= total) {
             return Ok(SearchPage {
                 hits: Vec::new(),
                 total,
+                more: false,
             });
         }
         // 2. The page: walk the sort index for big sets, otherwise sort the matches.
@@ -907,11 +982,40 @@ impl<M: Mode> SearchRead for SqliteTx<'_, M> {
                     ""
                 };
                 (
-                    format!("FROM json_each(?1) j CROSS JOIN cards c ON c.rowid = j.value{notes}"),
+                    format!(
+                        "FROM json_each(?1) j CROSS JOIN cards c ON c.rowid = j.value{notes} WHERE 1"
+                    ),
                     vec![SqlValue::Text(matched_json)],
                 )
             }
         };
+        if let Some(after) = &s.after {
+            // Keyset (v1.4): each segment is one range of the sort order after the cursor,
+            // read in order until the page (plus one row, to know whether more follow) is full.
+            let want = s.limit as usize + 1;
+            let mut ids: Vec<CardId> = Vec::new();
+            for seg in keyset_segments(s.sort, s.descending, after) {
+                if ids.len() >= want {
+                    break;
+                }
+                let mut p = params.clone();
+                let cond = seg.sql(s.sort, s.descending, &mut p);
+                p.push(SqlValue::Integer((want - ids.len()) as i64));
+                let sql = format!(
+                    "SELECT c.id {from} AND {cond} {} LIMIT ?{}",
+                    order_by(s.sort, s.descending),
+                    p.len()
+                );
+                ids.extend(card_ids(self.conn(), &sql, &p)?);
+            }
+            let more = ids.len() > s.limit as usize;
+            ids.truncate(s.limit as usize);
+            return Ok(SearchPage {
+                hits: self.hits(&ids)?,
+                total,
+                more,
+            });
+        }
         // A page past the middle of an index walk is read from the far end, walking the index
         // backwards (v1.0: the last page of 200 000 cards costs what the first one does).
         let end = s.offset.saturating_add(s.limit).min(total);
@@ -933,9 +1037,11 @@ impl<M: Mode> SearchRead for SqliteTx<'_, M> {
         if backwards {
             ids.reverse();
         }
+        let more = (s.offset as usize).saturating_add(ids.len()) < total as usize;
         Ok(SearchPage {
             hits: self.hits(&ids)?,
             total,
+            more,
         })
     }
 

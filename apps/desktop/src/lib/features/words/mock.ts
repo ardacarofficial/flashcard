@@ -1,15 +1,17 @@
 /**
  * Dev-only mock of the word index (`words.*`, v1.4) and of `subtitle.encounters.list`, with a
  * small film vocabulary so "Kelimelerim" can be demoed and tested without Rust. The real index
- * (status rules, counts, paging) lives in fc-app's `words` module; this only answers in shape.
- * Manual marks go through reading's `reading.words.mark` (reading/mock.ts), which keeps its own
- * state: the rows here do not change when a word is marked.
+ * (status rules, counts, paging, history) lives in fc-app's `words` module; this only answers in
+ * shape. The one place for every `words.*` handler (Library, Home, Progress and Kelimelerim read
+ * these). `words.stats` counts the listed sample plus a fixed background (the rest of a
+ * plausible collection: 312 known, 234 learning); `words.mark` changes the sample's rows.
  */
 import { menu, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
 // Namespace import: `mockEncountersOfNote` is a live binding set when the subtitle mock starts.
 import * as sub from '../subtitle/mock';
 import type {
   CefrBand,
+  WordHistoryPoint,
   SubtitleCaptureRow,
   WordCounts,
   WordEntryDto,
@@ -43,6 +45,23 @@ const WORDS: Seed[] = [
   { key: 'whatever', status: 'learning', rank: 870, band: 'A2', notes: 1, cards: 1, interval: 6 },
 ];
 
+/** Meanings of the sample (`words.lookup` → `word.meanings`). */
+const MEANINGS: Record<string, string[]> = {
+  'give up': ['vazgeçmek', 'bırakmak'],
+  deadline: ['son teslim tarihi'],
+  'figure out': ['çözmek, anlamak'],
+  reckon: ['sanmak, tahmin etmek'],
+  cook: ['pişirmek', 'aşçı'],
+  chemistry: ['kimya'],
+  cartel: ['kartel'],
+  launder: ['(para) aklamak'],
+  lawyer: ['avukat'],
+  whatever: ['her neyse'],
+};
+
+/** Words outside the listed sample, so the counts look like a real collection. */
+const BACKGROUND: WordCounts = { new: 137, learning: 230, known: 308, ignored: 3 };
+
 const SENTENCES: Record<string, [string, string, number]> = {
   'give up': ['I will never give up on this family.', 'Breaking Bad · S1E3', 1_302_000],
   deadline: ['The deadline is Friday, no exceptions.', 'The Office · S2E4', 412_000],
@@ -71,6 +90,8 @@ export default {
   ],
   handlers: ({ now, id, modules }: MockEnv) => {
     const at = now();
+    // Own copy: `words.mark` changes it.
+    const words: Seed[] = WORDS.map((w) => ({ ...w }));
     const noteIds = new Map(WORDS.map((w) => [w.key, w.notes ? id('note') : null]));
     const withData = () => modules.enabled('word_data');
     const entry = (w: Seed, full = false): WordEntryDto => {
@@ -89,30 +110,63 @@ export default {
         first_seen: w.notes ? at : null,
         note_ids: full && note ? [note] : [],
         card_ids: [],
+        meanings: full ? (MEANINGS[w.key] ?? []) : [],
         level: withData() ? level(w) : null,
       };
     };
-    const counts = (list: Seed[]): WordCounts => ({
-      new: list.filter((w) => w.status === 'new').length,
-      learning: list.filter((w) => w.status === 'learning').length,
-      known: list.filter((w) => w.status === 'known').length,
-      ignored: list.filter((w) => w.status === 'ignored').length,
+    const counts = (list: Seed[], base: WordCounts = { new: 0, learning: 0, known: 0, ignored: 0 }): WordCounts => ({
+      new: base.new + list.filter((w) => w.status === 'new').length,
+      learning: base.learning + list.filter((w) => w.status === 'learning').length,
+      known: base.known + list.filter((w) => w.status === 'known').length,
+      ignored: base.ignored + list.filter((w) => w.status === 'ignored').length,
     });
+    /** Status by the cards alone (what a cleared mark falls back to): the seed's own unless
+     * the seed was a manual mark. */
+    const byCards = (w: Seed): WordStatus => {
+      const seed = WORDS.find((x) => x.key === w.key);
+      if (seed && !seed.manual) return seed.status;
+      return w.cards === 0 ? 'new' : (w.interval ?? 0) >= 21 ? 'known' : 'learning';
+    };
     const BANDS: (CefrBand | null)[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', null];
     return {
       'words.stats': () => ({
         threshold_days: 21,
+        total: counts(words, BACKGROUND),
         languages: [
           {
             language: 'en',
-            counts: counts(WORDS),
-            bands: withData() ? BANDS.map((band) => ({ band, counts: counts(WORDS.filter((w) => w.band === band)) })) : [],
+            counts: counts(words, BACKGROUND),
+            bands: withData() ? BANDS.map((band) => ({ band, counts: counts(words.filter((w) => w.band === band)) })) : [],
           },
         ],
-        unassigned_notes: 3,
+        unassigned_notes: 12,
       }),
+      'words.languages': () => ({ languages: [{ code: 'en', notes: 655, words: Object.values(counts(words, BACKGROUND)).reduce((a, b) => a + b, 0) }] }),
+      'words.history': ({ days }) => {
+        // A plausible climb to today's known count: slow at first, a few words a day lately.
+        const n = days ?? 90;
+        const known = counts(words, BACKGROUND).known;
+        const today = new Date(at);
+        const points: WordHistoryPoint[] = Array.from({ length: n }, (_, i) => {
+          const d = new Date(today.getTime() - (n - 1 - i) * 86_400_000);
+          const share = n === 1 ? 1 : i / (n - 1);
+          return { day: d.toISOString().slice(0, 10), known: Math.round(known * (0.45 + 0.55 * share * share)) };
+        });
+        return { threshold_days: 21, points };
+      },
+      'words.mark': ({ lemmas, mark }) => {
+        let changed = 0;
+        for (const lemma of lemmas) {
+          const w = words.find((x) => x.key === lemma.trim().toLowerCase());
+          if (!w || (w.manual ? (w.status === 'ignored' ? 'ignored' : 'known') : null) === mark) continue;
+          w.manual = mark !== null;
+          w.status = mark ?? byCards(w);
+          changed++;
+        }
+        return { changed };
+      },
       'words.list': ({ status, cursor, limit, sort }) => {
-        let list = WORDS.filter((w) => !status || w.status === status);
+        let list = words.filter((w) => !status || w.status === status);
         const rankOf = (w: Seed) => w.rank ?? Number.MAX_SAFE_INTEGER;
         const bandOf = (w: Seed) => (w.band ? BANDS.indexOf(w.band) : 99);
         if (sort === 'rank') list = [...list].sort((a, b) => rankOf(a) - rankOf(b));
@@ -128,7 +182,7 @@ export default {
         lemmatizer: 'en-simple',
         threshold_days: 21,
         forms: forms.map((form) => {
-          const w = WORDS.find((x) => x.key === form.toLowerCase());
+          const w = words.find((x) => x.key === form.toLowerCase());
           return {
             form,
             key: w?.key ?? form.toLowerCase(),

@@ -22,10 +22,17 @@ descending?: boolean | null,
  */
 notes_only?: boolean | null, 
 /**
- * Rows to skip (default 0).
+ * Rows to skip (default 0). Not with `cursor`.
  */
 offset?: number | null, 
 /**
  * Page size (default 100, max 500).
  */
-limit?: number | null, };
+limit?: number | null, 
+/**
+ * v1.4, keyset paging: `next_cursor` of the previous page of the same search (same query,
+ * sort, direction and `notes_only`); the page starts right after that page's last row
+ * without counting rows to skip. Opaque. A cursor of another search or a damaged one is
+ * `VALIDATION_INVALID_PARAMS` (`details.field = "cursor"`).
+ */
+cursor?: string | null, };

@@ -2,7 +2,7 @@
   İlerleme (v1.4, route `stats`; prototype `olustur-ara-istatistik.html`, İlerleme part). The
   first view answers three questions in plain words, one sentence and one small chart each:
   "Bugün ne yaptım?" (`stats.today`, last 7 days of `stats.overview`, today's hard words from
-  `stats.struggles` with "Bunları çalış"), "İlerliyor muyum?" (`words.stats`: the one "which
+  `stats.struggles` with "Bunları çalış"), "İlerliyor muyum?" (`words.stats`, and `words.history` as a line: the one "which
   words do I know" truth, linking to Kelimelerim) and "Yarın ne var?" (the forecast of
   `stats.overview`). Everything else — summary tiles, calendar, recall, stages, trend,
   30 days, hours, answer times, recent struggles, leeches with the guided repair, deck report
@@ -29,6 +29,7 @@
     StatsScope,
     StruggleList,
     TodayStats,
+    WordHistoryPoint,
     WordStats,
   } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
@@ -63,6 +64,7 @@
   import { LoadState } from '../core/kit';
   import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
   import BarChart from './BarChart.svelte';
+  import LineChart from './LineChart.svelte';
   import Heatmap from './Heatmap.svelte';
   import LeechRepair from './LeechRepair.svelte';
   import Panel from './Panel.svelte';
@@ -100,6 +102,8 @@
   let struggles = $state<StruggleList | null>(null);
   let hardToday = $state<StruggleList | null>(null);
   let words = $state<WordStats | null>(null);
+  /** Known words at the end of each of the last 90 study days (`words.history`). */
+  let wordHistory = $state<WordHistoryPoint[]>([]);
   let notice = $state<string | null>(null);
   let showMore = $state(readMore());
   let repairing = $state<CardRow | null>(null);
@@ -159,12 +163,18 @@
   async function loadWords() {
     if (!moduleKnownOn('words')) {
       words = null;
+      wordHistory = [];
       return;
     }
     try {
       words = await api.call('words.stats', {});
     } catch {
       words = null;
+    }
+    try {
+      wordHistory = (await api.call('words.history', { days: 90, language: null, tz_offset_mins: tzOffset() })).points;
+    } catch {
+      wordHistory = [];
     }
   }
 
@@ -305,16 +315,8 @@
 </script>
 
 <div class="stats">
-  <PageHeader title={t('stats.heading')} subtitle={t('stats.subtitle')}>
-    {#snippet actions()}
-      {#if adv && ctx.navigate}
-        <nav class="subnav" aria-label={t('stats.tabs.label')}>
-          {#if moduleKnownOn('planning')}<Button size="sm" variant="ghost" onclick={() => ctx.navigate?.('/planning')}>{t('nav.planning')}</Button>{/if}
-          {#if moduleKnownOn('goals')}<Button size="sm" variant="ghost" onclick={() => ctx.navigate?.('/goals')}>{t('nav.goals')}</Button>{/if}
-        </nav>
-      {/if}
-    {/snippet}
-  </PageHeader>
+  <!-- Planning and Goals are the section's tabs (shell), with or without Advanced (F1). -->
+  <PageHeader title={t('stats.heading')} subtitle={t('stats.subtitle')} />
 
   {#if adv}
     <form
@@ -414,6 +416,26 @@
             <li><span class="dot warning" aria-hidden="true"></span>{t('stats.q.growing.learning_label')} <span class="num">{formatCount(k.learning)}</span></li>
             <li><span class="dot neutral" aria-hidden="true"></span>{t('stats.q.growing.new')} <span class="num">{formatCount(k.new)}</span></li>
           </ul>
+          {#if wordHistory.length > 1 && wordHistory.some((p) => p.known > 0)}
+            {@const first = wordHistory[0]!}
+            {@const gain = wordHistory[wordHistory.length - 1]!.known - first.known}
+            <div class="history" data-testid="growing-history">
+              <div class="history-head">
+                <span class="sub">{t('stats.q.growing.history')}</span>
+                {#if gain > 0}
+                  <span class="sub num" data-testid="growing-history-change">{t('stats.q.growing.history_change', { n: gain, days: wordHistory.length })}</span>
+                {/if}
+              </div>
+              <LineChart
+                label={t('stats.q.growing.history')}
+                points={wordHistory.map((p) => ({
+                  label: d(p.day),
+                  value: p.known,
+                  title: t('stats.q.growing.history_point', { date: d(p.day), n: formatCount(p.known) }),
+                }))}
+              />
+            </div>
+          {/if}
           {#if words.languages.length > 1}
             <p class="sub">
               {words.languages
@@ -1233,10 +1255,6 @@
     }
   }
   /* --- v1.4: three answers --- */
-  .subnav {
-    display: flex;
-    gap: var(--space-1);
-  }
   .answers {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1306,6 +1324,17 @@
   .ans .hard {
     flex: 1 1 10rem;
     font-size: var(--text-sm);
+  }
+  .history {
+    display: grid;
+    gap: var(--space-1);
+    margin-top: var(--space-2);
+  }
+  .history-head {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+    flex-wrap: wrap;
   }
   .legend-inline {
     display: flex;

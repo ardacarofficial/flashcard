@@ -199,6 +199,7 @@ fn leeches(req: LeechRequest, ctx: &QueryCtx<'_>) -> AppResult<LeechList> {
         notes_only: false,
         offset: 0,
         limit: req.limit.unwrap_or(100).clamp(1, 1000),
+        after: None,
     })?;
     let index = DeckIndex::load(reads)?;
     Ok(LeechList {

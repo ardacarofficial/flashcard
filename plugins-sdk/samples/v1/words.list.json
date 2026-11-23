@@ -34,7 +34,8 @@
           "band": "A1",
           "band_origin": "profile",
           "estimated": false
-        }
+        },
+        "meanings": []
       },
       {
         "language": "en",
@@ -56,7 +57,8 @@
           "band": "A2",
           "band_origin": "expression",
           "estimated": true
-        }
+        },
+        "meanings": []
       }
     ],
     "next_cursor": "ZW4fcGljayB1cB9aHzQyOTQ5NjcyOTU"

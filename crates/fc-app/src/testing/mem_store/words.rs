@@ -168,6 +168,59 @@ impl WordIndexRead for MemTx<'_> {
     fn word_index_dirty_count(&self) -> StorageResult<u32> {
         Ok(0)
     }
+
+    fn word_index_languages(&self) -> StorageResult<Vec<(String, u32, u32)>> {
+        let w = &self.s().domains.words;
+        let mut out: BTreeMap<String, (u32, u32)> = BTreeMap::new();
+        for n in w.notes.values().filter(|n| !n.language.is_empty()) {
+            out.entry(n.language.clone()).or_default().0 += 1;
+        }
+        for (l, _) in w.words.keys() {
+            if let Some(e) = out.get_mut(l) {
+                e.1 += 1;
+            }
+        }
+        Ok(out.into_iter().map(|(l, (n, w))| (l, n, w)).collect())
+    }
+
+    fn word_index_marked(&self, language: Option<&str>) -> StorageResult<Vec<WordIndexRecord>> {
+        Ok(self
+            .s()
+            .domains
+            .words
+            .words
+            .values()
+            .filter(|w| w.mark.is_some() && language.is_none_or(|l| l == w.language))
+            .cloned()
+            .collect())
+    }
+
+    fn word_review_events(
+        &self,
+        language: Option<&str>,
+        threshold_days: u32,
+    ) -> StorageResult<Vec<WordReviewEvent>> {
+        let s = self.s();
+        let mut v: Vec<&ReviewLogRecord> = s.domains.study.reviews.values().collect();
+        v.sort_by_key(|r| (r.created_at, r.id));
+        Ok(v.into_iter()
+            .filter_map(|r| {
+                let card = s.cards.get(&r.card_id).filter(|c| c.deleted_at.is_none())?;
+                let n = s.domains.words.notes.get(&card.note_id)?;
+                if n.language.is_empty() || language.is_some_and(|l| l != n.language) {
+                    return None;
+                }
+                Some(WordReviewEvent {
+                    language: n.language.clone(),
+                    key: n.key.clone(),
+                    card_id: r.card_id,
+                    at: r.created_at,
+                    known: r.state_after == fc_core::card::CardState::Review
+                        && r.scheduled_days >= threshold_days,
+                })
+            })
+            .collect())
+    }
 }
 
 impl WordIndexWrite for MemTx<'_> {

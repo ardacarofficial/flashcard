@@ -2,8 +2,9 @@
   Kelimelerim (v1.4, prototypes/v14/olustur-ara-istatistik.html route `words`): the word index
   as a list — a big search box (`/`), status chips with the counts of `words.stats`, language
   and sort, keyset paging (`words.list` cursor). A row opens a side panel: the status in one
-  sentence, the word's cards (`reading.words.lookup`), frequency and CEFR band (`words.lookup`),
-  the manual mark (`reading.words.mark`) and where it was seen (`subtitle.encounters.list`).
+  sentence, what it means and its frequency and CEFR band (`words.lookup`), the manual mark
+  (`words.mark`) and where it was seen (`subtitle.encounters.list`). The language menu lists
+  the collection's languages (`words.languages`). Only `words.*`: no dependency on reading mode.
   Every status, count and level comes from the backend; the screen only shows them.
 -->
 <script lang="ts">
@@ -11,8 +12,8 @@
   import { api } from '$lib/api';
   import type {
     SubtitleCaptureRow,
-    WordCard,
     WordEntryDto,
+    WordLanguageDto,
     WordFormResult,
     WordMark,
     WordSort,
@@ -20,9 +21,9 @@
     WordStatus,
   } from '$lib/api/types';
   import { formatCount, formatDuration } from '$lib/format';
-  import { t } from '$lib/i18n/index.svelte';
+  import { i18n, t } from '$lib/i18n/index.svelte';
   import { isEditableTarget } from '$lib/keyboard';
-  import { moduleKnownOn, moduleOn, trackModules } from '../cards/modules.svelte';
+  import { moduleKnownOn, trackModules } from '../cards/modules.svelte';
   import type { ScreenCtx } from '../types';
   import {
     Button,
@@ -51,6 +52,7 @@
   const STATUSES: WordStatus[] = ['new', 'learning', 'known', 'ignored'];
 
   let stats = $state<WordStats | null>(null);
+  let langs = $state<WordLanguageDto[]>([]);
   let words = $state<WordEntryDto[]>([]);
   let next = $state<string | null>(null);
   let loading = $state(true);
@@ -65,7 +67,6 @@
   let searchEl = $state<HTMLInputElement | null>(null);
 
   let form = $state<WordFormResult | null>(null);
-  let cards = $state<WordCard[]>([]);
   let seen = $state<SubtitleCaptureRow[]>([]);
   let marking = $state(false);
 
@@ -73,6 +74,11 @@
   const lang = $derived(language ?? stats?.languages[0]?.language ?? null);
   const counts = $derived(stats?.languages.find((l) => l.language === lang)?.counts ?? null);
   const total = $derived(counts ? counts.new + counts.learning + counts.known + counts.ignored : 0);
+  /** Words in every language (`words.stats.total`): none at all → the empty state. */
+  const grandTotal = $derived(
+    stats ? stats.total.new + stats.total.learning + stats.total.known + stats.total.ignored : 0,
+  );
+  const meanings = $derived(form?.word?.meanings ?? []);
   const shown = $derived.by(() => {
     const q = query.trim().toLowerCase();
     if (!q) return words;
@@ -81,8 +87,15 @@
   });
   const selected = $derived(open ? (words.find((w) => w.key === open) ?? null) : null);
 
+  function langName(code: string): string {
+    try {
+      return new Intl.DisplayNames([i18n.locale], { type: 'language' }).of(code) ?? code;
+    } catch {
+      return code;
+    }
+  }
   const langOptions = $derived<SelectOption<string>[]>(
-    (stats?.languages ?? []).map((l) => ({ value: l.language, label: l.language })),
+    langs.map((l) => ({ value: l.code, label: `${langName(l.code)} (${l.code})` })),
   );
   const sortOptions = $derived<SelectOption<WordSort>[]>([
     { value: 'key', label: t('words.screen.sort.key') },
@@ -95,7 +108,9 @@
   ]);
 
   async function loadStats() {
-    stats = await api.call('words.stats', {});
+    const [s, l] = await Promise.all([api.call('words.stats', {}), api.call('words.languages', {})]);
+    stats = s;
+    langs = l.languages;
   }
 
   async function loadList(more = false) {
@@ -139,21 +154,12 @@
     active = key;
     open = key;
     form = null;
-    cards = [];
     seen = [];
     const l = lang ?? '';
     await ctx.guarded(async () => {
       const r = await api.call('words.lookup', { language: l, forms: [key] });
       if (open === key) form = r.forms[0] ?? null;
     });
-    if (moduleOn('reading')) {
-      try {
-        const info = await api.call('reading.words.lookup', { language: l, lemma: key, tz_offset_mins: -new Date().getTimezoneOffset() });
-        if (open === key) cards = info.cards;
-      } catch {
-        /* reading switched off: the card count of the row stays */
-      }
-    }
     if (moduleKnownOn('subtitle')) {
       try {
         const list = await api.call('subtitle.encounters.list', { lang: l, lemma: key });
@@ -172,7 +178,7 @@
     if (!selected || !lang) return;
     const key = selected.key;
     marking = true;
-    const ok = await ctx.guarded(() => api.call('reading.words.mark', { language: lang, lemmas: [key], mark: to }));
+    const ok = await ctx.guarded(() => api.call('words.mark', { language: lang, lemmas: [key], mark: to }));
     if (ok) {
       await ctx.guarded(async () => {
         await loadStats();
@@ -241,7 +247,7 @@
     <Skeleton lines={6} />
   {:else if failed && !stats}
     <EmptyState title={t('words.screen.load_failed')} action={{ label: t('words.screen.retry'), onclick: () => void reload() }} />
-  {:else if stats && total === 0 && stats.languages.length <= 1}
+  {:else if stats && grandTotal === 0}
     {#if stats.unassigned_notes > 0}
       <p class="hint" data-testid="words-unassigned">{t('words.screen.unassigned', { count: stats.unassigned_notes })}</p>
     {/if}
@@ -287,7 +293,7 @@
         {/each}
       </div>
       <span class="sp"></span>
-      {#if stats.languages.length > 1}
+      {#if langs.length > 1}
         <Select
           size="sm"
           label={t('words.screen.language')}
@@ -373,7 +379,7 @@
             <div class="lab">{t('words.screen.detail.status')}</div>
             <div class="st"><span class="dot {selected.status}" aria-hidden="true"></span>{statusLabel(selected.status)}</div>
             <p class="say" data-testid="word-say">{sentence(selected)}</p>
-            {#if moduleOn('reading')}
+            {#if moduleKnownOn('words')}
               <div class="actions">
                 {#if selected.status !== 'known'}
                   <Button size="sm" icon={Check} loading={marking} onclick={() => void mark('known')}>{t('words.screen.detail.mark_known')}</Button>
@@ -389,17 +395,17 @@
           </section>
 
           <section>
-            <div class="lab">{t('words.screen.detail.cards')}</div>
-            {#if cards.length}
-              <ul class="cardlist">
-                {#each cards as c (c.card_id)}
-                  <li>
-                    <span class="grow"><b>{c.word}</b>{#if c.meaning} · {c.meaning}{/if}</span>
-                    {#if c.interval_days != null}<span class="small muted num">{t('words.screen.detail.interval', { days: formatCount(c.interval_days) })}</span>{/if}
-                  </li>
+            <div class="lab">{t('words.screen.detail.meaning')}</div>
+            {#if meanings.length}
+              <ul class="cardlist" data-testid="word-meanings">
+                {#each meanings as m (m)}
+                  <li><span class="grow">{m}</span></li>
                 {/each}
               </ul>
-            {:else if selected.cards === 0}
+            {:else if form}
+              <p class="small muted">{t('words.screen.detail.no_meaning')}</p>
+            {/if}
+            {#if selected.cards === 0}
               <p class="small muted">{t('words.screen.detail.no_cards')}</p>
             {:else}
               <p class="small">{t('words.screen.cards', { count: selected.cards })}</p>

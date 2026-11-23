@@ -52,6 +52,7 @@ suite!(
     bulk_ops_on_1000_cards_undo_in_one_step,
     search_with_classifications_and_paging,
     search_errors_are_positioned,
+    search_cursor_pages_like_offsets,
     saved_queries_crud_undo,
     saved_queries_follow_option_renames_and_reorders,
     bulk_attribute_skips_inapplicable_and_restores,
@@ -100,6 +101,7 @@ fn search(t: &TestApp, q: &str) -> CardSearchPage {
         notes_only: None,
         offset: None,
         limit: Some(500),
+        cursor: None,
     })
 }
 
@@ -334,6 +336,7 @@ pub(super) fn search_with_classifications_and_paging(f: Factory) {
         notes_only: Some(true),
         offset: Some(1),
         limit: Some(2),
+        cursor: None,
     });
     assert_eq!((p1.total, p1.items.len(), p1.offset), (4, 2, 1));
     assert_eq!(p1.items[0].sort_field, "Kılıç 2");
@@ -349,6 +352,83 @@ pub(super) fn search_with_classifications_and_paging(f: Factory) {
     assert_eq!(count(&saved.query), 3);
 }
 
+/// v1.4 keyset paging over the API: `next_cursor` pages give the offset pages' rows in their
+/// order for every sort (ties: one clock, repeated sort fields; NULLs: new cards' due), and a
+/// cursor that is damaged, from another search or combined with an offset is rejected.
+pub(super) fn search_cursor_pages_like_offsets(f: Factory) {
+    let t = TestApp::new(f());
+    let d = deck(&t, "Dil");
+    for i in 0..13 {
+        let front = ["elma", "Elma", "armut", "çay"][i % 4];
+        note(&t, d, &format!("{front}{}", i % 3), if i % 2 == 0 { &["fiil"] } else { &[] });
+    }
+    let req = |query: &str, sort, descending, offset, cursor: Option<String>| SearchCards {
+        query: query.into(),
+        sort: Some(sort),
+        descending: Some(descending),
+        notes_only: None,
+        offset,
+        limit: Some(4),
+        cursor,
+    };
+    let sorts = [
+        CardSortKey::SortField,
+        CardSortKey::Created,
+        CardSortKey::Modified,
+        CardSortKey::Due,
+        CardSortKey::Stability,
+        CardSortKey::Difficulty,
+        CardSortKey::Lapses,
+        CardSortKey::Reps,
+    ];
+    for query in ["", "tag:fiil"] {
+        for sort in sorts {
+            for descending in [false, true] {
+                let (mut by_offset, mut by_cursor) = (Vec::new(), Vec::new());
+                let mut offset = 0;
+                loop {
+                    let p = t.ok::<SearchCardsMethod>(req(query, sort, descending, Some(offset), None));
+                    by_offset.extend(p.items.iter().map(|r| r.card_id));
+                    offset += 4;
+                    assert_eq!(p.next_cursor.is_some(), offset < p.total, "{query:?} {sort:?}");
+                    if p.next_cursor.is_none() {
+                        break;
+                    }
+                }
+                let mut cursor = None;
+                loop {
+                    let p = t.ok::<SearchCardsMethod>(req(query, sort, descending, None, cursor));
+                    by_cursor.extend(p.items.iter().map(|r| r.card_id));
+                    cursor = p.next_cursor;
+                    if cursor.is_none() {
+                        break;
+                    }
+                }
+                assert_eq!(by_cursor, by_offset, "{query:?} {sort:?} desc={descending}");
+            }
+        }
+    }
+    let first = t.ok::<SearchCardsMethod>(req("", CardSortKey::SortField, false, None, None));
+    let c = first.next_cursor.unwrap();
+    let bad = |r: SearchCards| {
+        let e = t.err::<SearchCardsMethod>(r);
+        assert_eq!(e.code, ErrorCode::ValidationInvalidParams);
+        assert_eq!(e.details["field"], "cursor");
+    };
+    bad(req("", CardSortKey::SortField, false, None, Some("bozuk".into())));
+    bad(req("", CardSortKey::SortField, false, None, Some(String::new())));
+    bad(req("tag:fiil", CardSortKey::SortField, false, None, Some(c.clone())));
+    bad(req("", CardSortKey::Created, false, None, Some(c.clone())));
+    bad(req("", CardSortKey::SortField, true, None, Some(c.clone())));
+    bad(req("", CardSortKey::SortField, false, Some(4), Some(c.clone())));
+    let mut notes = req("", CardSortKey::SortField, false, None, Some(c.clone()));
+    notes.notes_only = Some(true);
+    bad(notes);
+    // Offset 0 with a cursor is the cursor's page.
+    let p = t.ok::<SearchCardsMethod>(req("", CardSortKey::SortField, false, Some(0), Some(c)));
+    assert_eq!(p.items.len(), 4);
+}
+
 pub(super) fn search_errors_are_positioned(f: Factory) {
     let t = TestApp::new(f());
     let en = deck(&t, "İngilizce");
@@ -360,6 +440,7 @@ pub(super) fn search_errors_are_positioned(f: Factory) {
         notes_only: None,
         offset: None,
         limit: None,
+        cursor: None,
     });
     assert_eq!(e.code, ErrorCode::ValidationQuery);
     assert_eq!(e.message_key, "errors.validation.query");
@@ -824,6 +905,7 @@ pub(super) fn module_can_be_disabled(f: Factory) {
         notes_only: None,
         offset: None,
         limit: None,
+        cursor: None,
     });
     assert_eq!(e.code, ErrorCode::ConflictModuleDisabled);
     let modules = t.ok::<ModulesList>(Empty {}).modules;

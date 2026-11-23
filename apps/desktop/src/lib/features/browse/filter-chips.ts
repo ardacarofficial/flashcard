@@ -27,8 +27,6 @@ export interface ChipDef {
   text?: string;
 }
 
-const LANGS = ['en', 'de', 'fr', 'es', 'it', 'pt', 'ru', 'ja', 'ko', 'zh'];
-
 function langName(code: string, locale: string): string {
   try {
     return new Intl.DisplayNames([locale], { type: 'language' }).of(code) ?? code;
@@ -37,8 +35,11 @@ function langName(code: string, locale: string): string {
   }
 }
 
-/** Every chip, in screen order; `locale` names the languages. */
-export function chipDefs(locale = 'tr'): ChipDef[] {
+/**
+ * Every chip, in screen order; `locale` names the languages. `langs` are the language codes
+ * the collection has (`words.languages`): the language chip offers those, plus "no language".
+ */
+export function chipDefs(locale = 'tr', langs: readonly string[] = []): ChipDef[] {
   return [
     {
       id: 'status',
@@ -58,7 +59,7 @@ export function chipDefs(locale = 'tr'): ChipDef[] {
       keys: ['dil', 'lang', 'language'],
       module: 'words',
       values: [
-        ...LANGS.map((l) => ({ token: `dil:${l}`, label: { raw: `${langName(l, locale)} (${l})` } })),
+        ...langs.map((l) => ({ token: `dil:${l}`, label: { raw: `${langName(l, locale)} (${l})` } })),
         { token: 'dil:yok', label: 'browse.chips.lang_none' as MessageKey },
       ],
     },

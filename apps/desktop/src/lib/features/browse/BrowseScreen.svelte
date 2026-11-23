@@ -70,6 +70,8 @@
   let descending = $state(false);
   let rows = $state<CardRow[]>([]);
   let total = $state(0);
+  /** Keyset cursor of the page after `rows` (`null`: none, or the last page). */
+  let nextCursor = $state<string | null>(null);
   let loaded = $state(false);
   let loading = $state(false);
   let loadError = $state<string | null>(null);
@@ -145,14 +147,18 @@
   }
 
   async function run(append = false) {
-    const offset = append ? rows.length : 0;
+    // "Load more" continues the list on screen: keyset cursor of its last page when the core
+    // gave one (v1.4), else by offset.
+    const q = append ? ran : query;
+    const at = append && nextCursor ? { cursor: nextCursor } : { offset: append ? rows.length : 0 };
     loading = true;
     loadError = null;
     try {
-      const page = await api.call('search.cards', { query, sort, descending, notes_only: notesOnly, offset, limit: PAGE });
+      const page = await api.call('search.cards', { query: q, sort, descending, notes_only: notesOnly, ...at, limit: PAGE });
       rows = append ? [...rows, ...page.items] : page.items;
       total = page.total;
-      ran = query;
+      nextCursor = page.next_cursor;
+      ran = q;
       queryError = null;
       if (!append) {
         selected = new Map();

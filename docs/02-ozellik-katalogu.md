@@ -229,6 +229,14 @@ Etiketler serbesttir. Sınıflandırma ise **kullanıcının tanımladığı yap
 - **Kayıtlı filtreler:** Sorguya isim verilir (ör. "Zor fiillerim"), kenar çubuğunda görünür, tek tıkla çalışılır.
 - Tam metin arama için SQLite **FTS5**, Türkçe karakter normalizasyonuyla.
 - Sorgu dili saf bir ayrıştırıcıdır: `parse(metin) → AST`, `compile(AST) → SQL`. Hata mesajları konumlu ve anlaşılırdır.
+- `[v1.4]` **Sayfalama: ofset ya da imleç (keyset).** `search.cards` eskisi gibi `offset`/`limit` alır; ek olarak isteğe bağlı
+  `cursor` ve yanıtta `next_cursor` (`null` = son sayfa) vardır (eklemeli, `v1` içinde; eski çağıranlar değişmeden çalışır).
+  İmleç opaktır: önceki sayfanın son satırının sıralama değeri + kart kimliği, sorgu metnine, sıralamaya, yöne ve
+  `notes_only`'ye bağlı. İmleçle sayfa `OFFSET` saymadan sıralama indeksinde o satırın hemen ardından başlar
+  (`(değer, kimlik) > (?, ?)`; azalanda tersi; NULL artanda başta, azalanda sonda; eşitlikte kart kimliği) ve ofsetle
+  okunan sayfayla **aynı satırları aynı sırada** verir (sekiz sıralamanın hepsi, iki yön). Bozuk, başka bir aramanın ya
+  da `offset > 0` ile verilen imleç `VALIDATION_INVALID_PARAMS` (`details.field = "cursor"`). İmleçli yanıtta `offset` 0'dır
+  (konum sayılmaz). Ara ekranının "Daha fazla"sı imleci kullanır; ölçüm docs/12.
 
 ### 9.1 Dil öğrenimi sorguları `[v1.4]`
 
@@ -467,7 +475,7 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 - Kelimeye tıklayınca: anlam (sözlük/çeviri/AI), "Kart yap" (cümle bağlamıyla birlikte), "Biliyorum" işaretle.
 - Kelime **kökü / ailesi** desteği (run/running/ran): dil bazında lemmatizasyon sağlayıcısı (takılabilir).
 - Metindeki bilinen kelime yüzdesi ("Bu metnin %87'sini biliyorsun").
-- `[v1.4]` **Ortak kelime dizini:** renkler, yüzde ve Subtitle eklentisinin bilinen kelimeleri aynı kalıcı dizinden gelir; elle, Anki'den, Subtitle'dan ya da okumadan gelen her `term` notu sayılır. Elle işaret kartı yener; "bilinen" eşiği ayardır (`words.known_interval_days`, 21 gün). Destenin dili `words.language` ile verilir; dili bilinmeyen notlar raporlanır. API: `words.lookup` (toplu), `words.list`, `words.stats`, `words.index.rebuild` (docs/03 §4.2).
+- `[v1.4]` **Ortak kelime dizini:** renkler, yüzde ve Subtitle eklentisinin bilinen kelimeleri aynı kalıcı dizinden gelir; elle, Anki'den, Subtitle'dan ya da okumadan gelen her `term` notu sayılır. Elle işaret kartı yener; "bilinen" eşiği ayardır (`words.known_interval_days`, 21 gün). Destenin dili `words.language` ile verilir; dili bilinmeyen notlar raporlanır. API: `words.lookup` (toplu; v1.4 F1'den beri notların anlamlarıyla, `meanings`), `words.list`, `words.stats` (dil başına ve `total`), `words.languages` (koleksiyonun dilleri, not/kelime sayısıyla), `words.history` (son N çalışma gününün sonunda bilinen kelime sayısı), `words.mark` (elle işaret, geri alınabilir; okuma modülüne bağlı değil), `words.index.rebuild` (docs/03 §4.2).
 - `[v1.4]` **En öğretici sahne:** bir kelimenin örnek cümleleri (Subtitle karşılaşmaları ya da okuma modundaki aday cümleler) neden sıralandıklarıyla döner: hedef kelime gerçekten geçiyor mu, kelime dışındaki bilinmeyen kelimeler (kelime dizininden; özel isimler — cümle ortasında büyük harfle başlayan ya da sıklık paketinin bilmediği kelimeler — sayılmaz; çok sık kelimeler bilinir sayılır), cümle bütün mü (kesik başlangıç/son, sarkan tire, iki konuşmacı, çok kısa/uzun), ses ve resim, çevredeki kelimelerin sıklığı; neredeyse aynı replikler (noktalama/büyük harf, üst üste binen altyazı satırları) birbirinin kopyası olarak bildirilir. Öneri hiçbir zaman kendiliğinden uygulanmaz; `subtitle.auto_best_example` (varsayılan kapalı) yakalamada uygular, geri alınabilir, kartın takvimi değişmez. Modül `examples` (docs/03 §4.4).
 - `[v1.4]` **Sıklık ve seviye:** her kelimenin film/dizi altyazılarındaki sıklık sırası ve tahmini CEFR bandı (profil listesinden mi, sıradan mı tahmin edildiği belirtilir); ifadeler belgeli kuralla tahmini bant alır; kelime ailesi (`act`/`actor`) gösterilir ama üyeleri bilinen yapmaz. `words.list` "bilmediğim en sık kelimeler" için sıraya/banda göre sıralar ve süzer. İngilizce paket uygulamayla gelir (CC BY-SA 4.0, kaynaklar `words.data.sources`), başka paket `words.data.import`; modül `word_data` kapatılabilir (docs/03 §4.3).
 

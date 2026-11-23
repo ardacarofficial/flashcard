@@ -14,6 +14,11 @@ items: Array<CardRow>,
  */
 total: number, 
 /**
- * Offset of the first row.
+ * Offset of the first row (the request's `offset`; 0 with a `cursor`: the position is
+ * not counted).
  */
-offset: number, };
+offset: number, 
+/**
+ * v1.4: cursor of the next page (pass as `cursor`); `null` = this is the last page.
+ */
+next_cursor: string | null, };

@@ -478,6 +478,7 @@ fn extension_word_lands_in_the_inbox() {
             notes_only: None,
             offset: None,
             limit: None,
+            cursor: None,
         });
     assert_eq!(hits.total, 1);
     // The add was the client's, in the oplog.

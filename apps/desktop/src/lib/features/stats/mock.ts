@@ -269,17 +269,6 @@ export default {
             small_sample: true,
           })),
       }),
-      'words.stats': () => ({
-        threshold_days: 21,
-        languages: [
-          {
-            language: 'en',
-            counts: { new: 140, learning: 234, known: 312, ignored: 4 },
-            bands: [],
-          },
-        ],
-        unassigned_notes: 12,
-      }),
       'stats.apply_to_leeches': ({ threshold, action }) => {
         const changed = action === 'suspend' ? leeches - suspended : leeches;
         if (action === 'suspend') suspended = leeches;

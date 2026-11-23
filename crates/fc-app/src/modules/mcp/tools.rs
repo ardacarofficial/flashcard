@@ -961,6 +961,7 @@ impl Cx<'_> {
             notes_only: a.notes_only,
             offset: a.offset,
             limit: Some(a.limit.unwrap_or(20).clamp(1, MAX_SEARCH_ROWS)),
+            cursor: None,
         })?;
         Ok(json!({
             "total": page.total,
@@ -1101,6 +1102,7 @@ impl Cx<'_> {
                 notes_only: Some(true),
                 offset: Some(offset),
                 limit: Some(500),
+                cursor: None,
             })?;
             total = page.total;
             if page.items.is_empty() {

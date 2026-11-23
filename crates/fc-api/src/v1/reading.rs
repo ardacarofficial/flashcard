@@ -389,7 +389,7 @@ pub struct TextAnalysis {
 
 // ------------------------------------------------------------------ words
 
-/// `reading.words.mark`: marks words without cards as known / ignored, or clears the mark.
+/// `reading.words.mark` and `words.mark` (v1.4): marks words as known / ignored, or clears the mark.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct MarkWords {
@@ -420,7 +420,7 @@ pub struct RestoreWordMarks {
     pub marks: Vec<WordMarkEntry>,
 }
 
-/// Response of `reading.words.mark`.
+/// Response of `reading.words.mark` and `words.mark`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct WordMarksChanged {
     /// Marks that changed.

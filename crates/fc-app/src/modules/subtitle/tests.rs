@@ -689,6 +689,7 @@ fn captures_are_found_by_language_queries(f: Factory, with_media: bool) {
             notes_only: None,
             offset: None,
             limit: None,
+            cursor: None,
         })
         .total
     };

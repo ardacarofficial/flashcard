@@ -381,7 +381,10 @@
         "open": "My words",
         "empty": "As you add and study words, the ones you know are counted here.",
         "cards": "{n} of your cards have settled ({pct}).",
-        "cards_sub": "Settled: a card whose interval is over three weeks."
+        "cards_sub": "Settled: a card whose interval is over three weeks.",
+        "history": "Known words over time",
+        "history_point": "{date}: {n} words",
+        "history_change": "{n, plural, one {+# word} other {+# words}} in {days} days"
       },
       "tomorrow": {
         "heading": "What’s coming tomorrow?",

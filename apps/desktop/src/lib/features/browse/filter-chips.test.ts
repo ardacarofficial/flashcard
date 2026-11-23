@@ -51,8 +51,14 @@ describe('filter chips: query tokens', () => {
     expect(valueOf(from, findToken('nereden:subtitle', from.keys)!)).toBeNull();
   });
 
+  it('offers the languages the collection has, plus "no language"', () => {
+    const lang = chipDefs('en', ['de', 'en']).find((c) => c.id === 'lang')!;
+    expect(lang.values.map((v) => v.token)).toEqual(['dil:de', 'dil:en', 'dil:yok']);
+    expect(chipDefs('en').find((c) => c.id === 'lang')!.values.map((v) => v.token)).toEqual(['dil:yok']);
+  });
+
   it('every chip value writes a token of its own key', () => {
-    for (const def of chipDefs()) {
+    for (const def of chipDefs('tr', ['en', 'de'])) {
       for (const v of def.values) expect(def.keys).toContain(tokens(v.token)[0]!.key);
       if (def.text) expect(def.keys).toContain(fold(def.text.slice(0, -1)));
     }

@@ -24,23 +24,29 @@ pub(crate) mod index;
 mod tests;
 
 use crate::error::{AppError, AppResult};
-use crate::handler::{CommandCtx, CommandOutcome, QueryCtx};
+use crate::handler::{inverse_call, CommandCtx, CommandOutcome, QueryCtx};
 use crate::jobs::{JobContext, JobHandler};
 use crate::module::{main_menu, ModuleDescriptor};
 use crate::modules::reading::{language_or_default, lemmatizer_for, words::tokens};
+use crate::modules::reading::words as reading_words;
 use crate::modules::word_data;
 use crate::registry::Registry;
 use crate::support::summary;
 use base64::Engine;
 use fc_api::v1::common::Empty;
 use fc_api::v1::jobs::JobDto;
+use fc_api::v1::reading::{MarkWords, RestoreWordMarks, WordMarksChanged};
 use fc_api::v1::methods::*;
 use fc_api::v1::words::*;
 use fc_api::{ApiError, ErrorCode};
 use fc_core::reading::{headword_key, WordCounts, WordMark, WordStatus};
 use fc_core::settings::{SettingDef, SettingKind, SettingScope, SettingScopeKind};
-use fc_core::words::{index_language, DEFAULT_KNOWN_INTERVAL_DAYS};
-use fc_core::{CardId, NoteId};
+use fc_core::notetype::{FieldRole, NoteType};
+use fc_core::words::{
+    index_language, known_history, KnownEvent, MarkEvent, DEFAULT_KNOWN_INTERVAL_DAYS,
+};
+use fc_core::{CardId, NoteId, NoteTypeId};
+use crate::support::content::role_text;
 use fc_core::word_data::CefrBand;
 use fc_storage::repo::{
     WordDataQuery, WordDataRecord, WordDataSort, WordIndexQuery, WordIndexRecord, NO_BAND, NO_RANK,
@@ -109,6 +115,10 @@ pub fn register(reg: &mut Registry) {
     reg.query::<WordsLookup>(lookup);
     reg.query::<WordsList>(list);
     reg.query::<WordsStats>(stats);
+    reg.query::<WordsLanguages>(languages);
+    reg.query::<WordsHistory>(history);
+    reg.command::<WordsMark>(mark);
+    reg.command::<WordsRestore>(restore);
     reg.command::<WordsIndexRebuild>(rebuild);
     reg.command::<WordsIndexRebuildNow>(rebuild_now);
     reg.job(Arc::new(RebuildJob));
@@ -179,6 +189,7 @@ pub(crate) fn entry_dto(
         first_seen: r.first_seen,
         note_ids,
         card_ids,
+        meanings: Vec::new(),
         level: None,
     }
 }
@@ -279,6 +290,7 @@ fn lookup(req: LookupWords, ctx: &QueryCtx<'_>) -> AppResult<WordsLookupResult> 
             cards_of.entry(c.note_id).or_default().push(c.card_id);
         }
     }
+    let meaning_of = meanings(ctx.tx, &all_notes)?;
     let threshold_days = threshold(ctx.tx)?;
     // Word data (v1.4 B2): rank and band of each form, and the families of their lemmas.
     let with_data = word_data::enabled(ctx.tx, ctx.registry)?;
@@ -326,7 +338,9 @@ fn lookup(req: LookupWords, ctx: &QueryCtx<'_>) -> AppResult<WordsLookupResult> 
                     .iter()
                     .flat_map(|n| cards_of.get(n).into_iter().flatten().copied())
                     .collect();
+                let meanings = meanings_of(&notes, &meaning_of);
                 let mut dto = entry_dto(r, threshold_days, notes, cards);
+                dto.meanings = meanings;
                 dto.level.clone_from(&level);
                 dto
             });
@@ -491,8 +505,16 @@ fn stats(_req: Empty, ctx: &QueryCtx<'_>) -> AppResult<WordStats> {
             }
         }
     }
+    let mut total = WordCounts::default();
+    for c in per.values() {
+        total.new = total.new.saturating_add(c.new);
+        total.learning = total.learning.saturating_add(c.learning);
+        total.known = total.known.saturating_add(c.known);
+        total.ignored = total.ignored.saturating_add(c.ignored);
+    }
     Ok(WordStats {
         threshold_days,
+        total,
         languages: per
             .into_iter()
             .map(|(language, counts)| LanguageWordCounts {
@@ -507,6 +529,149 @@ fn stats(_req: Empty, ctx: &QueryCtx<'_>) -> AppResult<WordStats> {
             })
             .collect(),
         unassigned_notes: ctx.tx.word_index_unassigned()?,
+    })
+}
+
+/// The `meaning`-role text of each of `notes` (notes without one are absent). One note
+/// type read per type.
+fn meanings(reads: &dyn Reads, notes: &[NoteId]) -> AppResult<HashMap<NoteId, String>> {
+    let mut types: HashMap<NoteTypeId, Option<NoteType>> = HashMap::new();
+    let mut out = HashMap::new();
+    for &id in notes {
+        let Some(note) = reads.get_note(id)? else {
+            continue;
+        };
+        let nt = match types.entry(note.notetype_id) {
+            std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+            std::collections::hash_map::Entry::Vacant(e) => e.insert(reads.get_notetype(note.notetype_id)?),
+        };
+        let Some(nt) = nt else {
+            continue;
+        };
+        if let Some(text) = role_text(nt, &note, FieldRole::Meaning) {
+            out.insert(id, text);
+        }
+    }
+    Ok(out)
+}
+
+/// The meanings of a word's notes, in note order, duplicates dropped.
+fn meanings_of(notes: &[NoteId], meaning_of: &HashMap<NoteId, String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for text in notes.iter().filter_map(|n| meaning_of.get(n)) {
+        if !out.contains(text) {
+            out.push(text.clone());
+        }
+    }
+    out
+}
+
+fn languages(_req: Empty, ctx: &QueryCtx<'_>) -> AppResult<WordLanguages> {
+    Ok(WordLanguages {
+        languages: ctx
+            .tx
+            .word_index_languages()?
+            .into_iter()
+            .map(|(code, notes, words)| WordLanguageDto { code, notes, words })
+            .collect(),
+    })
+}
+
+/// Default / largest `words.history` span (study days).
+const DEFAULT_HISTORY_DAYS: u32 = 90;
+const MAX_HISTORY_DAYS: u32 = 730;
+
+fn history(req: WordHistoryRequest, ctx: &QueryCtx<'_>) -> AppResult<WordHistory> {
+    let days = req.days.unwrap_or(DEFAULT_HISTORY_DAYS);
+    if days == 0 || days > MAX_HISTORY_DAYS {
+        return Err(crate::support::invalid("days must be 1–730"));
+    }
+    let cal = crate::modules::stats::facts::calendar(ctx.tx, req.tz_offset_mins)?;
+    let language = req
+        .language
+        .as_deref()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(index_language);
+    let threshold_days = threshold(ctx.tx)?;
+    let today = cal.index(ctx.now);
+    let from = today - i64::from(days) + 1;
+    // Dense indexes for words and cards (the fold in fc-core works on them).
+    let mut word_ids: HashMap<(String, String), u32> = HashMap::new();
+    let mut card_ids: HashMap<CardId, u32> = HashMap::new();
+    let mut intern = |l: String, k: String| -> u32 {
+        let n = u32::try_from(word_ids.len()).unwrap_or(u32::MAX);
+        *word_ids.entry((l, k)).or_insert(n)
+    };
+    let mut events = Vec::new();
+    for e in ctx.tx.word_review_events(language.as_deref(), threshold_days)? {
+        let word = intern(e.language, e.key);
+        let n = u32::try_from(card_ids.len()).unwrap_or(u32::MAX);
+        let card = *card_ids.entry(e.card_id).or_insert(n);
+        events.push(KnownEvent {
+            word,
+            card,
+            day: cal.index(e.at),
+            known: e.known,
+        });
+    }
+    let mut marks = Vec::new();
+    for r in ctx.tx.word_index_marked(language.as_deref())? {
+        let (Some(mark), Some(at)) = (r.mark.as_deref().and_then(WordMark::parse), r.mark_at)
+        else {
+            continue;
+        };
+        marks.push(MarkEvent {
+            word: intern(r.language, r.key),
+            mark,
+            day: cal.index(at),
+        });
+    }
+    let counts = known_history(word_ids.len(), card_ids.len(), &events, &marks, from, today);
+    Ok(WordHistory {
+        threshold_days,
+        points: (from..=today)
+            .zip(counts)
+            .map(|(day, known)| WordHistoryPoint {
+                day: fc_core::stats::iso_date(day),
+                known,
+            })
+            .collect(),
+    })
+}
+
+// ------------------------------------------------------------------ marks
+
+fn mark(req: MarkWords, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<WordMarksChanged>> {
+    let (language, previous) = reading_words::mark_words(req, ctx)?;
+    let changed = u32::try_from(previous.len()).unwrap_or(u32::MAX);
+    Ok(CommandOutcome {
+        response: WordMarksChanged { changed },
+        inverse: vec![inverse_call::<WordsRestore>(&RestoreWordMarks {
+            language: language.clone(),
+            marks: previous,
+        })?],
+        summary: summary::<WordsMark>().param("count", changed),
+        events: vec![reading_words::changed_event(&language)],
+    })
+}
+
+fn restore(
+    req: RestoreWordMarks,
+    ctx: &mut CommandCtx<'_>,
+) -> AppResult<CommandOutcome<WordMarksChanged>> {
+    let marks: Vec<(String, Option<WordMark>)> =
+        req.marks.into_iter().map(|m| (m.lemma, m.mark)).collect();
+    let previous = reading_words::apply(ctx, &req.language, &marks)?;
+    let changed = u32::try_from(previous.len()).unwrap_or(u32::MAX);
+    Ok(CommandOutcome {
+        response: WordMarksChanged { changed },
+        inverse: vec![inverse_call::<WordsRestore>(&RestoreWordMarks {
+            language: req.language.clone(),
+            marks: previous,
+        })?],
+        summary: summary::<WordsRestore>().param("count", changed),
+        events: vec![reading_words::changed_event(&req.language)],
     })
 }
 
