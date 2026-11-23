@@ -24,8 +24,12 @@ test('J3 search and fix: find, Enter, edit, Ctrl+Enter → field changed in the 
   await press(page, 'ArrowDown', 'Enter');
   const editor = page.getByRole('dialog');
   await expect(editor).toBeVisible();
-  const back = editor.getByRole('textbox').nth(1);
+  // The back field by its name (not `textbox.nth(1)`: before the note type arrives the
+  // dialog's second text box is the card's own note; F1).
+  const back = editor.getByRole('textbox', { name: 'Arka', exact: true });
+  await expect(back).toBeEditable();
   await back.focus();
+  await expect(back).toBeFocused();
   // Select the field's text with the keyboard (End, Shift+Home: Ctrl+A is taken, see J7).
   await press(page, 'End', 'Shift+Home');
   await page.keyboard.type('şemsiye');

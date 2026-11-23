@@ -21,9 +21,13 @@ test('J7a Ctrl+A in the note editor selects the field text', async ({ page }) =>
   await press(page, 'Enter');
   await expect(page.getByTestId('browse-row')).toHaveCount(1);
   await press(page, 'ArrowDown', 'Enter');
-  const back = page.getByRole('dialog').getByRole('textbox').nth(1);
-  await back.focus();
+  // The back field by its name, once it shows the note's text (what the user waits for).
+  // `textbox.nth(1)` raced the note type's arrival: before the fields render, the second
+  // text box of the dialog is the card's own note (F1, J7a under load).
+  const back = page.getByRole('dialog').getByRole('textbox', { name: 'Arka', exact: true });
   await expect(back).toHaveValue('kurşun kalem');
+  await back.focus();
+  await expect(back).toBeFocused();
 
   await press(page, 'Control+a');
   const selected = await back.evaluate((el) => {

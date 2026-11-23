@@ -53,4 +53,28 @@ describe('<BrowseScreen> on the dev mock', () => {
     expect(last.query).toBe('kalem');
     call.mockRestore();
   });
+
+  it('a late answer of an earlier search never replaces the newer results (F1)', async () => {
+    const decks = (await api.deck.tree()).roots;
+    await api.note.createClassic(decks[0]!.deck.id, 'zümrüt', 'emerald', []);
+    const call = api.call.bind(api);
+    const held: (() => void)[] = [];
+    let first = true;
+    const spy = vi.spyOn(api, 'call').mockImplementation(((method: string, req: unknown) => {
+      const p = call(method as never, req as never);
+      if (method !== 'search.cards' || !first) return p;
+      first = false; // the opening search (every card) answers late
+      return p.then((v) => new Promise((resolve) => held.push(() => resolve(v as never))));
+    }) as typeof api.call);
+    render(BrowseScreen, { ctx: { ...ctx, decks } });
+    const input = screen.getByLabelText('Search', { selector: 'input' });
+    await fireEvent.input(input, { target: { value: 'zümrüt' } });
+    await fireEvent.submit(screen.getByRole('search'));
+    expect(await screen.findByText('1 card')).toBeTruthy();
+    held.splice(0).forEach((go) => go());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText('1 card')).toBeTruthy();
+    expect(screen.getAllByTestId('browse-row')).toHaveLength(1);
+    spy.mockRestore();
+  });
 });
