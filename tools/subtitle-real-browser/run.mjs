@@ -8,7 +8,14 @@
 //
 //   cargo build -p fc-cli
 //   [FC_BIN=target/debug/fc] [SUBTITLE_REPO=/home/user/subtitle] [SUBTITLE_DIST=<built dist>] \
+//   [SUBTITLE_PATCH=tools/subtitle-patches/0001-flashcard-known-words.patch] \
 //   [CHROMIUM=/opt/pw-browsers/chromium] node tools/subtitle-real-browser/run.mjs
+//
+// SUBTITLE_PATCH (comma-separated, optional) is applied with `git apply` to the copy before it is
+// built (tools/subtitle-patches). A build that has "Flashcard'dan oku" (patched, or a SUBTITLE_DIST
+// built from a patched tree) gets two more steps: with sharing off in Flashcard the button says so
+// and nothing is colored; with sharing on a word learned only in Flashcard is colored in the
+// subtitles as a learning word.
 //
 // Skips (exit 0, "SKIP: …") when the extension's repository or Chromium is missing. Not part of
 // the default CI. Needs Playwright (`playwright` resolvable from here, from apps/desktop or from the
@@ -21,7 +28,7 @@
 // are canned (no network here). Nothing else leaves the machine: every other outside request is
 // aborted and listed.
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -35,6 +42,7 @@ const FC = process.env.FC_BIN ?? (existsSync(localFc) ? localFc : 'fc');
 const REPO = process.env.SUBTITLE_REPO ?? '/home/user/subtitle';
 const CHROMIUM = process.env.CHROMIUM ?? '/opt/pw-browsers/chromium';
 const KEEP = process.env.KEEP === '1';
+const PATCHES = (process.env.SUBTITLE_PATCH ?? '').split(',').filter(Boolean).map((p) => resolve(p));
 const SHOTS = process.env.SHOTS ?? null;
 
 const skip = (why) => {
@@ -85,6 +93,10 @@ function buildExtension() {
   // A copy of the committed tree (the repository is read-only for us)
   const clone = spawnSync('git', ['clone', '-q', REPO, copy], { stdio: 'inherit' });
   if (clone.status !== 0) cpSync(REPO, copy, { recursive: true, filter: (p) => !p.includes('node_modules') });
+  for (const patch of PATCHES) {
+    const r = spawnSync('git', ['apply', '--whitespace=nowarn', patch], { cwd: copy, encoding: 'utf8' });
+    if (r.status !== 0) throw new Error(`git apply ${patch} failed in ${copy}:\n${r.stdout}${r.stderr}`);
+  }
   for (const args of [['install', '--frozen-lockfile'], ['build']]) {
     const r = spawnSync('pnpm', args, { cwd: copy, encoding: 'utf8', maxBuffer: 64 << 20 });
     if (r.status !== 0) throw new Error(`pnpm ${args.join(' ')} failed in ${copy}:\n${(r.stdout + r.stderr).slice(-4000)}`);
@@ -261,8 +273,15 @@ try {
     assert.ok(existsSync(join(d, 'manifest.json')), 'no manifest.json in the build');
     report.extension_version = JSON.parse(readFileSync(join(d, 'manifest.json'), 'utf8')).version;
     report.extension_commit = spawnSync('git', ['-C', REPO, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+    report.patches = PATCHES;
     return d;
   });
+  // The extension reads Flashcard's known words only with the patch (docs/14 §4)
+  const reads = (() => {
+    const js = join(dist, 'assets/js');
+    return existsSync(js) && readdirSync(js).some((f) => f.endsWith('.js') && readFileSync(join(js, f), 'utf8').includes("Flashcard'dan oku"));
+  })();
+  report.flashcard_reads = reads;
 
   const secret = await step('Flashcard: subtitle module on, a key made, the server listens', async () => {
     call('modules.set_enabled', { id: 'subtitle', enabled: true });
@@ -520,6 +539,75 @@ try {
     }
   });
 
+  // -- "Flashcard'dan oku" (patched build): a word learned only in Flashcard --------------------
+  // "seven" (line 4) is captured straight into Flashcard (as if from another browser), so the
+  // extension's own saved words don't have it: only reading Flashcard can color it.
+  const persistedWords = () =>
+    worker.evaluate(async () => {
+      const { 'persist:words': raw } = await chrome.storage.local.get('persist:words');
+      return raw ? JSON.parse(raw) : {};
+    });
+  const readFromFlashcard = async () => {
+    await openLearning();
+    const row = options.locator('.es-flashcards-read');
+    const status = row.getByRole('status');
+    const before = (await status.textContent()).trim();
+    await row.getByRole('button', { name: "Flashcard'dan oku" }).click();
+    await options.waitForFunction(
+      (text) => {
+        const el = document.querySelector('.es-flashcards-read [role="status"]');
+        return el && el.textContent.trim() !== text;
+      },
+      before,
+      { timeout: 20000 },
+    );
+    return (await status.textContent()).trim();
+  };
+  const sevenClass = async () => {
+    await playLine(3);
+    const item = subs.locator('.es-sub-item').filter({ hasText: /^\W*seven\W*$/ }).first();
+    return (await item.getAttribute('class')) ?? '';
+  };
+  if (reads) {
+    await step('"Flashcard\'dan oku", sharing off in Flashcard: the row says so, nothing is colored', async () => {
+      const line = LINES[3];
+      const at = line.text.indexOf('seven');
+      const response = await fetch(`${serverUrl}/v1/captures`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schema: 1,
+          capture_id: '0192812a-6f3c-7a41-9c2e-0000000000a7',
+          kind: 'word',
+          lang: { target: 'en', native: 'tr' },
+          term: { surface: 'seven', lemma: 'seven', pos: null },
+          definition: { text: 'yedi', source: 'dict' },
+          context: { sentence: line.text, translation: line.tr, term_offset: [at, at + 5] },
+          source: { type: 'video', url: null, title: 'The Night Train', site: 'youtube', video_id: VIDEO_ID, t_start_ms: line.start, t_end_ms: line.end },
+          media: {},
+          deck_id: null,
+          tags: [],
+          created_at: new Date().toISOString(),
+          client: { name: 'subtitle-extension', ext_version: 'real-browser-seed' },
+        }),
+      });
+      assert.equal(response.status, 201, await response.text());
+      assert.equal(notesOf('seven').encounters.length, 1);
+      const said = await readFromFlashcard();
+      report.flashcard_read_off = said;
+      if (SHOTS) await options.locator('.es-flashcards-read').screenshot({ path: join(SHOTS, '04-flashcard-read-off.png') });
+      assert.match(said, /paylaşmıyor/, said);
+      const words = await persistedWords();
+      report.words_after_read_off = Object.keys(words);
+      assert.deepEqual(Object.values(words).filter((w) => w.flashcards), [], 'nothing read from Flashcard');
+      assert.equal(words['en:seven'], undefined);
+      await sleep(1000);
+      const cls = await sevenClass();
+      report.seven_class_off = cls;
+      assert.doesNotMatch(cls, /es-sub-item-learning/);
+    });
+  }
+
   // The extension does not ask for known words today (docs/14 §4). What it would get, asked from
   // its own background (its origin, its stored key), before and after the owner shares them:
   await step('known words from the extension\'s origin: empty until shared, then the captured words', async () => {
@@ -543,6 +631,29 @@ try {
     const lemmas = after.known.words.map((w) => `${w.lemma}:${w.status}`).sort();
     for (const lemma of ['key', 'pick up', 'train', 'station']) assert.ok(lemmas.includes(`${lemma}:learning`), lemmas.join(', '));
   });
+
+  if (reads) {
+    await step('"Flashcard\'dan oku", sharing on: the word learned in Flashcard is colored in the subtitles', async () => {
+      const said = await readFromFlashcard();
+      report.flashcard_read_on = said;
+      if (SHOTS) await options.locator('.es-flashcards-read').screenshot({ path: join(SHOTS, '05-flashcard-read-on.png') });
+      assert.match(said, /kelime okundu, \d+ değişti$/, said);
+      const words = await persistedWords();
+      report.words_after_read_on = words;
+      assert.equal(words['en:seven']?.status, 'learning', JSON.stringify(words['en:seven']));
+      assert.equal(words['en:seven']?.flashcards, true);
+      // Words added with "+" were already learning in the extension; they stay so
+      assert.equal(words['en:key']?.status, 'learning');
+      const t = Date.now();
+      let cls = '';
+      while (!/es-sub-item-learning/.test((cls = await sevenClass()))) {
+        if (Date.now() - t > 15000) throw new Error(`"seven" not colored as learning: class="${cls}"`);
+        await sleep(500);
+      }
+      report.seven_class_on = cls;
+      if (SHOTS) await page.screenshot({ path: join(SHOTS, '06-flashcard-word-colored.png') });
+    });
+  }
 
   await step('a revoked key: "+" says so and keeps the word', async () => {
     const [k] = call('subtitle.keys.list').keys.filter((x) => !x.revoked_at);

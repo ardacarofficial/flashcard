@@ -2,6 +2,10 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## Unreleased (v1.4.1)
+
+- **Subtitle eklentisi için "Flashcard'dan oku" yaması (H4):** `tools/subtitle-patches/0001-flashcard-known-words.patch` (eklenti `7fe2843` üzerine `git apply`): öğrenme servisi Subtitle Kartları iken "Anki'den oku"nun yanında **Flashcard'dan oku** — `known-words` sayfalarını imleçle okur, yalnız Flashcard paylaşıyorsa (`shared`/`features.known_words`; kapalıysa açık bir mesaj), Anki gibi birleştirir (senin "biliyorum" işaretin kazanır), altyazı Flashcard'ın öğrendiğin kelimelerini boyar; eklenti kopyasında `pnpm test`/`lint`/`build` yeşil, `tools/subtitle-real-browser` `SUBTITLE_PATCH=…` ile yamalı derlemeyi gerçek Chromium'da sınar (paylaşım kapalı → mesaj, boyanmaz; açık → Flashcard'da öğrenilen kelime boyanır); sözleşme denetimi yamalı istemciyi de kabul eder; Flashcard tarafında değişiklik gerekmedi. _(H4)_
+
 ## Unreleased (v1.4)
 
 - **Subtitle eklentisi gerçek tarayıcıda (G2):** derlenmiş eklenti gerçek Chromium'da gerçek `fc api serve`'e karşı sahibin akışıyla denendi (eşleştirme, **+**, aynı kelime ikinci sahneden → aynı notun karşılaşması, deyim, uygulama kapalı/yeniden başlamış, yanlış/iptal anahtar, bilinen kelimeler eklentinin kökeninden); hepsi geçti, Flashcard tarafında hata çıkmadı; betik `tools/subtitle-real-browser/run.mjs`, rapor ve eklentide gereken değişiklik `docs/14-subtitle-gercek-tarayici.md`.
