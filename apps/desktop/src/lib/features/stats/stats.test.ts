@@ -65,7 +65,7 @@ describe('v0.6 screens on the dev mock', () => {
     const s = await api.call('settings.get', { scope: { kind: 'app' }, keys: ['planning.easy_days.sun'] });
     expect(s.values[0]!.value).toBe('minimum');
     // Optimizer and workload (optimizer module on in the mock): v1.3 keeps them under "Advanced".
-    await fireEvent.click(screen.getByRole('button', { name: 'Show advanced settings' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Show more settings' }));
     expect(await screen.findByText('Desired retention and workload')).toBeTruthy();
     expect(await screen.findByText(/90%\s*\(current\)/)).toBeTruthy();
   });

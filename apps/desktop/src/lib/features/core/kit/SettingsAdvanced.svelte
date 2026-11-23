@@ -1,6 +1,7 @@
 <!--
-  "Advanced" disclosure of a settings page (v1.3): rarely used rows behind one button, closed
-  by default; its open/closed state is remembered per `id` (this device only). It opens by
+  "More settings" disclosure of a settings page (v1.3): rarely used rows behind one button, closed
+  by default (v1.4 F1: open while the app's one "Advanced" switch is on — "Gelişmiş" names
+  only that switch); its open/closed state is remembered per `id` (this device only). It opens by
   itself while the settings search is active, so a matching row is never hidden. Put it after
   the page's everyday sections and before a `tone="danger"` section.
 -->
@@ -10,11 +11,12 @@
   import { ChevronRight, Icon } from '$lib/ui';
   import { loadOpen, saveOpen } from './disclosure';
   import { settingsSearch } from './search.svelte';
+  import { advanced } from '$lib/shell/advanced.svelte';
 
   interface Props {
     /** Stable id: the remembered state's key (e.g. `mcp`, `notetypes.code`). */
     id: string;
-    /** Button text (default "Advanced settings"). */
+    /** Button text (default "More settings"). */
     title?: string;
     /** One line saying what is inside and who needs it. */
     summary?: string;
@@ -27,7 +29,7 @@
   $effect.pre(() => {
     open = loadOpen(id);
   });
-  const shown = $derived(open || settingsSearch.active);
+  const shown = $derived(open || settingsSearch.active || advanced.on);
 
   function toggle() {
     open = !shown;
@@ -37,7 +39,7 @@
 </script>
 
 <section class="fc-settings-advanced" class:open={shown} data-testid="settings-advanced">
-  <button type="button" class="toggle" aria-expanded={shown} aria-controls="fc-adv-{uid}" onclick={toggle}>
+  <button type="button" class="toggle" aria-expanded={shown} aria-controls="fc-adv-{uid}" disabled={advanced.on} onclick={toggle}>
     <span class="chev"><Icon icon={ChevronRight} size={14} /></span>
     <span class="titles">
       <span class="title">{title ?? t('kit.advanced.title')}</span>
@@ -53,6 +55,9 @@
   .fc-settings-advanced {
     border-top: 1px solid var(--border);
     padding-top: var(--space-2);
+  }
+  .toggle:disabled {
+    cursor: default;
   }
   .toggle {
     display: flex;

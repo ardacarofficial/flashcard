@@ -376,7 +376,7 @@
         "learning_label": "Learning",
         "new": "New",
         "other": "{lang}: {n} words",
-        "unassigned": "{n, plural, one {# note has} other {# notes have}} no language, so they are not counted. Give their deck a language (Library › deck).",
+        "unassigned": "{n, plural, one {# note has} other {# notes have}} no language, so they are not counted. Pick their language in Settings › Words.",
         "meaning": "Known = a word you still remember after {days} days, or marked “I already know this”.",
         "open": "My words",
         "empty": "As you add and study words, the ones you know are counted here.",
@@ -545,8 +545,8 @@
     "advanced": {
       "heading": "Advanced",
       "intro": "FSRS optimization and workload by target recall: usually nothing to touch.",
-      "show": "Show advanced settings",
-      "hide": "Hide advanced settings"
+      "show": "Show more settings",
+      "hide": "Hide more settings"
     }
   },
   "optimizer": {

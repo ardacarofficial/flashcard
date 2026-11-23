@@ -35,7 +35,7 @@ describe('settings kit (v1.3)', () => {
 
   it('"Advanced" is closed by default and remembers being opened', async () => {
     const first = render(KitFixture, { texts });
-    const toggle = screen.getByRole('button', { name: /Advanced settings/ });
+    const toggle = screen.getByRole('button', { name: /More settings/ });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByText('Maximum interval')).toBeNull();
     await fireEvent.click(toggle);
@@ -45,7 +45,7 @@ describe('settings kit (v1.3)', () => {
 
     // Next visit: still open (this device), until closed again.
     render(KitFixture, { texts });
-    const again = screen.getByRole('button', { name: /Advanced settings/ });
+    const again = screen.getByRole('button', { name: /More settings/ });
     expect(again.getAttribute('aria-expanded')).toBe('true');
     await fireEvent.click(again);
     expect(screen.queryByText('Maximum interval')).toBeNull();

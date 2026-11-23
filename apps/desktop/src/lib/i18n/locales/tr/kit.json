@@ -5,7 +5,7 @@
     "reset": "Varsayılana dön",
     "example": "Örnek:",
     "advanced": {
-      "title": "Gelişmiş ayarlar"
+      "title": "Daha fazla ayar"
     },
     "search": {
       "label": "Ayarlarda ara",
@@ -19,7 +19,6 @@
     "guide": {
       "title": "Ne değiştirmek istiyorsun?",
       "description": "En sık aranan ayarlar. Birine tıkla, doğru sayfa açılsın. Yukarıdaki arama kutusuna da yazabilirsin.",
-      "new_per_day": "Günde kaç yeni kelime gelsin?",
       "reminder": "Her gün çalışmayı bana hatırlat",
       "card_back": "Kartın önünde ve arkasında ne görünsün?",
       "keys": "Klavye kısayollarını değiştir",
@@ -27,7 +26,6 @@
       "subtitle": "Tarayıcıda izlerken kelime yakala",
       "backup": "Yedek al, kartlarını dışa aktar",
       "where": {
-        "presets": "Deste ayarları",
         "reminders": "Hatırlatıcılar",
         "notetypes": "Not türleri",
         "shortcuts": "Kısayollar",

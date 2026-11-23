@@ -369,6 +369,21 @@ async function main() {
             sheet.push({ cfg, name });
             shots++;
           };
+          // v1.4 (F1): the app opens with the "Advanced" switch off. Shoot that basic view
+          // (sidebar + Settings), then turn the one switch on so the sweep below reaches every
+          // place (Library, Add, Search) and every settings group.
+          await snap('00-basic-home');
+          const settingsNav = page.locator('nav').getByRole('button', { name: /^(Ayarlar|Settings)$/ }).first();
+          await settingsNav.click().catch(() => {});
+          await settle(page);
+          await snap('00-basic-settings');
+          const advSwitch = page.locator('[data-testid="advanced-switch"] [role=switch]').first();
+          if (await advSwitch.count()) {
+            if ((await advSwitch.getAttribute('aria-checked')) !== 'true') await advSwitch.click().catch(() => {});
+            await settle(page);
+          }
+          await page.locator(NAV).first().click().catch(() => {});
+          await settle(page);
           const items = page.locator(NAV);
           const count = await items.count();
           if (!navNames) {

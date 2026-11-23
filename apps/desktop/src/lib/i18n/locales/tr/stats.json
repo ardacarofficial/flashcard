@@ -376,7 +376,7 @@
         "learning_label": "Öğreniyorum",
         "new": "Yeni",
         "other": "{lang}: {n} kelime",
-        "unassigned": "{n, plural, one {# notun} other {# notun}} dili belli değil; onlar sayılmadı. Destesine bir dil ver (Kütüphane › deste).",
+        "unassigned": "{n, plural, one {# notun} other {# notun}} dili belli değil; onlar sayılmadı. Dilini Ayarlar › Kelimeler'de seç.",
         "meaning": "Biliyorum = {days} gün sonra hâlâ hatırladığın ya da “zaten biliyorum” dediğin kelime.",
         "open": "Kelimelerim",
         "empty": "Kelime ekleyip çalıştıkça bildiğin kelimeler burada sayılır.",
@@ -545,8 +545,8 @@
     "advanced": {
       "heading": "Gelişmiş",
       "intro": "FSRS optimizasyonu ve hedef hatırlamaya göre iş yükü: çoğu zaman dokunman gerekmez.",
-      "show": "Gelişmiş ayarları göster",
-      "hide": "Gelişmiş ayarları gizle"
+      "show": "Daha fazla ayar göster",
+      "hide": "Daha fazla ayarı gizle"
     }
   },
   "optimizer": {
