@@ -90,9 +90,13 @@ fn deep_nesting_is_a_positioned_error_not_a_stack_overflow() {
     assert!(parse_query(&ok).is_ok());
     assert!(parse_query(&format!("{}x", "-".repeat(d))).is_ok());
     assert!(parse_query(&format!("{}x", "NOT ".repeat(d))).is_ok());
+    // 1 MiB: the smallest stack a query runs on in the app (the Windows main thread). Nesting
+    // up to the cap needs ~200 KiB in a Linux debug build (192 KiB overflows, 256 KiB does
+    // not) and more on Windows, whose debug frames are larger: 256 KiB overflowed there (CI,
+    // v1.4.1 I2). The point stays: 1 000 and 100 000 levels are refused, not recursed into.
     let deep = |q: String| {
         std::thread::Builder::new()
-            .stack_size(256 * 1024)
+            .stack_size(1024 * 1024)
             .spawn(move || span_of(&q))
             .unwrap()
             .join()
@@ -842,3 +846,4 @@ fn media_values_select_by_origin() {
     facts.media = vec![(MediaKind::Audio, MediaOrigin::Tts)];
     assert!(!hit("ses:video", &facts) && hit("ses:tts", &facts) && hit("ses:var", &facts));
 }
+
