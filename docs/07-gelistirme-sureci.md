@@ -54,7 +54,22 @@ Bağımlılık sürümleri `Cargo.lock` ve `pnpm-lock.yaml` ile sabitlenir.
 | Windows pilotu (v1.3) | Kurulu uygulamada üç yolculuk; geçit değil (§3.1) | tauri-driver + msedgedriver |
 | Eklenti | Örnek eklentiler, izin reddi, kaynak sınırları | Sahte host |
 
+| Rastgele / bozuk girdi (v1.4.1) | Paket ve metin okuyucuları, Subtitle HTTP API'si, sorgu dili, tüm komutların geri alınması (§3.2) | proptest / tohumlu SplitMix64 |
+
 **Kural:** Her yeni komut için en az bir servis testi ve bir geri al testi.
+
+### 3.2 Rastgele ve bozuk girdi testleri (v1.4.1, H3)
+
+Gerçek kullanıcının dosyalarının ve tarayıcı eklentisinin uygulamaya girdiği her yer tohumlu rastgele testlerle korunur. Tohum sabittir (CI deterministik); `FC_FUZZ_SEED=<u64>` tohumu, `FC_FUZZ_CASES=<n>` vaka sayısını değiştirir (uzun koşu); hata mesajı tohumu ve en küçük girdiyi basar. Varsayılan takımda her test ≤ ~10 sn (debug).
+
+| Yer | Test | Özellik |
+|---|---|---|
+| `fc-interop/src/fuzz_tests.rs` | Bozulmuş `.apkg`/`.colpkg`/`.fcpack`/`.fcbackup` (bit çevirme, üzerine yazma, ekleme/silme, her zip bölüm sınırında kesme), gerçek deflate bombası, `anki::hostile` (bozuk UTF-8, dev alan, yinelenen kimlik, ağaç olmayan deste adları, eksik/kaçmaya çalışan medya, yanlış şema), tırnak/BOM/karışık satır sonlu metin, 1 milyon sütun | Asla panik yok; bozuk arşiv ya reddedilir ya **birebir aynı** okunur; kesilmiş arşiv reddedilir; yazılan metin aynen geri okunur |
+| `fc-http/tests/fuzz_capture.rs` | Bozuk/rastgele JSON, yanlış içerik türü, sınırı aşan gövde ve medya, kesik/bozuk chunked gövde, tekrar, sırasız ve eşzamanlı yinelenen yakalamalar | Reddedilen istek hiçbir şey yazmaz (tüm tablolar + diskteki medya); idempotentlik; her yanıt sözleşme biçiminde |
+| `fc-storage/src/tests/search_fuzz.rs` | Rastgele dünyalar (özel karakterli notlar) üzerinde ATOMS ∪ LANG_ATOMS birleşimleri ve üretilmiş anahtar × işleç × düşmanca değer | SQL sonucu = başvuru değerlendiricisi (`fc_core::query::eval`); derlenmeyen sorgu konumlu hata verir |
+| `fc-app/src/undo_fuzz_tests.rs` | Kayıt defterinden türetilen geri alınabilir komutların rastgele dizisi, gerçek SQLite dosyasında, ortada yeniden başlatma | Hepsi geri alınınca kullanıcı verisi başlangıca, hepsi yinelenince sona eşit; reddedilen komut yazmaz. Üreticisi olmayan her komut `NOT_GENERATED`'da gerekçesiyle listelenir, yeni komut unutulamaz |
+| `fc-app/src/undo_fuzz_tests.rs` (içe aktarma) | `anki::hostile` paketleri, bozuk CSV/JSON, 1 milyon sütun gerçek içe aktarma işinden | İş ya başarılı olur ve tek geri alma başlangıca döndürür ya da çevrilen bir kodla (`import_format` …) başarısız olur ve geride hiçbir şey kalmaz |
+
 
 ### 3.1 Gerçek çekirdeğe karşı yolculuklar (v1.3: dev köprüsü)
 

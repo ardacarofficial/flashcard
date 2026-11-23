@@ -293,7 +293,15 @@ impl<'a> Parser<'a> {
     /// past the closing quote; `None` (cursor unchanged) if there is no well-formed quote.
     fn quoted(&mut self) -> Option<String> {
         let start = self.i;
-        let lead = self.rest().len() - self.rest().trim_start_matches(|c| self.is_blank(c)).len();
+        // With a custom record separator a newline is only layout (the writer puts one after
+        // each separator; unquoted values are trimmed of it): it may precede the quote too
+        // (v1.4.1 H3: `a@@\n" -"` used to keep its quotes).
+        let custom = !matches!(self.opts.record_separator.as_str(), NEWLINE | BLANK_LINE);
+        let lead = self.rest().len()
+            - self
+                .rest()
+                .trim_start_matches(|c| self.is_blank(c) || (custom && c == '\n'))
+                .len();
         let body = &self.s[start + lead..];
         let inner = body.strip_prefix('"')?;
         let mut out = String::new();
@@ -386,6 +394,12 @@ pub fn write_delimited(rows: &[Vec<String>], opts: &TextOptions) -> String {
             if j > 0 {
                 out.push_str(&opts.field_separator);
             }
+            if j == 0 && value.is_empty() && opts.field_separator.starts_with([' ', '\t']) {
+                // The reader trims blanks at the start of a record: `" - b"` would lose the
+                // separator's blank (v1.4.1 H3).
+                out.push_str("\"\"");
+                continue;
+            }
             out.push_str(&quote_if_needed(value, opts));
         }
     }
@@ -394,15 +408,20 @@ pub fn write_delimited(rows: &[Vec<String>], opts: &TextOptions) -> String {
 }
 
 fn quote_if_needed(value: &str, opts: &TextOptions) -> String {
+    // The reader turns `\r\n` and a lone `\r` into `\n` before splitting (v1.4.1 H3: a lone
+    // `\r` inside a value used to go out unquoted and come back as two records).
+    let lines = value.replace("\r\n", "\n").replace('\r', "\n");
+    // A separator inside the value, or one that starts in its tail (`a@` + `@@`).
+    let hits = |sep: &str| format!("{lines}{sep}").find(sep) != Some(lines.len());
     let record_hit = if opts.record_separator == BLANK_LINE {
-        value.contains("\n\n")
+        lines.contains("\n\n")
     } else {
-        value.contains(opts.record_separator.as_str())
+        hits(&opts.record_separator)
     };
-    let needs = value.contains(opts.field_separator.as_str())
+    let needs = hits(&opts.field_separator)
         || record_hit
         || value.starts_with('"')
-        || value.contains('\n') && opts.record_separator == NEWLINE
+        || lines.contains('\n') && opts.record_separator == NEWLINE
         || value.trim() != value;
     if needs {
         format!("\"{}\"", value.replace('"', "\"\""))

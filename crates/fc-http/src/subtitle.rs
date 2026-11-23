@@ -124,7 +124,8 @@ fn header_text<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
         .filter(|v| !v.is_empty())
 }
 
-async fn read_body(body: Body, headers: &HeaderMap, max: usize) -> Result<Vec<u8>, ApiError> {
+async fn read_body(mut body: Body, headers: &HeaderMap, max: usize) -> Result<Vec<u8>, ApiError> {
+    use axum::body::HttpBody;
     let too_large = || {
         api(
             ErrorCode::ValidationPayloadTooLarge,
@@ -137,10 +138,28 @@ async fn read_body(body: Body, headers: &HeaderMap, max: usize) -> Result<Vec<u8
     if declared.is_some_and(|n| n > max) {
         return Err(too_large());
     }
-    axum::body::to_bytes(body, max)
-        .await
-        .map(|b| b.to_vec())
-        .map_err(|_| too_large())
+    // v1.4.1 (fuzz): read frame by frame so that only a body past `max` is a `413`; a body
+    // that ends before its `Content-Length` or breaks its chunked encoding is a malformed
+    // request (`422`), not "too large" (which the extension takes as final for the capture).
+    let mut out = Vec::new();
+    while let Some(frame) =
+        std::future::poll_fn(|cx| std::pin::Pin::new(&mut body).poll_frame(cx)).await
+    {
+        let frame = frame.map_err(|_| {
+            api(
+                ErrorCode::ValidationInvalidParams,
+                "the request body ended early or is not validly encoded",
+            )
+            .with_detail("field", "body")
+        })?;
+        if let Ok(data) = frame.into_data() {
+            if out.len() + data.len() > max {
+                return Err(too_large());
+            }
+            out.extend_from_slice(&data);
+        }
+    }
+    Ok(out)
 }
 
 /// Largest `captures:batch` body: every capture of a full batch may be as large as a capture

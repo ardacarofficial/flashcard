@@ -18,8 +18,8 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, TestRunner};
 use std::time::Instant;
 
-const NOW: Timestamp = Timestamp(1_800_000_000_000);
-const WORDS: &[&str] = &[
+pub(super) const NOW: Timestamp = Timestamp(1_800_000_000_000);
+pub(super) const WORDS: &[&str] = &[
     "kılıç",
     "kalkan",
     "apple",
@@ -85,8 +85,8 @@ struct Row {
     lang: fc_core::query::LangFacts,
 }
 
-struct World {
-    fx: Fx,
+pub(super) struct World {
+    pub(super) fx: Fx,
     decks: Vec<Deck>,
     tags: Vec<Tag>,
     notetypes: Vec<NoteType>,
@@ -99,6 +99,11 @@ fn pick<'a, T>(rng: &mut SplitMix64, items: &'a [T]) -> &'a T {
 }
 
 fn world(n_notes: u128, seed: u64) -> World {
+    world_with(n_notes, seed, WORDS)
+}
+
+/// [`world`] with note text drawn from `words`.
+pub(super) fn world_with(n_notes: u128, seed: u64, words: &[&str]) -> World {
     let fx = Fx::seeded();
     let mut rng = SplitMix64::new(seed);
     let decks = vec![
@@ -130,8 +135,8 @@ fn world(n_notes: u128, seed: u64) -> World {
             tx.insert_attribute_def(a).unwrap();
         }
         for i in 0..n_notes {
-            let front = format!("{} {}", pick(&mut rng, WORDS), pick(&mut rng, WORDS));
-            let back = (*pick(&mut rng, WORDS)).to_owned();
+            let front = format!("{} {}", pick(&mut rng, words), pick(&mut rng, words));
+            let back = (*pick(&mut rng, words)).to_owned();
             let tags: Vec<&str> = tag_names
                 .iter()
                 .copied()
@@ -234,6 +239,11 @@ fn world(n_notes: u128, seed: u64) -> World {
 
 impl World {
     fn filter(&self, q: &str) -> Filter {
+        self.try_filter(q).unwrap_or_else(|e| panic!("{q}: {e}"))
+    }
+
+    /// Parses and resolves `q` against the world's catalog.
+    pub(super) fn try_filter(&self, q: &str) -> Result<Filter, fc_core::query::QueryError> {
         let cat = Catalog {
             decks: &self.decks,
             tags: &self.tags,
@@ -246,10 +256,10 @@ impl World {
             known_interval_days: 21,
             word_keys: &[],
         };
-        compile_query(q, &cat).unwrap_or_else(|e| panic!("{q}: {e}"))
+        compile_query(q, &cat)
     }
 
-    fn expected(&self, f: &Filter) -> Vec<CardId> {
+    pub(super) fn expected(&self, f: &Filter) -> Vec<CardId> {
         let mut out: Vec<(Timestamp, CardId)> = Vec::new();
         for r in &self.rows {
             let stored: Vec<(AttributeDefId, EntityRef, fc_core::attribute::StoredValue)> = r
@@ -282,13 +292,13 @@ impl World {
         out.into_iter().map(|(_, id)| id).collect()
     }
 
-    fn actual(&self, f: &Filter) -> Vec<CardId> {
+    pub(super) fn actual(&self, f: &Filter) -> Vec<CardId> {
         self.fx.read(|r| r.search_card_ids(f, NOW).unwrap())
     }
 }
 
 /// Query atoms covering every predicate kind.
-const ATOMS: &[&str] = &[
+pub(super) const ATOMS: &[&str] = &[
     "kilic",
     "KILIÇ",
     "ışık",
@@ -1041,11 +1051,15 @@ const SOURCES: &[&str] = &["The Night Train · S1E2", "The Night Train · S1E3",
 /// and the word data behind the `word_frequency` view when `with_freq`), mirrored in each row's
 /// [`fc_core::query::LangFacts`].
 fn lang_world(n_notes: u128, seed: u64, with_freq: bool) -> World {
+    with_lang(world(n_notes, seed), seed, with_freq)
+}
+
+/// Adds the language data of [`lang_world`] to `w`.
+pub(super) fn with_lang(mut w: World, seed: u64, with_freq: bool) -> World {
     use fc_core::content::media::MediaOrigin;
     use fc_core::query::{MediaKind, NoteOrigin};
     use fc_core::reading::WordMark;
     use fc_core::words::WordEvidence;
-    let mut w = world(n_notes, seed);
     let mut rng = SplitMix64::new(seed ^ 0x5eed);
     let conn = w.fx.raw();
     conn.execute_batch("BEGIN").unwrap();
@@ -1297,7 +1311,7 @@ fn lang_world(n_notes: u128, seed: u64, with_freq: bool) -> World {
 }
 
 /// Atoms of the v1.4 language keys (TR and EN spellings).
-const LANG_ATOMS: &[&str] = &[
+pub(super) const LANG_ATOMS: &[&str] = &[
     "durum:yeni",
     "status:learning",
     "durum:öğreniyorum",

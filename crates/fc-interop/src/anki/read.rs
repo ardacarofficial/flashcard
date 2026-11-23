@@ -154,17 +154,30 @@ fn require_tables(conn: &Connection, names: &[&str]) -> InteropResult<()> {
     Ok(())
 }
 
+/// A text column read forgivingly (v1.4.1 H3): invalid UTF-8 becomes U+FFFD, a blob is read
+/// as text, a number as its digits, NULL as empty. One damaged note must not refuse a
+/// package of thousands; the replacement character shows the damage in the note.
+fn lossy_text(r: &rusqlite::Row<'_>, i: usize) -> rusqlite::Result<String> {
+    use rusqlite::types::ValueRef;
+    Ok(match r.get_ref(i)? {
+        ValueRef::Null => String::new(),
+        ValueRef::Integer(n) => n.to_string(),
+        ValueRef::Real(f) => f.to_string(),
+        ValueRef::Text(b) | ValueRef::Blob(b) => String::from_utf8_lossy(b).into_owned(),
+    })
+}
+
 fn notes(conn: &Connection) -> InteropResult<Vec<AnkiNote>> {
     let mut st = conn
         .prepare("SELECT id, guid, mid, mod, tags, flds FROM notes ORDER BY id")
         .map_err(sql)?;
     let rows = st
         .query_map([], |r| {
-            let tags: String = r.get(4)?;
-            let flds: String = r.get(5)?;
+            let tags = lossy_text(r, 4)?;
+            let flds = lossy_text(r, 5)?;
             Ok(AnkiNote {
                 id: r.get(0)?,
-                guid: r.get(1)?,
+                guid: lossy_text(r, 1)?,
                 mid: r.get(2)?,
                 modified: r.get(3)?,
                 tags: tags.split_whitespace().map(str::to_owned).collect(),
@@ -204,7 +217,7 @@ fn cards(conn: &Connection) -> InteropResult<Vec<AnkiCard>> {
                 odue: r.get(13)?,
                 odid: r.get(14)?,
                 flags: r.get(15)?,
-                data: r.get::<_, Option<String>>(16)?.unwrap_or_default(),
+                data: lossy_text(r, 16)?,
             })
         })
         .map_err(sql)?;

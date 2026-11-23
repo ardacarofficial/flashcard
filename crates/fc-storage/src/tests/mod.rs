@@ -25,6 +25,7 @@ mod notes;
 mod plugins;
 mod reading;
 mod search;
+mod search_fuzz;
 mod stats;
 mod store;
 mod study;

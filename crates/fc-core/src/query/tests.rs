@@ -81,6 +81,38 @@ fn errors_are_positioned_in_characters() {
     assert_eq!(span_of("- a"), (0, 1, "expected_term"));
 }
 
+/// v1.4.1 (found by `fc-storage` `search_fuzz`): a pasted run of `(` or `-` overflowed the
+/// stack (1000 levels on a 2 MB thread); nesting is capped at [`parse::MAX_DEPTH`].
+#[test]
+fn deep_nesting_is_a_positioned_error_not_a_stack_overflow() {
+    let d = parse::MAX_DEPTH;
+    let ok = format!("{}x{}", "(".repeat(d), ")".repeat(d));
+    assert!(parse_query(&ok).is_ok());
+    assert!(parse_query(&format!("{}x", "-".repeat(d))).is_ok());
+    assert!(parse_query(&format!("{}x", "NOT ".repeat(d))).is_ok());
+    let deep = |q: String| {
+        std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(move || span_of(&q))
+            .unwrap()
+            .join()
+            .unwrap()
+    };
+    let n = u32::try_from(d).unwrap();
+    for big in [d + 1, 1_000, 100_000] {
+        let q = format!("{}x{}", "(".repeat(big), ")".repeat(big));
+        assert_eq!(deep(q), (n, n + 1, "too_deep"), "{big}");
+        assert_eq!(
+            deep(format!("{}x", "-".repeat(big))),
+            (n, n + 1, "too_deep")
+        );
+    }
+    assert_eq!(
+        deep(format!("{}x", "NOT ".repeat(1_000))),
+        (4 * n, 4 * n + 3, "too_deep")
+    );
+}
+
 // ------------------------------------------------------------------ fixtures
 
 struct World {

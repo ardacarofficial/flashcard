@@ -70,4 +70,6 @@ mod review_fixes_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod undo_fuzz_tests;
+#[cfg(test)]
 mod v11_tests;

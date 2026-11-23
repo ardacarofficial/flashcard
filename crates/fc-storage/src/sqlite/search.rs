@@ -205,6 +205,17 @@ fn fts_phrase(tokens: &[String], prefix: bool) -> String {
     format!("content : \"{phrase}\"{}", if prefix { " *" } else { "" })
 }
 
+/// `parts` joined by `sep` (` AND `/` OR `) as a balanced tree of parenthesised groups. SQLite
+/// caps an expression's depth at 1000 and a flat chain of N terms is N deep: a pasted paragraph
+/// of a thousand words is a thousand-term `AND` (v1.4.1, found by `search_fuzz`).
+fn balanced(parts: &[String], sep: &str) -> String {
+    if parts.len() <= 16 {
+        return format!("({})", parts.join(sep));
+    }
+    let (a, b) = parts.split_at(parts.len() / 2);
+    format!("({}{sep}{})", balanced(a, sep), balanced(b, sep))
+}
+
 /// `negated`: whether `f` sits under a `NOT`. Only there must a predicate be made non-`NULL`
 /// (`coalesce`); in positive position `NULL` already rejects the row, and leaving the bare
 /// predicate lets the planner drive the query from an index (`c.note_id IN (…)`).
@@ -227,7 +238,7 @@ fn compile(f: &Filter, now: Timestamp, negated: bool, out: &mut Sql) -> String {
                 " OR "
             };
             let parts: Vec<String> = v.iter().map(|x| compile(x, now, negated, out)).collect();
-            format!("({})", parts.join(sep))
+            balanced(&parts, sep)
         }
         Filter::Not(x) => format!("(NOT {})", compile(x, now, true, out)),
         Filter::Pred(p) if negated => format!("coalesce(({}), 0)", pred(p, now, out)),
@@ -545,9 +556,11 @@ fn pred(p: &Pred, now: Timestamp, out: &mut Sql) -> String {
             note_in(
                 out,
                 "note_id",
+                // Only the non-empty ones (v1.4.1: `kaynak:*` matched notes without any).
                 &format!(
-                    "FROM note_origins WHERE (fc_glob({g}, source) OR fc_glob({g}, site) \
-                     OR fc_glob({g}, video_id))"
+                    "FROM note_origins WHERE ((source <> '' AND fc_glob({g}, source)) \
+                     OR (site <> '' AND fc_glob({g}, site)) \
+                     OR (video_id <> '' AND fc_glob({g}, video_id)))"
                 ),
             )
         }

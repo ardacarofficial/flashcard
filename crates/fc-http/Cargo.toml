@@ -24,6 +24,8 @@ fc-app = { path = "../fc-app", features = ["testing"] }
 tempfile.workspace = true
 # v1.0: a desktop session (app lock) over the served app.
 fc-ai.workspace = true
+# v1.4.1: the fuzz tests compare the whole collection before and after a rejected request.
+fc-storage.workspace = true
 
 [lints]
 workspace = true
