@@ -71,6 +71,9 @@ fix).
 | E1a | v1.4 Sınav: question types are check boxes from `study.options` (true/false off), none checked → Start off with the reason, only matching + 2 questions → `modes.test.paper` has exactly two matching questions; the result says the schedule did not change | must pass (v1.4) |
 | E1b | v1.4 Test: `Esc` on the feedback pauses — the session stays open in the core (`ended_at` null, `modes.quiz.result` answered 1, not finished), `Enter` continues with the next word | must pass (v1.4) |
 | K1 | A key right after a grade: four buttons, four cards in a row graded `1`/`2`/`3`/`4` with `Space` pressed at once (saving is held back 400 ms on purpose; half the cards turned with Space, half by clicking the card so it has the focus): while saving, the graded card stays on its back; the next card comes up on its front; each card has exactly one review in the session, with the pressed grade | must pass (fixed in v1.3) |
+| E3a | v1.4 Search chips: "Nereden → Altyazıdan" writes `nereden:altyazı` in the box; the count and the rows equal `search.cards` read back; × removes the token | must pass (v1.4) |
+| E3W | v1.4 My words: `/`, type a captured word, ↓ Enter, "Zaten biliyorum" → `words.lookup` reads status known with a manual mark (mark cleared after) | must pass (v1.4) |
+| E3N | v1.4 Note editor extras: a Subtitle note's encounters show; an accepted answer added in the editor is read back with `accepted_answers.list` | must pass (v1.4) |
 
 A journey that shows a known bug is **never deleted or skipped**: the bug assertion comes after
 `test.fail(true, '<bug>')`, called only once the journey's own preconditions have passed (so a

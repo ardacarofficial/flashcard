@@ -1,5 +1,5 @@
-import { err, menu, module, settingsPage, type MockEnv, type MockFeature } from '$lib/api/mock/env';
-import type { ApiError, CreateNote, NoteDto } from '$lib/api/types';
+import { err, menu, module, settingsPage, type Handlers, type MockEnv, type MockFeature } from '$lib/api/mock/env';
+import type { AudioFillItem, AudioFillPreview, AudioFillScope, ApiError, CreateNote, JobDto, NoteAcceptedAnswers, NoteDto } from '$lib/api/types';
 
 export default {
   modules: [
@@ -7,6 +7,8 @@ export default {
       menu('notes.add', 'nav.add_note', '/notes/new', 20),
       menu('notes.list', 'nav.notes', '/notes', 30),
     ]),
+    module('accepted_answers', []),
+    { ...module('audio_fill', []), methods: ['media.audio.fill_preview', 'media.audio.fill', 'media.origins'] },
   ],
   handlers: ({ now, id, emit, notes, decks, requireDeck, requireName, addDeck, sameName, pathOf, undoLog }: MockEnv) => {
   /** v1.3: one undo step removes these notes (and a deck made for them). */
@@ -135,6 +137,100 @@ export default {
     emit({ type: 'notes_deleted', data: { ids: gone } });
     return { decks: 0, notes: gone.length, cards: gone.length };
   },
+  ...extras({ now, id, emit, notes }),
   };
   },
 } satisfies MockFeature;
+
+/**
+ * v1.4 note extras (dev mock; the real rules: fc-app `accepted_answers`, `audio_fill`):
+ * accepted answers per note (the meaning field, `back` here) and filling a missing sound
+ * (a note "has" a sound field when its fields carry an `audio` key; TTS reads the word).
+ */
+function extras({ now, id, emit, notes }: Pick<MockEnv, 'now' | 'id' | 'emit' | 'notes'>): Handlers {
+  const answers = new Map<string, Map<string, string[]>>();
+  const requireNote = (noteId: string) => {
+    const n = notes.find((x) => x.id === noteId);
+    if (!n) throw err('NOT_FOUND_NOTE', 'errors.not_found.note', noteId);
+    return n;
+  };
+  const state = (noteId: string): NoteAcceptedAnswers => ({
+    note_id: noteId,
+    fields: [...(answers.get(noteId) ?? new Map<string, string[]>())].filter(([, a]) => a.length).map(([field, a]) => ({ field, answers: [...a] })),
+  });
+  const listOf = (noteId: string, field: string | null | undefined) => {
+    requireNote(noteId);
+    const byField = answers.get(noteId) ?? new Map<string, string[]>();
+    answers.set(noteId, byField);
+    const key = field ?? 'back';
+    const list = byField.get(key) ?? [];
+    byField.set(key, list);
+    return list;
+  };
+  const fold = (s: string) => s.trim().toLocaleLowerCase();
+  const scopeNotes = (scope: AudioFillScope) => (scope.note_ids ?? []).map(requireNote);
+  const plan = (n: NoteDto): AudioFillItem => {
+    const word = (n.fields.word ?? n.fields.front ?? '').replace(/<[^>]*>/g, '').trim();
+    if (!('audio' in n.fields)) return { note_id: n.id, source: 'none', reason: 'no_audio_field', text: null, language: null };
+    if (!word) return { note_id: n.id, source: 'none', reason: 'no_text', text: null, language: null };
+    return { note_id: n.id, source: 'tts', reason: null, text: word, language: 'en' };
+  };
+  const preview = (scope: AudioFillScope): AudioFillPreview => {
+    const ns = scopeNotes(scope);
+    const todo = ns.filter((n) => !(n.fields.audio ?? '').trim());
+    const items = todo.map(plan);
+    const count = (s: AudioFillItem['source']) => items.filter((i) => i.source === s).length;
+    return {
+      notes: ns.length,
+      with_audio: ns.length - todo.length,
+      original: count('original'),
+      clip: count('clip'),
+      tts: count('tts'),
+      tts_cached: 0,
+      none: count('none'),
+      other_video: 0,
+      no_times: 0,
+      tts_problems: [],
+      items,
+    };
+  };
+  const ttsHash = 'b'.repeat(64);
+  return {
+    'accepted_answers.list': ({ note_id }) => {
+      requireNote(note_id);
+      return state(note_id);
+    },
+    'accepted_answers.add': ({ note_id, field, answers: add }) => {
+      const list = listOf(note_id, field);
+      for (const a of add) if (a.trim() && !list.some((x) => fold(x) === fold(a))) list.push(a.trim());
+      return state(note_id);
+    },
+    'accepted_answers.remove': ({ note_id, field, answers: drop }) => {
+      const list = listOf(note_id, field);
+      const keep = list.filter((x) => !drop.some((d) => fold(d) === fold(x)));
+      list.splice(0, list.length, ...keep);
+      return state(note_id);
+    },
+    'media.audio.fill_preview': ({ scope }) => preview(scope),
+    'media.audio.fill': ({ scope }) => {
+      const result = preview(scope);
+      for (const item of result.items) {
+        if (item.source === 'none') continue;
+        const n = requireNote(item.note_id);
+        n.fields = { ...n.fields, audio: `[sound:media:${ttsHash}]` };
+        n.updated_at = now();
+        emit({ type: 'note_updated', data: { note_id: n.id } });
+      }
+      const t = now();
+      const job: JobDto = { id: id('job'), kind: 'audio_fill', status: 'succeeded', progress: 1, message: null, error: null, result, created_at: t, updated_at: t };
+      return job;
+    },
+    'media.origins': ({ hashes, note_id }) => {
+      const all = [...hashes];
+      if (note_id) {
+        for (const v of Object.values(requireNote(note_id).fields)) for (const m of v.matchAll(/media:([0-9a-f]{64})/g)) all.push(m[1]!);
+      }
+      return { origins: [...new Set(all)].map((hash) => ({ hash, origin: hash === ttsHash ? ('tts' as const) : ('user' as const) })) };
+    },
+  };
+}

@@ -22,10 +22,7 @@
   import {
     Button,
     ChevronDown,
-    ClipboardPaste,
-    Columns3,
     EmptyState,
-    FileText,
     Icon,
     IconButton,
     ImagePlus,
@@ -35,8 +32,6 @@
     SegmentedControl,
     Select,
     Skeleton,
-    Sparkles,
-    Tabs,
     Textarea,
     toast,
     Trash2,
@@ -52,6 +47,7 @@
   import NoteEditor from '../cards/NoteEditor.svelte';
   import ImportFlow, { type Destination } from '../io/ImportFlow.svelte';
   import AddedSummary from './AddedSummary.svelte';
+  import AddWays from './AddWays.svelte';
   import { ADD_WAYS, addWayRequest, lastAddWay, rememberAddWay, takeAddWay, type AddWay } from './add-way.svelte';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
@@ -118,13 +114,6 @@
   const typeOptions = $derived((notetypes ?? []).map((n) => ({ value: n.id, label: n.name })));
   const targetDeck = $derived(mode === 'new' ? parent || null : deckId);
   const canSave = $derived(!!nt && filled > 0 && !busy && (mode === 'new' ? !!title.trim() : !!deckId));
-  const aiOn = $derived(moduleOn('ai') && !!ctx.navigate);
-  const wayTabs = $derived([
-    { id: 'single', label: t('add.way.single'), icon: Plus },
-    { id: 'bulk', label: t('add.way.bulk'), icon: Columns3 },
-    { id: 'paste', label: t('add.way.paste'), icon: ClipboardPaste },
-    { id: 'file', label: t('add.way.file'), icon: FileText },
-  ]);
 
   function chooseWay(id: string) {
     if (!(ADD_WAYS as readonly string[]).includes(id)) return;
@@ -493,15 +482,11 @@
 <svelte:window onkeydown={onGlobalKey} />
 
 <div class="create">
-  <PageHeader title={t('create.heading')} subtitle={t('add.subtitle')}>
-    {#snippet actions()}
-      {#if aiOn}
-        <Button variant="ghost" icon={Sparkles} onclick={() => ctx.navigate?.('/ai')}>{t('create.ai')}</Button>
-      {/if}
-    {/snippet}
-  </PageHeader>
+  <PageHeader title={t('create.heading')} subtitle={t('add.subtitle')} />
 
-  <Tabs variant="pill" label={t('add.way.label')} tabs={wayTabs} value={way} onchange={chooseWay} class="ways" />
+  <div class="add-layout">
+    <AddWays {way} onchoose={chooseWay} navigate={ctx.navigate ? (r) => ctx.navigate?.(r) : undefined} />
+    <div class="add-main" role="tabpanel" aria-labelledby="add-way-{way}">
 
   {#if loadError}
     <EmptyState title={t('create.load_failed')} description={loadError} action={{ label: t('create.retry'), onclick: () => void loadTypes() }} />
@@ -699,6 +684,8 @@
     </div>
   {/if}
 </div>
+  </div>
+</div>
 
 <input bind:this={fileInput} class="file" type="file" accept="image/*" tabindex="-1" aria-hidden="true" onchange={(e) => void onFile(e.currentTarget.files)} />
 
@@ -710,6 +697,25 @@
   }
   .create :global(.fc-page-header) {
     margin-bottom: 0;
+  }
+  /* v1.4: the ways rail on the left, the chosen way on the right (one column when narrow). */
+  .add-layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: var(--space-6);
+    align-items: start;
+  }
+  .add-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-width: 0;
+  }
+  @media (max-width: 1000px) {
+    .add-layout {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-4);
+    }
   }
   .bulk {
     display: flex;

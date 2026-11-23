@@ -127,8 +127,8 @@ describe('<QuickAddHost>', () => {
     render(QuickAddDialog, { open: true, ctx, deck: target.deck.id });
     await screen.findByLabelText(/^Term/);
     const ways = screen.getByRole('group', { name: 'Other ways:' });
-    expect(Array.from(ways.querySelectorAll('button'), (b) => b.textContent?.trim())).toEqual(['Bulk', 'Paste', 'From a file']);
-    await fireEvent.click(screen.getByRole('button', { name: 'Paste' }));
+    expect(Array.from(ways.querySelectorAll('button'), (b) => b.textContent?.trim())).toEqual(['Row by row', 'Paste a list', 'From a file']);
+    await fireEvent.click(screen.getByRole('button', { name: 'Paste a list' }));
     expect(navigate).toHaveBeenCalledWith('/notes/new');
     expect(selectDeck).toHaveBeenCalledWith(target.deck.id);
     expect(takeAddWay()).toEqual({ way: 'paste', deckId: target.deck.id });

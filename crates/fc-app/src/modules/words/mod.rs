@@ -26,7 +26,7 @@ mod tests;
 use crate::error::{AppError, AppResult};
 use crate::handler::{CommandCtx, CommandOutcome, QueryCtx};
 use crate::jobs::{JobContext, JobHandler};
-use crate::module::ModuleDescriptor;
+use crate::module::{main_menu, ModuleDescriptor};
 use crate::modules::reading::{language_or_default, lemmatizer_for, words::tokens};
 use crate::modules::word_data;
 use crate::registry::Registry;
@@ -98,7 +98,8 @@ pub fn descriptor() -> ModuleDescriptor {
                 scopes: vec![SettingScopeKind::App],
             },
         ],
-        ui: vec![],
+        // v1.4 E3: "Kelimelerim" (frontend feature `words`); placed by the shell (E2).
+        ui: vec![main_menu("words.screen", "nav.words", "book-open", "/words", 31)],
     }
 }
 

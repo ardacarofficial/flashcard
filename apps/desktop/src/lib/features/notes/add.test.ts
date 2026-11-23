@@ -179,11 +179,15 @@ describe('<CreateScreen> ways in', () => {
   it('four ways as tabs; a request (Quick Add → Paste) opens that way on the deck', async () => {
     const decks = (await api.deck.tree()).roots;
     render(CreateScreen, { ctx: ctxWith({ decks, navigate: () => {} }) });
-    const tabs = await screen.findByRole('tablist', { name: 'How do you want to add' });
-    expect(within(tabs).getAllByRole('tab').map((t) => t.textContent?.trim())).toEqual(['One card', 'Bulk', 'Paste', 'From a file']);
+    // v1.4: a rail of ways in two groups (the labels changed with the prototype); the in-page
+    // ways are tabs, the ones with their own page are buttons after them.
+    const own = await screen.findByRole('tablist', { name: 'Type it yourself' });
+    expect(within(own).getAllByRole('tab').map((t) => t.getAttribute('aria-label'))).toEqual(['One word', 'Paste a list', 'Row by row']);
+    const bring = screen.getByRole('tablist', { name: 'Bring from somewhere' });
+    expect(within(bring).getAllByRole('tab').map((t) => t.getAttribute('aria-label'))).toEqual(['From a file']);
     requestAddWay('paste', decks[0]!.deck.id);
     expect(await screen.findByRole('textbox', { name: 'Paste your list here' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Paste' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Paste a list' }).getAttribute('aria-selected')).toBe('true');
     expect(takeAddWay()).toBeNull();
     await fireEvent.click(screen.getByRole('tab', { name: 'From a file' }));
     expect(await screen.findByText('Drop the file here')).toBeTruthy();

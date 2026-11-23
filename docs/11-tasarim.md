@@ -93,6 +93,8 @@ Oluştur sayfası "Nasıl eklemek istersin?" diye açılır: **Tek kart** (Hızl
 - **Hızlı Ekle** örnek alanı olmayan bir türdeyken cümle yazmak isteyene "Kelime kartı" türünü tek tıkla önerir.
 - **Oluştur › Yapay zeka** yalnız "Yapay zekayla kart üret"tir (deste formdaki bir alan; sağlayıcı yoksa "Sağlayıcı bağla" Ayarlar'a götürür). Sağlayıcılar ve kullanım **Ayarlar › Bağlantılar › Yapay zeka**'dadır.
 
+**v1.4 (E3, prototip `prototypes/v14/olustur-ara-istatistik.html`):** başlık **Ekle**; sekmelerin yerine solda bir **yollar rayı** (`features/notes/AddWays.svelte`), iki grup: *Kendin yaz* (Tek kelime · Liste yapıştır · Satır satır) ve *Bir yerden getir* (Dosyadan · Yakalananlar (bekleyen sayısıyla) · Bir metinden seç · Yapay zekayla · Hazır desteler). Her yol tek satırla ne yaptığını söyler. Bu sayfada açılan yollar dikey bir sekme listesidir (`role="tablist"`, `aria-orientation="vertical"`, `↑`/`↓` Home/End); kendi sayfası olan yollar (Gelen kutusu, Okuma, Yapay zeka, Başlangıç desteleri) ↗ işaretli düğmelerdir ve o sayfayı açar. Modülü kapalı yol çizilmez. 1000 px altında ray, açıklamasız sarmalanan bir satıra döner. Hızlı Ekle penceresi (`N`) kaldı (prototip sorusu 5 için B; kapatmak kabuk işi).
+
 ### 1.4 Ayarlar kiti: ayar öğretir (`features/core/kit`)
 
 Kurallar (her ayar sayfası uyar):
@@ -163,6 +165,10 @@ Bu girişler `shell/commands.svelte.ts`'te tek fonksiyondur: `openQuickAdd()` ve
 **Deste sayfası** (`features/decks/DeckPage.svelte`): başlık + sayılar + çipler + **Dil** (v1.4: `words.language` deste kapsamı, seçici; boşken "kelimeleri sayılmıyor" uyarısı) + ⋯; birincil **"Çalış"** (`Enter`) ve mod düğmeleri (Kartlar, Öğren, Test, Eşleştir başlatıcıyı o mod seçili açar; Okuma kendi ekranı); önizleme kartı (`←`/`→`, `Space`), ilerleme, bugünün sayıları, alt desteler. **Terim listesi** (`TermList.svelte`) gerçek bir tablo; satır içi düzenleme `notes.terms`'ün rollerden seçtiği alanlara yazar (`term_field`, `definition_field`), belirsiz not türlerinde tam düzenleyici açılır.
 
 **Ara** (`features/browse/BrowseScreen.svelte`, geniş): sorgu alanı (`/`), ince araç çubuğu, sık sanal tablo, kart bilgisi yan paneli; `↑`/`↓`, `Space`, `Shift+↑/↓`, `Enter` düzenle, `Esc`; seçim varken toplu işlem çubuğu. v1.3: `added:N` / `edited:N` / `reviewed:N` yerel çalışma günlerini sayar (`study.day_start_hour`), kayan 24 saati değil.
+
+**v1.4 (E3) Ara süzgeç çipleri** (`features/browse/FilterChips.svelte`, `filter-chips.ts`): arama kutusunun altında Durum, Dil, Seviye (CEFR), Sıklık, Nereden, Karşılaşma, Ses, Görsel, Kaynak, Kelime. Bir değer seçmek sorgu kutusuna o yüklemi yazar (aynı anahtarlı eski jetonun yerine; `-` ile başlayan jetonlara dokunmaz) ve sorguyu çalıştırır; etkin çipin × düğmesi jetonu siler. Sorgu dili görünür kalır, öğrenilir; yardım (`?`) yeni yüklemleri birer örnekle listeler. Modülü kapalı çip çizilmez (`words`, `word_data`, `subtitle`).
+
+**v1.4 (E3) Kelimelerim** (`features/words/WordsScreen.svelte`, route `/words`, `words` modülünün `main_menu` girdisi; kenar çubuğundaki yeri kabuğun işi): büyük arama kutusu (`/`), durum çipleri sayılarıyla (`words.stats`), sıralama (A–Z / en sık / seviye; `word_data` açıkken), satırda kelime · durum · sıklık sırası · CEFR · kart sayısı, "Daha fazla" ile imleçli sayfalama; `↑`/`↓`, `Enter` yan paneli açar, `Esc` kapatır. Panel: durum tek cümle, kartları, sıklık/seviye, "Zaten biliyorum / Yeniden öğren / Yok say" (`reading.words.mark`), "Nerede gördün" (`subtitle.encounters.list`). Boş hâl Ekle'ye götürür; dili bilinmeyen kart sayısı tek satır ipucu.
 
 ### 3.3 İlerleme (eski İstatistik) ve Planlama
 

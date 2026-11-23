@@ -1,4 +1,7 @@
 {
+  "nav": {
+    "words": "Kelimelerim"
+  },
   "modules": {
     "words": {
       "name": "Kelime dizini",
@@ -40,6 +43,85 @@
   "words": {
     "job": {
       "rebuilding": "Kelime dizini yeniden kuruluyor…"
+    },
+    "screen": {
+      "title": "Kelimelerim",
+      "lead": "Bir kelime yaz, bul; tıkla: anlamını, cümlesini, ne kadar bildiğini gör.",
+      "search_label": "Kelime ara",
+      "search_placeholder": "Kelime ara",
+      "clear_search": "Aramayı temizle",
+      "filters": "Duruma göre",
+      "all": "Hepsi",
+      "status": {
+        "new": "Yeni",
+        "learning": "Öğreniyorum",
+        "known": "Biliyorum",
+        "ignored": "Yok sayılan"
+      },
+      "language": "Dil",
+      "sort": {
+        "label": "Sırala",
+        "key": "A–Z",
+        "rank": "En sık duyulan",
+        "band": "Seviye"
+      },
+      "list_label": "Kelimeler",
+      "rank": "#{rank}",
+      "rank_title": "Duyulma sırası",
+      "cards": "{count, plural, other {# kart}}",
+      "no_cards": "kart yok",
+      "more": "Daha fazla",
+      "shown": "{shown} kelime gösteriliyor",
+      "keys": {
+        "search": "ara",
+        "move": "gez",
+        "open": "aç",
+        "close": "kapat"
+      },
+      "unassigned": "{count, plural, other {# kartın}} dili belli değil: Ayarlar'da destenin dilini seç, o kartlar da burada sayılsın.",
+      "empty": {
+        "title": "Kelime listen boş",
+        "body": "Eklediğin her kelime burada durur: anlamı, dizideki cümlesi ve ne kadar bildiğin. Ekle'den ilk kelimeni ekle.",
+        "action": "Kelime ekle"
+      },
+      "no_match": {
+        "title": "“{query}” bulunamadı",
+        "body": "Yazımına bak ya da başka bir durum seç."
+      },
+      "filter_empty": {
+        "title": "Bu süzgeçte kelime yok",
+        "body": "Başka bir durum seç."
+      },
+      "load_failed": "Kelimeler yüklenemedi.",
+      "retry": "Yeniden dene",
+      "detail": {
+        "label": "Kelime: {word}",
+        "close": "Kapat",
+        "status": "Durum",
+        "say": {
+          "new": "Bu kelimeyi henüz çalışmadın.",
+          "learning": "Öğreniyorsun: kartını çalıştıkça bilinir olur.",
+          "known": "Biliyorsun: kartın en uzun {days} gün bekledi.",
+          "known_plain": "Biliyorsun.",
+          "known_manual": "Bunu bildiğini sen söyledin; kartı varsa yine sorulur.",
+          "ignored": "Yok saydın: okurken ve sayılarda karşına çıkmaz."
+        },
+        "mark_known": "Zaten biliyorum",
+        "relearn": "Yeniden öğren",
+        "ignore": "Yok say",
+        "cards": "Kartları",
+        "open_note": "Arama'da aç",
+        "no_cards": "Bu kelimenin kartı yok.",
+        "interval": "{days} gün aralık",
+        "level": "Sıklık ve seviye",
+        "rank_line": "Film ve dizilerde en sık duyulan {rank}. kelime",
+        "band_line": "Seviye {band}",
+        "estimated": "tahmini",
+        "no_level": "Bu kelime için sıklık bilgisi yok.",
+        "seen": "Nerede gördün",
+        "no_seen": "Henüz bir videoda yakalamadın.",
+        "at": "{time}'da"
+      }
     }
   }
 }
