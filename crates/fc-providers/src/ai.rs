@@ -61,12 +61,16 @@ pub struct CompletionRequest {
 }
 
 /// Token usage for cost tracking (`ai_usage` table).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct Usage {
     /// Input tokens.
     pub input_tokens: u32,
     /// Output tokens.
     pub output_tokens: u32,
+    /// What the request cost in US dollars **as the provider reports it** (OpenRouter's
+    /// `usage.cost`), when it does (v1.4). `None` = the app estimates from its price table.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
 }
 
 /// A completion result.

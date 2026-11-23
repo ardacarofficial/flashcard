@@ -342,9 +342,11 @@
       "ai_unauthorized": "The provider rejected the API key (or none is set).",
       "ai_rate_limited": "Rate limit reached. Try again later.",
       "ai_invalid_request": "The provider refused the request.",
-      "ai_invalid_output": "The answer was not in the expected format.",
+      "ai_invalid_output": "The model did not answer in the expected format (it was also asked once to fix it). Try again; if it fails again, pick another model.",
       "ai_keychain": "The system keychain is not available.",
-      "ai_source": "The web page could not be fetched. Try again later."
+      "ai_source": "The web page could not be fetched. Try again later.",
+      "ai_model_not_found": "The provider does not know this model (wrong name, or it is gone). Pick another model in Settings → AI.",
+      "ai_timeout": "The provider did not answer in time. Try again in a moment; if it keeps happening, allow a longer wait in the AI settings."
     }
   },
   "settings": {

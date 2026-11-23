@@ -5,6 +5,7 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 ## Unreleased (v1.4)
 
 - **Subtitle eklentisi gerçek tarayıcıda (G2):** derlenmiş eklenti gerçek Chromium'da gerçek `fc api serve`'e karşı sahibin akışıyla denendi (eşleştirme, **+**, aynı kelime ikinci sahneden → aynı notun karşılaşması, deyim, uygulama kapalı/yeniden başlamış, yanlış/iptal anahtar, bilinen kelimeler eklentinin kökeninden); hepsi geçti, Flashcard tarafında hata çıkmadı; betik `tools/subtitle-real-browser/run.mjs`, rapor ve eklentide gereken değişiklik `docs/14-subtitle-gercek-tarayici.md`.
+- **AI gerçek sağlayıcıyla (OpenRouter) denendi, bulunan sekiz hata düzeltildi:** sertifikalar işletim sisteminin deposuyla doğrulanır (antivirüs/şirket vekili arkasında da çalışır), OpenRouter'ın bildirdiği gerçek ücret kullanım paneline ve bütçeye girer (önce $0), üretilen kartlar kartın sorduğu alanı (Klasik'te arka) boş bırakamaz, iptal AI şeridini hemen boşaltır, yanlış model ve zaman aşımı kendi TR/EN mesajlarıyla (`PROVIDER_AI_MODEL_NOT_FOUND`, `PROVIDER_AI_TIMEOUT`), sarılmış üst sağlayıcı hatasının nedeni korunur, etikete sarılmış düz cevap soyulur, Türkçe anlamlarda ș → ş; yeniden koşulabilir canlı deneme `FC_AI_LIVE=1` (+ yolculuk G1, varsayılan takımda atlanır); ayrıntı docs/13. _(G1)_
 
 ## [1.4.0] — v1.4 "kelime uygulaması": kaybolmayan veri, tek kelime doğrusu, sade ekranlar
 

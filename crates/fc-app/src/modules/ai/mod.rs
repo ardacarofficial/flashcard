@@ -45,6 +45,10 @@ mod tests_phase3;
 mod tests_presets;
 #[cfg(test)]
 mod tests_meaning;
+#[cfg(test)]
+mod tests_live;
+#[cfg(test)]
+mod tests_openrouter;
 
 pub(crate) use context::meaning_field as context_meaning_field;
 pub use meaning::suggest_after_capture;

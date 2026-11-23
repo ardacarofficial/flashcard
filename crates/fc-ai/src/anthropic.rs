@@ -179,6 +179,7 @@ impl Anthropic {
             usage: Usage {
                 input_tokens: u32_at(v, "/usage/input_tokens"),
                 output_tokens: u32_at(v, "/usage/output_tokens"),
+                cost_usd: None,
             },
             truncated: v.get("stop_reason").and_then(Value::as_str) == Some("max_tokens"),
         })

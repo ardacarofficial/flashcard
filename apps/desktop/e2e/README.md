@@ -78,6 +78,7 @@ fix).
 | F1a | v1.4 Leech repair: a card lapsed 8× through `study.start`/`study.answer` (cramming sessions, typed wrong answer kept) → İlerleme › Daha fazla › "Düzelt": lapses and the typed answer shown; "Uygula" on "accept the other meanings" → `stats.leech_repairs.list` has it, `accepted_answers.list` both senses, note fields unchanged; one Ctrl+Z removes both | must pass (v1.4) |
 | F1b | v1.4 Encounters (note editor): two Subtitle notes from real captures; "Başka karta taşı" + note picker moves one encounter (`subtitle.encounters.list` on both notes); "Bir kartla birleştir" with a different word → "Yine de birleştir" → one note keeps all three encounters, the other is in `browse.trash` | must pass (v1.4) |
 | F1c | v1.4 Audio fill (note editor › Ses): a capture's own WAV, audio field emptied → "Ses bul" previews the original, "Bunu ekle" puts the same media back (`notes.get`, `media.origins` = original); a note without sound and no TTS provider shows the reason and writes nothing (a real TTS fill is not covered) | must pass (v1.4) |
+| G1 | v1.4 "Bu cümledeki anlam" against a **real** AI provider (OpenRouter from its preset): Search → a seeded Subtitle note → Enter → Öner → preview → Gönder → "Kartın anlamına da yaz" → Uygula; `ai.meaning.get` and `notes.get` read back. Opt-in: `FC_AI_LIVE=1` (spends a little, needs the network; docs/13) | skipped by default |
 
 A journey that shows a known bug is **never deleted or skipped**: the bug assertion comes after
 `test.fail(true, '<bug>')`, called only once the journey's own preconditions have passed (so a

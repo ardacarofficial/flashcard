@@ -364,6 +364,7 @@ pub(crate) fn fetch_page_dialing(
             .max_redirects(0)
             .http_status_as_error(false)
             .user_agent("flashcard (reader)")
+            .tls_config(crate::http::tls())
             .build();
         let agent = ureq::Agent::with_parts(
             config,

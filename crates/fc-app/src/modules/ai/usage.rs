@@ -154,12 +154,18 @@ fn record(req: RecordAiUsage, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutc
         feature: req.feature.id().to_owned(),
         input_tokens: req.input_tokens,
         output_tokens: req.output_tokens,
-        cost_estimate: cost(
-            &prices,
-            &req.model,
-            u64::from(req.input_tokens),
-            u64::from(req.output_tokens),
-        ),
+        // What the provider charged when it says so (OpenRouter), else the price table.
+        cost_estimate: req
+            .cost_usd
+            .filter(|c| c.is_finite() && *c >= 0.0)
+            .or_else(|| {
+                cost(
+                    &prices,
+                    &req.model,
+                    u64::from(req.input_tokens),
+                    u64::from(req.output_tokens),
+                )
+            }),
         created_at: ctx.now,
     };
     ctx.tx.insert_ai_usage(&row)?;

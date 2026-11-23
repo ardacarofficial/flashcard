@@ -322,10 +322,8 @@ fn a_timeout_writes_nothing() {
     let job = run(&t, task(&note));
     assert_eq!(job.status, JobStatus::Failed, "{:?}", job.result);
     let err = job.error.unwrap();
-    assert!(
-        matches!(err.code, ErrorCode::ProviderUnavailable | ErrorCode::ProviderFailed),
-        "{err:?}"
-    );
+    // v1.4 G1: a timeout says so (it was "service unavailable" before).
+    assert_eq!(err.code, ErrorCode::ProviderAiTimeout, "{err:?}");
     untouched(&t, &note);
 }
 

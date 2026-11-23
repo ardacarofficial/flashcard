@@ -90,6 +90,7 @@ impl Ollama {
             usage: Usage {
                 input_tokens: u32_at(v, "/prompt_eval_count"),
                 output_tokens: u32_at(v, "/eval_count"),
+                cost_usd: None,
             },
             truncated: v.get("done_reason").and_then(Value::as_str) == Some("length"),
         })
@@ -179,6 +180,7 @@ impl AiProvider for Ollama {
                     out.usage = Usage {
                         input_tokens: u32_at(&v, "/prompt_eval_count"),
                         output_tokens: u32_at(&v, "/eval_count"),
+                        cost_usd: None,
                     };
                     out.truncated = v.get("done_reason").and_then(Value::as_str) == Some("length");
                     return Ok(false);

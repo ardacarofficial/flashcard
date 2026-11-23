@@ -308,7 +308,7 @@ fn mentions_credit(text: &str) -> bool {
 }
 
 /// The body says the model is unknown or not available to this key.
-fn mentions_missing_model(text: &str) -> bool {
+pub(crate) fn mentions_missing_model(text: &str) -> bool {
     text.contains("model")
         && any(
             text,
