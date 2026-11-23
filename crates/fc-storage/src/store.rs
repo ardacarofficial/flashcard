@@ -24,13 +24,18 @@
 //!   holds the in-memory writer).
 //!
 //! * **WAL checkpoints off the write path** (v1.4 Z2): a file-backed store runs a
-//!   [`Checkpointer`] thread with its own connection. A commit only signals it; the thread
-//!   waits [`CHECKPOINT_DELAY`] for more commits, then runs a `PASSIVE` checkpoint (which
-//!   never blocks readers or the writer). SQLite's own auto-checkpoint ran inside the commit
-//!   that crossed 1 000 WAL pages — copying pages and syncing the database file under the
-//!   writer mutex: every ~15th Subtitle capture paid it (Linux ~12 ms, a Windows CI disk up to
-//!   2 s, stalling every command behind it). The writer keeps auto-checkpoint only as a safety
-//!   net at [`SAFETY_CHECKPOINT_PAGES`].
+//!   [`Checkpointer`] thread with its own connection. SQLite's own auto-checkpoint ran inside
+//!   the commit that crossed 1 000 WAL pages — copying pages and syncing the WAL and the
+//!   database file under the writer mutex: every ~15th Subtitle capture paid it (Linux
+//!   ~12 ms, a Windows CI disk up to 2 s, stalling every command behind it). Now the writer's
+//!   WAL hook only signals the thread when the WAL reaches [`BACKGROUND_CHECKPOINT_PAGES`]
+//!   (the same point as before), and the thread runs a `PASSIVE` checkpoint (never blocks
+//!   readers or the writer). **Not earlier:** after a complete checkpoint the next commit
+//!   starts the WAL over and syncs its header (SQLite's rule, `walFrames`), so checkpointing
+//!   after every burst put a WAL sync into the first command after each pause (seen with
+//!   strace; on Windows CI it pushed a plugin hook's storage write past its deadline). The
+//!   writer still checkpoints itself at [`SAFETY_CHECKPOINT_PAGES`] if the thread falls
+//!   behind.
 //!
 //! Why not an `r2d2`-style pool: one more dependency for what is, on a desktop app, a fixed
 //! handful of connections; the scheme above is ~50 lines plus the checkpoint thread.
@@ -80,17 +85,17 @@ pub struct SqliteStore {
     checkpointer: Option<Checkpointer>,
 }
 
-/// How long the checkpoint thread waits after a commit for more commits (one checkpoint
-/// per burst of captures, not one per capture).
-pub const CHECKPOINT_DELAY: Duration = Duration::from_millis(250);
+/// WAL size (pages) at which the background thread checkpoints: SQLite's own default, so the
+/// WAL starts over (and its header is synced by a commit) no more often than before.
+pub const BACKGROUND_CHECKPOINT_PAGES: i32 = 1_000;
 
-/// WAL size (pages) at which the writer still checkpoints itself: reached only if the
-/// background thread falls behind (SQLite's default is 1 000).
-pub const SAFETY_CHECKPOINT_PAGES: i64 = 20_000;
+/// WAL size (pages) at which the writer still checkpoints itself, inside the commit as SQLite
+/// did: reached only if the background thread falls behind.
+pub const SAFETY_CHECKPOINT_PAGES: i32 = 20_000;
 
 #[derive(Default)]
 struct CheckpointState {
-    /// A commit happened since the last checkpoint started.
+    /// The WAL reached [`BACKGROUND_CHECKPOINT_PAGES`] since the last checkpoint started.
     dirty: bool,
     stop: bool,
     /// Checkpoints run (tests).
@@ -104,8 +109,9 @@ struct Checkpointer {
 }
 
 impl Checkpointer {
-    /// Starts the thread on its own connection to `path` and hooks `writer`'s commits to it.
-    /// `None` (nothing changed) when the connection cannot be opened.
+    /// Starts the thread on its own connection to `path` and hooks `writer`'s WAL to it (the
+    /// hook replaces SQLite's auto-checkpoint). `None` (nothing changed) when the connection
+    /// cannot be opened.
     fn start(path: &Path, writer: &mut Connection) -> Option<Self> {
         let conn = Connection::open_with_flags(
             path,
@@ -121,21 +127,25 @@ impl Checkpointer {
             .spawn(move || checkpoint_loop(&conn, &theirs))
             .ok()?;
         let hooked = state.clone();
-        let hook = writer.commit_hook(Some(move || {
-            let (m, c) = &*hooked;
-            if let Ok(mut s) = m.lock() {
-                s.dirty = true;
+        // Called after each commit with the WAL's size in pages.
+        let hook = writer.wal_hook(Some(move |wal: &mut rusqlite::hooks::Wal, pages: i32| {
+            if pages >= SAFETY_CHECKPOINT_PAGES {
+                // The thread fell behind: as SQLite's auto-checkpoint would.
+                let _ = wal.checkpoint();
+            } else if pages >= BACKGROUND_CHECKPOINT_PAGES {
+                let (m, c) = &*hooked;
+                if let Ok(mut s) = m.lock() {
+                    s.dirty = true;
+                }
+                c.notify_one();
             }
-            c.notify_one();
-            false
+            Ok(())
         }));
-        let safety = writer.pragma_update(None, "wal_autocheckpoint", SAFETY_CHECKPOINT_PAGES);
         let mut me = Self {
             state,
             thread: Some(thread),
         };
-        if hook.is_err() || safety.is_err() {
-            let _ = writer.commit_hook(None::<fn() -> bool>);
+        if hook.is_err() {
             let _ = writer.pragma_update(None, "wal_autocheckpoint", 1_000);
             me.stop();
             return None;
@@ -159,8 +169,8 @@ impl Checkpointer {
     }
 }
 
-/// Waits for a commit, lets a burst settle, checkpoints (`PASSIVE`: copies what no reader
-/// still needs, never waits for or blocks other connections); until told to stop.
+/// Waits for the writer's signal, checkpoints (`PASSIVE`: copies what no reader still needs,
+/// never waits for or blocks other connections); until told to stop.
 fn checkpoint_loop(conn: &Connection, state: &(Mutex<CheckpointState>, Condvar)) {
     let (m, c) = state;
     loop {
@@ -169,21 +179,6 @@ fn checkpoint_loop(conn: &Connection, state: &(Mutex<CheckpointState>, Condvar))
             while !s.dirty && !s.stop {
                 s = match c.wait(s) {
                     Ok(s) => s,
-                    Err(_) => return,
-                };
-            }
-            if s.stop {
-                return;
-            }
-            // Let the burst settle (a stop still ends the wait at once).
-            let until = Instant::now() + CHECKPOINT_DELAY;
-            while !s.stop {
-                let left = until.saturating_duration_since(Instant::now());
-                if left.is_zero() {
-                    break;
-                }
-                s = match c.wait_timeout(s, left) {
-                    Ok((s, _)) => s,
                     Err(_) => return,
                 };
             }

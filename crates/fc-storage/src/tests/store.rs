@@ -135,33 +135,47 @@ fn reader_connections_are_query_only() {
         .is_err());
 }
 
-/// v1.4 Z2: WAL checkpoints run on the store's own thread, not inside a commit: the writer's
-/// auto-checkpoint is only the safety net, a commit wakes the thread, which checkpoints
-/// every frame once the burst settles; dropping the store stops it (the WAL is removed).
+/// v1.4 Z2: WAL checkpoints run on the store's own thread, not inside a commit. Small
+/// commits never trigger one (a complete checkpoint makes the next commit start the WAL over
+/// and sync it, so checkpointing after every pause put a sync into the next command); a WAL
+/// past [`BACKGROUND_CHECKPOINT_PAGES`] is checkpointed by the thread, every frame; dropping
+/// the store stops it (the WAL is removed).
 #[test]
 fn wal_checkpoints_run_off_the_write_path() {
-    use crate::store::{CHECKPOINT_DELAY, SAFETY_CHECKPOINT_PAGES};
+    use crate::store::{BACKGROUND_CHECKPOINT_PAGES, SAFETY_CHECKPOINT_PAGES};
+    use std::time::{Duration, Instant};
+    const { assert!(SAFETY_CHECKPOINT_PAGES > BACKGROUND_CHECKPOINT_PAGES) };
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("collection.db");
     let store = SqliteStore::open(&path).unwrap();
-    {
-        let tx = store.write().unwrap();
-        drop(tx);
-    }
-    let before = store
-        .checkpoints_run()
-        .expect("a file store runs the thread");
-    for n in 1..=20 {
+    let put = |key: &str, value: serde_json::Value| {
         let mut tx = store.write().unwrap();
-        tx.insert_deck(&deck(n, None, &format!("D{n}"))).unwrap();
+        tx.set_ux_state(key, &value, fc_core::Timestamp(1)).unwrap();
         tx.commit().unwrap();
+    };
+    // Bursts of small commits with pauses: no checkpoint (the WAL is not started over).
+    for round in 0..3 {
+        for n in 0..5 {
+            put(&format!("k{round}.{n}"), serde_json::json!(n));
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
-    let deadline = std::time::Instant::now() + CHECKPOINT_DELAY * 40;
-    while store.checkpoints_run().unwrap() == before {
-        assert!(std::time::Instant::now() < deadline, "no checkpoint ran");
-        std::thread::sleep(CHECKPOINT_DELAY / 5);
+    assert_eq!(
+        store.checkpoints_run(),
+        Some(0),
+        "small commits: no checkpoint"
+    );
+    // A WAL past the threshold: the thread checkpoints it.
+    let big = serde_json::json!("x".repeat(64 * 1024));
+    for n in 0..100 {
+        put(&format!("big{n}"), big.clone());
     }
-    // Everything written is in the database file: another checkpoint has nothing to copy.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while store.checkpoints_run() == Some(0) {
+        assert!(Instant::now() < deadline, "no checkpoint ran");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // Everything written so far is in the database file.
     let raw = rusqlite::Connection::open(&path).unwrap();
     let (log, done): (i64, i64) = raw
         .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |r| {
@@ -169,7 +183,6 @@ fn wal_checkpoints_run_off_the_write_path() {
         })
         .unwrap();
     assert_eq!(log, done, "every WAL frame was checkpointed");
-    const { assert!(SAFETY_CHECKPOINT_PAGES > 1_000) };
     drop(raw);
     drop(store);
     assert!(
