@@ -51,3 +51,10 @@ export function testAnswers(questions: TestQuestionDto[], input: PaperInput): Te
 export function plainKey(e: KeyboardEvent): boolean {
   return !e.ctrlKey && !e.metaKey && !e.altKey && !isEditableTarget(e.target);
 }
+
+/**
+ * v1.4 A/B (prototype `modlar.html`, "Test’te doğru cevaptan sonra?"): A = a right pick goes on
+ * by itself after this many ms (Enter goes on at once; a wrong pick always waits for Enter so
+ * the right answer can be read); B = always wait for Enter: set to 0.
+ */
+export const QUIZ_AUTO_NEXT_MS = 1100;

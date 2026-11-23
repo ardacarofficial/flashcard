@@ -219,11 +219,14 @@
       "done_heading": "Well done",
       "count_written": "Written",
       "count_choice": "Choice",
-      "start_heading": "Every card in two steps"
+      "start_heading": "Every card in two steps",
+      "tile_learned": "Cards learned",
+      "tile_answers": "Answers",
+      "tile_missed": "Misses"
     },
     "test": {
-      "heading": "Practice test",
-      "intro": "A test from the chosen cards with mixed questions. It does not change your schedule.",
+      "heading": "Exam",
+      "intro": "A paper of mixed questions from the chosen cards. It does not change your schedule.",
       "questions": "Questions",
       "kinds": "Question types",
       "kind": {
@@ -232,15 +235,15 @@
         "true_false": "True or false",
         "matching": "Matching"
       },
-      "start": "Create test",
-      "nothing": "No cards for a test here.",
+      "start": "Make an exam",
+      "nothing": "No cards for an exam here.",
       "statement": "Suggested answer: {text}",
       "true": "True",
       "false": "False",
       "your_answer": "Your answer",
       "print": "Print",
       "print_key": "Print answer key",
-      "keys_hint": "A–D picks an option, Enter goes to the next question, Ctrl+Enter hands it in.",
+      "keys_hint": "1–4 or A–D picks an option, Enter goes to the next question, Ctrl+Enter hands it in.",
       "submit": "Submit",
       "score": "{correct} of {total} correct",
       "verdict": {
@@ -250,7 +253,7 @@
         "blank": "Blank"
       },
       "key": "Answer: {text}",
-      "new": "New test",
+      "new": "New exam",
       "number": "{n}.",
       "score_label": "Score",
       "n_correct": "{n} right",
@@ -267,16 +270,17 @@
       "all_kinds": "None picked: all types are used.",
       "progress_label": "Answered questions",
       "exit": "Exit",
-      "exit_label": "Leave the test",
+      "exit_label": "Leave the exam",
       "answered_short": "answered",
-      "start_heading": "New practice test",
+      "start_heading": "New exam",
       "verdict_col": "Result",
       "question_col": "Question",
-      "discard_title": "Leave this test?",
-      "discard_body": "Your {n, plural, one {# answer} other {# answers}} will be lost; the test is not graded.",
-      "discard_keep": "Back to the test",
-      "discard": "Leave test",
-      "match_word": "Word {n}"
+      "discard_title": "Leave this exam?",
+      "discard_body": "Your {n, plural, one {# answer} other {# answers}} will be lost; the exam is not graded.",
+      "discard_keep": "Back to the exam",
+      "discard": "Leave exam",
+      "match_word": "Word {n}",
+      "practice": "Practice: an exam never changes your schedule."
     },
     "options": {
       "timed": "Time limit",
@@ -353,7 +357,38 @@
       "few_options": "This deck has few meanings: {count} options for this word.",
       "done": "{correct} / {total} right",
       "missed_again": "Study the missed ones again",
-      "practice": "Practice: your schedule didn’t change."
+      "practice": "Practice: your schedule didn’t change.",
+      "done_heading": "Test finished",
+      "how": "Which one is the meaning?",
+      "how_keys": "Pick with 1–{n} or a click.",
+      "options_label": "Options",
+      "wrong": "Not quite. The right answer: {text}",
+      "auto_next": "A right answer goes on by itself",
+      "next": "Next",
+      "see_result": "See the result",
+      "pause": "Pause",
+      "pause_label": "Pause the test (Esc)",
+      "progress_label": "Test progress",
+      "tally": "{right} right · {wrong} wrong",
+      "paused_heading": "Paused",
+      "paused": "Pick up where you left off: {answered} answered · {left} left. The unfinished test also waits on Home and in “Study”.",
+      "finish_now": "Finish and see the result",
+      "tile_questions": "Questions",
+      "tile_right": "Right",
+      "tile_wrong": "Wrong",
+      "missed_heading": "What you missed",
+      "col_word": "Word",
+      "col_right": "Right answer",
+      "col_yours": "Your pick",
+      "no_pick": "—"
+    },
+    "summary": {
+      "score_label": "Score",
+      "practice": "Practice: your schedule did not change. These cards are in “Studied today”.",
+      "scheduled": "Schedule updated: the next review of {count, plural, one {# card} other {# cards}} is set.",
+      "again": "Study again…",
+      "done": "Done",
+      "none_missed": "You missed nothing."
     }
   }
 }

@@ -70,7 +70,10 @@ describe('study launcher', () => {
     const navigate = await open({ deckId: deck.id, kind: 'test' });
     // v1.4: the paper (`test`) is called "Exam"; "Test" is the four-option quiz.
     expect(screen.getByRole('radio', { name: 'Exam' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByTestId('launcher-mode-desc').textContent).toMatch(/Doesn’t change the schedule/);
+    // v1.4: one line under the mode says what it does; the footer says what it does to the schedule.
+    expect(screen.getByTestId('launcher-mode-desc').textContent).toMatch(/A paper of mixed questions/);
+    expect(screen.getByTestId('launcher-mode-test').textContent).toMatch(/practice/);
+    expect(screen.getByTestId('launcher-schedule').textContent).toMatch(/Practice: your schedule stays the same/);
     // Test defaults to every card; the counts are the backend's.
     expect(scopeButton('all').getAttribute('aria-checked')).toBe('true');
     expect(screen.getByTestId('launcher-scope-all').textContent).toMatch(/3/);
@@ -88,6 +91,9 @@ describe('study launcher', () => {
   it('an empty scope is disabled and says why; practice scopes are tagged', async () => {
     const deck = await deckWith('Launch B', [['sun', 'güneş']]);
     await open({ deckId: deck.id });
+    // v1.4: today's cards first; the other four scopes are one click away.
+    expect(screen.queryByTestId('launcher-scope-studied_today')).toBeNull();
+    await fireEvent.click(screen.getByTestId('launcher-more-scopes'));
     const studied = scopeButton('studied_today');
     expect(studied.disabled).toBe(true);
     expect(screen.getByTestId('launcher-scope-studied_today').textContent).toMatch(/You haven’t studied today yet/);
@@ -96,7 +102,9 @@ describe('study launcher', () => {
     expect(screen.getByTestId('launcher-scope-due').textContent).not.toMatch(/practice/);
     // Cards: today's queue, and the button says what will happen.
     expect(scopeButton('due').getAttribute('aria-checked')).toBe('true');
-    expect(startButton().textContent).toMatch(/Launch B · 1 card/);
+    expect(screen.getByTestId('launcher-summary').textContent).toMatch(/Cards · Today’s cards · 1 card/);
+    expect(screen.getByTestId('launcher-schedule').textContent).toMatch(/Changes your schedule/);
+    expect(screen.getByTestId('launcher-mode-normal').textContent).toMatch(/changes schedule/);
   });
 
   it('after a session, "struggled today" holds the missed cards and starts as practice', async () => {

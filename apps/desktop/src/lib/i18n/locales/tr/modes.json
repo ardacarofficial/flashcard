@@ -219,11 +219,14 @@
       "done_heading": "Harika",
       "count_written": "Yazılı",
       "count_choice": "Seçmeli",
-      "start_heading": "Her kart iki adımda"
+      "start_heading": "Her kart iki adımda",
+      "tile_learned": "Öğrenilen kart",
+      "tile_answers": "Cevap",
+      "tile_missed": "Kaçırma"
     },
     "test": {
-      "heading": "Deneme testi",
-      "intro": "Seçilen kartlardan karışık sorulu bir test. Takvimini değiştirmez.",
+      "heading": "Sınav",
+      "intro": "Seçilen kartlardan karışık sorulu bir kâğıt. Takvimini değiştirmez.",
       "questions": "Soru sayısı",
       "kinds": "Soru tipleri",
       "kind": {
@@ -232,15 +235,15 @@
         "true_false": "Doğru / yanlış",
         "matching": "Eşleştirme"
       },
-      "start": "Test oluştur",
-      "nothing": "Burada test yapılacak kart yok.",
+      "start": "Sınav hazırla",
+      "nothing": "Burada sınav yapılacak kart yok.",
       "statement": "Önerilen cevap: {text}",
       "true": "Doğru",
       "false": "Yanlış",
       "your_answer": "Cevabın",
       "print": "Yazdır",
       "print_key": "Cevap anahtarını yazdır",
-      "keys_hint": "A–D şık seçer, Enter sonraki soruya geçer, Ctrl+Enter teslim eder.",
+      "keys_hint": "1–4 ya da A–D şık seçer, Enter sonraki soruya geçer, Ctrl+Enter teslim eder.",
       "submit": "Teslim et",
       "score": "{total} sorudan {correct} doğru",
       "verdict": {
@@ -250,7 +253,7 @@
         "blank": "Boş"
       },
       "key": "Cevap: {text}",
-      "new": "Yeni test",
+      "new": "Yeni sınav",
       "number": "{n}.",
       "score_label": "Puan",
       "n_correct": "{n} doğru",
@@ -267,16 +270,17 @@
       "all_kinds": "Hiçbiri seçilmedi: tüm tipler kullanılır.",
       "progress_label": "Cevaplanan sorular",
       "exit": "Çık",
-      "exit_label": "Testten çık",
+      "exit_label": "Sınavdan çık",
       "answered_short": "cevaplandı",
-      "start_heading": "Yeni deneme testi",
+      "start_heading": "Yeni sınav",
       "verdict_col": "Sonuç",
       "question_col": "Soru",
-      "discard_title": "Test bırakılsın mı?",
-      "discard_body": "Verdiğin {n} cevap kaybolacak; test puanlanmaz.",
-      "discard_keep": "Teste dön",
-      "discard": "Testi bırak",
-      "match_word": "{n}. kelime"
+      "discard_title": "Sınav bırakılsın mı?",
+      "discard_body": "Verdiğin {n} cevap kaybolacak; sınav puanlanmaz.",
+      "discard_keep": "Sınava dön",
+      "discard": "Sınavı bırak",
+      "match_word": "{n}. kelime",
+      "practice": "Pratikti: sınav takvimini değiştirmez."
     },
     "options": {
       "timed": "Süre sınırı",
@@ -353,7 +357,38 @@
       "few_options": "Bu destede az anlam var: bu kelimede {count} şık.",
       "done": "{correct} / {total} doğru",
       "missed_again": "Yanlışları tekrar çalış",
-      "practice": "Pratikti: takvimin değişmedi."
+      "practice": "Pratikti: takvimin değişmedi.",
+      "done_heading": "Test bitti",
+      "how": "Anlamı hangisi?",
+      "how_keys": "1–{n} ile ya da tıklayarak seç.",
+      "options_label": "Şıklar",
+      "wrong": "Olmadı. Doğrusu: {text}",
+      "auto_next": "Doğruysa kendiliğinden geçer",
+      "next": "Sonraki",
+      "see_result": "Sonucu gör",
+      "pause": "Ara ver",
+      "pause_label": "Teste ara ver (Esc)",
+      "progress_label": "Test ilerlemesi",
+      "tally": "{right} doğru · {wrong} yanlış",
+      "paused_heading": "Ara verdin",
+      "paused": "Kaldığın yerden devam edebilirsin: {answered} cevaplandı · {left} kaldı. Yarım test Ana sayfada ve “Çalış”ta da durur.",
+      "finish_now": "Bitir ve sonucu gör",
+      "tile_questions": "Soru",
+      "tile_right": "Doğru",
+      "tile_wrong": "Yanlış",
+      "missed_heading": "Kaçırdıkların",
+      "col_word": "Kelime",
+      "col_right": "Doğrusu",
+      "col_yours": "Senin seçimin",
+      "no_pick": "—"
+    },
+    "summary": {
+      "score_label": "Puan",
+      "practice": "Pratikti: takvimin değişmedi. Bu kartlar “Bugün çalıştıklarım”da.",
+      "scheduled": "Takvimin güncellendi: {count, plural, one {# kartın} other {# kartın}} sıradaki tekrarı ayarlandı.",
+      "again": "Tekrar çalış…",
+      "done": "Tamam",
+      "none_missed": "Hiç kaçırmadın."
     }
   }
 }

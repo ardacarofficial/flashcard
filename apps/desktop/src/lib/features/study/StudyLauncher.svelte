@@ -1,19 +1,45 @@
 <!--
-  The study launcher (v1.3): one keyboard-first dialog for "I want to study". Top to bottom:
-  unfinished sessions to continue (first and focused when there are any), the mode (Cards /
-  Learn / Test / Match — only those `study.options` says are on) with one line on what it does
-  to the schedule, what to study (five scopes with their exact counts; an empty one is disabled
-  and says why), how many, and the collapsed options the old setup panels had. Enter starts
-  (unless focus is on another button), Esc closes. Start re-validates: when the backend says
-  there is nothing to study the dialog stays open with the reason.
+  The study launcher ("Çalış"): one keyboard-first dialog for "I want to study".
+  v1.4 (prototype `prototypes/v14/modlar.html`): left, "How do you want to study?" — every mode
+  `study.options.modes` lists (Cards, Test, Learn, Exam, Match; only the ones switched on) with
+  its icon, its name, ONE line on what it does and whether it changes the schedule ("takvimi
+  etkiler" / "pratik"), all from the API. Right, "Which cards?" — today's cards by default, the
+  other four scopes one click away (their exact counts; an empty one is disabled and says why);
+  the Exam's own choices (question types, how many) when the Exam is picked; and, behind the ONE
+  "Gelişmiş" switch, everything else the v1.3 options had (count, practice, time limit,
+  confidence scale, filters, saved searches, postpone). The footer says what Start will do:
+  mode · cards · how many, and what it does to the schedule. Unfinished sessions sit on top
+  (first and focused). Enter starts (unless focus is on another button), Esc closes. Start
+  re-validates: when the backend says there is nothing to study the dialog stays open with the
+  reason.
 -->
 <script lang="ts">
   import { tick, untrack } from 'svelte';
   import { api, ApiError } from '$lib/api';
-  import type { AttributeDefDto, SavedQueryDto, SessionDto, StartModes, TestQuestionKind } from '$lib/api/types';
+  import type { AttributeDefDto, SavedQueryDto, SessionDto, StartModes, StudyModeOption, TestQuestionKind } from '$lib/api/types';
   import { formatCount } from '$lib/format';
   import { t, td } from '$lib/i18n/index.svelte';
-  import { Button, ChevronDown, ChevronUp, Chip, Dialog, Icon, Input, OptionTile, Play, SegmentedControl, Select, Skeleton, Switch } from '$lib/ui';
+  import {
+    Button,
+    Calendar,
+    Checkbox,
+    ChevronDown,
+    ChevronUp,
+    ClipboardCheck,
+    Dialog,
+    FileText,
+    GraduationCap,
+    Icon,
+    Info,
+    Input,
+    Layers,
+    LayoutGrid,
+    OptionTile,
+    Play,
+    Select,
+    Skeleton,
+    Switch,
+  } from '$lib/ui';
   import OptRow from '../modes/OptRow.svelte';
   import StudyModeOptions from '../modes/StudyModeOptions.svelte';
   import { moduleKnownOn, moduleOn } from '../cards/modules.svelte';
@@ -22,12 +48,15 @@
   import {
     emptyReasonKey,
     isCustom,
+    loadAdvanced,
     loadPrefs,
     minutesUntil,
     pickKind,
     pickScope,
     plannedCount,
+    rememberAdvanced,
     rememberChoice,
+    SCOPES_PROGRESSIVE,
     startRequest,
     type LaunchChoice,
   } from './launch';
@@ -41,14 +70,17 @@
   }
   let { open = $bindable(false), request, onstart }: Props = $props();
 
-  const TEST_KINDS: TestQuestionKind[] = ['multiple_choice', 'written', 'matching', 'true_false'];
+  const MODE_ICON = { normal: Layers, quiz: ClipboardCheck, learn: GraduationCap, test: FileText, match: LayoutGrid } as const;
 
   let options = $state<StudyOptions | null>(null);
   let failed = $state<string | null>(null);
   let kind = $state<LaunchKind | null>(null);
   let scope = $state<StudyScope>('due');
   let limit = $state<number | string>('');
-  let showOptions = $state(false);
+  /** The one "Gelişmiş" switch: the rarely needed options (remembered). */
+  let advanced = $state(false);
+  /** Progressive scopes: today's cards only, the other four one click away. */
+  let moreScopes = $state(false);
   let notice = $state<string | null>(null);
   let starting = $state(false);
   // Options of the old setup panels (no option is lost).
@@ -58,11 +90,8 @@
   let attrId = $state('');
   let attrValue = $state('');
   let modes = $state<StartModes | null>(null);
-  // v1.4: true/false is off by default (guessing gets half right). Matching is offered but not
-  // preselected here: this paper screen picks its letters with a list box, not the A–D keys
-  // (the approved prototype's screen will); the API's own default includes it.
-  let testKinds = $state<Record<TestQuestionKind, boolean>>({ true_false: false, multiple_choice: true, written: true, matching: false });
-  let testQuestions = $state(20);
+  /** Exam: question types, from the API's defaults (true/false is off). */
+  let testKinds = $state<Partial<Record<TestQuestionKind, boolean>>>({});
   let postponeDays = $state<number | string>(1);
   let attrs = $state<AttributeDefDto[]>([]);
   let saved = $state<SavedQueryDto[]>([]);
@@ -77,17 +106,20 @@
     try {
       const o = await studyOptions({ deck_id: deckId, include_subdecks: null });
       options = o;
+      const exam = o.modes.find((m) => m.kind === 'test');
       if (preselect) {
+        testKinds = Object.fromEntries((exam?.question_kinds ?? []).map((k) => [k, exam!.default_question_kinds.includes(k)]));
         const k = pickKind(o, request.kind, prefs, deckId);
         kind = k;
         if (k) scope = pickScope(o.scopes, k, request.scope, prefs);
+        moreScopes = !SCOPES_PROGRESSIVE || scope !== 'due';
         // The dialog focused its first control while loading: move to the real first stop —
         // "Continue" when something is unfinished, else the chosen mode. Opened for one mode
         // (the deck page's Learn / Test / Match): only an unfinished session OF THAT MODE comes
         // first — Enter never resumes a Test when Learn was asked for.
         await tick();
         const resumeSel = request.kind ? `[data-resume][data-kind="${request.kind}"]` : '[data-resume]';
-        (root?.querySelector<HTMLElement>(resumeSel) ?? root?.querySelector<HTMLElement>('.fc-seg [aria-checked="true"]'))?.focus();
+        (root?.querySelector<HTMLElement>(resumeSel) ?? root?.querySelector<HTMLElement>('[data-mode][aria-checked="true"]'))?.focus();
       }
       now = Date.now();
     } catch (e) {
@@ -95,7 +127,7 @@
     }
   }
 
-  async function loadExtras() {
+  function loadExtras() {
     attrs = [];
     saved = [];
     if (moduleKnownOn('attributes') && deckId) {
@@ -110,15 +142,6 @@
         () => {},
       );
     }
-    if (moduleKnownOn('practice_test')) {
-      api.call('settings.get', { scope: { kind: 'app' }, keys: ['practice_test.questions'] }).then(
-        (r) => {
-          const v = r.values.find((x) => x.key === 'practice_test.questions')?.value;
-          if (typeof v === 'number') testQuestions = v;
-        },
-        () => {},
-      );
-    }
   }
 
   // Every opening starts from the opener's request and the remembered choices.
@@ -130,14 +153,14 @@
       options = null;
       notice = null;
       limit = '';
-      showOptions = !!request.query;
+      advanced = loadAdvanced() || !!request.query || !!request.practice;
       practice = request.practice ?? false;
       query = request.query ?? '';
       savedId = '';
       attrId = '';
       attrValue = '';
       void load(true);
-      void loadExtras();
+      loadExtras();
     });
   });
 
@@ -158,7 +181,11 @@
   const selected = $derived(scopes.find((s) => s.scope === scope));
   const resumable = $derived(options?.resumable ?? []);
   const deckName = $derived(options?.deck_name ?? t('study.launcher.deck_all'));
-  const kindOptions = $derived((options?.modes ?? []).map((m) => m.kind).filter((k): k is LaunchKind => k !== 'custom' && k !== 'mistakes').map((k) => ({ value: k, label: t(`study.launcher.kind.${k}`) })));
+  const modeList = $derived((options?.modes ?? []).filter((m): m is StudyModeOption & { kind: LaunchKind } => m.kind !== 'custom' && m.kind !== 'mistakes'));
+  const mode = $derived(modeList.find((m) => m.kind === kind) ?? null);
+  const shownScopes = $derived(moreScopes ? scopes : scopes.filter((s) => s.scope === 'due' || s.scope === scope));
+  const hiddenScopes = $derived(scopes.length - shownScopes.length);
+  const examKinds = $derived((mode?.question_kinds ?? []).filter((k) => testKinds[k]));
 
   const choice = $derived<LaunchChoice | null>(
     kind
@@ -167,27 +194,32 @@
           scope,
           deckId,
           limit: Number(limit) > 0 ? Math.floor(Number(limit)) : null,
-          practice,
-          query: kind === 'normal' || moduleOn('browse') ? query : '',
-          savedQueryId: kind === 'normal' ? savedId : '',
-          attribute: kind === 'normal' && attrId !== '' && attrValue !== '' ? { attrId, value: attrValue } : null,
-          modes,
-          testKinds: TEST_KINDS.filter((k) => testKinds[k]),
-          testQuestions,
+          practice: advanced && practice,
+          query: advanced && (kind === 'normal' || moduleOn('browse')) ? query : '',
+          savedQueryId: advanced && kind === 'normal' ? savedId : '',
+          attribute: advanced && kind === 'normal' && attrId !== '' && attrValue !== '' ? { attrId, value: attrValue } : null,
+          modes: advanced ? modes : null,
+          testKinds: examKinds,
+          testQuestions: mode?.default_questions ?? 20,
         }
       : null,
   );
   const custom = $derived(choice ? isCustom(choice) : false);
   const planned = $derived(choice ? plannedCount(choice, selected) : null);
-  const canStart = $derived(!!choice && (custom || (planned ?? 0) > 0) && !starting);
-  const trial = $derived(!!choice && (selected?.mode === 'trial' || ((kind === 'normal' || kind === 'learn') && practice)));
-  const startLabel = $derived(
-    `${deckName} · ${
-      planned === null
-        ? t('study.launcher.filtered')
-        : kind === 'test'
-          ? t('study.launcher.questions', { count: planned })
-          : t('study.launcher.cards', { count: planned })
+  /** Why Start is off (shown in the footer), or null. */
+  const blocked = $derived(kind === 'test' && examKinds.length === 0 ? t('study.launcher.exam_no_kinds') : null);
+  const canStart = $derived(!!choice && !blocked && (custom || (planned ?? 0) > 0) && !starting);
+  /** The schedule line of the footer: what this start does to "when do I see it again". */
+  const schedLine = $derived.by(() => {
+    if (!mode) return '';
+    if (!mode.affects_schedule) return t('study.launcher.sched.practice_mode');
+    if (!custom && selected?.mode === 'trial') return t('study.launcher.sched.practice_scope', { scope: t(`study.launcher.scope.${scope}`) });
+    if (choice?.practice) return t('study.launcher.sched.practice_switch');
+    return t('study.launcher.sched.affects');
+  });
+  const summary = $derived(
+    `${mode ? td(mode.name_key) : ''} · ${custom ? t('study.launcher.filtered') : t(`study.launcher.scope.${scope}`)}${
+      planned === null ? '' : ` · ${kind === 'test' ? t('study.launcher.questions', { count: planned }) : t('study.launcher.cards', { count: planned })}`
     }`,
   );
 
@@ -244,13 +276,14 @@
     }
   }
 
-  // The scope rows are one radio group: one Tab stop (the chosen row), arrows move inside.
+  // The mode rows and the scope rows are radio groups: one Tab stop each, arrows move inside.
   $effect(() => {
     void scope;
-    void scopes;
+    void kind;
+    void shownScopes;
     void custom;
     void tick().then(() => {
-      for (const el of root?.querySelectorAll<HTMLElement>('[data-scope] button') ?? []) {
+      for (const el of root?.querySelectorAll<HTMLElement>('[data-scope] button, [data-mode]') ?? []) {
         el.tabIndex = el.getAttribute('aria-checked') === 'true' ? 0 : -1;
       }
     });
@@ -261,7 +294,7 @@
     const dir = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
     if (!dir) return;
     e.preventDefault();
-    const enabled = scopes.filter((s) => s.count > 0);
+    const enabled = shownScopes.filter((s) => s.count > 0);
     const i = enabled.findIndex((s) => s.scope === scope);
     const next = enabled[(i + dir + enabled.length) % enabled.length];
     if (!next) return;
@@ -269,20 +302,45 @@
     (e.currentTarget as HTMLElement).querySelector<HTMLElement>(`[data-scope="${next.scope}"] button`)?.focus();
   }
 
+  /** Arrow keys walk the modes (one radio group); Space picks the focused one. */
+  function onModeKey(e: KeyboardEvent) {
+    const dir = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
+    if (!dir) return;
+    e.preventDefault();
+    const i = modeList.findIndex((m) => m.kind === kind);
+    const next = modeList[(i + dir + modeList.length) % modeList.length];
+    if (!next) return;
+    pickMode(next.kind);
+    root?.querySelector<HTMLElement>(`[data-mode="${next.kind}"]`)?.focus();
+  }
+
   /** Enter starts — unless the focus is on a control whose own Enter means something else. */
   function onKey(e: KeyboardEvent) {
     if (e.key !== 'Enter' || e.repeat || e.isComposing || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
     const el = e.target as HTMLElement | null;
     // Buttons with an Enter of their own: continue a session, toggles, menus, pickers.
-    if (el?.closest('[data-enter-self], [role=listbox], [role=combobox], [role=menu], [role=switch], [aria-haspopup]')) return;
+    if (el?.closest('[data-enter-self], [role=listbox], [role=combobox], [role=menu], [role=switch], [aria-haspopup], input[type=checkbox]')) return;
     e.preventDefault();
     void start();
   }
 
   // When the mode changes, show its remembered (or default) scope.
-  function onKind(k: LaunchKind) {
+  function pickMode(k: LaunchKind) {
+    if (kind === k) return;
+    kind = k;
     if (options) scope = pickScope(options.scopes, k, undefined, prefs);
+    if (scope !== 'due') moreScopes = true;
     notice = null;
+  }
+
+  function toggleMore() {
+    moreScopes = !moreScopes;
+    if (!moreScopes && scope !== 'due' && (scopes.find((s) => s.scope === 'due')?.count ?? 0) > 0) scope = 'due';
+  }
+
+  function setAdvanced(v: boolean) {
+    advanced = v;
+    rememberAdvanced(v);
   }
 
   const attrOptions = $derived([{ value: '', label: t('study.filter_any') }, ...attrs.map((a) => ({ value: a.id, label: a.name }))]);
@@ -294,7 +352,7 @@
 <Dialog
   bind:open
   title={deckId ? t('study.launcher.title_deck', { deck: deckName }) : t('study.launcher.title')}
-  size="md"
+  size="lg"
 >
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="launcher" bind:this={root} onkeydown={onKey} data-testid="study-launcher">
@@ -322,125 +380,174 @@
         </section>
       {/if}
 
-      <section class="block">
-        <span class="label" id="launch-mode">{t('study.launcher.mode_label')}</span>
-        <SegmentedControl label={t('study.launcher.mode_label')} size="sm" fullWidth options={kindOptions} bind:value={kind} onchange={onKind} />
-        <p class="mode-desc" data-testid="launcher-mode-desc">
-          {t(`study.launcher.kind_desc.${kind}`)}
-          {#if trial && kind !== 'test' && kind !== 'match'}<span class="tag">{t('study.launcher.practice_tag')}</span>{/if}
-        </p>
-      </section>
-
-      <section class="block" class:dim={custom}>
-        <span class="label" id="launch-scope">{t('study.launcher.scope_label')}</span>
-        {#if custom}<p class="custom-note">{t('study.launcher.custom_note')}</p>{/if}
-        <!-- svelte-ignore a11y_interactive_supports_focus -->
-        <div class="scopes" role="radiogroup" aria-labelledby="launch-scope" onkeydown={onScopeKey}>
-          {#each scopes as s (s.scope)}
-            {@const empty = s.count === 0}
-            <span class="scope-cell" data-scope={s.scope} data-testid="launcher-scope-{s.scope}">
-              <OptionTile class="scope-row" checked={scope === s.scope} disabled={empty || custom} onclick={() => (scope = s.scope)}>
-                <span class="s-text">
-                  <span class="s-name">
-                    {t(`study.launcher.scope.${s.scope}`)}
-                    <!-- Test and Match never change the schedule: the tag only matters for Cards / Learn. -->
-                    {#if PRACTICE_SCOPES.includes(s.scope) && (kind === 'normal' || kind === 'learn')}<span class="tag">{t('study.launcher.practice_tag')}</span>{/if}
-                  </span>
-                  <span class="s-desc" class:reason={empty}>{empty ? reasonText(s) : t(!deckId && s.scope === 'all' ? 'study.launcher.scope_desc.all_decks' : `study.launcher.scope_desc.${s.scope}`)}</span>
+      <div class="cols">
+        <section class="block">
+          <span class="label" id="launch-mode"><span class="step num" aria-hidden="true">1</span>{t('study.launcher.mode_label')}</span>
+          <div class="modes" role="radiogroup" aria-labelledby="launch-mode" tabindex="-1" onkeydown={onModeKey}>
+            {#each modeList as m (m.kind)}
+              {@const on = m.kind === kind}
+              <button
+                type="button"
+                class="mode"
+                class:on
+                role="radio"
+                aria-checked={on}
+                aria-label={t(`study.launcher.kind.${m.kind}`)}
+                aria-describedby="mode-desc-{m.kind}"
+                data-mode={m.kind}
+                data-testid="launcher-mode-{m.kind}"
+                onclick={() => pickMode(m.kind)}
+              >
+                <span class="m-icon"><Icon icon={MODE_ICON[m.kind]} size={16} /></span>
+                <span class="m-name">{td(m.name_key)}</span>
+                <span class="m-chip" class:cal={m.affects_schedule}>
+                  {#if m.affects_schedule}<Icon icon={Calendar} size={12} />{t('study.launcher.chip.affects')}{:else}{t('study.launcher.chip.practice')}{/if}
                 </span>
-                <span class="s-count num" class:zero={empty}>{formatCount(s.count)}</span>
-              </OptionTile>
-            </span>
-          {/each}
-        </div>
-      </section>
+                <span class="m-line" id="mode-desc-{m.kind}" data-testid={on ? 'launcher-mode-desc' : undefined}>{td(m.description_key)}</span>
+              </button>
+            {/each}
+          </div>
+          <p class="legend"><Icon icon={Info} size={14} /><span>{t('study.launcher.legend')}</span></p>
+        </section>
 
-      <section class="block row">
-        <OptRow label={kind === 'test' ? t('study.launcher.count_label_test') : t('study.launcher.count_label')} description={kind === 'test' ? t('study.launcher.count_hint_test', { n: formatCount(testQuestions) }) : t('study.launcher.count_hint')} labelFor="launch-count">
-          <Input
-            id="launch-count"
-            class="count"
-            size="sm"
-            type="number"
-            min="1"
-            max="9999"
-            label={kind === 'test' ? t('study.launcher.count_label_test') : t('study.launcher.count_label')}
-            hideLabel
-            placeholder={kind === 'test' ? formatCount(testQuestions) : t('study.launcher.count_all')}
-            bind:value={limit}
-          />
-        </OptRow>
-      </section>
-
-      <div class="opts-toggle">
-        <Button
-          variant="ghost"
-          size="sm"
-          data-enter-self
-          iconEnd={showOptions ? ChevronUp : ChevronDown}
-          aria-expanded={showOptions}
-          aria-controls="launch-options"
-          onclick={() => (showOptions = !showOptions)}
-        >
-          {t('study.launcher.options')}
-        </Button>
-      </div>
-      {#if showOptions}
-        <div id="launch-options" class="options">
-          {#if kind === 'normal' || kind === 'learn'}
-            {#if selected?.mode !== 'trial'}
-              <OptRow label={t('study.practice_label')} description={t('study.launcher.practice_desc')}>
-                <Switch ariaLabel={t('study.practice_label')} bind:checked={practice} />
-              </OptRow>
-            {/if}
-          {/if}
-          {#if kind === 'normal'}
-            <StudyModeOptions bind:value={modes} />
-            {#if attrs.length > 0}
-              <OptRow label={t('study.filter_label')}>
-                <span data-enter-self class="ctl"><Select class="sel" size="sm" label={t('study.filter_label')} hideLabel options={attrOptions} bind:value={attrId} /></span>
-                {#if attrDef}
-                  <span data-enter-self class="ctl"><Select class="sel" size="sm" label={attrDef.name} hideLabel options={valueOptions} bind:value={attrValue} /></span>
-                {/if}
-              </OptRow>
-            {/if}
-          {/if}
-          {#if kind === 'test'}
-            <OptRow label={t('modes.test.kinds')} description={TEST_KINDS.some((k) => testKinds[k]) ? undefined : t('modes.test.all_kinds')}>
-              <div class="chips" role="group" aria-label={t('modes.test.kinds')} data-enter-self>
-                {#each TEST_KINDS as k (k)}
-                  <Chip label={t(`modes.test.kind.${k}`)} selected={testKinds[k]} onclick={() => (testKinds[k] = !testKinds[k])} />
-                {/each}
+        <div class="right">
+          <section class="block" class:dim={custom}>
+            <span class="label" id="launch-scope"><span class="step num" aria-hidden="true">2</span>{t('study.launcher.scope_label')}</span>
+            {#if custom}<p class="custom-note">{t('study.launcher.custom_note')}</p>{/if}
+            <!-- svelte-ignore a11y_interactive_supports_focus -->
+            <div class="scopes" role="radiogroup" aria-labelledby="launch-scope" onkeydown={onScopeKey}>
+              {#each shownScopes as s (s.scope)}
+                {@const empty = s.count === 0}
+                <span class="scope-cell" data-scope={s.scope} data-testid="launcher-scope-{s.scope}">
+                  <OptionTile class="scope-row" checked={scope === s.scope} disabled={empty || custom} onclick={() => (scope = s.scope)}>
+                    <span class="s-text">
+                      <span class="s-name">
+                        {t(`study.launcher.scope.${s.scope}`)}
+                        <!-- Only a mode that changes the schedule turns practice in these scopes. -->
+                        {#if PRACTICE_SCOPES.includes(s.scope) && mode?.affects_schedule}<span class="tag">{t('study.launcher.practice_tag')}</span>{/if}
+                      </span>
+                      <span class="s-desc" class:reason={empty}>{empty ? reasonText(s) : t(!deckId && s.scope === 'all' ? 'study.launcher.scope_desc.all_decks' : `study.launcher.scope_desc.${s.scope}`)}</span>
+                    </span>
+                    <span class="s-count num" class:zero={empty}>{formatCount(s.count)}</span>
+                  </OptionTile>
+                </span>
+              {/each}
+            </div>
+            {#if SCOPES_PROGRESSIVE}
+              <div class="more">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-enter-self
+                  data-testid="launcher-more-scopes"
+                  iconEnd={moreScopes ? ChevronUp : ChevronDown}
+                  aria-expanded={moreScopes}
+                  onclick={toggleMore}
+                >
+                  {moreScopes ? t('study.launcher.scopes_less') : t('study.launcher.scopes_more', { n: hiddenScopes })}
+                </Button>
               </div>
-            </OptRow>
+            {/if}
+          </section>
+
+          {#if kind === 'test' && mode}
+            <section class="block" aria-labelledby="launch-exam">
+              <span class="label" id="launch-exam"><span class="step num" aria-hidden="true">3</span>{t('study.launcher.exam_label')}</span>
+              <div class="box">
+                <div class="kinds" role="group" aria-label={t('modes.test.kinds')}>
+                  {#each mode.question_kinds as k (k)}
+                    <Checkbox
+                      label={t(`modes.test.kind.${k}`)}
+                      description={t(`study.launcher.exam_kind_desc.${k}`)}
+                      checked={!!testKinds[k]}
+                      onchange={(v) => (testKinds[k] = v)}
+                    />
+                  {/each}
+                </div>
+                <OptRow label={t('study.launcher.count_label_test')} description={t('study.launcher.count_hint_test', { n: formatCount(mode.default_questions ?? 20) })} labelFor="launch-count">
+                  <Input
+                    id="launch-count"
+                    class="count"
+                    size="sm"
+                    type="number"
+                    min="1"
+                    max="200"
+                    label={t('study.launcher.count_label_test')}
+                    hideLabel
+                    placeholder={formatCount(mode.default_questions ?? 20)}
+                    bind:value={limit}
+                  />
+                </OptRow>
+              </div>
+            </section>
           {/if}
-          {#if moduleOn('browse')}
-            <OptRow label={t('study.query_label')} labelFor="launch-query">
-              <Input
-                id="launch-query"
-                class="query"
-                size="sm"
-                label={t('study.query_label')}
-                hideLabel
-                bind:value={query}
-                disabled={savedId !== ''}
-                placeholder={t('study.query_placeholder')}
-                spellcheck="false"
-              />
-              {#if kind === 'normal' && saved.length > 0}
-                <span data-enter-self class="ctl"><Select class="sel" size="sm" label={t('study.saved_label')} hideLabel options={savedOptions} bind:value={savedId} /></span>
-              {/if}
-            </OptRow>
-          {/if}
-          {#if kind === 'normal'}
-            <OptRow label={t('study.postpone_label')} labelFor="launch-postpone">
-              <Input id="launch-postpone" class="days" size="sm" type="number" min="1" max="365" label={t('study.postpone_label')} hideLabel bind:value={postponeDays} />
-              <span class="unit">{t('study.postpone_days')}</span>
-              <Button size="sm" data-enter-self onclick={() => void postpone()}>{t('study.postpone')}</Button>
-            </OptRow>
+
+          {#if advanced}
+            <section class="block" id="launch-options" aria-labelledby="launch-adv">
+              <span class="label" id="launch-adv"><span class="step num" aria-hidden="true">{kind === 'test' ? 4 : 3}</span>{t('study.launcher.advanced')}</span>
+              <div class="box options">
+                {#if kind !== 'test'}
+                  <OptRow label={t('study.launcher.count_label')} description={t('study.launcher.count_hint')} labelFor="launch-count">
+                    <Input
+                      id="launch-count"
+                      class="count"
+                      size="sm"
+                      type="number"
+                      min="1"
+                      max="9999"
+                      label={t('study.launcher.count_label')}
+                      hideLabel
+                      placeholder={t('study.launcher.count_all')}
+                      bind:value={limit}
+                    />
+                  </OptRow>
+                {/if}
+                {#if (kind === 'normal' || kind === 'learn') && selected?.mode !== 'trial'}
+                  <OptRow label={t('study.practice_label')} description={t('study.launcher.practice_desc')}>
+                    <Switch ariaLabel={t('study.practice_label')} bind:checked={practice} />
+                  </OptRow>
+                {/if}
+                {#if kind === 'normal'}
+                  <StudyModeOptions bind:value={modes} />
+                  {#if attrs.length > 0}
+                    <OptRow label={t('study.filter_label')}>
+                      <span data-enter-self class="ctl"><Select class="sel" size="sm" label={t('study.filter_label')} hideLabel options={attrOptions} bind:value={attrId} /></span>
+                      {#if attrDef}
+                        <span data-enter-self class="ctl"><Select class="sel" size="sm" label={attrDef.name} hideLabel options={valueOptions} bind:value={attrValue} /></span>
+                      {/if}
+                    </OptRow>
+                  {/if}
+                {/if}
+                {#if moduleOn('browse')}
+                  <OptRow label={t('study.query_label')} description={t('study.launcher.query_desc')} labelFor="launch-query">
+                    <Input
+                      id="launch-query"
+                      class="query"
+                      size="sm"
+                      label={t('study.query_label')}
+                      hideLabel
+                      bind:value={query}
+                      disabled={savedId !== ''}
+                      placeholder={t('study.query_placeholder')}
+                      spellcheck="false"
+                    />
+                    {#if kind === 'normal' && saved.length > 0}
+                      <span data-enter-self class="ctl"><Select class="sel" size="sm" label={t('study.saved_label')} hideLabel options={savedOptions} bind:value={savedId} /></span>
+                    {/if}
+                  </OptRow>
+                {/if}
+                {#if kind === 'normal'}
+                  <OptRow label={t('study.postpone_label')} description={t('study.launcher.postpone_desc')} labelFor="launch-postpone">
+                    <Input id="launch-postpone" class="days" size="sm" type="number" min="1" max="365" label={t('study.postpone_label')} hideLabel bind:value={postponeDays} />
+                    <span class="unit">{t('study.postpone_days')}</span>
+                    <Button size="sm" data-enter-self onclick={() => void postpone()}>{t('study.postpone')}</Button>
+                  </OptRow>
+                {/if}
+              </div>
+            </section>
           {/if}
         </div>
-      {/if}
+      </div>
 
       {#if notice}<p class="notice" role="status" data-testid="launcher-notice">{notice}</p>{/if}
     {/if}
@@ -448,11 +555,23 @@
 
   {#snippet footer()}
     {#if kind && options}
-      <span data-enter-start class="start">
-        <Button variant="primary" kbd="Enter" aria-keyshortcuts="Enter" icon={Play} disabled={!canStart} loading={starting} data-testid="launcher-start" onclick={() => void start()}>
-          {t('study.launcher.start')} · {startLabel}
-        </Button>
-      </span>
+      <div class="foot">
+        <span class="adv" data-enter-self>
+          <Switch label={t('study.launcher.advanced')} description={t('study.launcher.advanced_desc')} checked={advanced} onchange={setAdvanced} />
+        </span>
+        <p class="foot-sum" data-testid="launcher-summary" aria-live="polite">
+          {#if blocked}
+            <span class="warn">{blocked}</span>
+          {:else}
+            <strong>{summary}</strong><br /><span class="sched" data-testid="launcher-schedule">{schedLine}</span>
+          {/if}
+        </p>
+        <span data-enter-start class="start">
+          <Button variant="primary" size="lg" kbd="Enter" aria-keyshortcuts="Enter" icon={Play} disabled={!canStart} loading={starting} data-testid="launcher-start" onclick={() => void start()}>
+            {t('study.launcher.start')}
+          </Button>
+        </span>
+      </div>
     {/if}
   {/snippet}
 </Dialog>
@@ -463,6 +582,23 @@
     flex-direction: column;
     gap: var(--space-4);
   }
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-5);
+    align-items: start;
+  }
+  @media (max-width: 960px) {
+    .cols {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .right {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-width: 0;
+  }
   .block {
     display: flex;
     flex-direction: column;
@@ -471,10 +607,24 @@
     margin: 0;
   }
   .label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
     margin: 0;
     font-size: var(--text-xs);
     font-weight: var(--weight-medium);
     color: var(--text-2);
+  }
+  .step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--border-strong);
+    border-radius: 50%;
+    font-size: var(--text-2xs);
+    color: var(--text-1);
   }
   .resume-list {
     display: flex;
@@ -500,7 +650,8 @@
   .resume:hover {
     background: var(--surface-2);
   }
-  .resume:focus-visible {
+  .resume:focus-visible,
+  .mode:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
@@ -512,10 +663,89 @@
     color: var(--text-2);
     font-size: var(--text-xs);
   }
-  .mode-desc {
-    margin: 0;
-    font-size: var(--text-sm);
+  /* Modes: icon · name · schedule chip, one line under it. */
+  .modes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .mode {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'icon name chip' 'icon line line';
+    column-gap: var(--space-3);
+    row-gap: 2px;
+    align-items: center;
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    color: var(--text-1);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+  .mode:hover {
+    background: var(--surface-2);
+  }
+  .mode.on {
+    border-color: var(--accent-text);
+    background: var(--accent-soft);
+  }
+  .m-icon {
+    grid-area: icon;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
     color: var(--text-2);
+    align-self: start;
+  }
+  .mode.on .m-icon {
+    color: var(--accent-text);
+    border-color: var(--accent-text);
+  }
+  .m-name {
+    grid-area: name;
+    font-size: var(--text-sm);
+    font-weight: var(--weight-semibold);
+  }
+  .m-chip {
+    grid-area: chip;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-2xs);
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+  .m-chip.cal {
+    color: var(--accent-text);
+    border-color: var(--accent-text);
+  }
+  .m-line {
+    grid-area: line;
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .legend {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-start;
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .legend :global(svg) {
+    flex: none;
+    margin-top: 2px;
   }
   .tag {
     display: inline-block;
@@ -575,28 +805,36 @@
   .dim .scopes {
     opacity: 0.6;
   }
+  .more {
+    display: flex;
+  }
   .custom-note {
     margin: 0;
     font-size: var(--text-xs);
     color: var(--warning);
   }
-  .block.row :global(.opt-row) {
-    padding-inline: 0;
-  }
-  .row :global(.count) {
-    width: 96px;
-  }
-  .opts-toggle {
-    display: flex;
-    border-top: 1px solid var(--border);
-    padding-top: var(--space-2);
-  }
-  .options {
+  .box {
     display: flex;
     flex-direction: column;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+  }
+  .box :global(.opt-row) {
+    padding-inline: 0;
+  }
+  .kinds {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .box :global(.count) {
+    width: 80px;
   }
   .options :global(.query) {
-    width: 220px;
+    width: 200px;
   }
   .options :global(.days) {
     width: 72px;
@@ -606,11 +844,6 @@
   }
   .ctl {
     display: contents;
-  }
-  .chips {
-    display: flex;
-    gap: var(--space-2);
-    flex-wrap: wrap;
   }
   .unit {
     font-size: var(--text-xs);
@@ -627,6 +860,31 @@
   }
   .notice.error {
     border-color: var(--danger);
+  }
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .adv {
+    flex: none;
+  }
+  .foot-sum {
+    flex: 1;
+    min-width: 200px;
+    margin: 0;
+    text-align: end;
+    font-size: var(--text-sm);
+    color: var(--text-1);
+  }
+  .sched {
+    font-size: var(--text-xs);
+    color: var(--text-2);
+  }
+  .warn {
+    color: var(--warning);
   }
   .start {
     display: contents;

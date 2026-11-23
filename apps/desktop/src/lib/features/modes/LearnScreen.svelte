@@ -7,39 +7,36 @@
    * (`SessionFrame`). Keys: 1–4 pick, Enter check/continue, Z undo, Esc end; a held key is one
    * press.
    *
-   * v1.4: a quiz session ("Test": one word, four meanings, the answer at once) runs here too,
-   * as the multiple-choice step (`modes.quiz.answer`), until the approved prototype's own
-   * screen is built. Its end shows the score from `modes.quiz.result` and "study the missed
-   * ones again" (`study.start { kind: quiz, from_session }`).
+   * v1.4: a quiz session ("Test": one word, four meanings, the answer at once) arrives on this
+   * route too and runs on its own screen (`QuizRun`). One key = one job: Space never goes on
+   * here (Space only flips cards); Enter does.
    */
   import { formatCount } from '$lib/format';
-  import { onMount, tick } from 'svelte';
+  import { onMount } from 'svelte';
   import { api } from '$lib/api';
-  import type { LearnAnswerResult, LearnDto, QuizResultDto, SessionDto } from '$lib/api/types';
+  import type { LearnAnswerResult, LearnDto, SessionDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import {
     Button,
     CircleAlert,
     CircleCheck,
-    GraduationCap,
     Icon,
     Input,
     PageHeader,
     OptionTile,
-    Repeat,
     Skeleton,
     TriangleAlert,
   } from '$lib/ui';
   import SessionFrame from './SessionFrame.svelte';
+  import SessionSummary from './SessionSummary.svelte';
+  import QuizRun from './QuizRun.svelte';
   import CardView from '../cards/CardView.svelte';
   import { trackModules } from '../cards/modules.svelte';
   import type { StudyScope } from '../study/contract';
   import LaunchIdle from '../study/LaunchIdle.svelte';
   import { handoffSeq, launcher, openLauncher, takeHandoff, type Handoff } from '../study/launcher.svelte';
   import type { ScreenCtx } from '../types';
-  import { isEditableTarget } from '$lib/keyboard';
   import { plainKey } from './modes';
-  import { tzOffsetMins } from '../study/format';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -50,14 +47,13 @@
   let picked = $state<number | null>(null);
   let input = $state<HTMLInputElement | null>(null);
   let continueBtn = $state<HTMLButtonElement | null>(null);
-  let againBtn = $state<HTMLButtonElement | null>(null);
   let busy = false;
   let shownAt = 0;
   /** The scope the session was started with ("Learn again" builds on it). */
   let startedScope = $state<StudyScope | null>(null);
 
-  /** v1.4 quiz: its result once it ended. */
-  let quizResult = $state<QuizResultDto | null>(null);
+  /** v1.4: a Test (quiz) handed to this route runs on its own screen. */
+  let quizRun = $state<Handoff | null>(null);
 
   // A session started (or continued) in the study launcher arrives here (learn or quiz).
   const initial = takeHandoff('learn') ?? takeHandoff('quiz');
@@ -65,6 +61,15 @@
   let hadSession = $state(false);
 
   function accept(h: Handoff) {
+    if (h.kind === 'quiz') {
+      session = null;
+      finished = null;
+      quizRun = h;
+      hadSession = true;
+      accepting = false;
+      return;
+    }
+    quizRun = null;
     startedScope = h.scope;
     finished = null;
     accepting = true;
@@ -91,17 +96,8 @@
     return () => void unsub.then((u) => u());
   });
 
-  $effect(() => {
-    if (finished) void tick().then(() => againBtn?.focus());
-  });
-
   const card = $derived(session?.current ?? null);
-  const quiz = $derived(session?.modes?.quiz ?? null);
-  /** A quiz word drawn as Learn's multiple-choice step. */
-  const learn = $derived<LearnDto | null>(
-    session?.modes?.learn ??
-      (quiz ? { stage: 'choice', options: quiz.options, mistakes: 0, progress: { total: quiz.progress.total, learned: quiz.progress.answered, choice: quiz.progress.total - quiz.progress.answered, written: 0 } } : null),
-  );
+  const learn = $derived<LearnDto | null>(session?.modes?.learn ?? null);
   // A running session owns the window (v1.2); the end screen is a normal page again.
   $effect(() => ctx.setFocus?.(session !== null && card !== null && learn !== null));
   const progress = $derived((feedback?.session ?? session ?? finished)?.modes?.learn?.progress ?? learn?.progress ?? null);
@@ -119,7 +115,6 @@
     if (s.current) show(s);
     else {
       await api.call('study.end', { session_id: s.id });
-      quizResult = s.kind === 'quiz' ? await api.call('modes.quiz.result', { session_id: s.id }) : null;
       finished = s;
       session = null;
       feedback = null;
@@ -132,25 +127,10 @@
     openLauncher({ deckId: finished?.deck_id ?? ctx.selectedDeck, kind: 'learn', scope: struggled ? 'struggled_today' : (startedScope ?? undefined) });
   }
 
-  /** v1.4: "study the missed ones again" — a quiz of the words this one missed. */
-  async function quizMissed() {
-    if (!finished) return;
-    const s = await api.call('study.start', { kind: 'quiz', deck_id: finished.deck_id, from_session: finished.id, tz_offset_mins: tzOffsetMins() });
-    quizResult = null;
-    accept({ kind: 'quiz', session: s, scope: null });
-  }
-
   async function answer(choice: number | null) {
     if (!session || !card || feedback) return;
     if (choice === null && typed.trim() === '') return;
     picked = choice;
-    if (session.kind === 'quiz') {
-      if (choice === null) return;
-      const r = await api.call('modes.quiz.answer', { session_id: session.id, card_id: card.card_id, choice, duration_ms: Math.max(0, Date.now() - shownAt) });
-      feedback = { grade: r.correct ? 'correct' : 'wrong', stage: 'choice', learned: false, expected: r.expected, diff: [], session: r.session };
-      queueMicrotask(() => continueBtn?.focus());
-      return;
-    }
     feedback = await api.call('modes.learn.answer', {
       session_id: session.id,
       card_id: card.card_id,
@@ -190,15 +170,15 @@
     if (e.defaultPrevented || e.repeat || document.querySelector('[aria-modal="true"]')) return;
     const tag = (e.target as HTMLElement | null)?.tagName ?? '';
     if (tag === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
-    if (!session) return;
+    if (!session || quizRun) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       void run(end);
       return;
     }
     if (feedback) {
-      // Enter goes on from the answer field too; Space only outside text fields (it types there).
-      if (e.key === 'Enter' || (e.key === ' ' && !isEditableTarget(e.target))) {
+      // Enter goes on, from the answer field too. Space does not: one key = one job.
+      if (e.key === 'Enter') {
         e.preventDefault();
         void run(next);
       } else if (e.key.toLowerCase() === 'z' && plainKey(e)) {
@@ -226,9 +206,13 @@
 </script>
 <svelte:window onkeydown={onKey} />
 
-{#if session && card && learn}
+{#if quizRun}
+  {#key quizRun}
+    <QuizRun {ctx} handoff={quizRun} onclose={() => (quizRun = null)} />
+  {/key}
+{:else if session && card && learn}
   <SessionFrame
-    title={quiz ? t('study.mode.quiz.name') : t('modes.learn.heading')}
+    title={t('modes.learn.heading')}
     subtitle={ctx.selectedPath ?? t('study.whole_collection')}
     progressLabel={t('modes.learn.progress_label')}
     max={progress?.total ?? 1}
@@ -261,13 +245,8 @@
         {#if learn.mistakes > 0}<span class="again">{t('modes.learn.missed', { n: learn.mistakes })}</span>{/if}
       </div>
       <div class="prompt">
-        {#if quiz?.term}
-          <p class="term" data-testid="question">{quiz.term}</p>
-        {:else}
-          <CardView sides={card.sides} showAnswer={false} interactive={false} testid="question" />
-        {/if}
+        <CardView sides={card.sides} showAnswer={false} interactive={false} testid="question" />
       </div>
-      {#if quiz?.few_options}<p class="few" role="note">{t('modes.quiz.few_options', { count: quiz.options.length })}</p>{/if}
     </div>
 
     {#if learn.stage === 'choice'}
@@ -325,29 +304,22 @@
     </p>
   </SessionFrame>
 {:else if finished}
-  <section class="done" role="status">
-    <header class="done-head">
-      <span class="badge"><Icon icon={GraduationCap} size={20} /></span>
-      <div>
-        <h1>{t('modes.learn.done_heading')}</h1>
-        {#if quizResult}
-          <p data-testid="quiz-score">{t('modes.quiz.done', { correct: quizResult.correct, total: quizResult.total })}</p>
-          {#if !quizResult.affects_schedule}<p>{t('modes.quiz.practice')}</p>{/if}
-        {:else}
-          <p>{t('modes.learn.done', { total: finished.modes?.learn?.progress.total ?? 0 })}</p>
-        {/if}
-      </div>
-    </header>
-    <div class="done-actions">
-      {#if quizResult && quizResult.missed.length > 0}
-        <Button variant="primary" icon={Repeat} data-testid="quiz-missed-again" onclick={() => void run(quizMissed)}>{t('modes.quiz.missed_again')} · {formatCount(quizResult.missed.length)}</Button>
-      {/if}
-      {#if launcher.available}
-        <Button variant="primary" icon={Repeat} bind:element={againBtn} title={t('study.summary.again_desc')} data-testid="learn-again" onclick={learnAgain}>{t('modes.learn.again')}</Button>
-      {/if}
-      <Button onclick={() => (finished = null)}>{t('modes.learn.back')}</Button>
-    </div>
-  </section>
+  {@const lp = finished.modes?.learn?.progress}
+  <SessionSummary
+    testid="learn-summary"
+    heading={t('modes.learn.done_heading')}
+    sub={t('modes.learn.done', { total: lp?.total ?? 0 })}
+    percent={null}
+    tiles={[
+      { label: t('modes.learn.tile_learned'), value: formatCount(lp?.learned ?? 0) },
+      { label: t('modes.learn.tile_answers'), value: formatCount(finished.answered) },
+      { label: t('modes.learn.tile_missed'), value: formatCount(finished.mistakes) },
+    ]}
+    practice={finished.mode === 'trial'}
+    scheduled={lp?.learned ?? 0}
+    onagain={launcher.available ? learnAgain : undefined}
+    ondone={() => (finished = null)}
+  />
 {:else if accepting}
   <section class="learn">
     <PageHeader title={t('modes.learn.heading')} subtitle={ctx.selectedPath ? undefined : t('study.whole_collection')} />
@@ -358,16 +330,6 @@
 {/if}
 
 <style>
-  .term {
-    margin: 0;
-    font-size: var(--text-xl);
-    font-weight: 600;
-  }
-  .few {
-    margin: 0;
-    color: var(--text-2);
-    font-size: var(--text-sm);
-  }
   .learn {
     display: flex;
     flex-direction: column;
@@ -512,38 +474,6 @@
     margin-right: 2px;
   }
   /* End: a normal page again. */
-  .done {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-  .done-head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .done-head h1 {
-    margin: 0;
-    font-size: var(--text-xl);
-    font-weight: var(--weight-semibold);
-  }
-  .done-head p {
-    margin: 2px 0 0;
-    color: var(--text-2);
-    font-size: var(--text-sm);
-  }
-  .badge {
-    display: inline-flex;
-    padding: var(--space-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-    color: var(--success);
-  }
-  .done-actions {
-    display: flex;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-  }
   @media (max-width: 720px) {
     .choices {
       grid-template-columns: minmax(0, 1fr);
