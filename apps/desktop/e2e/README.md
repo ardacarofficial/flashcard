@@ -68,6 +68,9 @@ fix).
 | C4 | A note's two cards in two decks: each deck alone offers its card; the whole-collection queue (Home → launcher → Enter) counts and serves one of them; a deck whose preset does not bury siblings keeps its card | must pass (fixed in v1.3) |
 | C5 | v1.4 Test (quiz): deck page → launcher → "Test" → each word asked with four meanings of the deck, key `1` picks, the verdict and the right meaning show at once, Enter goes on; the end score equals `modes.quiz.result` read back (every word answered, practice: one `trial_quiz` answer per card, schedules unchanged) | must pass (v1.4) |
 | K1 | A key right after a grade: four buttons, four cards in a row graded `1`/`2`/`3`/`4` with `Space` pressed at once (saving is held back 400 ms on purpose; half the cards turned with Space, half by clicking the card so it has the focus): while saving, the graded card stays on its back; the next card comes up on its front; each card has exactly one review in the session, with the pressed grade | must pass (fixed in v1.3) |
+| E3a | v1.4 Search chips: "Nereden → Altyazıdan" writes `nereden:altyazı` in the box; the count and the rows equal `search.cards` read back; × removes the token | must pass (v1.4) |
+| E3W | v1.4 My words: `/`, type a captured word, ↓ Enter, "Zaten biliyorum" → `words.lookup` reads status known with a manual mark (mark cleared after) | must pass (v1.4) |
+| E3N | v1.4 Note editor extras: a Subtitle note's encounters show; an accepted answer added in the editor is read back with `accepted_answers.list` | must pass (v1.4) |
 
 A journey that shows a known bug is **never deleted or skipped**: the bug assertion comes after
 `test.fail(true, '<bug>')`, called only once the journey's own preconditions have passed (so a
