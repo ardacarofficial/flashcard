@@ -2,5 +2,7 @@
   "oplog.summary.words.index.rebuild": "Kelime dizinini yeniden kurmaya başladı",
   "oplog.summary.words.index.rebuild_now": "Kelime dizinini yeniden kurdu",
   "oplog.summary.words.data.import": "Kelime verisini içe aktardı",
-  "oplog.summary.words.data.reset": "Yerleşik kelime verisine döndü"
+  "oplog.summary.words.data.reset": "Yerleşik kelime verisine döndü",
+  "oplog.summary.words.mark": "{count} kelime işaretlendi",
+  "oplog.summary.words.restore": "{count} kelime işareti geri alındı"
 }

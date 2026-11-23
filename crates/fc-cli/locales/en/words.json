@@ -2,5 +2,7 @@
   "oplog.summary.words.index.rebuild": "Started rebuilding the word index",
   "oplog.summary.words.index.rebuild_now": "Rebuilt the word index",
   "oplog.summary.words.data.import": "Imported word data",
-  "oplog.summary.words.data.reset": "Restored the built-in word data"
+  "oplog.summary.words.data.reset": "Restored the built-in word data",
+  "oplog.summary.words.mark": "Marked {count} word(s)",
+  "oplog.summary.words.restore": "Restored {count} word mark(s)"
 }
