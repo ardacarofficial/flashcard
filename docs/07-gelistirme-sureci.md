@@ -70,6 +70,8 @@ Gerçek kullanıcının dosyalarının ve tarayıcı eklentisinin uygulamaya gir
 | `fc-app/src/undo_fuzz_tests.rs` | Kayıt defterinden türetilen geri alınabilir komutların rastgele dizisi, gerçek SQLite dosyasında, ortada yeniden başlatma | Hepsi geri alınınca kullanıcı verisi başlangıca, hepsi yinelenince sona eşit; reddedilen komut yazmaz. Üreticisi olmayan her komut `NOT_GENERATED`'da gerekçesiyle listelenir, yeni komut unutulamaz |
 | `fc-app/src/undo_fuzz_tests.rs` (içe aktarma) | `anki::hostile` paketleri, bozuk CSV/JSON, 1 milyon sütun gerçek içe aktarma işinden | İş ya başarılı olur ve tek geri alma başlangıca döndürür ya da çevrilen bir kodla (`import_format` …) başarısız olur ve geride hiçbir şey kalmaz |
 
+**Geri alma değişmezi (v1.4.1, I1):** her açık, geri alınabilir komut ya rastgele dizide üretilir ya da `NOT_GENERATED` listesinde geri almayı kanıtlayan testine (`dosya::fonksiyon`) adıyla bağlanır; `named_undo_tests_exist` bu testlerin var olduğunu, komutu çalıştırıp geri aldığını, `every_generator_is_accepted_at_least_once` her üreticinin gerçekten yazdığını denetler (`FC_FUZZ_STATS=1` komut başına kabul/ret sayar).
+
 
 ### 3.1 Gerçek çekirdeğe karşı yolculuklar (v1.3: dev köprüsü)
 

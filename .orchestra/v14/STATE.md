@@ -1,4 +1,15 @@
-# v1.4 state — 1.4.0 integrated (F1, 2026-11-23)
+# v1.4 state — 1.4.1 robustness round closed (I1, 2026-11-23)
+
+Version **1.4.1** (`v14/i1`): the robustness round. H1 (FSRS weights of every version, mirrored backups,
+disaster restore), H2 (kill matrix, disk full, damaged-collection rescue, WAL checkpoint), H3 (fuzz/property
+tests, 12 fixes), H4 (Subtitle "Flashcard'dan oku" patch) merged; I1 closed what they left open: every undoable
+command proves undo (generator or a named, existence-checked test), `/v1` body reading aligned with Subtitle
+(malformed = 400, stalled body = 408 after 30 s), unused media rows cleaned by the trash purge (never one
+undo/redo can still reach), `backups/.verify-*` leftovers removed at start, mirror catch-up, in-app rescue on
+the Bakım page. No migration. Verification record: CHANGELOG 1.4.1 and the I1 report.
+
+## 1.4.0 (F1, 2026-11-23)
+
 
 Version **1.4.0** (`v14/f1`): backend (below) + design track built in the app (E1 study modes, E2 settings and
 navigation, E3 Add/Search/My words, E4 Progress/Home) + F1 integration (one Advanced switch, simple Günlük tempo,

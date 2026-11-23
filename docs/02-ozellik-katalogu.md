@@ -577,3 +577,4 @@ Gerçek koruma için işletim sistemi hesabını parolayla kilitleyin ve disk ş
 - **Çökme kurtarma:** Oturum durumu ve taslaklar kalıcı.
 - **Günlükler (log):** Yerel log dosyası, "Hata raporu için logları dışa aktar" butonu (otomatik gönderim yok).
 - **Performans hedefi:** 100.000 notta arama < 100 ms, sıradaki kart < 20 ms, açılış < 2 sn.
+- `[v1.4.1]` **Uygulama içinden kurtarma:** koleksiyon açılıyor ama veritabanı denetimi sorun buluyorsa Bakım (Günlükler ve güncellemeler) sayfasında açılış diyaloğundaki iki seçenek: **Yedekten geri yükle** (doğrulanan en yeni yedek) ya da **Okunabileni kurtar**; her biri neyin kaybolacağını söyleyip onay ister, uygulama yeniden başlar, kurtarma koleksiyon açılmadan önce koşar ve sonuç (bozuk dosyaların saklandığı klasörle) bir kez gösterilir. Bozuk dosyalar silinmez (`damaged/<zaman>/`).
