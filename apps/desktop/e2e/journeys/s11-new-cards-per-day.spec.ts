@@ -49,7 +49,7 @@ async function openDeckOptions(page: Page, via: 'guide' | 'nav') {
   if (via === 'guide') {
     await main.getByRole('button', { name: new RegExp(`^${t('settings.guide.new_per_day').replace(/[?.]/g, '\\$&')}`) }).click();
   } else {
-    await main.getByRole('navigation', { name: t('shell.settings_nav') }).getByRole('button', { name: t('nav.presets'), exact: true }).click();
+    await main.getByRole('navigation', { name: t('shell.settings_nav') }).getByRole('button', { name: t('shell.page.pace'), exact: true }).click();
   }
   await expect(main.getByRole('heading', { level: 1, name: t('presets.heading') })).toBeVisible();
 }

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { configure, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { afterEach, describe, expect, it } from 'vitest';
+import { configure, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { api, CLASSIC_NOTETYPE_ID } from '$lib/api';
 import { i18n } from '$lib/i18n/index.svelte';
 import App from './App.svelte';
@@ -8,15 +8,29 @@ i18n.locale = 'en';
 // The whole mock app boots per test: on a loaded machine that takes longer than the 1 s default.
 configure({ asyncUtilTimeout: 10_000 });
 
+/** v1.4: the one "Advanced" switch (core setting `app.show_advanced`), as the user leaves it. */
+const setAdvanced = (on: boolean) => api.call('settings.set', { scope: { kind: 'app' }, key: 'app.show_advanced', value: on });
+
 describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
-  it('draws the 5 sections + Inbox + Settings + profile from modules.list; section pages are tabs', async () => {
+  afterEach(async () => {
+    await setAdvanced(false);
+  });
+
+  it('draws the basic places + Inbox + Settings + profile from modules.list; "Advanced" adds the rest', async () => {
     render(App);
     const nav = await screen.findByRole('navigation', { name: 'Main navigation' });
     await screen.findByRole('button', { name: 'Settings' });
     const labels = () => Array.from(nav.querySelectorAll('li > button'), (b) => b.getAttribute('aria-label') ?? b.textContent?.trim());
+    // v1.4: the few places a daily user needs (no My words screen in the mock yet: Search).
+    await waitFor(() => expect(labels()).toEqual(['Home', 'Search', 'Progress', expect.stringMatching(/^Inbox/), 'Settings']));
+    // The switch at the bottom of Settings brings back every v1.3 place.
+    await fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await fireEvent.click(within(await screen.findByTestId('advanced-switch')).getByRole('switch'));
     await waitFor(() =>
-      expect(labels()).toEqual(['Home', 'Library', 'Create', 'Search', 'Statistics', expect.stringMatching(/^Inbox/), 'Settings']),
+      expect(labels()).toEqual(['Home', 'Library', 'Create', 'Search', 'Progress', expect.stringMatching(/^Inbox/), 'Settings']),
     );
+    await waitFor(async () => expect((await api.call('settings.get', { scope: { kind: 'app' }, keys: ['app.show_advanced'] })).values[0]?.value).toBe(true));
+    await fireEvent.click(screen.getByRole('button', { name: 'Home' }));
     expect(screen.getByRole('button', { name: /^Profile: / })).toBeTruthy();
     // Home opens first (bundled) and is built from $lib/ui.
     expect(await screen.findByRole('heading', { level: 1, name: 'Home' })).toBeTruthy();
@@ -44,12 +58,16 @@ describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
     render(App);
     await fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
     const sub = await screen.findByRole('navigation', { name: 'Settings sections' });
-    const groups = Array.from(sub.querySelectorAll('h2'), (h) => h.textContent?.trim());
-    // v1.3: grouped by task, technical pages apart under "Advanced".
-    expect(groups).toEqual(['General', 'Studying and cards', 'Connections', 'Data', 'Advanced']);
-    const pages = Array.from(sub.querySelectorAll('button'), (b) => b.textContent?.trim());
+    const groups = () => Array.from(sub.querySelectorAll('h2'), (h) => h.textContent?.trim());
+    const pages = () => Array.from(sub.querySelectorAll('[data-testid="subnav-item"]'), (b) => b.textContent?.trim());
+    // v1.4: Basic only, each page named for what it answers.
+    await waitFor(() => expect(groups()).toEqual(['Basics']));
     // Subtitle: off by default in the app, on in the dev mock (its settings page gets screenshots).
-    expect(pages).toEqual(['General', 'Reminders', 'Shortcuts', 'Profiles & lock', 'Deck options', 'Note types', 'Modes and reading', 'AI', 'Subtitle', 'Export & backup', 'Starter decks', 'Automation', 'Assistants (MCP)', 'Plugins', 'Maintenance', 'Logs & updates']);
+    expect(pages()).toEqual(['Daily pace', 'How cards look', 'Reminders', 'Subtitle and connections', 'Backup', 'Language and look']);
+    // The one "Advanced" switch shows every other v1.3 page, grouped.
+    await fireEvent.click(within(screen.getByTestId('advanced-switch')).getByRole('switch'));
+    await waitFor(() => expect(groups()).toEqual(['Basics', 'Studying', 'App', 'Connections (details)', 'Data and upkeep']));
+    expect(pages()).toEqual(['Daily pace', 'How cards look', 'Reminders', 'Subtitle and connections', 'Backup', 'Language and look', 'Modes and reading', 'Shortcuts', 'Adding cards', 'Profiles & lock', 'AI', 'Assistants (MCP)', 'Automation', 'Plugins', 'Starter decks', 'Maintenance', 'Logs & updates']);
     await fireEvent.click(screen.getByRole('button', { name: 'Reminders' }));
     expect(sub.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Reminders');
 
@@ -64,10 +82,11 @@ describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
     // Library: Decks | Notes only; the study modes open from the deck page's tiles and Home.
     expect(await tabsOf('Library')).toEqual(['Decks', 'Notes']);
     expect(await tabsOf('Search')).toEqual([]);
-    expect(await tabsOf('Statistics')).toEqual(['Overview', 'Planning', 'Goals']);
+    expect(await tabsOf('Progress')).toEqual(['Overview', 'Planning', 'Goals']);
   });
 
   it('study modes open from the deck page; a running session gets the focus layout', async () => {
+    await setAdvanced(true);
     const deck = (await api.deck.create('Focus')).id;
     await api.call('notes.create_many', {
       notetype_id: CLASSIC_NOTETYPE_ID,
@@ -112,6 +131,7 @@ describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
   });
 
   it('mounts no screen behind the lock screen, lazy ones included', async () => {
+    await setAdvanced(true);
     render(App);
     await fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
     await fireEvent.click(await screen.findByRole('button', { name: 'Profiles & lock' }));
@@ -130,12 +150,13 @@ describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
   });
 
   it('v1.2 top bar: trail, search opens the palette, "Add card" and N open the Quick Add dialog', async () => {
+    await setAdvanced(true);
     render(App);
     const bar = await screen.findByTestId('top-bar');
     const trail = () => Array.from(bar.querySelectorAll('nav li'), (l) => l.textContent?.trim());
     await waitFor(() => expect(trail()).toEqual(['Home']));
-    await fireEvent.click(await screen.findByRole('button', { name: 'Statistics' }));
-    await waitFor(() => expect(trail()).toEqual(['Statistics', 'Overview']));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Progress' }));
+    await waitFor(() => expect(trail()).toEqual(['Progress', 'Overview']));
 
     // The search field opens the command palette.
     await fireEvent.click(await screen.findByTestId('top-search'));
@@ -147,7 +168,7 @@ describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
     await fireEvent.click(await screen.findByRole('button', { name: 'Add card' }));
     expect(await screen.findByRole('dialog', { name: 'Add card' }, { timeout: 3000 })).toBeTruthy();
-    expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Statistics');
+    expect(nav.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Progress');
     await fireEvent.keyDown(document.activeElement ?? window, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add card' })).toBeNull());
 

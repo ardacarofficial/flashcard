@@ -23,7 +23,7 @@ interface NoteType {
 async function openType(page: Page, name: string) {
   await goToSection(page, 'shell.settings');
   const main = page.locator('#fc-main');
-  await main.getByRole('navigation', { name: t('shell.settings_nav') }).getByRole('button', { name: t('nav.notetypes'), exact: true }).click();
+  await main.getByRole('navigation', { name: t('shell.settings_nav') }).getByRole('button', { name: t('shell.page.cards'), exact: true }).click();
   const entry = main.getByRole('button', { name: new RegExp(`^${name}`) });
   await entry.focus();
   await press(page, 'Enter');
