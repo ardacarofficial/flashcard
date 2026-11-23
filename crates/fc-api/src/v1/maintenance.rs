@@ -67,6 +67,47 @@ pub struct CheckIntegrity {
     pub quick: Option<bool>,
 }
 
+/// What to put in place of a damaged collection (v1.4.1, the same two choices as the
+/// start-up dialog).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum RescueChoice {
+    /// The newest backup that verifies.
+    Backup,
+    /// What is still readable in the damaged file.
+    Readable,
+}
+
+/// `maintenance.rescue.request`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RequestRescue {
+    /// What to put in place of the damaged collection.
+    pub mode: RescueChoice,
+}
+
+/// Response of `maintenance.rescue.request`: the app restarts and rescues.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct RescueRequestDto {
+    /// The choice recorded.
+    pub mode: RescueChoice,
+}
+
+/// The last rescue the app ran on request (v1.4.1), read back after the restart.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct RescueOutcomeDto {
+    /// What was asked for.
+    pub mode: RescueChoice,
+    /// When it ran.
+    pub at: Timestamp,
+    /// It worked (the collection was replaced).
+    pub ok: bool,
+    /// Where the damaged files are kept (when it worked).
+    pub kept_in: Option<String>,
+    /// Why it did not work (nothing was changed then).
+    pub error: Option<ApiError>,
+}
+
 /// A study session left open by the previous run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct RecoverableSession {
@@ -123,6 +164,8 @@ pub struct MaintenanceStatus {
     pub previous_run: Option<RunInfoDto>,
     /// Latest integrity check of this run, if any.
     pub integrity: Option<IntegrityDto>,
+    /// The rescue run on request at this start (v1.4.1), if any.
+    pub rescue: Option<RescueOutcomeDto>,
 }
 
 /// `maintenance.logs.export`.

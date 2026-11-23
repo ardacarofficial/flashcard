@@ -257,6 +257,7 @@
       "mirror_ok": "İkinci yer: hazır · {count} kopya, son: {date}",
       "mirror_ok_empty": "İkinci yer: hazır · henüz kopya yok",
       "mirror_folder": "İkinci klasör: {folder}",
+      "mirror_caught_up": "İkinci yer eksik kaldığı için {count} eski yedek de oraya kopyalandı ({date}).",
       "mirror_missing": "İkinci yedek klasörü bulunamadı: {folder}. Disk takılı mı?",
       "mirror_unwritable": "İkinci yedek klasörüne yazılamıyor: {folder}. İzinleri ve boş yeri kontrol et.",
       "mirror_inside_collection": "İkinci yedek klasörü koleksiyon klasörünün içinde: {folder}. Başka bir diske koy.",

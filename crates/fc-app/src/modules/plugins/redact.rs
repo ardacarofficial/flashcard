@@ -501,6 +501,7 @@ pub(crate) fn event_domains(event: &DomainEvent) -> &'static [Domain] {
         // v1.0: the user's own session (lock state, reminders) is nobody else's business.
         E::LockChanged { .. } => &["lock"],
         E::ProfileSwitched { .. } => &["profiles"],
+        E::RescueRequested { .. } => &["maintenance"],
         E::ReminderDue { .. } => &["reminders"],
     }
 }
@@ -522,6 +523,7 @@ const GATED_EVENT_DOMAINS: &[Domain] = &[
     "lock",
     "profiles",
     "reminders",
+    "maintenance",
 ];
 
 /// Whether an `event:` hook of a plugin holding `granted` is called for `event` at all.
@@ -1062,6 +1064,11 @@ mod tests {
         // reports quote the app's state: refused, reads included, and unhookable.
         refused_module("maintenance", &["maintenance"]);
         assert!(matches!(exposure("maintenance.logs.export"), Exposure::Refused(_)));
+        assert!(matches!(exposure("maintenance.rescue.request"), Exposure::Refused(_)));
+        let e = DomainEvent::RescueRequested {
+            mode: fc_api::v1::maintenance::RescueChoice::Backup,
+        };
+        assert!(!event_delivered(&grants(&["maintenance:read"]), &e));
     }
 
     #[test]

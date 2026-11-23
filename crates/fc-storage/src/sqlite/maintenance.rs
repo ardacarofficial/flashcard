@@ -46,20 +46,28 @@ impl<M: Mode> MaintenanceRead for SqliteTx<'_, M> {
         } else {
             "integrity_check"
         };
-        let rows = all(
+        // v1.4.1: on a damaged file the check itself can stop with "database disk image is
+        // malformed": that is the verdict (a problem row), not a failure of the check.
+        let mut rows = corruption_is_a_problem(all(
             self.conn(),
             "sqlite_master",
             &format!("PRAGMA {pragma}({})", max_rows.max(1)),
             [],
             |r| r.get::<_, String>(0),
-        )?;
-        let fk = all(
+        ))?;
+        let fk = match all(
             self.conn(),
             "sqlite_master",
             "PRAGMA foreign_key_check",
             [],
             |r| r.get::<_, Option<String>>(0),
-        )?;
+        ) {
+            Err(e) if is_corruption(&e) => {
+                rows.push(e.to_string());
+                Vec::new()
+            }
+            other => other?,
+        };
         Ok(IntegrityRecord {
             rows,
             foreign_key_violations: u64::try_from(fk.len()).unwrap_or(u64::MAX),
@@ -88,5 +96,20 @@ impl MaintenanceWrite for SqliteTx<'_, WriteMode> {
             [key],
         )?;
         Ok(n > 0)
+    }
+}
+
+/// SQLite said the file is damaged (`SQLITE_CORRUPT`, `SQLITE_NOTADB`).
+fn is_corruption(e: &crate::error::StorageError) -> bool {
+    use rusqlite::ErrorCode as C;
+    matches!(e, crate::error::StorageError::Sqlite(rusqlite::Error::SqliteFailure(f, _))
+        if matches!(f.code, C::DatabaseCorrupt | C::NotADatabase))
+}
+
+/// The check's rows, or its corruption error as the one problem row.
+fn corruption_is_a_problem(r: StorageResult<Vec<String>>) -> StorageResult<Vec<String>> {
+    match r {
+        Err(e) if is_corruption(&e) => Ok(vec![e.to_string()]),
+        other => other,
     }
 }

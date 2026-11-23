@@ -15,6 +15,7 @@ import type { NoteId } from "./NoteId";
 import type { NoteTypeId } from "./NoteTypeId";
 import type { PluginNotice } from "./PluginNotice";
 import type { ReminderCounts } from "./ReminderCounts";
+import type { RescueChoice } from "./RescueChoice";
 import type { SettingScope } from "./SettingScope";
 
 /**
@@ -197,7 +198,11 @@ locked: boolean, } } | { "type": "profile_switched", "data": {
 /**
  * The profile that opens next.
  */
-profile_id: string, } } | { "type": "reminder_due", "data": { 
+profile_id: string, } } | { "type": "rescue_requested", "data": { 
+/**
+ * `backup` or `readable`.
+ */
+mode: RescueChoice, } } | { "type": "reminder_due", "data": { 
 /**
  * What waits today.
  */

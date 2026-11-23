@@ -34,6 +34,16 @@ koleksiyonu saklar (profil için). Profil (v1.4 Z2): `FC_PERF_HOT_DB=<kopya> FC_
 Linux konteyneri, **4 vCPU Intel Xeon @ 2.10 GHz**, 15 GiB bellek, sanal disk; Rust 1.100.0. v1.0 ölçümleri
 (docs/10 §36–37) 8 çekirdekli bir makinedeydi: aynı sayılar burada ~1,2–1,5× yavaş beklenir.
 
+## v1.4.1 kontrol koşusu (I1, 2026-11-23, release, aynı makine, sakin)
+
+Sağlamlık turundan (H1–H4, I1) sonra aynı komutla baştan sona: **bütün bütçeler tutuyor**, gevşetilen yok
+(kurulum: v1.0 dünyası 50 s, film katmanı 172 s). Z2'ye göre kayda değer oynamalar: açılış 705 → 870 ms (bütçe
+2 000; açılış artık çöp boşaltmadan sonra ayrıca sahipsiz medya taraması ve `.verify-*` artığı denetimi yapar),
+önbellekli istatistik 662 → 863 ms (bütçe 1 000, payı azaldı), `study.start` özel sorgu 684 → 952 ms (bütçesiz).
+Gerisi Z2 ile aynı ya da daha iyi: `study.start` 459 ms, sıradaki kart p95 9,6 ms, en yavaş arama 64 ms, tarayıcı
+sayfası 91 ms (imleçle 26), kırılım 1 342 ms, tepe bellek 326 MB, yakalama p95 12,3 ms, cevap sırasında yakalama
+p95 42,1 ms, `io.backup.create` 74 s / tepe 386 MB, `io.backup.verify` 58 s / 357 MB.
+
 ## Sonuçlar — tam ölçek, **release**, aynı makine (2026-11-23, Z2 sonrası)
 
 "Önce" sütunu Z1'in koşusu (sakin makine); "sonra" Z2'nin bütün değişikliklerden sonra baştan sona koştuğu son

@@ -53,7 +53,7 @@ const backupReport: BackupReport = {
   media: 0,
   verified: true,
   missing_media: [],
-  mirror: { path: null, error: 'disk full', disk_full: false },
+  mirror: { path: null, error: 'disk full', disk_full: false, caught_up: 0 },
 };
 const backupDone: JobDto = { ...done, id: 'job-b', kind: 'io.backup', result: backupReport };
 const call = vi.fn(async (method: string, _params: unknown) => {
@@ -202,7 +202,7 @@ describe('backup settings: second backup location (v1.4.1)', () => {
   });
 
   it('a missing folder and a failed copy are warnings; a failed copy after a backup is said', async () => {
-    backupStatus = { ...base, mirror: { folder: 'E:\\Yedek', state: 'missing', copies: [], last_failure: { at: 1, message: 'gone' }, disk_full: false } };
+    backupStatus = { ...base, mirror: { folder: 'E:\\Yedek', state: 'missing', copies: [], last_failure: { at: 1, message: 'gone' }, disk_full: false, last_catch_up: null } };
     render(BackupPanel, {});
     const alerts = await screen.findAllByRole('alert');
     expect(alerts.map((a) => a.textContent)).toEqual([
@@ -218,7 +218,7 @@ describe('backup settings: second backup location (v1.4.1)', () => {
   });
 
   it('a full mirror disk is said plainly, the main backup still counts', async () => {
-    backupStatus = { ...base, mirror: { folder: 'E:/Yedek', state: 'ok', copies: [], last_failure: { at: 1, message: 'full' }, disk_full: true } };
+    backupStatus = { ...base, mirror: { folder: 'E:/Yedek', state: 'ok', copies: [], last_failure: { at: 1, message: 'full' }, disk_full: true, last_catch_up: null } };
     render(BackupPanel, {});
     const alerts = await screen.findAllByRole('alert');
     expect(alerts.map((a) => a.textContent)).toEqual([expect.stringMatching(/^The second backup disk is full \(.*\): E:\/Yedek\. Your main backup is fine/)]);
@@ -226,10 +226,18 @@ describe('backup settings: second backup location (v1.4.1)', () => {
 
   it('ok: copies and the newest date', async () => {
     const copy = { path: 'E:/Yedek/auto-1.fcbackup', created_at: 1, verified_at: 1, bytes: 1, complete: true, automatic: true };
-    backupStatus = { ...base, mirror: { folder: 'E:/Yedek', state: 'ok', copies: [copy, copy], last_failure: null, disk_full: false } };
+    backupStatus = { ...base, mirror: { folder: 'E:/Yedek', state: 'ok', copies: [copy, copy], last_failure: null, disk_full: false, last_catch_up: null } };
     render(BackupPanel, {});
     expect(await screen.findByText(/^Second location: ready · 2 copies, last: /)).toBeTruthy();
     expect(screen.getByText('Second folder: E:/Yedek')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('back after a gap: says the missed backups were copied too (v1.4.1)', async () => {
+    const copy = { path: 'E:/Yedek/auto-1.fcbackup', created_at: 1, verified_at: 1, bytes: 1, complete: true, automatic: true };
+    backupStatus = { ...base, mirror: { folder: 'E:/Yedek', state: 'ok', copies: [copy, copy], last_failure: null, disk_full: false, last_catch_up: { at: 1, copies: 2 } } };
+    render(BackupPanel, {});
+    expect(await screen.findByText(/^The second location had missed some backups: 2 older backups were copied there too/)).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });

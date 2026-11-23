@@ -856,16 +856,70 @@ fn a_missing_mirror_never_fails_the_backup_and_says_so() {
     assert!(rep.mirror.unwrap().error.is_some());
     assert!(backup_files(&p.data.join("backups"), "manual-").is_empty());
 
-    // The drive is back: the next backup is copied and the failure is cleared.
+    // The drive is back: the next backup is copied and the failure is cleared — and
+    // (v1.4.1, I1) the verified automatic backup it missed is copied too, and said so.
     std::fs::create_dir_all(&gone).unwrap();
     set(&p.t, super::backup_mirror::MIRROR_KEY, serde_json::json!(s(&gone)));
     clock.advance(DAY + HOUR);
     let rep: BackupReport = result(&finish(&p.t, &tick().expect("due")));
-    assert_eq!(rep.mirror.unwrap().error, None);
-    assert_eq!(backup_files(&gone, "auto-").len(), 1);
+    let copy = rep.mirror.unwrap();
+    assert_eq!((copy.error, copy.caught_up), (None, 1));
+    let mirrored = backup_files(&gone, "auto-");
+    assert_eq!(mirrored.len(), 2, "{mirrored:?}");
+    // Byte for byte the same files as at home, nothing half-written left.
+    let mut home: Vec<Vec<u8>> = auto_files(&p.data)
+        .iter()
+        .map(|f| std::fs::read(p.data.join("backups").join("auto").join(f)).unwrap())
+        .collect();
+    let mut there: Vec<Vec<u8>> = mirrored.iter().map(|f| std::fs::read(f).unwrap()).collect();
+    home.sort();
+    there.sort();
+    assert_eq!(home, there);
+    assert!(mirrored.iter().all(|f| !part_path(f).exists()));
     let mirror = p.t.ok::<IoBackupStatus>(Empty {}).mirror.unwrap();
-    assert_eq!((mirror.state, mirror.copies.len()), (MirrorState::Ok, 1));
+    assert_eq!((mirror.state, mirror.copies.len()), (MirrorState::Ok, 2));
     assert!(mirror.last_failure.is_none());
+    let caught = mirror.last_catch_up.unwrap();
+    assert_eq!(caught.copies, 1);
+    // Nothing is missing any more: the next backup copies only itself.
+    clock.advance(DAY + HOUR);
+    let rep: BackupReport = result(&finish(&p.t, &tick().expect("due")));
+    assert_eq!(rep.mirror.unwrap().caught_up, 0);
+    assert_eq!(backup_files(&gone, "auto-").len(), 3);
+}
+
+/// v1.4.1 (I1): the catch-up stays within the keep count: with keep 2 and three backups
+/// missed, the mirror gets the newest one it lacks plus the current one, never more.
+#[test]
+fn the_mirror_catch_up_stays_within_the_keep_count() {
+    let clock = MovableClock::new();
+    let p = profile_with(Some(clock.clone()));
+    fill(&p.t, p._dir.path());
+    let root = tempfile::tempdir().unwrap();
+    let gone = root.path().join("unplugged");
+    set(&p.t, super::backup_mirror::MIRROR_KEY, serde_json::json!(s(&gone)));
+    set(&p.t, super::backup_auto::KEEP_KEY, serde_json::json!(2));
+    let tick = || super::auto_backup_tick(&p.t.app, true).unwrap();
+    for _ in 0..3 {
+        clock.advance(DAY + HOUR);
+        result::<BackupReport>(&finish(&p.t, &tick().expect("due")));
+    }
+    std::fs::create_dir_all(&gone).unwrap();
+    clock.advance(DAY + HOUR);
+    let rep: BackupReport = result(&finish(&p.t, &tick().expect("due")));
+    assert_eq!(rep.mirror.unwrap().caught_up, 1);
+    let mut home: Vec<Vec<u8>> = auto_files(&p.data)
+        .iter()
+        .map(|f| std::fs::read(p.data.join("backups").join("auto").join(f)).unwrap())
+        .collect();
+    let mut there: Vec<Vec<u8>> = backup_files(&gone, "auto-")
+        .iter()
+        .map(|f| std::fs::read(f).unwrap())
+        .collect();
+    assert_eq!((home.len(), there.len()), (2, 2));
+    home.sort();
+    there.sort();
+    assert_eq!(home, there, "the mirror holds the same two newest backups");
 }
 
 /// v1.4.1: a preset row holding FSRS-4.5 weights (stored before v1.4.1, or restored from an
@@ -933,4 +987,50 @@ fn a_stored_preset_with_old_fsrs_weights_studies_without_error() {
     }
     assert!(n > 0, "the fixture has cards to study");
     p.t.ok::<StudyEnd>(SessionRef { session_id: s.id });
+}
+
+/// v1.4.1 (I1): a crash during a backup verification leaves a `backups/.verify-*` scratch
+/// folder; the next start removes it once nothing has been written in it for a while (a
+/// verification running right now, maybe in another process, is left alone).
+#[test]
+fn verification_scratch_folders_left_by_a_crash_are_removed() {
+    use std::time::{Duration, SystemTime};
+    let dir = tempfile::tempdir().unwrap();
+    let backups = dir.path().join("backups");
+    let left = backups.join(".verify-abc123");
+    std::fs::create_dir_all(left.join("media").join("ab")).unwrap();
+    std::fs::write(left.join("collection.db"), b"x").unwrap();
+    std::fs::write(left.join("media").join("ab").join("f"), b"y").unwrap();
+    let keep = backups.join("auto");
+    std::fs::create_dir_all(&keep).unwrap();
+    std::fs::write(backups.join("status.json"), b"{}").unwrap();
+    let idle = super::backup_file::STALE_VERIFY_AFTER;
+    // Just written: maybe a verification at work.
+    assert_eq!(
+        super::remove_stale_verify_dirs(&backups, SystemTime::now()),
+        0
+    );
+    assert!(left.exists());
+    // Idle for longer than the limit: left over, removed; nothing else is touched.
+    let later = SystemTime::now() + idle + Duration::from_secs(1);
+    assert_eq!(
+        super::backup_file::remove_stale_verify_dirs(&backups, later, idle),
+        1
+    );
+    assert!(!left.exists());
+    assert!(keep.exists() && backups.join("status.json").exists());
+    // Through the real start: an old leftover goes when the collection is opened.
+    std::fs::create_dir_all(backups.join(".verify-old")).unwrap();
+    let old = SystemTime::now() - idle - Duration::from_secs(60);
+    std::fs::File::open(backups.join(".verify-old"))
+        .and_then(|f| f.set_modified(old))
+        .ok();
+    if std::fs::metadata(backups.join(".verify-old"))
+        .and_then(|m| m.modified())
+        .is_ok_and(|t| t <= old)
+    {
+        let app = crate::App::open_sqlite(&dir.path().join("collection.db")).unwrap();
+        assert!(!backups.join(".verify-old").exists());
+        drop(app);
+    }
 }

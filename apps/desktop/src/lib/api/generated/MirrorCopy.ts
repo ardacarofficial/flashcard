@@ -15,4 +15,9 @@ error: string | null,
 /**
  * The mirror's disk is full (said on its own; the backup at home is not affected).
  */
-disk_full: boolean, };
+disk_full: boolean, 
+/**
+ * v1.4.1: older verified automatic backups the mirror lacked (it was missing when they
+ * were taken) copied there too with this one, within the keep count.
+ */
+caught_up: number, };

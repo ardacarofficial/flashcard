@@ -201,6 +201,26 @@ impl ContentWrite for MemTx<'_> {
         Ok(!used && self.m().domains.content.media.remove(hash).is_some())
     }
 
+    fn delete_unused_media(&mut self, created_before: Timestamp) -> StorageResult<Vec<String>> {
+        // The in-memory double knows note references only (no oplog text to search).
+        let used: std::collections::HashSet<String> = self
+            .c()
+            .refs
+            .values()
+            .flat_map(|r| r.media.iter().cloned())
+            .collect();
+        let media = &mut self.m().domains.content.media;
+        let gone: Vec<String> = media
+            .values()
+            .filter(|m| m.created_at < created_before && !used.contains(&m.hash))
+            .map(|m| m.hash.clone())
+            .collect();
+        for h in &gone {
+            media.remove(h);
+        }
+        Ok(gone)
+    }
+
     fn delete_orphan_media_files(&mut self) -> StorageResult<u64> {
         let content = &mut self.m().domains.content;
         let before = content.files.len();

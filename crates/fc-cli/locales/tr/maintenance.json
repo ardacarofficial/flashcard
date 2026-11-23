@@ -4,6 +4,7 @@
   "oplog.summary.maintenance.crash_reports.clear": "Çökme raporları silindi",
   "oplog.summary.maintenance.drafts.save": "Form taslağı kaydedildi",
   "oplog.summary.maintenance.drafts.discard": "Form taslağı atıldı",
+  "oplog.summary.maintenance.rescue.request": "Koleksiyonun bir sonraki açılışta kurtarılması istendi",
   "oplog.summary.updates.install": "Güncelleme indirildi",
   "oplog.summary.updates.apply": "Güncelleme kuruldu"
 }

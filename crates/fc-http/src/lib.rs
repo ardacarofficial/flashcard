@@ -14,7 +14,10 @@
 //! * **Tokens.** `Authorization: Bearer <token>`; made here from the OS random generator,
 //!   handed to the client once after the user approves the pairing, never stored — the app
 //!   keeps its SHA-256 hash.
-//! * **Limits.** Body ≤ [`MAX_BODY_BYTES`] (`413`), [`CLIENT_RATE_PER_SEC`] requests per
+//! * **Limits.** Body ≤ [`MAX_BODY_BYTES`] (`413`; one that ends early or breaks its encoding
+//!   is malformed, `400` / Subtitle `422`), the whole body within [`BODY_READ_TIMEOUT`] (`408`,
+//!   v1.4.1: a client that announces a body and stalls no longer holds the connection),
+//!   [`CLIENT_RATE_PER_SEC`] requests per
 //!   second per client (burst [`CLIENT_BURST`]), [`PAIR_PER_MINUTE`] pairing requests per
 //!   minute and [`PAIR_PER_NAME`] per client name per [`PAIR_NAME_WINDOW_SECS`] (`429` +
 //!   `Retry-After`).
@@ -26,15 +29,20 @@
 //!
 //! App calls are blocking (SQLite), so they run on tokio's blocking pool.
 
+mod body;
 mod routes;
 mod subtitle;
 
 use fc_app::App;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Largest request body accepted (bytes).
 pub const MAX_BODY_BYTES: usize = 256 * 1024;
+/// Time a request body may take to arrive in full (v1.4.1). Generous: the largest body
+/// (a Subtitle sound) crosses the loopback in well under a second.
+pub const BODY_READ_TIMEOUT: Duration = Duration::from_secs(30);
 /// Sustained requests per second per client.
 pub const CLIENT_RATE_PER_SEC: f64 = 10.0;
 /// Burst of requests per client.
@@ -135,6 +143,15 @@ impl Server {
     /// Binds `config` (synchronously, so a busy port is reported here) and serves `app` on a
     /// background thread.
     pub fn start(app: Arc<App>, config: ServerConfig) -> std::io::Result<Self> {
+        Self::start_with_body_timeout(app, config, BODY_READ_TIMEOUT)
+    }
+
+    /// [`Server::start`] with another [`BODY_READ_TIMEOUT`] (tests).
+    pub fn start_with_body_timeout(
+        app: Arc<App>,
+        config: ServerConfig,
+        body_timeout: Duration,
+    ) -> std::io::Result<Self> {
         let listener = std::net::TcpListener::bind(config.addr())?;
         let addr = listener.local_addr()?;
         if !addr.ip().is_loopback() {
@@ -150,7 +167,7 @@ impl Server {
             .enable_all()
             .build()?;
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-        let router = routes::router(app, addr.port());
+        let router = routes::router(app, addr.port(), body_timeout);
         let thread = std::thread::Builder::new()
             .name("fc-http".into())
             .spawn(move || {

@@ -46,9 +46,14 @@ export default {
       crash_reports: structuredClone(crashes),
       previous_run: { started_at: 1, version: '1.0.0', clean: true },
       integrity,
+      rescue: null,
     });
+    // v1.4.1: scenario `damaged` = a collection that opens but fails the integrity check.
+    const damaged = mockScenario() === 'damaged';
     const check = (quick: boolean): IntegrityDto => {
-      integrity = { ok: true, quick, problems: [], checked_at: now(), duration_ms: 12 };
+      integrity = damaged
+        ? { ok: false, quick, problems: ['*** in database main ***', 'Page 42: btreeInitPage() returns error code 11'], checked_at: now(), duration_ms: 40 }
+        : { ok: true, quick, problems: [], checked_at: now(), duration_ms: 12 };
       return integrity;
     };
     const noOffer = () => ({ reason: null, previous_run: status().previous_run, crash: null, integrity: null, session: null, drafts: [] });
@@ -70,6 +75,12 @@ export default {
       'maintenance.recovery.get': () => noOffer(),
       'maintenance.recovery.dismiss': () => noOffer(),
       'maintenance.integrity.check': ({ quick }) => check(quick ?? false),
+      // The real one records the choice and the desktop shell restarts into the rescue.
+      'maintenance.rescue.request': ({ mode }) => {
+        if (!integrity || integrity.ok)
+          throw err('CONFLICT_RESCUE_UNAVAILABLE', 'errors.conflict.rescue_unavailable', 'the collection is not damaged');
+        return { mode };
+      },
       'maintenance.logs.export': ({ path }) => {
         if (!path.toLowerCase().endsWith('.zip'))
           throw err('VALIDATION_INVALID_PARAMS', 'errors.validation.invalid_params', 'path must end in .zip');

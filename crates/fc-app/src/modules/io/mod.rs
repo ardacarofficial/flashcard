@@ -72,6 +72,13 @@ pub const JOB_RESTORE: &str = "io.restore";
 /// Backup verification job kind.
 pub const JOB_VERIFY: &str = "io.verify";
 pub use backup_auto::{tick as auto_backup_tick, JOB_AUTO_BACKUP};
+pub(crate) use backup_auto::backups_dir;
+
+/// v1.4.1: removes the `.verify-*` scratch folders a crash during a backup verification left
+/// in `backups` (idle for [`backup_file::STALE_VERIFY_AFTER`]); best effort.
+pub(crate) fn remove_stale_verify_dirs(backups: &std::path::Path, now: std::time::SystemTime) -> usize {
+    backup_file::remove_stale_verify_dirs(backups, now, backup_file::STALE_VERIFY_AFTER)
+}
 
 /// Descriptor.
 pub fn descriptor() -> ModuleDescriptor {

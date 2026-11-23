@@ -325,6 +325,10 @@ pub struct MirrorCopy {
     /// The mirror's disk is full (said on its own; the backup at home is not affected).
     #[serde(default)]
     pub disk_full: bool,
+    /// v1.4.1: older verified automatic backups the mirror lacked (it was missing when they
+    /// were taken) copied there too with this one, within the keep count.
+    #[serde(default)]
+    pub caught_up: u32,
 }
 
 /// `io.backup.verify`.
@@ -439,6 +443,19 @@ pub struct BackupMirrorStatus {
     /// That failure was a full disk in the mirror folder.
     #[serde(default)]
     pub disk_full: bool,
+    /// v1.4.1: the last time older backups the mirror lacked were copied there (`null`:
+    /// never needed).
+    #[serde(default)]
+    pub last_catch_up: Option<MirrorCatchUp>,
+}
+
+/// Older verified automatic backups copied to the mirror folder after it came back (v1.4.1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct MirrorCatchUp {
+    /// When.
+    pub at: Timestamp,
+    /// How many copies.
+    pub copies: u32,
 }
 
 /// State of the mirror folder.

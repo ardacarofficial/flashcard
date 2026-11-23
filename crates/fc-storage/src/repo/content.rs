@@ -110,6 +110,14 @@ pub trait ContentWrite: ContentRead {
     /// `media.add` still works, until [`ContentWrite::delete_orphan_media_files`] runs).
     /// Returns whether a row was deleted.
     fn delete_unreferenced_media(&mut self, hash: &str) -> StorageResult<bool>;
+    /// v1.4.1: deletes the media rows created before `created_before` that nothing uses any
+    /// more (an undone import's files after its trashed notes were purged, an undone
+    /// `media.add`): no note references it (trashed notes included), no Subtitle upload or
+    /// capture, no note type's templates or CSS, no inbox item, draft or reading item, it is
+    /// no TTS/clip/Subtitle original (`media_origins`), and **no oplog entry that undo or redo
+    /// can still reach** (entries after the newest history barrier) names it. Returns the
+    /// hashes; their files go with [`ContentWrite::delete_orphan_media_files`].
+    fn delete_unused_media(&mut self, created_before: Timestamp) -> StorageResult<Vec<String>>;
     /// Removes stored files that have no `media` row (and interrupted partial writes).
     /// Returns how many files were removed.
     fn delete_orphan_media_files(&mut self) -> StorageResult<u64>;

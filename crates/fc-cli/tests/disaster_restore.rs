@@ -812,17 +812,22 @@ fn a_missing_mirror_is_reported_and_recovers() {
     assert_eq!(status["last_failure"], Value::Null, "{status}");
     assert_eq!(status["automatic"].as_array().unwrap().len(), 1);
 
-    // The drive is back.
+    // The drive is back: this backup is copied, and (v1.4.1, I1) so is the verified
+    // automatic backup the mirror missed while it was gone; the status says so.
     std::fs::create_dir(&gone).unwrap();
     let job = call(&db, "io.backup.auto", &json!({}));
     let r = job_result(&job).clone();
     assert_eq!(r["mirror"]["error"], Value::Null, "{r}");
+    assert_eq!(r["mirror"]["caught_up"], 1, "{r}");
     let copy = PathBuf::from(r["mirror"]["path"].as_str().unwrap());
     assert!(copy.is_file());
-    assert_eq!(named(&gone, "auto-"), vec![copy]);
+    let mirrored = named(&gone, "auto-");
+    assert_eq!(mirrored.len(), 2, "{mirrored:?}");
+    assert!(mirrored.contains(&copy));
     let status = call(&db, "io.backup.status", &json!({}));
     let ms = &status["mirror"];
     assert_eq!(ms["state"], "ok", "{status}");
-    assert_eq!(ms["copies"].as_array().unwrap().len(), 1);
+    assert_eq!(ms["copies"].as_array().unwrap().len(), 2);
     assert_eq!(ms["last_failure"], Value::Null, "{status}");
+    assert_eq!(ms["last_catch_up"]["copies"], 1, "{status}");
 }

@@ -246,6 +246,13 @@ pub enum DomainEvent {
         /// The profile that opens next.
         profile_id: String,
     },
+    /// The user asked to rescue the damaged collection from the app (v1.4.1,
+    /// `maintenance.rescue.request`): the desktop shell restarts and runs the rescue before
+    /// it opens the collection again.
+    RescueRequested {
+        /// `backup` or `readable`.
+        mode: super::maintenance::RescueChoice,
+    },
     /// Time for the daily study reminder (v1.0): show an OS notification.
     ReminderDue {
         /// What waits today.

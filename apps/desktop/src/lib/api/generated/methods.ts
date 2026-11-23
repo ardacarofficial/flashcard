@@ -296,6 +296,8 @@ import type { RenderedCardDto } from "./RenderedCardDto";
 import type { ReorderAttributeOptions } from "./ReorderAttributeOptions";
 import type { ReorderRules } from "./ReorderRules";
 import type { RepairResult } from "./RepairResult";
+import type { RequestRescue } from "./RequestRescue";
+import type { RescueRequestDto } from "./RescueRequestDto";
 import type { ResetSetting } from "./ResetSetting";
 import type { ResetShortcut } from "./ResetShortcut";
 import type { ResetWordData } from "./ResetWordData";
@@ -707,6 +709,7 @@ export interface Methods {
   "maintenance.recovery.get": { kind: "query"; request: Empty; response: RecoveryDto };
   "maintenance.recovery.dismiss": { kind: "command"; request: Empty; response: RecoveryDto };
   "maintenance.integrity.check": { kind: "query"; request: CheckIntegrity; response: IntegrityDto };
+  "maintenance.rescue.request": { kind: "command"; request: RequestRescue; response: RescueRequestDto };
   "maintenance.logs.export": { kind: "command"; request: ExportLogs; response: LogExportDto };
   "maintenance.crash_reports.clear": { kind: "command"; request: Empty; response: ClearedCount };
   "maintenance.drafts.save": { kind: "command"; request: SaveDraft; response: DraftDto };
@@ -1050,6 +1053,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "maintenance.recovery.get": "query",
   "maintenance.recovery.dismiss": "command",
   "maintenance.integrity.check": "query",
+  "maintenance.rescue.request": "command",
   "maintenance.logs.export": "command",
   "maintenance.crash_reports.clear": "command",
   "maintenance.drafts.save": "command",

@@ -12,14 +12,22 @@
 //!   missing or unwritable mirror is recorded (`backups/status.json` `mirror_failure`) and
 //!   reported in the job's result and `io.backup.status`, never an error of the job.
 //!   Studying never waits on it (jobs run off the writer).
+//! * Catch-up (v1.4.1): after a good copy, the verified automatic backups at home that the
+//!   mirror lacks (it was missing or unwritable when they were taken; matched by the
+//!   snapshot time in the manifest) are copied too — as many as the keep count leaves room
+//!   for, each re-read there like the first — and `io.backup.status` says so
+//!   (`mirror.last_catch_up`, the job's `mirror.caught_up`).
 
 use super::backup_auto::{
-    copy_info, fresh_copy_name, keep, list_copies, load_status, rotate_copies, update_status,
+    auto_dir, copy_info, fresh_copy_name, keep, list_auto, list_copies, load_status,
+    rotate_copies, update_status,
 };
 use super::backup_file::{check_archive, part_path};
 use crate::error::AppResult;
 use crate::jobs::{CancelToken, JobContext};
-use fc_api::v1::io::{BackupFailure, BackupMirrorStatus, MirrorCopy, MirrorState, VerifiedBackup};
+use fc_api::v1::io::{
+    BackupFailure, BackupMirrorStatus, MirrorCatchUp, MirrorCopy, MirrorState, VerifiedBackup,
+};
 use fc_core::settings::{SettingDef, SettingKind, SettingScope, SettingScopeKind};
 use fc_core::Timestamp;
 use serde_json::Value;
@@ -140,6 +148,77 @@ fn io_failed(shown: &str, e: &std::io::Error) -> MirrorError {
     }
 }
 
+/// Copies `src` to `target` through `<target>.part`: flushed, re-read there (every entry's
+/// size and hash), then renamed. Nothing is left behind on failure.
+fn copy_verified(src: &Path, target: &Path, cancel: &CancelToken) -> Result<(), MirrorError> {
+    let part = part_path(target);
+    let shown = target.to_string_lossy().into_owned();
+    let run = || -> Result<(), MirrorError> {
+        let n = copy_synced(src, &part).map_err(|e| io_failed(&shown, &e))?;
+        let want = std::fs::metadata(src).map(|m| m.len()).unwrap_or(n);
+        let got = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+        if got != want {
+            return Err(format!("{shown}: {got} bytes written, {want} expected").into());
+        }
+        // Re-read on the mirror's disk: every entry's size and hash.
+        check_archive(&part, cancel)
+            .map_err(|e| MirrorError::from(format!("{shown}: {}", e.into_api().message)))?;
+        std::fs::rename(&part, target).map_err(|e| io_failed(&shown, &e))
+    };
+    let r = run();
+    if r.is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+    r
+}
+
+/// Snapshot time (manifest `created_at`) of a backup file, `None` when unreadable.
+fn snapshot_time(path: &Path) -> Option<i64> {
+    super::backup_file::open_backup(path)
+        .ok()
+        .map(|r| r.manifest().created_at.0)
+}
+
+/// Copies the verified automatic backups in `home_auto` that `dir` lacks (matched by
+/// snapshot time) and that the keep count leaves room for, oldest last; each is named after
+/// its own time so rotation keeps the newest. Stops at the first failure. Returns how many.
+pub(crate) fn catch_up(home_auto: &Path, dir: &Path, keep: u32, cancel: &CancelToken) -> u32 {
+    let keep = usize::try_from(keep.max(1)).unwrap_or(usize::MAX);
+    let present: Vec<(i64, Option<i64>)> = list_copies(dir, AUTO)
+        .into_iter()
+        .map(|(taken, p)| (taken, snapshot_time(&p)))
+        .collect();
+    let have: std::collections::HashSet<i64> = present.iter().filter_map(|(_, s)| *s).collect();
+    let missing: Vec<(i64, PathBuf)> = list_auto(home_auto)
+        .into_iter()
+        .take(keep)
+        .filter(|(_, p)| snapshot_time(p).is_some_and(|s| !have.contains(&s)))
+        .collect();
+    // Only what survives rotation: the newest `keep` of mirror ∪ missing.
+    let mut times: Vec<i64> = present
+        .iter()
+        .map(|(t, _)| *t)
+        .chain(missing.iter().map(|(t, _)| *t))
+        .collect();
+    times.sort_unstable_by(|a, b| b.cmp(a));
+    let floor = times.get(keep - 1).copied().unwrap_or(i64::MIN);
+    let mut copied = 0;
+    for (taken, src) in missing.into_iter().filter(|(t, _)| *t >= floor) {
+        if cancel.is_cancelled() {
+            break;
+        }
+        let target = fresh_copy_name(dir, AUTO, Timestamp(taken));
+        if copy_verified(&src, &target, cancel).is_err() {
+            break;
+        }
+        copied += 1;
+    }
+    if copied > 0 {
+        rotate_copies(dir, AUTO, u32::try_from(keep).unwrap_or(u32::MAX));
+    }
+    copied
+}
+
 /// Copies the verified backup `src` into `dir` as `<prefix><now>.fcbackup`, re-reads it there
 /// and rotates (see the module docs). `Err`: why not.
 pub(crate) fn copy_to_mirror(
@@ -161,24 +240,7 @@ pub(crate) fn copy_to_mirror(
     }
     let prefix = if automatic { AUTO } else { MANUAL };
     let target = fresh_copy_name(dir, prefix, now);
-    let part = part_path(&target);
-    let shown = target.to_string_lossy().into_owned();
-    let run = || -> Result<(), MirrorError> {
-        let n = copy_synced(src, &part).map_err(|e| io_failed(&shown, &e))?;
-        let want = std::fs::metadata(src).map(|m| m.len()).unwrap_or(n);
-        let got = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
-        if got != want {
-            return Err(format!("{shown}: {got} bytes written, {want} expected").into());
-        }
-        // Re-read on the mirror's disk: every entry's size and hash.
-        check_archive(&part, cancel)
-            .map_err(|e| MirrorError::from(format!("{shown}: {}", e.into_api().message)))?;
-        std::fs::rename(&part, &target).map_err(|e| io_failed(&shown, &e))
-    };
-    if let Err(e) = run() {
-        let _ = std::fs::remove_file(&part);
-        return Err(e);
-    }
+    copy_verified(src, &target, cancel)?;
     rotate_copies(dir, prefix, keep);
     Ok(target)
 }
@@ -198,6 +260,10 @@ pub(crate) fn mirror_backup(
     };
     ctx.report(Some(0.95), "io.progress.mirror");
     let outcome = copy_to_mirror(src, &dir, data_dir, automatic, ctx.now(), keep, &ctx.cancel);
+    let caught_up = match (&outcome, data_dir) {
+        (Ok(_), Some(home)) => catch_up(&auto_dir(home), &dir, keep, &ctx.cancel),
+        _ => 0,
+    };
     if let Some(home) = data_dir {
         let at = ctx.now();
         let shown = dir.to_string_lossy().into_owned();
@@ -206,6 +272,12 @@ pub(crate) fn mirror_backup(
                 s.mirror_failure = None;
                 s.mirror_disk_full = false;
                 s.mirror_dir = Some(shown);
+                if caught_up > 0 {
+                    s.mirror_catch_up = Some(MirrorCatchUp {
+                        at,
+                        copies: caught_up,
+                    });
+                }
             }),
             Err(e) => update_status(home, |s| {
                 s.mirror_failure = Some(BackupFailure {
@@ -222,11 +294,13 @@ pub(crate) fn mirror_backup(
             path: Some(path.to_string_lossy().into_owned()),
             error: None,
             disk_full: false,
+            caught_up,
         },
         Err(e) => MirrorCopy {
             path: None,
             error: Some(e.message),
             disk_full: e.disk_full,
+            caught_up: 0,
         },
     })
 }
@@ -259,6 +333,7 @@ pub(crate) fn status(
         copies,
         disk_full: file.mirror_failure.is_some() && file.mirror_disk_full,
         last_failure: file.mirror_failure,
+        last_catch_up: file.mirror_catch_up,
     }))
 }
 

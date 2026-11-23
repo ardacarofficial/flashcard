@@ -776,3 +776,60 @@ fn a_locked_app_answers_nothing_but_ping() {
         .unwrap();
     assert_eq!(decks().status, 200);
 }
+
+/// v1.4.1: on `/v1/*` a body that ends before its `Content-Length` is malformed (`400`), as
+/// on the Subtitle path (`422`), never "too large"; a client that announces a body and then
+/// stalls gets `408` after the body timeout and the connection is closed (it cannot hold a
+/// connection forever).
+#[test]
+fn truncated_bodies_are_malformed_and_stalled_bodies_time_out() {
+    use std::net::Shutdown;
+    use std::time::{Duration, Instant};
+    let fx = Fx::new();
+    let server = Server::start_with_body_timeout(
+        fx.app.clone(),
+        ServerConfig::localhost(0),
+        Duration::from_millis(400),
+    )
+    .unwrap();
+    let addr = server.local_addr();
+    let head = |extra: &str| {
+        format!(
+            "POST /v1/pair HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nX-Flashcard-Client: test\r\n\
+             Content-Type: application/json\r\nContent-Length: 100\r\n{extra}\r\n{{\"client_na",
+            addr.port()
+        )
+    };
+    let read_reply = |s: &mut TcpStream| {
+        let mut raw = Vec::new();
+        s.read_to_end(&mut raw).unwrap();
+        String::from_utf8_lossy(&raw).to_string()
+    };
+    // Truncated: 10 of 100 bytes, then the client's side is closed.
+    let mut s = TcpStream::connect(addr).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+    s.write_all(head("Connection: close\r\n").as_bytes())
+        .unwrap();
+    s.shutdown(Shutdown::Write).unwrap();
+    let text = read_reply(&mut s);
+    assert!(text.starts_with("HTTP/1.1 400"), "{text}");
+    assert!(text.contains("VALIDATION_INVALID_PARAMS"), "{text}");
+    assert!(!text.contains("PAYLOAD_TOO_LARGE"), "{text}");
+    // Stalled: 10 of 100 bytes and the socket stays open (keep-alive). The server answers
+    // `408` and closes; `read_to_end` returning at all proves the close.
+    let mut s = TcpStream::connect(addr).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+    let started = Instant::now();
+    s.write_all(head("").as_bytes()).unwrap();
+    let text = read_reply(&mut s);
+    let took = started.elapsed();
+    assert!(text.starts_with("HTTP/1.1 408"), "{text}");
+    assert!(text.contains("body_timeout"), "{text}");
+    assert!(took >= Duration::from_millis(350), "{took:?}");
+    assert!(took < Duration::from_secs(15), "{took:?}");
+    // Nothing was paired by either request; the server still answers.
+    let r = send(addr, "GET", "/v1/ping", &[], None);
+    assert_eq!(r.status, 200);
+    drop(s);
+    server.stop();
+}

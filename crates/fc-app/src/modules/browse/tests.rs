@@ -912,3 +912,83 @@ pub(super) fn module_can_be_disabled(f: Factory) {
     let browse = modules.iter().find(|m| m.id == "browse").unwrap();
     assert!(!browse.enabled && browse.ui.is_empty());
 }
+
+/// v1.4.1 (I1): media rows nothing uses any more are cleaned by the trash purge — but never
+/// while undo or redo can still reach them — and their files go at the next start.
+#[test]
+fn purging_the_trash_removes_media_nothing_can_reach_any_more() {
+    use base64::Engine;
+    use fc_api::v1::oplog::Actor;
+    use serde_json::json;
+    let store = Arc::new(TempSqlite::new());
+    let db = store.path();
+    let t = TestApp::new(store.clone());
+    let call = |t: &TestApp, m: &str, p: serde_json::Value| {
+        t.app
+            .invoke(&format!("v1.{m}"), p.clone(), &Actor::User)
+            .unwrap_or_else(|e| panic!("{m} {p}: {e:?}"))
+    };
+    let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+    png.extend_from_slice(b"i1-media-cleanup");
+    let m = call(
+        &t,
+        "media.add",
+        json!({"name": "a.png",
+               "data_base64": base64::engine::general_purpose::STANDARD.encode(&png)}),
+    );
+    let hash = m["hash"].as_str().unwrap().to_owned();
+    let deck = call(
+        &t,
+        "decks.create",
+        json!({"path": "M", "parent_id": null, "description": null, "icon": null,
+               "color": null}),
+    )["id"]
+        .clone();
+    let note = call(
+        &t,
+        "notes.create",
+        json!({"notetype_id": builtin::CLASSIC_ID, "deck_id": deck,
+               "fields": {"front": format!("![a](media:{hash})"), "back": "x"},
+               "tags": [], "attributes": [], "allow_duplicate": true}),
+    )["id"]
+        .clone();
+    // Undoing the note (as undoing an import does) trashes it; the file is still in use.
+    call(&t, "notes.delete", json!({"ids": [note]}));
+    let row = |t: &TestApp| t.store.read().unwrap().get_media(&hash).unwrap();
+    let file = || {
+        db.parent()
+            .unwrap()
+            .join("media")
+            .join(&hash[..2])
+            .join(&hash)
+    };
+    let purge = |t: &TestApp| call(t, "browse.purge_trash", json!({"older_than_days": 0}));
+    // 1st purge: the note goes for good, but the `media.add` entry is still undoable.
+    purge(&t);
+    assert!(row(&t).is_some(), "undo could still reach it");
+    // An unused file no undo can reach and a file still being added are told apart: a
+    // second `media.add` (the editor before saving) stays through the next purge.
+    let mut other = b"\x89PNG\r\n\x1a\n".to_vec();
+    other.extend_from_slice(b"still-in-the-editor");
+    let pending = call(
+        &t,
+        "media.add",
+        json!({"name": "b.png",
+               "data_base64": base64::engine::general_purpose::STANDARD.encode(&other)}),
+    )["hash"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // 2nd purge: the barrier of the 1st one hides the old entries; the unused row goes.
+    purge(&t);
+    assert!(row(&t).is_none(), "an unused media row was kept");
+    let pending_row = t.store.read().unwrap().get_media(&pending).unwrap();
+    assert!(pending_row.is_some(), "a reachable media.add was removed");
+    assert!(file().exists(), "files go at the next start");
+    // Next start: the orphan sweep takes the file; the reachable one keeps its bytes.
+    drop(t);
+    let t = TestApp::new(store);
+    assert!(!file().exists(), "the unused file was not removed at start");
+    let still = call(&t, "media.read", json!({"hash": pending}));
+    assert!(still["data_base64"].as_str().is_some_and(|s| !s.is_empty()));
+}

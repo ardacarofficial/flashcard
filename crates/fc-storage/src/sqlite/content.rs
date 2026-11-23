@@ -6,12 +6,12 @@
 
 use super::{all, exec, id, json_list, one, ts};
 use super::{Mode, SqliteTx, WriteMode};
-use crate::error::{StorageError, StorageResult};
+use crate::error::{in_table, StorageError, StorageResult};
 use crate::media::media_file_path;
 use crate::repo::{ContentRead, ContentWrite, FieldSample, FlagDef, MediaRecord, NoteRefs};
 use fc_core::content::refs::is_media_hash;
 use fc_core::rng::{Rng, SplitMix64};
-use fc_core::{NoteId, NoteTypeId};
+use fc_core::{NoteId, NoteTypeId, Timestamp};
 use rusqlite::{params, Connection, Row};
 use std::path::{Path, PathBuf};
 
@@ -310,6 +310,59 @@ impl ContentWrite for SqliteTx<'_, WriteMode> {
             [hash],
         )?;
         Ok(n > 0)
+    }
+
+    fn delete_unused_media(&mut self, created_before: Timestamp) -> StorageResult<Vec<String>> {
+        // Entries before the newest history barrier can be neither undone nor redone.
+        let barrier: i64 = self
+            .conn()
+            .query_row(
+                "SELECT coalesce(max(rowid), 0) FROM oplog WHERE command = ?1",
+                [crate::repo::OPLOG_BARRIER_COMMAND],
+                |r| r.get(0),
+            )
+            .map_err(|e| in_table(e, M))?;
+        let named = |table_cols: &[(&str, &[&str])]| -> String {
+            table_cols
+                .iter()
+                .map(|(t, cols)| {
+                    let any = cols
+                        .iter()
+                        .map(|c| format!("instr(x.{c}, media.hash) > 0"))
+                        .collect::<Vec<_>>()
+                        .join(" OR ");
+                    format!("AND NOT EXISTS (SELECT 1 FROM {t} x WHERE {any})\n")
+                })
+                .collect()
+        };
+        let text_refs = named(&[
+            ("notetypes", &["templates", "css"]),
+            ("inbox", &["payload"]),
+            ("drafts", &["payload"]),
+            ("reading_items", &["body", "cues", "media_path"]),
+        ]);
+        let sql = format!(
+            "DELETE FROM media
+              WHERE created_at < ?1
+                AND NOT EXISTS (SELECT 1 FROM note_media nm WHERE nm.hash = media.hash)
+                AND NOT EXISTS (SELECT 1 FROM subtitle_uploads u WHERE u.media_hash = media.hash)
+                AND NOT EXISTS (SELECT 1 FROM subtitle_captures c
+                                 WHERE c.screenshot_hash = media.hash OR c.audio_hash = media.hash)
+                AND NOT EXISTS (SELECT 1 FROM media_origins o
+                                 WHERE o.hash = media.hash AND o.origin <> 'user')
+                {text_refs}
+                AND NOT EXISTS (SELECT 1 FROM oplog x WHERE x.rowid > ?2
+                                   AND (instr(x.payload, media.hash) > 0
+                                        OR instr(x.inverse, media.hash) > 0))
+              RETURNING hash"
+        );
+        all(
+            self.conn(),
+            M,
+            &sql,
+            params![created_before.0, barrier],
+            |r| r.get(0),
+        )
     }
 
     fn delete_orphan_media_files(&mut self) -> StorageResult<u64> {

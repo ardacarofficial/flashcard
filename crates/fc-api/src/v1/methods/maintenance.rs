@@ -14,6 +14,11 @@ methods! {
     MaintenanceRecoveryDismiss = "maintenance.recovery.dismiss", Command, "maintenance", "maintenance:write", Public, undo: false, Empty => RecoveryDto;
     /// SQLite integrity check of the collection (+ foreign keys).
     MaintenanceIntegrityCheck = "maintenance.integrity.check", Query, "maintenance", "maintenance:read", Public, undo: false, CheckIntegrity => IntegrityDto;
+    /// The collection opened but its integrity check failed (v1.4.1): records the user's
+    /// rescue choice and asks the desktop shell to restart; the rescue (`backup` = newest
+    /// verified backup, `readable` = keep what is readable; the damaged files are moved
+    /// aside, never deleted) runs before the collection opens again. Not an undo step.
+    MaintenanceRescueRequest = "maintenance.rescue.request", Command, "maintenance", "maintenance:write", Public, undo: false, RequestRescue => RescueRequestDto;
     /// Writes the logs, crash reports and a system summary — redacted — into a `.zip` the
     /// user chose. Nothing is sent anywhere. Writes a file: not an undo step.
     MaintenanceLogsExport = "maintenance.logs.export", Command, "maintenance", "maintenance:write", Public, undo: false, ExportLogs => LogExportDto;
