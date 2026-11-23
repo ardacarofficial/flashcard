@@ -20,7 +20,11 @@ fn call(t: &TestApp, method: &str, params: Value) -> Value {
 }
 
 fn set_module(t: &TestApp, id: &str, enabled: bool) {
-    call(t, "modules.set_enabled", json!({ "id": id, "enabled": enabled }));
+    call(
+        t,
+        "modules.set_enabled",
+        json!({ "id": id, "enabled": enabled }),
+    );
 }
 
 fn capture_json(n: u32, lemma: &str) -> Value {
@@ -31,7 +35,7 @@ fn capture_json(n: u32, lemma: &str) -> Value {
       "lang": { "target": "en", "native": "tr" },
       "term": { "surface": lemma, "lemma": lemma, "pos": "noun" },
       "definition": { "text": format!("anlam {n}"), "source": "dict" },
-      "context": { "sentence": format!("I need my {lemma} now."), "term_offset": [10, 10 + lemma.len()] },
+      "context": { "sentence": format!("I need my {lemma} now."), "translation": "Şimdi lazım.", "term_offset": [10, 10 + lemma.len()] },
       "source": { "type": "video", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
                   "title": "Film", "site": "youtube", "video_id": "dQw4w9WgXcQ",
                   "t_start_ms": 1000, "t_end_ms": 2500 },
@@ -45,7 +49,12 @@ fn capture_json(n: u32, lemma: &str) -> Value {
 
 /// Studies one new card of a fresh deck and reads the answer back.
 fn study_works(t: &TestApp, module: &str) {
-    let deck = call(t, "decks.create", json!({ "path": format!("Deste {module}") }))["id"].clone();
+    let deck = call(
+        t,
+        "decks.create",
+        json!({ "path": format!("Deste {module}") }),
+    )["id"]
+        .clone();
     let classic = fc_core::content::builtin::ALL
         .iter()
         .find(|b| b.key == "classic")
@@ -56,7 +65,11 @@ fn study_works(t: &TestApp, module: &str) {
         "notes.create",
         json!({ "notetype_id": classic, "deck_id": deck, "fields": { "front": "apple", "back": "elma" } }),
     );
-    let s = call(t, "study.start", json!({ "kind": "normal", "deck_id": deck }));
+    let s = call(
+        t,
+        "study.start",
+        json!({ "kind": "normal", "deck_id": deck }),
+    );
     let card = s["current"]["card_id"].clone();
     assert!(card.is_string(), "{module} off: no card to study: {s}");
     call(
@@ -65,7 +78,12 @@ fn study_works(t: &TestApp, module: &str) {
         json!({ "session_id": s["id"], "card_id": card, "rating": "good", "duration_ms": 3000 }),
     );
     let card_id: fc_core::CardId = serde_json::from_value(card).unwrap();
-    let logs = t.store.read().unwrap().review_logs_for_cards(&[card_id]).unwrap();
+    let logs = t
+        .store
+        .read()
+        .unwrap()
+        .review_logs_for_cards(&[card_id])
+        .unwrap();
     assert_eq!(logs.len(), 1, "{module} off: the answer was not stored");
 }
 
@@ -119,7 +137,16 @@ fn every_module_can_be_switched_off_and_the_app_still_starts_studies_and_capture
         assert_eq!(row["enabled"], json!(false), "{module}: {row}");
         call(&t, "decks.tree", json!({}));
         call(&t, "settings.schema", json!({}));
-        study_works(&t, module);
+        if module == "study" {
+            // Studying is that module: it refuses plainly, nothing else breaks.
+            let e = t
+                .app
+                .invoke("v1.study.start", json!({ "kind": "normal" }), &Actor::User)
+                .unwrap_err();
+            assert_eq!(e.code, fc_api::ErrorCode::ConflictModuleDisabled);
+        } else {
+            study_works(&t, module);
+        }
         if module != subtitle::ID {
             capture_works(&t, module, n as u32 + 1);
         }

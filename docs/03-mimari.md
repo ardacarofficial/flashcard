@@ -111,6 +111,7 @@ Tüm kimlikler **UUIDv7** (zamana göre sıralanabilir). Tüm tablolarda `create
 | v1.4 Subtitle | `subtitle_capture_log` (karşılaşmalar + tanı), görünüm `subtitle_encounter_counts`, `note_origins` | Yakalama = karşılaşma (docs/06 §5.1, 1430/1460/1490) |
 | v1.4 medya kökeni | `media_origins` | `original`/`clip`/`tts`/`user` + TTS önbelleği (§13, 1420) |
 | v1.4 anlam ve cevaplar | `note_meanings`, `note_accepted_answers`, `leech_repairs` | Bağlamdaki anlam, kabul edilen cevaplar, zor kart onarımları (1450/1470) |
+| v1.4 yazılan cevaplar | `typed_answers` | Kart başına son 20 yazılı cevap, tekrarıyla; ayar `study.keep_typed_answers` (1421) |
 
 ### 4.1 Alan rolleri ve cevap alanı (v1.3)
 
@@ -331,7 +332,7 @@ Her arayüzün bir **kimliği**, **yetenek bildirimi** (capabilities) ve **ayar 
 ## 15. Migration'lar
 
 - Her şema değişikliği numaralı ve **geri dönüşsüz ama test edilmiş** bir migration'dır.
-- Numaralar sürüm başına ayrılmış aralıklardadır (`fc-storage` `migrate::RELEASE_RANGES`; aralık dışı migration testleri kırar): v0.1 `1`–`99`, v0.2 `100`–`199` … v1.0 `1000`–`1099` (izlere bölünmüş, docs/07 §5.1), v1.1 `1100`–`1199` (migration yok), v1.2 `1200`–`1299` (`1200_subtitle`), **v1.3 `1300`–`1399`** (`1300_vocabulary_roles` ve `1301_subtitle_word_front`: yalnız veri; 1301 yerleşik Altyazı kartının ön yüzünü yalnız kelimeye indirir, yalnızca şablon hâlâ gönderildiği gibiyse), **v1.4 `1400`–`1499`** (`1410_word_index`, iz A3'ün aralığı 1410–1429: kelime dizini, §4.2; `1420_media_origins`, iz W4: medya kökeni + TTS önbelleği, §13; `1440_word_data`, iz B2'nin aralığı 1440–1459: kelime verisi, §4.3). Dosyalar `crates/fc-storage/migrations/NNNN_ad.sql`; birleştikten sonra **asla düzenlenmez** (sağlama toplamı tutmazsa veritabanı açılmaz).
+- Numaralar sürüm başına ayrılmış aralıklardadır (`fc-storage` `migrate::RELEASE_RANGES`; aralık dışı migration testleri kırar): v0.1 `1`–`99`, v0.2 `100`–`199` … v1.0 `1000`–`1099` (izlere bölünmüş, docs/07 §5.1), v1.1 `1100`–`1199` (migration yok), v1.2 `1200`–`1299` (`1200_subtitle`), **v1.3 `1300`–`1399`** (`1300_vocabulary_roles` ve `1301_subtitle_word_front`: yalnız veri; 1301 yerleşik Altyazı kartının ön yüzünü yalnız kelimeye indirir, yalnızca şablon hâlâ gönderildiği gibiyse), **v1.4 `1400`–`1499`** (`1410_word_index`: kelime dizini, §4.2; `1420_media_origins`: medya kökeni + TTS önbelleği, §13; `1421_typed_answers`: yazılan cevaplar; `1430_subtitle_capture_log`: yakalama tanısı; `1440_word_data` + `1441_word_frequency_view`: kelime verisi, §4.3; `1450_meaning_in_context`: bağlamdaki anlam + kabul edilen cevaplar; `1460_language_queries`: not kökeni; `1470_leech_repairs`: zor kart onarımları, §4.4; `1490_subtitle_encounters`: karşılaşmalar, docs/06 §5.1). Dosyalar `crates/fc-storage/migrations/NNNN_ad.sql`; birleştikten sonra **asla düzenlenmez** (sağlama toplamı tutmazsa veritabanı açılmaz).
 - Migration öncesi veritabanının otomatik anlık kopyası alınır (sadece migration sırasında, periyodik yedek değil).
 - CI'da: her migration boş veritabanında ve önceki sürümlerden üretilmiş örnek veritabanlarında çalıştırılır.
 - Veri formatları (deste paketi, yedek, eklenti manifesti) de sürüm numarası taşır.

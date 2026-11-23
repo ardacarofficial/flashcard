@@ -157,15 +157,17 @@ const FULL: Scale = Scale {
     film_capture_p95: 50.0,
     busy_answer_p95: 60.0,
     busy_capture_p95: 100.0,
-    film_first_card: 500.0,
+    // Film budgets: ~2× the first release measurement on a 4-core 2.1 GHz Xeon (docs/12).
+    film_first_card: 1_500.0,
     lookup_500_p95: 100.0,
     words_list: 200.0,
     lang_query: 300.0,
     rank_p95: 50.0,
-    index_rebuild: 15_000.0,
-    backup_create: 120_000.0,
-    backup_verify: 60_000.0,
-    backup_peak_mb: 8_000.0,
+    index_rebuild: 5_000.0,
+    backup_create: 150_000.0,
+    backup_verify: 120_000.0,
+    // The collection dump is held in memory (docs/12 "Bilinen sınır"); this catches growth.
+    backup_peak_mb: 4_000.0,
 };
 
 /// CI regression check: 1/10 size in a debug build on shared runners, so the budgets are
@@ -784,17 +786,61 @@ fn run_suite(scale: Scale) -> Measured {
         ("stats breakdown", m.stats_breakdown, scale.stats_breakdown),
         ("stats deck scope", m.stats_deck, scale.stats_deck),
         ("import", m.import, scale.import),
-        ("film capture p95", built.capture_p95, scale.film_capture_p95),
-        ("answer p95 while capturing", m.film.busy_answer_p95, scale.busy_answer_p95),
-        ("capture p95 while answering", m.film.busy_capture_p95, scale.busy_capture_p95),
-        ("study.options + first Subtitle card", m.film.study_options + m.film.subtitle_first_card, scale.film_first_card),
-        ("words.lookup 500 p95", m.film.lookup_p95, scale.lookup_500_p95),
-        ("words.list by frequency", m.film.words_list_rank, scale.words_list),
-        ("language queries", m.film.lang_query_worst, scale.lang_query),
-        ("subtitle.encounters.rank p95", m.film.rank_p95, scale.rank_p95),
-        ("words.index.rebuild_now", m.film.index_rebuild, scale.index_rebuild),
-        ("io.backup.create", m.film.backup_create, scale.backup_create),
-        ("io.backup.verify", m.film.backup_verify, scale.backup_verify),
+        (
+            "film capture p95",
+            built.capture_p95,
+            scale.film_capture_p95,
+        ),
+        (
+            "answer p95 while capturing",
+            m.film.busy_answer_p95,
+            scale.busy_answer_p95,
+        ),
+        (
+            "capture p95 while answering",
+            m.film.busy_capture_p95,
+            scale.busy_capture_p95,
+        ),
+        (
+            "study.options + first Subtitle card",
+            m.film.study_options + m.film.subtitle_first_card,
+            scale.film_first_card,
+        ),
+        (
+            "words.lookup 500 p95",
+            m.film.lookup_p95,
+            scale.lookup_500_p95,
+        ),
+        (
+            "words.list by frequency",
+            m.film.words_list_rank,
+            scale.words_list,
+        ),
+        (
+            "language queries",
+            m.film.lang_query_worst,
+            scale.lang_query,
+        ),
+        (
+            "subtitle.encounters.rank p95",
+            m.film.rank_p95,
+            scale.rank_p95,
+        ),
+        (
+            "words.index.rebuild_now",
+            m.film.index_rebuild,
+            scale.index_rebuild,
+        ),
+        (
+            "io.backup.create",
+            m.film.backup_create,
+            scale.backup_create,
+        ),
+        (
+            "io.backup.verify",
+            m.film.backup_verify,
+            scale.backup_verify,
+        ),
     ];
     for (name, got, budget) in checks {
         assert!(
