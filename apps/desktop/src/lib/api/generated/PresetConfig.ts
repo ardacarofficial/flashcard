@@ -32,8 +32,10 @@ desired_retention: number,
  */
 maximum_interval_days: number, 
 /**
- * FSRS parameters; empty = the algorithm's defaults. Otherwise 17 (FSRS-4.5),
- * 19 (FSRS-5) or 21 (FSRS-6) finite numbers, as produced by the optimizer (v0.6).
+ * FSRS parameters; empty = the algorithm's defaults. Otherwise 21 (FSRS-6) finite
+ * numbers within [`FSRS6_WEIGHT_BOUNDS`], as produced by the optimizer (v0.6). 17
+ * (FSRS-4.5) and 19 (FSRS-5) values are accepted on input and upgraded to FSRS-6 as they
+ * are read ([`upgrade_fsrs_weights`], v1.4.1): every reader sees 21 or none.
  */
 fsrs_weights: Array<number>, 
 /**

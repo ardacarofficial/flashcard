@@ -16,6 +16,8 @@
 //!   automatic, `io.backup.create`, `io.backup.verify`) and the last failure. It lives beside
 //!   the files it describes, not in the collection, so a restore does not roll it back.
 //!   `io.backup.status` reads it together with the folder.
+//! * Mirror (v1.4.1): `io.backup_mirror_dir` — every verified backup is also copied to a
+//!   second folder and re-read there ([`super::backup_mirror`]).
 
 use super::backup_file::{write_backup_file, Check, Written};
 use super::ID;
@@ -59,9 +61,10 @@ const TICK_EVERY_MS: i64 = 10 * 60 * 1000;
 const PREFIX: &str = "auto-";
 const EXT: &str = ".fcbackup";
 
-/// The two settings.
+/// The backup settings.
 pub fn settings() -> Vec<SettingDef> {
     vec![
+        super::backup_mirror::setting(),
         SettingDef {
             key: SCHEDULE_KEY.to_owned(),
             kind: SettingKind::Choice {
@@ -99,7 +102,7 @@ fn schedule(reads: &dyn fc_storage::Reads) -> AppResult<AutoBackupSchedule> {
     )
 }
 
-fn keep(reads: &dyn fc_storage::Reads) -> AppResult<u32> {
+pub(crate) fn keep(reads: &dyn fc_storage::Reads) -> AppResult<u32> {
     let stored = crate::settings::resolve_stored(reads, &SettingScope::App, KEEP_KEY)?;
     Ok(stored
         .and_then(|(v, _)| v.as_u64())
@@ -130,9 +133,19 @@ pub(crate) fn auto_dir(data_dir: &Path) -> PathBuf {
 
 /// `backups/status.json`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct StatusFile {
-    last_verified: Option<VerifiedBackup>,
-    last_failure: Option<BackupFailure>,
+pub(crate) struct StatusFile {
+    pub last_verified: Option<VerifiedBackup>,
+    pub last_failure: Option<BackupFailure>,
+    /// The last copy to the mirror folder that failed (cleared by the next good one).
+    #[serde(default)]
+    pub mirror_failure: Option<BackupFailure>,
+    /// Whether that failure was a full disk.
+    #[serde(default)]
+    pub mirror_disk_full: bool,
+    /// The mirror folder last copied to: kept beside the backups (not only in the
+    /// collection's settings) so the rescue of a damaged collection finds it too.
+    #[serde(default)]
+    pub mirror_dir: Option<String>,
 }
 
 fn status_path(data_dir: &Path) -> PathBuf {
@@ -140,14 +153,14 @@ fn status_path(data_dir: &Path) -> PathBuf {
 }
 
 /// Missing or unreadable: nothing known.
-fn load_status(data_dir: &Path) -> StatusFile {
+pub(crate) fn load_status(data_dir: &Path) -> StatusFile {
     std::fs::read(status_path(data_dir))
         .ok()
         .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default()
 }
 
-fn update_status(data_dir: &Path, f: impl FnOnce(&mut StatusFile)) {
+pub(crate) fn update_status(data_dir: &Path, f: impl FnOnce(&mut StatusFile)) {
     let mut s = load_status(data_dir);
     f(&mut s);
     let path = status_path(data_dir);
@@ -162,6 +175,11 @@ fn update_status(data_dir: &Path, f: impl FnOnce(&mut StatusFile)) {
 /// collection looks there too, v1.4.1).
 pub(crate) fn last_verified_path(data_dir: &Path) -> Option<String> {
     load_status(data_dir).last_verified.map(|v| v.path)
+}
+
+/// The mirror folder recorded in `status.json` (the rescue looks for backups there too).
+pub(crate) fn last_mirror_dir(data_dir: &Path) -> Option<PathBuf> {
+    load_status(data_dir).mirror_dir.map(PathBuf::from)
 }
 
 /// Records a verified backup as the last one (best effort; no folder: nothing to record).
@@ -194,6 +212,7 @@ pub(crate) fn backup_report(path: &Path, w: &Written) -> BackupReport {
         media: u32::try_from(w.manifest.media).unwrap_or(u32::MAX),
         verified: w.verified.as_ref().is_some_and(|r| r.ok),
         missing_media: w.manifest.missing_media.clone(),
+        mirror: None,
     }
 }
 
@@ -218,6 +237,11 @@ pub(crate) fn verified_backup(
 
 /// Verified automatic copies in `dir`, newest first: `(taken at, path)`.
 fn list_auto(dir: &Path) -> Vec<(i64, PathBuf)> {
+    list_copies(dir, PREFIX)
+}
+
+/// Verified copies named `<prefix><millis>[-n].fcbackup` in `dir`, newest first.
+pub(crate) fn list_copies(dir: &Path, prefix: &str) -> Vec<(i64, PathBuf)> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -225,7 +249,7 @@ fn list_auto(dir: &Path) -> Vec<(i64, PathBuf)> {
         .filter_map(Result::ok)
         .filter_map(|e| {
             let name = e.file_name().into_string().ok()?;
-            let stem = name.strip_prefix(PREFIX)?.strip_suffix(EXT)?;
+            let stem = name.strip_prefix(prefix)?.strip_suffix(EXT)?;
             let ms = stem.split('-').next()?.parse::<i64>().ok()?;
             Some((ms, e.path()))
         })
@@ -236,10 +260,15 @@ fn list_auto(dir: &Path) -> Vec<(i64, PathBuf)> {
 
 /// A name for a copy taken at `now` that no existing file has.
 fn fresh_name(dir: &Path, now: Timestamp) -> PathBuf {
-    let mut path = dir.join(format!("{PREFIX}{}{EXT}", now.0));
+    fresh_copy_name(dir, PREFIX, now)
+}
+
+/// `<prefix><millis>[-n].fcbackup` in `dir` that no existing file (or `.part`) has.
+pub(crate) fn fresh_copy_name(dir: &Path, prefix: &str, now: Timestamp) -> PathBuf {
+    let mut path = dir.join(format!("{prefix}{}{EXT}", now.0));
     let mut n = 1;
     while path.exists() || super::backup_file::part_path(&path).exists() {
-        path = dir.join(format!("{PREFIX}{}-{n}{EXT}", now.0));
+        path = dir.join(format!("{prefix}{}-{n}{EXT}", now.0));
         n += 1;
     }
     path
@@ -259,13 +288,18 @@ fn remove_stale_parts(dir: &Path) {
 
 /// Keeps the newest `keep` copies (never fewer than one).
 fn rotate(dir: &Path, keep: u32) {
+    rotate_copies(dir, PREFIX, keep);
+}
+
+/// Keeps the newest `keep` copies named `<prefix>…` in `dir` (never fewer than one).
+pub(crate) fn rotate_copies(dir: &Path, prefix: &str, keep: u32) {
     let keep = usize::try_from(keep.max(1)).unwrap_or(usize::MAX);
-    for (_, path) in list_auto(dir).into_iter().skip(keep) {
+    for (_, path) in list_copies(dir, prefix).into_iter().skip(keep) {
         let _ = std::fs::remove_file(path);
     }
 }
 
-fn copy_info(path: &Path, taken: i64) -> VerifiedBackup {
+pub(crate) fn copy_info(path: &Path, taken: i64) -> VerifiedBackup {
     let bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     let manifest = super::backup_file::open_backup(path)
         .ok()
@@ -329,6 +363,10 @@ pub(super) fn status(_: Empty, app: &crate::App, _actor: &Actor) -> AppResult<Ba
             next_due: None,
             last_failure: None,
             stale: None,
+            mirror: {
+                let tx = app.store().read()?;
+                super::backup_mirror::status(&*tx, None)?
+            },
         });
     };
     let dir = auto_dir(data_dir);
@@ -345,6 +383,10 @@ pub(super) fn status(_: Empty, app: &crate::App, _actor: &Actor) -> AppResult<Ba
     };
     let now = app.now();
     let stale = staleness(sched, last_verified.as_ref(), file.last_failure.is_some(), now);
+    let mirror = {
+        let tx = app.store().read()?;
+        super::backup_mirror::status(&*tx, Some(data_dir))?
+    };
     Ok(BackupStatus {
         schedule: sched,
         keep,
@@ -354,6 +396,7 @@ pub(super) fn status(_: Empty, app: &crate::App, _actor: &Actor) -> AppResult<Ba
         next_due: next_due(sched, &dir, now),
         last_failure: file.last_failure,
         stale,
+        mirror,
     })
 }
 
@@ -474,7 +517,9 @@ impl JobHandler for AutoBackupJob {
             verified_backup(&path, &written, ctx.now(), true),
         );
         rotate(&dir, keep);
-        serde_json::to_value(backup_report(&path, &written))
+        let mut report = backup_report(&path, &written);
+        report.mirror = super::backup_mirror::mirror_backup(ctx, Some(&data_dir), &path, true);
+        serde_json::to_value(report)
             .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))
     }
 }

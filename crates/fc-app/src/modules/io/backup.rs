@@ -230,7 +230,10 @@ impl JobHandler for BackupJob {
             ctx.data_dir(),
             verified_backup(&path, &written, ctx.now(), false),
         );
-        serde_json::to_value(backup_report(&path, &written)).map_err(internal)
+        let mut report = backup_report(&path, &written);
+        report.mirror =
+            super::backup_mirror::mirror_backup(ctx, ctx.data_dir(), &path, false);
+        serde_json::to_value(report).map_err(internal)
     }
 }
 

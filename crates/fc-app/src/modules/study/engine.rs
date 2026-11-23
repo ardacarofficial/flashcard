@@ -877,3 +877,7 @@ pub(super) fn summary_dto(s: &Session) -> SessionSummary {
         ended_at: s.record.ended_at,
     }
 }
+
+#[cfg(test)]
+#[path = "preset_seam_tests.rs"]
+mod preset_seam_tests;

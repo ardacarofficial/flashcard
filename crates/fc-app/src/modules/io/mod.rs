@@ -26,9 +26,12 @@ mod apply;
 mod backup;
 mod backup_auto;
 mod backup_file;
+mod backup_mirror;
 /// What the maintenance rescue of a damaged collection (v1.4.1) uses of the backup code.
 pub(crate) mod rescue_support {
-    pub(crate) use super::backup_auto::{auto_dir, backups_dir, last_verified_path};
+    pub(crate) use super::backup_auto::{
+        auto_dir, backups_dir, last_mirror_dir, last_verified_path,
+    };
     pub(crate) use super::backup_file::{open_backup, restore_into, verify_file};
     pub(crate) use super::disk_full;
 }

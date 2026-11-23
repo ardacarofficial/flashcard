@@ -141,7 +141,7 @@ export default {
       'io.export.start': (req) =>
         finished('io.export', { path: req.path, bytes: 0, notes: notes.length, cards: 0, media: 0 }),
       'io.backup.create': (req) =>
-        finished('io.backup', { path: req.path, bytes: 0, notes: notes.length, cards: 0, media: 0 }),
+        finished('io.backup', { path: req.path, bytes: 0, notes: notes.length, cards: 0, media: 0, mirror: null }),
       'io.backup.inspect': () => ({
         created_at: now(),
         counts: { notes: notes.length },

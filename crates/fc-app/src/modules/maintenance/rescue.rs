@@ -9,7 +9,8 @@
 //! * [`RescueMode::Backup`]: the newest backup that **verifies now** (restored into a scratch
 //!   profile and read back: `io.backup.verify`'s check) among the automatic copies
 //!   (`backups/auto/`), the other backups in `backups/` (safety copies of restores) and the
-//!   last verified backup recorded in `backups/status.json` (wherever the user saved it);
+//!   last verified backup recorded in `backups/status.json` (wherever the user saved it) and
+//!   the copies in the mirror folder recorded there (`io.backup_mirror_dir`, v1.4.1);
 //!   restored at the collection's place and read back once more.
 //! * [`RescueMode::Readable`]: every row still readable from the damaged file is copied
 //!   (`fc_storage::rescue::salvage_into`), then the media files those rows name are copied
@@ -82,10 +83,15 @@ pub fn needs_rescue(db: &Path) -> bool {
 }
 
 /// Backups a [`RescueMode::Backup`] rescue may use, newest first: the automatic ones, the
-/// other `.fcbackup` files in `backups/`, and the last verified one recorded in `status.json`.
+/// other `.fcbackup` files in `backups/`, the copies in the mirror folder and the last
+/// verified one recorded in `status.json`.
 pub fn backup_candidates(data_dir: &Path) -> Vec<PathBuf> {
     let mut found: Vec<(i64, PathBuf)> = Vec::new();
-    for dir in [io::auto_dir(data_dir), io::backups_dir(data_dir)] {
+    let mirror = io::last_mirror_dir(data_dir);
+    for dir in [io::auto_dir(data_dir), io::backups_dir(data_dir)]
+        .into_iter()
+        .chain(mirror)
+    {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
         };

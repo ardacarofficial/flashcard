@@ -95,7 +95,9 @@
       "create_title": "Şimdi yedekle",
       "create_hint": "İstediğin yerde saklayabileceğin tek bir .fcbackup dosyası kaydeder.",
       "restore_title": "Yedekten geri yükle",
-      "restore_hint": "Mevcut koleksiyonun yerini alır; önce o yedeklenir."
+      "restore_hint": "Mevcut koleksiyonun yerini alır; önce o yedeklenir.",
+      "mirror_failed": "Yedek alındı ama ikinci yere kopyalanamadı: {error}",
+      "mirror_disk_full": "Yedek alındı ama ikinci yere kopyalanamadı: ikinci yedek diski dolu. Orada yer aç ya da başka bir klasör seç."
     },
     "print": {
       "layout": "Düzen",
@@ -118,6 +120,7 @@
       "converting": "Dönüştürülüyor…",
       "writing": "Kaydediliyor…",
       "collecting": "Toplanıyor…",
+      "mirror": "İkinci yere kopyalanıyor…",
       "writing_file": "Dosya yazılıyor…",
       "safety_backup": "Mevcut koleksiyonun yedeği alınıyor…"
     },
@@ -250,7 +253,16 @@
       "verify_hint": "Yedeği ayrı bir yerde geri açıp okur; kartlarına dokunmaz.",
       "verify": "Şimdi denetle",
       "verified_ok": "Yedek sağlam: tamamen geri açılabiliyor.",
-      "verified_bad": "Yedekte {problems} sorun bulundu. Yeni bir yedek al."
+      "verified_bad": "Yedekte {problems} sorun bulundu. Yeni bir yedek al.",
+      "mirror_ok": "İkinci yer: hazır · {count} kopya, son: {date}",
+      "mirror_ok_empty": "İkinci yer: hazır · henüz kopya yok",
+      "mirror_folder": "İkinci klasör: {folder}",
+      "mirror_missing": "İkinci yedek klasörü bulunamadı: {folder}. Disk takılı mı?",
+      "mirror_unwritable": "İkinci yedek klasörüne yazılamıyor: {folder}. İzinleri ve boş yeri kontrol et.",
+      "mirror_inside_collection": "İkinci yedek klasörü koleksiyon klasörünün içinde: {folder}. Başka bir diske koy.",
+      "mirror_failed": "İkinci yere son kopya alınamadı ({date}).",
+      "mirror_off": "İkinci bir yedek yeri yok; aşağıdan başka bir disk seçebilirsin.",
+      "mirror_disk_full": "İkinci yedek diski dolu ({date}): {folder}. Asıl yedeğin sağlam; orada yer aç ya da başka bir klasör seç."
     }
   },
   "errors": {
@@ -276,6 +288,10 @@
       "auto_backup_keep": {
         "label": "Saklanacak otomatik kopya",
         "description": "Yeni kopya denemeyi geçince eski kopyalar silinir. En yeni sağlam kopya hiçbir zaman silinmez."
+      },
+      "backup_mirror_dir": {
+        "label": "İkinci yedek klasörü",
+        "description": "Başka bir diskte ya da eşitlenen bir klasörde (OneDrive, Dropbox) olsun: her yedek oraya da kopyalanır ve denetlenir. Klasör önceden var olmalı. Kapatmak için boş bırak."
       }
     }
   }

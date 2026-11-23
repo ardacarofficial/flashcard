@@ -91,9 +91,10 @@ fn config_error(e: &PresetConfigError) -> AppError {
     )
 }
 
+/// Validated, with FSRS weights in their stored (FSRS-6) form.
 fn checked(config: PresetConfig) -> AppResult<PresetConfig> {
     config.validate().map_err(|e| config_error(&e))?;
-    Ok(config)
+    Ok(config.normalized())
 }
 
 /// Normalized name, unique among presets (case-insensitive) except `except`.
@@ -453,7 +454,11 @@ mod tests {
             reviews_per_day: 500,
             learning_steps_mins: vec![1, 10, 60],
             desired_retention: 0.95,
-            fsrs_weights: vec![0.4; 19],
+            // FSRS-5 weights (the reference defaults): stored upgraded to FSRS-6 (v1.4.1).
+            fsrs_weights: vec![
+                0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575,
+                0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655, 0.6621,
+            ],
             bury_siblings: true,
             new_order: NewCardOrder::Random,
             review_order: ReviewOrder::Retrievability,
@@ -464,6 +469,8 @@ mod tests {
             name: "Yoğun".into(),
             config: cfg.clone(),
         });
+        let cfg = cfg.normalized();
+        assert_eq!(cfg.fsrs_weights.len(), 21);
         assert_eq!((upd.name.as_str(), &upd.config), ("Yoğun", &cfg));
         let copy = t.ok::<PresetsClone>(ClonePreset {
             id: exam.id,

@@ -116,6 +116,7 @@ const MODE_SETTINGS = [
   // v1.4 (F1): the keys the Basic settings pages show, as fc-app declares them.
   def('io.auto_backup', choice('off', 'daily', 'weekly'), 'daily'),
   def('io.auto_backup_keep', int(1, 100), 7, true),
+  def('io.backup_mirror_dir', text(1024), ''),
   def('subtitle.default_deck', text(64), '', true),
   def('subtitle.share_known_words', { type: 'bool' }, false),
   def('subtitle.same_word', choice('add_example', 'always_new_card'), 'add_example'),

@@ -26,27 +26,26 @@ pub fn valid_decay(decay: f64) -> bool {
 /// Decay of FSRS-4.5 and FSRS-5 (17 / 19 weights): their curve has a fixed `d = 0.5`.
 pub const FSRS5_DECAY: f64 = 0.5;
 
-/// Decay of a preset's FSRS weights — the one rule every surface uses (v1.4):
-/// * 21 finite weights (FSRS-6): `w20` at the scheduler's `f32` precision (`fsrs-rs` computes
-///   in `f32`, and [`DEFAULT_DECAY`] is defined the same way);
+/// Decay of a preset's FSRS weights — the one rule every surface uses (v1.4), and the decay
+/// the scheduler runs with (v1.4.1: both go through
+/// [`crate::preset::schedulable_fsrs_weights`]):
+/// * 21 finite weights (FSRS-6): `w20` clamped into its range (0.1–0.8), at the scheduler's
+///   `f32` precision (`fsrs-rs` computes in `f32`, and [`DEFAULT_DECAY`] is defined the same
+///   way);
 /// * 17 / 19 finite weights (FSRS-4.5 / FSRS-5): [`FSRS5_DECAY`], the fixed decay of those
-///   model versions (not a guess: the curve they were optimised on);
+///   model versions, which their upgrade to FSRS-6 keeps;
 /// * anything else (empty = the default weights, invalid): [`DEFAULT_DECAY`].
 pub fn decay_of_weights(weights: &[f64]) -> f64 {
-    if !weights.iter().all(|w| w.is_finite()) {
-        return DEFAULT_DECAY;
-    }
-    match weights.len() {
-        21 => {
+    match crate::preset::schedulable_fsrs_weights(weights) {
+        Some(w) if w.len() == crate::preset::FSRS6_WEIGHT_COUNT => {
             #[allow(clippy::cast_possible_truncation)]
-            let d = f64::from(weights[20] as f32);
+            let d = f64::from(w[20] as f32);
             if valid_decay(d) {
                 d
             } else {
                 DEFAULT_DECAY
             }
         }
-        17 | 19 => FSRS5_DECAY,
         _ => DEFAULT_DECAY,
     }
 }
@@ -186,6 +185,9 @@ mod tests {
         assert_eq!(decay_of_weights(&[1.0; 17]), FSRS5_DECAY);
         assert_eq!(decay_of_weights(&[]), DEFAULT_DECAY);
         assert_eq!(decay_of_weights(&[1.0; 20]), DEFAULT_DECAY);
+        // Out of range: the scheduler's clamped value (v1.4.1).
+        w[20] = 0.01;
+        assert_eq!(decay_of_weights(&w), f64::from(0.1_f32));
         w[3] = f64::NAN;
         assert_eq!(decay_of_weights(&w), DEFAULT_DECAY);
         let c = Curve::new(0.3).unwrap();

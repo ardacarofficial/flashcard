@@ -662,3 +662,105 @@ fn next_morning_review_is_one_elapsed_day() {
     assert!(close(second.state.stability.unwrap(), long, 1e-4));
     assert!((long - same_day).abs() > 0.1);
 }
+
+// ------------------------------------------------------------------ FSRS-4.5 / FSRS-5 weights
+//
+// v1.4.1: a preset may hold 17 (FSRS-4.5) or 19 (FSRS-5) weights (older optimizer runs,
+// imported collections). They used to fail at study time ("FSRS-6 needs 21 weights"); now
+// they go through the one upgrade (`fc_core::preset::upgrade_fsrs_weights`), which must give
+// exactly the memory states and intervals of the reference implementation for those weights.
+
+/// The reference implementation's FSRS-4.5 / FSRS-5 defaults.
+const FSRS45_W: [f64; 17] = [
+    0.4872, 1.4003, 3.7145, 13.8206, 5.1618, 1.2298, 0.8975, 0.031, 1.6474, 0.1367, 1.0461, 2.1072,
+    0.0793, 0.3246, 1.587, 0.2272, 2.8755,
+];
+const FSRS5_W: [f64; 19] = [
+    0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575, 0.1192, 1.01925,
+    1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655, 0.6621,
+];
+
+#[test]
+fn old_fsrs_weights_schedule_like_the_reference() {
+    #[allow(clippy::cast_possible_truncation)]
+    for old in [FSRS45_W.to_vec(), FSRS5_W.to_vec()] {
+        let mut p = params(&[], &[]);
+        p.extra = serde_json::json!({ "weights": old });
+        let reference =
+            ::fsrs::FSRS::new(&old.iter().map(|x| *x as f32).collect::<Vec<_>>()).unwrap();
+        // A new card, then a review card 3 and 40 days after its last review.
+        let review = |s: f64, d: f64, days: i64| SchedulingState {
+            state: CardState::Review,
+            due: Some(T0),
+            stability: Some(s),
+            difficulty: Some(d),
+            reps: 3,
+            lapses: 0,
+            last_review: Some(Timestamp(T0.0 - days * DAY)),
+        };
+        let cases = [
+            (SchedulingState::NEW, None, 0u32),
+            (review(5.0, 6.0, 3), Some((5.0f32, 6.0f32)), 3),
+            (review(20.0, 4.0, 40), Some((20.0, 4.0)), 40),
+        ];
+        for (state, mem, days) in cases {
+            let next = reference
+                .next_states(
+                    mem.map(|(s, d)| ::fsrs::MemoryState {
+                        stability: s,
+                        difficulty: d,
+                        stability_fast: s,
+                    }),
+                    0.9,
+                    days,
+                )
+                .unwrap();
+            let want = [next.again, next.hard, next.good, next.easy];
+            let got = fsrs().preview(&state, T0, &p).unwrap();
+            for (g, w) in got.iter().zip(&want) {
+                let (s, d) = (g.state.stability.unwrap(), g.state.difficulty.unwrap());
+                assert!(
+                    close(s, f64::from(w.memory.stability), 1e-5),
+                    "{old:?}: {s} vs {w:?}"
+                );
+                assert!(
+                    close(d, f64::from(w.memory.difficulty), 1e-5),
+                    "{old:?}: {d} vs {w:?}"
+                );
+            }
+            // Review cards (no steps) get the reference interval, rounded to days.
+            if mem.is_some() {
+                let good = &got[2];
+                let want = f64::from(want[2].interval).round().max(1.0);
+                assert!(
+                    (f64::from(good.scheduled_days) - want).abs() <= 1.0,
+                    "{} vs {want}",
+                    good.scheduled_days
+                );
+            }
+        }
+        // The decay every surface uses is the curve these weights run with.
+        assert_eq!(decay(&p), Some(0.5));
+    }
+}
+
+/// FSRS-5 checked against its own published formulas (not the upgrade): the first review's
+/// stability is `w[G-1]`, its difficulty `w4 − e^{w5·(G−1)} + 1`, and the curve has decay 0.5
+/// (`R = (1 + 19/81 · t/S)^-0.5`). The upgrade keeps all three exactly.
+#[test]
+fn fsrs5_weights_keep_fsrs5_first_review_and_curve() {
+    let mut p = params(&[], &[]);
+    p.extra = serde_json::json!({ "weights": FSRS5_W });
+    let got = fsrs().preview(&SchedulingState::NEW, T0, &p).unwrap();
+    for (i, o) in got.iter().enumerate() {
+        let g = (i + 1) as f64;
+        let d0 = (FSRS5_W[4] - (FSRS5_W[5] * (g - 1.0)).exp() + 1.0).clamp(1.0, 10.0);
+        assert!(close(o.state.stability.unwrap(), FSRS5_W[i], 1e-5));
+        assert!(close(o.state.difficulty.unwrap(), d0, 1e-5));
+    }
+    let r = retrievability(10.0, 30.0, &p).unwrap();
+    assert!(
+        close(r, (1.0 + 19.0 / 81.0 * 3.0f64).powf(-0.5), 1e-9),
+        "{r}"
+    );
+}

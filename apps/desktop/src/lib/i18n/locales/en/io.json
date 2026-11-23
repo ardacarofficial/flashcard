@@ -95,7 +95,9 @@
       "create_title": "Back up now",
       "create_hint": "Saves one .fcbackup file you can keep anywhere.",
       "restore_title": "Restore from a backup",
-      "restore_hint": "Replaces the current collection; it is backed up first."
+      "restore_hint": "Replaces the current collection; it is backed up first.",
+      "mirror_failed": "Backed up, but the copy to the second location failed: {error}",
+      "mirror_disk_full": "The backup was made, but the second location's disk is full. Free some space there or pick another folder."
     },
     "print": {
       "layout": "Layout",
@@ -118,6 +120,7 @@
       "converting": "Converting…",
       "writing": "Saving…",
       "collecting": "Collecting…",
+      "mirror": "Copying to the second location…",
       "writing_file": "Writing the file…",
       "safety_backup": "Backing up the current collection…"
     },
@@ -250,7 +253,16 @@
       "verify_hint": "Opens the backup in a separate place and reads it back; your cards are not touched.",
       "verify": "Check now",
       "verified_ok": "The backup is good: it opens completely.",
-      "verified_bad": "{problems} problems found in the backup. Make a new one."
+      "verified_bad": "{problems} problems found in the backup. Make a new one.",
+      "mirror_ok": "Second location: ready · {count, plural, one {# copy} other {# copies}}, last: {date}",
+      "mirror_ok_empty": "Second location: ready · no copy yet",
+      "mirror_folder": "Second folder: {folder}",
+      "mirror_missing": "The second backup folder was not found: {folder}. Is the drive connected?",
+      "mirror_unwritable": "Cannot write to the second backup folder: {folder}. Check permissions and free space.",
+      "mirror_inside_collection": "The second backup folder is inside the collection folder: {folder}. Put it on another drive.",
+      "mirror_failed": "The last copy to the second location failed ({date}).",
+      "mirror_off": "No second backup location; you can set another drive below.",
+      "mirror_disk_full": "The second backup disk is full ({date}): {folder}. Your main backup is fine; free some space there or pick another folder."
     }
   },
   "errors": {
@@ -276,6 +288,10 @@
       "auto_backup_keep": {
         "label": "Automatic copies to keep",
         "description": "Older checked copies are removed once a new one has passed its check. The newest good copy is never deleted."
+      },
+      "backup_mirror_dir": {
+        "label": "Second backup folder",
+        "description": "On another drive or in a synced folder (OneDrive, Dropbox): every backup is also copied there and checked. The folder must already exist. Leave empty to turn it off."
       }
     }
   }
