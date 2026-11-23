@@ -12,5 +12,9 @@
   "oplog.summary.flags.update": "Changed flag {flag}",
   "oplog.summary.cards.set_flag": "Flagged {count} card(s)",
   "oplog.summary.cards.set_flags": "Changed flags of {count} card(s)",
-  "oplog.summary.cards.set_user_note": "Edited card note: {text}"
+  "oplog.summary.cards.set_user_note": "Edited card note: {text}",
+  "oplog.summary.media.origin.record": "Recorded where a media file came from",
+  "oplog.summary.media.audio.fill": "Added sound to {count} cards",
+  "oplog.summary.media.audio.attach": "Added sound to a card",
+  "oplog.summary.media.audio.fill_rollback": "Undid an unfinished audio fill"
 }

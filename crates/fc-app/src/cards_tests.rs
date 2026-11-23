@@ -1172,6 +1172,8 @@ fn v03_internal_methods() {
             "cards.restore_generated",
             "cards.trash_generated",
             "media.forget",
+            // v1.4 W4: where a file came from (derived metadata, never in the oplog).
+            "media.origin.record",
             "media.reinstate",
             "notetypes.restore_version",
         ]

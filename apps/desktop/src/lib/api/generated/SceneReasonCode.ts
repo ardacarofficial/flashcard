@@ -3,4 +3,4 @@
 /**
  * Why a scene got its points.
  */
-export type SceneReasonCode = "target_present" | "target_missing" | "no_other_unknown" | "other_unknown" | "learning_words" | "names_ignored" | "cut_start" | "cut_end" | "dangling_dash" | "no_end_punctuation" | "two_speakers" | "too_short" | "too_long" | "good_length" | "has_audio" | "has_image" | "common_words" | "rare_words";
+export type SceneReasonCode = "target_present" | "target_missing" | "no_other_unknown" | "other_unknown" | "learning_words" | "names_ignored" | "cut_start" | "cut_end" | "dangling_dash" | "no_end_punctuation" | "two_speakers" | "too_short" | "too_long" | "good_length" | "has_audio" | "synthesized_audio" | "has_image" | "common_words" | "rare_words";

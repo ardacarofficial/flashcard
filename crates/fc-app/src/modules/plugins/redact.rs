@@ -143,7 +143,7 @@ pub(crate) fn exposure(name: &str) -> Exposure {
             Reads(NOTETYPES)
         }
         "cards.render" | "cards.preview" => Reads(CARDS_NOTES),
-        "media.add" | "media.get" | "media.list" | "media.read" => Reads(MEDIA),
+        "media.add" | "media.get" | "media.list" | "media.read" | "media.origins" => Reads(MEDIA),
         "jobs.list" | "jobs.get" => Reads(JOBS),
         "decks.tree" | "decks.list" | "decks.get" | "decks.create" | "decks.rename"
         | "decks.move" | "decks.update" | "decks.delete" | "decks.restore" | "presets.list"
@@ -237,6 +237,9 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         // Imports read any file or web page; clips run ffmpeg on a file.
         "reading.items.import" => Refused(FREE_PATHS),
         "reading.clips.extract" => Refused(PROGRAMS),
+        // v1.4 W4: a fill runs ffmpeg on a file and TTS over any scope.
+        "media.audio.fill" => Refused(PROGRAMS),
+        "media.audio.fill_preview" => Refused(UNBOUNDED),
         // v0.9: proposals are the user's to review; a plugin may propose and read them.
         "inbox.add" | "inbox.list" | "inbox.count" | "inbox.reject" => Reads(&["inbox"]),
         "inbox.accept" | "deep_links.open" => Refused("the user reviews the inbox"),

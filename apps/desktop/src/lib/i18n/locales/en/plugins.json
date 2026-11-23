@@ -10,6 +10,10 @@
     "tts": {
       "name": "Text to speech",
       "description": "Reads cards aloud through the installed voice providers."
+    },
+    "audio_fill": {
+      "name": "Missing audio",
+      "description": "Gives every card sound: the film's own line, else a cut from your local video file, else a voice reading the word."
     }
   },
   "settings": {
@@ -70,6 +74,12 @@
       "provider": {
         "label": "Voice provider",
         "description": "Empty = the first available one."
+      }
+    },
+    "audio_fill": {
+      "clip_offset_ms": {
+        "label": "Clip shift (ms)",
+        "description": "If your video file's timing differs from the one you watched, shift the cuts by this much (negative = earlier)."
       }
     }
   },
@@ -213,6 +223,9 @@
   "jobs": {
     "plugins": {
       "model_download": "Downloading a model"
+    },
+    "audio_fill": {
+      "fill": "Filling missing audio"
     }
   },
   "commands": {
@@ -249,6 +262,13 @@
       "providers": "Voice providers",
       "voices": "Voices",
       "synthesize": "Read text aloud"
+    },
+    "media": {
+      "origins": "Where the sound and picture came from",
+      "audio": {
+        "fill_preview": "Preview filling missing audio",
+        "fill": "Fill missing audio"
+      }
     }
   },
   "errors": {
@@ -271,6 +291,12 @@
     },
     "provider": {
       "plugin_failed": "A plugin failed ({kind})."
+    }
+  },
+  "audio_fill": {
+    "job": {
+      "planning": "Checking which cards have no sound…",
+      "filling": "Adding sound to the cards…"
     }
   }
 }

@@ -743,3 +743,70 @@ fn relative_days_follow_the_study_day() {
     let f = w.compile("reviewed:1").unwrap();
     assert!(yesterday_late.hits(&f) && this_morning.hits(&f));
 }
+
+/// v1.4 W4: `ses:`/`görsel:` select by the file's origin; `klip` is a cut from a local
+/// video (it used to alias `video`, which now means original or clip).
+#[test]
+fn media_values_select_by_origin() {
+    use crate::content::media::MediaOrigin;
+    let w = world();
+    let media = |kind, from| Filter::Pred(Pred::Media(kind, from));
+    for (q, expect) in [
+        ("ses:video", media(MediaKind::Audio, MediaFrom::Video)),
+        ("audio:subtitle", media(MediaKind::Audio, MediaFrom::Video)),
+        (
+            "ses:özgün",
+            media(MediaKind::Audio, MediaFrom::Origin(MediaOrigin::Original)),
+        ),
+        (
+            "ses:klip",
+            media(MediaKind::Audio, MediaFrom::Origin(MediaOrigin::Clip)),
+        ),
+        (
+            "audio:clip",
+            media(MediaKind::Audio, MediaFrom::Origin(MediaOrigin::Clip)),
+        ),
+        (
+            "ses:kullanıcı",
+            media(MediaKind::Audio, MediaFrom::Origin(MediaOrigin::User)),
+        ),
+        (
+            "görsel:dosya",
+            media(MediaKind::Image, MediaFrom::Origin(MediaOrigin::User)),
+        ),
+        (
+            "image:original",
+            media(MediaKind::Image, MediaFrom::Origin(MediaOrigin::Original)),
+        ),
+        // No note type speaks here: only synthesised files.
+        (
+            "ses:tts",
+            media(MediaKind::Audio, MediaFrom::Origin(MediaOrigin::Tts)),
+        ),
+    ] {
+        assert_eq!(w.compile(q).unwrap(), expect, "{q}");
+    }
+    assert!(w.compile("görsel:tts").is_err());
+
+    // The reference evaluator: a clip counts as "from the video", a TTS file does not.
+    let mut facts = crate::query::LangFacts::NONE;
+    facts.media = vec![(MediaKind::Audio, MediaOrigin::Clip)];
+    let s = sample(1, 2, "a");
+    let hit = |q: &str, f: &crate::query::LangFacts| {
+        matches(
+            &w.compile(q).unwrap(),
+            &CardFacts {
+                card: &s.card,
+                note: &s.note,
+                tag_ids: &s.tags,
+                attrs: &[],
+                search_text: &s.text,
+                lang: f,
+            },
+            NOW,
+        )
+    };
+    assert!(hit("ses:video", &facts) && hit("ses:klip", &facts) && !hit("ses:tts", &facts));
+    facts.media = vec![(MediaKind::Audio, MediaOrigin::Tts)];
+    assert!(!hit("ses:video", &facts) && hit("ses:tts", &facts) && hit("ses:var", &facts));
+}

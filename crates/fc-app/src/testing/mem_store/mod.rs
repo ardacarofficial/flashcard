@@ -188,5 +188,6 @@ domains! {
     word_data => WordDataState,
     capture_log => CaptureLogState,
     meanings => MeaningState,
+    media_origins => MediaOriginState,
     leech_repairs => LeechRepairState,
 }

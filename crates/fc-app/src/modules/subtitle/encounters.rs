@@ -98,7 +98,7 @@ fn ms_out(v: Option<i64>) -> Option<u64> {
 }
 
 /// Storage row → API row.
-pub(super) fn row_dto(r: SubtitleCaptureRecord) -> SubtitleCaptureRow {
+pub(crate) fn row_dto(r: SubtitleCaptureRecord) -> SubtitleCaptureRow {
     let f = r.facts;
     SubtitleCaptureRow {
         capture_id: r.capture_id,
@@ -126,6 +126,8 @@ pub(super) fn row_dto(r: SubtitleCaptureRecord) -> SubtitleCaptureRow {
             t_end_ms: ms_out(f.t_end_ms),
             screenshot_hash: f.screenshot_hash,
             audio_hash: f.audio_hash,
+            screenshot_origin: None,
+            audio_origin: None,
             example_fields: f.example_fields,
         },
         is_primary: r.is_primary,
@@ -248,13 +250,13 @@ fn card_of(reads: &dyn Reads, note: NoteId) -> AppResult<CardId> {
 }
 
 fn list_of(reads: &dyn Reads, note: NoteId) -> AppResult<SubtitleEncounterList> {
-    Ok(SubtitleEncounterList {
-        encounters: reads
-            .subtitle_encounters_of_note(note)?
-            .into_iter()
-            .map(row_dto)
-            .collect(),
-    })
+    let mut encounters: Vec<_> = reads
+        .subtitle_encounters_of_note(note)?
+        .into_iter()
+        .map(row_dto)
+        .collect();
+    crate::modules::audio_fill::with_origins(reads, &mut encounters)?;
+    Ok(SubtitleEncounterList { encounters })
 }
 
 /// Rewrites `rows` (existing ones only) without ever having two primaries of one note: all
@@ -296,7 +298,7 @@ fn put_inverse(old: Vec<SubtitleCaptureRecord>) -> AppResult<Vec<InvokeRequest>>
 /// with `with_primary`, the [`EXAMPLE_KEYS`] fields show the primary one (an attach leaves
 /// them, so a field the user edited is kept). A nested `notes.update` only when something
 /// changes (schedule and history are never touched by a field edit).
-pub(super) fn sync_note(ctx: &mut CommandCtx<'_>, note_id: NoteId, with_primary: bool) -> AppResult<()> {
+pub(crate) fn sync_note(ctx: &mut CommandCtx<'_>, note_id: NoteId, with_primary: bool) -> AppResult<()> {
     let Some(note) = ctx.reads().get_note(note_id)? else {
         return Ok(());
     };
@@ -423,9 +425,9 @@ pub(super) fn list(
             ))
         }
     };
-    Ok(SubtitleEncounterList {
-        encounters: rows.into_iter().map(row_dto).collect(),
-    })
+    let mut encounters: Vec<_> = rows.into_iter().map(row_dto).collect();
+    crate::modules::audio_fill::with_origins(reads, &mut encounters)?;
+    Ok(SubtitleEncounterList { encounters })
 }
 
 pub(super) fn put(

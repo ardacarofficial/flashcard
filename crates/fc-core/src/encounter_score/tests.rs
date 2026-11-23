@@ -267,6 +267,29 @@ fn media_adds_points_and_breaks_ties() {
     );
 }
 
+/// v1.4 W4: the film's own sound beats a synthesised one (a TTS fill still beats none).
+#[test]
+fn original_audio_beats_synthesized_audio() {
+    let w = world();
+    let mut tts = w.scene("tts", "I'll pick you up at eight.");
+    tts.has_audio = true;
+    tts.audio_synthesized = true;
+    let mut film = w.scene("film", "I'll pick you up at eight.");
+    film.has_audio = true;
+    let none = w.scene("none", "I'll pick you up at eight.");
+    let s = |x| score_scene(x, &opts("pick up"));
+    let (t, f, n) = (s(&tts), s(&film), s(&none));
+    assert!(codes(&t).contains(&SceneReasonCode::SynthesizedAudio));
+    assert!(!codes(&t).contains(&SceneReasonCode::HasAudio));
+    assert_eq!(
+        f.score - t.score,
+        points::HAS_AUDIO - points::SYNTHESIZED_AUDIO
+    );
+    assert_eq!(t.score - n.score, points::SYNTHESIZED_AUDIO);
+    let ranked = rank_scenes(&[tts, film], &opts("pick up"));
+    assert_eq!(ranked[0].id, "film");
+}
+
 #[test]
 fn learning_words_count_a_little() {
     let w = world();

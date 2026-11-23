@@ -166,7 +166,7 @@
       "from_q": "from:subtitle",
       "from_d": "Where the card came from: subtitle, reading, anki, import, manual; source:\"*S1E2\" episode or video title",
       "media_q": "audio:video",
-      "media_d": "Has a sound clip taken from the video; also audio:yes / none / file / tts, image:yes"
+      "media_d": "Has a sound clip taken from the video; also audio:yes / none / original / clip / tts / file, image:yes"
     },
     "saved_short": "Saved",
     "keys": {

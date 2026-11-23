@@ -97,6 +97,8 @@ pub(crate) struct Candidate {
     pub surface: Option<String>,
     /// Sound stored.
     pub has_audio: bool,
+    /// v1.4 W4: the stored sound is synthesised (TTS).
+    pub audio_synthesized: bool,
     /// Picture stored.
     pub has_image: bool,
 }
@@ -145,6 +147,7 @@ pub(crate) fn rank_candidates(
                 .and_then(|(s, e)| utf16_byte_range(&c.sentence, s, e)),
             surface: c.surface.clone(),
             has_audio: c.has_audio,
+            audio_synthesized: c.audio_synthesized,
             has_image: c.has_image,
         });
     }
@@ -225,6 +228,13 @@ pub(crate) fn rank_note(
         .first()
         .map(|r| (r.lang.clone(), r.lemma.clone()))
         .unwrap_or_default();
+    let audio: Vec<String> = rows.iter().filter_map(|r| r.facts.audio_hash.clone()).collect();
+    let origins = crate::modules::audio_fill::origins_of(reads, &audio)?;
+    let synthesized = |h: &Option<String>| {
+        h.as_ref()
+            .and_then(|h| origins.get(h))
+            .is_some_and(|o| o.origin == fc_core::content::media::MediaOrigin::Tts)
+    };
     let candidates: Vec<Candidate> = rows
         .iter()
         .map(|r| Candidate {
@@ -233,6 +243,7 @@ pub(crate) fn rank_note(
             term_offset: r.facts.term_start.zip(r.facts.term_end),
             surface: r.facts.surface.clone(),
             has_audio: r.facts.audio_hash.is_some(),
+            audio_synthesized: synthesized(&r.facts.audio_hash),
             has_image: r.facts.screenshot_hash.is_some(),
         })
         .collect();
@@ -346,6 +357,7 @@ fn rank_sentences(req: RankSentences, ctx: &QueryCtx<'_>) -> AppResult<RankedExa
             term_offset: s.term_offset,
             surface: s.surface.clone(),
             has_audio: s.has_audio.unwrap_or(false),
+            audio_synthesized: false,
             has_image: s.has_image.unwrap_or(false),
         })
         .collect();

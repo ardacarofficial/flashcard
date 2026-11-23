@@ -55,6 +55,9 @@ pub mod points {
     pub const GOOD_LENGTH: i32 = 4;
     /// The scene's sound is there.
     pub const HAS_AUDIO: i32 = 8;
+    /// Sound is there but synthesised (v1.4 W4: TTS fills a missing sound; the film's own
+    /// line teaches more, so a real recording ranks higher).
+    pub const SYNTHESIZED_AUDIO: i32 = 3;
     /// The scene's picture is there.
     pub const HAS_IMAGE: i32 = 4;
     /// The surrounding words are common (median rank ≤ [`super::COMMON_RANK`]).
@@ -110,6 +113,8 @@ pub struct Scene {
     pub surface: Option<String>,
     /// The scene's sound is stored.
     pub has_audio: bool,
+    /// v1.4 W4: … and it is synthesised (origin `tts`), not the film's.
+    pub audio_synthesized: bool,
     /// The scene's picture is stored.
     pub has_image: bool,
 }
@@ -162,6 +167,8 @@ pub enum SceneReasonCode {
     GoodLength,
     /// Sound present.
     HasAudio,
+    /// Sound present, but synthesised (TTS), not the film's.
+    SynthesizedAudio,
     /// Picture present.
     HasImage,
     /// Common surrounding words (`count` = median rank).
@@ -477,7 +484,11 @@ pub fn score_scene(scene: &Scene, opts: &ScoreOptions) -> SceneScore {
         reasons.push(length(R::GoodLength, p::GOOD_LENGTH));
     }
     if scene.has_audio {
-        reasons.push(reason(R::HasAudio, p::HAS_AUDIO));
+        reasons.push(if scene.audio_synthesized {
+            reason(R::SynthesizedAudio, p::SYNTHESIZED_AUDIO)
+        } else {
+            reason(R::HasAudio, p::HAS_AUDIO)
+        });
     }
     if scene.has_image {
         reasons.push(reason(R::HasImage, p::HAS_IMAGE));
