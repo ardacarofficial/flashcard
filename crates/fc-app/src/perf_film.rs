@@ -454,6 +454,10 @@ const LANGUAGE_QUERIES: &[&str] = &[
     "kaynak:\"Dizi S01E1*\"",
 ];
 
+/// Answers timed while captures arrive, and the least number of captures timed meanwhile
+/// (v1.4.1 I2: was 40 answers / ≥ 20 captures; a p95 of 23 samples is the second-worst one).
+const BUSY_SAMPLES: usize = 120;
+
 /// Times the film workload on an opened collection (the probe process).
 pub(crate) fn measure(app: &App, dir: &Path, scale: FilmScale) -> FilmMeasured {
     let mut m = FilmMeasured::default();
@@ -471,19 +475,22 @@ pub(crate) fn measure(app: &App, dir: &Path, scale: FilmScale) -> FilmMeasured {
 
     // A capture arriving while a study answer is being saved: one thread answers, another
     // posts captures (new words and new scenes of known ones, every fourth with media).
+    // v1.4.1 (I2): at least [`BUSY_SAMPLES`] of each, so that a p95 is not the second-worst
+    // sample and one stall of a shared CI runner (seconds on Windows) cannot decide it.
     let session = invoke(
         app,
         "study.start",
         json!({ "kind": "normal", "tz_offset_mins": 180 }),
     );
     let done = std::sync::atomic::AtomicBool::new(false);
+    let posted = std::sync::atomic::AtomicUsize::new(0);
     let (mut answers, mut captures) = std::thread::scope(|s| {
         let poster = s.spawn(|| {
             let mut rng = SplitMix64::new(7);
             let mut roll = move |n: u64| rng.next_u64() % n.max(1);
             let mut laps = Vec::new();
             let mut i = 0usize;
-            while !done.load(std::sync::atomic::Ordering::Relaxed) || laps.len() < 20 {
+            while !done.load(std::sync::atomic::Ordering::Relaxed) || laps.len() < BUSY_SAMPLES {
                 let n = if i % 2 == 0 {
                     scale.notes + (i / 2) % 200
                 } else {
@@ -492,8 +499,9 @@ pub(crate) fn measure(app: &App, dir: &Path, scale: FilmScale) -> FilmMeasured {
                 let id = 10_000_000 + i;
                 let v = capture_json(id, &words[n], &fillers, &mut roll);
                 laps.push(post(app, &key, id, &v, i % 4 == 0));
+                posted.store(laps.len(), std::sync::atomic::Ordering::Relaxed);
                 i += 1;
-                if laps.len() >= 400 {
+                if laps.len() >= 1_000 {
                     break;
                 }
             }
@@ -501,7 +509,12 @@ pub(crate) fn measure(app: &App, dir: &Path, scale: FilmScale) -> FilmMeasured {
         });
         let mut laps = Vec::new();
         let mut session = session;
-        for _ in 0..40 {
+        // Answers go on until both sides have their samples (captures are slower), so
+        // every timed capture is one that arrived while answers were being saved.
+        while laps.len() < BUSY_SAMPLES
+            || (posted.load(std::sync::atomic::Ordering::Relaxed) < BUSY_SAMPLES
+                && laps.len() < 1_000)
+        {
             let Some(card) = session["current"].as_object().map(|c| c["card_id"].clone()) else {
                 break;
             };

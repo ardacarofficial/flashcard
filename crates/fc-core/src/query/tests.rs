@@ -846,4 +846,3 @@ fn media_values_select_by_origin() {
     facts.media = vec![(MediaKind::Audio, MediaOrigin::Tts)];
     assert!(!hit("ses:video", &facts) && hit("ses:tts", &facts) && hit("ses:var", &facts));
 }
-
