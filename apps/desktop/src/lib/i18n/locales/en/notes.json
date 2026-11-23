@@ -136,7 +136,6 @@
     "answers_lead": "Count these as right in tests too",
     "answers_add": "Add an answer",
     "answers_placeholder": "Type, press Enter",
-    "answers_remove": "Remove “{answer}”",
     "answers_empty": "No extra answers yet.",
     "audio_title": "Sound",
     "audio_missing": "No sound",

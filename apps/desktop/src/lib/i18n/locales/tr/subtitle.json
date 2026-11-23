@@ -141,6 +141,36 @@
       "sent": "Eklenti kelimeyi ve geçtiği altyazı cümlesini bu uygulamaya gönderir; varsa anlamını, cümlenin çevirisini, o anın ekran görüntüsünü, sesini ve videonun o saniyesine bağlantıyı da ekler.",
       "card": "Seçtiğin destede bir kart olur: ön yüzde kelime ve cümle (kelime kalın), arka yüzde anlam, çeviri, resim ve ses. Gelen kutusuna uğramadan doğrudan desteye gider.",
       "repeat": "Aynı kelimeyi aynı cümleden bir daha eklersen ikinci kart oluşmaz. Başka bir cümleden eklersen yeni kart olur."
+    },
+    "encounter_panel": {
+      "title": "Bu kelimeyi nerede gördün",
+      "primary": "Ana örnek",
+      "make_primary": "Bunu ana örnek yap",
+      "move": "Başka karta taşı",
+      "merge": "Bir kartla birleştir",
+      "unknown_source": "Bilinmeyen kaynak",
+      "better": "Daha iyi bir örnek var: {sentence}",
+      "better_use": "Ana örnek yap",
+      "move_title": "Bu örnek hangi karta ait?",
+      "merge_title": "Hangi kartla birleştirelim?",
+      "search": "Kart ara",
+      "search_hint": "Kelimeyi yaz, eşleşen kartlar aşağıda çıkar.",
+      "no_match": "Eşleşen kart yok.",
+      "pick_move": "Buraya taşı",
+      "pick_merge": "Bu kartla birleştir",
+      "force_title": "Bu iki kart aynı kelime gibi durmuyor",
+      "force_hint": "Yine de birleştirirsen örnekler tek kartta toplanır, öteki kart çöpe gider. İstersen geri alabilirsin.",
+      "force_confirm": "Yine de birleştir",
+      "primary_set": "Ana örnek değişti.",
+      "moved": "Örnek taşındı.",
+      "merged": "Kartlar birleşti.",
+      "audio": "Ses: {origin}",
+      "origin": {
+        "original": "özgün",
+        "clip": "klip",
+        "tts": "tts",
+        "user": "dosya"
+      }
     }
   }
 }

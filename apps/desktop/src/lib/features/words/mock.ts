@@ -6,6 +6,8 @@
  * state: the rows here do not change when a word is marked.
  */
 import { menu, module, type MockEnv, type MockFeature } from '$lib/api/mock/env';
+// Namespace import: `mockEncountersOfNote` is a live binding set when the subtitle mock starts.
+import * as sub from '../subtitle/mock';
 import type {
   CefrBand,
   SubtitleCaptureRow,
@@ -137,7 +139,9 @@ export default {
           };
         }),
       }),
-      'subtitle.encounters.list': ({ lemma }) => {
+      'subtitle.encounters.list': ({ lemma, note_id }) => {
+        // A note's encounters (note editor) belong to the subtitle mock; this one answers by word.
+        if (note_id) return { encounters: sub.mockEncountersOfNote(note_id) };
         const s = lemma ? SENTENCES[lemma] : undefined;
         const note = lemma ? noteIds.get(lemma) : null;
         if (!s || !note || !lemma) return { encounters: [] };

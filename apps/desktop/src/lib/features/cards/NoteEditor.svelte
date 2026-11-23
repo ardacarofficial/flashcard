@@ -9,6 +9,9 @@
   import CardMetaPanel from './CardMetaPanel.svelte';
   import CardPreview from './CardPreview.svelte';
   import FieldInput from './FieldInput.svelte';
+  import NoteEditorAnswers from './NoteEditorAnswers.svelte';
+  import NoteEditorAudio from './NoteEditorAudio.svelte';
+  import NoteEditorEncounters from './NoteEditorEncounters.svelte';
   import { moduleKnownOn, moduleOn, trackModules } from './modules.svelte';
   import { Button, Chip, CircleAlert, CircleCheck, Icon, Select, Skeleton } from '$lib/ui';
 
@@ -103,11 +106,32 @@
       ntId = n.notetype_id;
       attrDeck = n.home_deck_id;
       values = { ...n.fields };
+      loadedFields = { ...n.fields };
       noteAttrs = Object.fromEntries(n.attributes.map((a) => [a.attr_id, a.value ?? null]));
     }, fail);
     if (moduleOn('links')) {
       api.call('links.backlinks', { note_id: id }).then((r) => (backlinks = r.items), () => (backlinks = []));
     }
+  });
+
+  // v1.4 "This word" (encounters, accepted answers, sound): their writes can change the
+  // note's fields in the core; take those changes in without dropping what is being typed.
+  let loadedFields: Record<string, string> = {};
+  function refreshFields() {
+    const id = noteId;
+    if (!id) return;
+    api.call('notes.get', { id }).then((n) => {
+      if (id !== noteId) return;
+      const next = { ...values };
+      for (const [k, v] of Object.entries(n.fields)) if (v !== loadedFields[k]) next[k] = v;
+      values = next;
+      loadedFields = { ...n.fields };
+    }, fail);
+  }
+  const extras = $derived({
+    encounters: moduleOn('subtitle'),
+    answers: moduleOn('accepted_answers'),
+    audio: moduleOn('audio_fill'),
   });
 
   // v1.0: what is typed into a new note survives a crash (form draft, restored on open).
@@ -256,6 +280,15 @@
         {#if error}<span class="error" role="alert"><Icon icon={CircleAlert} size={14} /> {error}</span>{/if}
       </div>
     </form>
+
+    {#if noteId && (extras.encounters || extras.answers || extras.audio)}
+      <section class="word-block" aria-labelledby="note-word-title" data-testid="note-extras">
+        <h3 id="note-word-title">{t('note_extras.title')}</h3>
+        {#if extras.encounters}<NoteEditorEncounters {noteId} {onopennote} onchanged={refreshFields} />{/if}
+        {#if extras.answers}<NoteEditorAnswers {noteId} />{/if}
+        {#if extras.audio}<NoteEditorAudio {noteId} onfilled={refreshFields} />{/if}
+      </section>
+    {/if}
   </div>
 
   <aside class="side-col">
@@ -323,6 +356,14 @@
     border-inline-start: 1px solid var(--border);
   }
   .attrs-block {
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+  .word-block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
     padding-top: var(--space-3);
     border-top: 1px solid var(--border);
   }
