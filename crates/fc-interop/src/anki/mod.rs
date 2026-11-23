@@ -17,6 +17,8 @@
 pub mod convert;
 #[cfg(any(test, feature = "fixtures"))]
 pub mod fixtures;
+#[cfg(any(test, feature = "fixtures"))]
+pub mod hostile;
 pub mod occlusion;
 mod proto;
 mod read;

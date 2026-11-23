@@ -29,3 +29,6 @@ pub mod text;
 mod zipio;
 
 pub use error::{InteropError, InteropResult};
+
+#[cfg(test)]
+mod fuzz_tests;
