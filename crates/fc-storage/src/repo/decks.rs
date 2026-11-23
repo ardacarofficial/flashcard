@@ -46,6 +46,15 @@ pub trait DeckRead {
     /// Own card counts per deck at `now` (decks without cards may be omitted). Cards of
     /// trashed notes are not counted.
     fn card_counts_by_deck(&self, now: Timestamp) -> StorageResult<Vec<(DeckId, CardCounts)>>;
+    /// Live cards per deck: [`CardCounts::total`] of [`Self::card_counts_by_deck`] without
+    /// the state counts (v1.4 Z2: SQLite answers it from an index).
+    fn card_totals_by_deck(&self) -> StorageResult<Vec<(DeckId, u32)>> {
+        Ok(self
+            .card_counts_by_deck(Timestamp(0))?
+            .into_iter()
+            .map(|(d, c)| (d, c.total))
+            .collect())
+    }
     /// Ancestry of `id`: root first, `id` itself last (trashed decks included). Fails with
     /// `NotFound` for an unknown deck and `Corrupt` on a parent cycle.
     fn deck_ancestry(&self, id: DeckId) -> StorageResult<Vec<DeckId>>;

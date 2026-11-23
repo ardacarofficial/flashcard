@@ -166,8 +166,8 @@ const FULL: Scale = Scale {
     index_rebuild: 5_000.0,
     backup_create: 150_000.0,
     backup_verify: 120_000.0,
-    // The collection dump is held in memory (docs/12 "Bilinen sınır"); this catches growth.
-    backup_peak_mb: 4_000.0,
+    // v1.4 Z2: the dump is streamed both ways (2M reviews: ~380 MB, was 2.7 GB).
+    backup_peak_mb: 1_000.0,
 };
 
 /// CI regression check: 1/10 size in a debug build on shared runners, so the budgets are

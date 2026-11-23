@@ -97,6 +97,19 @@ impl<M: Mode> DeckRead for SqliteTx<'_, M> {
         })
     }
 
+    fn card_totals_by_deck(&self) -> StorageResult<Vec<(DeckId, u32)>> {
+        all(
+            self.conn(),
+            "cards",
+            "SELECT c.deck_id, count(*) FROM cards c INDEXED BY cards_deck_live
+             WHERE c.deleted_at IS NULL AND c.note_id NOT IN
+                 (SELECT id FROM notes INDEXED BY notes_trashed WHERE deleted_at IS NOT NULL)
+             GROUP BY c.deck_id ORDER BY c.deck_id",
+            [],
+            |r| Ok((id(r, 0)?, r.get(1)?)),
+        )
+    }
+
     fn deck_ancestry(&self, deck: DeckId) -> StorageResult<Vec<DeckId>> {
         let rows: Vec<(DeckId, i64)> = all(
             self.conn(),

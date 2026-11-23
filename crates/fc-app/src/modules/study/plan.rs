@@ -161,6 +161,9 @@ pub(crate) struct Planner<'a> {
     card_deck: HashMap<CardId, Option<DeckId>>,
     /// Live cards per deck (empty reasons; loaded on first use).
     inventory: Option<HashMap<DeckId, u32>>,
+    /// v1.4 Z2: every card in progress due before a time, read once and shared by the plans
+    /// of this planner (a deck tree planned each node's subtree again).
+    started: Option<(Timestamp, Vec<fc_core::card::Card>)>,
 }
 
 impl<'a> Planner<'a> {
@@ -179,6 +182,7 @@ impl<'a> Planner<'a> {
             today: None,
             card_deck: HashMap::new(),
             inventory: None,
+            started: None,
         })
     }
 
@@ -317,9 +321,8 @@ impl<'a> Planner<'a> {
             self.inventory = Some(
                 self.v
                     .reads
-                    .card_counts_by_deck(self.now)?
+                    .card_totals_by_deck()?
                     .into_iter()
-                    .map(|(d, c)| (d, c.total))
                     .collect(),
             );
         }
@@ -330,6 +333,47 @@ impl<'a> Planner<'a> {
             None => inv.values().sum(),
             Some(decks) => decks.iter().filter_map(|d| inv.get(d)).sum(),
         })
+    }
+
+    /// `Reads::study_cards` of `f`, with the cards in progress of a plain due read (no card
+    /// list, no classification, suspended left out) taken from one read of the whole
+    /// collection shared by every plan of this planner (v1.4 Z2). Same cards, same order:
+    /// `planner_candidates_equal_study_cards` checks it against the storage read.
+    pub(crate) fn candidates(&mut self, f: &StudyCardFilter) -> AppResult<Vec<fc_core::card::Card>> {
+        let Some(due_before) = f.due_before else {
+            return Ok(self.v.reads.study_cards(f)?);
+        };
+        if f.card_ids.is_some() || !f.attributes.is_empty() || f.include_suspended {
+            return Ok(self.v.reads.study_cards(f)?);
+        }
+        const STARTED: [CardState; 3] = [CardState::Learning, CardState::Review, CardState::Relearning];
+        if self.started.as_ref().is_none_or(|(t, _)| *t != due_before) {
+            let all = self.v.reads.study_cards(&StudyCardFilter {
+                states: Some(STARTED.to_vec()),
+                due_before: Some(due_before),
+                ..StudyCardFilter::default()
+            })?;
+            self.started = Some((due_before, all));
+        }
+        let decks: Option<HashSet<DeckId>> = f.deck_ids.as_ref().map(|d| d.iter().copied().collect());
+        let mut out: Vec<fc_core::card::Card> = self
+            .started
+            .as_ref()
+            .map(|(_, cards)| cards.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .filter(|c| decks.as_ref().is_none_or(|d| d.contains(&c.deck_id)))
+            .filter(|c| f.states.as_ref().is_none_or(|s| s.contains(&c.scheduling.state)))
+            .cloned()
+            .collect();
+        if f.states.as_ref().is_none_or(|s| s.contains(&CardState::New)) {
+            out.extend(self.v.reads.study_cards(&StudyCardFilter {
+                states: Some(vec![CardState::New]),
+                ..f.clone()
+            })?);
+        }
+        out.sort_by_key(|c| (c.created_at, c.id));
+        Ok(out)
     }
 
     /// Plans the queue of `req`. Today's queue of the whole collection (no deck, daily
@@ -658,7 +702,7 @@ impl<'a> Planner<'a> {
         // Bounded: every round leaves out a card or reads more new cards.
         let (mut queue, rng) = loop {
             card_filter.new_first = new_read;
-            let mut candidates = reads.study_cards(&card_filter)?;
+            let mut candidates = self.candidates(&card_filter)?;
             let new_read_all = new_read.is_none_or(|f| {
                 (candidates
                     .iter()

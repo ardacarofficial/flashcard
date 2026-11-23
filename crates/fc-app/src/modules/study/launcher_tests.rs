@@ -820,6 +820,82 @@ pub fn lowering_learn_ahead_keeps_the_card_on_screen(f: &Factory) {
     assert!(t.session(s.id).current.is_some());
 }
 
+/// v1.4 Z2: the planner reads the cards in progress once and shares them across the plans of
+/// a deck tree. On random worlds its candidates equal the storage read of the same filter
+/// (the old path, kept as the reference), and every tree node's numbers equal a planner made
+/// for that deck alone.
+pub fn shared_candidates_equal_the_storage_read(f: &Factory) {
+    use crate::modules::study::ext::View;
+    use crate::modules::study::plan::{today_counts, Planner};
+    use fc_core::card::Card;
+    use fc_core::rng::{Rng, SplitMix64};
+    use fc_storage::repo::{NewCardsFirst, StudyCardFilter};
+    for seed in 0..4u64 {
+        let t = T::new(f(), 130 + seed);
+        let mut rng = SplitMix64::new(seed);
+        let p = t.deck("P");
+        let decks = [p.id, t.deck("P::A").id, t.deck("P::A::X").id, t.deck("Q").id];
+        let mut cards = Vec::new();
+        for i in 0..60 {
+            let d = decks[(rng.next_u64() % 4) as usize];
+            cards.push(t.note(d, &format!("w{seed}-{i}"), "x"));
+        }
+        for c in &cards {
+            let roll = rng.next_u64() % 5;
+            let due = Timestamp(T0 + (rng.next_u64() % 48) as i64 * HOUR - 24 * HOUR);
+            let suspended = rng.next_u64() % 10 == 0;
+            t.put_card(*c, |card| {
+                match roll {
+                    0 => card.scheduling.state = CardState::Review,
+                    1 => card.scheduling.state = CardState::Learning,
+                    2 => card.scheduling.state = CardState::Relearning,
+                    _ => {}
+                }
+                if roll < 3 {
+                    card.scheduling.due = Some(due);
+                }
+                card.suspended = suspended;
+            });
+        }
+        let tree = t.tree();
+        let tx = t.store.read().unwrap();
+        let ctx = crate::handler::QueryCtx {
+            tx: &*tx,
+            now: fc_core::time::Clock::now(&*t.clock),
+            locale: fc_core::i18n::Locale::default(),
+            registry: t.app.registry(),
+        };
+        let now = ctx.now;
+        let mut planner = Planner::new(View::query(&ctx), now, 0).unwrap();
+        let day_end = Timestamp(now.0 + 6 * HOUR);
+        for subset in [&decks[..1], &decks[1..3], &decks[..], &decks[3..]] {
+            for states in [None, Some(vec![CardState::New]), Some(vec![CardState::Review, CardState::Learning])] {
+                for new_first in [None, Some(NewCardsFirst { n: 3, newest: false }), Some(NewCardsFirst { n: 2, newest: true })] {
+                    let filter = StudyCardFilter {
+                        deck_ids: Some(subset.to_vec()),
+                        states: states.clone(),
+                        due_before: Some(day_end),
+                        new_first,
+                        ..StudyCardFilter::default()
+                    };
+                    let ids = |v: Vec<Card>| v.into_iter().map(|c| c.id).collect::<Vec<_>>();
+                    assert_eq!(
+                        ids(planner.candidates(&filter).unwrap()),
+                        ids(ctx.tx.study_cards(&filter).unwrap()),
+                        "seed {seed}"
+                    );
+                }
+            }
+        }
+        for d in decks {
+            let mut alone = Planner::new(View::query(&ctx), now, 0).unwrap();
+            let (new, learning, due) = today_counts(&mut alone, Some(d)).unwrap();
+            let c = tree_counts(&tree, d);
+            assert_eq!((c.new, c.learning, c.due), (new, learning, due), "seed {seed}");
+        }
+    }
+}
+
 macro_rules! launcher_suite {
     ($factory:expr) => {
         launcher_suite!(@tests $factory;
@@ -837,6 +913,7 @@ macro_rules! launcher_suite {
             siblings_across_decks_in_the_collection_queue,
             forecast_today_is_the_launchers_count,
             lowering_learn_ahead_keeps_the_card_on_screen,
+            shared_candidates_equal_the_storage_read,
         );
     };
     (@tests $factory:expr; $($name:ident),* $(,)?) => {

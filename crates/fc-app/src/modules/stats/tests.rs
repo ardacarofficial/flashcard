@@ -562,6 +562,14 @@ pub fn breakdown_cache_equals_recomputation(f: &Factory) {
     assert!(!breakdown_agrees(&t, &req), "trashed card: not cached");
     t.refresh(0);
     assert!(breakdown_agrees(&t, &req));
+    // v1.4 Z2: a card added since keeps the cache (SQLite: its reviews all come after it,
+    // so they are folded on top); studying it too.
+    t.refresh(0);
+    t.note(d.id, "yeni", Some((def.id, noun)));
+    t.note(d.id, "yeni2", None);
+    assert_eq!(breakdown_agrees(&t, &req), t.incremental, "added cards");
+    t.study(StudyMode::Scheduled, None, 2);
+    assert_eq!(breakdown_agrees(&t, &req), t.incremental, "added cards studied");
     // A removed review (undo of an answer) invalidates the cache.
     t.day(9);
     let s = t.start(StudyMode::Scheduled, None).unwrap();
