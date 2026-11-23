@@ -143,7 +143,7 @@
     font-weight: var(--weight-semibold);
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .cap:first-child {
     margin-top: 0;
@@ -202,7 +202,7 @@
   }
   .d {
     font-size: var(--text-xs);
-    color: var(--text-3);
+    color: var(--text-2);
     line-height: var(--leading-tight);
   }
   .badge {
