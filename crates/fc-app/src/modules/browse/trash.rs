@@ -62,6 +62,10 @@ pub(super) fn purge(req: PurgeTrash, ctx: &mut CommandCtx<'_>) -> AppResult<Comm
     let c = ctx.tx.purge_trash(cutoff)?;
     // v0.10: trashed reading items go with the same retention.
     let reading = ctx.tx.purge_reading_items(cutoff)?;
+    // v1.4.1: media rows nothing uses any more (an undone import's files once its trashed
+    // notes are gone, an undone `media.add`), with the same retention and never one that
+    // undo/redo can still reach; their files go with the next start's orphan sweep.
+    ctx.tx.delete_unused_media(cutoff)?;
     let total = c.notes + c.cards + c.decks + reading;
     if total > 0 {
         // Older inverses may refer to what is gone now: undo stops here instead of failing

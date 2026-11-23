@@ -56,6 +56,9 @@ fn api(code: ErrorCode, message: &str) -> ApiError {
 
 /// Status of an error on `/subtitle/v1/*`.
 fn status_of(e: &ApiError) -> StatusCode {
+    if let Some(s) = crate::body::status(e) {
+        return s;
+    }
     match e.code {
         ErrorCode::NotFoundMethod => StatusCode::NOT_FOUND,
         ErrorCode::ConflictModuleDisabled => StatusCode::SERVICE_UNAVAILABLE,
@@ -124,49 +127,35 @@ fn header_text<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
         .filter(|v| !v.is_empty())
 }
 
-async fn read_body(mut body: Body, headers: &HeaderMap, max: usize) -> Result<Vec<u8>, ApiError> {
-    use axum::body::HttpBody;
-    let too_large = || {
-        api(
-            ErrorCode::ValidationPayloadTooLarge,
-            "request body too large",
-        )
-        .with_detail("max_bytes", max)
-    };
-    let declared =
-        header_text(headers, header::CONTENT_LENGTH.as_str()).and_then(|v| v.parse::<usize>().ok());
-    if declared.is_some_and(|n| n > max) {
-        return Err(too_large());
-    }
-    // v1.4.1 (fuzz): read frame by frame so that only a body past `max` is a `413`; a body
-    // that ends before its `Content-Length` or breaks its chunked encoding is a malformed
-    // request (`422`), not "too large" (which the extension takes as final for the capture).
-    let mut out = Vec::new();
-    while let Some(frame) =
-        std::future::poll_fn(|cx| std::pin::Pin::new(&mut body).poll_frame(cx)).await
-    {
-        let frame = frame.map_err(|_| {
-            api(
-                ErrorCode::ValidationInvalidParams,
-                "the request body ended early or is not validly encoded",
-            )
-            .with_detail("field", "body")
-        })?;
-        if let Ok(data) = frame.into_data() {
-            if out.len() + data.len() > max {
-                return Err(too_large());
-            }
-            out.extend_from_slice(&data);
-        }
-    }
-    Ok(out)
+/// The body ([`crate::body::read`]): only a body past `max` is a `413`; one that ends before
+/// its `Content-Length` or breaks its chunked encoding is a malformed request (`422`, the
+/// extension takes `413` as final for the capture); a stalled one `408`.
+async fn read_body(
+    s: &Shared,
+    body: Body,
+    headers: &HeaderMap,
+    max: usize,
+) -> Result<Vec<u8>, ApiError> {
+    crate::body::read(
+        body,
+        headers,
+        max,
+        s.body_timeout,
+        ErrorCode::ValidationInvalidParams,
+    )
+    .await
 }
 
 /// Largest `captures:batch` body: every capture of a full batch may be as large as a capture
 /// sent on its own (a `413` would fail every capture of the batch for good).
 pub(crate) const MAX_BATCH_BODY_BYTES: usize = subtitle::MAX_BATCH * MAX_BODY_BYTES;
 
-async fn read_json(body: Body, headers: &HeaderMap, max: usize) -> Result<Value, ApiError> {
+async fn read_json(
+    s: &Shared,
+    body: Body,
+    headers: &HeaderMap,
+    max: usize,
+) -> Result<Value, ApiError> {
     let is_json = header_text(headers, header::CONTENT_TYPE.as_str())
         .and_then(|v| v.split(';').next())
         .is_some_and(|m| m.trim().eq_ignore_ascii_case("application/json"));
@@ -177,7 +166,7 @@ async fn read_json(body: Body, headers: &HeaderMap, max: usize) -> Result<Value,
         )
         .with_detail("field", "content-type"));
     }
-    let bytes = read_body(body, headers, max).await?;
+    let bytes = read_body(s, body, headers, max).await?;
     serde_json::from_slice(&bytes).map_err(|e| {
         api(
             ErrorCode::ValidationSubtitleCapture,
@@ -306,7 +295,7 @@ pub(crate) async fn route(
             Ok(json(StatusCode::OK, &words))
         }
         "captures" => {
-            let value = read_json(body, headers, MAX_BODY_BYTES).await?;
+            let value = read_json(s, body, headers, MAX_BODY_BYTES).await?;
             let o = blocking(move || subtitle::capture(&app, &key, &value)).await?;
             let status = match o.status {
                 SubtitleCaptureStatus::Created => StatusCode::CREATED,
@@ -321,7 +310,7 @@ pub(crate) async fn route(
             ))
         }
         "captures:batch" => {
-            let value = read_json(body, headers, MAX_BATCH_BODY_BYTES).await?;
+            let value = read_json(s, body, headers, MAX_BATCH_BODY_BYTES).await?;
             let r = blocking(move || subtitle::batch(&app, &key, &value)).await?;
             Ok(json(StatusCode::OK, &r))
         }
@@ -343,7 +332,7 @@ pub(crate) async fn route(
             let kind = header_text(headers, "x-media-kind")
                 .ok_or_else(|| missing("X-Media-Kind"))?
                 .to_owned();
-            let bytes = read_body(body, headers, MAX_AUDIO_BYTES).await?;
+            let bytes = read_body(s, body, headers, MAX_AUDIO_BYTES).await?;
             let r =
                 blocking(move || subtitle::upload(&app, &key, &capture_id, &kind, &mime, &bytes))
                     .await?;

@@ -252,13 +252,60 @@ fn verify_into(
     }
     std::fs::create_dir_all(scratch).map_err(|e| file_err(&shown(scratch), e))?;
     let dir = tempfile::Builder::new()
-        .prefix(".verify-")
+        .prefix(VERIFY_PREFIX)
         .tempdir_in(scratch)
         .map_err(|e| file_err(&shown(scratch), e))?;
     restore_into(r, &dir.path().join("collection.db"), cancel, report)?;
     // Best effort: the folder is removed on drop too.
     let _ = dir.close();
     Ok(())
+}
+
+/// Prefix of the scratch folders a verification restores into.
+const VERIFY_PREFIX: &str = ".verify-";
+/// A scratch folder nothing was written in for this long is left over from a crash (a
+/// verification running right now — maybe in another process — keeps writing in its own).
+pub(crate) const STALE_VERIFY_AFTER: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
+/// Newest modification time of `path` and everything under it.
+fn newest_mtime(path: &Path) -> Option<std::time::SystemTime> {
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    let mut newest = meta.modified().ok()?;
+    if meta.is_dir() {
+        for e in std::fs::read_dir(path).ok()?.filter_map(Result::ok) {
+            if let Some(t) = newest_mtime(&e.path()) {
+                newest = newest.max(t);
+            }
+        }
+    }
+    Some(newest)
+}
+
+/// v1.4.1: removes the `.verify-*` scratch folders in `backups` that a crash during a backup
+/// verification left behind (nothing written in them for `idle`, as of `now`). Best effort;
+/// returns how many were removed. Runs when the collection is opened.
+pub(crate) fn remove_stale_verify_dirs(
+    backups: &Path,
+    now: std::time::SystemTime,
+    idle: std::time::Duration,
+) -> usize {
+    let Ok(entries) = std::fs::read_dir(backups) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for e in entries.filter_map(Result::ok) {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let path = e.path();
+        if !name.starts_with(VERIFY_PREFIX) || !path.is_dir() {
+            continue;
+        }
+        let stale = newest_mtime(&path)
+            .is_some_and(|t| now.duration_since(t).is_ok_and(|age| age >= idle));
+        if stale && std::fs::remove_dir_all(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
 }
 
 /// Restores the backup open in `r` into a NEW collection at `db_file` (media into its

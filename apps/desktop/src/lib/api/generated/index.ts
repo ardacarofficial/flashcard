@@ -381,6 +381,7 @@ export type * from "./MergedSubtitleNotes";
 export type * from "./MethodInfo";
 export type * from "./MethodKind";
 export type * from "./MethodList";
+export type * from "./MirrorCatchUp";
 export type * from "./MirrorCopy";
 export type * from "./MirrorState";
 export type * from "./ModelDownload";

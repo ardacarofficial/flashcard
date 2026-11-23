@@ -146,6 +146,9 @@ pub(crate) struct StatusFile {
     /// collection's settings) so the rescue of a damaged collection finds it too.
     #[serde(default)]
     pub mirror_dir: Option<String>,
+    /// v1.4.1: the last catch-up of older backups the mirror lacked.
+    #[serde(default)]
+    pub mirror_catch_up: Option<fc_api::v1::io::MirrorCatchUp>,
 }
 
 fn status_path(data_dir: &Path) -> PathBuf {
@@ -236,7 +239,7 @@ pub(crate) fn verified_backup(
 // ------------------------------------------------------------------ the folder
 
 /// Verified automatic copies in `dir`, newest first: `(taken at, path)`.
-fn list_auto(dir: &Path) -> Vec<(i64, PathBuf)> {
+pub(crate) fn list_auto(dir: &Path) -> Vec<(i64, PathBuf)> {
     list_copies(dir, PREFIX)
 }
 

@@ -257,6 +257,7 @@
       "mirror_ok": "Second location: ready · {count, plural, one {# copy} other {# copies}}, last: {date}",
       "mirror_ok_empty": "Second location: ready · no copy yet",
       "mirror_folder": "Second folder: {folder}",
+      "mirror_caught_up": "The second location had missed some backups: {count, plural, one {# older backup was} other {# older backups were}} copied there too ({date}).",
       "mirror_missing": "The second backup folder was not found: {folder}. Is the drive connected?",
       "mirror_unwritable": "Cannot write to the second backup folder: {folder}. Check permissions and free space.",
       "mirror_inside_collection": "The second backup folder is inside the collection folder: {folder}. Put it on another drive.",

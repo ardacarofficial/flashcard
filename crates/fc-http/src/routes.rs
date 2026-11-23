@@ -79,13 +79,15 @@ pub(crate) struct Shared {
     /// v1.2: rate limits and last-use notes of Subtitle access keys.
     pub(crate) key_buckets: Mutex<HashMap<SubtitleKeyId, Bucket>>,
     pub(crate) key_touched: Mutex<HashMap<SubtitleKeyId, Instant>>,
+    /// v1.4.1: how long a request body may take ([`crate::BODY_READ_TIMEOUT`]).
+    pub(crate) body_timeout: Duration,
 }
 
 pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-pub(crate) fn router(app: Arc<App>, port: u16) -> Router {
+pub(crate) fn router(app: Arc<App>, port: u16, body_timeout: Duration) -> Router {
     let shared = Arc::new(Shared {
         app,
         port,
@@ -96,6 +98,7 @@ pub(crate) fn router(app: Arc<App>, port: u16) -> Router {
         touched: Mutex::new(HashMap::new()),
         key_buckets: Mutex::new(HashMap::new()),
         key_touched: Mutex::new(HashMap::new()),
+        body_timeout,
     });
     // Tokens handed out by an earlier run lived in its memory only: nothing can finish those
     // pairings, so they must not wait to be approved. (Failing to tidy up is not fatal.)
@@ -106,6 +109,9 @@ pub(crate) fn router(app: Arc<App>, port: u16) -> Router {
 // ------------------------------------------------------------------ responses
 
 fn status_of(e: &ApiError) -> StatusCode {
+    if let Some(s) = crate::body::status(e) {
+        return s;
+    }
     match e.code {
         ErrorCode::PermissionUnauthenticated => StatusCode::UNAUTHORIZED,
         ErrorCode::ValidationPayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
@@ -301,24 +307,17 @@ fn csrf_guard(headers: &HeaderMap, method: &Method) -> Result<(), ApiError> {
     Ok(())
 }
 
-async fn read_json(body: Body, headers: &HeaderMap) -> Result<Value, ApiError> {
-    let too_large = || {
-        api(
-            ErrorCode::ValidationPayloadTooLarge,
-            "request body too large",
-        )
-        .with_detail("max_bytes", MAX_BODY_BYTES)
-    };
-    let declared = headers
-        .get(header::CONTENT_LENGTH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<usize>().ok());
-    if declared.is_some_and(|n| n > MAX_BODY_BYTES) {
-        return Err(too_large());
-    }
-    let bytes = axum::body::to_bytes(body, MAX_BODY_BYTES)
-        .await
-        .map_err(|_| too_large())?;
+/// v1.4.1: read like the Subtitle path ([`crate::body::read`]): a truncated or badly encoded
+/// body is malformed (`400 VALIDATION_INVALID_PARAMS`), not "too large"; a stalled one `408`.
+async fn read_json(s: &Shared, body: Body, headers: &HeaderMap) -> Result<Value, ApiError> {
+    let bytes = crate::body::read(
+        body,
+        headers,
+        MAX_BODY_BYTES,
+        s.body_timeout,
+        ErrorCode::ValidationInvalidParams,
+    )
+    .await?;
     if bytes.iter().all(u8::is_ascii_whitespace) {
         return Ok(Value::Object(serde_json::Map::new()));
     }
@@ -440,7 +439,7 @@ async fn route(
                 }
                 ("GET", "decks") => invoke(s, client, "decks.list", Value::Null).await,
                 ("POST", "inbox") => {
-                    let item = parse(read_json(body, headers).await?)?;
+                    let item = parse(read_json(s, body, headers).await?)?;
                     let app = s.app.clone();
                     let (dto, created) =
                         blocking(move || local_api::add_inbox_item(&app, &client, item)).await?;
@@ -460,7 +459,7 @@ async fn route(
                     if !ok {
                         return Err(not_found());
                     }
-                    let params = read_json(body, headers).await?;
+                    let params = read_json(s, body, headers).await?;
                     invoke(s, client, name, params).await
                 }
                 _ => Err(not_found()),
@@ -550,7 +549,7 @@ async fn pair(
     lock(&s.pair_bucket)
         .take(PAIR_PER_MINUTE / 60.0, PAIR_PER_MINUTE)
         .map_err(rate_limited)?;
-    let req: PairRequest = parse(read_json(body, headers).await?)?;
+    let req: PairRequest = parse(read_json(s, body, headers).await?)?;
     pair_name_allowed(s, origin, &req.client_name)?;
     let token = format!(
         "fc1_{}",

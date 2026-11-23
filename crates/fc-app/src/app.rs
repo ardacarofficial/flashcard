@@ -224,10 +224,11 @@ impl App {
 
     /// Startup work after the store is open (and migrated — `SqliteStore::open` migrates):
     /// seeds built-ins (the Classic note type, localized by `app.locale`), marks jobs left
-    /// running/queued as interrupted, removes media files without a media entry (left by an
-    /// undone `media.add`; redo works until the next start), then loads module switches and
-    /// the locale into memory, rolls back crash-interrupted undo groups and purges the expired
-    /// trash (`browse.purge_trash`, v0.4). Idempotent. Seeding is not an undoable command, so it writes no oplog entry.
+    /// running/queued as interrupted, then loads module switches and the locale into memory,
+    /// rolls back crash-interrupted undo groups, purges the expired trash
+    /// (`browse.purge_trash`, v0.4; with v1.4.1 also media rows nothing uses) and removes
+    /// media files without a media entry (left by an undone `media.add` or that purge; redo
+    /// works until the next start). Idempotent. Seeding is not an undoable command, so it writes no oplog entry.
     pub fn load_state(&self) -> AppResult<()> {
         let now = self.clock.now();
         let mut tx = self.store.write()?;
@@ -241,7 +242,6 @@ impl App {
         }
         crate::support::content::seed_builtin_notetypes(&mut *tx, locale, now)?;
         tx.mark_unfinished_jobs_interrupted(now)?;
-        tx.delete_orphan_media_files()?;
         // The word index (v1.4): builds what a migration or another writer queued.
         crate::modules::words::index::drain(&mut *tx)?;
         // Word data (v1.4): installs the shipped packs once (and again when they change); one
@@ -255,6 +255,10 @@ impl App {
         // Best effort: an expired-trash purge that fails must not keep the collection closed
         // (it runs again next start, and the user can run `browse.purge_trash`).
         let _ = crate::modules::browse::purge_on_startup(self);
+        // After the purge (v1.4.1): the files of the media rows it removed go now too.
+        let mut tx = self.store.write()?;
+        tx.delete_orphan_media_files()?;
+        tx.commit()?;
         // Position from which other processes' commits count as news.
         self.poll_external_changes()?;
         Ok(())
@@ -319,6 +323,13 @@ impl App {
             app.set_data_dir(dir.to_path_buf());
         }
         app.load_state()?;
+        // v1.4.1: scratch folders a crash during a backup verification left behind.
+        if let Some(dir) = path.parent() {
+            crate::modules::io::remove_stale_verify_dirs(
+                &crate::modules::io::backups_dir(dir),
+                std::time::SystemTime::now(),
+            );
+        }
         Ok(app)
     }
 

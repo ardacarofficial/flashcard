@@ -121,6 +121,9 @@
             : t('io.status.mirror_ok_empty')}
         </p>
         <p class="line muted">{t('io.status.mirror_folder', { folder: mirror.folder })}</p>
+        {#if mirror.last_catch_up}
+          <p class="line muted">{t('io.status.mirror_caught_up', { count: mirror.last_catch_up.copies, date: formatDateTime(mirror.last_catch_up.at) })}</p>
+        {/if}
       {:else}
         <p class="note bad" role="alert"><Icon icon={CircleAlert} size={16} /><span>{td(`io.status.mirror_${mirror.state}`, { folder: mirror.folder })}</span></p>
       {/if}
