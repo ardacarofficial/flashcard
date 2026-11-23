@@ -4,6 +4,7 @@
   "oplog.summary.maintenance.crash_reports.clear": "Deleted the crash reports",
   "oplog.summary.maintenance.drafts.save": "Saved a form draft",
   "oplog.summary.maintenance.drafts.discard": "Discarded a form draft",
+  "oplog.summary.maintenance.rescue.request": "Asked to rescue the collection at the next start",
   "oplog.summary.updates.install": "Downloaded an update",
   "oplog.summary.updates.apply": "Installed an update"
 }
