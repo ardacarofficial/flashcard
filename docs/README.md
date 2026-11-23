@@ -2,7 +2,7 @@
 
 Bu klasör, uygulamanın **tam planını** içerir. Geliştirme boyunca pusulamız budur. Bir şey burada yazmıyorsa ya henüz karar verilmemiştir ya da kapsam dışıdır.
 
-> **Durum:** **v1.3.0** — "kullanılır" sürümü: tek çalışma başlatıcısı ve bir tuş = bir iş klavye modeli, alan rolleriyle doğru davranan kelime kartları, kart eklemenin tek yeri, kendini anlatan ayarlar, hazır AI sağlayıcıları (OpenRouter…), ve gerçek Rust çekirdeğine karşı koşan yolculuklar ([11](11-tasarim.md)). v1.0 (Windows sürümü), v1.1 ve v1.2 (arayüz, Subtitle bağlantısı) tamam; bekleyen: Windows WebDriver pilotunun CI'da yeşil koşusu (ilk koşu oturum açamadı; WebView2 politikası düzeltmesi Windows'ta denenmedi), Windows'ta elle koşu ([07 §8](07-gelistirme-sureci.md)) ve Subtitle eklentisinin gerçek bir tarayıcıda denenmesi. Ayrıntı: [04](04-yol-haritasi.md), [CHANGELOG](../CHANGELOG.md), kullanıcı rehberi [guide/](guide/README.md) (v1.3'te ne değişti: [TR](guide/v1.3-tr.md) · [EN](guide/v1.3-en.md)).
+> **Durum:** **v1.4.0** — "kelime uygulaması" sürümü: kaybolamayan veri (doğrulanan akışlı yedek), "hangi kelimeleri biliyorum" sorusuna tek cevap (ortak kelime dizini, sıklık/CEFR, dil sorguları, bilinen kelimeler zamanla), Subtitle yakalaması bir karşılaşma (en öğretici sahne, zor kart onarımı), Test (bir kelime, dört anlam) ve Sınav, ölçülmüş hız ([12](12-performans.md)); arayüzde dört yerli kenar çubuğu (Ana sayfa · Kelimelerim · İlerleme · Ayarlar), tek "Gelişmiş" anahtarı, soru soru Temel ayarlar ve sade Günlük tempo ([11](11-tasarim.md)). Bekleyen: Windows'ta elle koşu ([07 §8](07-gelistirme-sureci.md)) ve Subtitle eklentisinin gerçek bir tarayıcıda denenmesi. Ayrıntı: [04](04-yol-haritasi.md), [CHANGELOG](../CHANGELOG.md), kullanıcı rehberi [guide/](guide/README.md) (v1.3'te ne değişti: [TR](guide/v1.3-tr.md) · [EN](guide/v1.3-en.md)).
 
 ## 🗂️ Dokümanlar
 
@@ -18,7 +18,7 @@ Bu klasör, uygulamanın **tam planını** içerir. Geliştirme boyunca pusulam�
 | 08 | [Açık Kararlar](08-acik-kararlar.md) | Henüz karar verilmemiş konular |
 | 09 | [Rakip Analizi](09-rakip-analizi.md) | Anki ve diğer uygulamalarla karşılaştırma, alınan fikirler |
 | 10 | [Sözleşme ve sürüm kayıtları](10-v0.1-sozlesme.md) | v0.1 sözleşmesi ve sonraki sürümlerin uygulama/doğrulama kayıtları |
-| 11 | [Tasarım (v1.3)](11-tasarim.md) | Akışlar (başlatıcı, klavye modeli, kart ekleme, ayar kiti, kelime kartları), bilgi mimarisi, tasarım sistemi, doğrulama (yolculuklar, Windows pilotu, ekran görüntüleri) |
+| 11 | [Tasarım (v1.4)](11-tasarim.md) | Akışlar (başlatıcı, klavye modeli, kart ekleme, ayar kiti, kelime kartları), bilgi mimarisi, tasarım sistemi, doğrulama (yolculuklar, Windows pilotu, ekran görüntüleri) |
 | 12 | [Performans (v1.4)](12-performans.md) | Ölçülmüş hız: 100k not / 2M tekrar + film izleme yükü (20k karşılaşma, ~1 GiB medya), makine, debug/release, düzeltilenler ve bilinen sınırlar |
 
 ## ⚡ Tek cümlede

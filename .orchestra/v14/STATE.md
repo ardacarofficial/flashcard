@@ -1,6 +1,11 @@
-# v1.4 state — backend closed (Z1, 2026-11-23)
+# v1.4 state — 1.4.0 integrated (F1, 2026-11-23)
 
-Version stays 1.3.0 (the design track is not built yet). All backend work of v1.4 is merged on `v14/z1`:
+Version **1.4.0** (`v14/f1`): backend (below) + design track built in the app (E1 study modes, E2 settings and
+navigation, E3 Add/Search/My words, E4 Progress/Home) + F1 integration (one Advanced switch, simple Günlük tempo,
+`words.mark/languages/history`, meaning in context in editor and study, browser cursor paging, journeys F1a–c).
+F1 details and what is left: see "F1 integration" at the end.
+
+Backend history: all backend work of v1.4 was merged on `v14/z1`:
 A1 backup, A2/A5 recall + capture diagnostics, A3 word index, A6 interrupted delivery, B2 frequency/CEFR,
 B3 language queries, B4 words on every surface, C0 deterministic tests, C1 study modes, W1 encounters,
 W2 meaning in context + accepted answers, W3 best scene + leech repair, W4 media origin + audio fill,
@@ -20,6 +25,19 @@ Z1 closing pass (measured speed, typed answers, consistency).
 ## Known limits / next
 - Backups hold the whole collection dump in memory twice over a create (write + verify-by-restore): peak memory
   grows with the review history (see docs/12). Streaming the dump table by table is the next backup step.
-- Settings UI for the v1.4 keys waits for the approved D2 prototype (only the schema exists).
 - Windows manual run and the Subtitle extension in a real browser are still pending (from v1.3).
-- Design track (D1–D3 prototypes) awaits the owner's approval; nothing of it is built.
+- The owner has not answered the prototypes' A/B questions; the app builds each prototype's first-load variant,
+  each flippable by one constant (listed in the E1–E4 and F1 reports / docs/11).
+
+## F1 integration (2026-11-23)
+- One Advanced switch (`app.show_advanced`) everywhere; "Gelişmiş" names only it (page disclosures: "Daha fazla ayar").
+- Names: Ekle, İlerleme, Test (quiz) / Sınav (paper) also on the deck page; Kelimelerim in the sidebar.
+- New API (additive, v1): `words.mark` (+ internal `words.restore`), `words.languages`, `words.history`,
+  `words.lookup` meanings, `words.stats.total`, `planning.apply_pace` `reviews_per_day`/`desired_retention`,
+  `search.cards` `cursor`/`next_cursor`. No migration.
+- New screens/parts: Basic › Günlük tempo (`/settings/pace`), "Bu cümledeki anlam" (editor + study menu), known-words
+  line chart on İlerleme. Journeys P1, F1a–F1c. Dialog keeps Esc/Tab when the focused action removes itself.
+- Open: no MCP tools for the new words methods; MCP `search_cards` still pages by offset; history uses today's
+  threshold and the current mark only; "Genel tempo" for all decks needs a core default (the pace page writes one
+  deck); no real-core journey for "Bu cümledeki anlam" (needs a provider); full-scale perf suite not re-run on a
+  quiet machine (study.start 663 ms under load in the keyset run).
