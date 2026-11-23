@@ -23,8 +23,17 @@
 //!   [`StorageError::Busy`] instead of dead-locking (e.g. a read opened while the same thread
 //!   holds the in-memory writer).
 //!
+//! * **WAL checkpoints off the write path** (v1.4 Z2): a file-backed store runs a
+//!   [`Checkpointer`] thread with its own connection. A commit only signals it; the thread
+//!   waits [`CHECKPOINT_DELAY`] for more commits, then runs a `PASSIVE` checkpoint (which
+//!   never blocks readers or the writer). SQLite's own auto-checkpoint ran inside the commit
+//!   that crossed 1 000 WAL pages — copying pages and syncing the database file under the
+//!   writer mutex: every ~15th Subtitle capture paid it (Linux ~12 ms, a Windows CI disk up to
+//!   2 s, stalling every command behind it). The writer keeps auto-checkpoint only as a safety
+//!   net at [`SAFETY_CHECKPOINT_PAGES`].
+//!
 //! Why not an `r2d2`-style pool: one more dependency for what is, on a desktop app, a fixed
-//! handful of connections; the scheme above is ~50 lines and has no background threads.
+//! handful of connections; the scheme above is ~50 lines plus the checkpoint thread.
 
 use crate::error::{StorageError, StorageResult};
 use crate::migrate;
@@ -32,7 +41,7 @@ use crate::repo::{Reads, Writes};
 use crate::sqlite::{ReadMode, SqliteTx, WriteMode};
 use rusqlite::{Connection, OpenFlags};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, TryLockError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, TryLockError};
 use std::time::{Duration, Instant};
 
 /// A read-only snapshot (deferred transaction on a read connection; WAL lets it run alongside
@@ -66,6 +75,130 @@ pub struct SqliteStore {
     path: Option<PathBuf>,
     backup: Option<PathBuf>,
     timeout: Duration,
+    /// Background WAL checkpoints (file-backed stores; `None` in memory or when its
+    /// connection could not be opened — SQLite's auto-checkpoint then stays as it was).
+    checkpointer: Option<Checkpointer>,
+}
+
+/// How long the checkpoint thread waits after a commit for more commits (one checkpoint
+/// per burst of captures, not one per capture).
+pub const CHECKPOINT_DELAY: Duration = Duration::from_millis(250);
+
+/// WAL size (pages) at which the writer still checkpoints itself: reached only if the
+/// background thread falls behind (SQLite's default is 1 000).
+pub const SAFETY_CHECKPOINT_PAGES: i64 = 20_000;
+
+#[derive(Default)]
+struct CheckpointState {
+    /// A commit happened since the last checkpoint started.
+    dirty: bool,
+    stop: bool,
+    /// Checkpoints run (tests).
+    runs: u64,
+}
+
+/// The WAL checkpoint thread of a file-backed store (see the module docs).
+struct Checkpointer {
+    state: Arc<(Mutex<CheckpointState>, Condvar)>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Checkpointer {
+    /// Starts the thread on its own connection to `path` and hooks `writer`'s commits to it.
+    /// `None` (nothing changed) when the connection cannot be opened.
+    fn start(path: &Path, writer: &mut Connection) -> Option<Self> {
+        let conn = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .ok()?;
+        conn.pragma_update(None, "busy_timeout", migrate::BUSY_TIMEOUT_MS)
+            .ok()?;
+        let state: Arc<(Mutex<CheckpointState>, Condvar)> = Arc::default();
+        let theirs = state.clone();
+        let thread = std::thread::Builder::new()
+            .name("fc-wal-checkpoint".into())
+            .spawn(move || checkpoint_loop(&conn, &theirs))
+            .ok()?;
+        let hooked = state.clone();
+        let hook = writer.commit_hook(Some(move || {
+            let (m, c) = &*hooked;
+            if let Ok(mut s) = m.lock() {
+                s.dirty = true;
+            }
+            c.notify_one();
+            false
+        }));
+        let safety = writer.pragma_update(None, "wal_autocheckpoint", SAFETY_CHECKPOINT_PAGES);
+        let mut me = Self {
+            state,
+            thread: Some(thread),
+        };
+        if hook.is_err() || safety.is_err() {
+            let _ = writer.commit_hook(None::<fn() -> bool>);
+            let _ = writer.pragma_update(None, "wal_autocheckpoint", 1_000);
+            me.stop();
+            return None;
+        }
+        Some(me)
+    }
+
+    fn stop(&mut self) {
+        let (m, c) = &*self.state;
+        if let Ok(mut s) = m.lock() {
+            s.stop = true;
+        }
+        c.notify_all();
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+    }
+
+    fn runs(&self) -> u64 {
+        self.state.0.lock().map_or(0, |s| s.runs)
+    }
+}
+
+/// Waits for a commit, lets a burst settle, checkpoints (`PASSIVE`: copies what no reader
+/// still needs, never waits for or blocks other connections); until told to stop.
+fn checkpoint_loop(conn: &Connection, state: &(Mutex<CheckpointState>, Condvar)) {
+    let (m, c) = state;
+    loop {
+        {
+            let Ok(mut s) = m.lock() else { return };
+            while !s.dirty && !s.stop {
+                s = match c.wait(s) {
+                    Ok(s) => s,
+                    Err(_) => return,
+                };
+            }
+            if s.stop {
+                return;
+            }
+            // Let the burst settle (a stop still ends the wait at once).
+            let until = Instant::now() + CHECKPOINT_DELAY;
+            while !s.stop {
+                let left = until.saturating_duration_since(Instant::now());
+                if left.is_zero() {
+                    break;
+                }
+                s = match c.wait_timeout(s, left) {
+                    Ok((s, _)) => s,
+                    Err(_) => return,
+                };
+            }
+            if s.stop {
+                return;
+            }
+            s.dirty = false;
+        }
+        // A failure (busy, I/O) is retried at the next commit; the writer's safety net
+        // bounds the WAL meanwhile.
+        let _ = conn.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |_| Ok(()));
+        if let Ok(mut s) = m.lock() {
+            s.runs += 1;
+        }
+    }
 }
 
 impl SqliteStore {
@@ -99,12 +232,14 @@ impl SqliteStore {
                 Ok(Mutex::new(r))
             })
             .collect::<StorageResult<Vec<_>>>()?;
+        let checkpointer = Checkpointer::start(path, &mut conn);
         Ok(Self {
             writer: Mutex::new(conn),
             readers,
             path: Some(path.to_owned()),
             backup,
             timeout: Duration::from_millis(u64::from(migrate::BUSY_TIMEOUT_MS)),
+            checkpointer,
         })
     }
 
@@ -140,12 +275,14 @@ impl SqliteStore {
                 Ok(Mutex::new(r))
             })
             .collect::<StorageResult<Vec<_>>>()?;
+        let checkpointer = Checkpointer::start(path, &mut conn);
         Ok(Self {
             writer: Mutex::new(conn),
             readers,
             path: Some(path.to_owned()),
             backup: None,
             timeout: Duration::from_millis(u64::from(migrate::BUSY_TIMEOUT_MS)),
+            checkpointer,
         })
     }
 
@@ -162,6 +299,7 @@ impl SqliteStore {
             path: None,
             backup: None,
             timeout: Duration::from_millis(u64::from(migrate::BUSY_TIMEOUT_MS)),
+            checkpointer: None,
         })
     }
 
@@ -174,6 +312,11 @@ impl SqliteStore {
     /// (`None` if nothing was migrated).
     pub fn migration_backup(&self) -> Option<&Path> {
         self.backup.as_deref()
+    }
+
+    /// Background checkpoints run so far (`None` without the thread; tests).
+    pub fn checkpoints_run(&self) -> Option<u64> {
+        self.checkpointer.as_ref().map(Checkpointer::runs)
     }
 
     fn reader(&self) -> StorageResult<MutexGuard<'_, Connection>> {
@@ -218,6 +361,11 @@ impl Store for SqliteStore {
 
 impl Drop for SqliteStore {
     fn drop(&mut self) {
+        // The thread's connection closes before the writer's (the last close checkpoints
+        // and removes the WAL).
+        if let Some(mut c) = self.checkpointer.take() {
+            c.stop();
+        }
         // Recommended before closing: lets SQLite refresh planner statistics if useful.
         if let Ok(conn) = self.writer.try_lock() {
             let _ = conn.execute_batch("PRAGMA optimize;");

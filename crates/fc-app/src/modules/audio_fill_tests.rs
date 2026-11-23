@@ -312,9 +312,12 @@ fn a_clip_is_never_invented_without_times(store: Arc<dyn Store>) {
     let without = capture(&t.app, &key, &shot(2, "bank", "banka", "The bank.", false))
         .unwrap()
         .note_id;
+    // Absolute on every platform (`/videos/…` is not absolute on Windows); the preview
+    // never opens the file.
+    let video = std::env::temp_dir().join("videos").join("show-s1e2.mkv");
     let req = |source: Option<&str>| FillAudio {
         video: Some(AudioFillVideo {
-            path: "/videos/show-s1e2.mkv".into(),
+            path: video.display().to_string(),
             source: source.map(str::to_owned),
         }),
         tts: Some(false),

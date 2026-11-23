@@ -98,6 +98,18 @@ cevap/yakalama aynı anda p95 28 / 47 ms · `study.options` 73 ms · `words.look
 11 ms · `encounters.rank` p95 3,7 ms · dizin 346 ms · yedek oluştur / doğrula **16 / 10 s, tepe ~500 MB** (Z2 akışla: 17 / 12 s, tepe ~250 / ~225 MB).
 Debug, release'ten 5–20× yavaştır (özellikle deflate ve serde); CI bütçeleri yalnız kaba regresyonu yakalar.
 
+## Windows CI'deki yakalama takılmaları (v1.4 Z2 izleme)
+
+Windows işinde (debug, ölçekli dünya) yakalama p50 5 ms iken p95 360 ms / maks 2,2 s, aynı anda cevap maks 1,5 s
+ölçüldü. Linux'ta `FC_PERF_SLOW_MS=12` (yavaş yakalamaları sırasıyla yazdırır) ile aynı örüntü küçük ölçekte
+görüldü: yavaşlar medyalı yakalamalar **değil**, her ~14–22 yakalamada bir (#14, 29, 42, 58, 73 …) ~17 ms — SQLite'ın
+otomatik WAL checkpoint'i (1 000 sayfa): o commit'in içinde, yazar kilidi tutulurken sayfaları kopyalayıp veritabanı
+dosyasını senkronluyordu; Windows'un CI diskinde bu saniyeler sürüyor ve arkasındaki her komut (cevaplar) bekliyordu.
+Otomatik checkpoint kapatılınca periyodik yavaşlar kayboldu (p95 17,3 → 6,3 ms, cevap maks 27 → 11 ms). Düzeltme:
+checkpoint deponun kendi iş parçacığında (docs/03 "SQLite"); sonrası Linux'ta yakalama p50 / p95 / maks 4,5 / 6,3 / 24 ms,
+cevap 6,6 / 10,0 / 11 ms. Ölçekli CI bütçeleri **değişmedi** (Windows'ta kalan bir yavaşlık disk/virüs tarayıcısı
+kaynaklıysa bir sonraki koşunun `FC_PERF_SLOW_MS` dökümü gösterir).
+
 ## Düzeltilenler (önce → sonra)
 
 | Sorun | Düzeltme | Önce → sonra (CI ölçeği, debug) |
