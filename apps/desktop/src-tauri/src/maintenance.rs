@@ -284,6 +284,64 @@ impl<R: Runtime> Updater for TauriUpdater<R> {
 /// [`RunState`] shared with the updater's exit hook (Tauri state).
 pub type RunStateHandle = Arc<RunState>;
 
+/// v1.4.1: the collection at `db` is damaged (it did not open and SQLite's integrity check
+/// fails). A native, bilingual dialog (the UI cannot start without a collection) offers:
+/// restore the newest verified backup, or keep what is readable; the damaged files are moved
+/// aside and kept either way. `Err` (the startup error) when the user quits or the rescue
+/// fails — nothing is lost then either.
+pub fn offer_rescue(db: &std::path::Path, error: &str) -> Result<(), String> {
+    use fc_app::modules::maintenance::rescue::{rescue, RescueMode};
+    use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
+    let (backup, readable, quit) = (
+        "Yedekten geri yükle / Restore backup".to_owned(),
+        "Okunabileni kurtar / Keep what is readable".to_owned(),
+        "Çık / Quit".to_owned(),
+    );
+    let choice = MessageDialog::new()
+        .set_level(MessageLevel::Warning)
+        .set_title("Flashcard")
+        .set_description(rescue_text(error))
+        .set_buttons(MessageButtons::YesNoCancelCustom(
+            backup.clone(),
+            readable.clone(),
+            quit,
+        ))
+        .show();
+    let mode = match choice {
+        MessageDialogResult::Custom(c) if c == backup => RescueMode::Backup,
+        MessageDialogResult::Yes => RescueMode::Backup,
+        MessageDialogResult::Custom(c) if c == readable => RescueMode::Readable,
+        MessageDialogResult::No => RescueMode::Readable,
+        _ => return Err(error.to_owned()),
+    };
+    let now = fc_core::Clock::now(&fc_app::system::SystemClock);
+    let report = rescue(db, mode, now).map_err(|e| {
+        let e = e.into_api();
+        format!("{error}\n\n{}: {}", e.code, e.message)
+    })?;
+    MessageDialog::new()
+        .set_level(MessageLevel::Info)
+        .set_title("Flashcard")
+        .set_description(format!(
+            "Koleksiyon kurtarıldı. Bozuk dosyalar silinmedi, burada duruyor:\n\
+             The collection was rescued. The damaged files were not deleted, they are here:\n\n{}",
+            report.kept_in
+        ))
+        .set_buttons(MessageButtons::Ok)
+        .show();
+    Ok(())
+}
+
+/// Text of the rescue dialog (bilingual: the UI dictionaries are not loaded yet).
+pub fn rescue_text(detail: &str) -> String {
+    format!(
+        "Koleksiyon dosyası bozuk görünüyor. Hiçbir şey silinmeyecek: bozuk dosyalar \
+         `damaged` klasörüne taşınıp saklanır.\n\
+         The collection file looks damaged. Nothing will be deleted: the damaged files are \
+         moved to the `damaged` folder and kept.\n\n{detail}"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,62 +412,4 @@ mod tests {
         let e = tauri_plugin_updater::Error::Network("down".into());
         assert!(matches!(map_error(&e), UpdateError::Network(_)));
     }
-}
-
-/// v1.4.1: the collection at `db` is damaged (it did not open and SQLite's integrity check
-/// fails). A native, bilingual dialog (the UI cannot start without a collection) offers:
-/// restore the newest verified backup, or keep what is readable; the damaged files are moved
-/// aside and kept either way. `Err` (the startup error) when the user quits or the rescue
-/// fails — nothing is lost then either.
-pub fn offer_rescue(db: &std::path::Path, error: &str) -> Result<(), String> {
-    use fc_app::modules::maintenance::rescue::{rescue, RescueMode};
-    use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
-    let (backup, readable, quit) = (
-        "Yedekten geri yükle / Restore backup".to_owned(),
-        "Okunabileni kurtar / Keep what is readable".to_owned(),
-        "Çık / Quit".to_owned(),
-    );
-    let choice = MessageDialog::new()
-        .set_level(MessageLevel::Warning)
-        .set_title("Flashcard")
-        .set_description(rescue_text(error))
-        .set_buttons(MessageButtons::YesNoCancelCustom(
-            backup.clone(),
-            readable.clone(),
-            quit,
-        ))
-        .show();
-    let mode = match choice {
-        MessageDialogResult::Custom(c) if c == backup => RescueMode::Backup,
-        MessageDialogResult::Yes => RescueMode::Backup,
-        MessageDialogResult::Custom(c) if c == readable => RescueMode::Readable,
-        MessageDialogResult::No => RescueMode::Readable,
-        _ => return Err(error.to_owned()),
-    };
-    let now = fc_core::Clock::now(&fc_app::system::SystemClock);
-    let report = rescue(db, mode, now).map_err(|e| {
-        let e = e.into_api();
-        format!("{error}\n\n{}: {}", e.code, e.message)
-    })?;
-    MessageDialog::new()
-        .set_level(MessageLevel::Info)
-        .set_title("Flashcard")
-        .set_description(format!(
-            "Koleksiyon kurtarıldı. Bozuk dosyalar silinmedi, burada duruyor:\n\
-             The collection was rescued. The damaged files were not deleted, they are here:\n\n{}",
-            report.kept_in
-        ))
-        .set_buttons(MessageButtons::Ok)
-        .show();
-    Ok(())
-}
-
-/// Text of the rescue dialog (bilingual: the UI dictionaries are not loaded yet).
-pub fn rescue_text(detail: &str) -> String {
-    format!(
-        "Koleksiyon dosyası bozuk görünüyor. Hiçbir şey silinmeyecek: bozuk dosyalar \
-         `damaged` klasörüne taşınıp saklanır.\n\
-         The collection file looks damaged. Nothing will be deleted: the damaged files are \
-         moved to the `damaged` folder and kept.\n\n{detail}"
-    )
 }
