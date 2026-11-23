@@ -3,7 +3,8 @@ import type { DeckId } from "./DeckId";
 
 /**
  * `planning.apply_pace`: sets the new-card limit of a deck's preset (creating and assigning a
- * preset when the deck has none) and optionally adds an exam date for the deck. One undo
+ * preset when the deck has none), v1.4 also its review limit and desired retention (the
+ * "Daily pace" settings page), and optionally adds an exam date for the deck. One undo
  * step; the forecast's `target` says beforehand what it touches.
  */
 export type ApplyPace = { 
@@ -26,4 +27,12 @@ exam_date?: string | null,
 /**
  * The exam's name (default: the deck's name).
  */
-exam_name?: string | null, };
+exam_name?: string | null, 
+/**
+ * v1.4: also set the preset's review limit (0–99999; `None` = unchanged).
+ */
+reviews_per_day?: number | null, 
+/**
+ * v1.4: also set the preset's desired retention (0.70–0.99; `None` = unchanged).
+ */
+desired_retention?: number | null, };

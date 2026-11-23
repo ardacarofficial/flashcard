@@ -702,6 +702,17 @@ fn free_preset_name(reads: &dyn Reads, base: &str) -> AppResult<String> {
     Ok(name)
 }
 
+/// `config` with the limits and retention of `req` (fields `req` leaves out stay); the
+/// preset command that stores it validates the result.
+fn paced(req: &ApplyPace, config: fc_core::preset::PresetConfig) -> fc_core::preset::PresetConfig {
+    fc_core::preset::PresetConfig {
+        new_per_day: req.new_per_day,
+        reviews_per_day: req.reviews_per_day.unwrap_or(config.reviews_per_day),
+        desired_retention: req.desired_retention.unwrap_or(config.desired_retention),
+        ..config
+    }
+}
+
 fn apply_pace(req: ApplyPace, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<PaceApplied>> {
     use fc_api::v1::presets::{AssignPreset, CreatePreset, PresetDto, UpdatePreset};
     validate_pace(req.new_per_day)?;
@@ -726,16 +737,14 @@ fn apply_pace(req: ApplyPace, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutc
                 .reads()
                 .get_preset(id)?
                 .ok_or_else(|| err_id(ErrorCode::NotFoundPreset, format!("preset {id} not found"), id))?;
-            if preset.config.new_per_day != req.new_per_day {
+            let config = paced(&req, preset.config.clone());
+            if config != preset.config {
                 call::<PresetsUpdate>(
                     ctx,
                     &UpdatePreset {
                         id,
                         name: preset.name,
-                        config: fc_core::preset::PresetConfig {
-                            new_per_day: req.new_per_day,
-                            ..preset.config
-                        },
+                        config,
                     },
                 )?;
             }
@@ -747,10 +756,7 @@ fn apply_pace(req: ApplyPace, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutc
                 ctx,
                 &CreatePreset {
                     name,
-                    config: Some(fc_core::preset::PresetConfig {
-                        new_per_day: req.new_per_day,
-                        ..fc_core::preset::PresetConfig::default()
-                    }),
+                    config: Some(paced(&req, fc_core::preset::PresetConfig::default())),
                 },
             )?;
             call::<PresetsAssign>(

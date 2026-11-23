@@ -67,7 +67,7 @@ describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
     // The one "Advanced" switch shows every other v1.3 page, grouped.
     await fireEvent.click(within(screen.getByTestId('advanced-switch')).getByRole('switch'));
     await waitFor(() => expect(groups()).toEqual(['Basics', 'Studying', 'App', 'Connections (details)', 'Data and upkeep']));
-    expect(pages()).toEqual(['Daily pace', 'How cards look', 'Reminders', 'Subtitle and connections', 'Backup', 'Language and look', 'Modes and reading', 'Words', 'Shortcuts', 'Adding cards', 'Profiles & lock', 'AI', 'Assistants (MCP)', 'Automation', 'Plugins', 'Starter decks', 'Maintenance', 'Logs & updates']);
+    expect(pages()).toEqual(['Daily pace', 'How cards look', 'Reminders', 'Subtitle and connections', 'Backup', 'Language and look', 'Deck options', 'Modes and reading', 'Words', 'Shortcuts', 'Adding cards', 'Profiles & lock', 'AI', 'Assistants (MCP)', 'Automation', 'Plugins', 'Starter decks', 'Maintenance', 'Logs & updates']);
     await fireEvent.click(screen.getByRole('button', { name: 'Reminders' }));
     expect(sub.querySelector('[aria-current="page"]')?.textContent?.trim()).toBe('Reminders');
 

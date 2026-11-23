@@ -90,13 +90,14 @@ export const PLACEMENTS: readonly { route: string; place: Place; also?: Place[];
   // Inbox (sidebar footer).
   { route: '/inbox', place: { kind: 'inbox' } },
   // Basic settings: the everyday questions (prototype order).
-  { route: '/presets', place: settings('basic'), label_key: 'shell.page.pace' },
+  { route: '/settings/pace', place: settings('basic'), label_key: 'shell.page.pace' },
   { route: '/notetypes', place: settings('basic'), label_key: 'shell.page.cards' },
   { route: '/reminders', place: settings('basic'), label_key: 'shell.page.reminders' },
   { route: '/subtitle', place: settings('basic'), label_key: 'shell.page.subtitle' },
   { route: '/io', place: settings('basic'), label_key: 'shell.page.backup' },
   { route: '/settings/*', place: settings('basic'), label_key: 'shell.page.look' },
   // Advanced › Studying: the study screen and modes, words.
+  { route: '/presets', place: settings('study') },
   { route: '/mode-settings', place: settings('study') },
   { route: '/settings/words', place: settings('study') },
   // Advanced › App.
