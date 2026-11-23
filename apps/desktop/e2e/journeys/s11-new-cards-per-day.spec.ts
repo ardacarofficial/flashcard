@@ -39,15 +39,16 @@ async function launcherShows(page: Page, deckName: string): Promise<{ due: strin
 }
 
 /**
- * Settings › deck options. The first time through the General page's "How many new words a
- * day?" link (what the owner would look for); Settings reopens on the last page, so later
- * through the settings navigation.
+ * Settings › deck options. The first time Settings opens straight on it (v1.4: Basic › "Daily
+ * pace", what the owner would look for); Settings reopens on the last page, so later through
+ * the settings navigation.
  */
 async function openDeckOptions(page: Page, via: 'guide' | 'nav') {
   await goToSection(page, 'shell.settings');
   const main = page.locator('#fc-main');
   if (via === 'guide') {
-    await main.getByRole('button', { name: new RegExp(`^${t('settings.guide.new_per_day').replace(/[?.]/g, '\\$&')}`) }).click();
+    // v1.4: Settings opens on the first Basic page, "Daily pace" — the everyday question itself.
+    await expect(main.getByRole('navigation', { name: t('shell.settings_nav') }).getByRole('button', { name: t('shell.page.pace'), exact: true })).toHaveAttribute('aria-current', 'page');
   } else {
     await main.getByRole('navigation', { name: t('shell.settings_nav') }).getByRole('button', { name: t('shell.page.pace'), exact: true }).click();
   }
