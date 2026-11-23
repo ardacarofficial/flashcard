@@ -3,7 +3,9 @@
   classification per row, row actions (study, add card, ⋯) on hover/focus, keyboard
   navigation — or, as the secondary view, a grid of deck cards (`fc.library.view`; the tree is
   the default). "New deck". Opening a deck selects it and shows its deck page here; the page's
-  back link returns. Numbers come from `decks.tree` / `decks.summaries`.
+  back link returns. Numbers come from `decks.tree` / `decks.summaries`. v1.4: with the
+  `words` module on, one slim row says how many notes have no language (`words.stats`) and
+  leads to a deck that needs one.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -11,7 +13,7 @@
   import type { DeckId, DeckSummaries, ModuleDto } from '$lib/api/types';
   import { t } from '$lib/i18n/index.svelte';
   import { usePageKeys } from '$lib/shell/page-keys.svelte';
-  import { Button, EmptyState, LayoutGrid, Library, List, PageHeader, Plus, SegmentedControl, Skeleton } from '$lib/ui';
+  import { Button, ChevronRight, EmptyState, Icon, Languages, LayoutGrid, Library, List, PageHeader, Plus, SegmentedControl, Skeleton } from '$lib/ui';
   import type { ScreenCtx } from '../types';
   import DeckCard from './DeckCard.svelte';
   import DeckDialogs from './DeckDialogs.svelte';
@@ -19,7 +21,8 @@
   import DeckTreeRows from './DeckTreeRows.svelte';
   import NameDialog from './NameDialog.svelte';
   import { addCardAction, deckMenu, studyAction, type DeckRequest } from './deck-menu';
-  import { nodesById, summariesById, todayCounts } from './library';
+  import { firstDeckWithoutLanguage } from './language';
+  import { moduleOn, nodesById, summariesById, todayCounts } from './library';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -37,6 +40,8 @@
   let view = $state<View>(readView());
   let creating = $state(false);
   let request = $state<DeckRequest | null>(null);
+  /** Notes the word index can't count (no language); 0 while the `words` module is off. */
+  let unassigned = $state(0);
 
   const nodes = $derived(nodesById(ctx.decks));
   const byId = $derived(summariesById(summaries));
@@ -68,14 +73,44 @@
     }
   }
 
+  async function loadWords() {
+    if (!moduleOn(modules, 'words')) {
+      unassigned = 0;
+      return;
+    }
+    try {
+      unassigned = (await api.call('words.stats', {})).unassigned_notes;
+    } catch {
+      unassigned = 0;
+    }
+  }
+
+  async function loadModules() {
+    try {
+      modules = (await api.modules.list()).modules;
+    } catch {
+      return;
+    }
+    await loadWords();
+  }
+
+  /** The hint's link: the first deck without a language, else just the Library. */
+  async function openUnassigned() {
+    const id = await firstDeckWithoutLanguage(ctx.decks).catch(() => null);
+    if (id) ctx.selectDeck(id);
+  }
+
   onMount(() => {
     void load();
-    void api.modules.list().then(
-      (m) => (modules = m.modules),
-      () => {},
-    );
+    void loadModules();
     const unsub = api.on(['deck_', 'note', 'card', 'study_', 'undone', 'redone', 'data_changed', 'imported', 'collection_', 'attribute'], () => void load());
-    return () => void unsub.then((u) => u());
+    const unsubWords = api.on(['deck_', 'note', 'setting_changed', 'undone', 'redone', 'data_changed', 'imported', 'collection_'], () => void loadWords());
+    const unsubModules = api.on(['module_toggled'], () => void loadModules());
+    return () => {
+      void unsub.then((u) => u());
+      void unsubWords.then((u) => u());
+      void unsubModules.then((u) => u());
+    };
   });
 
   // "10 decks: 4 top-level, 6 sub-decks · 141 cards to study today"
@@ -116,6 +151,14 @@
       <span>{t('library.load_failed')}</span>
       <Button size="sm" variant="ghost" onclick={() => void load()}>{t('library.retry')}</Button>
     </div>
+  {/if}
+
+  {#if unassigned > 0 && ctx.decks.length > 0}
+    <button type="button" class="hint-row" data-testid="library-unassigned" onclick={() => void openUnassigned()}>
+      <Icon icon={Languages} size={16} />
+      <span class="hint-text">{t('decks.unassigned.notice', { count: unassigned })}</span>
+      <span class="hint-open">{t('decks.unassigned.action')}<Icon icon={ChevronRight} size={14} /></span>
+    </button>
   {/if}
 
   {#if ctx.decks.length === 0}
@@ -204,6 +247,51 @@
     background: var(--danger-soft);
     color: var(--danger);
     font-size: var(--text-sm);
+  }
+  /* Same slim row as Home's inbox notice. */
+  .hint-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-height: var(--row-h);
+    margin-bottom: var(--space-3);
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-1);
+    color: var(--text-1);
+    font: inherit;
+    font-size: var(--text-sm);
+    text-align: start;
+    cursor: pointer;
+    transition: background var(--motion-fast) var(--ease);
+  }
+  .hint-row :global(svg) {
+    flex: none;
+    color: var(--accent-text);
+  }
+  .hint-row:hover {
+    background: var(--surface-2);
+  }
+  .hint-row:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+  .hint-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .hint-open {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 2px;
+    color: var(--text-2);
+    font-size: var(--text-xs);
+  }
+  .hint-open :global(svg) {
+    color: var(--text-2);
   }
   .keys {
     margin: var(--space-2) 0 0;
