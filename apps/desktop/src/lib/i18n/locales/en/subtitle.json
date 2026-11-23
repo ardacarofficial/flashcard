@@ -6,6 +6,10 @@
     "subtitle": {
       "name": "Subtitle extension",
       "description": "Off by default. Words you add with + in video subtitles (Subtitle browser extension) become cards in a deck, with the line, its translation, a screenshot and the audio. Only this computer can connect, with an access key you create here."
+    },
+    "examples": {
+      "name": "Best example",
+      "description": "Ranks the scenes of a word by how easy they are to learn from: unknown words besides the word (names do not count), whole sentence or a cut line, sound and picture, common words around it. Says why, and spots the same line captured twice."
     }
   },
   "settings": {
@@ -23,6 +27,10 @@
         "description": "Another example: a new scene of a word you already have a card for, with the same meaning, is added to that card as another example (no new card; its schedule stays). A different meaning gets its own card and asks you once. New card: every line is a new card (as before v1.4).",
         "add_example": "Another example",
         "always_new_card": "New card"
+      },
+      "auto_best_example": {
+        "label": "Show the best example by itself",
+        "description": "Off: a new scene of a word is only added as another example; the card keeps showing the one it has. On: when the new scene is clearly easier to learn from (fewer unknown words, a whole sentence, sound and picture), the card shows it instead. Undo brings the old one back; the card's schedule never changes."
       }
     }
   },
@@ -45,8 +53,13 @@
         "set_primary": "Show this example on the card",
         "move": "Move an example to another card",
         "merge_notes": "Merge two cards of one word",
-        "resolve": "Same or different meaning?"
+        "resolve": "Same or different meaning?",
+        "rank": "Rank the examples of a word",
+        "suggest_primary": "Suggest a better example for the card"
       }
+    },
+    "examples": {
+      "rank_sentences": "Rank sentences for a word"
     }
   },
   "errors": {

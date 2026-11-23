@@ -14,6 +14,7 @@ pub mod automation;
 pub mod card;
 pub mod content;
 pub mod deck;
+pub mod encounter_score;
 pub mod error;
 pub mod goal;
 pub mod i18n;

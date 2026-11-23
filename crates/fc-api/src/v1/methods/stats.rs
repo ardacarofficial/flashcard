@@ -20,4 +20,15 @@ methods! {
     StatsDeckReports = "stats.deck_reports", Query, "stats", "stats:read", Public, undo: false, DeckReportsRequest => DeckReports;
     /// Brings the statistics cache up to date (derived data; no undo step).
     StatsRefreshCache = "stats.refresh_cache", Command, "stats", "stats:write", Public, undo: false, RefreshStatsCache => StatsCacheInfo;
+    // ---- stats: leech repair (v1.4) ----
+    /// v1.4: a leech's evidence (failed reviews, its example ranked, other examples, meaning vs
+    /// accepted answers, other notes of the word) and previewed repairs.
+    StatsLeechesRepairPlan = "stats.leech_repairs.plan", Query, "stats", "stats:read", Public, undo: false, LeechCardRef => LeechRepairPlan;
+    /// v1.4: applies one repair (an existing undoable command) to a leech and records it —
+    /// one undo step.
+    StatsLeechesRepair = "stats.leech_repairs.apply", Command, "stats", "cards:write", Public, undo: true, ApplyLeechRepair => LeechRepairDto;
+    /// v1.4: recorded repairs and the card's scheduled reviews before/after each.
+    StatsLeechesRepairs = "stats.leech_repairs.list", Query, "stats", "stats:read", Public, undo: false, LeechRepairsRequest => LeechRepairReport;
+    /// Internal (v1.4) inverse of `stats.leech_repairs.apply`: removes or puts back records exactly.
+    StatsLeechesRepairsRestore = "stats.leech_repairs.restore", Command, "stats", "cards:write", Internal, undo: true, RestoreLeechRepairs => crate::v1::common::Empty;
 }

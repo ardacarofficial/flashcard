@@ -175,6 +175,15 @@ pub(crate) fn exposure(name: &str) -> Exposure {
         "stats.struggles" => Reads(STATS_ROWS),
         // Which cards it changes says which cards are leeches.
         "stats.apply_to_leeches" => Oracle(STATS_CARDS),
+        // v1.4 leech repair: the report carries the applied repairs (answers, rewritten
+        // fields: note text). The plan shows Subtitle examples and applying runs Subtitle and
+        // AI-draft commands: both the user's.
+        "stats.leech_repairs.list" => Reads(STATS_ROWS),
+        "stats.leech_repairs.plan" | "stats.leech_repairs.apply" => {
+            Refused("repairing a leech is the user's (Subtitle examples, AI drafts)")
+        }
+        // v1.4 best scene: candidate sentences ranked with the word index's statuses.
+        "examples.rank_sentences" => Reads(READING_CARDS),
         // Whole-history work (cache rebuild, FSRS training): the user's, never a plugin's.
         "stats.refresh_cache" | "optimizer.run" => Refused(UNBOUNDED),
         "optimizer.workload" => Reads(DECKS),

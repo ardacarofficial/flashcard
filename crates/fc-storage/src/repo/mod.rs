@@ -88,4 +88,5 @@ domains! {
     word_data: WordDataRead, WordDataWrite;
     capture_log: CaptureLogRead, CaptureLogWrite;
     meanings: MeaningRead, MeaningWrite;
+    leech_repairs: LeechRepairRead, LeechRepairWrite;
 }

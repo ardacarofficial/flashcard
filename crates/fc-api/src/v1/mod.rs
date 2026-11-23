@@ -11,6 +11,7 @@ pub mod cardtypes;
 pub mod common;
 pub mod decks;
 pub mod events;
+pub mod examples;
 pub mod inbox;
 pub mod io;
 pub mod jobs;

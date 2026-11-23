@@ -188,4 +188,5 @@ domains! {
     word_data => WordDataState,
     capture_log => CaptureLogState,
     meanings => MeaningState,
+    leech_repairs => LeechRepairState,
 }
