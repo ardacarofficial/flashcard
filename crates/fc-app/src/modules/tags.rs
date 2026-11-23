@@ -98,10 +98,15 @@ fn retag(
     Ok(inverse)
 }
 
-/// Carries the color of `from` over to `to` if `to` has no row yet.
-fn carry_color(ctx: &mut CommandCtx<'_>, from: &TagName, to: &TagName) -> AppResult<()> {
+/// Carries the color of `from` over to `to` if `to` has no row yet. Returns the inverse
+/// (v1.4.1 H3: without it, undoing the rename left a coloured tag no note uses).
+fn carry_color(
+    ctx: &mut CommandCtx<'_>,
+    from: &TagName,
+    to: &TagName,
+) -> AppResult<Option<fc_api::InvokeRequest>> {
     let Some(src) = ctx.reads().get_tag_by_name(from)? else {
-        return Ok(());
+        return Ok(None);
     };
     if src.color.is_some() && ctx.reads().get_tag_by_name(to)?.is_none() {
         ctx.tx.upsert_tag(&Tag {
@@ -111,8 +116,12 @@ fn carry_color(ctx: &mut CommandCtx<'_>, from: &TagName, to: &TagName) -> AppRes
             created_at: ctx.now,
             updated_at: ctx.now,
         })?;
+        return Ok(Some(inverse_call::<TagsSetColor>(&SetTagColor {
+            name: to.as_str().to_owned(),
+            color: None,
+        })?));
     }
-    Ok(())
+    Ok(None)
 }
 
 fn rename(req: RenameTag, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<TagChangeResult>> {
@@ -127,9 +136,10 @@ fn rename(req: RenameTag, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<
             from.as_str(),
         ));
     }
-    carry_color(ctx, &from, &to)?;
-    let inverse = retag(ctx, std::slice::from_ref(&from), &to)?;
+    let uncolor = carry_color(ctx, &from, &to)?;
+    let mut inverse = retag(ctx, std::slice::from_ref(&from), &to)?;
     let notes_affected = u32::try_from(inverse.len()).unwrap_or(u32::MAX);
+    inverse.extend(uncolor);
     Ok(CommandOutcome {
         response: TagChangeResult { notes_affected },
         events: if inverse.is_empty() {

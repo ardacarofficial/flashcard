@@ -74,6 +74,9 @@ pub enum QueryErrorKind {
         /// Compiler message.
         message: String,
     },
+    /// v1.4.1: parentheses/negations nested deeper than [`super::parse::MAX_DEPTH`] (a pasted
+    /// `((((…` used to overflow the stack).
+    TooDeep,
 }
 
 impl QueryErrorKind {
@@ -95,6 +98,7 @@ impl QueryErrorKind {
             Self::InvalidFlag { .. } => "invalid_flag",
             Self::InvalidId { .. } => "invalid_id",
             Self::InvalidRegex { .. } => "invalid_regex",
+            Self::TooDeep => "too_deep",
         }
     }
 

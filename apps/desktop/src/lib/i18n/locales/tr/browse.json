@@ -340,6 +340,7 @@
     "query": {
       "unclosed_quote": "Bir tırnak kapanmamış.",
       "unclosed_paren": "Bir parantez kapanmamış.",
+      "too_deep": "Sorgu çok iç içe (en fazla 50 kat parantez ya da eksi).",
       "unmatched_paren": "Açılmamış parantez kapatılmış.",
       "expected_term": "Burada bir arama terimi eksik.",
       "empty_value": "“{key}:” bir değer bekliyor.",

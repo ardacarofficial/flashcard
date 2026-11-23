@@ -209,10 +209,18 @@ impl Lexer {
     }
 }
 
+/// Deepest nesting of parentheses and negations (`-`, `NOT`) a query may have. Parsing,
+/// resolving, evaluating and compiling to SQL recurse once per level: without a bound a pasted
+/// run of `(` overflows the stack (v1.4.1: 1000 levels did on a 2 MB thread) and SQLite refuses
+/// expressions deeper than 1000.
+pub const MAX_DEPTH: usize = 50;
+
 struct Parser {
     toks: Vec<(Tok, Span)>,
     pos: usize,
     len: usize,
+    /// Current nesting ([`MAX_DEPTH`]).
+    depth: usize,
 }
 
 impl Parser {
@@ -266,14 +274,23 @@ impl Parser {
         let Some((tok, span)) = self.toks.get(self.pos).cloned() else {
             return Err(QueryError::new(QueryErrorKind::ExpectedTerm, here));
         };
+        if matches!(tok, Tok::Neg | Tok::Not | Tok::LParen) {
+            if self.depth >= MAX_DEPTH {
+                return Err(QueryError::new(QueryErrorKind::TooDeep, span));
+            }
+            self.depth += 1;
+        }
         match tok {
             Tok::Neg | Tok::Not => {
                 self.pos += 1;
-                Ok(Expr::Not(Box::new(self.unary()?)))
+                let inner = self.unary()?;
+                self.depth -= 1;
+                Ok(Expr::Not(Box::new(inner)))
             }
             Tok::LParen => {
                 self.pos += 1;
                 let inner = self.or()?;
+                self.depth -= 1;
                 match self.peek() {
                     Some(Tok::RParen) => {
                         self.pos += 1;
@@ -310,6 +327,7 @@ pub fn parse_query(text: &str) -> Result<Expr, QueryError> {
         toks,
         pos: 0,
         len: lexer.chars.len(),
+        depth: 0,
     };
     let expr = p.or()?;
     if let Some((tok, span)) = p.toks.get(p.pos) {

@@ -340,6 +340,7 @@
     "query": {
       "unclosed_quote": "A quote is not closed.",
       "unclosed_paren": "A parenthesis is not closed.",
+      "too_deep": "The query is nested too deeply (at most 50 levels of brackets or minus signs).",
       "unmatched_paren": "Closing parenthesis without an opening one.",
       "expected_term": "A search term is missing here.",
       "empty_value": "“{key}:” needs a value.",

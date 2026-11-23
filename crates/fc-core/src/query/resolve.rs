@@ -440,7 +440,8 @@ impl<'a> Resolver<'a> {
                     Some(start) if days >= 1 => {
                         start.plus_millis(-(days - 1).saturating_mul(MILLIS_PER_DAY))
                     }
-                    _ => now.plus_millis(-days.saturating_mul(MILLIS_PER_DAY)),
+                    // `saturating_neg`: `added:-9223372036854775808` overflowed (v1.4.1).
+                    _ => now.plus_millis(days.saturating_mul(MILLIS_PER_DAY).saturating_neg()),
                 };
                 let (col, op, at) = match k.as_str() {
                     "added" => (TimeCol::CardCreated, CmpOp::Ge, back),

@@ -2,6 +2,10 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## Unreleased (v1.4.1)
+
+- **Rastgele ve bozuk girdi testleri (H3), bulunan 11 hata düzeltildi:** paket/metin okuyucuları, Subtitle HTTP API'si, sorgu dili ve kayıt defterindeki tüm geri alınabilir komutlar tohumlu rastgele testlerle korunuyor (docs/07 §3.2). Düzeltilenler: metin dışa aktarımında tek `\r`, özel kayıt ayırıcısından sonraki tırnak, ayırıcının başıyla biten değer ve boş ilk değer geri içe aktarmada bozuluyordu; tek notu bozuk UTF-8/blob olan Anki paketi tümden reddediliyordu (artık U+FFFD ile okunur); renkli etiketi yeniden adlandırmanın geri alınması renkli, notsuz bir etiket bırakıyordu; 1000 kelimelik sorgu SQLite'ta "Expression tree is too large" veriyordu, 1000 kat iç içe sorgu yığını taşırıyordu (artık en çok 50 kat, `too_deep` hatası), `added:-9223372036854775808` panikliyordu, `kaynak:*` boş kaynaklı notları buluyordu; kesik/bozuk gövdeli Subtitle isteği 413 (eklentide kalıcı hata) yerine 422 döner. _(H3)_
+
 ## Unreleased (v1.4)
 
 - **Subtitle eklentisi gerçek tarayıcıda (G2):** derlenmiş eklenti gerçek Chromium'da gerçek `fc api serve`'e karşı sahibin akışıyla denendi (eşleştirme, **+**, aynı kelime ikinci sahneden → aynı notun karşılaşması, deyim, uygulama kapalı/yeniden başlamış, yanlış/iptal anahtar, bilinen kelimeler eklentinin kökeninden); hepsi geçti, Flashcard tarafında hata çıkmadı; betik `tools/subtitle-real-browser/run.mjs`, rapor ve eklentide gereken değişiklik `docs/14-subtitle-gercek-tarayici.md`.
