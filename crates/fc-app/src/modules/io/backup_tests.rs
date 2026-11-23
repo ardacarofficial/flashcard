@@ -12,8 +12,8 @@ use fc_api::v1::io::*;
 use fc_api::v1::jobs::{JobDto, JobRef, JobStatus};
 use fc_api::v1::methods::*;
 use fc_api::v1::settings::SetSetting;
-use fc_core::settings::SettingScope;
 use fc_api::ErrorCode;
+use fc_core::settings::SettingScope;
 use fc_core::{Clock, Timestamp};
 use fc_interop::anki::fixtures as anki_fx;
 use fc_interop::media::sha256_hex;
@@ -134,10 +134,17 @@ type MediaFiles = Vec<(MediaRecord, Vec<u8>)>;
 /// What must survive a backup → restore, byte for byte.
 fn essentials(t: &TestApp) -> (Vec<Rows>, MediaFiles) {
     let d = dump(t);
-    let rows = ["decks", "notetypes", "notes", "cards", "review_log", "media"]
-        .iter()
-        .map(|n| table(&d, n))
-        .collect();
+    let rows = [
+        "decks",
+        "notetypes",
+        "notes",
+        "cards",
+        "review_log",
+        "media",
+    ]
+    .iter()
+    .map(|n| table(&d, n))
+    .collect();
     let tx = t.store.read().unwrap();
     let mut media: MediaFiles = tx
         .list_media()
@@ -187,7 +194,10 @@ fn restore_into_an_empty_profile_brings_notes_history_and_media_back_byte_identi
     assert_eq!(rr.media, 2);
     assert!(rr.missing_media.is_empty());
     let after = essentials(&b.t);
-    assert_eq!(after.0, before.0, "decks, notes, cards, review history and media rows");
+    assert_eq!(
+        after.0, before.0,
+        "decks, notes, cards, review history and media rows"
+    );
     assert_eq!(after.1, before.1, "media files byte-identical");
     for (m, bytes) in &after.1 {
         assert_eq!(sha256_hex(bytes), m.hash);
@@ -224,7 +234,12 @@ fn typed_answers_survive_backup_and_restore() {
         .unwrap();
         tx.commit().unwrap();
     }
-    let kept = a.t.store.read().unwrap().typed_answers_of_card(card.id).unwrap();
+    let kept =
+        a.t.store
+            .read()
+            .unwrap()
+            .typed_answers_of_card(card.id)
+            .unwrap();
     assert_eq!(kept.len(), 1);
     let path = a._dir.path().join("typed.fcbackup");
     assert!(create(&a.t, &path).verified);
@@ -235,7 +250,12 @@ fn typed_answers_survive_backup_and_restore() {
         safety_backup_path: None,
     });
     let _: RestoreReport = result(&finish(&b.t, &job));
-    let restored = b.t.store.read().unwrap().typed_answers_of_card(card.id).unwrap();
+    let restored =
+        b.t.store
+            .read()
+            .unwrap()
+            .typed_answers_of_card(card.id)
+            .unwrap();
     assert_eq!(restored, kept);
 }
 
@@ -269,7 +289,11 @@ fn an_interrupted_write_leaves_the_previous_backup_intact() {
     .err()
     .expect("cancelled");
     assert_eq!(e.into_api().code, ErrorCode::ConflictJobCancelled);
-    assert_eq!(std::fs::read(&path).unwrap(), good, "the previous backup is untouched");
+    assert_eq!(
+        std::fs::read(&path).unwrap(),
+        good,
+        "the previous backup is untouched"
+    );
     assert!(!part_path(&path).exists(), "no half file is left behind");
     // …and it still restores and verifies.
     let job = p.t.ok::<IoBackupVerify>(VerifyBackup { path: s(&path) });
@@ -308,7 +332,14 @@ fn missing_media_are_reported_and_the_backup_is_marked_incomplete() {
     assert_eq!(rr.missing_media, vec![lost.clone()]);
     assert_eq!(rr.media, 1);
     let kept = &media[1].hash;
-    assert!(b.t.store.read().unwrap().read_media_file(kept).unwrap().is_some());
+    assert!(b
+        .t
+        .store
+        .read()
+        .unwrap()
+        .read_media_file(kept)
+        .unwrap()
+        .is_some());
 }
 
 /// Flips a byte in the middle of the first occurrence of `needle`.
@@ -341,7 +372,10 @@ fn a_corrupt_backup_fails_verification_and_restore_without_touching_live_data() 
     assert!(!v.ok);
     assert!(!v.problems.is_empty());
     // A failed check is not "the last verified backup".
-    assert_eq!(p.t.ok::<IoBackupStatus>(Empty {}).last_verified.unwrap(), last);
+    assert_eq!(
+        p.t.ok::<IoBackupStatus>(Empty {}).last_verified.unwrap(),
+        last
+    );
 
     let job = p.t.ok::<IoBackupRestore>(RestoreBackup {
         path: s(&bad),
@@ -478,12 +512,20 @@ fn automatic_backups_follow_the_clock_and_keep_the_last_n_verified_copies() {
     assert!(p.t.ok::<IoBackupStatus>(Empty {}).last_failure.is_none());
 
     // Weekly, then off.
-    set(&p.t, super::backup_auto::SCHEDULE_KEY, serde_json::json!("weekly"));
+    set(
+        &p.t,
+        super::backup_auto::SCHEDULE_KEY,
+        serde_json::json!("weekly"),
+    );
     let st = p.t.ok::<IoBackupStatus>(Empty {});
     let newest = st.automatic[0].created_at.0;
     assert_eq!(st.next_due.unwrap().0, newest + 7 * DAY);
     assert!(tick().is_none());
-    set(&p.t, super::backup_auto::SCHEDULE_KEY, serde_json::json!("off"));
+    set(
+        &p.t,
+        super::backup_auto::SCHEDULE_KEY,
+        serde_json::json!("off"),
+    );
     clock.advance(30 * DAY);
     assert!(tick().is_none());
     assert!(p.t.ok::<IoBackupStatus>(Empty {}).next_due.is_none());
@@ -505,4 +547,129 @@ fn without_a_collection_folder_there_are_no_automatic_backups() {
         enabled: false,
     });
     assert!(super::auto_backup_tick(&p.t.app, true).unwrap().is_none());
+}
+
+/// v1.4 Z2: the sanitizers run per chunk of a streamed restore; chunk by chunk they do what
+/// they do to the whole dump.
+#[test]
+fn sanitizing_chunk_by_chunk_equals_sanitizing_the_whole_dump() {
+    use super::backup::{sanitize, sanitize_rows};
+    use fc_storage::repo::{SqlValue, TableDump};
+    let text = |s: &str| SqlValue::Text(s.into());
+    let table = |name: &str, columns: &[&str], rows: Vec<Vec<SqlValue>>| TableDump {
+        name: name.into(),
+        columns: columns.iter().map(|c| c.to_string()).collect(),
+        rows,
+    };
+    let settings: Vec<Vec<SqlValue>> = (0..9)
+        .map(|i| {
+            let key = if i % 3 == 0 {
+                crate::settings::EXEC_SETTINGS[0].to_owned()
+            } else {
+                format!("k{i}")
+            };
+            vec![text("app"), text(&key), text("\"/bin/sh\"")]
+        })
+        .collect();
+    let whole = CollectionDump {
+        schema_versions: vec![1],
+        tables: vec![
+            table("settings", &["scope", "key", "value"], settings),
+            table(
+                "mcp_servers",
+                &["id", "approved"],
+                vec![
+                    vec![text("a"), text("yes")],
+                    vec![text("b"), SqlValue::Null],
+                ],
+            ),
+            table(
+                "api_clients",
+                &["id", "status", "scopes"],
+                vec![vec![text("c"), text("approved"), text("[\"x\"]")]],
+            ),
+            table(
+                "subtitle_capture_log",
+                &["seq"],
+                vec![vec![SqlValue::Integer(1)], vec![SqlValue::Integer(2)]],
+            ),
+            table(
+                "subtitle_keys",
+                &["id", "created_at", "revoked_at"],
+                vec![vec![text("k"), SqlValue::Integer(5), SqlValue::Null]],
+            ),
+            table("notes", &["id"], vec![vec![text("n")]]),
+        ],
+    };
+    let mut want = whole.clone();
+    sanitize(&mut want);
+    assert_ne!(want, whole, "the fixture has something to forget");
+    // The same rows in chunks of two, as a streamed load hands them over.
+    let mut got = whole.clone();
+    for t in &mut got.tables {
+        let mut kept = Vec::new();
+        for chunk in t.rows.chunks(2) {
+            let mut part = TableDump {
+                name: t.name.clone(),
+                columns: t.columns.clone(),
+                rows: chunk.to_vec(),
+            };
+            sanitize_rows(&mut part).unwrap();
+            assert_eq!((&part.name, &part.columns), (&t.name, &t.columns));
+            kept.extend(part.rows);
+        }
+        t.rows = kept;
+    }
+    assert_eq!(got, want);
+}
+
+/// v1.4 Z2: a restore at this build's schema streams the dump through the sanitizers into
+/// the tables (an exec setting in the backup does not come back) and reports the rows it
+/// kept.
+#[test]
+fn a_streamed_restore_forgets_exec_settings_and_counts_what_it_kept() {
+    let p = profile();
+    fill(&p.t, p._dir.path());
+    let path = p._dir.path().join("b.fcbackup");
+    create(&p.t, &path);
+    // The same backup with an exec setting slipped in.
+    let b = fc_interop::fcbackup::read(&std::fs::read(&path).unwrap()).unwrap();
+    let mut d: CollectionDump = serde_json::from_slice(&b.collection).unwrap();
+    let settings = d.tables.iter_mut().find(|t| t.name == "settings").unwrap();
+    let col = |n: &str| settings.columns.iter().position(|c| c == n).unwrap();
+    let mut row = vec![fc_storage::repo::SqlValue::Null; settings.columns.len()];
+    row[col("scope")] = fc_storage::repo::SqlValue::Text("app".into());
+    row[col("key")] = fc_storage::repo::SqlValue::Text(crate::settings::EXEC_SETTINGS[0].into());
+    row[col("value")] = fc_storage::repo::SqlValue::Text("\"/bin/sh\"".into());
+    row[col("updated_at")] = fc_storage::repo::SqlValue::Integer(1);
+    settings.rows.push(row);
+    let header = fc_interop::fcbackup::BackupHeader {
+        created_at: b.manifest.created_at,
+        schema_versions: d.schema_versions.clone(),
+        counts: d.row_counts(),
+    };
+    let (bytes, _) =
+        fc_interop::fcbackup::write(header, &serde_json::to_vec(&d).unwrap(), &b.media).unwrap();
+    let forged = p._dir.path().join("forged.fcbackup");
+    std::fs::write(&forged, bytes).unwrap();
+
+    let fresh = profile();
+    let job = fresh.t.ok::<IoBackupRestore>(RestoreBackup {
+        path: s(&forged),
+        safety_backup_path: None,
+    });
+    let rr: RestoreReport = result(&finish(&fresh.t, &job));
+    let after = dump(&fresh.t);
+    let kept = table(&after, "settings");
+    assert_eq!(
+        kept.len() + 1,
+        table(&d, "settings").len(),
+        "the exec setting is gone"
+    );
+    assert_eq!(rr.counts["settings"], kept.len() as u64);
+    assert_eq!(
+        rr.counts["review_log"],
+        table(&d, "review_log").len() as u64
+    );
+    assert_eq!(essentials(&fresh.t), essentials(&p.t));
 }

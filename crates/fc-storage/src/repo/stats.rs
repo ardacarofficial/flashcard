@@ -147,6 +147,22 @@ pub trait StatsRead {
     fn review_log_mark(&self) -> StorageResult<ReviewLogMark>;
     /// Review rows (any mode) with sequence ≤ `seq`.
     fn review_count_upto(&self, seq: i64) -> StorageResult<i64>;
+    /// v1.4 Z2: the insertion mark of the card table (a card inserted later has a higher
+    /// one); `None` where the store has no such order (the breakdown cache then fingerprints
+    /// every card).
+    fn card_seq_mark(&self) -> StorageResult<Option<i64>> {
+        Ok(None)
+    }
+    /// Cards inserted after `mark` (see [`Self::card_seq_mark`]).
+    fn cards_after_seq(&self, mark: i64) -> StorageResult<Vec<CardId>> {
+        let _ = mark;
+        Ok(Vec::new())
+    }
+    /// Review rows (any mode) of `cards` with sequence ≤ `seq`.
+    fn review_count_upto_for(&self, seq: i64, cards: &[CardId]) -> StorageResult<i64> {
+        let _ = (seq, cards);
+        Ok(0)
+    }
     /// The cache of `calendar`.
     fn stats_cache(&self, calendar: &str) -> StorageResult<Option<StatsCacheRecord>>;
     /// Due times in `[from, to)` of live, unsuspended, scheduled (non-new) cards of live notes.

@@ -31,7 +31,7 @@ use fc_storage::repo::StatsCacheRecord;
 use fc_storage::{Reads, Writes};
 use fc_study::day::StudyDay;
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// Answers / passes of one day by review kind: learn, young, mature, relearn.
 type Kinds = [PassCount; 4];
@@ -113,11 +113,16 @@ impl Parts {
 
     /// Which cards are in which group, as a short text.
     fn fingerprint(&self) -> String {
+        self.fingerprint_except(&HashSet::new())
+    }
+
+    /// [`Self::fingerprint`] leaving out `skip`.
+    fn fingerprint_except(&self, skip: &HashSet<CardId>) -> String {
         let mut bytes = Vec::new();
         for (option, ids) in &self.groups {
             bytes.extend_from_slice(group_key(option.as_ref()).as_bytes());
             bytes.push(0xff);
-            for id in ids {
+            for id in ids.iter().filter(|id| !skip.contains(id)) {
                 bytes.extend_from_slice(id.0.as_bytes());
             }
             bytes.push(0xfe);
@@ -131,6 +136,38 @@ impl Parts {
             fc_core::note::fnv1a64(&flipped)
         )
     }
+}
+
+/// The fingerprint a cache of `parts` is stored with (v1.4 Z2): `m<card mark>/` + the
+/// fingerprint of the cards inserted up to the mark, where the store keeps an insertion
+/// order. A card added later has no review in the cache (its reviews came after it), so a
+/// later check leaves it out: capturing a word no longer throws the cache away.
+fn stored_fingerprint(reads: &dyn Reads, parts: &Parts) -> AppResult<String> {
+    Ok(match reads.card_seq_mark()? {
+        Some(mark) => format!("m{mark}/{}", parts.fingerprint()),
+        None => parts.fingerprint(),
+    })
+}
+
+/// Whether the cards of `parts` are grouped as when `cache` was stored: every card the cache
+/// can hold reviews of has the group it had, and no card inserted since has a review in it.
+fn same_groups(reads: &dyn Reads, parts: &Parts, cache: &StatsCacheRecord) -> AppResult<bool> {
+    let Some(stored) = cache.fingerprint.as_deref() else {
+        return Ok(false);
+    };
+    let Some((mark, fingerprint)) = stored
+        .strip_prefix('m')
+        .and_then(|s| s.split_once('/'))
+        .and_then(|(m, f)| Some((m.parse::<i64>().ok()?, f)))
+    else {
+        return Ok(stored == parts.fingerprint());
+    };
+    let added = reads.cards_after_seq(mark)?;
+    if reads.review_count_upto_for(cache.upto_seq, &added)? != 0 {
+        return Ok(false);
+    }
+    let added: HashSet<CardId> = added.into_iter().collect();
+    Ok(fingerprint == parts.fingerprint_except(&added))
 }
 
 /// Cache key of a group: the option id, `""` for "no value".
@@ -234,10 +271,10 @@ fn cached(
         return Ok(None);
     };
     let mark = reads.review_log_mark()?;
-    let valid = cache.fingerprint.as_deref() == Some(parts.fingerprint().as_str())
-        && cache.generation == mark.generation
+    let valid = cache.generation == mark.generation
         && cache.upto_seq <= mark.max_seq
-        && reads.review_count_upto(cache.upto_seq)? == cache.row_count;
+        && reads.review_count_upto(cache.upto_seq)? == cache.row_count
+        && same_groups(reads, parts, &cache)?;
     if !valid {
         return Ok(None);
     }
@@ -369,7 +406,7 @@ pub(super) fn refresh(tx: &mut dyn Writes, cal: StudyDay, now: Timestamp) -> App
             None => fresh(reads, &parts, cal)?,
         };
         let record = StatsCacheRecord {
-            fingerprint: Some(parts.fingerprint()),
+            fingerprint: Some(stored_fingerprint(reads, &parts)?),
             calendar: cache_key(&def, cal),
             upto_seq: mark.max_seq,
             row_count: reads.review_count_upto(mark.max_seq)?,

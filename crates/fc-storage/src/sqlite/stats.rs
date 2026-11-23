@@ -121,6 +121,41 @@ impl<M: Mode> StatsRead for SqliteTx<'_, M> {
         run().map_err(|e| crate::error::in_table(e, REVIEWS))
     }
 
+    fn card_seq_mark(&self) -> StorageResult<Option<i64>> {
+        one(
+            self.conn(),
+            "cards",
+            "SELECT coalesce(max(rowid), 0) FROM cards",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+    }
+
+    fn cards_after_seq(&self, mark: i64) -> StorageResult<Vec<CardId>> {
+        all(
+            self.conn(),
+            "cards",
+            "SELECT id FROM cards WHERE rowid > ?1",
+            [mark],
+            |r| id(r, 0),
+        )
+    }
+
+    fn review_count_upto_for(&self, seq: i64, cards: &[CardId]) -> StorageResult<i64> {
+        if cards.is_empty() {
+            return Ok(0);
+        }
+        Ok(one(
+            self.conn(),
+            REVIEWS,
+            "SELECT count(*) FROM review_log
+             WHERE card_id IN (SELECT value FROM json_each(?2)) AND rowid <= ?1",
+            params![seq, super::json_list(cards)],
+            |r| r.get::<_, i64>(0),
+        )?
+        .unwrap_or(0))
+    }
+
     fn review_log_mark(&self) -> StorageResult<ReviewLogMark> {
         let max_seq = one(
             self.conn(),

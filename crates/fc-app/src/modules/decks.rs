@@ -117,12 +117,7 @@ fn today_planner<'a>(ctx: &'a QueryCtx<'_>) -> AppResult<crate::modules::study::
 
 fn tree(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<DeckTree> {
     let index = DeckIndex::load(ctx.tx)?;
-    let own_total: HashMap<DeckId, u32> = ctx
-        .tx
-        .card_counts_by_deck(ctx.now)?
-        .into_iter()
-        .map(|(id, c)| (id, c.total))
-        .collect();
+    let own_total: HashMap<DeckId, u32> = ctx.tx.card_totals_by_deck()?.into_iter().collect();
     let mut planner = today_planner(ctx)?;
     fn node(
         index: &DeckIndex,
@@ -175,9 +170,9 @@ fn summaries(_: Empty, ctx: &QueryCtx<'_>) -> AppResult<DeckSummaries> {
     let index = DeckIndex::load(reads)?;
     let live: HashSet<DeckId> = index.live().map(|d| d.id).collect();
     let mut total = 0;
-    for (id, c) in reads.card_counts_by_deck(ctx.now)? {
+    for (id, n) in reads.card_totals_by_deck()? {
         if live.contains(&id) {
-            total += c.total;
+            total += n;
         }
     }
     // Whole collection: the queue of `study.start { deck_id: null }` (Home's Start).

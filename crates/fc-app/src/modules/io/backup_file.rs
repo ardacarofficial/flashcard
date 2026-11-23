@@ -1,9 +1,10 @@
 //! Writing and verifying `.fcbackup` files on disk (v1.4), shared by `io.backup.create`,
 //! automatic backups, the safety backup of a restore and `io.backup.verify`.
 //!
-//! * **Streaming**: the dump is serialized straight into the archive, media files are read
-//!   and written one at a time ([`fc_interop::fcbackup`]); memory is bounded by the largest
-//!   media file, not the collection.
+//! * **Streaming**: the storage writes the dump's JSON row by row straight into the archive
+//!   (`dump_collection_json`, v1.4 Z2), media files are read and written one at a time
+//!   ([`fc_interop::fcbackup`]); memory is bounded by the largest media file, not the
+//!   collection or its review history.
 //! * **Never half a file**: the archive goes to `<name>.part` beside the target, is flushed to
 //!   disk, checked, and only then renamed over the target. A failure, a cancellation or a
 //!   crash leaves the previous file at the target untouched (a stale `.part` is removed by
@@ -13,10 +14,11 @@
 //!   backup is marked incomplete. Refusing would leave a collection with one lost file
 //!   without any later backup.
 //! * **Verification** ([`verify_file`]): the backup restored into a scratch profile (a
-//!   temporary SQLite collection, deleted afterwards) — the dump brought to this build's
-//!   schema and loaded, every media file put into the scratch media store — then read back:
-//!   row counts of the main tables and every media file's hash compared with the manifest.
-//!   The live collection is not touched.
+//!   temporary SQLite collection, deleted afterwards) — the dump loaded as it streams out of
+//!   the archive (a dump at an older schema is read whole and brought to this build's schema
+//!   first), every media file put into the scratch media store — then read back: row counts
+//!   of the main tables and every media file's hash compared with the manifest. The live
+//!   collection is not touched.
 
 use super::backup::{compatible, row_counts};
 use super::media::media_store;
@@ -26,16 +28,22 @@ use crate::jobs::CancelToken;
 use fc_api::v1::io::BackupVerifyReport;
 use fc_api::ErrorCode;
 use fc_interop::fcbackup::{self, BackupHeader, BackupReader, BackupWriter, Manifest};
-use fc_storage::repo::{CollectionDump, MediaRecord};
-use fc_storage::{ReadTx, Reads, SqliteStore, Store};
+use fc_storage::repo::{DumpStream, DumpStreamError, MediaRecord};
+use fc_storage::{ReadTx, Reads, SqliteStore, StorageError, Store};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
 /// Tables whose row counts a verification compares.
-pub(crate) const CHECKED_TABLES: [&str; 6] =
-    ["decks", "notetypes", "notes", "cards", "review_log", "media"];
+pub(crate) const CHECKED_TABLES: [&str; 6] = [
+    "decks",
+    "notetypes",
+    "notes",
+    "cards",
+    "review_log",
+    "media",
+];
 
 /// I/O buffer of backup files.
 const BUF: usize = 1 << 20;
@@ -59,7 +67,10 @@ pub(crate) struct Written {
 
 /// `<file name>.part` beside `path`.
 pub(crate) fn part_path(path: &Path) -> PathBuf {
-    let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+    let mut name = path
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_default();
     name.push(".part");
     path.with_file_name(name)
 }
@@ -99,10 +110,7 @@ pub(crate) fn write_backup_file<'a>(
                 if !report.ok {
                     return Err(AppError::api(
                         ErrorCode::Internal,
-                        format!(
-                            "the backup did not verify: {}",
-                            report.problems.join("; ")
-                        ),
+                        format!("the backup did not verify: {}", report.problems.join("; ")),
                     ));
                 }
                 Some(report)
@@ -122,6 +130,18 @@ pub(crate) fn write_backup_file<'a>(
     out
 }
 
+/// A streamed dump's outcome as [`fcbackup`] wants it: a JSON-side failure is the stream's
+/// (reading: not a dump; writing: the file), a storage one stays the caller's.
+pub(crate) fn split_stream<T>(
+    r: Result<T, DumpStreamError>,
+) -> std::io::Result<Result<T, StorageError>> {
+    match r {
+        Ok(v) => Ok(Ok(v)),
+        Err(DumpStreamError::Json(e)) => Err(std::io::Error::other(e)),
+        Err(DumpStreamError::Storage(e)) => Ok(Err(e)),
+    }
+}
+
 /// Streams the archive into `part` and flushes it to disk.
 fn write_part(
     reads: &dyn Reads,
@@ -129,7 +149,6 @@ fn write_part(
     part: &Path,
     cancel: &CancelToken,
 ) -> AppResult<(Manifest, u64)> {
-    let dump = reads.dump_collection()?;
     let store = media_store();
     let media = store.list(reads)?;
     let file = File::create(part).map_err(|e| file_err(&shown(part), e))?;
@@ -137,12 +156,19 @@ fn write_part(
         BufWriter::with_capacity(BUF, file),
         BackupHeader {
             created_at: now,
-            schema_versions: dump.schema_versions.clone(),
-            counts: row_counts(&dump),
+            schema_versions: Vec::new(),
+            counts: BTreeMap::new(),
         },
     );
-    w.write_collection(&dump).map_err(|e| write_failed(part, e))?;
-    drop(dump);
+    // Row by row from the snapshot into the archive; the manifest (written last) gets the
+    // schema and the rows per table actually written.
+    let written = w
+        .write_collection_with(|out| split_stream(reads.dump_collection_json(out)))
+        .map_err(|e| write_failed(part, e))?
+        .map_err(|e| write_failed(part, e))??;
+    let header = w.header_mut();
+    header.schema_versions = written.schema_versions;
+    header.counts = written.counts;
     for m in &media {
         cancel.check()?;
         match store.bytes(reads, &m.hash)? {
@@ -221,19 +247,6 @@ fn verify_into(
             .push("the backup comes from a newer version".into());
         return Ok(());
     }
-    let dump: CollectionDump = r.collection().map_err(interop_err)?;
-    // The dump is what the manifest says it is.
-    for (table, n) in row_counts(&dump) {
-        let want = manifest.counts.get(&table).copied().unwrap_or(0);
-        if want != n {
-            report
-                .problems
-                .push(format!("{table}: {n} rows, the manifest says {want}"));
-        }
-    }
-    cancel.check()?;
-    let dump = fc_storage::upgrade_dump(dump)?;
-    let expected = row_counts(&dump);
     std::fs::create_dir_all(scratch).map_err(|e| file_err(&shown(scratch), e))?;
     let dir = tempfile::Builder::new()
         .prefix(".verify-")
@@ -241,10 +254,48 @@ fn verify_into(
         .map_err(|e| file_err(&shown(scratch), e))?;
     let store = SqliteStore::open(&dir.path().join("collection.db"))?;
     let media = r.media_list();
-    {
+    // The dump is what the manifest says it is.
+    let mut compare = |counts: &BTreeMap<String, u64>| {
+        for (table, n) in counts {
+            let want = manifest.counts.get(table).copied().unwrap_or(0);
+            if want != *n {
+                report
+                    .problems
+                    .push(format!("{table}: {n} rows, the manifest says {want}"));
+            }
+        }
+    };
+    let expected = {
         let mut tx = store.write()?;
-        tx.load_collection(&dump)?;
-        drop(dump);
+        // Loaded as it streams out of the archive (checked for cancellation every chunk).
+        let mut hook = |_: &mut fc_storage::repo::TableDump| {
+            if cancel.is_cancelled() {
+                return Err(StorageError::Corrupt {
+                    table: "backup",
+                    message: "cancelled".into(),
+                });
+            }
+            Ok(())
+        };
+        let read = r
+            .collection_with(|json| split_stream(tx.load_collection_json(json, &mut hook)))
+            .map_err(interop_err)??;
+        let expected = match read {
+            DumpStream::Streamed(summary) => {
+                compare(&summary.counts);
+                summary.counts
+            }
+            // An older schema: brought forward whole, then loaded.
+            DumpStream::Whole(dump) => {
+                compare(&row_counts(&dump));
+                cancel.check()?;
+                let dump = fc_storage::upgrade_dump(dump)?;
+                let expected = row_counts(&dump);
+                tx.load_collection(&dump)?;
+                expected
+            }
+        };
+        cancel.check()?;
         let files = media_store();
         for m in &media {
             cancel.check()?;
@@ -260,7 +311,8 @@ fn verify_into(
             files.put(&mut *tx, &record, &bytes)?;
         }
         tx.commit()?;
-    }
+        expected
+    };
     // Read back what the scratch profile holds.
     let tx = store.read()?;
     let back = tx.dump_row_counts()?;

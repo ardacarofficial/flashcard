@@ -414,3 +414,137 @@ fn session_queue_rows() {
     assert_eq!(seqs(1), vec![5]);
     assert_eq!(seqs(2), vec![10], "other sessions untouched");
 }
+
+/// v1.4 Z2: the per-deck first-new read (`cards_deck_new_order`) and the skipped branches
+/// give what the reference gives — every candidate read whole, then the first `n` new cards
+/// taken in creation order — on random worlds (decks, states, suspended, trashed, ties).
+#[test]
+fn study_cards_per_deck_first_new_equals_reference() {
+    use crate::repo::NewCardsFirst;
+    use fc_core::rng::{Rng, SplitMix64};
+    for seed in 0..6u64 {
+        let fx = Fx::seeded();
+        let mut rng = SplitMix64::new(seed);
+        let decks = 5u128;
+        fx.write(|tx| {
+            for d in 1..=decks {
+                tx.insert_deck(&deck(d, None, &format!("D{d}"))).unwrap();
+            }
+            for n in 1..=120u128 {
+                let d = 1 + u128::from(rng.next_u64() % 5);
+                // Ties on created_at on purpose (ordered by id then).
+                let at = 10 + (rng.next_u64() % 40) as i64;
+                add_note(tx, &note(n, &format!("w{n}"), "x", &[], at), d);
+                let mut c = tx.get_card(fc_core::CardId(nid(n).0)).unwrap().unwrap();
+                match rng.next_u64() % 4 {
+                    0 => {
+                        c.scheduling.state = CardState::Review;
+                        c.scheduling.due = Some(Timestamp((rng.next_u64() % 2_000) as i64));
+                    }
+                    1 => {
+                        c.scheduling.state = CardState::Learning;
+                        c.scheduling.due = (rng.next_u64() % 2 == 0)
+                            .then(|| Timestamp((rng.next_u64() % 2_000) as i64));
+                    }
+                    _ => {}
+                }
+                c.suspended = rng.next_u64() % 9 == 0;
+                tx.update_card(&c).unwrap();
+                if rng.next_u64() % 15 == 0 {
+                    tx.set_notes_deleted(&[nid(n)], Some(Timestamp(5))).unwrap();
+                }
+            }
+        });
+        let started = [
+            CardState::Learning,
+            CardState::Review,
+            CardState::Relearning,
+        ];
+        for (decks_sel, states, n, newest) in [
+            (vec![1u128], None, 3u32, false),
+            (vec![2, 3], None, 5, true),
+            (vec![1, 2, 3, 4, 5], None, 7, false),
+            (vec![4, 5], Some(vec![CardState::New]), 4, false),
+            (vec![3], Some(started.to_vec()), 4, true),
+            (
+                vec![1, 5],
+                Some(vec![CardState::New, CardState::Review]),
+                0,
+                false,
+            ),
+        ] {
+            let f = StudyCardFilter {
+                deck_ids: Some(decks_sel.iter().map(|d| did(*d)).collect()),
+                states: states.clone(),
+                due_before: Some(Timestamp(1_000)),
+                new_first: Some(NewCardsFirst { n, newest }),
+                ..Default::default()
+            };
+            let got: Vec<_> = fx.read(|r| r.study_cards(&f).unwrap());
+            // Reference: everything, then the first/last `n` new cards.
+            let all: Vec<_> = fx.read(|r| {
+                r.study_cards(&StudyCardFilter {
+                    new_first: None,
+                    ..f.clone()
+                })
+                .unwrap()
+            });
+            let mut new: Vec<_> = all
+                .iter()
+                .filter(|c| c.scheduling.state == CardState::New)
+                .collect();
+            if newest {
+                new.reverse();
+            }
+            let keep: std::collections::HashSet<_> =
+                new.iter().take(n as usize).map(|c| c.id).collect();
+            let want: Vec<_> = all
+                .iter()
+                .filter(|c| c.scheduling.state != CardState::New || keep.contains(&c.id))
+                .map(|c| c.id)
+                .collect();
+            let got: Vec<_> = got.iter().map(|c| c.id).collect();
+            assert_eq!(
+                got, want,
+                "seed {seed}, decks {decks_sel:?}, states {states:?}"
+            );
+        }
+        let (totals, counts) = fx.read(|r| {
+            (
+                r.card_totals_by_deck().unwrap(),
+                r.card_counts_by_deck(Timestamp(0)).unwrap(),
+            )
+        });
+        let counts: Vec<_> = counts.into_iter().map(|(d, c)| (d, c.total)).collect();
+        assert_eq!(totals, counts, "seed {seed}");
+    }
+}
+
+/// Migration 1422 adds the two indexes to an existing collection; its cards are untouched.
+#[test]
+fn migration_1422_adds_speed_indexes() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("collection.db");
+    let before: Vec<_> = MIGRATIONS
+        .iter()
+        .filter(|m| m.version < 1422)
+        .copied()
+        .collect();
+    drop(SqliteStore::open_with_migrations(&path, &before).unwrap());
+    let index_count = || -> i64 {
+        Connection::open(&path)
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM sqlite_master
+                 WHERE name IN ('cards_deck_new_order', 'cards_deck_live')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(index_count(), 0);
+    let store = SqliteStore::open(&path).unwrap();
+    assert_eq!(index_count(), 2);
+    let r = store.read().unwrap();
+    assert!(r.card_totals_by_deck().unwrap().is_empty());
+}

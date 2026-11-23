@@ -675,6 +675,36 @@ impl<'a> EmptyCards<'a> {
         }
     }
 
+    /// Reads the notes of `cards` not checked yet in one go (v1.4 Z2: a queue of 20 000
+    /// learning cards was 40 000 single-row reads). [`Self::is_empty`] gives the same answer
+    /// with or without it.
+    pub fn prefetch<'c>(&mut self, cards: impl IntoIterator<Item = &'c Card>) -> AppResult<()> {
+        let mut want: Vec<NoteId> = cards
+            .into_iter()
+            .map(|c| c.note_id)
+            .filter(|n| !self.keys.contains_key(n))
+            .collect();
+        want.sort_unstable();
+        want.dedup();
+        if want.is_empty() {
+            return Ok(());
+        }
+        for note in self.view.reads.get_notes(&want)? {
+            let nt = match self.notetypes.entry(note.notetype_id) {
+                std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(require_notetype(self.view.reads, note.notetype_id)?)
+                }
+            };
+            let keys: BTreeSet<String> = content::card_specs(self.view.registry, nt, &note)?
+                .into_iter()
+                .map(|s| s.template_key)
+                .collect();
+            self.keys.insert(note.id, keys);
+        }
+        Ok(())
+    }
+
     pub fn is_empty(&mut self, card: &Card) -> AppResult<bool> {
         if let Some(keys) = self.keys.get(&card.note_id) {
             return Ok(!keys.contains(&card.template_key));

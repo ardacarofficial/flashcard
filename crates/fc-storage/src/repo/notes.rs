@@ -25,6 +25,17 @@ pub struct NoteListRow {
 pub trait NoteRead {
     /// Note by id.
     fn get_note(&self, id: NoteId) -> StorageResult<Option<Note>>;
+    /// Notes by id, in no particular order; unknown ids are left out (v1.4 Z2: the study
+    /// planner's empty-card check reads a queue's notes in one go).
+    fn get_notes(&self, ids: &[NoteId]) -> StorageResult<Vec<Note>> {
+        let mut out = Vec::with_capacity(ids.len());
+        for id in ids {
+            if let Some(n) = self.get_note(*id)? {
+                out.push(n);
+            }
+        }
+        Ok(out)
+    }
     /// Paged listing, newest `updated_at` first.
     fn list_notes(
         &self,

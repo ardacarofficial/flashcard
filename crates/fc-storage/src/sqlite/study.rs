@@ -7,11 +7,14 @@ use crate::error::StorageResult;
 use crate::repo::{
     ReviewLogRecord, SessionQueueRow, SessionRecord, StudyCardFilter, StudyRead, StudyWrite,
 };
-use fc_core::card::Card;
+use fc_core::card::{Card, CardState};
 use fc_core::{CardId, ReviewLogId, SessionId, Timestamp};
 use rusqlite::{params, Row};
 
 const SESSIONS: &str = "sessions";
+/// Most decks whose first new cards are read deck by deck (more: one walk of the
+/// collection-wide order).
+const PER_DECK_NEW_MAX: usize = 64;
 const QUEUE: &str = "session_queue";
 const REVIEWS: &str = "review_log";
 const SESSION_COLS: &str = "id, kind, query, config, state, started_at, ended_at";
@@ -148,6 +151,12 @@ impl<M: Mode> StudyRead for SqliteTx<'_, M> {
             ));
         }
         let base = conds.join(" AND ");
+        // v1.4 Z2: a branch the states rule out is not run (an unsatisfiable `state` test still
+        // walked the due index or the new-card order).
+        let wants = |s: CardState| filter.states.as_ref().is_none_or(|st| st.contains(&s));
+        let wants_new = wants(CardState::New);
+        let wants_started =
+            wants(CardState::Learning) || wants(CardState::Review) || wants(CardState::Relearning);
         if filter.due_before.is_none() && filter.new_first.is_none() {
             return all(
                 self.conn(),
@@ -177,13 +186,61 @@ impl<M: Mode> StudyRead for SqliteTx<'_, M> {
             }
             None => format!("SELECT {CARD_COLS} FROM cards c WHERE {base} AND {started}"),
         };
-        let mut out = all(
-            self.conn(),
-            "cards",
-            &sql,
-            rusqlite::params_from_iter(due_args.iter()),
-            card_row,
-        )?;
+        let mut out = if wants_started {
+            all(
+                self.conn(),
+                "cards",
+                &sql,
+                rusqlite::params_from_iter(due_args.iter()),
+                card_row,
+            )?
+        } else {
+            Vec::new()
+        };
+        if !wants_new {
+            out.sort_by_key(|c| (c.created_at, c.id));
+            return Ok(out);
+        }
+        // v1.4 Z2: the first `n` of a few decks are the first `n` of the first `n` of each deck,
+        // each read off `cards_deck_new_order` (the collection-wide order walked past every
+        // other deck's new cards).
+        if let (Some(f), Some(decks), false) = (
+            filter.new_first,
+            filter.deck_ids.as_deref(),
+            filter.include_suspended,
+        ) {
+            if decks.len() <= PER_DECK_NEW_MAX {
+                let dir = if f.newest { "DESC" } else { "ASC" };
+                let mut new = Vec::new();
+                let mut deck_args = args.clone();
+                deck_args.push(String::new());
+                deck_args.push(f.n.to_string());
+                let (d, n) = (deck_args.len() - 1, deck_args.len());
+                let sql = format!(
+                    "SELECT {CARD_COLS} FROM cards c INDEXED BY cards_deck_new_order
+                     WHERE {base} AND c.state = 'new' AND c.deck_id = ?{d}
+                     ORDER BY c.created_at {dir}, c.id {dir} LIMIT CAST(?{n} AS INTEGER)"
+                );
+                for deck in decks {
+                    deck_args[d - 1] = deck.to_string();
+                    new.extend(all(
+                        self.conn(),
+                        "cards",
+                        &sql,
+                        rusqlite::params_from_iter(deck_args.iter()),
+                        card_row,
+                    )?);
+                }
+                new.sort_by_key(|c| (c.created_at, c.id));
+                if f.newest {
+                    new.reverse();
+                }
+                new.truncate(f.n as usize);
+                out.extend(new);
+                out.sort_by_key(|c| (c.created_at, c.id));
+                return Ok(out);
+            }
+        }
         let mut new_args = args;
         let (order, limit) = match filter.new_first {
             Some(f) => {
