@@ -110,6 +110,13 @@ checkpoint deponun kendi iş parçacığında (docs/03 "SQLite"); sonrası Linux
 cevap 6,6 / 10,0 / 11 ms. Ölçekli CI bütçeleri **değişmedi** (Windows'ta kalan bir yavaşlık disk/virüs tarayıcısı
 kaynaklıysa bir sonraki koşunun `FC_PERF_SLOW_MS` dökümü gösterir).
 
+**İkinci adım:** ilk sürüm her commit patlamasından 250 ms sonra checkpoint ediyordu. strace: tam checkpoint'ten sonraki
+ilk commit WAL'ı baştan başlatıp başlığını `fsync`'liyor (SQLite `walFrames`, `syncHeader`), yani duraklamadan sonraki
+her ilk komut bir WAL senkronu ödüyordu (Linux'ta görünmez, Windows CI'de bir eklenti kancasının `kv.set` yazması 3 s'lik
+süre sınırını aştı → `example_hook_fills_a_field` boş alan). Artık arka plan checkpoint'i yalnız WAL 1 000 sayfaya
+ulaşınca (eski eşik, yazarın WAL kancası) tetikleniyor: baştan başlatma eskisi kadar seyrek, kopyalama + veritabanı
+senkronu yine yazma yolunun dışında.
+
 ## Düzeltilenler (önce → sonra)
 
 | Sorun | Düzeltme | Önce → sonra (CI ölçeği, debug) |

@@ -388,6 +388,10 @@ fn example_tts_provider_plugin(f: Factory) {
 fn example_hook_fills_a_field(f: Factory) {
     let t = TestApp::new(f());
     let dir = tempfile::tempdir().unwrap();
+    // What the hook does, not how fast: a loaded CI machine must not turn the 3 s call
+    // deadline into an empty field (the deadline has its own tests: `misbehaving_plugins_cannot_crash_the_app`,
+    // `looping_hooks_hit_the_deadline`).
+    set_app_setting(&t, SETTING_TIMEOUT, json!(60_000));
     let d = deck(&t, "English");
     install(
         &t,
@@ -403,7 +407,12 @@ fn example_hook_fills_a_field(f: Factory) {
         ],
     );
     let filled = classic(&t, &d, "sword", "");
-    assert_eq!(filled.fields["back"], "kılıç");
+    assert_eq!(
+        filled.fields["back"],
+        "kılıç",
+        "hook did not fill; plugin log: {:?}",
+        t.ok::<PluginsLogs>(PluginRef { id: AUTOFILL.into() }).entries
+    );
     // Stored, not just returned.
     assert_eq!(t.ok::<NotesGet>(NoteRef { id: filled.id }).fields["back"], "kılıç");
     // A word it does not know, or a field already filled, is left alone.
