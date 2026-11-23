@@ -35,7 +35,7 @@
     }
   },
   "create": {
-    "heading": "Kart ekle",
+    "heading": "Ekle",
     "subtitle": "Her satıra bir terim ve tanımı.",
     "where": "Kartlar nereye",
     "mode_new": "Yeni deste",
@@ -79,13 +79,31 @@
     "duplicates_kept": "{count, plural, other {# kart zaten vardı; aşağıda bırakıldı, değiştirip yeniden kaydedebilirsin.}}"
   },
   "add": {
-    "subtitle": "Tek tek yaz, tablo gibi doldur, bir liste yapıştır ya da dosyadan al: hepsi seçtiğin desteye gider.",
+    "subtitle": "Yeni kelime yaz ya da bir yerden getir. Nasıl eklersen ekle, hepsi seçtiğin desteye gider; sonra Kelimelerim'de bulursun.",
     "way": {
-      "label": "Nasıl eklemek istersin",
-      "single": "Tek kart",
-      "bulk": "Toplu",
-      "paste": "Yapıştır",
-      "file": "Dosyadan"
+      "label": "Ekleme yolları",
+      "single": "Tek kelime",
+      "bulk": "Satır satır",
+      "paste": "Liste yapıştır",
+      "file": "Dosyadan",
+      "inbox": "Yakalananlar",
+      "text": "Bir metinden seç",
+      "ai": "Yapay zekayla",
+      "starters": "Hazır desteler"
+    },
+    "way_group": {
+      "own": "Kendin yaz",
+      "bring": "Bir yerden getir"
+    },
+    "way_desc": {
+      "single": "Yaz, Ctrl+Enter. En hızlısı; pencere açık kalır.",
+      "paste": "Bir listeyi yapıştır: kelime, anlam, cümle.",
+      "bulk": "Tablo gibi satır satır yaz, görsel de ekle.",
+      "file": "CSV, metin ya da Anki dosyası.",
+      "inbox": "Subtitle eklentisinden gelen kelimeler onayını bekliyor.",
+      "text": "Altyazı ya da paragraf yapıştır, bilmediğine tıkla.",
+      "ai": "Bir konu ver, kelime önersin; beğendiklerini seç.",
+      "starters": "Sıfırdan başlamak istemezsen."
     },
     "single": {
       "lead": "Kelimeyi yaz, anlamını yaz, Enter: pencere açık kalır, sıradakine geçersin.",
@@ -110,6 +128,39 @@
       "example_translation": "cümle çevirisi",
       "source": "kaynak",
       "note": "not"
+    }
+  },
+  "note_extras": {
+    "title": "Bu kelime",
+    "answers_title": "Kabul edilen cevaplar",
+    "answers_lead": "Testte bunları da doğru say",
+    "answers_add": "Cevap ekle",
+    "answers_placeholder": "Yaz, Enter’a bas",
+    "answers_remove": "“{answer}” cevabını kaldır",
+    "answers_empty": "Henüz ek cevap yok.",
+    "audio_title": "Ses",
+    "audio_missing": "Sesi yok",
+    "audio_has": "Sesi var",
+    "audio_find": "Ses bul",
+    "audio_use": "Bunu ekle",
+    "audio_would": "Bulunan ses:",
+    "audio_text": "Okunacak: “{text}”",
+    "audio_filling": "Ses ekleniyor…",
+    "audio_done": "Ses eklendi.",
+    "audio_failed": "Ses eklenemedi.",
+    "audio_none": "Bu kart için ses bulamadım.",
+    "audio_reason": {
+      "no_audio_field": "Bu kart türünde ses alanı yok.",
+      "no_text": "Okunacak bir yazı yok.",
+      "tts_off": "Seslendirme kapalı.",
+      "no_tts_provider": "Seslendirme sağlayıcısı yok.",
+      "no_voice": "Bu dil için kurulu bir ses yok."
+    },
+    "origin": {
+      "original": "özgün",
+      "clip": "klip",
+      "tts": "tts",
+      "user": "dosya"
     }
   }
 }

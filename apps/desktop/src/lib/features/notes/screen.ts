@@ -2,6 +2,6 @@
 import type { ScreenModule } from '../types';
 
 export default [
-  { id: 'add_note', load: () => import('./CreateScreen.svelte'), routes: ['/notes/new'] },
+  { id: 'add_note', load: () => import('./CreateScreen.svelte'), routes: ['/notes/new'], width: 'wide' },
   { id: 'notes', load: () => import('./NoteListScreen.svelte'), routes: ['/notes'], deckPicker: true },
 ] satisfies ScreenModule;

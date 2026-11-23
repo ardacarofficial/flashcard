@@ -35,7 +35,7 @@
     }
   },
   "create": {
-    "heading": "Add cards",
+    "heading": "Add",
     "subtitle": "One term and its definition per row.",
     "where": "Where the cards go",
     "mode_new": "New deck",
@@ -79,13 +79,31 @@
     "duplicates_kept": "{count, plural, one {# card already existed; it is kept below so you can change it and save again.} other {# cards already existed; they are kept below so you can change them and save again.}}"
   },
   "add": {
-    "subtitle": "Type them one by one, fill a grid, paste a list or bring a file: they all go to the deck you pick.",
+    "subtitle": "Type a new word or bring them from somewhere. However you add them, they go to the deck you pick; then you find them in My words.",
     "way": {
-      "label": "How do you want to add",
-      "single": "One card",
-      "bulk": "Bulk",
-      "paste": "Paste",
-      "file": "From a file"
+      "label": "Ways to add",
+      "single": "One word",
+      "bulk": "Row by row",
+      "paste": "Paste a list",
+      "file": "From a file",
+      "inbox": "Captured",
+      "text": "Pick from a text",
+      "ai": "With AI",
+      "starters": "Starter decks"
+    },
+    "way_group": {
+      "own": "Type it yourself",
+      "bring": "Bring from somewhere"
+    },
+    "way_desc": {
+      "single": "Type, Ctrl+Enter. The quickest; the window stays open.",
+      "paste": "Paste a list: word, meaning, sentence.",
+      "bulk": "Type row by row like a table, images too.",
+      "file": "CSV, text or an Anki file.",
+      "inbox": "Words from the Subtitle extension wait for your OK.",
+      "text": "Paste subtitles or a paragraph, click what you don't know.",
+      "ai": "Give a topic, it suggests words; pick the ones you like.",
+      "starters": "If you'd rather not start from scratch."
     },
     "single": {
       "lead": "Type the word, type its meaning, Enter: the window stays open for the next one.",
@@ -110,6 +128,39 @@
       "example_translation": "sentence translation",
       "source": "source",
       "note": "note"
+    }
+  },
+  "note_extras": {
+    "title": "This word",
+    "answers_title": "Accepted answers",
+    "answers_lead": "Count these as right in tests too",
+    "answers_add": "Add an answer",
+    "answers_placeholder": "Type, press Enter",
+    "answers_remove": "Remove “{answer}”",
+    "answers_empty": "No extra answers yet.",
+    "audio_title": "Sound",
+    "audio_missing": "No sound",
+    "audio_has": "Has sound",
+    "audio_find": "Find sound",
+    "audio_use": "Add it",
+    "audio_would": "Found:",
+    "audio_text": "Reads: “{text}”",
+    "audio_filling": "Adding the sound…",
+    "audio_done": "Sound added.",
+    "audio_failed": "Could not add the sound.",
+    "audio_none": "No sound found for this card.",
+    "audio_reason": {
+      "no_audio_field": "This card type has no sound field.",
+      "no_text": "There is no text to read.",
+      "tts_off": "Text to speech is off.",
+      "no_tts_provider": "No text-to-speech provider.",
+      "no_voice": "No voice installed for this language."
+    },
+    "origin": {
+      "original": "original",
+      "clip": "clip",
+      "tts": "TTS",
+      "user": "file"
     }
   }
 }
