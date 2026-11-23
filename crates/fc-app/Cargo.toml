@@ -40,6 +40,8 @@ fc-interop = { workspace = true, features = ["fixtures"] }
 fc-ai = { workspace = true, features = ["mock"] }
 # Verifies a tampered signature against the real update key (same crate the updater uses).
 minisign-verify = "0.3"
+# v1.4.1: "any preset that validates can schedule any card state".
+proptest = { version = "1", default-features = false, features = ["std"] }
 
 [features]
 ## In-memory store, a temp-file SQLite store and the storage-agnostic service test suite

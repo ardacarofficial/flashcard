@@ -9,15 +9,17 @@
    * skippable at any time, re-opened from Help (`openGuide`).
    */
   import { onMount, tick, untrack } from 'svelte';
-  import { api } from '$lib/api';
+  import { api, type ApiError } from '$lib/api';
   import type { OnboardingChoices, OnboardingSubjectDto, StudyGoal } from '$lib/api/types';
   import { i18n, t, td } from '$lib/i18n/index.svelte';
   import { formatCount } from '$lib/format';
-  import { Button, Check, Checkbox, Dialog, Icon, Input } from '$lib/ui';
+  import { Button, Check, Checkbox, Dialog, Icon, Input, RotateCcw } from '$lib/ui';
   import type { DeckTreeNode } from '$lib/api/types';
   import type { ScreenCtx } from '../types';
   import GuidePanel from './GuidePanel.svelte';
   import { setGuideView, startGuide } from './guide.svelte';
+  import { pickFile } from '../io/files';
+  import { followJob } from '../io/job';
 
   interface Props {
     /** Called after setup or skip (the shell re-reads decks). */
@@ -105,7 +107,7 @@
   });
 
   async function apply(withStarters: boolean) {
-    if (!subject || busy) return;
+    if (!subject || busy || restoring) return;
     error = null;
     busy = true;
     try {
@@ -143,6 +145,35 @@
       /* nothing to do */
     }
     ondone?.();
+  }
+
+  /** v1.4.1: a new computer with an old backup — restore it instead of setting up a deck. */
+  let restoring = $state(false);
+  async function restoreBackup() {
+    if (busy || restoring) return;
+    error = null;
+    const path = await pickFile([{ name: 'Flashcard', extensions: ['fcbackup'] }], t('io.path_prompt'));
+    if (!path) return;
+    restoring = true;
+    try {
+      const info = await api.call('io.backup.inspect', { path });
+      if (!info.compatible) {
+        error = t('io.backup.incompatible');
+        return;
+      }
+      const finished = await followJob(await api.call('io.backup.restore', { path, safety_backup_path: null }), () => {});
+      if (finished.status !== 'succeeded') {
+        error = td(finished.error?.message_key ?? (finished.status === 'cancelled' ? 'io.job.cancelled' : 'errors.internal.unexpected'));
+        return;
+      }
+      open = false;
+      setGuideView('closed');
+      ondone?.();
+    } catch (e) {
+      error = td((e as ApiError).messageKey ?? 'errors.internal.unexpected');
+    } finally {
+      restoring = false;
+    }
   }
 
   let radios = $state<HTMLButtonElement[]>([]);
@@ -235,10 +266,13 @@
       {#if error}<p class="error" role="alert">{error}</p>{/if}
     </form>
     {#snippet footer()}
-      <Button variant="ghost" onclick={() => void skip()}>{fromGuide ? t('onboarding.cancel') : t('onboarding.skip')}</Button>
+      <Button variant="ghost" disabled={restoring} onclick={() => void skip()}>{fromGuide ? t('onboarding.cancel') : t('onboarding.skip')}</Button>
+      {#if !fromGuide}
+        <Button variant="ghost" icon={RotateCcw} loading={restoring} disabled={busy} onclick={() => void restoreBackup()}>{t('onboarding.restore')}</Button>
+      {/if}
       <span class="spacer"></span>
-      <Button disabled={chosenStarters.length === 0 || busy} onclick={() => void apply(true)}>{t('onboarding.apply_starters')}</Button>
-      <Button variant="primary" kbd="Enter" disabled={!subject} loading={busy} onclick={() => void apply(false)}>{t('onboarding.apply_own')}</Button>
+      <Button disabled={chosenStarters.length === 0 || busy || restoring} onclick={() => void apply(true)}>{t('onboarding.apply_starters')}</Button>
+      <Button variant="primary" kbd="Enter" disabled={!subject || restoring} loading={busy} onclick={() => void apply(false)}>{t('onboarding.apply_own')}</Button>
     {/snippet}
   </Dialog>
 {/if}

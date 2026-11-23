@@ -4,8 +4,10 @@
 //! second ("fast") stability trace; `cards` stores one stability, so FSRS-7 needs a schema
 //! addition first (docs/08 K10). FSRS-6 is exact with the stored state.
 //!
-//! Custom weights: `SchedulerParams.extra = {"weights": [21 numbers]}` (personal optimization
-//! arrives with v0.6).
+//! Custom weights: `SchedulerParams.extra = {"weights": [numbers]}` — 17 (FSRS-4.5), 19
+//! (FSRS-5) or 21; every list goes through [`fc_core::preset::schedulable_fsrs_weights`] (the
+//! reference upgrade to FSRS-6, then the model's ranges), so a preset that could be saved
+//! always schedules (v1.4.1).
 
 use super::{apply, check_params, elapsed_days, info, Candidate, FSRS_ID, RATINGS};
 use crate::day::StudyDay;
@@ -56,19 +58,22 @@ fn weights(params: &SchedulerParams) -> StrategyResult<Vec<f32>> {
     let list = raw
         .as_array()
         .ok_or_else(|| StrategyError("weights must be an array of numbers".into()))?;
-    let w: Vec<f32> = list
+    let w: Vec<f64> = list
         .iter()
-        .map(|v| v.as_f64().filter(|x| x.is_finite()).map(|x| x as f32))
+        .map(|v| v.as_f64().filter(|x| x.is_finite()))
         .collect::<Option<_>>()
         .ok_or_else(|| StrategyError("weights must be finite numbers".into()))?;
-    if w.len() != FSRS6_DEFAULT_WEIGHTS.len() {
-        return Err(StrategyError(format!(
-            "FSRS-6 needs {} weights, got {}",
-            FSRS6_DEFAULT_WEIGHTS.len(),
-            w.len()
-        )));
+    let w = fc_core::preset::schedulable_fsrs_weights(&w).ok_or_else(|| {
+        StrategyError(format!(
+            "FSRS needs 17, 19 or 21 weights, got {}",
+            list.len()
+        ))
+    })?;
+    if w.is_empty() {
+        return Ok(FSRS6_DEFAULT_WEIGHTS.to_vec());
     }
-    Ok(w)
+    #[allow(clippy::cast_possible_truncation)]
+    Ok(w.into_iter().map(|x| x as f32).collect())
 }
 
 /// Memory of a card as FSRS sees it (`None` = first review).

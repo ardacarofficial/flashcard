@@ -308,6 +308,20 @@ pub struct BackupReport {
     /// Media the collection lists whose bytes are missing or damaged on disk: not in the
     /// backup (empty = complete). The backup is written anyway, marked incomplete.
     pub missing_media: Vec<String>,
+    /// v1.4.1: the copy in the second backup location (`io.backup_mirror_dir`), written and
+    /// re-read there; `null` when no mirror is set. A mirror that fails does not fail the
+    /// backup: it is reported here and in `io.backup.status`.
+    #[serde(default)]
+    pub mirror: Option<MirrorCopy>,
+}
+
+/// Outcome of copying one backup to the mirror folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct MirrorCopy {
+    /// The copy (`null` when it could not be written).
+    pub path: Option<String>,
+    /// Why it could not be written (untranslated diagnostic); `null` = written and verified.
+    pub error: Option<String>,
 }
 
 /// `io.backup.verify`.
@@ -400,6 +414,39 @@ pub struct BackupStatus {
     /// collection has no folder. Decided in Rust ([`BackupStale`]); clients only word it.
     #[serde(default)]
     pub stale: Option<BackupStale>,
+    /// v1.4.1: the second backup location (`io.backup_mirror_dir`, e.g. another drive or a
+    /// synced folder); `null` = not set. Every automatic and manual backup is also copied
+    /// there and re-read; a mirror that is missing or unwritable never blocks studying or the
+    /// backup itself — it shows here.
+    #[serde(default)]
+    pub mirror: Option<BackupMirrorStatus>,
+}
+
+/// The mirror folder as `io.backup.status` sees it now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct BackupMirrorStatus {
+    /// The folder as set.
+    pub folder: String,
+    /// Whether a backup can be copied there right now.
+    pub state: MirrorState,
+    /// Verified copies there, newest first (automatic `auto-*` and manual `manual-*`).
+    pub copies: Vec<VerifiedBackup>,
+    /// The last copy that failed, if none succeeded since.
+    pub last_failure: Option<BackupFailure>,
+}
+
+/// State of the mirror folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum MirrorState {
+    /// There and writable.
+    Ok,
+    /// Not there (drive unplugged, folder removed) or not an absolute folder path.
+    Missing,
+    /// There, but a file cannot be written in it.
+    Unwritable,
+    /// Inside the collection folder: it would die with the same disk, so nothing is copied.
+    InsideCollection,
 }
 
 /// Why `io.backup.status` says the backup needs attention.

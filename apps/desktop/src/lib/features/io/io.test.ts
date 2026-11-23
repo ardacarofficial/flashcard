@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import type { ImportPreview, JobDto, NoteTypeDto } from '$lib/api/types';
+import type { BackupReport, BackupStatus, ImportPreview, JobDto, NoteTypeDto } from '$lib/api/types';
 import { i18n } from '$lib/i18n/index.svelte';
 import { decodeColumn, encodeColumn, escapeSeparator, unescapeSeparator } from './mapping';
 
@@ -42,14 +42,34 @@ const done: JobDto = {
   created_at: 0,
   updated_at: 0,
 };
+// v1.4.1: Settings › Backup with a second backup location.
+let backupStatus: BackupStatus;
+const backupReport: BackupReport = {
+  path: '/home/demo/y.fcbackup',
+  bytes: 1,
+  notes: 1,
+  cards: 1,
+  review_log: 0,
+  media: 0,
+  verified: true,
+  missing_media: [],
+  mirror: { path: null, error: 'disk full' },
+};
+const backupDone: JobDto = { ...done, id: 'job-b', kind: 'io.backup', result: backupReport };
 const call = vi.fn(async (method: string, _params: unknown) => {
   switch (method) {
+    case 'io.backup.status':
+      return backupStatus;
+    case 'io.backup.create':
+      return { ...backupDone, status: 'queued', result: null };
+    case 'settings.schema':
+      return { settings: [] };
     case 'io.import.preview':
       return preview;
     case 'io.import.start':
       return { ...done, status: 'queued', result: null };
     case 'jobs.get':
-      return done;
+      return (_params as { id: string }).id === backupDone.id ? backupDone : done;
     case 'cards.preview':
       return { cards: [] };
     case 'oplog.undo':
@@ -69,6 +89,7 @@ vi.mock('$lib/api', () => ({
 }));
 
 import ImportFlow from './ImportFlow.svelte';
+import BackupPanel from './BackupPanel.svelte';
 
 describe('io mapping helpers', () => {
   it('round-trips column targets and separators', () => {
@@ -158,5 +179,50 @@ describe('<ImportFlow> (was <ImportPanel>)', () => {
     const file = new File(['x'], 'deck.apkg');
     await fireEvent.change(screen.getByTestId('file-input'), { target: { files: [file] } });
     expect(await screen.findByText(/only be opened in the app/)).toBeTruthy();
+  });
+});
+
+describe('backup settings: second backup location (v1.4.1)', () => {
+  const base: BackupStatus = {
+    schedule: 'daily',
+    keep: 7,
+    folder: '/home/demo/backups',
+    last_verified: null,
+    automatic: [],
+    next_due: null,
+    last_failure: null,
+    stale: null,
+    mirror: null,
+  };
+
+  it('not set: one muted hint', async () => {
+    backupStatus = base;
+    render(BackupPanel, {});
+    expect(await screen.findByText('No second backup location; you can set another drive below.')).toBeTruthy();
+  });
+
+  it('a missing folder and a failed copy are warnings; a failed copy after a backup is said', async () => {
+    backupStatus = { ...base, mirror: { folder: 'E:\\Yedek', state: 'missing', copies: [], last_failure: { at: 1, message: 'gone' } } };
+    render(BackupPanel, {});
+    const alerts = await screen.findAllByRole('alert');
+    expect(alerts.map((a) => a.textContent)).toEqual([
+      'The second backup folder was not found: E:\\Yedek. Is the drive connected?',
+      expect.stringMatching(/^The last copy to the second location failed \(/),
+    ]);
+
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('/home/demo/y.fcbackup');
+    await fireEvent.click(screen.getByRole('button', { name: 'Create backup…' }));
+    expect(await screen.findByText('Backed up, but the copy to the second location failed: disk full')).toBeTruthy();
+    expect(screen.getByText('Backup saved to /home/demo/y.fcbackup.')).toBeTruthy();
+    prompt.mockRestore();
+  });
+
+  it('ok: copies and the newest date', async () => {
+    const copy = { path: 'E:/Yedek/auto-1.fcbackup', created_at: 1, verified_at: 1, bytes: 1, complete: true, automatic: true };
+    backupStatus = { ...base, mirror: { folder: 'E:/Yedek', state: 'ok', copies: [copy, copy], last_failure: null } };
+    render(BackupPanel, {});
+    expect(await screen.findByText(/^Second location: ready · 2 copies, last: /)).toBeTruthy();
+    expect(screen.getByText('Second folder: E:/Yedek')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

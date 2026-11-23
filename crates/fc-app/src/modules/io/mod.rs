@@ -26,6 +26,7 @@ mod apply;
 mod backup;
 mod backup_auto;
 mod backup_file;
+mod backup_mirror;
 #[cfg(test)]
 mod backup_tests;
 mod export;

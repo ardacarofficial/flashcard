@@ -28,6 +28,7 @@
     "starters_none": "No starter deck for this subject; the app guide is always offered.",
     "notes": "{count, plural, one {# card} other {# cards}}",
     "skip": "Skip the guide",
+    "restore": "Restore from a backup",
     "done": "Ready: {count, plural, one {# card} other {# cards}} added. Undo removes the whole setup.",
     "templates": {
       "cefr": "CEFR levels (A1–C2)",

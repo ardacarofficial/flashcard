@@ -63,6 +63,8 @@ export default {
         next_due: null,
         last_failure: null,
         stale: 'old',
+        // v1.4.1: no second backup location set (`io.backup_mirror_dir` is empty).
+        mirror: null,
       }),
       'maintenance.status': () => status(),
       'maintenance.recovery.get': () => noOffer(),

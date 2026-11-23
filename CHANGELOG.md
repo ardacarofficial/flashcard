@@ -2,6 +2,10 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## Unreleased (v1.4.1)
+
+- **FSRS ağırlıkları ve ikinci yedek yeri (H1):** 17/19 FSRS ağırlıklı preset'ler çalışırken "FSRS-6 needs 21 weights" ile düşmüyor — okunurken tek yerde referans yükseltmesiyle FSRS-6'ya çevrilir (FSRS-4.5/5 referans parametreleriyle `fsrs-rs`'e eşit planlama testi), ağırlıklar FSRS-6 aralıklarında doğrulanır ve "doğrulanan her preset her kart durumunu planlar" özellik testi var; yeni `io.backup_mirror_dir`: her otomatik/elle yedek ikinci bir klasöre de yazılıp orada doğrulanır, aynı saklama sayısıyla, eksik/yazılamaz ayna durumda açıkça görünür ve hiçbir şeyi bekletmez; ilk açılışta "Yedekten geri yükle"; yalnız aynadaki yedekten boş profile tam dönüş CLI e2e ile kanıtlandı (Windows CI'da da).
+
 ## Unreleased (v1.4)
 
 - **Subtitle eklentisi gerçek tarayıcıda (G2):** derlenmiş eklenti gerçek Chromium'da gerçek `fc api serve`'e karşı sahibin akışıyla denendi (eşleştirme, **+**, aynı kelime ikinci sahneden → aynı notun karşılaşması, deyim, uygulama kapalı/yeniden başlamış, yanlış/iptal anahtar, bilinen kelimeler eklentinin kökeninden); hepsi geçti, Flashcard tarafında hata çıkmadı; betik `tools/subtitle-real-browser/run.mjs`, rapor ve eklentide gereken değişiklik `docs/14-subtitle-gercek-tarayici.md`.

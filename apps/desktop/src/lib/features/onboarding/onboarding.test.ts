@@ -178,6 +178,23 @@ describe('first-run guide (dev mock)', () => {
     skip.mockRestore();
   });
 
+  it('first run offers restoring a backup instead (inspect, restore, no skip)', async () => {
+    const call = vi.spyOn(api, 'call');
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('/old/flashcard.fcbackup');
+    const ondone = vi.fn();
+    render(OnboardingHost, { ondone });
+    await fireEvent.click(await screen.findByRole('button', { name: 'Restore from a backup' }, { timeout: 5000 }));
+    await waitFor(() => expect(ondone).toHaveBeenCalled());
+    const methods = call.mock.calls.map(([m]) => m);
+    expect(methods).toContain('io.backup.inspect');
+    expect(call.mock.calls.find(([m]) => m === 'io.backup.restore')?.[1]).toEqual({ path: '/old/flashcard.fcbackup', safety_backup_path: null });
+    expect(methods).not.toContain('onboarding.skip');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(guide.view).toBe('closed');
+    prompt.mockRestore();
+    call.mockRestore();
+  });
+
   it('openGuide() reopens the checklist; with decks, step 1 opens the add page', async () => {
     flags.fresh = false;
     const navigate = vi.fn();

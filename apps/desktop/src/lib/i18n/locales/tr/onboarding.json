@@ -28,6 +28,7 @@
     "starters_none": "Bu konu için başlangıç destesi yok; uygulama rehberi her zaman sunulur.",
     "notes": "{count} kart",
     "skip": "Rehberi geç",
+    "restore": "Yedekten geri yükle",
     "done": "Hazır: {count} kart eklendi. Geri al tüm kurulumu kaldırır.",
     "templates": {
       "cefr": "CEFR seviyeleri (A1–C2)",

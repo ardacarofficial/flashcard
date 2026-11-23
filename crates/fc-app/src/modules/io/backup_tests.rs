@@ -14,6 +14,7 @@ use fc_api::v1::methods::*;
 use fc_api::v1::settings::SetSetting;
 use fc_api::ErrorCode;
 use fc_core::settings::SettingScope;
+use fc_core::card::Rating;
 use fc_core::{Clock, Timestamp};
 use fc_interop::anki::fixtures as anki_fx;
 use fc_interop::media::sha256_hex;
@@ -732,4 +733,196 @@ fn a_streamed_restore_forgets_exec_settings_and_counts_what_it_kept() {
         table(&d, "review_log").len() as u64
     );
     assert_eq!(essentials(&fresh.t), essentials(&p.t));
+}
+
+// ------------------------------------------------------------------ mirror (v1.4.1, H1)
+
+fn backup_files(dir: &Path, prefix: &str) -> Vec<PathBuf> {
+    let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map(|d| {
+            d.filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| {
+                    let name = p.file_name().unwrap().to_string_lossy().into_owned();
+                    name.starts_with(prefix) && name.ends_with(".fcbackup")
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort();
+    v
+}
+
+#[test]
+fn every_backup_is_also_copied_to_the_mirror_verified_there_and_rotated() {
+    let clock = MovableClock::new();
+    let p = profile_with(Some(clock.clone()));
+    fill(&p.t, p._dir.path());
+    let mirror = tempfile::tempdir().unwrap();
+    let m = mirror.path();
+    assert!(p.t.ok::<IoBackupStatus>(Empty {}).mirror.is_none(), "off by default");
+    set(&p.t, super::backup_mirror::MIRROR_KEY, serde_json::json!(s(m)));
+    let st = p.t.ok::<IoBackupStatus>(Empty {}).mirror.unwrap();
+    assert_eq!((st.state, st.copies.len()), (MirrorState::Ok, 0));
+    assert_eq!(st.folder, s(m));
+    let tick = || super::auto_backup_tick(&p.t.app, true).unwrap();
+
+    // Automatic: the same file at home and in the mirror.
+    let rep: BackupReport = result(&finish(&p.t, &tick().expect("due")));
+    let copy = rep.mirror.clone().unwrap();
+    assert_eq!(copy.error, None);
+    let copied = PathBuf::from(copy.path.unwrap());
+    assert_eq!(backup_files(m, "auto-"), vec![copied.clone()]);
+    assert_eq!(std::fs::read(&copied).unwrap(), std::fs::read(&rep.path).unwrap());
+    assert!(!part_path(&copied).exists());
+    // …and it is a backup that restores and matches.
+    let job = p.t.ok::<IoBackupVerify>(VerifyBackup { path: s(&copied) });
+    assert!(result::<BackupVerifyReport>(&finish(&p.t, &job)).ok);
+
+    // Manual: copied as `manual-…`.
+    let rep = create(&p.t, &p._dir.path().join("hand.fcbackup"));
+    let manual = PathBuf::from(rep.mirror.unwrap().path.unwrap());
+    assert_eq!(backup_files(m, "manual-"), vec![manual.clone()]);
+    assert_eq!(
+        std::fs::read(&manual).unwrap(),
+        std::fs::read(p._dir.path().join("hand.fcbackup")).unwrap()
+    );
+
+    // The same keep count as at home: keep 2 → two automatic copies in both places.
+    set(&p.t, super::backup_auto::KEEP_KEY, serde_json::json!(2));
+    for _ in 0..3 {
+        clock.advance(DAY + HOUR);
+        result::<BackupReport>(&finish(&p.t, &tick().expect("due")));
+    }
+    assert_eq!(auto_files(&p.data).len(), 2);
+    let autos = backup_files(m, "auto-");
+    assert_eq!(autos.len(), 2, "{autos:?}");
+    assert!(!autos.contains(&copied), "the oldest went first");
+    let st = p.t.ok::<IoBackupStatus>(Empty {}).mirror.unwrap();
+    assert_eq!(st.state, MirrorState::Ok);
+    assert_eq!(st.copies.len(), 3);
+    assert!(st.last_failure.is_none());
+    assert!(st.copies[0].automatic && !st.copies[2].automatic, "newest first");
+    // No probe file or `.part` is left behind.
+    let names: Vec<String> = std::fs::read_dir(m)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(names.len(), 3, "{names:?}");
+}
+
+#[test]
+fn a_missing_mirror_never_fails_the_backup_and_says_so() {
+    let clock = MovableClock::new();
+    let p = profile_with(Some(clock.clone()));
+    fill(&p.t, p._dir.path());
+    let root = tempfile::tempdir().unwrap();
+    // A drive that is not plugged in: the folder is not created on the wrong disk.
+    let gone = root.path().join("unplugged");
+    set(&p.t, super::backup_mirror::MIRROR_KEY, serde_json::json!(s(&gone)));
+    let tick = || super::auto_backup_tick(&p.t.app, true).unwrap();
+    let rep: BackupReport = result(&finish(&p.t, &tick().expect("due")));
+    assert!(rep.verified, "the backup itself succeeded");
+    assert_eq!(auto_files(&p.data).len(), 1);
+    let copy = rep.mirror.unwrap();
+    assert!(copy.path.is_none() && copy.error.is_some());
+    assert!(!gone.exists());
+    let st = p.t.ok::<IoBackupStatus>(Empty {});
+    assert!(st.last_failure.is_none(), "the backup did not fail");
+    let mirror = st.mirror.unwrap();
+    assert_eq!(mirror.state, MirrorState::Missing);
+    assert!(mirror.last_failure.is_some());
+
+    // Other folders that are no second place.
+    for (dir, want) in [
+        ("relative/folder".to_owned(), MirrorState::Missing),
+        (s(&p.data.join("backups")), MirrorState::InsideCollection),
+    ] {
+        set(&p.t, super::backup_mirror::MIRROR_KEY, serde_json::json!(dir));
+        let st = p.t.ok::<IoBackupStatus>(Empty {}).mirror.unwrap();
+        assert_eq!(st.state, want, "{dir}");
+    }
+    // Inside the collection folder: nothing is copied there.
+    let rep = create(&p.t, &p._dir.path().join("x.fcbackup"));
+    assert!(rep.mirror.unwrap().error.is_some());
+    assert!(backup_files(&p.data.join("backups"), "manual-").is_empty());
+
+    // The drive is back: the next backup is copied and the failure is cleared.
+    std::fs::create_dir_all(&gone).unwrap();
+    set(&p.t, super::backup_mirror::MIRROR_KEY, serde_json::json!(s(&gone)));
+    clock.advance(DAY + HOUR);
+    let rep: BackupReport = result(&finish(&p.t, &tick().expect("due")));
+    assert_eq!(rep.mirror.unwrap().error, None);
+    assert_eq!(backup_files(&gone, "auto-").len(), 1);
+    let mirror = p.t.ok::<IoBackupStatus>(Empty {}).mirror.unwrap();
+    assert_eq!((mirror.state, mirror.copies.len()), (MirrorState::Ok, 1));
+    assert!(mirror.last_failure.is_none());
+}
+
+/// v1.4.1: a preset row holding FSRS-4.5 weights (stored before v1.4.1, or restored from an
+/// old backup) used to fail as soon as a card of its decks was graded ("FSRS-6 needs 21
+/// weights"). It now reads as FSRS-6 and every card studies.
+#[test]
+fn a_stored_preset_with_old_fsrs_weights_studies_without_error() {
+    use fc_api::v1::presets::{AssignPreset, PresetRef};
+    use fc_api::v1::study::{AnswerCard, SessionRef, StartSession, StudyKind, StudyMode};
+    let p = profile();
+    fill(&p.t, p._dir.path());
+    let id = fc_core::PresetId::from_uuid(uuid::Uuid::from_u128(0x0190_0000_0000_7000_8000_0000_0000_0a11));
+    let fsrs45 = vec![
+        0.4872, 1.4003, 3.7145, 13.8206, 5.1618, 1.2298, 0.8975, 0.031, 1.6474, 0.1367, 1.0461,
+        2.1072, 0.0793, 0.3246, 1.587, 0.2272, 2.8755,
+    ];
+    {
+        let mut tx = p.t.store.write().unwrap();
+        tx.upsert_preset(&fc_core::preset::Preset {
+            id,
+            name: "Old".into(),
+            config: fc_core::preset::PresetConfig {
+                fsrs_weights: fsrs45,
+                ..Default::default()
+            },
+            created_at: Timestamp(1),
+            updated_at: Timestamp(1),
+        })
+        .unwrap();
+        tx.commit().unwrap();
+    }
+    let decks: Vec<_> = p.t.store.read().unwrap().list_decks(false).unwrap();
+    p.t.ok::<PresetsAssign>(AssignPreset {
+        deck_ids: decks.iter().map(|d| d.id).collect(),
+        preset_id: Some(id),
+    });
+    let got = p.t.ok::<PresetsGet>(PresetRef { id });
+    assert_eq!(got.config.fsrs_weights.len(), 21);
+    assert_eq!(got.config.validate(), Ok(()));
+    let mut s = p.t.ok::<StudyStart>(StartSession {
+        kind: StudyKind::Normal,
+        mode: Some(StudyMode::Scheduled),
+        deck_id: None,
+        include_subdecks: None,
+        filter: None,
+        from_session: None,
+        new_limit: Some(100),
+        order: None,
+        tz_offset_mins: Some(0),
+        modes: None,
+        scope: None,
+    });
+    let mut n = 0;
+    while let Some(c) = s.current.clone() {
+        n += 1;
+        s = p.t.ok::<StudyAnswer>(AnswerCard {
+            typed_answer: None,
+            session_id: s.id,
+            card_id: c.card_id,
+            rating: if n % 2 == 0 { Rating::Again } else { Rating::Good },
+            duration_ms: 3_000,
+            reveal_ms: None,
+        });
+        assert!(n < 200);
+    }
+    assert!(n > 0, "the fixture has cards to study");
+    p.t.ok::<StudyEnd>(SessionRef { session_id: s.id });
 }
