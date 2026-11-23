@@ -127,6 +127,38 @@ süre sınırını aştı → `example_hook_fills_a_field` boş alan). Artık ar
 ulaşınca (eski eşik, yazarın WAL kancası) tetikleniyor: baştan başlatma eskisi kadar seyrek, kopyalama + veritabanı
 senkronu yine yazma yolunun dışında.
 
+## Windows CI kırmızısı: "aynı anda yakalama" p95 (v1.4.1 I2)
+
+1.4.1 birleşmesinde (a059b18) Windows işi `perf_suite_scaled`'de düştü: aynı anda yakalama p50 / p95 / maks
+54,9 / **831** / 2 360 ms (bütçe p95 600 ms, **23 örnek**), aynı pencerede cevap maks 2 314 ms, kurulumdaki yakalama
+maks 11,9 s (p95 41 ms). Önce bunun gerçek bir yavaşlama mı ölçüm gürültüsü mü olduğuna bakıldı. Sonuç: **ölçüm
+gürültüsü**; ürün yavaşlamadı.
+
+- **Yazma yolu aynı.** 1e9217e (son yeşil) ile şimdi arasında yakalama/cevap yolunda üretim kodu değişmedi:
+  yedek, ayna, `.verify-*` taraması, medya temizliği açılışta ya da işlerde koşar; WAL checkpoint kodu yalnız test
+  sayaçları aldı. Tek fark testlerde: fc-app testleri fc-storage'ı `crash-points` ile derliyor (yazar bağlantısına
+  satır/commit sayan iki kanca).
+- **Linux'ta tek başına, üçer koşu (debug, ms):** aynı anda yakalama p95 1e9217e'de 25,6 / 27,6 / 31,7, şimdi
+  29,6 / 29,6 / 27,6. Cevap p95 9,2–12,8'e karşı 11,4–12,4. Kurulumdaki yakalama maksimumu 10,7–17,5'e karşı
+  10,9–15,6. Fark yok.
+- **Linux'ta CI gibi, fc-app'in bütün testleriyle paralel:** 1e9217e'de 26,5, şimdi 24,1. İkisi de bütçenin çok
+  altında; Linux Windows'taki takılmaları üretmiyor.
+- **CI günlüğü:** `perf_suite_scaled` fc-app'in öbür 1 112 testiyle aynı anda koşuyor (Windows'ta 4 çekirdek).
+  Ölçülen "aynı anda" fazı (14:47–14:48:28) tam da sağlamlık turunda eklenen ağır testlerle çakıştı: geri alma
+  fuzz'ı (yeniden başlatmalı rastgele diziler, düşmanca içe aktarmalar, her üreticinin denetimi) ve 50k notluk
+  `lookup_500_forms`. Bu, Windows runner'ının bilinen disk/virüs tarayıcısı takılmasıdır (Z2 bölümü, yukarıda:
+  p95 360 ms / maks 2,2 s, turdan önce). Kurulumdaki 11,9 s'lik tek yakalama tek iş parçacığında oldu; tutan bir
+  yazar yoktu.
+- **Ölçüm zayıftı:** 23 örneğin p95'i en kötü **ikinci** örnektir. Düşen koşuda yalnız iki yakalama yavaştı (2 360 ve
+  831 ms) ve aynı andaki cevap maksimumu (2 314 ms) da aynı tek duraklamaya işaret ediyor.
+
+**Değişiklik** (`perf_film.rs`, `BUSY_SAMPLES = 120`): cevaplayıcı her iki tarafta en az 120 örnek birikene kadar
+sürer (önce 40 cevap / ≥ 20 yakalama), böylece her ölçülen yakalama gerçekten cevaplar kaydedilirken gelmiş olur.
+p95 artık 120 örneğin en kötü 7.'si; tek bir duraklama karar veremez. **Bütçe aynı** (p95 600 / 400 ms). Sonrası
+Linux'ta tek başına üç koşu: yakalama 121 örnek, p95 35,4 / 34,4 / 34,1 ms; cevap ~305 örnek, p95 12,5–13,2 ms.
+Paralel koşuda 26,9 / 13,1 ms. Ölçekli paket ~49 → ~55 s sürer. Windows'ta yeşile döndüğünü bir sonraki CI
+gösterecek.
+
 ## Düzeltilenler (önce → sonra)
 
 | Sorun | Düzeltme | Önce → sonra (CI ölçeği, debug) |
