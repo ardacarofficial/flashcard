@@ -287,6 +287,36 @@
     "auto": {
       "title": "Help that runs by itself",
       "description": "Where AI works without you asking. All start off."
+    },
+    "meaning": {
+      "title": "Meaning in this sentence",
+      "menu": "Meaning in this sentence",
+      "lead": "The AI tells you which meaning the word has in this card's sentence. Your card changes only when you apply it.",
+      "ask": "Suggest",
+      "ask_again": "Suggest again",
+      "current": "In this sentence:",
+      "expression": "Expression",
+      "phrase": "Rests on “{phrase}”",
+      "also_accepted": "Written answers also accept: {list}",
+      "original": "The source's meaning: {original}",
+      "suggestion": "AI suggestion",
+      "in_sentence": "The meaning that fits",
+      "confidence": "Sure: {value}",
+      "also_correct": "Also correct (your written answers will accept them): {list}",
+      "not_this": "Not in this sentence: {list}",
+      "source": "Your card says now: {original}",
+      "replace_field": "Also put it in the card's meaning",
+      "apply": "Apply",
+      "dismiss": "Dismiss",
+      "applied": "Meaning applied.",
+      "undo": "Undo",
+      "failed": "No suggestion came back. Try again.",
+      "reason": {
+        "no_sentence": "This card has no sentence to read the word in.",
+        "no_word": "This card has no word to explain.",
+        "no_meaning_field": "This card type has no meaning field.",
+        "no_cards": "This note has no cards."
+      }
     }
   },
   "errors": {

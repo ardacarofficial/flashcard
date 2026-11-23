@@ -39,6 +39,8 @@
     type MenuItem,
   } from '$lib/ui';
   import StudyAi from '../ai/StudyAi.svelte';
+  import MeaningDialog from '../ai/MeaningDialog.svelte';
+  import { aiReady, trackAiReady } from '../ai/ready.svelte';
   import CardView from '../cards/CardView.svelte';
   import PluginToolbar from '../plugins/PluginToolbar.svelte';
   import { defaultFlagKey, flagColor, hasFlag } from '../cards/flags';
@@ -75,6 +77,9 @@
   let typed = $state('');
   let check = $state<AnswerCheckDto | null>(null);
   let composing = $state(false);
+  /** v1.4: the note whose "meaning in this sentence" dialog is open (More menu). */
+  let meaningNote = $state<string | null>(null);
+  $effect(() => trackAiReady());
   let buttons = $state<'two' | 'four'>('two');
   /**
    * A call of a key or button is in flight: other keys are dropped (never queued), and the
@@ -599,6 +604,8 @@
     ...(moduleOn('inline_cards')
       ? [{ id: 'inline', label: t('modes.inline.open'), keys: ['N'], onselect: () => (composing = true) }]
       : []),
+    // v1.4: only with the `ai` module on and a provider set up.
+    ...(aiReady() && card ? [{ id: 'meaning', label: t('ai.meaning.menu'), onselect: () => (meaningNote = card?.note_id ?? null) }] : []),
     { id: 'sep', separator: true as const },
     twoButtons
       ? { id: 'buttons', label: t('study.buttons.use_four'), onselect: () => void ctx.guarded(() => setButtons('four')) }
@@ -865,6 +872,9 @@
     <StudyAi cardId={card.card_id} {revealed} typed={card.type_answer ? typed : null} />
     {#if composing}
       <InlineComposer deckId={card.deck_id} guarded={ctx.guarded} onclose={() => (composing = false)} />
+    {/if}
+    {#if meaningNote}
+      <MeaningDialog noteId={meaningNote} onclose={() => (meaningNote = null)} />
     {/if}
   </SessionFrame>
 {/if}

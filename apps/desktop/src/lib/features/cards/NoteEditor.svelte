@@ -12,6 +12,8 @@
   import NoteEditorAnswers from './NoteEditorAnswers.svelte';
   import NoteEditorAudio from './NoteEditorAudio.svelte';
   import NoteEditorEncounters from './NoteEditorEncounters.svelte';
+  import MeaningInContext from '../ai/MeaningInContext.svelte';
+  import { aiReady, trackAiReady } from '../ai/ready.svelte';
   import { moduleKnownOn, moduleOn, trackModules } from './modules.svelte';
   import { Button, Chip, CircleAlert, CircleCheck, Icon, Select, Skeleton } from '$lib/ui';
 
@@ -132,7 +134,18 @@
     encounters: moduleOn('subtitle'),
     answers: moduleOn('accepted_answers'),
     audio: moduleOn('audio_fill'),
+    // v1.4 meaning in this sentence: the `ai` module on and a provider set up.
+    meaning: aiReady(),
   });
+  $effect(() => {
+    if (noteId) trackAiReady();
+  });
+  /** Bumped after a meaning was applied: it may have added accepted answers (re-read them). */
+  let answersSeq = $state(0);
+  function meaningApplied() {
+    refreshFields();
+    answersSeq += 1;
+  }
 
   // v1.0: what is typed into a new note survives a crash (form draft, restored on open).
   const draft = draftKeeper<{ notetype_id: string; fields: Record<string, string> }>('notes.add');
@@ -281,11 +294,12 @@
       </div>
     </form>
 
-    {#if noteId && (extras.encounters || extras.answers || extras.audio)}
+    {#if noteId && (extras.encounters || extras.answers || extras.audio || extras.meaning)}
       <section class="word-block" aria-labelledby="note-word-title" data-testid="note-extras">
         <h3 id="note-word-title">{t('note_extras.title')}</h3>
         {#if extras.encounters}<NoteEditorEncounters {noteId} {onopennote} onchanged={refreshFields} />{/if}
-        {#if extras.answers}<NoteEditorAnswers {noteId} />{/if}
+        {#if extras.meaning}<MeaningInContext {noteId} onapplied={meaningApplied} />{/if}
+        {#if extras.answers}{#key answersSeq}<NoteEditorAnswers {noteId} />{/key}{/if}
         {#if extras.audio}<NoteEditorAudio {noteId} onfilled={refreshFields} />{/if}
       </section>
     {/if}
