@@ -119,7 +119,7 @@
     }
   },
   "stats": {
-    "heading": "Genel bakış",
+    "heading": "İlerleme",
     "scope": {
       "deck": "Deste",
       "all_decks": "Tüm desteler",
@@ -258,7 +258,7 @@
       "intro": "Her destenin ne kadar ilerlediği."
     },
     "empty": "Bu dönemde henüz tekrar yok.",
-    "subtitle": "Tekrarların, hafızan ve sırada ne olduğu.",
+    "subtitle": "Üç soru, üç kısa cevap. Daha ayrıntılısı en altta, “Daha fazla”da.",
     "overview": "Özet",
     "range_short": {
       "30": "30 gün",
@@ -315,7 +315,7 @@
       "today": "bugün",
       "total": "{days} günde toplam {n} kart",
       "empty": "Önümüzdeki günlerde tekrar yok.",
-      "plan": "Temponu planla"
+      "plan": "Günde kaç yeni kelime?"
     },
     "struggles": {
       "heading": "Nelerde zorlanıyorum?",
@@ -350,7 +350,99 @@
     "summary": {
       "heading": "Dönem özeti",
       "meaning": "Seçili dönemdeki seri, tekrar, süre ve gerçek hatırlama oranın."
-    }
+    },
+    "q": {
+      "today": {
+        "heading": "Bugün ne yaptım?",
+        "none": "Bugün henüz çalışmadın.",
+        "start": "Çalışmaya başla",
+        "say": "Bugün {n, plural, one {# kelime} other {# kelime}} çalıştın, {correct} tanesini bildin.",
+        "minutes": "{n} dakika",
+        "started": "{n} yeni kelimeye başladın",
+        "streak": "{n} gündür her gün",
+        "chart": "Son 7 gün, gün başına çalışılan kelime",
+        "today": "bugün",
+        "day": "{date}: {n} kelime",
+        "hard": "Zorlandıkların: {list}",
+        "no_hard": "Bugün zorlandığın kelime yok."
+      },
+      "growing": {
+        "heading": "İlerliyor muyum?",
+        "say": "{n} kelimeyi biliyorsun.",
+        "none": "Henüz “biliyorum” dediğin kelime yok.",
+        "learning": "{n} kelimeyi de öğreniyorsun, {fresh} kelime sırada; öğrendiklerin oturdukça bu sayı artar.",
+        "chart": "Kelimelerin ({lang})",
+        "known": "Biliyorum",
+        "learning_label": "Öğreniyorum",
+        "new": "Yeni",
+        "other": "{lang}: {n} kelime",
+        "unassigned": "{n, plural, one {# notun} other {# notun}} dili belli değil; onlar sayılmadı. Destesine bir dil ver (Kütüphane › deste).",
+        "meaning": "Biliyorum = {days} gün sonra hâlâ hatırladığın ya da “zaten biliyorum” dediğin kelime.",
+        "open": "Kelimelerim",
+        "empty": "Kelime ekleyip çalıştıkça bildiğin kelimeler burada sayılır.",
+        "cards": "{n} kartın oturdu ({pct}).",
+        "cards_sub": "Oturmuş kart: aralığı üç haftayı geçmiş kart."
+      },
+      "tomorrow": {
+        "heading": "Yarın ne var?",
+        "say": "Yarın {n} kelimenin tekrar sırası geliyor.",
+        "none": "Yarın sırası gelen kelime yok.",
+        "none_sub": "Çalıştıkça, hangi gün kaç kelimenin sırası geleceği burada görünür.",
+        "peak_tomorrow": "Bu haftanın en yoğun günü yarın.",
+        "peak": "Bu hafta en yoğun gün {day} ({date}): {n} tekrar.",
+        "tomorrow": "yarın",
+        "meaning": "Yeni kelimeler bu sayıya dahil değil."
+      }
+    },
+    "more_toggle": {
+      "label": "Daha fazla",
+      "hint": "Çalışma takvimi, hatırlama oranı, kelimelerin aşamaları, sürekli unuttukların ve diğer grafikler. Her birinin altında ne anlattığı yazıyor."
+    },
+    "forecast30": {
+      "heading": "Önümüzdeki 30 gün",
+      "meaning": "Hangi gün kaç kelimenin sırası gelecek. Gecikenler bugüne sayılır; yeni kelimeler dahil değil."
+    },
+    "repair": {
+      "open": "Düzelt",
+      "title": "“{term}”: neden hep unutuyorsun?",
+      "intro": "Son yanlış cevapların ve kartı düzeltmek için öneriler. Her düzeltme tek adımda geri alınabilir.",
+      "lapses": "{n, plural, one {Bu kelimeyi # kez unuttun.} other {Bu kelimeyi # kez unuttun.}}",
+      "evidence": "Ne oldu?",
+      "expects": "Kartın beklediği cevap:",
+      "also_accepted": "bunlar da kabul: {list}",
+      "no_failures": "Son yanlış cevabın kayıtlı değil.",
+      "typed": "Yazdığın:",
+      "not_typed": "Yazarak cevaplamadın.",
+      "typed_off": "Yazdığın cevaplar saklanmıyor (Ayarlar › Çalışma). Açarsan sonraki yanlışlarında burada görünür.",
+      "confusables": "Bu kelimenin başka anlamları da var: {list}",
+      "proposals": "Ne yapabilirsin?",
+      "none": "Bu kart için belirgin bir öneri yok. Cümlesini yeniden oku ya da bir süre kenara koy.",
+      "apply": "Uygula",
+      "applied": "Yapıldı: {what}. Geri almak için Ctrl+Z.",
+      "ai_hint": "Yapay zeka sayfasından",
+      "accepted_field": "Kabul edilen cevaplar",
+      "past": "Önceki düzeltmeler",
+      "before_after": "önce {before} · sonra {after} ({n} cevap)",
+      "small_sample": "Henüz az cevap var; fark pek bir şey söylemiyor.",
+      "undo": "Her düzeltme geri alınabilir: Ctrl+Z.",
+      "kind": {
+        "switch_example": "Daha iyi bir örnek cümle göster",
+        "add_accepted_answers": "Başka doğru cevapları da kabul et",
+        "move_meaning": "Başka anlamı ayrı karta taşı",
+        "ai_rewrite": "Yapay zekayla yeniden yaz"
+      },
+      "why": {
+        "better_example": "Bu kelimeyi gördüğün başka bir sahne daha öğretici duruyor.",
+        "senses_not_accepted": "Anlamın birkaç parçası var; her biri tek başına henüz doğru sayılmıyor.",
+        "also_correct_not_accepted": "Önerilen anlamda başka doğru cevaplar da var; henüz kabul edilmiyorlar.",
+        "mixed_meanings": "Bu kelimeyi farklı bir anlamıyla da yakalamışsın; kart iki anlamı karıştırıyor.",
+        "fresh_angle": "Belirgin bir sebep bulunamadı; başka bir anlatım işe yarayabilir."
+      }
+    },
+    "tabs": {
+      "label": "İlerleme sayfaları"
+    },
+    "adv_note": "Süzgeçler, kararlılık/zorluk grafikleri ve sınıflandırmaya göre istatistik Gelişmiş’te (Ayarlar)."
   },
   "planning": {
     "heading": "Planlama",

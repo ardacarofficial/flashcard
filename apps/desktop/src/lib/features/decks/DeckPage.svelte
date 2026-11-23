@@ -4,14 +4,16 @@
   whose module is off has none, rule 7); then a smaller flippable preview (←/→ move, Space
   flips) beside the New / Learning / Mastered progress, today's counts and the sub-decks.
   Below: the term list as a dense table with inline edit. Progress numbers come from
-  `decks.summaries`, counts from `decks.tree`.
+  `decks.summaries`, counts from `decks.tree`. v1.4: with the `words` module on, the header
+  shows the deck's language (`words.language`, deck scope) with a picker; without one it says
+  that its words are not counted.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import type { DeckSummary, DeckTreeNode, FlagDto, ModuleDto, NoteTerm } from '$lib/api/types';
   import { formatCount, formatPercent100 } from '$lib/format';
-  import { t } from '$lib/i18n/index.svelte';
+  import { i18n, t } from '$lib/i18n/index.svelte';
   import { usePageKeys } from '$lib/shell/page-keys.svelte';
   import {
     BookOpen,
@@ -30,6 +32,7 @@
     Plus,
     ProgressBar,
     Repeat,
+    Select,
     Shuffle,
     Skeleton,
     Tooltip,
@@ -43,6 +46,7 @@
   import { launcher, openLauncher } from '../study/launcher.svelte';
   import type { LaunchKind } from '../study/contract';
   import { menuRoute, moduleOn, nodesById, summariesById, todayCounts } from './library';
+  import { COMMON_LANGUAGES, deckLanguage, languageName, setDeckLanguage } from './language';
 
   interface Props {
     ctx: ScreenCtx;
@@ -72,6 +76,8 @@
   let index = $state(0);
   let flipped = $state(false);
   let request = $state<DeckRequest | null>(null);
+  /** The deck's word language ("" = unknown); null while unknown to us or `words` is off. */
+  let language = $state<string | null>(null);
 
   /** The parents of a sub-deck, outermost first: crumbs before its name in the top bar. */
   const parents = $derived.by(() => {
@@ -126,6 +132,44 @@
     }
   }
 
+  const wordsOn = $derived(moduleOn(modules, 'words'));
+
+  async function loadLanguage() {
+    const id = deck.id;
+    if (!wordsOn) {
+      language = null;
+      return;
+    }
+    try {
+      const l = await deckLanguage(id);
+      if (id === deck.id) language = l;
+    } catch {
+      if (id === deck.id) language = null;
+    }
+  }
+
+  async function changeLanguage(value: string) {
+    const id = deck.id;
+    await ctx.guarded(() => setDeckLanguage(id, value));
+    // The stored value wins (also puts the picker back after a failure).
+    await loadLanguage();
+  }
+
+  /** Picker options: common languages plus the stored one; "Not set" only to clear one. */
+  const languageOptions = $derived.by(() => {
+    const tags: string[] = [...COMMON_LANGUAGES];
+    if (language && !tags.includes(language)) tags.push(language);
+    const named = tags.map((tag) => ({ value: tag, label: languageName(tag, i18n.locale) }));
+    return language ? [...named, { value: '', label: t('decks.language.unknown') }] : named;
+  });
+
+  // Another deck opened or the module switched: read its language again.
+  $effect(() => {
+    void deck.id;
+    void wordsOn;
+    void loadLanguage();
+  });
+
   onMount(() => {
     if (moduleOn(modules, 'flags') || modules.length === 0) {
       void api.call('flags.list', {}).then(
@@ -134,7 +178,11 @@
       );
     }
     const unsub = api.on(['note', 'cards_', 'card_', 'study_', 'undone', 'redone', 'data_changed', 'imported', 'attribute'], () => void loadTerms());
-    return () => void unsub.then((u) => u());
+    const unsubLanguage = api.on(['setting_changed', 'undone', 'redone', 'collection_'], () => void loadLanguage());
+    return () => {
+      void unsub.then((u) => u());
+      void unsubLanguage.then((u) => u());
+    };
   });
 
   // A different deck opened: start over.
@@ -228,6 +276,21 @@
     {#each summary?.chips ?? [] as chip (chip.attr_id + chip.label)}
       <Chip size="sm" label={chip.label} />
     {/each}
+    {#if language !== null}
+      <span class="lang" class:unknown={language === ''} data-testid="deck-language">
+        <span class="lang-text">{language === '' ? t('decks.language.unknown_hint') : t('decks.language.label')}</span>
+        <Select
+          size="sm"
+          class="lang-select"
+          hideLabel
+          label={t('decks.language.picker', { deck: deck.name })}
+          placeholder={t('decks.language.choose')}
+          options={languageOptions}
+          bind:value={language}
+          onchange={(v) => void changeLanguage(v)}
+        />
+      </span>
+    {/if}
   {/snippet}
   {#snippet actions()}
     <Menu items={deckMenu(ctx, modules, node, (r) => (request = r))} label={t('deck_page.more')} align="end" />
@@ -367,6 +430,22 @@
     margin-inline-end: var(--space-1);
     color: var(--text-2);
     font-size: var(--text-xs);
+  }
+  .lang {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    gap: var(--space-2);
+    margin-inline-start: var(--space-2);
+    color: var(--text-2);
+    font-size: var(--text-xs);
+  }
+  .lang.unknown .lang-text {
+    color: var(--text-1);
+  }
+  .lang :global(.lang-select) {
+    flex: none;
+    min-width: 128px;
   }
   .actionbar {
     display: flex;

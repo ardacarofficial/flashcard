@@ -25,7 +25,8 @@ use crate::jobs::{enqueue, JobContext, JobHandler};
 use crate::support::summary;
 use fc_api::v1::common::Empty;
 use fc_api::v1::io::{
-    AutoBackupSchedule, AutoBackupStart, BackupFailure, BackupReport, BackupStatus,
+    AutoBackupSchedule, AutoBackupStart, BackupFailure, BackupReport, BackupStale,
+    BackupStatus,
     VerifiedBackup,
 };
 use fc_api::v1::jobs::JobDto;
@@ -282,6 +283,28 @@ fn next_due(s: AutoBackupSchedule, dir: &Path, now: Timestamp) -> Option<Timesta
     })
 }
 
+/// Longest a verified backup may be before Home asks for a new one when automatic backups
+/// are off.
+const STALE_WHEN_OFF_MS: i64 = 7 * MILLIS_PER_DAY;
+
+/// Whether the backup needs attention (`io.backup.status.stale`): a failure first, then no
+/// backup at all, then a backup older than two schedule periods (7 days when off).
+pub(crate) fn staleness(
+    sched: AutoBackupSchedule,
+    last_verified: Option<&VerifiedBackup>,
+    failed: bool,
+    now: Timestamp,
+) -> Option<BackupStale> {
+    if failed {
+        return Some(BackupStale::Failed);
+    }
+    let Some(last) = last_verified else {
+        return Some(BackupStale::Never);
+    };
+    let limit = period_ms(sched).map_or(STALE_WHEN_OFF_MS, |p| p.saturating_mul(2));
+    (now.0.saturating_sub(last.verified_at.0) > limit).then_some(BackupStale::Old)
+}
+
 // ------------------------------------------------------------------ API
 
 /// `io.backup.status` (an action: it needs the collection folder).
@@ -299,6 +322,7 @@ pub(super) fn status(_: Empty, app: &crate::App, _actor: &Actor) -> AppResult<Ba
             automatic: Vec::new(),
             next_due: None,
             last_failure: None,
+            stale: None,
         });
     };
     let dir = auto_dir(data_dir);
@@ -313,14 +337,17 @@ pub(super) fn status(_: Empty, app: &crate::App, _actor: &Actor) -> AppResult<Ba
         (Some(a), Some(b)) => Some(if b.verified_at.0 > a.verified_at.0 { b } else { a }),
         (a, b) => a.or(b),
     };
+    let now = app.now();
+    let stale = staleness(sched, last_verified.as_ref(), file.last_failure.is_some(), now);
     Ok(BackupStatus {
         schedule: sched,
         keep,
         folder: Some(dir.to_string_lossy().into_owned()),
         last_verified,
         automatic,
-        next_due: next_due(sched, &dir, app.now()),
+        next_due: next_due(sched, &dir, now),
         last_failure: file.last_failure,
+        stale,
     })
 }
 

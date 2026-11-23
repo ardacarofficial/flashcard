@@ -396,6 +396,23 @@ pub struct BackupStatus {
     pub next_due: Option<Timestamp>,
     /// The last automatic backup that failed, if none succeeded since.
     pub last_failure: Option<BackupFailure>,
+    /// v1.4: why the backup needs attention ("son yedek" hint on Home); `null` = fine, or the
+    /// collection has no folder. Decided in Rust ([`BackupStale`]); clients only word it.
+    #[serde(default)]
+    pub stale: Option<BackupStale>,
+}
+
+/// Why `io.backup.status` says the backup needs attention.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum BackupStale {
+    /// The last automatic backup failed (and none succeeded since).
+    Failed,
+    /// There is no verified backup at all.
+    Never,
+    /// The newest verified backup is older than the limit: two periods of the automatic
+    /// schedule (daily: 2 days, weekly: 14 days), 7 days when automatic backups are off.
+    Old,
 }
 
 /// Response of `io.backup.auto`.

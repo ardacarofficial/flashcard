@@ -3,9 +3,18 @@ import { deckCounts } from '$lib/api/mock/seed';
 import type { DeckCounts, DeckDto, DeckSummary, Mastery, NoteTerm } from '$lib/api/types';
 
 export default {
-  modules: [module('decks', [menu('decks.tree', 'nav.decks', '/decks', 10)])],
+  // v1.4: the word index (`words.*`) has no screen of its own yet; the Library and the deck
+  // page read `words.stats` for the "no language" hint.
+  modules: [module('decks', [menu('decks.tree', 'nav.decks', '/decks', 10)]), module('words', [])],
   handlers: ({ now, emit, decks, notes, attrs, cardFlags, pathOf, addDeck, tree, ancestors, requireDeck, requireName, sameName }: MockEnv) => ({
   'decks.tree': () => ({ roots: tree(null) }),
+  // The mock has no deck languages (`settings.*` lives in stats/mock.ts and ignores the
+  // scope), so every note with a term counts as "language unknown".
+  'words.stats': () => ({
+    threshold_days: 21,
+    languages: [],
+    unassigned_notes: notes.filter((n) => (n.fields.front ?? '').trim() !== '').length,
+  }),
   // Plausible, fixed progress per deck (the real numbers come from fc-app).
   'decks.summaries': () => {
     const roots = tree(null);

@@ -5,19 +5,24 @@
   per-row "Study"; the row opens the deck page); a compact stat strip (streak, goal, today's
   answers); the inbox as one slim row when something waits. Every number is the backend's:
   `decks.summaries`, `stats.overview`, `goals.list`, `inbox.count`; parts whose module is off
-  are left out (rule 7).
+  are left out (rule 7). v1.4: today's counts are the core's queue counts as sent (`today_*`);
+  one line with the words you know (`words.stats`) leads to İlerleme; a "son yedek" line
+  appears when `io.backup.status.stale` says the backup needs attention (link to Settings ›
+  Data).
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
-  import type { DeckSummaries, DeckTreeNode, GoalItem, ModuleDto, ReviewTotals, Streak } from '$lib/api/types';
+  import type { BackupStale, DeckSummaries, DeckTreeNode, GoalItem, ModuleDto, ReviewTotals, Streak, WordCounts } from '$lib/api/types';
   import type { ScreenCtx } from '$lib/features';
   import { formatCount, formatDuration } from '$lib/format';
   import { t, td } from '$lib/i18n/index.svelte';
   import { usePageKeys } from '$lib/shell/page-keys.svelte';
   import {
     Button,
+    BarChart3,
     ChevronRight,
+    HardDrive,
     CircleCheck,
     EmptyState,
     Flame,
@@ -57,6 +62,8 @@
   let goal = $state<GoalItem | null>(null);
   let goalsLoaded = $state(false);
   let inbox = $state(0);
+  let known = $state<WordCounts | null>(null);
+  let backupStale = $state<BackupStale | null>(null);
 
   const nodes = $derived(nodesById(ctx.decks));
   const byId = $derived(summariesById(summaries));
@@ -142,6 +149,19 @@
         () => (goalsLoaded = true),
       );
     }
+    if (moduleOn(list, 'words')) {
+      // The main language's counts (the word index's one truth; İlerleme shows the rest).
+      api.call('words.stats', {}).then(
+        (w) => (known = w.languages[0]?.counts ?? null),
+        () => (known = null),
+      );
+    } else known = null;
+    if (moduleOn(list, 'io')) {
+      api.call('io.backup.status', {}).then(
+        (b) => (backupStale = b.stale),
+        () => (backupStale = null),
+      );
+    } else backupStale = null;
     if (moduleOn(list, 'inbox')) {
       api.call('inbox.count', {}).then(
         (c) => (inbox = c.pending),
@@ -233,6 +253,22 @@
         <Icon icon={Inbox} size={16} />
         <span class="inbox-text">{t('home.inbox_notice', { count: inbox })}</span>
         <span class="inbox-open">{t('home.inbox_open')}<Icon icon={ChevronRight} size={14} /></span>
+      </button>
+    {/if}
+
+    {#if known && (known.known > 0 || known.learning > 0)}
+      <button type="button" class="inbox-row" data-testid="home-words" onclick={() => open(statsOn ? '/stats' : '/words')}>
+        <Icon icon={BarChart3} size={16} />
+        <span class="inbox-text">{t('home.words_line', { known: known.known, learning: known.learning })}</span>
+        <span class="inbox-open">{statsOn ? t('home.words_progress') : t('home.words_open')}<Icon icon={ChevronRight} size={14} /></span>
+      </button>
+    {/if}
+
+    {#if backupStale}
+      <button type="button" class="inbox-row backup" data-testid="home-backup" onclick={() => ctx.navigate?.('/io', 'settings')}>
+        <Icon icon={HardDrive} size={16} />
+        <span class="inbox-text">{td(`home.backup.${backupStale}`)}</span>
+        <span class="inbox-open">{t('home.backup.open')}<Icon icon={ChevronRight} size={14} /></span>
       </button>
     {/if}
 
@@ -444,6 +480,9 @@
   .inbox-row :global(svg) {
     flex: none;
     color: var(--accent-text);
+  }
+  .inbox-row.backup :global(svg) {
+    color: var(--warning);
   }
   .inbox-row:hover {
     background: var(--surface-2);

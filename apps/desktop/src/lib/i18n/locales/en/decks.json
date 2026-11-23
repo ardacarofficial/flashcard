@@ -140,5 +140,18 @@
     "subdecks": "Sub-decks",
     "state": "Status",
     "edit_hint": "Ctrl+Enter saves · Esc cancels"
+  },
+  "decks": {
+    "language": {
+      "label": "Language",
+      "choose": "Choose a language",
+      "unknown": "Not set",
+      "unknown_hint": "This deck has no language: its words aren't counted.",
+      "picker": "Language of {deck}"
+    },
+    "unassigned": {
+      "notice": "{count, plural, one {# note has no language, so its word isn't counted} other {# notes have no language, so their words aren't counted}} among the words you know.",
+      "action": "Give its deck a language"
+    }
   }
 }

@@ -140,5 +140,18 @@
     "subdecks": "Alt desteler",
     "state": "Durum",
     "edit_hint": "Ctrl+Enter kaydeder · Esc vazgeçer"
+  },
+  "decks": {
+    "language": {
+      "label": "Dil",
+      "choose": "Dil seç",
+      "unknown": "Belli değil",
+      "unknown_hint": "Bu destenin dili belli değil: kelimeleri sayılmıyor.",
+      "picker": "{deck} destesinin dili"
+    },
+    "unassigned": {
+      "notice": "{count} notun dili belli değil; bu yüzden bildiğin kelimelere sayılmıyor.",
+      "action": "Destesine bir dil ver"
+    }
   }
 }
