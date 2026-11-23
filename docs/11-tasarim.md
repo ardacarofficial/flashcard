@@ -42,13 +42,18 @@ Düzenleyici fikir: her ekran bir akışın parçasıdır. Ana akışlar ve tuş
 
 "Çalışmak istiyorum" demenin **tek** yolu. Her giriş aynı iletişim kutusunu açar: Ana sayfa (düğme, satırlar, `Enter`), Kütüphane satırı, deste sayfasının "Çalış"ı (`Enter`) ve mod düğmeleri (o mod seçili), palet (ekranlar ve ham `study.start` komutu), kendi başına açılan mod sayfaları, oturum sonundaki "Tekrar çalış", İstatistik'in "Bunları çalış"ı ve kart eklemenin "Şimdi çalış"ı. Eski mod başına kurulum panelleri kalktı.
 
-Yukarıdan aşağı, hepsi `study.options`'tan (Rust, yan etkisiz sorgu; docs/02):
+v1.4 (onaylanacak taslak `prototypes/v14/modlar.html`, önerilen A seçenekleri): iki sütun, hepsi `study.options`'tan (Rust, yan etkisiz sorgu; docs/02):
 
-1. **Yarım kalanlar** — varsa ilk ve odakta: "Devam et · 7 cevaplandı · 13 kaldı". `Enter` aynı oturuma döner.
-2. **Mod** — Kartlar / Öğren / Test / Eşleştir (yalnız modülü açık olanlar), altında takvime ne yaptığını söyleyen tek satır ("Test … takvimi hiç değiştirmez").
-3. **Ne çalışayım?** — beş kapsam, **tam sayılarıyla**: Bugünün kartları · Yeni kartlar · Bugün çalıştıklarım · Bugün zorlandıklarım · Tüm kartlar. Son üçü "pratik · takvimi değiştirmez" etiketlidir ve başlarken kart kümesi dondurulur. Boş kapsam devre dışıdır ve nedenini söyler ("Bugünlük kart sınırın doldu", "Sıradaki kart 6 dk sonra", "Bugün henüz çalışmadın").
-4. **Kaç kart?** (Test'te "Kaç soru?"), kapalı **Seçenekler** (pratik, süre/güven, sınıflandırma, sorgu, kayıtlı sorgu, erteleme, test soru türleri).
-5. **Başla** — sayıyı üstünde taşır. Başlarken Rust yeniden doğrular; o an boşsa (`CONFLICT_NOTHING_TO_STUDY`) iletişim kutusu nedeniyle açık kalır, **hiçbir oturum açılmaz ve yarım oturum kapanmaz.**
+1. **Yarım kalanlar** — varsa en üstte ve odakta: "Devam et · 7 cevaplandı · 13 kaldı". `Enter` aynı oturuma döner.
+2. **Nasıl çalışmak istersin?** — `study.options.modes` ne listeliyorsa (modülü kapalı mod yok): Kartlar · Test (dört şık, cevap hemen; arka uçta `quiz`) · Öğren · Sınav (karışık kâğıt; arka uçta `test`) · Eşleştir. Her satır simge + ad + **tek satır "ne yapar"** (`description_key`) + **"takvimi etkiler" / "pratik"** etiketi (`affects_schedule`); altında "Takvim = …" açıklaması. Radyo grubu: oklar gezer, `Tab` tek durak.
+3. **Hangi kartlar?** — beş kapsam tam sayılarıyla; **aşamalı**: önce yalnız "Bugünün kartları", diğer dördü "Başka kartlar seç (4)" ile bir tık uzakta (seçili kapsam bugün değilse, ör. bugün boşken, kendiliğinden açık). Pratik kapsam etiketi yalnız takvimi etkileyen modda görünür. Boş kapsam devre dışıdır ve nedenini söyler. Aç/kapa sabiti: `launch.ts` `SCOPES_PROGRESSIVE` (B = hepsi açık).
+4. **Sınavda neler olsun?** — yalnız Sınav seçiliyken, hep görünür: soru türleri onay kutusu (API'nin `question_kinds` / `default_question_kinds`'i; doğru/yanlış kapalı başlar), "Kaç soru?" (`default_questions`). Hiç tür yoksa Başla kapalı, nedeni altbilgide.
+5. **Gelişmiş** — tek anahtar (altbilgide, cihazda hatırlanır): kart sayısı, pratik, süre/güven, sınıflandırma, sorgu + kayıtlı sorgu, erteleme. Kapalıyken başlatıcıda yalnız mod ve kartlar vardır.
+6. **Altbilgi** — "Test · Tüm kartlar · 30 kart" + takvime ne olacağı tek cümle ("Pratik: takvimin değişmez" / "Takvimi etkiler: …") ve **Başla**. Başlarken Rust yeniden doğrular; o an boşsa (`CONFLICT_NOTHING_TO_STUDY`) iletişim kutusu nedeniyle açık kalır, **hiçbir oturum açılmaz ve yarım oturum kapanmaz.**
+
+**Oturum sonu (`features/modes/SessionSummary.svelte`)** her modda aynı kalıp: puan halkası, tek cümle, birkaç sayı, **takvime ne olduğu tek satır** ("Pratikti: takvimin değişmedi" / "Takvimin güncellendi: N kartın sıradaki tekrarı ayarlandı"), "Yanlışları tekrar çalış (`R`)", "Tekrar çalış…", "Tamam" ve kaçırılanlar listesi (Test: kelime · doğrusu · senin seçimin; `modes.quiz.result`). Test, Öğren ve (kendi sonuç sayfasında takvim satırıyla) Sınav kullanır.
+
+**Test ekranı (`features/modes/QuizRun.svelte`, `/learn` rotasında açılır).** Kelime, en çok dört anlam; `1`–`4` ya da tık; doğru/yanlış ve doğru şık hemen, altında kartın arka yüzü (cümle, kaynak). `Enter` sonraki; doğru cevap 1,1 sn sonra kendiliğinden geçer (sabit `modes.ts` `QUIZ_AUTO_NEXT_MS`, B = 0), yanlışta doğrusunu okuman için `Enter` bekler. `Esc` ara verir: oturum çekirdekte açık kalır (Devam et burada, Ana sayfada ve başlatıcıda), `Space` hiçbir şey yapmaz.
 
 Klavye: `Enter` başlatır (odak "Devam et"te ya da kendi `Enter`'ı olan bir kontroldeyse o kontrol), `↑`/`↓`/`←`/`→` kapsamlar arasında, `Tab` sayı ve seçenekler, `Esc` kapatır. Son mod deste başına, son kapsam mod başına hatırlanır (cihazda). Ana sayfa sayısı sıfırken bile ölü bir "Başla" sunulmaz: başlatıcı pratik kapsamlarını gösterir.
 
@@ -56,7 +61,7 @@ Klavye: `Enter` başlatır (odak "Devam et"te ya da kendi `Enter`'ı olan bir ko
 
 **Bekleme durumu.** Kalan kartların hepsi öğrenme adımında bekliyorsa oturum kapanmaz: "Sıradaki kart N dk sonra" + geri sayım, **Bekle** / **Başka bir şey çalış** (başlatıcı) / **Bitir**. Önden öğrenme penceresi bir ayardır (`study.learn_ahead_mins`, "Öğrenme kartını erken göster", varsayılan 20 dk, 0 = hep bekle); `next_due` kartın gerçekten sunulacağı andır, bekleme ekranı yalnız gerçekten beklemen gerektiğinde görünür. Oturum açıkken pencereyi küçültmek ekrandaki kartı almaz: oturum, kartı seçtiği pencereyi bir sonraki cevaba kadar korur; büyütmek hemen geçerlidir.
 
-**Ara vermek.** Kartlar oturumunda `Esc` oturumu **duraklatır** (puanın hemen ardından basılan `Esc` de kaybolmaz: cevap kaydedilince ara verir): o ana kadarki özet ("Ara verdin — kaldığın yerden devam edebilirsin") ve odakta **Devam et** (`Enter` aynı oturuma döner; "Tamam" deste sayfasına ya da Ana sayfaya götürür, oturum açık kalır); oturum açık kalır, başlatıcının ilk satırı da onu sunar. Tür başına tek açık oturum vardır (Kartlar, Öğren, Test, Eşleştir); Test kâğıdı cevaplarını taslak olarak saklar ve devam edince geri yükler.
+**Ara vermek.** Kartlar oturumunda `Esc` oturumu **duraklatır** (puanın hemen ardından basılan `Esc` de kaybolmaz: cevap kaydedilince ara verir): o ana kadarki özet ("Ara verdin — kaldığın yerden devam edebilirsin") ve odakta **Devam et** (`Enter` aynı oturuma döner; "Tamam" deste sayfasına ya da Ana sayfaya götürür, oturum açık kalır); oturum açık kalır, başlatıcının ilk satırı da onu sunar. Tür başına tek açık oturum vardır (Kartlar, Test, Öğren, Sınav, Eşleştir); Sınav kâğıdı cevaplarını taslak olarak saklar ve devam edince geri yükler.
 
 ### 1.2 Klavye modeli: bir tuş, bir iş
 
@@ -64,7 +69,7 @@ Kural: **bir tuşun anlamı gizli bir duruma bağlı olarak değişmez.** Uygula
 
 | Tuş | Tek işi | Neyi asla yapmaz |
 |---|---|---|
-| `Space` | Kartı çevirir, ön ⇄ arka, her basışta | Puanlamaz (v1.2'de ikinci basış "Biliyorum" sayıyordu) |
+| `Space` | Kartı çevirir, ön ⇄ arka, her basışta | Puanlamaz (v1.2'de ikinci basış "Biliyorum" sayıyordu); Test'te ve Öğren'de hiçbir şey yapmaz (v1.4: Öğren'de "devam" değil) |
 | `1`–`4` (2'li düzende `1`/`2`) | Puanlar: Tekrar / Zor / İyi / Kolay (2'li: Hâlâ öğreniyorum / Biliyorum) | Arka yüz görülmeden hiçbir şey yapmaz; 2'li düzende `3`/`4` boş. Şıklı kartın sorusunda şık seçer (şıklar ekranda) |
 | `Enter` | Odaktaki kontrole basar | Sayfa kısayolu değildir; kartı odakta olmadan çevirmez/puanlamaz |
 | `H` | İpucu (yalnız soru yüzünde) | — |

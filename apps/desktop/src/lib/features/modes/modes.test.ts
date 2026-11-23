@@ -212,6 +212,59 @@ describe('learn screen', () => {
   });
 });
 
+describe('quiz (Test) screen', () => {
+  it('1–4 picks, the answer shows at once, Space does nothing, Enter goes on; the score and the missed words come from the core', async () => {
+    const quiz = (answered: number, correct: number) => ({
+      rating_scale: 'buttons',
+      confidence: [],
+      timer: null,
+      timed_out: 0,
+      learn: null,
+      test: null,
+      quiz: { term: answered === 0 ? 'badger' : 'otter', options: ['kedi', 'porsuk', 'vaşak', 'su samuru'], few_options: false, progress: { total: 2, answered, correct }, affects_schedule: false },
+    });
+    const first = session({ kind: 'quiz', mode: 'trial', modes: quiz(0, 0) });
+    const second = session({ kind: 'quiz', mode: 'trial', current: card('c-2', 'otter'), modes: quiz(1, 0) });
+    const done = session({ kind: 'quiz', mode: 'trial', current: null, modes: quiz(2, 1) });
+    const answers: number[] = [];
+    call.mockImplementation(async (m, p) => {
+      if (m === 'study.start') return first;
+      if (m === 'modes.quiz.answer') {
+        answers.push(p.choice);
+        return p.card_id === 'c-1'
+          ? { correct: false, picked: p.choice, correct_option: 1, expected: 'porsuk', session: second }
+          : { correct: true, picked: p.choice, correct_option: 3, expected: 'su samuru', session: done };
+      }
+      if (m === 'modes.quiz.result')
+        return { session_id: 's-1', total: 2, answered: 2, correct: 1, wrong: 1, percent: 50, finished: true, affects_schedule: false, missed: [{ card_id: 'c-1', term: 'badger', expected: 'porsuk', picked: 'kedi' }] };
+      return base(m);
+    });
+    await launch('quiz', { mode: 'trial', scope: 'all' });
+    render(LearnScreen, { ctx: ctx() });
+    expect((await screen.findByTestId('question')).textContent).toBe('badger');
+    await key(' ');
+    expect(answers).toEqual([]);
+    await key('1'); // kedi: wrong
+    const fb = await screen.findByTestId('quiz-feedback');
+    expect(fb.textContent).toContain('porsuk');
+    expect(fb.getAttribute('data-correct')).toBe('false');
+    // A wrong pick waits: Space does not go on, Enter does.
+    await key(' ');
+    expect(screen.getByTestId('question').textContent).toBe('badger');
+    await key('Enter');
+    await waitFor(() => expect(screen.getByTestId('question').textContent).toBe('otter'));
+    await key('4');
+    await waitFor(() => expect(screen.getByTestId('quiz-feedback').getAttribute('data-correct')).toBe('true'));
+    await key('Enter');
+    expect((await screen.findByTestId('quiz-score')).textContent).toBe('1 / 2 right');
+    expect(answers).toEqual([0, 3]);
+    expect(call).toHaveBeenCalledWith('study.end', { session_id: 's-1' });
+    expect(screen.getByTestId('summary-schedule').textContent).toMatch(/Practice/);
+    expect(screen.getByTestId('summary-missed').textContent).toContain('kedi');
+    expect(screen.getByTestId('summary-repeat')).toBeTruthy();
+  });
+});
+
 describe('test screen', () => {
   it('creates a mixed paper, prints the key and shows the score', async () => {
     const questions = [

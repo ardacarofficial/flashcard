@@ -22,6 +22,7 @@
     Dialog,
     Icon,
     IconButton,
+    Info,
     Input,
     Minus,
     OptionTile,
@@ -426,6 +427,7 @@
         </p>
       </div>
     </div>
+    <p class="sched no-print" data-testid="test-schedule"><Icon icon={Info} size={14} />{t('modes.test.practice')}</p>
     {#if misses.length > 0}
       <section class="misses no-print" aria-labelledby="test-misses">
         <h2 id="test-misses">{t('modes.test.misses', { n: misses.length })}</h2>
@@ -700,5 +702,16 @@
     :global(.section-tabs) {
       display: none !important;
     }
+  }
+  .sched {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    font-size: var(--text-sm);
+    color: var(--text-2);
   }
 </style>

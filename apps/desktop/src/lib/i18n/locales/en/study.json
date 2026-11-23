@@ -136,7 +136,7 @@
       "resume_heading": "Unfinished",
       "resume": "Continue",
       "resume_meta": "{answered} answered · {remaining} left",
-      "mode_label": "Mode",
+      "mode_label": "How do you want to study?",
       "kind": {
         "normal": "Cards",
         "learn": "Learn",
@@ -151,7 +151,7 @@
         "match": "Match words with their meanings against the clock. Doesn’t change the schedule.",
         "quiz": "One word, four options; pick one and see the right answer at once. Practice: doesn’t change the schedule."
       },
-      "scope_label": "What to study",
+      "scope_label": "Which cards?",
       "scope": {
         "due": "Today’s cards",
         "new": "New cards",
@@ -192,7 +192,32 @@
       "nothing_now": "Can’t start right now: {reason}.",
       "no_modes": "No study mode is on. Turn one on in Settings › Modules.",
       "deck_all": "All decks",
-      "count_hint_test": "Leave empty for {n}"
+      "count_hint_test": "Leave empty for {n}",
+      "chip": {
+        "affects": "changes schedule",
+        "practice": "practice"
+      },
+      "legend": "Schedule = when you see a word again. In modes that “change schedule” your answers set it; “practice” modes never touch it, so play as much as you like.",
+      "sched": {
+        "affects": "Changes your schedule: your answers set the next review",
+        "practice_mode": "Practice: your schedule stays the same",
+        "practice_scope": "Practice: “{scope}” never touches the schedule",
+        "practice_switch": "Practice (switched on in Advanced): your schedule stays the same"
+      },
+      "scopes_more": "Choose other cards ({n})",
+      "scopes_less": "Only today’s cards",
+      "exam_label": "What should the exam ask?",
+      "exam_kind_desc": {
+        "multiple_choice": "You get the word and pick its meaning.",
+        "written": "You get the meaning and type the word.",
+        "matching": "Match four words with four meanings (counts as one question).",
+        "true_false": "Off by default: guessing gets half right, so it teaches little."
+      },
+      "exam_no_kinds": "Pick at least one question type",
+      "advanced": "Advanced",
+      "advanced_desc": "Card count, practice, time limit, filter, postpone",
+      "query_desc": "Filter by tag, level or a search (e.g. level:B1).",
+      "postpone_desc": "No time today? Move what is due a few days ahead."
     },
     "mode": {
       "normal": {

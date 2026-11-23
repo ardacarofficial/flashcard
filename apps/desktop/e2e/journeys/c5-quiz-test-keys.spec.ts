@@ -1,6 +1,7 @@
 /**
  * v1.4 C1 — "Test" is the four-option quiz the owner expected: one word, four meanings, keys
- * 1–4 pick, the right answer shows at once, Enter goes on; at the end the score. The result
+ * 1–4 pick, the right answer shows at once, Enter goes on (a right pick goes on by itself),
+ * Space does nothing; at the end the score. The result
  * is read back from the core (`modes.quiz.result`): every word answered, the score the screen
  * showed, practice reviews (`trial_quiz`) and an untouched schedule.
  */
@@ -38,30 +39,45 @@ test('C5 Test (quiz): keys 1–4 pick, the answer shows at once, the score is pe
   await page.getByTestId('deck-mode-learn').click();
   // The launcher lists the mode as "Test" (its own id: quiz) next to "Sınav" (the paper).
   await page.getByRole('radio', { name: t('study.launcher.kind.quiz'), exact: true }).click();
-  await expect(page.getByTestId('launcher-mode-desc')).toContainText(t('study.launcher.kind_desc.quiz'));
+  // v1.4: one line under the mode says what it does; the footer says it is practice.
+  await expect(page.getByTestId('launcher-mode-desc')).toContainText(t('study.mode.quiz.description'));
+  await expect(page.getByTestId('launcher-schedule')).toContainText(t('study.launcher.sched.practice_mode'));
   await expect(page.getByTestId('launcher-start')).toBeEnabled();
   await page.getByTestId('launcher-start').click();
 
   const meaning = new Map(PAIRS);
   let right = 0;
   for (let i = 0; i < PAIRS.length; i++) {
-    const word = (await page.getByTestId('question').textContent())?.trim() ?? '';
+    const question = page.getByTestId('question');
+    const word = (await question.textContent())?.trim() ?? '';
     expect(meaning.has(word), `asks a word: ${word}`).toBe(true);
     // Four meanings of this deck, the word's own among them.
-    const options = page.getByRole('group', { name: t('modes.learn.stage_choice') }).getByRole('button');
+    const options = page.getByTestId('quiz-options').getByRole('button');
     await expect(options).toHaveCount(4);
-    const texts = (await options.allTextContents()).join(' | ');
-    expect(texts).toContain(meaning.get(word)!);
-    // Key 1 picks the first option; the verdict and the right meaning show at once.
-    await press(page, '1');
-    const feedback = page.getByTestId('learn-feedback');
-    await expect(feedback).toBeVisible();
-    const ok = ((await feedback.textContent()) ?? '').includes(t('modes.learn.correct'));
-    if (ok) right++;
-    else await expect(feedback).toContainText(meaning.get(word)!);
-    await press(page, 'Enter');
+    const texts = (await options.allTextContents()).map((x) => x.trim());
+    const at = texts.findIndex((x) => x.includes(meaning.get(word)!));
+    expect(at, texts.join(' | ')).toBeGreaterThanOrEqual(0);
+    // Space never answers here (Space only flips cards).
+    await press(page, 'Space');
+    await expect(page.getByTestId('quiz-feedback')).toHaveCount(0);
+    // Every other word: the right key; else a wrong one. The verdict shows at once.
+    const pickRight = i % 2 === 0;
+    const key = pickRight ? at : (at + 1) % 4;
+    await press(page, String(key + 1));
+    const feedback = page.getByTestId('quiz-feedback');
+    if (pickRight) {
+      right++;
+      // A right pick goes on by itself: wait for the next word (the last one: the result).
+      if (i < PAIRS.length - 1) await expect(question).not.toHaveText(word);
+    } else {
+      // A wrong pick waits for Enter with the right meaning shown.
+      await expect(feedback).toHaveAttribute('data-correct', 'false');
+      await expect(feedback).toContainText(meaning.get(word)!);
+      await press(page, 'Enter');
+    }
   }
   await expect(page.getByTestId('quiz-score')).toHaveText(t('modes.quiz.done', { correct: right, total: PAIRS.length }));
+  await expect(page.getByTestId('summary-schedule')).toContainText(t('modes.summary.practice'));
 
   // Read back what the core kept.
   const { reviews } = await cardHistory(cards[0]!);
@@ -72,7 +88,9 @@ test('C5 Test (quiz): keys 1–4 pick, the answer shows at once, the score is pe
   const result = await rpc<QuizResult>('modes.quiz.result', { session_id: sessionId ?? [...sessions][0] });
   expect(result).toMatchObject({ total: PAIRS.length, answered: PAIRS.length, correct: right, wrong: PAIRS.length - right, finished: true, affects_schedule: false });
   expect(result.missed.length).toBe(PAIRS.length - right);
-  if (result.missed.length) await expect(page.getByTestId('quiz-missed-again')).toBeVisible();
+  if (result.missed.length) await expect(page.getByTestId('summary-repeat')).toBeVisible();
+  // The missed list on the screen is the core's.
+  for (const m of result.missed) await expect(page.getByTestId('summary-missed')).toContainText(m.term);
   // Practice: one `trial_quiz` answer per word, schedules untouched.
   const modes = (await Promise.all(cards.map(async (c) => (await cardHistory(c)).reviews.map((r) => r.mode)))).flat();
   expect(modes).toEqual(PAIRS.map(() => 'trial_quiz'));

@@ -82,17 +82,18 @@ test('S7a subtitle card, written test question: "gitmek" for go/went is correct'
   await launcher.getByRole('radio', { name: t('study.launcher.kind.test'), exact: true }).focus();
   await press(page, 'Space');
   await expect(launcher.getByRole('radio', { name: t('study.launcher.kind.test'), exact: true })).toBeChecked();
-  await launcher.getByRole('button', { name: t('study.launcher.options') }).focus();
-  await press(page, 'Enter');
+  // v1.4: the Exam's question types are always shown for the Exam (check boxes, from the API's
+  // defaults): true/false starts switched off (guessing gets half right).
   const kinds = launcher.getByRole('group', { name: t('modes.test.kinds') });
-  // v1.4: true/false starts switched off (guessing gets half right); only multiple choice to turn off.
-  await expect(kinds.getByRole('button', { name: t('modes.test.kind.true_false'), exact: true })).toHaveAttribute('aria-pressed', 'false');
-  for (const k of ['multiple_choice'] as const) {
-    await kinds.getByRole('button', { name: t(`modes.test.kind.${k}`), exact: true }).focus();
+  const kind = (k: string) => kinds.getByRole('checkbox', { name: new RegExp(`^${t(`modes.test.kind.${k}`)}`) });
+  await expect(kind('true_false')).not.toBeChecked();
+  for (const k of ['multiple_choice', 'matching'] as const) {
+    if (!(await kind(k).isChecked())) continue;
+    await kind(k).focus();
     await press(page, 'Space');
-    await expect(kinds.getByRole('button', { name: t(`modes.test.kind.${k}`), exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await expect(kind(k)).not.toBeChecked();
   }
-  await expect(kinds.getByRole('button', { name: t('modes.test.kind.written'), exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(kind('written')).toBeChecked();
   await page.getByTestId('launcher-start').focus();
   // The session the UI starts (its own `study.start` call through the bridge).
   const started = page.waitForResponse((r) => r.url().endsWith('/rpc') && /(^|\.)study\.start$/.test(r.request().postDataJSON()?.method ?? ''));

@@ -165,3 +165,29 @@ export function plannedCount(c: Pick<LaunchChoice, 'kind' | 'limit' | 'query' | 
   const cap = c.limit ?? (c.kind === 'test' ? c.testQuestions : null);
   return cap === null ? scope.count : Math.min(cap, scope.count);
 }
+
+/**
+ * v1.4 A/B (prototype `modlar.html`, "Hangi kartlar?"): A = progressive — today's cards only,
+ * the other four scopes one click away (opened by itself when another scope is chosen);
+ * B = all five always shown. Flip to `false` for B.
+ */
+export const SCOPES_PROGRESSIVE = true;
+
+const ADVANCED_KEY = 'fc.study.launcher.advanced';
+
+/** The launcher's "Gelişmiş" switch (a per-viewer convenience, like the remembered mode). */
+export function loadAdvanced(): boolean {
+  try {
+    return localStorage.getItem(ADVANCED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function rememberAdvanced(on: boolean): void {
+  try {
+    localStorage.setItem(ADVANCED_KEY, on ? '1' : '0');
+  } catch {
+    /* per-viewer convenience only */
+  }
+}

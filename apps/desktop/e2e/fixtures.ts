@@ -285,3 +285,13 @@ export async function cardsIn(deckId: string): Promise<string[]> {
 export function sessionNow(id: string): Promise<SessionRow> {
   return rpc<SessionRow>('study.session', { session_id: id });
 }
+
+/**
+ * v1.4 launcher: "Which cards?" shows today's cards first; the other four scopes are one click
+ * away ("Başka kartlar seç"). Opens them (no-op when they are already shown).
+ */
+export async function showAllScopes(page: Page): Promise<void> {
+  const more = page.getByTestId('launcher-more-scopes');
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
+}

@@ -136,7 +136,7 @@
       "resume_heading": "Yarım kalanlar",
       "resume": "Devam et",
       "resume_meta": "{answered} cevaplandı · {remaining} kaldı",
-      "mode_label": "Mod",
+      "mode_label": "Nasıl çalışmak istersin?",
       "kind": {
         "normal": "Kartlar",
         "learn": "Öğren",
@@ -151,7 +151,7 @@
         "match": "Kelimeleri anlamlarıyla süreye karşı eşleştir. Takvimi değiştirmez.",
         "quiz": "Bir kelime, dört şık; seçince doğrusunu hemen görürsün. Pratiktir, takvimi değiştirmez."
       },
-      "scope_label": "Ne çalışayım?",
+      "scope_label": "Hangi kartlar?",
       "scope": {
         "due": "Bugünün kartları",
         "new": "Yeni kartlar",
@@ -192,7 +192,32 @@
       "nothing_now": "Şu an başlatılamıyor: {reason}.",
       "no_modes": "Açık çalışma modu yok. Ayarlar › Modüller’den birini aç.",
       "deck_all": "Tüm desteler",
-      "count_hint_test": "Boş bırakırsan {n}"
+      "count_hint_test": "Boş bırakırsan {n}",
+      "chip": {
+        "affects": "takvimi etkiler",
+        "practice": "pratik"
+      },
+      "legend": "Takvim = bir kelimeyi ne zaman yeniden göreceğin. “Takvimi etkiler” modlarda cevapların bunu ayarlar; “pratik” modlar takvimine dokunmaz, istediğin kadar çalışabilirsin.",
+      "sched": {
+        "affects": "Takvimi etkiler: cevapların sıradaki tekrarı ayarlar",
+        "practice_mode": "Pratik: takvimin değişmez",
+        "practice_scope": "Pratik: “{scope}” takvime dokunmaz",
+        "practice_switch": "Pratik (Gelişmiş’te açtın): takvimin değişmez"
+      },
+      "scopes_more": "Başka kartlar seç ({n})",
+      "scopes_less": "Yalnız bugünün kartları",
+      "exam_label": "Sınavda neler olsun?",
+      "exam_kind_desc": {
+        "multiple_choice": "Kelime verilir, şıklardan anlamını seçersin.",
+        "written": "Anlamı verilir, kelimeyi yazarsın.",
+        "matching": "Dört kelimeyi dört anlamla eşlersin (tek soru sayılır).",
+        "true_false": "Kapalı başlar: tahminle yarı yarıya tutar, öğretmesi zayıf."
+      },
+      "exam_no_kinds": "En az bir soru türü seç",
+      "advanced": "Gelişmiş",
+      "advanced_desc": "Kart sayısı, pratik, süre, süzgeç, erteleme",
+      "query_desc": "Etikete, seviyeye ya da bir aramaya göre süz (ör. level:B1).",
+      "postpone_desc": "Bugün vaktin yoksa sırası gelenleri birkaç gün ileri al."
     },
     "mode": {
       "normal": {
