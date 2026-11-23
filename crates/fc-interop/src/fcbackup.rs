@@ -13,7 +13,10 @@
 //! one by one — and [`BackupReader`] reads from any `Read + Seek`, one entry at a time.
 //! Memory is bounded by the largest single media file, never by the archive. So whatever the
 //! app can write, it can read back: there is no total size ceiling for this format (unlike
-//! the foreign formats behind [`crate::zipio`]'s budget).
+//! the foreign formats behind [`crate::zipio`]'s budget). `collection.json` itself can be
+//! produced and consumed as a byte stream ([`BackupWriter::write_collection_with`],
+//! [`BackupReader::collection_with`], v1.4 Z2): the storage writes and loads it row by row,
+//! so not even the table dump has to be in memory.
 //!
 //! **Damaged or hostile input** is still refused entry by entry: the size a header declares
 //! must match the manifest (v2), a header may not claim more than deflate can produce from
@@ -125,23 +128,36 @@ fn write_err(e: impl ToString) -> InteropError {
     InteropError::invalid(FORMAT, format!("write: {}", e.to_string()))
 }
 
-/// Counts and hashes what passes through.
+/// Counts and hashes what passes through, and remembers the first write error (a producer
+/// may report it as its own).
 struct Hashing<W> {
     inner: W,
     hasher: Sha256,
     n: u64,
+    failed: Option<String>,
+}
+
+impl<W> Hashing<W> {
+    fn note<T>(&mut self, r: io::Result<T>) -> io::Result<T> {
+        if let Err(e) = &r {
+            self.failed.get_or_insert_with(|| e.to_string());
+        }
+        r
+    }
 }
 
 impl<W: Write> Write for Hashing<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let n = self.inner.write(buf)?;
+        let r = self.inner.write(buf);
+        let n = self.note(r)?;
         self.hasher.update(&buf[..n]);
         self.n += n as u64;
         Ok(n)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
+        let r = self.inner.flush();
+        self.note(r)
     }
 }
 
@@ -168,26 +184,32 @@ impl<W: Write + Seek> BackupWriter<W> {
         }
     }
 
+    /// The header; the manifest is written last ([`Self::finish`]), so a dump streamed with
+    /// [`Self::write_collection_with`] can fill in the schema and row counts it wrote.
+    pub fn header_mut(&mut self) -> &mut BackupHeader {
+        &mut self.header
+    }
+
     /// Serializes the table dump straight into `collection.json` (no intermediate buffer).
     pub fn write_collection<T: Serialize + ?Sized>(&mut self, dump: &T) -> InteropResult<()> {
-        // Buffered: serde_json writes token by token, and every write would otherwise go
-        // through the hasher and the deflater on its own (v1.4 Z1: 12 s → ~1 s on 200k rows).
-        self.collection_entry(|w| {
-            let mut b = io::BufWriter::with_capacity(1 << 16, w);
-            serde_json::to_writer(&mut b, dump).map_err(io::Error::other)?;
-            b.flush()
-        })
+        self.write_collection_with(|w| serde_json::to_writer(w, dump))?
+            .map_err(write_err)
     }
 
     /// Writes `collection.json` from bytes already serialized (fixtures, forged backups).
     pub fn write_collection_bytes(&mut self, json: &[u8]) -> InteropResult<()> {
-        self.collection_entry(|w| w.write_all(json))
+        self.write_collection_with(|w| w.write_all(json))?
+            .map_err(write_err)
     }
 
-    fn collection_entry(
+    /// Writes `collection.json` with `body`, which streams the JSON into the writer it gets
+    /// (buffered, hashed, deflated as it goes). The outer error is the archive's (a failed
+    /// write, even when `body` reported it as its own error; the entry written twice); the
+    /// inner one is `body`'s own. After either, the backup is unusable: drop the writer.
+    pub fn write_collection_with<T, E>(
         &mut self,
-        body: impl FnOnce(&mut Hashing<&mut ZipWriter<W>>) -> io::Result<()>,
-    ) -> InteropResult<()> {
+        body: impl FnOnce(&mut dyn Write) -> Result<T, E>,
+    ) -> InteropResult<Result<T, E>> {
         if self.collection.is_some() {
             return Err(write_err("collection written twice"));
         }
@@ -201,14 +223,32 @@ impl<W: Write + Seek> BackupWriter<W> {
             inner: &mut self.zip,
             hasher: Sha256::new(),
             n: 0,
+            failed: None,
         };
-        body(&mut h).map_err(write_err)?;
+        // Buffered: serde_json writes token by token, and every write would otherwise go
+        // through the hasher and the deflater on its own (v1.4 Z1: 12 s → ~1 s on 200k rows).
+        let mut b = io::BufWriter::with_capacity(1 << 16, &mut h);
+        let out = body(&mut b);
+        let flushed = match out {
+            Ok(_) => b.flush(),
+            Err(_) => Ok(()),
+        };
+        // Not flushed again on drop: after a failed body the entry is abandoned.
+        let _ = b.into_parts();
+        if let Some(e) = h.failed.take() {
+            return Err(write_err(e));
+        }
+        flushed.map_err(write_err)?;
+        let value = match out {
+            Ok(v) => v,
+            Err(e) => return Ok(Err(e)),
+        };
         let (hasher, n) = (h.hasher, h.n);
         self.collection = Some(EntrySum {
             sha256: hex(&hasher.finalize()),
             size: n,
         });
-        Ok(())
+        Ok(Ok(value))
     }
 
     /// Adds media file `hash`. Returns `false` (and records it as missing instead) when
@@ -411,6 +451,25 @@ impl<R: Read + Seek> BackupReader<R> {
     /// Parses `collection.json` as it streams out of the archive (checked against the
     /// manifest's size and hash in v2).
     pub fn collection<T: DeserializeOwned>(&mut self) -> InteropResult<T> {
+        let value = self.collection_with(|r| {
+            serde_json::from_reader(r)
+                .map(Ok::<T, std::convert::Infallible>)
+                .map_err(io::Error::other)
+        })?;
+        Ok(value.unwrap_or_else(|e| match e {}))
+    }
+
+    /// Streams `collection.json` (buffered) into `body`, which consumes it as it comes (v1.4
+    /// Z2: the storage loads it row by row). The entry is checked like
+    /// [`Self::collection`]: size, ratio, CRC and, once `body` is done, the manifest's hash
+    /// (v2). `body`'s I/O error means "not readable" (`collection.json: …`, as a parse error
+    /// of [`Self::collection`]); its inner error is its own and is returned as is unless the
+    /// entry turns out damaged. Whatever `body` did with the bytes before a check failed is
+    /// the caller's to undo.
+    pub fn collection_with<T, E>(
+        &mut self,
+        body: impl FnOnce(&mut dyn Read) -> io::Result<Result<T, E>>,
+    ) -> InteropResult<Result<T, E>> {
         let sum = self.manifest.collection.clone();
         let (value, hash) = self.with_entry(COLLECTION, sum.as_ref().map(|s| s.size), |f| {
             let mut h = HashingRead {
@@ -419,8 +478,7 @@ impl<R: Read + Seek> BackupReader<R> {
             };
             // Buffered: serde_json reads byte by byte (see `write_collection`). What the buffer
             // read ahead is hashed already; the rest is drained below.
-            let value: T = serde_json::from_reader(io::BufReader::with_capacity(1 << 16, &mut h))
-                .map_err(io::Error::other)?;
+            let value = body(&mut io::BufReader::with_capacity(1 << 16, &mut h))?;
             io::copy(&mut h, &mut io::sink())?;
             Ok((value, hex(&h.hasher.finalize())))
         })?;

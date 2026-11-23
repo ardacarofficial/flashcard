@@ -13,11 +13,12 @@
 //!   `attributes.option.add` calls with their own inverses. Cancelling (or a failure) rolls
 //!   the current chunk back and removes the committed ones (`io.import.discard`).
 //! * **Export / backup** = jobs reading one snapshot and writing a file.
-//! * **Restore** = job `io.backup.restore` brings the backup to the current schema in a
-//!   private database (later data migrations included), writes a safety backup of the current
+//! * **Restore** = job `io.backup.restore` checks the backup (a dump at the current schema
+//!   is read through without being kept; an older one is brought to the current schema in a
+//!   private database, later data migrations included), writes a safety backup of the current
 //!   state under the app data folder, then invokes `io.backup.load` (internal), which swaps
 //!   every table in one transaction (atomic on purpose: a half-restored collection must never
-//!   be visible). Media go through [`media::MediaStore`].
+//!   be visible), streaming the dump from the file. Media go through [`media::MediaStore`].
 //! * **Backups** (v1.4) stream file to file and are verified in a scratch profile before
 //!   they count ([`backup_file`]); automatic backups run on a schedule ([`backup_auto`]).
 

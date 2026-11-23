@@ -414,3 +414,246 @@ fn fit_dump_to_schema_drops_later_tables_and_columns() {
     assert_eq!(cut, dump);
     assert!(crate::fit_dump_to_schema(dump, &[1, 9_999]).is_err());
 }
+
+// ------------------------------------------------------------ v1.4 Z2: streamed dump/load
+
+use crate::repo::{CollectionDump, DumpStream, DumpStreamError, DumpSummary, TableDump, CHUNK};
+
+/// A collection with more than two chunks of review history and a media row.
+fn streamed_fixture() -> Fx {
+    let fx = Fx::seeded();
+    fx.write(|tx| {
+        ensure_home(tx);
+        tx.insert_deck(&deck(1, None, "Deck")).unwrap();
+        add_note(tx, &note(1, "front <b>x</b>", "back", &["t1"], 1), 1);
+        let c = CardId(nid(1).0);
+        let rows: Vec<_> = (0..(CHUNK as u128 * 2 + 7))
+            .map(|i| review(i, c, i as i64))
+            .collect();
+        tx.insert_review_logs(&rows).unwrap();
+        tx.insert_media(&media(&[0, 255, 7])).unwrap();
+    });
+    fx
+}
+
+fn streamed(r: Result<DumpStream, DumpStreamError>) -> DumpSummary {
+    match r {
+        Ok(DumpStream::Streamed(s)) => s,
+        Ok(DumpStream::Whole(_)) => panic!("read whole"),
+        Err(e) => panic!("{e}"),
+    }
+}
+
+/// The streamed dump writes exactly the bytes `serde_json` makes of the in-memory dump, and
+/// loading them back streamed is `load_collection`.
+#[test]
+fn streamed_dump_is_byte_identical_and_loads_like_load_collection() {
+    let fx = streamed_fixture();
+    let before = fx.read(|r| r.dump_collection().unwrap());
+    let mut json = Vec::new();
+    let summary = fx.read(|r| r.dump_collection_json(&mut json).unwrap());
+    assert_eq!(json, serde_json::to_vec(&before).unwrap());
+    assert_eq!(summary, DumpSummary::of(&before));
+    assert_eq!(summary.counts, fx.read(|r| r.dump_row_counts().unwrap()));
+    assert_eq!(summary.counts["review_log"], CHUNK as u64 * 2 + 7);
+
+    // The reference: the in-memory load of the same JSON into another collection.
+    let reference = Fx::seeded();
+    reference.write(|tx| {
+        tx.load_collection(&serde_json::from_slice(&json).unwrap())
+            .unwrap()
+    });
+    let reference = reference.read(|r| r.dump_collection().unwrap());
+    assert_eq!(reference, before);
+
+    fx.write(|tx| tx.insert_deck(&deck(2, None, "Other")).unwrap());
+    let mut chunks = 0;
+    let loaded = fx.write(|tx| {
+        streamed(tx.load_collection_json(&mut &json[..], &mut |t| {
+            assert!(!t.rows.is_empty() && t.rows.len() <= CHUNK);
+            chunks += 1;
+            Ok(())
+        }))
+    });
+    assert_eq!(loaded, summary);
+    assert!(chunks >= 3, "the history came in chunks");
+    assert_eq!(fx.read(|r| r.dump_collection().unwrap()), before);
+    // The search index was rebuilt from the loaded notes.
+    let hits: i64 = fx
+        .raw()
+        .query_row(
+            "SELECT count(*) FROM notes_fts WHERE notes_fts MATCH 'front'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(hits, 1);
+    // A scan reads the same counts without keeping anything.
+    let scanned = streamed(crate::repo::scan_dump_json(&mut &json[..], &mut |_| Ok(())));
+    assert_eq!(scanned, summary);
+}
+
+/// The hook sees every chunk and may change or drop rows; counts are what was kept.
+#[test]
+fn streamed_load_applies_the_row_hook() {
+    let fx = streamed_fixture();
+    let mut json = Vec::new();
+    fx.read(|r| r.dump_collection_json(&mut json).unwrap());
+    let mut keep_one = |t: &mut TableDump| {
+        if t.name == "review_log" {
+            t.rows.truncate(1);
+        }
+        if t.name == "decks" {
+            let i = t.columns.iter().position(|c| c == "name").unwrap();
+            for r in &mut t.rows {
+                if let SqlValue::Text(name) = &mut r[i] {
+                    name.push_str(" (restored)");
+                }
+            }
+        }
+        Ok(())
+    };
+    let scanned = streamed(crate::repo::scan_dump_json(&mut &json[..], &mut keep_one));
+    let loaded = fx.write(|tx| streamed(tx.load_collection_json(&mut &json[..], &mut keep_one)));
+    assert_eq!(loaded, scanned);
+    assert_eq!(loaded.counts["review_log"], 3, "one per chunk");
+    let after = fx.read(|r| r.dump_collection().unwrap());
+    assert_eq!(after.row_counts(), loaded.counts);
+    let decks = after.tables.iter().find(|t| t.name == "decks").unwrap();
+    let i = decks.columns.iter().position(|c| c == "name").unwrap();
+    assert!(decks
+        .rows
+        .iter()
+        .all(|r| matches!(&r[i], SqlValue::Text(n) if n.ends_with(" (restored)"))));
+    // A hook error stops the load.
+    let mut tx = fx.store.write().unwrap();
+    let r = tx.load_collection_json(&mut &json[..], &mut |_| Err(crate::StorageError::Busy));
+    assert!(matches!(
+        r,
+        Err(DumpStreamError::Storage(crate::StorageError::Busy))
+    ));
+}
+
+/// Field order does not matter (a hand-made file may list `tables` before `schema_versions`,
+/// or `rows` before `columns`): the same rows load. An older schema is handed back whole,
+/// nothing loaded.
+#[test]
+fn streamed_load_takes_any_field_order_and_hands_older_schemas_back_whole() {
+    let fx = streamed_fixture();
+    let before = fx.read(|r| r.dump_collection().unwrap());
+    let reordered = serde_json::json!({
+        "tables": before.tables.iter().map(|t| serde_json::json!({
+            "rows": t.rows, "columns": t.columns, "extra": 1, "name": t.name,
+        })).collect::<Vec<_>>(),
+        "note": "ignored",
+        "schema_versions": before.schema_versions,
+    });
+    let json = serde_json::to_vec(&reordered).unwrap();
+    fx.write(|tx| tx.insert_deck(&deck(2, None, "Other")).unwrap());
+    let loaded = fx.write(|tx| streamed(tx.load_collection_json(&mut &json[..], &mut |_| Ok(()))));
+    assert_eq!(loaded, DumpSummary::of(&before));
+    assert_eq!(fx.read(|r| r.dump_collection().unwrap()), before);
+    // Array form (serde accepts structs as sequences).
+    let tuple = serde_json::json!([
+        before.schema_versions,
+        before
+            .tables
+            .iter()
+            .map(|t| serde_json::json!([t.name, t.columns, t.rows]))
+            .collect::<Vec<_>>(),
+    ]);
+    let json = serde_json::to_vec(&tuple).unwrap();
+    fx.write(|tx| tx.insert_deck(&deck(2, None, "Other")).unwrap());
+    fx.write(|tx| streamed(tx.load_collection_json(&mut &json[..], &mut |_| Ok(()))));
+    assert_eq!(fx.read(|r| r.dump_collection().unwrap()), before);
+
+    let v05: Vec<u32> = before
+        .schema_versions
+        .iter()
+        .copied()
+        .filter(|v| *v < 500)
+        .collect();
+    let old = crate::fit_dump_to_schema(before.clone(), &v05).unwrap();
+    let json = serde_json::to_vec(&old).unwrap();
+    fx.write(|tx| tx.insert_deck(&deck(2, None, "Other")).unwrap());
+    let changed = fx.read(|r| r.dump_collection().unwrap());
+    let got = fx.write(|tx| {
+        tx.load_collection_json(&mut &json[..], &mut |_| Ok(()))
+            .unwrap()
+    });
+    let DumpStream::Whole(whole) = got else {
+        panic!("an older schema is not streamed")
+    };
+    assert_eq!(whole, old);
+    assert_eq!(
+        fx.read(|r| r.dump_collection().unwrap()),
+        changed,
+        "nothing loaded"
+    );
+    // …and the scan says the same.
+    let scanned = crate::repo::scan_dump_json(&mut &json[..], &mut |_| Ok(())).unwrap();
+    assert!(matches!(scanned, DumpStream::Whole(d) if d == old));
+}
+
+/// Damage is refused as `load_collection` refuses it; dropping the transaction leaves the
+/// collection as it was.
+#[test]
+fn streamed_load_refuses_damage_and_rolls_back() {
+    let fx = streamed_fixture();
+    let good = fx.read(|r| r.dump_collection().unwrap());
+    let refuse = |dump: serde_json::Value| {
+        let json = serde_json::to_vec(&dump).unwrap();
+        let mut tx = fx.store.write().unwrap();
+        let r = tx.load_collection_json(&mut &json[..], &mut |_| Ok(()));
+        drop(tx);
+        assert_eq!(fx.read(|r| r.dump_collection().unwrap()), good);
+        r.expect_err("refused")
+    };
+    let as_json = |d: &CollectionDump| serde_json::to_value(d).unwrap();
+    let mut d = good.clone();
+    d.tables.push(TableDump {
+        name: "nope".into(),
+        columns: vec![],
+        rows: vec![],
+    });
+    let e = refuse(as_json(&d));
+    assert!(e.to_string().contains("unknown table nope"), "{e}");
+    let mut d = good.clone();
+    let reviews = d
+        .tables
+        .iter_mut()
+        .find(|t| t.name == "review_log")
+        .unwrap();
+    reviews.columns.push("nope".into());
+    let e = refuse(as_json(&d));
+    assert!(
+        e.to_string().contains("unknown column review_log.nope"),
+        "{e}"
+    );
+    let mut d = good.clone();
+    let reviews = d
+        .tables
+        .iter_mut()
+        .find(|t| t.name == "review_log")
+        .unwrap();
+    reviews.rows[CHUNK + 3].pop();
+    let e = refuse(as_json(&d));
+    assert!(matches!(e, DumpStreamError::Storage(_)));
+    assert!(e.to_string().contains("ragged rows in review_log"), "{e}");
+    // Not a dump: a JSON error.
+    let mut v = as_json(&good);
+    v.as_object_mut().unwrap().remove("tables");
+    assert!(matches!(refuse(v), DumpStreamError::Json(e) if e.to_string().contains("tables")));
+    let json = serde_json::to_vec(&good).unwrap();
+    let mut tx = fx.store.write().unwrap();
+    let r = tx.load_collection_json(&mut &json[..json.len() / 2], &mut |_| Ok(()));
+    assert!(matches!(r, Err(DumpStreamError::Json(_))));
+    drop(tx);
+    let mut trailing = json.clone();
+    trailing.extend_from_slice(b" x");
+    let mut tx = fx.store.write().unwrap();
+    let r = tx.load_collection_json(&mut &trailing[..], &mut |_| Ok(()));
+    assert!(matches!(r, Err(DumpStreamError::Json(_))));
+    drop(tx);
+    assert_eq!(fx.read(|r| r.dump_collection().unwrap()), good);
+}

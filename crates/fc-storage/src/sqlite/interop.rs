@@ -1,15 +1,20 @@
-//! Import/export support: bulk review log rows, whole-collection dump/load.
+//! Import/export support: bulk review log rows, whole-collection dump/load (in memory, or
+//! streamed as JSON row by row: v1.4 Z2).
 
 use super::study::{review_row, REVIEW_COLS};
 use super::{all, count, enum_str, exec, json_list};
 use super::{Mode, SqliteTx, WriteMode};
 use crate::error::{StorageError, StorageResult};
 use crate::repo::{
-    CollectionDump, InteropRead, InteropWrite, PurgeRows, ReviewLogRecord, SqlValue, TableDump,
+    read_dump_json, CollectionDump, DumpSink, DumpStream, DumpStreamError, DumpSummary,
+    InteropRead, InteropWrite, PurgeRows, ReviewLogRecord, RowHook, SqlValue, TableDump,
 };
 use fc_core::CardId;
 use rusqlite::types::{Value, ValueRef};
 use rusqlite::{params, params_from_iter, Connection};
+use serde::ser::{SerializeStruct, Serializer};
+use serde::Serialize;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
 
 const REVIEWS: &str = "review_log";
@@ -172,52 +177,46 @@ impl<M: Mode> InteropRead for SqliteTx<'_, M> {
 
     fn dump_collection(&self) -> StorageResult<CollectionDump> {
         let conn = self.conn();
-        let mut versions: Vec<u32> = Vec::new();
-        {
-            let mut st = conn.prepare("SELECT version FROM schema_migrations ORDER BY version")?;
-            for v in st.query_map([], |r| r.get::<_, u32>(0))? {
-                versions.push(v?);
-            }
-        }
+        let versions = schema_versions(conn)?;
         let mut tables = Vec::new();
-        for t in user_tables(conn)? {
-            let mut columns: Vec<String> = Vec::new();
-            if t.with_rowid {
-                columns.push("rowid".into());
-            }
-            columns.extend(t.columns.iter().cloned());
-            let select: Vec<String> = columns.iter().map(|c| quote(c)).collect();
-            let order = if t.with_rowid {
-                "rowid".to_owned()
-            } else if t.pk.is_empty() {
-                "1".to_owned()
-            } else {
-                t.pk.iter().map(|c| quote(c)).collect::<Vec<_>>().join(", ")
-            };
-            let filter = dump_filter(&t.name).map_or(String::new(), |w| format!(" WHERE {w}"));
-            let sql = format!(
-                "SELECT {} FROM {}{filter} ORDER BY {order}",
-                select.join(", "),
-                quote(&t.name)
-            );
-            let mut st = conn.prepare(&sql)?;
-            let n = columns.len();
+        for q in dump_queries(conn)? {
+            let mut st = conn.prepare(&q.sql)?;
+            let n = q.columns.len();
             let rows: Vec<Vec<SqlValue>> = st
-                .query_map([], |r| {
-                    (0..n)
-                        .map(|i| r.get_ref(i).map(to_sql_value))
-                        .collect::<Result<Vec<_>, _>>()
-                })?
+                .query_map([], |r| dump_row(r, n))?
                 .collect::<Result<_, _>>()?;
             tables.push(TableDump {
-                name: t.name,
-                columns,
+                name: q.name,
+                columns: q.columns,
                 rows,
             });
         }
         Ok(CollectionDump {
             schema_versions: versions,
             tables,
+        })
+    }
+
+    fn dump_collection_json(
+        &self,
+        out: &mut dyn std::io::Write,
+    ) -> Result<DumpSummary, DumpStreamError> {
+        let conn = self.conn();
+        let w = JsonDump {
+            conn,
+            versions: schema_versions(conn)?,
+            tables: dump_queries(conn)?,
+            counts: RefCell::new(BTreeMap::new()),
+            failed: RefCell::new(None),
+        };
+        let written = serde_json::to_writer(out, &w);
+        if let Some(e) = w.failed.take() {
+            return Err(DumpStreamError::Storage(e));
+        }
+        written.map_err(DumpStreamError::Json)?;
+        Ok(DumpSummary {
+            schema_versions: w.versions,
+            counts: w.counts.into_inner(),
         })
     }
     fn dump_row_counts(&self) -> StorageResult<std::collections::BTreeMap<String, u64>> {
@@ -273,63 +272,34 @@ impl InteropWrite for SqliteTx<'_, WriteMode> {
         let conn = self.conn();
         conn.execute_batch("PRAGMA defer_foreign_keys = ON")?;
         let current = user_tables(conn)?;
-        let known: BTreeMap<&str, &TableInfo> =
-            current.iter().map(|t| (t.name.as_str(), t)).collect();
         // Validate before deleting anything.
         for t in &dump.tables {
-            let info = known
-                .get(t.name.as_str())
-                .ok_or_else(|| corrupt(format!("unknown table {}", t.name)))?;
-            let cols: HashSet<&str> = info.columns.iter().map(String::as_str).collect();
-            for c in &t.columns {
-                let rowid_ok = c == "rowid" && info.with_rowid;
-                if !rowid_ok && !cols.contains(c.as_str()) {
-                    return Err(corrupt(format!("unknown column {}.{c}", t.name)));
-                }
-            }
+            check_table(&current, &t.name, &t.columns)?;
             if t.rows.iter().any(|r| r.len() != t.columns.len()) {
                 return Err(corrupt(format!("ragged rows in {}", t.name)));
             }
         }
-        for t in &current {
-            conn.execute_batch(&format!("DELETE FROM {}", quote(&t.name)))?;
-        }
+        empty_tables(conn, &current)?;
         for t in &dump.tables {
             if t.rows.is_empty() {
                 continue;
             }
-            let cols: Vec<String> = t.columns.iter().map(|c| quote(c)).collect();
-            let marks = vec!["?"; cols.len()].join(", ");
-            let sql = format!(
-                "INSERT INTO {} ({}) VALUES ({marks})",
-                quote(&t.name),
-                cols.join(", ")
-            );
-            let mut st = conn.prepare(&sql)?;
-            for row in &t.rows {
-                let values = row
-                    .iter()
-                    .map(from_sql_value)
-                    .collect::<StorageResult<Vec<_>>>()?;
-                st.execute(params_from_iter(values))?;
-            }
+            insert_rows(conn, &insert_sql(&t.name, &t.columns), &t.rows)?;
         }
-        // The search index is derived: rebuild it from the loaded notes instead of trusting
-        // the backup's copy (older builds indexed differently).
-        conn.execute_batch(super::search::REBUILD_SEARCH_INDEX)?;
-        // The v0.6 statistics cache is derived too and never in a backup: drop the local one
-        // and move the generation, so no reader trusts it even if the restored history happens
-        // to match its counters; the next `stats.refresh_cache` rebuilds it. Older schemas
-        // (`upgrade_dump` loads into them) have no cache yet.
-        let has_cache: bool = conn.query_row(
-            "SELECT count(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'stats_cache_meta'",
-            [],
-            |r| r.get(0),
-        )?;
-        if has_cache {
-            conn.execute_batch(RESET_STATS_CACHE)?;
-        }
-        Ok(())
+        finish_load(conn)
+    }
+
+    fn load_collection_json(
+        &mut self,
+        json: &mut dyn std::io::Read,
+        hook: RowHook<'_>,
+    ) -> Result<DumpStream, DumpStreamError> {
+        let mut sink = JsonLoad {
+            conn: self.conn(),
+            current: Vec::new(),
+            insert: String::new(),
+        };
+        read_dump_json(json, &mut sink, hook)
     }
 
     fn purge_rows(&mut self, rows: &PurgeRows) -> StorageResult<()> {
@@ -407,6 +377,229 @@ impl InteropWrite for SqliteTx<'_, WriteMode> {
             )?;
         }
         Ok(())
+    }
+}
+
+/// Applied migration versions, in order.
+fn schema_versions(conn: &Connection) -> StorageResult<Vec<u32>> {
+    let mut st = conn.prepare("SELECT version FROM schema_migrations ORDER BY version")?;
+    let versions = st
+        .query_map([], |r| r.get::<_, u32>(0))?
+        .collect::<Result<_, _>>()?;
+    Ok(versions)
+}
+
+/// How one table is dumped.
+struct DumpQuery {
+    name: String,
+    /// `rowid` first when the table has one.
+    columns: Vec<String>,
+    sql: String,
+}
+
+/// The dump's query per user table (see [`CollectionDump`]).
+fn dump_queries(conn: &Connection) -> StorageResult<Vec<DumpQuery>> {
+    Ok(user_tables(conn)?
+        .into_iter()
+        .map(|t| {
+            let mut columns: Vec<String> = Vec::new();
+            if t.with_rowid {
+                columns.push("rowid".into());
+            }
+            columns.extend(t.columns.iter().cloned());
+            let select: Vec<String> = columns.iter().map(|c| quote(c)).collect();
+            let order = if t.with_rowid {
+                "rowid".to_owned()
+            } else if t.pk.is_empty() {
+                "1".to_owned()
+            } else {
+                t.pk.iter().map(|c| quote(c)).collect::<Vec<_>>().join(", ")
+            };
+            let filter = dump_filter(&t.name).map_or(String::new(), |w| format!(" WHERE {w}"));
+            let sql = format!(
+                "SELECT {} FROM {}{filter} ORDER BY {order}",
+                select.join(", "),
+                quote(&t.name)
+            );
+            DumpQuery {
+                name: t.name,
+                columns,
+                sql,
+            }
+        })
+        .collect())
+}
+
+fn dump_row(r: &rusqlite::Row<'_>, n: usize) -> rusqlite::Result<Vec<SqlValue>> {
+    (0..n).map(|i| r.get_ref(i).map(to_sql_value)).collect()
+}
+
+/// The collection as `serde_json` would write its [`CollectionDump`] (same struct and field
+/// names, same order), each table read with a cursor as it is written. A storage error is
+/// kept in `failed` (the serializer only carries text); rows per table go to `counts`.
+struct JsonDump<'c> {
+    conn: &'c Connection,
+    versions: Vec<u32>,
+    tables: Vec<DumpQuery>,
+    counts: RefCell<BTreeMap<String, u64>>,
+    failed: RefCell<Option<StorageError>>,
+}
+
+impl JsonDump<'_> {
+    fn fail<E: serde::ser::Error>(&self, e: impl Into<StorageError>) -> E {
+        *self.failed.borrow_mut() = Some(e.into());
+        E::custom("the dump could not be read")
+    }
+}
+
+impl Serialize for JsonDump<'_> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut st = s.serialize_struct("CollectionDump", 2)?;
+        st.serialize_field("schema_versions", &self.versions)?;
+        st.serialize_field("tables", &JsonTables(self))?;
+        st.end()
+    }
+}
+
+struct JsonTables<'a, 'c>(&'a JsonDump<'c>);
+
+impl Serialize for JsonTables<'_, '_> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_seq(self.0.tables.iter().map(|q| JsonTable(self.0, q)))
+    }
+}
+
+struct JsonTable<'a, 'c>(&'a JsonDump<'c>, &'a DumpQuery);
+
+impl Serialize for JsonTable<'_, '_> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut st = s.serialize_struct("TableDump", 3)?;
+        st.serialize_field("name", &self.1.name)?;
+        st.serialize_field("columns", &self.1.columns)?;
+        st.serialize_field("rows", &JsonRows(self.0, self.1))?;
+        st.end()
+    }
+}
+
+struct JsonRows<'a, 'c>(&'a JsonDump<'c>, &'a DumpQuery);
+
+impl Serialize for JsonRows<'_, '_> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeSeq;
+        let (w, q) = (self.0, self.1);
+        let mut st = w.conn.prepare(&q.sql).map_err(|e| w.fail::<S::Error>(e))?;
+        let mut rows = st.query([]).map_err(|e| w.fail::<S::Error>(e))?;
+        let n = q.columns.len();
+        let mut seq = s.serialize_seq(None)?;
+        let mut count = 0u64;
+        while let Some(r) = rows.next().map_err(|e| w.fail::<S::Error>(e))? {
+            let row = dump_row(r, n).map_err(|e| w.fail::<S::Error>(e))?;
+            seq.serialize_element(&row)?;
+            count += 1;
+        }
+        w.counts.borrow_mut().insert(q.name.clone(), count);
+        seq.end()
+    }
+}
+
+/// The table `name` of this schema, if the dump's `columns` all exist there.
+fn check_table<'t>(
+    current: &'t [TableInfo],
+    name: &str,
+    columns: &[String],
+) -> StorageResult<&'t TableInfo> {
+    let info = current
+        .iter()
+        .find(|t| t.name == name)
+        .ok_or_else(|| corrupt(format!("unknown table {name}")))?;
+    let cols: HashSet<&str> = info.columns.iter().map(String::as_str).collect();
+    for c in columns {
+        let rowid_ok = c == "rowid" && info.with_rowid;
+        if !rowid_ok && !cols.contains(c.as_str()) {
+            return Err(corrupt(format!("unknown column {name}.{c}")));
+        }
+    }
+    Ok(info)
+}
+
+/// Empties every table of the dump scope (tables the dump lacks stay empty).
+fn empty_tables(conn: &Connection, current: &[TableInfo]) -> StorageResult<()> {
+    for t in current {
+        conn.execute_batch(&format!("DELETE FROM {}", quote(&t.name)))?;
+    }
+    Ok(())
+}
+
+fn insert_sql(table: &str, columns: &[String]) -> String {
+    let cols: Vec<String> = columns.iter().map(|c| quote(c)).collect();
+    let marks = vec!["?"; cols.len()].join(", ");
+    format!(
+        "INSERT INTO {} ({}) VALUES ({marks})",
+        quote(table),
+        cols.join(", ")
+    )
+}
+
+fn insert_rows(conn: &Connection, sql: &str, rows: &[Vec<SqlValue>]) -> StorageResult<()> {
+    let mut st = conn.prepare_cached(sql)?;
+    for row in rows {
+        let values = row
+            .iter()
+            .map(from_sql_value)
+            .collect::<StorageResult<Vec<_>>>()?;
+        st.execute(params_from_iter(values))?;
+    }
+    Ok(())
+}
+
+/// What every load ends with: derived data rebuilt or invalidated.
+fn finish_load(conn: &Connection) -> StorageResult<()> {
+    // The search index is derived: rebuild it from the loaded notes instead of trusting
+    // the backup's copy (older builds indexed differently).
+    conn.execute_batch(super::search::REBUILD_SEARCH_INDEX)?;
+    // The v0.6 statistics cache is derived too and never in a backup: drop the local one
+    // and move the generation, so no reader trusts it even if the restored history happens
+    // to match its counters; the next `stats.refresh_cache` rebuilds it. Older schemas
+    // (`upgrade_dump` loads into them) have no cache yet.
+    let has_cache: bool = conn.query_row(
+        "SELECT count(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'stats_cache_meta'",
+        [],
+        |r| r.get(0),
+    )?;
+    if has_cache {
+        conn.execute_batch(RESET_STATS_CACHE)?;
+    }
+    Ok(())
+}
+
+/// [`InteropWrite::load_collection_json`] into SQLite: the tables are emptied once the dump
+/// is known to be at this schema, then each chunk is inserted as it arrives.
+struct JsonLoad<'c> {
+    conn: &'c Connection,
+    current: Vec<TableInfo>,
+    /// Insert statement of the table being read.
+    insert: String,
+}
+
+impl DumpSink for JsonLoad<'_> {
+    fn begin(&mut self) -> StorageResult<()> {
+        self.conn.execute_batch("PRAGMA defer_foreign_keys = ON")?;
+        self.current = user_tables(self.conn)?;
+        empty_tables(self.conn, &self.current)
+    }
+
+    fn table(&mut self, name: &str, columns: &[String]) -> StorageResult<()> {
+        check_table(&self.current, name, columns)?;
+        self.insert = insert_sql(name, columns);
+        Ok(())
+    }
+
+    fn rows(&mut self, rows: &[Vec<SqlValue>]) -> StorageResult<()> {
+        insert_rows(self.conn, &self.insert, rows)
+    }
+
+    fn finish(&mut self) -> StorageResult<()> {
+        finish_load(self.conn)
     }
 }
 

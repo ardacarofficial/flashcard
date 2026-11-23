@@ -960,3 +960,76 @@ fn perf_suite_100k() {
 fn perf_suite_scaled() {
     run_suite(SCALED);
 }
+
+/// Profiling helper (v1.4 Z2): times one hot path of a kept collection (`FC_PERF_KEEP`)
+/// `FC_PERF_HOT_N` times, so a sampler (gdb, perf) can attach to a steady loop:
+/// `FC_PERF_HOT_DB=<copy> FC_PERF_HOT_OP=tree|start|breakdown|page|options cargo test -p fc-app
+/// --release --lib perf_tests::hot -- --ignored --nocapture`. The collection is written to
+/// (sessions are started and ended): give it a copy.
+#[test]
+#[ignore = "profiling helper: needs FC_PERF_HOT_DB"]
+fn hot() {
+    let Ok(path) = std::env::var("FC_PERF_HOT_DB") else {
+        return;
+    };
+    let op = std::env::var("FC_PERF_HOT_OP").unwrap_or_else(|_| "tree".into());
+    let n: usize = std::env::var("FC_PERF_HOT_N")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+    let (open, app) = time(|| App::open_sqlite(Path::new(&path)).unwrap());
+    println!("open {open:.1} ms");
+    let level_id = invoke(&app, "attributes.list", json!({}))["defs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["key"] == "level")
+        .map(|a| a["id"].clone());
+    let total = invoke(&app, "search.cards", json!({ "query": "", "limit": 1 }))["total"]
+        .as_u64()
+        .unwrap();
+    for i in 0..n {
+        let (ms, ()) = time(|| match op.as_str() {
+            "tree" => {
+                invoke(&app, "decks.tree", json!({}));
+            }
+            "summaries" => {
+                invoke(&app, "decks.summaries", json!({}));
+            }
+            "start" => {
+                let s = invoke(
+                    &app,
+                    "study.start",
+                    json!({ "kind": "normal", "tz_offset_mins": 180 }),
+                );
+                invoke(&app, "study.end", json!({ "session_id": s["id"] }));
+            }
+            "options" => {
+                invoke(&app, "study.options", json!({ "tz_offset_mins": 180 }));
+            }
+            "breakdown" => {
+                invoke(
+                    &app,
+                    "stats.breakdown",
+                    json!({ "attr_id": level_id, "tz_offset_mins": 180 }),
+                );
+            }
+            "page" => {
+                for sort in ["sort_field", "due", "modified"] {
+                    for offset in [0, total / 3, total / 2, total.saturating_sub(100)] {
+                        let (ms, _) = time(|| {
+                            invoke(
+                                &app,
+                                "search.cards",
+                                json!({ "query": "", "sort": sort, "offset": offset, "limit": 100 }),
+                            )
+                        });
+                        println!("  page {sort} @{offset}: {ms:.1} ms");
+                    }
+                }
+            }
+            other => panic!("unknown FC_PERF_HOT_OP {other}"),
+        });
+        println!("{op} #{i}: {ms:.1} ms");
+    }
+}

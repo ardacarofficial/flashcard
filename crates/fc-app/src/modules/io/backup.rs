@@ -5,22 +5,27 @@
 //! `.part`, restored into a scratch profile and compared, then renamed into place
 //! (`io.backup.create`; `io.backup.verify` runs the same check on any file). A restore
 //!
-//! 1. reads the backup entry by entry: parses the dump, checks that every media file the
-//!    manifest lists is there and matches its hash (nothing held in memory but the dump),
-//!    and brings the dump to this build's schema in a private database
-//!    ([`fc_storage::upgrade_dump`]: later data migrations run on the restored rows), all
-//!    without holding the writer;
+//! 1. reads the backup entry by entry: reads the dump through (a dump at this build's schema
+//!    is only checked and counted as it streams, nothing kept: v1.4 Z2), checks that every
+//!    media file the manifest lists is there and matches its hash, and brings a dump taken at
+//!    an older schema to this one in a private database ([`fc_storage::upgrade_dump`]: later
+//!    data migrations run on the restored rows; such a dump is held in memory), all without
+//!    holding the writer;
 //! 2. writes a backup of the current state (docs/02 §16) into the app data folder
 //!    (`<collection folder>/backups/`; the backup's own folder may be read-only), re-read and
 //!    hash-checked before the restore goes on;
 //! 3. swaps every table and the media in one transaction (`io.backup.load`) — deliberately
-//!    atomic: a half-restored collection must never be visible to other commands. Media are
-//!    streamed from the backup file one at a time (each re-verified by the media store).
+//!    atomic: a half-restored collection must never be visible to other commands. The dump
+//!    (unless it was upgraded in memory) is streamed from the backup file into the tables
+//!    chunk by chunk, re-checked against the manifest's hash; media are streamed one at a
+//!    time (each re-verified by the media store). The sanitizers ([`sanitize`]) see every
+//!    chunk of rows before it is written.
 //!
 //! It is not an undo step — the safety backup is the way back.
 
 use super::backup_auto::{backup_report, backups_dir, record_verified, verified_backup};
-use super::backup_file::{open_backup, verify_file, write_backup_file, Check};
+use super::backup_file::{open_backup, split_stream, verify_file, write_backup_file, Check};
+use super::media::media_store;
 use super::{file_err, interop_err, Staging, JOB_BACKUP, JOB_RESTORE, JOB_VERIFY};
 use crate::error::{AppError, AppResult};
 use crate::handler::{CommandCtx, CommandHandler, CommandOutcome, QueryCtx};
@@ -33,17 +38,18 @@ use fc_api::v1::io::*;
 use fc_api::v1::jobs::JobDto;
 use fc_api::v1::methods::{IoBackupCreate, IoBackupLoad, IoBackupRestore, IoBackupVerify};
 use fc_api::{ApiError, ErrorCode};
-use super::media::media_store;
 use fc_interop::fcbackup::{self, MediaEntry};
-use fc_storage::repo::{CollectionDump, MediaRecord};
+use fc_storage::repo::{CollectionDump, DumpStream, MediaRecord, TableDump};
+use fc_storage::StorageResult;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// A restore ready to swap in: the dump at this build's schema and the backup's media
-/// (streamed from `path` by `io.backup.load`).
+/// A restore ready to swap in: the backup's media (streamed from `path` by `io.backup.load`)
+/// and its dump — streamed from `path` too (`None`: it is at this build's schema and was
+/// checked by the job), or, brought forward from an older schema, in memory.
 pub(crate) struct Restore {
-    pub dump: CollectionDump,
+    pub dump: Option<CollectionDump>,
     pub path: PathBuf,
     pub media: Vec<MediaEntry>,
 }
@@ -60,7 +66,11 @@ pub(super) fn create(
     if req.path.trim().is_empty() {
         return Err(invalid("path is empty"));
     }
-    let job = enqueue(ctx, JOB_BACKUP, serde_json::to_value(&req).map_err(internal)?)?;
+    let job = enqueue(
+        ctx,
+        JOB_BACKUP,
+        serde_json::to_value(&req).map_err(internal)?,
+    )?;
     Ok(CommandOutcome {
         response: job,
         inverse: Vec::new(),
@@ -77,7 +87,11 @@ pub(super) fn restore(
     if req.path.trim().is_empty() {
         return Err(invalid("path is empty"));
     }
-    let job = enqueue(ctx, JOB_RESTORE, serde_json::to_value(&req).map_err(internal)?)?;
+    let job = enqueue(
+        ctx,
+        JOB_RESTORE,
+        serde_json::to_value(&req).map_err(internal)?,
+    )?;
     Ok(CommandOutcome {
         response: job,
         inverse: Vec::new(),
@@ -87,17 +101,16 @@ pub(super) fn restore(
 }
 
 pub(crate) fn row_counts(dump: &CollectionDump) -> std::collections::BTreeMap<String, u64> {
-    dump.tables
-        .iter()
-        .map(|t| (t.name.clone(), t.rows.len() as u64))
-        .collect()
+    dump.row_counts()
 }
 
 /// Whether this build knows every migration the backup had.
 pub(crate) fn compatible(versions: &[u32]) -> bool {
-    versions
-        .iter()
-        .all(|v| fc_storage::migrate::MIGRATIONS.iter().any(|m| m.version == *v))
+    versions.iter().all(|v| {
+        fc_storage::migrate::MIGRATIONS
+            .iter()
+            .any(|m| m.version == *v)
+    })
 }
 
 /// A backup is data from outside: registered MCP servers that come with it must not launch
@@ -126,6 +139,32 @@ fn forget_exec_settings(dump: &mut CollectionDump) {
     }
 }
 
+/// Everything a restored backup must not bring along as it is (see the `forget_*` helpers).
+pub(super) fn sanitize(dump: &mut CollectionDump) {
+    forget_mcp_approvals(dump);
+    forget_exec_settings(dump);
+    crate::modules::local_api::forget_clients(dump);
+    crate::modules::subtitle::forget_keys(dump);
+}
+
+/// [`sanitize`] on one chunk of rows of a streamed restore (the helpers work per table).
+pub(super) fn sanitize_rows(t: &mut TableDump) -> StorageResult<()> {
+    let empty = TableDump {
+        name: String::new(),
+        columns: Vec::new(),
+        rows: Vec::new(),
+    };
+    let mut one = CollectionDump {
+        schema_versions: Vec::new(),
+        tables: vec![std::mem::replace(t, empty)],
+    };
+    sanitize(&mut one);
+    if let Some(back) = one.tables.pop() {
+        *t = back;
+    }
+    Ok(())
+}
+
 /// `io.backup.verify`.
 pub(super) fn verify(
     req: VerifyBackup,
@@ -134,7 +173,11 @@ pub(super) fn verify(
     if req.path.trim().is_empty() {
         return Err(invalid("path is empty"));
     }
-    let job = enqueue(ctx, JOB_VERIFY, serde_json::to_value(&req).map_err(internal)?)?;
+    let job = enqueue(
+        ctx,
+        JOB_VERIFY,
+        serde_json::to_value(&req).map_err(internal)?,
+    )?;
     Ok(CommandOutcome {
         response: job,
         inverse: Vec::new(),
@@ -246,7 +289,13 @@ impl JobHandler for RestoreJob {
                 .with_detail("format", fcbackup::FORMAT),
             ));
         }
-        let dump: CollectionDump = reader.collection().map_err(interop_err)?;
+        // A dump at this schema is read through and counted (after the sanitizers) without
+        // being kept; an older one is read whole.
+        let read = reader
+            .collection_with(|json| {
+                split_stream(fc_storage::repo::scan_dump_json(json, &mut sanitize_rows))
+            })
+            .map_err(interop_err)??;
         // Every listed media file is there and matches, before anything is replaced.
         let media = reader.media_list();
         for (i, m) in media.iter().enumerate() {
@@ -259,12 +308,16 @@ impl JobHandler for RestoreJob {
         }
         drop(reader);
         ctx.cancel.check()?;
-        // Older schema: migrate the restored rows forward (outside the writer).
-        let mut dump = fc_storage::upgrade_dump(dump)?;
-        forget_mcp_approvals(&mut dump);
-        forget_exec_settings(&mut dump);
-        crate::modules::local_api::forget_clients(&mut dump);
-        crate::modules::subtitle::forget_keys(&mut dump);
+        let (dump, counts) = match read {
+            DumpStream::Streamed(summary) => (None, summary.counts),
+            // Older schema: migrate the restored rows forward (outside the writer).
+            DumpStream::Whole(dump) => {
+                let mut dump = fc_storage::upgrade_dump(dump)?;
+                sanitize(&mut dump);
+                let counts = row_counts(&dump);
+                (Some(dump), counts)
+            }
+        };
         ctx.cancel.check()?;
 
         // Safety backup of the current state first, into the app data folder.
@@ -276,8 +329,7 @@ impl JobHandler for RestoreJob {
                     .data_dir()
                     .map(|d| d.join("backups"))
                     .unwrap_or_else(std::env::temp_dir);
-                std::fs::create_dir_all(&dir)
-                    .map_err(|e| file_err(&dir.to_string_lossy(), e))?;
+                std::fs::create_dir_all(&dir).map_err(|e| file_err(&dir.to_string_lossy(), e))?;
                 dir.join(format!("pre-restore-{}.fcbackup", ctx.now().0))
                     .to_string_lossy()
                     .into_owned()
@@ -290,7 +342,9 @@ impl JobHandler for RestoreJob {
             _ => a == b,
         };
         if same(&safety_path, &path) {
-            return Err(invalid("the safety backup would overwrite the backup being restored"));
+            return Err(invalid(
+                "the safety backup would overwrite the backup being restored",
+            ));
         }
         write_backup_file(
             &|| ctx.read(),
@@ -309,16 +363,9 @@ impl JobHandler for RestoreJob {
         ctx.cancel.check()?;
 
         ctx.report(None, "io.progress.writing");
-        let counts = row_counts(&dump);
         let restored = u32::try_from(media.len()).unwrap_or(u32::MAX);
-        self.0.put_restore(
-            ctx.job_id,
-            Restore {
-                dump,
-                path,
-                media,
-            },
-        );
+        self.0
+            .put_restore(ctx.job_id, Restore { dump, path, media });
         let result = ctx.invoke::<IoBackupLoad>(&StagedJob { job_id: ctx.job_id });
         let _ = self.0.take_restore(ctx.job_id);
         result?;
@@ -337,12 +384,29 @@ impl JobHandler for RestoreJob {
 pub(crate) struct LoadHandler(pub Arc<Staging>);
 
 impl CommandHandler<IoBackupLoad> for LoadHandler {
-    fn execute(&self, req: StagedJob, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<Empty>> {
+    fn execute(
+        &self,
+        req: StagedJob,
+        ctx: &mut CommandCtx<'_>,
+    ) -> AppResult<CommandOutcome<Empty>> {
         let Restore { dump, path, media } = self.0.take_restore(req.job_id)?;
-        ctx.tx.load_collection(&dump)?;
-        drop(dump);
-        let store = media_store();
         let mut reader = open_backup(&path)?;
+        match dump {
+            Some(dump) => ctx.tx.load_collection(&dump)?,
+            None => {
+                let tx = &mut *ctx.tx;
+                let read = reader
+                    .collection_with(|json| {
+                        split_stream(tx.load_collection_json(json, &mut sanitize_rows))
+                    })
+                    .map_err(interop_err)??;
+                if let DumpStream::Whole(_) = read {
+                    // The job read this file at this build's schema a moment ago.
+                    return Err(internal("the backup changed during the restore"));
+                }
+            }
+        }
+        let store = media_store();
         for m in &media {
             let bytes = reader.read_media(m).map_err(interop_err)?;
             let (hash, bytes) = (&m.hash, &bytes);

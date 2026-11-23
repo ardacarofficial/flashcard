@@ -262,3 +262,133 @@ fn foreign_and_newer_files_are_refused() {
     let bad = raw_zip(&[("manifest.json", &serde_json::to_vec(&m).unwrap(), true)]);
     assert!(read_manifest(&bad).is_err());
 }
+
+/// v1.4 Z2: `collection.json` as a byte stream both ways. The streamed writer gives the same
+/// entry (bytes, size, hash) as `write_collection`; the header can be filled in afterwards;
+/// the streamed reader hands the producer's own errors back and still checks the hash.
+#[test]
+fn the_collection_streams_both_ways() {
+    #[derive(Serialize)]
+    struct Dump {
+        schema_versions: Vec<u32>,
+        tables: Vec<u32>,
+    }
+    let dump = Dump {
+        schema_versions: vec![1, 400],
+        tables: (0..50_000).collect(),
+    };
+    let json = serde_json::to_vec(&dump).unwrap();
+
+    let mut w = BackupWriter::new(Cursor::new(Vec::new()), header());
+    w.write_collection(&dump).unwrap();
+    let (old, old_manifest) = w.finish().unwrap();
+
+    let mut w = BackupWriter::new(
+        Cursor::new(Vec::new()),
+        BackupHeader {
+            counts: BTreeMap::new(),
+            schema_versions: Vec::new(),
+            ..header()
+        },
+    );
+    let n = w
+        .write_collection_with(|out| {
+            // Many small writes, like a row-by-row serializer.
+            for chunk in json.chunks(7) {
+                out.write_all(chunk)?;
+            }
+            Ok::<_, io::Error>(json.len())
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(n, json.len());
+    assert!(w.write_collection_bytes(b"{}").is_err(), "written twice");
+    *w.header_mut() = header();
+    let (new, manifest) = w.finish().unwrap();
+    assert_eq!(manifest, old_manifest);
+    assert_eq!(read(&new.into_inner()).unwrap().collection, json);
+    assert_eq!(read(&old.get_ref()[..]).unwrap().collection, json);
+
+    // Reading: the stream as it comes, the producer's error as is.
+    let mut r = BackupReader::open(Cursor::new(old.into_inner())).unwrap();
+    let got = r
+        .collection_with(|json_in| {
+            let mut s = String::new();
+            json_in.read_to_string(&mut s)?;
+            Ok(Ok::<_, &str>(s.len()))
+        })
+        .unwrap();
+    assert_eq!(got, Ok(json.len()));
+    let got = r
+        .collection_with(|json_in| {
+            let mut first = [0u8; 10];
+            json_in.read_exact(&mut first)?;
+            Ok(Err::<(), _>("refused"))
+        })
+        .unwrap();
+    assert_eq!(
+        got,
+        Err("refused"),
+        "read partly: the rest is drained and checked"
+    );
+    // An I/O error of the body is the entry's.
+    let e = r
+        .collection_with(|_| Err::<Result<(), ()>, _>(io::Error::other("not json")))
+        .unwrap_err();
+    assert!(e.to_string().contains("collection.json: not json"), "{e}");
+}
+
+/// A failed write is the archive's error even when the producer reports it as its own; a
+/// producer's own error leaves no collection behind.
+#[test]
+fn a_failed_streamed_collection_write_is_reported() {
+    /// Accepts `left` bytes, then fails.
+    struct Full {
+        inner: Cursor<Vec<u8>>,
+        left: usize,
+    }
+    impl Write for Full {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            if self.left < buf.len() {
+                return Err(io::Error::other("disk full"));
+            }
+            self.left -= buf.len();
+            self.inner.write(buf)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    impl Seek for Full {
+        fn seek(&mut self, to: io::SeekFrom) -> io::Result<u64> {
+            self.inner.seek(to)
+        }
+    }
+    let mut w = BackupWriter::new(
+        Full {
+            inner: Cursor::new(Vec::new()),
+            left: 4096,
+        },
+        header(),
+    );
+    let noise: Vec<u8> = (0..1_000_000u32)
+        .flat_map(|i| i.wrapping_mul(2_654_435_761).to_le_bytes())
+        .collect();
+    let e = w
+        .write_collection_with(|out| {
+            out.write_all(&noise)
+                .map_err(|e| format!("my own words: {e}"))
+        })
+        .unwrap_err();
+    assert!(e.to_string().contains("disk full"), "{e}");
+
+    let mut w = BackupWriter::new(Cursor::new(Vec::new()), header());
+    let inner = w
+        .write_collection_with(|out| {
+            out.write_all(b"{\"half").map_err(|e| e.to_string())?;
+            Err::<(), _>("storage failed".to_string())
+        })
+        .unwrap();
+    assert_eq!(inner, Err("storage failed".to_string()));
+    assert!(w.finish().is_err(), "no collection written");
+}

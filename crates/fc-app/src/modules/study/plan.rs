@@ -719,6 +719,8 @@ impl<'a> Planner<'a> {
             );
             let by_id: HashMap<CardId, &fc_core::card::Card> =
                 candidates.iter().map(|c| (c.id, c)).collect();
+            self.empty
+                .prefetch(queue.iter().filter_map(|e| by_id.get(&e.card_id).copied()))?;
             let mut found = false;
             for e in &queue {
                 if let Some(card) = by_id.get(&e.card_id) {

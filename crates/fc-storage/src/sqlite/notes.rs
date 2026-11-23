@@ -168,6 +168,22 @@ impl<M: Mode> NoteRead for SqliteTx<'_, M> {
         }
     }
 
+    fn get_notes(&self, ids: &[NoteId]) -> StorageResult<Vec<Note>> {
+        let mut out = Vec::with_capacity(ids.len());
+        // Chunks keep the JSON parameter and the tag lookup bounded.
+        for chunk in ids.chunks(10_000) {
+            let notes = all(
+                self.conn(),
+                T,
+                &format!("SELECT {COLS} FROM notes WHERE id IN (SELECT value FROM json_each(?1))"),
+                [json_list(chunk)],
+                note_row,
+            )?;
+            out.extend(with_tags(self.conn(), notes)?);
+        }
+        Ok(out)
+    }
+
     fn list_notes(
         &self,
         filter: &NoteFilter,
