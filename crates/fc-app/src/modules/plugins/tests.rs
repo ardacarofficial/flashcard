@@ -772,6 +772,19 @@ fn install_update_uninstall_are_undoable(f: Factory) {
     assert_eq!(run(&t, MISBEHAVE, "ok").unwrap_err().code, ErrorCode::ConflictPluginInactive);
     undo(&t);
     assert!(run(&t, MISBEHAVE, "ok").is_ok());
+    // v1.4.1: changing the grants is one undo step; redo gives the new grants again.
+    let granted = grants(&t, MISBEHAVE);
+    t.ok::<PluginsSetPermissions>(SetPluginPermissions {
+        id: MISBEHAVE.into(),
+        granted: vec!["ui:command".into()],
+    });
+    assert_eq!(grants(&t, MISBEHAVE), ["ui:command"]);
+    undo(&t);
+    assert_eq!(grants(&t, MISBEHAVE), granted);
+    redo(&t);
+    assert_eq!(grants(&t, MISBEHAVE), ["ui:command"]);
+    undo(&t);
+    assert_eq!(grants(&t, MISBEHAVE), granted);
 
     // Reinstalling (update path) keeps grants given now; undo goes back to the old row.
     t.ok::<PluginsInstall>(InstallPlugin {
