@@ -278,6 +278,8 @@ fn answer(req: LearnAnswer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
     let step = probe
         .record(card.id, grade)
         .ok_or_else(|| not_available(card.id))?;
+    // v1.4: the written stage's text is kept with the review (`study.keep_typed_answers`).
+    let written = stage == pure::LearnStage::Written;
     let outcome = answer_core(
         ctx,
         &AnswerCard {
@@ -286,11 +288,13 @@ fn answer(req: LearnAnswer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
             rating: pure::rating(grade),
             duration_ms: req.duration_ms,
             reveal_ms: None,
+            typed_answer: if written { req.given.clone() } else { None },
         },
         AnswerHooks {
             confidence: false,
             no_requeue: true,
             practice,
+            typed_correct: written.then_some(grade != Grade::Wrong),
             after: Some(Box::new(move |state: &mut SessionState, card_id, note_id, kind| {
                 after_state.record(card_id, grade);
                 let learned = after_state.item(card_id).is_some_and(|i| i.learned);

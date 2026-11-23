@@ -66,7 +66,7 @@ Kart türü motorunun üç işi vardır: **kart üret**, **soruyu sun**, **cevab
 | Ters | Arka yüz soru olur |
 | Cloze | `{{c1::Ankara}} Türkiye'nin başkentidir` → boşluk sorulur. Aynı notta c1, c2... ayrı kartlar olur |
 | Çoktan seçmeli | Doğru cevap + çeldiriciler. Çeldiriciler elle girilir ya da aynı destedeki diğer notlardan otomatik seçilir (veya AI ile üretilir) |
-| Yazarak cevaplama | Kullanıcı cevabı yazar, cevap kontrolcüsü değerlendirir, fark gösterilir (diff) |
+| Yazarak cevaplama | Kullanıcı cevabı yazar, cevap kontrolcüsü değerlendirir, fark gösterilir (diff). `[v1.4]` Yazılan cevap tekrarla birlikte saklanır (Kartlar, Öğren'in yazma aşaması, Sınav'ın yazılı soruları; kart başına son 20; yedeğe girer, günlüklere girmez); ayar `study.keep_typed_answers` ("Yazdığın cevapları sakla", varsayılan açık; kapalıyken yenisi saklanmaz, eskiler kalır) |
 | Resim üzerinde gizleme | Resmin bölgeleri maskelenir, her maske ayrı kart olur. "Birini gizle, diğerlerini göster" ve "hepsini gizle, birini sor" modları |
 | Resimli quiz | Resim gösterilir, cevap metin, seçenek ya da yazarak verilir |
 | Sesli kart | Ses çalınır, kullanıcı ne duyduğunu yazar/seçer (dinleme pratiği) |
@@ -374,7 +374,7 @@ Her istatistik global, deste, etiket veya sorgu bazında görüntülenebilir; ta
 | ✅ Başarı oranı | Doğru cevap yüzdesi (yeni / genç / olgun kartlar ayrı) |
 | 📅 Aktivite ısı haritası | Gün gün çalışma yoğunluğu |
 | 🐌 Zor kartlar (leech) | Unutma sayısı eşiği aşan kartlar. Eşik ayarlanabilir. Eylem: etiketle, kenara koy, AI ile yeniden yaz |
-| 🛠️ Zor kartı onar `[v1.4]` | Kenara koymak yerine **onarım önerisi**: son unutmalar (süre, ipucu; yazılan cevap henüz saklanmıyor), karttaki örneğin puanı ve diğer sahneler sıralı, anlam ↔ kabul edilen cevaplar, aynı kelimenin başka notu. Öneriler var olan geri alınabilir komutlardır ve önizlenir: daha iyi örneği göster, anlamları tek tek kabul et, başka anlamdaki sahneyi taşı, AI ile yeniden yaz. Hangi onarımın uygulandığı kaydedilir; sonraki gerçek tekrarlar önceki 10 tekrarla karşılaştırılır ("n küçük" uyarısıyla). API: `stats.leech_repairs.plan/apply/list` (docs/03 §4.4) |
+| 🛠️ Zor kartı onar `[v1.4]` | Kenara koymak yerine **onarım önerisi**: son unutmalar (süre, ipucu, o tekrarda yazdığın cevap), karttaki örneğin puanı ve diğer sahneler sıralı, anlam ↔ kabul edilen cevaplar, aynı kelimenin başka notu. Öneriler var olan geri alınabilir komutlardır ve önizlenir: daha iyi örneği göster, anlamları tek tek kabul et, başka anlamdaki sahneyi taşı, AI ile yeniden yaz. Hangi onarımın uygulandığı kaydedilir; sonraki gerçek tekrarlar önceki 10 tekrarla karşılaştırılır ("n küçük" uyarısıyla). API: `stats.leech_repairs.plan/apply/list` (docs/03 §4.4) |
 | ⏱️ Cevap süreleri | Ortalama, dağılım, en yavaş kartlar |
 | 🔮 Gelecek tahmini | Önümüzdeki günlerde sırası gelecek kart sayısı |
 | 🧠 Hafıza durumu | Yeni / öğreniliyor / genç / olgun / askıda dağılımı |

@@ -384,6 +384,7 @@ fn anki_import_study_backup_wipe_restore_is_identical() {
             break;
         }
         session = t.ok::<StudyAnswer>(AnswerCard {
+            typed_answer: None,
             session_id: session.id,
             card_id: current.card_id,
             rating: Rating::Good,
@@ -392,6 +393,7 @@ fn anki_import_study_backup_wipe_restore_is_identical() {
         });
     }
     t.ok::<StudyAnswer>(AnswerCard {
+        typed_answer: None,
         session_id: session.id,
         card_id: dog.id,
         rating: Rating::Good,

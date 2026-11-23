@@ -269,6 +269,10 @@
       "learn_ahead_mins": {
         "label": "Öğrenme kartını erken göster (dakika)",
         "description": "Başka kart kalmadığında, adımı dolmak üzere olan öğrenme kartı en çok bu kadar dakika erken gelir; boş yere beklemezsin. Daha uzun beklemen gerekirse \"Sıradaki kart … sonra\" görürsün. 0: adım dolana kadar hep bekle."
+      },
+      "keep_typed_answers": {
+        "label": "Yazdığın cevapları sakla",
+        "description": "Açık: kartta, Öğren'in yazma aşamasında ve Sınav'ın yazılı sorularında yazdığın cevap tekrarla birlikte saklanır (kart başına son 20); zor kartı onarırken neyi yanlış yazdığını görürsün. Yedeğe girer, günlüklere girmez. Kapalı: yenisi saklanmaz, önceden saklananlar kalır."
       }
     }
   },

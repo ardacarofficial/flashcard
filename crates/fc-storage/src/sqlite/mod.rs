@@ -32,6 +32,7 @@ mod stats;
 mod study;
 mod subtitle;
 mod tags;
+mod typed_answers;
 mod ux;
 mod word_data;
 mod words;

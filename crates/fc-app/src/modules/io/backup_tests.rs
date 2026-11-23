@@ -195,6 +195,50 @@ fn restore_into_an_empty_profile_brings_notes_history_and_media_back_byte_identi
     }
 }
 
+/// v1.4 (Z1): typed answers (`typed_answers`) are user history: a backup carries them.
+#[test]
+fn typed_answers_survive_backup_and_restore() {
+    use fc_storage::repo::{CardFilter, TypedAnswerRecord};
+    let a = profile();
+    fill(&a.t, a._dir.path());
+    let card = {
+        let tx = a.t.store.read().unwrap();
+        tx.list_cards(&CardFilter::default())
+            .unwrap()
+            .into_iter()
+            .find(|c| !tx.review_logs_for_card(c.id).unwrap().is_empty())
+            .expect("a card with review history")
+    };
+    {
+        let mut tx = a.t.store.write().unwrap();
+        let review = tx.review_logs_for_card(card.id).unwrap().pop().unwrap();
+        tx.insert_typed_answer(&TypedAnswerRecord {
+            id: 0,
+            card_id: card.id,
+            review_log_id: Some(review.id),
+            mode: "normal".into(),
+            typed: "yazdığım cevap".into(),
+            correct: Some(false),
+            created_at: review.created_at,
+        })
+        .unwrap();
+        tx.commit().unwrap();
+    }
+    let kept = a.t.store.read().unwrap().typed_answers_of_card(card.id).unwrap();
+    assert_eq!(kept.len(), 1);
+    let path = a._dir.path().join("typed.fcbackup");
+    assert!(create(&a.t, &path).verified);
+
+    let b = profile();
+    let job = b.t.ok::<IoBackupRestore>(RestoreBackup {
+        path: s(&path),
+        safety_backup_path: None,
+    });
+    let _: RestoreReport = result(&finish(&b.t, &job));
+    let restored = b.t.store.read().unwrap().typed_answers_of_card(card.id).unwrap();
+    assert_eq!(restored, kept);
+}
+
 #[test]
 fn an_interrupted_write_leaves_the_previous_backup_intact() {
     let p = profile();

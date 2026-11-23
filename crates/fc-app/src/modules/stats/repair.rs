@@ -1,7 +1,7 @@
 //! v1.4 (W3, docs/03 §4.4): **repairing a leech** instead of only setting it aside.
 //!
-//! * `stats.leech_repairs.plan`: the evidence — the latest failed reviews (time, hints; typed
-//!   answers are not kept by the study flow), the example on the card and its score
+//! * `stats.leech_repairs.plan`: the evidence — the latest failed reviews (time, hints, what
+//!   was typed: `typed_answers`, v1.4 Z1), the example on the card and its score
 //!   (`examples` module), the other encounters ranked, the meaning against the accepted
 //!   answers, other notes of the same word (confusable) — and previewed proposals. Each
 //!   proposal is one **existing** undoable command: `subtitle.encounters.set_primary`,
@@ -150,17 +150,27 @@ fn plan(req: LeechCardRef, ctx: &QueryCtx<'_>) -> AppResult<LeechRepairPlan> {
     let lapses = card.scheduling.lapses;
     let mut logs = reads.review_logs_for_cards(&[card.id])?;
     logs.sort_by_key(|l| std::cmp::Reverse((l.created_at, l.id)));
-    let failed_reviews = logs
+    let failed: Vec<&ReviewLogRecord> = logs
         .iter()
         .filter(|l| l.rating == Rating::Again)
         .take(EVIDENCE)
+        .collect();
+    // v1.4 (Z1): what was typed for each of them (`typed_answers`, by review).
+    let review_ids: Vec<_> = failed.iter().map(|l| l.id).collect();
+    let typed: std::collections::HashMap<_, _> = reads
+        .typed_answers_of_reviews(&review_ids)?
+        .into_iter()
+        .filter_map(|t| t.review_log_id.map(|id| (id, t.typed)))
+        .collect();
+    let failed_reviews = failed
+        .iter()
         .map(|l| LeechFailedReview {
             at: l.created_at,
             mode: l.mode.clone(),
             duration_ms: l.duration_ms,
             answer_duration_ms: l.answer_duration_ms,
             hints_used: l.hints_used,
-            typed_answer: None,
+            typed_answer: typed.get(&l.id).cloned(),
         })
         .collect();
     let (answer_field, answer) = meaning_of(reads, note)?;
@@ -311,7 +321,7 @@ fn plan(req: LeechCardRef, ctx: &QueryCtx<'_>) -> AppResult<LeechRepairPlan> {
         threshold,
         is_leech: lapses >= threshold,
         failed_reviews,
-        typed_answers_recorded: false,
+        typed_answers_recorded: crate::modules::study::typed::keeping(reads)?,
         answer_field,
         answer,
         senses: note_senses,

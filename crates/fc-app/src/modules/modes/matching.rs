@@ -340,6 +340,7 @@ fn finish(req: MatchRef, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome<M
         session: Some(before),
         remove_reviews: written,
         add_reviews: Vec::new(),
+        ..Default::default()
     })?];
     let new_best = previous.is_none_or(|b| time < b);
     if new_best {

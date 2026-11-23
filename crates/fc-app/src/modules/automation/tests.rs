@@ -568,6 +568,7 @@ fn flag_and_answer_triggers(f: Factory) {
         rating: Rating::Good,
         duration_ms: 1000,
         reveal_ms: None,
+        typed_answer: None,
     });
     assert!(w.ids("is:suspended").is_empty(), "good is not again");
     let second = s.current.unwrap().card_id;
@@ -577,6 +578,7 @@ fn flag_and_answer_triggers(f: Factory) {
         rating: Rating::Again,
         duration_ms: 1000,
         reveal_ms: None,
+        typed_answer: None,
     });
     assert_eq!(w.ids("is:suspended tag:leech"), vec![second]);
     let statuses = w.statuses();
@@ -1037,6 +1039,7 @@ fn answer(w: &W, s: &SessionDto, rating: Rating) -> (CardId, SessionDto) {
         rating,
         duration_ms: 1000,
         reveal_ms: None,
+        typed_answer: None,
     });
     (card, next)
 }

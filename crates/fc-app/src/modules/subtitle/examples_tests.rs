@@ -297,7 +297,10 @@ fn a_leech_gets_evidence_repairs_and_an_honest_report(f: Factory) {
     assert_eq!(plan.failed_reviews.len(), 4);
     assert!(plan.failed_reviews[0].at > plan.failed_reviews[1].at, "newest first");
     assert_eq!(plan.failed_reviews[0].hints_used, 1);
-    assert!(!plan.typed_answers_recorded);
+    // v1.4 Z1: typed answers are kept by default (`study.keep_typed_answers`); these reviews
+    // were not typed.
+    assert!(plan.typed_answers_recorded);
+    assert!(plan.failed_reviews.iter().all(|r| r.typed_answer.is_none()));
     assert_eq!(plan.answer_field.as_deref(), Some("meaning"));
     assert_eq!(plan.senses, vec!["anahtar", "tuş"]);
     let ex = plan.examples.as_ref().unwrap();

@@ -133,6 +133,7 @@ fn answer(req: ConfidenceAnswer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandO
         rating,
         duration_ms: req.duration_ms,
         reveal_ms: req.reveal_ms,
+        typed_answer: None,
     };
     super::check_button_answer(ctx, &card)?;
     let outcome = answer_core(

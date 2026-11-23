@@ -98,6 +98,7 @@ const text = (max_len: number): SettingDef['kind'] => ({ type: 'text', max_len }
 const MODE_SETTINGS = [
   def('study.answer_buttons', choice('two', 'four'), 'two'),
   def('study.learn_ahead_mins', int(0, 1440), 20),
+  def('study.keep_typed_answers', { type: 'bool' }, true),
   def('confidence.rating_scale', choice('buttons', 'confidence'), 'buttons'),
   def('timed.seconds', int(3, 600), 20),
   def('timed.on_timeout', choice('again', 'skip'), 'again'),
