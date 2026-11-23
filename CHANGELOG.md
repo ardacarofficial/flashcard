@@ -6,6 +6,9 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 Sürüm numarası değişmedi (tasarım izi henüz uygulanmadı). Arka uç üç dalgada "kelime uygulamasının temeli" oldu: kaybolamayan veri, "hangi kelimeleri biliyorum" sorusuna tek cevap, ölçülmüş hız. Migration'lar 1410–1490 aralığında; yeni modüller (`words`, `word_data`, `quiz`, `accepted_answers`, `examples`, `audio_fill`) varsayılan açık ve her biri kapatılabilir; yeni ayarların hepsi `settings.schema`'da TR/EN ad ve tek satırlık açıklamayla.
 
+### Ekranlar (E-izi)
+- **İlerleme (eski İstatistik), Ana sayfa, Kütüphane:** İlerleme ilk bakışta üç soruya cümleyle cevap verir (Bugün ne yaptım? / İlerliyor muyum? — `words.stats` / Yarın ne var?), gerisi "Daha fazla"da, süzgeç + Planlama/Hedefler + kararlılık + sınıflandırma Gelişmiş'te; sürekli unutulan kart için rehberli **Düzelt** (`stats.leech_repairs.plan/apply/list`, yazdığın cevaplarla, geri alınabilir); Ana sayfa bugünün sayılarını çekirdeğin `today_*` alanlarından aynen gösterir, bildiğin kelimeler satırı ve yedek eskiyse "son yedek" satırı (`io.backup.status.stale`, yeni alan); deste sayfasında deste dili, Kütüphane'de dili belli olmayan notlar. _(E4)_
+
 ### Veri güvenliği
 - **Her zaman geri dönen yedek:** `.fcbackup` v2 dosyadan dosyaya akışla yazılır/okunur (1 GiB okuma tavanı kalktı, eski yedekler okunur), manifest her medyayı boyut + SHA-256 ile listeler, eksik medya `missing_media` ile raporlanıp yedek "eksik" işaretlenir, yedek geçici profile geri yüklenip doğrulanmadan yerine konmaz; yeni `io.backup.verify`, `io.backup.status`, `io.backup.auto`, ayarlar `io.auto_backup` (kapalı/günlük/haftalık, varsayılan günlük) ve `io.auto_backup_keep` (7). _(A1)_
 

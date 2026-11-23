@@ -535,6 +535,66 @@ fn automatic_backups_follow_the_clock_and_keep_the_last_n_verified_copies() {
 }
 
 #[test]
+fn status_says_when_the_backup_is_stale() {
+    let clock = MovableClock::new();
+    let p = profile_with(Some(clock.clone()));
+    fill(&p.t, p._dir.path());
+    let stale = || p.t.ok::<IoBackupStatus>(Empty {}).stale;
+    let tick = || super::auto_backup_tick(&p.t.app, true).unwrap();
+
+    // No backup yet.
+    assert_eq!(stale(), Some(BackupStale::Never));
+    result::<BackupReport>(&finish(&p.t, &tick().expect("due")));
+    assert_eq!(stale(), None);
+    // Daily: fine for two days, then old.
+    clock.advance(2 * DAY - HOUR);
+    assert_eq!(stale(), None);
+    clock.advance(2 * HOUR);
+    assert_eq!(stale(), Some(BackupStale::Old));
+    // Weekly: two weeks.
+    set(&p.t, super::backup_auto::SCHEDULE_KEY, serde_json::json!("weekly"));
+    assert_eq!(stale(), None);
+    clock.advance(13 * DAY);
+    assert_eq!(stale(), Some(BackupStale::Old));
+    // Off: a week.
+    set(&p.t, super::backup_auto::SCHEDULE_KEY, serde_json::json!("off"));
+    assert_eq!(stale(), Some(BackupStale::Old));
+    result::<BackupReport>(&finish(&p.t, &p.t.ok::<IoBackupAuto>(Empty {}).job.unwrap()));
+    assert_eq!(stale(), None);
+    clock.advance(7 * DAY + HOUR);
+    assert_eq!(stale(), Some(BackupStale::Old));
+
+    // A failure wins over the rest.
+    set(&p.t, super::backup_auto::SCHEDULE_KEY, serde_json::json!("daily"));
+    let auto = p.data.join("backups").join("auto");
+    std::fs::rename(&auto, p.data.join("backups").join("moved")).unwrap();
+    std::fs::write(&auto, b"not a folder").unwrap();
+    assert_eq!(finish(&p.t, &tick().expect("due")).status, JobStatus::Failed);
+    assert_eq!(stale(), Some(BackupStale::Failed));
+}
+
+#[test]
+fn staleness_rule() {
+    use super::backup_auto::staleness;
+    let b = |at: i64| VerifiedBackup {
+        path: "x".into(),
+        created_at: Timestamp(at),
+        verified_at: Timestamp(at),
+        bytes: 1,
+        complete: true,
+        automatic: true,
+    };
+    let now = Timestamp(100 * DAY);
+    let daily = AutoBackupSchedule::Daily;
+    assert_eq!(staleness(daily, None, false, now), Some(BackupStale::Never));
+    assert_eq!(staleness(daily, Some(&b(now.0)), true, now), Some(BackupStale::Failed));
+    assert_eq!(staleness(daily, Some(&b(now.0 - 2 * DAY)), false, now), None);
+    assert_eq!(staleness(daily, Some(&b(now.0 - 2 * DAY - 1)), false, now), Some(BackupStale::Old));
+    assert_eq!(staleness(AutoBackupSchedule::Weekly, Some(&b(now.0 - 14 * DAY)), false, now), None);
+    assert_eq!(staleness(AutoBackupSchedule::Off, Some(&b(now.0 - 7 * DAY - 1)), false, now), Some(BackupStale::Old));
+}
+
+#[test]
 fn without_a_collection_folder_there_are_no_automatic_backups() {
     let t = TestApp::mem();
     assert!(super::auto_backup_tick(&t.app, true).unwrap().is_none());

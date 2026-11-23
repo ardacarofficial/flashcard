@@ -103,6 +103,7 @@ export type * from "./BacklinksOf";
 export type * from "./BackupFailure";
 export type * from "./BackupInfo";
 export type * from "./BackupReport";
+export type * from "./BackupStale";
 export type * from "./BackupStatus";
 export type * from "./BackupVerifyReport";
 export type * from "./BandOrigin";
