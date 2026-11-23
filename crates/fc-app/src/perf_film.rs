@@ -403,7 +403,15 @@ pub(crate) fn build(path: &Path, scale: FilmScale) -> FilmBuild {
         let n = note_of(i, scale.notes, &mut roll);
         let v = capture_json(i, &words[n], &fillers, &mut roll);
         let with_media = i % media_every == 0 && out.media_files < scale.with_media * 2;
-        laps.push(post(&app, &key, i, &v, with_media));
+        let ms = post(&app, &key, i, &v, with_media);
+        if std::env::var("FC_PERF_SLOW_MS")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .is_some_and(|t| ms > t)
+        {
+            println!("slow capture #{i}: {ms:.1} ms (media: {with_media})");
+        }
+        laps.push(ms);
         if with_media {
             out.media_files += 2;
         }
