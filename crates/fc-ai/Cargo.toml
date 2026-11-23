@@ -20,7 +20,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 async-trait.workspace = true
 base64.workspace = true
-ureq = { version = "3", default-features = false, features = ["rustls"] }
+# v1.4 G1: `platform-verifier` = trust the operating system's certificate store (Windows, macOS,
+# Linux), like a browser — a TLS-inspecting antivirus or company proxy adds its own root there.
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
 ## PDF text extraction (card sources).
 lopdf = { version = "0.42", default-features = false }
 keyring = { version = "3.6", optional = true, features = ["apple-native", "windows-native", "linux-native"] }

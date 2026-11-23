@@ -45,6 +45,35 @@ pub fn redact(text: &str, secret: Option<&Secret>) -> String {
     out
 }
 
+/// TLS of every outgoing request (v1.4 G1): certificates are checked against the **operating
+/// system's** trust store, as the browser does, not a list compiled into the app. On a Windows
+/// machine whose antivirus or company proxy inspects HTTPS (it installs its own root in the OS
+/// store) the compiled-in list rejected every provider, while the browser worked. Found when the
+/// app first ran against a real provider behind such a proxy.
+pub(crate) fn tls() -> ureq::tls::TlsConfig {
+    ureq::tls::TlsConfig::builder()
+        .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+        .build()
+}
+
+/// What a provider error says when no (complete) answer came within the timeout (v1.4: the app
+/// tells it apart from "cannot reach" with [`is_timeout`]).
+pub const TIMED_OUT: &str = "no answer within the time limit";
+
+/// Whether `e` is a request that timed out (see [`TIMED_OUT`]).
+pub fn is_timeout(e: &ProviderError) -> bool {
+    e.kind == ProviderErrorKind::Unavailable && e.message.ends_with(TIMED_OUT)
+}
+
+/// Whether a provider's error text says the model does not exist or may not be used (OpenRouter
+/// 400 "… is not a valid model ID", OpenAI `model_not_found`, Anthropic 404 "model: …").
+pub fn is_missing_model(e: &ProviderError) -> bool {
+    matches!(
+        e.kind,
+        ProviderErrorKind::InvalidRequest | ProviderErrorKind::Unavailable
+    ) && crate::diagnose::mentions_missing_model(&e.message.to_ascii_lowercase())
+}
+
 /// A JSON-over-HTTP client for one provider configuration.
 pub(crate) struct Http {
     agent: ureq::Agent,
@@ -59,6 +88,7 @@ impl Http {
             .timeout_global(Some(config.timeout))
             .http_status_as_error(false)
             .user_agent("flashcard")
+            .tls_config(tls())
             .build()
             .into();
         Self {
@@ -252,6 +282,12 @@ impl Http {
     }
 
     fn transport(&self, e: ureq::Error) -> ProviderError {
+        if let ureq::Error::Timeout(_) = e {
+            return ProviderError::new(
+                ProviderErrorKind::Unavailable,
+                format!("{}: {TIMED_OUT}", self.provider),
+            );
+        }
         let message = redact(&format!("{}: {e}", self.provider), self.key.as_ref());
         match e {
             ureq::Error::Timeout(_)
@@ -301,11 +337,23 @@ pub(crate) fn error_message(body: &str) -> String {
     let text = parsed
         .as_ref()
         .and_then(|v| {
-            v.pointer("/error/message")
+            let message = v
+                .pointer("/error/message")
                 .or_else(|| v.get("error").filter(|e| e.is_string()))
                 .or_else(|| v.get("message"))
+                .and_then(Value::as_str)?;
+            // OpenRouter wraps the upstream provider's error: `message` is only "Provider
+            // returned error", the reason ("… is temporarily rate-limited upstream") is in
+            // `error.metadata.raw` (v1.4 G1, seen live).
+            let raw = v
+                .pointer("/error/metadata/raw")
                 .and_then(Value::as_str)
-                .map(str::to_owned)
+                .map(str::trim)
+                .filter(|r| !r.is_empty() && *r != message);
+            Some(match raw {
+                Some(raw) => format!("{message}: {raw}"),
+                None => message.to_owned(),
+            })
         })
         .unwrap_or_else(|| body.trim().to_owned());
     text.chars().take(MAX_ERROR_CHARS).collect()
@@ -352,4 +400,12 @@ pub(crate) fn u32_at(v: &Value, pointer: &str) -> u32 {
         .and_then(Value::as_u64)
         .map(|n| u32::try_from(n).unwrap_or(u32::MAX))
         .unwrap_or(0)
+}
+
+/// The request's cost in US dollars as the provider reports it (OpenRouter: `usage.cost`, in
+/// credits = USD), if it does: a finite, non-negative number.
+pub(crate) fn cost_at(v: &Value) -> Option<f64> {
+    v.pointer("/usage/cost")
+        .and_then(Value::as_f64)
+        .filter(|c| c.is_finite() && *c >= 0.0)
 }

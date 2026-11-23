@@ -40,12 +40,14 @@ pub mod mock;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_openrouter;
+#[cfg(test)]
 mod tests_presets;
 #[cfg(test)]
 mod tests_v2;
 
 pub use executor::block_on;
-pub use http::redact;
+pub use http::{is_missing_model, is_timeout, redact, TIMED_OUT};
 
 use fc_providers::ai::AiProvider;
 use secrets::Secret;

@@ -274,19 +274,35 @@ fn setting_u64(reads: &dyn Reads, key: &str, default: u64) -> AppResult<u64> {
 /// Provider error → API error. The message is scrubbed of the key again (plugin providers
 /// may not do it themselves).
 fn provider_error(e: ProviderError, provider: &str, key: Option<&Secret>) -> AppError {
-    let code = match e.kind {
+    // v1.4 G1 (seen live): a wrong model name and a timeout get their own plain message
+    // instead of "the provider refused the request" / "service unavailable".
+    let special = if fc_ai::is_timeout(&e) {
+        Some(ErrorCode::ProviderAiTimeout)
+    } else if fc_ai::is_missing_model(&e) {
+        Some(ErrorCode::ProviderAiModelNotFound)
+    } else {
+        None
+    };
+    let code = special.unwrap_or(match e.kind {
         ProviderErrorKind::Unauthorized => ErrorCode::ProviderAiUnauthorized,
         ProviderErrorKind::RateLimited => ErrorCode::ProviderAiRateLimited,
         ProviderErrorKind::InvalidRequest => ErrorCode::ProviderAiInvalidRequest,
         ProviderErrorKind::Unavailable => ErrorCode::ProviderUnavailable,
         ProviderErrorKind::Cancelled => ErrorCode::ConflictJobCancelled,
         ProviderErrorKind::Failed => ErrorCode::ProviderFailed,
-    };
+    });
     let message = fc_ai::redact(&e.message, key);
+    // The reason the user may see is the provider's own words, without the adapter's internal
+    // id (`builtin.ai.openai_compatible: HTTP 400: …` → `HTTP 400: …`).
+    let reason = message
+        .split_once(": ")
+        .filter(|(id, _)| id.starts_with("builtin.ai."))
+        .map_or(message.as_str(), |(_, rest)| rest)
+        .to_owned();
     AppError::Api(
         ApiError::new(code, message.clone())
             .with_detail("provider", provider)
-            .with_detail("reason", message)
+            .with_detail("reason", reason)
             .retryable(e.retryable),
     )
 }
@@ -440,18 +456,13 @@ fn send(
         // Turned off while queued or between retries: nothing more goes out.
         ctx.ensure_module_enabled(ID)?;
         *attempts += 1;
-        let result = match stream {
-            Some(partial) => {
-                partial.reset();
-                let on_text = |t: &str| partial.push(t);
-                let r = fc_ai::block_on(conn.provider.complete_stream(request.clone(), &on_text));
-                if r.is_ok() {
-                    partial.flush();
-                }
-                r
-            }
-            None => fc_ai::block_on(conn.provider.complete(request.clone())),
-        };
+        if let Some(partial) = stream {
+            partial.reset();
+        }
+        let result = out_of_band(ctx, &conn.provider, request, stream)?;
+        if let (Ok(_), Some(partial)) = (&result, stream) {
+            partial.flush();
+        }
         match result {
             Ok(response) => {
                 // Spent tokens are recorded even if the job is cancelled right after.
@@ -461,6 +472,7 @@ fn send(
                     feature,
                     input_tokens: response.usage.input_tokens,
                     output_tokens: response.usage.output_tokens,
+                    cost_usd: response.usage.cost_usd,
                 })?;
                 ctx.cancel.check()?;
                 return Ok(response);
@@ -474,6 +486,64 @@ fn send(
                 attempt += 1;
             }
             Err(e) => return Err(provider_error(e, &conn.name, conn.key.as_ref())),
+        }
+    }
+}
+
+/// What the request thread hands back.
+enum Answer {
+    /// A streamed piece of text.
+    Piece(String),
+    /// The provider's final answer.
+    Done(fc_providers::ProviderResult<CompletionResponse>),
+}
+
+/// Sends `request` on a thread of its own and waits for it here, checking for cancellation
+/// every 50 ms (v1.4 G1). The HTTP call itself cannot be interrupted: before, a cancelled job
+/// kept waiting for it — up to the request timeout — and held the AI lane, so the next request
+/// (a hint, a meaning) waited too (seen live: 11 s after cancelling a 30-card generation). Now
+/// the job ends at once; the abandoned call finishes on its own and its answer is dropped (its
+/// tokens are not recorded: the provider may still bill them).
+fn out_of_band(
+    ctx: &JobContext<'_>,
+    provider: &Arc<dyn AiProvider>,
+    request: &CompletionRequest,
+    stream: Option<&Partial<'_>>,
+) -> AppResult<fc_providers::ProviderResult<CompletionResponse>> {
+    use std::sync::mpsc::{channel, RecvTimeoutError};
+    let (tx, rx) = channel::<Answer>();
+    let provider = Arc::clone(provider);
+    let request = request.clone();
+    let streaming = stream.is_some();
+    std::thread::Builder::new()
+        .name("fc-ai-request".into())
+        .spawn(move || {
+            let result = if streaming {
+                let pieces = Mutex::new(tx.clone());
+                let on_text = |t: &str| {
+                    if let Ok(tx) = pieces.lock() {
+                        let _ = tx.send(Answer::Piece(t.to_owned()));
+                    }
+                };
+                fc_ai::block_on(provider.complete_stream(request, &on_text))
+            } else {
+                fc_ai::block_on(provider.complete(request))
+            };
+            let _ = tx.send(Answer::Done(result));
+        })
+        .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+    loop {
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(Answer::Piece(t)) => {
+                if let Some(partial) = stream {
+                    partial.push(&t);
+                }
+            }
+            Ok(Answer::Done(result)) => return Ok(result),
+            Err(RecvTimeoutError::Timeout) => ctx.cancel.check()?,
+            Err(RecvTimeoutError::Disconnected) => {
+                return Err(AppError::api(ErrorCode::Internal, "the AI request thread stopped"))
+            }
         }
     }
 }
@@ -579,6 +649,8 @@ impl JobHandler for RequestJob {
         )?;
         input_tokens += first.usage.input_tokens;
         output_tokens += first.usage.output_tokens;
+        // The provider's own figure when every call reported one (OpenRouter), else estimated.
+        let mut reported_cost = first.usage.cost_usd;
         let mut truncated = first.truncated;
         let mut model = first.model.clone();
         let parsed = match parse(&payload.spec, &first.text) {
@@ -609,6 +681,7 @@ impl JobHandler for RequestJob {
                 let second = send(&self.0, ctx, &conn, payload.feature, &repair, &mut attempts, None)?;
                 input_tokens += second.usage.input_tokens;
                 output_tokens += second.usage.output_tokens;
+                reported_cost = reported_cost.zip(second.usage.cost_usd).map(|(a, b)| a + b);
                 truncated = second.truncated;
                 model = second.model.clone();
                 parse(&payload.spec, &second.text).map_err(|reason| {
@@ -628,7 +701,8 @@ impl JobHandler for RequestJob {
         let result = AiJobResult {
             output,
             provider_id: conn.id,
-            cost_usd: cost(&prices, &model, u64::from(input_tokens), u64::from(output_tokens)),
+            cost_usd: reported_cost
+                .or_else(|| cost(&prices, &model, u64::from(input_tokens), u64::from(output_tokens))),
             model,
             input_tokens,
             output_tokens,

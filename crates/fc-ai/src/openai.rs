@@ -1,7 +1,7 @@
 //! OpenAI and OpenAI-compatible endpoints — Chat Completions (`POST /chat/completions`,
 //! `GET /models`; the base URL includes the version path, e.g. `https://api.openai.com/v1`).
 
-use crate::http::{image_base64, model_of, u32_at, Http};
+use crate::http::{cost_at, image_base64, model_of, u32_at, Http};
 use crate::{ProviderConfig, ProviderKind};
 use async_trait::async_trait;
 use fc_providers::ai::{AiProvider, CompletionRequest, CompletionResponse, ContentPart, Usage};
@@ -110,6 +110,7 @@ impl OpenAi {
             usage: Usage {
                 input_tokens: u32_at(v, "/usage/prompt_tokens"),
                 output_tokens: u32_at(v, "/usage/completion_tokens"),
+                cost_usd: cost_at(v),
             },
             truncated: choice.get("finish_reason").and_then(Value::as_str) == Some("length"),
         })
@@ -206,6 +207,7 @@ impl AiProvider for OpenAi {
                     out.usage = Usage {
                         input_tokens: u32_at(&v, "/usage/prompt_tokens"),
                         output_tokens: u32_at(&v, "/usage/completion_tokens"),
+                        cost_usd: cost_at(&v),
                     };
                 }
                 Ok(true)

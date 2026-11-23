@@ -2,6 +2,10 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## Unreleased (v1.4)
+
+- **AI gerçek sağlayıcıyla (OpenRouter) denendi, bulunan sekiz hata düzeltildi:** sertifikalar işletim sisteminin deposuyla doğrulanır (antivirüs/şirket vekili arkasında da çalışır), OpenRouter'ın bildirdiği gerçek ücret kullanım paneline ve bütçeye girer (önce $0), üretilen kartlar kartın sorduğu alanı (Klasik'te arka) boş bırakamaz, iptal AI şeridini hemen boşaltır, yanlış model ve zaman aşımı kendi TR/EN mesajlarıyla (`PROVIDER_AI_MODEL_NOT_FOUND`, `PROVIDER_AI_TIMEOUT`), sarılmış üst sağlayıcı hatasının nedeni korunur, etikete sarılmış düz cevap soyulur, Türkçe anlamlarda ș → ş; yeniden koşulabilir canlı deneme `FC_AI_LIVE=1` (+ yolculuk G1, varsayılan takımda atlanır); ayrıntı docs/13. _(G1)_
+
 ## [1.4.0] — v1.4 "kelime uygulaması": kaybolmayan veri, tek kelime doğrusu, sade ekranlar
 
 Workspace sürümü `1.4.0`. Sahibi v1.3'ü kullandı: "çekirdek sağlam ama kullanırken hâlâ kafam karışıyor." v1.4 iki izde ilerledi: arka uç kelime uygulamasının temeli oldu (kaybolamayan veri, "hangi kelimeleri biliyorum" sorusuna tek cevap, ölçülmüş hız), tasarım izi önce tıklanabilir taslaklarla (`prototypes/v14/`) sonra uygulamada ekranları sadeleştirdi: dört yerli kenar çubuğu (Ana sayfa · Kelimelerim · İlerleme · Ayarlar), tek "Gelişmiş" anahtarı, Temel ayarlar soru soru. Hiçbir özellik silinmedi; taşınanlar Gelişmiş'te ya da Ctrl K'da. Migration'lar 1410–1499 aralığında; yeni modüller (`words`, `word_data`, `quiz`, `accepted_answers`, `examples`, `audio_fill`) varsayılan açık ve her biri kapatılabilir.

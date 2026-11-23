@@ -342,9 +342,11 @@
       "ai_unauthorized": "Sağlayıcı API anahtarını kabul etmedi (ya da anahtar yok).",
       "ai_rate_limited": "İstek sınırına ulaşıldı. Biraz sonra dene.",
       "ai_invalid_request": "Sağlayıcı isteği reddetti.",
-      "ai_invalid_output": "Cevap beklenen biçimde değildi.",
+      "ai_invalid_output": "Model cevabı beklenen biçimde vermedi (bir kez düzeltmesi de istendi). Yeniden dene; olmazsa başka bir model seç.",
       "ai_keychain": "Sistem anahtar zinciri kullanılamıyor.",
-      "ai_source": "Web sayfası alınamadı. Biraz sonra tekrar dene."
+      "ai_source": "Web sayfası alınamadı. Biraz sonra tekrar dene.",
+      "ai_model_not_found": "Sağlayıcı bu modeli tanımıyor (adı yanlış ya da artık yok). Ayarlar → Yapay zeka'dan başka bir model seç.",
+      "ai_timeout": "Sağlayıcı zamanında cevap vermedi. Biraz sonra yeniden dene; sık oluyorsa Yapay zeka ayarlarında bekleme süresini uzat."
     }
   },
   "settings": {

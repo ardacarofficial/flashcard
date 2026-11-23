@@ -422,6 +422,23 @@ fn note_qa(reads: &dyn Reads, registry: &Registry, locale: Locale, note: NoteId)
     card_qa(reads, registry, locale, card)
 }
 
+/// A new card needs what it asks for (v1.4 G1): the fields the templates ask for
+/// ([`fc_core::notetype::CardTemplate::answer_field`], e.g. Classic's `back`) are required in
+/// generated notes. Seen live: with `back` optional, a real model put the answer inside
+/// `front` ("… (Arka: …)") and the card had no back.
+fn answers_required(nt: &NoteType, fields: Vec<FieldSpec>) -> Vec<FieldSpec> {
+    fields
+        .into_iter()
+        .map(|mut f| {
+            f.required |= nt
+                .templates
+                .iter()
+                .any(|t| t.answer_field.as_ref().is_some_and(|k| k.0 == f.key));
+            f
+        })
+        .collect()
+}
+
 fn require_text_notetype(reads: &dyn Reads, id: NoteTypeId) -> AppResult<(NoteType, Vec<FieldSpec>)> {
     let nt = require_notetype(reads, id)?;
     if nt.deleted_at.is_some() {
@@ -483,6 +500,7 @@ pub(crate) fn build(
                 });
             }
             let (nt, fields) = require_text_notetype(reads, *notetype_id)?;
+            let fields = answers_required(&nt, fields);
             let (assignments, lines) = deck_classifications(reads, *deck_id, attributes)?;
             vars.insert("count", count.to_string());
             vars.insert("notetype", nt.name.clone());
@@ -658,7 +676,9 @@ pub(crate) fn build(
                 *position,
                 candidates,
             )?;
-            vars.insert("language", target_language(answer_lang.as_deref(), locale)?);
+            let language = target_language(answer_lang.as_deref(), locale)?;
+            let turkish = language == "Turkish";
+            vars.insert("language", language);
             vars.insert("sentence", m.sentence.clone());
             vars.insert("lemma", m.lemma.clone());
             vars.insert(
@@ -681,7 +701,10 @@ pub(crate) fn build(
             target.original = m.original;
             items = 1;
             max_tokens = 600;
-            OutputSpec::Meaning { sentence: m.sentence }
+            OutputSpec::Meaning {
+                sentence: m.sentence,
+                turkish,
+            }
         }
     };
     let text = render_template(&template(reads, feature)?, &vars);

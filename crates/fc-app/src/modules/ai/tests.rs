@@ -227,7 +227,8 @@ fn generate_cards_end_to_end_is_level_aware() {
     assert_eq!(req.json()["tool_choice"]["name"], "emit_result");
     assert_eq!(
         req.json()["tools"][0]["input_schema"]["properties"]["notes"]["items"]["required"],
-        json!(["front"])
+        // v1.4 G1: the field the card asks for (`back`) is required too.
+        json!(["front", "back"])
     );
 
     // Usage was recorded with its cost.

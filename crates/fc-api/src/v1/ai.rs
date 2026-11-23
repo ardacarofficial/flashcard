@@ -497,6 +497,10 @@ pub struct RecordAiUsage {
     pub input_tokens: u32,
     /// Output tokens.
     pub output_tokens: u32,
+    /// The cost the provider reported for this call (OpenRouter), in US dollars; `null` = the
+    /// price table's estimate is stored (v1.4).
+    #[serde(default)]
+    pub cost_usd: Option<f64>,
 }
 
 // ------------------------------------------------------------------ requests

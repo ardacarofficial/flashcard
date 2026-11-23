@@ -34,3 +34,7 @@ ProviderAiKeychain => Provider, "errors.provider.ai_keychain";
 ConflictAiBudgetExceeded => Conflict, "errors.conflict.ai_budget_exceeded";
 /// Asking without a preview needs the user's opt-in (`details.setting`).
 ConflictAiAutoOff => Conflict, "errors.conflict.ai_auto_off";
+/// The provider does not know the chosen model, or this key may not use it (`details.provider`, `details.reason`; v1.4).
+ProviderAiModelNotFound => Provider, "errors.provider.ai_model_not_found";
+/// The provider sent no (complete) answer within the request timeout (`ai.request_timeout_secs`, v1.4).
+ProviderAiTimeout => Provider, "errors.provider.ai_timeout";

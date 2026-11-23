@@ -22,7 +22,8 @@
 - **İki yer, iki iş** (X2, `features/ai/AiScreen.svelte` yerine göre çizer): **Ayarlar › Bağlantılar › Yapay zeka** = sağlayıcılar (`ProvidersPanel`) + kullanım (`UsagePanel`), alt başlık AI'ın nerede kullanıldığını söyler ve "Kart üret" bağlantısı verir; **Oluştur › Yapay zeka** = yalnız "Yapay zekayla kart üret" (`GeneratePanel`; deste formdaki bir alan, sağlayıcı yoksa "Sağlayıcı bağla" Ayarlar'a götürür). Metotlar ve davranış aynı kaldı.
 - **Eklentiler:** `ai.test` işinin sonucu (sonuç, modeller, HTTP durumu, sağlayıcının arındırılmış mesajı) sağlayıcının `last_test`'i gibi **AI yapılandırmasıdır**, not metni içermez: eklenti onu `jobs:read` + `ai:read` ile görür (`plugins/redact.rs`). `ai.models` ve `ai.request` işleri not metni taşıyabildiği için ayrı (AI + notlar) sınıftadır. Testi başlatmak (`ai.providers.test`, `ai_requests:write`) eklentilere kapalıdır.
 - Bilinen sınır: masaüstü kabuk dış bağlantıları kendisi açmayabilir (opener eklentisi yok); bu yüzden anahtar/indirme sayfası adresi metin olarak da gösterilir ve kopyalanabilir.
-- Bilinen sınır: gerçek sağlayıcı anahtarlarıyla uçtan uca deneme yapılmadı; tanıma, anahtar kuralı ve sınıflandırma, sağlayıcıların belgelerindeki yanıt biçimlerini taklit eden yerel bir sahte sunucuya karşı test edildi (`crates/fc-ai/src/tests_presets.rs`).
+- ~~Bilinen sınır: gerçek sağlayıcı anahtarlarıyla uçtan uca deneme yapılmadı.~~ **v1.4 (G1):** OpenRouter gerçek API'ye karşı uçtan uca denendi (ön ayar, model listesi, bağlantı testi, her AI özelliği, hata yolları); bulunan sekiz hata düzeltildi ve kayıtlı cevaplarla test edildi. Ayrıntı ve yeniden koşma (`FC_AI_LIVE=1`): [13](13-ai-canli-deneme.md). Diğer sağlayıcılar hâlâ yalnız sahte sunucuya karşı test edildi (`crates/fc-ai/src/tests_presets.rs`).
+- **v1.4 (G1):** sertifikalar işletim sisteminin güven deposuyla doğrulanır (`ureq` `platform-verifier`; HTTPS'i denetleyen antivirüs/şirket vekili kökünü oraya koyar); yanlış model `PROVIDER_AI_MODEL_NOT_FOUND`, zaman aşımı `PROVIDER_AI_TIMEOUT` (kendi TR/EN metinleriyle; `details.reason` sağlayıcının kendi sözü, bağdaştırıcının iç kimliği olmadan); OpenRouter'ın sardığı üst sağlayıcı hatasında neden (`error.metadata.raw`) korunur; `jobs.cancel` uçuştaki isteği beklemeden işi bitirir ve AI şeridini boşaltır (istek kendi iş parçacığında; bırakılan çağrının token'ları kaydedilmez).
 
 ### 1.2 Güvenlik ve gizlilik
 - API anahtarları **işletim sistemi anahtar zincirinde.** Veritabanında, ayar dosyasında, logda asla yok.
@@ -31,6 +32,7 @@
 
 ### 1.3 Kullanım ve harcama takibi
 - Her çağrı `ai_usage` tablosuna: sağlayıcı, model, özellik, girdi/çıktı token, tahmini maliyet.
+- **v1.4 (G1):** sağlayıcı cevabında gerçek ücreti bildiriyorsa (OpenRouter `usage.cost`, akışlı cevapta son parça) o kaydedilir (`Usage.cost_usd` → `ai.usage.record.cost_usd` → `AiJobResult.cost_usd`); bildirmiyorsa fiyat tablosundan tahmin. Önceden fiyat satırı olmayan her OpenRouter modeli $0 sayılıyor, aylık bütçe hiç durdurmuyordu.
 - Ayarlar ekranında: bu ay / bu hafta toplam, özelliğe ve modele göre dağılım.
 - İsteğe bağlı aylık bütçe uyarısı ("Bu ay 5$ sınırına yaklaştın").
 - Fiyat tablosu ayarlardan düzenlenebilir (sağlayıcılar fiyat değiştirir).
