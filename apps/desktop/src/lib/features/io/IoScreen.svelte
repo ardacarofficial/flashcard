@@ -17,9 +17,10 @@
   let { ctx }: { ctx: ScreenCtx } = $props();
 
   const ICONS = { export: Download, backup: HardDrive, print: Printer } as const;
-  const TABS = ['export', 'backup', 'print'] as const;
+  // v1.4: this page is Settings › Basic › "Backup": the backup tab comes first.
+  const TABS = ['backup', 'export', 'print'] as const;
   type Tab = (typeof TABS)[number];
-  let tab = $state<Tab>('export');
+  let tab = $state<Tab>('backup');
   // The deck export / print work on (the shell's selected deck), picked here. No deck means the
   // whole collection on Export, "choose one" on Print.
   const deckOptions = $derived([
@@ -57,7 +58,7 @@
         {#if id === 'export'}
           <ExportPanel {ctx} />
         {:else if id === 'backup'}
-          <BackupPanel />
+          <BackupPanel {ctx} />
         {:else}
           <PrintPanel {ctx} />
         {/if}

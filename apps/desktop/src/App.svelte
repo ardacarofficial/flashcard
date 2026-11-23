@@ -18,6 +18,7 @@
   import DeckPicker from '$lib/shell/DeckPicker.svelte';
   import ProfileMenu from '$lib/shell/ProfileMenu.svelte';
   import SettingsLayout from '$lib/shell/SettingsLayout.svelte';
+  import { advanced } from '$lib/shell/advanced.svelte';
   import Button from '$lib/ui/Button.svelte';
   import Spinner from '$lib/ui/Spinner.svelte';
   import Tabs from '$lib/ui/Tabs.svelte';
@@ -191,6 +192,8 @@
   async function loadModules() {
     try {
       modules = (await api.modules.list()).modules;
+      // v1.4: the one "Advanced" switch (sidebar places, settings groups); per profile.
+      void advanced.load();
       // A switched-off module's page is gone: back home.
       if (!current) show(nav.all[0]!);
       void loadInbox();

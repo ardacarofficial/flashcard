@@ -141,6 +141,27 @@
       "sent": "Eklenti kelimeyi ve geçtiği altyazı cümlesini bu uygulamaya gönderir; varsa anlamını, cümlenin çevirisini, o anın ekran görüntüsünü, sesini ve videonun o saniyesine bağlantıyı da ekler.",
       "card": "Seçtiğin destede bir kart olur: ön yüzde kelime ve cümle (kelime kalın), arka yüzde anlam, çeviri, resim ve ses. Gelen kutusuna uğramadan doğrudan desteye gider.",
       "repeat": "Aynı kelimeyi aynı cümleden bir daha eklersen ikinci kart oluşmaz. Başka bir cümleden eklersen yeni kart olur."
+    },
+    "words": {
+      "title": "Gelen kelimeler",
+      "description": "Subtitle’dan gelen bir kelimeye ne olsun ve eklenti burada neyi görebilsin."
+    },
+    "captures": {
+      "title": "Son yakalamalar (sorun giderme)",
+      "summary": "Bir kelime gelmediyse: son denemeler ve sonuçları. Yalnız saat ve sonuç tutulur, cümle ya da kelime değil.",
+      "load": "Son yakalamaları göster",
+      "none": "Henüz yakalama denemesi yok.",
+      "when": "Ne zaman",
+      "result": "Sonuç",
+      "took": "Süre",
+      "kept": "Son {n} deneme saklanır.",
+      "results": {
+        "created": "kart oluştu",
+        "duplicate": "zaten vardı",
+        "rejected": "reddedildi",
+        "media_missing": "medya eksik",
+        "attached": "var olan karta eklendi"
+      }
     }
   }
 }

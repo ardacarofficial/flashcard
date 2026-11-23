@@ -15,7 +15,9 @@
   import { t } from '$lib/i18n/index.svelte';
   import type { ScreenCtx } from '../types';
   import { Button, Chip, CircleHelp, Copy, Dialog, EmptyState, FolderInput, Icon, Input, KeyRound, Link, Plus, Select, Skeleton, TriangleAlert, toast } from '$lib/ui';
-  import { FormRow, SettingsPage, SettingsSection, isDefault, loadDefaults } from '../core/kit';
+  import { FormRow, SchemaRows, SettingsAdvanced, SettingsPage, SettingsSection, isDefault, loadDefaults } from '../core/kit';
+  import type { SubtitleCaptureAttempts } from '$lib/api/types';
+  import { formatDuration } from '$lib/format';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -30,6 +32,12 @@
   let loadFailed = $state(false);
   /** The Subtitle module is switched off (its commands refuse). */
   let moduleOff = $state(false);
+
+  /** v1.4 diagnostics: the newest capture attempts (ids, results, times only). */
+  let captures = $state<SubtitleCaptureAttempts | null>(null);
+  async function loadCaptures() {
+    captures = await api.call('subtitle.captures.recent', { limit: 20 }).catch(() => null);
+  }
 
   async function load() {
     try {
@@ -236,6 +244,34 @@
         </div>
       {/if}
     </SettingsSection>
+    <!-- v1.4: what happens with the words that arrive, and what Subtitle may read back. -->
+    <SettingsSection title={t('subtitle.words.title')} description={t('subtitle.words.description')} body="rows">
+      <SchemaRows keys={['subtitle.same_word', 'subtitle.auto_best_example', 'subtitle.share_known_words']} guarded={ctx.guarded} />
+    </SettingsSection>
+    <SettingsAdvanced id="subtitle.captures" title={t('subtitle.captures.title')} summary={t('subtitle.captures.summary')}>
+      <div class="captures" data-testid="subtitle-captures">
+        <Button size="sm" variant="secondary" onclick={() => void loadCaptures()}>{t('subtitle.captures.load')}</Button>
+        {#if captures}
+          {#if captures.attempts.length === 0}
+            <p class="muted">{t('subtitle.captures.none')}</p>
+          {:else}
+            <table class="cap-table">
+              <thead><tr><th>{t('subtitle.captures.when')}</th><th>{t('subtitle.captures.result')}</th><th>{t('subtitle.captures.took')}</th></tr></thead>
+              <tbody>
+                {#each captures.attempts as a, i (i)}
+                  <tr>
+                    <td class="num">{formatDateTime(a.at)}</td>
+                    <td>{t(`subtitle.captures.results.${a.result}`)}{#if a.reason}<span class="muted"> · {a.reason}</span>{/if}</td>
+                    <td class="num">{formatDuration(a.duration_ms)}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+            <p class="muted">{t('subtitle.captures.kept', { count: captures.kept, n: formatCount(captures.kept) })}</p>
+          {/if}
+        {/if}
+      </div>
+    </SettingsAdvanced>
   {/if}
 </SettingsPage>
 
@@ -254,6 +290,31 @@
 {/if}
 
 <style>
+  .captures {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+  .cap-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+  }
+  .cap-table th {
+    text-align: start;
+    font-weight: var(--weight-medium);
+    color: var(--text-2);
+    border-bottom: 1px solid var(--border);
+    padding: 4px 8px 4px 0;
+  }
+  .cap-table td {
+    border-bottom: 1px solid var(--border);
+    padding: 4px 8px 4px 0;
+  }
+  .cap-table .num {
+    font-family: var(--font-mono);
+  }
   .pad {
     padding: var(--space-3) 0;
     border-bottom: 1px solid var(--border);

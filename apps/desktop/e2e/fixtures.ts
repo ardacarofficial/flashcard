@@ -141,7 +141,17 @@ export async function press(page: Page, ...keys: string[]): Promise<void> {
 
 /** Opens a sidebar section by its i18n label key (`shell.section.create`). */
 export async function goToSection(page: Page, labelKey: string): Promise<void> {
-  await sidebarButton(page, labelKey).click();
+  const button = sidebarButton(page, labelKey);
+  if (!(await button.isVisible())) {
+    // v1.4: Library, Create and Search sit in the sidebar only with the one "Advanced" switch
+    // on (Settings, bottom of the list): turn it on the way the user does, then go.
+    await sidebarButton(page, 'shell.settings').click();
+    const sw = page.getByTestId('advanced-switch').getByRole('switch');
+    await expect(sw).toBeVisible();
+    if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click();
+    await expect(button).toBeVisible();
+  }
+  await button.click();
 }
 
 // ------------------------------------------------------------------ persisted state

@@ -283,7 +283,11 @@
     "settings_subtitle": "Yapay zeka sağlayıcını bağla ve ne kadar kullandığını gör. Kart üretmek Oluştur › Yapay zeka'da; kart yazarken ve çalışırken de kullanılır.",
     "make_cards": "Kart üret",
     "generate_title": "Yapay zekayla kart üret",
-    "generate_subtitle": "Bir metni yapıştır ya da dosyadan al; yapay zeka kart önerir, beğendiklerini seçip eklersin."
+    "generate_subtitle": "Bir metni yapıştır ya da dosyadan al; yapay zeka kart önerir, beğendiklerini seçip eklersin.",
+    "auto": {
+      "title": "Kendiliğinden yardım",
+      "description": "Yapay zekanın sen sormadan çalıştığı yerler. Hepsi kapalı başlar."
+    }
   },
   "errors": {
     "validation": {

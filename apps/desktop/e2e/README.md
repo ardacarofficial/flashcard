@@ -47,6 +47,7 @@ fix).
 | S2 | Home → Enter → Enter, answer 3, Esc (pause), reopen the launcher from Home: Continue is first (focused) and resumes the same session | must pass |
 | S3 | Deck page → Test → 10 questions → answer all → `Ctrl+Enter`: score shown, no card's schedule changed | must pass |
 | S4 | Two cards Again → "struggled today" counts 2, practice (`trial`) rows, schedule untouched | must pass |
+| E2 | Settings: Basic only, search finds an Advanced page ("In Advanced", one-off band), Subtitle share-known-words and backup keep saved, the Advanced switch remembered (`app.show_advanced`) and Library back in the sidebar | must pass |
 | S5 | 21 new / limit 20: launcher and Home show 0 with the reason; empty start refused, open session kept | must pass |
 | S6 | 1 m / 10 m steps: at learn-ahead 0 → "Sıradaki kart … sonra", session open, `next_due` = due time, the card comes back when the countdown ends; within the default window (`study.learn_ahead_mins` = 20) "Again" brings the card straight back | must pass |
 | S7a | Subtitle card go/went, launcher → Test (written only): the paper opens in the answer field, "gitmek" is graded correct (paper read back with the key) | must pass |

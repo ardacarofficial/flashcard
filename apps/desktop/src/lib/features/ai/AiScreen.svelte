@@ -12,6 +12,7 @@
   import GeneratePanel from './GeneratePanel.svelte';
   import ProvidersPanel from './ProvidersPanel.svelte';
   import UsagePanel from './UsagePanel.svelte';
+  import { SchemaRows, SettingsSection } from '../core/kit';
 
   let { ctx }: { ctx: ScreenCtx } = $props();
 
@@ -37,6 +38,12 @@
         <div class="panel">
           {#if id === 'providers'}
             <ProvidersPanel {ctx} />
+            <!-- v1.4: AI help that runs by itself (off by default; the core gates the cost). -->
+            <div class="auto">
+              <SettingsSection title={t('ai.auto.title')} description={t('ai.auto.description')} body="rows">
+                <SchemaRows keys={['ai.meaning.auto_suggest']} guarded={ctx.guarded} />
+              </SettingsSection>
+            </div>
           {:else}
             <UsagePanel />
           {/if}
@@ -56,5 +63,8 @@
   }
   .panel {
     padding-top: var(--space-4);
+  }
+  .auto {
+    margin-top: var(--space-8);
   }
 </style>

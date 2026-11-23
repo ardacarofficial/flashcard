@@ -44,6 +44,10 @@
       "theme": {
         "label": "Tema",
         "description": "Açık, koyu ya da sistem ayarına uy."
+      },
+      "show_advanced": {
+        "label": "Gelişmiş özellikleri göster",
+        "description": "Açıkken ayarlarda ve menülerde nadiren gereken sayfalar da görünür. Kapalıyken hiçbiri silinmez; aramada yine bulunur."
       }
     },
     "general_intro": "Uygulamanın dilini ve görünümünü buradan seçersin. Aradığın ayarı bilmiyorsan aşağıdaki sorulardan başla."

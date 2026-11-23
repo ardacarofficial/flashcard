@@ -5,9 +5,10 @@
     "section": {
       "home": "Ana sayfa",
       "library": "Kütüphane",
+      "words": "Kelimelerim",
       "create": "Oluştur",
       "search": "Ara",
-      "stats": "İstatistik"
+      "stats": "İlerleme"
     },
     "inbox": "Gelen kutusu",
     "inbox_count": "Gelen kutusu, {count} bekliyor",
@@ -15,12 +16,11 @@
     "settings_nav": "Ayar bölümleri",
     "section_nav": "{section} sayfaları",
     "group": {
-      "general": "Genel",
-      "study": "Çalışma ve kartlar",
-      "connections": "Bağlantılar",
-      "data": "Veri",
-      "advanced": "Gelişmiş",
-      "advanced_hint": "Teknik ayarlar: çoğu zaman gerekmez.",
+      "basic": "Temel",
+      "study": "Çalışma",
+      "app": "Uygulama",
+      "connections": "Bağlantılar (ayrıntı)",
+      "data": "Veri ve bakım",
       "other": "Diğer"
     },
     "profile": {
@@ -36,6 +36,24 @@
       "search": "Ara ya da komut çalıştır",
       "add_card": "Kart ekle",
       "add_card_hint": "Kart ekle (N)"
+    },
+    "page": {
+      "pace": "Günlük tempo",
+      "cards": "Kartların görünüşü",
+      "reminders": "Hatırlatma",
+      "subtitle": "Subtitle ve bağlantılar",
+      "backup": "Yedek",
+      "look": "Dil ve görünüm",
+      "words": "Kelimeler",
+      "adding": "Kart ekleme"
+    },
+    "advanced": {
+      "label": "Gelişmiş ayarlar",
+      "tag": "Gelişmiş’te",
+      "off_hint": "Kapalı: {count} sayfa daha gizli. Hiçbiri silinmedi; arama hepsini bulur.",
+      "on_hint": "Açık: nadiren gereken sayfalar da görünüyor, menüde Kütüphane, Oluştur ve Ara da var.",
+      "one_off": "Bu sayfa Gelişmiş’te. Bir kereliğine açtın; Gelişmiş kapalı kalıyor.",
+      "turn_on": "Gelişmiş’i aç"
     }
   }
 }

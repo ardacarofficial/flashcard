@@ -18,7 +18,7 @@ export const PAGE_TEXTS: Record<string, readonly string[]> = {
   '/mode-settings': ['mode_settings', 'settings.study', 'settings.learn', 'settings.practice_test', 'settings.confidence', 'settings.timed', 'settings.focus', 'settings.match', 'settings.reading', 'settings.tts'],
   '/ai': ['ai', 'settings.ai'],
   '/subtitle': ['subtitle', 'settings.subtitle'],
-  '/io': ['io'],
+  '/io': ['io', 'settings.io'],
   '/starters': ['starters'],
   '/automation': ['automation', 'settings.automation'],
   '/mcp': ['mcp', 'settings.mcp'],
@@ -26,6 +26,9 @@ export const PAGE_TEXTS: Record<string, readonly string[]> = {
   '/plugins': ['plugins', 'settings.plugins'],
   '/maintenance': ['maintenance', 'settings.maintenance'],
   '/app-maintenance': ['app_maintenance', 'settings.updates'],
+  // v1.4: the shell's own pages of rows from several modules' settings.
+  '/settings/words': ['settings_pages.words', 'settings.words'],
+  '/settings/adding': ['settings_pages.adding', 'settings.quick_add', 'settings.clipboard', 'settings.attributes'],
 };
 
 const SKIP = new Set(['errors', 'commands']);

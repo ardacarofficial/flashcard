@@ -39,7 +39,7 @@
   });
 </script>
 
-<SettingsPage title={t('settings.pages.general')} subtitle={t('settings.general_intro')}>
+<SettingsPage title={t('shell.page.look')} subtitle={t('settings.general_intro')}>
   {#if questions.length > 0}
     <SettingsSection title={t('settings.guide.title')} description={t('settings.guide.description')} icon={LifeBuoy}>
       <ul class="guide" data-testid="settings-guide">

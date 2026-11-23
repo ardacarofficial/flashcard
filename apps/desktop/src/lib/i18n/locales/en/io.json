@@ -237,6 +237,20 @@
       "export_hint": "To move a deck or the whole collection to another app or device.",
       "backup_hint": "A one-file copy of everything: for a new computer, or in case something goes wrong.",
       "print_hint": "To print the cards on paper or save them as a PDF."
+    },
+    "status": {
+      "title": "Are your cards safe?",
+      "hint": "The app backs up your cards by itself and checks that every backup opens again.",
+      "last": "Last good backup: {date}",
+      "never": "No checked backup yet.",
+      "next": "Next automatic backup: {date}",
+      "folder": "Folder: {folder}",
+      "failed": "The last automatic backup failed ({date}). Check the folder and free space.",
+      "verify_title": "Check the last backup",
+      "verify_hint": "Opens the backup in a separate place and reads it back; your cards are not touched.",
+      "verify": "Check now",
+      "verified_ok": "The backup is good: it opens completely.",
+      "verified_bad": "{problems} problems found in the backup. Make a new one."
     }
   },
   "errors": {
