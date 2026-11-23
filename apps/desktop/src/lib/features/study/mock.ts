@@ -13,6 +13,7 @@ import type {
   NoteDto,
   SessionDto,
   SessionModesDto,
+  QuizMissDto,
   SessionSummary,
   StudyCardDto,
   TestAnswerDto,
@@ -72,6 +73,8 @@ interface MockSession {
   learn?: MockLearn;
   test?: { questions: TestQuestionDto[]; result: TestPaperDto['result']; answers: TestPaperDto['answers']; draft?: TestAnswerDto[] | null };
   match?: MockMatch;
+  /** v1.4 Test (`kind: quiz`): one word, up to four meanings, judged at once. */
+  quiz?: { total: number; correct: number; answered: number; affects: boolean; missed: QuizMissDto[] };
 }
 
 const front = (c: MockCard) => c.note.fields.front ?? '';
@@ -110,6 +113,17 @@ const MODE_SETTINGS = [
   def('reading.default_language', text(35), 'en'),
   def('reading.vocabulary_query', text(2000), ''),
   def('reading.ffmpeg_path', text(1000), 'ffmpeg', true),
+  // v1.4 (F1): the keys the Basic settings pages show, as fc-app declares them.
+  def('io.auto_backup', choice('off', 'daily', 'weekly'), 'daily'),
+  def('io.auto_backup_keep', int(1, 100), 7, true),
+  def('subtitle.default_deck', text(64), '', true),
+  def('subtitle.share_known_words', { type: 'bool' }, false),
+  def('subtitle.same_word', choice('add_example', 'always_new_card'), 'add_example'),
+  { ...def('subtitle.auto_best_example', { type: 'bool' }, false), module: 'examples' },
+  def('words.language', text(35), ''),
+  def('words.known_interval_days', int(1, 3650), 21, true),
+  def('quiz.affects_schedule', { type: 'bool' }, false),
+  def('quiz.max_cards', int(1, 200), 20),
 ];
 
 export default {
@@ -178,6 +192,20 @@ export default {
             options: c && st === 'choice' ? learnOptions(s, c) : [],
             mistakes: c ? (s.learn.mistakes[c.card_id] ?? 0) : 0,
             progress: { total: s.learn.total, learned, choice: s.learn.total - learned - written, written },
+          },
+        });
+      }
+      if (s.quiz) {
+        const q = s.quiz;
+        const c = s.queue[0];
+        const options = c && s.dto.ended_at === null ? learnOptions(s, c) : [];
+        return plainModes({
+          quiz: {
+            term: c ? front(c) : null,
+            options,
+            few_options: options.length > 0 && options.length < 4,
+            progress: { total: q.total, answered: q.answered, correct: q.correct },
+            affects_schedule: q.affects,
           },
         });
       }
@@ -487,7 +515,7 @@ export default {
         // error that leaves every open session alone.
         const scope: StudyScope | null = req.scope ?? (req.kind === 'normal' && !from ? 'due' : null);
         let queue: MockCard[];
-        if (scope && (req.kind === 'normal' || req.kind === 'learn' || req.kind === 'test' || req.kind === 'match')) {
+        if (scope && (req.kind === 'normal' || req.kind === 'quiz' || req.kind === 'learn' || req.kind === 'test' || req.kind === 'match')) {
           const r = resolve(scope, deckId);
           if (r.cards.length === 0) throw nothingToStudy(r.reason ?? 'no_cards', r.next);
           queue = r.cards;
@@ -499,7 +527,11 @@ export default {
         for (const s of sessions.values()) if (s.dto.kind === req.kind) s.dto.ended_at ??= now();
         const s = newSession(req, queue);
         if (scope && PRACTICE_SCOPES.includes(scope)) s.dto.mode = 'trial';
-        if (req.kind === 'learn') {
+        if (req.kind === 'quiz') {
+          s.queue = queue.slice(0, req.filter?.limit ?? 20);
+          s.quiz = { total: s.queue.length, correct: 0, answered: 0, affects: false, missed: [] };
+          if (!s.quiz.affects) s.dto.mode = 'trial';
+        } else if (req.kind === 'learn') {
           s.queue = queue.slice(0, 30);
           s.learn = { stage: Object.fromEntries(s.queue.map((c) => [c.card_id, 'choice' as const])), mistakes: {}, total: s.queue.length };
         } else if (req.kind === 'test') {
@@ -536,6 +568,42 @@ export default {
           expected: back(c),
           diff: [],
           session: view(s),
+        };
+      },
+      'modes.quiz.answer': ({ session_id, card_id, choice }) => {
+        const s = require(session_id);
+        requireCurrent(s, card_id);
+        const q = s.quiz!;
+        const c = s.queue[0]!;
+        const options = learnOptions(s, c);
+        const correctOption = options.indexOf(back(c));
+        const ok = choice === correctOption;
+        s.queue.shift();
+        q.answered++;
+        s.dto.answered++;
+        if (ok) {
+          q.correct++;
+          s.dto.correct++;
+        } else {
+          q.missed.push({ card_id: c.card_id, term: front(c), expected: back(c), picked: options[choice] ?? null });
+          s.again.push(c.card_id);
+        }
+        answeredToday(card_id, !ok, q.affects);
+        return { correct: ok, picked: choice, correct_option: correctOption, expected: back(c), session: view(s) };
+      },
+      'modes.quiz.result': ({ session_id }) => {
+        const s = require(session_id);
+        const q = s.quiz!;
+        return {
+          session_id,
+          total: q.total,
+          answered: q.answered,
+          correct: q.correct,
+          wrong: q.answered - q.correct,
+          percent: q.answered === 0 ? 0 : Math.round((q.correct / q.answered) * 100),
+          finished: q.answered >= q.total || s.dto.ended_at !== null,
+          affects_schedule: q.affects,
+          missed: q.missed,
         };
       },
       'modes.test.paper': ({ session_id, with_key }) => paper(require(session_id), with_key ?? false),

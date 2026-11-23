@@ -6,7 +6,7 @@
   },
   "modules": {
     "stats": {
-      "name": "Statistics",
+      "name": "Progress",
       "description": "Streak, success rates, heatmap, forecast, cards you keep struggling with and report cards — by deck, tag, query or classification."
     },
     "planning": {
@@ -83,7 +83,7 @@
   },
   "commands": {
     "stats": {
-      "overview": "Statistics",
+      "overview": "Progress",
       "breakdown": "Statistics by classification",
       "leeches": "Cards I keep struggling with",
       "deck_reports": "Deck report cards",

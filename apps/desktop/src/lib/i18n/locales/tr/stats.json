@@ -6,7 +6,7 @@
   },
   "modules": {
     "stats": {
-      "name": "İstatistikler",
+      "name": "İlerleme",
       "description": "Seri, başarı oranları, ısı haritası, tahmin, sürekli zorlandığın kartlar ve karneler — deste, etiket, sorgu veya sınıflandırma bazında."
     },
     "planning": {
@@ -83,7 +83,7 @@
   },
   "commands": {
     "stats": {
-      "overview": "İstatistikler",
+      "overview": "İlerleme",
       "breakdown": "Sınıflandırmaya göre istatistik",
       "leeches": "Sürekli zorlandığım kartlar",
       "deck_reports": "Deste karneleri",

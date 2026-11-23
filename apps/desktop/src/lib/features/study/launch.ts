@@ -7,6 +7,7 @@
  */
 import type { StartModes, StudyFilter, TestQuestionKind } from '$lib/api/types';
 import type { MessageKey } from '$lib/i18n/index.svelte';
+import { advanced as appAdvanced } from '$lib/shell/advanced.svelte';
 import { LAUNCH_KINDS, SCOPES, type LaunchKind, type StartStudy, type StudyEmptyReason, type StudyOptions, type StudyScope, type StudyScopeOption } from './contract';
 
 /** The remembered choices: last mode per deck, last scope per mode. */
@@ -173,21 +174,15 @@ export function plannedCount(c: Pick<LaunchChoice, 'kind' | 'limit' | 'query' | 
  */
 export const SCOPES_PROGRESSIVE = true;
 
-const ADVANCED_KEY = 'fc.study.launcher.advanced';
-
-/** The launcher's "Gelişmiş" switch (a per-viewer convenience, like the remembered mode). */
+/**
+ * The launcher's "Gelişmiş" switch is the app's ONE switch (v1.4 F1): the core setting
+ * `app.show_advanced` kept by `$lib/shell/advanced.svelte`. Flipping it here flips it in
+ * Settings, İlerleme and the sidebar too.
+ */
 export function loadAdvanced(): boolean {
-  try {
-    return localStorage.getItem(ADVANCED_KEY) === '1';
-  } catch {
-    return false;
-  }
+  return appAdvanced.on;
 }
 
 export function rememberAdvanced(on: boolean): void {
-  try {
-    localStorage.setItem(ADVANCED_KEY, on ? '1' : '0');
-  } catch {
-    /* per-viewer convenience only */
-  }
+  void appAdvanced.set(on);
 }

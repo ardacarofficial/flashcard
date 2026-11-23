@@ -7,8 +7,8 @@
   `decks.summaries`, `stats.overview`, `goals.list`, `inbox.count`; parts whose module is off
   are left out (rule 7). v1.4: today's counts are the core's queue counts as sent (`today_*`);
   one line with the words you know (`words.stats`) leads to İlerleme; a "son yedek" line
-  appears when `io.backup.status.stale` says the backup needs attention (link to Settings ›
-  Data).
+  appears when `io.backup.status.stale` says the backup needs attention (link to Settings › Basic ›
+  Backup, its first tab).
 -->
 <script lang="ts">
   import { onMount } from 'svelte';

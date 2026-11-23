@@ -63,8 +63,8 @@
       "where": "Bugünün kartları ve ilerlemen nerede",
       "home_hint": "Ana sayfa bugün sırası gelen kartları gösterir.",
       "home_action": "Ana sayfa",
-      "stats_hint": "İstatistikler gün gün ne kadar öğrendiğini gösterir.",
-      "stats_action": "İstatistikler",
+      "stats_hint": "İlerleme gün gün ne kadar öğrendiğini gösterir.",
+      "stats_action": "İlerleme",
       "extension": "Tarayıcı eklentisini bağla",
       "extension_hint": "Dizi izlerken bir kelimeyi altyazı cümlesiyle birlikte tek tıkla kaydet.",
       "extension_action": "Bağla"
