@@ -17,7 +17,7 @@
   import { typingTarget } from '$lib/features/browse/palette';
   import DeckPicker from '$lib/shell/DeckPicker.svelte';
   import ProfileMenu from '$lib/shell/ProfileMenu.svelte';
-  import SettingsLayout from '$lib/shell/SettingsLayout.svelte';
+  import type SettingsLayoutType from '$lib/shell/SettingsLayout.svelte';
   import { advanced } from '$lib/shell/advanced.svelte';
   import Button from '$lib/ui/Button.svelte';
   import Spinner from '$lib/ui/Spinner.svelte';
@@ -25,6 +25,18 @@
   import ToastHost from '$lib/ui/ToastHost.svelte';
   import { setPageChrome } from '$lib/ui/page-chrome';
   import type { Crumb } from '$lib/ui/types';
+
+  /**
+   * Settings' two-column layout loads the first time Settings opens (v1.4 F1: its own chunk,
+   * so the initial CSS stays inside the bundle budget; `pnpm bundle:check`).
+   */
+  let SettingsLayout = $state<typeof SettingsLayoutType | null>(null);
+  function loadSettingsLayout() {
+    if (!SettingsLayout) void import('$lib/shell/SettingsLayout.svelte').then((m) => (SettingsLayout = m.default));
+  }
+  $effect(() => {
+    if (where === 'settings') loadSettingsLayout();
+  });
 
   /** The shell's own first page (not a module; docs/11 §2). Its own chunk, like every screen. */
   const HOME: ScreenDef = { id: 'home', load: () => import('$lib/features/home/HomeScreen.svelte') };
@@ -344,7 +356,11 @@
       {/snippet}
 
       {#if where === 'settings' && !locked}
-        <SettingsLayout groups={nav.settings} {active} open={show}>{@render body()}</SettingsLayout>
+        {#if SettingsLayout}
+          <SettingsLayout groups={nav.settings} {active} open={show}>{@render body()}</SettingsLayout>
+        {:else}
+          <p class="loading" role="status"><Spinner /> {t('common.loading')}</p>
+        {/if}
       {:else}
         {@render body()}
       {/if}
