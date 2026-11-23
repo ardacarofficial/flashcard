@@ -57,7 +57,7 @@ okuma sonra eklenebilir), Flashcard'dan silinen kelimenin eklentiden düşmesi (
 
 Eklenti deposunun kopyasında (`git clone`, 7fe2843):
 
-- `pnpm test` — 138 dosya, 1533 test geçti (yeni: `src/flashcards/knownWords.test.ts` 5,
+- `pnpm test` — 137 dosya, 1528 test geçti (yeni: `src/flashcards/knownWords.test.ts` 5,
   `src/models/words/words.test.ts` +4, `src/pages/content/components/Settings/FlashcardsRow.test.tsx` 3)
 - `pnpm lint` — 0 hata (18 uyarı, hepsi yamadan önce de vardı)
 - `pnpm build` — geçti (`tsc --noEmit` + Vite)

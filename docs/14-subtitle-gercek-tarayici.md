@@ -9,6 +9,7 @@ cargo build -p fc-cli
 node tools/subtitle-real-browser/run.mjs            # eklentiyi kopyadan derler (git clone + pnpm install + pnpm build)
 # isteğe bağlı: FC_BIN=… SUBTITLE_REPO=/home/user/subtitle SUBTITLE_DIST=<hazır dist> CHROMIUM=/opt/pw-browsers/chromium
 #               SHOTS=<klasör> (ekran görüntüleri)  REPORT=<dosya.json>  KEEP=1 (geçici profili silme)
+#               SUBTITLE_PATCH=tools/subtitle-patches/0001-flashcard-known-words.patch (kopyaya git apply; §4)
 ```
 
 Her adım sonucu Flashcard'ın API'sinden (`fc call`) **kaydedilmiş hâliyle** geri okur; sonunda bir JSON rapor yazar (toast metinleri, tanı satırları, dışarıya giden ve kesilen istekler, konsol hataları).
@@ -31,7 +32,7 @@ Dışarıya hiçbir şey gitmez: yerel geri döngü dışındaki her istek ya yu
 
 ## 2. Sahibin yaptığı gibi: adımlar ve sonuç
 
-13 adımın hepsi geçti (betik birkaç kez koştu, biri sıfırdan `git clone` + `pnpm install` + `pnpm build` ile; son koşu 13/13).
+13 adımın hepsi geçti (betik birkaç kez koştu, biri sıfırdan `git clone` + `pnpm install` + `pnpm build` ile; son koşu 13/13). v1.4.1'de "Flashcard'dan oku" yamasıyla iki adım daha (12–13, §4): yamalı derlemeyle 15/15.
 
 | # | Adım (eklentide) | Eklentinin kendi arayüzü | Flashcard'dan geri okunan (kalıcı) |
 |---|---|---|---|
@@ -45,7 +46,7 @@ Dışarıya hiçbir şey gitmez: yerel geri döngü dışındaki her istek ya yu
 | 8 | Ayarlarda **yanlış anahtar** → Kaydet → Bağlantıyı test et; sonra "station" → **+** | test: "Erişim anahtarı geçersiz ya da süresi dolmuş (401): the access key is not valid (invalid)"; toast: "Subtitle Kartları: …(401)…"; Kuyruk kartında **Gönderilemeyenler: station** + Tekrar dene / Sil | hiçbir şey yazılmaz |
 | 9 | Doğru anahtar geri → Kaydet → test "Bağlandı" → **Tümünü tekrar dene** | kuyruk boşalır | `station` notu gelir (kelime kaybolmadı) |
 | 10 | Anahtar uygulamada **iptal edilir** (`subtitle.keys.revoke`) → "need" üzerine gelinir (eklenti bunu "need to" deyimi olarak açar) → **+** | "Subtitle Kartları: … (401): the access key is not valid (revoked)" | hiçbir şey yazılmaz; kelime eklentinin kuyruğunda `failed` olarak bekler (Tekrar dene için) |
-| 11 | Bilinen kelimeler (eklenti bugün sormuyor; §4): eklentinin **kendi servis çalışanından**, kayıtlı anahtarıyla `/v1/me` + `/v1/known-words?lang=en` | — | paylaşım kapalıyken `features.known_words=false`, `words: []`; `subtitle.share_known_words` açılınca `true` ve yakalanan lemmalar (`key`, `pick up`, `light`, `train`, `station`) `learning` olarak |
+| 11 | Bilinen kelimeler (yamasız eklenti sormuyor; §4): eklentinin **kendi servis çalışanından**, kayıtlı anahtarıyla `/v1/me` + `/v1/known-words?lang=en` | — | paylaşım kapalıyken `features.known_words=false`, `words: []`; `subtitle.share_known_words` açılınca `true` ve yakalanan lemmalar (`key`, `pick up`, `light`, `train`, `station`) `learning` olarak |
 
 Ses: eklenti satırın sesini yalnız Media Source Extensions ile oynayan oynatıcıların tamponundan keser (`src/audio/bufferedAudio.ts`); düz dosya oynatan taklit sayfada ses yoktur, ayrıca "Ses" seçeneği eklentide **varsayılan kapalı**. Bu denemede ses gönderilmedi; ses yükleme yolu (`/v1/media` `audio/wav`, bayt bayt saklama) `tools/subtitle-contract` ile eklentinin kendi istemcisinden zaten sınanıyor.
 
@@ -65,18 +66,31 @@ Gözlemler (hata değil, sahibin bileceği şeyler):
 - **Konsol:** sayfada ve arka planda hata yok; ayarlar sayfasında yalnız kesilen yazı tipi isteğinin iki `ERR_FAILED`'ı.
 - **Kelimelerde sözcük türü boş:** Google sözlük yanıtında tür olduğu hâlde kelime yakalamalarında `term.pos` `null` geliyor (deyimde `phrase`). Eklenti tarafı; Flashcard boş alanı olduğu gibi saklar.
 
-## 4. Eklenti deposunda gereken değişiklik: Flashcard'dan bilinen kelimeler
+## 4. Eklenti deposunda gereken değişiklik: Flashcard'dan bilinen kelimeler — yama hazır (v1.4.1 H4)
 
-Eklenti bugün `known-words`'ü hiç çağırmıyor: istemcide `FlashcardsApi.knownWords(lang, cursor)` (`src/flashcards/api.ts`) var ama kimse kullanmıyor. `subtitle.share_known_words` açıkken altyazıdaki kelimelerin Flashcard'a göre boyanması için, Anki'nin "Anki'den oku" yolunun (`syncAnkiFx`) aynısı gerekir:
+Eklenti `known-words`'ü kendiliğinden çağırmıyordu (istemcide `FlashcardsApi.knownWords` vardı, kimse kullanmıyordu). Değişiklik eklenti deposuna dokunmadan, **yama** olarak yazıldı: [`tools/subtitle-patches/0001-flashcard-known-words.patch`](../tools/subtitle-patches/README.md), taban eklenti commit'i **`7fe2843d9d52760bd589403e226b2fa506a8a0da`** (3.1.3), `git apply` (ya da `git am`) ile uygulanır. Eklentinin kendi kurallarıyla (Effector modeli, Türkçe arayüz, Vitest, yedek kuralı: yeni kalıcı depo yok, kelimeler zaten yedeklenen `persist:words`'te):
 
-1. `src/flashcards/messages.ts` — yeni istek `{ action: "knownWords"; lang: string }`, yanıt `{ shared: boolean; words: TKnownWord[] }`.
-2. `src/flashcards/background.ts` `createFlashcards().handle()` — `case "knownWords"`: kayıtlı sunucuyla (`persist:flashcardsServer`) önce `api.me()` (`features.known_words === false` → `{ shared: false, words: [] }`: "Flashcard'da paylaşım kapalı" diyebilmek için; sunucunun `shared` alanını istemci tipi `TKnownWord`/yanıt tipi okumaz), sonra `next_cursor` bitene kadar `api.knownWords(lang, cursor)` sayfaları (500'er). İstek arka planda olmalı: anahtar ve CORS orada.
-3. `src/models/words/index.ts` — `flashcardsSyncRequested` + `syncFlashcardsFx`, `syncAnkiFx`'in kopyası: `status` doğrudan sunucudan (`known`/`learning`; Flashcard zaten `words.known_interval_days`, varsayılan 21 gün, ile karar verir), anahtar `wordKey(language, lemma)` (Flashcard lemması zaten sözlük hâli; Anki yolundaki `normalizeWord` + `requestWordRanks` eşlemesi yine uygulanmalı), kullanıcının kendi "biliyorum" işareti korunur, `anki: true` yerine yeni bir `flashcards: true` işareti.
-4. `src/utils/words.ts` `TSavedWord` — `flashcards?: boolean`; `WordStatus.tsx`'teki `markedStatus` bu işareti Anki'ninki gibi saymalı.
-5. `src/pages/content/components/Settings/Words.tsx` (satır ~139, "Anki'den oku") — öğrenme servisi `subtitle-cards` iken **"Flashcard'dan oku"** düğmesi; istenirse video açılışında kendiliğinden (günde bir).
-6. Hata metinleri için: `src/flashcards/api.ts`'te 401/403 mesajı `error.code`'a göre Türkçe kurulabilir (sunucu `invalid`/`revoked` ayrımını mesajda veriyor).
+| Parça (eklentide) | Ne |
+|---|---|
+| `src/flashcards/background.ts` `knownWords` mesajı, `readKnownWords` | kayıtlı sunucu + anahtarla önce `/v1/me` (`features.known_words === false` → paylaşım kapalı, kelime istenmez), sonra `next_cursor` bitene kadar `GET /v1/known-words` (en çok 200 sayfa; görülmüş imleç döngüyü keser); bir sayfa `shared: false` derse de kapalı; yalnız `known`/`learning` |
+| `src/flashcards/api.ts` | `knownWords()` sayfanın `shared` alanını da döndürür (söylemeyen sunucu paylaşıyor sayılır) |
+| `src/models/words/index.ts` `syncFlashcardsFx`, `flashcardsSyncRequested` | Anki ile ortak `mergeReadWords`: `normalizeWord` + `wordRanks` ile sözlük hâli, **"biliyorum" işaretin kazanır**, diğerleri Flashcard'ın durumunu ve `flashcards: true` işaretini alır; okuma sürerken yapılan düzenlemeler korunur. Dil: oynayan altyazınınki; ayarlar sayfasında seviyesi ya da kelimesi olan her dil |
+| `Words.tsx` `FlashcardsRow`; `options/sections.tsx` | Öğrenme servisi **Subtitle Kartları** iken Kelimeler sekmesinde ("Anki'den oku"nun yerinde) ve ayarlar sayfasının Öğrenme servisi bölümünde **"Flashcard'dan oku"**; sonuç satırın altında: "N kelime okundu, M değişti" / "Flashcard kelimelerini paylaşmıyor. Flashcard'da Subtitle ekranında “Bildiğin kelimeleri Subtitle ile paylaş”ı aç, sonra yeniden oku." / hatanın Türkçe nedeni |
 
-Flashcard tarafı hazır ve bu denemede eklentinin kökeninden doğrulandı (§2 adım 11). Uygulama tarafında değişiklik gerekmez.
+Eklenti kopyasında: `pnpm test` 137 dosya / 1528 test (12'si yeni), `pnpm lint` 0 hata, `pnpm build` geçti.
+
+**Gerçek tarayıcıda** (`SUBTITLE_PATCH=tools/subtitle-patches/0001-flashcard-known-words.patch node tools/subtitle-real-browser/run.mjs`: kopya klonlanır, yama `git apply` ile uygulanır, derlenir; derlemede düğme varsa iki adım daha koşar; 15/15 geçti):
+
+| # | Adım | Eklentinin arayüzü | Kalıcı sonuç |
+|---|---|---|---|
+| 12 | "seven" yalnız Flashcard'a yakalanır (`POST /subtitle/v1/captures`, başka bir tarayıcıdan gelmiş gibi); paylaşım **kapalı**; ayarlar sayfasında **Flashcard'dan oku** | "Flashcard kelimelerini paylaşmıyor. …" | eklentinin `persist:words`'ünde Flashcard'dan gelen kelime yok, `en:seven` yok; altyazıda "seven" boyanmamış |
+| 13 | `subtitle.share_known_words` açılır (adım 11) → **Flashcard'dan oku** | "6 kelime okundu, 6 değişti" | `en:seven` = `learning`, `flashcards: true`; **+** ile eklenen 5 kelime öğrenilen kalır (işaretlenir); video sekmesinde (yeniden yüklemeden, `chrome.storage` ile) "seven" `es-sub-item-learning`, turuncu |
+
+"6 değişti": **+** ile eklenenler zaten öğreniliyordu, okuma onlara yalnız `flashcards` işaretini ekledi (Anki yolu da böyle sayar).
+
+Flashcard tarafında değişiklik gerekmedi. `tools/subtitle-contract/check.mjs` artık yamalı istemcinin `shared` alanını da kabul eder (yamasız istemciyle aynı sonuç).
+
+Bilinçli olarak yapılmayanlar (eklenti sahibinin kararı): video açılışında kendiliğinden okuma (günde bir), Flashcard'dan silinen kelimenin eklentiden düşmesi (Anki yolu da yapmıyor), 401/403 mesajlarının `error.code`'a göre Türkçeleştirilmesi (sunucu `invalid`/`revoked` ayrımını mesajda veriyor).
 
 ## 5. Hâlâ sahibin kendi tarayıcısını isteyenler
 

@@ -595,6 +595,7 @@ try {
       assert.equal(notesOf('seven').encounters.length, 1);
       const said = await readFromFlashcard();
       report.flashcard_read_off = said;
+      if (SHOTS) await options.locator('.es-flashcards-read').screenshot({ path: join(SHOTS, '04-flashcard-read-off.png') });
       assert.match(said, /paylaşmıyor/, said);
       const words = await persistedWords();
       report.words_after_read_off = Object.keys(words);
@@ -635,6 +636,7 @@ try {
     await step('"Flashcard\'dan oku", sharing on: the word learned in Flashcard is colored in the subtitles', async () => {
       const said = await readFromFlashcard();
       report.flashcard_read_on = said;
+      if (SHOTS) await options.locator('.es-flashcards-read').screenshot({ path: join(SHOTS, '05-flashcard-read-on.png') });
       assert.match(said, /kelime okundu, \d+ değişti$/, said);
       const words = await persistedWords();
       report.words_after_read_on = words;
@@ -649,7 +651,7 @@ try {
         await sleep(500);
       }
       report.seven_class_on = cls;
-      if (SHOTS) await page.screenshot({ path: join(SHOTS, '04-flashcard-word-colored.png') });
+      if (SHOTS) await page.screenshot({ path: join(SHOTS, '06-flashcard-word-colored.png') });
     });
   }
 
