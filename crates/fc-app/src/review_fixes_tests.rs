@@ -197,6 +197,10 @@ fn replayable_methods_are_undoable_commands_without_side_channels() {
                 // v1.4: an automatic meaning suggestion a job writes (no inverse), never an
                 // inverse itself.
                 AiMeaningStoreSuggestion::NAME,
+                // v1.4 W4: media origin (no inverse, never in the oplog) and the rollback
+                // of an unfinished audio fill (like `io.import.discard`).
+                MediaOriginsRecord::NAME,
+                MediaAudioFillRollback::NAME,
             ]
             .contains(&d.name)
         {

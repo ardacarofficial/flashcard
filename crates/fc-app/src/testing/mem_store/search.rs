@@ -80,6 +80,39 @@ impl MemTx<'_> {
                 .cloned()
                 .collect();
         }
+        // v1.4 W4: the stored media files the note references, with their origin.
+        let mut seen = std::collections::BTreeSet::new();
+        for v in note.fields.values() {
+            for h in fc_core::content::refs::extract_media(v) {
+                if !seen.insert(h.clone()) {
+                    continue;
+                }
+                let Ok(Some(m)) = self.get_media(&h) else {
+                    continue;
+                };
+                let kind = match fc_core::content::media::media_kind(&m.mime) {
+                    Some(fc_core::content::media::MediaKind::Audio) => {
+                        fc_core::query::lang::MediaKind::Audio
+                    }
+                    Some(fc_core::content::media::MediaKind::Image) => {
+                        fc_core::query::lang::MediaKind::Image
+                    }
+                    _ => continue,
+                };
+                let origin = self
+                    .media_origins_of(std::slice::from_ref(&h))
+                    .ok()
+                    .and_then(|r| r.first().map(|r| r.origin))
+                    .unwrap_or(
+                        if fc_core::query::lang::is_video_media(m.original_name.as_deref()) {
+                            fc_core::content::media::MediaOrigin::Original
+                        } else {
+                            fc_core::content::media::MediaOrigin::User
+                        },
+                    );
+                f.media.push((kind, origin));
+            }
+        }
         f
     }
 

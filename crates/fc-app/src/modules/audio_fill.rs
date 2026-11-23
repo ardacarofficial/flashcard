@@ -326,6 +326,39 @@ impl Speech for ViaQuery<'_, '_> {
     }
 }
 
+/// Providers and voices read up front (the job plans inside a read snapshot and must not
+/// call methods while it is open).
+struct Prefetched {
+    providers: Vec<TtsProviderDto>,
+    voices: HashMap<String, Vec<VoiceDto>>,
+}
+
+impl Prefetched {
+    fn new(speech: &dyn Speech) -> AppResult<Self> {
+        let providers = speech.providers()?;
+        let voices = providers
+            .iter()
+            .filter_map(|p| speech.voices(&p.id).ok().map(|v| (p.id.clone(), v)))
+            .collect();
+        Ok(Self { providers, voices })
+    }
+}
+
+impl Speech for Prefetched {
+    fn providers(&self) -> AppResult<Vec<TtsProviderDto>> {
+        Ok(self.providers.clone())
+    }
+    fn voices(&self, provider: &str) -> AppResult<Vec<VoiceDto>> {
+        self.voices
+            .get(provider)
+            .cloned()
+            .ok_or_else(|| internal("no voices"))
+    }
+    fn synthesize(&self, _: Synthesize) -> AppResult<AudioDto> {
+        Err(internal("prefetched speech does not synthesise"))
+    }
+}
+
 struct ViaJob<'a, 'b>(&'a JobContext<'b>);
 
 impl Speech for ViaJob<'_, '_> {
@@ -515,8 +548,8 @@ fn plan(
     let mut problems: BTreeMap<(String, String), u32> = BTreeMap::new();
     let mut steps = Vec::new();
     for note in notes {
-        if !types.contains_key(&note.notetype_id) {
-            types.insert(note.notetype_id, reads.get_notetype(note.notetype_id)?);
+        if let std::collections::hash_map::Entry::Vacant(e) = types.entry(note.notetype_id) {
+            e.insert(reads.get_notetype(note.notetype_id)?);
         }
         let Some(nt) = types.get(&note.notetype_id).and_then(Option::as_ref) else {
             continue;
@@ -854,7 +887,8 @@ impl FillJob {
                 if let Some(h) = cache.get(&cache_id) {
                     return Ok(Made::Hash(h.clone()));
                 }
-                if let Some(h) = ctx.read()?.find_tts_media(key)? {
+                let cached = ctx.read()?.find_tts_media(key)?;
+                if let Some(h) = cached {
                     cache.insert(cache_id, h.clone());
                     return Ok(Made::Hash(h));
                 }
@@ -907,9 +941,10 @@ impl JobHandler for FillJob {
         let req: FillAudio = crate::support::from_json(&payload)?;
         ctx.ensure_module_enabled(ID)?;
         ctx.report(None, "audio_fill.job.planning");
+        let speech = Prefetched::new(&ViaJob(ctx))?;
         let (steps, ffmpeg) = {
             let reads = ctx.read()?;
-            let (_, steps) = plan(&*reads, &ViaJob(ctx), &req, ctx.now())?;
+            let (_, steps) = plan(&*reads, &speech, &req, ctx.now())?;
             let ffmpeg = if req.video.is_some() {
                 let stored = crate::settings::resolve_stored(
                     &*reads,

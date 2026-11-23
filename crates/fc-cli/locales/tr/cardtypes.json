@@ -12,5 +12,9 @@
   "oplog.summary.flags.update": "Bayrak değiştirildi: {flag}",
   "oplog.summary.cards.set_flag": "{count} kart bayraklandı",
   "oplog.summary.cards.set_flags": "{count} kartın bayrakları değişti",
-  "oplog.summary.cards.set_user_note": "Kart notu düzenlendi: {text}"
+  "oplog.summary.cards.set_user_note": "Kart notu düzenlendi: {text}",
+  "oplog.summary.media.origin.record": "Medya dosyasının kaynağı kaydedildi",
+  "oplog.summary.media.audio.fill": "{count} karta ses eklendi",
+  "oplog.summary.media.audio.attach": "Karta ses eklendi",
+  "oplog.summary.media.audio.fill_rollback": "Yarım kalan ses tamamlama geri alındı"
 }

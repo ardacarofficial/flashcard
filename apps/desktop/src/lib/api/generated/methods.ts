@@ -43,6 +43,7 @@ import type { AttributeRef } from "./AttributeRef";
 import type { AttributeTemplateList } from "./AttributeTemplateList";
 import type { AttributeValues } from "./AttributeValues";
 import type { AudioDto } from "./AudioDto";
+import type { AudioFillPreview } from "./AudioFillPreview";
 import type { AutoBackupStart } from "./AutoBackupStart";
 import type { BacklinksOf } from "./BacklinksOf";
 import type { BackupInfo } from "./BackupInfo";
@@ -124,6 +125,7 @@ import type { ExpireCard } from "./ExpireCard";
 import type { ExportLogs } from "./ExportLogs";
 import type { ExtractAiSource } from "./ExtractAiSource";
 import type { ExtractClip } from "./ExtractClip";
+import type { FillAudio } from "./FillAudio";
 import type { FindReplace } from "./FindReplace";
 import type { FlagDto } from "./FlagDto";
 import type { FlagList } from "./FlagList";
@@ -166,6 +168,7 @@ import type { ListAttributes } from "./ListAttributes";
 import type { ListExams } from "./ListExams";
 import type { ListGoals } from "./ListGoals";
 import type { ListInbox } from "./ListInbox";
+import type { ListMediaOrigins } from "./ListMediaOrigins";
 import type { ListNotes } from "./ListNotes";
 import type { ListOplog } from "./ListOplog";
 import type { ListReadingItems } from "./ListReadingItems";
@@ -196,6 +199,7 @@ import type { McpToolList } from "./McpToolList";
 import type { MediaContent } from "./MediaContent";
 import type { MediaDto } from "./MediaDto";
 import type { MediaItems } from "./MediaItems";
+import type { MediaOriginList } from "./MediaOriginList";
 import type { MediaRef } from "./MediaRef";
 import type { MergeAttributeOptions } from "./MergeAttributeOptions";
 import type { MergeSubtitleNotes } from "./MergeSubtitleNotes";
@@ -616,6 +620,9 @@ export interface Methods {
   "tts.providers": { kind: "query"; request: Empty; response: TtsProviderList };
   "tts.voices": { kind: "query"; request: ListVoices; response: VoiceList };
   "tts.synthesize": { kind: "query"; request: Synthesize; response: AudioDto };
+  "media.origins": { kind: "query"; request: ListMediaOrigins; response: MediaOriginList };
+  "media.audio.fill_preview": { kind: "query"; request: FillAudio; response: AudioFillPreview };
+  "media.audio.fill": { kind: "command"; request: FillAudio; response: JobDto };
   "modes.learn.answer": { kind: "command"; request: LearnAnswer; response: LearnAnswerResult };
   "modes.quiz.answer": { kind: "command"; request: QuizAnswer; response: QuizAnswerResult };
   "modes.quiz.result": { kind: "query"; request: QuizRef; response: QuizResultDto };
@@ -947,6 +954,9 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "tts.providers": "query",
   "tts.voices": "query",
   "tts.synthesize": "query",
+  "media.origins": "query",
+  "media.audio.fill_preview": "query",
+  "media.audio.fill": "command",
   "modes.learn.answer": "command",
   "modes.quiz.answer": "command",
   "modes.quiz.result": "query",

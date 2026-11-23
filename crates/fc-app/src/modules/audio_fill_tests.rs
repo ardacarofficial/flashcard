@@ -148,7 +148,7 @@ fn run(t: &TestApp, req: FillAudio) -> AudioFillReport {
     let j = t.ok::<MediaAudioFill>(req);
     t.app.run_pending_jobs().unwrap();
     let j = t.ok::<JobsGet>(JobRef { id: j.id });
-    assert_eq!(j.status, JobStatus::Done, "{j:?}");
+    assert_eq!(j.status, JobStatus::Succeeded, "{j:?}");
     serde_json::from_value(j.result.unwrap()).unwrap()
 }
 
@@ -194,7 +194,7 @@ fn the_film_sound_is_original_and_missing_sound_is_filled_once_per_word(store: A
         id: a,
         deck_id: None,
         fields,
-        tags: n.tags.clone(),
+        tags: n.tags.iter().map(|t| t.as_str().to_owned()).collect(),
         attributes: vec![],
     });
     // B, C: the same word with two meanings (two notes), no sound → TTS once.

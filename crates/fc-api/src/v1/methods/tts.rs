@@ -16,7 +16,7 @@ methods! {
     /// Where stored media files came from (original / clip / tts / user).
     MediaOrigins = "media.origins", Query, "media", "media:read", Public, undo: false, ListMediaOrigins => MediaOriginList;
     /// Records where a stored media file came from (derived metadata, like a note's origin).
-    MediaOriginsRecord = "media.origin.record", Command, "media", "media:write", Internal, undo: false, MediaOriginDto => Empty;
+    MediaOriginsRecord = "media.origin.record", Command, "media", "media:write", Internal, undo: true (replay: false), MediaOriginDto => Empty;
     /// What `media.audio.fill` would do: how many notes, which source each would get.
     MediaAudioFillPreview = "media.audio.fill_preview", Query, "audio_fill", "media:read", Public, undo: false, FillAudio => AudioFillPreview;
     /// Fills missing sound (original, else a clip of a local video, else TTS) as a cancellable job; one undo step.
