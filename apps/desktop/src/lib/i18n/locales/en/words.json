@@ -1,4 +1,7 @@
 {
+  "nav": {
+    "words": "My words"
+  },
   "modules": {
     "words": {
       "name": "Word index",
@@ -40,6 +43,85 @@
   "words": {
     "job": {
       "rebuilding": "Rebuilding the word index…"
+    },
+    "screen": {
+      "title": "My words",
+      "lead": "Type a word to find it; click it to see its meaning, its sentence and how well you know it.",
+      "search_label": "Search words",
+      "search_placeholder": "Search words",
+      "clear_search": "Clear search",
+      "filters": "By status",
+      "all": "All",
+      "status": {
+        "new": "New",
+        "learning": "Learning",
+        "known": "Known",
+        "ignored": "Ignored"
+      },
+      "language": "Language",
+      "sort": {
+        "label": "Sort",
+        "key": "A–Z",
+        "rank": "Heard most",
+        "band": "Level"
+      },
+      "list_label": "Words",
+      "rank": "#{rank}",
+      "rank_title": "Frequency rank",
+      "cards": "{count, plural, one {# card} other {# cards}}",
+      "no_cards": "no cards",
+      "more": "Show more",
+      "shown": "{shown} words shown",
+      "keys": {
+        "search": "search",
+        "move": "move",
+        "open": "open",
+        "close": "close"
+      },
+      "unassigned": "{count, plural, one {# card has} other {# cards have}} no language: pick the deck's language in Settings so they count here too.",
+      "empty": {
+        "title": "Your word list is empty",
+        "body": "Every word you add lives here: its meaning, its line from the show and how well you know it. Add your first word from Add.",
+        "action": "Add a word"
+      },
+      "no_match": {
+        "title": "No “{query}” here",
+        "body": "Check the spelling or pick another status."
+      },
+      "filter_empty": {
+        "title": "No words with this status",
+        "body": "Pick another status."
+      },
+      "load_failed": "Couldn't load your words.",
+      "retry": "Try again",
+      "detail": {
+        "label": "Word: {word}",
+        "close": "Close",
+        "status": "Status",
+        "say": {
+          "new": "You haven't studied this word yet.",
+          "learning": "You're learning it: it becomes known as you study its card.",
+          "known": "You know it: its card went up to {days} days between reviews.",
+          "known_plain": "You know it.",
+          "known_manual": "You said you know it; if it has a card, it's still asked.",
+          "ignored": "You ignored it: it doesn't show up in reading or in the counts."
+        },
+        "mark_known": "I already know it",
+        "relearn": "Learn it again",
+        "ignore": "Ignore",
+        "cards": "Cards",
+        "open_note": "Open in Search",
+        "no_cards": "This word has no cards.",
+        "interval": "{days} day interval",
+        "level": "Frequency and level",
+        "rank_line": "Number {rank} among the words heard most in films and shows",
+        "band_line": "Level {band}",
+        "estimated": "estimated",
+        "no_level": "No frequency data for this word.",
+        "seen": "Where you saw it",
+        "no_seen": "You haven't caught it in a video yet.",
+        "at": "at {time}"
+      }
     }
   }
 }

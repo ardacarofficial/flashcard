@@ -88,6 +88,8 @@ Oluştur sayfası "Nasıl eklemek istersin?" diye açılır: **Tek kart** (Hızl
 - **Hızlı Ekle** örnek alanı olmayan bir türdeyken cümle yazmak isteyene "Kelime kartı" türünü tek tıkla önerir.
 - **Oluştur › Yapay zeka** yalnız "Yapay zekayla kart üret"tir (deste formdaki bir alan; sağlayıcı yoksa "Sağlayıcı bağla" Ayarlar'a götürür). Sağlayıcılar ve kullanım **Ayarlar › Bağlantılar › Yapay zeka**'dadır.
 
+**v1.4 (E3, prototip `prototypes/v14/olustur-ara-istatistik.html`):** başlık **Ekle**; sekmelerin yerine solda bir **yollar rayı** (`features/notes/AddWays.svelte`), iki grup: *Kendin yaz* (Tek kelime · Liste yapıştır · Satır satır) ve *Bir yerden getir* (Dosyadan · Yakalananlar (bekleyen sayısıyla) · Bir metinden seç · Yapay zekayla · Hazır desteler). Her yol tek satırla ne yaptığını söyler. Bu sayfada açılan yollar dikey bir sekme listesidir (`role="tablist"`, `aria-orientation="vertical"`, `↑`/`↓` Home/End); kendi sayfası olan yollar (Gelen kutusu, Okuma, Yapay zeka, Başlangıç desteleri) ↗ işaretli düğmelerdir ve o sayfayı açar. Modülü kapalı yol çizilmez. 1000 px altında ray, açıklamasız sarmalanan bir satıra döner. Hızlı Ekle penceresi (`N`) kaldı (prototip sorusu 5 için B; kapatmak kabuk işi).
+
 ### 1.4 Ayarlar kiti: ayar öğretir (`features/core/kit`)
 
 Kurallar (her ayar sayfası uyar):
