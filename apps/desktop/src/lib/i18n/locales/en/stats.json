@@ -90,7 +90,12 @@
       "refresh_cache": "Refresh the statistics cache",
       "apply_to_leeches": "Act on every card I keep struggling with",
       "today": "How am I doing today?",
-      "struggles": "What am I struggling with?"
+      "struggles": "What am I struggling with?",
+      "leech_repairs": {
+        "plan": "Why do I keep forgetting this card?",
+        "apply": "Repair a card I keep forgetting",
+        "list": "Did the repairs help?"
+      }
     },
     "planning": {
       "exams": {

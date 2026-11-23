@@ -69,7 +69,7 @@ pub const RELEASE_RANGES: &[(&str, std::ops::RangeInclusive<u32>)] = &[
     ("v1.3", 1300..=1399),
     // v1.4: 1410–1429 word index (A3), 1430–1439 subtitle capture diagnostics (A5), 1440–1459
     // word data: frequency, CEFR band, families (B2; 1450–1459 went to W2: meaning in
-    // context and accepted answers); the rest by worker brief.
+    // context and accepted answers), 1470–1479 leech repairs (W3); the rest by worker brief.
     ("v1.4", 1400..=1499),
 ];
 

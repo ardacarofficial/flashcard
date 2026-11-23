@@ -6,6 +6,10 @@
     "subtitle": {
       "name": "Subtitle eklentisi",
       "description": "Varsayılan kapalı. Video altyazılarında + ile eklediğin kelimeler (Subtitle tarayıcı eklentisi) bir destede kart olur: cümlesi, çevirisi, ekran görüntüsü ve sesiyle. Yalnız bu bilgisayar, burada oluşturduğun bir erişim anahtarıyla bağlanabilir."
+    },
+    "examples": {
+      "name": "En iyi örnek",
+      "description": "Bir kelimenin sahnelerini ne kadar kolay öğrettiklerine göre sıralar: kelimenin dışındaki bilinmeyen kelimeler (isimler sayılmaz), tam cümle mi yarım satır mı, ses ve resim, çevresindeki kelimelerin yaygınlığı. Nedenini söyler, iki kez yakalanan aynı repliği fark eder."
     }
   },
   "settings": {
@@ -23,6 +27,10 @@
         "description": "Başka bir örnek: kartı olan bir kelimenin aynı anlamdaki yeni sahnesi o karta başka bir örnek olarak eklenir (yeni kart yok, planı değişmez). Farklı bir anlam kendi kartını alır ve sana bir kez sorulur. Yeni kart: her replik yeni bir kart olur (v1.4 öncesi gibi).",
         "add_example": "Başka bir örnek",
         "always_new_card": "Yeni kart"
+      },
+      "auto_best_example": {
+        "label": "En iyi örneği kendiliğinden göster",
+        "description": "Kapalı: bir kelimenin yeni sahnesi yalnızca başka bir örnek olarak eklenir; kart gösterdiği örneği korur. Açık: yeni sahne açıkça daha kolay öğretiyorsa (daha az bilinmeyen kelime, tam cümle, ses ve resim) kart onu gösterir. Geri al eskisini getirir; kartın takvimi hiç değişmez."
       }
     }
   },
@@ -45,8 +53,13 @@
         "set_primary": "Bu örneği kartta göster",
         "move": "Örneği başka bir karta taşı",
         "merge_notes": "Bir kelimenin iki kartını birleştir",
-        "resolve": "Aynı anlam mı, farklı mı?"
+        "resolve": "Aynı anlam mı, farklı mı?",
+        "rank": "Bir kelimenin örneklerini sırala",
+        "suggest_primary": "Kart için daha iyi bir örnek öner"
       }
+    },
+    "examples": {
+      "rank_sentences": "Bir kelime için cümleleri sırala"
     }
   },
   "errors": {

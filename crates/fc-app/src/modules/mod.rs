@@ -64,4 +64,5 @@ modules! {
     words,
     word_data,
     accepted_answers,
+    examples,
 }
