@@ -212,7 +212,7 @@ pub(crate) fn status(
             }));
         }
     }
-    copies.sort_by(|a, b| b.verified_at.0.cmp(&a.verified_at.0));
+    copies.sort_by_key(|c| std::cmp::Reverse(c.verified_at.0));
     let last_failure = data_dir.and_then(|d| load_status(d).mirror_failure);
     Ok(Some(BackupMirrorStatus {
         folder: dir.to_string_lossy().into_owned(),
