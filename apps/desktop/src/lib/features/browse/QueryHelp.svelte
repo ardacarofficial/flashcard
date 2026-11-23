@@ -21,9 +21,15 @@
     { q: 'browse.syntax.phrase_q', d: 'browse.syntax.phrase_d' },
     // v1.4 language-learning keys (docs/02 §9.1)
     { q: 'browse.syntax.word_q', d: 'browse.syntax.word_d' },
+    { q: 'browse.syntax.status_q', d: 'browse.syntax.status_d' },
+    { q: 'browse.syntax.lang_q', d: 'browse.syntax.lang_d' },
     { q: 'browse.syntax.seen_q', d: 'browse.syntax.seen_d' },
     { q: 'browse.syntax.from_q', d: 'browse.syntax.from_d' },
+    { q: 'browse.syntax.source_q', d: 'browse.syntax.source_d' },
     { q: 'browse.syntax.media_q', d: 'browse.syntax.media_d' },
+    { q: 'browse.syntax.image_q', d: 'browse.syntax.image_d' },
+    { q: 'browse.syntax.freq_q', d: 'browse.syntax.freq_d' },
+    { q: 'browse.syntax.cefr_q', d: 'browse.syntax.cefr_d' },
   ];
 </script>
 

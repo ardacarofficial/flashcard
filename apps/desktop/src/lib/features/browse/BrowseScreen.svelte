@@ -8,7 +8,7 @@
 -->
 <script lang="ts">
   import { formatDate } from '$lib/format';
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { api, type ApiError } from '$lib/api';
   import type {
     AttributeDefDto,
@@ -53,6 +53,7 @@
   import type { ScreenCtx } from '../types';
   import BulkBar from './BulkBar.svelte';
   import CardInfoSheet from './CardInfoSheet.svelte';
+  import FilterChips from './FilterChips.svelte';
   import { COLUMNS, loadColumns, saveColumns, stateLabel, stateTone, type ColumnId } from './columns';
   import { typingTarget } from './palette';
   import QueryHelp from './QueryHelp.svelte';
@@ -310,6 +311,21 @@
     void run();
   }
 
+  /** A filter chip rewrote the query: show it in the field and run it. */
+  function setFromChip(q: string) {
+    query = q;
+    void check();
+    void run();
+  }
+
+  /** A text chip wrote `key:` — the caret goes after it so the value is typed right there. */
+  async function typeFromChip(q: string, caret: number) {
+    query = q;
+    await tick();
+    queryInput?.focus();
+    queryInput?.setSelectionRange(caret, caret);
+  }
+
   function clearQuery() {
     query = '';
     void run();
@@ -462,6 +478,7 @@
     </Menu>
     <Button type="submit" variant="primary" size="lg" kbd="Enter">{t('browse.run')}</Button>
   </form>
+  <FilterChips {query} onset={setFromChip} ontext={(q, caret) => void typeFromChip(q, caret)} />
   {#if helpOpen}
     <QueryHelp onpick={(q) => ((query = q), void run())} onclose={() => ((helpOpen = false), queryInput?.focus())} />
   {/if}
@@ -476,7 +493,7 @@
           onchange={(on) => (on ? void selectAll() : clearSelection())}
         />
       {/if}
-      <span class="summary" aria-live="polite">
+      <span class="summary" aria-live="polite" data-testid="browse-summary">
         {notesOnly ? t('browse.results_notes', { count: total }) : t('browse.results', { count: total })}
       </span>
       {#if loading && loaded}<span class="busy" aria-hidden="true"></span>{/if}
