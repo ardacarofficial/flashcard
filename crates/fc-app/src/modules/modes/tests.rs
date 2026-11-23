@@ -15,7 +15,8 @@
 //! * inline card creation during study → [`inline_cards_during_study_are_one_undo_step`];
 //! * every mode is a switchable module → [`modes_are_switchable_modules`];
 //! * v1.1 match: rounds, picks, backend clock, best time, practice reviews, undo →
-//!   [`match_rounds_are_timed_practice_and_undoable`].
+//!   [`match_rounds_are_timed_practice_and_undoable`];
+//! * v1.4 typed answers kept with their reviews (`typed_tests`).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use crate::{App, AppDeps};
@@ -315,6 +316,7 @@ pub fn learn_mode_learns_cards_at_every_stage(f: &Factory) {
         rating: Rating::Good,
         duration_ms: 1,
         reveal_ms: None,
+        typed_answer: None,
     });
     assert_eq!(e.code, ErrorCode::ValidationSessionMode);
     // A multiple-choice question has 4 distinct options, one of them right.
@@ -410,7 +412,7 @@ pub fn learn_choice_answers_do_not_rate_reviewed_cards(f: &Factory) {
     // Graduate every card to review ("Easy" on a new card).
     let mut s = t.start(StudyKind::Normal, StudyMode::Scheduled, d.id, None, None);
     while let Some(c) = s.current.clone() {
-        s = t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c.card_id, rating: Rating::Easy, duration_ms: 1_000, reveal_ms: None });
+        s = t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c.card_id, rating: Rating::Easy, duration_ms: 1_000, reveal_ms: None, typed_answer: None });
     }
     t.end(s.id);
     assert!(cards.iter().all(|c| t.card(*c).scheduling.state == CardState::Review));
@@ -667,6 +669,7 @@ pub fn confidence_levels_map_onto_fsrs_ratings(f: &Factory) {
             rating: mapped[level as usize - 1],
             duration_ms: 2_000,
             reveal_ms: Some(1_000),
+            typed_answer: None,
         });
     }
     for c in &a {
@@ -729,6 +732,7 @@ pub fn timed_mode_is_enforced_on_the_backend_clock(f: &Factory) {
         rating: Rating::Good,
         duration_ms: 1_000,
         reveal_ms: None,
+        typed_answer: None,
     }));
     let s = t.start_timer(&s);
     let started = t.now();
@@ -748,6 +752,7 @@ pub fn timed_mode_is_enforced_on_the_backend_clock(f: &Factory) {
         rating: Rating::Good,
         duration_ms: 5_000,
         reveal_ms: None,
+        typed_answer: None,
     });
     assert_eq!(t.reviews(c1)[0].mode, "timed");
     let c2 = s.current.clone().unwrap().card_id;
@@ -766,6 +771,7 @@ pub fn timed_mode_is_enforced_on_the_backend_clock(f: &Factory) {
         rating: Rating::Easy,
         duration_ms: 1_000,
         reveal_ms: None,
+        typed_answer: None,
     });
     assert_eq!(e.code, ErrorCode::ConflictTimeUp);
     // ...and a run-out countdown cannot be restarted (any client: desktop, local API, plugins).
@@ -817,6 +823,7 @@ pub fn timed_mode_is_enforced_on_the_backend_clock(f: &Factory) {
         rating: Rating::Good,
         duration_ms: 3_000,
         reveal_ms: None,
+        typed_answer: None,
     });
     // Options are validated: limits, kinds.
     let e = t
@@ -882,7 +889,7 @@ pub fn timed_countdown_belongs_to_the_card_on_screen(f: &Factory) {
     // A learning card coming back after "Again" starts a new countdown.
     let c = removed[1];
     t.advance(1_000);
-    let mut s2 = t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c, rating: Rating::Again, duration_ms: 1_000, reveal_ms: None });
+    let mut s2 = t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c, rating: Rating::Again, duration_ms: 1_000, reveal_ms: None, typed_answer: None });
     let mut guard = 0;
     while s2.current.as_ref().map(|x| x.card_id) != Some(c) {
         guard += 1;
@@ -892,7 +899,7 @@ pub fn timed_countdown_belongs_to_the_card_on_screen(f: &Factory) {
                 let id = other.card_id;
                 assert_eq!(deadline(&s2), None);
                 t.start_timer(&s2);
-                s2 = t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: id, rating: Rating::Easy, duration_ms: 1_000, reveal_ms: None });
+                s2 = t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: id, rating: Rating::Easy, duration_ms: 1_000, reveal_ms: None, typed_answer: None });
             }
             None => {
                 t.advance(60_000);
@@ -958,7 +965,7 @@ pub fn modes_log_their_own_review_mode_and_respect_daily_limits(f: &Factory) {
     };
     let s = t.start_timer(&t.start(StudyKind::Normal, StudyMode::Scheduled, d.id, None, Some(timed.clone())));
     let c = s.current.unwrap().card_id;
-    t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c, rating: Rating::Good, duration_ms: 1, reveal_ms: None });
+    t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c, rating: Rating::Good, duration_ms: 1, reveal_ms: None, typed_answer: None });
     t.end(s.id);
     assert_eq!(new_today(&t), 1);
     let scheduled_cards = t.all_cards();
@@ -968,7 +975,7 @@ pub fn modes_log_their_own_review_mode_and_respect_daily_limits(f: &Factory) {
     t.end(r.session.id);
     let s = t.start_timer(&t.start(StudyKind::Custom, StudyMode::Trial, d.id, None, Some(timed)));
     let c = s.current.unwrap().card_id;
-    t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c, rating: Rating::Good, duration_ms: 1, reveal_ms: None });
+    t.ok::<StudyAnswer>(AnswerCard { session_id: s.id, card_id: c, rating: Rating::Good, duration_ms: 1, reveal_ms: None, typed_answer: None });
     t.end(s.id);
     let s = t.start(StudyKind::Test, StudyMode::Scheduled, d.id, None, Some(StartModes {
         test: Some(TestOptions { questions: Some(3), kinds: None }),
@@ -1196,6 +1203,11 @@ pub fn match_rounds_are_timed_practice_and_undoable(f: &Factory) {
     assert_eq!(e.code, ErrorCode::ValidationSettingValue);
 }
 
+// v1.4 (Z1): typed answers (Cards type-in, Learn, Exam).
+#[path = "typed_tests.rs"]
+mod typed_tests;
+use typed_tests::*;
+
 macro_rules! modes_suite {
     ($factory:expr) => {
         modes_suite!(@tests $factory;
@@ -1209,6 +1221,8 @@ macro_rules! modes_suite {
             inline_cards_during_study_are_one_undo_step,
             modes_are_switchable_modules,
             match_rounds_are_timed_practice_and_undoable,
+            typed_answers_are_kept_for_cards_learn_and_exam,
+            typed_answers_are_capped_undone_and_switchable,
         );
     };
     (@tests $factory:expr; $($name:ident),* $(,)?) => {

@@ -26,7 +26,9 @@ answer_duration_ms?: number | null,
  */
 hints_used: number, 
 /**
- * The typed answer. Always `null` today: the study flow does not keep typed answers
- * (see `typed_answers_recorded`).
+ * What the user typed for this review (Cards type-in, Learn's written stage, the
+ * Exam's written questions; `typed_answers`, newest 20 per card). `null` when the card
+ * was not answered by typing, the text was not kept (`study.keep_typed_answers` off) or
+ * it was pruned.
  */
 typed_answer?: string | null, };

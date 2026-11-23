@@ -216,6 +216,7 @@ fn quiz_feedback_result_and_missed_restart() {
             rating: fc_core::card::Rating::Good,
             duration_ms: 1,
             reveal_ms: None,
+            typed_answer: None,
         });
         assert_eq!(e.code, ErrorCode::ValidationSessionMode);
         // First word wrong (the verdict and the right option come back at once).

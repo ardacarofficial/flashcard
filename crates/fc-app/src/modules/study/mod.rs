@@ -16,6 +16,7 @@
 //! * `plan` (v1.3): which cards a session takes — one planner for `study.start`,
 //!   `study.options` and the today counts of the deck list, so they always agree.
 //! * `options` (v1.3): `study.options`, the study launcher's data.
+//! * `typed` (v1.4): typed answers kept with their reviews (`study.keep_typed_answers`).
 
 mod cards;
 mod engine;
@@ -25,6 +26,7 @@ mod session;
 mod state_diff;
 #[cfg(test)]
 mod tests;
+pub(crate) mod typed;
 
 /// v1.3 today's queue for other modules (`decks.tree`/`decks.summaries` counts, the query
 /// language's study day): the same planner `study.start` uses.
@@ -76,6 +78,9 @@ pub const HINT_STRATEGY: &str = "study.hint_strategy";
 /// again, "I know it" = good) or `four` (again / hard / good / easy with next intervals).
 /// Presentation only: the ratings and the scheduler are the same either way.
 pub const ANSWER_BUTTONS: &str = "study.answer_buttons";
+/// v1.4: keep what the user typed for a written answer with its review (`typed_answers`,
+/// newest 20 per card), shown as a leech's evidence. Off: nothing new is kept.
+pub const KEEP_TYPED_ANSWERS: &str = "study.keep_typed_answers";
 
 /// Upper bound of [`LEARN_AHEAD_MINS`] (a day: learning steps are intraday).
 const MAX_LEARN_AHEAD_MINS: i64 = 24 * 60;
@@ -126,6 +131,7 @@ pub fn descriptor() -> ModuleDescriptor {
             )),
             advanced(bool_setting(FOLD_TURKISH, true, &[SettingScopeKind::App])),
             advanced(bool_setting(AUTO_GRADE, false, &[SettingScopeKind::App])),
+            bool_setting(KEEP_TYPED_ANSWERS, true, &[SettingScopeKind::App]),
             int_setting(DAY_START_HOUR, 4, 0, 23, true),
             int_setting(
                 LEARN_AHEAD_MINS,

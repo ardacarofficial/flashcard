@@ -90,4 +90,5 @@ domains! {
     meanings: MeaningRead, MeaningWrite;
     media_origins: MediaOriginRead, MediaOriginWrite;
     leech_repairs: LeechRepairRead, LeechRepairWrite;
+    typed_answers: TypedAnswerRead, TypedAnswerWrite;
 }

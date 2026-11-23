@@ -243,6 +243,7 @@ fn switching_profiles_drops_the_in_memory_queue_cache() {
         rating: Rating::Good,
         duration_ms: 1_000,
         reveal_ms: None,
+        typed_answer: None,
     });
     assert!(
         !crate::modules::study::queue_cache_is_empty(fx.t.app.registry()),

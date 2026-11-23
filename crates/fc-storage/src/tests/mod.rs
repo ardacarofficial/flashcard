@@ -29,6 +29,7 @@ mod store;
 mod study;
 mod subtitle;
 mod tags;
+mod typed_answers;
 mod ux;
 mod vocab_roles;
 mod word_data;

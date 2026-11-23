@@ -269,6 +269,10 @@
       "learn_ahead_mins": {
         "label": "Show learning cards early (minutes)",
         "description": "When nothing else is left, a learning card whose step is almost up comes up to this many minutes early, so you don't wait for nothing. If you would have to wait longer, you see \"Next card in …\". 0: always wait until the step is up."
+      },
+      "keep_typed_answers": {
+        "label": "Keep what you type",
+        "description": "On: what you type on a card, in Learn's written stage and in the Exam's written questions is kept with the review (the last 20 per card), so when you fix a hard card you see what you got wrong. It goes into backups, never into logs. Off: nothing new is kept; answers kept before stay."
       }
     }
   },

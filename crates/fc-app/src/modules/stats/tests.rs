@@ -175,6 +175,7 @@ impl T {
                 rating,
                 duration_ms: 3_000 + 1_000 * u32::try_from(n % 7).unwrap(),
                 reveal_ms: None,
+                typed_answer: None,
             });
             if mode == StudyMode::Scheduled {
                 // The button showed what the answer got (planning included).
@@ -314,6 +315,7 @@ pub fn cache_equals_recomputation(f: &Factory) {
         rating: Rating::Hard,
         duration_ms: 9_000,
         reveal_ms: None,
+        typed_answer: None,
     });
     t.refresh(0);
     let before_undo = t.total_reviews();
@@ -570,6 +572,7 @@ pub fn breakdown_cache_equals_recomputation(f: &Factory) {
         rating: Rating::Good,
         duration_ms: 3_000,
         reveal_ms: None,
+        typed_answer: None,
     });
     t.refresh(0);
     t.undo();
@@ -962,6 +965,7 @@ pub fn goals_progress_and_undo(f: &Factory) {
             rating: Rating::Easy,
             duration_ms: 60_000,
             reveal_ms: None,
+            typed_answer: None,
         });
     }
     let list = t.ok::<GoalsList>(ListGoals {
@@ -1436,6 +1440,7 @@ pub fn today_and_struggles(f: &Factory) {
             rating: Rating::Good,
             duration_ms: 1_000,
             reveal_ms: None,
+            typed_answer: None,
         });
     }
     assert_eq!(seen, [a, b].into_iter().collect());

@@ -394,11 +394,13 @@ fn answer(req: QuizAnswer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
             rating: if correct { Rating::Good } else { Rating::Again },
             duration_ms: req.duration_ms,
             reveal_ms: None,
+            typed_answer: None,
         },
         AnswerHooks {
             confidence: false,
             no_requeue: true,
             practice: !quiz.affects_schedule,
+            typed_correct: None,
             after: Some(Box::new(move |state: &mut SessionState, card_id, _, _| {
                 after.record(card_id, req.choice);
                 if let Some(m) = state.modes.as_mut() {

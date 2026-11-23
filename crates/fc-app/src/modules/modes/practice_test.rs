@@ -423,7 +423,8 @@ fn submit(req: SubmitTest, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
     let per = duration / u32::try_from(t.questions.len().max(1)).unwrap_or(u32::MAX);
     let sched = scheduler(ctx.reads())?;
     let mut written = Vec::new();
-    for (q, v) in t.questions.iter().zip(&graded.verdicts) {
+    let mut typed = crate::modules::study::typed::TypedUndo::default();
+    for ((q, v), r) in t.questions.iter().zip(&graded.verdicts).zip(&responses) {
         let Some(card) = ctx.reads().get_card(q.card_id)? else {
             continue;
         };
@@ -453,6 +454,19 @@ fn submit(req: SubmitTest, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
             created_at: ctx.now,
         };
         ctx.tx.insert_review_log(&review)?;
+        // v1.4: a written question's text is kept with its review (`study.keep_typed_answers`).
+        if let (QuestionKind::Written, Response::Text(text)) = (q.kind, r) {
+            typed.extend(crate::modules::study::typed::record(
+                ctx,
+                &crate::modules::study::typed::TypedAnswer {
+                    card_id: card.id,
+                    review_log_id: Some(review.id),
+                    mode: REVIEW_MODE,
+                    typed: text,
+                    correct: Some(matches!(v, Verdict::Correct | Verdict::Almost)),
+                },
+            )?);
+        }
         written.push(review.id);
     }
     let n = index(graded.verdicts.len());
@@ -476,6 +490,8 @@ fn submit(req: SubmitTest, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcome
             session: Some(before),
             remove_reviews: written,
             add_reviews: Vec::new(),
+            remove_typed_answers: typed.remove,
+            add_typed_answers: typed.add,
         })?],
         summary: summary::<ModesTestSubmit>().param("percent", percent),
         events: Vec::new(),

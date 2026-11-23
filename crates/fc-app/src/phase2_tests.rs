@@ -181,6 +181,7 @@ fn start_with(
 
 fn answer(t: &TestApp, s: &SessionDto, card: CardId, rating: Rating) -> SessionDto {
     t.ok::<StudyAnswer>(AnswerCard {
+        typed_answer: None,
         session_id: s.id,
         card_id: card,
         rating,
@@ -299,6 +300,7 @@ pub fn study_renders_card_types_and_undo_is_exact(f: &Factory) {
     let s = start(t, StudyKind::Normal, StudyMode::Scheduled, w.parent.id);
     let e = t
         .err::<StudyAnswer>(AnswerCard {
+            typed_answer: None,
             session_id: s.id,
             card_id: c2,
             rating: Rating::Good,

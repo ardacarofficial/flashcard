@@ -190,4 +190,5 @@ domains! {
     meanings => MeaningState,
     media_origins => MediaOriginState,
     leech_repairs => LeechRepairState,
+    typed_answers => TypedAnswerState,
 }
