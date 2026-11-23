@@ -119,3 +119,44 @@ fn the_tts_cache_needs_the_whole_key_and_the_file() {
     .unwrap();
     assert_eq!(w.find_tts_media(&key).unwrap(), None);
 }
+
+/// A backup (dump) carries the origins and a restore (load, as the verify-by-restore does)
+/// gives them back unchanged.
+#[test]
+fn a_backup_restore_keeps_origins() {
+    let src = SqliteStore::open_in_memory().unwrap();
+    let rec = MediaOriginRecord {
+        hash: h('f'),
+        origin: MediaOrigin::Tts,
+        provider: "p".into(),
+        voice: "v".into(),
+        language: "en".into(),
+        rate_milli: 850,
+        text_hash: h('e'),
+        source: String::new(),
+        created_at: Timestamp(3),
+    };
+    {
+        let mut w = src.write().unwrap();
+        w.put_media_origin(&rec).unwrap();
+        w.put_media_origin(&MediaOriginRecord {
+            hash: h('g'),
+            origin: MediaOrigin::Clip,
+            source: "show.mkv".into(),
+            ..rec.clone()
+        })
+        .unwrap();
+        w.commit().unwrap();
+    }
+    let dump = src.read().unwrap().dump_collection().unwrap();
+    let dst = SqliteStore::open_in_memory().unwrap();
+    let mut w = dst.write().unwrap();
+    w.load_collection(&dump).unwrap();
+    let back = w.media_origins_of(&[h('f'), h('g')]).unwrap();
+    assert_eq!(back.len(), 2);
+    assert_eq!(back[0], rec);
+    assert_eq!(
+        (back[1].origin, back[1].source.as_str()),
+        (MediaOrigin::Clip, "show.mkv")
+    );
+}

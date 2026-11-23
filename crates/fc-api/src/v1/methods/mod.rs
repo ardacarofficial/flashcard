@@ -107,4 +107,5 @@ domains! {
     themes,
     words,
     accepted_answers,
+    examples,
 }

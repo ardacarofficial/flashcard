@@ -65,4 +65,5 @@ modules! {
     word_data,
     accepted_answers,
     audio_fill,
+    examples,
 }

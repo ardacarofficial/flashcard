@@ -721,3 +721,7 @@ fn captures_are_found_by_language_queries_mem() {
 /// v1.4 W1: encounters (uses the helpers above).
 #[path = "encounters_tests.rs"]
 mod encounters_tests;
+
+/// v1.4 W3: best scene and leech repair (uses the helpers above).
+#[path = "examples_tests.rs"]
+mod examples_tests;

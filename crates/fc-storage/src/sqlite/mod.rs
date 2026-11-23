@@ -15,6 +15,7 @@ pub use interop::{fit_dump_to_schema, upgrade_dump, upgrade_dump_with};
 mod automation;
 mod inbox;
 mod jobs;
+mod leech_repairs;
 mod local_api;
 mod maintenance;
 mod mcp;

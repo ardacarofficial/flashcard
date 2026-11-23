@@ -125,6 +125,7 @@ pub fn descriptor() -> ModuleDescriptor {
                 scopes: vec![SettingScopeKind::App],
             },
             encounters::same_word_setting(),
+            crate::modules::examples::auto_best_setting(),
         ],
         ui: vec![main_menu(
             "subtitle.screen",
@@ -569,6 +570,8 @@ fn captures_create(
             ctx.tx.insert_subtitle_capture(&row)?;
             // Only the examples list changes: the card, its schedule and history stay.
             encounters::sync_note(ctx, note_id, false)?;
+            // v1.4 W3: `subtitle.auto_best_example` (off by default) may show the best one.
+            crate::modules::examples::after_attach(ctx, note_id)?;
             (row, true)
         }
         encounters::Placement::NewNote { review } => {

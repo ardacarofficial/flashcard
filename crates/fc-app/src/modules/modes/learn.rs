@@ -23,7 +23,7 @@ use fc_core::rng::{Rng, SplitMix64};
 use fc_core::settings::{SettingDef, SettingKind, SettingScope, SettingScopeKind};
 use fc_core::CardId;
 use fc_providers::strategy::DiffSpanKind;
-use fc_study::answer::{check, CheckOptions, CheckerKind, Grade};
+use fc_study::answer::{check_accepting, CheckOptions, CheckerKind, Grade};
 use fc_study::modes::learn::{self as pure, LearnState, CHOICE_OPTIONS};
 use fc_study::modes::{choice_options, option_key, ModesState};
 use fc_study::session::{QueueEntry, SessionState};
@@ -69,6 +69,8 @@ pub fn register(reg: &mut Registry) {
 struct Asked {
     answer: String,
     own: Option<(Vec<String>, u32)>,
+    /// v1.4 accepted answers of `answer` (offline): right when typed, never a wrong option.
+    accepted: Vec<String>,
 }
 
 fn asked(v: View<'_>, card: &Card) -> AppResult<Asked> {
@@ -79,9 +81,16 @@ fn asked(v: View<'_>, card: &Card) -> AppResult<Asked> {
             Asked {
                 answer: options.get(*correct as usize).cloned().unwrap_or_default(),
                 own: Some((options, *correct)),
+                accepted: Vec::new(),
             }
         }
         CardInteraction::SelfGrade | CardInteraction::Type { .. } => Asked {
+            accepted: crate::modules::accepted_answers::alternatives_for(
+                v.reads,
+                v.registry,
+                card.note_id,
+                &r.expected,
+            )?,
             answer: r.expected,
             own: None,
         },
@@ -142,7 +151,8 @@ fn options(s: &Session, learn: &LearnState, card: CardId, a: &Asked) -> Option<(
         ^ card.0.as_u64_pair().1.rotate_left(17)
         ^ u64::from(s.state.answered).wrapping_mul(0x9E37_79B9_7F4A_7C15);
     let mut rng = SplitMix64::new(seed);
-    choice_options(&a.answer, &pure::pool(learn, card), CHOICE_OPTIONS, &mut rng)
+    let pool = fc_study::modes::without_accepted(&pure::pool(learn, card), &a.accepted);
+    choice_options(&a.answer, &pool, CHOICE_OPTIONS, &mut rng)
 }
 
 fn stage_dto(s: pure::LearnStage) -> LearnStage {
@@ -240,7 +250,7 @@ fn answer(req: LearnAnswer, ctx: &mut CommandCtx<'_>) -> AppResult<CommandOutcom
                 fold_turkish: setting_bool(ctx.reads(), &SettingScope::App, FOLD_TURKISH)?,
                 ..CheckOptions::default()
             };
-            let c = check(kind, &a.answer, &given, &opts);
+            let c = check_accepting(kind, &a.answer, &a.accepted, &given, &opts);
             let diff = c
                 .diff
                 .into_iter()

@@ -89,4 +89,5 @@ domains! {
     capture_log: CaptureLogRead, CaptureLogWrite;
     meanings: MeaningRead, MeaningWrite;
     media_origins: MediaOriginRead, MediaOriginWrite;
+    leech_repairs: LeechRepairRead, LeechRepairWrite;
 }

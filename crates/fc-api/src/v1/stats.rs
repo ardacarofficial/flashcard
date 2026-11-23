@@ -383,3 +383,308 @@ pub struct StruggleList {
     /// session (`study.start` kind `custom`, mode `trial`); `None` when there are none.
     pub study_query: Option<String>,
 }
+
+// ------------------------------------------------------------------ leech repair (v1.4 W3)
+
+/// `stats.leech_repairs.plan`: a card by id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct LeechCardRef {
+    /// Card.
+    pub card_id: CardId,
+}
+
+/// One failed review of a leech (evidence).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(optional_fields = nullable)]
+pub struct LeechFailedReview {
+    /// When.
+    pub at: Timestamp,
+    /// Study mode of the review (`normal`, `learn`, …).
+    pub mode: String,
+    /// Show → rate, ms.
+    pub duration_ms: u32,
+    /// Show → reveal, ms.
+    pub answer_duration_ms: Option<u32>,
+    /// Hints used.
+    pub hints_used: u32,
+    /// The typed answer. Always `null` today: the study flow does not keep typed answers
+    /// (see `typed_answers_recorded`).
+    pub typed_answer: Option<String>,
+}
+
+/// Another note of the same word (a confusable meaning).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct LeechConfusable {
+    /// The other note.
+    pub note_id: NoteId,
+    /// Its meaning (plain text).
+    pub meaning: String,
+}
+
+/// A repair of a leech: each runs one existing undoable command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum LeechRepair {
+    /// Show a better example on the card (`subtitle.encounters.set_primary`).
+    SwitchExample {
+        /// The encounter to show.
+        capture_id: String,
+    },
+    /// Accept more answers in the written check (`accepted_answers.add`).
+    AddAcceptedAnswers {
+        /// Field (`null` = the meaning field).
+        #[serde(default)]
+        field: Option<String>,
+        /// Answers.
+        answers: Vec<String>,
+    },
+    /// An example with another meaning goes to another (or a new) note
+    /// (`subtitle.encounters.move`): the card stops mixing two meanings.
+    MoveMeaning {
+        /// The encounter.
+        capture_id: String,
+        /// Target note (`null` = a new note).
+        #[serde(default)]
+        to_note_id: Option<NoteId>,
+    },
+    /// The reviewed result of the AI "rewrite a leech" task (`ai.preview` → `ai.run` with
+    /// `rewrite_leech`), applied with `ai.notes.update`.
+    AiRewrite {
+        /// Field key → new value.
+        fields: std::collections::BTreeMap<String, String>,
+    },
+}
+
+/// Kind of a [`LeechRepair`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum LeechRepairKind {
+    /// [`LeechRepair::SwitchExample`].
+    SwitchExample,
+    /// [`LeechRepair::AddAcceptedAnswers`].
+    AddAcceptedAnswers,
+    /// [`LeechRepair::MoveMeaning`].
+    MoveMeaning,
+    /// [`LeechRepair::AiRewrite`].
+    AiRewrite,
+}
+
+impl LeechRepairKind {
+    /// Storage string.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SwitchExample => "switch_example",
+            Self::AddAcceptedAnswers => "add_accepted_answers",
+            Self::MoveMeaning => "move_meaning",
+            Self::AiRewrite => "ai_rewrite",
+        }
+    }
+
+    /// From the storage string.
+    pub fn parse(s: &str) -> Option<Self> {
+        [
+            Self::SwitchExample,
+            Self::AddAcceptedAnswers,
+            Self::MoveMeaning,
+            Self::AiRewrite,
+        ]
+        .into_iter()
+        .find(|k| k.as_str() == s)
+    }
+}
+
+impl LeechRepair {
+    /// Its kind.
+    pub const fn kind(&self) -> LeechRepairKind {
+        match self {
+            Self::SwitchExample { .. } => LeechRepairKind::SwitchExample,
+            Self::AddAcceptedAnswers { .. } => LeechRepairKind::AddAcceptedAnswers,
+            Self::MoveMeaning { .. } => LeechRepairKind::MoveMeaning,
+            Self::AiRewrite { .. } => LeechRepairKind::AiRewrite,
+        }
+    }
+}
+
+/// Why a repair is proposed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum LeechRepairWhy {
+    /// Another encounter ranks clearly better than the one on the card.
+    BetterExample,
+    /// The meaning lists several senses; each alone is not accepted yet.
+    SensesNotAccepted,
+    /// A suggested meaning in context lists other correct answers not accepted yet.
+    AlsoCorrectNotAccepted,
+    /// An encounter was captured with a different meaning than the card's.
+    MixedMeanings,
+    /// Nothing specific found, or a fresh angle may help: the AI rewrite task.
+    FreshAngle,
+}
+
+/// A field's value before and after a repair (preview).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct LeechFieldChange {
+    /// Field key (`accepted_answers` for the accepted answer list).
+    pub field: String,
+    /// Before (plain text).
+    pub before: String,
+    /// After (plain text).
+    pub after: String,
+}
+
+/// A proposed repair, previewed. Apply it with `stats.leech_repairs.apply` (`repair` as given).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(optional_fields = nullable)]
+pub struct LeechRepairProposal {
+    /// The repair (for [`LeechRepair::AiRewrite`] `fields` is empty: run `ai_preview` first,
+    /// then apply the reviewed result).
+    pub repair: LeechRepair,
+    /// The existing command it runs.
+    pub method: String,
+    /// Why it is proposed.
+    pub why: LeechRepairWhy,
+    /// What changes on the card's note.
+    pub preview: Vec<LeechFieldChange>,
+    /// For the AI rewrite: the `ai.preview` request to show before anything leaves.
+    pub ai_preview: Option<crate::v1::ai::PreviewAi>,
+}
+
+/// A repair as recorded.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct LeechRepairDto {
+    /// Record id.
+    pub id: i64,
+    /// Card.
+    pub card_id: CardId,
+    /// Its note.
+    pub note_id: NoteId,
+    /// Kind.
+    pub kind: LeechRepairKind,
+    /// The repair as applied.
+    pub repair: LeechRepair,
+    /// The card's lapses then.
+    pub lapses: u32,
+    /// When.
+    pub applied_at: Timestamp,
+}
+
+/// Response of `stats.leech_repairs.plan`: the evidence and the proposed repairs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(optional_fields = nullable)]
+pub struct LeechRepairPlan {
+    /// Card.
+    pub card_id: CardId,
+    /// Its note.
+    pub note_id: NoteId,
+    /// Times forgotten.
+    pub lapses: u32,
+    /// Leech threshold (setting `stats.leech_threshold`).
+    pub threshold: u32,
+    /// `lapses >= threshold`.
+    pub is_leech: bool,
+    /// The latest failed reviews, newest first (at most 5; practice reviews included).
+    pub failed_reviews: Vec<LeechFailedReview>,
+    /// Whether typed answers are kept (`false` today).
+    pub typed_answers_recorded: bool,
+    /// The field the card asks for (the note type's meaning field).
+    pub answer_field: Option<String>,
+    /// Its value (plain text).
+    pub answer: String,
+    /// The senses in it (`a; b, c` → three).
+    pub senses: Vec<String>,
+    /// Answers the written check also accepts.
+    pub accepted_answers: Vec<String>,
+    /// The note's encounters ranked (`null`: no encounters, or the `examples` module is off).
+    pub examples: Option<crate::v1::examples::RankedExamples>,
+    /// Other notes of the same word.
+    pub confusables: Vec<LeechConfusable>,
+    /// Proposed repairs, most specific first.
+    pub proposals: Vec<LeechRepairProposal>,
+    /// Repairs applied to this card before, oldest first.
+    pub repairs: Vec<LeechRepairDto>,
+}
+
+/// `stats.leech_repairs.apply`: applies one repair to a leech and records it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ApplyLeechRepair {
+    /// Card.
+    pub card_id: CardId,
+    /// The repair.
+    pub repair: LeechRepair,
+}
+
+/// Internal `stats.leech_repairs.restore` (the inverse of a repair): removes (`remove`) or
+/// puts back (`put`) recorded repairs exactly.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RestoreLeechRepairs {
+    /// Record ids to remove.
+    #[serde(default)]
+    pub remove: Vec<i64>,
+    /// Records to put back.
+    #[serde(default)]
+    pub put: Vec<LeechRepairDto>,
+}
+
+/// `stats.leech_repairs.list`: what happened after the recorded repairs.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(optional_fields = nullable)]
+pub struct LeechRepairsRequest {
+    /// One card (`null` = every repaired card).
+    #[serde(default)]
+    pub card_id: Option<CardId>,
+    /// Newest repairs first, at most this many (default 100).
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
+/// Pass rate of a run of scheduled reviews (practice reviews do not count).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(optional_fields = nullable)]
+pub struct LeechPassRate {
+    /// Reviews counted.
+    pub reviews: u32,
+    /// Not "again".
+    pub passed: u32,
+    /// `passed / reviews` (`null` without reviews).
+    pub rate: Option<f64>,
+}
+
+/// One review after a repair.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct LeechReviewAfter {
+    /// When.
+    pub at: Timestamp,
+    /// Remembered (not "again").
+    pub passed: bool,
+    /// Show → rate, ms.
+    pub duration_ms: u32,
+    /// Hints used.
+    pub hints_used: u32,
+}
+
+/// A repair and the card's reviews around it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct LeechRepairOutcome {
+    /// The repair.
+    pub repair: LeechRepairDto,
+    /// The last scheduled reviews before it (at most 10).
+    pub before: LeechPassRate,
+    /// The scheduled reviews since (until the card's next repair).
+    pub after: LeechPassRate,
+    /// Those reviews, oldest first (at most 20).
+    pub next_reviews: Vec<LeechReviewAfter>,
+    /// Honest caveat: fewer than 10 reviews after the repair — "n is small", the difference
+    /// says little yet.
+    pub small_sample: bool,
+}
+
+/// Response of `stats.leech_repairs.list`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct LeechRepairReport {
+    /// Newest repair first.
+    pub items: Vec<LeechRepairOutcome>,
+}

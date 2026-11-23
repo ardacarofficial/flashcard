@@ -66,6 +66,24 @@ pub fn option_key(text: &str) -> String {
     normalize(text, &CheckOptions::default())
 }
 
+/// `pool` without the texts that are accepted answers of the correct one (v1.4 accepted
+/// answers, by [`option_key`]): an alternative the written check accepts — `bırakmak` next to
+/// `vazgeçmek` for "give up" — must never be offered as a **wrong** option.
+pub fn without_accepted(pool: &[String], accepted: &[String]) -> Vec<String> {
+    if accepted.is_empty() {
+        return pool.to_vec();
+    }
+    let keys: std::collections::HashSet<String> = accepted
+        .iter()
+        .map(|a| option_key(a))
+        .filter(|k| !k.is_empty())
+        .collect();
+    pool.iter()
+        .filter(|p| !keys.contains(&option_key(p)))
+        .cloned()
+        .collect()
+}
+
 /// Fisher–Yates shuffle with a seeded generator.
 pub fn shuffle<T>(items: &mut [T], rng: &mut dyn Rng) {
     for i in (1..items.len()).rev() {
@@ -137,5 +155,24 @@ mod tests {
         // Deterministic per seed.
         let run = |s| choice_options("elma", &pool, 3, &mut SplitMix64::new(s));
         assert_eq!(run(9), run(9));
+    }
+
+    #[test]
+    fn accepted_answers_never_become_wrong_options() {
+        let pool: Vec<String> = ["bırakmak", "BIRAKMAK ", "koşmak", "yemek"]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
+        let left = without_accepted(&pool, &["Bırakmak".to_owned()]);
+        assert_eq!(left, vec!["koşmak".to_owned(), "yemek".to_owned()]);
+        assert_eq!(without_accepted(&pool, &[]), pool);
+        for seed in 0..30 {
+            let (opts, _) =
+                choice_options("vazgeçmek", &left, 4, &mut SplitMix64::new(seed)).unwrap();
+            assert!(
+                !opts.iter().any(|o| option_key(o) == option_key("bırakmak")),
+                "{opts:?}"
+            );
+        }
     }
 }

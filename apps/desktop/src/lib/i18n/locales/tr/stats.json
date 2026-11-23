@@ -90,7 +90,12 @@
       "refresh_cache": "İstatistik önbelleğini güncelle",
       "apply_to_leeches": "Sürekli zorlandığım tüm kartlara uygula",
       "today": "Bugün nasılım?",
-      "struggles": "Nelerde zorlanıyorum?"
+      "struggles": "Nelerde zorlanıyorum?",
+      "leech_repairs": {
+        "plan": "Bu kartı neden hep unutuyorum?",
+        "apply": "Hep unuttuğum bir kartı onar",
+        "list": "Onarımlar işe yaradı mı?"
+      }
     },
     "planning": {
       "exams": {

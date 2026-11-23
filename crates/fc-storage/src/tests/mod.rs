@@ -13,6 +13,7 @@ mod decks;
 mod encounters;
 mod inbox;
 mod interop;
+mod leech_repairs;
 mod maintenance;
 mod mcp;
 mod meanings;

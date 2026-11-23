@@ -265,14 +265,9 @@
     },
     "media": {
       "origins": "Ses ve görselin kaynağı",
-      "origin": {
-        "record": "Dosyanın kaynağını kaydet"
-      },
       "audio": {
         "fill_preview": "Eksik sesleri tamamlama önizlemesi",
-        "fill": "Eksik sesleri tamamla",
-        "attach": "Karta ses ekle",
-        "fill_rollback": "Yarım kalan ses tamamlamayı geri al"
+        "fill": "Eksik sesleri tamamla"
       }
     }
   },

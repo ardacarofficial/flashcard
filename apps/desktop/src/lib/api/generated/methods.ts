@@ -31,6 +31,7 @@ import type { ApiClientDto } from "./ApiClientDto";
 import type { ApiClientList } from "./ApiClientList";
 import type { ApiClientRef } from "./ApiClientRef";
 import type { ApplyAiMeaning } from "./ApplyAiMeaning";
+import type { ApplyLeechRepair } from "./ApplyLeechRepair";
 import type { ApplyOnboarding } from "./ApplyOnboarding";
 import type { ApplyPace } from "./ApplyPace";
 import type { ApplyToLeeches } from "./ApplyToLeeches";
@@ -160,7 +161,12 @@ import type { JobRef } from "./JobRef";
 import type { LearnAnswer } from "./LearnAnswer";
 import type { LearnAnswerResult } from "./LearnAnswerResult";
 import type { LeechActionResult } from "./LeechActionResult";
+import type { LeechCardRef } from "./LeechCardRef";
 import type { LeechList } from "./LeechList";
+import type { LeechRepairDto } from "./LeechRepairDto";
+import type { LeechRepairPlan } from "./LeechRepairPlan";
+import type { LeechRepairReport } from "./LeechRepairReport";
+import type { LeechRepairsRequest } from "./LeechRepairsRequest";
 import type { LeechRequest } from "./LeechRequest";
 import type { LinkedNoteList } from "./LinkedNoteList";
 import type { ListAttributeTemplates } from "./ListAttributeTemplates";
@@ -255,6 +261,7 @@ import type { PreviewAi } from "./PreviewAi";
 import type { PreviewCards } from "./PreviewCards";
 import type { PreviewImport } from "./PreviewImport";
 import type { PreviewRule } from "./PreviewRule";
+import type { PrimarySuggestion } from "./PrimarySuggestion";
 import type { PrintDocument } from "./PrintDocument";
 import type { ProfileDto } from "./ProfileDto";
 import type { ProfileList } from "./ProfileList";
@@ -267,6 +274,9 @@ import type { QuizAnswer } from "./QuizAnswer";
 import type { QuizAnswerResult } from "./QuizAnswerResult";
 import type { QuizRef } from "./QuizRef";
 import type { QuizResultDto } from "./QuizResultDto";
+import type { RankEncounters } from "./RankEncounters";
+import type { RankSentences } from "./RankSentences";
+import type { RankedExamples } from "./RankedExamples";
 import type { ReadingItemDto } from "./ReadingItemDto";
 import type { ReadingItemList } from "./ReadingItemList";
 import type { ReadingItemRef } from "./ReadingItemRef";
@@ -565,6 +575,9 @@ export interface Methods {
   "stats.struggles": { kind: "query"; request: StrugglesRequest; response: StruggleList };
   "stats.deck_reports": { kind: "query"; request: DeckReportsRequest; response: DeckReports };
   "stats.refresh_cache": { kind: "command"; request: RefreshStatsCache; response: StatsCacheInfo };
+  "stats.leech_repairs.plan": { kind: "query"; request: LeechCardRef; response: LeechRepairPlan };
+  "stats.leech_repairs.apply": { kind: "command"; request: ApplyLeechRepair; response: LeechRepairDto };
+  "stats.leech_repairs.list": { kind: "query"; request: LeechRepairsRequest; response: LeechRepairReport };
   "planning.exams.list": { kind: "query"; request: ListExams; response: ExamList };
   "planning.exams.create": { kind: "command"; request: CreateExam; response: ExamDto };
   "planning.exams.update": { kind: "command"; request: UpdateExam; response: ExamDto };
@@ -736,6 +749,9 @@ export interface Methods {
   "accepted_answers.list": { kind: "query"; request: AcceptedAnswersRef; response: NoteAcceptedAnswers };
   "accepted_answers.add": { kind: "command"; request: EditAcceptedAnswers; response: NoteAcceptedAnswers };
   "accepted_answers.remove": { kind: "command"; request: EditAcceptedAnswers; response: NoteAcceptedAnswers };
+  "subtitle.encounters.rank": { kind: "query"; request: RankEncounters; response: RankedExamples };
+  "subtitle.encounters.suggest_primary": { kind: "query"; request: RankEncounters; response: PrimarySuggestion };
+  "examples.rank_sentences": { kind: "query"; request: RankSentences; response: RankedExamples };
 }
 
 /** Unqualified method name. */
@@ -899,6 +915,9 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "stats.struggles": "query",
   "stats.deck_reports": "query",
   "stats.refresh_cache": "command",
+  "stats.leech_repairs.plan": "query",
+  "stats.leech_repairs.apply": "command",
+  "stats.leech_repairs.list": "query",
   "planning.exams.list": "query",
   "planning.exams.create": "command",
   "planning.exams.update": "command",
@@ -1070,4 +1089,7 @@ export const METHODS: { readonly [K in MethodName]: Methods[K]["kind"] } = {
   "accepted_answers.list": "query",
   "accepted_answers.add": "command",
   "accepted_answers.remove": "command",
+  "subtitle.encounters.rank": "query",
+  "subtitle.encounters.suggest_primary": "query",
+  "examples.rank_sentences": "query",
 };

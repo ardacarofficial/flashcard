@@ -189,4 +189,5 @@ domains! {
     capture_log => CaptureLogState,
     meanings => MeaningState,
     media_origins => MediaOriginState,
+    leech_repairs => LeechRepairState,
 }

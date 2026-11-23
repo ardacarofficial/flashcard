@@ -10,5 +10,7 @@
   "oplog.summary.goals.delete": "Hedef kaldırıldı",
   "oplog.summary.goals.restore": "Hedef geri getirildi",
   "oplog.summary.optimizer.run": "FSRS optimizasyonu başlatıldı",
-  "oplog.summary.planning.apply_pace": "{deck}: günde {count} yeni kart"
+  "oplog.summary.planning.apply_pace": "{deck}: günde {count} yeni kart",
+  "oplog.summary.stats.leech_repairs.apply": "Hep unuttuğun bir kart onarıldı ({kind})",
+  "oplog.summary.stats.leech_repairs.restore": "Zor kart onarım kayıtları geri kondu"
 }

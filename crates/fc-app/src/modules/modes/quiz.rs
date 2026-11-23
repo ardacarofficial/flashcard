@@ -296,7 +296,14 @@ pub(super) fn init(v: View<'_>, state: &mut SessionState, rng: &mut dyn Rng) -> 
                     .filter(|c| w.language.is_empty() || c.language.is_empty() || c.language == w.language)
                     .map(|c| c.meaning.clone())
                     .collect();
-                pure::options(&w.answer, &pool, rng)
+                // v1.4: an accepted answer of the right meaning is never a wrong option.
+                let accepted = crate::modules::accepted_answers::alternatives_for(
+                    v.reads,
+                    v.registry,
+                    w.note_id,
+                    &w.answer,
+                )?;
+                pure::options(&w.answer, &fc_study::modes::without_accepted(&pool, &accepted), rng)
             }
         };
         if let Some((options, correct)) = opts {

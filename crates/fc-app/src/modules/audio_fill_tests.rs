@@ -416,3 +416,46 @@ fn a_real_ffmpeg_recuts_the_line_from_a_local_video() {
     let m = t.store.read().unwrap().get_media(&h).unwrap().unwrap();
     assert_eq!(m.mime, "audio/mpeg");
 }
+
+/// A note with several encounters: the fill gives the PRIMARY example its sound (and the
+/// card); the other example is left as it is. W3's scene ranking sees the filled sound, and
+/// ranks it as synthesised.
+#[test]
+fn only_the_primary_example_is_filled() {
+    let (t, calls, key) = app(Arc::new(SqliteStore::open_in_memory().unwrap()), vec!["en"]);
+    let n = capture(&t.app, &key, &shot(1, "key", "anahtar", "Where are my keys?", false))
+        .unwrap()
+        .note_id;
+    let m = capture(&t.app, &key, &shot(2, "key", "anahtar", "Keys on the table.", false))
+        .unwrap()
+        .note_id;
+    assert_eq!(n, m, "the same meaning is another example of one note");
+    let r = run(&t, ids(&[n]));
+    assert_eq!((r.done.tts, calls.load(Ordering::SeqCst)), (1, 1));
+    let enc = t
+        .ok::<SubtitleEncountersList>(ListSubtitleEncounters {
+            note_id: Some(n),
+            ..Default::default()
+        })
+        .encounters;
+    assert_eq!(enc.len(), 2);
+    let (p, o): (Vec<_>, Vec<_>) = enc.iter().partition(|e| e.is_primary);
+    assert_eq!(p[0].facts.audio_origin, Some(MediaOrigin::Tts));
+    assert_eq!(audio_of(&t, n), format!("media:{}", p[0].facts.audio_hash.clone().unwrap()));
+    assert_eq!(o[0].facts.audio_hash, None);
+    assert_eq!(o[0].facts.audio_origin, None);
+    assert!(!o[0].facts.example_fields.contains_key("audio"));
+    // W3's ranking: the filled sound counts, as synthesised.
+    let ranked = t.ok::<SubtitleEncountersRank>(fc_api::v1::examples::RankEncounters {
+        note_id: n,
+    });
+    let s = ranked
+        .items
+        .iter()
+        .find(|e| e.id == p[0].capture_id)
+        .unwrap();
+    assert!(s
+        .reasons
+        .iter()
+        .any(|r| r.code == fc_core::encounter_score::SceneReasonCode::SynthesizedAudio));
+}

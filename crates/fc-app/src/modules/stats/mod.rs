@@ -18,6 +18,7 @@
 mod breakdown;
 pub(crate) mod facts;
 mod questions;
+mod repair;
 #[cfg(test)]
 mod tests;
 
@@ -86,6 +87,7 @@ pub fn register(reg: &mut Registry) {
     reg.query::<StatsStruggles>(questions::struggles);
     reg.query::<StatsDeckReports>(deck_reports);
     reg.command::<StatsRefreshCache>(refresh);
+    repair::register(reg);
 }
 
 fn range_start(today: i64, days: Option<u32>) -> Option<i64> {

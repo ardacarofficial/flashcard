@@ -265,14 +265,9 @@
     },
     "media": {
       "origins": "Where the sound and picture came from",
-      "origin": {
-        "record": "Record where a file came from"
-      },
       "audio": {
         "fill_preview": "Preview filling missing audio",
-        "fill": "Fill missing audio",
-        "attach": "Add sound to a card",
-        "fill_rollback": "Undo an unfinished audio fill"
+        "fill": "Fill missing audio"
       }
     }
   },

@@ -72,6 +72,10 @@ pub struct TestSource {
     pub answer: String,
     /// The card's own options and the correct index (choice card types).
     pub own_options: Option<(Vec<String>, u32)>,
+    /// v1.4 accepted answers of `answer` and of `definition` (the offline written check takes
+    /// them): never offered as a wrong option or a false statement, never another word's
+    /// meaning on the same matching board.
+    pub accepted: Vec<String>,
 }
 
 /// Answer key of a question.
@@ -242,6 +246,8 @@ fn matching(s: &TestSource, sources: &[TestSource], rng: &mut dyn Rng) -> Option
     use super::option_key;
     let mut words = vec![option_key(&s.term)];
     let mut meanings = vec![option_key(&s.definition)];
+    // Accepted answers of the words on the board: no other word may bring one as its meaning.
+    let mut accepted: Vec<String> = s.accepted.iter().map(|a| option_key(a)).collect();
     if words[0].is_empty() || meanings[0].is_empty() {
         return None;
     }
@@ -256,8 +262,14 @@ fn matching(s: &TestSource, sources: &[TestSource], rng: &mut dyn Rng) -> Option
         if w.is_empty() || m.is_empty() || words.contains(&w) || meanings.contains(&m) {
             continue;
         }
+        // Neither its meaning is accepted for a word on the board, nor a board meaning for it.
+        let theirs: Vec<String> = o.accepted.iter().map(|a| option_key(a)).collect();
+        if accepted.contains(&m) || meanings.iter().any(|x| theirs.contains(x)) {
+            continue;
+        }
         words.push(w);
         meanings.push(m);
+        accepted.extend(theirs);
         set.push(o);
     }
     if set.len() < 2 {
@@ -318,7 +330,12 @@ fn question(
         QuestionKind::MultipleChoice => {
             let options = match &s.own_options {
                 Some((opts, i)) if opts.len() >= 2 => Some((opts.clone(), *i)),
-                _ => choice_options(&s.answer, pool, CHOICE_OPTIONS, rng),
+                _ => choice_options(
+                    &s.answer,
+                    &super::without_accepted(pool, &s.accepted),
+                    CHOICE_OPTIONS,
+                    rng,
+                ),
             };
             match options {
                 Some((options, i)) => Question {
@@ -340,7 +357,8 @@ fn question(
         }
         QuestionKind::TrueFalse => {
             // A wrong statement needs a distractor; without one the question is written.
-            let Some((distractors, _)) = choice_options(&s.answer, pool, 2, rng) else {
+            let pool = super::without_accepted(pool, &s.accepted);
+            let Some((distractors, _)) = choice_options(&s.answer, &pool, 2, rng) else {
                 return written(s);
             };
             let truth = rng.below(2) == 0;
@@ -371,11 +389,11 @@ fn question(
 }
 
 /// Grades `responses` (paper order; missing = blank). Written answers go to `check_text`
-/// (expected, given) — the configured answer checker.
+/// (question, given) — the configured answer checker, with the card's accepted answers.
 pub fn grade(
     questions: &[Question],
     responses: &[Response],
-    check_text: impl Fn(&str, &str) -> Grade,
+    check_text: impl Fn(&Question, &str) -> Grade,
 ) -> Graded {
     let mut verdicts = Vec::with_capacity(questions.len());
     let mut given = Vec::with_capacity(questions.len());
@@ -409,7 +427,7 @@ pub fn grade(
                     Verdict::Wrong
                 }
             }
-            (Response::Text(t), QuestionKind::Written) => match check_text(&q.key.expected, t) {
+            (Response::Text(t), QuestionKind::Written) => match check_text(q, t) {
                 Grade::Correct => Verdict::Correct,
                 Grade::Almost => Verdict::Almost,
                 Grade::Wrong => Verdict::Wrong,
@@ -451,12 +469,54 @@ mod tests {
                 definition: format!("cevap {i}"),
                 answer: format!("cevap {i}"),
                 own_options: None,
+                accepted: Vec::new(),
             })
             .collect()
     }
 
-    fn checker(e: &str, g: &str) -> Grade {
-        check(CheckerKind::Multi, e, g, &CheckOptions::default()).grade
+    fn checker(q: &Question, g: &str) -> Grade {
+        check(
+            CheckerKind::Multi,
+            &q.key.expected,
+            g,
+            &CheckOptions::default(),
+        )
+        .grade
+    }
+
+    /// v1.4: an accepted answer of the right one is never a wrong option, a false statement
+    /// or another word's meaning on a matching board.
+    #[test]
+    fn accepted_answers_are_never_distractors() {
+        // Card 1 means "vazgeçmek" and also accepts "bırakmak"; card 2 means "bırakmak".
+        let mut src = sources(6);
+        src[0].answer = "vazgeçmek".into();
+        src[0].definition = "vazgeçmek".into();
+        src[0].accepted = vec!["bırakmak".into()];
+        src[1].answer = "bırakmak".into();
+        src[1].definition = "bırakmak".into();
+        let bad = |t: &str| super::super::option_key(t) == "bırakmak";
+        for seed in 0..40 {
+            let paper = generate(&src, &ALL_KINDS, 6, &mut SplitMix64::new(seed));
+            for q in paper.iter().filter(|q| q.card_id == src[0].card_id) {
+                match q.kind {
+                    QuestionKind::MultipleChoice => {
+                        assert!(!q.options.iter().any(|o| bad(o)), "{q:?}")
+                    }
+                    QuestionKind::TrueFalse => {
+                        assert!(!q.statement.as_deref().is_some_and(bad), "{q:?}")
+                    }
+                    _ => {}
+                }
+            }
+            for q in paper.iter().filter(|q| q.kind == QuestionKind::Matching) {
+                let has = |t: &str| q.terms.iter().any(|x| x == t);
+                assert!(
+                    !(has("q1") && has("q2")),
+                    "vazgeçmek and bırakmak on one board: {q:?}"
+                );
+            }
+        }
     }
 
     #[test]
