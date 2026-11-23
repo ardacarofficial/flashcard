@@ -97,7 +97,8 @@ describe('<App> on the dev mock transport', { timeout: 30_000 }, () => {
     expect(page.classList.contains('focus')).toBe(false);
     const start = (await screen.findByTestId('launcher-start')) as HTMLButtonElement;
     await waitFor(() => expect(start.disabled).toBe(false));
-    expect(start.textContent).toMatch(/Focus · 4 questions/);
+    // v1.4: the footer says what Start does (mode · cards · count); the button is just "Start".
+    expect(screen.getByTestId('launcher-summary').textContent).toMatch(/Exam · All cards · 4 questions/);
     await fireEvent.click(start);
     await waitFor(() => expect(page.classList.contains('focus')).toBe(true), { timeout: 5_000 });
     // The running paper owns the window: no deck picker, no Library tabs.
