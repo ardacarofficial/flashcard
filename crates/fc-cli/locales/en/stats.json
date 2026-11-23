@@ -10,5 +10,7 @@
   "oplog.summary.goals.delete": "Removed a goal",
   "oplog.summary.goals.restore": "Restored a goal",
   "oplog.summary.optimizer.run": "Started FSRS optimization",
-  "oplog.summary.planning.apply_pace": "{deck}: {count} new cards a day"
+  "oplog.summary.planning.apply_pace": "{deck}: {count} new cards a day",
+  "oplog.summary.stats.leech_repairs.apply": "Repaired a card you keep forgetting ({kind})",
+  "oplog.summary.stats.leech_repairs.restore": "Leech repair records put back"
 }
