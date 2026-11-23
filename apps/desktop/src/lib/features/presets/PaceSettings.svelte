@@ -64,26 +64,39 @@
   let failed = $state(false);
   let routes = $state<Set<string>>(new Set());
 
-  // Drafts of the two number fields (saved on change).
+  // Drafts of the two number fields (saved on change). `loaded*` = the value the last load
+  // showed: a draft that differs from it is the user's (typed, maybe still being saved) and a
+  // load never overwrites it (F1: a slow load after save #1 reset the typed reviews limit).
   let newDraft = $state<number | string>('');
   let reviewsDraft = $state<number | string>('');
+  let loadedNew: number | null = null;
+  let loadedReviews: number | null = null;
+  const untouched = (draft: number | string, loaded: number | null) => draft === '' || loaded === null || Number(draft) === loaded;
+  /** Only the newest load may write the page (an older, slower one is dropped). */
+  let loadSeq = 0;
 
   const recommended = $derived(RECOMMENDED_NEW === 'A' ? 10 : (defaults?.new_per_day ?? 10));
 
   async function load(id: string | null = deckId) {
     if (!id) return;
+    const seq = ++loadSeq;
+    let stale = false;
     const ok = await ctx.guarded(async () => {
       const [eff, list, fc] = await Promise.all([
         api.call('presets.for_deck', { deck_id: id }),
         api.call('presets.list', {}),
         api.call('planning.forecast', { deck_id: id, days: CURVE_DAYS }),
       ]);
+      if (seq !== loadSeq) return void (stale = true);
       config = eff.config;
       defaults = list.defaults;
       forecast = fc;
-      newDraft = eff.config.new_per_day;
-      reviewsDraft = eff.config.reviews_per_day;
+      if (untouched(newDraft, loadedNew)) newDraft = eff.config.new_per_day;
+      if (untouched(reviewsDraft, loadedReviews)) reviewsDraft = eff.config.reviews_per_day;
+      loadedNew = eff.config.new_per_day;
+      loadedReviews = eff.config.reviews_per_day;
     });
+    if (stale) return;
     failed = !ok && !config;
     if (!ok) return;
     const mins = await Promise.all(
@@ -108,23 +121,60 @@
       .catch(() => {});
   });
 
+  type Change = { new_per_day?: number; reviews_per_day?: number; desired_retention?: number };
+  /**
+   * Writes run one after another (F1): `apply_pace` always carries `new_per_day`, so a save
+   * built from values read before the previous save landed would send the old value and undo
+   * it. Each save starts after the previous one and reads what the core holds right then.
+   */
+  let queue: Promise<void> = Promise.resolve();
+  function enqueue(job: () => Promise<void>): Promise<void> {
+    // (a failing job never blocks the next one)
+    queue = queue.then(job).catch(() => {});
+    return queue;
+  }
+  const save = (change: Change) => enqueue(() => saveNow(change));
+  const undo = () => enqueue(async () => {
+    await ctx.guarded(() => api.call('oplog.undo', {}));
+    await load();
+  });
+
   /** Saves one change (instant save, A/B 8 = A) and offers to undo it. */
-  async function save(change: { new_per_day?: number; reviews_per_day?: number; desired_retention?: number }) {
+  async function saveNow(change: Change) {
     const id = deckId;
     if (!id || !config) return;
+    // The deck's values now (not the page's copy: a reload may still be on its way).
+    let cur: PresetConfig = config;
+    const read = await ctx.guarded(async () => {
+      cur = (await api.call('presets.for_deck', { deck_id: id })).config;
+    });
+    if (!read) return void (await load(id));
+    // Nothing to save (the core already holds it): just show the saved values again.
+    if (
+      (change.new_per_day ?? cur.new_per_day) === cur.new_per_day &&
+      (change.reviews_per_day ?? cur.reviews_per_day) === cur.reviews_per_day &&
+      (change.desired_retention ?? cur.desired_retention) === cur.desired_retention
+    ) {
+      if (change.new_per_day !== undefined) newDraft = cur.new_per_day;
+      if (change.reviews_per_day !== undefined) reviewsDraft = cur.reviews_per_day;
+      return;
+    }
     const ok = await ctx.guarded(() =>
       api.call('planning.apply_pace', {
         deck_id: id,
-        new_per_day: change.new_per_day ?? config!.new_per_day,
+        new_per_day: change.new_per_day ?? cur.new_per_day,
         reviews_per_day: change.reviews_per_day ?? null,
         desired_retention: change.desired_retention ?? null,
       }),
     );
+    // The field's own value is settled now (saved, or refused: then the saved one shows again).
+    if (change.new_per_day !== undefined && Number(newDraft) === change.new_per_day) loadedNew = null;
+    if (change.reviews_per_day !== undefined && Number(reviewsDraft) === change.reviews_per_day) loadedReviews = null;
     await load(id);
     if (ok) {
       toast.show(t('presets.pace.saved'), {
         tone: 'success',
-        action: { label: t('presets.pace.undo'), run: () => void ctx.guarded(() => api.call('oplog.undo', {})).then(() => load()) },
+        action: { label: t('presets.pace.undo'), run: () => void undo() },
       });
     }
   }
@@ -135,12 +185,12 @@
   };
   function commitNew() {
     const n = whole(newDraft);
-    if (n === null || n === config?.new_per_day) return void (newDraft = config?.new_per_day ?? '');
+    if (n === null) return void (newDraft = config?.new_per_day ?? '');
     void save({ new_per_day: n });
   }
   function commitReviews() {
     const n = whole(reviewsDraft);
-    if (n === null || n === config?.reviews_per_day) return void (reviewsDraft = config?.reviews_per_day ?? '');
+    if (n === null) return void (reviewsDraft = config?.reviews_per_day ?? '');
     void save({ reviews_per_day: n });
   }
 
