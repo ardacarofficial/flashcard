@@ -19,7 +19,7 @@ Bu klasör, uygulamanın **tam planını** içerir. Geliştirme boyunca pusulam�
 | 09 | [Rakip Analizi](09-rakip-analizi.md) | Anki ve diğer uygulamalarla karşılaştırma, alınan fikirler |
 | 10 | [Sözleşme ve sürüm kayıtları](10-v0.1-sozlesme.md) | v0.1 sözleşmesi ve sonraki sürümlerin uygulama/doğrulama kayıtları |
 | 11 | [Tasarım (v1.4)](11-tasarim.md) | Akışlar (başlatıcı, klavye modeli, kart ekleme, ayar kiti, kelime kartları), bilgi mimarisi, tasarım sistemi, doğrulama (yolculuklar, Windows pilotu, ekran görüntüleri) |
-| 12 | [Performans (v1.4)](12-performans.md) | Ölçülmüş hız: 100k not / 2M tekrar + film izleme yükü (20k karşılaşma, ~1 GiB medya), makine, debug/release, düzeltilenler ve bilinen sınırlar |
+| 12 | [Performans (v1.4)](12-performans.md) | Ölçülmüş hız: 100k not / 2M tekrar + film izleme yükü (20k karşılaşma, ~1 GiB medya), makine, debug/release, düzeltilenler ve bilinen sınırlar; v1.4.2: aynı makinede Anki'nin arka ucuyla karşılaştırma (yöntem, kısıtlar, farkların nedeni) |
 | 13 | [Yapay zekâ gerçek sağlayıcıyla (v1.4)](13-ai-canli-deneme.md) | OpenRouter ile ilk gerçek deneme: ne koşuldu, ne çalıştı, bulunan ve düzeltilen hatalar, denenmeyenler, `FC_AI_LIVE=1` ile yeniden koşma |
 | 14 | [Subtitle gerçek tarayıcıda (v1.4)](14-subtitle-gercek-tarayici.md) | Derlenmiş Subtitle eklentisi gerçek Chromium'da gerçek `fc`'ye karşı: kurulum, geçen adımlar, eklentideki değişiklik ("Flashcard'dan oku" yaması, `tools/subtitle-patches`), sahibin tarayıcısını isteyenler |
 | 16 | [Anki uyumu (v1.4.2)](16-anki-uyum.md) | Gerçek Anki'nin ürettiği destelerle Anki → biz → Anki: aynen gidip gelenler, bilerek değişenler (nedenleriyle), desteklenmeyenler; nasıl yeniden sınanır |

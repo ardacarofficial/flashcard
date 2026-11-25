@@ -1,7 +1,7 @@
 {
  "anki_version": "26.09.4",
  "cards": {
-  "1795611878140/0": {
+  "1795613338248/0": {
    "deck": "SM2::Kelimeler",
    "due_in": 4,
    "factor": 2500,
@@ -21,7 +21,7 @@
    ],
    "type": 2
   },
-  "1795611878140/1": {
+  "1795613338248/1": {
    "deck": "SM2::Kelimeler",
    "due_in": 2,
    "factor": 2350,
@@ -56,7 +56,7 @@
    ],
    "type": 2
   },
-  "1795611878144/0": {
+  "1795613338249/0": {
    "deck": "SM2::Kelimeler",
    "due_in": 20,
    "factor": 2650,
@@ -71,12 +71,12 @@
     [
      0,
      4,
-     5
+     4
     ],
     [
      1,
      4,
-     14
+     11
     ],
     [
      4,
@@ -86,7 +86,7 @@
    ],
    "type": 2
   },
-  "1795611878144/1": {
+  "1795613338249/1": {
    "deck": "SM2::Kelimeler",
    "due_in": 60,
    "factor": 0,
@@ -116,14 +116,14 @@
    ],
    "type": 1
   },
-  "1795611878148/0": {
+  "1795613338250/0": {
    "deck": "SM2::Kelimeler",
-   "due_in": 3,
+   "due_in": 9,
    "factor": 2500,
    "filtered": null,
    "flags": 0,
    "fsrs": null,
-   "ivl": 3,
+   "ivl": 5,
    "lapses": 0,
    "queue": 2,
    "reps": 3,
@@ -141,24 +141,35 @@
     [
      0,
      4,
-     3
+     5
+    ],
+    [
+     4,
+     0,
+     5
     ]
    ],
    "type": 2
   },
-  "1795611878148/1": {
+  "1795613338250/1": {
    "deck": "SM2::Kelimeler",
-   "due_in": null,
-   "factor": 0,
+   "due_in": 5,
+   "factor": 2500,
    "filtered": null,
    "flags": 0,
    "fsrs": null,
-   "ivl": 0,
+   "ivl": 5,
    "lapses": 0,
-   "queue": 0,
+   "queue": 2,
    "reps": 0,
-   "revlog": [],
-   "type": 0
+   "revlog": [
+    [
+     4,
+     0,
+     5
+    ]
+   ],
+   "type": 2
   }
  },
  "check_database": [],
@@ -169,39 +180,39 @@
  "fsrs": false,
  "media": {},
  "notes": {
-  "1795611878140": {
+  "1795613338248": {
    "fields": [
     "word0",
     "kelime0"
    ],
-   "guid": "EW&i$ncQi~",
+   "guid": "mAQ;4HvH::",
    "notetype": "Basic (and reversed card)+",
    "tags": [
     "sm2"
    ]
   },
-  "1795611878144": {
+  "1795613338249": {
    "fields": [
     "word1",
     "kelime1"
    ],
-   "guid": "dc(=_j5QCV",
+   "guid": "bLikFtSg]Q",
    "notetype": "Basic (and reversed card)+",
    "tags": [
     "sm2"
    ]
   },
-  "1795611878148": {
+  "1795613338250": {
    "fields": [
     "word2",
     "kelime2"
    ],
-   "guid": "M|BgZjN%@j",
+   "guid": "B(k!1/2ND]",
    "notetype": "Basic (and reversed card)+",
    "tags": [
     "sm2"
    ]
   }
  },
- "revlog_total": 14
+ "revlog_total": 16
 }

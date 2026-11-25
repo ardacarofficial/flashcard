@@ -56,7 +56,8 @@ fn our_cards(t: &TestApp) -> HashMap<String, Value> {
         let logs = store.review_logs_for_card(c.id).unwrap();
         let s = &c.scheduling;
         let ivl = match (s.state, s.due, s.last_review) {
-            (CardState::Review, Some(d), Some(l)) => (d.0 - l.0 + DAY_MS / 2).div_euclid(DAY_MS),
+            // Day of the last review → due day (a due date is the start of a study day).
+            (CardState::Review, Some(d), Some(l)) => (d.0 - l.0 + DAY_MS - 1).div_euclid(DAY_MS),
             _ => 0,
         };
         let key = format!("{}/{ord}", note.created_at.0);
@@ -100,7 +101,15 @@ fn anki_cards(report: &Value) -> HashMap<String, Value> {
             serde_json::json!({
                 "deck": c["deck"],
                 "state": state,
-                "ivl": if state == "Review" { c["ivl"].as_i64().unwrap() } else { 0 },
+                // Our interval is "last answer → due". After a manual reschedule Anki's
+                // stored number can be something else (FSRS: 0 on a never-answered card;
+                // SM-2: the old interval when only the due date was moved): there the gap
+                // itself is expected. The packages are built in one go, so it is `due_in`.
+                "ivl": match (state, revlog.last()) {
+                    ("Review", Some(last)) if last[1] == 0 => c["due_in"].as_i64().unwrap(),
+                    ("Review", _) => c["ivl"].as_i64().unwrap(),
+                    _ => 0,
+                },
                 "reps": c["reps"],
                 "lapses": c["lapses"],
                 // Anki's flag number → our bit per flag.
@@ -130,6 +139,14 @@ fn import_and_compare(name: &str) -> TestApp {
     assert_eq!(ours.len(), anki.len(), "{name}: {:?}", ours.keys().collect::<Vec<_>>());
     for (key, a) in &anki {
         let o = ours.get(key).unwrap_or_else(|| panic!("{name}: card {key} missing"));
+        // FSRS memory to three decimals (Anki holds 32-bit floats; its report is rounded).
+        let (mut o, mut a) = (o.clone(), a.clone());
+        let (of, af) = (o["fsrs"].take(), a["fsrs"].take());
+        assert_eq!(of.is_null(), af.is_null(), "{name}: card {key} memory state");
+        for i in 0..af.as_array().map_or(0, Vec::len) {
+            let (x, y) = (of[i].as_f64().unwrap(), af[i].as_f64().unwrap());
+            assert!((x - y).abs() < 0.002, "{name}: card {key} memory state {of} / {af}");
+        }
         assert_eq!(o, a, "{name}: card {key}");
     }
     // Tags (hierarchy kept) and media names (non-ASCII) as Anki wrote them.
@@ -168,8 +185,27 @@ fn wide_real_anki_packages_import_like_anki_reports_them() {
     names.sort_unstable();
     assert_eq!(names, ["çiçek.png", "şarkı ğ.wav"]);
     // "Set due date" / "forget" go back to Anki as manual rows.
-    assert_eq!(back.revlog.iter().filter(|r| r.ease == 0 && r.rtype == 4).count(), 3);
-    import_and_compare("wide-sm2");
+    let manual: Vec<_> = back.revlog.iter().filter(|r| r.ease == 0 && r.rtype == 4).collect();
+    assert_eq!(manual.len(), 3);
+    // One of them is the "forget" (ease factor 0, Anki's mark of a reset); the two "set due
+    // date" rows must not look like one.
+    assert_eq!(manual.iter().filter(|r| r.factor == 0).count(), 1);
+    // Manual rows are history, not answers: what statistics, retention, streaks and the
+    // FSRS optimizer read (`stats_reviews`) holds every answer and none of them.
+    for (t, name) in [(t, "wide-fsrs"), (import_and_compare("wide-sm2"), "wide-sm2")] {
+        let report = json(&fixture(&format!("{name}.json")));
+        let answers: usize = report["cards"]
+            .as_object()
+            .unwrap()
+            .values()
+            .flat_map(|c| c["revlog"].as_array().unwrap())
+            .filter(|r| r[1] != 0)
+            .count();
+        let store = t.store.read().unwrap();
+        let read = store.stats_reviews(0, None).unwrap();
+        assert_eq!(read.len(), answers, "{name}");
+        assert!(read.iter().all(|(_, r)| r.mode != MANUAL_MODE), "{name}");
+    }
 }
 
 /// Differences between Anki's report of its own package and of our export of it that are
@@ -184,6 +220,16 @@ const ACCEPTED: &[(&str, &str)] = &[
     // A day-learning card (Anki queue 3) goes back as an intraday learning card (queue 1)
     // due at the same moment.
     ("queue 3 -> 1", "learning due counted in seconds"),
+    // Our interval is "last answer → due"; after a manual reschedule Anki's stored interval
+    // can differ (FSRS: 0 on a never-answered card; SM-2: the interval before the move).
+    ("ivl after manual reschedule ", "interval is derived from last answer and due date"),
+    // A relearning card: Anki stores the interval it returns to; we send the rounded
+    // stability after the lapse (the same number unless Anki fuzzed or clamped it).
+    ("ivl of a relearning card ", "post-lapse interval is derived from stability"),
+    // Notes get a new GUID (Anki's is not stored): a fresh collection is unaffected.
+    ("guid ", "Anki GUID is not stored"),
+    // Stock note types land on our built-ins and go back under the built-in's name.
+    ("notetype ", "stock note types map to built-ins"),
 ];
 
 fn accepted(diff: &str) -> bool {
@@ -199,13 +245,17 @@ fn accepted(diff: &str) -> bool {
 fn wide_packages_round_trip_through_real_anki() {
     let python = std::env::var("FC_ANKI_PYTHON").expect("FC_ANKI_PYTHON");
     let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/anki/wide.py");
-    let dir = tempfile::tempdir().unwrap();
+    // `FC_ANKI_KEEP=<dir>` keeps the packages and reports there (to look at a difference).
+    let tmp = tempfile::tempdir().unwrap();
+    let keep = std::env::var_os("FC_ANKI_KEEP").map(PathBuf::from);
+    let work: &Path = keep.as_deref().unwrap_or(tmp.path());
+    std::fs::create_dir_all(work).unwrap();
     let run = |args: &[&str]| {
         let out = std::process::Command::new(&python)
             .arg("-I")
             .arg(&script)
             .args(args)
-            .current_dir(dir.path())
+            .current_dir(work)
             .output()
             .expect("run python");
         assert!(out.status.success(), "{args:?}: {}", String::from_utf8_lossy(&out.stderr));
@@ -213,16 +263,16 @@ fn wide_packages_round_trip_through_real_anki() {
     };
     // Fresh packages, today (due dates are compared relative to Anki's today), with a large
     // review history: 400 cards × 8 answers.
-    let made = dir.path().join("made");
+    let made = work.join("made");
     run(&["make", made.to_str().unwrap(), "--large", "400"]);
     for name in ["wide-fsrs", "wide-sm2"] {
         let t = TestApp::new(Arc::new(TempSqlite::new()));
         let r = import_file(&t, &made.join(format!("{name}.apkg")));
         let anki = made.join(format!("{name}.json"));
         assert_eq!(r.added_reviews as u64, json(&anki)["revlog_total"].as_u64().unwrap(), "{name}");
-        let ours = dir.path().join(format!("{name}-ours.apkg"));
+        let ours = work.join(format!("{name}-ours.apkg"));
         export(&t, ExportFormat::Apkg, &ours);
-        let report = dir.path().join(format!("{name}-ours.json"));
+        let report = work.join(format!("{name}-ours.json"));
         run(&["report", ours.to_str().unwrap(), report.to_str().unwrap()]);
         let diffs: Vec<String> =
             serde_json::from_str(&run(&["compare", anki.to_str().unwrap(), report.to_str().unwrap()]))

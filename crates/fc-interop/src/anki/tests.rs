@@ -688,8 +688,10 @@ fn manual_reschedules_are_kept_but_are_not_answers() {
         .find(|c| c.id == 1_610_000_000_032)
         .unwrap();
     (c5.ctype, c5.queue, c5.due, c5.ivl, c5.odid, c5.odue) = (0, 0, 7, 0, 0, 0);
-    col.revlog
-        .push(rev(day(240), 1_610_000_000_032, 0, 0, 10, 4));
+    // Anki marks a reset with ease factor 0 (a "set due date" row carries the card's).
+    let mut forget = rev(day(240), 1_610_000_000_032, 0, 0, 10, 4);
+    forget.factor = 0;
+    col.revlog.push(forget);
 
     let (pack, report) = to_pack(&col, NOW);
     assert_eq!(report.skipped_reviews, 0);
@@ -739,12 +741,80 @@ fn manual_reschedules_are_kept_but_are_not_answers() {
         exported.ivl, 25,
         "Anki's interval: last answer (day 85) to due (day 110)"
     );
-    let mut rows: Vec<(i64, i64, i64)> = back
+    // Ease factor 0 only on the reset: Anki reads a manual row with factor 0 as "forget".
+    let mut rows: Vec<(i64, i64, i64, i64)> = back
         .revlog
         .iter()
         .filter(|r| r.ease == 0)
-        .map(|r| (r.rtype, r.ivl, r.last_ivl))
+        .map(|r| (r.rtype, r.ivl, r.last_ivl, r.factor))
         .collect();
     rows.sort_unstable();
-    assert_eq!(rows, [(4, 0, 10), (4, 3, 3), (4, 25, 15)]);
+    assert_eq!(rows, [(4, 0, 10, 0), (4, 3, 3, 2500), (4, 25, 15, 2500)]);
+
+    // A card with nothing but a manual row ("set due date" on a new card) was never
+    // answered: no last review time goes to Anki (its "Check Database" would remove it).
+    let never_answered = back
+        .revlog
+        .iter()
+        .find(|r| r.ease == 0 && r.ivl == 3)
+        .map(|r| r.cid)
+        .unwrap();
+    let data = |cid: i64| &back.cards.iter().find(|c| c.id == cid).unwrap().data;
+    assert!(
+        !data(never_answered).contains("lrt"),
+        "{}",
+        data(never_answered)
+    );
+    assert!(
+        data(exported.id).contains("\"lrt\""),
+        "{}",
+        data(exported.id)
+    );
+}
+
+/// v1.4.2: the interval sent to Anki is counted in days (day of the last answer → due day),
+/// whatever the time of day of the answer; a relearning card sends the interval it returns to.
+#[test]
+fn exported_interval_is_in_days_whatever_the_time_of_the_answer() {
+    let (mut pack, _) = to_pack(&sample(), NOW);
+    let day = 86_400_000_i64;
+    let due = Timestamp(NOW.0.div_euclid(day) * day + 10 * day);
+    let mut expect = Vec::new();
+    let mut hours = [13_i64, 23, 1, 11].into_iter().cycle();
+    let mut relearning = false;
+    for c in &mut pack.cards {
+        let s = &mut c.scheduling;
+        if s.state == CardState::Review && !relearning {
+            // Lapsed a few minutes ago.
+            relearning = true;
+            s.state = CardState::Relearning;
+            s.last_review = Some(Timestamp(NOW.0 - 60_000));
+            s.due = Some(Timestamp(NOW.0 + 540_000));
+        }
+        match s.state {
+            CardState::Review => {
+                // Answered `h` hours into the day, seven days before the due day.
+                let h = hours.next().unwrap();
+                s.due = Some(due);
+                s.last_review = Some(Timestamp(due.0 - 7 * day + h * 3_600_000));
+                expect.push((2, 7));
+            }
+            CardState::Relearning => {
+                s.stability = Some(5.6);
+                expect.push((3, 6));
+            }
+            _ => {}
+        }
+    }
+    assert!(expect.contains(&(3, 6)) && expect.len() >= 3, "{expect:?}");
+    let back = from_pack(&pack, true, NOW);
+    let mut got: Vec<(i64, i64)> = back
+        .cards
+        .iter()
+        .filter(|c| matches!(c.ctype, 2 | 3))
+        .map(|c| (c.ctype, c.ivl))
+        .collect();
+    got.sort_unstable();
+    expect.sort_unstable();
+    assert_eq!(got, expect);
 }

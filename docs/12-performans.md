@@ -15,7 +15,7 @@ cargo test -p fc-app --lib perf_suite_scaled -- --nocapture
 Dünya bir süreçte kurulur, ölçümleri **ayrı bir süreç** (`perf_tests::probe`) yapar: masaüstü uygulamasının
 yaptığı gibi koleksiyonu açar ve her şeyi `App::invoke` (JSON giriş/çıkış) üzerinden çağırır. Yedek ölçümleri
 kendi tepe belleğini ölçer (Linux `clear_refs` ile süreç tepe değeri sıfırlanır). `FC_PERF_KEEP=<dosya>` kurulan
-koleksiyonu saklar (profil için). Profil (v1.4 Z2): `FC_PERF_HOT_DB=<kopya> FC_PERF_HOT_OP=tree|summaries|start|options|breakdown|page cargo test -p fc-app --release --lib perf_tests::hot -- --ignored --nocapture` tek işi döngüde zamanlar; gdb ile örneklemek için (kopyanın eski `-wal`/`-shm` dosyalarını silin).
+koleksiyonu saklar (profil için). Profil (v1.4 Z2; v1.4.2'de `answers|stats|search|import_text|apkg_export|apkg_import` ve `FC_PERF_HOT_MODULE_OFF=<modül>` eklendi): `FC_PERF_HOT_DB=<kopya> FC_PERF_HOT_OP=tree|summaries|start|options|breakdown|page cargo test -p fc-app --release --lib perf_tests::hot -- --ignored --nocapture` tek işi döngüde zamanlar; gdb ile örneklemek için (kopyanın eski `-wal`/`-shm` dosyalarını silin).
 
 **Film izleme katmanı** (`fc-app/src/perf_film.rs`, v1.4 Z1): v1.0 dünyasının üstüne, gerçek yoldan
 (`subtitle.media.upload` + `subtitle.captures.create`):
@@ -158,6 +158,138 @@ p95 artık 120 örneğin en kötü 7.'si; tek bir duraklama karar veremez. **Bü
 Linux'ta tek başına üç koşu: yakalama 121 örnek, p95 35,4 / 34,4 / 34,1 ms; cevap ~305 örnek, p95 12,5–13,2 ms.
 Paralel koşuda 26,9 / 13,1 ms. Ölçekli paket ~49 → ~55 s sürer. Windows'ta yeşile döndüğünü bir sonraki CI
 gösterecek.
+
+## Anki ile karşılaştırma (v1.4.2 J3, 2026-11-25)
+
+Soru: aynı makinede, aynı büyüklükte veride Anki'nin kendi arka ucu ne kadar hızlı, biz ne kadar hızlıyız?
+Aşağıdaki sayılar bir yarış sonucu değil; hangi işte neden fark olduğunu görmek için.
+
+### Yöntem
+
+- **Aynı makine** (yukarıdaki 4 vCPU konteyner). Makine **paylaşımlıydı**: ölçümler sırasında başka üç iş
+  derleme ve test koşturuyordu (yük ortalaması 1,3–5,6). Mutlak sayılar sakin makinedekinden kötü; iki taraf da
+  aynı koşullarda ölçüldü, ama aynı anda değil.
+- **Aynı biçimde veri, aynı veri değil.** Anki tarafı `tools/anki/bench.py` ile kurulur: perf takımının dünyasının
+  (`build_world`) eşi, resmî `anki` paketiyle (26.09.4, CI'daki sürüm) bir Anki koleksiyonu olarak: 100 000 iki
+  kartlı not / 200 000 kart / 2 000 000 tekrar satırı, aynı desteler, etiketler, durum dağılımı (%25 yeni, %10
+  (yeniden) öğrenme, %65 tekrar), aynı kelimeler. Rastgele sayı üreteci farklı olduğu için satırlar birebir aynı
+  değil (ör. `Kelimeler 1` destesi bizde 8 265, Anki'de 8 342 not). Sınıflandırmalar (`level`, `exam`) Anki'de etiket
+  (`level::B1`). Bizim koleksiyonda ayrıca **film katmanı** var (20 000 karşılaşma, 6 000 kelime, 6 000 kart,
+  1 GiB medya); Anki'ninkinde yok.
+- **Anki:** arka uç Python paketi üzerinden çağrılır (masaüstü Anki'nin çağırdığı aynı Rust kodu). Her iş 5 kez
+  ölçüldü, ortancası alındı; bütün ölçüm dört kez koşuldu (biri kurulumla aynı süreçte, üçü `--reuse` ile),
+  tabloda **dört koşunun ortancalarının ortancası**, parantezde en düşük–en yüksek.
+- **Biz:** `perf_tests::hot` saklanan koleksiyonda (`FC_PERF_KEEP`) her işi `App::invoke` (JSON giriş/çıkış)
+  üzerinden 5 kez (sayfalar 3 kez) koşar; tabloda ortanca. Aynı gün `perf_suite_100k` bir kez baştan sona koştu
+  (aşağıda).
+- İki tarafta da **arayüz yok**: Anki'de Qt/web görünümü, bizde Tauri/Svelte ölçülmedi.
+
+```bash
+python3 -m venv /tmp/ankivenv && /tmp/ankivenv/bin/pip install anki==26.09.4
+/tmp/ankivenv/bin/python -I tools/anki/bench.py --dir <klasör> --runs 5            # kur + ölç
+/tmp/ankivenv/bin/python -I tools/anki/bench.py --dir <klasör> --runs 5 --reuse    # aynı koleksiyonu yeniden ölç
+FC_PERF_DIR=<klasör> FC_PERF_KEEP=<klasör>/kept.db cargo test -p fc-app --release --lib perf_suite_100k -- --ignored --nocapture
+FC_PERF_HOT_DB=<kept.db kopyası> FC_PERF_HOT_OP=tree|start|answers|stats|search|page|keyset|import_text|apkg_export|apkg_import FC_PERF_HOT_N=5 \
+  cargo test -p fc-app --release --lib perf_tests::hot -- --ignored --nocapture
+```
+
+### Sonuçlar (ms, ortanca)
+
+| İş | Anki arka ucu | Biz | Ne kadar karşılaştırılabilir |
+|---|---|---|---|
+| Koleksiyonu aç | 40 (39–44), deste ağacı dahil | aç 170 + `decks.tree` 523 | Kısmen. Bizim açılış çöp boşaltma, sahipsiz medya ve yarım yedek denetimi de yapar; ağaç aşağıda |
+| Deste ağacı (sayılarla) | 36 (35–41) | 523 | Farklı iş: aşağıda "Neden" 1 |
+| Günün kuyruğunu kur | 44 (YKS) / 64 (İngilizce) | `study.start` 399 | Farklı iş: Anki tek deste ağacını, sınır kadar kartla kurar; biz bütün koleksiyonu. "Neden" 2 |
+| Cevap ver + sıradaki kart, p50 / p95 | 0,6 / 1,5 (p50 0,6–3,3) | 5,6 / 6,8 (yük dengeleyici kapalı: p50 2,7) | Evet (ikisi de kartı günceller, geçmişe yazar, sıradakini verir). "Neden" 3 |
+| Özel oturum, 200 kart (`level>=B1 deck:İngilizce`) | filtreli deste 227 (190–244) | 754 (takım, tek ölçüm) | Kısmen: Anki kartları filtreli desteye taşır; biz oturum kurarız |
+| Arama: en yavaş sorgu | 148 (boş sorgu, 200 000 kart) | 100 (`deck:İngilizce is:due`) | Kısmen: Anki eşleşen **bütün** kimlikleri sıralı döndürür + ilk 100 satırı çizer; biz sayım + ilk 100 satır. Sorgu sorgu aşağıda |
+| Tarayıcı sayfası (en kötü: üç sıralama × dört konum) | 161 (147–209); kimlik listesi eldeyken 100 satır 1,7 | ofsetle 120, imleçle 18 | Kısmen: Anki listeyi bir kez sıralar, sonra kaydırma bedavaya yakındır; biz her sayfayı sorgularız |
+| İstatistik, bütün koleksiyon | 617 (599–654), her seferinde hesaplanır | 701 (önbellekten) | Kısmen: ekranlar farklı şeyler gösterir; ikisi de 2M satırlık geçmişin özeti |
+| İstatistik, bir deste ağacı | 1 124 (897–1 426) | 2 991 | Aynı not. Bizde kapsamlı istek önbelleksiz ("Bilinen sınırlar") |
+| Kart bilgisi | 0,1 | — (ölçülmedi) | — |
+| 10 000 satır metin içe aktarma | 375 (350–389) | ~1 520 → **~1 250** (düzeltmeden sonra; "Neden" 4) | Evet. "Neden" 4 |
+| `.apkg` dışa aktarma (bir deste: ~8 300 not, 16 500 kart, ~165 000 geçmiş satırı) | 1 104 (1 045–1 360) | 2 169 | Evet (aynı biçim). "Neden" 5 |
+| O `.apkg`'yi boş koleksiyona içe aktarma | 862 (780–1 100) | 3 498 | Evet. "Neden" 5 |
+| Koleksiyon yedeği | 427 (353–698), yalnız koleksiyon, 63 MB | `io.backup.create` 70 s | **Hayır.** Bizimki 1,1 GiB medyayı da yazar, sonra yedeği geçici profile geri yükleyip doğrular |
+| `.colpkg` (medyasız) | 376 (367–836) | — | Ölçülmedi: bizim `.colpkg` medyayı hep içerir (1 GiB) |
+| Tepe bellek | 431 MB (Python + arka uç, bütün ölçümlerden sonra) | 326 MB (takım, yedek hariç) | Kabaca: Python yorumlayıcısı ve 200 000'lik kimlik listeleri Anki tarafında sayılır |
+
+Sorgu sorgu arama (ms; "eşleşme" Anki'deki kart sayısı; bizde boş sorgu 206 002 kart):
+
+| Sorgu (bizim sözdizimi) | Anki | Biz | Eşleşme |
+|---|---|---|---|
+| (boş) | 148 | 27 | 200 000 |
+| `kılıç` | 36 | 36 | 23 958 |
+| `"ağaç çiçek"` | 17 | 4 | 370 |
+| `deck:İngilizce is:due` | 53 | 100 | ~16 000–19 000 (saate bağlı) |
+| `tag:fiil -is:suspended` | 102 | 55 | 108 052 |
+| `level>=B1` (Anki: dört etiketin VEYA'sı) | 107 | 36 | 70 722 |
+| `level:B1 is:due` | 32 | 38 | ~2 200–2 600 |
+| `exam:TYT deck:YKS` | 36 | 57 | 17 748 |
+| `(level:A1 OR level:C2) apple` | 34 | 40 | 4 338 |
+| `-level:A1 deck:İngilizce tag:isim` | 67 | 78 | 38 122 |
+| `stability>20 lapses>=2` (Anki: `prop:s>20 prop:lapses>=2`) | 119 | 34 | 91 245 |
+| `retrievability<0.8` (Anki: `prop:r<0.8`) | 73 | 65 | ~8 150 |
+| `front:wh*` | 20 | 62 | 8 452 |
+| `is:new deck:YKS::TYT` | 22 | 76 | 8 482 |
+
+Okuma: çok eşleşmeli sorgularda biz hızlıyız (bütün kimlikleri döndürmüyoruz), az eşleşmeli deste/alan
+süzgeçlerinde Anki 2–4× hızlı (`front:wh*`, `is:new deck:…`, `deck:… is:due`). Bu üçü profillenmedi; bütçenin
+(100 ms) içindeler, `deck:İngilizce is:due` bu yüklü koşuda sınırda (takımın tek ölçümünde en yavaş arama 51 ms).
+
+### Anki'nin açıkça hızlı olduğu işler: neden
+
+Profil: `perf_tests::hot` döngüsüne gdb ile bağlanıp yığın örnekleme (60–160 örnek; pay = örneklerin oranı,
+kaba bir ölçü).
+
+1. **Deste ağacı (36'ya karşı 523 ms).** Bizde ağaçtaki sayı "bu desteye başlarsan kaç kart gelir"in kendisidir
+   (docs/12 Z2: sayılar ve oturum aynı planlayıcıdan geçer). Bunun için bugün vadesi gelen bütün kartlar tam
+   satır olarak okunur (örneklerin ~%25'i), notları okunur (~%20) ve "boş kart" denetimi için şablonları
+   işlenir (~%13). Anki SQL ile sayar ve deste sınırını uygular; boş kartı çalışma sırasında görür. Bu dünyada
+   fark ayrıca büyür: kartların %10'u (≈19 000) "bir saat içinde vadeli öğrenme" durumunda, gerçek bir
+   koleksiyonda bu sayı onlarcadır. Düzeltilmedi: sayı = verilen kart güvencesinden vazgeçmeden hızlandırmak
+   ayrı bir iş (bütçe: açılış 2 000 ms, tutuyor).
+2. **Kuyruk kurma (44–64'e karşı 399 ms).** Aynı okuma + boş kart denetimi (örneklerin ~%70'i), artı oturumun
+   (kuyruğun tamamı, burada ~19 000 kart) veritabanına yazılması (~%12): uygulama kapanıp açılınca oturum
+   kaldığı yerden sürer. Anki kuyruğu bellekte tutar ve seçili deste ağacından en fazla sınır kadar kart alır
+   (burada 200 tekrar + vadesi gelen öğrenme kartları; yeni kart 0, çünkü v3 zamanlayıcıda yeni kart sınırı
+   tekrar sınırının kalanıyla kısılır). Düzeltilmedi; bütçe 500 ms.
+3. **Cevap (0,6'ya karşı 5,6 ms).** Yük dengeleyici (`planning` modülü) cevabın yarısından
+   fazlası: örneklerin %65'i `plan_outcome` → `due_counts_by_day` içinde; aynı döngü modül kapalıyken
+   (`FC_PERF_HOT_MODULE_OFF=planning`) p50 **6,2 → 2,7 ms** (ikişer koşu × 5 × 40 cevap). Dengeleyici, verilen
+   aralığın oynama penceresindeki her gün için o gün vadeli kartları dizinden sayar; bunu cevap için ve dönen
+   sıradaki kartın düğme önizlemeleri için ayrı ayrı yapar. Maliyet o günlerde vadeli kart sayısıyla orantılı:
+   bu dünyada gün başına ~1 100 kart var (gerçek bir kişisel koleksiyonda onlarca). Anki'nin dengeleyicisi gün
+   başına sayıları oturum boyunca bellekte tutar. Düzeltilmedi (sonraki iş: bir cevabın bütün pencereleri için
+   tek sayım, ya da sayıların oturumla birlikte bellekte tutulması). Kalanı: her cevap kendi
+   işlemi olarak diske yazılır (kart, geçmiş satırı, geri alma için işlem kaydı, oturumun değişen kısmı); Anki
+   cevabı açık bir işlemin içinde biriktirir, geri almayı bellekte tutar. Bu yüzden karşılaştırma tam eşit
+   değil: bizde cevap döndüğünde kalıcıdır. Bütçe p95 20 ms.
+4. **Metin içe aktarma (375'e karşı 1 455 ms).** Örnekler: notun yazılması (tam metin dizini, medya/bağlantı
+   başvuruları dahil) ~%31, satır başına diğer yazma ve okumalar (kartlar, yinelenen not denetimi,
+   sınıflandırma değerleri, köken kaydı) ~%29, her satır için deste listesinin yeniden okunması ~%16, kart
+   üretimi/boş kart denetimi ~%6, metnin ayrıştırılması ve kelime dizini ~%9. **Düzeltilen:** deste soy ağacı ve
+   "sınıflandırma modülü açık mı" artık parça (işlem) başına bir kez okunur: düzeltmesiz ortanca 1 517 ms (dört koşu × 5: 1 455, 1 394, 1 700,
+   1 579; yük ortalaması 1,3–1,7), düzeltmeyle 1 250 ms (dört koşu × 5: 1 220, 1 254, 1 246 ve bozulan bir koşu
+   1 532; yük 0,5–0,6). İki ölçüm aynı makine yükünde alınamadı; profildeki pay (%16) ~230 ms'lik bir kazanca
+   denk gelir, ölçülen fark (~270 ms) bununla uyumlu ama yükten ayrıştırılmış değil. Takımın bütçesi (10 000 ms)
+   değişmedi.
+   Kalan fark yapısal: içe aktarma geri alınabilir tek adımdır ve parçalar hâlinde yazılır (iptal edilebilir,
+   bu sırada başka komutlar çalışır).
+5. **`.apkg` dışa/içe aktarma (2× / 4×).** Profillenmedi. Bilinen farklar: biz Anki koleksiyonunu kendi
+   modelimizden yeniden kurarız (not tipleri, kart `ord`'ları, medya adları, kimlik türetme), Anki kendi
+   satırlarını kopyalar; içe aktarmada her not komut yolundan geçer (tam metin dizini, kelime dizini, geri alma
+   kaydı), 165 000 geçmiş satırı 2M satırlık istatistik önbelleğini geçersiz kılar. Bütçesi yok; ayrı bir iş.
+
+### Aynı gün tam takım (tek koşu, paylaşımlı makine)
+
+`perf_suite_100k` bir kez baştan sona koştu (yük ortalaması ~4,3; kurulum 44 s + film katmanı 154 s):
+açılış 692 ms, **`study.start` 705 ms (bütçe 500: aştı)**, sıradaki kart p50/p95 6,1 / 10,4 ms, en yavaş arama
+51 ms, tarayıcı sayfası 82 ms (imleçle 30), istatistik 735 / 1 188 / 2 982 ms, 10 000 satır içe aktarma 1 589 ms,
+tepe bellek 326 MB, yakalama p95 12,0 ms, cevap sırasında yakalama p95 30,0 ms, `io.backup.create` 70 s / 388 MB,
+`io.backup.verify` 55 s / 358 MB. `study.start` dışındaki bütün bütçeler tuttu. `study.start` yüklü makinede
+daha önce de aşmıştı (F1 koşusu: 663 ms, "Bilinen sınırlar"); aynı ikiliyle az sonra `hot` döngüsünde ortanca
+399 ms (380–418). Bu iz o yola dokunmadı. Sakin makinede yeniden koşulmalı.
 
 ## Düzeltilenler (önce → sonra)
 

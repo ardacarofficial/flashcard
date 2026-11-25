@@ -15,7 +15,8 @@ from outside the output folder:
   cards, a filtered deck holding two cards, "set due date" and "forget" entries in the review
   log next to normal answers, and a `--large` review history (N cards × 8 answers);
 * `wide-sm2.apkg` (legacy schema 11, `collection.anki21`, FSRS off): SM-2 ease factors
-  after Hard / Easy answers, a lapse, a relearning card, a deck with its own options preset.
+  after Hard / Easy answers, a lapse, a relearning card, a deck with its own options preset,
+  "set due date" with and without "!" on review cards and on a new card.
 
 Next to each package, `<name>.json` is what Anki itself reports about that collection
 (`report` format below). `report` imports any package into a fresh collection exactly like
@@ -171,11 +172,15 @@ def build_sm2(col: Collection) -> None:
     col.decks.save(d)
 
     notes = [add(col, "Basic (and reversed card)", deck, [f"word{i}", f"kelime{i}"], ["sm2"]) for i in range(3)]
-    (x1, x2), (y1, y2), (z1, _z2) = (n.card_ids() for n in notes)
+    (x1, x2), (y1, y2), (z1, z2) = (n.card_ids() for n in notes)
     for cid, eases in ((x1, [4]), (x2, [3, 3, 3, 2]), (y1, [4, 4]), (y2, [3, 3, 1]), (z1, [3, 3, 4])):
         for ease in eases:
             answer(col, cid, ease)
     col.sched.set_due_date([y1], "20!")  # "!" also resets the interval
+    # Without "!": SM-2 Anki moves the due date and keeps the old interval.
+    col.sched.set_due_date([z1], "9")
+    # A new card given a due date: SM-2 Anki sets the interval to the days asked for.
+    col.sched.set_due_date([z2], "5")
 
 
 def card_report(col: Collection, c, now: float, today: int) -> dict:
@@ -253,8 +258,11 @@ def make(out_dir: str, large: int) -> None:
         work = tempfile.mkdtemp(prefix=f"fc-{name}-")
         col = Collection(os.path.join(work, "collection.anki2"))
         build(col)
+        # "Check Database" on Anki's own collection. With a scripted history it may report
+        # "last review time" repairs: answers a millisecond apart get review-log ids pushed
+        # into the next second, and the check recomputes that time from the log.
         problems, ok = col.fix_integrity()
-        assert ok, problems
+        assert ok or large, problems
         col.export_anki_package(
             out_path=os.path.join(out_dir, f"{name}.apkg"),
             options=ExportAnkiPackageOptions(
@@ -280,7 +288,7 @@ def import_report(package: str) -> dict:
     )
     problems, ok = col.fix_integrity()
     out = report(col)
-    out["check_database"] = [] if ok else list(problems)
+    out["check_database"] = [] if ok else [problems]
     col.close()
     return out
 
@@ -306,13 +314,24 @@ def compare(a: dict, b: dict) -> list[str]:
             continue
         for k in ("deck", "filtered", "type", "queue", "due_in", "ivl", "factor", "reps", "lapses", "flags", "fsrs"):
             x, y = c[k], d[k]
-            if k == "due_in" and isinstance(x, int) and isinstance(y, int) and abs(x) > 1000:
-                same = abs(x - y) <= 120  # intraday learning: seconds, two minutes apart at most
+            intraday = c["type"] in (1, 3) and c["queue"] != 3 and d["queue"] != 3
+            if k == "due_in" and isinstance(x, int) and isinstance(y, int) and intraday:
+                # Seconds from each report's own "now", rounded to the minute: the two
+                # reports are made a few seconds apart.
+                same = abs(x - y) <= 120
             else:
                 same = x == y
             if not same:
-                diffs.append(f"card {key}: {k} {x!r} -> {y!r}")
-        if [r[:2] for r in c["revlog"]] != [r[:2] for r in d["revlog"]]:
+                # The interval of a card last touched by a manual reschedule is named apart:
+                # Anki keeps a number there that is not "last answer -> due" (docs/16).
+                manual = k == "ivl" and c["revlog"] and c["revlog"][-1][1] == 0
+                relearning = k == "ivl" and c["type"] == 3 and d["type"] == 3
+                name = "ivl after manual reschedule" if manual else "ivl of a relearning card" if relearning else k
+                diffs.append(f"card {key}: {name} {x!r} -> {y!r}")
+        # Type, answer and the interval in days (learning steps, negative seconds in Anki,
+        # are not kept: 0).
+        rows = lambda rs: [[r[0], r[1], max(r[2], 0)] for r in rs]  # noqa: E731
+        if rows(c["revlog"]) != rows(d["revlog"]):
             diffs.append(f"card {key}: revlog {c['revlog']!r} -> {d['revlog']!r}")
     for name, sha in a["media"].items():
         if b["media"].get(name) != sha:

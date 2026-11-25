@@ -990,7 +990,7 @@ fn perf_suite_scaled() {
 
 /// Profiling helper (v1.4 Z2): times one hot path of a kept collection (`FC_PERF_KEEP`)
 /// `FC_PERF_HOT_N` times, so a sampler (gdb, perf) can attach to a steady loop:
-/// `FC_PERF_HOT_DB=<copy> FC_PERF_HOT_OP=tree|start|breakdown|page|keyset|options cargo test -p fc-app
+/// `FC_PERF_HOT_DB=<copy> FC_PERF_HOT_OP=tree|start|answers|stats|breakdown|page|keyset|search|import_text|apkg_export|colpkg_export|apkg_import|options cargo test -p fc-app
 /// --release --lib perf_tests::hot -- --ignored --nocapture`. The collection is written to
 /// (sessions are started and ended): give it a copy.
 #[test]
@@ -1006,6 +1006,18 @@ fn hot() {
         .unwrap_or(5);
     let (open, app) = time(|| App::open_sqlite(Path::new(&path)).unwrap());
     println!("open {open:.1} ms");
+    // `FC_PERF_HOT_MODULE_OFF=<module id>`: the same loop with a module switched off (what
+    // a module costs on a hot path; v1.4.2: `planning` on `answers`).
+    if let Some(module) = std::env::var("FC_PERF_HOT_MODULE_OFF")
+        .ok()
+        .filter(|m| !m.is_empty())
+    {
+        invoke(
+            &app,
+            "modules.set_enabled",
+            json!({ "id": module, "enabled": false }),
+        );
+    }
     let level_id = invoke(&app, "attributes.list", json!({}))["defs"]
         .as_array()
         .unwrap()
@@ -1054,6 +1066,124 @@ fn hot() {
                         println!("  page {sort} @{offset}: {ms:.1} ms");
                     }
                 }
+            }
+            // v1.4.2: every browser query on its own (count + first page of 100), the
+            // per-query numbers behind "slowest search" (docs/12, Anki comparison).
+            "search" => {
+                for q in SEARCH_QUERIES {
+                    let (ms, _) =
+                        time(|| invoke(&app, "search.cards", json!({ "query": q, "limit": 100 })));
+                    println!("  search {q:?}: {ms:.1} ms");
+                }
+            }
+            // v1.4.2 (docs/12, Anki comparison): a session over the whole collection and
+            // 40 answers, each returning the next card.
+            "answers" => {
+                let (start, mut session) = time(|| {
+                    invoke(
+                        &app,
+                        "study.start",
+                        json!({ "kind": "normal", "tz_offset_mins": 180 }),
+                    )
+                });
+                let mut laps = Vec::new();
+                for _ in 0..40 {
+                    let card = session["current"]["card_id"].clone();
+                    let (ms, next) = time(|| {
+                        invoke(
+                            &app,
+                            "study.answer",
+                            json!({
+                                "session_id": session["id"],
+                                "card_id": card,
+                                "rating": "good",
+                                "duration_ms": 4_000,
+                            }),
+                        )
+                    });
+                    laps.push(ms);
+                    session = next;
+                }
+                invoke(&app, "study.end", json!({ "session_id": session["id"] }));
+                laps.sort_by(f64::total_cmp);
+                println!(
+                    "  study.start {start:.1} ms, answer p50 {:.1} / p95 {:.1} ms",
+                    percentile(&laps, 0.5),
+                    percentile(&laps, 0.95)
+                );
+            }
+            // v1.4.2: statistics, whole collection (cached after the first) and one deck tree.
+            "stats" => {
+                let (all, _) =
+                    time(|| invoke(&app, "stats.overview", json!({ "tz_offset_mins": 180 })));
+                let english = invoke(&app, "decks.list", json!({}))["decks"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|d| d["path"] == "İngilizce")
+                    .unwrap()["id"]
+                    .clone();
+                let (deck, _) = time(|| {
+                    invoke(
+                        &app,
+                        "stats.overview",
+                        json!({ "scope": { "deck_id": english }, "tz_offset_mins": 180 }),
+                    )
+                });
+                println!("  stats.overview all {all:.1} ms, deck {deck:.1} ms");
+            }
+            // v1.4.2: 10 000 pasted lines into a deck (new lines every time).
+            "import_text" => {
+                let path = format!("İçe aktarılan {i}");
+                let target = invoke(&app, "decks.create", json!({ "path": path }))["id"].clone();
+                let text: String = (0..10_000)
+                    .map(|k| format!("yeni kelime {i}-{k}\tnew word {i}-{k}\n"))
+                    .collect();
+                let (ms, report) = time(|| {
+                    let job = invoke(
+                        &app,
+                        "io.import.start",
+                        json!({ "source": { "kind": "text", "text": text }, "deck_id": target }),
+                    );
+                    app.run_pending_jobs().unwrap();
+                    invoke(&app, "jobs.get", json!({ "id": job["id"] }))
+                });
+                assert_eq!(report["result"]["added_notes"], json!(10_000), "{report}");
+                println!("  import_text: {ms:.1} ms");
+            }
+            // v1.4.2: packages (docs/12, Anki comparison). `FC_PERF_PKG` is the file:
+            // `apkg_export` writes the deck `İngilizce::Kelimeler 1` with history there,
+            // `colpkg_export` the whole collection, `apkg_import` reads it (give the
+            // run an empty collection to import into, as Anki's side does).
+            "apkg_export" | "colpkg_export" | "apkg_import" => {
+                let pkg = std::env::var("FC_PERF_PKG").expect("FC_PERF_PKG");
+                let job = if op == "apkg_import" {
+                    invoke(
+                        &app,
+                        "io.import.start",
+                        json!({ "source": { "kind": "file", "path": pkg }, "format": "anki" }),
+                    )
+                } else {
+                    let deck = (op == "apkg_export").then(|| {
+                        invoke(&app, "decks.list", json!({}))["decks"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .find(|d| d["path"] == "İngilizce::Kelimeler 1")
+                            .unwrap()["id"]
+                            .clone()
+                    });
+                    let format = if deck.is_some() { "apkg" } else { "colpkg" };
+                    invoke(
+                        &app,
+                        "io.export.start",
+                        json!({ "format": format, "path": pkg, "deck_id": deck }),
+                    )
+                };
+                app.run_pending_jobs().unwrap();
+                let report = invoke(&app, "jobs.get", json!({ "id": job["id"] }));
+                assert_eq!(report["status"], json!("succeeded"), "{report}");
+                println!("  {op}: {}", report["result"]);
             }
             // v1.4: the same pages by keyset cursor.
             "keyset" => {
