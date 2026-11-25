@@ -44,6 +44,8 @@ mod acceptance;
 #[cfg(test)]
 mod cards_tests;
 #[cfg(test)]
+mod cut_short_tests;
+#[cfg(test)]
 mod i18n_lint_tests;
 #[cfg(test)]
 mod module_switch_tests;

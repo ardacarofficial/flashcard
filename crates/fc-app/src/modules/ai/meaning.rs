@@ -362,15 +362,26 @@ fn suggest(services: &AiServices, req: AiMeaningRef, ctx: &mut CommandCtx<'_>) -
 
 /// Hook for the Subtitle capture (W1): after a capture made or matched `note_id`, queue an
 /// automatic meaning suggestion **if** the AI module is on, the user opted in
-/// (`ai.meaning.auto_suggest`), the budget is not spent and a provider is set up. Never
-/// fails the capture: any of those missing → `None`, and nothing was written. Runs
+/// (`ai.meaning.auto_suggest`), the budget is not spent and a provider is set up. A refusal
+/// never fails the capture: any of those missing → `Ok(None)`, and nothing was written (the
+/// nested `ai.meaning.suggest` refuses before its only write, the job row). Runs
 /// `ai.meaning.suggest` nested, so it is the same path as a direct call.
-pub fn suggest_after_capture(ctx: &mut CommandCtx<'_>, note_id: NoteId) -> Option<JobDto> {
-    let enabled = crate::support::module_enabled(ctx.reads(), ctx.registry, super::ID).ok()?;
-    if !enabled || !auto_suggest_on(ctx.reads()).ok()? {
-        return None;
+///
+/// A **storage** failure is passed on (v1.4.2 K1): the transaction the capture shares may
+/// be gone (full disk, deadline), and the capture must fail as a whole with that error
+/// instead of going on and failing later with another one.
+pub fn suggest_after_capture(
+    ctx: &mut CommandCtx<'_>,
+    note_id: NoteId,
+) -> AppResult<Option<JobDto>> {
+    let enabled = crate::support::module_enabled(ctx.reads(), ctx.registry, super::ID)?;
+    if !enabled || !auto_suggest_on(ctx.reads())? {
+        return Ok(None);
     }
-    let call = inverse_call::<AiMeaningSuggest>(&AiMeaningRef { note_id }).ok()?;
-    let value = ctx.call(&call).ok()?;
-    serde_json::from_value(value).ok()
+    let call = inverse_call::<AiMeaningSuggest>(&AiMeaningRef { note_id })?;
+    match ctx.call(&call) {
+        Ok(value) => Ok(serde_json::from_value(value).ok()),
+        Err(AppError::Storage(e)) => Err(AppError::Storage(e)),
+        Err(_) => Ok(None),
+    }
 }

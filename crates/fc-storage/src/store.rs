@@ -291,6 +291,16 @@ impl SqliteStore {
         })
     }
 
+    /// The writer connection, outside any transaction (kill and fault tests only).
+    #[cfg(feature = "crash-points")]
+    pub(crate) fn with_writer<T>(&self, f: impl FnOnce(&Connection) -> T) -> T {
+        let conn = self
+            .writer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        f(&conn)
+    }
+
     /// Opens an existing database **without migrating or snapshotting it**: for secondary
     /// processes (`fc mcp serve`) that must not rewrite a collection the app owns. Fails with
     /// [`StorageError::NeedsMigration`] when migrations are pending and with

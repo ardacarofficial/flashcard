@@ -96,3 +96,30 @@ pub fn write_older_collection(
     tx.load_collection(dump)?;
     tx.commit()
 }
+
+/// Runs `sql` on the writer connection of `store`, outside any transaction (tests: a trigger
+/// that makes one statement of a command fail, a table that cannot be read).
+///
+/// # Errors
+/// The SQLite error as text.
+pub fn run_sql(store: &crate::SqliteStore, sql: &str) -> Result<(), String> {
+    store.with_writer(|conn| conn.execute_batch(sql).map_err(|e| e.to_string()))
+}
+
+/// A full disk for the writer connection of `store`: with `Some(extra)` the database may grow
+/// by `extra` more pages and then every statement that needs another one stops with SQLite's
+/// own "database or disk is full"; `None` lifts the limit. Returns the page count now.
+///
+/// # Errors
+/// The SQLite error as text.
+pub fn allow_pages(store: &crate::SqliteStore, extra: Option<u32>) -> Result<u32, String> {
+    store.with_writer(|conn| {
+        let pages: u32 = conn
+            .pragma_query_value(None, "page_count", |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        let limit = extra.map_or(u32::MAX - 1, |e| pages.saturating_add(e));
+        conn.pragma_update_and_check(None, "max_page_count", limit, |r| r.get::<_, i64>(0))
+            .map_err(|e| e.to_string())?;
+        Ok(pages)
+    })
+}
