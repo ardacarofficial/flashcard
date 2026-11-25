@@ -73,7 +73,7 @@
     "tts": {
       "provider": {
         "label": "Ses sağlayıcısı",
-        "description": "Boş = kullanılabilen ilk sağlayıcı."
+        "description": "Boş = kullanılabilen ilk sağlayıcı. Windows'ta bu, Windows'un kendi sesleridir (internetsiz, anahtarsız): builtin.system."
       }
     },
     "audio_fill": {
@@ -290,8 +290,12 @@
       "plugin_rejected": "Bir eklenti bunu durdurdu: {message}"
     },
     "provider": {
-      "plugin_failed": "Bir eklenti hata verdi ({kind})."
+      "plugin_failed": "Bir eklenti hata verdi ({kind}).",
+      "no_voice": "Bu bilgisayarda {language} için kurulu bir ses yok. Windows'ta Ayarlar → Saat ve dil → Konuşma → Ses ekle'den ekleyebilirsin (dil paketini kurar), sonra yeniden dene."
     }
+  },
+  "tts_providers": {
+    "system": "Windows sesleri (internetsiz)"
   },
   "audio_fill": {
     "job": {

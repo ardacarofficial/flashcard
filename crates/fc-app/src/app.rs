@@ -313,12 +313,22 @@ impl App {
         Ok(())
     }
 
+    /// Built-in providers that need the operating system (v1.4.2 J4: the voices Windows has,
+    /// offline, as the TTS provider `builtin.system`; nothing elsewhere). Only the real
+    /// collection opens register them: the service tests behave the same on every platform.
+    pub fn register_system_providers(&self) {
+        if let Some(tts) = fc_system_tts::provider() {
+            self.registry.register_tts(tts);
+        }
+    }
+
     /// Opens (creating and migrating if needed) the SQLite collection at `path` and returns a
     /// ready app: production deps, [`App::load_state`] done.
     pub fn open_sqlite(path: &std::path::Path) -> AppResult<Self> {
         let store = Arc::new(fc_storage::SqliteStore::open(path)?);
         let app = Self::new(AppDeps::with_store(store))
             .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+        app.register_system_providers();
         if let Some(dir) = path.parent() {
             app.set_data_dir(dir.to_path_buf());
         }
@@ -341,6 +351,7 @@ impl App {
         let store = Arc::new(fc_storage::SqliteStore::open_current(path)?);
         let app = Self::new(AppDeps::with_store(store))
             .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
+        app.register_system_providers();
         if let Some(dir) = path.parent() {
             app.set_data_dir(dir.to_path_buf());
         }

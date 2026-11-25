@@ -310,6 +310,10 @@ jobs:
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
       - name: Backend testleri (core, storage, app, CLI e2e)
         run: cargo test --locked -p fc-core -p fc-storage -p fc-app -p fc-cli
+      # v1.4.2 J4: the real Windows voice speaks one English sentence into a decodable WAV. A
+      # runner without an English voice prints "no voice" (and a warning annotation), not a pass.
+      - name: Windows offline speech (system voices)
+        run: cargo test --locked -p fc-system-tts -- --nocapture
       - name: Frontend derle
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile

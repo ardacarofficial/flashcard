@@ -153,7 +153,7 @@
       "no_text": "Okunacak bir yazı yok.",
       "tts_off": "Seslendirme kapalı.",
       "no_tts_provider": "Seslendirme sağlayıcısı yok.",
-      "no_voice": "Bu dil için kurulu bir ses yok."
+      "no_voice": "Bu dil için kurulu bir ses yok. Windows'ta ekleyebilirsin: Ayarlar → Saat ve dil → Konuşma → Ses ekle."
     },
     "origin": {
       "original": "özgün",

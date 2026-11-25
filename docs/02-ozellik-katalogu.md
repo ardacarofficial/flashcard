@@ -166,7 +166,7 @@ Kart türü motorunun üç işi vardır: **kart üret**, **soruyu sun**, **cevab
 - ⛱️ **Yarına bırak** (gömme): Kart sadece bugün gösterilmez.
 - ✏️ **Kartı düzenle:** Çalışmadan çıkmadan kartı düzenleme.
 - ℹ️ **Kart bilgisi:** Bkz. §11.
-- 🔊 **Sesli okuma:** TTS sağlayıcısı varsa alan seslendirilir (otomatik ya da butonla).
+- 🔊 **Sesli okuma:** TTS sağlayıcısı varsa alan seslendirilir (otomatik ya da butonla). `[v1.4.2]` Windows'ta yerleşik sağlayıcı **Windows sesleri** (`builtin.system`): internetsiz, anahtarsız, notun dilindeki kurulu sesle; eksik sesi de doldurur. O dil için ses yoksa ne kurulacağını söyler (Ayarlar → Saat ve dil → Konuşma → Ses ekle). docs/03 §13.
 - 🧘 **Odak modu:** Tam ekran, dikkat dağıtıcı her şey gizli.
 
 ## 7. ✍️ Cevap kontrolü

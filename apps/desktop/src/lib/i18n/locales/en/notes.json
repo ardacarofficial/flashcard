@@ -153,7 +153,7 @@
       "no_text": "There is no text to read.",
       "tts_off": "Text to speech is off.",
       "no_tts_provider": "No text-to-speech provider.",
-      "no_voice": "No voice installed for this language."
+      "no_voice": "No voice installed for this language. On Windows add one: Settings → Time & language → Speech → Add voices."
     },
     "origin": {
       "original": "original",

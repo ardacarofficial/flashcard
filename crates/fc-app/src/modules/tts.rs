@@ -85,6 +85,46 @@ fn provider_error(provider: &str, e: ProviderError) -> AppError {
     )
 }
 
+/// Primary language subtag, lower case (`en-US` → `en`).
+fn primary(tag: &str) -> String {
+    tag.trim()
+        .split(['-', '_'])
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase()
+}
+
+/// After a failed synthesis: when the provider lists voices and none speaks `language`, the
+/// plain "no voice for this language — install one" error (`errors.provider.no_voice`, v1.4.2
+/// J4) instead of the provider's own message.
+fn no_voice_error(p: &dyn TtsProvider, id: &str, language: &str) -> Option<AppError> {
+    let lang = primary(language);
+    if matches!(lang.as_str(), "" | "und" | "mul" | "zxx") {
+        return None;
+    }
+    let voices = block_on(p.voices()).ok()?;
+    // A provider that lists no voices at all says nothing about languages (as in the audio
+    // fill); only the system provider's empty list means "this machine has no voice".
+    if voices.is_empty() && id != fc_system_tts::PROVIDER_ID {
+        return None;
+    }
+    if voices.iter().any(|v| primary(&v.language) == lang) {
+        return None;
+    }
+    let mut e = ApiError::new(
+        ErrorCode::ProviderUnavailable,
+        format!("no installed voice speaks '{language}'"),
+    )
+    .with_detail("provider", id)
+    .with_detail("kind", "no_voice")
+    .with_detail("language", language);
+    e.message_key = NO_VOICE_KEY.to_owned();
+    Some(AppError::Api(e))
+}
+
+/// i18n key of the "no voice for this language" sentence.
+pub const NO_VOICE_KEY: &str = "errors.provider.no_voice";
+
 fn pick(ctx: &QueryCtx<'_>, requested: Option<String>) -> AppResult<Arc<dyn TtsProvider>> {
     let wanted = match requested {
         Some(p) => Some(p),
@@ -166,13 +206,20 @@ fn synthesize(req: Synthesize, ctx: &QueryCtx<'_>) -> AppResult<AudioDto> {
     }
     let p = pick(ctx, req.provider)?;
     let id = p.info().id;
+    let asked_voice = req.voice.is_some();
+    let language = req.language.clone();
     let clip = block_on(p.synthesize(SpeechRequest {
         text: req.text,
         language: req.language,
         voice: req.voice,
         rate,
     }))
-    .map_err(|e| provider_error(&id, e))?;
+    .map_err(|e| {
+        if asked_voice {
+            return provider_error(&id, e);
+        }
+        no_voice_error(&*p, &id, &language).unwrap_or_else(|| provider_error(&id, e))
+    })?;
     Ok(AudioDto {
         provider: id,
         mime: clip.mime,

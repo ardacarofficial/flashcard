@@ -1,0 +1,27 @@
+[package]
+name = "fc-system-tts"
+description = "Offline text-to-speech with the voices the operating system has (Windows: Windows.Media.SpeechSynthesis), behind the `TtsProvider` interface."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fc-providers.workspace = true
+async-trait.workspace = true
+
+# Only on Windows (v1.4.2 J4). The same version Tauri already pulls in (no new crate in the lock file).
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Media",
+    "Media_Core",
+    "Media_SpeechSynthesis",
+    "Storage",
+    "Storage_Streams",
+] }
+
+[lints]
+workspace = true

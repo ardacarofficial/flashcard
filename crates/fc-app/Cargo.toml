@@ -16,6 +16,8 @@ fc-study = { path = "../fc-study" }
 fc-interop.workspace = true
 fc-ai.workspace = true
 fc-plugins.workspace = true
+# Offline speech with the system's voices (Windows; nothing elsewhere), v1.4.2 J4.
+fc-system-tts.workspace = true
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true

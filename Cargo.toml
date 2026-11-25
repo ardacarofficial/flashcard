@@ -21,6 +21,7 @@ fc-app = { path = "crates/fc-app" }
 fc-interop = { path = "crates/fc-interop" }
 fc-ai = { path = "crates/fc-ai" }
 fc-plugins = { path = "crates/fc-plugins" }
+fc-system-tts = { path = "crates/fc-system-tts" }
 
 # external
 serde = { version = "1", features = ["derive"] }
