@@ -1,4 +1,20 @@
-# v1.4 state — 1.4.1 robustness round closed (I1, 2026-11-23)
+# v1.4 state — 1.4.2 closing round released (L1, 2026-11-25)
+
+Version **1.4.2** (`v14/l1`): the closing round on top of 1.4.1. J1 (independent review of the write path:
+salvage loses fewer rows and counts them, damaged media file repaired, no write after SQLite's own rollback,
+plugin model URL local files only), J2 (installed-app Windows journeys J4–J7 incl. rescue; main window created
+after the app state exists; Subtitle client check cannot pass silently), J3 (Anki manual reschedules kept as
+`manual` rows, round trip checked with real Anki in CI, speed comparison with Anki's backend), J4 (offline
+speech with Windows voices, `builtin.system`), K1 (the review's four open findings closed: process locks,
+media fsync before commit, concurrent migration, AI capture hook) and K2 (answer + next card p50 ~6 → ~2 ms,
+browser page budget was measurement noise) merged. No migration. Record: CHANGELOG 1.4.2, docs/12, 15, 16.
+
+Still pending, all with the owner: manual use on Windows; Subtitle on a real YouTube/Netflix account; adding
+the `SUBTITLE_REPO_TOKEN` repository secret so CI checks the real Subtitle client (then
+`SUBTITLE_CHECK_REQUIRED=true`). The `webdriver-pilot` job is not a gate yet (`continue-on-error` until J4–J6
+were green on three runs in a row).
+
+## 1.4.1 (I1, 2026-11-23)
 
 Version **1.4.1** (`v14/i1`): the robustness round. H1 (FSRS weights of every version, mirrored backups,
 disaster restore), H2 (kill matrix, disk full, damaged-collection rescue, WAL checkpoint), H3 (fuzz/property
