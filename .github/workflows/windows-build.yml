@@ -71,24 +71,28 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # PILOT, non-gating (v1.3): drives the installed app (WebView2) with tauri-driver +
-  # msedgedriver and runs three journeys (apps/desktop/e2e-windows/README.md). Runs after the
-  # installer job, so it can never stop the installer from being built and uploaded;
-  # `continue-on-error` keeps a red pilot from failing the workflow run.
-  # First run (45038113867) failed at session creation ("DevToolsActivePort file doesn't
-  # exist"): this runner is elevated, and since WebView2 Runtime 150 an elevated host ignores
-  # the WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS msedgedriver uses to open the DevTools port.
-  # run.mjs now sets the HKLM WebView2 policy for the app's exe (and removes it afterwards),
-  # runs the app alone first (PREFLIGHT line), tries session strategies in order (SESSION
-  # line) and leaves a diagnosis of every failed try in the results artifact.
+  # Windows journeys against the INSTALLED app (apps/desktop/e2e-windows/README.md): tauri-driver
+  # + msedgedriver drive the WebView2 app. v1.3 pilot (P, J1–J3; the session works through the
+  # HKLM WebView2 policy, strategy "driver+policy": green on every run since). v1.4.2 adds the
+  # owner's data journeys (J4 Subtitle capture over the local API, J5 reopen, J6 backup/restore,
+  # J7 rescue of a truncated collection). The JOB goes red when a BLOCKING journey fails (list
+  # below); J7 never does: it answers the native rescue message box from outside the app (a
+  # flaky native piece), its failure is a warning.
+  # NOT A GATE YET: J4–J7 and the app restarts they need have never run on Windows, so
+  # `continue-on-error` keeps a red job from failing the workflow run (the job itself still
+  # shows red, with ::error annotations and the summary lines). TO MAKE IT A GATE: delete the
+  # `continue-on-error: true` line below, once J4–J6 were green on three runs in a row.
+  # Runs after the installer job, so the installer is always built and uploaded first.
   webdriver-pilot:
-    name: WebDriver pilot (non-gating)
+    name: Windows journeys (installed app)
     needs: installer
     runs-on: windows-2025
     continue-on-error: true
-    timeout-minutes: 50
+    timeout-minutes: 60
     env:
       FC_WIN_E2E_OUT: ${{ github.workspace }}\e2e-windows-results
+      # Journeys whose failure makes this job red (v1.4.2). Not J7 (native dialog): see the README.
+      FC_WIN_E2E_BLOCKING: P,J1,J2,J3,J4,J5,J6
     steps:
       # Only the pilot's own folder (+ root files such as rust-toolchain.toml): no pnpm, no lockfile.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -116,8 +120,9 @@ jobs:
           if (-not $exe) { throw "no installed app under $dir (per-user install expected)" }
           Write-Host "installed: $($exe.FullName)"
           $fc = Join-Path $dir 'fc.exe'
-          if (Test-Path $fc) { Write-Host "fc CLI installed beside the app: $fc" } else { Write-Warning "fc.exe is not beside the installed app ($dir): Settings › MCP will not find it" }
+          if (Test-Path $fc) { Write-Host "fc CLI installed beside the app: $fc" } else { Write-Warning "fc.exe is not beside the installed app ($dir): Settings › MCP will not find it, J7 cannot fold/fall back" }
           "FC_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "FC_CLI=$fc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Runner, WebView2 and Edge versions
         shell: pwsh
         run: |
@@ -181,12 +186,13 @@ jobs:
           $td = (Get-Command tauri-driver -ErrorAction Stop).Source
           Write-Host "tauri-driver: $(cargo install --list | Select-String '^tauri-driver') ($td)"
           "TAURI_DRIVER=$td" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      # Zero npm dependencies: Node 22's fetch speaks WebDriver to tauri-driver on 127.0.0.1:4444.
-      # Prints PREFLIGHT / SESSION / PASS|FAIL lines (also on the run's summary page).
+      # Zero npm dependencies: Node 22's fetch speaks WebDriver to tauri-driver on 127.0.0.1:4444
+      # and the Subtitle contract to the app's local API. Prints PREFLIGHT / SESSION / PASS|FAIL
+      # lines (also on the run's summary page); exits 1 only when a blocking journey failed.
       - name: Journeys against the installed app
         shell: pwsh
-        timeout-minutes: 25
-        run: node apps/desktop/e2e-windows/run.mjs --app "$env:FC_EXE" --native-driver "$env:MSEDGEDRIVER" --tauri-driver "$env:TAURI_DRIVER" --out "$env:FC_WIN_E2E_OUT"
+        timeout-minutes: 35
+        run: node apps/desktop/e2e-windows/run.mjs --app "$env:FC_EXE" --native-driver "$env:MSEDGEDRIVER" --tauri-driver "$env:TAURI_DRIVER" --fc "$env:FC_CLI" --out "$env:FC_WIN_E2E_OUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
