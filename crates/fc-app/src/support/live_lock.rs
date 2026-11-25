@@ -15,6 +15,12 @@
 //! Best effort by design: a collection without a folder (in memory), or a file system that
 //! cannot lock, has no locks, and startup behaves as it did before — everything unfinished
 //! counts as crashed.
+//!
+//! `File::try_lock` is in the standard library since Rust 1.89; the workspace states 1.86 as
+//! its oldest compiler but builds with the pinned toolchain (`rust-toolchain.toml`), so the
+//! lint about newer APIs is switched off here rather than raising the stated version, which
+//! would turn on new lints across the whole code base.
+#![allow(clippy::incompatible_msrv)]
 
 use std::fs::{File, OpenOptions, TryLockError};
 use std::path::{Path, PathBuf};
