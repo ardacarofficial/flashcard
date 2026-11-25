@@ -40,6 +40,68 @@ fn file_err(path: &Path, e: &std::io::Error) -> StorageError {
     }
 }
 
+/// Forces media files a transaction wrote to disk (v1.4.2 K1, review finding 10), before
+/// its rows are committed: file contents (`fsync` / `FlushFileBuffers`), then on Unix each
+/// folder once, which is where the rename lives (Windows has no such call; NTFS journals
+/// the rename). A power cut may still lose the last commits (`synchronous = NORMAL`), but a
+/// media row that survives finds its bytes. A file that is gone again (removed later in the
+/// same transaction) is skipped.
+///
+/// A capture brings one or two files; a restore or an import brings thousands in one
+/// transaction, so from [`SYNC_PARALLEL_FROM`] files on they are forced by a few threads at
+/// once (the file system then writes several of them per journal flush).
+pub(crate) fn sync_media_files(paths: &[PathBuf]) -> StorageResult<()> {
+    if paths.len() < SYNC_PARALLEL_FROM {
+        sync_files(paths)?;
+    } else {
+        let per_thread = paths.len().div_ceil(SYNC_THREADS);
+        std::thread::scope(|scope| {
+            let workers: Vec<_> = paths
+                .chunks(per_thread)
+                .map(|chunk| scope.spawn(move || sync_files(chunk)))
+                .collect();
+            workers.into_iter().try_for_each(|w| {
+                w.join().unwrap_or_else(|_| {
+                    Err(StorageError::File {
+                        path: String::new(),
+                        message: "a media sync thread stopped".to_owned(),
+                    })
+                })
+            })
+        })?;
+    }
+    if cfg!(unix) {
+        let dirs: std::collections::BTreeSet<&Path> =
+            paths.iter().filter_map(|p| p.parent()).collect();
+        for dir in dirs {
+            // A folder that is gone holds no file of ours any more.
+            match std::fs::File::open(dir) {
+                Ok(d) => d.sync_all().map_err(|e| file_err(dir, &e))?,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(file_err(dir, &e)),
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Files in one transaction from which [`sync_media_files`] uses several threads.
+const SYNC_PARALLEL_FROM: usize = 16;
+/// Threads of a large [`sync_media_files`].
+const SYNC_THREADS: usize = 8;
+
+fn sync_files(paths: &[PathBuf]) -> StorageResult<()> {
+    for path in paths {
+        // Opened for writing: Windows flushes only through a handle that may write.
+        match std::fs::OpenOptions::new().write(true).open(path) {
+            Ok(f) => f.sync_all().map_err(|e| file_err(path, &e))?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(file_err(path, &e)),
+        }
+    }
+    Ok(())
+}
+
 fn media_row(r: &Row<'_>) -> rusqlite::Result<MediaRecord> {
     Ok(MediaRecord {
         hash: r.get(0)?,
@@ -296,8 +358,13 @@ impl ContentWrite for SqliteTx<'_, WriteMode> {
                 let written = std::fs::write(&part, bytes)
                     .map_err(|e| file_err(&part, &e))
                     .and_then(|()| std::fs::rename(&part, &path).map_err(|e| file_err(&path, &e)));
-                if written.is_err() {
-                    let _ = std::fs::remove_file(&part);
+                match &written {
+                    // Renaming does not put the bytes on disk; the commit does, before the
+                    // row that names the file can be kept (v1.4.2 K1).
+                    Ok(()) => self.unsynced_media.push(path),
+                    Err(_) => {
+                        let _ = std::fs::remove_file(&part);
+                    }
                 }
                 written
             }

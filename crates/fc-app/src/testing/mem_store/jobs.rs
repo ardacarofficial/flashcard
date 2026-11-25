@@ -72,10 +72,14 @@ impl JobWrite for MemTx<'_> {
         Ok(())
     }
 
-    fn mark_unfinished_jobs_interrupted(&mut self, now: Timestamp) -> StorageResult<u32> {
+    fn mark_unfinished_jobs_interrupted(
+        &mut self,
+        now: Timestamp,
+        keep: &[JobId],
+    ) -> StorageResult<u32> {
         let mut n = 0;
         for j in self.m().jobs.values_mut() {
-            if j.status == "running" || j.status == "queued" {
+            if (j.status == "running" || j.status == "queued") && !keep.contains(&j.id) {
                 j.status = "interrupted".into();
                 j.updated_at = now;
                 n += 1;

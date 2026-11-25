@@ -8,6 +8,7 @@ pub(crate) mod content;
 pub(crate) mod decks;
 pub(crate) mod dto;
 pub(crate) mod history;
+pub(crate) mod live_lock;
 pub(crate) mod notes;
 pub(crate) mod store_ops;
 

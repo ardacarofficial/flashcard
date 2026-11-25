@@ -380,3 +380,36 @@ fn a_damaged_media_file_is_repaired_by_writing_the_good_bytes() {
     fx.write(|tx| tx.write_media_file(&m.hash, bytes).unwrap());
     assert_eq!(files_under(&fx.dir.path().join("media")), vec![path]);
 }
+
+/// v1.4.2 K1 (review finding 10): media files are forced to disk when their transaction
+/// commits — one or two (a capture) and many at once (a restore; several threads). A power
+/// cut cannot be staged here; what can be checked is that the commit path handles every
+/// file, a file removed again before the commit, and a failure.
+#[test]
+fn commit_forces_the_media_files_of_its_transaction_to_disk() {
+    let fx = Fx::new();
+    let content = |i: u32| format!("media {i} {}", "x".repeat(i as usize * 7)).into_bytes();
+    let mut tx = fx.store.write().unwrap();
+    for i in 0..60 {
+        let bytes = content(i);
+        tx.write_media_file(&media_hash(&bytes), &bytes).unwrap();
+    }
+    // Gone again inside the same transaction (an undone add): skipped, not an error.
+    let gone = crate::media::media_file_path(&fx.db_path(), &media_hash(&content(3))).unwrap();
+    std::fs::remove_file(&gone).unwrap();
+    tx.commit().unwrap();
+    for i in (0..60).filter(|i| *i != 3) {
+        let bytes = content(i);
+        let read = fx.read(|r| r.read_media_file(&media_hash(&bytes)).unwrap());
+        assert_eq!(read.as_deref(), Some(&bytes[..]), "file {i}");
+    }
+    // The pieces, directly: few files (one thread), many (several), none.
+    let all = files_under(&fx.dir.path().join("media"));
+    assert_eq!(all.len(), 59);
+    crate::sqlite::content::sync_media_files(&all[..2]).unwrap();
+    crate::sqlite::content::sync_media_files(&all).unwrap();
+    crate::sqlite::content::sync_media_files(&[]).unwrap();
+    // A file that cannot be forced to disk fails the commit: the row is not kept.
+    let dir_as_file = fx.dir.path().join("media");
+    assert!(crate::sqlite::content::sync_media_files(&[dir_as_file]).is_err());
+}

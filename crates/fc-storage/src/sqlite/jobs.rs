@@ -108,13 +108,20 @@ impl JobWrite for SqliteTx<'_, WriteMode> {
         Ok(())
     }
 
-    fn mark_unfinished_jobs_interrupted(&mut self, now: Timestamp) -> StorageResult<u32> {
+    fn mark_unfinished_jobs_interrupted(
+        &mut self,
+        now: Timestamp,
+        keep: &[JobId],
+    ) -> StorageResult<u32> {
+        let keep: Vec<String> = keep.iter().map(ToString::to_string).collect();
+        let keep = serde_json::to_string(&keep).unwrap_or_else(|_| "[]".into());
         let n = exec(
             self.conn(),
             T,
             "UPDATE jobs SET status = 'interrupted', updated_at = ?1
-             WHERE status IN ('queued', 'running')",
-            [now.0],
+             WHERE status IN ('queued', 'running')
+               AND id NOT IN (SELECT value FROM json_each(?2))",
+            params![now.0, keep],
         )?;
         Ok(count(n))
     }

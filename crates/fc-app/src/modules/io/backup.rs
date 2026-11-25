@@ -424,7 +424,7 @@ impl CommandHandler<IoBackupLoad> for LoadHandler {
             store.put(&mut *ctx.tx, &record, bytes)?;
         }
         // Jobs that were running when the backup was taken have no worker now.
-        ctx.tx.mark_unfinished_jobs_interrupted(ctx.now)?;
+        ctx.tx.mark_unfinished_jobs_interrupted(ctx.now, &[])?;
         // History starts afresh: the backup's oplog is never replayed (its inverses are
         // untrusted data and may refer to rows that are gone), and undo stops at a barrier.
         ctx.tx.clear_oplog()?;

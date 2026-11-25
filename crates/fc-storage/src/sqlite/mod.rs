@@ -8,7 +8,7 @@ mod ai;
 mod attributes;
 mod capture_log;
 mod cards;
-mod content;
+pub(crate) mod content;
 mod decks;
 mod interop;
 pub use interop::{fit_dump_to_schema, upgrade_dump, upgrade_dump_with};
@@ -72,6 +72,9 @@ pub(crate) struct SqliteTx<'a, M: Mode> {
     /// SQLite ended the transaction itself (see [`SqliteTx::conn`]); the connection is
     /// `query_only` until this handle is dropped. Holds what `query_only` was before.
     lost: std::cell::Cell<Option<bool>>,
+    /// Media files this transaction wrote that are not forced to disk yet: `commit` does
+    /// that first, so a row never outlives a power cut that its file did not (v1.4.2 K1).
+    pub(crate) unsynced_media: Vec<std::path::PathBuf>,
     _mode: PhantomData<M>,
 }
 
@@ -87,6 +90,7 @@ impl<'a, M: Mode> SqliteTx<'a, M> {
             conn,
             open: true,
             lost: std::cell::Cell::new(None),
+            unsynced_media: Vec::new(),
             _mode: PhantomData,
         })
     }
@@ -132,6 +136,8 @@ impl WriteTx for SqliteTx<'_, WriteMode> {
         if self.lost.get().is_some() || self.conn.is_autocommit() {
             return Err(StorageError::RolledBack);
         }
+        // Files before rows: see `unsynced_media`.
+        content::sync_media_files(&std::mem::take(&mut self.unsynced_media))?;
         self.conn.execute_batch("COMMIT")?;
         self.open = false;
         Ok(())

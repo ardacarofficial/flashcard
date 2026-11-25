@@ -259,9 +259,16 @@ impl SqliteStore {
         crate::interrupt::install(&mut conn)?;
         #[cfg(feature = "crash-points")]
         crate::crash_points::install(&mut conn);
-        let backup = snapshot_before_migrating(&mut conn, path, migrations)?;
+        let mut backup = snapshot_before_migrating(&mut conn, path, migrations)?;
         crate::media::export_legacy_blobs(&conn, path)?;
-        migrate::migrate_with(&mut conn, migrations)?;
+        let applied = migrate::migrate_with(&mut conn, migrations)?;
+        if applied.is_empty() {
+            // Another process migrated while this one waited: its snapshot is the one that
+            // counts, this copy describes no migration of ours.
+            if let Some(extra) = backup.take() {
+                let _ = std::fs::remove_file(extra);
+            }
+        }
         let readers = (0..READ_POOL_SIZE)
             .map(|_| {
                 let mut r = Connection::open_with_flags(
@@ -282,6 +289,16 @@ impl SqliteStore {
             timeout: Duration::from_millis(u64::from(migrate::BUSY_TIMEOUT_MS)),
             checkpointer,
         })
+    }
+
+    /// The writer connection, outside any transaction (kill and fault tests only).
+    #[cfg(feature = "crash-points")]
+    pub(crate) fn with_writer<T>(&self, f: impl FnOnce(&Connection) -> T) -> T {
+        let conn = self
+            .writer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        f(&conn)
     }
 
     /// Opens an existing database **without migrating or snapshotting it**: for secondary
@@ -466,18 +483,23 @@ fn snapshot_before_migrating(
         .map(|f| f.to_string_lossy().into_owned())
         .unwrap_or_else(|| "collection.db".to_owned());
     let mut n = 0u32;
-    let target = loop {
+    loop {
         let suffix = if n == 0 {
             String::new()
         } else {
             format!("-{n}")
         };
         let candidate = path.with_file_name(format!("{file}.pre-v{from}-to-v{to}{suffix}.bak"));
-        if !candidate.exists() {
-            break candidate;
+        if candidate.exists() {
+            n += 1;
+            continue;
         }
-        n += 1;
-    };
-    conn.execute("VACUUM INTO ?1", [target.to_string_lossy().as_ref()])?;
-    Ok(Some(target))
+        match conn.execute("VACUUM INTO ?1", [candidate.to_string_lossy().as_ref()]) {
+            Ok(_) => return Ok(Some(candidate)),
+            // Another process opening at the same moment took this name first (`VACUUM INTO`
+            // refuses an existing file): the next one.
+            Err(_) if candidate.exists() && n < 100 => n += 1,
+            Err(e) => return Err(e.into()),
+        }
+    }
 }
