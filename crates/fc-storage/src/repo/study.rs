@@ -33,18 +33,29 @@ pub const REVIEW_MODE_IMPORTED: &str = "imported";
 /// study limits count.
 pub const SCHEDULED_REVIEW_MODES: [&str; 5] = ["normal", "learn", "timed", "confidence", "quiz"];
 
-/// Whether a `review_log.mode` is **practice** — the answer did not change the schedule:
-/// `trial`, `trial_<mode>` (v0.10 practice variants: `trial_learn`, `trial_timed`,
-/// `trial_confidence`), `test` and `match` (v1.1). Statistics and FSRS optimization skip
+/// `review_log.mode` of a manual reschedule brought in from Anki (v1.4.2: "set due date",
+/// "forget", FSRS "reschedule"): kept in the card's history and written back to Anki as such,
+/// but **not an answer** (its `rating` only fills the column), so it is skipped wherever
+/// practice rows are ([`is_practice_mode`]). Same value as `fc_interop::pack::MANUAL_MODE`.
+pub const REVIEW_MODE_MANUAL: &str = "manual";
+
+/// Whether a `review_log.mode` is **not a scored answer**: practice — the answer did not
+/// change the schedule: `trial`, `trial_<mode>` (v0.10 practice variants: `trial_learn`,
+/// `trial_timed`, `trial_confidence`), `test` and `match` (v1.1) — or a manual reschedule
+/// imported from Anki ([`REVIEW_MODE_MANUAL`], v1.4.2). Statistics and FSRS optimization skip
 /// these rows
 /// ([`PRACTICE_MODE_SQL`] is the same rule in SQL).
 pub fn is_practice_mode(mode: &str) -> bool {
-    mode == "trial" || mode == "test" || mode == "match" || mode.starts_with("trial_")
+    mode == "trial"
+        || mode == "test"
+        || mode == "match"
+        || mode == REVIEW_MODE_MANUAL
+        || mode.starts_with("trial_")
 }
 
 /// [`is_practice_mode`] as an SQL condition on a `mode` column.
-pub const PRACTICE_MODE_SQL: &str =
-    "(mode = 'trial' OR mode = 'test' OR mode = 'match' OR substr(mode, 1, 6) = 'trial_')";
+pub const PRACTICE_MODE_SQL: &str = "(mode = 'trial' OR mode = 'test' OR mode = 'match' \
+     OR mode = 'manual' OR substr(mode, 1, 6) = 'trial_')";
 
 /// A `review_log` row.
 #[derive(Debug, Clone, PartialEq)]

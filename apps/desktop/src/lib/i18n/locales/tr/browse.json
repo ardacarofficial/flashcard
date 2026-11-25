@@ -112,7 +112,8 @@
         "again": "Tekrar",
         "hard": "Zor",
         "good": "İyi",
-        "easy": "Kolay"
+        "easy": "Kolay",
+        "manual": "Elle planlandı"
       }
     },
     "error_at": "{start}–{end} arası",

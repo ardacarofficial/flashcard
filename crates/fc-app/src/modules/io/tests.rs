@@ -834,7 +834,8 @@ fn write_tmp(dir: &tempfile::TempDir, name: &str, bytes: &[u8]) -> PathBuf {
 fn assert_sample_imported(t: &TestApp, r: &ImportReport) {
     assert_eq!((r.added_notes, r.added_cards), (4, 5), "{r:?}");
     // Anki's stock Basic and Cloze land on the v0.3 built-ins: no new note types.
-    assert_eq!((r.added_media, r.added_reviews, r.added_notetypes), (2, 4, 0));
+    // Reviews: four answers and the manual reschedule (kept as a `manual` row, v1.4.2).
+    assert_eq!((r.added_media, r.added_reviews, r.added_notetypes), (2, 5, 0));
     let tx = t.store.read().unwrap();
     let builtin = |key: &str| {
         fc_core::content::builtin::ALL

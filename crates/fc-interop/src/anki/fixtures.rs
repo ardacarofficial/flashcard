@@ -44,7 +44,7 @@ fn card(id: i64, nid: i64, did: i64, ord: i64) -> AnkiCard {
     }
 }
 
-fn rev(id: i64, cid: i64, ease: i64, ivl: i64, last: i64, rtype: i64) -> AnkiRevlog {
+pub fn rev(id: i64, cid: i64, ease: i64, ivl: i64, last: i64, rtype: i64) -> AnkiRevlog {
     AnkiRevlog {
         id,
         cid,

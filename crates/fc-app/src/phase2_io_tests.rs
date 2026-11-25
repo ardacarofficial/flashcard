@@ -258,7 +258,8 @@ fn anki_import_study_backup_wipe_restore_is_identical() {
         (4, 5, 2),
         "{r:?}"
     );
-    assert_eq!((r.added_notetypes, r.added_reviews), (0, 5));
+    // Five answers and the sample's manual reschedule (kept as a `manual` row, v1.4.2).
+    assert_eq!((r.added_notetypes, r.added_reviews), (0, 6));
     let again = write(dir.path(), "again.apkg", &second_package());
     let r2 = import(
         &t,

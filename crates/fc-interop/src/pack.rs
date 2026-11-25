@@ -31,6 +31,12 @@ pub struct PackValue {
     pub value: AttributeValue,
 }
 
+/// `ReviewEntry::mode` of a manual reschedule brought in from Anki ("set due date",
+/// "forget"): not an answer — `rating` only fills the column — so statistics, FSRS
+/// optimization and study limits skip it (`fc_storage::repo::REVIEW_MODE_MANUAL`, same
+/// value). Exported back to Anki as a "Manual" row (ease 0).
+pub const MANUAL_MODE: &str = "manual";
+
 /// One `review_log` row (immutable history; docs/03 §4).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReviewEntry {
@@ -56,7 +62,7 @@ pub struct ReviewEntry {
     pub answer_duration_ms: Option<i64>,
     /// Hints shown.
     pub hints_used: u32,
-    /// `normal`, `preview`, …
+    /// `normal`, `preview`, [`MANUAL_MODE`], …
     pub mode: String,
     /// FSRS stability after the review.
     pub stability_after: Option<f64>,

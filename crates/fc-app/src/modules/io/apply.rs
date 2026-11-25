@@ -172,6 +172,8 @@ impl CommandHandler<IoImportApply> for ApplyHandler {
             spent: 0,
             media_bytes: 0,
             budget: state.chunk,
+            ancestry: HashMap::new(),
+            attrs_on: None,
         };
         w.run(ctx, &mut state)?;
         w.cancel.check()?;
@@ -224,9 +226,36 @@ struct Writer {
     spent: usize,
     media_bytes: usize,
     budget: usize,
+    /// Per-chunk memo of what every imported row asked the store again (v1.4.2: a sixth
+    /// of a 10 000-row text import was re-reading the deck list). A chunk is one
+    /// transaction: nothing but the import itself changes decks in it, and it only adds
+    /// decks, which never changes the ancestry of an existing one.
+    ancestry: HashMap<DeckId, Vec<DeckId>>,
+    /// Whether the `attributes` module is on (cannot change inside the transaction).
+    attrs_on: Option<bool>,
 }
 
 impl Writer {
+    /// The deck and its ancestors (memoized for the chunk).
+    fn ancestry(&mut self, ctx: &CommandCtx<'_>, deck: DeckId) -> AppResult<Vec<DeckId>> {
+        if let Some(a) = self.ancestry.get(&deck) {
+            return Ok(a.clone());
+        }
+        let a = DeckIndex::load(ctx.reads())?.ancestry(deck)?;
+        self.ancestry.insert(deck, a.clone());
+        Ok(a)
+    }
+
+    /// `attributes_enabled`, asked once per chunk.
+    fn attrs_on(&mut self, ctx: &CommandCtx<'_>) -> AppResult<bool> {
+        if let Some(on) = self.attrs_on {
+            return Ok(on);
+        }
+        let on = attributes_enabled(ctx)?;
+        self.attrs_on = Some(on);
+        Ok(on)
+    }
+
     /// Counts one unit; checks the cancel token every [`CHECK_EVERY`] units.
     fn tick(&mut self) -> AppResult<()> {
         if self.spent % CHECK_EVERY == 0 {
@@ -475,7 +504,7 @@ impl Writer {
 
         // Classifications applicable to the deck (note level). With the module off they are
         // hidden: mapped values are ignored and only defaults apply (as in `notes.create`).
-        let attrs_on = attributes_enabled(ctx)?;
+        let attrs_on = self.attrs_on(ctx)?;
         let provided = if attrs_on {
             self.row_attributes(ctx, report, imp, deck, row)?
         } else {
@@ -520,8 +549,7 @@ impl Writer {
                 DuplicatePolicy::Add => {}
             }
         }
-        let index = DeckIndex::load(ctx.reads())?;
-        let ancestry = index.ancestry(deck)?;
+        let ancestry = self.ancestry(ctx, deck)?;
         let defs = ctx.reads().list_attribute_defs(false)?;
         let effective = effective_attribute_defs(&ancestry, &defs);
         let prepared = if attrs_on {
@@ -566,8 +594,7 @@ impl Writer {
     ) -> AppResult<Vec<(AttributeDefId, Option<AttributeValue>)>> {
         let mut out = Vec::new();
         for (aref, text) in &row.attrs {
-            let index = DeckIndex::load(ctx.reads())?;
-            let ancestry = index.ancestry(deck)?;
+            let ancestry = self.ancestry(ctx, deck)?;
             let defs = ctx.reads().list_attribute_defs(false)?;
             let effective: Vec<AttributeDef> = effective_attribute_defs(&ancestry, &defs)
                 .into_iter()

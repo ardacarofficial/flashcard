@@ -29,7 +29,7 @@ use crate::media::{
     extension_for, guess_mime, hash_of, media_tags_to_sound, media_url, references, rewrite,
     sha256_hex, sound_to_audio,
 };
-use crate::pack::{derived_id, MediaFile, Pack, ReviewEntry};
+use crate::pack::{derived_id, MediaFile, Pack, ReviewEntry, MANUAL_MODE};
 use fc_core::card::{Card, CardState, Rating, SchedulingState};
 use fc_core::content::builtin as builtins;
 use fc_core::deck::{normalize_deck_segment, Deck};
@@ -51,7 +51,8 @@ pub struct AnkiImportReport {
     pub skipped_notes: usize,
     /// Cards skipped (unknown note or template).
     pub skipped_cards: usize,
-    /// Review log rows skipped (manual reschedules, unknown cards).
+    /// Review log rows skipped (their card was not imported). Manual reschedules ("set due
+    /// date", "forget", FSRS "reschedule") are imported as `manual` rows (v1.4.2).
     pub skipped_reviews: usize,
     /// Tags that are not valid tag names.
     pub skipped_tags: usize,
@@ -422,6 +423,12 @@ struct FsrsData {
     lrt: Option<i64>,
 }
 
+/// A review log row Anki wrote for a manual change, not an answer: type 4 "Manual" ("set due
+/// date", "forget", "reposition") or 5 "Rescheduled" (FSRS reschedule), always with ease 0.
+fn is_manual(r: &AnkiRevlog) -> bool {
+    r.ease == 0 || matches!(r.rtype, 4 | 5)
+}
+
 fn rating(ease: i64) -> Option<Rating> {
     match ease {
         1 => Some(Rating::Again),
@@ -521,10 +528,20 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
     }
     let deck_of = |did: i64| deck_ids.get(&did_path(did)).copied();
 
-    // Last review per card.
+    // Last *answer* per card: a manual reschedule ("set due date", "forget") moves the due
+    // date but is not a review, so it never counts as the last one (Anki's FSRS and interval
+    // both run from the last answer).
+    // A card never answered but put into review by hand ("set due date" on a new card) has
+    // only that row: it stands in as the start of the interval.
     let mut last_review: HashMap<i64, i64> = HashMap::new();
+    let mut last_manual: HashMap<i64, i64> = HashMap::new();
     for r in &col.revlog {
-        let e = last_review.entry(r.cid).or_insert(r.id);
+        let map = if is_manual(r) {
+            &mut last_manual
+        } else {
+            &mut last_review
+        };
+        let e = map.entry(r.cid).or_insert(r.id);
         *e = (*e).max(r.id);
     }
 
@@ -654,6 +671,11 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
                     (state == CardState::Review && ac.ivl > 0)
                         .then(|| due.map(|d| Timestamp(d.0 - ac.ivl * DAY_MS)))
                         .flatten()
+                })
+                .or_else(|| {
+                    (state != CardState::New)
+                        .then(|| last_manual.get(&ac.id).map(|t| Timestamp(*t)))
+                        .flatten()
                 });
             let id = CardId::from_uuid(derived_id(
                 ac.id,
@@ -698,12 +720,50 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
     }
     report.skipped_cards = col.cards.len().saturating_sub(card_ids.len());
 
-    for r in &col.revlog {
-        let (Some((card, _)), Some(rating), true) =
-            (card_ids.get(&r.cid), rating(r.ease), r.rtype != 4)
-        else {
+    // In time order, so a manual row knows the state its card was in.
+    let mut revlog: Vec<&AnkiRevlog> = col.revlog.iter().collect();
+    revlog.sort_by_key(|r| (r.id, r.cid));
+    let mut state_of: HashMap<i64, CardState> = HashMap::new();
+    for r in revlog {
+        let Some((card, _)) = card_ids.get(&r.cid) else {
             report.skipped_reviews += 1;
             continue;
+        };
+        let id = ReviewLogId::from_uuid(derived_id(r.id, &format!("rev:{card}:{}", r.id)));
+        let prev = state_of.get(&r.cid).copied().unwrap_or(CardState::New);
+        let rating = match rating(r.ease) {
+            Some(rating) if !is_manual(r) => rating,
+            // Not an answer: `rating` only fills the column (`MANUAL_MODE` rows are never
+            // read as answers). Anki tells the kinds apart by the ease factor it logs: 0 is a
+            // reset ("forget": the card is new again, and Anki's FSRS ignores what came
+            // before it), anything else is "set due date" (a review card due on that day)
+            // or, type 5, an FSRS "reschedule" (the card stays what it was).
+            _ => {
+                let after = match (r.rtype, r.factor, prev) {
+                    (4, 0, _) => CardState::New,
+                    (5, _, CardState::Relearning | CardState::Learning) => prev,
+                    _ => CardState::Review,
+                };
+                state_of.insert(r.cid, after);
+                pack.review_logs.push(ReviewEntry {
+                    id,
+                    card_id: *card,
+                    session_id: None,
+                    rating: Rating::Good,
+                    state_before: prev,
+                    state_after: after,
+                    scheduled_days: r.ivl.max(0),
+                    elapsed_days: r.last_ivl.max(0),
+                    duration_ms: 0,
+                    answer_duration_ms: None,
+                    hints_used: 0,
+                    mode: MANUAL_MODE.into(),
+                    stability_after: None,
+                    difficulty_after: None,
+                    created_at: Timestamp(r.id),
+                });
+                continue;
+            }
         };
         let state_before = match r.rtype {
             0 => CardState::Learning,
@@ -716,8 +776,9 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
             _ if r.ivl > 0 => CardState::Review,
             _ => state_before,
         };
+        state_of.insert(r.cid, state_after);
         pack.review_logs.push(ReviewEntry {
-            id: ReviewLogId::from_uuid(derived_id(r.id, &format!("rev:{card}:{}", r.id))),
+            id,
             card_id: *card,
             session_id: None,
             rating,
@@ -941,6 +1002,19 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
         .collect();
 
     // Cards.
+    // Cards whose history is only manual rows (never answered).
+    let manual_only: HashSet<CardId> = {
+        let mut answered: HashSet<CardId> = HashSet::new();
+        let mut manual: HashSet<CardId> = HashSet::new();
+        for r in &pack.review_logs {
+            if r.mode == MANUAL_MODE {
+                manual.insert(r.card_id);
+            } else {
+                answered.insert(r.card_id);
+            }
+        }
+        manual.difference(&answered).copied().collect()
+    };
     let mut card_alloc = IdAlloc::default();
     let mut cids: HashMap<CardId, i64> = HashMap::new();
     let mut used_ords: HashSet<(i64, i64)> = HashSet::new();
@@ -977,12 +1051,15 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
         let s = &c.scheduling;
         let position = i64::try_from(pos).unwrap_or(0) + 1;
         let sched = include_scheduling && s.state != CardState::New;
-        // Anki's interval is the scheduled gap (last review → due); stability only stands in
-        // when one of them is unknown.
+        // Anki's interval is the scheduled gap in days (day of the last review → due day);
+        // stability only stands in when one of them is unknown. A due date is the start of a
+        // study day (ours and Anki's) and the review happened some time during its own day, so
+        // the gap is rounded **up**: rounding to the nearest day lost a day for every card
+        // answered in the second half of the study day (v1.4.2).
         let interval = || {
             match (s.due, s.last_review) {
                 (Some(d), Some(l)) if d.0 > l.0 => {
-                    Some((d.0 - l.0 + DAY_MS / 2).div_euclid(DAY_MS))
+                    Some((d.0 - l.0 + DAY_MS - 1).div_euclid(DAY_MS))
                 }
                 _ => None,
             }
@@ -997,7 +1074,16 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
             let due_ts = s.due.unwrap_or(now);
             match s.state {
                 CardState::Review => (2, 2, due_day(due_ts), interval(), 2500),
-                CardState::Relearning => (3, 1, due_ts.0.div_euclid(1000), interval(), 2500),
+                // A relearning card waits minutes; Anki's interval there is the one it gets
+                // back when it graduates: the stability after the lapse (for a card that
+                // came from SM-2 Anki, the interval Anki had stored).
+                CardState::Relearning => (
+                    3,
+                    1,
+                    due_ts.0.div_euclid(1000),
+                    s.stability.map_or(1, |x| (x.round() as i64).max(1)),
+                    2500,
+                ),
                 _ => (1, 1, due_ts.0.div_euclid(1000), 0, 2500),
             }
         };
@@ -1008,7 +1094,10 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
             data.insert("s".into(), st.into());
             data.insert("d".into(), d.into());
         }
-        if let (true, Some(l)) = (sched, s.last_review) {
+        // Anki's "last review time" is the last *answer* (its "Check Database" recomputes it
+        // from the review log and reports a card that disagrees): a card whose history holds
+        // only manual rows ("set due date" on a new card) has none.
+        if let (true, Some(l), false) = (sched, s.last_review, manual_only.contains(&c.id)) {
             data.insert("lrt".into(), l.0.div_euclid(1000).into());
         }
         let data = if data.is_empty() {
@@ -1064,6 +1153,27 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
             let Some(cid) = cids.get(&r.card_id) else {
                 continue;
             };
+            if r.mode == MANUAL_MODE {
+                // Back as what it was in Anki: a "Manual" row with no answer. Ease factor 0
+                // is how Anki marks a reset ("forget"); a "set due date" row must not carry
+                // it, or Anki drops the card's earlier history from its FSRS calculation
+                // (and "Check Database" clears the card's last review time).
+                revlog.push(AnkiRevlog {
+                    id: rev_alloc.take(r.created_at.0),
+                    cid: *cid,
+                    ease: 0,
+                    ivl: r.scheduled_days,
+                    last_ivl: r.elapsed_days,
+                    factor: if r.state_after == CardState::New {
+                        0
+                    } else {
+                        2500
+                    },
+                    time: 0,
+                    rtype: 4,
+                });
+                continue;
+            }
             revlog.push(AnkiRevlog {
                 id: rev_alloc.take(r.created_at.0),
                 cid: *cid,
