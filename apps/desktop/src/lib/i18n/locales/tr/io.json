@@ -127,7 +127,7 @@
     "issue": {
       "anki_skipped_notes": "{count} not okunamadı.",
       "anki_skipped_cards": "{count} kart okunamadı.",
-      "anki_skipped_reviews": "{count} tekrar kaydı atlandı (elle yeniden planlama).",
+      "anki_skipped_reviews": "{count} tekrar kaydı atlandı (kartı pakette yok).",
       "anki_skipped_tags": "{count} geçersiz etiket atlandı.",
       "anki_missing_media": "Pakette {count} medya dosyası eksik.",
       "unknown_notetype": "Bilinmeyen not türü.",

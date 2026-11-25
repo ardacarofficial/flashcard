@@ -2,6 +2,10 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## Unreleased (v1.4.2)
+
+- **Anki uyumu gerçek destelerle (J3):** Anki'nin "vade tarihi ayarla" / "unut" satırları artık atlanmıyor: geçmişte `manual` satırı olarak durur (kart bilgisinde "Elle planlandı"), son tekrar sayılmaz — böylece vadesi elle değiştirilmiş kartın aralığı Anki'ye dönünce kısalmıyor — ve Anki'ye yine elle satırı olarak döner; gerçek Anki'yle üretilen yeni paketler (FSRS açık/kapalı, filtreli deste, hiyerarşik etiket, Türkçe adlı medya, schema 11 ve zstd, büyük geçmiş) içe aktarılıp Anki'nin kendi raporuyla, dışa aktarılıp yine gerçek Anki'de karşılaştırılıyor; kalan farklar nedenleriyle docs/16. _(J3)_
+
 ## [1.4.1] — sağlamlık turu: verinin kaybolmadığının kanıtı
 
 Workspace sürümü `1.4.1`. Bağımsız bir inceleme v1.4.0'ı okudu ve işi tek soruya indirdi: bir arızadan sonra kartların ve çalışma geçmişi geri geliyor mu? Bu sürüm bunu testlerle kanıtlar: gerçek süreçler yazmanın ortasında öldürüldü, disk dolduruldu, koleksiyon bozuldu, dosyalar ve istekler rastgele bozuldu. Yeni özellik yok; bulunan hatalar düzeltildi. Migration yok.

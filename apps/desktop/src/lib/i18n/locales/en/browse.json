@@ -112,7 +112,8 @@
         "again": "Again",
         "hard": "Hard",
         "good": "Good",
-        "easy": "Easy"
+        "easy": "Easy",
+        "manual": "Rescheduled by hand"
       }
     },
     "error_at": "at {start}–{end}",

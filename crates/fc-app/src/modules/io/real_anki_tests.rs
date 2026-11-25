@@ -47,7 +47,7 @@ fn result<T: DeserializeOwned>(job: &JobDto) -> T {
     serde_json::from_value(job.result.clone().unwrap()).unwrap()
 }
 
-fn import_file(t: &TestApp, path: &Path) -> ImportReport {
+pub(super) fn import_file(t: &TestApp, path: &Path) -> ImportReport {
     let job = t.ok::<IoImportStart>(StartImport {
         source: ImportSource::File {
             path: path.to_string_lossy().into_owned(),
@@ -65,7 +65,7 @@ fn import_file(t: &TestApp, path: &Path) -> ImportReport {
     result(&finish(t, &job))
 }
 
-fn export(t: &TestApp, format: ExportFormat, path: &Path) -> ExportReport {
+pub(super) fn export(t: &TestApp, format: ExportFormat, path: &Path) -> ExportReport {
     let job = t.ok::<IoExportStart>(StartExport {
         format,
         path: path.to_string_lossy().into_owned(),
@@ -97,13 +97,12 @@ fn import_real(name: &str) -> TestApp {
     assert_eq!(r.added_notes as usize, notes.len(), "{name}: {r:?}");
     assert_eq!(r.added_cards as usize, cards, "{name}: {r:?}");
     assert_eq!(r.added_media, 3, "{name}: {r:?}");
-    // Every review except Anki's manual "set due date" entry (reported, not imported).
-    let reviews = exp["revlog"].as_u64().unwrap() as u32 - 1;
+    // Every review, Anki's manual "set due date" entry as a `manual` row (v1.4.2).
+    let reviews = exp["revlog"].as_u64().unwrap() as u32;
     assert_eq!(r.added_reviews, reviews, "{name}: {r:?}");
     // Stock note types land on built-ins; only the custom "Vocab TR" is new.
     assert_eq!(r.added_notetypes, 1, "{name}: {r:?}");
-    let keys: Vec<&str> = r.issues.iter().map(|i| i.message.key.as_str()).collect();
-    assert_eq!(keys, ["io.issue.anki_skipped_reviews"], "{name}: {r:?}");
+    assert!(r.issues.is_empty(), "{name}: {r:?}");
     t
 }
 

@@ -19,7 +19,9 @@ use fc_core::preset::NewCardOrder;
 use fc_core::rng::SplitMix64;
 use fc_core::settings::SettingScope;
 use fc_core::{CardId, DeckId, NoteId, SessionId, Timestamp};
-use fc_storage::repo::{NewCardsFirst, ReviewLogRecord, StudyCardFilter, REVIEW_MODE_IMPORTED};
+use fc_storage::repo::{
+    NewCardsFirst, ReviewLogRecord, StudyCardFilter, REVIEW_MODE_IMPORTED, REVIEW_MODE_MANUAL,
+};
 use fc_storage::Reads;
 use fc_study::day::{StudyDay, MAX_TZ_OFFSET_MINS};
 use fc_study::session::{self as queue, BuildOptions, Order, QueueEntry, QueueKind};
@@ -302,13 +304,14 @@ impl<'a> Planner<'a> {
     }
 
     /// Distinct cards answered (`struggled`: rated Again / answered wrong) during the
-    /// current study day, any mode except imported history, in first-answer order.
+    /// current study day, any mode except imported history (and imported manual reschedules),
+    /// in first-answer order.
     fn studied_today(&mut self, struggled: bool) -> AppResult<Vec<CardId>> {
         let mut seen = HashSet::new();
         Ok(self
             .today_reviews()?
             .iter()
-            .filter(|r| r.mode != REVIEW_MODE_IMPORTED)
+            .filter(|r| r.mode != REVIEW_MODE_IMPORTED && r.mode != REVIEW_MODE_MANUAL)
             .filter(|r| !struggled || r.rating == Rating::Again)
             .filter(|r| seen.insert(r.card_id))
             .map(|r| r.card_id)

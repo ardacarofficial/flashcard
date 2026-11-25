@@ -29,7 +29,7 @@ use crate::media::{
     extension_for, guess_mime, hash_of, media_tags_to_sound, media_url, references, rewrite,
     sha256_hex, sound_to_audio,
 };
-use crate::pack::{derived_id, MediaFile, Pack, ReviewEntry};
+use crate::pack::{derived_id, MediaFile, Pack, ReviewEntry, MANUAL_MODE};
 use fc_core::card::{Card, CardState, Rating, SchedulingState};
 use fc_core::content::builtin as builtins;
 use fc_core::deck::{normalize_deck_segment, Deck};
@@ -51,7 +51,8 @@ pub struct AnkiImportReport {
     pub skipped_notes: usize,
     /// Cards skipped (unknown note or template).
     pub skipped_cards: usize,
-    /// Review log rows skipped (manual reschedules, unknown cards).
+    /// Review log rows skipped (their card was not imported). Manual reschedules ("set due
+    /// date", "forget", FSRS "reschedule") are imported as `manual` rows (v1.4.2).
     pub skipped_reviews: usize,
     /// Tags that are not valid tag names.
     pub skipped_tags: usize,
@@ -422,6 +423,12 @@ struct FsrsData {
     lrt: Option<i64>,
 }
 
+/// A review log row Anki wrote for a manual change, not an answer: type 4 "Manual" ("set due
+/// date", "forget", "reposition") or 5 "Rescheduled" (FSRS reschedule), always with ease 0.
+fn is_manual(r: &AnkiRevlog) -> bool {
+    r.ease == 0 || matches!(r.rtype, 4 | 5)
+}
+
 fn rating(ease: i64) -> Option<Rating> {
     match ease {
         1 => Some(Rating::Again),
@@ -521,10 +528,20 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
     }
     let deck_of = |did: i64| deck_ids.get(&did_path(did)).copied();
 
-    // Last review per card.
+    // Last *answer* per card: a manual reschedule ("set due date", "forget") moves the due
+    // date but is not a review, so it never counts as the last one (Anki's FSRS and interval
+    // both run from the last answer).
+    // A card never answered but put into review by hand ("set due date" on a new card) has
+    // only that row: it stands in as the start of the interval.
     let mut last_review: HashMap<i64, i64> = HashMap::new();
+    let mut last_manual: HashMap<i64, i64> = HashMap::new();
     for r in &col.revlog {
-        let e = last_review.entry(r.cid).or_insert(r.id);
+        let map = if is_manual(r) {
+            &mut last_manual
+        } else {
+            &mut last_review
+        };
+        let e = map.entry(r.cid).or_insert(r.id);
         *e = (*e).max(r.id);
     }
 
@@ -654,6 +671,11 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
                     (state == CardState::Review && ac.ivl > 0)
                         .then(|| due.map(|d| Timestamp(d.0 - ac.ivl * DAY_MS)))
                         .flatten()
+                })
+                .or_else(|| {
+                    (state != CardState::New)
+                        .then(|| last_manual.get(&ac.id).map(|t| Timestamp(*t)))
+                        .flatten()
                 });
             let id = CardId::from_uuid(derived_id(
                 ac.id,
@@ -698,12 +720,77 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
     }
     report.skipped_cards = col.cards.len().saturating_sub(card_ids.len());
 
-    for r in &col.revlog {
-        let (Some((card, _)), Some(rating), true) =
-            (card_ids.get(&r.cid), rating(r.ease), r.rtype != 4)
-        else {
+    // In time order, so a manual row knows the state its card was in.
+    let mut revlog: Vec<&AnkiRevlog> = col.revlog.iter().collect();
+    revlog.sort_by_key(|r| (r.id, r.cid));
+    let mut state_of: HashMap<i64, CardState> = HashMap::new();
+    // What a manual row left the card in: the state the card's next row starts from, or — for
+    // its last row — the card's state now. (Anki writes "forget" and "set due date" on a new
+    // card the same way: ease 0, interval 0.)
+    let mut next_state: HashMap<(i64, i64), CardState> = HashMap::new();
+    {
+        let mut after: HashMap<i64, CardState> = HashMap::new();
+        for r in revlog.iter().rev() {
+            if let Some(s) = after
+                .get(&r.cid)
+                .copied()
+                .or_else(|| card_ids.get(&r.cid).map(|c| c.1))
+            {
+                next_state.insert((r.id, r.cid), s);
+            }
+            let before = match (is_manual(r), r.rtype) {
+                (true, _) => None,
+                (false, 0) => Some(CardState::New),
+                (false, 2) => Some(CardState::Relearning),
+                (false, _) => Some(CardState::Review),
+            };
+            match before {
+                Some(b) => after.insert(r.cid, b),
+                None => after.remove(&r.cid),
+            };
+        }
+    }
+    for r in revlog {
+        let Some((card, _)) = card_ids.get(&r.cid) else {
             report.skipped_reviews += 1;
             continue;
+        };
+        let id = ReviewLogId::from_uuid(derived_id(r.id, &format!("rev:{card}:{}", r.id)));
+        let prev = state_of.get(&r.cid).copied().unwrap_or(CardState::New);
+        let rating = match rating(r.ease) {
+            Some(rating) if !is_manual(r) => rating,
+            // "Set due date" (a review card due in `ivl` days) or "forget" (`ivl` 0: new
+            // again). Not an answer: `rating` only fills the column (`MANUAL_MODE` rows are
+            // never read as answers).
+            _ => {
+                let after = next_state
+                    .get(&(r.id, r.cid))
+                    .copied()
+                    .unwrap_or(if r.ivl > 0 {
+                        CardState::Review
+                    } else {
+                        CardState::New
+                    });
+                state_of.insert(r.cid, after);
+                pack.review_logs.push(ReviewEntry {
+                    id,
+                    card_id: *card,
+                    session_id: None,
+                    rating: Rating::Good,
+                    state_before: prev,
+                    state_after: after,
+                    scheduled_days: r.ivl.max(0),
+                    elapsed_days: r.last_ivl.max(0),
+                    duration_ms: 0,
+                    answer_duration_ms: None,
+                    hints_used: 0,
+                    mode: MANUAL_MODE.into(),
+                    stability_after: None,
+                    difficulty_after: None,
+                    created_at: Timestamp(r.id),
+                });
+                continue;
+            }
         };
         let state_before = match r.rtype {
             0 => CardState::Learning,
@@ -716,8 +803,9 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
             _ if r.ivl > 0 => CardState::Review,
             _ => state_before,
         };
+        state_of.insert(r.cid, state_after);
         pack.review_logs.push(ReviewEntry {
-            id: ReviewLogId::from_uuid(derived_id(r.id, &format!("rev:{card}:{}", r.id))),
+            id,
             card_id: *card,
             session_id: None,
             rating,
@@ -1064,6 +1152,20 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
             let Some(cid) = cids.get(&r.card_id) else {
                 continue;
             };
+            if r.mode == MANUAL_MODE {
+                // Back as what it was in Anki: a "Manual" row with no answer.
+                revlog.push(AnkiRevlog {
+                    id: rev_alloc.take(r.created_at.0),
+                    cid: *cid,
+                    ease: 0,
+                    ivl: r.scheduled_days,
+                    last_ivl: r.elapsed_days,
+                    factor: 0,
+                    time: 0,
+                    rtype: 4,
+                });
+                continue;
+            }
             revlog.push(AnkiRevlog {
                 id: rev_alloc.take(r.created_at.0),
                 cid: *cid,

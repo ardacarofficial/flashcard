@@ -127,7 +127,7 @@
     "issue": {
       "anki_skipped_notes": "{count, plural, one {# note} other {# notes}} could not be read.",
       "anki_skipped_cards": "{count, plural, one {# card} other {# cards}} could not be read.",
-      "anki_skipped_reviews": "{count} review log entries were skipped (manual reschedules).",
+      "anki_skipped_reviews": "{count} review log entries were skipped (their card is not in the package).",
       "anki_skipped_tags": "{count} invalid tags were skipped.",
       "anki_missing_media": "{count} media files are missing from the package.",
       "unknown_notetype": "Unknown note type.",

@@ -69,7 +69,12 @@
           {#each info.reviews as rv, i (i)}
             <li>
               <span class="num">{date(rv.at)}</span>
-              <span class="rating r-{rv.rating}">{td(`browse.info.rating.${rv.rating}`)}</span>
+              <!-- An Anki "set due date" / "forget" brought in by import: not an answer. -->
+              {#if rv.mode === 'manual'}
+                <span class="rating r-manual">{t('browse.info.rating.manual')}</span>
+              {:else}
+                <span class="rating r-{rv.rating}">{td(`browse.info.rating.${rv.rating}`)}</span>
+              {/if}
               <span class="num muted">{t('browse.info.interval', { days: rv.scheduled_days })}</span>
             </li>
           {/each}

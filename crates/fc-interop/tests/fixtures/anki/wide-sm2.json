@@ -1,0 +1,207 @@
+{
+ "anki_version": "26.09.4",
+ "cards": {
+  "1795611878140/0": {
+   "deck": "SM2::Kelimeler",
+   "due_in": 4,
+   "factor": 2500,
+   "filtered": null,
+   "flags": 0,
+   "fsrs": null,
+   "ivl": 4,
+   "lapses": 0,
+   "queue": 2,
+   "reps": 1,
+   "revlog": [
+    [
+     0,
+     4,
+     4
+    ]
+   ],
+   "type": 2
+  },
+  "1795611878140/1": {
+   "deck": "SM2::Kelimeler",
+   "due_in": 2,
+   "factor": 2350,
+   "filtered": null,
+   "flags": 0,
+   "fsrs": null,
+   "ivl": 2,
+   "lapses": 0,
+   "queue": 2,
+   "reps": 4,
+   "revlog": [
+    [
+     0,
+     3,
+     -600
+    ],
+    [
+     0,
+     3,
+     -3600
+    ],
+    [
+     0,
+     3,
+     1
+    ],
+    [
+     1,
+     2,
+     2
+    ]
+   ],
+   "type": 2
+  },
+  "1795611878144/0": {
+   "deck": "SM2::Kelimeler",
+   "due_in": 20,
+   "factor": 2650,
+   "filtered": null,
+   "flags": 0,
+   "fsrs": null,
+   "ivl": 20,
+   "lapses": 0,
+   "queue": 2,
+   "reps": 2,
+   "revlog": [
+    [
+     0,
+     4,
+     5
+    ],
+    [
+     1,
+     4,
+     14
+    ],
+    [
+     4,
+     0,
+     20
+    ]
+   ],
+   "type": 2
+  },
+  "1795611878144/1": {
+   "deck": "SM2::Kelimeler",
+   "due_in": 60,
+   "factor": 0,
+   "filtered": null,
+   "flags": 0,
+   "fsrs": null,
+   "ivl": 0,
+   "lapses": 0,
+   "queue": 1,
+   "reps": 3,
+   "revlog": [
+    [
+     0,
+     3,
+     -600
+    ],
+    [
+     0,
+     3,
+     -3600
+    ],
+    [
+     0,
+     1,
+     -60
+    ]
+   ],
+   "type": 1
+  },
+  "1795611878148/0": {
+   "deck": "SM2::Kelimeler",
+   "due_in": 3,
+   "factor": 2500,
+   "filtered": null,
+   "flags": 0,
+   "fsrs": null,
+   "ivl": 3,
+   "lapses": 0,
+   "queue": 2,
+   "reps": 3,
+   "revlog": [
+    [
+     0,
+     3,
+     -600
+    ],
+    [
+     0,
+     3,
+     -3600
+    ],
+    [
+     0,
+     4,
+     3
+    ]
+   ],
+   "type": 2
+  },
+  "1795611878148/1": {
+   "deck": "SM2::Kelimeler",
+   "due_in": null,
+   "factor": 0,
+   "filtered": null,
+   "flags": 0,
+   "fsrs": null,
+   "ivl": 0,
+   "lapses": 0,
+   "queue": 0,
+   "reps": 0,
+   "revlog": [],
+   "type": 0
+  }
+ },
+ "check_database": [],
+ "decks": [
+  "SM2",
+  "SM2::Kelimeler"
+ ],
+ "fsrs": false,
+ "media": {},
+ "notes": {
+  "1795611878140": {
+   "fields": [
+    "word0",
+    "kelime0"
+   ],
+   "guid": "EW&i$ncQi~",
+   "notetype": "Basic (and reversed card)+",
+   "tags": [
+    "sm2"
+   ]
+  },
+  "1795611878144": {
+   "fields": [
+    "word1",
+    "kelime1"
+   ],
+   "guid": "dc(=_j5QCV",
+   "notetype": "Basic (and reversed card)+",
+   "tags": [
+    "sm2"
+   ]
+  },
+  "1795611878148": {
+   "fields": [
+    "word2",
+    "kelime2"
+   ],
+   "guid": "M|BgZjN%@j",
+   "notetype": "Basic (and reversed card)+",
+   "tags": [
+    "sm2"
+   ]
+  }
+ },
+ "revlog_total": 14
+}

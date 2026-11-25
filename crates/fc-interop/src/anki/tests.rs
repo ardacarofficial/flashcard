@@ -44,11 +44,14 @@ fn converts_cloze_image_sound_scheduling_and_history() {
     let (pack, report) = to_pack(&sample(), NOW);
     assert_eq!(report.skipped_notes, 0);
     assert_eq!(report.skipped_cards, 0);
-    assert_eq!(report.skipped_reviews, 1, "manual reschedule");
+    assert_eq!(
+        report.skipped_reviews, 0,
+        "a manual reschedule is a `manual` row"
+    );
     assert!(report.missing_media.is_empty());
     assert_eq!(pack.notes.len(), 4);
     assert_eq!(pack.cards.len(), 5);
-    assert_eq!(pack.review_logs.len(), 4);
+    assert_eq!(pack.review_logs.len(), 5);
     assert_eq!(pack.media.len(), 2);
 
     // Decks: only those holding cards (+ ancestors); filtered decks resolve to the original.
@@ -237,6 +240,20 @@ fn export_then_import_roundtrips() {
         v
     };
     assert_eq!(ratings(&back), ratings(&pack));
+    let modes = |p: &Pack| {
+        let mut v: Vec<_> = p
+            .review_logs
+            .iter()
+            .map(|r| (r.created_at, r.mode.clone(), r.scheduled_days))
+            .collect();
+        v.sort();
+        v
+    };
+    assert_eq!(
+        modes(&back),
+        modes(&pack),
+        "manual rows go back as manual rows"
+    );
     let mut media: Vec<_> = back
         .media
         .iter()
@@ -641,4 +658,93 @@ fn anki_image_occlusion_becomes_v03_masks() {
         keys,
         vec![("m1", "image_occlusion"), ("m2", "image_occlusion")]
     );
+}
+
+/// v1.4.2: Anki's "set due date" / "forget" rows are imported as `manual` rows (not answers),
+/// the last *answer* stays the card's last review (so the interval exported back = Anki's),
+/// and they go back to Anki as "Manual" rows with ease 0.
+#[test]
+fn manual_reschedules_are_kept_but_are_not_answers() {
+    let mut col = sample();
+    // The review card `c1` (due day 100, interval 15) was answered on day 85, then "set due
+    // date" moved it ten days later on day 90: Anki keeps the interval counted from day 85.
+    let day = |d: i64| (CRT + d * 86_400) * 1000;
+    let c1 = col
+        .cards
+        .iter_mut()
+        .find(|c| c.id == 1_610_000_000_001)
+        .unwrap();
+    c1.due = 110;
+    c1.ivl = 25;
+    col.revlog.retain(|r| r.cid != 1_610_000_000_001);
+    col.revlog
+        .push(rev(day(85), 1_610_000_000_001, 3, 15, 4, 1));
+    col.revlog
+        .push(rev(day(90), 1_610_000_000_001, 0, 25, 15, 4));
+    // A "forget": the card is new again.
+    let c5 = col
+        .cards
+        .iter_mut()
+        .find(|c| c.id == 1_610_000_000_032)
+        .unwrap();
+    (c5.ctype, c5.queue, c5.due, c5.ivl, c5.odid, c5.odue) = (0, 0, 7, 0, 0, 0);
+    col.revlog
+        .push(rev(day(240), 1_610_000_000_032, 0, 0, 10, 4));
+
+    let (pack, report) = to_pack(&col, NOW);
+    assert_eq!(report.skipped_reviews, 0);
+    let card = pack
+        .cards
+        .iter()
+        .find(|c| {
+            pack.review_logs
+                .iter()
+                .any(|r| r.card_id == c.id && r.created_at.0 == day(85))
+        })
+        .unwrap();
+    assert_eq!(
+        card.scheduling.last_review,
+        Some(Timestamp(day(85))),
+        "the answer, not the manual row"
+    );
+    let manual: Vec<_> = pack
+        .review_logs
+        .iter()
+        .filter(|r| r.mode == crate::pack::MANUAL_MODE)
+        .map(|r| {
+            (
+                r.created_at.0,
+                r.state_before,
+                r.state_after,
+                r.scheduled_days,
+            )
+        })
+        .collect();
+    assert_eq!(
+        manual,
+        [
+            (day(90), CardState::Review, CardState::Review, 25),
+            (1_620_700_000_000, CardState::New, CardState::Review, 3),
+            (day(240), CardState::Review, CardState::New, 0),
+        ]
+    );
+
+    let back = from_pack(&pack, true, NOW);
+    let exported = back
+        .cards
+        .iter()
+        .find(|c| c.due > 100 && c.ctype == 2)
+        .unwrap();
+    assert_eq!(
+        exported.ivl, 25,
+        "Anki's interval: last answer (day 85) to due (day 110)"
+    );
+    let mut rows: Vec<(i64, i64, i64)> = back
+        .revlog
+        .iter()
+        .filter(|r| r.ease == 0)
+        .map(|r| (r.rtype, r.ivl, r.last_ivl))
+        .collect();
+    rows.sort_unstable();
+    assert_eq!(rows, [(4, 0, 10), (4, 3, 3), (4, 25, 15)]);
 }

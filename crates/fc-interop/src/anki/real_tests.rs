@@ -164,11 +164,20 @@ fn check(name: &str, layout: AnkiLayout, scheduling: bool) -> (AnkiCollection, P
         }
     }
 
-    // History: every Anki review except the manual "set due date" one.
+    // History: every Anki row, the manual "set due date" one as a `manual` row (v1.4.2).
     let reviews = exp["revlog"].as_u64().unwrap() as usize;
     if scheduling {
-        assert_eq!(pack.review_logs.len(), reviews - 1, "{name}");
-        assert_eq!(report.skipped_reviews, 1, "{name}");
+        assert_eq!(pack.review_logs.len(), reviews, "{name}");
+        assert_eq!(report.skipped_reviews, 0, "{name}");
+        let manual: Vec<_> = pack
+            .review_logs
+            .iter()
+            .filter(|r| r.mode == crate::pack::MANUAL_MODE)
+            .collect();
+        assert_eq!(manual.len(), 1, "{name}");
+        assert_eq!(manual[0].state_after, CardState::Review, "{name}");
+        // What Anki wrote: "set due date" on a new card (FSRS) logs interval 0.
+        assert_eq!(manual[0].scheduled_days, 0, "{name}");
     } else {
         assert!(pack.review_logs.is_empty(), "{name}");
     }
