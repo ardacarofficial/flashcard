@@ -14,11 +14,14 @@
 //!   back-filled).
 //! * Each migration runs in its own `BEGIN IMMEDIATE` transaction. Missing migrations are
 //!   applied in ascending order, even if a higher one is already applied (lane merges).
+//! * Two processes may open at the same moment: the one that gets the writer second waits for
+//!   it ([`MIGRATION_WAIT`]), then finds the migration recorded and skips it (v1.4.2 K1).
 
 use crate::error::{in_table, StorageError, StorageResult};
 use fc_core::note::fnv1a64;
-use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use std::collections::BTreeMap;
+use std::time::{Duration, Instant};
 
 /// One migration.
 #[derive(Debug, Clone, Copy)]
@@ -110,6 +113,30 @@ pub fn current_version(conn: &Connection) -> StorageResult<u32> {
     Ok(u32::try_from(v).unwrap_or(0))
 }
 
+/// How long an opener that finds migrations pending waits for the writer beyond the busy
+/// timeout: another process that opened the collection at the same moment is applying them
+/// (v1.4.2 K1). Long enough for the slowest migration of a large collection.
+pub const MIGRATION_WAIT: Duration = Duration::from_secs(180);
+
+/// `BEGIN IMMEDIATE`; while the writer stays busy past the connection's busy timeout, tries
+/// again for up to `wait`.
+fn begin_immediate(conn: &Connection, wait: Duration) -> StorageResult<Transaction<'_>> {
+    let start = Instant::now();
+    loop {
+        match Transaction::new_unchecked(conn, TransactionBehavior::Immediate) {
+            Ok(tx) => return Ok(tx),
+            Err(e) if is_busy(&e) && start.elapsed() < wait => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+}
+
+fn is_busy(e: &rusqlite::Error) -> bool {
+    use rusqlite::ErrorCode as C;
+    matches!(e, rusqlite::Error::SqliteFailure(f, _)
+        if matches!(f.code, C::DatabaseBusy | C::DatabaseLocked))
+}
+
 /// Applies pending [`MIGRATIONS`]. Returns the versions applied (empty = up to date).
 /// Fails with [`StorageError::TooNew`] if the database is ahead of this build, and with
 /// [`StorageError::Migration`] on a checksum mismatch or an unknown recorded migration.
@@ -125,7 +152,29 @@ pub fn migrate_with(conn: &mut Connection, migrations: &[Migration]) -> StorageR
     let pending = check(conn, migrations)?;
     let mut applied = Vec::new();
     for m in pending {
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = begin_immediate(conn, MIGRATION_WAIT)?;
+        // Another opener (a second process starting at the same moment) may have applied it
+        // while this one waited for the writer: then it is done, not run again.
+        let done: Option<String> = tx
+            .query_row(
+                "SELECT checksum FROM schema_migrations WHERE version = ?1",
+                [m.version],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if let Some(sum) = done {
+            if sum != m.checksum() {
+                return Err(StorageError::Migration {
+                    version: m.version,
+                    message: format!(
+                        "checksum mismatch for {}: database has {sum}, build has {}",
+                        m.name,
+                        m.checksum()
+                    ),
+                });
+            }
+            continue;
+        }
         tx.execute_batch(m.sql)
             .map_err(|e| StorageError::Migration {
                 version: m.version,
@@ -176,7 +225,14 @@ fn check<'m>(
             supported: latest,
         });
     }
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    // Behind the newest migration: another opener may be migrating right now, so this one
+    // waits for it. Up to date: the writer's usual patience.
+    let wait = if current < latest {
+        MIGRATION_WAIT
+    } else {
+        Duration::ZERO
+    };
+    let tx = begin_immediate(conn, wait)?;
     tx.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
             version     INTEGER PRIMARY KEY NOT NULL,
@@ -254,8 +310,23 @@ pub fn schema_object_exists(conn: &Connection, name: &str) -> StorageResult<bool
 pub fn configure_connection(conn: &Connection) -> StorageResult<()> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "busy_timeout", BUSY_TIMEOUT_MS)?;
-    // In-memory databases report "memory"; ignore the returned mode.
-    let _mode: String = conn.pragma_update_and_check(None, "journal_mode", "WAL", |r| r.get(0))?;
+    // In-memory databases report "memory"; ignore the returned mode. On a brand-new file the
+    // switch to WAL needs the file to itself: when two processes create the collection at
+    // the same moment, SQLite refuses one of them at once instead of letting them wait for
+    // each other, so that one asks again (v1.4.2 K1).
+    let start = Instant::now();
+    loop {
+        match conn.pragma_update_and_check(None, "journal_mode", "WAL", |r| r.get::<_, String>(0)) {
+            Ok(_mode) => break,
+            Err(e)
+                if is_busy(&e)
+                    && start.elapsed() < Duration::from_millis(u64::from(BUSY_TIMEOUT_MS)) =>
+            {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.pragma_update(None, "temp_store", "MEMORY")?;
     conn.pragma_update(None, "cache_size", CACHE_SIZE_KIB)?;

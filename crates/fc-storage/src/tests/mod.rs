@@ -19,6 +19,7 @@ mod maintenance;
 mod mcp;
 mod meanings;
 mod media_origins;
+mod migrate_race;
 mod migrations;
 mod misc;
 mod notes;
