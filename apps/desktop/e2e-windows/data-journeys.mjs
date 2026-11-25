@@ -24,7 +24,7 @@
  *
  * Zero npm dependencies (Node 22: global fetch).
  */
-import { existsSync, readdirSync, statSync, truncateSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, truncateSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -348,6 +348,7 @@ export async function j7Rescue(env, facts) {
   facts.db = db;
   const deckId = await deckWith(env, `pilot_rescue_${env.tag}`, [['compass', 'pusula']]);
   // A verified backup where the rescue looks (`backups/`, and `status.json` records it).
+  mkdirSync(join(dir, 'backups'), { recursive: true });
   const path = join(dir, 'backups', `pilot-rescue-${env.tag}.fcbackup`);
   const report = await job(env, await env.rpc('io.backup.create', { path }), 'io.backup.create');
   facts.backup = report?.path;

@@ -322,7 +322,8 @@ public static class FcPilotDlg {
       else if (c.ToString() == "Static" && t.Length > 0) text.Append(t.ToString()).Append(" ");
       return true;
     }, IntPtr.Zero);
-    int id = GetDlgItem(dlg, 6) != IntPtr.Zero ? 6 : 1;
+    // Yes (6) on the rescue offer; else the first of OK (1) / Cancel (2) the box has (an MB_OK box closes on either).
+    int id = GetDlgItem(dlg, 6) != IntPtr.Zero ? 6 : (GetDlgItem(dlg, 1) != IntPtr.Zero ? 1 : 2);
     IntPtr btn = GetDlgItem(dlg, id);
     bool ok = press && PostMessage(dlg, 0x0111, (IntPtr)id, btn);
     return "found\\t" + id + "\\t" + ok + "\\t" + string.Join("|", buttons) + "\\t" + text.ToString().Replace("\\r", " ").Replace("\\n", " ");

@@ -1,17 +1,51 @@
-# Windows WebDriver pilot (v1.3)
+# Windows journeys against the installed app (v1.3 pilot → v1.4.2 gate)
 
-A **pilot**, not a gate: three journeys of the Linux suite (`../e2e`) run against the
+Journeys of the Linux suite (`../e2e`) and the owner's data journeys run against the
 **installed** Windows app (NSIS, per-user, WebView2) through
 [`tauri-driver`](https://v2.tauri.app/develop/tests/webdriver/) and a `msedgedriver` that
-matches the WebView2 runtime. It runs in the `webdriver-pilot` job of
-`.github/workflows/windows-build.yml` (`continue-on-error: true`, after the installer job).
+matches the WebView2 runtime. They run in the `webdriver-pilot` job ("Windows journeys
+(installed app)") of `.github/workflows/windows-build.yml`, after the installer job.
 
-**Status: not green yet.** The first CI run (45038113867) installed the app and matched the
-driver (WebView2 157.0.4341.46, tauri-driver 2.1.0) but could not create a session:
-`session not created: DevToolsActivePort file doesn't exist`. The likely cause and the fix
-below were worked out by reading (the tauri-driver 2.1.0 / wry / Tauri sources and public
-WebView2 reports); **nothing here has run on Windows since.** The next run says which
-session strategy worked (or why none did); the journeys themselves have never run yet.
+**Status.** P and J1–J3 have been green on every run since the session fix below (11 runs in a
+row up to 45206222145; session via `driver+policy` in ~1.5 s). v1.4.2 adds J4–J7 and makes the
+job a **gate**: it fails when a *blocking* journey fails. J4–J7 were written and their requests
+and read-backs checked on Linux (`local-check.mjs`, below); **their first Windows run is the next
+CI run.**
+
+## Which journeys block, and why
+
+| Journey | Blocks? | Why |
+|---|---|---|
+| P, J1–J3 | yes | Green on every run since the session strategy was fixed |
+| J4 capture, J5 reopen, J6 backup/restore | yes | Only the same machinery as J1–J3: the WebDriver session, the app's IPC, a loopback HTTP request, an app restart through the same session strategy. No native UI |
+| J7 rescue | **no** (warning) | Answers a **native Win32 message box** from outside the app and damages files of a killed app: the flaky native piece |
+
+The list is one line in the workflow (`FC_WIN_E2E_BLOCKING: P,J1,J2,J3,J4,J5,J6`; `--blocking`
+locally). A failed session or setup always fails the job. A non-blocking failure prints a
+`::warning` and `WARNING: non-blocking J7 failed` on the final line and the run's summary page.
+
+## What J7 covers, and what it does not
+
+The rescue dialog is shown by the shell **before any window** (`src-tauri/src/session.rs` →
+`maintenance.rs::offer_rescue`) with rfd 0.15 without `common-controls-v6`, i.e. a plain
+`MessageBoxW`: the three labels become **Yes / No / Cancel**, and Yes = "restore the newest
+verified backup". WebDriver cannot see it (no webview yet). J7 answers it the way a click does,
+from outside: while msedgedriver waits for the webview, `win.mjs::answerAppDialog` finds the
+app's `#32770` window, takes a desktop screenshot (`j7-damaged-dialog-1.png`), posts
+`WM_COMMAND IDYES`, then `IDOK` to the "rescued" box. **No test switch was added to the app**;
+the release build is unchanged. The PASS line names the path taken (`rescued by: …`):
+
+| `rescued_by` | Covered | Not covered |
+|---|---|---|
+| `native dialog: Yes …` | the real dialog, the real choice, the shell's rescue, the result in the installed app | a human click (a posted `WM_COMMAND` is what the button sends, not a mouse) |
+| `in-app rescue …` | the truncated file still opened; its integrity check failed; Maintenance → `maintenance.rescue.request` → restart → rescue | the native dialog (not shown in that case) |
+| `FALLBACK fc rescue --from backup …` | the same `rescue()` through the installed `fc.exe`, the result in the installed app | **the dialog**: it was not answered or the app did not come up after it |
+
+Before damaging, J7 makes a verified backup in `backups/`, writes one more note, stops the
+app, folds the write-ahead log into the file with the installed `fc.exe` (so the damage is not
+masked by pages still waiting in the log), and truncates `collection.db` to 2/5. After: the
+backup's notes are back, the later note is gone, `damaged/<time>/collection.db` is the
+truncated file byte-for-byte in size, the full integrity check passes, a new note is read back.
 
 ## Why the session failed, and what the pilot does about it
 
@@ -70,13 +104,33 @@ done blindly.
 | J1 | The app launches, the shell and Home (`home-start`) render | DOM |
 | J2 | Quick Add: `N`, type front, `Tab`, type back, `Ctrl+Enter` (as J1 in `../e2e`) | `notes.list` / `notes.get`: one note, exact fields, chosen deck |
 | J3 | Home → `Enter` → launcher → `Enter` → `Space`×3 → `2` (as S1 in `../e2e`) | `study.session`: exactly one answered; `study.card_history`: one review |
+| J4 | Subtitle module on, an access key made (`subtitle.keys.create`, Settings › Subtitle); the extension's pairing (`GET /subtitle/v1/me` with the key), picture + sound (`POST /v1/media`), the word with its sentence (`POST /v1/captures`, `Idempotency-Key`) to the **app's** local API; the resend | `201 created` / `200 duplicate` with the same card; `notes.get`: the note owns that card, word highlighted in the sentence, two media fields; `subtitle.encounters.list`: the capture is the primary encounter, video and time kept |
+| J5 | A capture into its own deck, one review (`study.start` / `study.answer good`), the app **closed** (WM_CLOSE, then forced) and **started again** | after the restart: the same note/card/encounter (as J4), `study.card_history`: exactly that one review (rating, session) |
+| J6 | Two notes, `io.backup.create` (the job), then a note added and one edited, `io.backup.restore` (safety backup into the results), page reloaded | the deck holds exactly the backup's two notes, the edit is undone, the safety backup exists |
+| J7 | See above: verified backup, a later note, app stopped, file truncated, app started, rescue answered | the backup's state, the later note gone, the damaged file kept, integrity check OK, a new write read back |
+
+Every journey makes its own decks, key and capture, so one failing does not take the next with
+it; a journey that finds no session (a restart before it failed) starts the app again first.
+On failure: what was expected and what was read back, a screenshot and the DOM
+(`<id>-fail.png/html`), and `summary.json` → `journeys[].facts`.
+
+`data-journeys.mjs` holds J4–J7 without WebDriver: they get the app's API, "close/start the
+app" and "start on a damaged collection" from the runner. `local-check.mjs` runs them on any
+machine against `fc dev serve` (same dispatch as the IPC) + `fc api serve` (the same HTTP server
+the app runs) on a temporary collection; there "start on a damaged collection" is
+`fc rescue --from backup` (no native dialog off Windows):
+
+```bash
+cargo build -p fc-cli
+node apps/desktop/e2e-windows/local-check.mjs            # J4–J7; --only J4,J6
+```
 
 No npm dependencies: `webdriver.mjs` is a small W3C WebDriver client on Node 22's `fetch`;
 `win.mjs` holds the Windows helpers (policy, processes, windows, desktop screenshot, CDP
-probe; PowerShell/`reg.exe`, never throwing); `run.mjs` runs the preflight, gets a session
+probe, answering the app's native message box; PowerShell/`reg.exe`, never throwing); `run.mjs` runs the preflight, gets a session
 (above), runs the journeys, writes `summary.json`, screenshots (and the DOM of a failed
 step) and the logs to the output dir, prints a `PASS`/`FAIL` line per journey (also on the
-workflow run's summary page), exits 1 when anything failed, and always stops tauri-driver
+workflow run's summary page), exits 1 when a blocking journey (or the setup) failed, and always stops tauri-driver
 and the app. Step P also dismisses the crash-recovery offer a forced stop leaves behind
 (`maintenance.recovery.dismiss`), so it cannot cover Home. IPC calls go through
 `window.__TAURI_INTERNALS__.invoke('invoke', { command: 'v1.<method>', payload })`, the same
@@ -86,7 +140,7 @@ journeys use; no visible text is matched (the UI language follows the OS).
 ## Run locally (Windows)
 
 The app always opens the real per-user profile (`%APPDATA%\app.flashcard.desktop`) and the
-pilot adds decks to it. **Use a throwaway Windows user or VM**; `run.mjs` refuses to start
+pilot adds decks to it (and J7 truncates its collection file, J6 restores a backup over it). **Use a throwaway Windows user or VM**; `run.mjs` refuses to start
 when that folder exists (outside CI) unless `FC_WIN_E2E_ALLOW_EXISTING_PROFILE=1`. Close any
 running Flashcard first (single instance).
 
@@ -100,7 +154,9 @@ node apps/desktop/e2e-windows/run.mjs --app "$env:LOCALAPPDATA\Flashcard\<app>.e
   --native-driver .\msedgedriver\msedgedriver.exe
 ```
 
-Options (or env): `--app` (`FC_EXE`), `--native-driver` (`MSEDGEDRIVER`), `--tauri-driver`
+Options (or env): `--app` (`FC_EXE`), `--fc` (`FC_CLI`, default `fc.exe` beside the app),
+`--blocking P,J1,…` (`FC_WIN_E2E_BLOCKING`), `--only J4,J6` (`FC_WIN_E2E_ONLY`: those + P/J1),
+`--native-driver` (`MSEDGEDRIVER`), `--tauri-driver`
 (`TAURI_DRIVER`, default `tauri-driver` on `PATH`), `--out` (`FC_WIN_E2E_OUT`, default
 `e2e-windows/.results`), `--port` (`FC_WIN_E2E_PORT`, default 4444; msedgedriver gets port+1),
 `--cdp-port` (`FC_WIN_E2E_CDP_PORT`, default 9333), `--strategy driver+policy|attach+policy|driver`
