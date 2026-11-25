@@ -51,6 +51,17 @@ fn media_row(r: &Row<'_>) -> rusqlite::Result<MediaRecord> {
     })
 }
 
+/// Whether the file at `path` exists and holds exactly `bytes` (size first: a damaged file is
+/// usually cut short, and then nothing is read).
+fn same_content(path: &Path, bytes: &[u8]) -> bool {
+    match std::fs::metadata(path) {
+        Ok(m) if m.is_file() && m.len() == bytes.len() as u64 => {
+            std::fs::read(path).is_ok_and(|b| b == bytes)
+        }
+        _ => false,
+    }
+}
+
 fn invalid_hash(hash: &str) -> StorageError {
     StorageError::NotFound {
         entity: "media",
@@ -270,7 +281,10 @@ impl ContentWrite for SqliteTx<'_, WriteMode> {
                 let Some(path) = media_file_path(&db, hash) else {
                     return Err(invalid_hash(hash));
                 };
-                if path.exists() {
+                // Content-addressed: a file that holds exactly these bytes is kept. A damaged
+                // one (cut short by a power loss, changed on disk) is replaced below, so adding
+                // the same media again or restoring a backup repairs it (v1.4.2 review J1).
+                if same_content(&path, bytes) {
                     return Ok(());
                 }
                 if let Some(dir) = path.parent() {

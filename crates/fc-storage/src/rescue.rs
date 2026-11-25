@@ -192,26 +192,33 @@ pub fn salvage_into(damaged: &Path, fresh: &Path) -> StorageResult<SalvageReport
         .map_err(at("detach"))?;
     // Rows whose parent was lost go too (repeat: removing one may orphan another).
     for _ in 0..8 {
-        let bad: Vec<(String, i64)> = {
+        // (table, rowid, foreign key id): the rowid is NULL in a WITHOUT ROWID table
+        // (`note_tags`, `links`, `attribute_values`, …).
+        let bad: Vec<(String, Option<i64>, i64)> = {
             let mut st = conn.prepare("PRAGMA foreign_key_check").map_err(at("fk"))?;
-            let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
+            let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(3)?)))?;
             rows.collect::<rusqlite::Result<_>>()?
         };
         if bad.is_empty() {
             break;
         }
-        for (table, rowid) in bad {
-            let n = conn.execute(
-                &format!(
-                    "DELETE FROM \"{}\" WHERE rowid = ?1",
-                    table.replace('"', "\"\"")
-                ),
-                [rowid],
-            )?;
+        let mut by_key: std::collections::BTreeSet<(String, i64)> = Default::default();
+        for (table, rowid, fk) in bad {
+            let n = match rowid {
+                Some(rowid) => conn.execute(
+                    &format!("DELETE FROM {} WHERE rowid = ?1", quote(&table)),
+                    [rowid],
+                )?,
+                // No rowid to name the row by: every orphan of this foreign key at once.
+                None if by_key.insert((table.clone(), fk)) => {
+                    delete_orphans(&conn, &table, fk).map_err(at("fk"))?
+                }
+                None => 0,
+            };
             if n > 0 {
                 let e = report.tables.entry(table).or_default();
-                e.0 = e.0.saturating_sub(1);
-                e.1 += 1;
+                e.0 = e.0.saturating_sub(n as u64);
+                e.1 += n as u64;
             }
         }
     }
@@ -289,50 +296,219 @@ fn copy_table(conn: &Connection, table: &str, rowid: bool) -> (u64, u64) {
     } else {
         (cols.clone(), cols.clone())
     };
-    let insert = format!("INSERT OR IGNORE INTO main.{q} ({into}) SELECT {from} FROM damaged.{q}");
+    // Rows the migrations seeded in the fresh file (flag names, prices, counters) give way to
+    // the collection's own: `OR IGNORE` would keep the defaults over what the user changed.
+    let seeded = conn
+        .query_row(
+            &format!("SELECT EXISTS (SELECT 1 FROM main.{q})"),
+            [],
+            |r| r.get::<_, bool>(0),
+        )
+        .unwrap_or(false);
+    let verb = if seeded { "REPLACE" } else { "IGNORE" };
+    let insert = format!("INSERT OR {verb} INTO main.{q} ({into}) SELECT {from} FROM damaged.{q}");
     if let Ok(n) = conn.execute(&insert, []) {
-        return (n as u64, 0);
+        // Junk rows of a page whose header still reads come back as rows that break a
+        // constraint and are ignored: what the damaged file counts but did not arrive is lost.
+        let listed: Option<i64> = conn
+            .query_row(&format!("SELECT count(*) FROM damaged.{q}"), [], |r| {
+                r.get(0)
+            })
+            .ok();
+        let listed = listed.and_then(|c| u64::try_from(c).ok()).unwrap_or(0);
+        return (n as u64, listed.saturating_sub(n as u64));
     }
     if !rowid {
-        // No rowid to walk: whatever could not be read whole is lost (counted as unknown: 0
-        // copied); the integrity report of the damaged file names the table.
-        return (0, 0);
+        return copy_rows_both_ways(conn, table, &q, &insert);
     }
-    // Walk the rowids we can still list, in ranges that halve on failure.
-    let ids: Vec<i64> = match conn.prepare(&format!("SELECT rowid FROM damaged.{q} ORDER BY rowid"))
-    {
-        Ok(mut st) => {
-            let mut ids = Vec::new();
+    // Walk the rowids we can still list, from both ends: a walk stops at the first unreadable
+    // page, so the rows behind it are reached from the other side (v1.4.2 review J1).
+    let walk = |order: &str| -> (Vec<i64>, bool) {
+        let mut ids = Vec::new();
+        let mut complete = false;
+        if let Ok(mut st) = conn.prepare(&format!(
+            "SELECT rowid FROM damaged.{q} ORDER BY rowid {order}"
+        )) {
             if let Ok(mut rows) = st.query([]) {
-                // Stops at the first unreadable page; the ids before it are still good.
-                while let Ok(Some(r)) = rows.next() {
-                    if let Ok(id) = r.get::<_, i64>(0) {
-                        ids.push(id);
+                loop {
+                    match rows.next() {
+                        Ok(Some(r)) => {
+                            if let Ok(id) = r.get::<_, i64>(0) {
+                                ids.push(id);
+                            }
+                        }
+                        Ok(None) => {
+                            complete = true;
+                            break;
+                        }
+                        Err(_) => break,
                     }
                 }
             }
-            ids
         }
-        Err(_) => Vec::new(),
+        (ids, complete)
     };
+    let (mut ids, complete) = walk("ASC");
+    // Rows on unreadable pages are never listed: estimated by the rowids between the two
+    // walks (an upper bound: rowids of deleted rows are counted too).
+    let mut unlisted = 0u64;
+    if !complete {
+        let (back, _) = walk("DESC");
+        let low = ids.last().copied();
+        let behind: Vec<i64> = back
+            .into_iter()
+            .filter(|id| low.is_none_or(|l| *id > l))
+            .collect();
+        unlisted = match (low, behind.iter().min()) {
+            (Some(l), Some(h)) => u64::try_from(h - l - 1).unwrap_or(0).max(1),
+            _ => 1,
+        };
+        ids.extend(behind);
+        ids.sort_unstable();
+        ids.dedup();
+    }
     let one = format!("{insert} WHERE rowid BETWEEN ?1 AND ?2");
-    let (mut copied, mut lost) = (0u64, 0u64);
+    let have = format!("SELECT count(*) FROM main.{q} WHERE rowid BETWEEN ?1 AND ?2");
+    let mut lost = 0u64;
     let mut stack: Vec<&[i64]> = ids.chunks(512).rev().collect();
     while let Some(chunk) = stack.pop() {
         let (Some(first), Some(last)) = (chunk.first(), chunk.last()) else {
             continue;
         };
-        match conn.execute(&one, [first, last]) {
-            Ok(n) => copied += n as u64,
-            Err(_) if chunk.len() == 1 => lost += 1,
-            Err(_) => {
-                let (a, b) = chunk.split_at(chunk.len() / 2);
-                stack.push(b);
-                stack.push(a);
-            }
+        // A range can also end early without an error (a junk row with a huge rowid ends
+        // the scan), so a range counts as copied only when all its rows arrived.
+        let arrived = conn.execute(&one, [first, last]).is_ok()
+            && conn
+                .query_row(&have, [first, last], |r| r.get::<_, i64>(0))
+                .is_ok_and(|n| usize::try_from(n).is_ok_and(|n| n >= chunk.len()));
+        if arrived {
+            continue;
+        }
+        if chunk.len() == 1 {
+            lost += 1;
+        } else {
+            let (a, b) = chunk.split_at(chunk.len() / 2);
+            stack.push(b);
+            stack.push(a);
         }
     }
-    (copied, lost)
+    let copied = (ids.len() as u64).saturating_sub(lost);
+    (copied, lost + unlisted)
+}
+
+/// A WITHOUT ROWID table that could not be copied whole: row by row in key order from both
+/// ends (each walk stops at the first unreadable page). The rows in between are lost; their
+/// number is unknown and counted as 1.
+fn copy_rows_both_ways(conn: &Connection, table: &str, q: &str, insert: &str) -> (u64, u64) {
+    let key: Vec<String> = match conn
+        .prepare("SELECT name FROM pragma_table_info(?1, 'main') WHERE pk > 0 ORDER BY pk")
+    {
+        Ok(mut st) => st
+            .query_map([table], |r| r.get::<_, String>(0))
+            .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
+    if key.is_empty() {
+        return (0, 1);
+    }
+    let cols: Vec<String> = key.iter().map(|k| quote(k)).collect();
+    let key_list = cols.join(", ");
+    let marks: Vec<String> = (1..=cols.len()).map(|i| format!("?{i}")).collect();
+    let one = format!("{insert} WHERE ({key_list}) = ({})", marks.join(", "));
+    let mut copied = 0u64;
+    let mut complete = false;
+    for order in ["ASC", "DESC"] {
+        let by: Vec<String> = cols.iter().map(|c| format!("{c} {order}")).collect();
+        let Ok(mut st) = conn.prepare(&format!(
+            "SELECT {key_list} FROM damaged.{q} ORDER BY {}",
+            by.join(", ")
+        )) else {
+            break;
+        };
+        let Ok(mut rows) = st.query([]) else { break };
+        loop {
+            match rows.next() {
+                Ok(Some(r)) => {
+                    let values: Vec<rusqlite::types::Value> =
+                        (0..cols.len()).filter_map(|i| r.get(i).ok()).collect();
+                    if values.len() == cols.len() {
+                        if let Ok(n) = conn.execute(&one, rusqlite::params_from_iter(values.iter()))
+                        {
+                            copied += n as u64;
+                        }
+                    }
+                }
+                Ok(None) => {
+                    complete = true;
+                    break;
+                }
+                Err(_) => break,
+            }
+        }
+        if complete {
+            break;
+        }
+    }
+    (copied, u64::from(!complete))
+}
+
+/// `"name"` (identifier quoting).
+fn quote(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
+}
+
+/// Deletes the rows of `table` whose foreign key `fk` (an id of `PRAGMA foreign_key_list`)
+/// points at no parent row; returns how many. Used where rows have no rowid.
+fn delete_orphans(conn: &Connection, table: &str, fk: i64) -> rusqlite::Result<usize> {
+    let mut st = conn.prepare(
+        "SELECT \"table\", \"from\", \"to\" FROM pragma_foreign_key_list(?1) WHERE id = ?2
+         ORDER BY seq",
+    )?;
+    let cols: Vec<(String, String, Option<String>)> = st
+        .query_map(rusqlite::params![table, fk], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let Some((parent, _, _)) = cols.first() else {
+        return Ok(0);
+    };
+    // `REFERENCES parent` without columns names the parent's primary key.
+    let parent_pk: Vec<String> = {
+        let mut st =
+            conn.prepare("SELECT name FROM pragma_table_info(?1) WHERE pk > 0 ORDER BY pk")?;
+        let v = st
+            .query_map([parent], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        v
+    };
+    let (t, p) = (quote(table), quote(parent));
+    // A NULL in any child column means "no reference" (SQLite's rule): never an orphan.
+    let present: Vec<String> = cols
+        .iter()
+        .map(|(_, from, _)| format!("{t}.{} IS NOT NULL", quote(from)))
+        .collect();
+    let matches: Vec<String> = cols
+        .iter()
+        .enumerate()
+        .map(|(i, (_, from, to))| {
+            let to = match to {
+                Some(to) => quote(to),
+                None => parent_pk
+                    .get(i)
+                    .map_or_else(|| "rowid".to_owned(), |c| quote(c)),
+            };
+            format!("{p}.{to} = {t}.{}", quote(from))
+        })
+        .collect();
+    conn.execute(
+        &format!(
+            "DELETE FROM {t} WHERE {} AND NOT EXISTS (SELECT 1 FROM {p} WHERE {})",
+            present.join(" AND "),
+            matches.join(" AND ")
+        ),
+        [],
+    )
 }
 
 fn column_list(conn: &Connection, table: &str) -> rusqlite::Result<String> {

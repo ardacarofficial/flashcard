@@ -89,6 +89,11 @@ pub enum StorageError {
     /// ([`crate::interrupt::deadline`]); its transaction is rolled back.
     #[error("interrupted: deadline passed")]
     Interrupted,
+    /// SQLite rolled the transaction back by itself after a stopped write statement (a
+    /// deadline, a full disk, an I/O error); nothing of it was saved and the handle takes no
+    /// further writes.
+    #[error("the transaction was rolled back; nothing was saved")]
+    RolledBack,
     /// Any other SQLite error.
     #[error("sqlite: {0}")]
     Sqlite(rusqlite::Error),

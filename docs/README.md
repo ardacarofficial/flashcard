@@ -22,6 +22,7 @@ Bu klasör, uygulamanın **tam planını** içerir. Geliştirme boyunca pusulam�
 | 12 | [Performans (v1.4)](12-performans.md) | Ölçülmüş hız: 100k not / 2M tekrar + film izleme yükü (20k karşılaşma, ~1 GiB medya), makine, debug/release, düzeltilenler ve bilinen sınırlar |
 | 13 | [Yapay zekâ gerçek sağlayıcıyla (v1.4)](13-ai-canli-deneme.md) | OpenRouter ile ilk gerçek deneme: ne koşuldu, ne çalıştı, bulunan ve düzeltilen hatalar, denenmeyenler, `FC_AI_LIVE=1` ile yeniden koşma |
 | 14 | [Subtitle gerçek tarayıcıda (v1.4)](14-subtitle-gercek-tarayici.md) | Derlenmiş Subtitle eklentisi gerçek Chromium'da gerçek `fc`'ye karşı: kurulum, geçen adımlar, eklentideki değişiklik ("Flashcard'dan oku" yaması, `tools/subtitle-patches`), sahibin tarayıcısını isteyenler |
+| 15 | [Yazma yolunun bağımsız incelemesi (v1.4.2)](15-bagimsiz-inceleme.md) | SQLite yazmaları, komutlar ve geri alma, eklentiler: ne okundu, bulgular ve durumları, okunmayanlar |
 
 ## ⚡ Tek cümlede
 
