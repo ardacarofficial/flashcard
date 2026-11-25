@@ -70,8 +70,8 @@ pub(crate) struct SqliteTx<'a, M: Mode> {
     conn: MutexGuard<'a, Connection>,
     open: bool,
     /// SQLite ended the transaction itself (see [`SqliteTx::conn`]); the connection is
-    /// `query_only` until this handle is dropped.
-    lost: std::cell::Cell<bool>,
+    /// `query_only` until this handle is dropped. Holds what `query_only` was before.
+    lost: std::cell::Cell<Option<bool>>,
     _mode: PhantomData<M>,
 }
 
@@ -86,7 +86,7 @@ impl<'a, M: Mode> SqliteTx<'a, M> {
         Ok(Self {
             conn,
             open: true,
-            lost: std::cell::Cell::new(false),
+            lost: std::cell::Cell::new(None),
             _mode: PhantomData,
         })
     }
@@ -99,10 +99,14 @@ impl<'a, M: Mode> SqliteTx<'a, M> {
     /// on its own, outside any transaction, so from then on the connection is `query_only`:
     /// every further write fails, and so does the commit (v1.4.2 review J1).
     pub(crate) fn conn(&self) -> &Connection {
-        if self.open && !self.lost.get() && self.conn.is_autocommit() {
-            self.lost.set(true);
-            // If even this fails, no later statement is let through as a write either:
-            // `commit` refuses, and the statement's own error already reached the caller.
+        if self.open && self.lost.get().is_none() && self.conn.is_autocommit() {
+            let was = self
+                .conn
+                .pragma_query_value(None, "query_only", |r| r.get::<_, bool>(0))
+                .unwrap_or(false);
+            self.lost.set(Some(was));
+            // Should even this fail: `commit` refuses all the same, and the stopped
+            // statement's own error already reached the caller.
             let _ = self.conn.pragma_update(None, "query_only", "ON");
         }
         &self.conn
@@ -114,10 +118,9 @@ impl<M: Mode> Drop for SqliteTx<'_, M> {
         if self.open && !self.conn.is_autocommit() {
             let _ = self.conn.execute_batch("ROLLBACK");
         }
-        if self.lost.get() {
-            // Writer connections are never `query_only` (readers do not take this path:
-            // nothing a read transaction runs makes SQLite roll it back).
-            let _ = self.conn.pragma_update(None, "query_only", "OFF");
+        if let Some(was) = self.lost.get() {
+            // Back to what it was: off for the writer, on for a pool reader.
+            let _ = self.conn.pragma_update(None, "query_only", was);
         }
     }
 }
@@ -126,7 +129,7 @@ impl ReadTx for SqliteTx<'_, ReadMode> {}
 
 impl WriteTx for SqliteTx<'_, WriteMode> {
     fn commit(mut self: Box<Self>) -> StorageResult<()> {
-        if self.lost.get() || self.conn.is_autocommit() {
+        if self.lost.get().is_some() || self.conn.is_autocommit() {
             return Err(StorageError::RolledBack);
         }
         self.conn.execute_batch("COMMIT")?;
