@@ -2,6 +2,10 @@
 
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
 
+## Unreleased (v1.4.2)
+
+- **Yazma yolunun bağımsız incelemesi (J1):** bozuk koleksiyonu kurtarma daha az satır kaybeder ve kaybettiğini sayar (etiketli bir notun kaybı kurtarmayı durdurmuyor, bozuk sayfanın ardındaki satırlar ve `WITHOUT ROWID` tablolar geri geliyor, bayrak adları gibi ekilmiş satırlar varsayılana dönmüyor); yarım kalmış medya dosyası aynı içerik yeniden yazılınca onarılır; SQLite bir işlemi kendisi geri aldıktan sonra (süre sınırı, dolu disk) aynı işlemden tek tek yazma sızamaz; eklenti model adresi yalnız yerel normal dosyayı gösterebilir. Bulgular ve açık kalanlar: [docs/15](docs/15-bagimsiz-inceleme.md).
+
 ## [1.4.1] — sağlamlık turu: verinin kaybolmadığının kanıtı
 
 Workspace sürümü `1.4.1`. Bağımsız bir inceleme v1.4.0'ı okudu ve işi tek soruya indirdi: bir arızadan sonra kartların ve çalışma geçmişi geri geliyor mu? Bu sürüm bunu testlerle kanıtlar: gerçek süreçler yazmanın ortasında öldürüldü, disk dolduruldu, koleksiyon bozuldu, dosyalar ve istekler rastgele bozuldu. Yeni özellik yok; bulunan hatalar düzeltildi. Migration yok.
