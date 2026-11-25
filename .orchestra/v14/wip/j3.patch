@@ -1,0 +1,3198 @@
+diff --git a/.orchestra/v14/briefs/j-common.md b/.orchestra/v14/briefs/j-common.md
+new file mode 100644
+index 0000000..0dcf2d9
+--- /dev/null
++++ b/.orchestra/v14/briefs/j-common.md
+@@ -0,0 +1,18 @@
++# J-workers — v1.4.2: the rest of the independent reviewer's plan
++
++Read `.orchestra/v14/COMMON.md` first; it binds you. State: v1.4.1 is released on `claude/festive-einstein-8y0kld`
++(robustness round done, CI and Windows build green). Four siblings work in parallel on the items that were left.
++Rules for this round:
++- Tests must pass on Windows CI too (no Unix-only paths, no wall-clock assumptions, files closed before delete).
++- `fc-desktop` (apps/desktop/src-tauri) cannot be compiled in this container. Code you write there is read by
++  nobody but CI: keep it small, re-read it as a reviewer (clippy `-D warnings`, items after test modules, unused
++  imports), and say in the report exactly what only CI can confirm.
++- No features removed, no UI redesign, sync out of scope. Text in the UI is i18n TR/EN.
++- Do not bump the version. CHANGELOG: lines under "Unreleased (v1.4.2)". Siblings share a 4-core machine: `-j 2`,
++  `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0`.
++- `/home/user/subtitle` and `/home/user/quiz` are read-only references: never edit or commit there.
++- Never put a real key or token in the repo or in output. No model names in the repo.
++- Usual full checks before the final commit (fmt, clippy `--workspace --exclude fc-desktop --all-targets`,
++  tests you touched plus the crate's suite, gen-ts check if the API changed, pnpm check/test if the UI changed).
++  Commit on your branch, no push. Report in Turkish, short: table of what you found or built, what you ran,
++  what you could not check.
+diff --git a/.orchestra/v14/briefs/j1-independent-review.md b/.orchestra/v14/briefs/j1-independent-review.md
+new file mode 100644
+index 0000000..a77e143
+--- /dev/null
++++ b/.orchestra/v14/briefs/j1-independent-review.md
+@@ -0,0 +1,22 @@
++# J1: independent code review of the write path, with fixes
++
++Read `j-common.md`. You did not write this code; review it as an outsider whose job is to find where the owner's
++cards or study history can be lost, corrupted or wrongly changed. Three areas, in this order:
++
++1. **SQLite writes** (`crates/fc-storage/src/sqlite/`, `store.rs`, migrations): transaction boundaries, anything
++   written outside a transaction, the background WAL checkpoint thread, busy/locked handling, foreign keys,
++   statements built from strings, what happens when two processes (desktop app + `fc api serve` / CLI) have the
++   collection open.
++2. **Commands and undo** (`crates/fc-app`: command registry, oplog, undo/redo): a command whose inverse does not
++   restore everything it changed, side effects outside the transaction (files, media, events, indexes) that
++   survive a rollback or an undo, validation that happens after the write, batches.
++3. **Plugins** (`crates/fc-plugins/src/runtime.rs`, `crates/fc-app/src/modules/plugins/host.rs`): what a plugin can
++   ask the host for, whether every host call checks the granted permission, resource limits (time, memory,
++   output size), path and URL handling, what a hostile plugin package can do at install time.
++
++For each finding: prove it with a failing test first where it can be tested, then fix it, keep the test. Rank
++findings (data loss > wrong data > crash > hardening). Do not report style. A finding you cannot fix within this
++task goes into the report with file:line and a concrete failure scenario. Write the review to
++`docs/15-bagimsiz-inceleme.md` (Turkish, short: what was read, findings table with status, what was not read) and
++link it from `docs/README.md`. You may use sub-agents to read the three areas in parallel, but verify every
++finding yourself before fixing it. If you find nothing in an area, say so and say what you read.
+diff --git a/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md b/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md
+new file mode 100644
+index 0000000..25249a5
+--- /dev/null
++++ b/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md
+@@ -0,0 +1,42 @@
++# J2: installed-app journeys on Windows, and the Subtitle check that cannot silently skip
++
++Read `j-common.md`. Two CI jobs, both verified only by CI (I, the orchestrator, push your branch's commits to the
++main branch and send you the failing logs; write the code so the first run has a real chance).
++
++## A. Windows installed-app journeys (`apps/desktop/e2e-windows/run.mjs`, `.github/workflows/windows-build.yml`)
++
++Today the pilot runs P and J1–J3 against the installed app through WebDriver, as non-blocking work. Read it and its
++README first, then add the journeys the reviewer asked for, each checking the saved result by reading it back
++(through the app or the local API, as the existing journeys do):
++
++1. **Capture**: with the app running, a Subtitle capture sent to the local API (the same request the extension
++   sends: pairing, then a word with its sentence and media) shows up in the app as a card with its encounter.
++2. **Reopen**: close the app, start it again; the card, the review done before closing and the encounter are there.
++3. **Backup and restore**: make a backup from the app, change something, restore, the change is gone and the
++   earlier state is back.
++4. **Rescue**: stop the app, damage the collection file (truncate it), start the app: the rescue dialog's choice
++   leads to a working collection restored from the verified backup. The dialog is a native one (rfd): if WebDriver
++   cannot drive it, find how the code can be driven in a test without weakening the product (for example the
++   existing `fc rescue` path for the choice plus the installed app for the result) and say plainly what is and is
++   not covered. Do not add a hidden test-only switch to the release build without saying so in the report.
++
++Keep each journey independent and its failure message useful (what was expected, what was read back, screenshot).
++Decide with reasons whether the new journeys block the build: a journey that is stable should block, one that
++depends on a flaky native piece stays non-blocking and is named as such. Update `apps/desktop/e2e-windows/README.md`.
++
++## B. Subtitle client check in `ci.yml` (around line 223)
++
++The job checks out `ardacarofficial/subtitle` with a token; when the checkout is unavailable it prints a warning
++and exits 0, so a release can go out without the real client ever being checked. Make that impossible to miss
++without making every fork or token-less run red for no reason:
++- On pushes to this repository's branches where the secret is expected: missing checkout = failed job, with a
++  message that says which secret is missing and how to set it.
++- Where the secret legitimately cannot exist (pull requests from forks): skipped, shown as skipped, not as success.
++- First find out from the workflow and its history what actually happens today on `claude/festive-einstein-8y0kld`
++  (does the checkout succeed?). If the secret is absent today, making the job fail would turn CI red until the
++  owner adds it: in that case keep the job red-capable behind one clearly named repository variable, leave it off,
++  make the job's summary say in a visible line "Subtitle client NOT checked", and put the exact steps for the owner
++  in the report. Do not guess; read the last CI logs' lines if you can, otherwise state the uncertainty.
++
++Local checks: `node --check` on the scripts, a YAML parse of both workflows, and run whatever part of `run.mjs`
++can run here against `fc dev serve` or `fc api serve` (the capture request and the read-back at least).
+diff --git a/.orchestra/v14/briefs/j3-anki-compat-and-speed.md b/.orchestra/v14/briefs/j3-anki-compat-and-speed.md
+new file mode 100644
+index 0000000..a592b91
+--- /dev/null
++++ b/.orchestra/v14/briefs/j3-anki-compat-and-speed.md
+@@ -0,0 +1,34 @@
++# J3: Anki compatibility on real decks, and an honest speed comparison
++
++Read `j-common.md`. Read `crates/fc-interop/src/anki/`, `crates/fc-app/src/modules/io/real_anki_tests.rs`,
++`docs/12-performans.md` and how CI opens our exports in real Anki first.
++
++## A. Compatibility
++
++1. `crates/fc-interop/src/anki/convert.rs` (around line 701) skips review-log entries made by manual rescheduling.
++   Decide what is right for the owner's history (import them as what they are, so intervals and due dates after
++   import match Anki's), implement it, test it with a package made by real Anki.
++2. Build a wider set of real-Anki fixtures with the `anki` Python package (the one CI already uses; install it in
++   a venv in your scratch dir, not in the repo): cloze, image occlusion, several templates per note type, sub-decks,
++   deck options with FSRS on and off, suspended/buried/flagged cards, tags with hierarchy, media with non-ASCII
++   names, filtered decks, a large review history, a scheduler-v3 collection, an old `.apkg` (schema 11) and a new
++   one (`.anki21b`, zstd). For each: import → compare with what Anki itself reports (card counts per state, due
++   dates, intervals, ease or FSRS memory state, review counts, media, tags) → export → open in Anki → compare
++   again. Every difference is either fixed, or listed with the reason it is acceptable.
++3. Write `docs/16-anki-uyum.md` (Turkish, short): the table of what round-trips exactly, what changes and why,
++   what is not supported. Link it from `docs/README.md`. Keep fixtures small enough for the repo (generate large
++   ones in the test, do not commit them).
++
++## B. Speed comparison
++
++Same machine, same data: build the 100k-note / 2M-review collection the perf suite uses, export it for Anki (or
++generate the same shape with the `anki` package), and measure Anki's own backend (through the `anki` Python
++package: open collection, build the day's queue / get the next card, answer a card, search queries equivalent to
++ours, browser page, stats, import, backup/export) against our numbers from `perf_suite_100k`. Be honest about what
++is and is not comparable (Python call overhead, UI not included on either side, different feature work per call);
++run each several times, report medians. Add the table to `docs/12-performans.md` under its own heading with the
++method and the caveats. Where Anki is clearly faster on a comparable operation, find out why and either fix it
++(with before/after numbers and no budget regressions) or explain it. No marketing sentences: numbers and caveats.
++
++If the `anki` package cannot be installed here (network policy), stop that part, say exactly which host was
++refused, and finish everything that does not need it.
+diff --git a/.orchestra/v14/briefs/j4-windows-offline-tts.md b/.orchestra/v14/briefs/j4-windows-offline-tts.md
+new file mode 100644
+index 0000000..feeb1e6
+--- /dev/null
++++ b/.orchestra/v14/briefs/j4-windows-offline-tts.md
+@@ -0,0 +1,26 @@
++# J4: offline speech on Windows
++
++Read `j-common.md`. Read `crates/fc-app/src/modules/tts.rs`, the audio-fill path (`audio_fill`, "missing audio"
++work from W4), `crates/fc-providers`, how the desktop shell wires providers, and `docs/` on TTS first.
++
++Goal: on Windows, a card's word and sentence can be spoken and missing audio can be filled with no network and no
++key, using the voices Windows already has, in the note's language (English, and whatever voices the machine has).
++
++- Find what exists today (which providers, what the UI offers, what happens offline) and say it in the report
++  before changing anything. If offline speech already works through some path, do not build a second one: close
++  the gaps instead.
++- Follow the architecture: the capability is a provider behind the existing TTS interface, chosen in the existing
++  settings; logic in Rust; the module can be turned off; `fc-core` stays pure. The Windows API (WinRT
++  `Windows.Media.SpeechSynthesis` or SAPI through the `windows` crate) lives behind `cfg(windows)` with a clear
++  "not available on this system" answer elsewhere, so the workspace still builds and tests on Linux.
++- It must produce audio bytes that the existing media path stores (so the audio fill, backup and export work as for
++  any other audio), list the installed voices, pick a voice for the note's language, and fail with a plain TR/EN
++  sentence when no voice exists for that language (with what the owner can do: install a Windows language pack).
++- Tests: everything above the system call is tested on Linux with a fake synthesiser; a `cfg(windows)` test in the
++  Windows CI job speaks one short English sentence and checks that it gets a non-empty, decodable audio file (GitHub's
++  Windows runners have English voices; if the runner has none, the test must say "no voice" clearly, not pass
++  silently and not fail the build for that reason alone).
++- The crate with the Windows code must be one CI compiles and tests on Windows (check which crates the Windows job
++  builds and tests); new dependencies only for `cfg(windows)`, checked against the lockfile and `cargo deny`/license
++  rules if the repo has them.
++- Docs: the provider in the relevant doc and the settings help text; CHANGELOG line.
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index f883d89..ec0eba2 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,6 +2,10 @@
+ 
+ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
+ 
++## Unreleased (v1.4.2)
++
++- **Anki uyumu gerçek destelerle (J3):** Anki'nin "vade tarihi ayarla" / "unut" satırları artık atlanmıyor: geçmişte `manual` satırı olarak durur (kart bilgisinde "Elle planlandı"), son tekrar sayılmaz — böylece vadesi elle değiştirilmiş kartın aralığı Anki'ye dönünce kısalmıyor — ve Anki'ye yine elle satırı olarak döner; gerçek Anki'yle üretilen yeni paketler (FSRS açık/kapalı, filtreli deste, hiyerarşik etiket, Türkçe adlı medya, schema 11 ve zstd, büyük geçmiş) içe aktarılıp Anki'nin kendi raporuyla, dışa aktarılıp yine gerçek Anki'de karşılaştırılıyor; kalan farklar nedenleriyle docs/16. _(J3)_
++
+ ## [1.4.1] — sağlamlık turu: verinin kaybolmadığının kanıtı
+ 
+ Workspace sürümü `1.4.1`. Bağımsız bir inceleme v1.4.0'ı okudu ve işi tek soruya indirdi: bir arızadan sonra kartların ve çalışma geçmişi geri geliyor mu? Bu sürüm bunu testlerle kanıtlar: gerçek süreçler yazmanın ortasında öldürüldü, disk dolduruldu, koleksiyon bozuldu, dosyalar ve istekler rastgele bozuldu. Yeni özellik yok; bulunan hatalar düzeltildi. Migration yok.
+diff --git a/apps/desktop/src/lib/features/browse/CardInfoSheet.svelte b/apps/desktop/src/lib/features/browse/CardInfoSheet.svelte
+index bed9ef3..6464d58 100644
+--- a/apps/desktop/src/lib/features/browse/CardInfoSheet.svelte
++++ b/apps/desktop/src/lib/features/browse/CardInfoSheet.svelte
+@@ -69,7 +69,12 @@
+           {#each info.reviews as rv, i (i)}
+             <li>
+               <span class="num">{date(rv.at)}</span>
+-              <span class="rating r-{rv.rating}">{td(`browse.info.rating.${rv.rating}`)}</span>
++              <!-- An Anki "set due date" / "forget" brought in by import: not an answer. -->
++              {#if rv.mode === 'manual'}
++                <span class="rating r-manual">{t('browse.info.rating.manual')}</span>
++              {:else}
++                <span class="rating r-{rv.rating}">{td(`browse.info.rating.${rv.rating}`)}</span>
++              {/if}
+               <span class="num muted">{t('browse.info.interval', { days: rv.scheduled_days })}</span>
+             </li>
+           {/each}
+diff --git a/apps/desktop/src/lib/i18n/locales/en/browse.json b/apps/desktop/src/lib/i18n/locales/en/browse.json
+index b7d3569..df99077 100644
+--- a/apps/desktop/src/lib/i18n/locales/en/browse.json
++++ b/apps/desktop/src/lib/i18n/locales/en/browse.json
+@@ -112,7 +112,8 @@
+         "again": "Again",
+         "hard": "Hard",
+         "good": "Good",
+-        "easy": "Easy"
++        "easy": "Easy",
++        "manual": "Rescheduled by hand"
+       }
+     },
+     "error_at": "at {start}–{end}",
+diff --git a/apps/desktop/src/lib/i18n/locales/en/io.json b/apps/desktop/src/lib/i18n/locales/en/io.json
+index 902f769..1b0d8b2 100644
+--- a/apps/desktop/src/lib/i18n/locales/en/io.json
++++ b/apps/desktop/src/lib/i18n/locales/en/io.json
+@@ -127,7 +127,7 @@
+     "issue": {
+       "anki_skipped_notes": "{count, plural, one {# note} other {# notes}} could not be read.",
+       "anki_skipped_cards": "{count, plural, one {# card} other {# cards}} could not be read.",
+-      "anki_skipped_reviews": "{count} review log entries were skipped (manual reschedules).",
++      "anki_skipped_reviews": "{count} review log entries were skipped (their card is not in the package).",
+       "anki_skipped_tags": "{count} invalid tags were skipped.",
+       "anki_missing_media": "{count} media files are missing from the package.",
+       "unknown_notetype": "Unknown note type.",
+diff --git a/apps/desktop/src/lib/i18n/locales/tr/browse.json b/apps/desktop/src/lib/i18n/locales/tr/browse.json
+index e9fddb3..9286181 100644
+--- a/apps/desktop/src/lib/i18n/locales/tr/browse.json
++++ b/apps/desktop/src/lib/i18n/locales/tr/browse.json
+@@ -112,7 +112,8 @@
+         "again": "Tekrar",
+         "hard": "Zor",
+         "good": "İyi",
+-        "easy": "Kolay"
++        "easy": "Kolay",
++        "manual": "Elle planlandı"
+       }
+     },
+     "error_at": "{start}–{end} arası",
+diff --git a/apps/desktop/src/lib/i18n/locales/tr/io.json b/apps/desktop/src/lib/i18n/locales/tr/io.json
+index 019187f..fa62568 100644
+--- a/apps/desktop/src/lib/i18n/locales/tr/io.json
++++ b/apps/desktop/src/lib/i18n/locales/tr/io.json
+@@ -127,7 +127,7 @@
+     "issue": {
+       "anki_skipped_notes": "{count} not okunamadı.",
+       "anki_skipped_cards": "{count} kart okunamadı.",
+-      "anki_skipped_reviews": "{count} tekrar kaydı atlandı (elle yeniden planlama).",
++      "anki_skipped_reviews": "{count} tekrar kaydı atlandı (kartı pakette yok).",
+       "anki_skipped_tags": "{count} geçersiz etiket atlandı.",
+       "anki_missing_media": "Pakette {count} medya dosyası eksik.",
+       "unknown_notetype": "Bilinmeyen not türü.",
+diff --git a/crates/fc-app/src/modules/io/mod.rs b/crates/fc-app/src/modules/io/mod.rs
+index cc7a0a9..7991fec 100644
+--- a/crates/fc-app/src/modules/io/mod.rs
++++ b/crates/fc-app/src/modules/io/mod.rs
+@@ -300,3 +300,5 @@ pub(crate) fn decode_text(bytes: &[u8]) -> String {
+ pub(crate) mod tests;
+ #[cfg(test)]
+ mod real_anki_tests;
++#[cfg(test)]
++mod real_anki_wide_tests;
+diff --git a/crates/fc-app/src/modules/io/real_anki_tests.rs b/crates/fc-app/src/modules/io/real_anki_tests.rs
+index 773bfd4..a23cb86 100644
+--- a/crates/fc-app/src/modules/io/real_anki_tests.rs
++++ b/crates/fc-app/src/modules/io/real_anki_tests.rs
+@@ -47,7 +47,7 @@ fn result<T: DeserializeOwned>(job: &JobDto) -> T {
+     serde_json::from_value(job.result.clone().unwrap()).unwrap()
+ }
+ 
+-fn import_file(t: &TestApp, path: &Path) -> ImportReport {
++pub(super) fn import_file(t: &TestApp, path: &Path) -> ImportReport {
+     let job = t.ok::<IoImportStart>(StartImport {
+         source: ImportSource::File {
+             path: path.to_string_lossy().into_owned(),
+@@ -65,7 +65,7 @@ fn import_file(t: &TestApp, path: &Path) -> ImportReport {
+     result(&finish(t, &job))
+ }
+ 
+-fn export(t: &TestApp, format: ExportFormat, path: &Path) -> ExportReport {
++pub(super) fn export(t: &TestApp, format: ExportFormat, path: &Path) -> ExportReport {
+     let job = t.ok::<IoExportStart>(StartExport {
+         format,
+         path: path.to_string_lossy().into_owned(),
+@@ -97,13 +97,12 @@ fn import_real(name: &str) -> TestApp {
+     assert_eq!(r.added_notes as usize, notes.len(), "{name}: {r:?}");
+     assert_eq!(r.added_cards as usize, cards, "{name}: {r:?}");
+     assert_eq!(r.added_media, 3, "{name}: {r:?}");
+-    // Every review except Anki's manual "set due date" entry (reported, not imported).
+-    let reviews = exp["revlog"].as_u64().unwrap() as u32 - 1;
++    // Every review, Anki's manual "set due date" entry as a `manual` row (v1.4.2).
++    let reviews = exp["revlog"].as_u64().unwrap() as u32;
+     assert_eq!(r.added_reviews, reviews, "{name}: {r:?}");
+     // Stock note types land on built-ins; only the custom "Vocab TR" is new.
+     assert_eq!(r.added_notetypes, 1, "{name}: {r:?}");
+-    let keys: Vec<&str> = r.issues.iter().map(|i| i.message.key.as_str()).collect();
+-    assert_eq!(keys, ["io.issue.anki_skipped_reviews"], "{name}: {r:?}");
++    assert!(r.issues.is_empty(), "{name}: {r:?}");
+     t
+ }
+ 
+diff --git a/crates/fc-app/src/modules/io/real_anki_wide_tests.rs b/crates/fc-app/src/modules/io/real_anki_wide_tests.rs
+new file mode 100644
+index 0000000..168503d
+--- /dev/null
++++ b/crates/fc-app/src/modules/io/real_anki_wide_tests.rs
+@@ -0,0 +1,234 @@
++//! v1.4.2 (J3): a wider set of packages **made by real Anki** (`tools/anki/wide.py`), checked
++//! through the app's own import against what Anki itself reported (`wide-*.json`), and — with
++//! `FC_ANKI_PYTHON` — exported again and opened in real Anki: every difference is either
++//! fixed or listed in `ACCEPTED` with its reason (docs/16-anki-uyum.md).
++//!
++//! * `wide-fsrs.apkg` (latest layout, FSRS on): two templates per note type, a three-gap cloze,
++//!   sub-decks, hierarchical tags, non-ASCII media names, suspended / buried / flagged cards, a
++//!   filtered deck, "set due date" and "forget" rows in the review log;
++//! * `wide-sm2.apkg` (schema 11, FSRS off): ease factors, a lapse, a deck options preset.
++
++use super::real_anki_tests::{export, import_file};
++use crate::testing::{TempSqlite, TestApp};
++use fc_api::v1::common::Empty;
++use fc_api::v1::io::ExportFormat;
++use fc_api::v1::methods::DecksList;
++use fc_core::card::{Card, CardState};
++use fc_core::notetype::NoteTypeKind;
++use fc_interop::pack::MANUAL_MODE;
++use fc_storage::repo::CardFilter;
++use serde_json::Value;
++use std::collections::HashMap;
++use std::path::{Path, PathBuf};
++use std::sync::Arc;
++
++const DAY_MS: i64 = 86_400_000;
++
++fn fixture(name: &str) -> PathBuf {
++    Path::new(env!("CARGO_MANIFEST_DIR"))
++        .join("../fc-interop/tests/fixtures/anki")
++        .join(name)
++}
++
++fn json(path: &Path) -> Value {
++    serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
++}
++
++/// Our cards keyed like Anki's report (`<note id>/<ord>`: a note's creation time is Anki's
++/// note id), with what Anki reports about a card.
++fn our_cards(t: &TestApp) -> HashMap<String, Value> {
++    let decks: HashMap<_, _> = t
++        .ok::<DecksList>(Empty {})
++        .decks
++        .into_iter()
++        .map(|d| (d.id, d.path))
++        .collect();
++    let store = t.store.read().unwrap();
++    let cards: Vec<Card> = store.list_cards(&CardFilter::default()).unwrap();
++    let mut out = HashMap::new();
++    for c in cards {
++        let note = store.get_note(c.note_id).unwrap().unwrap();
++        let nt = store.get_notetype(note.notetype_id).unwrap().unwrap();
++        let ord = match nt.kind {
++            NoteTypeKind::Cloze => c.template_key[1..].parse::<i64>().unwrap() - 1,
++            _ => nt.templates.iter().position(|x| x.key == c.template_key).unwrap() as i64,
++        };
++        let logs = store.review_logs_for_card(c.id).unwrap();
++        let s = &c.scheduling;
++        let ivl = match (s.state, s.due, s.last_review) {
++            (CardState::Review, Some(d), Some(l)) => (d.0 - l.0 + DAY_MS / 2).div_euclid(DAY_MS),
++            _ => 0,
++        };
++        let key = format!("{}/{ord}", note.created_at.0);
++        out.insert(
++            key,
++            serde_json::json!({
++                "deck": decks[&c.deck_id],
++                "state": format!("{:?}", s.state),
++                "ivl": ivl,
++                "reps": s.reps,
++                "lapses": s.lapses,
++                "flags": c.flags,
++                "suspended": c.suspended,
++                "buried": c.buried_until.is_some(),
++                "fsrs": s.difficulty.map(|d| [
++                    (s.stability.unwrap() * 1000.0).round() / 1000.0,
++                    (d * 1000.0).round() / 1000.0,
++                ]),
++                "revlog": logs.len(),
++                "manual": logs.iter().filter(|l| l.mode == MANUAL_MODE).count(),
++            }),
++        );
++    }
++    out
++}
++
++/// What Anki's report says, in `our_cards`' shape.
++fn anki_cards(report: &Value) -> HashMap<String, Value> {
++    let mut out = HashMap::new();
++    for (key, c) in report["cards"].as_object().unwrap() {
++        let state = match c["type"].as_i64().unwrap() {
++            1 => "Learning",
++            2 => "Review",
++            3 => "Relearning",
++            _ => "New",
++        };
++        let queue = c["queue"].as_i64().unwrap();
++        let revlog = c["revlog"].as_array().unwrap();
++        out.insert(
++            key.clone(),
++            serde_json::json!({
++                "deck": c["deck"],
++                "state": state,
++                "ivl": if state == "Review" { c["ivl"].as_i64().unwrap() } else { 0 },
++                "reps": c["reps"],
++                "lapses": c["lapses"],
++                // Anki's flag number → our bit per flag.
++                "flags": match c["flags"].as_i64().unwrap() { 0 => 0, n => 1 << (n - 1) },
++                "suspended": queue == -1,
++                "buried": queue == -2 || queue == -3,
++                "fsrs": c["fsrs"].as_object().map(|f| [f["stability"].clone(), f["difficulty"].clone()]),
++                "revlog": revlog.len(),
++                "manual": revlog.iter().filter(|r| r[1] == 0).count(),
++            }),
++        );
++    }
++    out
++}
++
++/// Imports a wide package through the app and compares every card with Anki's own report.
++fn import_and_compare(name: &str) -> TestApp {
++    let t = TestApp::new(Arc::new(TempSqlite::new()));
++    let report = json(&fixture(&format!("{name}.json")));
++    let r = import_file(&t, &fixture(&format!("{name}.apkg")));
++    assert!(r.issues.is_empty(), "{name}: {:?}", r.issues);
++    assert_eq!(r.added_notes as usize, report["notes"].as_object().unwrap().len());
++    assert_eq!(r.added_reviews as u64, report["revlog_total"].as_u64().unwrap(), "{name}: every row, manual ones too");
++    assert_eq!(r.added_media as usize, report["media"].as_object().unwrap().len());
++    let ours = our_cards(&t);
++    let anki = anki_cards(&report);
++    assert_eq!(ours.len(), anki.len(), "{name}: {:?}", ours.keys().collect::<Vec<_>>());
++    for (key, a) in &anki {
++        let o = ours.get(key).unwrap_or_else(|| panic!("{name}: card {key} missing"));
++        assert_eq!(o, a, "{name}: card {key}");
++    }
++    // Tags (hierarchy kept) and media names (non-ASCII) as Anki wrote them.
++    let store = t.store.read().unwrap();
++    let mut tags: Vec<String> = store
++        .list_cards(&CardFilter::default())
++        .unwrap()
++        .iter()
++        .flat_map(|c| store.get_note(c.note_id).unwrap().unwrap().tags)
++        .map(|t| t.as_str().to_owned())
++        .collect();
++    tags.sort();
++    tags.dedup();
++    let mut exp_tags: Vec<String> = report["notes"]
++        .as_object()
++        .unwrap()
++        .values()
++        .flat_map(|n| n["tags"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_owned()))
++        .collect();
++    exp_tags.sort();
++    exp_tags.dedup();
++    assert_eq!(tags, exp_tags, "{name}");
++    drop(store);
++    t
++}
++
++#[test]
++fn wide_real_anki_packages_import_like_anki_reports_them() {
++    let t = import_and_compare("wide-fsrs");
++    // Media with non-ASCII names keep their names (export writes them back under them).
++    let dir = tempfile::tempdir().unwrap();
++    let out = dir.path().join("back.apkg");
++    export(&t, ExportFormat::Apkg, &out);
++    let back = fc_interop::anki::read_package(&std::fs::read(&out).unwrap()).unwrap();
++    let mut names: Vec<&str> = back.media.iter().map(|(n, _)| n.as_str()).collect();
++    names.sort_unstable();
++    assert_eq!(names, ["çiçek.png", "şarkı ğ.wav"]);
++    // "Set due date" / "forget" go back to Anki as manual rows.
++    assert_eq!(back.revlog.iter().filter(|r| r.ease == 0 && r.rtype == 4).count(), 3);
++    import_and_compare("wide-sm2");
++}
++
++/// Differences between Anki's report of its own package and of our export of it that are
++/// accepted, with the reason (docs/16-anki-uyum.md). Each entry is a prefix of
++/// `tools/anki/wide.py compare` lines after the card key.
++const ACCEPTED: &[(&str, &str)] = &[
++    // SM-2 ease is not kept: our scheduler is FSRS; Anki gets its default 250 %.
++    ("factor ", "SM-2 ease factor is not stored"),
++    // Filtered decks are not carried: the card comes back in its home deck.
++    ("filtered ", "filtered decks are not imported"),
++    ("deck Filtre", "filtered decks are not imported"),
++    // A day-learning card (Anki queue 3) goes back as an intraday learning card (queue 1)
++    // due at the same moment.
++    ("queue 3 -> 1", "learning due counted in seconds"),
++];
++
++fn accepted(diff: &str) -> bool {
++    let tail = diff.split_once(": ").map_or(diff, |(_, t)| t);
++    ACCEPTED.iter().any(|(p, _)| tail.starts_with(p) || diff.starts_with(p))
++}
++
++/// Anki → fc → Anki: our export of each wide package (plus a generated large review history)
++/// opened in **real Anki**, compared with Anki's report of its own package. Needs
++/// `FC_ANKI_PYTHON` (see `real_anki_tests::our_exports_open_in_real_anki`).
++#[test]
++#[ignore = "needs FC_ANKI_PYTHON (Python with the official anki package)"]
++fn wide_packages_round_trip_through_real_anki() {
++    let python = std::env::var("FC_ANKI_PYTHON").expect("FC_ANKI_PYTHON");
++    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/anki/wide.py");
++    let dir = tempfile::tempdir().unwrap();
++    let run = |args: &[&str]| {
++        let out = std::process::Command::new(&python)
++            .arg("-I")
++            .arg(&script)
++            .args(args)
++            .current_dir(dir.path())
++            .output()
++            .expect("run python");
++        assert!(out.status.success(), "{args:?}: {}", String::from_utf8_lossy(&out.stderr));
++        String::from_utf8_lossy(&out.stdout).into_owned()
++    };
++    // Fresh packages, today (due dates are compared relative to Anki's today), with a large
++    // review history: 400 cards × 8 answers.
++    let made = dir.path().join("made");
++    run(&["make", made.to_str().unwrap(), "--large", "400"]);
++    for name in ["wide-fsrs", "wide-sm2"] {
++        let t = TestApp::new(Arc::new(TempSqlite::new()));
++        let r = import_file(&t, &made.join(format!("{name}.apkg")));
++        let anki = made.join(format!("{name}.json"));
++        assert_eq!(r.added_reviews as u64, json(&anki)["revlog_total"].as_u64().unwrap(), "{name}");
++        let ours = dir.path().join(format!("{name}-ours.apkg"));
++        export(&t, ExportFormat::Apkg, &ours);
++        let report = dir.path().join(format!("{name}-ours.json"));
++        run(&["report", ours.to_str().unwrap(), report.to_str().unwrap()]);
++        let diffs: Vec<String> =
++            serde_json::from_str(&run(&["compare", anki.to_str().unwrap(), report.to_str().unwrap()]))
++                .unwrap();
++        eprintln!("{name}: {} differences\n{}", diffs.len(), diffs.join("\n"));
++        let unexpected: Vec<&String> = diffs.iter().filter(|d| !accepted(d)).collect();
++        assert!(unexpected.is_empty(), "{name}: unexpected differences {unexpected:#?}");
++    }
++}
+diff --git a/crates/fc-app/src/modules/study/plan.rs b/crates/fc-app/src/modules/study/plan.rs
+index 89cc8b5..1eb1193 100644
+--- a/crates/fc-app/src/modules/study/plan.rs
++++ b/crates/fc-app/src/modules/study/plan.rs
+@@ -19,7 +19,9 @@ use fc_core::preset::NewCardOrder;
+ use fc_core::rng::SplitMix64;
+ use fc_core::settings::SettingScope;
+ use fc_core::{CardId, DeckId, NoteId, SessionId, Timestamp};
+-use fc_storage::repo::{NewCardsFirst, ReviewLogRecord, StudyCardFilter, REVIEW_MODE_IMPORTED};
++use fc_storage::repo::{
++    NewCardsFirst, ReviewLogRecord, StudyCardFilter, REVIEW_MODE_IMPORTED, REVIEW_MODE_MANUAL,
++};
+ use fc_storage::Reads;
+ use fc_study::day::{StudyDay, MAX_TZ_OFFSET_MINS};
+ use fc_study::session::{self as queue, BuildOptions, Order, QueueEntry, QueueKind};
+@@ -302,13 +304,14 @@ impl<'a> Planner<'a> {
+     }
+ 
+     /// Distinct cards answered (`struggled`: rated Again / answered wrong) during the
+-    /// current study day, any mode except imported history, in first-answer order.
++    /// current study day, any mode except imported history (and imported manual reschedules),
++    /// in first-answer order.
+     fn studied_today(&mut self, struggled: bool) -> AppResult<Vec<CardId>> {
+         let mut seen = HashSet::new();
+         Ok(self
+             .today_reviews()?
+             .iter()
+-            .filter(|r| r.mode != REVIEW_MODE_IMPORTED)
++            .filter(|r| r.mode != REVIEW_MODE_IMPORTED && r.mode != REVIEW_MODE_MANUAL)
+             .filter(|r| !struggled || r.rating == Rating::Again)
+             .filter(|r| seen.insert(r.card_id))
+             .map(|r| r.card_id)
+diff --git a/crates/fc-app/src/perf_tests.rs b/crates/fc-app/src/perf_tests.rs
+index 47137d2..5c16ff2 100644
+--- a/crates/fc-app/src/perf_tests.rs
++++ b/crates/fc-app/src/perf_tests.rs
+@@ -990,7 +990,7 @@ fn perf_suite_scaled() {
+ 
+ /// Profiling helper (v1.4 Z2): times one hot path of a kept collection (`FC_PERF_KEEP`)
+ /// `FC_PERF_HOT_N` times, so a sampler (gdb, perf) can attach to a steady loop:
+-/// `FC_PERF_HOT_DB=<copy> FC_PERF_HOT_OP=tree|start|breakdown|page|keyset|options cargo test -p fc-app
++/// `FC_PERF_HOT_DB=<copy> FC_PERF_HOT_OP=tree|start|breakdown|page|keyset|search|apkg_export|colpkg_export|apkg_import|options cargo test -p fc-app
+ /// --release --lib perf_tests::hot -- --ignored --nocapture`. The collection is written to
+ /// (sessions are started and ended): give it a copy.
+ #[test]
+@@ -1055,6 +1055,49 @@ fn hot() {
+                     }
+                 }
+             }
++            // v1.4.2: every browser query on its own (count + first page of 100), the
++            // per-query numbers behind "slowest search" (docs/12, Anki comparison).
++            "search" => {
++                for q in SEARCH_QUERIES {
++                    let (ms, _) =
++                        time(|| invoke(&app, "search.cards", json!({ "query": q, "limit": 100 })));
++                    println!("  search {q:?}: {ms:.1} ms");
++                }
++            }
++            // v1.4.2: packages (docs/12, Anki comparison). `FC_PERF_PKG` is the file:
++            // `apkg_export` writes the deck `İngilizce::Kelimeler 1` with history there,
++            // `colpkg_export` the whole collection, `apkg_import` reads it (give the
++            // run an empty collection to import into, as Anki's side does).
++            "apkg_export" | "colpkg_export" | "apkg_import" => {
++                let pkg = std::env::var("FC_PERF_PKG").expect("FC_PERF_PKG");
++                let job = if op == "apkg_import" {
++                    invoke(
++                        &app,
++                        "io.import.start",
++                        json!({ "source": { "kind": "file", "path": pkg }, "format": "anki" }),
++                    )
++                } else {
++                    let deck = (op == "apkg_export").then(|| {
++                        invoke(&app, "decks.list", json!({}))["decks"]
++                            .as_array()
++                            .unwrap()
++                            .iter()
++                            .find(|d| d["path"] == "İngilizce::Kelimeler 1")
++                            .unwrap()["id"]
++                            .clone()
++                    });
++                    let format = if deck.is_some() { "apkg" } else { "colpkg" };
++                    invoke(
++                        &app,
++                        "io.export.start",
++                        json!({ "format": format, "path": pkg, "deck_id": deck }),
++                    )
++                };
++                app.run_pending_jobs().unwrap();
++                let report = invoke(&app, "jobs.get", json!({ "id": job["id"] }));
++                assert_eq!(report["status"], json!("succeeded"), "{report}");
++                println!("  {op}: {}", report["result"]);
++            }
+             // v1.4: the same pages by keyset cursor.
+             "keyset" => {
+                 for sort in ["sort_field", "due", "modified"] {
+diff --git a/crates/fc-interop/src/anki/convert.rs b/crates/fc-interop/src/anki/convert.rs
+index 3a2b917..7a1a429 100644
+--- a/crates/fc-interop/src/anki/convert.rs
++++ b/crates/fc-interop/src/anki/convert.rs
+@@ -29,7 +29,7 @@ use crate::media::{
+     extension_for, guess_mime, hash_of, media_tags_to_sound, media_url, references, rewrite,
+     sha256_hex, sound_to_audio,
+ };
+-use crate::pack::{derived_id, MediaFile, Pack, ReviewEntry};
++use crate::pack::{derived_id, MediaFile, Pack, ReviewEntry, MANUAL_MODE};
+ use fc_core::card::{Card, CardState, Rating, SchedulingState};
+ use fc_core::content::builtin as builtins;
+ use fc_core::deck::{normalize_deck_segment, Deck};
+@@ -51,7 +51,8 @@ pub struct AnkiImportReport {
+     pub skipped_notes: usize,
+     /// Cards skipped (unknown note or template).
+     pub skipped_cards: usize,
+-    /// Review log rows skipped (manual reschedules, unknown cards).
++    /// Review log rows skipped (their card was not imported). Manual reschedules ("set due
++    /// date", "forget", FSRS "reschedule") are imported as `manual` rows (v1.4.2).
+     pub skipped_reviews: usize,
+     /// Tags that are not valid tag names.
+     pub skipped_tags: usize,
+@@ -422,6 +423,12 @@ struct FsrsData {
+     lrt: Option<i64>,
+ }
+ 
++/// A review log row Anki wrote for a manual change, not an answer: type 4 "Manual" ("set due
++/// date", "forget", "reposition") or 5 "Rescheduled" (FSRS reschedule), always with ease 0.
++fn is_manual(r: &AnkiRevlog) -> bool {
++    r.ease == 0 || matches!(r.rtype, 4 | 5)
++}
++
+ fn rating(ease: i64) -> Option<Rating> {
+     match ease {
+         1 => Some(Rating::Again),
+@@ -521,10 +528,20 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
+     }
+     let deck_of = |did: i64| deck_ids.get(&did_path(did)).copied();
+ 
+-    // Last review per card.
++    // Last *answer* per card: a manual reschedule ("set due date", "forget") moves the due
++    // date but is not a review, so it never counts as the last one (Anki's FSRS and interval
++    // both run from the last answer).
++    // A card never answered but put into review by hand ("set due date" on a new card) has
++    // only that row: it stands in as the start of the interval.
+     let mut last_review: HashMap<i64, i64> = HashMap::new();
++    let mut last_manual: HashMap<i64, i64> = HashMap::new();
+     for r in &col.revlog {
+-        let e = last_review.entry(r.cid).or_insert(r.id);
++        let map = if is_manual(r) {
++            &mut last_manual
++        } else {
++            &mut last_review
++        };
++        let e = map.entry(r.cid).or_insert(r.id);
+         *e = (*e).max(r.id);
+     }
+ 
+@@ -654,6 +671,11 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
+                     (state == CardState::Review && ac.ivl > 0)
+                         .then(|| due.map(|d| Timestamp(d.0 - ac.ivl * DAY_MS)))
+                         .flatten()
++                })
++                .or_else(|| {
++                    (state != CardState::New)
++                        .then(|| last_manual.get(&ac.id).map(|t| Timestamp(*t)))
++                        .flatten()
+                 });
+             let id = CardId::from_uuid(derived_id(
+                 ac.id,
+@@ -698,13 +720,78 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
+     }
+     report.skipped_cards = col.cards.len().saturating_sub(card_ids.len());
+ 
+-    for r in &col.revlog {
+-        let (Some((card, _)), Some(rating), true) =
+-            (card_ids.get(&r.cid), rating(r.ease), r.rtype != 4)
+-        else {
++    // In time order, so a manual row knows the state its card was in.
++    let mut revlog: Vec<&AnkiRevlog> = col.revlog.iter().collect();
++    revlog.sort_by_key(|r| (r.id, r.cid));
++    let mut state_of: HashMap<i64, CardState> = HashMap::new();
++    // What a manual row left the card in: the state the card's next row starts from, or — for
++    // its last row — the card's state now. (Anki writes "forget" and "set due date" on a new
++    // card the same way: ease 0, interval 0.)
++    let mut next_state: HashMap<(i64, i64), CardState> = HashMap::new();
++    {
++        let mut after: HashMap<i64, CardState> = HashMap::new();
++        for r in revlog.iter().rev() {
++            if let Some(s) = after
++                .get(&r.cid)
++                .copied()
++                .or_else(|| card_ids.get(&r.cid).map(|c| c.1))
++            {
++                next_state.insert((r.id, r.cid), s);
++            }
++            let before = match (is_manual(r), r.rtype) {
++                (true, _) => None,
++                (false, 0) => Some(CardState::New),
++                (false, 2) => Some(CardState::Relearning),
++                (false, _) => Some(CardState::Review),
++            };
++            match before {
++                Some(b) => after.insert(r.cid, b),
++                None => after.remove(&r.cid),
++            };
++        }
++    }
++    for r in revlog {
++        let Some((card, _)) = card_ids.get(&r.cid) else {
+             report.skipped_reviews += 1;
+             continue;
+         };
++        let id = ReviewLogId::from_uuid(derived_id(r.id, &format!("rev:{card}:{}", r.id)));
++        let prev = state_of.get(&r.cid).copied().unwrap_or(CardState::New);
++        let rating = match rating(r.ease) {
++            Some(rating) if !is_manual(r) => rating,
++            // "Set due date" (a review card due in `ivl` days) or "forget" (`ivl` 0: new
++            // again). Not an answer: `rating` only fills the column (`MANUAL_MODE` rows are
++            // never read as answers).
++            _ => {
++                let after = next_state
++                    .get(&(r.id, r.cid))
++                    .copied()
++                    .unwrap_or(if r.ivl > 0 {
++                        CardState::Review
++                    } else {
++                        CardState::New
++                    });
++                state_of.insert(r.cid, after);
++                pack.review_logs.push(ReviewEntry {
++                    id,
++                    card_id: *card,
++                    session_id: None,
++                    rating: Rating::Good,
++                    state_before: prev,
++                    state_after: after,
++                    scheduled_days: r.ivl.max(0),
++                    elapsed_days: r.last_ivl.max(0),
++                    duration_ms: 0,
++                    answer_duration_ms: None,
++                    hints_used: 0,
++                    mode: MANUAL_MODE.into(),
++                    stability_after: None,
++                    difficulty_after: None,
++                    created_at: Timestamp(r.id),
++                });
++                continue;
++            }
++        };
+         let state_before = match r.rtype {
+             0 => CardState::Learning,
+             2 => CardState::Relearning,
+@@ -716,8 +803,9 @@ pub fn to_pack(col: &AnkiCollection, now: Timestamp) -> (Pack, AnkiImportReport)
+             _ if r.ivl > 0 => CardState::Review,
+             _ => state_before,
+         };
++        state_of.insert(r.cid, state_after);
+         pack.review_logs.push(ReviewEntry {
+-            id: ReviewLogId::from_uuid(derived_id(r.id, &format!("rev:{card}:{}", r.id))),
++            id,
+             card_id: *card,
+             session_id: None,
+             rating,
+@@ -1064,6 +1152,20 @@ pub fn from_pack(pack: &Pack, include_scheduling: bool, now: Timestamp) -> AnkiC
+             let Some(cid) = cids.get(&r.card_id) else {
+                 continue;
+             };
++            if r.mode == MANUAL_MODE {
++                // Back as what it was in Anki: a "Manual" row with no answer.
++                revlog.push(AnkiRevlog {
++                    id: rev_alloc.take(r.created_at.0),
++                    cid: *cid,
++                    ease: 0,
++                    ivl: r.scheduled_days,
++                    last_ivl: r.elapsed_days,
++                    factor: 0,
++                    time: 0,
++                    rtype: 4,
++                });
++                continue;
++            }
+             revlog.push(AnkiRevlog {
+                 id: rev_alloc.take(r.created_at.0),
+                 cid: *cid,
+diff --git a/crates/fc-interop/src/anki/fixtures.rs b/crates/fc-interop/src/anki/fixtures.rs
+index 6123218..e9df8d1 100644
+--- a/crates/fc-interop/src/anki/fixtures.rs
++++ b/crates/fc-interop/src/anki/fixtures.rs
+@@ -44,7 +44,7 @@ fn card(id: i64, nid: i64, did: i64, ord: i64) -> AnkiCard {
+     }
+ }
+ 
+-fn rev(id: i64, cid: i64, ease: i64, ivl: i64, last: i64, rtype: i64) -> AnkiRevlog {
++pub fn rev(id: i64, cid: i64, ease: i64, ivl: i64, last: i64, rtype: i64) -> AnkiRevlog {
+     AnkiRevlog {
+         id,
+         cid,
+diff --git a/crates/fc-interop/src/anki/real_tests.rs b/crates/fc-interop/src/anki/real_tests.rs
+index 126b101..b99877f 100644
+--- a/crates/fc-interop/src/anki/real_tests.rs
++++ b/crates/fc-interop/src/anki/real_tests.rs
+@@ -164,11 +164,20 @@ fn check(name: &str, layout: AnkiLayout, scheduling: bool) -> (AnkiCollection, P
+         }
+     }
+ 
+-    // History: every Anki review except the manual "set due date" one.
++    // History: every Anki row, the manual "set due date" one as a `manual` row (v1.4.2).
+     let reviews = exp["revlog"].as_u64().unwrap() as usize;
+     if scheduling {
+-        assert_eq!(pack.review_logs.len(), reviews - 1, "{name}");
+-        assert_eq!(report.skipped_reviews, 1, "{name}");
++        assert_eq!(pack.review_logs.len(), reviews, "{name}");
++        assert_eq!(report.skipped_reviews, 0, "{name}");
++        let manual: Vec<_> = pack
++            .review_logs
++            .iter()
++            .filter(|r| r.mode == crate::pack::MANUAL_MODE)
++            .collect();
++        assert_eq!(manual.len(), 1, "{name}");
++        assert_eq!(manual[0].state_after, CardState::Review, "{name}");
++        // What Anki wrote: "set due date" on a new card (FSRS) logs interval 0.
++        assert_eq!(manual[0].scheduled_days, 0, "{name}");
+     } else {
+         assert!(pack.review_logs.is_empty(), "{name}");
+     }
+diff --git a/crates/fc-interop/src/anki/tests.rs b/crates/fc-interop/src/anki/tests.rs
+index f4753df..55e476f 100644
+--- a/crates/fc-interop/src/anki/tests.rs
++++ b/crates/fc-interop/src/anki/tests.rs
+@@ -44,11 +44,14 @@ fn converts_cloze_image_sound_scheduling_and_history() {
+     let (pack, report) = to_pack(&sample(), NOW);
+     assert_eq!(report.skipped_notes, 0);
+     assert_eq!(report.skipped_cards, 0);
+-    assert_eq!(report.skipped_reviews, 1, "manual reschedule");
++    assert_eq!(
++        report.skipped_reviews, 0,
++        "a manual reschedule is a `manual` row"
++    );
+     assert!(report.missing_media.is_empty());
+     assert_eq!(pack.notes.len(), 4);
+     assert_eq!(pack.cards.len(), 5);
+-    assert_eq!(pack.review_logs.len(), 4);
++    assert_eq!(pack.review_logs.len(), 5);
+     assert_eq!(pack.media.len(), 2);
+ 
+     // Decks: only those holding cards (+ ancestors); filtered decks resolve to the original.
+@@ -237,6 +240,20 @@ fn export_then_import_roundtrips() {
+         v
+     };
+     assert_eq!(ratings(&back), ratings(&pack));
++    let modes = |p: &Pack| {
++        let mut v: Vec<_> = p
++            .review_logs
++            .iter()
++            .map(|r| (r.created_at, r.mode.clone(), r.scheduled_days))
++            .collect();
++        v.sort();
++        v
++    };
++    assert_eq!(
++        modes(&back),
++        modes(&pack),
++        "manual rows go back as manual rows"
++    );
+     let mut media: Vec<_> = back
+         .media
+         .iter()
+@@ -642,3 +659,92 @@ fn anki_image_occlusion_becomes_v03_masks() {
+         vec![("m1", "image_occlusion"), ("m2", "image_occlusion")]
+     );
+ }
++
++/// v1.4.2: Anki's "set due date" / "forget" rows are imported as `manual` rows (not answers),
++/// the last *answer* stays the card's last review (so the interval exported back = Anki's),
++/// and they go back to Anki as "Manual" rows with ease 0.
++#[test]
++fn manual_reschedules_are_kept_but_are_not_answers() {
++    let mut col = sample();
++    // The review card `c1` (due day 100, interval 15) was answered on day 85, then "set due
++    // date" moved it ten days later on day 90: Anki keeps the interval counted from day 85.
++    let day = |d: i64| (CRT + d * 86_400) * 1000;
++    let c1 = col
++        .cards
++        .iter_mut()
++        .find(|c| c.id == 1_610_000_000_001)
++        .unwrap();
++    c1.due = 110;
++    c1.ivl = 25;
++    col.revlog.retain(|r| r.cid != 1_610_000_000_001);
++    col.revlog
++        .push(rev(day(85), 1_610_000_000_001, 3, 15, 4, 1));
++    col.revlog
++        .push(rev(day(90), 1_610_000_000_001, 0, 25, 15, 4));
++    // A "forget": the card is new again.
++    let c5 = col
++        .cards
++        .iter_mut()
++        .find(|c| c.id == 1_610_000_000_032)
++        .unwrap();
++    (c5.ctype, c5.queue, c5.due, c5.ivl, c5.odid, c5.odue) = (0, 0, 7, 0, 0, 0);
++    col.revlog
++        .push(rev(day(240), 1_610_000_000_032, 0, 0, 10, 4));
++
++    let (pack, report) = to_pack(&col, NOW);
++    assert_eq!(report.skipped_reviews, 0);
++    let card = pack
++        .cards
++        .iter()
++        .find(|c| {
++            pack.review_logs
++                .iter()
++                .any(|r| r.card_id == c.id && r.created_at.0 == day(85))
++        })
++        .unwrap();
++    assert_eq!(
++        card.scheduling.last_review,
++        Some(Timestamp(day(85))),
++        "the answer, not the manual row"
++    );
++    let manual: Vec<_> = pack
++        .review_logs
++        .iter()
++        .filter(|r| r.mode == crate::pack::MANUAL_MODE)
++        .map(|r| {
++            (
++                r.created_at.0,
++                r.state_before,
++                r.state_after,
++                r.scheduled_days,
++            )
++        })
++        .collect();
++    assert_eq!(
++        manual,
++        [
++            (day(90), CardState::Review, CardState::Review, 25),
++            (1_620_700_000_000, CardState::New, CardState::Review, 3),
++            (day(240), CardState::Review, CardState::New, 0),
++        ]
++    );
++
++    let back = from_pack(&pack, true, NOW);
++    let exported = back
++        .cards
++        .iter()
++        .find(|c| c.due > 100 && c.ctype == 2)
++        .unwrap();
++    assert_eq!(
++        exported.ivl, 25,
++        "Anki's interval: last answer (day 85) to due (day 110)"
++    );
++    let mut rows: Vec<(i64, i64, i64)> = back
++        .revlog
++        .iter()
++        .filter(|r| r.ease == 0)
++        .map(|r| (r.rtype, r.ivl, r.last_ivl))
++        .collect();
++    rows.sort_unstable();
++    assert_eq!(rows, [(4, 0, 10), (4, 3, 3), (4, 25, 15)]);
++}
+diff --git a/crates/fc-interop/src/pack.rs b/crates/fc-interop/src/pack.rs
+index 8ee8404..aa0af1c 100644
+--- a/crates/fc-interop/src/pack.rs
++++ b/crates/fc-interop/src/pack.rs
+@@ -31,6 +31,12 @@ pub struct PackValue {
+     pub value: AttributeValue,
+ }
+ 
++/// `ReviewEntry::mode` of a manual reschedule brought in from Anki ("set due date",
++/// "forget"): not an answer — `rating` only fills the column — so statistics, FSRS
++/// optimization and study limits skip it (`fc_storage::repo::REVIEW_MODE_MANUAL`, same
++/// value). Exported back to Anki as a "Manual" row (ease 0).
++pub const MANUAL_MODE: &str = "manual";
++
+ /// One `review_log` row (immutable history; docs/03 §4).
+ #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+ pub struct ReviewEntry {
+@@ -56,7 +62,7 @@ pub struct ReviewEntry {
+     pub answer_duration_ms: Option<i64>,
+     /// Hints shown.
+     pub hints_used: u32,
+-    /// `normal`, `preview`, …
++    /// `normal`, `preview`, [`MANUAL_MODE`], …
+     pub mode: String,
+     /// FSRS stability after the review.
+     pub stability_after: Option<f64>,
+diff --git a/crates/fc-interop/tests/fixtures/anki/wide-fsrs.apkg b/crates/fc-interop/tests/fixtures/anki/wide-fsrs.apkg
+new file mode 100644
+index 0000000000000000000000000000000000000000..dcd66ef146ff804061c2ad8d76a42b534b6b9716
+GIT binary patch
+literal 59241
+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%0AK#FrG^@zOB
+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
+O0{*)~9nrdr5&a*6vy*}V
+
+literal 0
+HcmV?d00001
+
+diff --git a/crates/fc-interop/tests/fixtures/anki/wide-fsrs.json b/crates/fc-interop/tests/fixtures/anki/wide-fsrs.json
+new file mode 100644
+index 0000000..6d1462c
+--- /dev/null
++++ b/crates/fc-interop/tests/fixtures/anki/wide-fsrs.json
+@@ -0,0 +1,356 @@
++{
++ "anki_version": "26.09.4",
++ "cards": {
++  "1795611877657/0": {
++   "deck": "Dil::İngilizce::Fiiller",
++   "due_in": 2,
++   "factor": 2500,
++   "filtered": "Filtre::Bugün",
++   "flags": 2,
++   "fsrs": {
++    "difficulty": 2.111,
++    "stability": 2.306
++   },
++   "ivl": 2,
++   "lapses": 0,
++   "queue": 2,
++   "reps": 2,
++   "revlog": [
++    [
++     0,
++     3,
++     -600
++    ],
++    [
++     0,
++     3,
++     2
++    ]
++   ],
++   "type": 2
++  },
++  "1795611877657/1": {
++   "deck": "Dil::İngilizce::Fiiller",
++   "due_in": 8,
++   "factor": 2500,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": {
++    "difficulty": 1.0,
++    "stability": 8.296
++   },
++   "ivl": 8,
++   "lapses": 0,
++   "queue": 2,
++   "reps": 1,
++   "revlog": [
++    [
++     0,
++     4,
++     8
++    ]
++   ],
++   "type": 2
++  },
++  "1795611877659/0": {
++   "deck": "Dil::İngilizce::Fiiller",
++   "due_in": 60,
++   "factor": 0,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": {
++    "difficulty": 6.413,
++    "stability": 0.212
++   },
++   "ivl": 0,
++   "lapses": 0,
++   "queue": 1,
++   "reps": 1,
++   "revlog": [
++    [
++     0,
++     1,
++     -60
++    ]
++   ],
++   "type": 1
++  },
++  "1795611877659/1": {
++   "deck": "Dil::İngilizce::Fiiller",
++   "due_in": null,
++   "factor": 0,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": null,
++   "ivl": 0,
++   "lapses": 0,
++   "queue": -1,
++   "reps": 0,
++   "revlog": [],
++   "type": 0
++  },
++  "1795611877660/0": {
++   "deck": "Dil::Almanca",
++   "due_in": 660,
++   "factor": 2300,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": {
++    "difficulty": 7.39,
++    "stability": 0.775
++   },
++   "ivl": 1,
++   "lapses": 1,
++   "queue": 1,
++   "reps": 4,
++   "revlog": [
++    [
++     0,
++     3,
++     -600
++    ],
++    [
++     0,
++     3,
++     2
++    ],
++    [
++     1,
++     3,
++     4
++    ],
++    [
++     1,
++     1,
++     -600
++    ]
++   ],
++   "type": 3
++  },
++  "1795611877660/1": {
++   "deck": "Dil::Almanca",
++   "due_in": 3,
++   "factor": 2500,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": null,
++   "ivl": 0,
++   "lapses": 0,
++   "queue": 2,
++   "reps": 0,
++   "revlog": [
++    [
++     4,
++     0,
++     0
++    ]
++   ],
++   "type": 2
++  },
++  "1795611877660/2": {
++   "deck": "Dil::Almanca",
++   "due_in": null,
++   "factor": 0,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": null,
++   "ivl": 0,
++   "lapses": 0,
++   "queue": -3,
++   "reps": 0,
++   "revlog": [],
++   "type": 0
++  },
++  "1795611877661/0": {
++   "deck": "Dil::Almanca",
++   "due_in": 8,
++   "factor": 2500,
++   "filtered": null,
++   "flags": 4,
++   "fsrs": {
++    "difficulty": 1.0,
++    "stability": 8.296
++   },
++   "ivl": 8,
++   "lapses": 0,
++   "queue": 2,
++   "reps": 1,
++   "revlog": [
++    [
++     0,
++     4,
++     8
++    ]
++   ],
++   "type": 2
++  },
++  "1795611877667/0": {
++   "deck": "Dil::İngilizce::Fiiller",
++   "due_in": 12,
++   "factor": 2500,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": {
++    "difficulty": 1.0,
++    "stability": 8.296
++   },
++   "ivl": 12,
++   "lapses": 0,
++   "queue": 2,
++   "reps": 1,
++   "revlog": [
++    [
++     0,
++     4,
++     10
++    ],
++    [
++     4,
++     0,
++     12
++    ]
++   ],
++   "type": 2
++  },
++  "1795611877669/0": {
++   "deck": "Dil::İngilizce::Fiiller",
++   "due_in": null,
++   "factor": 0,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": null,
++   "ivl": 0,
++   "lapses": 0,
++   "queue": 0,
++   "reps": 1,
++   "revlog": [
++    [
++     0,
++     4,
++     8
++    ],
++    [
++     4,
++     0,
++     0
++    ]
++   ],
++   "type": 0
++  },
++  "1795611877670/0": {
++   "deck": "Dil::İngilizce::Fiiller",
++   "due_in": 7,
++   "factor": 2500,
++   "filtered": "Filtre::Bugün",
++   "flags": 0,
++   "fsrs": {
++    "difficulty": 1.0,
++    "stability": 8.296
++   },
++   "ivl": 7,
++   "lapses": 0,
++   "queue": 2,
++   "reps": 1,
++   "revlog": [
++    [
++     0,
++     4,
++     7
++    ]
++   ],
++   "type": 2
++  }
++ },
++ "check_database": [],
++ "decks": [
++  "Dil",
++  "Dil::Almanca",
++  "Dil::İngilizce",
++  "Dil::İngilizce::Fiiller",
++  "Filtre",
++  "Filtre::Bugün"
++ ],
++ "fsrs": false,
++ "media": {
++  "çiçek.png": "fd4dd33f4fefc0cf889ac2c3e792811e1c07e3a701f4e5d39fccb693fca7554d",
++  "şarkı ğ.wav": "ac1e98d4719af5d84e0d68b7e78417072bd55629fdb25af899cfddb10be2d804"
++ },
++ "notes": {
++  "1795611877657": {
++   "fields": [
++    "go",
++    "gitmek <img src=\"çiçek.png\">",
++    "[sound:şarkı ğ.wav]"
++   ],
++   "guid": "KM1&sSda0v",
++   "notetype": "Kelime 2 yön",
++   "tags": [
++    "a1",
++    "lang::en::verb"
++   ]
++  },
++  "1795611877659": {
++   "fields": [
++    "take",
++    "almak",
++    ""
++   ],
++   "guid": "J-y7I>*FN-",
++   "notetype": "Kelime 2 yön",
++   "tags": [
++    "lang::en::verb"
++   ]
++  },
++  "1795611877660": {
++   "fields": [
++    "{{c1::Hund}} köpek, {{c2::Katze}} kedi, {{c3::Maus}} fare",
++    ""
++   ],
++   "guid": "Nq]@LN7D:i",
++   "notetype": "Cloze+",
++   "tags": [
++    "lang::de"
++   ]
++  },
++  "1795611877661": {
++   "fields": [
++    "Baum",
++    "ağaç"
++   ],
++   "guid": "y5oxvN*3s0",
++   "notetype": "Basic+",
++   "tags": [
++    "lang::de",
++    "orman::ağaç"
++   ]
++  },
++  "1795611877667": {
++   "fields": [
++    "run",
++    "koşmak"
++   ],
++   "guid": "y[OWF,]p8s",
++   "notetype": "Basic+",
++   "tags": []
++  },
++  "1795611877669": {
++   "fields": [
++    "walk",
++    "yürümek"
++   ],
++   "guid": "L6o~~iM[RR",
++   "notetype": "Basic+",
++   "tags": []
++  },
++  "1795611877670": {
++   "fields": [
++    "see",
++    "görmek"
++   ],
++   "guid": "y@{W)6iiJM",
++   "notetype": "Basic+",
++   "tags": []
++  }
++ },
++ "revlog_total": 15
++}
+diff --git a/crates/fc-interop/tests/fixtures/anki/wide-sm2.apkg b/crates/fc-interop/tests/fixtures/anki/wide-sm2.apkg
+new file mode 100644
+index 0000000000000000000000000000000000000000..c1b976c4794fa0b95334fff73854745c8950e5da
+GIT binary patch
+literal 61650
+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
+J!2<;1{{TwbQ}zG=
+
+literal 0
+HcmV?d00001
+
+diff --git a/crates/fc-interop/tests/fixtures/anki/wide-sm2.json b/crates/fc-interop/tests/fixtures/anki/wide-sm2.json
+new file mode 100644
+index 0000000..2f4ea4a
+--- /dev/null
++++ b/crates/fc-interop/tests/fixtures/anki/wide-sm2.json
+@@ -0,0 +1,207 @@
++{
++ "anki_version": "26.09.4",
++ "cards": {
++  "1795611878140/0": {
++   "deck": "SM2::Kelimeler",
++   "due_in": 4,
++   "factor": 2500,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": null,
++   "ivl": 4,
++   "lapses": 0,
++   "queue": 2,
++   "reps": 1,
++   "revlog": [
++    [
++     0,
++     4,
++     4
++    ]
++   ],
++   "type": 2
++  },
++  "1795611878140/1": {
++   "deck": "SM2::Kelimeler",
++   "due_in": 2,
++   "factor": 2350,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": null,
++   "ivl": 2,
++   "lapses": 0,
++   "queue": 2,
++   "reps": 4,
++   "revlog": [
++    [
++     0,
++     3,
++     -600
++    ],
++    [
++     0,
++     3,
++     -3600
++    ],
++    [
++     0,
++     3,
++     1
++    ],
++    [
++     1,
++     2,
++     2
++    ]
++   ],
++   "type": 2
++  },
++  "1795611878144/0": {
++   "deck": "SM2::Kelimeler",
++   "due_in": 20,
++   "factor": 2650,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": null,
++   "ivl": 20,
++   "lapses": 0,
++   "queue": 2,
++   "reps": 2,
++   "revlog": [
++    [
++     0,
++     4,
++     5
++    ],
++    [
++     1,
++     4,
++     14
++    ],
++    [
++     4,
++     0,
++     20
++    ]
++   ],
++   "type": 2
++  },
++  "1795611878144/1": {
++   "deck": "SM2::Kelimeler",
++   "due_in": 60,
++   "factor": 0,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": null,
++   "ivl": 0,
++   "lapses": 0,
++   "queue": 1,
++   "reps": 3,
++   "revlog": [
++    [
++     0,
++     3,
++     -600
++    ],
++    [
++     0,
++     3,
++     -3600
++    ],
++    [
++     0,
++     1,
++     -60
++    ]
++   ],
++   "type": 1
++  },
++  "1795611878148/0": {
++   "deck": "SM2::Kelimeler",
++   "due_in": 3,
++   "factor": 2500,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": null,
++   "ivl": 3,
++   "lapses": 0,
++   "queue": 2,
++   "reps": 3,
++   "revlog": [
++    [
++     0,
++     3,
++     -600
++    ],
++    [
++     0,
++     3,
++     -3600
++    ],
++    [
++     0,
++     4,
++     3
++    ]
++   ],
++   "type": 2
++  },
++  "1795611878148/1": {
++   "deck": "SM2::Kelimeler",
++   "due_in": null,
++   "factor": 0,
++   "filtered": null,
++   "flags": 0,
++   "fsrs": null,
++   "ivl": 0,
++   "lapses": 0,
++   "queue": 0,
++   "reps": 0,
++   "revlog": [],
++   "type": 0
++  }
++ },
++ "check_database": [],
++ "decks": [
++  "SM2",
++  "SM2::Kelimeler"
++ ],
++ "fsrs": false,
++ "media": {},
++ "notes": {
++  "1795611878140": {
++   "fields": [
++    "word0",
++    "kelime0"
++   ],
++   "guid": "EW&i$ncQi~",
++   "notetype": "Basic (and reversed card)+",
++   "tags": [
++    "sm2"
++   ]
++  },
++  "1795611878144": {
++   "fields": [
++    "word1",
++    "kelime1"
++   ],
++   "guid": "dc(=_j5QCV",
++   "notetype": "Basic (and reversed card)+",
++   "tags": [
++    "sm2"
++   ]
++  },
++  "1795611878148": {
++   "fields": [
++    "word2",
++    "kelime2"
++   ],
++   "guid": "M|BgZjN%@j",
++   "notetype": "Basic (and reversed card)+",
++   "tags": [
++    "sm2"
++   ]
++  }
++ },
++ "revlog_total": 14
++}
+diff --git a/crates/fc-storage/src/repo/study.rs b/crates/fc-storage/src/repo/study.rs
+index 8622f2d..0915de8 100644
+--- a/crates/fc-storage/src/repo/study.rs
++++ b/crates/fc-storage/src/repo/study.rs
+@@ -33,18 +33,29 @@ pub const REVIEW_MODE_IMPORTED: &str = "imported";
+ /// study limits count.
+ pub const SCHEDULED_REVIEW_MODES: [&str; 5] = ["normal", "learn", "timed", "confidence", "quiz"];
+ 
+-/// Whether a `review_log.mode` is **practice** — the answer did not change the schedule:
+-/// `trial`, `trial_<mode>` (v0.10 practice variants: `trial_learn`, `trial_timed`,
+-/// `trial_confidence`), `test` and `match` (v1.1). Statistics and FSRS optimization skip
++/// `review_log.mode` of a manual reschedule brought in from Anki (v1.4.2: "set due date",
++/// "forget", FSRS "reschedule"): kept in the card's history and written back to Anki as such,
++/// but **not an answer** (its `rating` only fills the column), so it is skipped wherever
++/// practice rows are ([`is_practice_mode`]). Same value as `fc_interop::pack::MANUAL_MODE`.
++pub const REVIEW_MODE_MANUAL: &str = "manual";
++
++/// Whether a `review_log.mode` is **not a scored answer**: practice — the answer did not
++/// change the schedule: `trial`, `trial_<mode>` (v0.10 practice variants: `trial_learn`,
++/// `trial_timed`, `trial_confidence`), `test` and `match` (v1.1) — or a manual reschedule
++/// imported from Anki ([`REVIEW_MODE_MANUAL`], v1.4.2). Statistics and FSRS optimization skip
+ /// these rows
+ /// ([`PRACTICE_MODE_SQL`] is the same rule in SQL).
+ pub fn is_practice_mode(mode: &str) -> bool {
+-    mode == "trial" || mode == "test" || mode == "match" || mode.starts_with("trial_")
++    mode == "trial"
++        || mode == "test"
++        || mode == "match"
++        || mode == REVIEW_MODE_MANUAL
++        || mode.starts_with("trial_")
+ }
+ 
+ /// [`is_practice_mode`] as an SQL condition on a `mode` column.
+-pub const PRACTICE_MODE_SQL: &str =
+-    "(mode = 'trial' OR mode = 'test' OR mode = 'match' OR substr(mode, 1, 6) = 'trial_')";
++pub const PRACTICE_MODE_SQL: &str = "(mode = 'trial' OR mode = 'test' OR mode = 'match' \
++     OR mode = 'manual' OR substr(mode, 1, 6) = 'trial_')";
+ 
+ /// A `review_log` row.
+ #[derive(Debug, Clone, PartialEq)]
+diff --git a/docs/03-mimari.md b/docs/03-mimari.md
+index 862efc3..175ea7c 100644
+--- a/docs/03-mimari.md
++++ b/docs/03-mimari.md
+@@ -267,6 +267,7 @@ Açılmayan ya da bütünlük denetiminden geçemeyen koleksiyonda **hiçbir şe
+ - Kuyruk oluşturma: sırası gelenler, öğrenme adımları, yeniler; karıştırma stratejisi; kardeşleri yarına bırakma (kodda `bury_siblings`).
+ - Oturum durumu `sessions` tablosunda kalıcıdır (çökme kurtarma).
+ - Takvimi etkilemeyen oturumlar (deneme, test) `review_log`'a `mode` alanıyla yazar ama `cards` durumunu değiştirmez.
++- v1.4.2: Anki'nin elle planlama satırları ("vade tarihi ayarla", "unut", FSRS "yeniden planla"; `ease` 0) `mode = 'manual'` olarak içe alınır: kartın geçmişinde durur, Anki'ye yine elle satırı olarak döner, ama cevap değildir (`rating` yalnız yer tutar): istatistik, FSRS optimizasyonu, günlük sınırlar ve son tekrar onu saymaz (`is_practice_mode`). Ayrıntı ve Anki uyum tablosu: [16](16-anki-uyum.md).
+ - Zamanlı mod, ipucu sayacı, cevap süresi ölçümü oturum motorundadır. Frontend sadece "gösterildi / çevrildi" zamanlarını bildirir (backend kendi zamanıyla doğrular).
+ - v1.3: **her türden bir açık oturum** (`study.start` yalnızca aynı türün açık oturumunu kapatır; test kâğıdı bir Kartlar oturumundan sağ çıkar). Kalan kartların hepsi öğrenme adımını bekleyen oturum açık kalır; `SessionDto.next_due` kartın gösterilebileceği anı verir. Başka kart kalmadığında öğrenme kartı vadesinden en çok önden öğrenme penceresi kadar önce gösterilir: `study.learn_ahead_mins` ayarı (varsayılan 20 = `fc_study::session::LEARN_AHEAD_MS`, 0–1440; `plan.rs` `learn_ahead_ms`). `next_due` / `next_available_at` kartın gerçekten sunulacağı andır (vade − pencere).
+ - Ayar değişikliği ekrandaki kartı almaz: oturum, gösterilen kartı seçtiği pencereyi `SessionState.learn_ahead_ms`'te tutar; `Session::shown_window_ms` bu değerle şimdiki ayarın büyüğüdür. Büyütülen pencere hemen, küçültülen bir sonraki cevaptan (yeni kart seçilince, `reset_shown_window`) geçerli olur; kart "artık oturumda değil" olmaz.
+diff --git a/docs/16-anki-uyum.md b/docs/16-anki-uyum.md
+new file mode 100644
+index 0000000..e153ccd
+--- /dev/null
++++ b/docs/16-anki-uyum.md
+@@ -0,0 +1,78 @@
++# 16 — Anki uyumu: gerçek destelerle ne gidip geliyor (v1.4.2)
++
++Kısa cevap: Anki'den gelen **notlar, alanlar, etiketler, kartların durumu, vadesi, aralığı, FSRS belleği,
++tekrar geçmişi ve medya** bize aynen gelir ve Anki'ye aynen döner. Değişenler ve desteklenmeyenler aşağıdaki
++tablolarda, her biri nedeniyle.
++
++## Nasıl sınandı
++
++Paketleri **gerçek Anki** üretir (resmî `anki` Python paketi, CI'daki sürüm `26.09.4`, kurulumu
++`tools/anki/wide.py` başında). İki takım var:
++
++| Takım | Ne içerir | Test |
++|---|---|---|
++| `real-*` (v1.0, `tools/anki/make_fixtures.py`) | Basic, ters kartlı, yazmalı, isteğe bağlı ters, cloze, ses, görüntü örtme, özel not tipi; askıya alınmış / gömülü / bayraklı kart; `.apkg` yeni (zstd) ve eski (schema 11), `.colpkg` | `fc-interop` `real_tests`, `fc-app` `real_anki_tests` |
++| `wide-*` (v1.4.2, `tools/anki/wide.py`) | **FSRS açık** (`wide-fsrs.apkg`, yeni biçim, zamanlayıcı v3): not tipi başına iki şablon, üç boşluklu cloze, üç kat alt deste, hiyerarşik etiket (`lang::en::verb`), Türkçe adlı medya (`şarkı ğ.wav`, `çiçek.png`), askı / elle gömme / bayrak, iki kartlı **filtreli deste**, "vade tarihi ayarla" ve "unut" satırları. **FSRS kapalı** (`wide-sm2.apkg`, schema 11): SM-2 kolaylık katsayıları, unutma, yeniden öğrenme, kendi seçenek preset'i olan deste | `fc-app` `real_anki_wide_tests` |
++
++Her paket için:
++
++1. **Anki → biz:** uygulamanın kendi içe aktarma işiyle alınır, her kart Anki'nin kendi raporuyla (`wide-*.json`)
++   karşılaştırılır: deste, durum, aralık, tekrar/unutma sayısı, bayrak, askı/gömme, FSRS kararlılık ve zorluk,
++   kart başına geçmiş satırı (elle olanlar ayrıca), etiketler, medya adları ve baytları.
++2. **Biz → Anki:** dışa aktardığımız `.apkg` gerçek Anki'de taze bir koleksiyona alınır, Anki'nin raporu
++   ilk raporla karşılaştırılır (`wide.py compare`). Fark ya düzeltilir ya da aşağıdaki "değişenler" tablosunda
++   nedeniyle yer alır (testteki `ACCEPTED` listesi; listede olmayan her fark testi düşürür).
++   Bu adımda paketler test anında yeniden üretilir ve **büyük bir geçmiş** eklenir (400 kart × 8 cevap);
++   repoya yalnız küçük paketler girer.
++
++```bash
++python3 -m venv /tmp/ankivenv && /tmp/ankivenv/bin/pip install anki==26.09.4
++FC_ANKI_PYTHON=/tmp/ankivenv/bin/python cargo test -p fc-app wide_packages_round_trip_through_real_anki -- --ignored --nocapture
++```
++
++## Aynen gidip gelenler
++
++| Ne | Not |
++|---|---|
++| Not alanları (HTML dahil), not tipi, şablonlar | Anki'nin hazır not tipleri yerleşik tiplerimize, diğerleri aynı adla özel tipe |
++| Etiketler, hiyerarşik etiketler (`a::b::c`) | |
++| Desteler ve alt desteler | Tam yol (`Dil::İngilizce::Fiiller`) |
++| Kart durumu: yeni / öğrenme / tekrar / yeniden öğrenme | |
++| Vade ve aralık (gün) | Aralık = son **cevap** → vade (Anki'nin hesabı) |
++| FSRS belleği (kararlılık, zorluk) ve son tekrar zamanı | |
++| Tekrar ve unutma sayısı, bayrak, askıya alma | Anki tek bayrak tutar: birden çok bayrağımızdan en küçüğü gider |
++| Tekrar geçmişi, **elle planlama satırları dahil** | Aşağıda |
++| Medya (resim, ses), Türkçe/boşluklu dosya adları | Bayt bayt aynı, ad aynı |
++| Görüntü örtme (Anki 23.10+) | Dikdörtgen olmayan şekiller dikdörtgene döner (v1.0'dan beri) |
++
++### Elle planlama satırları (v1.4.2 değişikliği)
++
++Anki "vade tarihi ayarla", "unut" ve FSRS "yeniden planla" işlemlerini tekrar geçmişine cevapsız bir satır
++olarak yazar (tür 4/5, `ease` 0). Önceden bunları atlıyorduk; iki sonucu vardı: geçmiş eksik kalıyordu ve
++bu satır kartın **son tekrarı** sayılıyordu, böylece vade tarihi değiştirilmiş bir kartın aralığı Anki'ye geri
++dönünce kısalıyordu (son cevaptan değil, elle ayarlama gününden sayılıyordu).
++
++Şimdi bu satırlar `mode = "manual"` olarak gelir: kartın geçmişinde "Elle planlandı" diye görünür, son tekrar
++olarak sayılmaz, istatistik, FSRS optimizasyonu, günlük sınırlar ve "bugün çalışılanlar" onu cevap saymaz
++(`fc_storage::repo::is_practice_mode`), Anki'ye yine tür 4, `ease` 0 satırı olarak döner. `rating` sütunu bu
++satırlarda yalnız yer tutar (şema "again…easy" ister; migration gerekmedi).
++
++## Değişenler (bilerek)
++
++| Ne | Ne olur | Neden |
++|---|---|---|
++| Not GUID'i | Dışa aktarmada not kimliğimizden yeni GUID üretilir | Anki GUID'ini saklamıyoruz. Sonuç: dışa aktardığımız paketi **aynı** Anki koleksiyonuna geri alırsan notlar güncellenmez, yanına kopya gelir. Taze koleksiyona sorun yok. Sonraki iş: GUID'i not kökeninde saklamak |
++| SM-2 kolaylık katsayısı (ease, ör. %235) | Anki'ye %250 döner | Zamanlayıcımız FSRS; katsayıyı saklamıyoruz. FSRS açık Anki'de kullanılmaz; FSRS kapalı Anki'de sonraki aralıklar katsayıya göre değişir |
++| Filtreli deste | Kart kendi destesinde gelir, filtreli deste oluşmaz; dönüşte de yok | Filtreli deste bir sorgudur; bizde karşılığı kayıtlı sorgu / sorgudan çalışma |
++| Gün aşan öğrenme adımı (Anki kuyruk 3) | Aynı anda vadeli gün içi öğrenme kartı (kuyruk 1) olarak döner | Öğrenme vadesini saniyeyle tutuyoruz; vade aynı |
++| Kalan öğrenme adımı (`left`) | Dönüşte 0 | Adımlar bizde preset'ten gelir |
++| Gömme türü (kardeş / elle) | Dönüşte elle gömme; yalnız ertesi güne kadar | Bizde tek gömme var |
++| Geçmişte cevap süresi dışı alanlar (satırdaki ease katsayısı, filtreli deste türü 3) | Katsayı 2500, tür 3 → 1 | Aynı neden: SM-2 alanları |
++
++## Desteklenmeyenler
++
++| Ne | Durum |
++|---|---|
++| Deste seçenekleri (günlük sınırlar, adımlar, istenen hatırlama, FSRS ağırlıkları) | İçe alınmaz; desteler varsayılan preset'le gelir. Dışa aktarmada Anki varsayılanı |
++| Anki eklentilerinin verisi, not tipi CSS'inin bize özel görünümü | Taşınmaz |
++| Anki eşitleme (AnkiWeb) | Kapsam dışı |
+diff --git a/docs/README.md b/docs/README.md
+index f5593f1..8fe3e96 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -22,6 +22,7 @@ Bu klasör, uygulamanın **tam planını** içerir. Geliştirme boyunca pusulam
+ | 12 | [Performans (v1.4)](12-performans.md) | Ölçülmüş hız: 100k not / 2M tekrar + film izleme yükü (20k karşılaşma, ~1 GiB medya), makine, debug/release, düzeltilenler ve bilinen sınırlar |
+ | 13 | [Yapay zekâ gerçek sağlayıcıyla (v1.4)](13-ai-canli-deneme.md) | OpenRouter ile ilk gerçek deneme: ne koşuldu, ne çalıştı, bulunan ve düzeltilen hatalar, denenmeyenler, `FC_AI_LIVE=1` ile yeniden koşma |
+ | 14 | [Subtitle gerçek tarayıcıda (v1.4)](14-subtitle-gercek-tarayici.md) | Derlenmiş Subtitle eklentisi gerçek Chromium'da gerçek `fc`'ye karşı: kurulum, geçen adımlar, eklentideki değişiklik ("Flashcard'dan oku" yaması, `tools/subtitle-patches`), sahibin tarayıcısını isteyenler |
++| 16 | [Anki uyumu (v1.4.2)](16-anki-uyum.md) | Gerçek Anki'nin ürettiği destelerle Anki → biz → Anki: aynen gidip gelenler, bilerek değişenler (nedenleriyle), desteklenmeyenler; nasıl yeniden sınanır |
+ 
+ ## ⚡ Tek cümlede
+ 
+diff --git a/tools/anki/bench.py b/tools/anki/bench.py
+new file mode 100644
+index 0000000..69999b4
+--- /dev/null
++++ b/tools/anki/bench.py
+@@ -0,0 +1,383 @@
++"""Anki's own backend on the perf suite's collection shape (docs/12-performans.md, "Anki ile karşılaştırma").
++
++Builds, with the official `anki` Python package, a collection shaped like the one
++`crates/fc-app/src/perf_tests.rs` builds (100k two-card notes / 200k cards / 2M review rows,
++the same decks, tags, state mix and query set), then times Anki's backend calls that do
++what our suite times. Prints one JSON object of medians (ms) at the end.
++
++    python -I tools/anki/bench.py --dir <scratch dir> [--notes 100000 --reviews 2000000] [--runs 5]
++    python -I tools/anki/bench.py --dir <scratch dir> --reuse     # measure an existing build again
++
++Not a correctness test. Classifications (our `level` / `exam` attributes) become tags
++(`level::B1`, `exam::TYT`): Anki has no typed classification. Notes, cards and the revlog
++are bulk-inserted with SQL in one transaction (the build is not what is measured), then
++`check database` makes Anki register the tags and validate the rows.
++"""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import os
++import random
++import resource
++import shutil
++import statistics
++import sys
++import time
++
++from anki.collection import Collection, DeckIdLimit, ExportAnkiPackageOptions, ImportAnkiPackageOptions, ImportAnkiPackageRequest
++from anki.import_export_pb2 import CsvMetadata, CsvMetadataRequest
++from anki.scheduler_pb2 import CardAnswer
++from anki.cards import Card  # after anki.collection (circular import)
++
++DAY_MS = 86_400_000
++
++# Same words as perf_tests.rs (Turkish letters on purpose).
++WORDS = [
++    "kılıç", "kalkan", "ağaç", "çiçek", "göl", "şehir", "ışık", "öğretmen", "apple", "badger",
++    "river", "mountain", "journey", "whisper", "harbor", "lantern", "meadow", "thunder", "türev",
++    "integral", "kuvvet", "enerji", "hücre", "atom",
++]
++LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]  # fc-core CEFR template
++EXAMS = ["TYT", "AYT", "YDT"]  # fc-core YKS template
++
++# perf_tests.rs SEARCH_QUERIES -> the same question in Anki's search syntax.
++B1_UP = "(" + " OR ".join(f"tag:level::{lv}" for lv in LEVELS[2:]) + ")"
++SEARCHES = [
++    ("", ""),
++    ("kılıç", "kılıç"),
++    ('"ağaç çiçek"', '"ağaç çiçek"'),
++    ("deck:İngilizce is:due", "deck:İngilizce is:due"),
++    ("tag:fiil -is:suspended", "tag:fiil -is:suspended"),
++    ("level>=B1", B1_UP),
++    ("level:B1 is:due", "tag:level::B1 is:due"),
++    ("exam:TYT deck:YKS", "tag:exam::TYT deck:YKS"),
++    ("(level:A1 OR level:C2) apple", "(tag:level::A1 OR tag:level::C2) apple"),
++    ("-level:A1 deck:İngilizce tag:isim", "-tag:level::A1 deck:İngilizce tag:isim"),
++    ("stability>20 lapses>=2", "prop:s>20 prop:lapses>=2"),
++    ("retrievability<0.8", "prop:r<0.8"),
++    ("front:wh*", "front:wh*"),
++    ("is:new deck:YKS::TYT", "is:new deck:YKS::TYT"),
++]
++# Browser sort orders: ours -> Anki's browser column.
++SORTS = [("sort_field", "noteFld"), ("due", "cardDue"), ("modified", "cardMod")]
++
++
++def ms(t0: float) -> float:
++    return (time.perf_counter() - t0) * 1000.0
++
++
++def median(xs: list[float]) -> float:
++    return round(statistics.median(xs), 1)
++
++
++def p95(xs: list[float]) -> float:
++    s = sorted(xs)
++    return round(s[max(0, min(len(s), -(-len(s) * 95 // 100)) - 1)], 1)
++
++
++def build(path: str, notes: int, reviews: int) -> None:
++    """The perf suite's world (perf_tests.rs `build_world`) as an Anki collection."""
++    rng = random.Random(2026)
++    roll = rng.randrange
++    col = Collection(path)
++    col.set_config("fsrs", True)  # FSRS on, as in our app
++    col.set_config("sortType", "noteFld")
++    english = col.decks.id("İngilizce")
++    yks = col.decks.id("YKS")
++    en_decks = [col.decks.id(f"İngilizce::Kelimeler {i}") for i in range(1, 9)]
++    yks_decks = []
++    for exam in ["TYT", "AYT"]:
++        yks_decks.append(col.decks.id(f"YKS::{exam}"))
++        for lesson in ["Matematik", "Fizik", "Kimya"]:
++            yks_decks.append(col.decks.id(f"YKS::{exam}::{lesson}"))
++    assert english and yks
++    nt = col.models.by_name("Basic (and reversed card)")
++    mid = nt["id"]
++    now_ms = int(time.time() * 1000)
++    now_s = now_ms // 1000
++    today = col.sched.today
++    seed_tags = ["fiil", "isim", "fiil::düzensiz"]
++
++    note_rows, card_rows, review_cards = [], [], []
++    base_nid = now_ms - 800 * DAY_MS  # unique millisecond ids before anything the app makes
++    for i in range(notes):
++        front = f"{WORDS[roll(len(WORDS))]} {WORDS[roll(len(WORDS))]} {i}"
++        back = f"{WORDS[roll(len(WORDS))]} — örnek cümle {i}"
++        tags = [t for t in seed_tags if roll(3) == 0]
++        english_note = roll(3) != 0
++        did = en_decks[roll(len(en_decks))] if english_note else yks_decks[roll(len(yks_decks))]
++        if roll(5) != 0:
++            tags.append(f"level::{LEVELS[roll(6)]}" if english_note else f"exam::{EXAMS[roll(3)]}")
++        created = now_ms - (1 + roll(700)) * DAY_MS
++        mod = (created + roll(30) * DAY_MS) // 1000
++        nid = base_nid + i
++        csum = int(hashlib.sha1(front.encode()).hexdigest()[:8], 16)
++        tag_str = f" {' '.join(tags)} " if tags else ""
++        note_rows.append((nid, f"b{i:x}g", mid, mod, -1, tag_str, f"{front}\x1f{back}", front, csum, 0, ""))
++        for k in range(2):
++            cid = base_nid + notes + 2 * i + k
++            r = roll(20)
++            data = ""
++            if r <= 4:  # 25 % new
++                typ, queue, due, ivl, reps, lapses, left = 0, 0, i, 0, 0, 0, 0
++            elif r <= 6:  # 10 % (re)learning, due within the hour
++                relearn = roll(2) == 1
++                typ = 3 if relearn else 1
++                queue, due, ivl = 1, now_s - 3600 + roll(7200), (5 if relearn else 0)
++                s, d = 0.5 + roll(30) / 10.0, 1.0 + roll(90) / 10.0
++                reps, lapses, left = 1 + roll(3), roll(3), 1
++                data = json.dumps({"s": s, "d": d, "dr": 0.9, "lrt": now_s - 86_400})
++            else:  # 65 % review, ~1/12 due today or overdue
++                typ, queue = 2, 2
++                due = today + roll(120) - 10
++                s, d = 1.0 + roll(3000) / 10.0, 1.0 + roll(90) / 10.0
++                reps, lapses, left = 2 + roll(20), roll(8), 0
++                ivl = max(1, int(s))
++                data = json.dumps({"s": s, "d": d, "dr": 0.9, "lrt": now_s - (1 + roll(60)) * 86_400})
++                review_cards.append(cid)
++            if roll(40) == 0:
++                queue = -1
++            flags = 1 if roll(25) == 0 else 0
++            card_rows.append((cid, nid, did, k, mod, -1, typ, queue, due, ivl, 2500 if typ else 0,
++                              reps, lapses, left, 0, 0, flags, data))
++    span = 730 * DAY_MS
++    rev_rows = []
++    for n in range(reviews):
++        at = now_ms - span + (n * span) // max(1, reviews)
++        again = roll(10) == 0
++        rev_rows.append((at, review_cards[roll(len(review_cards))], -1, 1 if again else 3,
++                         1 + roll(60), roll(60), 2500, 2000 + roll(15000), 0 if n % 50 == 0 else 1))
++
++    def chunks(rows, n=50_000):
++        for k in range(0, len(rows), n):
++            yield rows[k:k + n]
++
++    col.db.execute("begin")
++    for c in chunks(note_rows):
++        col.db.executemany("insert into notes values (?,?,?,?,?,?,?,?,?,?,?)", c)
++    for c in chunks(card_rows):
++        col.db.executemany("insert into cards values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", c)
++    for c in chunks(rev_rows):
++        col.db.executemany("insert into revlog values (?,?,?,?,?,?,?,?,?)", c)
++    col.db.execute("commit")
++    # Register the tags, validate rows (what Anki's Tools > Check Database does).
++    out, ok = col.fix_integrity()
++    print("check database:", ok, out.replace("\n", " | ")[:300], file=sys.stderr)
++    col.close()
++
++
++def measure(path: str, work: str, runs: int) -> dict:
++    res: dict = {}
++
++    # Open: Collection() (+ the deck list's counts, what the main window draws first).
++    opens = []
++    for _ in range(runs):
++        t0 = time.perf_counter()
++        col = Collection(path)
++        col.sched.deck_due_tree()
++        opens.append(ms(t0))
++        col.close()
++    res["open_plus_tree"] = median(opens)
++    col = Collection(path)
++    res["deck_tree"] = median([timed(col.sched.deck_due_tree) for _ in range(runs)])
++
++    # Build the day's queue (first get_queued_cards after the deck changed), per top deck:
++    # Anki studies one deck tree at a time; our study.start is over the whole collection.
++    dids = {n: col.decks.id_for_name(n) for n in ["İngilizce", "YKS"]}
++    for name, did in dids.items():
++        other = dids["YKS" if name == "İngilizce" else "İngilizce"]
++        xs = []
++        for _ in range(runs):
++            col.decks.select(other)
++            col.sched.get_queued_cards()
++            col.decks.select(did)
++            t0 = time.perf_counter()
++            q = col.sched.get_queued_cards(fetch_limit=1)
++            xs.append(ms(t0))
++        res[f"queue_build[{name}]"] = median(xs)
++        res[f"queue_counts[{name}]"] = [q.new_count, q.learning_count, q.review_count]
++
++    # Answer "good" + fetch the next card (+ render it, as the reviewer does): our
++    # study.answer round trip. 40 answers per run, like the suite.
++    col.decks.select(dids["İngilizce"])
++    laps, laps_render = [], []
++    for _ in range(max(1, runs // 2)):
++        q = col.sched.get_queued_cards(fetch_limit=1)
++        for _ in range(40):
++            qc = q.cards[0]
++            card = Card(col, backend_card=qc.card)
++            card.start_timer()
++            ans = col.sched.build_answer(card=card, states=qc.states, rating=CardAnswer.GOOD)
++            t0 = time.perf_counter()
++            col.sched.answer_card(ans)
++            q = col.sched.get_queued_cards(fetch_limit=1)
++            t1 = time.perf_counter()
++            nxt = Card(col, backend_card=q.cards[0].card)
++            nxt.question()
++            nxt.answer()
++            laps.append((t1 - t0) * 1000)
++            laps_render.append(ms(t0))
++    res["answer_next_p50_p95"] = [median(laps), p95(laps)]
++    res["answer_next_render_p50_p95"] = [median(laps_render), p95(laps_render)]
++
++    # Custom session by classification: a filtered deck of 200 cards from the same query.
++    xs = []
++    for k in range(runs):
++        fd = col.sched.get_or_create_filtered_deck(deck_id=0)
++        fd.name = f"bench {k}"
++        fd.config.search_terms[0].search = f"{B1_UP} deck:İngilizce"
++        fd.config.search_terms[0].limit = 200
++        t0 = time.perf_counter()
++        did = col.sched.add_or_update_filtered_deck(fd).id
++        q = col.sched.get_queued_cards(fetch_limit=1)  # select happens in add_or_update
++        xs.append(ms(t0))
++        assert q.cards, "filtered deck is empty"
++        col.decks.remove([did])
++    res["filtered_deck_200"] = median(xs)
++
++    # Searches: matching ids in browser order (the count) + the first 100 rows.
++    col.load_browser_card_columns()
++    sort_col = col.get_browser_column("noteFld")
++    worst, per = 0.0, {}
++    for ours, q in SEARCHES:
++        xs = []
++        for _ in range(runs):
++            t0 = time.perf_counter()
++            ids = col.find_cards(q, order=sort_col)
++            for cid in ids[:100]:
++                list(col.browser_row_for_id(cid)[0])
++            xs.append(ms(t0))
++        per[ours] = [median(xs), len(ids)]
++        worst = max(worst, per[ours][0])
++    res["search"] = per
++    res["search_worst"] = worst
++
++    # Browser page: whole list sorted, 100 rows at four positions, three orders.
++    worst_page, worst_rows = 0.0, 0.0
++    for _, key in SORTS:
++        column = col.get_browser_column(key)
++        for pos in ["0", "1/3", "1/2", "end"]:
++            xs, ys = [], []
++            for _ in range(runs):
++                t0 = time.perf_counter()
++                ids = col.find_cards("", order=column)
++                off = {"0": 0, "1/3": len(ids) // 3, "1/2": len(ids) // 2, "end": len(ids) - 100}[pos]
++                t1 = time.perf_counter()
++                for cid in ids[off:off + 100]:
++                    list(col.browser_row_for_id(cid)[0])
++                xs.append(ms(t0))
++                ys.append(ms(t1))
++            worst_page = max(worst_page, median(xs))
++            worst_rows = max(worst_rows, median(ys))
++    res["browser_page_worst"] = worst_page
++    res["browser_rows_only_worst"] = worst_rows
++
++    # Statistics: the stats screen's backend call (computed from the revlog every time).
++    res["stats_graphs_all_365"] = median([timed(lambda: col._backend.graphs(search="", days=365)) for _ in range(runs)])
++    res["stats_graphs_deck_365"] = median(
++        [timed(lambda: col._backend.graphs(search="deck:İngilizce", days=365)) for _ in range(runs)])
++    some = col.find_cards("is:review")[:runs]
++    res["card_info"] = median([timed(lambda c=c: col.card_stats_data(c)) for c in some])
++
++    # Backup (collection only, no media; Anki's own periodic backup).
++    bdir = os.path.join(work, "backups")
++    os.makedirs(bdir, exist_ok=True)
++    xs = []
++    for k in range(runs):
++        col.set_config("bench_touch", k)  # force=True still skips an unchanged collection
++        t0 = time.perf_counter()
++        assert col.create_backup(backup_folder=bdir, force=True, wait_for_completion=True)
++        xs.append(ms(t0))
++    res["backup_collection"] = median(xs)
++    res["backup_bytes"] = max(os.path.getsize(os.path.join(bdir, f)) for f in os.listdir(bdir))
++
++    # .apkg of one deck (~8k notes / 17k cards, with scheduling) and its import into an empty collection.
++    did = col.decks.id_for_name("İngilizce::Kelimeler 1")
++    apkg = os.path.join(work, "deck.apkg")
++    opts = ExportAnkiPackageOptions(with_scheduling=True, with_deck_configs=True, with_media=False, legacy=False)
++    xs = []
++    for _ in range(runs):
++        t0 = time.perf_counter()
++        exported = col.export_anki_package(out_path=apkg, options=opts, limit=DeckIdLimit(did))
++        xs.append(ms(t0))
++    res["export_apkg_deck"] = median(xs)
++    res["export_apkg_notes"] = exported
++    xs = []
++    for k in range(runs):
++        fresh = os.path.join(work, f"fresh{k}.anki2")
++        for f in (fresh, fresh + "-wal"):
++            if os.path.exists(f):
++                os.remove(f)
++        c2 = Collection(fresh)
++        req = ImportAnkiPackageRequest(package_path=apkg, options=ImportAnkiPackageOptions(with_scheduling=True))
++        t0 = time.perf_counter()
++        log = c2.import_anki_package(req)
++        xs.append(ms(t0))
++        res["import_apkg_notes"] = len(log.log.new)
++        c2.close()
++    res["import_apkg_deck"] = median(xs)
++
++    # Text import: the suite's 10 000 pasted lines (tab separated) into a new deck.
++    target = col.decks.id("İçe aktarılan")
++    xs = []
++    for k in range(runs):
++        tsv = os.path.join(work, f"import{k}.txt")
++        with open(tsv, "w", encoding="utf-8") as f:
++            for i in range(10_000):
++                f.write(f"yeni kelime {k}-{i}\tnew word {k}-{i}\n")
++        t0 = time.perf_counter()
++        meta = col._backend.get_csv_metadata(CsvMetadataRequest(path=tsv, delimiter=CsvMetadata.TAB))
++        meta.deck_id = target
++        out = col._backend.import_csv(path=tsv, metadata=meta)
++        xs.append(ms(t0))
++        assert len(out.log.new) == 10_000, len(out.log.new)
++    res["import_text_10k"] = median(xs)
++
++    col.close()
++    # Whole-collection package (.colpkg, no media): what "export collection" writes.
++    col = Collection(path)
++    t0 = time.perf_counter()
++    col.export_collection_package(os.path.join(work, "all.colpkg"), include_media=False, legacy=False)
++    res["export_colpkg"] = round(ms(t0), 1)
++    res["peak_rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)
++    return res
++
++
++def timed(f) -> float:
++    t0 = time.perf_counter()
++    f()
++    return ms(t0)
++
++
++def main() -> None:
++    ap = argparse.ArgumentParser()
++    ap.add_argument("--dir", required=True)
++    ap.add_argument("--notes", type=int, default=100_000)
++    ap.add_argument("--reviews", type=int, default=2_000_000)
++    ap.add_argument("--runs", type=int, default=5)
++    ap.add_argument("--reuse", action="store_true", help="measure the existing build again")
++    a = ap.parse_args()
++    os.makedirs(a.dir, exist_ok=True)
++    pristine = os.path.join(a.dir, "pristine.anki2")
++    if not a.reuse or not os.path.exists(pristine):
++        if os.path.exists(pristine):
++            os.remove(pristine)
++        t0 = time.perf_counter()
++        build(pristine, a.notes, a.reviews)
++        print(f"build {ms(t0) / 1000:.0f} s", file=sys.stderr)
++    # Every measurement starts from the same copy (answers, imports and backups write).
++    work = os.path.join(a.dir, "work")
++    shutil.rmtree(work, ignore_errors=True)
++    os.makedirs(work)
++    path = os.path.join(work, "collection.anki2")
++    shutil.copy(pristine, path)
++    res = measure(path, work, a.runs)
++    res["shape"] = {"notes": a.notes, "reviews": a.reviews, "runs": a.runs}
++    print(json.dumps(res, ensure_ascii=False, indent=1))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tools/anki/wide.py b/tools/anki/wide.py
+new file mode 100644
+index 0000000..11fa815
+--- /dev/null
++++ b/tools/anki/wide.py
+@@ -0,0 +1,348 @@
++"""Wider real-Anki fixtures and Anki's own report of a package (docs/16-anki-uyum.md).
++
++Built *with the official Anki library* (pip package `anki`, the version CI pins). Run isolated,
++from outside the output folder:
++
++    python -I tools/anki/wide.py make <out_dir> [--large N]
++    python -I tools/anki/wide.py report <package> <report.json>
++    python -I tools/anki/wide.py compare <anki.json> <roundtrip.json>
++
++`make` builds two collections and exports each with scheduling, deck options and media:
++
++* `wide-fsrs.apkg` (latest layout, zstd, scheduler v3, FSRS on): two templates per note type,
++  cloze with three gaps, sub-decks three deep, hierarchical tags (`lang::en::verb`), media
++  with non-ASCII names (`şarkı ğ.wav`, `çiçek.png`), suspended / buried (by hand) / flagged
++  cards, a filtered deck holding two cards, "set due date" and "forget" entries in the review
++  log next to normal answers, and a `--large` review history (N cards × 8 answers);
++* `wide-sm2.apkg` (legacy schema 11, `collection.anki21`, FSRS off): SM-2 ease factors
++  after Hard / Easy answers, a lapse, a relearning card, a deck with its own options preset.
++
++Next to each package, `<name>.json` is what Anki itself reports about that collection
++(`report` format below). `report` imports any package into a fresh collection exactly like
++File → Import and prints the same report, so Anki → fc → Anki can be compared with `compare`
++(prints the list of differences as JSON, one string each).
++
++Report: {"notes": {note id: {guid, notetype, fields, tags}}, "cards": {"note id/ord": {deck,
++filtered, type, queue, due_in, ivl, factor, reps, lapses, flags, fsrs, revlog: [[type, ease,
++ivl], ...]}}, "revlog_total", "media": {name: sha256}, "decks": [...], "fsrs": bool}.
++`due_in` is days from Anki's today (review / day-learning) or seconds from now rounded to the
++minute (intraday learning); `null` for new cards.
++"""
++
++import hashlib
++import json
++import os
++import random
++import struct
++import sys
++import tempfile
++import time
++import zlib
++
++from anki.collection import (
++    Collection,
++    ExportAnkiPackageOptions,
++    ImportAnkiPackageOptions,
++    ImportAnkiPackageRequest,
++)
++
++
++def png(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
++    raw = b"".join(b"\x00" + bytes(rgb) * width for _ in range(height))
++
++    def chunk(kind: bytes, data: bytes) -> bytes:
++        body = kind + data
++        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
++
++    return (
++        b"\x89PNG\r\n\x1a\n"
++        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
++        + chunk(b"IDAT", zlib.compress(raw))
++        + chunk(b"IEND", b"")
++    )
++
++
++def wav(samples: int, seed: int) -> bytes:
++    data = bytes((i * seed) % 256 for i in range(samples))
++    return (
++        b"RIFF"
++        + struct.pack("<I", 36 + len(data))
++        + b"WAVEfmt "
++        + struct.pack("<IHHIIHH", 16, 1, 1, 8000, 8000, 1, 8)
++        + b"data"
++        + struct.pack("<I", len(data))
++        + data
++    )
++
++
++def add(col: Collection, nt_name: str, deck_id: int, fields: list[str], tags: list[str]):
++    note = col.new_note(col.models.by_name(nt_name))
++    for i, v in enumerate(fields):
++        note.fields[i] = v
++    note.tags = tags
++    col.add_note(note, deck_id)
++    return note
++
++
++def answer(col: Collection, cid: int, ease: int) -> None:
++    card = col.get_card(cid)
++    card.start_timer()
++    col.sched.answerCard(card, ease)
++
++
++def build_fsrs(col: Collection, large: int) -> None:
++    col.set_config("fsrs", True)
++    deep = col.decks.id("Dil::İngilizce::Fiiller")
++    other = col.decks.id("Dil::Almanca")
++    img = col.media.write_data("çiçek.png", png(6, 4, (10, 160, 40)))
++    snd = col.media.write_data("şarkı ğ.wav", wav(300, 11))
++
++    # Two templates per note type: a custom type with a forward and a reverse card.
++    mm = col.models
++    vt = mm.new("Kelime 2 yön")
++    for name in ("Kelime", "Anlam", "Ses"):
++        mm.add_field(vt, mm.new_field(name))
++    for name, q, a in (
++        ("İleri", "{{Kelime}}", "{{FrontSide}}<hr id=answer>{{Anlam}} {{Ses}}"),
++        ("Geri", "{{Anlam}}", "{{FrontSide}}<hr id=answer>{{Kelime}}"),
++    ):
++        t = mm.new_template(name)
++        t["qfmt"], t["afmt"] = q, a
++        mm.add_template(vt, t)
++    mm.add(vt)
++
++    a = add(col, "Kelime 2 yön", deep, ["go", f'gitmek <img src="{img}">', f"[sound:{snd}]"], ["lang::en::verb", "a1"])
++    b = add(col, "Kelime 2 yön", deep, ["take", "almak", ""], ["lang::en::verb"])
++    c = add(col, "Cloze", other, ["{{c1::Hund}} köpek, {{c2::Katze}} kedi, {{c3::Maus}} fare", ""], ["lang::de"])
++    d = add(col, "Basic", other, ["Baum", "ağaç"], ["lang::de", "orman::ağaç"])
++    e = add(col, "Basic", deep, ["run", "koşmak"], [])
++    f = add(col, "Basic", deep, ["walk", "yürümek"], [])
++    g = add(col, "Basic", deep, ["see", "görmek"], [])
++
++    a1, a2 = a.card_ids()
++    b1, b2 = b.card_ids()
++    c1, c2, c3 = c.card_ids()
++    (d1,) = d.card_ids()
++    (e1,) = e.card_ids()
++    (f1,) = f.card_ids()
++    (g1,) = g.card_ids()
++
++    for cid, eases in ((a1, [3, 3]), (a2, [4]), (b1, [1]), (c1, [3, 3, 3]), (d1, [4]), (e1, [4]), (f1, [4]), (g1, [4])):
++        for ease in eases:
++            answer(col, cid, ease)
++    answer(col, c1, 1)  # lapse: relearning
++    # "Set due date" on a review card and on a new one; "forget" on a reviewed one.
++    col.sched.set_due_date([e1], "12")
++    col.sched.set_due_date([c2], "3")
++    col.sched.schedule_cards_as_new([f1], restore_position=True, reset_counts=False)
++    col.sched.suspend_cards([b2])
++    col.sched.bury_cards([c3], manual=True)
++    col.set_user_flag_for_cards(2, [a1])  # orange
++    col.set_user_flag_for_cards(4, [d1])  # blue
++
++    # A filtered deck holding the two review cards `a1` and `g1` (their home stays "Fiiller").
++    fd = col.sched.get_or_create_filtered_deck(0)
++    fd.name = "Filtre::Bugün"
++    fd.config.search_terms[0].search = f"cid:{a1},{g1}"
++    fd.config.search_terms[0].limit = 10
++    fd.config.reschedule = True
++    col.sched.add_or_update_filtered_deck(fd)
++
++    if large:
++        bulk = col.decks.id("Dil::Büyük")
++        rng = random.Random(7)
++        for i in range(large):
++            n = add(col, "Basic", bulk, [f"w{i}", f"k{i}"], ["büyük"])
++            cid = n.card_ids()[0]
++            for _ in range(8):
++                answer(col, cid, rng.choice([1, 2, 3, 3, 3, 4]))
++
++
++def build_sm2(col: Collection) -> None:
++    col.set_config("fsrs", False)
++    deck = col.decks.id("SM2::Kelimeler")
++    conf = col.decks.add_config_returning_id("Yavaş")
++    cfg = col.decks.get_config(conf)
++    cfg["new"]["delays"] = [1.0, 10.0, 60.0]
++    cfg["rev"]["perDay"] = 77
++    col.decks.update_config(cfg)
++    d = col.decks.get(deck)
++    d["conf"] = conf
++    col.decks.save(d)
++
++    notes = [add(col, "Basic (and reversed card)", deck, [f"word{i}", f"kelime{i}"], ["sm2"]) for i in range(3)]
++    (x1, x2), (y1, y2), (z1, _z2) = (n.card_ids() for n in notes)
++    for cid, eases in ((x1, [4]), (x2, [3, 3, 3, 2]), (y1, [4, 4]), (y2, [3, 3, 1]), (z1, [3, 3, 4])):
++        for ease in eases:
++            answer(col, cid, ease)
++    col.sched.set_due_date([y1], "20!")  # "!" also resets the interval
++
++
++def card_report(col: Collection, c, now: float, today: int) -> dict:
++    if c.type == 0:
++        due_in = None
++    elif c.queue == 1 or (c.queue in (-1, -2, -3) and c.due > 1_000_000_000):
++        due_in = round((c.due - now) / 60) * 60
++    else:
++        due_raw = c.odue if c.odid else c.due
++        due_in = due_raw - today
++    revlog = col.db.all(f"select type, ease, ivl from revlog where cid = {c.id} order by id")
++    return {
++        "deck": col.decks.name(c.odid or c.did),
++        "filtered": col.decks.name(c.did) if c.odid else None,
++        "type": c.type,
++        "queue": c.queue,
++        "due_in": due_in,
++        "ivl": c.ivl,
++        "factor": c.factor,
++        "reps": c.reps,
++        "lapses": c.lapses,
++        "flags": c.user_flag(),
++        "fsrs": None
++        if c.memory_state is None
++        else {
++            "stability": round(c.memory_state.stability, 3),
++            "difficulty": round(c.memory_state.difficulty, 3),
++        },
++        "revlog": [list(r) for r in revlog],
++    }
++
++
++def report(col: Collection) -> dict:
++    now = time.time()
++    today = col.sched.today
++    notes, cards = {}, {}
++    for nid in col.find_notes(""):
++        n = col.get_note(nid)
++        notes[str(n.id)] = {
++            "guid": n.guid,
++            "notetype": n.note_type()["name"],
++            "fields": list(n.fields),
++            "tags": sorted(n.tags),
++        }
++        for cid in n.card_ids():
++            c = col.get_card(cid)
++            cards[f"{n.id}/{c.ord}"] = card_report(col, c, now, today)
++    media = {}
++    for name in sorted(os.listdir(col.media.dir())):
++        with open(os.path.join(col.media.dir(), name), "rb") as f:
++            media[name] = hashlib.sha256(f.read()).hexdigest()
++    return {
++        "anki_version": __import__("anki.buildinfo").buildinfo.version,
++        "fsrs": bool(col.get_config("fsrs", False)),
++        "notes": notes,
++        "cards": cards,
++        "revlog_total": col.db.scalar("select count() from revlog"),
++        "media": media,
++        "decks": sorted(d.name for d in col.decks.all_names_and_ids() if d.name != "Default"),
++    }
++
++
++def write_json(path: str, value) -> None:
++    with open(path, "w", encoding="utf-8") as f:
++        json.dump(value, f, ensure_ascii=False, indent=1, sort_keys=True)
++        f.write("\n")
++
++
++def make(out_dir: str, large: int) -> None:
++    os.makedirs(out_dir, exist_ok=True)
++    for name, legacy, build in (
++        ("wide-fsrs", False, lambda col: build_fsrs(col, large)),
++        ("wide-sm2", True, build_sm2),
++    ):
++        work = tempfile.mkdtemp(prefix=f"fc-{name}-")
++        col = Collection(os.path.join(work, "collection.anki2"))
++        build(col)
++        problems, ok = col.fix_integrity()
++        assert ok, problems
++        col.export_anki_package(
++            out_path=os.path.join(out_dir, f"{name}.apkg"),
++            options=ExportAnkiPackageOptions(
++                legacy=legacy, with_scheduling=True, with_deck_configs=True, with_media=True
++            ),
++            limit=None,
++        )
++        # What Anki reports about the package it wrote (imported back the same way as ours).
++        write_json(os.path.join(out_dir, f"{name}.json"), import_report(os.path.join(out_dir, f"{name}.apkg")))
++        col.close()
++
++
++def import_report(package: str) -> dict:
++    work = tempfile.mkdtemp(prefix="fc-anki-report-")
++    col = Collection(os.path.join(work, "collection.anki2"))
++    col.import_anki_package(
++        ImportAnkiPackageRequest(
++            package_path=os.path.abspath(package),
++            options=ImportAnkiPackageOptions(
++                with_scheduling=True, with_deck_configs=True, merge_notetypes=False
++            ),
++        )
++    )
++    problems, ok = col.fix_integrity()
++    out = report(col)
++    out["check_database"] = [] if ok else list(problems)
++    col.close()
++    return out
++
++
++def compare(a: dict, b: dict) -> list[str]:
++    """Every difference between Anki's report of its own package (`a`) and of our export of
++    the same collection (`b`)."""
++    diffs = []
++    # Keyed by note id: Anki keeps the ids of an imported package, and so do we (a note's
++    # creation time); the guid is compared as a field.
++    for nid, n in a["notes"].items():
++        m = b["notes"].get(nid)
++        if m is None:
++            diffs.append(f"note {nid}: missing")
++            continue
++        for k in ("guid", "notetype", "fields", "tags"):
++            if n[k] != m[k]:
++                diffs.append(f"note {nid}: {k} {n[k]!r} -> {m[k]!r}")
++    for key, c in a["cards"].items():
++        d = b["cards"].get(key)
++        if d is None:
++            diffs.append(f"card {key}: missing")
++            continue
++        for k in ("deck", "filtered", "type", "queue", "due_in", "ivl", "factor", "reps", "lapses", "flags", "fsrs"):
++            x, y = c[k], d[k]
++            if k == "due_in" and isinstance(x, int) and isinstance(y, int) and abs(x) > 1000:
++                same = abs(x - y) <= 120  # intraday learning: seconds, two minutes apart at most
++            else:
++                same = x == y
++            if not same:
++                diffs.append(f"card {key}: {k} {x!r} -> {y!r}")
++        if [r[:2] for r in c["revlog"]] != [r[:2] for r in d["revlog"]]:
++            diffs.append(f"card {key}: revlog {c['revlog']!r} -> {d['revlog']!r}")
++    for name, sha in a["media"].items():
++        if b["media"].get(name) != sha:
++            diffs.append(f"media {name}: {'missing' if name not in b['media'] else 'bytes differ'}")
++    if a["revlog_total"] != b["revlog_total"]:
++        diffs.append(f"revlog_total {a['revlog_total']} -> {b['revlog_total']}")
++    for d in sorted(set(a["decks"]) - set(b["decks"])):
++        diffs.append(f"deck {d}: missing")
++    if b.get("check_database"):
++        diffs.append(f"check database: {b['check_database']}")
++    return diffs
++
++
++def main(argv: list[str]) -> int:
++    cmd = argv[1]
++    if cmd == "make":
++        large = int(argv[argv.index("--large") + 1]) if "--large" in argv else 0
++        make(argv[2], large)
++    elif cmd == "report":
++        write_json(argv[3], import_report(argv[2]))
++    elif cmd == "compare":
++        with open(argv[2], encoding="utf-8") as f:
++            a = json.load(f)
++        with open(argv[3], encoding="utf-8") as f:
++            b = json.load(f)
++        print(json.dumps(compare(a, b), ensure_ascii=False, indent=1))
++    else:
++        raise SystemExit(f"unknown command {cmd}")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv))

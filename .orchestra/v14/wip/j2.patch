@@ -1,0 +1,1505 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 59bb1ab..b00c7d2 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -191,6 +191,12 @@ jobs:
+     runs-on: ubuntu-24.04  # Playwright has no Chromium build for ubuntu-26.04 yet
+     env:
+       SUBTITLE_REPO_TOKEN: ${{ secrets.SUBTITLE_REPO_TOKEN }}
++      # v1.4.2: repository variable (Settings › Secrets and variables › Actions › Variables).
++      # `true` = a run that cannot check the real Subtitle client FAILS (once the secret above
++      # is set). Unset/anything else = the run passes but says "Subtitle client NOT checked".
++      SUBTITLE_CHECK_REQUIRED: ${{ vars.SUBTITLE_CHECK_REQUIRED }}
++      # Where the secret cannot exist: pull requests from forks and Dependabot get no secrets.
++      SUBTITLE_NO_SECRETS: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.fork || github.actor == 'dependabot[bot]') }}
+     defaults:
+       run:
+         working-directory: apps/browser-extension
+@@ -221,24 +227,57 @@ jobs:
+       # The Subtitle extension's own client and outbox against the real `fc api serve`
+       # (docs/06 §5.1): the contract, then the v1.4 interruption acceptance (dropped line,
+       # lost answer, server killed mid-batch, undo + resend, backup → fresh profile). The
+-      # extension's repository is private: the step runs when the `SUBTITLE_REPO_TOKEN`
+-      # secret (read access to it) is set, and says so when it is not.
++      # extension's repository is private: it is checked out with the `SUBTITLE_REPO_TOKEN`
++      # secret (read access to it).
++      # v1.4.2: the check can no longer pass silently without running. Without the client:
++      #  - pull request from a fork / Dependabot (no secrets there): both steps are SKIPPED;
++      #  - anywhere else: the job summary says "Subtitle client NOT checked" (+ a warning), the
++      #    check step is SKIPPED, and with the repository variable SUBTITLE_CHECK_REQUIRED=true
++      #    the job FAILS, naming the missing secret and how to set it.
+       - name: Subtitle eklentisi deposu
+-        if: env.SUBTITLE_REPO_TOKEN != ''
++        if: env.SUBTITLE_REPO_TOKEN != '' && env.SUBTITLE_NO_SECRETS != 'true'
+         uses: actions/checkout@v4
+         with:
+           repository: ardacarofficial/subtitle
+           ref: claude/busy-dijkstra-rdh5da
+           token: ${{ env.SUBTITLE_REPO_TOKEN }}
+           path: subtitle-ext
+-      - name: Subtitle sözleşmesi + kesinti kabulü (gerçek istemci, gerçek fc)
++      - name: Subtitle istemcisi burada mı? (yoksa "NOT checked")
++        id: subtitle-client
++        if: env.SUBTITLE_NO_SECRETS != 'true'
+         working-directory: .
+         run: |
+-          if [ ! -d subtitle-ext ]; then
+-            echo "::warning::SUBTITLE_REPO_TOKEN is not set: the Subtitle contract check did not run"
++          if [ -f subtitle-ext/src/flashcards/api.ts ]; then
++            echo "run=true" >> "$GITHUB_OUTPUT"
+             exit 0
+           fi
++          echo "run=false" >> "$GITHUB_OUTPUT"
++          if [ -z "$SUBTITLE_REPO_TOKEN" ]; then
++            why="the repository secret SUBTITLE_REPO_TOKEN is not set"
++          else
++            why="the checkout of ardacarofficial/subtitle has no src/flashcards/api.ts (wrong ref?)"
++          fi
++          how="Set it: github.com/ardacarofficial/flashcard → Settings → Secrets and variables → Actions → New repository secret, name SUBTITLE_REPO_TOKEN, value a fine-grained personal access token with read-only Contents access to ardacarofficial/subtitle."
++          {
++            echo "### ⚠️ Subtitle client NOT checked"
++            echo ""
++            echo "The real Subtitle extension client (tools/subtitle-contract) did not run: $why."
++            echo ""
++            echo "$how"
++            echo ""
++            echo "Then set the repository variable SUBTITLE_CHECK_REQUIRED=true (Settings → Secrets and variables → Actions → Variables) so a run without the client fails."
++          } >> "$GITHUB_STEP_SUMMARY"
++          if [ "$SUBTITLE_CHECK_REQUIRED" = "true" ]; then
++            echo "::error title=Subtitle client NOT checked::$why. $how (SUBTITLE_CHECK_REQUIRED=true makes this a failure.)"
++            exit 1
++          fi
++          echo "::warning title=Subtitle client NOT checked::$why. $how Then set the repository variable SUBTITLE_CHECK_REQUIRED=true to make a missing client fail the job."
++      - name: Subtitle sözleşmesi + kesinti kabulü (gerçek istemci, gerçek fc)
++        if: steps.subtitle-client.outputs.run == 'true'
++        working-directory: .
++        run: |
+           node tools/subtitle-contract/check.mjs
++          echo "### ✅ Subtitle client checked (ardacarofficial/subtitle @ $(git -C subtitle-ext rev-parse --short HEAD))" >> "$GITHUB_STEP_SUMMARY"
+         env:
+           FC_BIN: ${{ github.workspace }}/target/debug/fc
+           SUBTITLE_REPO: ${{ github.workspace }}/subtitle-ext
+diff --git a/.github/workflows/windows-build.yml b/.github/workflows/windows-build.yml
+index 15fd140..06cab1f 100644
+--- a/.github/workflows/windows-build.yml
++++ b/.github/workflows/windows-build.yml
+@@ -71,24 +71,23 @@ jobs:
+           if-no-files-found: error
+           retention-days: 14
+ 
+-  # PILOT, non-gating (v1.3): drives the installed app (WebView2) with tauri-driver +
+-  # msedgedriver and runs three journeys (apps/desktop/e2e-windows/README.md). Runs after the
+-  # installer job, so it can never stop the installer from being built and uploaded;
+-  # `continue-on-error` keeps a red pilot from failing the workflow run.
+-  # First run (45038113867) failed at session creation ("DevToolsActivePort file doesn't
+-  # exist"): this runner is elevated, and since WebView2 Runtime 150 an elevated host ignores
+-  # the WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS msedgedriver uses to open the DevTools port.
+-  # run.mjs now sets the HKLM WebView2 policy for the app's exe (and removes it afterwards),
+-  # runs the app alone first (PREFLIGHT line), tries session strategies in order (SESSION
+-  # line) and leaves a diagnosis of every failed try in the results artifact.
++  # Windows journeys against the INSTALLED app (apps/desktop/e2e-windows/README.md): tauri-driver
++  # + msedgedriver drive the WebView2 app. v1.3 pilot (P, J1–J3; the session works through the
++  # HKLM WebView2 policy, strategy "driver+policy": green on every run since). v1.4.2 adds the
++  # owner's data journeys (J4 Subtitle capture over the local API, J5 reopen, J6 backup/restore,
++  # J7 rescue of a truncated collection) and makes the job a GATE: it fails when a BLOCKING
++  # journey fails (list below, one line to change). J7 is non-blocking: it answers the native
++  # rescue message box from outside the app (a flaky native piece); its failure is a warning.
++  # Runs after the installer job, so the installer is always built and uploaded first.
+   webdriver-pilot:
+-    name: WebDriver pilot (non-gating)
++    name: Windows journeys (installed app)
+     needs: installer
+     runs-on: windows-2025
+-    continue-on-error: true
+-    timeout-minutes: 50
++    timeout-minutes: 60
+     env:
+       FC_WIN_E2E_OUT: ${{ github.workspace }}\e2e-windows-results
++      # Journeys whose failure fails this job (v1.4.2). Not J7 (native dialog): see the README.
++      FC_WIN_E2E_BLOCKING: P,J1,J2,J3,J4,J5,J6
+     steps:
+       # Only the pilot's own folder (+ root files such as rust-toolchain.toml): no pnpm, no lockfile.
+       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+@@ -116,8 +115,9 @@ jobs:
+           if (-not $exe) { throw "no installed app under $dir (per-user install expected)" }
+           Write-Host "installed: $($exe.FullName)"
+           $fc = Join-Path $dir 'fc.exe'
+-          if (Test-Path $fc) { Write-Host "fc CLI installed beside the app: $fc" } else { Write-Warning "fc.exe is not beside the installed app ($dir): Settings › MCP will not find it" }
++          if (Test-Path $fc) { Write-Host "fc CLI installed beside the app: $fc" } else { Write-Warning "fc.exe is not beside the installed app ($dir): Settings › MCP will not find it, J7 cannot fold/fall back" }
+           "FC_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
++          "FC_CLI=$fc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+       - name: Runner, WebView2 and Edge versions
+         shell: pwsh
+         run: |
+@@ -181,12 +181,13 @@ jobs:
+           $td = (Get-Command tauri-driver -ErrorAction Stop).Source
+           Write-Host "tauri-driver: $(cargo install --list | Select-String '^tauri-driver') ($td)"
+           "TAURI_DRIVER=$td" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+-      # Zero npm dependencies: Node 22's fetch speaks WebDriver to tauri-driver on 127.0.0.1:4444.
+-      # Prints PREFLIGHT / SESSION / PASS|FAIL lines (also on the run's summary page).
++      # Zero npm dependencies: Node 22's fetch speaks WebDriver to tauri-driver on 127.0.0.1:4444
++      # and the Subtitle contract to the app's local API. Prints PREFLIGHT / SESSION / PASS|FAIL
++      # lines (also on the run's summary page); exits 1 only when a blocking journey failed.
+       - name: Journeys against the installed app
+         shell: pwsh
+-        timeout-minutes: 25
+-        run: node apps/desktop/e2e-windows/run.mjs --app "$env:FC_EXE" --native-driver "$env:MSEDGEDRIVER" --tauri-driver "$env:TAURI_DRIVER" --out "$env:FC_WIN_E2E_OUT"
++        timeout-minutes: 35
++        run: node apps/desktop/e2e-windows/run.mjs --app "$env:FC_EXE" --native-driver "$env:MSEDGEDRIVER" --tauri-driver "$env:TAURI_DRIVER" --fc "$env:FC_CLI" --out "$env:FC_WIN_E2E_OUT"
+       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+         if: always()
+         with:
+diff --git a/.orchestra/v14/briefs/j-common.md b/.orchestra/v14/briefs/j-common.md
+new file mode 100644
+index 0000000..0dcf2d9
+--- /dev/null
++++ b/.orchestra/v14/briefs/j-common.md
+@@ -0,0 +1,18 @@
++# J-workers — v1.4.2: the rest of the independent reviewer's plan
++
++Read `.orchestra/v14/COMMON.md` first; it binds you. State: v1.4.1 is released on `claude/festive-einstein-8y0kld`
++(robustness round done, CI and Windows build green). Four siblings work in parallel on the items that were left.
++Rules for this round:
++- Tests must pass on Windows CI too (no Unix-only paths, no wall-clock assumptions, files closed before delete).
++- `fc-desktop` (apps/desktop/src-tauri) cannot be compiled in this container. Code you write there is read by
++  nobody but CI: keep it small, re-read it as a reviewer (clippy `-D warnings`, items after test modules, unused
++  imports), and say in the report exactly what only CI can confirm.
++- No features removed, no UI redesign, sync out of scope. Text in the UI is i18n TR/EN.
++- Do not bump the version. CHANGELOG: lines under "Unreleased (v1.4.2)". Siblings share a 4-core machine: `-j 2`,
++  `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0`.
++- `/home/user/subtitle` and `/home/user/quiz` are read-only references: never edit or commit there.
++- Never put a real key or token in the repo or in output. No model names in the repo.
++- Usual full checks before the final commit (fmt, clippy `--workspace --exclude fc-desktop --all-targets`,
++  tests you touched plus the crate's suite, gen-ts check if the API changed, pnpm check/test if the UI changed).
++  Commit on your branch, no push. Report in Turkish, short: table of what you found or built, what you ran,
++  what you could not check.
+diff --git a/.orchestra/v14/briefs/j1-independent-review.md b/.orchestra/v14/briefs/j1-independent-review.md
+new file mode 100644
+index 0000000..a77e143
+--- /dev/null
++++ b/.orchestra/v14/briefs/j1-independent-review.md
+@@ -0,0 +1,22 @@
++# J1: independent code review of the write path, with fixes
++
++Read `j-common.md`. You did not write this code; review it as an outsider whose job is to find where the owner's
++cards or study history can be lost, corrupted or wrongly changed. Three areas, in this order:
++
++1. **SQLite writes** (`crates/fc-storage/src/sqlite/`, `store.rs`, migrations): transaction boundaries, anything
++   written outside a transaction, the background WAL checkpoint thread, busy/locked handling, foreign keys,
++   statements built from strings, what happens when two processes (desktop app + `fc api serve` / CLI) have the
++   collection open.
++2. **Commands and undo** (`crates/fc-app`: command registry, oplog, undo/redo): a command whose inverse does not
++   restore everything it changed, side effects outside the transaction (files, media, events, indexes) that
++   survive a rollback or an undo, validation that happens after the write, batches.
++3. **Plugins** (`crates/fc-plugins/src/runtime.rs`, `crates/fc-app/src/modules/plugins/host.rs`): what a plugin can
++   ask the host for, whether every host call checks the granted permission, resource limits (time, memory,
++   output size), path and URL handling, what a hostile plugin package can do at install time.
++
++For each finding: prove it with a failing test first where it can be tested, then fix it, keep the test. Rank
++findings (data loss > wrong data > crash > hardening). Do not report style. A finding you cannot fix within this
++task goes into the report with file:line and a concrete failure scenario. Write the review to
++`docs/15-bagimsiz-inceleme.md` (Turkish, short: what was read, findings table with status, what was not read) and
++link it from `docs/README.md`. You may use sub-agents to read the three areas in parallel, but verify every
++finding yourself before fixing it. If you find nothing in an area, say so and say what you read.
+diff --git a/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md b/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md
+new file mode 100644
+index 0000000..25249a5
+--- /dev/null
++++ b/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md
+@@ -0,0 +1,42 @@
++# J2: installed-app journeys on Windows, and the Subtitle check that cannot silently skip
++
++Read `j-common.md`. Two CI jobs, both verified only by CI (I, the orchestrator, push your branch's commits to the
++main branch and send you the failing logs; write the code so the first run has a real chance).
++
++## A. Windows installed-app journeys (`apps/desktop/e2e-windows/run.mjs`, `.github/workflows/windows-build.yml`)
++
++Today the pilot runs P and J1–J3 against the installed app through WebDriver, as non-blocking work. Read it and its
++README first, then add the journeys the reviewer asked for, each checking the saved result by reading it back
++(through the app or the local API, as the existing journeys do):
++
++1. **Capture**: with the app running, a Subtitle capture sent to the local API (the same request the extension
++   sends: pairing, then a word with its sentence and media) shows up in the app as a card with its encounter.
++2. **Reopen**: close the app, start it again; the card, the review done before closing and the encounter are there.
++3. **Backup and restore**: make a backup from the app, change something, restore, the change is gone and the
++   earlier state is back.
++4. **Rescue**: stop the app, damage the collection file (truncate it), start the app: the rescue dialog's choice
++   leads to a working collection restored from the verified backup. The dialog is a native one (rfd): if WebDriver
++   cannot drive it, find how the code can be driven in a test without weakening the product (for example the
++   existing `fc rescue` path for the choice plus the installed app for the result) and say plainly what is and is
++   not covered. Do not add a hidden test-only switch to the release build without saying so in the report.
++
++Keep each journey independent and its failure message useful (what was expected, what was read back, screenshot).
++Decide with reasons whether the new journeys block the build: a journey that is stable should block, one that
++depends on a flaky native piece stays non-blocking and is named as such. Update `apps/desktop/e2e-windows/README.md`.
++
++## B. Subtitle client check in `ci.yml` (around line 223)
++
++The job checks out `ardacarofficial/subtitle` with a token; when the checkout is unavailable it prints a warning
++and exits 0, so a release can go out without the real client ever being checked. Make that impossible to miss
++without making every fork or token-less run red for no reason:
++- On pushes to this repository's branches where the secret is expected: missing checkout = failed job, with a
++  message that says which secret is missing and how to set it.
++- Where the secret legitimately cannot exist (pull requests from forks): skipped, shown as skipped, not as success.
++- First find out from the workflow and its history what actually happens today on `claude/festive-einstein-8y0kld`
++  (does the checkout succeed?). If the secret is absent today, making the job fail would turn CI red until the
++  owner adds it: in that case keep the job red-capable behind one clearly named repository variable, leave it off,
++  make the job's summary say in a visible line "Subtitle client NOT checked", and put the exact steps for the owner
++  in the report. Do not guess; read the last CI logs' lines if you can, otherwise state the uncertainty.
++
++Local checks: `node --check` on the scripts, a YAML parse of both workflows, and run whatever part of `run.mjs`
++can run here against `fc dev serve` or `fc api serve` (the capture request and the read-back at least).
+diff --git a/.orchestra/v14/briefs/j3-anki-compat-and-speed.md b/.orchestra/v14/briefs/j3-anki-compat-and-speed.md
+new file mode 100644
+index 0000000..a592b91
+--- /dev/null
++++ b/.orchestra/v14/briefs/j3-anki-compat-and-speed.md
+@@ -0,0 +1,34 @@
++# J3: Anki compatibility on real decks, and an honest speed comparison
++
++Read `j-common.md`. Read `crates/fc-interop/src/anki/`, `crates/fc-app/src/modules/io/real_anki_tests.rs`,
++`docs/12-performans.md` and how CI opens our exports in real Anki first.
++
++## A. Compatibility
++
++1. `crates/fc-interop/src/anki/convert.rs` (around line 701) skips review-log entries made by manual rescheduling.
++   Decide what is right for the owner's history (import them as what they are, so intervals and due dates after
++   import match Anki's), implement it, test it with a package made by real Anki.
++2. Build a wider set of real-Anki fixtures with the `anki` Python package (the one CI already uses; install it in
++   a venv in your scratch dir, not in the repo): cloze, image occlusion, several templates per note type, sub-decks,
++   deck options with FSRS on and off, suspended/buried/flagged cards, tags with hierarchy, media with non-ASCII
++   names, filtered decks, a large review history, a scheduler-v3 collection, an old `.apkg` (schema 11) and a new
++   one (`.anki21b`, zstd). For each: import → compare with what Anki itself reports (card counts per state, due
++   dates, intervals, ease or FSRS memory state, review counts, media, tags) → export → open in Anki → compare
++   again. Every difference is either fixed, or listed with the reason it is acceptable.
++3. Write `docs/16-anki-uyum.md` (Turkish, short): the table of what round-trips exactly, what changes and why,
++   what is not supported. Link it from `docs/README.md`. Keep fixtures small enough for the repo (generate large
++   ones in the test, do not commit them).
++
++## B. Speed comparison
++
++Same machine, same data: build the 100k-note / 2M-review collection the perf suite uses, export it for Anki (or
++generate the same shape with the `anki` package), and measure Anki's own backend (through the `anki` Python
++package: open collection, build the day's queue / get the next card, answer a card, search queries equivalent to
++ours, browser page, stats, import, backup/export) against our numbers from `perf_suite_100k`. Be honest about what
++is and is not comparable (Python call overhead, UI not included on either side, different feature work per call);
++run each several times, report medians. Add the table to `docs/12-performans.md` under its own heading with the
++method and the caveats. Where Anki is clearly faster on a comparable operation, find out why and either fix it
++(with before/after numbers and no budget regressions) or explain it. No marketing sentences: numbers and caveats.
++
++If the `anki` package cannot be installed here (network policy), stop that part, say exactly which host was
++refused, and finish everything that does not need it.
+diff --git a/.orchestra/v14/briefs/j4-windows-offline-tts.md b/.orchestra/v14/briefs/j4-windows-offline-tts.md
+new file mode 100644
+index 0000000..feeb1e6
+--- /dev/null
++++ b/.orchestra/v14/briefs/j4-windows-offline-tts.md
+@@ -0,0 +1,26 @@
++# J4: offline speech on Windows
++
++Read `j-common.md`. Read `crates/fc-app/src/modules/tts.rs`, the audio-fill path (`audio_fill`, "missing audio"
++work from W4), `crates/fc-providers`, how the desktop shell wires providers, and `docs/` on TTS first.
++
++Goal: on Windows, a card's word and sentence can be spoken and missing audio can be filled with no network and no
++key, using the voices Windows already has, in the note's language (English, and whatever voices the machine has).
++
++- Find what exists today (which providers, what the UI offers, what happens offline) and say it in the report
++  before changing anything. If offline speech already works through some path, do not build a second one: close
++  the gaps instead.
++- Follow the architecture: the capability is a provider behind the existing TTS interface, chosen in the existing
++  settings; logic in Rust; the module can be turned off; `fc-core` stays pure. The Windows API (WinRT
++  `Windows.Media.SpeechSynthesis` or SAPI through the `windows` crate) lives behind `cfg(windows)` with a clear
++  "not available on this system" answer elsewhere, so the workspace still builds and tests on Linux.
++- It must produce audio bytes that the existing media path stores (so the audio fill, backup and export work as for
++  any other audio), list the installed voices, pick a voice for the note's language, and fail with a plain TR/EN
++  sentence when no voice exists for that language (with what the owner can do: install a Windows language pack).
++- Tests: everything above the system call is tested on Linux with a fake synthesiser; a `cfg(windows)` test in the
++  Windows CI job speaks one short English sentence and checks that it gets a non-empty, decodable audio file (GitHub's
++  Windows runners have English voices; if the runner has none, the test must say "no voice" clearly, not pass
++  silently and not fail the build for that reason alone).
++- The crate with the Windows code must be one CI compiles and tests on Windows (check which crates the Windows job
++  builds and tests); new dependencies only for `cfg(windows)`, checked against the lockfile and `cargo deny`/license
++  rules if the repo has them.
++- Docs: the provider in the relevant doc and the settings help text; CHANGELOG line.
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index f883d89..0a51ade 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,6 +2,10 @@
+ 
+ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
+ 
++## Unreleased (v1.4.2)
++
++- **Windows yolculukları kapı oldu, Subtitle kontrolü sessizce atlanamaz (J2):** kurulu Windows uygulamasında yeni J4 Subtitle yakalaması (yerel API) → kart + karşılaşma, J5 kapat/aç → kart, tekrar ve karşılaşma yerinde, J6 yedek → değişiklik → geri yükleme, J7 kesik koleksiyon → yerel kurtarma diyaloğu → doğrulanmış yedek; P, J1–J6 başarısızsa `webdriver-pilot` işi kırmızı, J7 (yerel diyalog) uyarı; J4–J7 `local-check.mjs` ile her makinede `fc dev serve` + `fc api serve` üstünde de koşar. `ci.yml`: gerçek Subtitle istemcisi çekilemezse adım "atlandı" görünür ve özet "Subtitle client NOT checked" der; `SUBTITLE_CHECK_REQUIRED=true` depo değişkeniyle kırmızı. _(J2)_
++
+ ## [1.4.1] — sağlamlık turu: verinin kaybolmadığının kanıtı
+ 
+ Workspace sürümü `1.4.1`. Bağımsız bir inceleme v1.4.0'ı okudu ve işi tek soruya indirdi: bir arızadan sonra kartların ve çalışma geçmişi geri geliyor mu? Bu sürüm bunu testlerle kanıtlar: gerçek süreçler yazmanın ortasında öldürüldü, disk dolduruldu, koleksiyon bozuldu, dosyalar ve istekler rastgele bozuldu. Yeni özellik yok; bulunan hatalar düzeltildi. Migration yok.
+diff --git a/apps/desktop/e2e-windows/README.md b/apps/desktop/e2e-windows/README.md
+index bd7a3da..cc317e5 100644
+--- a/apps/desktop/e2e-windows/README.md
++++ b/apps/desktop/e2e-windows/README.md
+@@ -1,17 +1,51 @@
+-# Windows WebDriver pilot (v1.3)
++# Windows journeys against the installed app (v1.3 pilot → v1.4.2 gate)
+ 
+-A **pilot**, not a gate: three journeys of the Linux suite (`../e2e`) run against the
++Journeys of the Linux suite (`../e2e`) and the owner's data journeys run against the
+ **installed** Windows app (NSIS, per-user, WebView2) through
+ [`tauri-driver`](https://v2.tauri.app/develop/tests/webdriver/) and a `msedgedriver` that
+-matches the WebView2 runtime. It runs in the `webdriver-pilot` job of
+-`.github/workflows/windows-build.yml` (`continue-on-error: true`, after the installer job).
++matches the WebView2 runtime. They run in the `webdriver-pilot` job ("Windows journeys
++(installed app)") of `.github/workflows/windows-build.yml`, after the installer job.
+ 
+-**Status: not green yet.** The first CI run (45038113867) installed the app and matched the
+-driver (WebView2 157.0.4341.46, tauri-driver 2.1.0) but could not create a session:
+-`session not created: DevToolsActivePort file doesn't exist`. The likely cause and the fix
+-below were worked out by reading (the tauri-driver 2.1.0 / wry / Tauri sources and public
+-WebView2 reports); **nothing here has run on Windows since.** The next run says which
+-session strategy worked (or why none did); the journeys themselves have never run yet.
++**Status.** P and J1–J3 have been green on every run since the session fix below (11 runs in a
++row up to 45206222145; session via `driver+policy` in ~1.5 s). v1.4.2 adds J4–J7 and makes the
++job a **gate**: it fails when a *blocking* journey fails. J4–J7 were written and their requests
++and read-backs checked on Linux (`local-check.mjs`, below); **their first Windows run is the next
++CI run.**
++
++## Which journeys block, and why
++
++| Journey | Blocks? | Why |
++|---|---|---|
++| P, J1–J3 | yes | Green on every run since the session strategy was fixed |
++| J4 capture, J5 reopen, J6 backup/restore | yes | Only the same machinery as J1–J3: the WebDriver session, the app's IPC, a loopback HTTP request, an app restart through the same session strategy. No native UI |
++| J7 rescue | **no** (warning) | Answers a **native Win32 message box** from outside the app and damages files of a killed app: the flaky native piece |
++
++The list is one line in the workflow (`FC_WIN_E2E_BLOCKING: P,J1,J2,J3,J4,J5,J6`; `--blocking`
++locally). A failed session or setup always fails the job. A non-blocking failure prints a
++`::warning` and `WARNING: non-blocking J7 failed` on the final line and the run's summary page.
++
++## What J7 covers, and what it does not
++
++The rescue dialog is shown by the shell **before any window** (`src-tauri/src/session.rs` →
++`maintenance.rs::offer_rescue`) with rfd 0.15 without `common-controls-v6`, i.e. a plain
++`MessageBoxW`: the three labels become **Yes / No / Cancel**, and Yes = "restore the newest
++verified backup". WebDriver cannot see it (no webview yet). J7 answers it the way a click does,
++from outside: while msedgedriver waits for the webview, `win.mjs::answerAppDialog` finds the
++app's `#32770` window, takes a desktop screenshot (`j7-damaged-dialog-1.png`), posts
++`WM_COMMAND IDYES`, then `IDOK` to the "rescued" box. **No test switch was added to the app**;
++the release build is unchanged. The PASS line names the path taken (`rescued by: …`):
++
++| `rescued_by` | Covered | Not covered |
++|---|---|---|
++| `native dialog: Yes …` | the real dialog, the real choice, the shell's rescue, the result in the installed app | a human click (a posted `WM_COMMAND` is what the button sends, not a mouse) |
++| `in-app rescue …` | the truncated file still opened; its integrity check failed; Maintenance → `maintenance.rescue.request` → restart → rescue | the native dialog (not shown in that case) |
++| `FALLBACK fc rescue --from backup …` | the same `rescue()` through the installed `fc.exe`, the result in the installed app | **the dialog**: it was not answered or the app did not come up after it |
++
++Before damaging, J7 makes a verified backup in `backups/`, writes one more note, stops the
++app, folds the write-ahead log into the file with the installed `fc.exe` (so the damage is not
++masked by pages still waiting in the log), and truncates `collection.db` to 2/5. After: the
++backup's notes are back, the later note is gone, `damaged/<time>/collection.db` is the
++truncated file byte-for-byte in size, the full integrity check passes, a new note is read back.
+ 
+ ## Why the session failed, and what the pilot does about it
+ 
+@@ -70,13 +104,33 @@ done blindly.
+ | J1 | The app launches, the shell and Home (`home-start`) render | DOM |
+ | J2 | Quick Add: `N`, type front, `Tab`, type back, `Ctrl+Enter` (as J1 in `../e2e`) | `notes.list` / `notes.get`: one note, exact fields, chosen deck |
+ | J3 | Home → `Enter` → launcher → `Enter` → `Space`×3 → `2` (as S1 in `../e2e`) | `study.session`: exactly one answered; `study.card_history`: one review |
++| J4 | Subtitle module on, an access key made (`subtitle.keys.create`, Settings › Subtitle); the extension's pairing (`GET /subtitle/v1/me` with the key), picture + sound (`POST /v1/media`), the word with its sentence (`POST /v1/captures`, `Idempotency-Key`) to the **app's** local API; the resend | `201 created` / `200 duplicate` with the same card; `notes.get`: the note owns that card, word highlighted in the sentence, two media fields; `subtitle.encounters.list`: the capture is the primary encounter, video and time kept |
++| J5 | A capture into its own deck, one review (`study.start` / `study.answer good`), the app **closed** (WM_CLOSE, then forced) and **started again** | after the restart: the same note/card/encounter (as J4), `study.card_history`: exactly that one review (rating, session) |
++| J6 | Two notes, `io.backup.create` (the job), then a note added and one edited, `io.backup.restore` (safety backup into the results), page reloaded | the deck holds exactly the backup's two notes, the edit is undone, the safety backup exists |
++| J7 | See above: verified backup, a later note, app stopped, file truncated, app started, rescue answered | the backup's state, the later note gone, the damaged file kept, integrity check OK, a new write read back |
++
++Every journey makes its own decks, key and capture, so one failing does not take the next with
++it; a journey that finds no session (a restart before it failed) starts the app again first.
++On failure: what was expected and what was read back, a screenshot and the DOM
++(`<id>-fail.png/html`), and `summary.json` → `journeys[].facts`.
++
++`data-journeys.mjs` holds J4–J7 without WebDriver: they get the app's API, "close/start the
++app" and "start on a damaged collection" from the runner. `local-check.mjs` runs them on any
++machine against `fc dev serve` (same dispatch as the IPC) + `fc api serve` (the same HTTP server
++the app runs) on a temporary collection; there "start on a damaged collection" is
++`fc rescue --from backup` (no native dialog off Windows):
++
++```bash
++cargo build -p fc-cli
++node apps/desktop/e2e-windows/local-check.mjs            # J4–J7; --only J4,J6
++```
+ 
+ No npm dependencies: `webdriver.mjs` is a small W3C WebDriver client on Node 22's `fetch`;
+ `win.mjs` holds the Windows helpers (policy, processes, windows, desktop screenshot, CDP
+-probe; PowerShell/`reg.exe`, never throwing); `run.mjs` runs the preflight, gets a session
++probe, answering the app's native message box; PowerShell/`reg.exe`, never throwing); `run.mjs` runs the preflight, gets a session
+ (above), runs the journeys, writes `summary.json`, screenshots (and the DOM of a failed
+ step) and the logs to the output dir, prints a `PASS`/`FAIL` line per journey (also on the
+-workflow run's summary page), exits 1 when anything failed, and always stops tauri-driver
++workflow run's summary page), exits 1 when a blocking journey (or the setup) failed, and always stops tauri-driver
+ and the app. Step P also dismisses the crash-recovery offer a forced stop leaves behind
+ (`maintenance.recovery.dismiss`), so it cannot cover Home. IPC calls go through
+ `window.__TAURI_INTERNALS__.invoke('invoke', { command: 'v1.<method>', payload })`, the same
+@@ -86,7 +140,7 @@ journeys use; no visible text is matched (the UI language follows the OS).
+ ## Run locally (Windows)
+ 
+ The app always opens the real per-user profile (`%APPDATA%\app.flashcard.desktop`) and the
+-pilot adds decks to it. **Use a throwaway Windows user or VM**; `run.mjs` refuses to start
++pilot adds decks to it (and J7 truncates its collection file, J6 restores a backup over it). **Use a throwaway Windows user or VM**; `run.mjs` refuses to start
+ when that folder exists (outside CI) unless `FC_WIN_E2E_ALLOW_EXISTING_PROFILE=1`. Close any
+ running Flashcard first (single instance).
+ 
+@@ -100,7 +154,9 @@ node apps/desktop/e2e-windows/run.mjs --app "$env:LOCALAPPDATA\Flashcard\<app>.e
+   --native-driver .\msedgedriver\msedgedriver.exe
+ ```
+ 
+-Options (or env): `--app` (`FC_EXE`), `--native-driver` (`MSEDGEDRIVER`), `--tauri-driver`
++Options (or env): `--app` (`FC_EXE`), `--fc` (`FC_CLI`, default `fc.exe` beside the app),
++`--blocking P,J1,…` (`FC_WIN_E2E_BLOCKING`), `--only J4,J6` (`FC_WIN_E2E_ONLY`: those + P/J1),
++`--native-driver` (`MSEDGEDRIVER`), `--tauri-driver`
+ (`TAURI_DRIVER`, default `tauri-driver` on `PATH`), `--out` (`FC_WIN_E2E_OUT`, default
+ `e2e-windows/.results`), `--port` (`FC_WIN_E2E_PORT`, default 4444; msedgedriver gets port+1),
+ `--cdp-port` (`FC_WIN_E2E_CDP_PORT`, default 9333), `--strategy driver+policy|attach+policy|driver`
+diff --git a/apps/desktop/e2e-windows/data-journeys.mjs b/apps/desktop/e2e-windows/data-journeys.mjs
+new file mode 100644
+index 0000000..779bca6
+--- /dev/null
++++ b/apps/desktop/e2e-windows/data-journeys.mjs
+@@ -0,0 +1,395 @@
++/**
++ * v1.4.2 journeys J4–J7 of the Windows run (./README.md): what the owner's data goes through —
++ * a Subtitle capture arriving over the local API, the app closed and opened again, a backup
++ * restored, a damaged collection rescued. Each one checks the SAVED result by reading it back
++ * through the app's own API.
++ *
++ * The journeys know nothing about WebDriver: they get an `env` with the app's API (`rpc`), how
++ * to close and start the app, and (optionally) a UI. `run.mjs` gives them the installed app
++ * (IPC through WebView2, the app started by msedgedriver, the native rescue dialog);
++ * `local-check.mjs` gives them `fc dev serve` + `fc api serve` on a temporary collection, so the
++ * requests and read-backs are checked on any machine before Windows CI runs them.
++ *
++ *   env.rpc(method, params)       one public API call, as the UI makes it
++ *   env.ui                        null, or { ready(), reload(), shot(name) } (the installed app)
++ *   env.closeApp(label)           the app stops (its files are closed afterwards)
++ *   env.startApp(label)           the app starts again and its API answers
++ *   env.startDamaged(label)       the app starts on a damaged collection: drives the rescue
++ *                                 choice (restore the verified backup), returns
++ *                                 `{ rescued_by, ... }` once the app answers
++ *   env.fc(args)                  the `fc` CLI shipped with the app → stdout
++ *   env.out                       results folder (backups of J6 go there)
++ *   env.tag                       unique per run
++ *   env.log(...)                  progress line
++ *
++ * Zero npm dependencies (Node 22: global fetch).
++ */
++import { existsSync, mkdirSync, readdirSync, statSync, truncateSync } from 'node:fs';
++import { join } from 'node:path';
++import { setTimeout as sleep } from 'node:timers/promises';
++
++/** The built-in Classic note type (same constant as ../e2e/fixtures.ts). */
++const CLASSIC_NOTETYPE_ID = '01900000-0000-7000-8000-000000000001';
++
++/** A one-pixel JPEG and a tiny WAV header: what the extension uploads (base64 in its outbox). */
++const JPEG = Buffer.from(
++  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAAA//EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AP//Z',
++  'base64',
++);
++const WAV = Buffer.concat([Buffer.from('RIFF'), Buffer.from([36, 0, 0, 0]), Buffer.from('WAVEfmt '), Buffer.alloc(24)]);
++
++/** A failed expectation: what was expected and what was read back. */
++export function expect(cond, expected, readBack) {
++  if (!cond) {
++    const got = typeof readBack === 'string' ? readBack : JSON.stringify(readBack);
++    throw new Error(`expected ${expected}; read back: ${got?.slice(0, 800)}`);
++  }
++}
++
++/** Polls `fn` until it returns something truthy (no fixed sleeps). */
++export async function until(what, fn, timeoutMs = 30_000, intervalMs = 250) {
++  const end = Date.now() + timeoutMs;
++  let last;
++  for (;;) {
++    try {
++      const v = await fn();
++      if (v) return v;
++      last = v;
++    } catch (e) {
++      last = e;
++    }
++    if (Date.now() > end) {
++      const detail = last instanceof Error ? last.message : JSON.stringify(last);
++      throw new Error(`timed out after ${timeoutMs / 1000}s waiting for ${what} (last: ${String(detail).slice(0, 600)})`);
++    }
++    await sleep(intervalMs);
++  }
++}
++
++/** A UUIDv7-shaped id (the extension's capture ids are UUIDv7). */
++function captureId() {
++  const hex = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
++  const ms = Date.now().toString(16).padStart(12, '0').slice(-12);
++  return `${ms.slice(0, 8)}-${ms.slice(8, 12)}-7${hex.slice(13, 16)}-${((parseInt(hex[16], 16) & 3) | 8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
++}
++
++/** Waits for a background job (`jobs.get`) to finish; its result, or the job's error. */
++export async function job(env, started, what, timeoutMs = 180_000) {
++  const done = await until(
++    `${what} (job ${started.id})`,
++    async () => {
++      const j = await env.rpc('jobs.get', { id: started.id });
++      return j.status === 'succeeded' || j.status === 'failed' || j.status === 'cancelled' ? j : null;
++    },
++    timeoutMs,
++    500,
++  );
++  expect(done.status === 'succeeded', `${what} to succeed`, { status: done.status, error: done.error });
++  return done.result;
++}
++
++/** Notes of a deck with their fields and cards. */
++export async function notesIn(env, deckId) {
++  const page = await env.rpc('notes.list', { deck_id: deckId, include_subdecks: false, page: { cursor: null, limit: null } });
++  const out = [];
++  for (const n of page.items) out.push(await env.rpc('notes.get', { id: n.id }));
++  return out;
++}
++
++async function deckWith(env, name, pairs = []) {
++  const deck = await env.rpc('decks.create', { path: name, parent_id: null });
++  for (const [front, back] of pairs) {
++    await env.rpc('notes.create', { notetype_id: CLASSIC_NOTETYPE_ID, deck_id: deck.id, fields: { front, back }, tags: [], attributes: [] });
++  }
++  return deck.id;
++}
++
++const fronts = (notes) => notes.map((n) => n.fields.front).sort();
++
++// ------------------------------------------------------------------ the Subtitle extension
++
++/**
++ * What the extension does, on the wire: the user turns the Subtitle module on and makes an
++ * access key in the app (Settings › Subtitle: `subtitle.keys.create`); pairing in the extension
++ * is the server address + that key and its connection test (`GET /v1/me`); a capture uploads
++ * its picture and sound (`POST /v1/media`) and then the word with its sentence
++ * (`POST /v1/captures`, `Idempotency-Key` = capture id). Requests exactly as the extension's
++ * `src/flashcards/api.ts` makes them (tools/subtitle-contract runs that file itself on Linux CI).
++ */
++export async function pairExtension(env, name) {
++  await env.rpc('modules.set_enabled', { id: 'subtitle', enabled: true });
++  const { secret } = await env.rpc('subtitle.keys.create', { name });
++  const status = await env.rpc('subtitle.status', {});
++  const base = status.address; // http://127.0.0.1:<port>/subtitle
++  const call = async (path, init = {}) => {
++    const res = await fetch(`${base}${path}`, {
++      ...init,
++      headers: { Accept: 'application/json', Authorization: `Bearer ${secret}`, ...init.headers },
++      signal: AbortSignal.timeout(20_000),
++    });
++    const text = await res.text();
++    let body = null;
++    try {
++      body = text ? JSON.parse(text) : null;
++    } catch {
++      body = text;
++    }
++    return { status: res.status, body };
++  };
++  // The app starts its server within a couple of seconds of the module switch (it polls).
++  const me = await until(`GET ${base}/v1/me answers 200 (the extension's connection test)`, async () => {
++    const r = await call('/v1/me').catch((e) => ({ status: 0, body: e?.cause?.code ?? e.message }));
++    return r.status === 200 ? r : null;
++  });
++  expect(me.body?.user?.name === name, `GET /v1/me to name the key "${name}"`, me);
++  return { base, secret, call, me: me.body };
++}
++
++/** One capture as the extension sends it: picture, sound, then the word with its sentence. */
++export async function sendCapture(ext, { term, lemma, meaning, sentence, translation, deckId, videoId, tStart }) {
++  const id = captureId();
++  const media = {};
++  for (const [kind, mime, bytes] of [
++    ['screenshot', 'image/jpeg', JPEG],
++    ['audio', 'audio/wav', WAV],
++  ]) {
++    const r = await ext.call('/v1/media', { method: 'POST', headers: { 'Content-Type': mime, 'X-Capture-Id': id, 'X-Media-Kind': kind }, body: bytes });
++    expect(r.status === 200 || r.status === 201, `POST /v1/media (${kind}) to be accepted`, r);
++    expect(typeof r.body?.upload_id === 'string', `POST /v1/media (${kind}) to answer an upload_id`, r);
++    media[kind] = { upload_id: r.body.upload_id, mime };
++  }
++  const at = sentence.indexOf(term);
++  const capture = {
++    schema: 1,
++    capture_id: id,
++    kind: 'word',
++    lang: { target: 'en', native: 'tr' },
++    term: { surface: term, lemma, pos: 'noun' },
++    definition: { text: meaning, source: 'dict' },
++    context: { sentence, translation, term_offset: [at, at + term.length] },
++    source: {
++      type: 'video',
++      url: `https://www.youtube.com/watch?v=${videoId}`,
++      title: 'Windows journey',
++      site: 'youtube',
++      video_id: videoId,
++      t_start_ms: tStart,
++      t_end_ms: tStart + 2500,
++    },
++    media,
++    deck_id: deckId,
++    tags: ['subtitle'],
++    created_at: new Date().toISOString(),
++    client: { name: 'subtitle-extension', ext_version: 'windows-journey' },
++  };
++  const r = await ext.call('/v1/captures', {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': id },
++    body: JSON.stringify(capture),
++  });
++  expect(r.status === 201 && r.body?.status === 'created', 'POST /v1/captures → 201 {"status":"created"}', r);
++  return { id, card_id: r.body.card_id, capture };
++}
++
++/** The capture's note in `deckId`, its card, and its encounter, read back through the app. */
++async function readCapture(env, deckId, sent, term) {
++  const notes = await notesIn(env, deckId);
++  expect(notes.length === 1, `exactly one note in the capture's deck`, notes.map((n) => n.fields));
++  const note = notes[0];
++  const cardIds = note.cards.map((c) => c.id);
++  expect(cardIds.includes(sent.card_id), `the note to own card ${sent.card_id} (the id POST /v1/captures answered)`, cardIds);
++  const values = Object.values(note.fields).join(' | ');
++  expect(values.includes(term), `the note's fields to hold the word "${term}"`, note.fields);
++  expect(values.includes(`<b>${term}</b>`), `the sentence with "${term}" highlighted`, note.fields);
++  const media = Object.values(note.fields).filter((v) => typeof v === 'string' && v.startsWith('media:'));
++  expect(media.length >= 2, 'the picture and the sound as media fields', note.fields);
++  const { encounters } = await env.rpc('subtitle.encounters.list', { note_id: note.id });
++  const mine = encounters.find((e) => e.capture_id === sent.id);
++  expect(mine, `an encounter with capture id ${sent.id}`, encounters);
++  expect(mine.is_primary === true, 'the encounter to be the primary one', mine);
++  expect(mine.facts?.video_id === sent.capture.source.video_id, `the encounter's video ${sent.capture.source.video_id}`, mine.facts);
++  expect(mine.facts?.t_end_ms === sent.capture.source.t_end_ms, `the encounter's end time ${sent.capture.source.t_end_ms}`, mine.facts);
++  return { note, encounters };
++}
++
++// ------------------------------------------------------------------ J4 capture
++
++/** J4: with the app running, a capture sent to its local API is a card with its encounter. */
++export async function j4Capture(env, facts) {
++  const deckId = await deckWith(env, `pilot_capture_${env.tag}`);
++  const ext = await pairExtension(env, `windows journey ${env.tag}`);
++  facts.address = ext.base;
++  facts.me = ext.me;
++  const term = 'lighthouse';
++  const sent = await sendCapture(ext, {
++    term,
++    lemma: term,
++    meaning: 'deniz feneri',
++    sentence: `Keep the ${term} burning tonight.`,
++    translation: 'Bu gece deniz fenerini yanık tut.',
++    deckId,
++    videoId: 'pilotJ4cap',
++    tStart: 61_000,
++  });
++  facts.capture = { id: sent.id, card_id: sent.card_id };
++  // The same request again (the extension's outbox resends after a lost answer): no new card.
++  const again = await ext.call('/v1/captures', {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': sent.id },
++    body: JSON.stringify(sent.capture),
++  });
++  expect(again.status === 200 && again.body?.status === 'duplicate' && again.body?.card_id === sent.card_id, 'the resend → 200 {"status":"duplicate"} with the same card', again);
++  const { note, encounters } = await readCapture(env, deckId, sent, term);
++  facts.note = note.id;
++  facts.encounters = encounters.length;
++  // The app sees it as the owner would: the recent captures list (Settings › Subtitle).
++  const recent = await env.rpc('subtitle.captures.recent', {}).catch((e) => ({ error: e.message }));
++  facts.recent = recent?.attempts?.length ?? recent;
++  if (env.ui) {
++    await env.ui.reload();
++    await env.ui.ready();
++  }
++}
++
++// ------------------------------------------------------------------ J5 reopen
++
++/** J5: a captured card, reviewed once; the app closes and starts again; all three are there. */
++export async function j5Reopen(env, facts) {
++  const deckId = await deckWith(env, `pilot_reopen_${env.tag}`);
++  const ext = await pairExtension(env, `windows reopen ${env.tag}`);
++  const term = 'harbour';
++  const sent = await sendCapture(ext, {
++    term,
++    lemma: term,
++    meaning: 'liman',
++    sentence: `The ship waited outside the ${term} all night.`,
++    translation: 'Gemi bütün gece limanın dışında bekledi.',
++    deckId,
++    videoId: 'pilotJ5reo',
++    tStart: 125_000,
++  });
++  const tz = -new Date().getTimezoneOffset();
++  const session = await env.rpc('study.start', { kind: 'normal', deck_id: deckId, tz_offset_mins: tz });
++  const card = session.current?.card_id;
++  expect(card, 'the new session to show a card of the capture', session);
++  const after = await env.rpc('study.answer', { session_id: session.id, card_id: card, rating: 'good', duration_ms: 2000 });
++  expect(after.answered === 1, 'answered = 1 after one answer', after);
++  await env.rpc('study.end', { session_id: session.id }).catch(() => undefined);
++  const before = await env.rpc('study.card_history', { card_id: card });
++  expect(before.reviews.length === 1, 'one review before closing', before.reviews);
++  facts.before = { card, reviews: before.reviews.length, state: before.card?.state, capture: sent.id };
++
++  await env.closeApp('j5-close');
++  await env.startApp('j5-reopen');
++
++  const { note } = await readCapture(env, deckId, sent, term);
++  const history = await env.rpc('study.card_history', { card_id: card });
++  facts.after = { reviews: history.reviews.length, rating: history.reviews[0]?.rating, state: history.card?.state };
++  expect(history.reviews.length === 1, 'the review done before closing (exactly one)', history.reviews);
++  expect(history.reviews[0].rating === 'good' && history.reviews[0].session_id === session.id, `the review: rating good, session ${session.id}`, history.reviews[0]);
++  expect(note.cards.some((c) => c.id === card), `card ${card} still on the note`, note.cards);
++  if (env.ui) await env.ui.ready();
++}
++
++// ------------------------------------------------------------------ J6 backup + restore
++
++/** J6: backup, a change, restore: the change is gone and the earlier state is back. */
++export async function j6BackupRestore(env, facts) {
++  const deckId = await deckWith(env, `pilot_backup_${env.tag}`, [
++    ['anchor', 'çapa'],
++    ['sail', 'yelken'],
++  ]);
++  const path = join(env.out, `j6-${env.tag}.fcbackup`);
++  const report = await job(env, await env.rpc('io.backup.create', { path }), 'io.backup.create');
++  facts.backup = { path: report?.path, bytes: report?.bytes, notes: report?.notes };
++  expect(existsSync(path), `the backup file at ${path}`, report);
++
++  // The change: one more note, one note edited.
++  await env.rpc('notes.create', { notetype_id: CLASSIC_NOTETYPE_ID, deck_id: deckId, fields: { front: 'rudder', back: 'dümen' }, tags: [], attributes: [] });
++  const sail = (await notesIn(env, deckId)).find((n) => n.fields.front === 'sail');
++  await env.rpc('notes.update', { id: sail.id, fields: { front: 'sail', back: 'CHANGED' }, tags: [], attributes: [] });
++  const changed = await notesIn(env, deckId);
++  expect(fronts(changed).join() === 'anchor,rudder,sail', 'three notes after the change', fronts(changed));
++
++  const safety = join(env.out, `j6-${env.tag}-pre-restore.fcbackup`);
++  const restored = await job(env, await env.rpc('io.backup.restore', { path, safety_backup_path: safety }), 'io.backup.restore');
++  facts.restore = { safety: restored?.safety_backup_path, counts: restored?.counts };
++  if (env.ui) {
++    // The UI reloads after a restore (Settings › Backup does the same).
++    await env.ui.reload();
++    await env.ui.ready();
++  }
++  const back = await notesIn(env, deckId);
++  facts.after = back.map((n) => n.fields);
++  expect(fronts(back).join() === 'anchor,sail', 'the two notes of the backup, "rudder" gone', fronts(back));
++  const sailBack = back.find((n) => n.fields.front === 'sail');
++  expect(sailBack.fields.back === 'yelken', 'the edit undone by the restore (back = "yelken")', sailBack.fields);
++  expect(existsSync(safety), `the safety backup of the state before the restore at ${safety}`, restored);
++}
++
++// ------------------------------------------------------------------ J7 rescue
++
++/** Folder of the collection and the file. */
++async function collectionFile(env) {
++  const st = await env.rpc('maintenance.status', {});
++  expect(st.data_dir, 'maintenance.status.data_dir (the collection folder)', st);
++  const db = join(st.data_dir, 'collection.db');
++  expect(existsSync(db), `the collection file ${db}`, st.data_dir);
++  return { dir: st.data_dir, db };
++}
++
++/**
++ * J7: a verified backup, a later change, the app stopped, the collection file truncated, the
++ * app started: the rescue choice "restore the backup" leads to a working collection holding the
++ * backup's state; the damaged file is kept in `damaged/`.
++ */
++export async function j7Rescue(env, facts) {
++  const { dir, db } = await collectionFile(env);
++  facts.db = db;
++  const deckId = await deckWith(env, `pilot_rescue_${env.tag}`, [['compass', 'pusula']]);
++  // A verified backup where the rescue looks (`backups/`, and `status.json` records it).
++  mkdirSync(join(dir, 'backups'), { recursive: true });
++  const path = join(dir, 'backups', `pilot-rescue-${env.tag}.fcbackup`);
++  const report = await job(env, await env.rpc('io.backup.create', { path }), 'io.backup.create');
++  facts.backup = report?.path;
++  const status = await env.rpc('io.backup.status', {});
++  facts.last_verified = status.last_verified?.path ?? null;
++  await env.rpc('notes.create', { notetype_id: CLASSIC_NOTETYPE_ID, deck_id: deckId, fields: { front: 'after-backup', back: 'kaybolur' }, tags: [], attributes: [] });
++
++  await env.closeApp('j7-stop');
++  // Fold the write-ahead log into the file first (the last connection to close checkpoints it),
++  // so the damage below cannot be masked by pages still waiting in the log.
++  facts.fold = env.fc(['--db', db, '--json', 'call', 'maintenance.status', '{}']).slice(0, 200) ? 'ok' : 'empty';
++  const wal = `${db}-wal`;
++  facts.wal_after_fold = existsSync(wal) ? statSync(wal).size : null;
++  if (facts.wal_after_fold) truncateSync(wal, 0);
++  const size = statSync(db).size;
++  truncateSync(db, Math.floor((size * 2) / 5));
++  facts.truncated = { from: size, to: statSync(db).size };
++  // What `fc rescue` sees (read-only): does the file still open, does it pass its check.
++  try {
++    facts.health = JSON.parse(env.fc(['--db', db, 'rescue'])).health;
++  } catch (e) {
++    facts.health = `fc rescue (check) failed: ${e.message}`;
++  }
++  const damagedBefore = existsSync(join(dir, 'damaged')) ? readdirSync(join(dir, 'damaged')) : [];
++
++  const how = await env.startDamaged('j7-damaged', { db, dir });
++  Object.assign(facts, how);
++
++  // The result, read back from the app that now runs on the rescued collection.
++  const notes = await notesIn(env, deckId);
++  facts.after = notes.map((n) => n.fields.front);
++  expect(fronts(notes).join() === 'compass', 'the backup\'s state: "compass" only ("after-backup" was written after the backup)', fronts(notes));
++  const damaged = existsSync(join(dir, 'damaged')) ? readdirSync(join(dir, 'damaged')).filter((d) => !damagedBefore.includes(d)) : [];
++  expect(damaged.length === 1, `one new folder in ${join(dir, 'damaged')} with the damaged file`, damaged);
++  const kept = join(dir, 'damaged', damaged[0], 'collection.db');
++  expect(existsSync(kept) && statSync(kept).size === facts.truncated.to, `the damaged file kept as it was (${facts.truncated.to} bytes) at ${kept}`, existsSync(kept) ? statSync(kept).size : 'missing');
++  facts.kept_in = join(dir, 'damaged', damaged[0]);
++  // It works: integrity, and a write read back.
++  const check = await env.rpc('maintenance.integrity.check', { quick: false });
++  expect(check.ok === true, 'the rescued collection to pass its integrity check', check);
++  await env.rpc('notes.create', { notetype_id: CLASSIC_NOTETYPE_ID, deck_id: deckId, fields: { front: 'after-rescue', back: 'yeni' }, tags: [], attributes: [] });
++  expect(fronts(await notesIn(env, deckId)).join() === 'after-rescue,compass', 'a note written after the rescue to be read back', fronts(await notesIn(env, deckId)));
++  if (env.ui) await env.ui.ready();
++}
+diff --git a/apps/desktop/e2e-windows/local-check.mjs b/apps/desktop/e2e-windows/local-check.mjs
+new file mode 100644
+index 0000000..be3183f
+--- /dev/null
++++ b/apps/desktop/e2e-windows/local-check.mjs
+@@ -0,0 +1,148 @@
++#!/usr/bin/env node
++/**
++ * The data journeys J4–J7 of the Windows run (./data-journeys.mjs) on ANY machine, against the
++ * real Rust core: `fc dev serve` (the dev bridge: the same dispatch as the desktop IPC) plus
++ * `fc api serve` (the same local HTTP server the app runs for the Subtitle extension) on a
++ * temporary collection. No UI, no WebDriver: it checks the requests the journeys send and the
++ * read-backs they make, so the Windows run cannot fail on a wrong method name or payload.
++ *
++ *   cargo build -p fc-cli
++ *   node apps/desktop/e2e-windows/local-check.mjs [--fc target/debug/fc] [--only J4,J6]
++ *
++ * "Close the app" here stops both processes; "start on a damaged collection" runs the CLI's
++ * `fc rescue --from backup` (the same `rescue()` the app's native dialog calls) and starts them
++ * again — the native dialog itself only exists in the installed app (run.mjs drives it).
++ */
++import { execFileSync, spawn } from 'node:child_process';
++import { existsSync, mkdtempSync, rmSync } from 'node:fs';
++import { createServer } from 'node:net';
++import { tmpdir } from 'node:os';
++import { dirname, join, resolve } from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { j4Capture, j5Reopen, j6BackupRestore, j7Rescue, until } from './data-journeys.mjs';
++
++const here = dirname(fileURLToPath(import.meta.url));
++const arg = (name) => {
++  const i = process.argv.indexOf(`--${name}`);
++  return i > 0 ? process.argv[i + 1] : undefined;
++};
++const FC = resolve(arg('fc') ?? process.env.FC_BIN ?? join(here, '../../../target/debug', process.platform === 'win32' ? 'fc.exe' : 'fc'));
++if (!existsSync(FC)) {
++  console.error(`fc not found at ${FC}: cargo build -p fc-cli (or --fc / FC_BIN)`);
++  process.exit(2);
++}
++const only = arg('only')?.split(',');
++const dir = mkdtempSync(join(tmpdir(), 'fc-win-journeys-'));
++const db = join(dir, 'profile', 'collection.db');
++
++const freePort = () =>
++  new Promise((done) => {
++    const s = createServer();
++    s.listen(0, '127.0.0.1', () => {
++      const { port } = s.address();
++      s.close(() => done(port));
++    });
++  });
++
++let bridge = null;
++let api = null;
++let apiPort = 0;
++
++async function startApp() {
++  // The dev bridge (prints {"url","token"} on its first line).
++  const proc = spawn(FC, ['--db', db, 'dev', 'serve'], { stdio: ['ignore', 'pipe', 'inherit'] });
++  const first = await new Promise((ok, fail) => {
++    let buf = '';
++    proc.stdout.on('data', (d) => {
++      buf += d;
++      const nl = buf.indexOf('\n');
++      if (nl >= 0) ok(JSON.parse(buf.slice(0, nl)));
++    });
++    proc.once('exit', (c) => fail(new Error(`fc dev serve exited (${c})`)));
++  });
++  bridge = { proc, ...first };
++  if (!apiPort) {
++    apiPort = await freePort();
++    // What the app reads for the Subtitle address (`subtitle.status.address`).
++    await env.rpc('settings.set', { scope: { kind: 'app' }, key: 'local_api.port', value: apiPort });
++  }
++  api = spawn(FC, ['--db', db, 'api', 'serve', '--port', String(apiPort)], { stdio: ['ignore', 'ignore', 'inherit'] });
++  await until('fc api serve', async () => (await fetch(`http://127.0.0.1:${apiPort}/subtitle/v1/me`).catch(() => null)) !== null, 30_000, 100);
++}
++
++async function stop(p) {
++  if (!p || p.exitCode !== null || p.signalCode !== null) return;
++  await new Promise((r) => {
++    p.once('exit', r);
++    p.kill('SIGTERM');
++  });
++}
++
++async function closeApp() {
++  await stop(bridge?.proc);
++  await stop(api);
++  bridge = null;
++  api = null;
++}
++
++const env = {
++  tag: Date.now().toString(36),
++  out: dir,
++  ui: null,
++  log: (...a) => console.log('   ', ...a),
++  async rpc(method, params = {}) {
++    const res = await fetch(`${bridge.url}/rpc`, {
++      method: 'POST',
++      headers: { authorization: `Bearer ${bridge.token}`, 'content-type': 'application/json' },
++      body: JSON.stringify({ method, params }),
++    });
++    const reply = await res.json().catch(() => null);
++    if (reply?.ok === true) return reply.result;
++    throw new Error(`${method}: ${JSON.stringify(reply?.error ?? res.status)}`);
++  },
++  fc: (args) => execFileSync(FC, args, { encoding: 'utf8' }),
++  closeApp,
++  startApp,
++  async startDamaged() {
++    let report;
++    try {
++      report = JSON.parse(env.fc(['--db', db, 'rescue', '--from', 'backup']));
++    } catch (e) {
++      throw new Error(`fc rescue --from backup failed: ${e.stderr ?? e.message}`);
++    }
++    await startApp();
++    return { rescued_by: 'fc rescue --from backup (local check: no native dialog here)', rescue: { mode: report.mode, backup: report.backup, kept_in: report.kept_in } };
++  },
++};
++
++const journeys = [
++  ['J4', 'capture over the local API → card + encounter', j4Capture],
++  ['J5', 'reopen: card, review and encounter survive', j5Reopen],
++  ['J6', 'backup → change → restore', j6BackupRestore],
++  ['J7', 'rescue a truncated collection from the verified backup', j7Rescue],
++];
++
++let failed = 0;
++try {
++  await startApp();
++  await env.rpc('onboarding.skip', {});
++  for (const [id, name, fn] of journeys) {
++    if (only && !only.includes(id)) continue;
++    const facts = {};
++    const t0 = Date.now();
++    try {
++      if (!bridge) await startApp();
++      await fn(env, facts);
++      console.log(`PASS ${id} ${name} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
++    } catch (e) {
++      failed++;
++      console.log(`FAIL ${id} ${name}\n     ${e.message}`);
++    }
++    console.log(`     facts: ${JSON.stringify(facts)}`);
++  }
++} finally {
++  await closeApp();
++  if (!process.env.FC_KEEP) rmSync(dir, { recursive: true, force: true });
++  else console.log(`kept ${dir}`);
++}
++process.exit(failed ? 1 : 0);
+diff --git a/apps/desktop/e2e-windows/run.mjs b/apps/desktop/e2e-windows/run.mjs
+index f43aa62..49c36a6 100644
+--- a/apps/desktop/e2e-windows/run.mjs
++++ b/apps/desktop/e2e-windows/run.mjs
+@@ -1,15 +1,17 @@
+ #!/usr/bin/env node
+ /**
+- * Windows WebDriver pilot (v1.3, NON-gating): drives the INSTALLED desktop app (WebView2)
+- * through tauri-driver + msedgedriver and runs three journeys of the Linux suite
+- * (`../e2e/journeys`) against the real app, IPC included. See ./README.md.
++ * Windows journeys (v1.3 pilot; v1.4.2 a gate): drives the INSTALLED desktop app (WebView2)
++ * through tauri-driver + msedgedriver and runs journeys against the real app, IPC included.
++ * See ./README.md.
+  *
+  *   node apps/desktop/e2e-windows/run.mjs --app "%LOCALAPPDATA%\Flashcard\flashcard.exe" \
+  *     --native-driver C:\path\msedgedriver.exe [--tauri-driver tauri-driver] [--out dir]
+  *
+  * Env equivalents: FC_EXE, MSEDGEDRIVER, TAURI_DRIVER, FC_WIN_E2E_OUT, FC_WIN_E2E_PORT,
+  * FC_WIN_E2E_CDP_PORT, FC_WIN_E2E_STRATEGY (`--strategy`: only that session strategy),
+- * FC_WIN_E2E_VERBOSE_DRIVER=0 (`--no-verbose-driver`).
++ * FC_WIN_E2E_VERBOSE_DRIVER=0 (`--no-verbose-driver`), FC_CLI (`--fc`: the installed fc.exe,
++ * default beside the app), FC_WIN_E2E_BLOCKING (`--blocking`: journeys whose failure fails
++ * the run, default BLOCKING below), FC_WIN_E2E_ONLY (`--only J4,J6`: run only these + P/J1).
+  *
+  * Before the journeys:
+  *   PREFLIGHT the installed app runs on its own for 15 s (alive? its window? an error box?
+@@ -19,14 +21,21 @@
+  *             (processes with command lines, windows, DevToolsActivePort, CDP, a desktop
+  *             screenshot) and a verbose msedgedriver log in the output dir
+  *
+- * Journeys (in order, one app launch, one fresh profile):
++ * Journeys (in order, one fresh profile; each needs only P/J1, J5–J7 restart the app):
+  *   P  preparation: skip the first-run guide and create decks/notes through the app's own IPC
+  *   J1 the app launches and Home renders
+  *   J2 Quick Add: N, type front, Tab, type back, Ctrl+Enter → the note is in the chosen deck
+  *   J3 Home → Enter → launcher → Enter → Space×3 → 2 → exactly one card answered
++ *   J4 a Subtitle capture sent to the app's local API (pairing, media, word + sentence) is a
++ *      card with its encounter                                    (./data-journeys.mjs)
++ *   J5 close the app, start it again: the captured card, its review and encounter are there
++ *   J6 backup, a change, restore: the change is gone, the earlier state is back
++ *   J7 the app stopped, the collection file truncated, the app started: the native rescue
++ *      dialog's "restore backup" leads to a working collection (NON-blocking: native dialog)
+  *
+  * Prints one PASS/FAIL line per journey, writes screenshots + summary.json into the output
+- * dir, exits 1 when anything failed. tauri-driver and the app are always stopped.
++ * dir, exits 1 when a BLOCKING journey (or the session) failed; a non-blocking failure is a
++ * warning. tauri-driver and the app are always stopped.
+  *
+  * Zero npm dependencies on purpose (Node 22: global fetch); the WebDriver client is
+  * ./webdriver.mjs.
+@@ -37,8 +46,10 @@ import { createConnection } from 'node:net';
+ import { basename, dirname, join, resolve } from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ import { setTimeout as sleep } from 'node:timers/promises';
++import { execFileSync } from 'node:child_process';
++import { j4Capture, j5Reopen, j6BackupRestore, j7Rescue } from './data-journeys.mjs';
+ import { KEY, WebDriver } from './webdriver.mjs';
+-import { IS_WINDOWS, POLICY_KEY, WebView2Policy, cdp, desktopScreenshot, isElevated, processes, stopApp, windows } from './win.mjs';
++import { IS_WINDOWS, POLICY_KEY, WebView2Policy, answerAppDialog, cdp, desktopScreenshot, isElevated, processes, stopApp, windows } from './win.mjs';
+ 
+ const here = dirname(fileURLToPath(import.meta.url));
+ 
+@@ -59,7 +70,20 @@ const opts = {
+   cdpPort: Number(arg('cdp-port') ?? process.env.FC_WIN_E2E_CDP_PORT ?? 9333),
+   strategy: arg('strategy') ?? process.env.FC_WIN_E2E_STRATEGY ?? null,
+   verboseDriver: !process.argv.includes('--no-verbose-driver') && process.env.FC_WIN_E2E_VERBOSE_DRIVER !== '0',
++  /** The `fc` CLI the installer puts beside the app (J7 folds the WAL and, as a fallback, rescues). */
++  fcCli: arg('fc') ?? process.env.FC_CLI ?? null,
++  blocking: (arg('blocking') ?? process.env.FC_WIN_E2E_BLOCKING ?? null)?.split(',').map((s) => s.trim()).filter(Boolean) ?? null,
++  only: (arg('only') ?? process.env.FC_WIN_E2E_ONLY ?? null)?.split(',').map((s) => s.trim()).filter(Boolean) ?? null,
+ };
++if (!opts.fcCli && opts.app) opts.fcCli = join(dirname(opts.app), IS_WINDOWS ? 'fc.exe' : 'fc');
++
++/**
++ * Journeys whose failure fails the run (v1.4.2). P and J1–J3 have been green on every run
++ * since the session strategy was fixed; J4–J6 use only that same machinery (the session, the
++ * app's IPC, a loopback HTTP request). J7 is NOT here: it answers a native Win32 message box
++ * from outside the app and kills/damages files, the flaky native piece the gate leaves out.
++ */
++const BLOCKING = opts.blocking ?? ['P', 'J1', 'J2', 'J3', 'J4', 'J5', 'J6'];
+ const CI = process.env.CI === 'true';
+ 
+ /** How long a condition may take before a journey fails (no fixed sleeps anywhere). */
+@@ -204,8 +228,9 @@ async function evidence(id) {
+ 
+ /** Runs one journey, records PASS/FAIL. A journey whose prerequisite failed is SKIP (= failed run). */
+ async function journey(id, name, fn, { needs = [] } = {}) {
++  if (opts.only && !['P', 'J1', ...opts.only].includes(id)) return;
+   const t0 = Date.now();
+-  const row = { id, name, status: 'FAIL', ms: 0, error: null, files: [], facts: {} };
++  const row = { id, name, status: 'FAIL', blocking: BLOCKING.includes(id), ms: 0, error: null, files: [], facts: {} };
+   results.push(row);
+   const missing = needs.filter((n) => results.find((r) => r.id === n)?.status !== 'PASS');
+   if (missing.length > 0) {
+@@ -215,6 +240,8 @@ async function journey(id, name, fn, { needs = [] } = {}) {
+     return;
+   }
+   try {
++    // A journey before this one may have left no session (an app restart that failed).
++    if (!wd.sessionId && id !== 'P') await reopenSession(`${id}-session`);
+     await fn(row.facts);
+     row.status = 'PASS';
+     const png = await shot(`${id}-pass`);
+@@ -224,7 +251,13 @@ async function journey(id, name, fn, { needs = [] } = {}) {
+     row.files.push(...(await evidence(id)));
+   }
+   row.ms = Date.now() - t0;
+-  console.log(`${row.status} ${id} ${name} (${(row.ms / 1000).toFixed(1)}s)${row.error ? `\n     ${row.error.split('\n')[0]}` : ''}`);
++  const tagLine = row.blocking ? '' : ' [non-blocking]';
++  console.log(`${row.status} ${id}${tagLine} ${name} (${(row.ms / 1000).toFixed(1)}s)${row.error ? `\n     ${row.error.split('\n')[0]}` : ''}`);
++  if (row.facts.rescued_by) console.log(`     rescued by: ${row.facts.rescued_by}`);
++  if (row.status !== 'PASS' && process.env.GITHUB_ACTIONS === 'true') {
++    const level = row.blocking ? 'error' : 'warning';
++    console.log(`::${level} title=Windows journey ${id}${tagLine}::${(row.error ?? '').split('\n')[0].replace(/[\r\n]/g, ' ').slice(0, 900)}`);
++  }
+ }
+ 
+ // ------------------------------------------------------------------ app-level steps
+@@ -719,12 +752,16 @@ const STRATEGIES = [
+   },
+ ];
+ 
+-async function openSession() {
+-  const list = opts.strategy ? STRATEGIES.filter((s) => s.id === opts.strategy) : STRATEGIES;
+-  if (list.length === 0) throw new Error(`unknown --strategy ${opts.strategy} (one of ${STRATEGIES.map((s) => s.id).join(', ')})`);
++/**
++ * Gets a session: every strategy in order, or only `only` (a restart reuses the one that
++ * worked). `prefix` keeps the log files of later (re)starts apart.
++ */
++async function openSession(only = opts.strategy, prefix = 'session') {
++  const list = only ? STRATEGIES.filter((s) => s.id === only) : STRATEGIES;
++  if (list.length === 0) throw new Error(`unknown --strategy ${only} (one of ${STRATEGIES.map((s) => s.id).join(', ')})`);
+   for (const s of list) {
+     for (let i = 1; i <= s.tries; i++) {
+-      const label = `session-${s.id.replace('+', '-')}-${i}`;
++      const label = `${prefix}-${s.id.replace('+', '-')}-${i}`;
+       const a = { strategy: s.id, why: s.why, try: i, ok: false, ms: 0, policy: null, error: null };
+       summary.attempts.push(a);
+       const t0 = Date.now();
+@@ -784,6 +821,136 @@ async function openSession() {
+   );
+ }
+ 
++// ------------------------------------------------------------------ restarts (J5–J7)
++
++/** Closes the app: politely first (WM_CLOSE), then by force; the session and drivers go with it. */
++async function closeApp(label) {
++  const did = await stopTheApp();
++  log(`${label}: app closed (${did})`);
++  await wd.deleteSession();
++  await stopDriver();
++}
++
++/**
++ * After a (re)start: the webview with IPC, the crash-recovery offer a forced stop leaves
++ * behind dismissed (as in P), the page reloaded, the shell up.
++ */
++async function afterStart() {
++  await wd.setTimeouts({ script: 60_000, pageLoad: 60_000, implicit: 0 });
++  await waitFor(
++    'the webview with Tauri IPC',
++    () => wd.exec(() => document.readyState === 'complete' && !!window.__TAURI_INTERNALS__),
++    LAUNCH_TIMEOUT_MS,
++  );
++  await rpc('maintenance.recovery.dismiss', {}).catch(() => undefined);
++  await reload();
++  await shellReady(LAUNCH_TIMEOUT_MS);
++}
++
++/** Starts the app again with the strategy that worked and waits until it is usable. */
++async function reopenSession(label) {
++  await stopTheApp();
++  await openSession(summary.strategy ?? opts.strategy, label);
++  await afterStart();
++}
++
++/**
++ * J7: starts the app on a damaged collection. The shell shows its native rescue dialog before
++ * any window (`session.rs` → `offer_rescue`); while msedgedriver waits for the webview, the
++ * dialog is answered "Yes = restore the newest verified backup" from outside (a Win32 message
++ * box: `answerAppDialog`), then the info box "rescued" with OK, and the session comes up on the
++ * rescued collection. Two other outcomes are handled and NAMED in `rescued_by`:
++ *  - the truncated file still opened (no native dialog): its integrity check must fail and
++ *    the in-app rescue (Maintenance page → `maintenance.rescue.request`, the app restarts and
++ *    rescues before opening) is used;
++ *  - the dialog could not be answered / the app did not come up: the installed `fc rescue
++ *    --from backup` (the same `rescue()` the dialog runs) makes the choice instead, and the
++ *    app is started on its result. Then only the dialog itself is NOT covered.
++ */
++async function startDamaged(label, { db = join(process.env.APPDATA ?? '', IDENTIFIER, 'collection.db') } = {}) {
++  const s = STRATEGIES.find((x) => x.id === (summary.strategy ?? opts.strategy ?? 'driver+policy'));
++  const out = { strategy: s.id, dialogs: [] };
++  await stopTheApp();
++  policy?.set(s.policy());
++  await startDriver(label);
++  let settled = null;
++  const session = (async () => {
++    if (s.how === 'launch') return wd.newSession(opts.app, { timeoutMs: SESSION_TIMEOUT_MS });
++    launchApp(label);
++    await waitFor(`the DevTools endpoint 127.0.0.1:${opts.cdpPort}`, async () => (await cdp(opts.cdpPort)).ok, SESSION_TIMEOUT_MS, 500);
++    return wd.attachSession(`127.0.0.1:${opts.cdpPort}`, { timeoutMs: 60_000 });
++  })().then(
++    () => (settled = { ok: true }),
++    (e) => (settled = { ok: false, error: String(e?.message ?? e) }),
++  );
++  while (!settled) {
++    await Promise.race([session, sleep(1500)]);
++    if (settled || !IS_WINDOWS) continue;
++    const seen = answerAppDialog(APP_EXE, { press: false });
++    if (!seen.found) continue;
++    // The dialog as the owner sees it, before it is answered.
++    const png = `${label}-dialog-${out.dialogs.length + 1}.png`;
++    out.dialog_screenshot_error = desktopScreenshot(join(opts.out, png));
++    const answered = answerAppDialog(APP_EXE);
++    out.dialogs.push({ ...answered, screenshot: png });
++    log(`${label}: native dialog (${answered.kind ?? '?'}) "${(answered.text ?? seen.text ?? '').slice(0, 160)}" → ${answered.button ?? answered.error ?? 'not answered'}`);
++    if (out.dialogs.length > 6) break;
++  }
++  await session;
++  const yes = out.dialogs.some((d) => d.kind === 'rescue offer' && d.posted);
++  if (settled.ok) {
++    await afterStart();
++    if (yes) {
++      out.rescued_by = 'native dialog: Yes = "restore backup" (Win32 message box answered with WM_COMMAND IDYES), then OK';
++      return out;
++    }
++    if (out.dialogs.length === 0) {
++      // The file still opened: the app must see the damage and rescue on request.
++      const check = await rpc('maintenance.integrity.check', { quick: false });
++      out.integrity_before = { ok: check.ok };
++      if (check.ok) throw new Error(`expected the truncated collection to be offered a rescue; read back: it opened without a dialog and passed its integrity check (${JSON.stringify(check).slice(0, 300)})`);
++      const before = processes(APP_EXE);
++      const oldPids = new Set((Array.isArray(before) ? before : []).filter((p) => p.Name?.toLowerCase() === APP_EXE.toLowerCase()).map((p) => p.ProcessId));
++      await rpc('maintenance.rescue.request', { mode: 'backup' });
++      // The app restarts itself and rescues before it opens the collection: wait for the new
++      // process's window (the rescue is done by then), then take it over with a session.
++      await waitFor(
++        'the restarted app (new process) with its window',
++        () => {
++          const list = processes(APP_EXE);
++          const pids = (Array.isArray(list) ? list : []).filter((p) => p.Name?.toLowerCase() === APP_EXE.toLowerCase() && !oldPids.has(p.ProcessId)).map((p) => p.ProcessId);
++          const wins = pids.length ? windows(pids) : [];
++          return Array.isArray(wins) && wins.some((w) => pids.includes(w.pid) && w.visible && w.class !== '#32770');
++        },
++        LAUNCH_TIMEOUT_MS,
++        1000,
++      );
++      await closeApp(`${label}-after-request`);
++      await reopenSession(`${label}-reopen`);
++      const st = await rpc('maintenance.status', {});
++      out.in_app_rescue = st.rescue;
++      out.rescued_by = 'in-app rescue (the truncated file still opened, failed its integrity check; maintenance.rescue.request → restart). The native dialog was NOT shown';
++      return out;
++    }
++  }
++  // The dialog was not answered, or the app did not come up after it.
++  out.session_error = settled.ok ? 'the app came up but the dialog was not "restore backup"' : settled.error;
++  out.diagnosis = await diagnose(`${label}-failed`);
++  await wd.deleteSession();
++  await stopDriver();
++  await stopTheApp();
++  let report = null;
++  try {
++    report = JSON.parse(execFileSync(opts.fcCli, ['--db', db, 'rescue', '--from', 'backup'], { encoding: 'utf8', windowsHide: true }));
++  } catch (e) {
++    out.fc_rescue_error = String(e?.stderr ?? e?.message ?? e).slice(0, 600);
++  }
++  out.fc_rescue = report && { mode: report.mode, backup: report.backup, kept_in: report.kept_in };
++  out.rescued_by = `FALLBACK fc rescue --from backup: the native dialog ${out.dialogs.length ? 'was answered but' : 'was not seen and'} the app did not come up (${out.session_error.split('\n')[0].slice(0, 200)}). The dialog is NOT covered by this run`;
++  await reopenSession(`${label}-fallback`);
++  return out;
++}
++
+ async function stopAll() {
+   await stopDriver();
+   // The app msedgedriver launched is closed with the session; one the pilot started (attach)
+@@ -820,6 +987,24 @@ async function main() {
+   await journey('J1', 'app launches and Home renders', j1Launch, { needs: ['P'] });
+   await journey('J2', 'Quick Add: N, type, Ctrl+Enter → note in the chosen deck', j2QuickAdd, { needs: ['J1'] });
+   await journey('J3', 'Home → Enter → Enter → Space×3, 2 → exactly one answered', j3Study, { needs: ['J1'] });
++
++  // v1.4.2: the owner's data (./data-journeys.mjs). Each one makes its own decks/capture/key.
++  if (opts.fcCli && !existsSync(opts.fcCli)) log(`warning: no fc CLI at ${opts.fcCli} (J7 needs it)`);
++  const env = {
++    tag,
++    out: opts.out,
++    rpc,
++    log,
++    ui: { ready: () => shellReady(), reload, shot },
++    closeApp,
++    startApp: reopenSession,
++    startDamaged,
++    fc: (args) => execFileSync(opts.fcCli, args, { encoding: 'utf8', windowsHide: true }),
++  };
++  await journey('J4', 'Subtitle capture over the local API → card with its encounter', (f) => j4Capture(env, f), { needs: ['J1'] });
++  await journey('J5', 'close, start again: card, review and encounter are there', (f) => j5Reopen(env, f), { needs: ['J1'] });
++  await journey('J6', 'backup → change → restore: the change is gone', (f) => j6BackupRestore(env, f), { needs: ['J1'] });
++  await journey('J7', 'truncated collection → rescue dialog → restored from the verified backup', (f) => j7Rescue(env, f), { needs: ['J1'] });
+ }
+ 
+ let fatal = null;
+@@ -836,6 +1021,10 @@ try {
+   summary.finished_at = new Date().toISOString();
+   summary.fatal = fatal;
+   summary.ok = !fatal && results.length > 0 && results.every((r) => r.status === 'PASS');
++  summary.blocking = BLOCKING;
++  /** The gate: no setup failure and every blocking journey that was due passed. */
++  summary.gate_ok = !fatal && results.some((r) => r.blocking) && results.filter((r) => r.blocking).every((r) => r.status === 'PASS');
++  summary.non_blocking_failed = results.filter((r) => !r.blocking && r.status !== 'PASS').map((r) => r.id);
+   try {
+     mkdirSync(opts.out, { recursive: true });
+     writeFileSync(join(opts.out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
+@@ -844,13 +1033,18 @@ try {
+   }
+   const tried = summary.attempts.map((a) => `${a.strategy}#${a.try}=${a.ok ? 'ok' : 'fail'}`).join(' ') || 'none';
+   const sessionLine = `SESSION ${summary.strategy ? `via "${summary.strategy}"` : 'NONE'} (attempts: ${tried}; elevated: ${summary.elevated})`;
+-  const finalLine = `${summary.ok ? 'PASS' : 'FAIL'} windows pilot: ${results.map((r) => `${r.id}=${r.status}`).join(' ') || 'no journeys ran'}`;
++  const finalLine =
++    `${summary.gate_ok ? 'PASS' : 'FAIL'} windows journeys: ${results.map((r) => `${r.id}=${r.status}${r.blocking ? '' : '(non-blocking)'}`).join(' ') || 'no journeys ran'}` +
++    (summary.gate_ok && summary.non_blocking_failed.length ? ` — WARNING: non-blocking ${summary.non_blocking_failed.join(', ')} failed` : '');
+   console.log(sessionLine);
+   console.log(`\n${finalLine} → ${opts.out}`);
+   // The workflow run's summary page: the three lines that answer "what happened".
+   if (process.env.GITHUB_STEP_SUMMARY) {
+-    const rows = results.map((r) => `- ${r.status} ${r.id} ${r.name}${r.error ? `: ${r.error.split('\n')[0]}` : ''}`);
+-    const md = ['### Windows WebDriver pilot', '', `- ${summary.preflight?.line ?? 'PREFLIGHT skipped'}`, `- ${sessionLine}`, ...rows, `- **${finalLine}**`, fatal ? `- setup: ${fatal.split('\n')[0]}` : ''];
++    const rows = results.map(
++      (r) =>
++        `- ${r.status} ${r.id}${r.blocking ? '' : ' (non-blocking)'} ${r.name}${r.error ? `: ${r.error.split('\n')[0]}` : ''}${r.facts?.rescued_by ? ` — rescued by: ${r.facts.rescued_by}` : ''}`,
++    );
++    const md = ['### Windows journeys (installed app)', '', `- ${summary.preflight?.line ?? 'PREFLIGHT skipped'}`, `- ${sessionLine}`, ...rows, `- **${finalLine}**`, fatal ? `- setup: ${fatal.split('\n')[0]}` : ''];
+     try {
+       appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${md.filter(Boolean).join('\n')}\n`);
+     } catch (e) {
+@@ -858,4 +1052,4 @@ try {
+     }
+   }
+ }
+-process.exit(summary.ok ? 0 : 1);
++process.exit(summary.gate_ok ? 0 : 1);
+diff --git a/apps/desktop/e2e-windows/win.mjs b/apps/desktop/e2e-windows/win.mjs
+index 3721475..38820ed 100644
+--- a/apps/desktop/e2e-windows/win.mjs
++++ b/apps/desktop/e2e-windows/win.mjs
+@@ -276,3 +276,68 @@ export async function cdp(port, timeoutMs = 2_000) {
+     return { ok: false, error: e?.cause?.code ?? e?.message ?? String(e) };
+   }
+ }
++
++/**
++ * v1.4.2 (J7): answers the app's NATIVE rescue dialog. The desktop shell shows it with rfd
++ * 0.15 without the `common-controls-v6` feature, i.e. a plain Win32 `MessageBoxW` (class
++ * `#32770`): the three custom labels become Yes / No / Cancel, and the shell maps Yes →
++ * "restore the newest verified backup" (`maintenance.rs` → `offer_rescue`). The message box is
++ * answered the way a click does it: `WM_COMMAND` with the button's id (IDYES = 6) posted to
++ * the dialog. The info box that follows ("the collection was rescued", MB_OK) gets IDOK (1).
++ *
++ * Looks at every visible `#32770` window of a process named `appExeName` and answers the first
++ * one (only looks when `press` is false): `{ found: true, kind, button, posted, buttons, text }`, `{ found: false }`, or `{ error }`. Never
++ * throws. The dialog's text is returned for the log (it names the damage).
++ */
++export function answerAppDialog(appExeName, { press = true } = {}) {
++  const r = ps(
++    `Add-Type -TypeDefinition @"
++using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
++public static class FcPilotDlg {
++  public delegate bool EnumProc(IntPtr h, IntPtr l);
++  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);
++  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr p, EnumProc cb, IntPtr l);
++  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
++  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
++  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
++  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
++  [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h, int id);
++  [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr h);
++  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
++  public static string Answer(uint[] pids, bool press) {
++    var set = new HashSet<uint>(pids);
++    IntPtr dlg = IntPtr.Zero;
++    EnumWindows((h, l) => {
++      uint pid; GetWindowThreadProcessId(h, out pid);
++      var c = new StringBuilder(64); GetClassName(h, c, 64);
++      if (set.Contains(pid) && IsWindowVisible(h) && c.ToString() == "#32770") { dlg = h; return false; }
++      return true;
++    }, IntPtr.Zero);
++    if (dlg == IntPtr.Zero) return "none";
++    var text = new StringBuilder(); var buttons = new List<string>();
++    EnumChildWindows(dlg, (h, l) => {
++      var c = new StringBuilder(64); GetClassName(h, c, 64);
++      var t = new StringBuilder(2048); GetWindowText(h, t, 2048);
++      if (c.ToString() == "Button") buttons.Add(GetDlgCtrlID(h) + "=" + t.ToString());
++      else if (c.ToString() == "Static" && t.Length > 0) text.Append(t.ToString()).Append(" ");
++      return true;
++    }, IntPtr.Zero);
++    // Yes (6) on the rescue offer; else the first of OK (1) / Cancel (2) the box has (an MB_OK box closes on either).
++    int id = GetDlgItem(dlg, 6) != IntPtr.Zero ? 6 : (GetDlgItem(dlg, 1) != IntPtr.Zero ? 1 : 2);
++    IntPtr btn = GetDlgItem(dlg, id);
++    bool ok = press && PostMessage(dlg, 0x0111, (IntPtr)id, btn);
++    return "found\\t" + id + "\\t" + ok + "\\t" + string.Join("|", buttons) + "\\t" + text.ToString().Replace("\\r", " ").Replace("\\n", " ");
++  }
++}
++"@
++$name = [IO.Path]::GetFileNameWithoutExtension($env:FC_PS_EXE)
++$pids = @(Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object { [uint32]$_.Id })
++if ($pids.Count -eq 0) { 'noprocess' } else { [FcPilotDlg]::Answer([uint32[]]$pids, $env:FC_PS_PRESS -ne '0') }`,
++    { FC_PS_EXE: appExeName, FC_PS_PRESS: press ? '1' : '0' },
++  );
++  if (r.code !== 0) return { error: r.err || r.out || `powershell exited ${r.code}` };
++  if (r.out === 'none' || r.out === 'noprocess') return { found: false, process: r.out !== 'noprocess' };
++  const [, id, posted, buttons, text] = r.out.split('\t');
++  const button = Number(id) === 6 ? 'Yes (restore backup)' : 'OK';
++  return { found: true, kind: Number(id) === 6 ? 'rescue offer' : 'info', button, posted: posted === 'True', buttons, text: (text ?? '').trim().slice(0, 600) };
++}
+diff --git a/docs/04-yol-haritasi.md b/docs/04-yol-haritasi.md
+index 48bfac4..cf3abd2 100644
+--- a/docs/04-yol-haritasi.md
++++ b/docs/04-yol-haritasi.md
+@@ -262,7 +262,8 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
+ - [x] İpucu kuralı iki yönde (S7c); "Tüm desteler" kuyruğu her destenin şablonuna uyar, kardeşleri desteler arasında da yarına bırakır (S1, S2, C4); önden öğrenme penceresi ayar ve değişikliği ekrandaki kartı almaz (S6, C3); Planlama'nın bugünü = başlatıcının (C2).
+ - [x] Sahibin gözüyle (X2): görünür "Çalış", kavram başına tek söz, klavyeyle Test kâğıdı, AI Oluştur'da üretme / Ayarlar'da kurulum, ara ver → Devam et, `?` sayfa tuşları (O1–O4); Eşleştir rollerden (C1).
+ - [x] Yolculuklar gerçek çekirdekte, kaydedilen sonuç üzerinde (`pnpm -C apps/desktop e2e`, CI `journeys`).
+-- [ ] Windows: kurulu uygulamada WebDriver pilotu (`windows-build.yml` → `webdriver-pilot`, kapıda değil) yeşil ve proje sahibinin elle koşusu.
++- [x] Windows: kurulu uygulamada WebDriver pilotu (`windows-build.yml` → `webdriver-pilot`) yeşil (P, J1–J3); v1.4.2'de J4–J7 eklendi ve iş kapı oldu (J7 hariç).
++- [ ] Windows: proje sahibinin elle koşusu.
+ 
+ ## 📖 v1.4 · "Kelime uygulaması": kaybolmayan veri, tek kelime doğrusu, sade ekranlar
+ 
+diff --git a/docs/06-ai-ve-entegrasyonlar.md b/docs/06-ai-ve-entegrasyonlar.md
+index d1fba4a..bb5f7ba 100644
+--- a/docs/06-ai-ve-entegrasyonlar.md
++++ b/docs/06-ai-ve-entegrasyonlar.md
+@@ -310,7 +310,7 @@ Kullanıcının ayrı bir tarayıcı eklentisi olan **Subtitle**, video altyazı
+   4. yakalama uygulamada **geri alındı**, sonra aynı `capture_id` yine geldi (eklentinin bekleyen yeniden denemesi) → **yeni kart** (`201 created`, yeni `card_id`; geri al yakalamayı unutturur, eski kart geri gelmez); sonraki gönderim yine `duplicate`;
+   5. her şeyden sonra `io.backup.create` → **yeni bir profile** `io.backup.restore` → not, kart, medya sayıları aynı; bir ses dosyası eklentinin gönderdiği baytlarla **birebir**; geri yüklenen profil yakalama kimliklerini bilir (yeni anahtarla yeniden gönderim `duplicate`, aynı kart), eski anahtar `401`, tanı listesi boş başlar (geri yükleme tanı satırlarını düşürür; bu kabulün bulduğu açık, `subtitle::forget_keys`);
+   6. `subtitle.captures.recent` her denemeyi doğru anlatır: yakalama komutuna ulaşan her deneme bir satır (`created` bir kez, sonra `duplicate`, aynı kart); gövdesi tamamlanmadan kesilen istek hiçbir şey yazmaz; süreç kayıt ile tanı satırı arasında öldürülürse o deneme satırsız kalır ve yeniden deneme `duplicate` olarak görünür.
+-  Rust tarafı aynı sunucu davranışını `crates/fc-http/tests/subtitle_interrupted.rs`'de sabitler (okunmayan yanıt, yarım gövde, aynı yakalamanın ve yüklemenin eşzamanlı yeniden gönderimi, geri al + yeniden gönderim). CI: `extension` işi, `SUBTITLE_REPO_TOKEN` sırrı (eklentinin özel deposunu okuma izni) tanımlıysa depoyu çekip `check.mjs`'yi koşar; tanımlı değilse uyarı verir ve atlar.
++  Rust tarafı aynı sunucu davranışını `crates/fc-http/tests/subtitle_interrupted.rs`'de sabitler (okunmayan yanıt, yarım gövde, aynı yakalamanın ve yüklemenin eşzamanlı yeniden gönderimi, geri al + yeniden gönderim). CI: `extension` işi, `SUBTITLE_REPO_TOKEN` sırrı (eklentinin özel deposunu okuma izni) tanımlıysa depoyu çekip `check.mjs`'yi koşar. v1.4.2: tanımlı değilse kontrol adımı **atlandı** görünür (başarılı değil), iş özetinde "Subtitle client NOT checked" satırı ve sırrın nasıl ekleneceği yazar; depo değişkeni `SUBTITLE_CHECK_REQUIRED=true` iken iş **kırmızı** olur. Çatallardan gelen PR'lar ve Dependabot (sır göremezler) yalnızca atlanır.
+ - **Gerçek tarayıcı denemesi (v1.4 G2):** eklentinin **derlenmiş paketi** (depodan kopya, `pnpm build`, değiştirilmeden) gerçek Chromium'a yüklenip sahibin yaptığı gibi kullanılır: Ayarlar → Öğrenme servisi → Subtitle Kartları, adres + anahtar, bağlantı testi; YouTube adresinde sunulan taklit bir izleme sayfasında **+** (kelime, aynı kelime ikinci sahneden → aynı notun karşılaşması, deyim), uygulama kapalı/yeniden başlamış, yanlış ve iptal edilmiş anahtar; her adım `fc call` ile kalıcı sonucu okur. `node tools/subtitle-real-browser/run.mjs` (eklenti deposu ya da Chromium yoksa atlar; CI'da değil). Kurulum, geçenler, eklenti deposunda gereken değişiklik (Flashcard'dan bilinen kelimeleri okumak) ve hâlâ sahibin tarayıcısını isteyenler: [14](14-subtitle-gercek-tarayici.md).
+ - **"Flashcard'dan oku" yaması (v1.4.1 H4):** eklentinin bilinen kelimeleri okuması `tools/subtitle-patches/0001-flashcard-known-words.patch` olarak hazır (eklenti `7fe2843` üzerine `git apply`; eklenti deposu bu repodan değiştirilmez): Subtitle Kartları iken "Flashcard'dan oku" `/me` + `known-words` sayfalarını okur, paylaşım kapalıysa bunu söyler, Anki gibi birleştirir; `SUBTITLE_PATCH=… node tools/subtitle-real-browser/run.mjs` yamalı derlemeyi gerçek Chromium'da sınar. Ayrıntı: [14](14-subtitle-gercek-tarayici.md) §4, `tools/subtitle-patches/README.md`.
+ 
+diff --git a/docs/07-gelistirme-sureci.md b/docs/07-gelistirme-sureci.md
+index b050742..f8fbb7d 100644
+--- a/docs/07-gelistirme-sureci.md
++++ b/docs/07-gelistirme-sureci.md
+@@ -51,7 +51,7 @@ Bağımlılık sürümleri `Cargo.lock` ve `pnpm-lock.yaml` ile sabitlenir.
+ | Frontend | Bileşenler | Vitest |
+ | Uçtan uca: yolculuklar (v1.3) | Kullanıcı akışları, **gerçek çekirdeğe karşı**, kalıcı sonuç üzerinden (§3.1) | Playwright + `fc dev serve` |
+ | Görsel denetim | Ekranlar, mock arka uçla; yalnız görünüş ([docs/11 §5.3](11-tasarim.md)) | `scripts/screens.mjs` |
+-| Windows pilotu (v1.3) | Kurulu uygulamada üç yolculuk; geçit değil (§3.1) | tauri-driver + msedgedriver |
++| Windows yolculukları (v1.3 pilot, v1.4.2 geçit) | Kurulu uygulamada P, J1–J7; J7 (yerel kurtarma diyaloğu) hariç hepsi geçit (§3.1) | tauri-driver + msedgedriver |
+ | Eklenti | Örnek eklentiler, izin reddi, kaynak sınırları | Sahte host |
+ 
+ | Rastgele / bozuk girdi (v1.4.1) | Paket ve metin okuyucuları, Subtitle HTTP API'si, sorgu dili, tüm komutların geri alınması (§3.2) | proptest / tohumlu SplitMix64 |
+@@ -100,9 +100,10 @@ FC_E2E_KEEP=1 pnpm -C apps/desktop e2e          # geçici profili sakla (yolu ya
+ - **CI:** `ci.yml → journeys` (Linux, `ubuntu-24.04`): `cargo build -p fc-cli` (debug), `playwright install --with-deps chromium`, `FC_BIN` ile `pnpm e2e`; başarısızlıkta `e2e/.results/` artefakt olur.
+ - Köprüyü elle açmak: `cargo run -p fc-cli -- --db /tmp/x.db dev serve` → yazdığı `url` ve `token` ile `VITE_FC_BRIDGE_URL=… VITE_FC_BRIDGE_TOKEN=… pnpm -C apps/desktop dev:bridge`.
+ 
+-**Windows WebDriver pilotu** (v1.3, `apps/desktop/e2e-windows/`; tasarım tarafı [docs/11 §5.2](11-tasarim.md))
++**Windows yolculukları** (v1.3 pilot, v1.4.2 geçit; `apps/desktop/e2e-windows/`; tasarım tarafı [docs/11 §5.2](11-tasarim.md))
+ 
+-- `.github/workflows/windows-build.yml` → `webdriver-pilot` işi: **geçit değildir** (`continue-on-error: true`, kurulum işinden sonra koşar; kırmızı olsa da kurulum artefaktını ve akışı bozmaz). `windows-2025` üzerinde kurulum artefaktını sessiz, kullanıcı başına kurar; çalıştırıcı imajını, WebView2 çalışma zamanını ve sürücü sürümlerini günlüğe yazar; WebView2 sürümüne birebir uyan `msedgedriver`'ı ve `tauri-driver`'ı kurar; **kurulu** uygulamaya karşı üç yolculuk koşar: uygulama açılır ve Ana sayfa çizilir; Hızlı ekleme (`N`, yaz, `Ctrl+Enter`) bir not oluşturur; Ana sayfa → `Enter` → başlatıcı → `Enter` → `Space`×3 → `2` oturumu tam bir kart ilerletir. Doğrulama IPC üzerinden (`notes.list`/`notes.get`, `study.session`, `study.card_history`). Sonuçlar (`summary.json`, ekran görüntüleri, `tauri-driver-*.log`, `msedgedriver-*.log`, `*-diagnosis.json`, masaüstü görüntüleri, uygulamanın kendi günlüğü) `webdriver-pilot-results` artefaktıdır. **Durum:** ilk koşu oturum açamadı (yükseltilmiş koşucuda WebView2 150+ `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`'ı yok sayıyor); pilot artık HKLM WebView2 politikasıyla portu açıyor, önce uygulamayı tek başına deniyor (`PREFLIGHT`) ve oturum stratejilerini sırayla deniyor (`SESSION`). Windows'ta henüz koşmadı.
++- `.github/workflows/windows-build.yml` → `webdriver-pilot` işi ("Windows journeys (installed app)"), kurulum işinden sonra koşar (kurulum artefaktı her zaman önce üretilir). `windows-2025` üzerinde kurulum artefaktını sessiz, kullanıcı başına kurar; WebView2 sürümüne birebir uyan `msedgedriver`'ı ve `tauri-driver`'ı kurar; oturumu HKLM WebView2 politikasıyla açar (`driver+policy`; yükseltilmiş koşucuda WebView2 150+ `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`'ı yok sayıyor) ve **kurulu** uygulamaya karşı koşar: P hazırlık; J1 açılış ve Ana sayfa; J2 Hızlı ekleme; J3 başlatıcı + tek cevap; **v1.4.2:** J4 Subtitle yakalaması uygulamanın yerel API'sine (eşleştirme `GET /subtitle/v1/me`, medya, kelime + cümle) → kart ve karşılaşması; J5 uygulama kapanıp yeniden açılır → kart, kapanmadan önceki tekrar ve karşılaşma yerinde; J6 yedek → değişiklik → geri yükleme → değişiklik yok, önceki durum geri; J7 koleksiyon dosyası kesilir → yerel kurtarma diyaloğu (Win32 mesaj kutusu, dışarıdan `WM_COMMAND IDYES`) → doğrulanmış yedekten çalışan koleksiyon. Hepsi sonucu API'den geri okur. **Geçit:** P, J1–J6 başarısızsa iş kırmızı (`FC_WIN_E2E_BLOCKING`, tek satır); J7 yerel diyaloğa bağlı olduğu için engellemez (uyarı) ve hangi yoldan kurtarıldığını (`rescued_by`: yerel diyalog / uygulama içi kurtarma / `fc rescue` yedeği) yazar. Sonuçlar (`summary.json`, ekran görüntüleri, sürücü günlükleri, tanılar, uygulamanın kendi günlüğü) `webdriver-pilot-results` artefaktıdır.
++- J4–J7 `data-journeys.mjs`'te WebDriver'sız yazılı; `local-check.mjs` onları her makinede `fc dev serve` + `fc api serve` üstünde koşar (istekler ve geri okumalar Windows'tan önce sınanır).
+ - npm bağımlılığı yok: `webdriver.mjs` Node 22 `fetch`'i üstünde küçük bir W3C WebDriver istemcisi, `run.mjs` koşucu. Elle (Windows'ta, atılabilir bir kullanıcı/VM'de: uygulama gerçek kullanıcı profilini açar) çalıştırma: `apps/desktop/e2e-windows/README.md`.
+ - **Durum: Windows makinesi olmadan yazıldı; CI koşana kadar denenmedi.** İlk koşuların düzeltme (sürücü/çalışma zamanı eşleşmesi, odak, seçiciler) gerektirmesi beklenir.
+ 
+diff --git a/docs/11-tasarim.md b/docs/11-tasarim.md
+index adb30c1..7066a4b 100644
+--- a/docs/11-tasarim.md
++++ b/docs/11-tasarim.md
+@@ -330,9 +330,9 @@ Hepsi **geçmek zorunda**; şu an hiçbir yolculukta `test.fail` yok (S7c, X1'in
+ | E4b | İlerleme'nin "İlerliyor muyum?" cümlesi `words.stats`'ın sayısıdır; "Daha fazla" ayrıntıları açar |
+ | K1 | Puandan hemen sonra tuş: dört düğme, dört kart art arda `1`/`2`/`3`/`4` ve **beklemeden** `Space` (kayıt bilerek 400 ms yavaşlatılır; kart yarısında `Space`, yarısında tıklamayla — odak kartta — çevrilir): kayıt sürerken puanlanan kart arka yüzünde kalır, sonraki kart ön yüzüyle gelir; her kartın oturumda basılan puanla tam bir tekrarı vardır |
+ 
+-### 5.2 Windows: kurulu uygulamaya karşı WebDriver (pilot, kapıda değil)
++### 5.2 Windows: kurulu uygulamaya karşı WebDriver (v1.3 pilot, v1.4.2 kapı)
+ 
+-Linux'taki yolculuklar Windows'un üç sorusunu cevaplayamaz: kurulu NSIS paketi açılıyor mu, WebView2'de klavye aynı mı, gerçek IPC aynı sonucu kaydediyor mu. `.github/workflows/windows-build.yml` önce imzasız NSIS kurulumunu artefakt olarak üretir (`installer` işi; değişmedi), sonra **`continue-on-error: true`** ile ayrı bir `webdriver-pilot` işi (windows-2025) kurulumu sessizce yükler, `tauri-driver` + WebView2 sürümüne uyan `msedgedriver` ile **kurulu** uygulamaya bağlanır ve üç yolculuk koşar: uygulama açılır ve Ana sayfa çizilir; Hızlı Ekle (`N`, yaz, `Ctrl+Enter`) kütüphanede görünen bir not oluşturur; Ana sayfa → `Enter` → başlatıcı → `Enter` → `Space`, `Space`, `2` → oturum tam bir kart ilerler. Koşucu imajı, WebView2 ve sürücü sürümleri günlüğe yazılır. Kod `apps/desktop/e2e-windows/` (bağımlılıksız, W3C WebDriver HTTP). **Durum:** ilk CI koşusu (45038113867) kurulumu ve sürücü eşleşmesini geçti, oturum açılamadı (`DevToolsActivePort file doesn't exist`): koşucu yönetici yetkisiyle çalışıyor ve WebView2 150'den beri yükseltilmiş bir süreçte `msedgedriver`'ın kullandığı `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`'ı yok sayıyor. Pilot artık uygulamanın exe'si için HKLM WebView2 politikasıyla DevTools portunu açıyor, önce uygulamayı tek başına 15 sn çalıştırıyor (`PREFLIGHT`), oturum stratejilerini sırayla deniyor (`SESSION`) ve her başarısız denemenin tanısını artefakta koyuyor (`apps/desktop/e2e-windows/README.md`). Bu düzeltme okunarak bulundu, **Windows'ta henüz koşmadı;** yolculuklar hiç koşmadı. Art arda temiz koşulardan sonra yayın kapısına yükseltilir. `windows-smoke` (`Flashcard.exe --smoke`) ucuz bir tanı olarak kalır.
++Linux'taki yolculuklar Windows'un sorularını cevaplayamaz: kurulu NSIS paketi açılıyor mu, WebView2'de klavye aynı mı, gerçek IPC aynı sonucu kaydediyor mu, sahibin verisi (Subtitle yakalaması, kapanıp açılma, yedek, bozuk dosya) kurulu uygulamada sağ kalıyor mu. `.github/workflows/windows-build.yml` önce imzasız NSIS kurulumunu artefakt olarak üretir (`installer` işi), sonra `webdriver-pilot` işi (windows-2025) kurulumu sessizce yükler, `tauri-driver` + WebView2 sürümüne uyan `msedgedriver` ile **kurulu** uygulamaya bağlanır (HKLM WebView2 politikası, `driver+policy`: v1.3 düzeltmesinden beri her koşuda yeşil) ve yolculukları koşar: P, J1 açılış, J2 Hızlı Ekle, J3 başlatıcı + tek cevap; v1.4.2'de J4 Subtitle yakalaması uygulamanın yerel API'sine → kart + karşılaşma, J5 kapat/aç → kart, tekrar, karşılaşma yerinde, J6 yedek → değişiklik → geri yükle, J7 kesik koleksiyon → yerel kurtarma diyaloğu → doğrulanmış yedek. Her biri kaydedilen sonucu API'den geri okur. **Kapı:** P, J1–J6 başarısızsa iş kırmızı; J7 Win32 mesaj kutusunu dışarıdan cevapladığı için engellemez, hangi yolun kapsandığını açıkça yazar (`apps/desktop/e2e-windows/README.md`). Uygulamaya test anahtarı eklenmedi. `windows-smoke` (`Flashcard.exe --smoke`) ucuz bir tanı olarak kalır.
+ 
+ ### 5.3 Görsel kontrol: mock ekran görüntüleri
+ 
+@@ -361,5 +361,6 @@ Otomatik kontroller: `overflow-x`, `outside-viewport`, `text-clipped`, `raw-cont
+ - [x] Kart ekleme tek yerde (Tek kart / Toplu / Yapıştır / Dosyadan), içe aktarma Ayarlar'dan çıktı (J1, J2, J4, S9).
+ - [x] Ayarlar öğretir: açıklamalar gövde boyunda, örnek, varsayılan + "Varsayılana dön", Gelişmiş, arama (S11; `kit.test.ts`).
+ - [x] Tasarım sistemi korunur: token'lar, mono sayılar, kenarlık; ham kontrol yok, sabit metin yok, sayılar `$lib/format`'tan (lint testleri).
+-- [ ] Windows: kurulu uygulamada üç WebDriver yolculuğu yeşil (pilot, kapıda değil) ve gerçek bir Windows'ta elle koşu.
++- [x] Windows: kurulu uygulamada P, J1–J3 WebDriver yolculukları yeşil (v1.3 pilotu, art arda koşular).
++- [ ] Windows: J4–J7 (v1.4.2) ilk CI koşusunda yeşil; gerçek bir Windows'ta elle koşu.
+ - [ ] Subtitle tarayıcı eklentisi gerçek bir tarayıcıda (sözleşme testleri ve tohumdaki yakalamalar geçiyor).

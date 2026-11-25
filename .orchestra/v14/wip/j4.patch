@@ -1,0 +1,1416 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 59bb1ab..c591d05 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -264,6 +264,10 @@ jobs:
+           cache-dependency-path: apps/desktop/pnpm-lock.yaml
+       - name: Backend testleri (core, storage, app, CLI e2e)
+         run: cargo test --locked -p fc-core -p fc-storage -p fc-app -p fc-cli
++      # v1.4.2 J4: the real Windows voice speaks one English sentence into a decodable WAV. A
++      # runner without an English voice prints "no voice" (and a warning annotation), not a pass.
++      - name: Windows offline speech (system voices)
++        run: cargo test --locked -p fc-system-tts -- --nocapture
+       - name: Frontend derle
+         working-directory: apps/desktop
+         run: pnpm install --frozen-lockfile
+diff --git a/.orchestra/v14/briefs/j-common.md b/.orchestra/v14/briefs/j-common.md
+new file mode 100644
+index 0000000..0dcf2d9
+--- /dev/null
++++ b/.orchestra/v14/briefs/j-common.md
+@@ -0,0 +1,18 @@
++# J-workers — v1.4.2: the rest of the independent reviewer's plan
++
++Read `.orchestra/v14/COMMON.md` first; it binds you. State: v1.4.1 is released on `claude/festive-einstein-8y0kld`
++(robustness round done, CI and Windows build green). Four siblings work in parallel on the items that were left.
++Rules for this round:
++- Tests must pass on Windows CI too (no Unix-only paths, no wall-clock assumptions, files closed before delete).
++- `fc-desktop` (apps/desktop/src-tauri) cannot be compiled in this container. Code you write there is read by
++  nobody but CI: keep it small, re-read it as a reviewer (clippy `-D warnings`, items after test modules, unused
++  imports), and say in the report exactly what only CI can confirm.
++- No features removed, no UI redesign, sync out of scope. Text in the UI is i18n TR/EN.
++- Do not bump the version. CHANGELOG: lines under "Unreleased (v1.4.2)". Siblings share a 4-core machine: `-j 2`,
++  `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0`.
++- `/home/user/subtitle` and `/home/user/quiz` are read-only references: never edit or commit there.
++- Never put a real key or token in the repo or in output. No model names in the repo.
++- Usual full checks before the final commit (fmt, clippy `--workspace --exclude fc-desktop --all-targets`,
++  tests you touched plus the crate's suite, gen-ts check if the API changed, pnpm check/test if the UI changed).
++  Commit on your branch, no push. Report in Turkish, short: table of what you found or built, what you ran,
++  what you could not check.
+diff --git a/.orchestra/v14/briefs/j1-independent-review.md b/.orchestra/v14/briefs/j1-independent-review.md
+new file mode 100644
+index 0000000..a77e143
+--- /dev/null
++++ b/.orchestra/v14/briefs/j1-independent-review.md
+@@ -0,0 +1,22 @@
++# J1: independent code review of the write path, with fixes
++
++Read `j-common.md`. You did not write this code; review it as an outsider whose job is to find where the owner's
++cards or study history can be lost, corrupted or wrongly changed. Three areas, in this order:
++
++1. **SQLite writes** (`crates/fc-storage/src/sqlite/`, `store.rs`, migrations): transaction boundaries, anything
++   written outside a transaction, the background WAL checkpoint thread, busy/locked handling, foreign keys,
++   statements built from strings, what happens when two processes (desktop app + `fc api serve` / CLI) have the
++   collection open.
++2. **Commands and undo** (`crates/fc-app`: command registry, oplog, undo/redo): a command whose inverse does not
++   restore everything it changed, side effects outside the transaction (files, media, events, indexes) that
++   survive a rollback or an undo, validation that happens after the write, batches.
++3. **Plugins** (`crates/fc-plugins/src/runtime.rs`, `crates/fc-app/src/modules/plugins/host.rs`): what a plugin can
++   ask the host for, whether every host call checks the granted permission, resource limits (time, memory,
++   output size), path and URL handling, what a hostile plugin package can do at install time.
++
++For each finding: prove it with a failing test first where it can be tested, then fix it, keep the test. Rank
++findings (data loss > wrong data > crash > hardening). Do not report style. A finding you cannot fix within this
++task goes into the report with file:line and a concrete failure scenario. Write the review to
++`docs/15-bagimsiz-inceleme.md` (Turkish, short: what was read, findings table with status, what was not read) and
++link it from `docs/README.md`. You may use sub-agents to read the three areas in parallel, but verify every
++finding yourself before fixing it. If you find nothing in an area, say so and say what you read.
+diff --git a/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md b/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md
+new file mode 100644
+index 0000000..25249a5
+--- /dev/null
++++ b/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md
+@@ -0,0 +1,42 @@
++# J2: installed-app journeys on Windows, and the Subtitle check that cannot silently skip
++
++Read `j-common.md`. Two CI jobs, both verified only by CI (I, the orchestrator, push your branch's commits to the
++main branch and send you the failing logs; write the code so the first run has a real chance).
++
++## A. Windows installed-app journeys (`apps/desktop/e2e-windows/run.mjs`, `.github/workflows/windows-build.yml`)
++
++Today the pilot runs P and J1–J3 against the installed app through WebDriver, as non-blocking work. Read it and its
++README first, then add the journeys the reviewer asked for, each checking the saved result by reading it back
++(through the app or the local API, as the existing journeys do):
++
++1. **Capture**: with the app running, a Subtitle capture sent to the local API (the same request the extension
++   sends: pairing, then a word with its sentence and media) shows up in the app as a card with its encounter.
++2. **Reopen**: close the app, start it again; the card, the review done before closing and the encounter are there.
++3. **Backup and restore**: make a backup from the app, change something, restore, the change is gone and the
++   earlier state is back.
++4. **Rescue**: stop the app, damage the collection file (truncate it), start the app: the rescue dialog's choice
++   leads to a working collection restored from the verified backup. The dialog is a native one (rfd): if WebDriver
++   cannot drive it, find how the code can be driven in a test without weakening the product (for example the
++   existing `fc rescue` path for the choice plus the installed app for the result) and say plainly what is and is
++   not covered. Do not add a hidden test-only switch to the release build without saying so in the report.
++
++Keep each journey independent and its failure message useful (what was expected, what was read back, screenshot).
++Decide with reasons whether the new journeys block the build: a journey that is stable should block, one that
++depends on a flaky native piece stays non-blocking and is named as such. Update `apps/desktop/e2e-windows/README.md`.
++
++## B. Subtitle client check in `ci.yml` (around line 223)
++
++The job checks out `ardacarofficial/subtitle` with a token; when the checkout is unavailable it prints a warning
++and exits 0, so a release can go out without the real client ever being checked. Make that impossible to miss
++without making every fork or token-less run red for no reason:
++- On pushes to this repository's branches where the secret is expected: missing checkout = failed job, with a
++  message that says which secret is missing and how to set it.
++- Where the secret legitimately cannot exist (pull requests from forks): skipped, shown as skipped, not as success.
++- First find out from the workflow and its history what actually happens today on `claude/festive-einstein-8y0kld`
++  (does the checkout succeed?). If the secret is absent today, making the job fail would turn CI red until the
++  owner adds it: in that case keep the job red-capable behind one clearly named repository variable, leave it off,
++  make the job's summary say in a visible line "Subtitle client NOT checked", and put the exact steps for the owner
++  in the report. Do not guess; read the last CI logs' lines if you can, otherwise state the uncertainty.
++
++Local checks: `node --check` on the scripts, a YAML parse of both workflows, and run whatever part of `run.mjs`
++can run here against `fc dev serve` or `fc api serve` (the capture request and the read-back at least).
+diff --git a/.orchestra/v14/briefs/j3-anki-compat-and-speed.md b/.orchestra/v14/briefs/j3-anki-compat-and-speed.md
+new file mode 100644
+index 0000000..a592b91
+--- /dev/null
++++ b/.orchestra/v14/briefs/j3-anki-compat-and-speed.md
+@@ -0,0 +1,34 @@
++# J3: Anki compatibility on real decks, and an honest speed comparison
++
++Read `j-common.md`. Read `crates/fc-interop/src/anki/`, `crates/fc-app/src/modules/io/real_anki_tests.rs`,
++`docs/12-performans.md` and how CI opens our exports in real Anki first.
++
++## A. Compatibility
++
++1. `crates/fc-interop/src/anki/convert.rs` (around line 701) skips review-log entries made by manual rescheduling.
++   Decide what is right for the owner's history (import them as what they are, so intervals and due dates after
++   import match Anki's), implement it, test it with a package made by real Anki.
++2. Build a wider set of real-Anki fixtures with the `anki` Python package (the one CI already uses; install it in
++   a venv in your scratch dir, not in the repo): cloze, image occlusion, several templates per note type, sub-decks,
++   deck options with FSRS on and off, suspended/buried/flagged cards, tags with hierarchy, media with non-ASCII
++   names, filtered decks, a large review history, a scheduler-v3 collection, an old `.apkg` (schema 11) and a new
++   one (`.anki21b`, zstd). For each: import → compare with what Anki itself reports (card counts per state, due
++   dates, intervals, ease or FSRS memory state, review counts, media, tags) → export → open in Anki → compare
++   again. Every difference is either fixed, or listed with the reason it is acceptable.
++3. Write `docs/16-anki-uyum.md` (Turkish, short): the table of what round-trips exactly, what changes and why,
++   what is not supported. Link it from `docs/README.md`. Keep fixtures small enough for the repo (generate large
++   ones in the test, do not commit them).
++
++## B. Speed comparison
++
++Same machine, same data: build the 100k-note / 2M-review collection the perf suite uses, export it for Anki (or
++generate the same shape with the `anki` package), and measure Anki's own backend (through the `anki` Python
++package: open collection, build the day's queue / get the next card, answer a card, search queries equivalent to
++ours, browser page, stats, import, backup/export) against our numbers from `perf_suite_100k`. Be honest about what
++is and is not comparable (Python call overhead, UI not included on either side, different feature work per call);
++run each several times, report medians. Add the table to `docs/12-performans.md` under its own heading with the
++method and the caveats. Where Anki is clearly faster on a comparable operation, find out why and either fix it
++(with before/after numbers and no budget regressions) or explain it. No marketing sentences: numbers and caveats.
++
++If the `anki` package cannot be installed here (network policy), stop that part, say exactly which host was
++refused, and finish everything that does not need it.
+diff --git a/.orchestra/v14/briefs/j4-windows-offline-tts.md b/.orchestra/v14/briefs/j4-windows-offline-tts.md
+new file mode 100644
+index 0000000..feeb1e6
+--- /dev/null
++++ b/.orchestra/v14/briefs/j4-windows-offline-tts.md
+@@ -0,0 +1,26 @@
++# J4: offline speech on Windows
++
++Read `j-common.md`. Read `crates/fc-app/src/modules/tts.rs`, the audio-fill path (`audio_fill`, "missing audio"
++work from W4), `crates/fc-providers`, how the desktop shell wires providers, and `docs/` on TTS first.
++
++Goal: on Windows, a card's word and sentence can be spoken and missing audio can be filled with no network and no
++key, using the voices Windows already has, in the note's language (English, and whatever voices the machine has).
++
++- Find what exists today (which providers, what the UI offers, what happens offline) and say it in the report
++  before changing anything. If offline speech already works through some path, do not build a second one: close
++  the gaps instead.
++- Follow the architecture: the capability is a provider behind the existing TTS interface, chosen in the existing
++  settings; logic in Rust; the module can be turned off; `fc-core` stays pure. The Windows API (WinRT
++  `Windows.Media.SpeechSynthesis` or SAPI through the `windows` crate) lives behind `cfg(windows)` with a clear
++  "not available on this system" answer elsewhere, so the workspace still builds and tests on Linux.
++- It must produce audio bytes that the existing media path stores (so the audio fill, backup and export work as for
++  any other audio), list the installed voices, pick a voice for the note's language, and fail with a plain TR/EN
++  sentence when no voice exists for that language (with what the owner can do: install a Windows language pack).
++- Tests: everything above the system call is tested on Linux with a fake synthesiser; a `cfg(windows)` test in the
++  Windows CI job speaks one short English sentence and checks that it gets a non-empty, decodable audio file (GitHub's
++  Windows runners have English voices; if the runner has none, the test must say "no voice" clearly, not pass
++  silently and not fail the build for that reason alone).
++- The crate with the Windows code must be one CI compiles and tests on Windows (check which crates the Windows job
++  builds and tests); new dependencies only for `cfg(windows)`, checked against the lockfile and `cargo deny`/license
++  rules if the repo has them.
++- Docs: the provider in the relevant doc and the settings help text; CHANGELOG line.
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index f883d89..8d12e2e 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,6 +2,10 @@
+ 
+ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [SemVer](https://semver.org/lang/tr/).
+ 
++## Unreleased (v1.4.2)
++
++- **Windows'ta internetsiz seslendirme (J4):** yeni yerleşik TTS sağlayıcısı `builtin.system` (`fc-system-tts`, WinRT `Windows.Media.SpeechSynthesis`, yalnız `cfg(windows)`): kartın kelimesi/cümlesi ve eksik ses, Windows'un kurulu sesleriyle anahtarsız ve ağsız okunur; ses notun diline göre seçilir (varsayılan ses önce), çıktı oynatılabilir WAV olarak medya yoluna (eksik ses, yedek, dışa aktarma) girer; o dilde ses yoksa sade TR/EN cümle ne kurulacağını söyler (`errors.provider.no_voice`). `tts` modülüyle kapanır, `tts.provider` ayarıyla seçilir; Windows dışında kaydedilmez. Windows CI gerçek sesle bir İngilizce cümle okutur. _(J4)_
++
+ ## [1.4.1] — sağlamlık turu: verinin kaybolmadığının kanıtı
+ 
+ Workspace sürümü `1.4.1`. Bağımsız bir inceleme v1.4.0'ı okudu ve işi tek soruya indirdi: bir arızadan sonra kartların ve çalışma geçmişi geri geliyor mu? Bu sürüm bunu testlerle kanıtlar: gerçek süreçler yazmanın ortasında öldürüldü, disk dolduruldu, koleksiyon bozuldu, dosyalar ve istekler rastgele bozuldu. Yeni özellik yok; bulunan hatalar düzeltildi. Migration yok.
+diff --git a/Cargo.lock b/Cargo.lock
+index 1de80e9..9245d85 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -1691,6 +1691,7 @@ dependencies = [
+  "fc-providers",
+  "fc-storage",
+  "fc-study",
++ "fc-system-tts",
+  "getrandom 0.3.4",
+  "log",
+  "minisign-verify",
+@@ -1877,6 +1878,15 @@ dependencies = [
+  "uuid",
+ ]
+ 
++[[package]]
++name = "fc-system-tts"
++version = "1.4.1"
++dependencies = [
++ "async-trait",
++ "fc-providers",
++ "windows",
++]
++
+ [[package]]
+ name = "fdeflate"
+ version = "0.3.7"
+diff --git a/Cargo.toml b/Cargo.toml
+index 20b5b47..4ce1fc2 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -21,6 +21,7 @@ fc-app = { path = "crates/fc-app" }
+ fc-interop = { path = "crates/fc-interop" }
+ fc-ai = { path = "crates/fc-ai" }
+ fc-plugins = { path = "crates/fc-plugins" }
++fc-system-tts = { path = "crates/fc-system-tts" }
+ 
+ # external
+ serde = { version = "1", features = ["derive"] }
+diff --git a/apps/desktop/src/lib/i18n/locales/en/notes.json b/apps/desktop/src/lib/i18n/locales/en/notes.json
+index 881a570..a447e7e 100644
+--- a/apps/desktop/src/lib/i18n/locales/en/notes.json
++++ b/apps/desktop/src/lib/i18n/locales/en/notes.json
+@@ -153,7 +153,7 @@
+       "no_text": "There is no text to read.",
+       "tts_off": "Text to speech is off.",
+       "no_tts_provider": "No text-to-speech provider.",
+-      "no_voice": "No voice installed for this language."
++      "no_voice": "No voice installed for this language. On Windows add one: Settings → Time & language → Speech → Add voices."
+     },
+     "origin": {
+       "original": "original",
+diff --git a/apps/desktop/src/lib/i18n/locales/en/plugins.json b/apps/desktop/src/lib/i18n/locales/en/plugins.json
+index 6ed2982..7f2bf46 100644
+--- a/apps/desktop/src/lib/i18n/locales/en/plugins.json
++++ b/apps/desktop/src/lib/i18n/locales/en/plugins.json
+@@ -73,7 +73,7 @@
+     "tts": {
+       "provider": {
+         "label": "Voice provider",
+-        "description": "Empty = the first available one."
++        "description": "Empty = the first available one. On Windows that is the voices Windows already has (offline, no key): builtin.system."
+       }
+     },
+     "audio_fill": {
+@@ -290,9 +290,13 @@
+       "plugin_rejected": "A plugin stopped this: {message}"
+     },
+     "provider": {
+-      "plugin_failed": "A plugin failed ({kind})."
++      "plugin_failed": "A plugin failed ({kind}).",
++      "no_voice": "No voice for {language} is installed on this computer. On Windows add one under Settings → Time & language → Speech → Add voices (it installs the language pack), then try again."
+     }
+   },
++  "tts_providers": {
++    "system": "Windows voices (offline)"
++  },
+   "audio_fill": {
+     "job": {
+       "planning": "Checking which cards have no sound…",
+diff --git a/apps/desktop/src/lib/i18n/locales/tr/notes.json b/apps/desktop/src/lib/i18n/locales/tr/notes.json
+index 67c5d28..84e5088 100644
+--- a/apps/desktop/src/lib/i18n/locales/tr/notes.json
++++ b/apps/desktop/src/lib/i18n/locales/tr/notes.json
+@@ -153,7 +153,7 @@
+       "no_text": "Okunacak bir yazı yok.",
+       "tts_off": "Seslendirme kapalı.",
+       "no_tts_provider": "Seslendirme sağlayıcısı yok.",
+-      "no_voice": "Bu dil için kurulu bir ses yok."
++      "no_voice": "Bu dil için kurulu bir ses yok. Windows'ta ekleyebilirsin: Ayarlar → Saat ve dil → Konuşma → Ses ekle."
+     },
+     "origin": {
+       "original": "özgün",
+diff --git a/apps/desktop/src/lib/i18n/locales/tr/plugins.json b/apps/desktop/src/lib/i18n/locales/tr/plugins.json
+index 3195ebb..3f3fc1e 100644
+--- a/apps/desktop/src/lib/i18n/locales/tr/plugins.json
++++ b/apps/desktop/src/lib/i18n/locales/tr/plugins.json
+@@ -73,7 +73,7 @@
+     "tts": {
+       "provider": {
+         "label": "Ses sağlayıcısı",
+-        "description": "Boş = kullanılabilen ilk sağlayıcı."
++        "description": "Boş = kullanılabilen ilk sağlayıcı. Windows'ta bu, Windows'un kendi sesleridir (internetsiz, anahtarsız): builtin.system."
+       }
+     },
+     "audio_fill": {
+@@ -290,9 +290,13 @@
+       "plugin_rejected": "Bir eklenti bunu durdurdu: {message}"
+     },
+     "provider": {
+-      "plugin_failed": "Bir eklenti hata verdi ({kind})."
++      "plugin_failed": "Bir eklenti hata verdi ({kind}).",
++      "no_voice": "Bu bilgisayarda {language} için kurulu bir ses yok. Windows'ta Ayarlar → Saat ve dil → Konuşma → Ses ekle'den ekleyebilirsin (dil paketini kurar), sonra yeniden dene."
+     }
+   },
++  "tts_providers": {
++    "system": "Windows sesleri (internetsiz)"
++  },
+   "audio_fill": {
+     "job": {
+       "planning": "Hangi kartların sesi yok, bakılıyor…",
+diff --git a/crates/fc-app/Cargo.toml b/crates/fc-app/Cargo.toml
+index 132849d..1efad72 100644
+--- a/crates/fc-app/Cargo.toml
++++ b/crates/fc-app/Cargo.toml
+@@ -16,6 +16,8 @@ fc-study = { path = "../fc-study" }
+ fc-interop.workspace = true
+ fc-ai.workspace = true
+ fc-plugins.workspace = true
++# Offline speech with the system's voices (Windows; nothing elsewhere), v1.4.2 J4.
++fc-system-tts.workspace = true
+ async-trait.workspace = true
+ serde.workspace = true
+ serde_json.workspace = true
+diff --git a/crates/fc-app/src/app.rs b/crates/fc-app/src/app.rs
+index 52d491b..0817252 100644
+--- a/crates/fc-app/src/app.rs
++++ b/crates/fc-app/src/app.rs
+@@ -313,12 +313,22 @@ impl App {
+         Ok(())
+     }
+ 
++    /// Built-in providers that need the operating system (v1.4.2 J4: the voices Windows has,
++    /// offline, as the TTS provider `builtin.system`; nothing elsewhere). Only the real
++    /// collection opens register them: the service tests behave the same on every platform.
++    pub fn register_system_providers(&self) {
++        if let Some(tts) = fc_system_tts::provider() {
++            self.registry.register_tts(tts);
++        }
++    }
++
+     /// Opens (creating and migrating if needed) the SQLite collection at `path` and returns a
+     /// ready app: production deps, [`App::load_state`] done.
+     pub fn open_sqlite(path: &std::path::Path) -> AppResult<Self> {
+         let store = Arc::new(fc_storage::SqliteStore::open(path)?);
+         let app = Self::new(AppDeps::with_store(store))
+             .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
++        app.register_system_providers();
+         if let Some(dir) = path.parent() {
+             app.set_data_dir(dir.to_path_buf());
+         }
+@@ -341,6 +351,7 @@ impl App {
+         let store = Arc::new(fc_storage::SqliteStore::open_current(path)?);
+         let app = Self::new(AppDeps::with_store(store))
+             .map_err(|e| AppError::api(ErrorCode::Internal, e.to_string()))?;
++        app.register_system_providers();
+         if let Some(dir) = path.parent() {
+             app.set_data_dir(dir.to_path_buf());
+         }
+diff --git a/crates/fc-app/src/modules/audio_fill_tests.rs b/crates/fc-app/src/modules/audio_fill_tests.rs
+index 22e8e80..eef7592 100644
+--- a/crates/fc-app/src/modules/audio_fill_tests.rs
++++ b/crates/fc-app/src/modules/audio_fill_tests.rs
+@@ -462,3 +462,106 @@ fn only_the_primary_example_is_filled() {
+         .iter()
+         .any(|r| r.code == fc_core::encounter_score::SceneReasonCode::SynthesizedAudio));
+ }
++
++/// The OS under the system voice provider (`fc-system-tts`): an English (default) and a Turkish
++/// voice; records which voice spoke what.
++struct FakeOs {
++    spoken: Arc<std::sync::Mutex<Vec<(String, String)>>>,
++}
++
++impl fc_system_tts::Synthesiser for FakeOs {
++    fn voices(&self) -> ProviderResult<Vec<fc_system_tts::SystemVoice>> {
++        let v = |id: &str, language: &str, is_default| fc_system_tts::SystemVoice {
++            id: id.into(),
++            name: id.into(),
++            language: language.into(),
++            is_default,
++        };
++        Ok(vec![v("os-tr", "tr-TR", false), v("os-en", "en-US", true)])
++    }
++    fn speak(&self, text: &str, voice_id: &str, _rate: f64) -> ProviderResult<Vec<u8>> {
++        self.spoken
++            .lock()
++            .unwrap()
++            .push((text.to_owned(), voice_id.to_owned()));
++        let samples: Vec<i16> = text.bytes().map(i16::from).collect();
++        Ok(fc_system_tts::wav::pcm16_mono(16_000, &samples))
++    }
++}
++
++/// v1.4.2 J4: the offline system voice (`builtin.system`, here over a fake OS) is an ordinary
++/// provider: it fills missing audio through the media path (stored WAV, `tts` origin with its
++/// provider and language), the note's language picks the voice, `tts.voices` lists the
++/// installed ones, a language without a voice is a plain "install one" answer, and the `tts`
++/// module switch turns it off.
++#[test]
++fn the_system_voice_fills_missing_audio_offline() {
++    let t = TestApp::new(Arc::new(SqliteStore::open_in_memory().unwrap()));
++    let spoken = Arc::new(std::sync::Mutex::new(Vec::new()));
++    t.app
++        .registry()
++        .register_tts(Arc::new(fc_system_tts::SystemTts::new(FakeOs {
++            spoken: spoken.clone(),
++        })));
++    t.ok::<ModulesSetEnabled>(SetModuleEnabled {
++        id: crate::modules::subtitle::ID.into(),
++        enabled: true,
++    });
++    let c = t.ok::<SubtitleKeysCreate>(CreateSubtitleKey { name: "Chrome".into() });
++    let key = authenticate(&t.app, &key_hash(&c.secret)).unwrap();
++    let n = capture(&t.app, &key, &shot(1, "bank", "banka", "To the bank.", false))
++        .unwrap()
++        .note_id;
++
++    let p = t.ok::<MediaAudioFillPreview>(ids(&[n]));
++    assert_eq!((p.tts, p.none), (1, 0));
++    assert!(p.tts_problems.is_empty(), "{:?}", p.tts_problems);
++    let r = run(&t, ids(&[n]));
++    assert_eq!((r.done.tts, r.failed), (1, 0), "{r:?}");
++    assert_eq!(*spoken.lock().unwrap(), vec![("bank".to_owned(), "os-en".to_owned())]);
++    let h = hash_of(&audio_of(&t, n));
++    let o = origin(&t, &h);
++    assert_eq!(o.origin, MediaOrigin::Tts);
++    assert_eq!(o.provider.as_deref(), Some(fc_system_tts::PROVIDER_ID));
++    assert_eq!(o.language.as_deref(), Some("en"));
++    let m = t.store.read().unwrap().get_media(&h).unwrap().unwrap();
++    assert_eq!(m.mime, "audio/wav");
++
++    let v = t.ok::<TtsVoices>(fc_api::v1::tts::ListVoices { provider: None });
++    assert_eq!(v.provider, fc_system_tts::PROVIDER_ID);
++    assert_eq!(v.voices.len(), 2);
++    let said = t.ok::<TtsSynthesize>(fc_api::v1::tts::Synthesize {
++        provider: None,
++        text: "merhaba".into(),
++        language: "tr".into(),
++        voice: None,
++        rate: None,
++    });
++    assert_eq!(said.mime, "audio/wav");
++    assert_eq!(spoken.lock().unwrap()[1], ("merhaba".to_owned(), "os-tr".to_owned()));
++    // No Japanese voice on this machine: the plain sentence, with the language.
++    let e = t.err::<TtsSynthesize>(fc_api::v1::tts::Synthesize {
++        provider: None,
++        text: "こんにちは".into(),
++        language: "ja-JP".into(),
++        voice: None,
++        rate: None,
++    });
++    assert_eq!(e.code, ErrorCode::ProviderUnavailable);
++    assert_eq!(e.message_key, crate::modules::tts::NO_VOICE_KEY);
++    assert_eq!(e.details.get("language"), Some(&json!("ja-JP")));
++    assert_eq!(e.details.get("kind"), Some(&json!("no_voice")));
++    // The `tts` module off: no speech through it.
++    t.ok::<ModulesSetEnabled>(SetModuleEnabled {
++        id: crate::modules::tts::ID.into(),
++        enabled: false,
++    });
++    let e = t.err::<TtsSynthesize>(fc_api::v1::tts::Synthesize {
++        provider: None,
++        text: "bank".into(),
++        language: "en".into(),
++        voice: None,
++        rate: None,
++    });
++    assert_eq!(e.code, ErrorCode::ConflictModuleDisabled);
++}
+diff --git a/crates/fc-app/src/modules/tts.rs b/crates/fc-app/src/modules/tts.rs
+index 391f3db..413c130 100644
+--- a/crates/fc-app/src/modules/tts.rs
++++ b/crates/fc-app/src/modules/tts.rs
+@@ -85,6 +85,41 @@ fn provider_error(provider: &str, e: ProviderError) -> AppError {
+     )
+ }
+ 
++/// Primary language subtag, lower case (`en-US` → `en`).
++fn primary(tag: &str) -> String {
++    tag.trim()
++        .split(['-', '_'])
++        .next()
++        .unwrap_or("")
++        .to_ascii_lowercase()
++}
++
++/// After a failed synthesis: when the provider lists voices and none speaks `language`, the
++/// plain "no voice for this language — install one" error (`errors.provider.no_voice`, v1.4.2
++/// J4) instead of the provider's own message.
++fn no_voice_error(p: &dyn TtsProvider, id: &str, language: &str) -> Option<AppError> {
++    let lang = primary(language);
++    if matches!(lang.as_str(), "" | "und" | "mul" | "zxx") {
++        return None;
++    }
++    let voices = block_on(p.voices()).ok()?;
++    if voices.iter().any(|v| primary(&v.language) == lang) {
++        return None;
++    }
++    let mut e = ApiError::new(
++        ErrorCode::ProviderUnavailable,
++        format!("no installed voice speaks '{language}'"),
++    )
++    .with_detail("provider", id)
++    .with_detail("kind", "no_voice")
++    .with_detail("language", language);
++    e.message_key = NO_VOICE_KEY.to_owned();
++    Some(AppError::Api(e))
++}
++
++/// i18n key of the "no voice for this language" sentence.
++pub const NO_VOICE_KEY: &str = "errors.provider.no_voice";
++
+ fn pick(ctx: &QueryCtx<'_>, requested: Option<String>) -> AppResult<Arc<dyn TtsProvider>> {
+     let wanted = match requested {
+         Some(p) => Some(p),
+@@ -166,13 +201,20 @@ fn synthesize(req: Synthesize, ctx: &QueryCtx<'_>) -> AppResult<AudioDto> {
+     }
+     let p = pick(ctx, req.provider)?;
+     let id = p.info().id;
++    let asked_voice = req.voice.is_some();
++    let language = req.language.clone();
+     let clip = block_on(p.synthesize(SpeechRequest {
+         text: req.text,
+         language: req.language,
+         voice: req.voice,
+         rate,
+     }))
+-    .map_err(|e| provider_error(&id, e))?;
++    .map_err(|e| {
++        if asked_voice {
++            return provider_error(&id, e);
++        }
++        no_voice_error(&*p, &id, &language).unwrap_or_else(|| provider_error(&id, e))
++    })?;
+     Ok(AudioDto {
+         provider: id,
+         mime: clip.mime,
+diff --git a/crates/fc-system-tts/Cargo.toml b/crates/fc-system-tts/Cargo.toml
+new file mode 100644
+index 0000000..e33eb1f
+--- /dev/null
++++ b/crates/fc-system-tts/Cargo.toml
+@@ -0,0 +1,27 @@
++[package]
++name = "fc-system-tts"
++description = "Offline text-to-speech with the voices the operating system has (Windows: Windows.Media.SpeechSynthesis), behind the `TtsProvider` interface."
++version.workspace = true
++edition.workspace = true
++rust-version.workspace = true
++license.workspace = true
++publish.workspace = true
++
++[dependencies]
++fc-providers.workspace = true
++async-trait.workspace = true
++
++# Only on Windows (v1.4.2 J4). The same version Tauri already pulls in (no new crate in the lock file).
++[target.'cfg(windows)'.dependencies]
++windows = { version = "0.62", features = [
++    "Foundation",
++    "Foundation_Collections",
++    "Media",
++    "Media_Core",
++    "Media_SpeechSynthesis",
++    "Storage",
++    "Storage_Streams",
++] }
++
++[lints]
++workspace = true
+diff --git a/crates/fc-system-tts/src/lib.rs b/crates/fc-system-tts/src/lib.rs
+new file mode 100644
+index 0000000..e28e3ce
+--- /dev/null
++++ b/crates/fc-system-tts/src/lib.rs
+@@ -0,0 +1,242 @@
++//! Offline text-to-speech with the voices the operating system already has (v1.4.2 J4).
++//!
++//! [`SystemTts`] is a [`TtsProvider`] over a [`Synthesiser`], the thin boundary to the OS. On
++//! Windows that is `Windows.Media.SpeechSynthesis` (WinRT; the voices of Settings → Time &
++//! language → Speech, OneCore and the installed language packs). Everything above that boundary
++//! is here and tested on every platform with a fake synthesiser: which installed voice speaks a
++//! note's language, the speaking rate, checking that the bytes are a playable WAV before they
++//! reach the media store, and plain errors (no voice for a language → what to install).
++//!
++//! On other systems [`provider`] is `None` (nothing is registered, so the app answers
++//! `no_tts_provider` exactly as before) and [`Platform`] answers "not available on this system".
++
++use async_trait::async_trait;
++use fc_providers::speech::{AudioClip, SpeechRequest, TtsProvider, Voice};
++use fc_providers::{Capability, ProviderError, ProviderErrorKind, ProviderInfo, ProviderResult};
++use std::sync::Arc;
++
++pub mod wav;
++#[cfg(windows)]
++mod winrt;
++
++/// Provider id (`tts.provider` setting; sorts before `plugin.…`, so it is the default where it
++/// exists).
++pub const PROVIDER_ID: &str = "builtin.system";
++
++/// i18n key of the provider's name.
++pub const NAME_KEY: &str = "tts_providers.system";
++
++/// MIME type of what the system voice returns.
++pub const MIME: &str = "audio/wav";
++
++/// Speaking rates the system accepts (WinRT `SpeakingRate`: 0.5–6.0).
++pub const RATE_RANGE: (f64, f64) = (0.5, 6.0);
++
++/// An installed voice as the OS reports it.
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct SystemVoice {
++    /// OS id (stable on one machine).
++    pub id: String,
++    /// Display name ("Microsoft Zira").
++    pub name: String,
++    /// BCP-47 language (`en-US`).
++    pub language: String,
++    /// The voice the user chose as default in the OS settings.
++    pub is_default: bool,
++}
++
++/// The OS boundary: lists voices, turns text into a WAV file. Blocking.
++pub trait Synthesiser: Send + Sync {
++    /// Installed voices.
++    fn voices(&self) -> ProviderResult<Vec<SystemVoice>>;
++    /// Speaks `text` with the voice `voice_id` at `rate` (1.0 = normal, within [`RATE_RANGE`])
++    /// and returns the bytes of a WAV file.
++    fn speak(&self, text: &str, voice_id: &str, rate: f64) -> ProviderResult<Vec<u8>>;
++}
++
++/// The error for "no installed voice speaks `language`", with what to do about it. Its kind is
++/// `Unavailable`; the app shows the localized sentence `errors.provider.no_voice`.
++pub fn no_voice(language: &str) -> ProviderError {
++    ProviderError::new(
++        ProviderErrorKind::Unavailable,
++        format!(
++            "no installed system voice speaks '{language}'; add one in Windows Settings → \
++             Time & language → Speech → Add voices (or install the language pack), then try again"
++        ),
++    )
++}
++
++fn normalized(tag: &str) -> String {
++    tag.trim().replace('_', "-").to_ascii_lowercase()
++}
++
++fn primary(tag: &str) -> String {
++    normalized(tag)
++        .split('-')
++        .next()
++        .unwrap_or_default()
++        .to_owned()
++}
++
++/// Language tags that name no language: the default voice speaks them.
++fn no_language(tag: &str) -> bool {
++    matches!(primary(tag).as_str(), "" | "und" | "mul" | "zxx")
++}
++
++/// The OS default voice among those `pred` accepts, else the first of them.
++fn best(voices: &[SystemVoice], pred: impl Fn(&SystemVoice) -> bool) -> Option<&SystemVoice> {
++    voices
++        .iter()
++        .find(|v| v.is_default && pred(v))
++        .or_else(|| voices.iter().find(|v| pred(v)))
++}
++
++/// Which voice speaks a request: the asked voice (it must be installed); else, for the
++/// request's language, a voice of exactly that tag, then one of the same primary language
++/// (`en` ↔ `en-GB`), the OS default voice first in both; without a language, the OS default.
++pub fn choose_voice<'a>(
++    voices: &'a [SystemVoice],
++    language: &str,
++    wanted: Option<&str>,
++) -> ProviderResult<&'a SystemVoice> {
++    if let Some(id) = wanted.filter(|w| !w.is_empty()) {
++        return voices.iter().find(|v| v.id == id).ok_or_else(|| {
++            ProviderError::new(
++                ProviderErrorKind::Unavailable,
++                format!("the system voice '{id}' is not installed"),
++            )
++        });
++    }
++    if no_language(language) {
++        return best(voices, |_| true).ok_or_else(|| no_voice(language));
++    }
++    let tag = normalized(language);
++    let lang = primary(language);
++    best(voices, |v| normalized(&v.language) == tag)
++        .or_else(|| best(voices, |v| primary(&v.language) == lang))
++        .ok_or_else(|| no_voice(language))
++}
++
++/// The system TTS provider over a [`Synthesiser`].
++pub struct SystemTts<S> {
++    sys: S,
++}
++
++impl<S: Synthesiser> SystemTts<S> {
++    /// Wraps a synthesiser.
++    pub fn new(sys: S) -> Self {
++        Self { sys }
++    }
++
++    fn speak_now(&self, request: &SpeechRequest) -> ProviderResult<AudioClip> {
++        let text = request.text.trim();
++        if text.is_empty() {
++            return Err(ProviderError::new(
++                ProviderErrorKind::InvalidRequest,
++                "there is no text to read",
++            ));
++        }
++        let voices = self.sys.voices()?;
++        let voice = choose_voice(&voices, &request.language, request.voice.as_deref())?;
++        let rate = if request.rate.is_finite() {
++            f64::from(request.rate).clamp(RATE_RANGE.0, RATE_RANGE.1)
++        } else {
++            1.0
++        };
++        let bytes = self.sys.speak(text, &voice.id, rate)?;
++        wav::parse(&bytes).map_err(|why| {
++            ProviderError::new(
++                ProviderErrorKind::Failed,
++                format!("the system voice returned no playable audio ({why})"),
++            )
++        })?;
++        Ok(AudioClip {
++            mime: MIME.to_owned(),
++            bytes,
++        })
++    }
++}
++
++#[async_trait]
++impl<S: Synthesiser> TtsProvider for SystemTts<S> {
++    fn info(&self) -> ProviderInfo {
++        let mut languages: Vec<String> = self
++            .sys
++            .voices()
++            .unwrap_or_default()
++            .into_iter()
++            .map(|v| v.language)
++            .collect();
++        languages.sort();
++        languages.dedup();
++        ProviderInfo {
++            id: PROVIDER_ID.to_owned(),
++            name_key: NAME_KEY.to_owned(),
++            capabilities: languages.into_iter().map(Capability::Language).collect(),
++            settings: vec![],
++            secret_keys: vec![],
++            local: true,
++        }
++    }
++
++    async fn voices(&self) -> ProviderResult<Vec<Voice>> {
++        Ok(self
++            .sys
++            .voices()?
++            .into_iter()
++            .map(|v| Voice {
++                id: v.id,
++                name: v.name,
++                language: v.language,
++            })
++            .collect())
++    }
++
++    async fn synthesize(&self, request: SpeechRequest) -> ProviderResult<AudioClip> {
++        self.speak_now(&request)
++    }
++}
++
++/// This platform's synthesiser: Windows speech on Windows; elsewhere one that answers "not
++/// available on this system" to everything.
++#[derive(Debug, Default, Clone, Copy)]
++pub struct Platform;
++
++/// Whether this build has system voices at all (Windows).
++pub const AVAILABLE: bool = cfg!(windows);
++
++#[cfg(not(windows))]
++fn unavailable() -> ProviderError {
++    ProviderError::new(
++        ProviderErrorKind::Unavailable,
++        "system voices are not available on this system (only on Windows)",
++    )
++}
++
++impl Synthesiser for Platform {
++    fn voices(&self) -> ProviderResult<Vec<SystemVoice>> {
++        #[cfg(windows)]
++        return winrt::voices();
++        #[cfg(not(windows))]
++        Err(unavailable())
++    }
++
++    fn speak(&self, text: &str, voice_id: &str, rate: f64) -> ProviderResult<Vec<u8>> {
++        #[cfg(windows)]
++        return winrt::speak(text, voice_id, rate);
++        #[cfg(not(windows))]
++        {
++            let _ = (text, voice_id, rate);
++            Err(unavailable())
++        }
++    }
++}
++
++/// The system provider to register, or `None` where the platform has none (anything but
++/// Windows). The `tts` module's switch and the `tts.provider` setting decide whether it speaks.
++pub fn provider() -> Option<Arc<dyn TtsProvider>> {
++    AVAILABLE.then(|| Arc::new(SystemTts::new(Platform)) as Arc<dyn TtsProvider>)
++}
++
++#[cfg(test)]
++mod tests;
+diff --git a/crates/fc-system-tts/src/tests.rs b/crates/fc-system-tts/src/tests.rs
+new file mode 100644
+index 0000000..a93393f
+--- /dev/null
++++ b/crates/fc-system-tts/src/tests.rs
+@@ -0,0 +1,210 @@
++//! Everything above the system call, with a fake synthesiser (runs on every platform).
++
++use super::*;
++use std::future::Future;
++use std::sync::Mutex;
++use std::task::{Context, Poll, Waker};
++
++/// Drives a provider future (they finish without waiting).
++pub(crate) fn run<F: Future>(fut: F) -> F::Output {
++    let mut cx = Context::from_waker(Waker::noop());
++    let mut fut = std::pin::pin!(fut);
++    loop {
++        if let Poll::Ready(out) = fut.as_mut().poll(&mut cx) {
++            return out;
++        }
++    }
++}
++
++fn voice(id: &str, language: &str, is_default: bool) -> SystemVoice {
++    SystemVoice {
++        id: id.into(),
++        name: format!("Voice {id}"),
++        language: language.into(),
++        is_default,
++    }
++}
++
++#[derive(Default)]
++struct Fake {
++    voices: Vec<SystemVoice>,
++    /// What `speak` returns (`None` = a valid WAV).
++    output: Option<Vec<u8>>,
++    spoken: Mutex<Vec<(String, String, f64)>>,
++}
++
++impl Synthesiser for Fake {
++    fn voices(&self) -> ProviderResult<Vec<SystemVoice>> {
++        Ok(self.voices.clone())
++    }
++
++    fn speak(&self, text: &str, voice_id: &str, rate: f64) -> ProviderResult<Vec<u8>> {
++        self.spoken
++            .lock()
++            .unwrap()
++            .push((text.into(), voice_id.into(), rate));
++        Ok(self
++            .output
++            .clone()
++            .unwrap_or_else(|| wav::pcm16_mono(16_000, &[0, 50, -50, 0])))
++    }
++}
++
++fn machine() -> Vec<SystemVoice> {
++    vec![
++        voice("tr", "tr-TR", false),
++        voice("gb", "en-GB", false),
++        voice("us1", "en-US", false),
++        voice("us2", "en-US", true),
++        voice("de", "de_DE", false),
++    ]
++}
++
++fn request(text: &str, language: &str) -> SpeechRequest {
++    SpeechRequest {
++        text: text.into(),
++        language: language.into(),
++        voice: None,
++        rate: 1.0,
++    }
++}
++
++#[test]
++fn picks_the_voice_of_the_notes_language() {
++    let v = machine();
++    let pick = |lang: &str| choose_voice(&v, lang, None).map(|v| v.id.as_str());
++    // Exact tag, the OS default first among equals.
++    assert_eq!(pick("en-US"), Ok("us2"));
++    assert_eq!(pick("EN_us"), Ok("us2"));
++    assert_eq!(pick("en-GB"), Ok("gb"));
++    // Primary language only (the note says `en`, or a region nobody installed).
++    assert_eq!(pick("en"), Ok("us2"));
++    assert_eq!(pick("en-AU"), Ok("us2"));
++    assert_eq!(pick("tr"), Ok("tr"));
++    assert_eq!(pick("de-AT"), Ok("de"));
++    // No language → the OS default voice.
++    assert_eq!(pick(""), Ok("us2"));
++    assert_eq!(pick("und"), Ok("us2"));
++    // A voice asked by id must be installed.
++    assert_eq!(choose_voice(&v, "en", Some("gb")).unwrap().id, "gb");
++    let gone = choose_voice(&v, "en", Some("zz")).unwrap_err();
++    assert_eq!(gone.kind, ProviderErrorKind::Unavailable);
++    // Without any default the first listed voice of the language speaks.
++    let plain = vec![voice("a", "en-US", false), voice("b", "en-US", false)];
++    assert_eq!(choose_voice(&plain, "en", None).unwrap().id, "a");
++    assert_eq!(choose_voice(&plain, "", None).unwrap().id, "a");
++}
++
++#[test]
++fn no_voice_for_the_language_says_what_to_install() {
++    let v = machine();
++    for lang in ["ja-JP", "fr"] {
++        let e = choose_voice(&v, lang, None).unwrap_err();
++        assert_eq!(e.kind, ProviderErrorKind::Unavailable);
++        assert!(e.message.contains(lang), "{e:?}");
++        assert!(e.message.contains("Speech"), "{e:?}");
++        assert!(e.message.contains("language pack"), "{e:?}");
++    }
++    // No voices at all: even the default request has none.
++    assert!(choose_voice(&[], "", None).is_err());
++    assert!(choose_voice(&[], "en", None).is_err());
++}
++
++#[test]
++fn synthesizes_a_wav_with_the_chosen_voice_and_a_clamped_rate() {
++    let tts = SystemTts::new(Fake {
++        voices: machine(),
++        ..Fake::default()
++    });
++    let clip = run(tts.synthesize(request("  hello  ", "en"))).unwrap();
++    assert_eq!(clip.mime, "audio/wav");
++    assert!(wav::parse(&clip.bytes).is_ok());
++    let mut slow = request("merhaba", "tr-TR");
++    slow.rate = 0.25;
++    run(tts.synthesize(slow)).unwrap();
++    let mut fast = request("hallo", "de");
++    fast.rate = f32::NAN;
++    run(tts.synthesize(fast)).unwrap();
++    let mut asked = request("hi", "tr");
++    asked.voice = Some("gb".into());
++    run(tts.synthesize(asked)).unwrap();
++    assert_eq!(
++        *tts.sys.spoken.lock().unwrap(),
++        vec![
++            ("hello".to_owned(), "us2".to_owned(), 1.0),
++            ("merhaba".to_owned(), "tr".to_owned(), 0.5),
++            ("hallo".to_owned(), "de".to_owned(), 1.0),
++            ("hi".to_owned(), "gb".to_owned(), 1.0),
++        ]
++    );
++}
++
++#[test]
++fn refuses_empty_text_missing_voices_and_unplayable_output() {
++    let tts = SystemTts::new(Fake {
++        voices: machine(),
++        ..Fake::default()
++    });
++    let e = run(tts.synthesize(request("   ", "en"))).unwrap_err();
++    assert_eq!(e.kind, ProviderErrorKind::InvalidRequest);
++    let e = run(tts.synthesize(request("bonjour", "fr-FR"))).unwrap_err();
++    assert!(e
++        .message
++        .contains("no installed system voice speaks 'fr-FR'"));
++    assert!(
++        tts.sys.spoken.lock().unwrap().is_empty(),
++        "nothing was spoken"
++    );
++
++    let broken = SystemTts::new(Fake {
++        voices: machine(),
++        output: Some(b"RIFF\0\0\0\0WAVE".to_vec()),
++        ..Fake::default()
++    });
++    let e = run(broken.synthesize(request("hello", "en"))).unwrap_err();
++    assert_eq!(e.kind, ProviderErrorKind::Failed);
++    assert!(e.message.contains("no playable audio"), "{e:?}");
++}
++
++#[test]
++fn lists_voices_and_their_languages() {
++    let tts = SystemTts::new(Fake {
++        voices: machine(),
++        ..Fake::default()
++    });
++    let info = tts.info();
++    assert_eq!(info.id, PROVIDER_ID);
++    assert!(info.local);
++    assert_eq!(
++        info.capabilities,
++        ["de_DE", "en-GB", "en-US", "tr-TR"]
++            .map(|l| Capability::Language(l.into()))
++            .to_vec()
++    );
++    let voices = run(tts.voices()).unwrap();
++    assert_eq!(voices.len(), 5);
++    assert_eq!(
++        (
++            voices[3].id.as_str(),
++            voices[3].name.as_str(),
++            voices[3].language.as_str()
++        ),
++        ("us2", "Voice us2", "en-US")
++    );
++}
++
++#[test]
++fn elsewhere_the_platform_says_not_available() {
++    if AVAILABLE {
++        return; // Windows: the real voices are tested in `winrt::tests`.
++    }
++    assert!(provider().is_none(), "nothing to register off Windows");
++    let e = Platform.voices().unwrap_err();
++    assert_eq!(e.kind, ProviderErrorKind::Unavailable);
++    assert!(e.message.contains("not available on this system"));
++    let e = Platform.speak("hi", "x", 1.0).unwrap_err();
++    assert!(e.message.contains("not available on this system"));
++    let tts = SystemTts::new(Platform);
++    assert!(tts.info().capabilities.is_empty());
++    assert!(run(tts.synthesize(request("hi", "en"))).is_err());
++}
+diff --git a/crates/fc-system-tts/src/wav.rs b/crates/fc-system-tts/src/wav.rs
+new file mode 100644
+index 0000000..27ccdd6
+--- /dev/null
++++ b/crates/fc-system-tts/src/wav.rs
+@@ -0,0 +1,158 @@
++//! The smallest WAV reader that can tell a playable file from anything else: RIFF/WAVE header,
++//! a `fmt ` chunk with a sane format, and a non-empty `data` chunk. The system voice's output is
++//! checked with it before it is handed to the media store (a broken file must not be stored as
++//! a card's sound).
++
++/// What a valid WAV file says about itself.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub struct WavInfo {
++    /// `1` = PCM, `3` = IEEE float, `0xFFFE` = extensible…
++    pub format: u16,
++    /// Channels (≥ 1).
++    pub channels: u16,
++    /// Samples per second (≥ 1).
++    pub sample_rate: u32,
++    /// Bits per sample.
++    pub bits_per_sample: u16,
++    /// Bytes of audio in the `data` chunk (≥ 1; clipped to what the file really holds).
++    pub data_len: u32,
++}
++
++impl WavInfo {
++    /// Length of the audio in milliseconds (0 when the format has no fixed frame size).
++    pub fn duration_ms(&self) -> u64 {
++        let frame = u64::from(self.channels) * u64::from(self.bits_per_sample).div_ceil(8);
++        if frame == 0 {
++            return 0;
++        }
++        u64::from(self.data_len) / frame * 1000 / u64::from(self.sample_rate)
++    }
++}
++
++fn u16_at(b: &[u8], at: usize) -> Option<u16> {
++    Some(u16::from_le_bytes(b.get(at..at + 2)?.try_into().ok()?))
++}
++
++fn u32_at(b: &[u8], at: usize) -> Option<u32> {
++    Some(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?))
++}
++
++/// Reads the header of a WAV file. `Err` says in plain English why it is not one.
++pub fn parse(bytes: &[u8]) -> Result<WavInfo, &'static str> {
++    if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
++        return Err("not a RIFF/WAVE file");
++    }
++    let mut at = 12usize;
++    let mut fmt: Option<(u16, u16, u32, u16)> = None;
++    while at + 8 <= bytes.len() {
++        let id = &bytes[at..at + 4];
++        let len = u32_at(bytes, at + 4).ok_or("truncated chunk header")?;
++        let body = at + 8;
++        if id == b"fmt " {
++            let format = u16_at(bytes, body).ok_or("truncated fmt chunk")?;
++            let channels = u16_at(bytes, body + 2).ok_or("truncated fmt chunk")?;
++            let rate = u32_at(bytes, body + 4).ok_or("truncated fmt chunk")?;
++            let bits = u16_at(bytes, body + 14).ok_or("truncated fmt chunk")?;
++            if channels == 0 || rate == 0 {
++                return Err("fmt chunk has no channels or no sample rate");
++            }
++            fmt = Some((format, channels, rate, bits));
++        } else if id == b"data" {
++            let (format, channels, sample_rate, bits_per_sample) =
++                fmt.ok_or("data chunk before the fmt chunk")?;
++            let available = u32::try_from(bytes.len() - body).unwrap_or(u32::MAX);
++            // A streaming writer may leave the length at 0 or 0xFFFFFFFF: count what is there.
++            let data_len = if len == 0 || len > available {
++                available
++            } else {
++                len
++            };
++            if data_len == 0 {
++                return Err("no audio in the data chunk");
++            }
++            return Ok(WavInfo {
++                format,
++                channels,
++                sample_rate,
++                bits_per_sample,
++                data_len,
++            });
++        }
++        // Chunks are padded to an even length.
++        let next = usize::try_from(len)
++            .ok()
++            .and_then(|l| body.checked_add(l))
++            .and_then(|e| e.checked_add(e & 1));
++        match next {
++            Some(n) => at = n,
++            None => break,
++        }
++    }
++    Err("no data chunk")
++}
++
++/// A mono 16-bit PCM WAV file of `samples` (tests and fakes).
++pub fn pcm16_mono(sample_rate: u32, samples: &[i16]) -> Vec<u8> {
++    let data_len = u32::try_from(samples.len() * 2).unwrap_or(u32::MAX);
++    let mut out = Vec::with_capacity(44 + samples.len() * 2);
++    out.extend_from_slice(b"RIFF");
++    out.extend_from_slice(&(36 + data_len).to_le_bytes());
++    out.extend_from_slice(b"WAVEfmt ");
++    out.extend_from_slice(&16u32.to_le_bytes());
++    out.extend_from_slice(&1u16.to_le_bytes());
++    out.extend_from_slice(&1u16.to_le_bytes());
++    out.extend_from_slice(&sample_rate.to_le_bytes());
++    out.extend_from_slice(&(sample_rate * 2).to_le_bytes());
++    out.extend_from_slice(&2u16.to_le_bytes());
++    out.extend_from_slice(&16u16.to_le_bytes());
++    out.extend_from_slice(b"data");
++    out.extend_from_slice(&data_len.to_le_bytes());
++    for s in samples {
++        out.extend_from_slice(&s.to_le_bytes());
++    }
++    out
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn reads_a_pcm_file() {
++        let wav = pcm16_mono(16_000, &[0, 100, -100, 0].repeat(4000));
++        let info = parse(&wav).unwrap();
++        assert_eq!(
++            (info.format, info.channels, info.sample_rate),
++            (1, 1, 16_000)
++        );
++        assert_eq!(info.data_len, 32_000);
++        assert_eq!(info.duration_ms(), 1000);
++    }
++
++    #[test]
++    fn skips_unknown_chunks_and_counts_a_streamed_length() {
++        let mut wav = pcm16_mono(8000, &[1, 2, 3]);
++        // A LIST chunk (odd length → one pad byte) between fmt and data.
++        let list = [b"LIST".as_slice(), &3u32.to_le_bytes(), b"abc\0"].concat();
++        wav.splice(36..36, list);
++        let data_len_at = wav.len() - 6 - 4;
++        wav[data_len_at..data_len_at + 4].copy_from_slice(&u32::MAX.to_le_bytes());
++        assert_eq!(parse(&wav).unwrap().data_len, 6);
++    }
++
++    #[test]
++    fn refuses_what_is_not_playable() {
++        assert!(parse(b"").is_err());
++        assert!(parse(b"ID3\x04 not a wav at all").is_err());
++        assert_eq!(
++            parse(&pcm16_mono(8000, &[])),
++            Err("no audio in the data chunk")
++        );
++        let mut no_rate = pcm16_mono(8000, &[1]);
++        no_rate[24..28].copy_from_slice(&0u32.to_le_bytes());
++        assert!(parse(&no_rate).is_err());
++        let wav = pcm16_mono(8000, &[1, 2]);
++        assert_eq!(parse(&wav[..30]), Err("truncated fmt chunk"));
++        assert_eq!(parse(&wav[..36]), Err("no data chunk"));
++    }
++}
+diff --git a/crates/fc-system-tts/src/winrt.rs b/crates/fc-system-tts/src/winrt.rs
+new file mode 100644
+index 0000000..c4c9079
+--- /dev/null
++++ b/crates/fc-system-tts/src/winrt.rs
+@@ -0,0 +1,154 @@
++//! Windows speech through WinRT `Windows.Media.SpeechSynthesis` (the voices of Settings → Time &
++//! language → Speech). Offline, no key. The calls run on a short-lived worker thread: WinRT's
++//! blocking `join` must not run on a UI (STA) thread, and the worker joins the process MTA.
++
++use crate::SystemVoice;
++use fc_providers::{ProviderError, ProviderErrorKind, ProviderResult};
++use windows::core::HSTRING;
++use windows::Media::SpeechSynthesis::SpeechSynthesizer;
++use windows::Storage::Streams::DataReader;
++
++fn os_error(e: windows::core::Error) -> ProviderError {
++    ProviderError::new(
++        ProviderErrorKind::Unavailable,
++        format!("Windows speech failed: {e}"),
++    )
++}
++
++/// Runs `f` on a worker thread and waits for it.
++fn on_worker<T: Send + 'static>(
++    f: impl FnOnce() -> windows::core::Result<T> + Send + 'static,
++) -> ProviderResult<T> {
++    std::thread::Builder::new()
++        .name("fc-system-tts".into())
++        .spawn(f)
++        .map_err(|e| ProviderError::new(ProviderErrorKind::Failed, e.to_string()))?
++        .join()
++        .map_err(|_| ProviderError::new(ProviderErrorKind::Failed, "Windows speech crashed"))?
++        .map_err(os_error)
++}
++
++/// Installed voices, the OS default marked.
++pub(crate) fn voices() -> ProviderResult<Vec<SystemVoice>> {
++    on_worker(|| {
++        let default_id = SpeechSynthesizer::DefaultVoice()
++            .and_then(|v| v.Id())
++            .map(|id| id.to_string_lossy())
++            .ok();
++        let mut out = Vec::new();
++        for v in &SpeechSynthesizer::AllVoices()? {
++            let id = v.Id()?.to_string_lossy();
++            out.push(SystemVoice {
++                is_default: default_id.as_deref() == Some(id.as_str()),
++                id,
++                name: v.DisplayName()?.to_string_lossy(),
++                language: v.Language()?.to_string_lossy(),
++            });
++        }
++        Ok(out)
++    })
++}
++
++/// Speaks `text` with the installed voice `voice_id`; the stream WinRT returns is a WAV file.
++pub(crate) fn speak(text: &str, voice_id: &str, rate: f64) -> ProviderResult<Vec<u8>> {
++    let text = HSTRING::from(text);
++    let voice_id = voice_id.to_owned();
++    let found = on_worker(move || {
++        let Some(voice) = SpeechSynthesizer::AllVoices()?
++            .into_iter()
++            .find(|v| v.Id().is_ok_and(|id| id.to_string_lossy() == voice_id))
++        else {
++            return Ok(None);
++        };
++        let synth = SpeechSynthesizer::new()?;
++        synth.SetVoice(&voice)?;
++        synth.Options()?.SetSpeakingRate(rate)?;
++        let stream = synth.SynthesizeTextToStreamAsync(&text)?.join()?;
++        let size = u32::try_from(stream.Size()?).unwrap_or(u32::MAX);
++        let reader = DataReader::CreateDataReader(&stream.GetInputStreamAt(0)?)?;
++        let loaded = reader.LoadAsync(size)?.join()?;
++        let mut bytes = vec![0u8; loaded as usize];
++        reader.ReadBytes(&mut bytes)?;
++        let _ = reader.Close();
++        let _ = stream.Close();
++        let _ = synth.Close();
++        Ok(Some(bytes))
++    })?;
++    found.ok_or_else(|| {
++        ProviderError::new(
++            ProviderErrorKind::Unavailable,
++            "the chosen Windows voice is no longer installed",
++        )
++    })
++}
++
++#[cfg(test)]
++mod tests {
++    //! Runs on the Windows CI job (`cargo test -p fc-system-tts`): the real system voice.
++    use crate::{Platform, Synthesiser, SystemTts};
++    use fc_providers::speech::{SpeechRequest, TtsProvider};
++    use std::io::Write as _;
++
++    /// Bypasses the test harness's output capture, so a skipped check is visible in the CI log
++    /// (and as a GitHub warning annotation).
++    fn say(line: &str) {
++        let mut out = std::io::stdout().lock();
++        // Own line: the harness may have printed "test … " without a newline.
++        let _ = writeln!(out, "\n{line}");
++        let _ = out.flush();
++    }
++
++    #[test]
++    fn windows_voice_speaks_one_english_sentence() {
++        let voices = Platform.voices().expect("listing Windows voices");
++        let english: Vec<_> = voices
++            .iter()
++            .filter(|v| v.language.to_ascii_lowercase().starts_with("en"))
++            .collect();
++        say(&format!(
++            "fc-system-tts: {} Windows voice(s) installed, {} English: {:?}",
++            voices.len(),
++            english.len(),
++            english
++                .iter()
++                .map(|v| (&v.name, &v.language))
++                .collect::<Vec<_>>()
++        ));
++        if english.is_empty() {
++            say(
++                "::warning title=fc-system-tts::no voice: this Windows machine has no English \
++                 voice, so the real speech check was NOT run (install an English voice to run it)",
++            );
++            return;
++        }
++        let tts = SystemTts::new(Platform);
++        let clip = crate::tests::run(tts.synthesize(SpeechRequest {
++            text: "The quick brown fox jumps over the lazy dog.".into(),
++            language: "en-US".into(),
++            voice: None,
++            rate: 1.0,
++        }))
++        .expect("synthesis with an installed English voice");
++        assert_eq!(clip.mime, "audio/wav");
++        let info = crate::wav::parse(&clip.bytes).expect("a decodable WAV file");
++        say(&format!(
++            "fc-system-tts: spoke {} bytes, {:?}, {} ms",
++            clip.bytes.len(),
++            info,
++            info.duration_ms()
++        ));
++        assert!(info.duration_ms() > 300, "{info:?}");
++        // A language this machine surely lacks is a plain "no voice", not a crash.
++        let missing = crate::tests::run(tts.synthesize(SpeechRequest {
++            text: "x".into(),
++            language: "tlh".into(),
++            voice: None,
++            rate: 1.0,
++        }))
++        .expect_err("no Klingon voice");
++        assert!(
++            missing.message.contains("no installed system voice"),
++            "{missing:?}"
++        );
++    }
++}
+diff --git a/docs/02-ozellik-katalogu.md b/docs/02-ozellik-katalogu.md
+index 9374408..fa71324 100644
+--- a/docs/02-ozellik-katalogu.md
++++ b/docs/02-ozellik-katalogu.md
+@@ -166,7 +166,7 @@ Kart türü motorunun üç işi vardır: **kart üret**, **soruyu sun**, **cevab
+ - ⛱️ **Yarına bırak** (gömme): Kart sadece bugün gösterilmez.
+ - ✏️ **Kartı düzenle:** Çalışmadan çıkmadan kartı düzenleme.
+ - ℹ️ **Kart bilgisi:** Bkz. §11.
+-- 🔊 **Sesli okuma:** TTS sağlayıcısı varsa alan seslendirilir (otomatik ya da butonla).
++- 🔊 **Sesli okuma:** TTS sağlayıcısı varsa alan seslendirilir (otomatik ya da butonla). `[v1.4.2]` Windows'ta yerleşik sağlayıcı **Windows sesleri** (`builtin.system`): internetsiz, anahtarsız, notun dilindeki kurulu sesle; eksik sesi de doldurur. O dil için ses yoksa ne kurulacağını söyler (Ayarlar → Saat ve dil → Konuşma → Ses ekle). docs/03 §13.
+ - 🧘 **Odak modu:** Tam ekran, dikkat dağıtıcı her şey gizli.
+ 
+ ## 7. ✍️ Cevap kontrolü
+diff --git a/docs/03-mimari.md b/docs/03-mimari.md
+index 862efc3..80e2921 100644
+--- a/docs/03-mimari.md
++++ b/docs/03-mimari.md
+@@ -49,6 +49,8 @@ crates/
+   fc-ai/            Yerleşik AI sağlayıcıları (HTTP adaptörleri), v1.3 ön ayarlar
+                     (`presets`) ve bağlantı testi sınıflandırması (`diagnose`).
+   fc-plugins/       Eklenti çalışma zamanı (WASM), host fonksiyonları, izinler, manifest.
++  fc-system-tts/    v1.4.2: işletim sisteminin kendi sesleriyle çevrimdışı TTS sağlayıcısı
++                    (Windows: WinRT `Windows.Media.SpeechSynthesis`, `cfg(windows)`).
+   fc-interop/       Anki .apkg, deste paketi, yedek formatları.
+   fc-http/          Yerel HTTP API sunucusu (axum).
+   fc-mcp/           MCP sunucusu ve istemcisi.
+@@ -300,7 +302,7 @@ Açılmayan ya da bütünlük denetiminden geçemeyen koleksiyonda **hiçbir şe
+ | `HintStrategy` | ilk harf, kelime başları, kısmi, alan, AI | ✅ |
+ | `Importer` / `Exporter` | metin/CSV, JSON, Quizlet, .apkg, deste paketi, altyazı | ✅ |
+ | `AiProvider` | Claude, OpenAI, OpenAI uyumlu, Ollama | ✅ |
+-| `TtsProvider` | sistem TTS (Windows SAPI/OneCore), yerel model (ör. Piper) | ✅ |
++| `TtsProvider` | sistem TTS (v1.4.2: Windows sesleri, `builtin.system`, `fc-system-tts`), yerel model (ör. Piper) | ✅ |
+ | `SttProvider` | Whisper (yerel, whisper.cpp), Whisper API | ✅ |
+ | `TranslationProvider` | AI, DeepL vb. | ✅ |
+ | `DictionaryProvider` | — | ✅ |
+@@ -329,7 +331,7 @@ Her arayüzün bir **kimliği**, **yetenek bildirimi** (capabilities) ve **ayar
+ - Frontend medyaya özel bir protokolle erişir (`fcmedia://<hash>`), dosya yollarını bilmez.
+ - `[v1.4 W4]` **Köken:** her ses/görsel dosyasının nereden geldiği `media_origins` tablosunda (migration `1420_media_origins`): `original` (Subtitle eklentisinin filmden yakaladığı), `clip` (yerel video dosyasından ffmpeg ile kesilen; `source` = dosya adı), `tts` (sağlayıcı, ses, hız × 1000, metnin SHA-256'sı), `user`. Satırı olmayan dosya `user`dır; adı `subtitle-…` ise `original` (B3'ün eski kuralı). Üreticiler dosyanın yanına yazar (Subtitle yüklemesi, `reading.clips.extract`, `media.audio.fill`; iç komut `media.origin.record`), türetilmiş üst veri olarak geri alınmaz (aynı bayt = aynı dosya = aynı köken). Okuma: `media.origins { hashes | note_id }`, karşılaşma satırlarında `facts.audio_origin`/`screenshot_origin`, sorguda `ses:özgün|klip|tts|dosya|video` (docs/02 §9.1). Eskiler: `subtitle_uploads` ve `subtitle-…` adlı dosyalar `original`, gerisi tahmin edilmez.
+ - `[v1.4 W4]` **Eksik sesi tamamla** (modül `audio_fill`, kapatılabilir): `media.audio.fill_preview` (yazmaz: kaç not, her birine hangi kaynak, TTS önbellekte mi, hangi dil için ses yok) ve iptal edilebilir iş `media.audio.fill { scope: {query | note_ids}, video?, offset_ms?, tts?, tts_text: term|sentence, provider?, voice?, rate? }`. Not türünün ilk ses alanı boş olan her not için sıra: birincil karşılaşmanın kendi sesi → verilen yerel videodan, karşılaşmanın başlangıç–bitişi varsa (±`audio_fill.clip_offset_ms`, ±250 ms pay; süre yoksa **asla** uydurulmaz; `video.source` verilirse yalnız o video kimliği/başlığı) → kayıtlı `TtsProvider` ile terimin (ya da cümlenin) okunuşu. TTS önbelleği = (sağlayıcı, dil, ses, hız, metin hash'i) → dosya; aynı kelime bir kez sentezlenir. Ses, Altyazı notlarında birincil karşılaşmaya da yazılır (`audio_hash` + `example_fields.audio`; birincil değişse de kaybolmaz). Bütün iş **tek geri alma adımı** (içe aktarmadaki gibi çökmeye dayanıklı geri alma grubu, `media.audio.attach` + `media.audio.fill_rollback` iç komutları); iptal yazılanı geri alır. Dil için ses yoksa önizleme ve rapor dil başına `no_voice` ("<dil> için kurulu çevrimdışı ses yok") ya da `no_tts_provider` der, sessizce düşmez.
+-- `[v1.4 W4]` **Windows çevrimdışı ses:** çekirdekte henüz yerleşik bir OS ses sağlayıcısı yok (masaüstü arayüzü WebView konuşmasına düşer). Yeri hazır: `TtsProvider` + `Registry::register_tts`; Windows'ta `Windows.Media.SpeechSynthesis` (WinRT, `windows` crate'i, `cfg(windows)`) ile `voices()` = kurulu sesler, `synthesize()` = WAV akışı yazan bir sağlayıcı eklenecek; `voices()` dili listelemezse iş bunu `no_voice` olarak raporlar. Bu ortamda (Linux konteyner) derlenemediği/denenemediği için eklenmedi.
++- `[v1.4.2 J4]` **Windows çevrimdışı ses** (`fc-system-tts`, sağlayıcı `builtin.system`): Windows'un zaten kurulu sesleriyle (Ayarlar → Saat ve dil → Konuşma; OneCore + dil paketleri) internetsiz, anahtarsız seslendirme. Mimari: `SystemTts<S: Synthesiser>` bir `TtsProvider`; `Synthesiser` işletim sistemi sınırıdır (`voices()`, `speak(text, voice_id, rate) → WAV baytları`). Windows'ta `Platform` = WinRT (`windows` crate'i 0.62, yalnız `cfg(windows)`; Tauri'nin zaten çektiği sürüm, kilit dosyasına yeni dış crate girmedi), çağrılar kısa ömürlü bir iş parçacığında (STA'da bloklamaz). Sınırın üstü her platformda sahte sentezleyiciyle test edilir: **ses seçimi** — istenen ses (kurulu olmalı) → notun dilinin tam etiketi (`en-US`, büyük/küçük harf ve `_` fark etmez) → aynı birincil dil (`en` ↔ `en-GB`), ikisinde de Windows'un varsayılan sesi önce; dil yoksa (`und`, boş) varsayılan ses; hız 0.5–6'ya kırpılır; dönen baytlar oynatılabilir WAV değilse (`wav::parse`: RIFF/WAVE, `fmt `, boş olmayan `data`) medya deposuna gitmez. Dil için ses yoksa hata `PROVIDER_UNAVAILABLE` + `message_key` **`errors.provider.no_voice`** (`details.language`, `details.kind = "no_voice"`): "Bu bilgisayarda {dil} için kurulu bir ses yok. Windows'ta Ayarlar → Saat ve dil → Konuşma → Ses ekle…" (`tts.synthesize` bunu sağlayıcı ses listeleyip hiçbiri o dili konuşmuyorsa her sağlayıcı için verir). Kayıt: `App::register_system_providers` (`open_sqlite`/`open_sqlite_current`: masaüstü, `fc dev serve`, `fc mcp serve`); servis testleri `App::new` ile açar, sağlayıcısız kalır. Windows dışında `provider()` = `None` (hiçbir şey kaydedilmez, `no_tts_provider` eskisi gibi), `Platform` "not available on this system" der. Kimliği `plugin.…`'den önce sıralandığı için `tts.provider` boşken Windows'ta varsayılan budur; `tts` modülü kapatılınca konuşmaz. Ses dosyası `audio/wav`; eksik ses doldurma, yedek ve dışa aktarma onu her ses gibi taşır (köken `tts`, sağlayıcı `builtin.system`). Test: `fc-system-tts` birim testleri, `audio_fill_tests::the_system_voice_fills_missing_audio_offline`; Windows CI'da `cargo test -p fc-system-tts -- --nocapture` gerçek bir İngilizce sesle bir cümle okutup çözülebilir WAV bekler (İngilizce ses yoksa "no voice" yazar ve bir uyarı notu düşer: sessizce geçmez, yalnız bu yüzden de kırmızıya dönmez).
+ 
+ ## 14. Ayarlar
+ 

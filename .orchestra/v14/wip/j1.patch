@@ -1,0 +1,650 @@
+diff --git a/.orchestra/v14/briefs/j-common.md b/.orchestra/v14/briefs/j-common.md
+new file mode 100644
+index 0000000..0dcf2d9
+--- /dev/null
++++ b/.orchestra/v14/briefs/j-common.md
+@@ -0,0 +1,18 @@
++# J-workers — v1.4.2: the rest of the independent reviewer's plan
++
++Read `.orchestra/v14/COMMON.md` first; it binds you. State: v1.4.1 is released on `claude/festive-einstein-8y0kld`
++(robustness round done, CI and Windows build green). Four siblings work in parallel on the items that were left.
++Rules for this round:
++- Tests must pass on Windows CI too (no Unix-only paths, no wall-clock assumptions, files closed before delete).
++- `fc-desktop` (apps/desktop/src-tauri) cannot be compiled in this container. Code you write there is read by
++  nobody but CI: keep it small, re-read it as a reviewer (clippy `-D warnings`, items after test modules, unused
++  imports), and say in the report exactly what only CI can confirm.
++- No features removed, no UI redesign, sync out of scope. Text in the UI is i18n TR/EN.
++- Do not bump the version. CHANGELOG: lines under "Unreleased (v1.4.2)". Siblings share a 4-core machine: `-j 2`,
++  `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0`.
++- `/home/user/subtitle` and `/home/user/quiz` are read-only references: never edit or commit there.
++- Never put a real key or token in the repo or in output. No model names in the repo.
++- Usual full checks before the final commit (fmt, clippy `--workspace --exclude fc-desktop --all-targets`,
++  tests you touched plus the crate's suite, gen-ts check if the API changed, pnpm check/test if the UI changed).
++  Commit on your branch, no push. Report in Turkish, short: table of what you found or built, what you ran,
++  what you could not check.
+diff --git a/.orchestra/v14/briefs/j1-independent-review.md b/.orchestra/v14/briefs/j1-independent-review.md
+new file mode 100644
+index 0000000..a77e143
+--- /dev/null
++++ b/.orchestra/v14/briefs/j1-independent-review.md
+@@ -0,0 +1,22 @@
++# J1: independent code review of the write path, with fixes
++
++Read `j-common.md`. You did not write this code; review it as an outsider whose job is to find where the owner's
++cards or study history can be lost, corrupted or wrongly changed. Three areas, in this order:
++
++1. **SQLite writes** (`crates/fc-storage/src/sqlite/`, `store.rs`, migrations): transaction boundaries, anything
++   written outside a transaction, the background WAL checkpoint thread, busy/locked handling, foreign keys,
++   statements built from strings, what happens when two processes (desktop app + `fc api serve` / CLI) have the
++   collection open.
++2. **Commands and undo** (`crates/fc-app`: command registry, oplog, undo/redo): a command whose inverse does not
++   restore everything it changed, side effects outside the transaction (files, media, events, indexes) that
++   survive a rollback or an undo, validation that happens after the write, batches.
++3. **Plugins** (`crates/fc-plugins/src/runtime.rs`, `crates/fc-app/src/modules/plugins/host.rs`): what a plugin can
++   ask the host for, whether every host call checks the granted permission, resource limits (time, memory,
++   output size), path and URL handling, what a hostile plugin package can do at install time.
++
++For each finding: prove it with a failing test first where it can be tested, then fix it, keep the test. Rank
++findings (data loss > wrong data > crash > hardening). Do not report style. A finding you cannot fix within this
++task goes into the report with file:line and a concrete failure scenario. Write the review to
++`docs/15-bagimsiz-inceleme.md` (Turkish, short: what was read, findings table with status, what was not read) and
++link it from `docs/README.md`. You may use sub-agents to read the three areas in parallel, but verify every
++finding yourself before fixing it. If you find nothing in an area, say so and say what you read.
+diff --git a/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md b/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md
+new file mode 100644
+index 0000000..25249a5
+--- /dev/null
++++ b/.orchestra/v14/briefs/j2-windows-e2e-and-ci-gates.md
+@@ -0,0 +1,42 @@
++# J2: installed-app journeys on Windows, and the Subtitle check that cannot silently skip
++
++Read `j-common.md`. Two CI jobs, both verified only by CI (I, the orchestrator, push your branch's commits to the
++main branch and send you the failing logs; write the code so the first run has a real chance).
++
++## A. Windows installed-app journeys (`apps/desktop/e2e-windows/run.mjs`, `.github/workflows/windows-build.yml`)
++
++Today the pilot runs P and J1–J3 against the installed app through WebDriver, as non-blocking work. Read it and its
++README first, then add the journeys the reviewer asked for, each checking the saved result by reading it back
++(through the app or the local API, as the existing journeys do):
++
++1. **Capture**: with the app running, a Subtitle capture sent to the local API (the same request the extension
++   sends: pairing, then a word with its sentence and media) shows up in the app as a card with its encounter.
++2. **Reopen**: close the app, start it again; the card, the review done before closing and the encounter are there.
++3. **Backup and restore**: make a backup from the app, change something, restore, the change is gone and the
++   earlier state is back.
++4. **Rescue**: stop the app, damage the collection file (truncate it), start the app: the rescue dialog's choice
++   leads to a working collection restored from the verified backup. The dialog is a native one (rfd): if WebDriver
++   cannot drive it, find how the code can be driven in a test without weakening the product (for example the
++   existing `fc rescue` path for the choice plus the installed app for the result) and say plainly what is and is
++   not covered. Do not add a hidden test-only switch to the release build without saying so in the report.
++
++Keep each journey independent and its failure message useful (what was expected, what was read back, screenshot).
++Decide with reasons whether the new journeys block the build: a journey that is stable should block, one that
++depends on a flaky native piece stays non-blocking and is named as such. Update `apps/desktop/e2e-windows/README.md`.
++
++## B. Subtitle client check in `ci.yml` (around line 223)
++
++The job checks out `ardacarofficial/subtitle` with a token; when the checkout is unavailable it prints a warning
++and exits 0, so a release can go out without the real client ever being checked. Make that impossible to miss
++without making every fork or token-less run red for no reason:
++- On pushes to this repository's branches where the secret is expected: missing checkout = failed job, with a
++  message that says which secret is missing and how to set it.
++- Where the secret legitimately cannot exist (pull requests from forks): skipped, shown as skipped, not as success.
++- First find out from the workflow and its history what actually happens today on `claude/festive-einstein-8y0kld`
++  (does the checkout succeed?). If the secret is absent today, making the job fail would turn CI red until the
++  owner adds it: in that case keep the job red-capable behind one clearly named repository variable, leave it off,
++  make the job's summary say in a visible line "Subtitle client NOT checked", and put the exact steps for the owner
++  in the report. Do not guess; read the last CI logs' lines if you can, otherwise state the uncertainty.
++
++Local checks: `node --check` on the scripts, a YAML parse of both workflows, and run whatever part of `run.mjs`
++can run here against `fc dev serve` or `fc api serve` (the capture request and the read-back at least).
+diff --git a/.orchestra/v14/briefs/j3-anki-compat-and-speed.md b/.orchestra/v14/briefs/j3-anki-compat-and-speed.md
+new file mode 100644
+index 0000000..a592b91
+--- /dev/null
++++ b/.orchestra/v14/briefs/j3-anki-compat-and-speed.md
+@@ -0,0 +1,34 @@
++# J3: Anki compatibility on real decks, and an honest speed comparison
++
++Read `j-common.md`. Read `crates/fc-interop/src/anki/`, `crates/fc-app/src/modules/io/real_anki_tests.rs`,
++`docs/12-performans.md` and how CI opens our exports in real Anki first.
++
++## A. Compatibility
++
++1. `crates/fc-interop/src/anki/convert.rs` (around line 701) skips review-log entries made by manual rescheduling.
++   Decide what is right for the owner's history (import them as what they are, so intervals and due dates after
++   import match Anki's), implement it, test it with a package made by real Anki.
++2. Build a wider set of real-Anki fixtures with the `anki` Python package (the one CI already uses; install it in
++   a venv in your scratch dir, not in the repo): cloze, image occlusion, several templates per note type, sub-decks,
++   deck options with FSRS on and off, suspended/buried/flagged cards, tags with hierarchy, media with non-ASCII
++   names, filtered decks, a large review history, a scheduler-v3 collection, an old `.apkg` (schema 11) and a new
++   one (`.anki21b`, zstd). For each: import → compare with what Anki itself reports (card counts per state, due
++   dates, intervals, ease or FSRS memory state, review counts, media, tags) → export → open in Anki → compare
++   again. Every difference is either fixed, or listed with the reason it is acceptable.
++3. Write `docs/16-anki-uyum.md` (Turkish, short): the table of what round-trips exactly, what changes and why,
++   what is not supported. Link it from `docs/README.md`. Keep fixtures small enough for the repo (generate large
++   ones in the test, do not commit them).
++
++## B. Speed comparison
++
++Same machine, same data: build the 100k-note / 2M-review collection the perf suite uses, export it for Anki (or
++generate the same shape with the `anki` package), and measure Anki's own backend (through the `anki` Python
++package: open collection, build the day's queue / get the next card, answer a card, search queries equivalent to
++ours, browser page, stats, import, backup/export) against our numbers from `perf_suite_100k`. Be honest about what
++is and is not comparable (Python call overhead, UI not included on either side, different feature work per call);
++run each several times, report medians. Add the table to `docs/12-performans.md` under its own heading with the
++method and the caveats. Where Anki is clearly faster on a comparable operation, find out why and either fix it
++(with before/after numbers and no budget regressions) or explain it. No marketing sentences: numbers and caveats.
++
++If the `anki` package cannot be installed here (network policy), stop that part, say exactly which host was
++refused, and finish everything that does not need it.
+diff --git a/.orchestra/v14/briefs/j4-windows-offline-tts.md b/.orchestra/v14/briefs/j4-windows-offline-tts.md
+new file mode 100644
+index 0000000..feeb1e6
+--- /dev/null
++++ b/.orchestra/v14/briefs/j4-windows-offline-tts.md
+@@ -0,0 +1,26 @@
++# J4: offline speech on Windows
++
++Read `j-common.md`. Read `crates/fc-app/src/modules/tts.rs`, the audio-fill path (`audio_fill`, "missing audio"
++work from W4), `crates/fc-providers`, how the desktop shell wires providers, and `docs/` on TTS first.
++
++Goal: on Windows, a card's word and sentence can be spoken and missing audio can be filled with no network and no
++key, using the voices Windows already has, in the note's language (English, and whatever voices the machine has).
++
++- Find what exists today (which providers, what the UI offers, what happens offline) and say it in the report
++  before changing anything. If offline speech already works through some path, do not build a second one: close
++  the gaps instead.
++- Follow the architecture: the capability is a provider behind the existing TTS interface, chosen in the existing
++  settings; logic in Rust; the module can be turned off; `fc-core` stays pure. The Windows API (WinRT
++  `Windows.Media.SpeechSynthesis` or SAPI through the `windows` crate) lives behind `cfg(windows)` with a clear
++  "not available on this system" answer elsewhere, so the workspace still builds and tests on Linux.
++- It must produce audio bytes that the existing media path stores (so the audio fill, backup and export work as for
++  any other audio), list the installed voices, pick a voice for the note's language, and fail with a plain TR/EN
++  sentence when no voice exists for that language (with what the owner can do: install a Windows language pack).
++- Tests: everything above the system call is tested on Linux with a fake synthesiser; a `cfg(windows)` test in the
++  Windows CI job speaks one short English sentence and checks that it gets a non-empty, decodable audio file (GitHub's
++  Windows runners have English voices; if the runner has none, the test must say "no voice" clearly, not pass
++  silently and not fail the build for that reason alone).
++- The crate with the Windows code must be one CI compiles and tests on Windows (check which crates the Windows job
++  builds and tests); new dependencies only for `cfg(windows)`, checked against the lockfile and `cargo deny`/license
++  rules if the repo has them.
++- Docs: the provider in the relevant doc and the settings help text; CHANGELOG line.
+diff --git a/crates/fc-storage/src/rescue.rs b/crates/fc-storage/src/rescue.rs
+index 7d0959b..f448e8a 100644
+--- a/crates/fc-storage/src/rescue.rs
++++ b/crates/fc-storage/src/rescue.rs
+@@ -192,26 +192,33 @@ pub fn salvage_into(damaged: &Path, fresh: &Path) -> StorageResult<SalvageReport
+         .map_err(at("detach"))?;
+     // Rows whose parent was lost go too (repeat: removing one may orphan another).
+     for _ in 0..8 {
+-        let bad: Vec<(String, i64)> = {
++        // (table, rowid, foreign key id): the rowid is NULL in a WITHOUT ROWID table
++        // (`note_tags`, `links`, `attribute_values`, …).
++        let bad: Vec<(String, Option<i64>, i64)> = {
+             let mut st = conn.prepare("PRAGMA foreign_key_check").map_err(at("fk"))?;
+-            let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
++            let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(3)?)))?;
+             rows.collect::<rusqlite::Result<_>>()?
+         };
+         if bad.is_empty() {
+             break;
+         }
+-        for (table, rowid) in bad {
+-            let n = conn.execute(
+-                &format!(
+-                    "DELETE FROM \"{}\" WHERE rowid = ?1",
+-                    table.replace('"', "\"\"")
+-                ),
+-                [rowid],
+-            )?;
++        let mut by_key: std::collections::BTreeSet<(String, i64)> = Default::default();
++        for (table, rowid, fk) in bad {
++            let n = match rowid {
++                Some(rowid) => conn.execute(
++                    &format!("DELETE FROM {} WHERE rowid = ?1", quote(&table)),
++                    [rowid],
++                )?,
++                // No rowid to name the row by: every orphan of this foreign key at once.
++                None if by_key.insert((table.clone(), fk)) => {
++                    delete_orphans(&conn, &table, fk).map_err(at("fk"))?
++                }
++                None => 0,
++            };
+             if n > 0 {
+                 let e = report.tables.entry(table).or_default();
+-                e.0 = e.0.saturating_sub(1);
+-                e.1 += 1;
++                e.0 = e.0.saturating_sub(n as u64);
++                e.1 += n as u64;
+             }
+         }
+     }
+@@ -291,30 +298,61 @@ fn copy_table(conn: &Connection, table: &str, rowid: bool) -> (u64, u64) {
+     };
+     let insert = format!("INSERT OR IGNORE INTO main.{q} ({into}) SELECT {from} FROM damaged.{q}");
+     if let Ok(n) = conn.execute(&insert, []) {
+-        return (n as u64, 0);
++        // Junk rows of a page whose header still reads come back as rows that break a
++        // constraint and are ignored: what the damaged file counts but did not arrive is lost.
++        let listed: Option<i64> = conn
++            .query_row(&format!("SELECT count(*) FROM damaged.{q}"), [], |r| r.get(0))
++            .ok();
++        let listed = listed.and_then(|c| u64::try_from(c).ok()).unwrap_or(0);
++        return (n as u64, listed.saturating_sub(n as u64));
+     }
+     if !rowid {
+-        // No rowid to walk: whatever could not be read whole is lost (counted as unknown: 0
+-        // copied); the integrity report of the damaged file names the table.
+-        return (0, 0);
++        return copy_rows_both_ways(conn, table, &q, &insert);
+     }
+-    // Walk the rowids we can still list, in ranges that halve on failure.
+-    let ids: Vec<i64> = match conn.prepare(&format!("SELECT rowid FROM damaged.{q} ORDER BY rowid"))
+-    {
+-        Ok(mut st) => {
+-            let mut ids = Vec::new();
++    // Walk the rowids we can still list, from both ends: a walk stops at the first unreadable
++    // page, so the rows behind it are reached from the other side (v1.4.2 review J1).
++    let walk = |order: &str| -> (Vec<i64>, bool) {
++        let mut ids = Vec::new();
++        let mut complete = false;
++        if let Ok(mut st) = conn.prepare(&format!("SELECT rowid FROM damaged.{q} ORDER BY rowid {order}")) {
+             if let Ok(mut rows) = st.query([]) {
+-                // Stops at the first unreadable page; the ids before it are still good.
+-                while let Ok(Some(r)) = rows.next() {
+-                    if let Ok(id) = r.get::<_, i64>(0) {
+-                        ids.push(id);
++                loop {
++                    match rows.next() {
++                        Ok(Some(r)) => {
++                            if let Ok(id) = r.get::<_, i64>(0) {
++                                ids.push(id);
++                            }
++                        }
++                        Ok(None) => {
++                            complete = true;
++                            break;
++                        }
++                        Err(_) => break,
+                     }
+                 }
+             }
+-            ids
+         }
+-        Err(_) => Vec::new(),
++        (ids, complete)
+     };
++    let (mut ids, complete) = walk("ASC");
++    // Rows on unreadable pages are never listed: estimated by the rowids between the two
++    // walks (an upper bound: rowids of deleted rows are counted too).
++    let mut unlisted = 0u64;
++    if !complete {
++        let (back, _) = walk("DESC");
++        let low = ids.last().copied();
++        let behind: Vec<i64> = back
++            .into_iter()
++            .filter(|id| low.map_or(true, |l| *id > l))
++            .collect();
++        unlisted = match (low, behind.iter().min()) {
++            (Some(l), Some(h)) => u64::try_from(h - l - 1).unwrap_or(0).max(1),
++            _ => 1,
++        };
++        ids.extend(behind);
++        ids.sort_unstable();
++        ids.dedup();
++    }
+     let one = format!("{insert} WHERE rowid BETWEEN ?1 AND ?2");
+     let (mut copied, mut lost) = (0u64, 0u64);
+     let mut stack: Vec<&[i64]> = ids.chunks(512).rev().collect();
+@@ -332,7 +370,123 @@ fn copy_table(conn: &Connection, table: &str, rowid: bool) -> (u64, u64) {
+             }
+         }
+     }
+-    (copied, lost)
++    (copied, lost + unlisted)
++}
++
++/// A WITHOUT ROWID table that could not be copied whole: row by row in key order from both
++/// ends (each walk stops at the first unreadable page). The rows in between are lost; their
++/// number is unknown and counted as 1.
++fn copy_rows_both_ways(conn: &Connection, table: &str, q: &str, insert: &str) -> (u64, u64) {
++    let key: Vec<String> = match conn.prepare(
++        "SELECT name FROM pragma_table_info(?1, 'main') WHERE pk > 0 ORDER BY pk",
++    ) {
++        Ok(mut st) => st
++            .query_map([table], |r| r.get::<_, String>(0))
++            .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
++            .unwrap_or_default(),
++        Err(_) => Vec::new(),
++    };
++    if key.is_empty() {
++        return (0, 1);
++    }
++    let cols: Vec<String> = key.iter().map(|k| quote(k)).collect();
++    let key_list = cols.join(", ");
++    let marks: Vec<String> = (1..=cols.len()).map(|i| format!("?{i}")).collect();
++    let one = format!(
++        "{insert} WHERE ({key_list}) = ({})",
++        marks.join(", ")
++    );
++    let mut copied = 0u64;
++    let mut complete = false;
++    for order in ["ASC", "DESC"] {
++        let by: Vec<String> = cols.iter().map(|c| format!("{c} {order}")).collect();
++        let Ok(mut st) = conn.prepare(&format!(
++            "SELECT {key_list} FROM damaged.{q} ORDER BY {}",
++            by.join(", ")
++        )) else {
++            break;
++        };
++        let Ok(mut rows) = st.query([]) else { break };
++        loop {
++            match rows.next() {
++                Ok(Some(r)) => {
++                    let values: Vec<rusqlite::types::Value> =
++                        (0..cols.len()).filter_map(|i| r.get(i).ok()).collect();
++                    if values.len() == cols.len() {
++                        if let Ok(n) =
++                            conn.execute(&one, rusqlite::params_from_iter(values.iter()))
++                        {
++                            copied += n as u64;
++                        }
++                    }
++                }
++                Ok(None) => {
++                    complete = true;
++                    break;
++                }
++                Err(_) => break,
++            }
++        }
++        if complete {
++            break;
++        }
++    }
++    (copied, u64::from(!complete))
++}
++
++/// `"name"` (identifier quoting).
++fn quote(name: &str) -> String {
++    format!("\"{}\"", name.replace('"', "\"\""))
++}
++
++/// Deletes the rows of `table` whose foreign key `fk` (an id of `PRAGMA foreign_key_list`)
++/// points at no parent row; returns how many. Used where rows have no rowid.
++fn delete_orphans(conn: &Connection, table: &str, fk: i64) -> rusqlite::Result<usize> {
++    let mut st = conn.prepare(
++        "SELECT \"table\", \"from\", \"to\" FROM pragma_foreign_key_list(?1) WHERE id = ?2
++         ORDER BY seq",
++    )?;
++    let cols: Vec<(String, String, Option<String>)> = st
++        .query_map(rusqlite::params![table, fk], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
++        .collect::<rusqlite::Result<_>>()?;
++    let Some((parent, _, _)) = cols.first() else {
++        return Ok(0);
++    };
++    // `REFERENCES parent` without columns names the parent's primary key.
++    let parent_pk: Vec<String> = {
++        let mut st = conn.prepare(
++            "SELECT name FROM pragma_table_info(?1) WHERE pk > 0 ORDER BY pk",
++        )?;
++        let v = st
++            .query_map([parent], |r| r.get(0))?
++            .collect::<rusqlite::Result<_>>()?;
++        v
++    };
++    let (t, p) = (quote(table), quote(parent));
++    // A NULL in any child column means "no reference" (SQLite's rule): never an orphan.
++    let present: Vec<String> = cols
++        .iter()
++        .map(|(_, from, _)| format!("{t}.{} IS NOT NULL", quote(from)))
++        .collect();
++    let matches: Vec<String> = cols
++        .iter()
++        .enumerate()
++        .map(|(i, (_, from, to))| {
++            let to = match to {
++                Some(to) => quote(to),
++                None => parent_pk.get(i).map_or_else(|| "rowid".to_owned(), |c| quote(c)),
++            };
++            format!("{p}.{to} = {t}.{}", quote(from))
++        })
++        .collect();
++    conn.execute(
++        &format!(
++            "DELETE FROM {t} WHERE {} AND NOT EXISTS (SELECT 1 FROM {p} WHERE {})",
++            present.join(" AND "),
++            matches.join(" AND ")
++        ),
++        [],
++    )
+ }
+ 
+ fn column_list(conn: &Connection, table: &str) -> rusqlite::Result<String> {
+diff --git a/crates/fc-storage/src/sqlite/content.rs b/crates/fc-storage/src/sqlite/content.rs
+index 7ea17a0..c38a3f3 100644
+--- a/crates/fc-storage/src/sqlite/content.rs
++++ b/crates/fc-storage/src/sqlite/content.rs
+@@ -51,6 +51,17 @@ fn media_row(r: &Row<'_>) -> rusqlite::Result<MediaRecord> {
+     })
+ }
+ 
++/// Whether the file at `path` exists and holds exactly `bytes` (size first: a damaged file is
++/// usually cut short, and then nothing is read).
++fn same_content(path: &Path, bytes: &[u8]) -> bool {
++    match std::fs::metadata(path) {
++        Ok(m) if m.is_file() && m.len() == bytes.len() as u64 => {
++            std::fs::read(path).is_ok_and(|b| b == bytes)
++        }
++        _ => false,
++    }
++}
++
+ fn invalid_hash(hash: &str) -> StorageError {
+     StorageError::NotFound {
+         entity: "media",
+@@ -270,7 +281,10 @@ impl ContentWrite for SqliteTx<'_, WriteMode> {
+                 let Some(path) = media_file_path(&db, hash) else {
+                     return Err(invalid_hash(hash));
+                 };
+-                if path.exists() {
++                // Content-addressed: a file that holds exactly these bytes is kept. A damaged
++                // one (cut short by a power loss, changed on disk) is replaced below, so adding
++                // the same media again or restoring a backup repairs it (v1.4.2 review J1).
++                if same_content(&path, bytes) {
+                     return Ok(());
+                 }
+                 if let Some(dir) = path.parent() {
+diff --git a/crates/fc-storage/src/tests/content.rs b/crates/fc-storage/src/tests/content.rs
+index 1bbc246..f210902 100644
+--- a/crates/fc-storage/src/tests/content.rs
++++ b/crates/fc-storage/src/tests/content.rs
+@@ -351,3 +351,28 @@ fn field_samples_are_seeded_bounded_and_filtered() {
+     assert_eq!(q(1, 5).len(), 5);
+     assert_ne!(q(1, 5), q(2, 5), "different seeds pick different notes");
+ }
++
++/// v1.4.2 review (J1): a damaged file under a media hash (a power cut before the OS wrote
++/// it out, a bad sector, a sync tool) was kept forever: `write_media_file` skipped any
++/// existing file, so adding the same picture again, or restoring a backup that holds the
++/// good bytes, left the broken one in place. Now the existing file is kept only when it
++/// holds exactly these bytes; otherwise it is replaced (write + rename).
++#[test]
++fn a_damaged_media_file_is_repaired_by_writing_the_good_bytes() {
++    let fx = Fx::new();
++    let bytes = b"\x89PNG\r\n\x1a\nthe real picture".as_slice();
++    let m = media(bytes, "a.png");
++    let path = crate::media::media_file_path(&fx.db_path(), &m.hash).unwrap();
++    fx.write(|tx| {
++        tx.write_media_file(&m.hash, bytes).unwrap();
++        tx.insert_media(&m).unwrap();
++    });
++    for damaged in [&b""[..], &b"\x89PNG\r\n\x1a\nthe real pictur!"[..], &b"short"[..]] {
++        std::fs::write(&path, damaged).unwrap();
++        fx.write(|tx| tx.write_media_file(&m.hash, bytes).unwrap());
++        assert_eq!(std::fs::read(&path).unwrap(), bytes, "damaged: {damaged:?}");
++    }
++    // A good file is left as it is (no `.part` left behind either).
++    fx.write(|tx| tx.write_media_file(&m.hash, bytes).unwrap());
++    assert_eq!(files_under(&fx.dir.path().join("media")), vec![path]);
++}
+diff --git a/crates/fc-storage/src/tests/mod.rs b/crates/fc-storage/src/tests/mod.rs
+index 9494127..1c9b82a 100644
+--- a/crates/fc-storage/src/tests/mod.rs
++++ b/crates/fc-storage/src/tests/mod.rs
+@@ -24,6 +24,7 @@ mod misc;
+ mod notes;
+ mod plugins;
+ mod reading;
++mod rescue;
+ mod search;
+ mod search_fuzz;
+ mod stats;
+diff --git a/crates/fc-storage/src/tests/rescue.rs b/crates/fc-storage/src/tests/rescue.rs
+new file mode 100644
+index 0000000..1982016
+--- /dev/null
++++ b/crates/fc-storage/src/tests/rescue.rs
+@@ -0,0 +1,141 @@
++//! Salvage of a damaged collection (`rescue::salvage_into`), v1.4.2 review (J1).
++
++use super::{note, put_note, Fx};
++use crate::rescue::salvage_into;
++use rusqlite::Connection;
++
++/// Closes `fx`'s store (its WAL is checkpointed into the file) and returns the paths.
++fn closed(fx: Fx) -> (tempfile::TempDir, std::path::PathBuf) {
++    let path = fx.db_path();
++    let Fx { store, dir } = fx;
++    drop(store);
++    (dir, path)
++}
++
++/// Rows of a lost parent are dropped, also in WITHOUT ROWID tables (`note_tags`, `links`,
++/// `attribute_values`, …): `PRAGMA foreign_key_check` reports those with a NULL rowid, which
++/// made the whole "copy what is readable" rescue fail as soon as one note that had tags was
++/// lost.
++#[test]
++fn orphans_in_without_rowid_tables_do_not_stop_the_salvage() {
++    let fx = Fx::seeded();
++    fx.write(|tx| {
++        put_note(tx, &note(1, "lost", "x", &["film", "verb"], 10), "lost x").unwrap();
++        put_note(tx, &note(2, "kept", "y", &["film"], 11), "kept y").unwrap();
++    });
++    let lost = super::nid(1).to_string();
++    {
++        // What a damaged page does: the note row is gone, its tag rows are not.
++        let raw = fx.raw();
++        raw.pragma_update(None, "foreign_keys", "OFF").unwrap();
++        raw.execute("DELETE FROM notes WHERE id = ?1", [&lost]).unwrap();
++    }
++    let (dir, damaged) = closed(fx);
++    let fresh = dir.path().join("fresh.db");
++    let report = salvage_into(&damaged, &fresh).expect("the salvage completes");
++    let conn = Connection::open(&fresh).unwrap();
++    let tags_of = |id: &str| -> i64 {
++        conn.query_row("SELECT count(*) FROM note_tags WHERE note_id = ?1", [id], |r| r.get(0))
++            .unwrap()
++    };
++    assert_eq!(tags_of(&lost), 0, "the lost note's tag rows are dropped");
++    assert_eq!(tags_of(&super::nid(2).to_string()), 1, "the kept note keeps its tag");
++    let fk: i64 = conn
++        .query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |r| r.get(0))
++        .unwrap();
++    assert_eq!(fk, 0);
++    assert_eq!(report.tables["note_tags"].1, 2, "{:?}", report.tables["note_tags"]);
++}
++
++/// A damaged page in the middle of a table: the rows on both sides of it come back (the
++/// rowid walk used to stop at the first unreadable page and drop everything after it,
++/// uncounted).
++#[test]
++fn rows_after_a_damaged_page_are_salvaged_too() {
++    let fx = Fx::seeded();
++    let n = 3000i64;
++    fill_reviews(&fx, n);
++    let (dir, damaged) = closed(fx);
++    let leaves = leaf_pages(&damaged);
++    assert!(leaves.len() > 10, "{leaves:?}");
++    let page = u64::try_from(leaves[leaves.len() / 2]).unwrap();
++    // The whole page, header included: reading it fails.
++    damage(&damaged, page, 0);
++    let fresh = dir.path().join("fresh.db");
++    let report = salvage_into(&damaged, &fresh).unwrap();
++    let (copied, lost) = report.tables["review_log"];
++    let conn = Connection::open(&fresh).unwrap();
++    let last: Option<i64> = conn
++        .query_row("SELECT max(created_at) FROM review_log", [], |r| r.get(0))
++        .unwrap();
++    assert_eq!(last, Some(n - 1), "rows after the damaged page come back");
++    // One 4 KiB page holds a few dozen of these rows; everything else is copied.
++    assert!(copied >= u64::try_from(n).unwrap() - 100, "copied {copied}, lost {lost}");
++    assert!(lost > 0, "the damaged page rows are counted as lost: copied {copied}, lost {lost}");
++}
++
++/// Overwrites page `page` (1-based) from byte `from` with junk.
++fn damage(db: &std::path::Path, page: u64, from: u64) {
++    use std::io::{Seek, SeekFrom, Write};
++    let mut f = std::fs::OpenOptions::new().write(true).open(db).unwrap();
++    f.seek(SeekFrom::Start((page - 1) * 4096 + from)).unwrap();
++    f.write_all(&vec![0xA5; usize::try_from(4096 - from).unwrap()]).unwrap();
++    f.sync_all().unwrap();
++}
++
++/// A page whose cells were overwritten but whose header still reads: SQLite returns junk
++/// rows, which `INSERT OR IGNORE` dropped without counting them (the report said nothing was
++/// lost).
++#[test]
++fn junk_rows_of_a_damaged_page_are_counted_as_lost() {
++    let fx = Fx::seeded();
++    let n = 3000i64;
++    fill_reviews(&fx, n);
++    let (dir, damaged) = closed(fx);
++    let leaves = leaf_pages(&damaged);
++    damage(&damaged, u64::try_from(leaves[leaves.len() / 2]).unwrap(), 100);
++    let fresh = dir.path().join("fresh.db");
++    let report = salvage_into(&damaged, &fresh).unwrap();
++    let (copied, lost) = report.tables["review_log"];
++    let conn = Connection::open(&fresh).unwrap();
++    let last: Option<i64> = conn
++        .query_row("SELECT max(created_at) FROM review_log", [], |r| r.get(0))
++        .unwrap();
++    assert_eq!(last, Some(n - 1), "rows after the damaged page come back");
++    // One 4 KiB page holds a few dozen of these rows; everything else is copied.
++    assert!(copied >= u64::try_from(n).unwrap() - 100, "copied {copied}, lost {lost}");
++    assert!(lost > 0, "the damaged page rows are counted as lost: copied {copied}, lost {lost}");
++}
++
++fn fill_reviews(fx: &Fx, n: i64) {
++    let raw = fx.raw();
++    let tx = raw.unchecked_transaction().unwrap();
++    for i in 0..n {
++        tx.execute(
++            "INSERT INTO review_log (id, card_id, rating, state_before, state_after,
++                scheduled_days, elapsed_days, duration_ms, created_at)
++             VALUES (?1, 'c', 'good', 'review', 'review', 1, 1, 1000, ?2)",
++            rusqlite::params![format!("r{i:06}-{}", "x".repeat(80)), i],
++        )
++        .unwrap();
++    }
++    tx.commit().unwrap();
++}
++
++/// Leaf pages of `review_log`, in file order.
++fn leaf_pages(db: &std::path::Path) -> Vec<i64> {
++    let c = Connection::open(db).unwrap();
++    let mut st = c
++        .prepare(
++            "SELECT pageno FROM dbstat WHERE name = 'review_log' AND pagetype = 'leaf'
++             ORDER BY pageno",
++        )
++        .unwrap();
++    let v: Vec<i64> = st
++        .query_map([], |r| r.get(0))
++        .unwrap()
++        .collect::<Result<_, _>>()
++        .unwrap();
++    assert!(v.len() > 10, "{v:?}");
++    v
++}
