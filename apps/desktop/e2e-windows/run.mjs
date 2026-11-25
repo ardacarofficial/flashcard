@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 /**
- * Windows WebDriver pilot (v1.3, NON-gating): drives the INSTALLED desktop app (WebView2)
- * through tauri-driver + msedgedriver and runs three journeys of the Linux suite
- * (`../e2e/journeys`) against the real app, IPC included. See ./README.md.
+ * Windows journeys (v1.3 pilot; v1.4.2 a gate): drives the INSTALLED desktop app (WebView2)
+ * through tauri-driver + msedgedriver and runs journeys against the real app, IPC included.
+ * See ./README.md.
  *
  *   node apps/desktop/e2e-windows/run.mjs --app "%LOCALAPPDATA%\Flashcard\flashcard.exe" \
  *     --native-driver C:\path\msedgedriver.exe [--tauri-driver tauri-driver] [--out dir]
  *
  * Env equivalents: FC_EXE, MSEDGEDRIVER, TAURI_DRIVER, FC_WIN_E2E_OUT, FC_WIN_E2E_PORT,
  * FC_WIN_E2E_CDP_PORT, FC_WIN_E2E_STRATEGY (`--strategy`: only that session strategy),
- * FC_WIN_E2E_VERBOSE_DRIVER=0 (`--no-verbose-driver`).
+ * FC_WIN_E2E_VERBOSE_DRIVER=0 (`--no-verbose-driver`), FC_CLI (`--fc`: the installed fc.exe,
+ * default beside the app), FC_WIN_E2E_BLOCKING (`--blocking`: journeys whose failure fails
+ * the run, default BLOCKING below), FC_WIN_E2E_ONLY (`--only J4,J6`: run only these + P/J1).
  *
  * Before the journeys:
  *   PREFLIGHT the installed app runs on its own for 15 s (alive? its window? an error box?
@@ -19,14 +21,21 @@
  *             (processes with command lines, windows, DevToolsActivePort, CDP, a desktop
  *             screenshot) and a verbose msedgedriver log in the output dir
  *
- * Journeys (in order, one app launch, one fresh profile):
+ * Journeys (in order, one fresh profile; each needs only P/J1, J5–J7 restart the app):
  *   P  preparation: skip the first-run guide and create decks/notes through the app's own IPC
  *   J1 the app launches and Home renders
  *   J2 Quick Add: N, type front, Tab, type back, Ctrl+Enter → the note is in the chosen deck
  *   J3 Home → Enter → launcher → Enter → Space×3 → 2 → exactly one card answered
+ *   J4 a Subtitle capture sent to the app's local API (pairing, media, word + sentence) is a
+ *      card with its encounter                                    (./data-journeys.mjs)
+ *   J5 close the app, start it again: the captured card, its review and encounter are there
+ *   J6 backup, a change, restore: the change is gone, the earlier state is back
+ *   J7 the app stopped, the collection file truncated, the app started: the native rescue
+ *      dialog's "restore backup" leads to a working collection (NON-blocking: native dialog)
  *
  * Prints one PASS/FAIL line per journey, writes screenshots + summary.json into the output
- * dir, exits 1 when anything failed. tauri-driver and the app are always stopped.
+ * dir, exits 1 when a BLOCKING journey (or the session) failed; a non-blocking failure is a
+ * warning. tauri-driver and the app are always stopped.
  *
  * Zero npm dependencies on purpose (Node 22: global fetch); the WebDriver client is
  * ./webdriver.mjs.
@@ -37,8 +46,10 @@ import { createConnection } from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { execFileSync } from 'node:child_process';
+import { j4Capture, j5Reopen, j6BackupRestore, j7Rescue } from './data-journeys.mjs';
 import { KEY, WebDriver } from './webdriver.mjs';
-import { IS_WINDOWS, POLICY_KEY, WebView2Policy, cdp, desktopScreenshot, isElevated, processes, stopApp, windows } from './win.mjs';
+import { IS_WINDOWS, POLICY_KEY, WebView2Policy, answerAppDialog, cdp, desktopScreenshot, isElevated, processes, stopApp, windows } from './win.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -59,7 +70,20 @@ const opts = {
   cdpPort: Number(arg('cdp-port') ?? process.env.FC_WIN_E2E_CDP_PORT ?? 9333),
   strategy: arg('strategy') ?? process.env.FC_WIN_E2E_STRATEGY ?? null,
   verboseDriver: !process.argv.includes('--no-verbose-driver') && process.env.FC_WIN_E2E_VERBOSE_DRIVER !== '0',
+  /** The `fc` CLI the installer puts beside the app (J7 folds the WAL and, as a fallback, rescues). */
+  fcCli: arg('fc') ?? process.env.FC_CLI ?? null,
+  blocking: (arg('blocking') ?? process.env.FC_WIN_E2E_BLOCKING ?? null)?.split(',').map((s) => s.trim()).filter(Boolean) ?? null,
+  only: (arg('only') ?? process.env.FC_WIN_E2E_ONLY ?? null)?.split(',').map((s) => s.trim()).filter(Boolean) ?? null,
 };
+if (!opts.fcCli && opts.app) opts.fcCli = join(dirname(opts.app), IS_WINDOWS ? 'fc.exe' : 'fc');
+
+/**
+ * Journeys whose failure fails the run (v1.4.2). P and J1–J3 have been green on every run
+ * since the session strategy was fixed; J4–J6 use only that same machinery (the session, the
+ * app's IPC, a loopback HTTP request). J7 is NOT here: it answers a native Win32 message box
+ * from outside the app and kills/damages files, the flaky native piece the gate leaves out.
+ */
+const BLOCKING = opts.blocking ?? ['P', 'J1', 'J2', 'J3', 'J4', 'J5', 'J6'];
 const CI = process.env.CI === 'true';
 
 /** How long a condition may take before a journey fails (no fixed sleeps anywhere). */
@@ -204,8 +228,9 @@ async function evidence(id) {
 
 /** Runs one journey, records PASS/FAIL. A journey whose prerequisite failed is SKIP (= failed run). */
 async function journey(id, name, fn, { needs = [] } = {}) {
+  if (opts.only && !['P', 'J1', ...opts.only].includes(id)) return;
   const t0 = Date.now();
-  const row = { id, name, status: 'FAIL', ms: 0, error: null, files: [], facts: {} };
+  const row = { id, name, status: 'FAIL', blocking: BLOCKING.includes(id), ms: 0, error: null, files: [], facts: {} };
   results.push(row);
   const missing = needs.filter((n) => results.find((r) => r.id === n)?.status !== 'PASS');
   if (missing.length > 0) {
@@ -215,6 +240,8 @@ async function journey(id, name, fn, { needs = [] } = {}) {
     return;
   }
   try {
+    // A journey before this one may have left no session (an app restart that failed).
+    if (!wd.sessionId && id !== 'P') await reopenSession(`${id}-session`);
     await fn(row.facts);
     row.status = 'PASS';
     const png = await shot(`${id}-pass`);
@@ -224,7 +251,13 @@ async function journey(id, name, fn, { needs = [] } = {}) {
     row.files.push(...(await evidence(id)));
   }
   row.ms = Date.now() - t0;
-  console.log(`${row.status} ${id} ${name} (${(row.ms / 1000).toFixed(1)}s)${row.error ? `\n     ${row.error.split('\n')[0]}` : ''}`);
+  const tagLine = row.blocking ? '' : ' [non-blocking]';
+  console.log(`${row.status} ${id}${tagLine} ${name} (${(row.ms / 1000).toFixed(1)}s)${row.error ? `\n     ${row.error.split('\n')[0]}` : ''}`);
+  if (row.facts.rescued_by) console.log(`     rescued by: ${row.facts.rescued_by}`);
+  if (row.status !== 'PASS' && process.env.GITHUB_ACTIONS === 'true') {
+    const level = row.blocking ? 'error' : 'warning';
+    console.log(`::${level} title=Windows journey ${id}${tagLine}::${(row.error ?? '').split('\n')[0].replace(/[\r\n]/g, ' ').slice(0, 900)}`);
+  }
 }
 
 // ------------------------------------------------------------------ app-level steps
@@ -719,12 +752,16 @@ const STRATEGIES = [
   },
 ];
 
-async function openSession() {
-  const list = opts.strategy ? STRATEGIES.filter((s) => s.id === opts.strategy) : STRATEGIES;
-  if (list.length === 0) throw new Error(`unknown --strategy ${opts.strategy} (one of ${STRATEGIES.map((s) => s.id).join(', ')})`);
+/**
+ * Gets a session: every strategy in order, or only `only` (a restart reuses the one that
+ * worked). `prefix` keeps the log files of later (re)starts apart.
+ */
+async function openSession(only = opts.strategy, prefix = 'session') {
+  const list = only ? STRATEGIES.filter((s) => s.id === only) : STRATEGIES;
+  if (list.length === 0) throw new Error(`unknown --strategy ${only} (one of ${STRATEGIES.map((s) => s.id).join(', ')})`);
   for (const s of list) {
     for (let i = 1; i <= s.tries; i++) {
-      const label = `session-${s.id.replace('+', '-')}-${i}`;
+      const label = `${prefix}-${s.id.replace('+', '-')}-${i}`;
       const a = { strategy: s.id, why: s.why, try: i, ok: false, ms: 0, policy: null, error: null };
       summary.attempts.push(a);
       const t0 = Date.now();
@@ -784,6 +821,136 @@ async function openSession() {
   );
 }
 
+// ------------------------------------------------------------------ restarts (J5–J7)
+
+/** Closes the app: politely first (WM_CLOSE), then by force; the session and drivers go with it. */
+async function closeApp(label) {
+  const did = await stopTheApp();
+  log(`${label}: app closed (${did})`);
+  await wd.deleteSession();
+  await stopDriver();
+}
+
+/**
+ * After a (re)start: the webview with IPC, the crash-recovery offer a forced stop leaves
+ * behind dismissed (as in P), the page reloaded, the shell up.
+ */
+async function afterStart() {
+  await wd.setTimeouts({ script: 60_000, pageLoad: 60_000, implicit: 0 });
+  await waitFor(
+    'the webview with Tauri IPC',
+    () => wd.exec(() => document.readyState === 'complete' && !!window.__TAURI_INTERNALS__),
+    LAUNCH_TIMEOUT_MS,
+  );
+  await rpc('maintenance.recovery.dismiss', {}).catch(() => undefined);
+  await reload();
+  await shellReady(LAUNCH_TIMEOUT_MS);
+}
+
+/** Starts the app again with the strategy that worked and waits until it is usable. */
+async function reopenSession(label) {
+  await stopTheApp();
+  await openSession(summary.strategy ?? opts.strategy, label);
+  await afterStart();
+}
+
+/**
+ * J7: starts the app on a damaged collection. The shell shows its native rescue dialog before
+ * any window (`session.rs` → `offer_rescue`); while msedgedriver waits for the webview, the
+ * dialog is answered "Yes = restore the newest verified backup" from outside (a Win32 message
+ * box: `answerAppDialog`), then the info box "rescued" with OK, and the session comes up on the
+ * rescued collection. Two other outcomes are handled and NAMED in `rescued_by`:
+ *  - the truncated file still opened (no native dialog): its integrity check must fail and
+ *    the in-app rescue (Maintenance page → `maintenance.rescue.request`, the app restarts and
+ *    rescues before opening) is used;
+ *  - the dialog could not be answered / the app did not come up: the installed `fc rescue
+ *    --from backup` (the same `rescue()` the dialog runs) makes the choice instead, and the
+ *    app is started on its result. Then only the dialog itself is NOT covered.
+ */
+async function startDamaged(label, { db = join(process.env.APPDATA ?? '', IDENTIFIER, 'collection.db') } = {}) {
+  const s = STRATEGIES.find((x) => x.id === (summary.strategy ?? opts.strategy ?? 'driver+policy'));
+  const out = { strategy: s.id, dialogs: [] };
+  await stopTheApp();
+  policy?.set(s.policy());
+  await startDriver(label);
+  let settled = null;
+  const session = (async () => {
+    if (s.how === 'launch') return wd.newSession(opts.app, { timeoutMs: SESSION_TIMEOUT_MS });
+    launchApp(label);
+    await waitFor(`the DevTools endpoint 127.0.0.1:${opts.cdpPort}`, async () => (await cdp(opts.cdpPort)).ok, SESSION_TIMEOUT_MS, 500);
+    return wd.attachSession(`127.0.0.1:${opts.cdpPort}`, { timeoutMs: 60_000 });
+  })().then(
+    () => (settled = { ok: true }),
+    (e) => (settled = { ok: false, error: String(e?.message ?? e) }),
+  );
+  while (!settled) {
+    await Promise.race([session, sleep(1500)]);
+    if (settled || !IS_WINDOWS) continue;
+    const seen = answerAppDialog(APP_EXE, { press: false });
+    if (!seen.found) continue;
+    // The dialog as the owner sees it, before it is answered.
+    const png = `${label}-dialog-${out.dialogs.length + 1}.png`;
+    out.dialog_screenshot_error = desktopScreenshot(join(opts.out, png));
+    const answered = answerAppDialog(APP_EXE);
+    out.dialogs.push({ ...answered, screenshot: png });
+    log(`${label}: native dialog (${answered.kind ?? '?'}) "${(answered.text ?? seen.text ?? '').slice(0, 160)}" → ${answered.button ?? answered.error ?? 'not answered'}`);
+    if (out.dialogs.length > 6) break;
+  }
+  await session;
+  const yes = out.dialogs.some((d) => d.kind === 'rescue offer' && d.posted);
+  if (settled.ok) {
+    await afterStart();
+    if (yes) {
+      out.rescued_by = 'native dialog: Yes = "restore backup" (Win32 message box answered with WM_COMMAND IDYES), then OK';
+      return out;
+    }
+    if (out.dialogs.length === 0) {
+      // The file still opened: the app must see the damage and rescue on request.
+      const check = await rpc('maintenance.integrity.check', { quick: false });
+      out.integrity_before = { ok: check.ok };
+      if (check.ok) throw new Error(`expected the truncated collection to be offered a rescue; read back: it opened without a dialog and passed its integrity check (${JSON.stringify(check).slice(0, 300)})`);
+      const before = processes(APP_EXE);
+      const oldPids = new Set((Array.isArray(before) ? before : []).filter((p) => p.Name?.toLowerCase() === APP_EXE.toLowerCase()).map((p) => p.ProcessId));
+      await rpc('maintenance.rescue.request', { mode: 'backup' });
+      // The app restarts itself and rescues before it opens the collection: wait for the new
+      // process's window (the rescue is done by then), then take it over with a session.
+      await waitFor(
+        'the restarted app (new process) with its window',
+        () => {
+          const list = processes(APP_EXE);
+          const pids = (Array.isArray(list) ? list : []).filter((p) => p.Name?.toLowerCase() === APP_EXE.toLowerCase() && !oldPids.has(p.ProcessId)).map((p) => p.ProcessId);
+          const wins = pids.length ? windows(pids) : [];
+          return Array.isArray(wins) && wins.some((w) => pids.includes(w.pid) && w.visible && w.class !== '#32770');
+        },
+        LAUNCH_TIMEOUT_MS,
+        1000,
+      );
+      await closeApp(`${label}-after-request`);
+      await reopenSession(`${label}-reopen`);
+      const st = await rpc('maintenance.status', {});
+      out.in_app_rescue = st.rescue;
+      out.rescued_by = 'in-app rescue (the truncated file still opened, failed its integrity check; maintenance.rescue.request → restart). The native dialog was NOT shown';
+      return out;
+    }
+  }
+  // The dialog was not answered, or the app did not come up after it.
+  out.session_error = settled.ok ? 'the app came up but the dialog was not "restore backup"' : settled.error;
+  out.diagnosis = await diagnose(`${label}-failed`);
+  await wd.deleteSession();
+  await stopDriver();
+  await stopTheApp();
+  let report = null;
+  try {
+    report = JSON.parse(execFileSync(opts.fcCli, ['--db', db, 'rescue', '--from', 'backup'], { encoding: 'utf8', windowsHide: true }));
+  } catch (e) {
+    out.fc_rescue_error = String(e?.stderr ?? e?.message ?? e).slice(0, 600);
+  }
+  out.fc_rescue = report && { mode: report.mode, backup: report.backup, kept_in: report.kept_in };
+  out.rescued_by = `FALLBACK fc rescue --from backup: the native dialog ${out.dialogs.length ? 'was answered but' : 'was not seen and'} the app did not come up (${out.session_error.split('\n')[0].slice(0, 200)}). The dialog is NOT covered by this run`;
+  await reopenSession(`${label}-fallback`);
+  return out;
+}
+
 async function stopAll() {
   await stopDriver();
   // The app msedgedriver launched is closed with the session; one the pilot started (attach)
@@ -820,6 +987,24 @@ async function main() {
   await journey('J1', 'app launches and Home renders', j1Launch, { needs: ['P'] });
   await journey('J2', 'Quick Add: N, type, Ctrl+Enter → note in the chosen deck', j2QuickAdd, { needs: ['J1'] });
   await journey('J3', 'Home → Enter → Enter → Space×3, 2 → exactly one answered', j3Study, { needs: ['J1'] });
+
+  // v1.4.2: the owner's data (./data-journeys.mjs). Each one makes its own decks/capture/key.
+  if (opts.fcCli && !existsSync(opts.fcCli)) log(`warning: no fc CLI at ${opts.fcCli} (J7 needs it)`);
+  const env = {
+    tag,
+    out: opts.out,
+    rpc,
+    log,
+    ui: { ready: () => shellReady(), reload, shot },
+    closeApp,
+    startApp: reopenSession,
+    startDamaged,
+    fc: (args) => execFileSync(opts.fcCli, args, { encoding: 'utf8', windowsHide: true }),
+  };
+  await journey('J4', 'Subtitle capture over the local API → card with its encounter', (f) => j4Capture(env, f), { needs: ['J1'] });
+  await journey('J5', 'close, start again: card, review and encounter are there', (f) => j5Reopen(env, f), { needs: ['J1'] });
+  await journey('J6', 'backup → change → restore: the change is gone', (f) => j6BackupRestore(env, f), { needs: ['J1'] });
+  await journey('J7', 'truncated collection → rescue dialog → restored from the verified backup', (f) => j7Rescue(env, f), { needs: ['J1'] });
 }
 
 let fatal = null;
@@ -836,6 +1021,10 @@ try {
   summary.finished_at = new Date().toISOString();
   summary.fatal = fatal;
   summary.ok = !fatal && results.length > 0 && results.every((r) => r.status === 'PASS');
+  summary.blocking = BLOCKING;
+  /** The gate: no setup failure and every blocking journey that was due passed. */
+  summary.gate_ok = !fatal && results.some((r) => r.blocking) && results.filter((r) => r.blocking).every((r) => r.status === 'PASS');
+  summary.non_blocking_failed = results.filter((r) => !r.blocking && r.status !== 'PASS').map((r) => r.id);
   try {
     mkdirSync(opts.out, { recursive: true });
     writeFileSync(join(opts.out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
@@ -844,13 +1033,18 @@ try {
   }
   const tried = summary.attempts.map((a) => `${a.strategy}#${a.try}=${a.ok ? 'ok' : 'fail'}`).join(' ') || 'none';
   const sessionLine = `SESSION ${summary.strategy ? `via "${summary.strategy}"` : 'NONE'} (attempts: ${tried}; elevated: ${summary.elevated})`;
-  const finalLine = `${summary.ok ? 'PASS' : 'FAIL'} windows pilot: ${results.map((r) => `${r.id}=${r.status}`).join(' ') || 'no journeys ran'}`;
+  const finalLine =
+    `${summary.gate_ok ? 'PASS' : 'FAIL'} windows journeys: ${results.map((r) => `${r.id}=${r.status}${r.blocking ? '' : '(non-blocking)'}`).join(' ') || 'no journeys ran'}` +
+    (summary.gate_ok && summary.non_blocking_failed.length ? ` — WARNING: non-blocking ${summary.non_blocking_failed.join(', ')} failed` : '');
   console.log(sessionLine);
   console.log(`\n${finalLine} → ${opts.out}`);
   // The workflow run's summary page: the three lines that answer "what happened".
   if (process.env.GITHUB_STEP_SUMMARY) {
-    const rows = results.map((r) => `- ${r.status} ${r.id} ${r.name}${r.error ? `: ${r.error.split('\n')[0]}` : ''}`);
-    const md = ['### Windows WebDriver pilot', '', `- ${summary.preflight?.line ?? 'PREFLIGHT skipped'}`, `- ${sessionLine}`, ...rows, `- **${finalLine}**`, fatal ? `- setup: ${fatal.split('\n')[0]}` : ''];
+    const rows = results.map(
+      (r) =>
+        `- ${r.status} ${r.id}${r.blocking ? '' : ' (non-blocking)'} ${r.name}${r.error ? `: ${r.error.split('\n')[0]}` : ''}${r.facts?.rescued_by ? ` — rescued by: ${r.facts.rescued_by}` : ''}`,
+    );
+    const md = ['### Windows journeys (installed app)', '', `- ${summary.preflight?.line ?? 'PREFLIGHT skipped'}`, `- ${sessionLine}`, ...rows, `- **${finalLine}**`, fatal ? `- setup: ${fatal.split('\n')[0]}` : ''];
     try {
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${md.filter(Boolean).join('\n')}\n`);
     } catch (e) {
@@ -858,4 +1052,4 @@ try {
     }
   }
 }
-process.exit(summary.ok ? 0 : 1);
+process.exit(summary.gate_ok ? 0 : 1);

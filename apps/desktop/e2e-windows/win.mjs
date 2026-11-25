@@ -276,3 +276,67 @@ export async function cdp(port, timeoutMs = 2_000) {
     return { ok: false, error: e?.cause?.code ?? e?.message ?? String(e) };
   }
 }
+
+/**
+ * v1.4.2 (J7): answers the app's NATIVE rescue dialog. The desktop shell shows it with rfd
+ * 0.15 without the `common-controls-v6` feature, i.e. a plain Win32 `MessageBoxW` (class
+ * `#32770`): the three custom labels become Yes / No / Cancel, and the shell maps Yes →
+ * "restore the newest verified backup" (`maintenance.rs` → `offer_rescue`). The message box is
+ * answered the way a click does it: `WM_COMMAND` with the button's id (IDYES = 6) posted to
+ * the dialog. The info box that follows ("the collection was rescued", MB_OK) gets IDOK (1).
+ *
+ * Looks at every visible `#32770` window of a process named `appExeName` and answers the first
+ * one (only looks when `press` is false): `{ found: true, kind, button, posted, buttons, text }`, `{ found: false }`, or `{ error }`. Never
+ * throws. The dialog's text is returned for the log (it names the damage).
+ */
+export function answerAppDialog(appExeName, { press = true } = {}) {
+  const r = ps(
+    `Add-Type -TypeDefinition @"
+using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
+public static class FcPilotDlg {
+  public delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr p, EnumProc cb, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr h, int id);
+  [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+  public static string Answer(uint[] pids, bool press) {
+    var set = new HashSet<uint>(pids);
+    IntPtr dlg = IntPtr.Zero;
+    EnumWindows((h, l) => {
+      uint pid; GetWindowThreadProcessId(h, out pid);
+      var c = new StringBuilder(64); GetClassName(h, c, 64);
+      if (set.Contains(pid) && IsWindowVisible(h) && c.ToString() == "#32770") { dlg = h; return false; }
+      return true;
+    }, IntPtr.Zero);
+    if (dlg == IntPtr.Zero) return "none";
+    var text = new StringBuilder(); var buttons = new List<string>();
+    EnumChildWindows(dlg, (h, l) => {
+      var c = new StringBuilder(64); GetClassName(h, c, 64);
+      var t = new StringBuilder(2048); GetWindowText(h, t, 2048);
+      if (c.ToString() == "Button") buttons.Add(GetDlgCtrlID(h) + "=" + t.ToString());
+      else if (c.ToString() == "Static" && t.Length > 0) text.Append(t.ToString()).Append(" ");
+      return true;
+    }, IntPtr.Zero);
+    int id = GetDlgItem(dlg, 6) != IntPtr.Zero ? 6 : 1;
+    IntPtr btn = GetDlgItem(dlg, id);
+    bool ok = press && PostMessage(dlg, 0x0111, (IntPtr)id, btn);
+    return "found\\t" + id + "\\t" + ok + "\\t" + string.Join("|", buttons) + "\\t" + text.ToString().Replace("\\r", " ").Replace("\\n", " ");
+  }
+}
+"@
+$name = [IO.Path]::GetFileNameWithoutExtension($env:FC_PS_EXE)
+$pids = @(Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object { [uint32]$_.Id })
+if ($pids.Count -eq 0) { 'noprocess' } else { [FcPilotDlg]::Answer([uint32[]]$pids, $env:FC_PS_PRESS -ne '0') }`,
+    { FC_PS_EXE: appExeName, FC_PS_PRESS: press ? '1' : '0' },
+  );
+  if (r.code !== 0) return { error: r.err || r.out || `powershell exited ${r.code}` };
+  if (r.out === 'none' || r.out === 'noprocess') return { found: false, process: r.out !== 'noprocess' };
+  const [, id, posted, buttons, text] = r.out.split('\t');
+  const button = Number(id) === 6 ? 'Yes (restore backup)' : 'OK';
+  return { found: true, kind: Number(id) === 6 ? 'rescue offer' : 'info', button, posted: posted === 'True', buttons, text: (text ?? '').trim().slice(0, 600) };
+}

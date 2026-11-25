@@ -191,6 +191,12 @@ jobs:
     runs-on: ubuntu-24.04  # Playwright has no Chromium build for ubuntu-26.04 yet
     env:
       SUBTITLE_REPO_TOKEN: ${{ secrets.SUBTITLE_REPO_TOKEN }}
+      # v1.4.2: repository variable (Settings › Secrets and variables › Actions › Variables).
+      # `true` = a run that cannot check the real Subtitle client FAILS (once the secret above
+      # is set). Unset/anything else = the run passes but says "Subtitle client NOT checked".
+      SUBTITLE_CHECK_REQUIRED: ${{ vars.SUBTITLE_CHECK_REQUIRED }}
+      # Where the secret cannot exist: pull requests from forks and Dependabot get no secrets.
+      SUBTITLE_NO_SECRETS: ${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.fork || github.actor == 'dependabot[bot]') }}
     defaults:
       run:
         working-directory: apps/browser-extension
@@ -221,24 +227,57 @@ jobs:
       # The Subtitle extension's own client and outbox against the real `fc api serve`
       # (docs/06 §5.1): the contract, then the v1.4 interruption acceptance (dropped line,
       # lost answer, server killed mid-batch, undo + resend, backup → fresh profile). The
-      # extension's repository is private: the step runs when the `SUBTITLE_REPO_TOKEN`
-      # secret (read access to it) is set, and says so when it is not.
+      # extension's repository is private: it is checked out with the `SUBTITLE_REPO_TOKEN`
+      # secret (read access to it).
+      # v1.4.2: the check can no longer pass silently without running. Without the client:
+      #  - pull request from a fork / Dependabot (no secrets there): both steps are SKIPPED;
+      #  - anywhere else: the job summary says "Subtitle client NOT checked" (+ a warning), the
+      #    check step is SKIPPED, and with the repository variable SUBTITLE_CHECK_REQUIRED=true
+      #    the job FAILS, naming the missing secret and how to set it.
       - name: Subtitle eklentisi deposu
-        if: env.SUBTITLE_REPO_TOKEN != ''
+        if: env.SUBTITLE_REPO_TOKEN != '' && env.SUBTITLE_NO_SECRETS != 'true'
         uses: actions/checkout@v4
         with:
           repository: ardacarofficial/subtitle
           ref: claude/busy-dijkstra-rdh5da
           token: ${{ env.SUBTITLE_REPO_TOKEN }}
           path: subtitle-ext
-      - name: Subtitle sözleşmesi + kesinti kabulü (gerçek istemci, gerçek fc)
+      - name: Subtitle istemcisi burada mı? (yoksa "NOT checked")
+        id: subtitle-client
+        if: env.SUBTITLE_NO_SECRETS != 'true'
         working-directory: .
         run: |
-          if [ ! -d subtitle-ext ]; then
-            echo "::warning::SUBTITLE_REPO_TOKEN is not set: the Subtitle contract check did not run"
+          if [ -f subtitle-ext/src/flashcards/api.ts ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          if [ -z "$SUBTITLE_REPO_TOKEN" ]; then
+            why="the repository secret SUBTITLE_REPO_TOKEN is not set"
+          else
+            why="the checkout of ardacarofficial/subtitle has no src/flashcards/api.ts (wrong ref?)"
+          fi
+          how="Set it: github.com/ardacarofficial/flashcard → Settings → Secrets and variables → Actions → New repository secret, name SUBTITLE_REPO_TOKEN, value a fine-grained personal access token with read-only Contents access to ardacarofficial/subtitle."
+          {
+            echo "### ⚠️ Subtitle client NOT checked"
+            echo ""
+            echo "The real Subtitle extension client (tools/subtitle-contract) did not run: $why."
+            echo ""
+            echo "$how"
+            echo ""
+            echo "Then set the repository variable SUBTITLE_CHECK_REQUIRED=true (Settings → Secrets and variables → Actions → Variables) so a run without the client fails."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$SUBTITLE_CHECK_REQUIRED" = "true" ]; then
+            echo "::error title=Subtitle client NOT checked::$why. $how (SUBTITLE_CHECK_REQUIRED=true makes this a failure.)"
+            exit 1
+          fi
+          echo "::warning title=Subtitle client NOT checked::$why. $how Then set the repository variable SUBTITLE_CHECK_REQUIRED=true to make a missing client fail the job."
+      - name: Subtitle sözleşmesi + kesinti kabulü (gerçek istemci, gerçek fc)
+        if: steps.subtitle-client.outputs.run == 'true'
+        working-directory: .
+        run: |
           node tools/subtitle-contract/check.mjs
+          echo "### ✅ Subtitle client checked (ardacarofficial/subtitle @ $(git -C subtitle-ext rev-parse --short HEAD))" >> "$GITHUB_STEP_SUMMARY"
         env:
           FC_BIN: ${{ github.workspace }}/target/debug/fc
           SUBTITLE_REPO: ${{ github.workspace }}/subtitle-ext
