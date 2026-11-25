@@ -230,10 +230,17 @@ jobs:
       # extension's repository is private: it is checked out with the `SUBTITLE_REPO_TOKEN`
       # secret (read access to it).
       # v1.4.2: the check can no longer pass silently without running. Without the client:
-      #  - pull request from a fork / Dependabot (no secrets there): both steps are SKIPPED;
+      #  - pull request from a fork / Dependabot (no secrets there): the steps are SKIPPED and
+      #    the job summary says "Subtitle client check SKIPPED";
       #  - anywhere else: the job summary says "Subtitle client NOT checked" (+ a warning), the
       #    check step is SKIPPED, and with the repository variable SUBTITLE_CHECK_REQUIRED=true
       #    the job FAILS, naming the missing secret and how to set it.
+      - name: Subtitle istemcisi atlandı (çatal PR veya Dependabot, sır yok)
+        if: env.SUBTITLE_NO_SECRETS == 'true'
+        working-directory: .
+        run: |
+          echo "### ⏭️ Subtitle client check SKIPPED (pull request from a fork or Dependabot: no secrets there)" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Subtitle client check SKIPPED::pull requests from forks and Dependabot get no secrets; the check runs on pushes to this repository's branches"
       - name: Subtitle eklentisi deposu
         if: env.SUBTITLE_REPO_TOKEN != '' && env.SUBTITLE_NO_SECRETS != 'true'
         uses: actions/checkout@v4

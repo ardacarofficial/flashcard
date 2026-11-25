@@ -18,6 +18,8 @@
  *                                 choice (restore the verified backup), returns
  *                                 `{ rescued_by, ... }` once the app answers
  *   env.fc(args)                  the `fc` CLI shipped with the app → stdout
+ *   env.dataDir                   optional: the collection folder where the app does not report
+ *                                 one (`fc dev serve`: `maintenance.status.data_dir` is null)
  *   env.out                       results folder (backups of J6 go there)
  *   env.tag                       unique per run
  *   env.log(...)                  progress line
@@ -332,10 +334,11 @@ export async function j6BackupRestore(env, facts) {
 /** Folder of the collection and the file. */
 async function collectionFile(env) {
   const st = await env.rpc('maintenance.status', {});
-  expect(st.data_dir, 'maintenance.status.data_dir (the collection folder)', st);
-  const db = join(st.data_dir, 'collection.db');
-  expect(existsSync(db), `the collection file ${db}`, st.data_dir);
-  return { dir: st.data_dir, db };
+  const dir = st.data_dir ?? env.dataDir;
+  expect(dir, 'maintenance.status.data_dir (the collection folder)', st);
+  const db = join(dir, 'collection.db');
+  expect(existsSync(db), `the collection file ${db}`, dir);
+  return { dir, db };
 }
 
 /**
@@ -347,6 +350,24 @@ export async function j7Rescue(env, facts) {
   const { dir, db } = await collectionFile(env);
   facts.db = db;
   const deckId = await deckWith(env, `pilot_rescue_${env.tag}`, [['compass', 'pusula']]);
+  // The rescue restores the NEWEST backup. A fresh profile's first automatic backup (queued at
+  // startup, `io.auto_backup` = daily) must not land after the change below: wait until it
+  // exists (the next one is a day away); if it does not come, switch the schedule off and say so.
+  const settled = await until(
+    'the first automatic backup (io.backup.status.automatic)',
+    async () => {
+      const s = await env.rpc('io.backup.status', {});
+      return !s.folder || s.schedule === 'off' || s.automatic.length > 0 ? s : null;
+    },
+    90_000,
+    1000,
+  ).catch(() => null);
+  if (settled) {
+    facts.auto_backup = settled.folder ? `${settled.automatic.length} automatic, schedule ${settled.schedule}` : 'no collection folder (not the app)';
+  } else {
+    await env.rpc('settings.set', { scope: { kind: 'app' }, key: 'io.auto_backup', value: 'off' });
+    facts.auto_backup = 'none after 90 s: io.auto_backup switched off for this journey';
+  }
   // A verified backup where the rescue looks (`backups/`, and `status.json` records it).
   mkdirSync(join(dir, 'backups'), { recursive: true });
   const path = join(dir, 'backups', `pilot-rescue-${env.tag}.fcbackup`);

@@ -66,8 +66,20 @@ async function startApp() {
     // What the app reads for the Subtitle address (`subtitle.status.address`).
     await env.rpc('settings.set', { scope: { kind: 'app' }, key: 'local_api.port', value: apiPort });
   }
-  api = spawn(FC, ['--db', db, 'api', 'serve', '--port', String(apiPort)], { stdio: ['ignore', 'ignore', 'inherit'] });
-  await until('fc api serve', async () => (await fetch(`http://127.0.0.1:${apiPort}/subtitle/v1/me`).catch(() => null)) !== null, 30_000, 100);
+  // `fc api serve` refuses to start while both modules are off; the desktop app starts its
+  // server when the module is switched on (the journeys switch it on again themselves).
+  await env.rpc('modules.set_enabled', { id: 'subtitle', enabled: true });
+  const proc2 = spawn(FC, ['--db', db, 'api', 'serve', '--port', String(apiPort)], { stdio: ['ignore', 'ignore', 'inherit'] });
+  api = proc2;
+  await until(
+    'fc api serve',
+    async () => {
+      if (proc2.exitCode !== null) throw new Error(`fc api serve exited (${proc2.exitCode})`);
+      return (await fetch(`http://127.0.0.1:${apiPort}/subtitle/v1/me`).catch(() => null)) !== null;
+    },
+    30_000,
+    100,
+  );
 }
 
 async function stop(p) {
@@ -88,6 +100,7 @@ async function closeApp() {
 const env = {
   tag: Date.now().toString(36),
   out: dir,
+  dataDir: dirname(db),
   ui: null,
   log: (...a) => console.log('   ', ...a),
   async rpc(method, params = {}) {
@@ -100,7 +113,7 @@ const env = {
     if (reply?.ok === true) return reply.result;
     throw new Error(`${method}: ${JSON.stringify(reply?.error ?? res.status)}`);
   },
-  fc: (args) => execFileSync(FC, args, { encoding: 'utf8' }),
+  fc: (args) => execFileSync(FC, args, { encoding: 'utf8', timeout: 120_000 }),
   closeApp,
   startApp,
   async startDamaged() {

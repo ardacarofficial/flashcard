@@ -262,7 +262,7 @@ v0.1 ──┬── v0.2 (çalışma) ──────┬── v0.6 (istatis
 - [x] İpucu kuralı iki yönde (S7c); "Tüm desteler" kuyruğu her destenin şablonuna uyar, kardeşleri desteler arasında da yarına bırakır (S1, S2, C4); önden öğrenme penceresi ayar ve değişikliği ekrandaki kartı almaz (S6, C3); Planlama'nın bugünü = başlatıcının (C2).
 - [x] Sahibin gözüyle (X2): görünür "Çalış", kavram başına tek söz, klavyeyle Test kâğıdı, AI Oluştur'da üretme / Ayarlar'da kurulum, ara ver → Devam et, `?` sayfa tuşları (O1–O4); Eşleştir rollerden (C1).
 - [x] Yolculuklar gerçek çekirdekte, kaydedilen sonuç üzerinde (`pnpm -C apps/desktop e2e`, CI `journeys`).
-- [x] Windows: kurulu uygulamada WebDriver pilotu (`windows-build.yml` → `webdriver-pilot`) yeşil (P, J1–J3); v1.4.2'de J4–J7 eklendi ve iş kapı oldu (J7 hariç).
+- [x] Windows: kurulu uygulamada WebDriver pilotu (`windows-build.yml` → `webdriver-pilot`) yeşil (P, J1–J3); v1.4.2'de J4–J7 eklendi; iş kırmızı olabilir ama henüz engellemez (`continue-on-error`, J4–J6 üç koşu yeşil kalınca kaldırılır).
 - [ ] Windows: proje sahibinin elle koşusu.
 
 ## 📖 v1.4 · "Kelime uygulaması": kaybolmayan veri, tek kelime doğrusu, sade ekranlar

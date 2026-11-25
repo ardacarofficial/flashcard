@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Windows journeys (v1.3 pilot; v1.4.2 a gate): drives the INSTALLED desktop app (WebView2)
+ * Windows journeys (v1.3 pilot; v1.4.2: the owner's data journeys): drives the INSTALLED desktop app (WebView2)
  * through tauri-driver + msedgedriver and runs journeys against the real app, IPC included.
  * See ./README.md.
  *
@@ -939,16 +939,35 @@ async function startDamaged(label, { db = join(process.env.APPDATA ?? '', IDENTI
   await wd.deleteSession();
   await stopDriver();
   await stopTheApp();
-  let report = null;
+  // `fc rescue --from backup` rescues whatever is there, a healthy collection too: look first
+  // (read-only), so a rescue the dialog already did is not done a second time.
+  let health = null;
   try {
-    report = JSON.parse(execFileSync(opts.fcCli, ['--db', db, 'rescue', '--from', 'backup'], { encoding: 'utf8', windowsHide: true }));
+    health = JSON.parse(fcCli(['--db', db, 'rescue'])).health;
   } catch (e) {
-    out.fc_rescue_error = String(e?.stderr ?? e?.message ?? e).slice(0, 600);
+    out.fc_check_error = String(e?.stderr ?? e?.message ?? e).slice(0, 600);
   }
-  out.fc_rescue = report && { mode: report.mode, backup: report.backup, kept_in: report.kept_in };
-  out.rescued_by = `FALLBACK fc rescue --from backup: the native dialog ${out.dialogs.length ? 'was answered but' : 'was not seen and'} the app did not come up (${out.session_error.split('\n')[0].slice(0, 200)}). The dialog is NOT covered by this run`;
+  out.health_after_dialog = health;
+  const why = out.session_error.split('\n')[0].slice(0, 200);
+  if (yes && health?.ok === true) {
+    out.rescued_by = `native dialog: Yes = "restore backup" rescued the collection, but the app's first session did not come up (${why}); the app was started again`;
+  } else {
+    let report = null;
+    try {
+      report = JSON.parse(fcCli(['--db', db, 'rescue', '--from', 'backup']));
+    } catch (e) {
+      out.fc_rescue_error = String(e?.stderr ?? e?.message ?? e).slice(0, 600);
+    }
+    out.fc_rescue = report && { mode: report.mode, backup: report.backup, kept_in: report.kept_in };
+    out.rescued_by = `FALLBACK fc rescue --from backup: the native dialog ${out.dialogs.length ? 'was answered but' : 'was not seen and'} the app did not come up (${why}). The dialog is NOT covered by this run`;
+  }
   await reopenSession(`${label}-fallback`);
   return out;
+}
+
+/** The installed `fc` CLI → stdout. A CLI that hangs fails after two minutes (never the job). */
+function fcCli(args) {
+  return execFileSync(opts.fcCli, args, { encoding: 'utf8', windowsHide: true, timeout: 120_000 });
 }
 
 async function stopAll() {
@@ -999,7 +1018,7 @@ async function main() {
     closeApp,
     startApp: reopenSession,
     startDamaged,
-    fc: (args) => execFileSync(opts.fcCli, args, { encoding: 'utf8', windowsHide: true }),
+    fc: fcCli,
   };
   await journey('J4', 'Subtitle capture over the local API → card with its encounter', (f) => j4Capture(env, f), { needs: ['J1'] });
   await journey('J5', 'close, start again: card, review and encounter are there', (f) => j5Reopen(env, f), { needs: ['J1'] });

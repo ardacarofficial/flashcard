@@ -1,4 +1,4 @@
-# Windows journeys against the installed app (v1.3 pilot → v1.4.2 gate)
+# Windows journeys against the installed app (v1.3 pilot → v1.4.2 data journeys)
 
 Journeys of the Linux suite (`../e2e`) and the owner's data journeys run against the
 **installed** Windows app (NSIS, per-user, WebView2) through
@@ -7,21 +7,31 @@ matches the WebView2 runtime. They run in the `webdriver-pilot` job ("Windows jo
 (installed app)") of `.github/workflows/windows-build.yml`, after the installer job.
 
 **Status.** P and J1–J3 have been green on every run since the session fix below (11 runs in a
-row up to 45206222145; session via `driver+policy` in ~1.5 s). v1.4.2 adds J4–J7 and makes the
-job a **gate**: it fails when a *blocking* journey fails. J4–J7 were written and their requests
-and read-backs checked on Linux (`local-check.mjs`, below); **their first Windows run is the next
-CI run.**
+row up to 45206222145; session via `driver+policy` in ~1.5 s). v1.4.2 adds J4–J7. Their
+requests and read-backs pass on Linux against the real core (`local-check.mjs`, below: all four
+PASS); **on Windows they have never run: their first run is the next CI run.**
 
-## Which journeys block, and why
+## Not a gate yet, and how to make it one
 
-| Journey | Blocks? | Why |
+The job goes **red** when a *blocking* journey fails, but `continue-on-error: true` on the job
+keeps a red job from failing the workflow run. Reason: what is new on Windows has never run
+there (closing the app and getting a second WebDriver session in one run, the app's HTTP server
+on its fixed port, a restore inside the running app, the native dialog), and a build must not go
+red for the test's own first-run mistakes. A red job is still visible: `::error` annotations, the
+PASS/FAIL lines on the run's summary page, the artifact.
+
+**To make it a gate:** delete the line `continue-on-error: true` of the `webdriver-pilot` job in
+`.github/workflows/windows-build.yml`, once J4–J6 were green on three runs in a row.
+
+| Journey | Makes the job red? | Why |
 |---|---|---|
 | P, J1–J3 | yes | Green on every run since the session strategy was fixed |
-| J4 capture, J5 reopen, J6 backup/restore | yes | Only the same machinery as J1–J3: the WebDriver session, the app's IPC, a loopback HTTP request, an app restart through the same session strategy. No native UI |
+| J4 capture, J6 backup/restore | yes | The WebDriver session, the app's IPC, a loopback HTTP request; no native UI, no restart. The same requests pass against the real core on Linux |
+| J5 reopen | yes | As above plus one app restart (WM_CLOSE, then by force; "keep in tray" may turn the close into a kill) and a second session through the same strategy: never run on Windows |
 | J7 rescue | **no** (warning) | Answers a **native Win32 message box** from outside the app and damages files of a killed app: the flaky native piece |
 
 The list is one line in the workflow (`FC_WIN_E2E_BLOCKING: P,J1,J2,J3,J4,J5,J6`; `--blocking`
-locally). A failed session or setup always fails the job. A non-blocking failure prints a
+locally). A failed session or setup always makes the job red. A non-blocking failure prints a
 `::warning` and `WARNING: non-blocking J7 failed` on the final line and the run's summary page.
 
 ## What J7 covers, and what it does not
@@ -39,9 +49,17 @@ the release build is unchanged. The PASS line names the path taken (`rescued by:
 |---|---|---|
 | `native dialog: Yes …` | the real dialog, the real choice, the shell's rescue, the result in the installed app | a human click (a posted `WM_COMMAND` is what the button sends, not a mouse) |
 | `in-app rescue …` | the truncated file still opened; its integrity check failed; Maintenance → `maintenance.rescue.request` → restart → rescue | the native dialog (not shown in that case) |
+| `native dialog: Yes … but the app's first session did not come up` | the dialog and its rescue (the installed `fc.exe` finds the collection healthy afterwards), the result in the app started again | the app coming up in the same start as the dialog |
 | `FALLBACK fc rescue --from backup …` | the same `rescue()` through the installed `fc.exe`, the result in the installed app | **the dialog**: it was not answered or the app did not come up after it |
 
-Before damaging, J7 makes a verified backup in `backups/`, writes one more note, stops the
+On Windows the dialog's buttons read **Yes / No / Cancel**, not "Restore backup / Keep what is
+readable / Quit" (rfd without `common-controls-v6` drops custom labels), and its text does not
+say which is which: a product gap this journey documents, not one it hides.
+
+Before damaging, J7 waits for the profile's first automatic backup (queued at startup; the
+rescue takes the NEWEST backup, so one landing after the change would bring the change back;
+if none comes in 90 s it switches `io.auto_backup` off and says so in `facts.auto_backup`),
+makes a verified backup in `backups/`, writes one more note, stops the
 app, folds the write-ahead log into the file with the installed `fc.exe` (so the damage is not
 masked by pages still waiting in the log), and truncates `collection.db` to 2/5. After: the
 backup's notes are back, the later note is gone, `damaged/<time>/collection.db` is the

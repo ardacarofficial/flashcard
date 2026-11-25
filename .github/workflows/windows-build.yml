@@ -75,18 +75,23 @@ jobs:
   # + msedgedriver drive the WebView2 app. v1.3 pilot (P, J1–J3; the session works through the
   # HKLM WebView2 policy, strategy "driver+policy": green on every run since). v1.4.2 adds the
   # owner's data journeys (J4 Subtitle capture over the local API, J5 reopen, J6 backup/restore,
-  # J7 rescue of a truncated collection) and makes the job a GATE: it fails when a BLOCKING
-  # journey fails (list below, one line to change). J7 is non-blocking: it answers the native
-  # rescue message box from outside the app (a flaky native piece); its failure is a warning.
+  # J7 rescue of a truncated collection). The JOB goes red when a BLOCKING journey fails (list
+  # below); J7 never does: it answers the native rescue message box from outside the app (a
+  # flaky native piece), its failure is a warning.
+  # NOT A GATE YET: J4–J7 and the app restarts they need have never run on Windows, so
+  # `continue-on-error` keeps a red job from failing the workflow run (the job itself still
+  # shows red, with ::error annotations and the summary lines). TO MAKE IT A GATE: delete the
+  # `continue-on-error: true` line below, once J4–J6 were green on three runs in a row.
   # Runs after the installer job, so the installer is always built and uploaded first.
   webdriver-pilot:
     name: Windows journeys (installed app)
     needs: installer
     runs-on: windows-2025
+    continue-on-error: true
     timeout-minutes: 60
     env:
       FC_WIN_E2E_OUT: ${{ github.workspace }}\e2e-windows-results
-      # Journeys whose failure fails this job (v1.4.2). Not J7 (native dialog): see the README.
+      # Journeys whose failure makes this job red (v1.4.2). Not J7 (native dialog): see the README.
       FC_WIN_E2E_BLOCKING: P,J1,J2,J3,J4,J5,J6
     steps:
       # Only the pilot's own folder (+ root files such as rust-toolchain.toml): no pnpm, no lockfile.

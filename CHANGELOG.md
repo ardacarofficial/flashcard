@@ -4,7 +4,7 @@ Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/), sürümleme: [
 
 ## Unreleased (v1.4.2)
 
-- **Windows yolculukları kapı oldu, Subtitle kontrolü sessizce atlanamaz (J2):** kurulu Windows uygulamasında yeni J4 Subtitle yakalaması (yerel API) → kart + karşılaşma, J5 kapat/aç → kart, tekrar ve karşılaşma yerinde, J6 yedek → değişiklik → geri yükleme, J7 kesik koleksiyon → yerel kurtarma diyaloğu → doğrulanmış yedek; P, J1–J6 başarısızsa `webdriver-pilot` işi kırmızı, J7 (yerel diyalog) uyarı; J4–J7 `local-check.mjs` ile her makinede `fc dev serve` + `fc api serve` üstünde de koşar. `ci.yml`: gerçek Subtitle istemcisi çekilemezse adım "atlandı" görünür ve özet "Subtitle client NOT checked" der; `SUBTITLE_CHECK_REQUIRED=true` depo değişkeniyle kırmızı. _(J2)_
+- **Windows'ta veri yolculukları (J4–J7), Subtitle kontrolü sessizce atlanamaz (J2):** kurulu Windows uygulamasında yeni J4 Subtitle yakalaması (yerel API) → kart + karşılaşma, J5 kapat/aç → kart, tekrar ve karşılaşma yerinde, J6 yedek → değişiklik → geri yükleme, J7 kesik koleksiyon → yerel kurtarma diyaloğu → doğrulanmış yedek; P, J1–J6 başarısızsa `webdriver-pilot` işi kırmızı, J7 (yerel diyalog) uyarı; iş henüz **engellemiyor** (`continue-on-error`: J4–J7 Windows'ta hiç koşmadı; üç yeşil koşudan sonra o satır silinir); J4–J7 `local-check.mjs` ile her makinede `fc dev serve` + `fc api serve` üstünde de koşar. `ci.yml`: gerçek Subtitle istemcisi çekilemezse adım "atlandı" görünür ve özet "Subtitle client NOT checked" der; `SUBTITLE_CHECK_REQUIRED=true` depo değişkeniyle kırmızı. _(J2)_
 
 ## [1.4.1] — sağlamlık turu: verinin kaybolmadığının kanıtı
 
