@@ -12,6 +12,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "Flashcard",
         "width": 1100,
         "height": 720,

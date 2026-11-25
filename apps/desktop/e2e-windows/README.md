@@ -52,9 +52,19 @@ the release build is unchanged. The PASS line names the path taken (`rescued by:
 | `native dialog: Yes … but the app's first session did not come up` | the dialog and its rescue (the installed `fc.exe` finds the collection healthy afterwards), the result in the app started again | the app coming up in the same start as the dialog |
 | `FALLBACK fc rescue --from backup …` | the same `rescue()` through the installed `fc.exe`, the result in the installed app | **the dialog**: it was not answered or the app did not come up after it |
 
-On Windows the dialog's buttons read **Yes / No / Cancel**, not "Restore backup / Keep what is
-readable / Quit" (rfd without `common-controls-v6` drops custom labels), and its text does not
-say which is which: a product gap this journey documents, not one it hides.
+On Windows the dialog's buttons read **Yes / No / Cancel** (rfd without `common-controls-v6`
+drops custom labels); since v1.4.2 its text says which does what, in Turkish and English
+(`maintenance.rs::rescue_text`).
+
+First Windows run (J7 failed, `state not managed for field state on command invoke`): a product
+bug. Tauri created the configured main window before `setup`, the rescue dialog shown from
+`setup` pumped the event loop, so the page loaded and called `invoke` before the collection was
+in the app's state; the session opened on that window before the dialog was seen. Fixed in the
+app: the window says `"create": false` and `lib.rs::open_main_window` creates it after the state
+is managed. J7 now also logs every step (`native dialog FOUND … → sent …`, `session OPEN/FAILED`,
+`the app's API answers`, `FALLBACK …`), keeps answering the dialog until `maintenance.status`
+answers before any other page script, and on a failure writes what it saw to
+`j7-damaged-seen.json`.
 
 Before damaging, J7 waits for the profile's first automatic backup (queued at startup; the
 rescue takes the NEWEST backup, so one landing after the change would bring the change back;
