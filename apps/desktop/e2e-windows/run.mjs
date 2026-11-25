@@ -867,13 +867,60 @@ async function reopenSession(label) {
  *    --from backup` (the same `rescue()` the dialog runs) makes the choice instead, and the
  *    app is started on its result. Then only the dialog itself is NOT covered.
  */
+/** What the last `startDamaged` saw so far: dumped when it throws. */
+let damagedStart = null;
+
+/** `startDamaged`, and on a failure everything it saw (log + `<label>-seen.json`). */
+async function startDamagedLogged(label, where) {
+  try {
+    return await startDamaged(label, where);
+  } catch (e) {
+    const seen = JSON.stringify(damagedStart, null, 2);
+    log(`${label}: FAILED: ${String(e?.message ?? e).split('\n')[0]}\n${label}: what it saw: ${seen}`);
+    try {
+      writeFileSync(join(opts.out, `${label}-seen.json`), `${seen}\n`);
+    } catch {
+      // the log line above has it
+    }
+    await diagnose(`${label}-threw`);
+    throw e;
+  }
+}
+
 async function startDamaged(label, { db = join(process.env.APPDATA ?? '', IDENTIFIER, 'collection.db') } = {}) {
   const s = STRATEGIES.find((x) => x.id === (summary.strategy ?? opts.strategy ?? 'driver+policy'));
-  const out = { strategy: s.id, dialogs: [] };
+  const out = { strategy: s.id, dialogs: [], looks: 0 };
+  damagedStart = out;
   await stopTheApp();
   policy?.set(s.policy());
   await startDriver(label);
+  log(`${label}: starting the app on the damaged collection (session strategy "${s.id}", ${s.how}); looking for its native dialog`);
   let settled = null;
+  /** One look for the app's native dialog; answers it when there is one. Logs what it saw. */
+  const answerDialog = () => {
+    if (!IS_WINDOWS || out.dialogs.length > 6) return false;
+    out.looks++;
+    const seen = answerAppDialog(APP_EXE, { press: false });
+    if (seen.error) {
+      if (out.look_error !== seen.error) log(`${label}: looking for the dialog failed: ${seen.error.slice(0, 300)}`);
+      out.look_error = seen.error;
+      return false;
+    }
+    if (!seen.found) {
+      out.last_look = seen.process ? 'app running, no dialog window' : 'app process not found';
+      return false;
+    }
+    // The dialog as the owner sees it, before it is answered.
+    const png = `${label}-dialog-${out.dialogs.length + 1}.png`;
+    out.dialog_screenshot_error = desktopScreenshot(join(opts.out, png));
+    const answered = answerAppDialog(APP_EXE);
+    out.dialogs.push({ ...answered, screenshot: png });
+    log(
+      `${label}: native dialog FOUND (${answered.kind ?? seen.kind ?? '?'}; buttons ${answered.buttons ?? seen.buttons ?? '?'}) ` +
+        `"${(answered.text ?? seen.text ?? '').slice(0, 160)}" → sent ${answered.button ?? 'nothing'}${answered.posted ? '' : ` (NOT posted: ${answered.error ?? 'PostMessage failed or the dialog was gone'})`}`,
+    );
+    return true;
+  };
   const session = (async () => {
     if (s.how === 'launch') return wd.newSession(opts.app, { timeoutMs: SESSION_TIMEOUT_MS });
     launchApp(label);
@@ -885,18 +932,31 @@ async function startDamaged(label, { db = join(process.env.APPDATA ?? '', IDENTI
   );
   while (!settled) {
     await Promise.race([session, sleep(1500)]);
-    if (settled || !IS_WINDOWS) continue;
-    const seen = answerAppDialog(APP_EXE, { press: false });
-    if (!seen.found) continue;
-    // The dialog as the owner sees it, before it is answered.
-    const png = `${label}-dialog-${out.dialogs.length + 1}.png`;
-    out.dialog_screenshot_error = desktopScreenshot(join(opts.out, png));
-    const answered = answerAppDialog(APP_EXE);
-    out.dialogs.push({ ...answered, screenshot: png });
-    log(`${label}: native dialog (${answered.kind ?? '?'}) "${(answered.text ?? seen.text ?? '').slice(0, 160)}" → ${answered.button ?? answered.error ?? 'not answered'}`);
-    if (out.dialogs.length > 6) break;
+    if (!settled) answerDialog();
   }
   await session;
+  log(`${label}: session ${settled.ok ? 'OPEN' : `FAILED (${settled.error.split('\n')[0].slice(0, 200)})`} after ${out.looks} look(s), ${out.dialogs.length} dialog(s) answered (${out.last_look ?? 'no look without a dialog'})`);
+  if (settled.ok) {
+    // A session is not a usable app: up to v1.4.1 the window existed (and the session opened)
+    // while the rescue dialog was still up and the app's state was not there yet ("state not
+    // managed"). Keep answering the dialog until the app's API answers.
+    const end = Date.now() + LAUNCH_TIMEOUT_MS;
+    for (;;) {
+      const r = await rpc('maintenance.status', {}).then(
+        () => null,
+        (e) => String(e?.message ?? e).split('\n')[0].slice(0, 300),
+      );
+      if (r === null) break;
+      if (out.api_error !== r) log(`${label}: the app's API does not answer yet: ${r}`);
+      out.api_error = r;
+      if (Date.now() > end) {
+        settled = { ok: false, error: `the session opened but the app's API never answered in ${LAUNCH_TIMEOUT_MS / 1000}s (last: ${r})` };
+        break;
+      }
+      if (!answerDialog()) await sleep(1000);
+    }
+    if (settled.ok) log(`${label}: the app's API answers${out.api_error ? ` (before: ${out.api_error})` : ''}`);
+  }
   const yes = out.dialogs.some((d) => d.kind === 'rescue offer' && d.posted);
   if (settled.ok) {
     await afterStart();
@@ -935,6 +995,7 @@ async function startDamaged(label, { db = join(process.env.APPDATA ?? '', IDENTI
   }
   // The dialog was not answered, or the app did not come up after it.
   out.session_error = settled.ok ? 'the app came up but the dialog was not "restore backup"' : settled.error;
+  log(`${label}: FALLBACK (${out.session_error.split('\n')[0].slice(0, 200)}); dialogs: ${JSON.stringify(out.dialogs).slice(0, 600)}`);
   out.diagnosis = await diagnose(`${label}-failed`);
   await wd.deleteSession();
   await stopDriver();
@@ -959,6 +1020,7 @@ async function startDamaged(label, { db = join(process.env.APPDATA ?? '', IDENTI
       out.fc_rescue_error = String(e?.stderr ?? e?.message ?? e).slice(0, 600);
     }
     out.fc_rescue = report && { mode: report.mode, backup: report.backup, kept_in: report.kept_in };
+    log(`${label}: fc rescue --from backup → ${report ? `restored ${report.backup}, damaged files kept in ${report.kept_in}` : `FAILED: ${out.fc_rescue_error}`}`);
     out.rescued_by = `FALLBACK fc rescue --from backup: the native dialog ${out.dialogs.length ? 'was answered but' : 'was not seen and'} the app did not come up (${why}). The dialog is NOT covered by this run`;
   }
   await reopenSession(`${label}-fallback`);
@@ -1017,7 +1079,7 @@ async function main() {
     ui: { ready: () => shellReady(), reload, shot },
     closeApp,
     startApp: reopenSession,
-    startDamaged,
+    startDamaged: startDamagedLogged,
     fc: fcCli,
   };
   await journey('J4', 'Subtitle capture over the local API → card with its encounter', (f) => j4Capture(env, f), { needs: ['J1'] });

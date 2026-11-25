@@ -300,7 +300,7 @@ pub fn offer_rescue(db: &std::path::Path, error: &str) -> Result<(), String> {
     let choice = MessageDialog::new()
         .set_level(MessageLevel::Warning)
         .set_title("Flashcard")
-        .set_description(rescue_text(error))
+        .set_description(rescue_text(error, cfg!(windows)))
         .set_buttons(MessageButtons::YesNoCancelCustom(
             backup.clone(),
             readable.clone(),
@@ -333,12 +333,24 @@ pub fn offer_rescue(db: &std::path::Path, error: &str) -> Result<(), String> {
 }
 
 /// Text of the rescue dialog (bilingual: the UI dictionaries are not loaded yet).
-pub fn rescue_text(detail: &str) -> String {
+///
+/// `plain_buttons`: the dialog cannot show the three custom labels (Windows: rfd without
+/// `common-controls-v6` shows a plain message box with Yes / No / Cancel in the system's
+/// language), so the text says which button does what.
+pub fn rescue_text(detail: &str, plain_buttons: bool) -> String {
+    let legend = if plain_buttons {
+        "\n\nEvet (Yes) = yedekten geri yükle\nHayır (No) = okunabileni kurtar\n\
+         İptal (Cancel) = çık, hiçbir şeye dokunma\n\n\
+         Yes (Evet) = restore the newest backup\nNo (Hayır) = keep what is readable\n\
+         Cancel (İptal) = quit, change nothing"
+    } else {
+        ""
+    };
     format!(
         "Koleksiyon dosyası bozuk görünüyor. Hiçbir şey silinmeyecek: bozuk dosyalar \
          `damaged` klasörüne taşınıp saklanır.\n\
          The collection file looks damaged. Nothing will be deleted: the damaged files are \
-         moved to the `damaged` folder and kept.\n\n{detail}"
+         moved to the `damaged` folder and kept.{legend}\n\n{detail}"
     )
 }
 
@@ -351,6 +363,25 @@ mod tests {
             .chain(list.iter().copied())
             .map(String::from)
             .collect()
+    }
+
+    #[test]
+    fn the_rescue_text_names_the_plain_buttons_only_where_they_are_shown() {
+        let custom = rescue_text("IO_DATABASE: malformed", false);
+        assert!(!custom.contains("Evet"));
+        assert!(custom.ends_with("IO_DATABASE: malformed"));
+        let plain = rescue_text("IO_DATABASE: malformed", true);
+        for line in [
+            "Evet (Yes) = yedekten geri yükle",
+            "Hayır (No) = okunabileni kurtar",
+            "İptal (Cancel) = çık",
+            "Yes (Evet) = restore the newest backup",
+            "No (Hayır) = keep what is readable",
+            "Cancel (İptal) = quit",
+        ] {
+            assert!(plain.contains(line), "{line}");
+        }
+        assert!(plain.ends_with("IO_DATABASE: malformed"));
     }
 
     #[test]

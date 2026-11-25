@@ -108,6 +108,14 @@ pub fn run() {
                         fail(&e.to_string());
                     }
                     app.manage(collection.clone());
+                    // v1.4.2: the main window only now (`"create": false` in
+                    // tauri.conf.json). Tauri would create it before this setup runs, and a
+                    // native dialog shown from here (the rescue offer, a startup error) pumps
+                    // the event loop: the page loaded and called `invoke` before the state
+                    // above existed ("state not managed").
+                    if let Err(e) = open_main_window(app) {
+                        fail(&e);
+                    }
                     // App lock idle watch, reminders, tray, profile switch (v1.0).
                     if let Err(e) = session::start(app.handle(), &collection) {
                         fail(&e.to_string());
@@ -189,6 +197,22 @@ fn open_collection(
     Ok((collection, boot, dir))
 }
 
+/// Creates the main window from its `tauri.conf.json` entry (which says `"create": false`,
+/// so Tauri does not create it before the app state is managed).
+fn open_main_window(app: &tauri::App) -> Result<(), String> {
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "main")
+        .ok_or_else(|| "tauri.conf.json: no window labelled main".to_owned())?;
+    let builder = tauri::WebviewWindowBuilder::from_config(app.handle(), config)
+        .map_err(|e| format!("main window: {e}"))?;
+    builder.build().map_err(|e| format!("main window: {e}"))?;
+    Ok(())
+}
+
 /// Text of the startup error dialog. The UI dictionaries are not loaded yet (and the
 /// collection holding the language setting may be what failed), so it is bilingual.
 pub fn startup_error_text(detail: &str) -> String {
@@ -210,6 +234,21 @@ fn fail(detail: &str) -> ! {
 
 #[cfg(test)]
 mod tests {
+    /// The main window must not exist before the app state is managed (v1.4.2): Tauri
+    /// creates every configured window before `setup` unless it says `"create": false`.
+    #[test]
+    fn the_main_window_is_created_by_setup_not_by_the_config() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap_or_default();
+        let windows = conf["app"]["windows"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(windows.len(), 1);
+        assert_eq!(windows[0]["label"], "main");
+        assert_eq!(windows[0]["create"], false);
+    }
+
     #[test]
     fn startup_error_text_is_bilingual_and_keeps_the_detail() {
         let t = super::startup_error_text("IO_DATABASE: disk full");
