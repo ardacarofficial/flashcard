@@ -73,7 +73,7 @@
     "tts": {
       "provider": {
         "label": "Voice provider",
-        "description": "Empty = the first available one."
+        "description": "Empty = the first available one. On Windows that is the voices Windows already has (offline, no key): builtin.system."
       }
     },
     "audio_fill": {
@@ -290,8 +290,12 @@
       "plugin_rejected": "A plugin stopped this: {message}"
     },
     "provider": {
-      "plugin_failed": "A plugin failed ({kind})."
+      "plugin_failed": "A plugin failed ({kind}).",
+      "no_voice": "No voice for {language} is installed on this computer. On Windows add one under Settings → Time & language → Speech → Add voices (it installs the language pack), then try again."
     }
+  },
+  "tts_providers": {
+    "system": "Windows voices (offline)"
   },
   "audio_fill": {
     "job": {

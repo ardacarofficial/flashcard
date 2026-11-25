@@ -1691,6 +1691,7 @@ dependencies = [
  "fc-providers",
  "fc-storage",
  "fc-study",
+ "fc-system-tts",
  "getrandom 0.3.4",
  "log",
  "minisign-verify",
@@ -1875,6 +1876,15 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+]
+
+[[package]]
+name = "fc-system-tts"
+version = "1.4.1"
+dependencies = [
+ "async-trait",
+ "fc-providers",
+ "windows",
 ]
 
 [[package]]

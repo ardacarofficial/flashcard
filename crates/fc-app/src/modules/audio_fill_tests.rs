@@ -462,3 +462,142 @@ fn only_the_primary_example_is_filled() {
         .iter()
         .any(|r| r.code == fc_core::encounter_score::SceneReasonCode::SynthesizedAudio));
 }
+
+/// The OS under the system voice provider (`fc-system-tts`): an English (default) and a Turkish
+/// voice; records which voice spoke what.
+struct FakeOs {
+    spoken: Arc<std::sync::Mutex<Vec<(String, String)>>>,
+}
+
+impl fc_system_tts::Synthesiser for FakeOs {
+    fn voices(&self) -> ProviderResult<Vec<fc_system_tts::SystemVoice>> {
+        let v = |id: &str, language: &str, is_default| fc_system_tts::SystemVoice {
+            id: id.into(),
+            name: id.into(),
+            language: language.into(),
+            is_default,
+        };
+        Ok(vec![v("os-tr", "tr-TR", false), v("os-en", "en-US", true)])
+    }
+    fn speak(&self, text: &str, voice_id: &str, _rate: f64) -> ProviderResult<Vec<u8>> {
+        self.spoken
+            .lock()
+            .unwrap()
+            .push((text.to_owned(), voice_id.to_owned()));
+        let samples: Vec<i16> = text.bytes().map(i16::from).collect();
+        Ok(fc_system_tts::wav::pcm16_mono(16_000, &samples))
+    }
+}
+
+/// v1.4.2 J4: the offline system voice (`builtin.system`, here over a fake OS) is an ordinary
+/// provider: it fills missing audio through the media path (stored WAV, `tts` origin with its
+/// provider and language), the note's language picks the voice, `tts.voices` lists the
+/// installed ones, a language without a voice is a plain "install one" answer, and the `tts`
+/// module switch turns it off.
+#[test]
+fn the_system_voice_fills_missing_audio_offline() {
+    let t = TestApp::new(Arc::new(SqliteStore::open_in_memory().unwrap()));
+    let spoken = Arc::new(std::sync::Mutex::new(Vec::new()));
+    t.app
+        .registry()
+        .register_tts(Arc::new(fc_system_tts::SystemTts::new(FakeOs {
+            spoken: spoken.clone(),
+        })));
+    t.ok::<ModulesSetEnabled>(SetModuleEnabled {
+        id: crate::modules::subtitle::ID.into(),
+        enabled: true,
+    });
+    let c = t.ok::<SubtitleKeysCreate>(CreateSubtitleKey { name: "Chrome".into() });
+    let key = authenticate(&t.app, &key_hash(&c.secret)).unwrap();
+    let n = capture(&t.app, &key, &shot(1, "bank", "banka", "To the bank.", false))
+        .unwrap()
+        .note_id;
+
+    let p = t.ok::<MediaAudioFillPreview>(ids(&[n]));
+    assert_eq!((p.tts, p.none), (1, 0));
+    assert!(p.tts_problems.is_empty(), "{:?}", p.tts_problems);
+    let r = run(&t, ids(&[n]));
+    assert_eq!((r.done.tts, r.failed), (1, 0), "{r:?}");
+    assert_eq!(*spoken.lock().unwrap(), vec![("bank".to_owned(), "os-en".to_owned())]);
+    let h = hash_of(&audio_of(&t, n));
+    let o = origin(&t, &h);
+    assert_eq!(o.origin, MediaOrigin::Tts);
+    assert_eq!(o.provider.as_deref(), Some(fc_system_tts::PROVIDER_ID));
+    assert_eq!(o.language.as_deref(), Some("en"));
+    let m = t.store.read().unwrap().get_media(&h).unwrap().unwrap();
+    assert_eq!(m.mime, "audio/wav");
+
+    let v = t.ok::<TtsVoices>(fc_api::v1::tts::ListVoices { provider: None });
+    assert_eq!(v.provider, fc_system_tts::PROVIDER_ID);
+    assert_eq!(v.voices.len(), 2);
+    let said = t.ok::<TtsSynthesize>(fc_api::v1::tts::Synthesize {
+        provider: None,
+        text: "merhaba".into(),
+        language: "tr".into(),
+        voice: None,
+        rate: None,
+    });
+    assert_eq!(said.mime, "audio/wav");
+    assert_eq!(spoken.lock().unwrap()[1], ("merhaba".to_owned(), "os-tr".to_owned()));
+    // No Japanese voice on this machine: the plain sentence, with the language.
+    let e = t.err::<TtsSynthesize>(fc_api::v1::tts::Synthesize {
+        provider: None,
+        text: "こんにちは".into(),
+        language: "ja-JP".into(),
+        voice: None,
+        rate: None,
+    });
+    assert_eq!(e.code, ErrorCode::ProviderUnavailable);
+    assert_eq!(e.message_key, crate::modules::tts::NO_VOICE_KEY);
+    assert_eq!(e.details.get("language"), Some(&json!("ja-JP")));
+    assert_eq!(e.details.get("kind"), Some(&json!("no_voice")));
+    // The `tts` module off: no speech through it.
+    t.ok::<ModulesSetEnabled>(SetModuleEnabled {
+        id: crate::modules::tts::ID.into(),
+        enabled: false,
+    });
+    let e = t.err::<TtsSynthesize>(fc_api::v1::tts::Synthesize {
+        provider: None,
+        text: "bank".into(),
+        language: "en".into(),
+        voice: None,
+        rate: None,
+    });
+    assert_eq!(e.code, ErrorCode::ConflictModuleDisabled);
+}
+
+/// A provider that lists no voices says nothing about languages: its own error stays. Only the
+/// system provider's empty list means "this machine has no voice at all".
+#[test]
+fn an_empty_voice_list_is_no_voice_only_for_the_system_provider() {
+    let say = |t: &TestApp| {
+        t.err::<TtsSynthesize>(fc_api::v1::tts::Synthesize {
+            provider: None,
+            text: "bank".into(),
+            language: "en".into(),
+            voice: None,
+            rate: None,
+        })
+    };
+    let (t, _, _) = app(Arc::new(SqliteStore::open_in_memory().unwrap()), vec![]);
+    let e = say(&t);
+    assert_eq!(e.code, ErrorCode::ProviderUnavailable);
+    assert_ne!(e.message_key, crate::modules::tts::NO_VOICE_KEY);
+
+    struct NoVoices;
+    impl fc_system_tts::Synthesiser for NoVoices {
+        fn voices(&self) -> ProviderResult<Vec<fc_system_tts::SystemVoice>> {
+            Ok(vec![])
+        }
+        fn speak(&self, _: &str, _: &str, _: f64) -> ProviderResult<Vec<u8>> {
+            unreachable!("no voice to speak with")
+        }
+    }
+    let t = TestApp::new(Arc::new(SqliteStore::open_in_memory().unwrap()));
+    t.app
+        .registry()
+        .register_tts(Arc::new(fc_system_tts::SystemTts::new(NoVoices)));
+    let e = say(&t);
+    assert_eq!(e.message_key, crate::modules::tts::NO_VOICE_KEY);
+    assert_eq!(e.details.get("language"), Some(&json!("en")));
+}
