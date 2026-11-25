@@ -535,7 +535,10 @@ fn measure(path: &Path, import_rows: usize, film: Option<FilmScale>) -> Measured
         .unwrap();
     for sort in ["sort_field", "due", "modified"] {
         for offset in [0, total / 3, total / 2, total.saturating_sub(100)] {
-            let ms = best(2, || {
+            // v1.4.2 K2: best of 5 (was 2). The number reported is the worst of these twelve
+            // pages, so one slow moment in both tries of any page decided it: the same binary
+            // on the same collection gave 67–113 ms (docs/12, "Tarayıcı sayfası").
+            let ms = best(5, || {
                 let page = invoke(
                     &app,
                     "search.cards",
@@ -1006,6 +1009,11 @@ fn hot() {
         .unwrap_or(5);
     let (open, app) = time(|| App::open_sqlite(Path::new(&path)).unwrap());
     println!("open {open:.1} ms");
+    // `FC_PERF_HOT_DUE_CACHE=off`: the load balancer counts by query on every answer, as
+    // before v1.4.2 K2 (same binary, same machine state: what the kept counts save).
+    if std::env::var("FC_PERF_HOT_DUE_CACHE").is_ok_and(|v| v == "off") {
+        fc_storage::set_due_load_cache(false);
+    }
     // `FC_PERF_HOT_MODULE_OFF=<module id>`: the same loop with a module switched off (what
     // a module costs on a hot path; v1.4.2: `planning` on `answers`).
     if let Some(module) = std::env::var("FC_PERF_HOT_MODULE_OFF")
