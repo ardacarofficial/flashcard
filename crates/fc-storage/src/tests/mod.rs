@@ -24,6 +24,7 @@ mod misc;
 mod notes;
 mod plugins;
 mod reading;
+mod rescue;
 mod search;
 mod search_fuzz;
 mod stats;
