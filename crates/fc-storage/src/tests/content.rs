@@ -351,3 +351,32 @@ fn field_samples_are_seeded_bounded_and_filtered() {
     assert_eq!(q(1, 5).len(), 5);
     assert_ne!(q(1, 5), q(2, 5), "different seeds pick different notes");
 }
+
+/// v1.4.2 review (J1): a damaged file under a media hash (a power cut before the OS wrote
+/// it out, a bad sector, a sync tool) was kept forever: `write_media_file` skipped any
+/// existing file, so adding the same picture again, or restoring a backup that holds the
+/// good bytes, left the broken one in place. Now the existing file is kept only when it
+/// holds exactly these bytes; otherwise it is replaced (write + rename).
+#[test]
+fn a_damaged_media_file_is_repaired_by_writing_the_good_bytes() {
+    let fx = Fx::new();
+    let bytes = b"\x89PNG\r\n\x1a\nthe real picture".as_slice();
+    let m = media(bytes, "a.png");
+    let path = crate::media::media_file_path(&fx.db_path(), &m.hash).unwrap();
+    fx.write(|tx| {
+        tx.write_media_file(&m.hash, bytes).unwrap();
+        tx.insert_media(&m).unwrap();
+    });
+    for damaged in [
+        &b""[..],
+        &b"\x89PNG\r\n\x1a\nthe real pictur!"[..],
+        &b"short"[..],
+    ] {
+        std::fs::write(&path, damaged).unwrap();
+        fx.write(|tx| tx.write_media_file(&m.hash, bytes).unwrap());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes, "damaged: {damaged:?}");
+    }
+    // A good file is left as it is (no `.part` left behind either).
+    fx.write(|tx| tx.write_media_file(&m.hash, bytes).unwrap());
+    assert_eq!(files_under(&fx.dir.path().join("media")), vec![path]);
+}
