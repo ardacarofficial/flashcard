@@ -112,7 +112,17 @@ impl Fetcher for FileFetcher {
         let rest = url
             .strip_prefix("file://")
             .ok_or_else(|| ModelError::Unsupported(url.to_owned()))?;
-        let mut f = fs::File::open(file_url_path(rest))?;
+        // The URL comes from a plugin's manifest: only a regular file on this computer.
+        // A network share (`file:////host/share/x`: on Windows opening it signs in to that
+        // host), a device or a path relative to wherever the app runs is refused.
+        let path = file_url_path(rest);
+        if !is_local_file_path(rest, &path) {
+            return Err(ModelError::Unsupported(url.to_owned()));
+        }
+        let mut f = fs::File::open(path)?;
+        if !f.metadata()?.is_file() {
+            return Err(ModelError::Unsupported(url.to_owned()));
+        }
         f.seek(SeekFrom::Start(offset))?;
         Ok(Box::new(f))
     }
@@ -127,6 +137,15 @@ fn file_url_path(rest: &str) -> PathBuf {
     } else {
         PathBuf::from(rest)
     }
+}
+
+/// Whether the part after `file://` names an absolute path on a local drive: no host
+/// (`host/share`), no UNC or device namespace (`//host/share`, `//./COM1`, `//?/C:/x`, also
+/// written with backslashes).
+fn is_local_file_path(rest: &str, path: &std::path::Path) -> bool {
+    let slashes = rest.replace('\\', "/");
+    let after_drive = path.to_string_lossy().replace('\\', "/");
+    path.is_absolute() && !slashes.starts_with("//") && !after_drive.starts_with("//")
 }
 
 /// Builds a `file://` URL for a local path (forward slashes, `file:///C:/…` on Windows).
@@ -284,6 +303,30 @@ impl ModelStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// v1.4.2 review (J1): a model URL is written by the plugin's author. `file://` reaches
+    /// only regular local files: not a network share (Windows would sign in to that host),
+    /// not a device, not a folder, not a relative path.
+    #[test]
+    fn file_urls_reach_only_regular_local_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src.bin");
+        fs::write(&src, b"hello").unwrap();
+        assert!(FileFetcher.open(&file_url(&src), 0).is_ok());
+        for url in [
+            "file:////evil.example/share/model.bin".to_owned(),
+            "file://evil.example/share/model.bin".to_owned(),
+            r"file://\\evil.example\share\model.bin".to_owned(),
+            "file:////./PhysicalDrive0".to_owned(),
+            "file:////?/C:/Windows/win.ini".to_owned(),
+            "file://relative/model.bin".to_owned(),
+        ] {
+            let r = FileFetcher.open(&url, 0);
+            assert!(matches!(r, Err(ModelError::Unsupported(_))), "{url}");
+        }
+        // A folder (Windows refuses to open one at all).
+        assert!(FileFetcher.open(&file_url(dir.path()), 0).is_err());
+    }
 
     #[test]
     fn file_urls_roundtrip_unix_and_windows_paths() {
