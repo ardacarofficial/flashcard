@@ -26,6 +26,7 @@ pub mod store;
 
 pub use error::{is_disk_full, StorageError, StorageResult};
 pub use repo::{Reads, Writes};
+pub use sqlite::due_load::set_due_load_cache;
 pub use sqlite::{fit_dump_to_schema, upgrade_dump, upgrade_dump_with};
 pub use store::{ReadTx, SqliteStore, Store, WriteTx};
 

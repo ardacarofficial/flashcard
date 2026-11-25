@@ -10,6 +10,7 @@ mod capture_log;
 mod cards;
 mod content;
 mod decks;
+pub(crate) mod due_load;
 mod interop;
 pub use interop::{fit_dump_to_schema, upgrade_dump, upgrade_dump_with};
 mod automation;
@@ -57,12 +58,16 @@ pub(crate) enum WriteMode {}
 /// Transaction mode: how it begins.
 pub(crate) trait Mode {
     const BEGIN: &'static str;
+    /// A write transaction (on the writer connection).
+    const WRITE: bool;
 }
 impl Mode for ReadMode {
     const BEGIN: &'static str = "BEGIN DEFERRED";
+    const WRITE: bool = false;
 }
 impl Mode for WriteMode {
     const BEGIN: &'static str = "BEGIN IMMEDIATE";
+    const WRITE: bool = true;
 }
 
 /// An open transaction on a locked connection. Dropping it without commit rolls back.
