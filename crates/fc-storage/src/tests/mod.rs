@@ -11,6 +11,7 @@ mod capture_log;
 mod checkpoint_crash;
 mod content;
 mod decks;
+mod due_load;
 mod encounters;
 mod inbox;
 mod interop;

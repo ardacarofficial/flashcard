@@ -241,23 +241,7 @@ impl<M: Mode> StatsRead for SqliteTx<'_, M> {
         to: Timestamp,
         shift_ms: i64,
     ) -> StorageResult<Vec<(i64, u32)>> {
-        // Floor division (`div_euclid`) in SQL: SQLite's `/` truncates toward zero.
-        all(
-            self.conn(),
-            "cards",
-            "SELECT d, count(*) FROM (
-                 SELECT ((c.due + ?3) - (((c.due + ?3) % 86400000) + 86400000) % 86400000)
-                        / 86400000 AS d
-                 FROM cards c INDEXED BY cards_due_load
-                 WHERE c.due >= ?1 AND c.due < ?2
-                   AND c.state IN ('learning', 'review', 'relearning')
-                   AND c.suspended = 0 AND c.deleted_at IS NULL
-                   AND c.note_id NOT IN
-                       (SELECT id FROM notes INDEXED BY notes_trashed WHERE deleted_at IS NOT NULL)
-             ) GROUP BY d ORDER BY d",
-            params![from.0, to.0, shift_ms],
-            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, u32>(1)?)),
-        )
+        super::due_load::due_counts_by_day(self.conn(), M::WRITE, from, to, shift_ms)
     }
 
     fn list_exams(&self) -> StorageResult<Vec<ExamRecord>> {

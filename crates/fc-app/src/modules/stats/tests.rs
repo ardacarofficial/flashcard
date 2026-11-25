@@ -817,6 +817,130 @@ pub fn load_balancing_spreads_equal_cards(f: &Factory) {
     }
 }
 
+/// What the load balancer decided over a scripted week (v1.4.2 K2): every button's interval
+/// shown, every interval applied and every due day, as text. Seeded: the same script on any
+/// store.
+fn balancer_trace(f: &Factory) -> Vec<String> {
+    use fc_core::rng::Rng;
+    let t = T::new(f);
+    let d = t.deck("D");
+    let mut rng = SplitMix64::new(20_261_125);
+    let ids: Vec<CardId> = (0..240)
+        .map(|i| {
+            let id = t.note(d.id, &format!("w{i}"), None);
+            let stability = 2 + rng.below(180) as i64;
+            // Two in five wait to be answered; the rest are the load of the days ahead.
+            let due = if i % 5 < 2 {
+                -(rng.below(6) as i64)
+            } else {
+                1 + rng.below(200) as i64
+            };
+            let kind = rng.below(20);
+            t.set_card(id, |c| {
+                c.scheduling.state = if kind == 0 { CardState::Learning } else { CardState::Review };
+                c.scheduling.stability = Some(stability as f64);
+                c.scheduling.difficulty = Some(3.0 + (i % 6) as f64);
+                c.scheduling.reps = 3 + i % 4;
+                c.scheduling.last_review = Some(Timestamp(T0 + (due - stability) * DAY));
+                c.scheduling.due = Some(Timestamp(T0 + due * DAY + 3_600_000 * (i64::from(i) % 5)));
+                c.suspended = kind == 1;
+            });
+            id
+        })
+        .collect();
+    let index = |c: CardId| ids.iter().position(|x| *x == c).unwrap();
+    let mut trace = Vec::new();
+    for day in 0..4 {
+        t.day(day);
+        let Some(mut s) = t.start(StudyMode::Scheduled, None) else {
+            trace.push(format!("day {day}: nothing"));
+            continue;
+        };
+        for step in 0..30 {
+            let Some(c) = s.current.clone() else { break };
+            let rating = match rng.below(20) {
+                0..=2 => Rating::Again,
+                3..=6 => Rating::Hard,
+                7..=16 => Rating::Good,
+                _ => Rating::Easy,
+            };
+            let shown: Vec<u32> = c.intervals.iter().map(|p| p.scheduled_days).collect();
+            t.clock.advance(5_000);
+            s = t.ok::<StudyAnswer>(AnswerCard {
+                session_id: s.id,
+                card_id: c.card_id,
+                rating,
+                duration_ms: 3_000,
+                reveal_ms: None,
+                typed_answer: None,
+            });
+            let card = t.card(c.card_id);
+            trace.push(format!(
+                "day {day} #{step} card {} {rating:?}: shown {shown:?}, due {:?} {:?}",
+                index(c.card_id),
+                card.scheduling.state,
+                card.scheduling.due.map(|d| d.as_millis().div_euclid(DAY)),
+            ));
+            // Other writes between answers: the counts must follow them.
+            match rng.below(12) {
+                0 => {
+                    t.undo();
+                    t.redo();
+                    s = t.ok::<StudySession>(SessionRef { session_id: s.id });
+                }
+                1 => {
+                    let other = ids[rng.below(240) as usize];
+                    let moved = rng.below(30) as i64;
+                    t.set_card(other, |c| {
+                        c.suspended = !c.suspended;
+                        if c.scheduling.state == CardState::Review {
+                            c.scheduling.due = Some(Timestamp(T0 + (10 + moved) * DAY));
+                        }
+                    });
+                    s = t.ok::<StudySession>(SessionRef { session_id: s.id });
+                }
+                2 => {
+                    let note = t.card(ids[rng.below(240) as usize]).note_id;
+                    // Already trashed by an earlier step: an error, the same on every store.
+                    let _ = t.app.call::<NotesDelete>(&NoteIds { ids: vec![note] }, &Actor::User);
+                    s = t.ok::<StudySession>(SessionRef { session_id: s.id });
+                }
+                _ => {}
+            }
+        }
+        t.ok::<StudyEnd>(SessionRef { session_id: s.id });
+    }
+    trace.push(format!("due days {:?}", {
+        let read = t.store.read().unwrap();
+        ids.iter()
+            .map(|c| read.get_card(*c).unwrap().unwrap().scheduling.due.map(|d| d.as_millis().div_euclid(DAY)))
+            .collect::<Vec<_>>()
+    }));
+    trace
+}
+
+/// v1.4.2 K2: the per-day counts kept on SQLite's writer connection change nothing the load
+/// balancer decides. The same seeded week of answers (with undo/redo, cards moved and
+/// suspended, notes trashed in between) gives the same shown and applied intervals on the
+/// in-memory store (the trait's reference count over `due_times`), on SQLite with the counting
+/// query on every answer (the behaviour before) and on SQLite with the kept counts.
+#[test]
+fn load_balancer_decides_the_same_with_kept_counts() {
+    use crate::testing::{MemStore, TempSqlite};
+    let reference = balancer_trace(&|| -> Arc<dyn Store> { Arc::new(MemStore::new()) });
+    assert!(reference.len() > 80, "the script answers cards: {}", reference.len());
+    fc_storage::set_due_load_cache(false);
+    let query = balancer_trace(&|| -> Arc<dyn Store> { Arc::new(TempSqlite::new()) });
+    fc_storage::set_due_load_cache(true);
+    let kept = balancer_trace(&|| -> Arc<dyn Store> { Arc::new(TempSqlite::new()) });
+    for (i, line) in reference.iter().enumerate() {
+        assert_eq!(query.get(i), Some(line), "counting query, line {i}");
+        assert_eq!(kept.get(i), Some(line), "kept counts, line {i}");
+    }
+    assert_eq!(query.len(), reference.len());
+    assert_eq!(kept.len(), reference.len());
+}
+
 /// Exam-date mode: a card of the exam's scope whose next review would fall after the exam is
 /// pulled into the days just before it; other cards are not. Exam commands undo exactly.
 pub fn exam_mode_and_exam_commands(f: &Factory) {

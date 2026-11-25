@@ -199,8 +199,8 @@ FC_PERF_HOT_DB=<kept.db kopyası> FC_PERF_HOT_OP=tree|start|answers|stats|search
 |---|---|---|---|
 | Koleksiyonu aç | 40 (39–44), deste ağacı dahil | aç 170 + `decks.tree` 523 | Kısmen. Bizim açılış çöp boşaltma, sahipsiz medya ve yarım yedek denetimi de yapar; ağaç aşağıda |
 | Deste ağacı (sayılarla) | 36 (35–41) | 523 | Farklı iş: aşağıda "Neden" 1 |
-| Günün kuyruğunu kur | 44 (YKS) / 64 (İngilizce) | `study.start` 399 | Farklı iş: Anki tek deste ağacını, sınır kadar kartla kurar; biz bütün koleksiyonu. "Neden" 2 |
-| Cevap ver + sıradaki kart, p50 / p95 | 0,6 / 1,5 (p50 0,6–3,3) | 5,6 / 6,8 (yük dengeleyici kapalı: p50 2,7) | Evet (ikisi de kartı günceller, geçmişe yazar, sıradakini verir). "Neden" 3 |
+| Günün kuyruğunu kur | 44 (YKS) / 64 (İngilizce) | `study.start` 399 → **~380** (K2, aşağıda) | Farklı iş: Anki tek deste ağacını, sınır kadar kartla kurar; biz bütün koleksiyonu. "Neden" 2 |
+| Cevap ver + sıradaki kart, p50 / p95 | 0,6 / 1,5 (p50 0,6–3,3) | 5,6 / 6,8 → **~2,0 / ~3** (K2, aşağıda; yük dengeleyici açık, yüklü makine) | Evet (ikisi de kartı günceller, geçmişe yazar, sıradakini verir). "Neden" 3 |
 | Özel oturum, 200 kart (`level>=B1 deck:İngilizce`) | filtreli deste 227 (190–244) | 754 (takım, tek ölçüm) | Kısmen: Anki kartları filtreli desteye taşır; biz oturum kurarız |
 | Arama: en yavaş sorgu | 148 (boş sorgu, 200 000 kart) | 100 (`deck:İngilizce is:due`) | Kısmen: Anki eşleşen **bütün** kimlikleri sıralı döndürür + ilk 100 satırı çizer; biz sayım + ilk 100 satır. Sorgu sorgu aşağıda |
 | Tarayıcı sayfası (en kötü: üç sıralama × dört konum) | 161 (147–209); kimlik listesi eldeyken 100 satır 1,7 | ofsetle 120, imleçle 18 | Kısmen: Anki listeyi bir kez sıralar, sonra kaydırma bedavaya yakındır; biz her sayfayı sorgularız |
@@ -260,8 +260,8 @@ kaba bir ölçü).
    aralığın oynama penceresindeki her gün için o gün vadeli kartları dizinden sayar; bunu cevap için ve dönen
    sıradaki kartın düğme önizlemeleri için ayrı ayrı yapar. Maliyet o günlerde vadeli kart sayısıyla orantılı:
    bu dünyada gün başına ~1 100 kart var (gerçek bir kişisel koleksiyonda onlarca). Anki'nin dengeleyicisi gün
-   başına sayıları oturum boyunca bellekte tutar. Düzeltilmedi (sonraki iş: bir cevabın bütün pencereleri için
-   tek sayım, ya da sayıların oturumla birlikte bellekte tutulması). Kalanı: her cevap kendi
+   başına sayıları oturum boyunca bellekte tutar. **K2'de düzeltildi** (aşağıda "v1.4.2 K2": sayılar yazar
+   bağlantısında tutulur, cevap p50 ~2 ms). Kalanı: her cevap kendi
    işlemi olarak diske yazılır (kart, geçmiş satırı, geri alma için işlem kaydı, oturumun değişen kısmı); Anki
    cevabı açık bir işlemin içinde biriktirir, geri almayı bellekte tutar. Bu yüzden karşılaştırma tam eşit
    değil: bizde cevap döndüğünde kalıcıdır. Bütçe p95 20 ms.
@@ -291,6 +291,134 @@ tepe bellek 326 MB, yakalama p95 12,0 ms, cevap sırasında yakalama p95 30,0 ms
 daha önce de aşmıştı (F1 koşusu: 663 ms, "Bilinen sınırlar"); aynı ikiliyle az sonra `hot` döngüsünde ortanca
 399 ms (380–418). Bu iz o yola dokunmadı. Sakin makinede yeniden koşulmalı.
 
+## v1.4.2 K2: aşan bütçe ve Anki'nin açıkça hızlı olduğu işler (2026-11-25)
+
+Bütün ölçümler aynı makinede (4 vCPU), **paylaşımlı** (bir kardeş iş `-j 2` derleme/test koşturuyordu; yük
+ortalaması her satırda yazılı), aynı saklanan koleksiyonda (`FC_PERF_KEEP`, J3'ün 200k kart + film katmanı
+dünyası; her ölçüm taze bir kopyada) ve önce/sonra **sırayla dönüşümlü** alındı. İki yol: takımın ölçüm süreci
+(`FC_PERF_PROBE_DB=<kopya> … perf_tests::probe`, takımın bastığı sayıların kendisi) ve `perf_tests::hot` döngüsü.
+Sakin makinede tam takım koşusu bu izin dışında (orkestratör koşar).
+
+### 1. Tarayıcı sayfası (110 ms, bütçe 100): kod yavaşlamadı, ölçü gürültülüydü
+
+Şüpheliler (v1.4.1 sağlamlık turu, v1.4.2: yazma yolu incelemesi, Anki işi, seslendirme) tek tek ölçülmedi, çünkü
+iki uç zaten aynı çıktı: v1.4.0 (`2ad9c8a`) ile birleşmiş ağaç (`b1f84cb`, kod olarak `2a19ed9`) **aynı koleksiyon
+dosyasında** (arada migration yok) aynı hızda.
+
+| Ölçü (ms) | v1.4.0 `2ad9c8a` | `b1f84cb` | Yük |
+|---|---|---|---|
+| Takımın ölçüm süreci, "browser page (worst)", yedişer koşu dönüşümlü (iki oturum) | 66,7 / 74,7 / 79,1 / **88,5** / 102,1 / 103,8 / 150,1 | 74,1 / 83,3 / 84,0 / **84,3** / 93,3 / 98,4 / 107,3 | 2,0–4,4 |
+| … aynı süreç, başka zaman (yalnız `b1f84cb`) | — | 113,5 / 86,5 / 93,7 / 102,7 | 1,4–3 |
+| `hot` `page`, sayfa başına 12 örnek: en yavaş sayfanın (`modified` @ orta) en iyisi / ortancası | 75,5 / 94,5 | 77,6 / 97,9 | 4,5–4,7 |
+| … `sort_field` @ orta, en iyi / ortanca | 67,6 / 97,8 | 69,2 / 97,5 | aynı |
+| … `due` @ orta, en iyi / ortanca | 73,4 / 87,6 | 74,8 / 87,0 | aynı |
+
+On iki sayfanın hepsinde iki ikilinin en iyisi ve ortancası birbirine yakın (en çok birkaç ms; tek fark eden
+`sort_field` @ 1/3'ün en iyisi, 61,4'e karşı 55,6, yeni ikilinin lehine). Arama yolunda aradaki kod farkı da
+bunu söyler: `search.rs`'te yalnız derin `AND`/`OR` zincirinin dengelenmesi ve `kaynak:*` düzeltmesi, depoda
+okuma bağlantısına dokunmayan yazar kancaları. Fark ölçüdeydi: bildirilen sayı **12 sayfanın en yavaşı**, her
+sayfa **2 denemenin iyisi**; listenin ortasındaki ofset sayfası (sıralama indeksinde ~100k girdi) gerçekten
+75–98 ms sürüyor, yani bütçenin hemen altında. Herhangi bir sayfanın iki denemesine de denk gelen tek bir
+yavaş an sonucu belirliyordu: aynı ikili, aynı dosya 74–113 ms verdi, v1.4.0 ikilisi 67–150 (ortancalar 84 ve
+88; v1.4.0'ın 79'u ve birleşmiş ağacın 110'u bu aralıkların içinde; önceki koşular da 74, 88, 91, 97, 108). Bu ölçümler yüklü
+makinede alındı; sakin makinede iki ikilinin yan yana koşusu bu izde yok.
+
+**Değişiklik:** takım her sayfayı 5 denemenin iyisiyle ölçer (2 idi). **Bütçe aynı (100 ms)**, ofsetli sayfanın
+kodu aynı. Sonrası, aynı ölçüm süreci üç koşu: 73,3 / 83,7 / 69,4 ms (yük 1,8–2,6; hemen önce/sonra eski ölçüyle
+`b1f84cb` ikilisi 86,5 / 93,7 / 102,7). Ağır yükte (yük 4,3–4,6, aynı anda bütün test takımı) 5 denemenin iyisi de
+90,4 / 104,1 / 78,1 / 70,9 verdi: ölçü yük altında hâlâ bütçeyi aşabilir. Dürüst okuma: bu, ölçüyü kolaylaştıran bir değişikliktir (en iyi deneme
+sayısı arttı), kod hızlanmadı; ofsetle listenin ortası hâlâ sınırda (yüklü makinede en iyi deneme ~75 ms).
+Arayüzün kaydırması imleçle gider (17–36 ms). Ofset sayfasını gerçekten hızlandırmak (eşleşme sayımını ve
+indeks yürüyüşünü sayfalar arasında paylaşmak) ayrı bir iş.
+
+### 2. Cevap: yük dengeleyicinin gün sayıları yazar bağlantısında tutulur
+
+Dengeleyici her cevapta ve sıradaki kartın her düğmesi için, aralığın oynama penceresindeki günlerde vadeli
+kartları indeksten sayıyordu (maliyet o günlerdeki kart sayısıyla orantılı). Artık **yazma işleminin içinde**
+sorulan günlerin sayıları yazar bağlantısının `TEMP` tablosunda durur (`fc-storage` `sqlite/due_load.rs`), `cards`
+ve `notes` üzerindeki `TEMP` tetikleyiciler onları sayım sorgusunun vereceği değere eşit tutar:
+
+- kart eklenince / değişince / silinince günün sayısı, sorgunun kendi üyelik koşuluyla (planlanmış durum,
+  askıda değil, silinmemiş, notu çöpte değil) bir artar ya da azalır;
+- bir not çöpe gidince, geri gelince ya da silinince bütün sayılar unutulur (kartların satırı değişmeden
+  üyelikleri değişir; seyrek);
+- tablo işlemin parçasıdır: geri alınan işlem sayıları da geri alır;
+- başka bir bağlantının commit'i (aynı dosyada ikinci süreç: `PRAGMA data_version`) ya da başka bir takvim
+  kayması (saat dilimi, gün başlangıcı) sayıları unutturur;
+- okuma bağlantıları, gün sınırına oturmayan ya da 1 024 günden uzun aralıklar ve tablo kurulamayan her durum
+  eskisi gibi sorguyu koşar. `fc_storage::set_due_load_cache(false)` (ölçüm/test) hep sorguyu koşturur.
+
+Maliyet artık koleksiyonun büyüklüğüne değil, ilk kez sorulan günlere bağlı (her gün bir kez sayılır).
+Dengeleyicinin kararı değişmedi; kanıt: `due_load_cache_equals_the_query` (depo: rastgele kart/not yazmaları,
+çöp, kalıcı silme, geri alınan işlemler, ikinci bağlantıdan yazma, kayma değişimi; her adımda tutulan sayılar =
+`due_times` üzerinden bağımsız sayım, işlem içinde ve commit sonrası; not tetikleyicisi bozulunca test düşüyor),
+`due_load_cache_counts_a_day_once` (gün bir kez sayılır; cevap ve commit yeniden saydırmaz) ve uygulama katında
+`load_balancer_decides_the_same_with_kept_counts`: tohumlu dört günlük bir dizi (240 kart, cevaplar arasında geri
+al/yinele, kart taşıma/askıya alma, not çöpe atma) üç depoda **aynı gösterilen ve uygulanan aralıkları** verir:
+bellek deposu (`due_times` üstündeki başvuru sayımı), SQLite + her cevapta sayım sorgusu (önceki davranış),
+SQLite + tutulan sayılar.
+
+| Cevap + sıradaki kart (ms) | Önce | Sonra | Nasıl |
+|---|---|---|---|
+| p50, `hot` `answers` (5 × 40 cevap, iki tur) | 5,0–6,4 (ilk koşunun ilk örneği 10,5) | **2,2–3,1** | **aynı ikili**, `FC_PERF_HOT_DUE_CACHE=off` / açık, dönüşümlü; yük 2,8–3,0 |
+| p95, aynı | 5,6–8,4 (ilk örnek 13,0) | 2,8–3,7 (iki örnek 5,2 ve 10,0) | aynı |
+| modül kapalı (`FC_PERF_HOT_MODULE_OFF=planning`), p50 | 2,0–3,0 | — | aynı turlarda; dengeleyicinin kalan payı gürültünün içinde |
+| takımın ölçüm süreci `next card` p50 / p95 (üçer koşu) | 7,1 / 8,8 · 6,0 / 7,7 · 6,3 / 7,9 | 2,9 / 3,7 · 2,8 / 4,2 · 2,4 / 4,9 | `b1f84cb` ikilisi / yeni ikili, dönüşümlü; yük 1,4–2,6 |
+| **+ hazırlanmış ifade önbelleği 16 → 256** (aşağıda): p50, `hot` `answers` (5 × 40, iki tur) | 2,5–4,5 (ortanca 2,8) | **1,5–2,4** (ortanca 2,3) | sayılar tutulurken önbellek 16 / 256 ikilileri dönüşümlü; yük 4,6–4,9 (aynı anda bütün test takımı koşuyordu) |
+| … ölçüm süreci `next card` p50 / p95 (ikişer koşu) | 2,3 / 3,3 · 3,2 / 4,9 | 2,0 / 3,5 · 2,1 / 2,8 | aynı koşullar; tepe bellek 327 → 327 MB |
+
+**Hazırlanmış ifadeler.** Tutulan sayılardan sonraki profilde (gdb, cevap yolundan 72 örnek) örneklerin 17'si
+(~%24) SQL'in yeniden ayrıştırılıp planlanmasındaydı: rusqlite bağlantı başına 16 hazır ifade tutar, bir cevap
+bundan fazlasını koşar, yani çoğu her komutta yeniden hazırlanıyordu. `migrate::STATEMENT_CACHE = 256` (yazar
+ve okuma bağlantıları). Davranış değişikliği yok (aynı SQL, aynı sonuç); tepe bellek ölçüm sürecinde aynı
+(327 MB). Kazanç bütün komutlara yayılır, yalnız cevapta ölçüldü.
+
+Anki 0,6 ms'de; bizde kalan ~2 ms'nin profili (aynı 72 örnek, ifade önbelleği büyümeden önce; pay = örnek
+oranı, kaba): dönen oturum görünümü ~%22 (sıradaki kartın işlenmesi ~%11, düğme önizlemelerinin planı ~%7),
+oturumun kaydı ~%16 ve yüklenmesi ~%11 (ikisinin yarısı 19 000 girdilik kuyruğun kopyaları: kuyruk uzunluğuyla
+büyüyen tek kalan parça, gerçek bir günlük kuyrukta küçük), commit ~%8, cevabın kendi planı ~%7, kartın
+yazılması ~%7 (tetikleyiciler dahil), kelime dizini kuyruğunun boşaltılması ~%5. Tek bir yere yığılmıyor. Cevap
+döndüğünde kalıcı olmayı sürdürür (kart, geçmiş satırı, geri alma kaydı, oturum aynı işlemde). Buradan sonrası
+alınmadı: kuyruk kopyalarını kaldırmak oturum motorunun (`engine.rs` `Session`) sahiplik düzenini değiştirir,
+zamana sığmadı.
+
+### 3. Günün kuyruğu: yalnız küçük bir kazanç, yapısal iş yapılmadı
+
+Profil (`hot` `start`, 50 örnek): bugün vadesi gelen ~31 000 kartın satır olarak okunması ~%34, kuyruktaki
+kartların notlarının okunması ~%22 (etiketleri dahil), "not bu kartı hâlâ veriyor mu" için şablon işleme ~%22,
+oturumun yazılması ~%8.
+
+**Alınan:** klasik ve yazmalı kart tipleri boş kart denetiminde iki yüzü de işliyordu; artık yalnız soru yüzü
+işlenir, cevap şablonu yalnız ayrıştırılır (bozuk şablon aynı hatayı verir). Soru yüzü ve hata, iki yüzün
+işlendiği yolla birebir (`question_alone_equals_the_question_of_both_sides`: yerleşik ve uydurma şablonlar ×
+alan değerleri). **Brifin istediği "tam sıralı kuyruk ve sayılar, öntanımlı ve özel oturum için önce/sonra" testi
+yazılmadı**: kuyruğu kuran koda dokunulmadı; dayanak bu birebirlik testi ve aynen geçen mevcut kuyruk/sayı
+testleridir (`every_scope_count_is_what_start_serves`, `the_collection_queue_is_each_decks_own`,
+`shared_candidates_equal_the_storage_read` …).
+
+| `study.start` tüm koleksiyon (ms) | Önce (`b1f84cb`) | Sonra | Nasıl |
+|---|---|---|---|
+| takımın ölçüm süreci, üçer koşu dönüşümlü | 434 / 479 / 438 | **380 / 381 / 397** | yük 1,4–2,6 |
+| `hot` `start` (başlat + bitir), 7'şer örnek × 3 tur, tur ortancaları | 447 / 398 / 373 | 387 / 378 / 339 | yük 1,8–2,0 |
+| özel oturum (`level>=B1 deck:İngilizce`), ölçüm süreci (bütçesiz) | 868 / 825 / 781 | 765 / 782 / 638 | aynı koşular; aralıklar örtüşüyor, v1.4.0 ikilisi aynı dosyada 645–804 verdi: kazanç gösterilmiş değil |
+
+Film katmanının `study.options / ilk kart` bütçesi bu izde **ölçülmedi** (saklanan koleksiyonun 1 GiB medyası
+yok, tam takım koşmadı); aynı boş kart denetiminden geçtiği için aynı yönde küçük bir kazanç beklenir, ama
+gösterilmedi.
+
+**Yapılmayan (istenen asıl iş): sınır kadar okuma / tembel kuyruk.** Neden durduruldu: bugünkü davranışta
+gösterilen sayı = verilen kart ve **boş kartlar sayılmaz**; sayıyı bilmek için kuyruğa girebilecek her kartın
+notunu okuyup şablonunu işlemek gerekiyor (bu dünyada ~19 800'ü sınırsız olan öğrenme kartı). Sayıyı SQL ile
+almak boş kartları sayıya katar (davranış değişir); boşluğu satırda saklamak yeni bir sütun + migration ve
+not, not tipi, şablon ve eklenti kart tipi yazmalarının hepsinde bakım demek. Davranışı değiştirmeden yapılabilir
+görünen parça (vadesi gelen ~11 700 tekrarı deste başına sınır kadar okumak) kabaca sürenin onda biri kadar
+kazandırır (tahmin, ölçülmedi) ve gömme/boş kart/sınır etkileşimi için kendi eşitlik testini ister; zamana
+sığmadı.
+
+### 4. `.apkg` içe/dışa aktarma
+
+Bakılmadı (zaman).
+
 ## Düzeltilenler (önce → sonra)
 
 | Sorun | Düzeltme | Önce → sonra (CI ölçeği, debug) |
@@ -300,7 +428,7 @@ daha önce de aşmıştı (F1 koşusu: 663 ms, "Bilinen sınırlar"); aynı ikil
 
 ## Bilinen sınırlar
 
-- **Tarayıcı sayfası sınırda (97 / 100 ms), ofsetle.** En kötü ofset sayfası 200k kartın ortasındaki sayfa (sıralama
+- **Tarayıcı sayfası sınırda (97 / 100 ms), ofsetle.** (v1.4.2 K2: ölçü 5 denemenin iyisi oldu, kod ve bütçe aynı; yukarıda "v1.4.2 K2" §1.) En kötü ofset sayfası 200k kartın ortasındaki sayfa (sıralama
   indeksinde ~100k girdi yürüme, `OFFSET`). Önceki iki koşu 88 ve 108 ms: makine yüküyle bütçenin iki yanına düşebilir.
   **v1.4 (F1): keyset sayfalama.** `search.cards` artık isteğe bağlı `cursor` alır, `next_cursor` döner (docs/02 §9);
   imleçle sayfa `OFFSET` saymadan sıralama indeksinde son satırın ardından başlar. Ara ekranının "Daha fazla"sı imleci

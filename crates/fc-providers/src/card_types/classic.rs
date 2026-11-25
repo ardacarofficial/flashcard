@@ -1,7 +1,7 @@
 //! `classic` (self-graded) and `typing` (typed answer) engines: one card per template, unless
 //! the question renders empty (optional reverse).
 
-use super::{info, render_sides, tts_of};
+use super::{info, render_question, render_sides, tts_of};
 use crate::provider::ProviderInfo;
 use crate::strategy::{
     CardInput, CardTypeEngine, Interaction, RenderContext, RenderedCard, StrategyError,
@@ -24,7 +24,7 @@ fn generate_if_visible(
         template,
         template_key: &template.key,
     };
-    let (q, _) = render_sides(&input, &RenderContext::default(), None)?;
+    let q = render_question(&input, &RenderContext::default(), None)?;
     Ok(if has_visible_content(&q.html) {
         vec![CardSpec {
             template_key: template.key.clone(),
@@ -132,6 +132,99 @@ mod tests {
         };
         assert_eq!(count(&without), 1);
         assert_eq!(count(&with), 2);
+    }
+
+    /// v1.4.2 K2: the question rendered alone is the question `render_sides` renders, and a
+    /// template that does not parse (either side) fails with the same error; so the cards a
+    /// note yields are the same as when both sides were rendered.
+    #[test]
+    fn question_alone_equals_the_question_of_both_sides() {
+        let values = [
+            "",
+            " ",
+            "dog",
+            "**bold** [[link]]",
+            "<b>x</b>",
+            "&nbsp;",
+            "<!-- c -->",
+            "<br>",
+            "line\n\nline",
+            "{{c1::cloze}}",
+            "<img src=\"media:x\">",
+            "y",
+        ];
+        let mut seen = 0;
+        let mut empty = 0;
+        for key in ["classic", "classic_reverse", "optional_reverse", "typing"] {
+            let Some(def) = fc_core::content::builtin::find(key) else {
+                continue;
+            };
+            let mut nt = def.build(fc_core::Timestamp(1), fc_core::i18n::Locale::En);
+            // Extra shapes: sections, filters, specials, and sides that do not parse.
+            let mut extra = nt.templates[0].clone();
+            let first = nt.fields[0].key.to_string();
+            let variants = [
+                (
+                    format!("{{{{#{first}}}}}Q: {{{{text:{first}}}}}{{{{/{first}}}}}"),
+                    "{{FrontSide}}<hr>{{Tags}}".to_owned(),
+                ),
+                (
+                    format!("{{{{^{first}}}}}{{{{Deck}}}}{{{{/{first}}}}}{{{{hint:{first}}}}}"),
+                    "{{Card}}".to_owned(),
+                ),
+                (
+                    format!("{{{{tts:en:{first}}}}}"),
+                    format!("{{{{type:{first}}}}}"),
+                ),
+                (
+                    format!("{{{{{first}}}}}"),
+                    "{{#open}}never closed".to_owned(),
+                ),
+                ("{{".to_owned(), "fine".to_owned()),
+                ("{{ }}".to_owned(), "{{/x}}".to_owned()),
+            ];
+            for (front, back) in variants {
+                extra.front = front;
+                extra.back = back;
+                nt.templates.push(extra.clone());
+            }
+            for a in values {
+                for b in values {
+                    let mut pairs: Vec<(&str, &str)> = Vec::new();
+                    for (i, f) in nt.fields.iter().enumerate() {
+                        pairs.push((f.key.as_str(), if i % 2 == 0 { a } else { b }));
+                    }
+                    let mut n = note(&nt, &pairs);
+                    if a.len() % 2 == 1 {
+                        n.tags = vec![fc_core::tag::TagName::parse("verb").unwrap()];
+                    }
+                    for t in &nt.templates {
+                        let input = CardInput {
+                            note: &n,
+                            notetype: &nt,
+                            template: t,
+                            template_key: &t.key,
+                        };
+                        let ctx = RenderContext::default();
+                        let both = render_sides(&input, &ctx, None).map(|(q, _)| q);
+                        let alone = render_question(&input, &ctx, None);
+                        assert_eq!(
+                            alone, both,
+                            "{key} {:?} / {:?} with {a:?} {b:?}",
+                            t.front, t.back
+                        );
+                        seen += 1;
+                        if alone.is_ok_and(|q| !has_visible_content(&q.html)) {
+                            empty += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            seen > 1_000 && empty > 50,
+            "{seen} renders, {empty} empty questions"
+        );
     }
 
     #[test]

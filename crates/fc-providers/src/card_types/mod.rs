@@ -75,6 +75,33 @@ pub(crate) fn render_sides(
     Ok((q, a))
 }
 
+/// The question side alone, as [`render_sides`] renders it (v1.4.2 K2: "does this note yield
+/// this card" is asked for every queued card and only looks at the question). The answer
+/// template is still parsed, so a template that does not parse fails here exactly as it does
+/// in [`render_sides`] (rendering itself cannot fail).
+pub(crate) fn render_question(
+    input: &CardInput<'_>,
+    ctx: &RenderContext,
+    cloze: Option<u32>,
+) -> StrategyResult<SideOutput> {
+    let links = |key: &str| ctx.links.get(key).map(ToString::to_string);
+    let env = RenderEnv {
+        notetype: input.notetype,
+        fields: &input.note.fields,
+        tags: &input.note.tags,
+        deck: &ctx.deck_path,
+        card_name: &input.template.name,
+        cloze,
+        reveal: false,
+        front_side: None,
+        links: &links,
+    };
+    let err = |e: fc_core::content::template::TemplateError| StrategyError(e.to_string());
+    let q = render_template(&input.template.front, &env).map_err(err)?;
+    fc_core::content::template::parse(&input.template.back).map_err(err)?;
+    Ok(q)
+}
+
 /// TTS requests of both sides, question first, without duplicates.
 pub(crate) fn tts_of(q: &SideOutput, a: &SideOutput) -> Vec<TtsRequest> {
     let mut out: Vec<TtsRequest> = Vec::new();
