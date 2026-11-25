@@ -60,8 +60,13 @@ pub trait JobRead {
 pub trait JobWrite: JobRead {
     /// Inserts or replaces.
     fn upsert_job(&mut self, job: &JobRecord) -> StorageResult<()>;
-    /// At startup: `running`/`queued` → `interrupted`. Returns rows changed.
-    fn mark_unfinished_jobs_interrupted(&mut self, now: Timestamp) -> StorageResult<u32>;
+    /// At startup: `running`/`queued` → `interrupted`, except the jobs in `keep` (jobs another
+    /// live process is running, v1.4.2 K1). Returns rows changed.
+    fn mark_unfinished_jobs_interrupted(
+        &mut self,
+        now: Timestamp,
+        keep: &[JobId],
+    ) -> StorageResult<u32>;
     /// Claims the oldest `queued` job: sets it `running` with `updated_at = now` and returns
     /// it (`None` if the queue is empty).
     fn claim_next_job(&mut self, now: Timestamp) -> StorageResult<Option<JobRecord>>;

@@ -10,6 +10,7 @@ use crate::registry::{
     Registry, RegistryError,
 };
 use crate::settings::SettingsSchema;
+use crate::support::live_lock::{self, LiveLock, Owner};
 use crate::system::{OsRng, SystemClock};
 use fc_api::method::parse_qualified_name;
 use fc_api::method::MethodDescriptor;
@@ -110,6 +111,11 @@ pub(crate) enum OplogMode<'g> {
 /// the marker in that same transaction. So if the app stops in between, the marker describes
 /// exactly the committed parts, and [`App::load_state`] rolls them back — a change is never
 /// left without an undo step.
+///
+/// **Other processes** (v1.4.2 K1). The group may belong to another process working on the
+/// same collection (an `fc` import while the desktop app starts). A marker alone cannot tell
+/// a crashed writer from a running one, so every group also holds a [`LiveLock`]; startup
+/// rolls a group back only when that lock is free.
 pub(crate) struct UndoGroup {
     batch_id: BatchId,
     pending: Vec<PendingOplogEntry>,
@@ -117,6 +123,9 @@ pub(crate) struct UndoGroup {
     marker: UnfinishedBatchRecord,
     /// Parts appended to the marker so far.
     parts: u32,
+    /// Held for as long as the group lives: tells a starting app that the process writing
+    /// this group is alive (see below). Released by the system if the process dies.
+    _alive: Option<LiveLock>,
 }
 
 impl UndoGroup {
@@ -241,7 +250,13 @@ impl App {
             tx.upsert_notetype(&builtin::classic(now, name, front, back))?;
         }
         crate::support::content::seed_builtin_notetypes(&mut *tx, locale, now)?;
-        tx.mark_unfinished_jobs_interrupted(now)?;
+        // Not the jobs another live process is running (v1.4.2 K1): a job's lock is taken
+        // inside the transaction that claims it, so under the writer this list is complete.
+        let running_elsewhere: Vec<JobId> = LiveLock::held(self.data_dir(), live_lock::JOB)
+            .iter()
+            .filter_map(|id| id.parse().ok())
+            .collect();
+        tx.mark_unfinished_jobs_interrupted(now, &running_elsewhere)?;
         // The word index (v1.4): builds what a migration or another writer queued.
         crate::modules::words::index::drain(&mut *tx)?;
         // Word data (v1.4): installs the shipped packs once (and again when they change); one
@@ -281,18 +296,38 @@ impl App {
     /// Startup: undoes what undo groups left unfinished by a crash wrote (see [`UndoGroup`]).
     /// The rollback runs unlogged and removes the marker in its own transaction. A rollback
     /// that fails keeps its marker (tried again at the next start) and does not stop the
-    /// app from opening.
+    /// app from opening. Groups a live process is writing are left alone.
     fn roll_back_unfinished_groups(&self) -> AppResult<()> {
-        let markers = {
+        let groups: Vec<BatchId> = {
             let tx = self.store.read()?;
-            let mut out = Vec::new();
-            for m in tx.list_unfinished_batches()? {
-                let parts = tx.unfinished_batch_parts(m.batch_id)?;
-                out.push((m, parts));
-            }
-            out
+            tx.list_unfinished_batches()?
+                .iter()
+                .map(|m| m.batch_id)
+                .collect()
         };
-        for (marker, parts) in markers {
+        for batch_id in groups {
+            // A group whose writer is alive (another process, mid-import) is not ours to
+            // undo. A free lock is held from here on, so two starting apps never roll the
+            // same group back at once.
+            let _claim =
+                match LiveLock::owner(self.data_dir(), live_lock::GROUP, &batch_id.to_string()) {
+                    Owner::Alive => continue,
+                    Owner::Gone(claim) => claim,
+                };
+            // Read now, not before: a writer that just finished removed its marker first
+            // and released its lock second.
+            let (marker, parts) = {
+                let tx = self.store.read()?;
+                let Some(m) = tx
+                    .list_unfinished_batches()?
+                    .into_iter()
+                    .find(|m| m.batch_id == batch_id)
+                else {
+                    continue;
+                };
+                let parts = tx.unfinished_batch_parts(batch_id)?;
+                (m, parts)
+            };
             if parts.is_empty() {
                 let mut tx = self.store.write()?;
                 tx.delete_unfinished_batch(marker.batch_id)?;
@@ -310,6 +345,8 @@ impl App {
                 false,
             );
         }
+        // Lock files of groups that ended with their process (no marker left to find them).
+        let _ = LiveLock::held(self.data_dir(), live_lock::GROUP);
         Ok(())
     }
 
@@ -826,6 +863,8 @@ impl App {
             created_at: now,
             updated_at: now,
         };
+        // Before the marker exists: whoever sees the marker finds the lock held.
+        let alive = LiveLock::hold(self.data_dir(), live_lock::GROUP, &batch_id.to_string());
         let mut tx = self.store.write()?;
         tx.upsert_unfinished_batch(&marker)?;
         tx.commit()?;
@@ -834,6 +873,7 @@ impl App {
             pending: Vec::new(),
             marker,
             parts: 0,
+            _alive: alive,
         })
     }
 

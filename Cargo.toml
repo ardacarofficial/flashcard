@@ -7,7 +7,7 @@ exclude = ["plugins-sdk"]
 [workspace.package]
 version = "1.4.1"
 edition = "2021"
-rust-version = "1.86"
+rust-version = "1.89"
 license = "UNLICENSED"
 publish = false
 

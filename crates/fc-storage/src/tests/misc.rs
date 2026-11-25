@@ -241,8 +241,11 @@ fn jobs_enqueue_claim_update_recover() {
     fx.write(|tx| {
         tx.upsert_job(&job(4, "running", 60)).unwrap();
         tx.upsert_job(&job(5, "queued", 61)).unwrap();
+        // A job another live process runs is kept (v1.4.2 K1).
+        tx.upsert_job(&job(7, "running", 62)).unwrap();
         assert_eq!(
-            tx.mark_unfinished_jobs_interrupted(Timestamp(70)).unwrap(),
+            tx.mark_unfinished_jobs_interrupted(Timestamp(70), &[job(7, "", 0).id])
+                .unwrap(),
             2
         );
     });
@@ -251,6 +254,18 @@ fn jobs_enqueue_claim_update_recover() {
         assert_eq!(
             (j.status.as_str(), j.updated_at),
             ("interrupted", Timestamp(70))
+        );
+        let kept = r.get_job(job(7, "", 0).id).unwrap().unwrap();
+        assert_eq!(
+            (kept.status.as_str(), kept.updated_at),
+            ("running", Timestamp(62))
+        );
+    });
+    fx.write(|tx| {
+        assert_eq!(
+            tx.mark_unfinished_jobs_interrupted(Timestamp(71), &[])
+                .unwrap(),
+            1
         );
     });
     // The schema rejects unknown statuses.

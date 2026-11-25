@@ -13,7 +13,9 @@
 //!   long command running for the job can observe it and roll back;
 //! * the final status (`succeeded`/`failed`/`cancelled`), result and error are persisted.
 //!
-//! Jobs left `queued`/`running` when the app closed are marked `interrupted` at startup.
+//! Jobs left `queued`/`running` when the app closed are marked `interrupted` at startup —
+//! except those another live process is running (the `fc` command line next to the desktop
+//! app): a running job holds a [`LiveLock`] (v1.4.2 K1).
 //!
 //! **Lanes.** Each handler names a lane ([`JobHandler::lane`]); [`spawn_worker`] runs one
 //! thread per lane, so a long AI request (seconds to minutes of waiting on the network) never
@@ -22,6 +24,7 @@
 
 use crate::app::{App, OplogMode, UndoGroup};
 use crate::error::{AppError, AppResult};
+use crate::support::live_lock::{self, LiveLock};
 use fc_api::v1::common::I18nMessage;
 use fc_api::v1::events::DomainEvent;
 use fc_api::v1::jobs::{JobDto, JobStatus};
@@ -449,28 +452,42 @@ impl App {
     /// Claims the oldest queued job (any lane) and runs it on this thread. `Ok(None)` if none
     /// is queued.
     pub fn run_next_job(&self) -> AppResult<Option<JobDto>> {
-        let claimed = {
+        let (claimed, alive) = {
             let mut tx = self.store().write()?;
             let job = tx.claim_next_job(self.now())?;
+            let alive = self.job_lock(job.as_ref());
             tx.commit()?;
-            job
+            (job, alive)
         };
-        self.run_claimed(claimed)
+        self.run_claimed(claimed, alive)
     }
 
     /// Claims the oldest queued job of `lane` and runs it on this thread.
     pub fn run_next_job_in(&self, lane: &str) -> AppResult<Option<JobDto>> {
         let (kinds, only) = self.registry().lane_kinds(lane);
-        let claimed = {
+        let (claimed, alive) = {
             let mut tx = self.store().write()?;
             let job = tx.claim_next_job_in(self.now(), &kinds, only)?;
+            let alive = self.job_lock(job.as_ref());
             tx.commit()?;
-            job
+            (job, alive)
         };
-        self.run_claimed(claimed)
+        self.run_claimed(claimed, alive)
     }
 
-    fn run_claimed(&self, claimed: Option<JobRecord>) -> AppResult<Option<JobDto>> {
+    /// The lock that tells a starting app this job's process is alive (v1.4.2 K1): taken
+    /// before the claim commits, so the job is never seen `running` without it; held until
+    /// the job's final status is written.
+    fn job_lock(&self, claimed: Option<&JobRecord>) -> Option<LiveLock> {
+        let id = claimed?.id.to_string();
+        LiveLock::hold(self.data_dir(), live_lock::JOB, &id)
+    }
+
+    fn run_claimed(
+        &self,
+        claimed: Option<JobRecord>,
+        _alive: Option<LiveLock>,
+    ) -> AppResult<Option<JobDto>> {
         let Some(record) = claimed else {
             return Ok(None);
         };
